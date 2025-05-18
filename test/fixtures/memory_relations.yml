@@ -1,0 +1,11 @@
+# Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
+
+one:
+  from_entity: one
+  to_entity: one
+  relation_type: MyString
+
+two:
+  from_entity: two
+  to_entity: two
+  relation_type: MyString

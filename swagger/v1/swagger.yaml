@@ -1,0 +1,556 @@
+---
+openapi: 3.0.1
+info:
+  title: API V1
+  version: v1
+paths:
+  "/api/v1/memory_entities":
+    get:
+      summary: list memory entities
+      tags:
+      - Memory Entities
+      responses:
+        '200':
+          description: successful
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  "$ref": "#/components/schemas/memory_entity"
+    post:
+      summary: create memory entity
+      tags:
+      - Memory Entities
+      parameters: []
+      responses:
+        '201':
+          description: created
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/memory_entity"
+        '422':
+          description: unprocessable entity
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  example: New Project
+                entity_type:
+                  type: string
+                  example: Project
+              required:
+              - name
+              - entity_type
+  "/api/v1/memory_entities/{id}":
+    parameters:
+    - name: id
+      in: path
+      description: id
+      required: true
+      schema:
+        type: string
+    get:
+      summary: show memory entity
+      tags:
+      - Memory Entities
+      responses:
+        '200':
+          description: successful
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/memory_entity"
+        '404':
+          description: not found
+    patch:
+      summary: update memory entity
+      tags:
+      - Memory Entities
+      parameters: []
+      responses:
+        '200':
+          description: successful
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/memory_entity"
+        '404':
+          description: not found
+        '422':
+          description: unprocessable entity
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  example: Updated Name
+                entity_type:
+                  type: string
+                  example: Updated Type
+    put:
+      summary: update memory entity
+      tags:
+      - Memory Entities
+      parameters: []
+      responses:
+        '200':
+          description: successful
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/memory_entity"
+        '404':
+          description: not found
+        '422':
+          description: unprocessable entity
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  example: Updated Name
+                entity_type:
+                  type: string
+                  example: Updated Type
+              required:
+              - name
+              - entity_type
+    delete:
+      summary: delete memory entity
+      tags:
+      - Memory Entities
+      responses:
+        '204':
+          description: no content
+        '404':
+          description: not found
+  "/api/v1/memory_entities/search":
+    get:
+      summary: search memory entities
+      tags:
+      - Memory Entities
+      parameters:
+      - name: q
+        in: query
+        required: true
+        description: Search query for entity name (case-insensitive)
+        schema:
+          type: string
+      responses:
+        '200':
+          description: successful
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  "$ref": "#/components/schemas/memory_entity"
+  "/api/v1/memory_entities/{memory_entity_id}/memory_observations":
+    parameters:
+    - name: memory_entity_id
+      in: path
+      description: ID of the parent Memory Entity
+      required: true
+      schema:
+        type: string
+    get:
+      summary: list memory observations for an entity
+      tags:
+      - Memory Observations
+      responses:
+        '200':
+          description: successful
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  "$ref": "#/components/schemas/memory_observation"
+        '404':
+          description: parent entity not found
+    post:
+      summary: create memory observation for an entity
+      tags:
+      - Memory Observations
+      parameters: []
+      responses:
+        '201':
+          description: created
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/memory_observation"
+        '422':
+          description: unprocessable entity
+        '404':
+          description: parent entity not found
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                content:
+                  type: string
+                  example: This is an observation.
+              required:
+              - content
+  "/api/v1/memory_entities/{memory_entity_id}/memory_observations/{id}":
+    parameters:
+    - name: memory_entity_id
+      in: path
+      description: ID of the parent Memory Entity
+      required: true
+      schema:
+        type: string
+    - name: id
+      in: path
+      description: ID of the Memory Observation
+      required: true
+      schema:
+        type: string
+    get:
+      summary: show memory observation
+      tags:
+      - Memory Observations
+      responses:
+        '200':
+          description: successful
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/memory_observation"
+        '404':
+          description: parent entity not found
+    patch:
+      summary: update memory observation
+      tags:
+      - Memory Observations
+      parameters: []
+      responses:
+        '200':
+          description: successful
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/memory_observation"
+        '422':
+          description: unprocessable entity
+        '404':
+          description: parent entity not found
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                content:
+                  type: string
+                  example: Updated Observation Content
+              required:
+              - content
+    put:
+      summary: update memory observation
+      tags:
+      - Memory Observations
+      parameters: []
+      responses:
+        '200':
+          description: successful
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/memory_observation"
+        '422':
+          description: unprocessable entity
+        '404':
+          description: parent entity not found
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                content:
+                  type: string
+                  example: Updated Observation Content via PUT
+              required:
+              - content
+    delete:
+      summary: delete memory observation
+      tags:
+      - Memory Observations
+      responses:
+        '204':
+          description: no content
+        '404':
+          description: not found
+  "/api/v1/memory_relations":
+    get:
+      summary: list memory relations
+      tags:
+      - Memory Relations
+      parameters:
+      - name: from_entity_id
+        in: query
+        required: false
+        description: Filter by source entity ID
+        schema:
+          type: integer
+      - name: to_entity_id
+        in: query
+        required: false
+        description: Filter by target entity ID
+        schema:
+          type: integer
+      - name: relation_type
+        in: query
+        required: false
+        description: Filter by relation type
+        schema:
+          type: string
+      responses:
+        '200':
+          description: successful
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  "$ref": "#/components/schemas/memory_relation"
+    post:
+      summary: create memory relation
+      tags:
+      - Memory Relations
+      parameters: []
+      responses:
+        '201':
+          description: created
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/memory_relation"
+        '422':
+          description: unprocessable entity
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                from_entity_id:
+                  type: integer
+                  description: ID of the source entity
+                to_entity_id:
+                  type: integer
+                  description: ID of the target entity
+                relation_type:
+                  type: string
+                  example: related_to
+              required:
+              - from_entity_id
+              - to_entity_id
+              - relation_type
+  "/api/v1/memory_relations/{id}":
+    parameters:
+    - name: id
+      in: path
+      description: ID of the Memory Relation
+      required: true
+      schema:
+        type: string
+    get:
+      summary: show memory relation
+      tags:
+      - Memory Relations
+      responses:
+        '200':
+          description: successful
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/memory_relation"
+        '404':
+          description: not found
+    patch:
+      summary: update memory relation
+      tags:
+      - Memory Relations
+      parameters: []
+      responses:
+        '200':
+          description: successful
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/memory_relation"
+        '422':
+          description: unprocessable entity
+        '404':
+          description: not found
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                relation_type:
+                  type: string
+                  example: updated_link
+              required:
+              - relation_type
+    put:
+      summary: update memory relation
+      tags:
+      - Memory Relations
+      parameters: []
+      responses:
+        '200':
+          description: successful
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/memory_relation"
+        '422':
+          description: unprocessable entity
+        '404':
+          description: not found
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                relation_type:
+                  type: string
+                  example: updated_link_put
+              required:
+              - relation_type
+    delete:
+      summary: delete memory relation
+      tags:
+      - Memory Relations
+      responses:
+        '204':
+          description: no content
+        '404':
+          description: not found
+  "/api/v1/status":
+    get:
+      summary: show status
+      tags:
+      - Status
+      responses:
+        '200':
+          description: successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+                  version:
+                    type: string
+                    example: 0.1.0
+                required:
+                - status
+                - version
+servers:
+- url: http://localhost:3000
+  description: Local development server
+components:
+  schemas:
+    memory_entity:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+        entity_type:
+          type: string
+        observations_count:
+          type: integer
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - id
+      - name
+      - entity_type
+      - observations_count
+      - created_at
+      - updated_at
+    memory_observation:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        content:
+          type: string
+        memory_entity_id:
+          type: integer
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - id
+      - content
+      - memory_entity_id
+      - created_at
+      - updated_at
+    memory_relation:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        from_entity_id:
+          type: integer
+        to_entity_id:
+          type: integer
+        relation_type:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - id
+      - from_entity_id
+      - to_entity_id
+      - relation_type
+      - created_at
+      - updated_at
