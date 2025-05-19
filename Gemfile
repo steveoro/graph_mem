@@ -27,7 +27,8 @@ gem "solid_cache"
 gem "solid_queue"
 gem "solid_cable"
 
-gem "actionmcp" # MCP Server implementation
+gem "fast-mcp" # MCP Server implementation
+
 gem "bootsnap", require: false # Reduces boot times through caching; required in config/boot.rb
 # Deploy this application anywhere as a Docker container [https://kamal-deploy.org]
 gem "kamal", require: false
@@ -70,5 +71,3 @@ end
 group :test do
   # Use system testing [https://guides.rubyonrails.org/testing.html#system-testing]
 end
-
-gem "fast-mcp", "~> 1.4"
