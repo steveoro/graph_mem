@@ -49,7 +49,7 @@ group :development, :test do
   gem "rubocop-rails-omakase", require: false
 
   # RSpec for testing
-  gem "rspec-rails", "~> 6.0"
+  gem "rspec-rails", "~> 8.0"
 
   # Adds support for Capybara system testing and selenium driver
   gem "capybara"
