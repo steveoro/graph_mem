@@ -21,13 +21,6 @@ GEM
       activesupport (= 8.0.2)
       mail (>= 2.8.0)
       rails-dom-testing (~> 2.2)
-    actionmcp (0.50.13)
-      activerecord (>= 8.0.1)
-      concurrent-ruby (>= 1.3.1)
-      jsonrpc-rails (>= 0.5.1)
-      multi_json
-      railties (>= 8.0.1)
-      zeitwerk (~> 2.6)
     actionpack (8.0.2)
       actionview (= 8.0.2)
       activesupport (= 8.0.2)
@@ -173,8 +166,6 @@ GEM
     json-schema (5.1.1)
       addressable (~> 2.8)
       bigdecimal (~> 3.1)
-    jsonrpc-rails (0.5.1)
-      railties (>= 8.0.1)
     kamal (2.6.1)
       activesupport (>= 7.0)
       base64 (~> 0.2)
@@ -206,7 +197,6 @@ GEM
     mini_mime (1.1.5)
     minitest (5.25.5)
     msgpack (1.8.0)
-    multi_json (1.15.0)
     mysql2 (0.5.6)
     net-imap (0.5.8)
       date
@@ -441,12 +431,11 @@ PLATFORMS
   x86_64-linux-musl
 
 DEPENDENCIES
-  actionmcp
   bootsnap
   brakeman
   capybara
   debug
-  fast-mcp (~> 1.4)
+  fast-mcp
   importmap-rails
   jbuilder
   kamal
