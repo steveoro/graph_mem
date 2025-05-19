@@ -1,2 +1,2 @@
 #!/usr/bin/env ruby
-exec "./bin/rails", "server", "--config=mcp.ru", "--port=62770"
+exec "./bin/rails", "server", "--port=3003"

@@ -22,7 +22,7 @@ RSpec.describe 'API V1 Status', type: :request do
           data = JSON.parse(response.body)
           expect(response).to have_http_status(:ok)
           expect(data['status']).to eq('ok')
-          expect(data['version']).to eq(GraphMemoryBackend::VERSION)
+          expect(data['version']).to eq(GraphMem::VERSION)
         end
       end
     end

@@ -3,22 +3,21 @@
 class GetEntityTool < ApplicationTool
   description "Retrieve a specific entity by ID, including its observations and relations."
 
-  property :entity_id,
-           type: "integer",
-           description: "The ID of the entity to retrieve.",
-           required: true
+  arguments do
+    required(:entity_id).filled(:integer).description("The ID of the entity to retrieve.")
+  end
 
   # Output: Complex object with entity details, observations, and relations (from/to)
 
-  def perform
+  def call(entity_id:)
     logger.info "Performing GetEntityTool with entity_id: #{entity_id}"
     begin
       # Find the entity and pre-load associations for efficiency
       entity = MemoryEntity.includes(:memory_observations, :relations_from, :relations_to)
                            .find(entity_id)
 
-      # Format the output hash
-      result_hash = {
+      # Format the output hash - return hash directly
+      {
         id: entity.id,
         name: entity.name,
         entity_type: entity.entity_type,
@@ -53,15 +52,12 @@ class GetEntityTool < ApplicationTool
           }
         end
       }
-      render(text: result_hash.to_json, mime_type: "application/json")
-
     rescue ActiveRecord::RecordNotFound => e
       logger.error "Entity Not Found in GetEntityTool: ID=#{entity_id}"
-      render(error: [ "Entity with ID=#{entity_id} not found." ])
-    # No KeyError needed
+      raise FastMcp::Errors::ResourceNotFound, "Entity with ID=#{entity_id} not found."
     rescue => e
       logger.error "Unexpected error in GetEntityTool: #{e.message}\n#{e.backtrace.join("\n")}"
-      render(error: [ "Internal Server Error: #{e.message}" ])
+      raise FastMcp::Errors::InternalError, "Internal Server Error: #{e.message}"
     end
   end
 end
