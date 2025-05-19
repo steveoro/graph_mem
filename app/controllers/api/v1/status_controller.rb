@@ -7,7 +7,7 @@ module Api
       def index
         render json: {
           status: "ok",
-          version: GraphMemoryBackend::VERSION
+          version: GraphMem::VERSION
         }
       end
     end
