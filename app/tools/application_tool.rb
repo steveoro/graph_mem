@@ -15,8 +15,8 @@ class ApplicationTool < FastMcp::Tool
 
   # Expected by FastMcp::Server for tools/list
   def description
-    if self.class.respond_to?(:tool_description)
-      self.class.tool_description
+    if self.class.respond_to?(:description)
+      self.class.description
     else
       "#{tool_name} - A general purpose tool."
     end

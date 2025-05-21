@@ -1,4 +1,5 @@
 # frozen_string_literal: true
+require 'fast_mcp/errors' # Attempt to load FastMcp::Errors
 
 class CreateEntityTool < ApplicationTool
   description "Create a new entity in the graph memory database."

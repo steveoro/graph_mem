@@ -4,7 +4,7 @@ require "pathname"
 namespace :db do
   desc "Migrate data from JSON Lines file to the database (clears existing data)"
   task migrate_json: :environment do
-    json_file_path = Pathname.new("/home/steve/.codeium/windsurf-next/memories/memory.json")
+    json_file_path = Pathname.new(Dir.home).join(".codeium/windsurf-next/memories/memory.json")
     unless json_file_path.exist?
       puts "Error: JSON file not found at #{json_file_path}"
       exit 1
