@@ -7,6 +7,15 @@ class DeleteEntityTool < ApplicationTool
     required(:entity_id).filled(:integer).description("The ID of the entity to delete.")
   end
 
+  # Defines the input schema for this tool. Overrides the shared behavior from ApplicationTool
+  def input_schema_to_json
+    {
+      type: "object",
+      properties: { entity_id: { type: "integer", description: "The ID of the entity to delete." } },
+      required: [ "entity_id" ]
+    }
+  end
+
   # Output: Success message object
 
   def call(entity_id:)
@@ -15,19 +24,31 @@ class DeleteEntityTool < ApplicationTool
       # Find and destroy the entity
       # Assuming dependent: :destroy is set correctly on MemoryEntity model for relations/observations
       entity = MemoryEntity.find(entity_id)
+      entity_attributes = entity.attributes # Capture attributes before destroy
       entity.destroy!
 
-      # Return success message - as a hash
-      { message: "Entity with ID=#{entity_id} and its associated data deleted successfully." }
+      # Return the attributes of the deleted entity as a simple hash, plus a success message
+      {
+        id: entity_attributes["id"],
+        name: entity_attributes["name"],
+        entity_type: entity_attributes["entity_type"],
+        created_at: entity_attributes["created_at"].iso8601(3),
+        updated_at: entity_attributes["updated_at"].iso8601(3),
+        # observations_count was part of the original entity, include if it makes sense
+        # observations_count: entity_attributes["observations_count"],
+        message: "Entity with ID=#{entity_id} and its associated data deleted successfully."
+      }
     rescue ActiveRecord::RecordNotFound => e
-      logger.error "Entity Not Found in DeleteEntityTool: ID=#{entity_id}"
-      raise FastMcp::Errors::ResourceNotFound, "Entity with ID=#{entity_id} not found."
+      error_message = "Entity with ID=#{entity_id} not found."
+      logger.error "ResourceNotFound in DeleteEntityTool: #{error_message} (was: #{e.message})"
+      raise McpGraphMemErrors::ResourceNotFound, error_message
     rescue ActiveRecord::RecordNotDestroyed => e
-      logger.error "Failed to Destroy Entity in DeleteEntityTool: ID=#{entity_id}, Error: #{e.message}"
-      raise FastMcp::Errors::OperationFailed, "Failed to delete entity: #{e.message}"
-    rescue => e
-      logger.error "Unexpected error in DeleteEntityTool: #{e.message}\n#{e.backtrace.join("\n")}"
-      raise FastMcp::Errors::InternalError, "Internal Server Error: #{e.message}"
+      error_message = "Failed to delete entity with ID=#{entity_id}: #{e.message}"
+      logger.error "OperationFailed in DeleteEntityTool: #{error_message}"
+      raise McpGraphMemErrors::OperationFailed, error_message
+    rescue StandardError => e
+      logger.error "InternalServerError in DeleteEntityTool: #{e.message} - #{e.backtrace.join("\n")}"
+      raise McpGraphMemErrors::InternalServerError, "An internal server error occurred in DeleteEntityTool: #{e.message}"
     end
   end
 end

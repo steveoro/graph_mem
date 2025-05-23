@@ -8,6 +8,18 @@ class CreateObservationTool < ApplicationTool
     required(:content).filled(:string).description("The textual content of the observation")
   end
 
+  # Defines the input schema for this tool. Overrides the shared behavior from ApplicationTool
+  def input_schema_to_json
+    {
+      type: "object",
+      properties: {
+        entity_id: { type: "integer", description: "The ID of the entity to add the observation to" },
+        content: { type: "string", description: "The textual content of the observation" }
+      },
+      required: [ "entity_id", "content" ]
+    }
+  end
+
   def call(entity_id:, content:)
     logger.info "Performing CreateObservationTool with entity_id: #{entity_id}, content: '#{content}'"
     begin
@@ -26,15 +38,16 @@ class CreateObservationTool < ApplicationTool
         updated_at: new_observation.updated_at.iso8601
       }
     rescue ActiveRecord::RecordNotFound => e
-      logger.error "Entity Not Found in CreateObservationTool: ID=#{entity_id} - #{e.message}"
-      raise FastMcp::Errors::ResourceNotFound, "Entity with ID #{entity_id} not found."
+      error_message = "Entity with ID=#{entity_id} not found."
+      logger.error "ResourceNotFound in CreateObservationTool: #{error_message} (was: #{e.message})"
+      raise McpGraphMemErrors::ResourceNotFound, error_message
     rescue ActiveRecord::RecordInvalid => e
-      logger.error "Validation Failed in CreateObservationTool: #{e.message}"
-      error_messages = e.record.errors.full_messages.join(", ")
-      raise FastMcp::Errors::InvalidParameters, "Validation Failed: #{error_messages}"
-    rescue => e
-      logger.error "Unexpected error in CreateObservationTool: #{e.message}\n#{e.backtrace.join("\n")}"
-      raise FastMcp::Errors::InternalError, "Internal Server Error: #{e.message}"
+      error_message = "Validation Failed: #{e.record.errors.full_messages.join(', ')}"
+      logger.error "InvalidArguments in CreateObservationTool: #{error_message} (was: #{e.message})"
+      raise FastMcp::Tool::InvalidArgumentsError, error_message
+    rescue StandardError => e
+      logger.error "InternalServerError in CreateObservationTool: #{e.message} - #{e.backtrace.join("\n")}"
+      raise McpGraphMemErrors::InternalServerError, "An internal server error occurred in CreateObservationTool: #{e.message}"
     end
   end
 end

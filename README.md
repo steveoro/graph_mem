@@ -61,7 +61,7 @@ GraphMem is a Ruby on Rails application that implements a Model Context Protocol
 
 ## Setting up the MCP client
 
-Edit your `~/.mcp.json` file to add the server block:
+Edit your MCP (JSON) configuration file, usually located under the folder of your MCP client setup (e.g., for Windsurf `~/.codeium/windsurf/mcp_config.json`,  for Windsurf-Next `~/.codeium/windsurf-next/mcp_config.json`, for Cursor `~/.cursor/mcp.json`), and add the `graph_mem` server block:
 
 ```json
 {
@@ -72,7 +72,7 @@ Edit your `~/.mcp.json` file to add the server block:
     "graph_mem": {
       "command": "/bin/bash",
       "args": [
-        "<path_to_graph_mem>/bin/windsurf_mcp_graph_mem_runner.sh"
+        "<path_to_graph_mem_folder>/bin/windsurf_mcp_graph_mem_runner.sh"
       ],
       "env": {
         "RAILS_ENV": "development"
@@ -89,7 +89,7 @@ Subsequently, edit your global rules file and add the contents of the `docs/know
 
 ## Running the API Server
 
-You can run the Rails server, which includes the MCP endpoint, using:
+You can run the Rails server, which also provides an API endpoint to check the database contents, using the usual:
 
 ```bash
 bin/rails server
@@ -100,7 +100,11 @@ Alternatively, a custom script is provided to run the server on port 3003:
 ```bash
 bin/mcp
 ```
-The MCP endpoint will be available at `http://localhost:3003/mcp/messages`.
+
+The SSE MCP endpoints will be available at `http://localhost:3003/mcp/sse` and `http://localhost:3003/mcp/messages`.
+
+The STDIO MCP server can be run using the `bin/windsurf_mcp_graph_mem_runner.sh` script. Although designed to work with Windsurf, it should work also with other MCP clients (currently not tested).
+
 
 ## Interacting with the MCP Server
 
@@ -123,7 +127,7 @@ curl -X POST -H "Content-Type: application/json" \
 **Example: Get Entity by ID**
 ```bash
 curl -X POST -H "Content-Type: application/json" \
-     -d '{"jsonrpc":"2.0","method":"GetEntityTool","params":{"id":"entity-uuid-123"},"id":3}' \
+     -d '{"jsonrpc":"2.0","method":"GetEntityTool","params":{"entity_id":"entity-uuid-123"},"id":3}' \
      http://localhost:3003/mcp/messages
 ```
 
@@ -143,4 +147,4 @@ Please make sure to update tests as appropriate.
 
 
 ## License
-The gem is available as open source under the terms of the [LGPL-3.0 License](https://opensource.org/licenses/LGPL-3.0).
+The project is available as open source under the terms of the [LGPL-3.0 License](https://opensource.org/licenses/LGPL-3.0).

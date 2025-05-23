@@ -7,6 +7,15 @@ class SearchEntitiesTool < ApplicationTool
     required(:query).filled(:string).description("The search term to find within entity names (case-insensitive).")
   end
 
+  # Defines the input schema for this tool. Overrides the shared behavior from ApplicationTool
+  def input_schema_to_json
+    {
+      type: "object",
+      properties: { query: { type: "string", description: "The search term to find within entity names (case-insensitive)." } },
+      required: [ "query" ]
+    }
+  end
+
   # Output: Array of entity objects
 
   def call(query:)
@@ -25,9 +34,9 @@ class SearchEntitiesTool < ApplicationTool
           updated_at: entity.updated_at.iso8601
         }
       end
-    rescue => e
-      logger.error "Unexpected error in SearchEntitiesTool: #{e.message}\n#{e.backtrace.join("\n")}"
-      raise FastMcp::Errors::InternalError, "Internal Server Error: #{e.message}"
+    rescue StandardError => e
+      logger.error "InternalServerError in SearchEntitiesTool: #{e.message} - #{e.backtrace.join("\n")}"
+      raise McpGraphMemErrors::InternalServerError, "An internal server error occurred in SearchEntitiesTool: #{e.message}"
     end
   end
 end

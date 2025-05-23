@@ -7,6 +7,15 @@ class GetEntityTool < ApplicationTool
     required(:entity_id).filled(:integer).description("The ID of the entity to retrieve.")
   end
 
+  # Defines the input schema for this tool. Overrides the shared behavior from ApplicationTool
+  def input_schema_to_json
+    {
+      type: "object",
+      properties: { entity_id: { type: "integer", description: "The ID of the entity to retrieve." } },
+      required: [ "entity_id" ]
+    }
+  end
+
   # Output: Complex object with entity details, observations, and relations (from/to)
 
   def call(entity_id:)
@@ -53,11 +62,12 @@ class GetEntityTool < ApplicationTool
         end
       }
     rescue ActiveRecord::RecordNotFound => e
-      logger.error "Entity Not Found in GetEntityTool: ID=#{entity_id}"
-      raise FastMcp::Errors::ResourceNotFound, "Entity with ID=#{entity_id} not found."
-    rescue => e
-      logger.error "Unexpected error in GetEntityTool: #{e.message}\n#{e.backtrace.join("\n")}"
-      raise FastMcp::Errors::InternalError, "Internal Server Error: #{e.message}"
+      error_message = "Entity with ID=#{entity_id} not found."
+      logger.error "ResourceNotFound in GetEntityTool: #{error_message} (was: #{e.message})"
+      raise McpGraphMemErrors::ResourceNotFound, error_message
+    rescue StandardError => e
+      logger.error "InternalServerError in GetEntityTool: #{e.message} - #{e.backtrace.join("\n")}"
+      raise McpGraphMemErrors::InternalServerError, "An internal server error occurred in GetEntityTool: #{e.message}"
     end
   end
 end

@@ -6,6 +6,22 @@
 if defined?(FastMcp::Server) && defined?(FastMcp::Transports::RackTransport)
   Rails.logger.info "[FastMcpPatches] Applying patches to FastMcp gem..."
 
+  # Standard JSON-RPC error codes
+  STANDARD_JSON_RPC_ERROR_CODES = {
+    ParseError: -32700,
+    InvalidRequest: -32600,
+    MethodNotFound: -32601,
+    InvalidParams: -32602,
+    InternalError: -32603
+  }.freeze
+
+  MCP_GRAPH_MEM_ERROR_CODES = {
+    ResourceNotFound: -32001,
+    OperationFailed: -32002,
+    InternalServerError: -32003
+  }.freeze
+  # -----------------------------------------------------------------------------
+
   # Patch 1: Ensure FastMcp::Server#send_response returns the response hash.
   # This is crucial for RackTransport to receive the data it needs.
   module FastMcp
@@ -20,6 +36,7 @@ if defined?(FastMcp::Server) && defined?(FastMcp::Transports::RackTransport)
       end
     end
   end
+  # -----------------------------------------------------------------------------
 
   # Patch 2: Ensure FastMcp::Transports::RackTransport#process_json_request
   # correctly formats the Rack response body as [JSON_STRING].
@@ -46,67 +63,130 @@ if defined?(FastMcp::Server) && defined?(FastMcp::Transports::RackTransport)
       end
     end
   end
-
-  Rails.logger.info "[FastMcpPatches] Successfully applied patches to FastMcp gem."
+  # -----------------------------------------------------------------------------
 
   # Patch 3: Correct FastMcp::Server#handle_tools_call to not call .new on an already instantiated tool
   # and retain detailed logging.
   module FastMcp
     class Server
-      # We are completely overriding the original handle_tools_call method here.
-      # The original alias handle_tools_call_original_for_detailed_logging might not be needed
-      # unless we intend to call the gem's version for some reason.
-      # For this fix, we directly implement the corrected logic.
-
-      # Remove the old alias for clarity if it's no longer used or redefine if necessary.
-      # For now, let's assume the override is sufficient.
-      # If `alias_method :handle_tools_call_original_for_detailed_logging, :handle_tools_call` was here,
-      # it would now alias our new method if not removed or handled carefully.
-
       def handle_tools_call(params, id)
-        tool_name = params["name"] # Use string key as per original method
+        tool_name = params["name"]
         arguments = params["arguments"] || {}
 
-        Rails.logger.info "[FastMcpPatches|Server#handle_tools_call_FIXED] Attempting call for tool_name: '#{tool_name}' with arguments: #{arguments.inspect}"
+        Rails.logger.info "[FastMcpPatches|Server#handle_tools_call_V6] Attempting call for tool_name: '#{tool_name}' with arguments: #{arguments.inspect}"
 
         if @tools.nil?
-          Rails.logger.error "[FastMcpPatches|Server#handle_tools_call_FIXED] @tools hash is NIL!"
-          return send_error(-32_000, "Internal server error: tools not initialized", id)
+          Rails.logger.error "[FastMcpPatches|Server#handle_tools_call_V6] @tools hash is NIL!"
+          send_error_result("#{STANDARD_JSON_RPC_ERROR_CODES[:InternalError]} Internal server error: tools not initialized", id)
+          return
         end
 
-        Rails.logger.info "[FastMcpPatches|Server#handle_tools_call_FIXED] Current @tools keys: #{@tools.keys.inspect}"
         tool = @tools[tool_name]
-
         unless tool
-          Rails.logger.error "[FastMcpPatches|Server#handle_tools_call_FIXED] Tool '#{tool_name}' NOT FOUND in @tools."
-          return send_error(-32_602, "Tool not found: #{tool_name}", id)
+          Rails.logger.error "[FastMcpPatches|Server#handle_tools_call_V6] Tool '#{tool_name}' NOT FOUND in @tools."
+          send_error_result("#{STANDARD_JSON_RPC_ERROR_CODES[:MethodNotFound]} Tool not found: #{tool_name}", id)
+          return
         end
 
-        Rails.logger.info "[FastMcpPatches|Server#handle_tools_call_FIXED] Tool '#{tool_name}' FOUND. Retrieved: #{tool.inspect}"
+        Rails.logger.info "[FastMcpPatches|Server#handle_tools_call_V6] Tool '#{tool_name}' FOUND. Retrieved: #{tool.inspect}"
 
         begin
-          symbolized_args = arguments.transform_keys(&:to_sym) # Symbolize keys for Ruby kwargs
-          Rails.logger.info "[FastMcpPatches|Server#handle_tools_call_FIXED] Calling tool.call_with_schema_validation!(**#{symbolized_args.inspect})"
+          symbolized_args = arguments.transform_keys(&:to_sym)
+          Rails.logger.info "[FastMcpPatches|Server#handle_tools_call_V6] Calling tool.call_with_schema_validation!(**#{symbolized_args.inspect})"
 
-          # --- THIS IS THE CRITICAL FIX ---
-          result, metadata = tool.call_with_schema_validation!(**symbolized_args)
-          # --- END CRITICAL FIX ---
+          actual_tool_data, tool_metadata = tool.call_with_schema_validation!(**symbolized_args)
+          Rails.logger.info "[FastMcpPatches|Server#handle_tools_call_V6] Tool '#{tool_name}' executed successfully."
+          Rails.logger.info "[FastMcpPatches|Server#handle_tools_call_V6] Raw Result from tool.call_with_schema_validation! (actual_tool_data): #{actual_tool_data.inspect}"
+          Rails.logger.info "[FastMcpPatches|Server#handle_tools_call_V6] Raw Result class: #{actual_tool_data.class}"
+          Rails.logger.info "[FastMcpPatches|Server#handle_tools_call_V6] Metadata: #{tool_metadata.inspect}"
 
-          Rails.logger.info "[FastMcpPatches|Server#handle_tools_call_FIXED] Tool '#{tool_name}' executed successfully. Result: #{result.inspect}, Metadata: #{metadata.inspect}"
-          send_formatted_result(result, id, metadata)
+          mcp_compliant_result_payload = {
+            content: [
+              {
+                type: "json",
+                json: actual_tool_data.deep_dup # V6 CHANGE: Directly use actual_tool_data
+              }
+            ]
+          }
+
+          Rails.logger.info "[FastMcpPatches|Server#handle_tools_call_V6] mcp_compliant_result_payload: #{mcp_compliant_result_payload.inspect}"
+
+          response_payload = {
+            jsonrpc: "2.0",
+            result: mcp_compliant_result_payload,
+            id: id
+          }
+
+          # DEBUG LOGGING (Updated)
+          begin
+            File.open("#{Rails.root}/tmp/graph_mem_debug.txt", "a") do |f|
+              f.puts "Timestamp: #{Time.now.iso8601(6)}"
+              f.puts "Tool: #{tool_name} (V6)" # Logging version marker
+              f.puts "Result from tool.call_with_schema_validation! (actual_tool_data): #{actual_tool_data.inspect}"
+              f.puts "Actual_tool_data class: #{actual_tool_data.class}"
+              f.puts "Response hash before JSON.generate (response_payload): #{response_payload.inspect}"
+              f.puts "Response[:result] class (mcp_compliant_result_payload class): #{response_payload[:result].class if response_payload.key?(:result)}"
+              f.puts "Response[:result] itself (mcp_compliant_result_payload): #{response_payload[:result].inspect if response_payload.key?(:result)}"
+              f.puts "Response[:result][:content][0][:json] class: #{response_payload[:result][:content][0][:json].class if response_payload.key?(:result) && response_payload[:result][:content]&.first&.key?(:json)}"
+            end
+          rescue => log_e
+            Rails.logger.error "[FastMcpPatches|Server#handle_tools_call_V6] Failed to write to debug log: #{log_e.message}"
+          end
+          # END DEBUG LOGGING
+
+          STDERR.puts "[PATCH_DEBUG|handle_tools_call_V6] PRE-SEND: response_payload IS: #{response_payload.inspect}"
+          STDERR.flush
+
+          @transport.send_message(response_payload)
+
         rescue FastMcp::Tool::InvalidArgumentsError => e
-          Rails.logger.error "[FastMcpPatches|Server#handle_tools_call_FIXED] Invalid arguments for tool #{tool_name}: #{e.message}"
-          send_error_result(e.message, id) # Assuming send_error_result is a method in FastMcp::Server
+          Rails.logger.error "[FastMcpPatches|Server#handle_tools_call_V6] InvalidArgumentsError for tool '#{tool_name}': #{e.message}"
+          send_error_result("#{STANDARD_JSON_RPC_ERROR_CODES[:InvalidParams]} #{e.message}", id)
+        rescue McpGraphMemErrors::ResourceNotFound => e
+          Rails.logger.error "[FastMcpPatches|Server#handle_tools_call_V6] ResourceNotFoundError for tool '#{tool_name}': #{e.message}"
+          send_error_result("#{MCP_GRAPH_MEM_ERROR_CODES[:ResourceNotFound]} #{e.message}", id)
+        rescue McpGraphMemErrors::OperationFailed => e
+          Rails.logger.error "[FastMcpPatches|Server#handle_tools_call_V6] OperationFailedError for tool '#{tool_name}': #{e.message}"
+          send_error_result("#{MCP_GRAPH_MEM_ERROR_CODES[:OperationFailed]} #{e.message}", id)
+        rescue McpGraphMemErrors::InternalServerError => e
+          Rails.logger.error "[FastMcpPatches|Server#handle_tools_call_V6] McpGraphMemErrors::InternalServerError for tool '#{tool_name}': #{e.message} Backtrace: #{e.backtrace.join("\n")}"
+          send_error_result("#{STANDARD_JSON_RPC_ERROR_CODES[:InternalError]} #{e.message}", id)
         rescue StandardError => e
-          Rails.logger.error "[FastMcpPatches|Server#handle_tools_call_FIXED] Error calling tool #{tool_name}: #{e.message} Backtrace: #{e.backtrace.join("\n")}"
-          send_error_result("#{e.message}, #{e.backtrace.join("\n")}", id) # Assuming send_error_result is a method
+          Rails.logger.error "[FastMcpPatches|Server#handle_tools_call_V6] Unhandled StandardError for tool '#{tool_name}': #{e.class} - #{e.message} Backtrace: #{e.backtrace.join("\n")}"
+          send_error_result("#{STANDARD_JSON_RPC_ERROR_CODES[:InternalError]} An unexpected internal server error occurred.", id)
         end
       end
     end
   end
-
-  Rails.logger.info "[FastMcpPatches] Successfully applied FIX for Server#handle_tools_call and retained logging."
-
-else
-  Rails.logger.warn "[FastMcpPatches] FastMcp::Server or FastMcp::Transports::RackTransport not defined. Patches not applied."
 end
+# -----------------------------------------------------------------------------
+
+# --- BEGIN DEBUG PATCH for StdioTransport ---
+Rails.logger.info "[FastMcpPatches] Applying debug patch to FastMcp::Transports::StdioTransport#send_message"
+module FastMcp
+  module Transports
+    class StdioTransport
+      alias_method :original_send_message_for_debug, :send_message
+
+      def send_message(message)
+        # Log to STDERR immediately upon entry
+        STDERR.puts "[STDIO_PATCH_DEBUG|send_message] ENTERED. Received message (class: #{message.class}): #{message.inspect}"
+        STDERR.flush
+
+        # Call the original method
+        original_send_message_for_debug(message)
+
+        STDERR.puts "[STDIO_PATCH_DEBUG|send_message] EXITED."
+        STDERR.flush
+      rescue StandardError => e
+        STDERR.puts "[STDIO_PATCH_DEBUG|send_message] ERROR: #{e.class} - #{e.message}\n#{e.backtrace.join("\n")}"
+        STDERR.flush
+        raise # Re-raise the error after logging
+      end
+    end
+  end
+end
+# --- END DEBUG PATCH for StdioTransport ---
+# -----------------------------------------------------------------------------
+
+Rails.logger.info "[FastMcpPatches] Successfully applied all patches to FastMcp gem."

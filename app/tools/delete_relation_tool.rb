@@ -7,6 +7,16 @@ class DeleteRelationTool < ApplicationTool
     required(:relation_id).filled(:integer).description("The ID of the relation to delete.")
   end
 
+  # Defines the input schema for this tool. Overrides the shared behavior from ApplicationTool
+  # Needed, otherwise the LLM will not figure out the input schema for this tool.
+  def input_schema_to_json
+    {
+      type: "object",
+      properties: { relation_id: { type: "integer", description: "The ID of the relation to delete." } },
+      required: [ "relation_id" ]
+    }
+  end
+
   # Output: Success message object
 
   def call(relation_id:)
@@ -14,19 +24,30 @@ class DeleteRelationTool < ApplicationTool
     begin
       # Find and destroy the relation
       relation = MemoryRelation.find(relation_id)
+      relation_attributes = relation.attributes # Capture attributes before destroy
       relation.destroy!
 
-      # Return success message - as a hash
-      { message: "Relation with ID=#{relation_id} deleted successfully." }
+      # Return the attributes of the deleted relation as a simple hash, plus a success message
+      {
+        id: relation_attributes["id"],
+        from_entity_id: relation_attributes["from_entity_id"],
+        to_entity_id: relation_attributes["to_entity_id"],
+        relation_type: relation_attributes["relation_type"],
+        created_at: relation_attributes["created_at"].iso8601(3),
+        updated_at: relation_attributes["updated_at"].iso8601(3),
+        message: "Relation with ID=#{relation_id} deleted successfully."
+      }
     rescue ActiveRecord::RecordNotFound => e
-      logger.error "Relation Not Found in DeleteRelationTool: ID=#{relation_id}"
-      raise FastMcp::Errors::ResourceNotFound, "Relation with ID=#{relation_id} not found."
+      error_message = "Relation with ID=#{relation_id} not found."
+      logger.error "ResourceNotFound in DeleteRelationTool: #{error_message} (was: #{e.message})"
+      raise McpGraphMemErrors::ResourceNotFound, error_message
     rescue ActiveRecord::RecordNotDestroyed => e
-      logger.error "Failed to Destroy Relation in DeleteRelationTool: ID=#{relation_id}, Error: #{e.message}"
-      raise FastMcp::Errors::OperationFailed, "Failed to delete relation: #{e.message}"
-    rescue => e
-      logger.error "Unexpected error in DeleteRelationTool: #{e.message}\n#{e.backtrace.join("\n")}"
-      raise FastMcp::Errors::InternalError, "Internal Server Error: #{e.message}"
+      error_message = "Failed to delete relation with ID=#{relation_id}: #{e.message}"
+      logger.error "OperationFailed in DeleteRelationTool: #{error_message}"
+      raise McpGraphMemErrors::OperationFailed, error_message
+    rescue StandardError => e
+      logger.error "InternalServerError in DeleteRelationTool: #{e.message} - #{e.backtrace.join("\n")}"
+      raise McpGraphMemErrors::InternalServerError, "An internal server error occurred in DeleteRelationTool: #{e.message}"
     end
   end
 end

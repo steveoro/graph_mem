@@ -7,26 +7,47 @@ class DeleteObservationTool < ApplicationTool
     required(:observation_id).filled(:integer).description("The ID of the observation to delete.")
   end
 
+  # Defines the input schema for this tool. Overrides the shared behavior from ApplicationTool
+  def input_schema_to_json
+    {
+      type: "object",
+      properties: { observation_id: { type: "integer", description: "The ID of the observation to delete." } },
+      required: [ "observation_id" ]
+    }
+  end
+
   # Output: Success message object
 
   def call(observation_id:)
     logger.info "Performing DeleteObservationTool with observation_id: #{observation_id}"
+
     begin
       # Find and destroy the observation
       observation = MemoryObservation.find(observation_id)
+      observation_attributes = observation.attributes # Capture attributes before destroy
       observation.destroy!
+      logger.info "Deleted observation with ID #{observation_attributes["id"]}"
 
-      # Return success message - as a hash
-      { message: "Observation with ID=#{observation_id} deleted successfully." }
+      # Return the attributes of the deleted observation as a simple hash
+      {
+        id: observation_attributes["id"],
+        memory_entity_id: observation_attributes["memory_entity_id"],
+        content: observation_attributes["content"],
+        created_at: observation_attributes["created_at"].iso8601(3),
+        updated_at: observation_attributes["updated_at"].iso8601(3),
+        message: "Observation with ID=#{observation_id} deleted successfully."
+      }
     rescue ActiveRecord::RecordNotFound => e
-      logger.error "Observation Not Found in DeleteObservationTool: ID=#{observation_id}"
-      raise FastMcp::Errors::ResourceNotFound, "Observation with ID=#{observation_id} not found."
+      error_message = "Observation with ID=#{observation_id} not found."
+      logger.error "ResourceNotFound in DeleteObservationTool: #{error_message} (was: #{e.message})"
+      raise McpGraphMemErrors::ResourceNotFound, error_message
     rescue ActiveRecord::RecordNotDestroyed => e
-      logger.error "Failed to Destroy Observation in DeleteObservationTool: ID=#{observation_id}, Error: #{e.message}"
-      raise FastMcp::Errors::OperationFailed, "Failed to delete observation: #{e.message}"
-    rescue => e
-      logger.error "Unexpected error in DeleteObservationTool: #{e.message}\n#{e.backtrace.join("\n")}"
-      raise FastMcp::Errors::InternalError, "Internal Server Error: #{e.message}"
+      error_message = "Failed to delete observation with ID=#{observation_id}: #{e.message}"
+      logger.error "OperationFailed in DeleteObservationTool: #{error_message}"
+      raise McpGraphMemErrors::OperationFailed, error_message
+    rescue StandardError => e
+      logger.error "InternalServerError in DeleteObservationTool: #{e.message} - #{e.backtrace.join("\n")}"
+      raise McpGraphMemErrors::InternalServerError, "An internal server error occurred in DeleteObservationTool: #{e.message}"
     end
   end
 end

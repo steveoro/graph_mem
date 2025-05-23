@@ -68,6 +68,6 @@ echo "[RunnerLog] Which ruby: $(which ruby)" >&2
 echo "[RunnerLog] Which bundle: $(which bundle)" >&2
 
 # Execute the stdio runner script with Bundler
-echo "[RunnerLog] Executing: bundle exec ruby ${SCRIPT_DIR}/mcp_stdio_runner.rb (STDERR redirected to /tmp/graph_mem_ruby_stderr.log)" >&2
-echo "" > "/tmp/graph_mem_ruby_stderr.log"
-exec bundle exec ruby "${SCRIPT_DIR}/mcp_stdio_runner.rb" 2> "/tmp/graph_mem_ruby_stderr.log"
+echo "[RunnerLog] Executing: bundle exec ruby ${SCRIPT_DIR}/mcp_stdio_runner.rb (STDERR redirected to ${PROJECT_ROOT}/log/graph_mem_ruby_stderr.log)" >&2
+echo "" > "${PROJECT_ROOT}/log/graph_mem_ruby_stderr.log"
+exec bundle exec ruby "${SCRIPT_DIR}/mcp_stdio_runner.rb" 2> "${PROJECT_ROOT}/log/graph_mem_ruby_stderr.log"
