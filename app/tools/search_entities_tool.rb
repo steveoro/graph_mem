@@ -1,11 +1,22 @@
 # frozen_string_literal: true
 
 class SearchEntitiesTool < ApplicationTool
+  # Provide a custom tool name:
+  def self.tool_name
+    'search_entities'
+  end
+
   description "Search for graph memory entities by name."
+
+  # TODO: after succesfully testing both 'list_entities' and 'search_subgraph', introduce pagination here too
 
   arguments do
     required(:query).filled(:string).description("The search term to find within entity names (case-insensitive).")
   end
+
+  # def self.input_schema
+  #   schema
+  # end
 
   # Defines the input schema for this tool. Overrides the shared behavior from ApplicationTool
   def input_schema_to_json

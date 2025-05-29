@@ -48,11 +48,19 @@ namespace :db do
     config_path = Rails.root.join("config", "database.yml")
     config = YAML.load_file(config_path)["development"]
 
-    db_name = config["database"]
-    db_user = config["username"]
-    db_pass = config["password"]
-    db_host = config["host"] || "localhost"
-    db_socket = config["socket"]
+    # Prepare & check configuration:
+    rails_config  = Rails.configuration
+    db_name       = rails_config.database_configuration[Rails.env]['database']
+    db_user       = rails_config.database_configuration[Rails.env]['username']
+    db_pass       = rails_config.database_configuration[Rails.env]['password']
+    db_host       = rails_config.database_configuration[Rails.env]['host']
+    db_socket     = rails_config.database_configuration[Rails.env]['socket']
+
+    # db_name = config["database"]
+    # db_user = config["username"]
+    # db_pass = config["password"]
+    # db_host = config["host"] || "localhost"
+    # db_socket = config["socket"]
 
     backup_dir = Rails.root.join("db", "backup")
     backup_file = backup_dir.join("#{db_name}.sql.bz2")
@@ -67,10 +75,10 @@ namespace :db do
 
     # Build base mysql command parts
     mysql_base_cmd = "mysql"
-    mysql_base_cmd += " -u#{db_user}"
+    mysql_base_cmd += " -u #{db_user}"
     mysql_base_cmd += " -p'#{db_pass}'" if db_pass.present?
-    mysql_base_cmd += " -h#{db_host}" if db_host != "localhost"
-    mysql_base_cmd += " -S#{db_socket}" if db_socket.present?
+    mysql_base_cmd += " -h #{db_host}" if db_host.present? && db_host != "localhost"
+    mysql_base_cmd += " -S #{db_socket}" if db_socket.present?
 
     # Commands to drop and create
     drop_cmd = "#{mysql_base_cmd} -e 'DROP DATABASE IF EXISTS \`#{db_name}\`;'"

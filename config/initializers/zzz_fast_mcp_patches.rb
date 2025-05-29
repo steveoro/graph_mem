@@ -70,6 +70,8 @@ if defined?(FastMcp::Server) && defined?(FastMcp::Transports::RackTransport)
   module FastMcp
     class Server
       def handle_tools_call(params, id)
+        STDERR.puts "[PATCH_DEBUG|handle_tools_call_V6_ENTRY] RAW PARAMS: #{params.inspect}, ID: #{id.inspect}"
+        STDERR.flush
         tool_name = params["name"]
         arguments = params["arguments"] || {}
 

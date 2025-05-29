@@ -1,9 +1,17 @@
 # frozen_string_literal: true
 
 class VersionTool < ApplicationTool
-  description "Returns the current Graph-Memory backend version"
+  # Provide a custom tool name:
+  def self.tool_name
+    'get_version'
+  end
+
+  description "Returns the current Graph-Memory backend implementation version"
 
   # No arguments are needed for this tool.
+  # def self.input_schema
+  #   Dry::Schema.JSON
+  # end
 
   def call
     begin
@@ -11,10 +19,10 @@ class VersionTool < ApplicationTool
     rescue NameError => e
       # This handles the case where GraphMem::VERSION might not be defined
       logger.error "Version constant not found: #{e.message}"
-      raise FastMcp::Errors::InternalError, "Version information is currently unavailable."
+      raise McpGraphMemErrors::InternalServerError, "Version information is currently unavailable."
     rescue => e
       logger.error "Unexpected error in VersionTool: #{e.message}\n#{e.backtrace.join("\n")}"
-      raise FastMcp::Errors::InternalError, "Internal Server Error: #{e.message}"
+      raise McpGraphMemErrors::InternalServerError, "Internal Server Error: #{e.message}"
     end
   end
 end

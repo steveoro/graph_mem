@@ -1,6 +1,11 @@
 # frozen_string_literal: true
 
 class CreateEntityTool < ApplicationTool
+  # Provide a custom tool name:
+  def self.tool_name
+    'create_entity'
+  end
+
   description "Create a new entity in the graph memory database."
 
   arguments do
@@ -8,6 +13,10 @@ class CreateEntityTool < ApplicationTool
     required(:entity_type).filled(:string).description("The type classification for the new entity (e.g., 'Project', 'Task', 'Issue').")
     optional(:observations).array(:string).description("Optional list of initial observation strings associated with the entity.")
   end
+
+  # def self.input_schema
+  #   schema
+  # end
 
   # Defines the input schema for this tool. Overrides the shared behavior from ApplicationTool
   # Needed, otherwise the LLM will not figure out the input schema for this tool.
@@ -22,10 +31,6 @@ class CreateEntityTool < ApplicationTool
       required: [ "name", "entity_type" ]
     }
   end
-
-  # Add validations if needed, e.g.:
-  # validates :name, presence: true
-  # validates :entityType, presence: true
 
   def call(name:, entity_type:, observations: [])
     logger.info "Performing CreateEntityTool with name: #{name}, type: #{entity_type}"

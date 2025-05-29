@@ -1,6 +1,11 @@
 # frozen_string_literal: true
 
 class CreateRelationTool < ApplicationTool # Assuming ApplicationTool inherits from ActionTool::Base
+  # Provide a custom tool name:
+  def self.tool_name
+    'create_relation'
+  end
+
   description "Create a relationship between two existing entities."
 
   arguments do
@@ -8,6 +13,10 @@ class CreateRelationTool < ApplicationTool # Assuming ApplicationTool inherits f
     required(:to_entity_id).filled(:integer).description("The ID of the entity where the relation ends.")
     required(:relation_type).filled(:string).description("The type classification for the relationship (e.g., 'related_to', 'depends_on').")
   end
+
+  # def self.input_schema
+  #   schema
+  # end
 
   # Defines the input schema for this tool. Overrides the shared behavior from ApplicationTool
   def input_schema_to_json

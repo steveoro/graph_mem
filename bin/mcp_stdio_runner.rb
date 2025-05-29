@@ -69,26 +69,18 @@ server_info = {
 
 RunnerLogger.info("GraphMem Stdio Runner: Server Name='#{server_info[:name]}', Version='#{server_info[:version]}'")
 
-# Manually list and instantiate your tool classes.
-# These should match the tools registered in config/initializers/fast_mcp.rb
-tool_classes = [
-  CreateEntityTool,
-  CreateObservationTool,
-  CreateRelationTool,
-  DeleteEntityTool,
-  DeleteObservationTool,
-  DeleteRelationTool,
-  FindRelationsTool,
-  GetEntityTool,
-  SearchEntitiesTool,
-  VersionTool
-]
+# Dynamically retrieve all tool names for manual registration from app/tools directory, except the shared (abstract) ApplicationTool:
+# (this will work as long as the tools classes are not part of any Module and their definition starts with /^class\s+/)
+tools_classes = Dir.glob(Pathname.new(Dir.pwd).join('app/tools/**/*.rb'))
+                   .map { |f| File.read(f).scan(/^class\s+([A-Z]\w*)/).flatten }
+                   .flatten.uniq
+                   .reject { |c| c == 'ApplicationTool' }
 
-tools_instances = tool_classes.map do |tool_class|
+tools_instances = tools_classes.map do |tool_class|
   begin
-    tool_class.new
+    tool_class.safe_constantize.new
   rescue StandardError => e
-    RunnerLogger.error "Failed to instantiate tool: #{tool_class.name}. Error: #{e.message}"
+    RunnerLogger.error "Failed to instantiate tool: #{tool_class}. Error: #{e.message}"
     nil
   end
 end.compact

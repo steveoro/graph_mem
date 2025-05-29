@@ -1,11 +1,20 @@
 # frozen_string_literal: true
 
 class DeleteEntityTool < ApplicationTool
+  # Provide a custom tool name:
+  def self.tool_name
+    'delete_entity'
+  end
+
   description "Delete a specific entity by ID. This will also delete associated observations and relations."
 
   arguments do
     required(:entity_id).filled(:integer).description("The ID of the entity to delete.")
   end
+
+  # def self.input_schema
+  #   schema
+  # end
 
   # Defines the input schema for this tool. Overrides the shared behavior from ApplicationTool
   def input_schema_to_json

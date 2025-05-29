@@ -3,6 +3,22 @@
 class ApplicationTool < FastMcp::Tool
   attr_accessor :server # Allow server instance to be set on tool instances
 
+  class << self
+    # Centralized input schema definition for schema validation
+    # This is called by FastMcp::Tool#call_with_schema_validation! via self.class.input_schema
+    def input_schema
+      if respond_to?(:schema) && (dsl_schema = schema)
+        # If the specific tool class (e.g., ListEntitiesTool) has defined 'arguments',
+        # it will have a 'schema' class method returning the Dry::Schema::Processor.
+        dsl_schema
+      else
+        # Default for tools that don't use the 'arguments' DSL
+        # (e.g., VersionTool, GetCurrentTimeTool)
+        Dry::Schema.JSON
+      end
+    end
+  end
+
   # write your custom logic to be shared across all tools here
 
   def logger

@@ -1,11 +1,20 @@
 # frozen_string_literal: true
 
 class DeleteObservationTool < ApplicationTool
+  # Provide a custom tool name:
+  def self.tool_name
+    'delete_observation'
+  end
+
   description "Delete a specific observation by ID."
 
   arguments do
     required(:observation_id).filled(:integer).description("The ID of the observation to delete.")
   end
+
+  # def self.input_schema
+  #   schema
+  # end
 
   # Defines the input schema for this tool. Overrides the shared behavior from ApplicationTool
   def input_schema_to_json

@@ -1,6 +1,10 @@
 require "json"
 require "pathname"
 
+# TODO:
+# 1. make memory file path a parameter
+# 2. make 2 different tasks: 1) migrate_json with existing DB overwrite, 2) append_json that appends new or missing data to existing DB
+
 namespace :db do
   desc "Migrate data from JSON Lines file to the database (clears existing data)"
   task migrate_json: :environment do

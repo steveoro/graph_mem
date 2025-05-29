@@ -1,11 +1,20 @@
 # frozen_string_literal: true
 
 class DeleteRelationTool < ApplicationTool
+  # Provide a custom tool name:
+  def self.tool_name
+    'delete_relation'
+  end
+
   description "Delete a specific relation by ID."
 
   arguments do
     required(:relation_id).filled(:integer).description("The ID of the relation to delete.")
   end
+
+  # def self.input_schema
+  #   schema
+  # end
 
   # Defines the input schema for this tool. Overrides the shared behavior from ApplicationTool
   # Needed, otherwise the LLM will not figure out the input schema for this tool.

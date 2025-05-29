@@ -15,7 +15,7 @@ While conversing with the user, be attentive to any new information that falls i
 
 ## Memory Update
 If any new information was gathered during the interaction, update your Graph Memory as follows:
-    a) Create entities for (using `mcp1_CreateEntityTool`):
+    a) Create entities for (using `mcp1_CreateEntityTool`), specifying the entity type in the proper field:
         - "Project" with name and folder path for proper discrimination
         - "Framework" and/or "ApplicationStack", with versions (Rails, React, ..., MySql/Postgres, MongoDb, ...)
         - "Workflow" for common development procedures

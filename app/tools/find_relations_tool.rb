@@ -1,6 +1,11 @@
 # frozen_string_literal: true
 
 class FindRelationsTool < ApplicationTool
+  # Provide a custom tool name:
+  def self.tool_name
+    'find_relations'
+  end
+
   description "Find relations based on optional filtering criteria (from_entity_id, to_entity_id, relation_type)."
 
   arguments do
