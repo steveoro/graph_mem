@@ -9,9 +9,6 @@ class VersionTool < ApplicationTool
   description "Returns the current Graph-Memory backend implementation version"
 
   # No arguments are needed for this tool.
-  # def self.input_schema
-  #   Dry::Schema.JSON
-  # end
 
   def call
     begin

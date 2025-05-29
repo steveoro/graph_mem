@@ -13,10 +13,6 @@ class CreateObservationTool < ApplicationTool
     required(:content).filled(:string).description("The textual content of the observation")
   end
 
-  # def self.input_schema
-  #   schema
-  # end
-
   # Defines the input schema for this tool. Overrides the shared behavior from ApplicationTool
   def input_schema_to_json
     {
@@ -40,7 +36,7 @@ class CreateObservationTool < ApplicationTool
       )
 
       {
-        id: new_observation.id,
+        observation_id: new_observation.id.to_s,
         memory_entity_id: new_observation.memory_entity_id,
         content: new_observation.content,
         created_at: new_observation.created_at.iso8601,

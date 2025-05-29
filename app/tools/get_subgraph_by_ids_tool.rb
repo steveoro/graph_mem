@@ -37,7 +37,7 @@ class GetSubgraphByIDsTool < ApplicationTool
           items: {
             type: :object,
             properties: {
-              id: { type: :integer },
+              entity_id: { type: :integer },
               name: { type: :string },
               entity_type: { type: :string },
               observations: {
@@ -45,18 +45,18 @@ class GetSubgraphByIDsTool < ApplicationTool
                 items: {
                   type: :object,
                   properties: {
-                    id: { type: :integer },
+                    observation_id: { type: :integer },
                     content: { type: :string },
                     created_at: { type: :string, format: 'date-time' },
                     updated_at: { type: :string, format: 'date-time' }
                   },
-                  required: [:id, :content, :created_at, :updated_at]
+                  required: [:observation_id, :content, :created_at, :updated_at]
                 }
               },
               created_at: { type: :string, format: 'date-time' },
               updated_at: { type: :string, format: 'date-time' }
             },
-            required: [:id, :name, :entity_type, :observations, :created_at, :updated_at]
+            required: [:entity_id, :name, :entity_type, :observations, :created_at, :updated_at]
           }
         },
         relations: {
@@ -64,14 +64,14 @@ class GetSubgraphByIDsTool < ApplicationTool
           items: {
             type: :object,
             properties: {
-              id: { type: :integer },
+              relation_id: { type: :integer },
               from_entity_id: { type: :integer },
               to_entity_id: { type: :integer },
               relation_type: { type: :string },
               created_at: { type: :string, format: 'date-time' },
               updated_at: { type: :string, format: 'date-time' }
             },
-            required: [:id, :from_entity_id, :to_entity_id, :relation_type, :created_at, :updated_at]
+            required: [:relation_id, :from_entity_id, :to_entity_id, :relation_type, :created_at, :updated_at]
           }
         }
       },
@@ -93,12 +93,12 @@ class GetSubgraphByIDsTool < ApplicationTool
     # Fetch entities with their observations
     entities_data = MemoryEntity.where(id: entity_ids).includes(:memory_observations).map do |entity|
       {
-        id: entity.id,
+        entity_id: entity.id.to_s,
         name: entity.name,
         entity_type: entity.entity_type,
         observations: entity.observations.map do |obs|
           {
-            id: obs.id,
+            observation_id: obs.id.to_s,
             content: obs.content,
             created_at: obs.created_at.iso8601,
             updated_at: obs.updated_at.iso8601
@@ -114,7 +114,7 @@ class GetSubgraphByIDsTool < ApplicationTool
       .where(from_entity_id: entity_ids, to_entity_id: entity_ids)
       .map do |relation|
       {
-        id: relation.id,
+        relation_id: relation.id.to_s,
         from_entity_id: relation.from_entity_id,
         to_entity_id: relation.to_entity_id,
         relation_type: relation.relation_type,

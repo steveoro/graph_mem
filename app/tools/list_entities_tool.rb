@@ -48,11 +48,11 @@ class ListEntitiesTool < ApplicationTool
           items: {
             type: :object,
             properties: {
-              id: { type: :integer },
+              entity_id: { type: :integer },
               name: { type: :string },
               entity_type: { type: :string, description: 'The type of the entity.' }
             },
-            required: [:id, :name, :entity_type]
+            required: [:entity_id, :name, :entity_type]
           }
         },
         pagination: {
@@ -93,7 +93,7 @@ class ListEntitiesTool < ApplicationTool
 
     output_entities = fetched_entities.map do |entity|
       {
-        id: entity.id,
+        entity_id: entity.id.to_s,
         name: entity.name,
         entity_type: entity.entity_type
       }

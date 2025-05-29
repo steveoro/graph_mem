@@ -12,12 +12,8 @@ class DeleteRelationTool < ApplicationTool
     required(:relation_id).filled(:integer).description("The ID of the relation to delete.")
   end
 
-  # def self.input_schema
-  #   schema
-  # end
-
   # Defines the input schema for this tool. Overrides the shared behavior from ApplicationTool
-  # Needed, otherwise the LLM will not figure out the input schema for this tool.
+  # Needed as actual argument manifest/publication, otherwise the LLM will not figure out the input schema for this tool.
   def input_schema_to_json
     {
       type: "object",
@@ -38,7 +34,7 @@ class DeleteRelationTool < ApplicationTool
 
       # Return the attributes of the deleted relation as a simple hash, plus a success message
       {
-        id: relation_attributes["id"],
+        relation_id: relation_attributes["id"],
         from_entity_id: relation_attributes["from_entity_id"],
         to_entity_id: relation_attributes["to_entity_id"],
         relation_type: relation_attributes["relation_type"],

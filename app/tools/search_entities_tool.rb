@@ -8,15 +8,11 @@ class SearchEntitiesTool < ApplicationTool
 
   description "Search for graph memory entities by name."
 
-  # TODO: after succesfully testing both 'list_entities' and 'search_subgraph', introduce pagination here too
+  # TODO: after successfully testing both 'list_entities' and 'search_subgraph', introduce pagination here too
 
   arguments do
     required(:query).filled(:string).description("The search term to find within entity names (case-insensitive).")
   end
-
-  # def self.input_schema
-  #   schema
-  # end
 
   # Defines the input schema for this tool. Overrides the shared behavior from ApplicationTool
   def input_schema_to_json
@@ -38,7 +34,7 @@ class SearchEntitiesTool < ApplicationTool
       # Format output (array of entity objects) - return array of hashes directly
       matching_entities.map do |entity|
         {
-          id: entity.id,
+          entity_id: entity.id.to_s,
           name: entity.name,
           entity_type: entity.entity_type,
           created_at: entity.created_at.iso8601,

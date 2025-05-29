@@ -47,7 +47,7 @@ class FindRelationsTool < ApplicationTool
       # Format output - return array of hashes directly
       matching_relations.map do |relation|
         {
-          id: relation.id,
+          relation_id: relation.id.to_s,
           from_entity_id: relation.from_entity_id,
           to_entity_id: relation.to_entity_id,
           relation_type: relation.relation_type,

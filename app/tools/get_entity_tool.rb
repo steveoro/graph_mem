@@ -12,10 +12,6 @@ class GetEntityTool < ApplicationTool
     required(:entity_id).filled(:integer).description("The ID of the entity to retrieve.")
   end
 
-  # def self.input_schema
-  #   schema
-  # end
-
   # Defines the input schema for this tool. Overrides the shared behavior from ApplicationTool
   def input_schema_to_json
     {
@@ -36,14 +32,14 @@ class GetEntityTool < ApplicationTool
 
       # Format the output hash - return hash directly
       {
-        id: entity.id,
+        entity_id: entity.id.to_s,
         name: entity.name,
         entity_type: entity.entity_type,
         created_at: entity.created_at.iso8601,
         updated_at: entity.updated_at.iso8601,
         observations: entity.memory_observations.map do |obs|
           {
-            id: obs.id,
+            observation_id: obs.id.to_s,
             content: obs.content,
             created_at: obs.created_at.iso8601,
             updated_at: obs.updated_at.iso8601
@@ -51,7 +47,7 @@ class GetEntityTool < ApplicationTool
         end,
         relations_from: entity.relations_from.map do |rel|
           {
-            id: rel.id,
+            relation_id: rel.id.to_s,
             to_entity_id: rel.to_entity_id,
             relation_type: rel.relation_type,
             created_at: rel.created_at.iso8601,
@@ -61,7 +57,7 @@ class GetEntityTool < ApplicationTool
         end,
         relations_to: entity.relations_to.map do |rel|
           {
-            id: rel.id,
+            relation_id: rel.id.to_s,
             from_entity_id: rel.from_entity_id,
             relation_type: rel.relation_type,
             created_at: rel.created_at.iso8601,

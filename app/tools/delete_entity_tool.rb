@@ -12,10 +12,6 @@ class DeleteEntityTool < ApplicationTool
     required(:entity_id).filled(:integer).description("The ID of the entity to delete.")
   end
 
-  # def self.input_schema
-  #   schema
-  # end
-
   # Defines the input schema for this tool. Overrides the shared behavior from ApplicationTool
   def input_schema_to_json
     {
@@ -38,7 +34,7 @@ class DeleteEntityTool < ApplicationTool
 
       # Return the attributes of the deleted entity as a simple hash, plus a success message
       {
-        id: entity_attributes["id"],
+        entity_id: entity_attributes["id"],
         name: entity_attributes["name"],
         entity_type: entity_attributes["entity_type"],
         created_at: entity_attributes["created_at"].iso8601(3),

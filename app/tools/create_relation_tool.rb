@@ -14,10 +14,6 @@ class CreateRelationTool < ApplicationTool # Assuming ApplicationTool inherits f
     required(:relation_type).filled(:string).description("The type classification for the relationship (e.g., 'related_to', 'depends_on').")
   end
 
-  # def self.input_schema
-  #   schema
-  # end
-
   # Defines the input schema for this tool. Overrides the shared behavior from ApplicationTool
   def input_schema_to_json
     {
@@ -50,7 +46,7 @@ class CreateRelationTool < ApplicationTool # Assuming ApplicationTool inherits f
 
       # Format output - return a single hash directly
       {
-        id: new_relation.id,
+        relation_id: new_relation.id.to_s,
         from_entity_id: new_relation.from_entity_id,
         to_entity_id: new_relation.to_entity_id,
         relation_type: new_relation.relation_type,

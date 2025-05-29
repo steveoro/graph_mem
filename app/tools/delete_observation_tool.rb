@@ -12,10 +12,6 @@ class DeleteObservationTool < ApplicationTool
     required(:observation_id).filled(:integer).description("The ID of the observation to delete.")
   end
 
-  # def self.input_schema
-  #   schema
-  # end
-
   # Defines the input schema for this tool. Overrides the shared behavior from ApplicationTool
   def input_schema_to_json
     {
@@ -39,7 +35,7 @@ class DeleteObservationTool < ApplicationTool
 
       # Return the attributes of the deleted observation as a simple hash
       {
-        id: observation_attributes["id"],
+        observation_id: observation_attributes["id"],
         memory_entity_id: observation_attributes["memory_entity_id"],
         content: observation_attributes["content"],
         created_at: observation_attributes["created_at"].iso8601(3),

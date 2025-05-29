@@ -10,16 +10,6 @@ class GetCurrentTimeTool < ApplicationTool
 
   # No arguments are needed for this tool.
 
-  # Defines the input schema for this tool as an instance method.
-  # Expected by FastMcp::Server for tool validation and tools/list.
-  # def tool_input_schema
-  #   {
-  #     type: "object",
-  #     properties: {},
-  #     required: []
-  #   }
-  # end
-
   # Defines the output schema for this tool as an instance method.
   # While not always strictly required by FastMcp for execution,
   # it's good practice for documentation and potential future use.

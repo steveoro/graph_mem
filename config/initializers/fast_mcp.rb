@@ -3,14 +3,17 @@
 require_relative "../../lib/graph_mem/version" # Ensure GraphMem::VERSION is loaded
 require "fast_mcp"
 
+# Toggle this to enable/disable debug output
+debug_mode = false
+
 # Clear any existing FastMcp server instance if Rails reloads initializers
 # This helps prevent issues with stale server instances in development.
 if Rails.env.development? && defined?(FastMcp.server) && FastMcp.server
-  puts "[DEBUG] FastMcp Initializer: Clearing existing FastMcp.server instance"
+  puts "[DEBUG] FastMcp Initializer: Clearing existing FastMcp.server instance" if debug_mode
   FastMcp.server = nil
 end
 
-puts "[DEBUG] FastMcp Initializer: Starting setup..."
+puts "[DEBUG] FastMcp Initializer: Starting setup..." if debug_mode
 
 # Configure FastMcp logger
 fast_mcp_logger = Logger.new(STDOUT)
@@ -29,7 +32,7 @@ FastMcp.mount_in_rails(
     %r{\Ahttp://localhost(:\d+)?\z}     # Matches http://localhost with any port
   ]
 ) do |server| # server here is the FastMcp::Server instance
-  puts "[DEBUG] FastMcp Initializer (mount_in_rails block): Configuring FastMcp::Server instance (name: #{server.name}, version: #{server.version})"
+  puts "[DEBUG] FastMcp Initializer (mount_in_rails block): Configuring FastMcp::Server instance (name: #{server.name}, version: #{server.version})" if debug_mode
 
   # Dynamically load and register tools from app/tools
   tools_dir = Rails.root.join("app", "tools")
@@ -42,7 +45,7 @@ FastMcp.mount_in_rails(
         # Register all descendents, except the base class ApplicationTool
         if tool_class && tool_class != ApplicationTool && tool_class < FastMcp::Tool
           server.register_tool(tool_class) # Register the class
-          puts "[DEBUG] FastMcp Initializer (mount_in_rails block): Registered tool: #{tool_class.tool_name}"
+          puts "[DEBUG] FastMcp Initializer (mount_in_rails block): Registered tool: #{tool_class.tool_name}" if debug_mode
         end
       rescue NameError => e
         # This can happen if the file defines a class/module that doesn't match the filename convention
@@ -66,7 +69,7 @@ FastMcp.mount_in_rails(
         # Register all descendents, except the base class ApplicationResource
         if resource_class && resource_class != ApplicationResource && resource_class < FastMcp::Resource
           server.register_resource(resource_class) # Register the class
-          puts "[DEBUG] FastMcp Initializer (mount_in_rails block): Registered resource #{resource_class_name}"
+          puts "[DEBUG] FastMcp Initializer (mount_in_rails block): Registered resource #{resource_class_name}" if debug_mode
         else
           puts "[WARN] FastMcp Initializer (mount_in_rails block): #{resource_class_name} from #{file} does not inherit from FastMcp::Resource or could not be loaded"
         end
@@ -79,8 +82,8 @@ FastMcp.mount_in_rails(
   end
 
   # You can access the globally set server via FastMcp.server if needed elsewhere
-  # puts "[DEBUG] FastMcp Initializer (mount_in_rails block): FastMcp.server tools: #{FastMcp.server.tools.keys.join(', ')}"
-  # puts "[DEBUG] FastMcp Initializer (mount_in_rails block): FastMcp.server resources: #{FastMcp.server.resources.keys.join(', ')}"
+  # puts "[DEBUG] FastMcp Initializer (mount_in_rails block): FastMcp.server tools: #{FastMcp.server.tools.keys.join(', ')}" if debug_mode
+  # puts "[DEBUG] FastMcp Initializer (mount_in_rails block): FastMcp.server resources: #{FastMcp.server.resources.keys.join(', ')}" if debug_mode
 end
 
-puts "[DEBUG] FastMcp Initializer: Finished setup using mount_in_rails."
+puts "[DEBUG] FastMcp Initializer: Finished setup using mount_in_rails." if debug_mode

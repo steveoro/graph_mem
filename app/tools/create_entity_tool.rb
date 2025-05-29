@@ -8,18 +8,15 @@ class CreateEntityTool < ApplicationTool
 
   description "Create a new entity in the graph memory database."
 
+  # Needed for input arguments validation
   arguments do
     required(:name).filled(:string).description("The unique name for the new entity.")
     required(:entity_type).filled(:string).description("The type classification for the new entity (e.g., 'Project', 'Task', 'Issue').")
     optional(:observations).array(:string).description("Optional list of initial observation strings associated with the entity.")
   end
 
-  # def self.input_schema
-  #   schema
-  # end
-
   # Defines the input schema for this tool. Overrides the shared behavior from ApplicationTool
-  # Needed, otherwise the LLM will not figure out the input schema for this tool.
+  # Needed as actual argument manifest/publication, otherwise the LLM will not figure out the input schema for this tool.
   def input_schema_to_json
     {
       type: "object",
@@ -56,7 +53,7 @@ class CreateEntityTool < ApplicationTool
 
     # Format output hash - return hash directly
     {
-      id: new_entity.id,
+      entity_id: new_entity.id.to_s,
       name: new_entity.name,
       entity_type: new_entity.entity_type,
       created_at: new_entity.created_at.iso8601,
