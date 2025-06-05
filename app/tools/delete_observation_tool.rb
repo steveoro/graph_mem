@@ -6,53 +6,27 @@ class DeleteObservationTool < ApplicationTool
     'delete_observation'
   end
 
-  description "Delete a specific observation by ID."
+  description "Delete an observation from the graph memory database."
 
-  arguments do
-    required(:observation_id).filled(:integer).description("The ID of the observation to delete.")
-  end
-
-  # Defines the input schema for this tool. Overrides the shared behavior from ApplicationTool
-  def input_schema_to_json
-    {
-      type: "object",
-      properties: { observation_id: { type: "integer", description: "The ID of the observation to delete." } },
-      required: [ "observation_id" ]
-    }
-  end
+  tool_input_schema({
+    type: "object",
+    properties: {
+      observation_id: { type: "string", description: "The ID of the observation to delete." }
+    },
+    required: ["observation_id"]
+  })
 
   # Output: Success message object
 
   def call(observation_id:)
-    logger.info "Performing DeleteObservationTool with observation_id: #{observation_id}"
+    return validation_error("Observation ID cannot be blank") if observation_id.blank?
 
-    begin
-      # Find and destroy the observation
-      observation = MemoryObservation.find(observation_id)
-      observation_attributes = observation.attributes # Capture attributes before destroy
-      observation.destroy!
-      logger.info "Deleted observation with ID #{observation_attributes["id"]}"
+    observation = MemoryObservation.find_by(id: observation_id)
+    return not_found_error("Observation", observation_id) unless observation
 
-      # Return the attributes of the deleted observation as a simple hash
-      {
-        observation_id: observation_attributes["id"],
-        memory_entity_id: observation_attributes["memory_entity_id"],
-        content: observation_attributes["content"],
-        created_at: observation_attributes["created_at"].iso8601(3),
-        updated_at: observation_attributes["updated_at"].iso8601(3),
-        message: "Observation with ID=#{observation_id} deleted successfully."
-      }
-    rescue ActiveRecord::RecordNotFound => e
-      error_message = "Observation with ID=#{observation_id} not found."
-      logger.error "ResourceNotFound in DeleteObservationTool: #{error_message} (was: #{e.message})"
-      raise McpGraphMemErrors::ResourceNotFound, error_message
-    rescue ActiveRecord::RecordNotDestroyed => e
-      error_message = "Failed to delete observation with ID=#{observation_id}: #{e.message}"
-      logger.error "OperationFailed in DeleteObservationTool: #{error_message}"
-      raise McpGraphMemErrors::OperationFailed, error_message
-    rescue StandardError => e
-      logger.error "InternalServerError in DeleteObservationTool: #{e.message} - #{e.backtrace.join("\n")}"
-      raise McpGraphMemErrors::InternalServerError, "An internal server error occurred in DeleteObservationTool: #{e.message}"
-    end
+    observation.destroy!
+    success_response({ message: "Observation deleted successfully", deleted_observation_id: observation_id })
+  rescue StandardError => e
+    error_response("Error deleting observation: #{e.message}")
   end
 end

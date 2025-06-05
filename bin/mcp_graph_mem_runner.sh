@@ -1,7 +1,7 @@
 #!/bin/bash
 # Wrapper script to set the correct RVM environment and working directory
 
-echo "[RunnerLog] Starting windsurf_mcp_graph_mem_runner.sh" >&2
+echo "[RunnerLog] Starting mcp_graph_mem_runner.sh" >&2
 
 echo "[RunnerLog] Shell identified as: $(ps -p $$ -o comm=)" >&2
 echo "[RunnerLog] PATH: $PATH" >&2

@@ -72,7 +72,7 @@ Edit your MCP (JSON) configuration file, usually located under the folder of you
     "graph_mem": {
       "command": "/bin/bash",
       "args": [
-        "<path_to_graph_mem_folder>/bin/windsurf_mcp_graph_mem_runner.sh"
+        "<path_to_graph_mem_folder>/bin/mcp_graph_mem_runner.sh"
       ],
       "env": {
         "RAILS_ENV": "development"
@@ -82,7 +82,7 @@ Edit your MCP (JSON) configuration file, usually located under the folder of you
 }
 ```
 
-Always use the absolute path to the `windsurf_mcp_graph_mem_runner.sh` script.
+Always use the absolute path to the `mcp_graph_mem_runner.sh` script.
 
 Subsequently, edit your global rules file and add the contents of the `docs/knowledge_graph_management_rules.md` file to it.
 
@@ -103,7 +103,7 @@ bin/mcp
 
 The SSE MCP endpoints will be available at `http://localhost:3003/mcp/sse` and `http://localhost:3003/mcp/messages`.
 
-The STDIO MCP server can be run using the `bin/windsurf_mcp_graph_mem_runner.sh` script. Although designed to work with Windsurf, it should work also with other MCP clients (currently not tested).
+The STDIO MCP server can be run using the `bin/mcp_graph_mem_runner.sh` script. Although designed to work with Windsurf, it should work also with other MCP clients (currently not tested).
 
 
 ## Interacting with the MCP Server

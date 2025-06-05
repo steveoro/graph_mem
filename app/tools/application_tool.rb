@@ -1,26 +1,27 @@
 # frozen_string_literal: true
 
-class ApplicationTool < FastMcp::Tool
-  attr_accessor :server # Allow server instance to be set on tool instances
+require 'mcp'
 
+# Base class for graph_mem tools - inherits directly from MCP::Tool
+class ApplicationTool < MCP::Tool
   class << self
-    # Centralized input schema definition for schema validation
-    # This is called by FastMcp::Tool#call_with_schema_validation! via self.class.input_schema
-    def input_schema
-      if respond_to?(:schema) && (dsl_schema = schema)
-        # If the specific tool class (e.g., ListEntitiesTool) has defined 'arguments',
-        # it will have a 'schema' class method returning the Dry::Schema::Processor.
-        dsl_schema
-      else
-        # Default for tools that don't use the 'arguments' DSL
-        # (e.g., VersionTool, GetCurrentTimeTool)
-        Dry::Schema.JSON
-      end
+    # Tool name - must be implemented by subclasses
+    def tool_name
+      raise NotImplementedError, "Subclasses must implement tool_name"
+    end
+
+    # Tool description - can be overridden by subclasses
+    def description_text
+      "#{tool_name} - A general purpose tool."
+    end
+
+    # Tool input schema in JSON Schema format
+    def tool_input_schema
+      { type: "object", properties: {}, required: [] }
     end
   end
 
-  # write your custom logic to be shared across all tools here
-
+  # Access to Rails logger
   def logger
     Rails.logger
   end
@@ -29,25 +30,19 @@ class ApplicationTool < FastMcp::Tool
     self.class.tool_name
   end
 
-  # Expected by FastMcp::Server for tools/list
+  # Expected by the conversion layer
   def description
-    if self.class.respond_to?(:description)
-      self.class.description
-    else
-      "#{tool_name} - A general purpose tool."
-    end
+    self.class.description
   end
 
-  # Expected by FastMcp::Server for tools/list
+  # Expected by the conversion layer
   def input_schema_to_json
-    # Corresponds to `tool.input_schema_to_json || { type: 'object', properties: {}, required: [] }`
-    # in FastMcp::Server#handle_tools_list
-    # Individual tools can override this if they have a specific input schema.
-    if self.class.respond_to?(:tool_input_schema)
-      self.class.tool_input_schema
-    else
-      { type: "object", properties: {}, required: [] }
-    end
+    self.class.tool_input_schema
+  end
+
+  # Main tool execution method - must be implemented by subclasses
+  def call(*args)
+    raise NotImplementedError, "Subclasses must implement call method"
   end
 
   # Optional: Convenience class method for tools to define their description
@@ -60,5 +55,40 @@ class ApplicationTool < FastMcp::Tool
   def self.tool_input_schema(schema = nil)
     @tool_input_schema = schema if schema
     @tool_input_schema || { type: "object", properties: {}, required: [] }
+  end
+
+  # DSL method to define description
+  def self.description(desc = nil)
+    @description = desc if desc
+    @description || tool_description
+  end
+
+  protected
+
+  # Helper method to format successful responses
+  def success_response(data)
+    if data.is_a?(Hash)
+      data.to_json
+    elsif data.is_a?(String)
+      data
+    else
+      data.to_s
+    end
+  end
+
+  # Helper method to format error responses
+  def error_response(message)
+    { error: message }.to_json
+  end
+
+  # Helper method for validation errors
+  def validation_error(message)
+    error_response("Validation Error: #{message}")
+  end
+
+  # Helper method for not found errors
+  def not_found_error(resource, identifier = nil)
+    msg = identifier ? "#{resource} with identifier '#{identifier}' not found" : "#{resource} not found"
+    error_response(msg)
   end
 end

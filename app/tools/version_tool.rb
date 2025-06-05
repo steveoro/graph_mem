@@ -3,23 +3,30 @@
 class VersionTool < ApplicationTool
   # Provide a custom tool name:
   def self.tool_name
-    'get_version'
+    'version'
   end
 
-  description "Returns the current Graph-Memory backend implementation version"
+  description 'Returns the current version of the GraphMem server.'
 
-  # No arguments are needed for this tool.
+  tool_input_schema({
+    type: "object",
+    properties: {},
+    required: []
+  })
 
   def call
-    begin
-      { version: GraphMem::VERSION.to_s }
-    rescue NameError => e
-      # This handles the case where GraphMem::VERSION might not be defined
-      logger.error "Version constant not found: #{e.message}"
-      raise McpGraphMemErrors::InternalServerError, "Version information is currently unavailable."
-    rescue => e
-      logger.error "Unexpected error in VersionTool: #{e.message}\n#{e.backtrace.join("\n")}"
-      raise McpGraphMemErrors::InternalServerError, "Internal Server Error: #{e.message}"
-    end
+    version = defined?(GraphMem::VERSION) ? GraphMem::VERSION.to_s : '0.6.2'
+    result = {
+      version: version,
+      server_name: 'graph-mem',
+      ruby_version: RUBY_VERSION,
+      rails_version: Rails.version
+    }
+
+    logger.info "VersionTool executed successfully"
+    success_response(result)
+  rescue StandardError => e
+    logger.error "Error in VersionTool: #{e.message} - #{e.backtrace.join("\n")}"
+    error_response("An error occurred while getting version information: #{e.message}")
   end
 end

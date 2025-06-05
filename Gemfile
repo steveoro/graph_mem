@@ -27,7 +27,7 @@ gem "solid_cache"
 gem "solid_queue"
 gem "solid_cable"
 
-gem "fast-mcp" # MCP Server implementation
+# gem "fast-mcp" # MCP Server implementation
 
 gem "bootsnap", require: false # Reduces boot times through caching; required in config/boot.rb
 # Deploy this application anywhere as a Docker container [https://kamal-deploy.org]
@@ -37,6 +37,8 @@ gem "thruster", require: false
 
 # Use Active Storage variants [https://guides.rubyonrails.org/active_storage_overview.html#transforming-images]
 # gem "image_processing", "~> 1.2"
+
+gem 'mcp'
 
 group :development, :test do
   # See https://guides.rubyonrails.org/debugging_rails_applications.html#debugging-with-the-debug-gem

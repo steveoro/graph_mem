@@ -6,13 +6,15 @@ class FindRelationsTool < ApplicationTool
     'find_relations'
   end
 
-  description "Find relations based on optional filtering criteria (from_entity_id, to_entity_id, relation_type)."
+  description "Find relations for an entity in the graph memory database."
 
-  arguments do
-    optional(:from_entity_id).filled(:integer).description("Optional: Filter relations starting from this entity ID.")
-    optional(:to_entity_id).filled(:integer).description("Optional: Filter relations ending at this entity ID.")
-    optional(:relation_type).filled(:string).description("Optional: Filter relations by this type.")
-  end
+  tool_input_schema({
+    type: "object",
+    properties: {
+      entity_id: { type: "string", description: "The ID of the entity to find relations for." }
+    },
+    required: ["entity_id"]
+  })
 
   # Defines the input schema for this tool. Overrides the shared behavior from ApplicationTool
   # Needed, otherwise the LLM will not figure out the input schema for this tool.
@@ -20,44 +22,40 @@ class FindRelationsTool < ApplicationTool
     {
       type: "object",
       properties: {
-        from_entity_id: { type: "integer", description: "Optional: Filter relations starting from this entity ID." },
-        to_entity_id: { type: "integer", description: "Optional: Filter relations ending at this entity ID." },
-        relation_type: { type: "string", description: "Optional: Filter relations by this type." }
+        entity_id: { type: "string", description: "The ID of the entity to find relations for." }
       },
-      required: []
+      required: ["entity_id"]
     }
   end
 
   # Output: Array of relation objects
 
-  def call(from_entity_id: nil, to_entity_id: nil, relation_type: nil)
-    logger.info "Performing FindRelationsTool with filters: from=#{from_entity_id}, to=#{to_entity_id}, type=#{relation_type}"
-    begin
-      # Start with all relations
-      relations_query = MemoryRelation.all
+  def call(entity_id:)
+    return validation_error("Entity ID cannot be blank") if entity_id.blank?
 
-      # Apply filters if provided
-      relations_query = relations_query.where(from_entity_id: from_entity_id) if from_entity_id.present?
-      relations_query = relations_query.where(to_entity_id: to_entity_id) if to_entity_id.present?
-      relations_query = relations_query.where(relation_type: relation_type) if relation_type.present?
+    entity = MemoryEntity.find_by(id: entity_id)
+    return not_found_error("Entity", entity_id) unless entity
 
-      # Execute the query and get results
-      matching_relations = relations_query.to_a
+    relations_from = MemoryRelation.includes(:to_entity).where(from_entity: entity)
+    relations_to = MemoryRelation.includes(:from_entity).where(to_entity: entity)
 
-      # Format output - return array of hashes directly
-      matching_relations.map do |relation|
-        {
-          relation_id: relation.id.to_s,
-          from_entity_id: relation.from_entity_id,
-          to_entity_id: relation.to_entity_id,
-          relation_type: relation.relation_type,
-          created_at: relation.created_at.iso8601,
-          updated_at: relation.updated_at.iso8601
-        }
-      end
-    rescue StandardError => e
-      logger.error "InternalServerError in FindRelationsTool: #{e.message} - #{e.backtrace.join("\n")}"
-      raise McpGraphMemErrors::InternalServerError, "An internal server error occurred in FindRelationsTool: #{e.message}"
-    end
+    result = {
+      entity_id: entity_id,
+      entity_name: entity.name,
+      relations_from: relations_from.map { |r| {
+        relation_id: r.id.to_s,
+        to_entity_name: r.to_entity.name,
+        relation_type: r.relation_type
+      }},
+      relations_to: relations_to.map { |r| {
+        relation_id: r.id.to_s,
+        from_entity_name: r.from_entity.name,
+        relation_type: r.relation_type
+      }}
+    }
+
+    success_response(result)
+  rescue StandardError => e
+    error_response("Error finding relations: #{e.message}")
   end
 end

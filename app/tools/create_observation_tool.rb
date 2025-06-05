@@ -6,53 +6,59 @@ class CreateObservationTool < ApplicationTool
     'create_observation'
   end
 
-  description "Creates new observations to existing entities in the knowledge graph"
+  description "Add a new observation to an existing entity in the graph memory database."
 
-  arguments do
-    required(:entity_id).filled(:integer).description("The ID of the entity to add the observation to")
-    required(:content).filled(:string).description("The textual content of the observation")
-  end
-
-  # Defines the input schema for this tool. Overrides the shared behavior from ApplicationTool
-  def input_schema_to_json
-    {
-      type: "object",
-      properties: {
-        entity_id: { type: "integer", description: "The ID of the entity to add the observation to" },
-        content: { type: "string", description: "The textual content of the observation" }
+  tool_input_schema({
+    type: "object",
+    properties: {
+      entity_id: {
+        type: "string",
+        description: "The ID of the entity to add the observation to."
       },
-      required: [ "entity_id", "content" ]
-    }
-  end
+      content: {
+        type: "string",
+        description: "The content of the observation to add."
+      }
+    },
+    required: ["entity_id", "content"]
+  })
 
   def call(entity_id:, content:)
-    logger.info "Performing CreateObservationTool with entity_id: #{entity_id}, content: '#{content}'"
-    begin
-      entity = MemoryEntity.find(entity_id)
+    logger.info "Creating observation for entity_id: #{entity_id}"
 
-      new_observation = MemoryObservation.create!(
-        memory_entity: entity,
-        content: content
-      )
+    # Validate inputs
+    return validation_error("Entity ID cannot be blank") if entity_id.blank?
+    return validation_error("Content cannot be blank") if content.blank?
 
-      {
-        observation_id: new_observation.id.to_s,
-        memory_entity_id: new_observation.memory_entity_id,
-        content: new_observation.content,
-        created_at: new_observation.created_at.iso8601,
-        updated_at: new_observation.updated_at.iso8601
-      }
-    rescue ActiveRecord::RecordNotFound => e
-      error_message = "Entity with ID=#{entity_id} not found."
-      logger.error "ResourceNotFound in CreateObservationTool: #{error_message} (was: #{e.message})"
-      raise McpGraphMemErrors::ResourceNotFound, error_message
-    rescue ActiveRecord::RecordInvalid => e
-      error_message = "Validation Failed: #{e.record.errors.full_messages.join(', ')}"
-      logger.error "InvalidArguments in CreateObservationTool: #{error_message} (was: #{e.message})"
-      raise FastMcp::Tool::InvalidArgumentsError, error_message
-    rescue StandardError => e
-      logger.error "InternalServerError in CreateObservationTool: #{e.message} - #{e.backtrace.join("\n")}"
-      raise McpGraphMemErrors::InternalServerError, "An internal server error occurred in CreateObservationTool: #{e.message}"
-    end
+    # Find the entity
+    entity = MemoryEntity.find_by(id: entity_id)
+    return not_found_error("Entity", entity_id) unless entity
+
+    # Create the observation
+    observation = MemoryObservation.create!(
+      memory_entity: entity,
+      content: content
+    )
+
+    logger.info "Created observation: #{observation.id} for entity: #{entity.name}"
+
+    # Format output hash
+    result = {
+      observation_id: observation.id.to_s,
+      entity_id: entity.id.to_s,
+      entity_name: entity.name,
+      content: observation.content,
+      created_at: observation.created_at.iso8601,
+      updated_at: observation.updated_at.iso8601
+    }
+
+    success_response(result)
+  rescue ActiveRecord::RecordInvalid => e
+    error_message = "Validation failed: #{e.record.errors.full_messages.join(', ')}"
+    logger.error "Validation error in CreateObservationTool: #{error_message}"
+    validation_error(error_message)
+  rescue StandardError => e
+    logger.error "Error in CreateObservationTool: #{e.message} - #{e.backtrace.join("\n")}"
+    error_response("An internal server error occurred while creating the observation: #{e.message}")
   end
 end
