@@ -25,37 +25,37 @@ end
 # This patch makes FastMcp::Logger instances also write their logs to STDERR,
 # allowing visibility into FastMcp::Server and StdioTransport internal logging
 # when their own logger (which is a FastMcp::Logger) is used.
-if ENV['RAILS_ENV'] == 'development' # Apply patch only in development
-  RunnerLogger.info("[RunnerLog] Applying FastMcp::Logger debug patch to redirect its output to STDERR.")
-  module FastMcp
-    class Logger
-      # Store the original 'add' method if not already done
-      unless instance_methods.include?(:original_add_for_mcp_stderr_debug)
-        alias_method :original_add_for_mcp_stderr_debug, :add
-      end
+# if ENV['RAILS_ENV'] == 'development' # Apply patch only in development
+#   RunnerLogger.info("[RunnerLog] Applying FastMcp::Logger debug patch to redirect its output to STDERR.")
+#   module FastMcp
+#     class Logger
+#       # Store the original 'add' method if not already done
+#       unless instance_methods.include?(:original_add_for_mcp_stderr_debug)
+#         alias_method :original_add_for_mcp_stderr_debug, :add
+#       end
 
-      # Override 'add' to also log to a dedicated STDERR logger
-      def add(severity, message = nil, progname = nil, &block)
-        # Initialize a dedicated STDERR logger for this FastMcp::Logger instance if not present
-        @stderr_debug_logger_instance ||= begin
-          logger = ::Logger.new(STDERR)
-          logger.level = self.level # Use the level set on this FastMcp::Logger instance
-          logger.formatter = proc do |s, datetime, p, msg|
-            "[FastMcpInternal-#{s}] #{msg}\n"
-          end
-          logger
-        end
+#       # Override 'add' to also log to a dedicated STDERR logger
+#       def add(severity, message = nil, progname = nil, &block)
+#         # Initialize a dedicated STDERR logger for this FastMcp::Logger instance if not present
+#         @stderr_debug_logger_instance ||= begin
+#           logger = ::Logger.new(STDERR)
+#           logger.level = self.level # Use the level set on this FastMcp::Logger instance
+#           logger.formatter = proc do |s, datetime, p, msg|
+#             "[FastMcpInternal-#{s}] #{msg}\n"
+#           end
+#           logger
+#         end
 
-        # Log the message using the dedicated STDERR logger
-        @stderr_debug_logger_instance.add(severity, message, progname, &block)
+#         # Log the message using the dedicated STDERR logger
+#         @stderr_debug_logger_instance.add(severity, message, progname, &block)
 
-        # Call the original 'add' method. For :stdio transport, this is a no-op.
-        # For other transports, it would log to STDOUT if originally configured to do so.
-        original_add_for_mcp_stderr_debug(severity, message, progname, &block)
-      end
-    end
-  end
-end
+#         # Call the original 'add' method. For :stdio transport, this is a no-op.
+#         # For other transports, it would log to STDOUT if originally configured to do so.
+#         original_add_for_mcp_stderr_debug(severity, message, progname, &block)
+#       end
+#     end
+#   end
+# end
 # --- END DEBUG MONKEY PATCH ---
 
 # Ensure GraphMem::VERSION is loaded (config/initializers/00_load_version.rb should handle this via environment.rb)
