@@ -3,7 +3,7 @@
 class DeleteEntityTool < ApplicationTool
   # Provide a custom tool name:
   def self.tool_name
-    'delete_entity'
+    "delete_entity"
   end
 
   description "Delete a specific entity by ID. This will also delete associated observations and relations."

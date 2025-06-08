@@ -3,7 +3,7 @@
 class CreateRelationTool < ApplicationTool # Assuming ApplicationTool inherits from ActionTool::Base
   # Provide a custom tool name:
   def self.tool_name
-    'create_relation'
+    "create_relation"
   end
 
   description "Create a relationship between two existing entities."

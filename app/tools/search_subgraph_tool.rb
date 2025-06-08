@@ -6,19 +6,19 @@ class SearchSubgraphTool < ApplicationTool
   DEFAULT_PAGE = 1
 
   def self.tool_name
-    'search_subgraph'
+    "search_subgraph"
   end
 
-  description 'Searches a query across entity names, types, and observations. ' \
-    'Returns a paginated subgraph of matching entities (with observations) ' \
-    'and relations exclusively between them, using page/per_page.'
+  description "Searches a query across entity names, types, and observations. " \
+    "Returns a paginated subgraph of matching entities (with observations) " \
+    "and relations exclusively between them, using page/per_page."
 
   # Defines arguments for fast-mcp validation.
   arguments do
-    required(:query).filled(:string).description('The search term to find within entity names, types, or observations.')
-    optional(:search_in_name).filled(:bool).description('Whether to search in entity names. Defaults to true.')
-    optional(:search_in_type).filled(:bool).description('Whether to search in entity types. Defaults to true.')
-    optional(:search_in_observations).filled(:bool).description('Whether to search in entity observations. Defaults to true.')
+    required(:query).filled(:string).description("The search term to find within entity names, types, or observations.")
+    optional(:search_in_name).filled(:bool).description("Whether to search in entity names. Defaults to true.")
+    optional(:search_in_type).filled(:bool).description("Whether to search in entity types. Defaults to true.")
+    optional(:search_in_observations).filled(:bool).description("Whether to search in entity observations. Defaults to true.")
     optional(:page).filled(:integer)
                    .description("The page number to retrieve. Defaults to #{DEFAULT_PAGE}. Must be 1 or greater.")
     optional(:per_page).filled(:integer)
@@ -31,36 +31,36 @@ class SearchSubgraphTool < ApplicationTool
       properties: {
         query: {
           type: :string,
-          description: 'The search term.'
+          description: "The search term."
         },
         search_in_name: {
           type: :boolean,
           default: true,
-          description: 'Whether to search in entity names.'
+          description: "Whether to search in entity names."
         },
         search_in_type: {
           type: :boolean,
           default: true,
-          description: 'Whether to search in entity types.'
+          description: "Whether to search in entity types."
         },
         search_in_observations: {
           type: :boolean,
           default: true,
-          description: 'Whether to search in entity observations.'
+          description: "Whether to search in entity observations."
         },
         page: {
-          type: [:integer, :null],
+          type: [ :integer, :null ],
           description: "Optional. The page number to retrieve. Defaults to #{DEFAULT_PAGE}.",
           minimum: 1 # Informational, enforced in call
         },
         per_page: {
-          type: [:integer, :null],
+          type: [ :integer, :null ],
           description: "Optional. Maximum number of entities to return per page. Defaults to #{DEFAULT_PER_PAGE}, max #{MAX_PER_PAGE}.",
           minimum: 1, # Informational
           maximum: MAX_PER_PAGE # Informational
         }
       },
-      required: [:query]
+      required: [ :query ]
     }.freeze
   end
 
@@ -83,16 +83,16 @@ class SearchSubgraphTool < ApplicationTool
                   properties: {
                     observation_id: { type: :integer },
                     content: { type: :string },
-                    created_at: { type: :string, format: 'date-time' },
-                    updated_at: { type: :string, format: 'date-time' }
+                    created_at: { type: :string, format: "date-time" },
+                    updated_at: { type: :string, format: "date-time" }
                   },
-                  required: [:observation_id, :content, :created_at, :updated_at]
+                  required: [ :observation_id, :content, :created_at, :updated_at ]
                 }
               },
-              created_at: { type: :string, format: 'date-time' },
-              updated_at: { type: :string, format: 'date-time' }
+              created_at: { type: :string, format: "date-time" },
+              updated_at: { type: :string, format: "date-time" }
             },
-            required: [:entity_id, :name, :entity_type, :observations, :created_at, :updated_at]
+            required: [ :entity_id, :name, :entity_type, :observations, :created_at, :updated_at ]
           }
         },
         relations: {
@@ -104,35 +104,35 @@ class SearchSubgraphTool < ApplicationTool
               from_entity_id: { type: :integer },
               to_entity_id: { type: :integer },
               relation_type: { type: :string },
-              created_at: { type: :string, format: 'date-time' },
-              updated_at: { type: :string, format: 'date-time' }
+              created_at: { type: :string, format: "date-time" },
+              updated_at: { type: :string, format: "date-time" }
             },
-            required: [:relation_id, :from_entity_id, :to_entity_id, :relation_type, :created_at, :updated_at]
+            required: [ :relation_id, :from_entity_id, :to_entity_id, :relation_type, :created_at, :updated_at ]
           }
         },
         pagination: {
           type: :object,
           properties: {
-            total_entities: { type: :integer, description: 'Total number of entities matching the search criteria.' },
-            per_page: { type: :integer, description: 'Number of entities requested per page.' },
-            current_page: { type: :integer, description: 'The current page number.' },
-            total_pages: { type: :integer, description: 'Total number of pages available for the search results.' }
+            total_entities: { type: :integer, description: "Total number of entities matching the search criteria." },
+            per_page: { type: :integer, description: "Number of entities requested per page." },
+            current_page: { type: :integer, description: "The current page number." },
+            total_pages: { type: :integer, description: "Total number of pages available for the search results." }
           },
-          required: [:total_entities, :per_page, :current_page, :total_pages]
+          required: [ :total_entities, :per_page, :current_page, :total_pages ]
         }
       },
-      required: [:entities, :relations, :pagination]
+      required: [ :entities, :relations, :pagination ]
     }.freeze
   end
 
   def call(query:, search_in_name: true, search_in_type: true, search_in_observations: true, page: nil, per_page: nil)
     query_term = query
     if query_term.blank?
-      raise FastMcp::Tool::InvalidArgumentsError, 'Query term cannot be blank.'
+      raise FastMcp::Tool::InvalidArgumentsError, "Query term cannot be blank."
     end
 
     unless search_in_name || search_in_type || search_in_observations
-      raise FastMcp::Tool::InvalidArgumentsError, 'At least one search field (name, type, observations) must be enabled.'
+      raise FastMcp::Tool::InvalidArgumentsError, "At least one search field (name, type, observations) must be enabled."
     end
 
     effective_page = page.nil? ? DEFAULT_PAGE : page.to_i
@@ -154,21 +154,21 @@ class SearchSubgraphTool < ApplicationTool
     sql_params = {}
 
     if search_in_name
-      sql_conditions << 'LOWER(memory_entities.name) LIKE :like_query_term'
+      sql_conditions << "LOWER(memory_entities.name) LIKE :like_query_term"
     end
     if search_in_type
-      sql_conditions << 'LOWER(memory_entities.entity_type) LIKE :like_query_term'
+      sql_conditions << "LOWER(memory_entities.entity_type) LIKE :like_query_term"
     end
     sql_params[:like_query_term] = like_query_term
 
     if search_in_observations
       # Ensure join is added only if searching observations
       base_query = base_query.joins(:memory_observations) unless base_query.joins_values.include?(:memory_observations)
-      sql_conditions << 'LOWER(memory_observations.content) LIKE :like_query_term'
+      sql_conditions << "LOWER(memory_observations.content) LIKE :like_query_term"
     end
 
     # Combine conditions with OR
-    combined_sql_conditions = sql_conditions.join(' OR ')
+    combined_sql_conditions = sql_conditions.join(" OR ")
 
     # Get all matching entity IDs first
     matching_entity_ids = base_query.where(combined_sql_conditions, sql_params).pluck(:id).uniq
@@ -222,7 +222,7 @@ class SearchSubgraphTool < ApplicationTool
     end
 
     total_pages_count = (total_matching_entities.to_f / effective_per_page).ceil
-    total_pages_count = [total_pages_count, 1].max # Ensure at least 1 page
+    total_pages_count = [ total_pages_count, 1 ].max # Ensure at least 1 page
 
     {
       entities: entities_to_return,

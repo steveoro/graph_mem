@@ -3,7 +3,7 @@
 class CreateEntityTool < ApplicationTool
   # Provide a custom tool name:
   def self.tool_name
-    'create_entity'
+    "create_entity"
   end
 
   description "Create a new entity in the graph memory database."

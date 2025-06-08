@@ -3,7 +3,7 @@
 class DeleteRelationTool < ApplicationTool
   # Provide a custom tool name:
   def self.tool_name
-    'delete_relation'
+    "delete_relation"
   end
 
   description "Delete a specific relation by ID."

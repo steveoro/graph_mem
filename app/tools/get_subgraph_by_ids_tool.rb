@@ -2,15 +2,15 @@
 
 class GetSubgraphByIDsTool < ApplicationTool
   def self.tool_name
-    'get_subgraph_by_ids'
+    "get_subgraph_by_ids"
   end
 
-  description 'Retrieves a specific set of entities by their IDs, including their observations, ' \
-    'and all relations that exist exclusively between them.'
+  description "Retrieves a specific set of entities by their IDs, including their observations, " \
+    "and all relations that exist exclusively between them."
 
   # Defines arguments for fast-mcp validation.
   arguments do
-    required(:entity_ids).array(:integer).description('An array of entity IDs to include in the subgraph.')
+    required(:entity_ids).array(:integer).description("An array of entity IDs to include in the subgraph.")
   end
 
   def tool_input_schema
@@ -21,10 +21,10 @@ class GetSubgraphByIDsTool < ApplicationTool
           type: :array,
           items: { type: :integer },
           minItems: 1,
-          description: 'An array of entity IDs to retrieve.'
+          description: "An array of entity IDs to retrieve."
         }
       },
-      required: [:entity_ids]
+      required: [ :entity_ids ]
     }.freeze
   end
 
@@ -47,16 +47,16 @@ class GetSubgraphByIDsTool < ApplicationTool
                   properties: {
                     observation_id: { type: :integer },
                     content: { type: :string },
-                    created_at: { type: :string, format: 'date-time' },
-                    updated_at: { type: :string, format: 'date-time' }
+                    created_at: { type: :string, format: "date-time" },
+                    updated_at: { type: :string, format: "date-time" }
                   },
-                  required: [:observation_id, :content, :created_at, :updated_at]
+                  required: [ :observation_id, :content, :created_at, :updated_at ]
                 }
               },
-              created_at: { type: :string, format: 'date-time' },
-              updated_at: { type: :string, format: 'date-time' }
+              created_at: { type: :string, format: "date-time" },
+              updated_at: { type: :string, format: "date-time" }
             },
-            required: [:entity_id, :name, :entity_type, :observations, :created_at, :updated_at]
+            required: [ :entity_id, :name, :entity_type, :observations, :created_at, :updated_at ]
           }
         },
         relations: {
@@ -68,14 +68,14 @@ class GetSubgraphByIDsTool < ApplicationTool
               from_entity_id: { type: :integer },
               to_entity_id: { type: :integer },
               relation_type: { type: :string },
-              created_at: { type: :string, format: 'date-time' },
-              updated_at: { type: :string, format: 'date-time' }
+              created_at: { type: :string, format: "date-time" },
+              updated_at: { type: :string, format: "date-time" }
             },
-            required: [:relation_id, :from_entity_id, :to_entity_id, :relation_type, :created_at, :updated_at]
+            required: [ :relation_id, :from_entity_id, :to_entity_id, :relation_type, :created_at, :updated_at ]
           }
         }
       },
-      required: [:entities, :relations]
+      required: [ :entities, :relations ]
     }.freeze
   end
 
@@ -85,7 +85,7 @@ class GetSubgraphByIDsTool < ApplicationTool
 
     if entity_ids.empty?
       # This is an invalid argument scenario
-      error_message = 'entity_ids array cannot be empty.'
+      error_message = "entity_ids array cannot be empty."
       logger.error "InvalidArgumentsError in GetSubgraphByIDsTool: #{error_message}"
       raise FastMcp::Tool::InvalidArgumentsError, error_message
     end

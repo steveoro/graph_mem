@@ -70,73 +70,78 @@ if defined?(FastMcp::Server) && defined?(FastMcp::Transports::RackTransport)
   module FastMcp
     class Server
       def handle_tools_call(params, id)
-        STDERR.puts "[PATCH_DEBUG|handle_tools_call_V6_ENTRY] RAW PARAMS: #{params.inspect}, ID: #{id.inspect}"
+        STDERR.puts "[PATCH_DEBUG|handle_tools_call_V7_ENTRY] RAW PARAMS: #{params.inspect}, ID: #{id.inspect}"
         STDERR.flush
         tool_name = params["name"]
         arguments = params["arguments"] || {}
 
-        Rails.logger.info "[FastMcpPatches|Server#handle_tools_call_V6] Attempting call for tool_name: '#{tool_name}' with arguments: #{arguments.inspect}"
+        Rails.logger.info "[FastMcpPatches|Server#handle_tools_call_V7] Attempting call for tool_name: '#{tool_name}' with arguments: #{arguments.inspect}"
 
         if @tools.nil?
-          Rails.logger.error "[FastMcpPatches|Server#handle_tools_call_V6] @tools hash is NIL!"
+          Rails.logger.error "[FastMcpPatches|Server#handle_tools_call_V7] @tools hash is NIL!"
           send_error_result("#{STANDARD_JSON_RPC_ERROR_CODES[:InternalError]} Internal server error: tools not initialized", id)
           return
         end
 
         tool = @tools[tool_name]
         unless tool
-          Rails.logger.error "[FastMcpPatches|Server#handle_tools_call_V6] Tool '#{tool_name}' NOT FOUND in @tools."
+          Rails.logger.error "[FastMcpPatches|Server#handle_tools_call_V7] Tool '#{tool_name}' NOT FOUND in @tools."
           send_error_result("#{STANDARD_JSON_RPC_ERROR_CODES[:MethodNotFound]} Tool not found: #{tool_name}", id)
           return
         end
 
-        Rails.logger.info "[FastMcpPatches|Server#handle_tools_call_V6] Tool '#{tool_name}' FOUND. Retrieved: #{tool.inspect}"
+        Rails.logger.info "[FastMcpPatches|Server#handle_tools_call_V7] Tool '#{tool_name}' FOUND. Retrieved: #{tool.inspect}"
 
         begin
           symbolized_args = arguments.transform_keys(&:to_sym)
-          Rails.logger.info "[FastMcpPatches|Server#handle_tools_call_V6] Calling tool.call_with_schema_validation!(**#{symbolized_args.inspect})"
+          Rails.logger.info "[FastMcpPatches|Server#handle_tools_call_V7] Calling tool.call_with_schema_validation!(**#{symbolized_args.inspect})"
 
           actual_tool_data, tool_metadata = tool.call_with_schema_validation!(**symbolized_args)
-          Rails.logger.info "[FastMcpPatches|Server#handle_tools_call_V6] Tool '#{tool_name}' executed successfully."
-          Rails.logger.info "[FastMcpPatches|Server#handle_tools_call_V6] Raw Result from tool.call_with_schema_validation! (actual_tool_data): #{actual_tool_data.inspect}"
-          Rails.logger.info "[FastMcpPatches|Server#handle_tools_call_V6] Raw Result class: #{actual_tool_data.class}"
-          Rails.logger.info "[FastMcpPatches|Server#handle_tools_call_V6] Metadata: #{tool_metadata.inspect}"
+          Rails.logger.info "[FastMcpPatches|Server#handle_tools_call_V7] Tool '#{tool_name}' executed successfully."
+          Rails.logger.info "[FastMcpPatches|Server#handle_tools_call_V7] Raw Result from tool.call_with_schema_validation! (actual_tool_data): #{actual_tool_data.inspect}"
+          Rails.logger.info "[FastMcpPatches|Server#handle_tools_call_V7] Raw Result class: #{actual_tool_data.class}"
+          Rails.logger.info "[FastMcpPatches|Server#handle_tools_call_V7] Metadata: #{tool_metadata.inspect}"
 
-          mcp_compliant_result_payload = {
-            content: [
-              {
-                type: "json",
-                json: actual_tool_data.deep_dup # V6 CHANGE: Directly use actual_tool_data
-              }
-            ]
-          }
-
-          Rails.logger.info "[FastMcpPatches|Server#handle_tools_call_V6] mcp_compliant_result_payload: #{mcp_compliant_result_payload.inspect}"
-
+          # V8: Complete restructuring to match what's expected by the Cascade MCP Go client
+          # Directly use the raw data without any nesting/manipulating
+          # According to memory entry 526073c5, the Cascade client's ToolResponse struct
+          # expects an array of Content objects in the "content" field
           response_payload = {
             jsonrpc: "2.0",
-            result: mcp_compliant_result_payload,
-            id: id
+            id: id,
+            result: {
+              content: [
+                {
+                  type: "json",
+                  # Try with raw object instead of JSON string
+                  json: actual_tool_data
+                }
+              ]
+            }
           }
 
-          # DEBUG LOGGING (Updated)
+          Rails.logger.info "[FastMcpPatches|Server#handle_tools_call_V8] response_payload: #{response_payload.inspect}"
+
+          # Note: response_payload is already defined above
+
+          # DEBUG LOGGING (Updated for V8)
           begin
             File.open("#{Rails.root}/tmp/graph_mem_debug.txt", "a") do |f|
               f.puts "Timestamp: #{Time.now.iso8601(6)}"
-              f.puts "Tool: #{tool_name} (V6)" # Logging version marker
+              f.puts "Tool: #{tool_name} (V8)" # Updated version marker
               f.puts "Result from tool.call_with_schema_validation! (actual_tool_data): #{actual_tool_data.inspect}"
               f.puts "Actual_tool_data class: #{actual_tool_data.class}"
               f.puts "Response hash before JSON.generate (response_payload): #{response_payload.inspect}"
-              f.puts "Response[:result] class (mcp_compliant_result_payload class): #{response_payload[:result].class if response_payload.key?(:result)}"
-              f.puts "Response[:result] itself (mcp_compliant_result_payload): #{response_payload[:result].inspect if response_payload.key?(:result)}"
+              f.puts "Response[:result] class: #{response_payload[:result].class if response_payload.key?(:result)}"
+              f.puts "Response[:result] itself: #{response_payload[:result].inspect if response_payload.key?(:result)}"
               f.puts "Response[:result][:content][0][:json] class: #{response_payload[:result][:content][0][:json].class if response_payload.key?(:result) && response_payload[:result][:content]&.first&.key?(:json)}"
             end
           rescue => log_e
-            Rails.logger.error "[FastMcpPatches|Server#handle_tools_call_V6] Failed to write to debug log: #{log_e.message}"
+            Rails.logger.error "[FastMcpPatches|Server#handle_tools_call_V8] Failed to write to debug log: #{log_e.message}"
           end
           # END DEBUG LOGGING
 
-          STDERR.puts "[PATCH_DEBUG|handle_tools_call_V6] PRE-SEND: response_payload IS: #{response_payload.inspect}"
+          STDERR.puts "[PATCH_DEBUG|handle_tools_call_V8] PRE-SEND: response_payload IS: #{response_payload.inspect}"
           STDERR.flush
 
           @transport.send_message(response_payload)

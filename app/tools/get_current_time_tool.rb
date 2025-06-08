@@ -3,10 +3,10 @@
 class GetCurrentTimeTool < ApplicationTool
   # Provide a custom tool name:
   def self.tool_name
-    'get_current_time'
+    "get_current_time"
   end
 
-  description 'Returns the current server time as an ISO 8601 string.'
+  description "Returns the current server time as an ISO 8601 string."
 
   # No arguments are needed for this tool.
 
@@ -23,7 +23,7 @@ class GetCurrentTimeTool < ApplicationTool
           description: "The current server time in ISO 8601 format."
         }
       },
-      required: ["timestamp"]
+      required: [ "timestamp" ]
     }
   end
 

@@ -3,7 +3,7 @@
 class CreateObservationTool < ApplicationTool
   # Provide a custom tool name:
   def self.tool_name
-    'create_observation'
+    "create_observation"
   end
 
   description "Creates new observations to existing entities in the knowledge graph"

@@ -6,10 +6,10 @@ class ListEntitiesTool < ApplicationTool
   DEFAULT_PAGE = 1
 
   def self.tool_name
-    'list_entities'
+    "list_entities"
   end
 
-  description 'Retrieves a paginated list of all entities, returning their ID, name, and type, using page/per_page.'
+  description "Retrieves a paginated list of all entities, returning their ID, name, and type, using page/per_page."
 
   # Defines arguments for fast-mcp validation.
   arguments do
@@ -24,13 +24,13 @@ class ListEntitiesTool < ApplicationTool
       type: :object,
       properties: {
         per_page: {
-          type: [:integer, :null],
+          type: [ :integer, :null ],
           description: "Optional. Maximum number of entities to return per page. Defaults to #{DEFAULT_PER_PAGE}, max #{MAX_PER_PAGE}.",
           minimum: 1,
           maximum: MAX_PER_PAGE
         },
         page: {
-          type: [:integer, :null],
+          type: [ :integer, :null ],
           description: "Optional. The page number to retrieve. Defaults to #{DEFAULT_PAGE}.",
           minimum: 1
         }
@@ -50,23 +50,23 @@ class ListEntitiesTool < ApplicationTool
             properties: {
               entity_id: { type: :integer },
               name: { type: :string },
-              entity_type: { type: :string, description: 'The type of the entity.' }
+              entity_type: { type: :string, description: "The type of the entity." }
             },
-            required: [:entity_id, :name, :entity_type]
+            required: [ :entity_id, :name, :entity_type ]
           }
         },
         pagination: {
           type: :object,
           properties: {
-            total_entities: { type: :integer, description: 'Total number of entities in the system.' },
-            per_page: { type: :integer, description: 'Number of entities requested per page.' },
-            current_page: { type: :integer, description: 'The current page number.' },
-            total_pages: { type: :integer, description: 'Total number of pages available.' }
+            total_entities: { type: :integer, description: "Total number of entities in the system." },
+            per_page: { type: :integer, description: "Number of entities requested per page." },
+            current_page: { type: :integer, description: "The current page number." },
+            total_pages: { type: :integer, description: "Total number of pages available." }
           },
-          required: [:total_entities, :per_page, :current_page, :total_pages]
+          required: [ :total_entities, :per_page, :current_page, :total_pages ]
         }
       },
-      required: [:entities, :pagination]
+      required: [ :entities, :pagination ]
     }.freeze
   end
 
@@ -100,7 +100,7 @@ class ListEntitiesTool < ApplicationTool
     end
 
     total_pages_count = (total_entities_count.to_f / effective_per_page).ceil
-    total_pages_count = [total_pages_count, 1].max
+    total_pages_count = [ total_pages_count, 1 ].max
 
     {
       entities: output_entities,

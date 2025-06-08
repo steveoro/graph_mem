@@ -3,7 +3,7 @@
 class GetEntityTool < ApplicationTool
   # Provide a custom tool name:
   def self.tool_name
-    'get_entity'
+    "get_entity"
   end
 
   description "Retrieve a specific entity by ID, including its observations and relations."

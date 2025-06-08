@@ -3,7 +3,7 @@
 class SearchEntitiesTool < ApplicationTool
   # Provide a custom tool name:
   def self.tool_name
-    'search_entities'
+    "search_entities"
   end
 
   description "Search for graph memory entities by name."
@@ -29,7 +29,8 @@ class SearchEntitiesTool < ApplicationTool
     logger.info "Performing SearchEntitiesTool with query: #{query}"
     begin
       # Perform case-insensitive search using LOWER on both sides
-      matching_entities = MemoryEntity.where("LOWER(name) LIKE LOWER(?)", "%#{query}%").to_a
+      matching_entities = MemoryEntity.where("LOWER(name) LIKE LOWER(?) OR LOWER(entity_type) LIKE LOWER(?)",
+                                             "%#{query}%", "%#{query}%").to_a
 
       # Format output (array of entity objects) - return array of hashes directly
       matching_entities.map do |entity|

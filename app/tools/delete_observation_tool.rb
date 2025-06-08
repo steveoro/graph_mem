@@ -3,7 +3,7 @@
 class DeleteObservationTool < ApplicationTool
   # Provide a custom tool name:
   def self.tool_name
-    'delete_observation'
+    "delete_observation"
   end
 
   description "Delete a specific observation by ID."

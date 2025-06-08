@@ -3,7 +3,7 @@
 class VersionTool < ApplicationTool
   # Provide a custom tool name:
   def self.tool_name
-    'get_version'
+    "get_version"
   end
 
   description "Returns the current Graph-Memory backend implementation version"

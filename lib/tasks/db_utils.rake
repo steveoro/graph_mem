@@ -83,17 +83,17 @@ namespace :db do
   def extract_cmd_params
     # Prepare & check configuration:
     rails_config  = Rails.configuration
-    db_name       = rails_config.database_configuration[Rails.env]['database']
-    db_user       = rails_config.database_configuration[Rails.env]['username']
-    db_pass       = rails_config.database_configuration[Rails.env]['password']
-    db_host       = rails_config.database_configuration[Rails.env]['host']
-    db_socket     = rails_config.database_configuration[Rails.env]['socket']
+    db_name       = rails_config.database_configuration[Rails.env]["database"]
+    db_user       = rails_config.database_configuration[Rails.env]["username"]
+    db_pass       = rails_config.database_configuration[Rails.env]["password"]
+    db_host       = rails_config.database_configuration[Rails.env]["host"]
+    db_socket     = rails_config.database_configuration[Rails.env]["socket"]
 
     result = " -u #{db_user}"
     result += " -p'#{db_pass}'" if db_pass.present?
     result += " -h #{db_host}" if db_host.present? && db_host != "localhost"
     result += " -S #{db_socket}" if db_socket.present?
-    [db_name, result]
+    [ db_name, result ]
   end
   # ---------------------------------------------------------------------------
 end
