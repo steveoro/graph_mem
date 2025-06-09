@@ -14,15 +14,12 @@ Rails.application.routes.draw do
   # API routes
   namespace :api do
     namespace :v1 do
+      # Search route defined first to ensure it takes precedence
+      get "memory_entities/search", to: "memory_entities#search"
+
       resources :memory_entities do
         # Nested routes for observations associated with an entity
         resources :memory_observations, only: [ :index, :create, :destroy, :show, :update ]
-      end
-      # Separate route for searching entities
-      resources :memory_entities, only: [] do
-        collection do
-          get "search"
-        end
       end
 
       # Update memory_relations to include show and update actions

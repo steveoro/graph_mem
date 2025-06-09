@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class GetSubgraphByIDsTool < ApplicationTool
+class GetSubgraphByIdsTool < ApplicationTool
   def self.tool_name
     "get_subgraph_by_ids"
   end
@@ -93,12 +93,12 @@ class GetSubgraphByIDsTool < ApplicationTool
     # Fetch entities with their observations
     entities_data = MemoryEntity.where(id: entity_ids).includes(:memory_observations).map do |entity|
       {
-        entity_id: entity.id.to_s,
+        entity_id: entity.id,
         name: entity.name,
         entity_type: entity.entity_type,
         observations: entity.observations.map do |obs|
           {
-            observation_id: obs.id.to_s,
+            observation_id: obs.id,
             content: obs.content,
             created_at: obs.created_at.iso8601,
             updated_at: obs.updated_at.iso8601
@@ -114,7 +114,7 @@ class GetSubgraphByIDsTool < ApplicationTool
       .where(from_entity_id: entity_ids, to_entity_id: entity_ids)
       .map do |relation|
       {
-        relation_id: relation.id.to_s,
+        relation_id: relation.id,
         from_entity_id: relation.from_entity_id,
         to_entity_id: relation.to_entity_id,
         relation_type: relation.relation_type,

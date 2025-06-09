@@ -1,40 +1,76 @@
-# GraphMem: MCP Server
+# GraphMem: Graph-Based Memory MCP Server
 
-GraphMem is a Ruby on Rails application that implements a Model Context Protocol (MCP) server. It's designed to provide an interface for interacting with a graph-based memory system, allowing clients to create, retrieve, search, and manage entities and their relationships.
+GraphMem is a Ruby on Rails application implementing a Model Context Protocol (MCP) server for graph-based memory management. It enables AI assistants and other clients to create, retrieve, search, and manage knowledge entities and their relationships through a standardized interface.
 
+[![Version](https://img.shields.io/badge/version-0.7.0-blue.svg)](lib/graph_mem/version.rb)
+[![Rails](https://img.shields.io/badge/rails-8.0.2-orange.svg)](Gemfile)
+[![Ruby](https://img.shields.io/badge/ruby-3.4.1-red.svg)](Gemfile)
+
+## Overview
+
+GraphMem provides persistent, structured storage for knowledge entities, their relationships, and observations. It's designed as a MCP server that enables AI assistants to maintain memory across sessions, build domain-specific knowledge graphs, and effectively reference past interactions.
 
 ## Technology Stack
 
-*   Ruby: 3.4.1+
-*   Rails: 8.0.2+
-*   MCP Implementation: [fast-mcp](https://github.com/yjacquin/fast-mcp) gem
-*   Database: MariaDB
-*   [fast-mcp](https://github.com/yjacquin/fast-mcp) gem with local patches for stdio + SSE
-*   [actionmcp](https://github.com/seuros/action_mcp) gem for pub-sub on a dedicated branch
-
+* **Ruby**: 3.4.1+
+* **Rails**: 8.0.2+
+* **MCP Implementation**: [fast-mcp](https://github.com/yjacquin/fast-mcp) gem, vers. 1.5+
+* **Database**: MariaDB
 
 ## Features
 
-*   Provides an MCP endpoint at `/mcp/messages`.
-*   Supports the following MCP tools for graph memory operations:
-    *   `VersionTool`: Get server version information.
-    *   `CreateEntityTool`: Create new entities.
-    *   `GetEntityTool`: Retrieve entities by ID.
-    *   `SearchEntitiesTool`: Search for entities based on criteria.
-    *   `DeleteEntityTool`: Delete entities.
-    *   `CreateObservationTool`: Add observations to entities.
-    *   `DeleteObservationTool`: Remove observations from entities.
-    *   `CreateRelationTool`: Create relationships between entities.
-    *   `DeleteRelationTool`: Remove relationships between entities.
-    *   `FindRelationsTool`: Find relationships connected to an entity.
-*   Includes an additional API server at `/api/v1` for direct interaction with the database, or for any other custom logic that doesn't rely on MCP.
+### MCP Tools
 
+GraphMem exposes the following MCP tools through an endpoint at `/mcp/messages`:
 
-## Current state
-- API server: working and tested
-- stdio runner: working and tested both with the MCP inspector and Windsurf
-- sse runner: tested but working only with the MCP inspector
-- pub-sub (on separate branch): tested but working only with the MCP inspector
+#### Entity Management
+* `get_version`: Get server version information
+* `create_entity`: Create new entities with name and type
+* `get_entity`: Retrieve entities by ID with related data
+* `search_entities`: Search for entities based on name
+* `list_entities`: List entities with pagination and filtering
+* `delete_entity`: Remove entities and all associated data
+
+#### Observation Management
+* `create_observation`: Add observations to existing entities
+* `delete_observation`: Remove observations from entities
+
+#### Relationship Management
+* `create_relation`: Create typed relationships between entities
+* `delete_relation`: Remove relationships
+* `find_relations`: Find relationships connected to entities
+* `get_subgraph_by_ids`: Get a connected subgraph of specified entities
+* `get_current_time`: Retrieve server time in ISO 8601 format
+
+### MCP Resources
+
+GraphMem also provides higher-level structured resource access:
+
+* `memory_entities`: Query entities with filtering, sorting, and relation inclusion
+* `memory_observations`: Access observations with advanced filtering
+* `memory_relations`: Query entity relationships with bidirectional entity inclusion
+* `memory_graph`: Get graph traversals starting from any entity with configurable depth
+
+### REST API
+
+Includes a traditional REST API at `/api/v1` for direct interaction with the database, suitable for integration with non-MCP clients.
+
+## Current Status
+
+* **API server**: Fully operational and tested
+* **stdio MCP transport**: Compatible with both MCP Inspector and Windsurf
+* **SSE transport**: Tested with MCP Inspector
+* **WebSocket transport**: Development in progress
+
+## Documentation
+
+Comprehensive documentation is available in the `/docs` directory:
+
+* [Memory Entity Resource](docs/memory_entity_resource.md)
+* [Memory Observation Resource](docs/memory_observation_resource.md) 
+* [Memory Relation Resource](docs/memory_relation_resource.md)
+* [Memory Graph Resource](docs/memory_graph_resource.md)
+* [REST API Reference](docs/api/rest_api_reference.md) or run the Rails server and navigate to `http://localhost:3000/api-docs/index.html` (uses Swagger)
 
 
 ## Setup and Installation
@@ -72,7 +108,7 @@ Edit your MCP (JSON) configuration file, usually located under the folder of you
     "graph_mem": {
       "command": "/bin/bash",
       "args": [
-        "<path_to_graph_mem_folder>/bin/windsurf_mcp_graph_mem_runner.sh"
+        "<path_to_graph_mem_folder>/bin/mcp_graph_mem_runner.sh"
       ],
       "env": {
         "RAILS_ENV": "development"
@@ -82,7 +118,7 @@ Edit your MCP (JSON) configuration file, usually located under the folder of you
 }
 ```
 
-Always use the absolute path to the `windsurf_mcp_graph_mem_runner.sh` script.
+Always use the absolute path to the `mcp_graph_mem_runner.sh` script.
 
 Subsequently, edit your global rules file and add the contents of the `docs/knowledge_graph_management_rules.md` file to it.
 
@@ -103,7 +139,7 @@ bin/mcp
 
 The SSE MCP endpoints will be available at `http://localhost:3003/mcp/sse` and `http://localhost:3003/mcp/messages`.
 
-The STDIO MCP server can be run using the `bin/windsurf_mcp_graph_mem_runner.sh` script. Although designed to work with Windsurf, it should work also with other MCP clients (currently not tested).
+The STDIO MCP server can be run using the `bin/mcp_graph_mem_runner.sh` script. Although designed to work with Windsurf, it should work also with other MCP clients (currently not tested).
 
 
 ## Interacting with the MCP Server
@@ -135,6 +171,7 @@ curl -X POST -H "Content-Type: application/json" \
 ## Development
 
 *   **Custom MCP Tools:** Located in `app/tools/`. New tools should inherit from `ApplicationTool` and be placed in this directory.
+*   **Custom MCP Resources:** Located in `app/resources/`. New resources should inherit from `ApplicationResource` and be placed in this directory.
 *   **Fast-MCP Configuration:** The main configuration for the `fast-mcp` gem, including tool registration and CORS settings, is in `config/initializers/fast_mcp.rb`.
 *   **Logging:** MCP-related logs can be found in the standard Rails log output. Debug logging for `fast-mcp` is enabled in `config/initializers/fast_mcp.rb`.
 

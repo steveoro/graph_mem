@@ -32,22 +32,22 @@ class GetEntityTool < ApplicationTool
 
       # Format the output hash - return hash directly
       {
-        entity_id: entity.id.to_s,
+        entity_id: entity.id,
         name: entity.name,
         entity_type: entity.entity_type,
         created_at: entity.created_at.iso8601,
         updated_at: entity.updated_at.iso8601,
         observations: entity.memory_observations.map do |obs|
           {
-            observation_id: obs.id.to_s,
-            content: obs.content,
+            observation_id: obs.id,
+            observation_content: obs.content,
             created_at: obs.created_at.iso8601,
             updated_at: obs.updated_at.iso8601
           }
         end,
         relations_from: entity.relations_from.map do |rel|
           {
-            relation_id: rel.id.to_s,
+            relation_id: rel.id,
             to_entity_id: rel.to_entity_id,
             relation_type: rel.relation_type,
             created_at: rel.created_at.iso8601,
@@ -57,7 +57,7 @@ class GetEntityTool < ApplicationTool
         end,
         relations_to: entity.relations_to.map do |rel|
           {
-            relation_id: rel.id.to_s,
+            relation_id: rel.id,
             from_entity_id: rel.from_entity_id,
             relation_type: rel.relation_type,
             created_at: rel.created_at.iso8601,

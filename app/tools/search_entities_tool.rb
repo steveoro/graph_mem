@@ -35,7 +35,7 @@ class SearchEntitiesTool < ApplicationTool
       # Format output (array of entity objects) - return array of hashes directly
       matching_entities.map do |entity|
         {
-          entity_id: entity.id.to_s,
+          entity_id: entity.id,
           name: entity.name,
           entity_type: entity.entity_type,
           created_at: entity.created_at.iso8601,

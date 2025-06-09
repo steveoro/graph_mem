@@ -10,7 +10,7 @@ class CreateObservationTool < ApplicationTool
 
   arguments do
     required(:entity_id).filled(:integer).description("The ID of the entity to add the observation to")
-    required(:content).filled(:string).description("The textual content of the observation")
+    required(:text_content).filled(:string).description("The textual content of the observation")
   end
 
   # Defines the input schema for this tool. Overrides the shared behavior from ApplicationTool
@@ -25,20 +25,18 @@ class CreateObservationTool < ApplicationTool
     }
   end
 
-  def call(entity_id:, content:)
-    logger.info "Performing CreateObservationTool with entity_id: #{entity_id}, content: '#{content}'"
+  def call(entity_id:, text_content:)
+    logger.info "Performing CreateObservationTool with entity_id: #{entity_id}, text_content: '#{text_content}'"
     begin
       entity = MemoryEntity.find(entity_id)
 
-      new_observation = MemoryObservation.create!(
-        memory_entity: entity,
-        content: content
-      )
+      new_observation = MemoryObservation.create!(memory_entity: entity, content: text_content)
+      logger.info "Created observation: #{new_observation.inspect}"
 
       {
-        observation_id: new_observation.id.to_s,
+        observation_id: new_observation.id,
         memory_entity_id: new_observation.memory_entity_id,
-        content: new_observation.content,
+        observation_content: new_observation.content,
         created_at: new_observation.created_at.iso8601,
         updated_at: new_observation.updated_at.iso8601
       }

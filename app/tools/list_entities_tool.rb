@@ -93,7 +93,7 @@ class ListEntitiesTool < ApplicationTool
 
     output_entities = fetched_entities.map do |entity|
       {
-        entity_id: entity.id.to_s,
+        entity_id: entity.id,
         name: entity.name,
         entity_type: entity.entity_type
       }

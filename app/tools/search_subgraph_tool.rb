@@ -191,12 +191,12 @@ class SearchSubgraphTool < ApplicationTool
 
       entities_to_return = db_entities.map do |entity|
         {
-          entity_id: entity.id.to_s,
+          entity_id: entity.id,
           name: entity.name,
           entity_type: entity.entity_type,
           observations: entity.memory_observations.map do |obs|
             {
-              observation_id: obs.id.to_s,
+              observation_id: obs.id,
               content: obs.content,
               created_at: obs.created_at.iso8601,
               updated_at: obs.updated_at.iso8601
@@ -211,7 +211,7 @@ class SearchSubgraphTool < ApplicationTool
       db_relations = MemoryRelation.where(from_entity_id: paginated_entity_ids, to_entity_id: paginated_entity_ids).to_a
       relations_to_return = db_relations.map do |relation|
         {
-          relation_id: relation.id.to_s,
+          relation_id: relation.id,
           from_entity_id: relation.from_entity_id,
           to_entity_id: relation.to_entity_id,
           relation_type: relation.relation_type,

@@ -28,6 +28,7 @@ module GraphMem
     # config.time_zone = "Central Time (US & Canada)"
     # config.eager_load_paths << Rails.root.join("extras")
     config.eager_load_paths << Rails.root.join("app/mcp")
+    # config.eager_load_paths << Rails.root.join("lib")
 
     # For example, in the context of Relations, ensure that associated MemoryEntity objects are preloaded
     # when retrieving multiple relations to avoid N+1 query issues.

@@ -53,7 +53,7 @@ class CreateEntityTool < ApplicationTool
 
     # Format output hash - return hash directly
     {
-      entity_id: new_entity.id.to_s,
+      entity_id: new_entity.id,
       name: new_entity.name,
       entity_type: new_entity.entity_type,
       created_at: new_entity.created_at.iso8601,

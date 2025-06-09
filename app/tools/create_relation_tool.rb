@@ -43,10 +43,11 @@ class CreateRelationTool < ApplicationTool # Assuming ApplicationTool inherits f
         to_entity_id: to_entity_id,
         relation_type: relation_type
       )
+      logger.info "Created relation: #{new_relation.inspect}"
 
       # Format output - return a single hash directly
       {
-        relation_id: new_relation.id.to_s,
+        relation_id: new_relation.id,
         from_entity_id: new_relation.from_entity_id,
         to_entity_id: new_relation.to_entity_id,
         relation_type: new_relation.relation_type,
