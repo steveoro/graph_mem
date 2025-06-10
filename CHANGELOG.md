@@ -5,6 +5,14 @@ All notable changes to GraphMem will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.1] - 2025-06-10
+
+### Added
+- `db:append_json` task to merge matching objects in legacy memory.json data files into existing database rows
+- `db:merge_entity` task to merge a single entity into an existing entity
+- `db:project_report` task to generate a consolidated Markdown report with Mermaid diagrams for all projects in the database
+
+
 ## [0.7.0] - 2025-06-09
 
 ### Added

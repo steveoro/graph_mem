@@ -1,4 +1,4 @@
-namespace :memory_graph do
+namespace :tools do
   desc "List all entities with pagination (default: page 1, per_page 20)"
   task :list_entities, [ :page, :per_page ] => :environment do |t, args|
     page = (args[:page] || 1).to_i
@@ -17,8 +17,10 @@ namespace :memory_graph do
     end
 
     puts "=" * 80
-    puts "Usage: bin/rails memory_graph:list_entities[page,per_page]"
+    puts "Usage: bin/rails tools:list_entities[page,per_page]"
   end
+  #-- -------------------------------------------------------------------------
+  #++
 
   desc "Get detailed information about an entity by ID"
   task :get_entity, [ :entity_id ] => :environment do |t, args|
@@ -59,6 +61,8 @@ namespace :memory_graph do
       puts "* [ID: #{rel.id}] #{rel.from_entity.name} (ID: #{rel.from_entity.id}) --[#{rel.relation_type}]--> #{entity.name}"
     end
   end
+  #-- -------------------------------------------------------------------------
+  #++
 
   desc "Search entities by name or type (case-insensitive)"
   task :search_entities, [ :query ] => :environment do |t, args|
@@ -81,8 +85,10 @@ namespace :memory_graph do
     end
 
     puts "=" * 80
-    puts "Usage: bin/rails memory_graph:search_entities[query]"
+    puts "Usage: bin/rails tools:search_entities[query]"
   end
+  #-- -------------------------------------------------------------------------
+  #++
 
   desc "Create a new entity"
   task :create_entity, [ :name, :type, :observation ] => :environment do |t, args|
@@ -92,7 +98,7 @@ namespace :memory_graph do
 
     if name.blank? || type.blank?
       puts "Please provide both name and type for the entity."
-      puts "Usage: bin/rails memory_graph:create_entity[name,type,\"observation text\"]"
+      puts "Usage: bin/rails tools:create_entity[name,type,\"observation text\"]"
       next
     end
 
@@ -113,6 +119,8 @@ namespace :memory_graph do
       puts "Error creating entity: #{e.message}"
     end
   end
+  #-- -------------------------------------------------------------------------
+  #++
 
   desc "Create a relation between two entities"
   task :create_relation, [ :from_id, :to_id, :relation_type ] => :environment do |t, args|
@@ -122,7 +130,7 @@ namespace :memory_graph do
 
     if from_id == 0 || to_id == 0 || relation_type.blank?
       puts "Please provide from_id, to_id, and relation_type."
-      puts "Usage: bin/rails memory_graph:create_relation[from_id,to_id,relation_type]"
+      puts "Usage: bin/rails tools:create_relation[from_id,to_id,relation_type]"
       next
     end
 
@@ -153,6 +161,8 @@ namespace :memory_graph do
       puts "Error creating relation: #{e.message}"
     end
   end
+  #-- -------------------------------------------------------------------------
+  #++
 
   desc "Add an observation to an entity"
   task :add_observation, [ :entity_id, :content ] => :environment do |t, args|
@@ -161,7 +171,7 @@ namespace :memory_graph do
 
     if entity_id == 0 || content.blank?
       puts "Please provide entity_id and content."
-      puts "Usage: bin/rails memory_graph:add_observation[entity_id,\"observation content\"]"
+      puts "Usage: bin/rails tools:add_observation[entity_id,\"observation content\"]"
       next
     end
 
@@ -183,6 +193,8 @@ namespace :memory_graph do
       puts "Error adding observation: #{e.message}"
     end
   end
+  #-- -------------------------------------------------------------------------
+  #++
 
   desc "Find relations by type"
   task :find_relations, [ :relation_type ] => :environment do |t, args|
@@ -204,8 +216,10 @@ namespace :memory_graph do
     end
 
     puts "=" * 80
-    puts "Usage: bin/rails memory_graph:find_relations[relation_type]"
+    puts "Usage: bin/rails tools:find_relations[relation_type]"
   end
+  #-- -------------------------------------------------------------------------
+  #++
 
   desc "Export memory graph to DOT format for visualization with Graphviz"
   task :export_to_dot, [ :filename ] => :environment do |t, args|
@@ -259,4 +273,6 @@ namespace :memory_graph do
     puts "  dot -Tpng #{filepath} -o memory_graph.png"
     puts "  dot -Tsvg #{filepath} -o memory_graph.svg"
   end
+  #-- -------------------------------------------------------------------------
+  #++
 end

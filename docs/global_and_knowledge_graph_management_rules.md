@@ -1,6 +1,6 @@
 # Knowledge Graph Management
 
-Use your Graph Memory to store and retrieve information about projects, issues, and solutions.
+Use your Graph Memory (`graph_mem`) to store and retrieve information about projects, issues, and solutions.
 
 ## Data Access Hierarchy
 
@@ -127,27 +127,3 @@ Use these entity types for consistent categorization:
 - Write thorough tests for all major functionalities.
 - Avoid making major changes to the patterns and architecture of how a feature works after it has shown to work well, unless explicitly instructed.
 - Always think about what other methods and areas of code might be affected by code changes.
-
----
-
-# Quality Management protocol
-
-## 1. Code Quality
-- Follow best practices commonly used for the current project language, framework or application stack. If the project is new or the framework wasn't well defined from start, prompt the user with a possible choice for best practices and or application stacks.
-- Follow naming conventions.
-- Maintaining code consistency.
-
-## 2. Performance
-- Prevention of unnecessary re-rendering
-- Efficient data fetching. Practical example: prevent the "n+1 query" problem.
-- Bundle size optimization. Practical example: prevent unnecessary dependencies when possible (like adding a new library reference when just a handful of lines of code could achieve the same)
-
-## 3. Security
-- Strict validation of input values
-- Appropriate error handling
-- Secure management of sensitive information
-
-## 4. UI/UX
-- Ensuring responsive design
-- Compliance with accessibility standards
-- Maintaining consistent design system (see also step "1. Code Quality" above)
