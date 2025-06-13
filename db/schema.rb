@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2025_05_17_212808) do
+ActiveRecord::Schema[8.0].define(version: 2025_06_13_095029) do
   create_table "action_mcp_session_messages", charset: "utf8mb4", collation: "utf8mb4_general_ci", force: :cascade do |t|
     t.string "session_id", null: false
     t.string "direction", default: "client", null: false, comment: "The message recipient"
@@ -85,6 +85,7 @@ ActiveRecord::Schema[8.0].define(version: 2025_05_17_212808) do
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.integer "memory_observations_count"
+    t.text "aliases"
     t.index ["entity_type"], name: "index_memory_entities_on_entity_type"
     t.index ["name"], name: "index_memory_entities_on_name", unique: true
   end

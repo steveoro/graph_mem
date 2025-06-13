@@ -34,12 +34,9 @@ module Api
       def search
         query = params[:q]
         if query.present?
-          # Using ILIKE for case-insensitive search (PostgreSQL specific)
-          # Use LOWER(name) LIKE LOWER(?) for database independence if needed
-          # Use LOWER() for case-insensitive search across databases
-          @memory_entities = ::MemoryEntity.where("LOWER(name) LIKE LOWER(?)", "%#{query.downcase}%")
+          @memory_entities = ::MemoryEntity.where("(LOWER(name) LIKE ?) OR (LOWER(entity_type) LIKE ?) OR (LOWER(aliases) LIKE ?)",
+                                                 "%#{query.downcase}%", "%#{query.downcase}%", "%#{query.downcase}%")
         else
-          # Return empty if no query provided, or could return all/error
           @memory_entities = ::MemoryEntity.none
         end
         render json: @memory_entities

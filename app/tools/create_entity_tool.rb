@@ -13,6 +13,7 @@ class CreateEntityTool < ApplicationTool
     required(:name).filled(:string).description("The unique name for the new entity.")
     required(:entity_type).filled(:string).description("The type classification for the new entity (e.g., 'Project', 'Task', 'Issue').")
     optional(:observations).array(:string).description("Optional list of initial observation strings associated with the entity.")
+    optional(:aliases).maybe(:string).description("Optional pipe-separated string of alternative names for the entity.")
   end
 
   # Defines the input schema for this tool. Overrides the shared behavior from ApplicationTool
@@ -23,20 +24,22 @@ class CreateEntityTool < ApplicationTool
       properties: {
         name: { type: "string", description: "The name of the entity" },
         entity_type: { type: "string", description: "The type of the entity" },
-        observations: { type: "array", items: { type: "string" }, description: "Optional list of initial observation strings associated with the entity." }
+        observations: { type: "array", items: { type: "string" }, description: "Optional list of initial observation strings associated with the entity." },
+        aliases: { type: "string", description: "Optional pipe-separated string of alternative names for the entity." }
       },
       required: [ "name", "entity_type" ]
     }
   end
 
-  def call(name:, entity_type:, observations: [])
+  def call(name:, entity_type:, observations: [], aliases: nil)
     logger.info "Performing CreateEntityTool with name: #{name}, type: #{entity_type}"
 
     # Wrap the core logic in a transaction
     new_entity = ActiveRecord::Base.transaction do
       entity = MemoryEntity.create!(
         name: name,
-        entity_type: entity_type
+        entity_type: entity_type,
+        aliases: aliases
       )
 
       # Add initial observations if provided
@@ -58,6 +61,7 @@ class CreateEntityTool < ApplicationTool
       entity_type: new_entity.entity_type,
       created_at: new_entity.created_at.iso8601,
       updated_at: new_entity.updated_at.iso8601,
+      aliases: new_entity.aliases,
       observations_count: new_entity.memory_observations.count # Ensure this reflects observations within the transaction
     }
   rescue ActiveRecord::RecordInvalid => e

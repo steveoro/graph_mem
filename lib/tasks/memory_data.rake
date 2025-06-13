@@ -1,10 +1,10 @@
 require "json"
 require "pathname"
 
-namespace :db do
+namespace :data do
   # Helper method to determine the JSON file path
   # Priority: Task argument > Environment variable > Default path
-  def get_json_file_path(task_arg_path, env_var_name = 'GRAPH_MEM_JSON_FILE')
+  def get_json_file_path(task_arg_path, env_var_name = "GRAPH_MEM_JSON_FILE")
     default_path = File.join(Dir.home, ".codeium", "windsurf-next", "memories", "memory.json")
     file_path_str = task_arg_path || ENV[env_var_name] || default_path
     Pathname.new(file_path_str)
@@ -13,7 +13,7 @@ namespace :db do
   desc "Migrate data from JSON Lines file to the database (clears existing data).\r\n \
  Pass file_path as argument or set GRAPH_MEM_JSON_FILE env var.\r\n \
  Default: ~/.codeium/windsurf-next/memories/memory.json"
-  task :migrate_json, [:file_path] => :environment do |t, args|
+  task :migrate_json, [ :file_path ] => :environment do |t, args|
     json_file_path = get_json_file_path(args[:file_path])
 
     unless json_file_path.exist?
@@ -154,7 +154,7 @@ namespace :db do
   desc "Append data from JSON Lines file to the database (adds missing, skips existing).\r\n \
  Pass file_path as argument or set GRAPH_MEM_JSON_FILE env var.\r\n \
  Default: ~/.codeium/windsurf-next/memories/memory.json"
-  task :append_json, [:file_path] => :environment do |t, args|
+  task :append_json, [ :file_path ] => :environment do |t, args|
     json_file_path = get_json_file_path(args[:file_path])
 
     unless json_file_path.exist?
@@ -307,7 +307,7 @@ namespace :db do
   desc "Merge one MemoryEntity into another. \n" \
        "Moves all relations and observations from the 'from' entity to the 'to' entity, then deletes the 'from' entity.\n" \
        "Args: from_id (integer), to_id (integer)"
-  task :merge_entity, [:from_id, :to_id] => :environment do |_t, args|
+  task :merge_entity, [ :from_id, :to_id ] => :environment do |_t, args|
     from_id_str = args[:from_id]
     to_id_str = args[:to_id]
 
@@ -412,12 +412,12 @@ namespace :db do
   def generate_all_projects_diagram(projects, all_relations)
     project_map = projects.index_by(&:id) # For quick lookup
 
-    mermaid = ["```mermaid", "mindmap"] # Start of the mindmap definition
+    mermaid = [ "```mermaid", "mindmap" ] # Start of the mindmap definition
     mermaid << "  root((Projects Interconnectivity))"
 
     projects.each do |p|
       # Sanitize project name for node label - mindmap nodes are defined by text and indentation only
-      safe_project_name = p.name.gsub(/[():"'\[\]]/, '').strip
+      safe_project_name = p.name.gsub(/[():"'\[\]]/, "").strip
       # Append project ID to the label for clarity
       mermaid << "    #{safe_project_name}<br/>ID #{p.id}" # Level 1: Project node
 
@@ -430,7 +430,7 @@ namespace :db do
         to_project = project_map[r.from_entity_id]
         if to_project # Should always be true due to project_map.key? check
           # Mindmap breaks syntax with special characters:
-          safe_to_project_name = to_project.name.gsub(/[():"'\[\]]/, '').strip
+          safe_to_project_name = to_project.name.gsub(/[():"'\[\]]/, "").strip
 
           # Level 2: Related project and relation type, also including target project ID
           mermaid << "      ← #{safe_to_project_name}<br/>ID #{to_project.id}"
@@ -450,29 +450,34 @@ namespace :db do
       entity_counts[other_entity.entity_type] += 1 if other_entity.id != project.id
     end
 
-    mermaid = ["```mermaid", "graph"]
-    mermaid << "  subgraph \"Project: #{project.name}\""
-    mermaid << "    P#{project.id}[\"#{project.name}<br/>#{project.memory_observations.count}x observations\"]:::project"
-    mermaid << "  end"
+    # Sanitize project name for Class diagram
+    safe_project_name = project.name.gsub(/[^a-zA-Z0-9_]/, "")
+
+    mermaid = [ "```mermaid" ]
+    mermaid << "classDiagram"
+    mermaid << "  direction LR"
+
+    # Define the project class with attributes
+    mermaid << "  class #{safe_project_name}:::project {"
+    mermaid << "    id : #{project.id}"
+    mermaid << "    observations : #{project.memory_observations.count}"
+    mermaid << "  }"
 
     entity_counts.each do |type, count|
-      safe_type_for_id = type.gsub(/[^a-zA-Z0-9]/, '') # For node ID
-      node_id = "T_#{safe_type_for_id}_#{project.id}"
+      # Sanitize type for Class diagram class name
+      safe_type_name = type.gsub(/[^a-zA-Z0-9_]/, "")
 
-      # Sanitize type for display in label (especially quotes)
-      display_type_in_label = type.gsub('"', '""')
+      # Define the entity type class with count attribute
+      mermaid << "  class #{safe_type_name}:::entityType {"
+      mermaid << "    total : #{count}"
+      mermaid << "  }"
 
-      node_label_content = "#{count}x #{display_type_in_label}"
-
-      # Explicitly define the node for the entity type
-      node_definition_line = "  #{node_id}[\"#{node_label_content}\"]:::entityType"
-      mermaid << node_definition_line
-
-      # Explicitly define the edge from the project to this entity type node
-      edge_definition_line = "  P#{project.id} -- \"#{count} relations\" --> #{node_id}"
-      mermaid << edge_definition_line
+      # Define relationship with cardinality
+      mermaid << "  #{safe_project_name} \"1\" --o \"#{count}\" #{safe_type_name} : has"
     end
 
+    # Add styling
+    mermaid << ""
     mermaid << "  classDef project fill:#f96,stroke:#333,stroke-width:2px,color:#000"
     mermaid << "  classDef entityType fill:#bbf,stroke:#33f,stroke-width:1px,color:#000"
     mermaid << "```"
@@ -482,16 +487,40 @@ namespace :db do
   #++
 
   def generate_project_issues_diagram(project, issues)
-    mermaid = ["```mermaid", "graph TD"]
-    mermaid << "  P#{project.id}[\"#{project.name}\"]:::project"
+    # Sanitize project name for Class diagram
+    safe_project_name = project.name.gsub(/[^a-zA-Z0-9_]/, "")
 
-    issues.each do |issue|
-      # Sanitize issue name for Mermaid diagram
-      issue_name = issue.name.gsub('"', '""').truncate(40)
-      mermaid << "  I#{issue.id}[\"#{issue_name}\"]:::issue"
-      mermaid << "  P#{project.id} --> I#{issue.id}"
+    mermaid = [ "```mermaid" ]
+    mermaid << "classDiagram"
+    mermaid << "  direction LR"
+
+    # Define the project class
+    mermaid << "  class #{safe_project_name}:::project {"
+    mermaid << "    id : #{project.id}"
+    mermaid << "    name : \"#{project.name.truncate(20)}\""
+    mermaid << "  }"
+
+    if issues.any?
+      # Define the Issue class
+      mermaid << "  class Issue:::issue {"
+      mermaid << "    total : #{issues.count}"
+      mermaid << "  }"
+
+      # Define relationship with cardinality
+      mermaid << "  #{safe_project_name} \"1\" --o \"#{issues.count}\" Issue : has"
+
+      # Add individual issue details as comments
+      mermaid << ""
+      mermaid << "  %% Individual Issues:"
+      issues.each do |issue|
+        # Sanitize issue name for comment
+        safe_issue_name = issue.name.gsub(/[%\r\n]/, " ").truncate(50)
+        mermaid << "  %% - ID #{issue.id}: #{safe_issue_name}"
+      end
     end
 
+    # Add styling
+    mermaid << ""
     mermaid << "  classDef project fill:#f96,stroke:#333,stroke-width:2px,color:#000"
     mermaid << "  classDef issue fill:#fbb,stroke:#f33,stroke-width:1px,color:#000"
     mermaid << "```"
@@ -502,15 +531,15 @@ namespace :db do
 
   desc "Generates a consolidated Markdown report with Mermaid diagrams for all projects.\n" \
        "Args: output_dir (optional, defaults to 'docs')"
-  task :project_report, [:output_dir] => :environment do |t, args|
+  task :project_report, [ :output_dir ] => :environment do |t, args|
     puts "Generating project overview report..."
 
     # --- CONFIGURATION ---
-    output_directory = args[:output_dir] || 'docs'
+    output_directory = args[:output_dir] || "docs"
     output_path = Rails.root.join(output_directory)
     FileUtils.mkdir_p(output_path)
 
-    output_file = output_path.join('project_overview_report.md')
+    output_file = output_path.join("project_overview_report.md")
     max_detailed_issues = 10
     max_detailed_observations = 5
 
@@ -556,7 +585,7 @@ namespace :db do
       report_content << generate_project_overview_diagram(project, project_relations)
 
       # B. Unresolved Issues Diagram
-      issues = get_related_entities_by_type(project, project_relations, 'Issue')
+      issues = get_related_entities_by_type(project, project_relations, "Issue")
       if issues.any?
         report_content << "### Associated Issues"
         report_content << generate_project_issues_diagram(project, issues.take(max_detailed_issues))

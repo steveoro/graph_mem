@@ -9,14 +9,14 @@ describe 'db:memory_data rake tasks', type: :task do
 
   # Re-enable tasks after each run, as they are only invoked once by default
   after(:each) do
-    Rake::Task['db:migrate_json'].reenable
-    Rake::Task['db:append_json'].reenable
+    Rake::Task['data:migrate_json'].reenable
+    Rake::Task['data:append_json'].reenable
   end
 
   # Helper to create a temporary JSON lines file
   let(:create_temp_json_file) do
     lambda do |data|
-      temp_file = Tempfile.new(['memory_data', '.json'])
+      temp_file = Tempfile.new([ 'memory_data', '.json' ])
       data.each { |line| temp_file.puts(line.to_json) }
       temp_file.close
       temp_file.path
@@ -26,7 +26,7 @@ describe 'db:memory_data rake tasks', type: :task do
   # Initial data for migration
   let(:initial_json_data) do
     [
-      { type: 'entity', name: 'Project Alpha', entityType: 'Project', observations: ['Is a cool project', 'Has one team member'] },
+      { type: 'entity', name: 'Project Alpha', entityType: 'Project', observations: [ 'Is a cool project', 'Has one team member' ] },
       { type: 'entity', name: 'Team Member 1', entityType: 'Person' },
       { type: 'relation', from: 'Project Alpha', to: 'Team Member 1', relationType: 'has_member' }
     ]
@@ -36,9 +36,9 @@ describe 'db:memory_data rake tasks', type: :task do
   let(:append_json_data) do
     [
       # Update existing entity with a new observation
-      { type: 'entity', name: 'Project Alpha', entityType: 'Project', observations: ['Is a cool project', 'Has a deadline'] },
+      { type: 'entity', name: 'Project Alpha', entityType: 'Project', observations: [ 'Is a cool project', 'Has a deadline' ] },
       # Add a new entity
-      { type: 'entity', name: 'Project Beta', entityType: 'Project', observations: ['A new project'] },
+      { type: 'entity', name: 'Project Beta', entityType: 'Project', observations: [ 'A new project' ] },
       # Add a new relation
       { type: 'relation', from: 'Project Beta', to: 'Team Member 1', relationType: 'has_member' },
       # This relation should be skipped as it already exists
@@ -46,7 +46,7 @@ describe 'db:memory_data rake tasks', type: :task do
     ]
   end
 
-  describe 'db:migrate_json' do
+  describe 'data:migrate_json' do
     let(:json_file_path) { create_temp_json_file.call(initial_json_data) }
 
     before do
@@ -57,7 +57,7 @@ describe 'db:memory_data rake tasks', type: :task do
     end
 
     it 'populates the database from the JSON file' do
-      Rake::Task['db:migrate_json'].invoke(json_file_path)
+      Rake::Task['data:migrate_json'].invoke(json_file_path)
 
       expect(MemoryEntity.count).to eq(2)
       expect(MemoryObservation.count).to eq(2)
@@ -74,14 +74,14 @@ describe 'db:memory_data rake tasks', type: :task do
       MemoryEntity.create!(name: 'Old Project', entity_type: 'Project')
       expect(MemoryEntity.find_by(name: 'Old Project')).not_to be_nil
 
-      Rake::Task['db:migrate_json'].invoke(json_file_path)
+      Rake::Task['data:migrate_json'].invoke(json_file_path)
 
       expect(MemoryEntity.find_by(name: 'Old Project')).to be_nil
       expect(MemoryEntity.count).to eq(2)
     end
   end
 
-  describe 'db:append_json' do
+  describe 'data:append_json' do
     let(:initial_file_path) { create_temp_json_file.call(initial_json_data) }
     let(:append_file_path) { create_temp_json_file.call(append_json_data) }
 
@@ -90,8 +90,8 @@ describe 'db:memory_data rake tasks', type: :task do
       MemoryRelation.delete_all
       MemoryObservation.delete_all
       MemoryEntity.delete_all
-      Rake::Task['db:migrate_json'].invoke(initial_file_path)
-      Rake::Task['db:migrate_json'].reenable # Re-enable for the next test if needed
+      Rake::Task['data:migrate_json'].invoke(initial_file_path)
+      Rake::Task['data:migrate_json'].reenable # Re-enable for the next test if needed
     end
 
     it 'appends new data without clearing existing data' do
@@ -101,7 +101,7 @@ describe 'db:memory_data rake tasks', type: :task do
       expect(MemoryRelation.count).to eq(1)
 
       # Run the append task
-      Rake::Task['db:append_json'].invoke(append_file_path)
+      Rake::Task['data:append_json'].invoke(append_file_path)
 
       # Check totals
       expect(MemoryEntity.count).to eq(3) # Initial 2 + 1 new

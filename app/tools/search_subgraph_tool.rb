@@ -9,15 +9,16 @@ class SearchSubgraphTool < ApplicationTool
     "search_subgraph"
   end
 
-  description "Searches a query across entity names, types, and observations. " \
+  description "Searches a query across entity names, types, aliases, and observations. " \
     "Returns a paginated subgraph of matching entities (with observations) " \
     "and relations exclusively between them, using page/per_page."
 
   # Defines arguments for fast-mcp validation.
   arguments do
-    required(:query).filled(:string).description("The search term to find within entity names, types, or observations.")
+    required(:query).filled(:string).description("The search term to find within entity names, types, aliases, or observations.")
     optional(:search_in_name).filled(:bool).description("Whether to search in entity names. Defaults to true.")
     optional(:search_in_type).filled(:bool).description("Whether to search in entity types. Defaults to true.")
+    optional(:search_in_aliases).filled(:bool).description("Whether to search in entity aliases. Defaults to true.")
     optional(:search_in_observations).filled(:bool).description("Whether to search in entity observations. Defaults to true.")
     optional(:page).filled(:integer)
                    .description("The page number to retrieve. Defaults to #{DEFAULT_PAGE}. Must be 1 or greater.")
@@ -48,6 +49,11 @@ class SearchSubgraphTool < ApplicationTool
           default: true,
           description: "Whether to search in entity observations."
         },
+        search_in_aliases: {
+          type: :boolean,
+          default: true,
+          description: "Whether to search in entity aliases."
+        },
         page: {
           type: [ :integer, :null ],
           description: "Optional. The page number to retrieve. Defaults to #{DEFAULT_PAGE}.",
@@ -76,6 +82,7 @@ class SearchSubgraphTool < ApplicationTool
               entity_id: { type: :integer },
               name: { type: :string },
               entity_type: { type: :string },
+              aliases: { type: [ :string, :null ] },
               observations: {
                 type: :array,
                 items: {
@@ -125,14 +132,14 @@ class SearchSubgraphTool < ApplicationTool
     }.freeze
   end
 
-  def call(query:, search_in_name: true, search_in_type: true, search_in_observations: true, page: nil, per_page: nil)
+  def call(query:, search_in_name: true, search_in_type: true, search_in_observations: true, search_in_aliases: true, page: nil, per_page: nil)
     query_term = query
     if query_term.blank?
       raise FastMcp::Tool::InvalidArgumentsError, "Query term cannot be blank."
     end
 
-    unless search_in_name || search_in_type || search_in_observations
-      raise FastMcp::Tool::InvalidArgumentsError, "At least one search field (name, type, observations) must be enabled."
+    unless search_in_name || search_in_type || search_in_observations || search_in_aliases
+      raise FastMcp::Tool::InvalidArgumentsError, "At least one search field (name, type, aliases, observations) must be enabled."
     end
 
     effective_page = page.nil? ? DEFAULT_PAGE : page.to_i
@@ -158,6 +165,9 @@ class SearchSubgraphTool < ApplicationTool
     end
     if search_in_type
       sql_conditions << "LOWER(memory_entities.entity_type) LIKE :like_query_term"
+    end
+    if search_in_aliases
+      sql_conditions << "LOWER(memory_entities.aliases) LIKE :like_query_term"
     end
     sql_params[:like_query_term] = like_query_term
 
@@ -194,6 +204,7 @@ class SearchSubgraphTool < ApplicationTool
           entity_id: entity.id,
           name: entity.name,
           entity_type: entity.entity_type,
+          aliases: entity.aliases,
           observations: entity.memory_observations.map do |obs|
             {
               observation_id: obs.id,

@@ -5,6 +5,14 @@ All notable changes to GraphMem will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+
+## [0.8.0] - 2025-06-13
+
+### Added
+- `update_entity_tool` to update an existing entity
+- support for entity names aliases as pipe-separated strings
+
+
 ## [0.7.1] - 2025-06-10
 
 ### Added

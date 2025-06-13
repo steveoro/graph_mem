@@ -3,13 +3,13 @@
 # MemoryEntity Resource implementation with pagination, filtering, sorting, and relation inclusion
 class MemoryEntityResource < ApplicationResource
   # Templated URI with all supported query parameters
-  uri "memory_entities{?page,per_page,entity_type,name,id,created_after,created_before,updated_after,updated_before,min_observations,sort_by,sort_dir,include_observations,include_relations,or_filters}"
+  uri "memory_entities{?page,per_page,entity_type,name,aliases,id,created_after,created_before,updated_after,updated_before,min_observations,sort_by,sort_dir,include_observations,include_relations,or_filters}"
   resource_name "MemoryEntities"
   description "Access memory entities with pagination, filtering, sorting and relation inclusion"
   mime_type "application/json"
 
   # Valid sort fields to prevent SQL injection
-  VALID_SORT_FIELDS = %w[id name entity_type observations_count created_at updated_at].freeze
+  VALID_SORT_FIELDS = %w[id name entity_type aliases observations_count created_at updated_at].freeze
 
   # Valid sort directions to prevent SQL injection
   VALID_SORT_DIRECTIONS = %w[asc desc].freeze
@@ -79,6 +79,11 @@ class MemoryEntityResource < ApplicationResource
       query = query.where("name LIKE ?", "%#{params[:name]}%")
     end
 
+    # Filter by aliases (partial match)
+    if params[:aliases].present?
+      query = query.where("aliases LIKE ?", "%#{params[:aliases]}%")
+    end
+
     # Filter by exact ID
     if params[:id].present?
       query = query.where(id: params[:id])
@@ -115,6 +120,7 @@ class MemoryEntityResource < ApplicationResource
     summary = {}
     summary[:entity_type] = params[:entity_type] if params[:entity_type].present?
     summary[:name] = params[:name] if params[:name].present?
+    summary[:aliases] = params[:aliases] if params[:aliases].present?
     summary[:id] = params[:id] if params[:id].present?
     summary[:created_after] = params[:created_after] if params[:created_after].present?
     summary[:created_before] = params[:created_before] if params[:created_before].present?
@@ -199,6 +205,12 @@ class MemoryEntityResource < ApplicationResource
       if filter["name"].present?
         conditions << "name LIKE ?"
         values << "%#{filter['name']}%"
+      end
+
+      # Handle aliases filter
+      if filter["aliases"].present?
+        conditions << "aliases LIKE ?"
+        values << "%#{filter['aliases']}%"
       end
 
       # Handle ID filter
