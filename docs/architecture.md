@@ -22,7 +22,6 @@ The MCP interface layer consists of:
 - **FastMcp::Server** - Base server implementation from the `fast-mcp` gem
 - **Custom Transports** - Includes STDIO and SSE transport implementations
 - **Tool Registration** - Configuration in `config/initializers/fast_mcp.rb`
-- **Monkey Patches** - Fixes to the FastMcp Server in `config/initializers/zzz_fast_mcp_patches.rb`
 
 The interface layer receives JSON-RPC 2.0 requests from clients, routes them to the appropriate tools, and formats responses according to the MCP specification.
 
@@ -30,7 +29,6 @@ The interface layer receives JSON-RPC 2.0 requests from clients, routes them to 
 
 - Transport implementations handle the communication protocol specifics (STDIO, HTTP/SSE)
 - The FastMcp::Server instance handles JSON-RPC request/response lifecycle
-- Custom monkey-patches ensure proper response formatting for tool calls
 - CORS configuration enables cross-origin requests for web clients
 
 ### 2. Application Logic Layer
@@ -150,8 +148,4 @@ To add a new MCP resource:
 
 ## Known Limitations and Workarounds
 
-- **FastMcp::Server#handle_tools_call Bug**: The `fast-mcp` gem version 1.4.0 incorrectly attempts to call `.new` on an already instantiated tool object. This is fixed through a monkey-patch in `config/initializers/zzz_fast_mcp_patches.rb`.
-
-- **Response Formatting**: The Cascade MCP Go client expects a specific format for tool responses that differs slightly from the default FastMcp formatting. The monkey-patch ensures compatibility.
-
-- **Cascade UI Refresh Requirement**: When making changes to MCP tools or resources, Cascade requires a manual UI refresh to discover the changes.
+- **Agentic Client Refresh Requirement**: When making changes to MCP tools or resources, any agentic client usually requires a manual UI refresh to discover the changes.

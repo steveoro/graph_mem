@@ -57,6 +57,48 @@ module Api
         head :no_content
       end
 
+      # POST /api/v1/memory_entities/:id/merge_into/:target_id
+      def merge
+        source_entity = @memory_entity # Set by before_action :set_entity for params[:id]
+        target_entity = ::MemoryEntity.find(params[:target_id])
+
+        ActiveRecord::Base.transaction do
+          # Re-assign observations from source to target
+          source_entity.memory_observations.update_all(memory_entity_id: target_entity.id)
+
+          # Re-assign relations where source_entity is the 'from' entity
+          # Avoid creating self-loops if target_entity was the original 'to'
+          ::MemoryRelation.where(from_entity_id: source_entity.id)
+                          .where.not(to_entity_id: target_entity.id)
+                          .update_all(from_entity_id: target_entity.id)
+
+          # Re-assign relations where source_entity is the 'to' entity
+          # Avoid creating self-loops if target_entity was the original 'from'
+          ::MemoryRelation.where(to_entity_id: source_entity.id)
+                          .where.not(from_entity_id: target_entity.id)
+                          .update_all(to_entity_id: target_entity.id)
+
+          # Delete relations that were directly between source and target to prevent self-loops
+          ::MemoryRelation.where(from_entity_id: source_entity.id, to_entity_id: target_entity.id).destroy_all
+          ::MemoryRelation.where(from_entity_id: target_entity.id, to_entity_id: source_entity.id).destroy_all
+
+          # Note: This simplified merge might create duplicate relations if, for example,
+          # A->C and B->C exist, and A is merged into B, resulting in two B->C relations
+          # if (from_entity_id, to_entity_id, relation_type) is not unique.
+          # This matches the behavior of the existing rake task `graph:merge_entities`.
+          # A robust solution would involve a unique index in the database or more complex de-duplication logic here.
+
+          # Delete the source entity
+          source_entity.destroy!
+        end
+
+        head :no_content
+      rescue ActiveRecord::RecordNotFound
+        render json: { error: "Target MemoryEntity not found when attempting to merge." }, status: :not_found
+      rescue ActiveRecord::RecordInvalid => e
+        render json: { error: "Merge failed: #{e.message}" }, status: :unprocessable_entity
+      end
+
       private
 
       # Use callbacks to share common setup or constraints between actions.

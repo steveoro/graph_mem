@@ -1,0 +1,19 @@
+<div class="container mx-auto px-4 py-8">
+  <h1 class="text-3xl font-bold mb-6 text-center">Knowledge Graph Visualization</h1>
+
+  <div data-controller="graph" class="w-full border rounded-lg shadow-lg bg-gray-50" style="height: 70vh;">
+    <div data-graph-target="container" style="width: 100%; height: 100%;"></div>
+  </div>
+
+  <p class="mt-6 text-sm text-gray-600 text-center">
+    Interactive graph powered by Cytoscape.js and Stimulus.
+  </p>
+</div>
+
+<style>
+  /* Ensure the graph container and cytoscape instance take up full space */
+  [data-graph-target="container"] .cytoscape-container {
+    width: 100%;
+    height: 100%;
+  }
+</style>

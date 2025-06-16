@@ -1,403 +1,363 @@
 # MCP Tools Documentation
 
-This document provides detailed information about the Model Context Protocol (MCP) tools available in GraphMem, how they're implemented, and best practices for using and extending them.
+This document provides detailed information about the Model Context Protocol (MCP) tools available in GraphMem.
 
 ## Overview
 
-MCP tools in GraphMem are Ruby classes that implement specific operations on the knowledge graph. Each tool follows the FastMcp tool pattern and is designed to handle a specific type of operation, such as entity creation, relationship management, or data retrieval.
+MCP tools in GraphMem are Ruby classes that implement specific operations on the knowledge graph. Each tool is designed to handle a specific type of operation, such as entity creation, relationship management, or data retrieval. They are accessed via JSON-RPC calls, typically managed by an MCP client.
 
 ## Available Tools
 
 GraphMem provides the following MCP tools, categorized by their function:
 
-### Entity Management
+### Utility Tools
 
 #### `get_version`
+- **Description:** Returns the current version of the GraphMem server.
+- **Parameters:** None
+- **Response Example:**
+  ```json
+  {
+    "version": "0.8.0"
+  }
+  ```
 
-Returns the current version of the GraphMem server.
+#### `get_current_time`
+- **Description:** Retrieves the current server time.
+- **Parameters:** None
+- **Response Example:**
+  ```json
+  {
+    "time": "2024-05-15T10:30:00Z"
+  }
+  ```
 
-**Parameters:** None
-
-**Response:**
-```json
-{
-  "version": "0.7.0"
-}
-```
+### Entity Management
 
 #### `create_entity`
-
-Creates a new entity in the knowledge graph.
-
-**Parameters:**
-- `name` (string, required): The name of the entity
-- `entity_type` (string, required): The type classification for the entity
-- `observations` (array of strings, optional): Initial observations to attach to the entity
-
-**Response:**
-```json
-{
-  "id": 123,
-  "name": "Project X",
-  "entity_type": "Project",
-  "observations_count": 1,
-  "created_at": "2025-06-09T15:30:00Z",
-  "updated_at": "2025-06-09T15:30:00Z"
-}
-```
+- **Description:** Creates a new entity in the knowledge graph.
+- **Parameters:**
+  - `name` (string, required): The unique name for the new entity.
+  - `entity_type` (string, required): The type classification for the new entity (e.g., 'Project', 'Task').
+  - `aliases` (string, optional): Pipe-separated string of alternative names for the entity.
+  - `observations` (array of strings, optional): Initial observation strings to associate with the entity.
+- **Response Example:**
+  ```json
+  {
+    "entity_id": 1,
+    "name": "New Project Alpha",
+    "entity_type": "Project",
+    "aliases": "alpha|project_a",
+    "observations_count": 1,
+    "created_at": "2024-05-15T10:30:00Z",
+    "updated_at": "2024-05-15T10:30:00Z"
+  }
+  ```
 
 #### `get_entity`
-
-Retrieves a specific entity by its ID.
-
-**Parameters:**
-- `entity_id` (integer, required): The ID of the entity to retrieve
-
-**Response:**
-```json
-{
-  "id": 123,
-  "name": "Project X",
-  "entity_type": "Project",
-  "observations_count": 3,
-  "created_at": "2025-06-09T15:30:00Z",
-  "updated_at": "2025-06-09T15:45:00Z",
-  "observations": [
-    {
-      "id": 456,
-      "content": "Initial project setup",
-      "created_at": "2025-06-09T15:30:00Z",
-      "updated_at": "2025-06-09T15:30:00Z"
-    }
-  ]
-}
-```
-
-#### `search_entities`
-
-Searches for entities by name (case-insensitive partial match).
-
-**Parameters:**
-- `query` (string, required): The search term to find within entity names
-
-**Response:**
-```json
-[
+- **Description:** Retrieves a specific entity by its ID, including its observations and relations.
+- **Parameters:**
+  - `entity_id` (integer, required): The ID of the entity to retrieve.
+- **Response Example:**
+  ```json
   {
-    "id": 123,
-    "name": "Project X",
+    "entity_id": 1,
+    "name": "Project Alpha",
     "entity_type": "Project",
-    "observations_count": 3,
-    "created_at": "2025-06-09T15:30:00Z",
-    "updated_at": "2025-06-09T15:45:00Z"
-  },
+    "aliases": "alpha|project_a",
+    "created_at": "2024-05-15T10:30:00Z",
+    "updated_at": "2024-05-15T10:35:00Z",
+    "observations": [
+      {
+        "observation_id": 101,
+        "content": "Initial setup complete.",
+        "created_at": "2024-05-15T10:30:00Z",
+        "updated_at": "2024-05-15T10:30:00Z"
+      }
+    ],
+    "relations_from": [
+      {
+        "relation_id": 201,
+        "to_entity_id": 2,
+        "to_entity_name": "Task Beta",
+        "relation_type": "has_task",
+        "created_at": "2024-05-15T10:35:00Z",
+        "updated_at": "2024-05-15T10:35:00Z"
+      }
+    ],
+    "relations_to": []
+  }
+  ```
+
+#### `update_entity`
+- **Description:** Updates an existing entity's core properties (name, type, aliases).
+- **Parameters:**
+  - `entity_id` (integer, required): The ID of the entity to update.
+  - `name` (string, optional): The new name for the entity. If provided, must be unique.
+  - `entity_type` (string, optional): The new type classification for the entity.
+  - `aliases` (string, optional): The new pipe-separated string of aliases. This will replace existing aliases. Pass empty string to clear aliases.
+- **Response Example:**
+  ```json
   {
-    "id": 124,
-    "name": "Project Y",
+    "entity_id": 1,
+    "name": "Project Alpha Updated",
     "entity_type": "Project",
-    "observations_count": 1,
-    "created_at": "2025-06-09T16:00:00Z",
-    "updated_at": "2025-06-09T16:00:00Z"
+    "aliases": "alpha_v2|project_alpha_prime",
+    "created_at": "2024-05-15T10:30:00Z",
+    "updated_at": "2024-05-15T10:40:00Z"
   }
-]
-```
-
-#### `list_entities`
-
-Lists entities with pagination support.
-
-**Parameters:**
-- `page` (integer, optional): The page number to retrieve (default: 1)
-- `per_page` (integer, optional): The number of entities per page (default: 20, max: 100)
-
-**Response:**
-```json
-{
-  "entities": [
-    {
-      "id": 123,
-      "name": "Project X",
-      "entity_type": "Project",
-      "observations_count": 3,
-      "created_at": "2025-06-09T15:30:00Z",
-      "updated_at": "2025-06-09T15:45:00Z"
-    }
-  ],
-  "pagination": {
-    "total_entities": 45,
-    "per_page": 20,
-    "current_page": 1,
-    "total_pages": 3
-  }
-}
-```
+  ```
 
 #### `delete_entity`
-
-Deletes an entity and all its associated observations and relations.
-
-**Parameters:**
-- `entity_id` (integer, required): The ID of the entity to delete
-
-**Response:**
-```json
-{
-  "success": true,
-  "message": "Entity deleted successfully"
-}
-```
+- **Description:** Deletes a specific entity by ID. This will also delete associated observations and relations.
+- **Parameters:**
+  - `entity_id` (integer, required): The ID of the entity to delete.
+- **Response Example:**
+  ```json
+  {
+    "entity_id": 1,
+    "name": "Project Alpha Updated",
+    "entity_type": "Project",
+    "aliases": "alpha_v2|project_alpha_prime",
+    "created_at": "2024-05-15T10:30:00Z",
+    "updated_at": "2024-05-15T10:40:00Z",
+    "message": "Entity and associated data deleted successfully."
+  }
+  ```
 
 ### Observation Management
 
 #### `create_observation`
-
-Adds an observation to an existing entity.
-
-**Parameters:**
-- `entity_id` (integer, required): The ID of the entity to add the observation to
-- `text_content` (string, required): The content of the observation
-
-**Response:**
-```json
-{
-  "id": 456,
-  "content": "New observation content",
-  "memory_entity_id": 123,
-  "created_at": "2025-06-09T16:15:00Z",
-  "updated_at": "2025-06-09T16:15:00Z"
-}
-```
+- **Description:** Creates a new observation and associates it with an existing entity.
+- **Parameters:**
+  - `entity_id` (integer, required): The ID of the entity to add the observation to.
+  - `text_content` (string, required): The textual content of the observation.
+- **Response Example:**
+  ```json
+  {
+    "observation_id": 102,
+    "memory_entity_id": 1,
+    "content": "A new piece of information.",
+    "created_at": "2024-05-15T10:45:00Z",
+    "updated_at": "2024-05-15T10:45:00Z"
+  }
+  ```
 
 #### `delete_observation`
+- **Description:** Deletes a specific observation by ID.
+- **Parameters:**
+  - `observation_id` (integer, required): The ID of the observation to delete.
+- **Response Example:**
+  ```json
+  {
+    "observation_id": 102,
+    "memory_entity_id": 1,
+    "content": "A new piece of information.",
+    "created_at": "2024-05-15T10:45:00Z",
+    "updated_at": "2024-05-15T10:45:00Z",
+    "message": "Observation deleted successfully."
+  }
+  ```
 
-Removes an observation from an entity.
-
-**Parameters:**
-- `observation_id` (integer, required): The ID of the observation to delete
-
-**Response:**
-```json
-{
-  "success": true,
-  "message": "Observation deleted successfully"
-}
-```
-
-### Relationship Management
+### Relation Management
 
 #### `create_relation`
-
-Creates a relationship between two existing entities.
-
-**Parameters:**
-- `from_entity_id` (integer, required): The ID of the source entity
-- `to_entity_id` (integer, required): The ID of the target entity
-- `relation_type` (string, required): The type of relationship (e.g., "depends_on", "part_of")
-
-**Response:**
-```json
-{
-  "id": 789,
-  "from_entity_id": 123,
-  "to_entity_id": 124,
-  "relation_type": "depends_on",
-  "created_at": "2025-06-09T16:30:00Z",
-  "updated_at": "2025-06-09T16:30:00Z"
-}
-```
+- **Description:** Creates a relationship between two existing entities.
+- **Parameters:**
+  - `from_entity_id` (integer, required): The ID of the entity where the relation starts.
+  - `to_entity_id` (integer, required): The ID of the entity where the relation ends.
+  - `relation_type` (string, required): The type classification for the relationship (e.g., 'related_to', 'depends_on').
+- **Response Example:**
+  ```json
+  {
+    "relation_id": 202,
+    "from_entity_id": 1,
+    "to_entity_id": 3,
+    "relation_type": "linked_to",
+    "created_at": "2024-05-15T10:50:00Z",
+    "updated_at": "2024-05-15T10:50:00Z"
+  }
+  ```
 
 #### `delete_relation`
-
-Removes a relationship between entities.
-
-**Parameters:**
-- `relation_id` (integer, required): The ID of the relation to delete
-
-**Response:**
-```json
-{
-  "success": true,
-  "message": "Relation deleted successfully"
-}
-```
-
-#### `find_relations`
-
-Finds relationships connected to specified entities.
-
-**Parameters:**
-- `from_entity_id` (integer, optional): Filter by source entity ID
-- `to_entity_id` (integer, optional): Filter by target entity ID
-- `relation_type` (string, optional): Filter by relation type
-
-**Response:**
-```json
-[
+- **Description:** Deletes a specific relation by ID.
+- **Parameters:**
+  - `relation_id` (integer, required): The ID of the relation to delete.
+- **Response Example:**
+  ```json
   {
-    "id": 789,
-    "from_entity_id": 123,
-    "to_entity_id": 124,
-    "relation_type": "depends_on",
-    "created_at": "2025-06-09T16:30:00Z",
-    "updated_at": "2025-06-09T16:30:00Z"
+    "relation_id": 202,
+    "from_entity_id": 1,
+    "to_entity_id": 3,
+    "relation_type": "linked_to",
+    "created_at": "2024-05-15T10:50:00Z",
+    "updated_at": "2024-05-15T10:50:00Z",
+    "message": "Relation deleted successfully."
   }
-]
-```
+  ```
 
-#### `get_subgraph_by_ids`
+### Search & Query Tools
 
-Retrieves a subgraph consisting of specified entities and their relations.
-
-**Parameters:**
-- `entity_ids` (array of integers, required): The IDs of entities to include in the subgraph
-
-**Response:**
-```json
-{
-  "entities": [
-    {
-      "id": 123,
-      "name": "Project X",
-      "entity_type": "Project",
-      "observations_count": 3,
-      "created_at": "2025-06-09T15:30:00Z",
-      "updated_at": "2025-06-09T15:45:00Z",
-      "observations": [...]
-    },
-    {
-      "id": 124,
-      "name": "Project Y",
-      "entity_type": "Project",
-      "observations_count": 1,
-      "created_at": "2025-06-09T16:00:00Z",
-      "updated_at": "2025-06-09T16:00:00Z",
-      "observations": [...]
+#### `list_entities`
+- **Description:** Retrieves a paginated list of all entities.
+- **Parameters:**
+  - `page` (integer, optional, default: 1): The page number to retrieve. Must be 1 or greater.
+  - `per_page` (integer, optional, default: 20, max: 100): The maximum number of entities to return per page. Must be between 1 and 100.
+- **Response Example:**
+  ```json
+  {
+    "entities": [
+      {
+        "entity_id": 1,
+        "name": "Project Alpha Updated",
+        "entity_type": "Project",
+        "aliases": "alpha_v2|project_alpha_prime",
+        "created_at": "2024-05-15T10:30:00Z",
+        "updated_at": "2024-05-15T10:40:00Z"
+      },
+      {
+        "entity_id": 2,
+        "name": "Task Beta",
+        "entity_type": "Task",
+        "aliases": null,
+        "created_at": "2024-05-15T10:32:00Z",
+        "updated_at": "2024-05-15T10:32:00Z"
+      }
+    ],
+    "pagination": {
+      "current_page": 1,
+      "per_page": 20,
+      "total_entries": 2,
+      "total_pages": 1
     }
-  ],
-  "relations": [
+  }
+  ```
+
+#### `search_entities`
+- **Description:** Searches for entities by name, type, or aliases (case-insensitive).
+- **Parameters:**
+  - `query` (string, required): The search term to find within entity names, types, or aliases.
+- **Response Example (array of matching entities):**
+  ```json
+  [
     {
-      "id": 789,
-      "from_entity_id": 123,
-      "to_entity_id": 124,
-      "relation_type": "depends_on",
-      "created_at": "2025-06-09T16:30:00Z",
-      "updated_at": "2025-06-09T16:30:00Z"
+      "entity_id": 1,
+      "name": "Project Alpha Updated",
+      "entity_type": "Project",
+      "aliases": "alpha_v2|project_alpha_prime",
+      "created_at": "2024-05-15T10:30:00Z",
+      "updated_at": "2024-05-15T10:40:00Z"
     }
   ]
-}
-```
+  ```
 
-#### `get_current_time`
+#### `find_relations`
+- **Description:** Finds relations based on optional filtering criteria (from_entity_id, to_entity_id, relation_type).
+- **Parameters:**
+  - `from_entity_id` (integer, optional): Filter relations starting from this entity ID.
+  - `to_entity_id` (integer, optional): Filter relations ending at this entity ID.
+  - `relation_type` (string, optional): Filter relations by this type.
+- **Response Example (array of matching relations):**
+  ```json
+  [
+    {
+      "relation_id": 201,
+      "from_entity_id": 1,
+      "to_entity_id": 2,
+      "relation_type": "has_task",
+      "created_at": "2024-05-15T10:35:00Z",
+      "updated_at": "2024-05-15T10:35:00Z"
+    }
+  ]
+  ```
 
-Retrieves the current server time in ISO 8601 format.
+#### `get_subgraph_by_ids`
+- **Description:** Retrieves a specific set of entities by their IDs, including their observations, and all relations that exist exclusively between them.
+- **Parameters:**
+  - `entity_ids` (array of integers, required): An array of entity IDs to include in the subgraph.
+- **Response Example:**
+  ```json
+  {
+    "entities": [
+      {
+        "entity_id": 1,
+        "name": "Project Alpha Updated",
+        "entity_type": "Project",
+        "aliases": "alpha_v2|project_alpha_prime",
+        "created_at": "2024-05-15T10:30:00Z",
+        "updated_at": "2024-05-15T10:40:00Z",
+        "observations": [
+          {
+            "observation_id": 101,
+            "content": "Initial setup complete.",
+            "created_at": "2024-05-15T10:30:00Z",
+            "updated_at": "2024-05-15T10:30:00Z"
+          }
+        ]
+      },
+      {
+        "entity_id": 2,
+        "name": "Task Beta",
+        "entity_type": "Task",
+        "aliases": null,
+        "created_at": "2024-05-15T10:32:00Z",
+        "updated_at": "2024-05-15T10:32:00Z",
+        "observations": []
+      }
+    ],
+    "relations": [
+      {
+        "relation_id": 201,
+        "from_entity_id": 1,
+        "to_entity_id": 2,
+        "relation_type": "has_task",
+        "created_at": "2024-05-15T10:35:00Z",
+        "updated_at": "2024-05-15T10:35:00Z"
+      }
+    ]
+  }
+  ```
 
-**Parameters:** None
-
-**Response:**
-```json
-{
-  "time": "2025-06-09T16:40:00Z"
-}
-```
-
-## Tool Implementation Details
-
-### Directory Structure
-
-All MCP tools are located in the `app/tools/` directory:
-
-```
-app/tools/
-├── application_tool.rb                # Base class for all tools
-├── version_tool.rb                    # Returns server version
-├── entity/
-│   ├── create_entity_tool.rb          # Creates new entities
-│   ├── get_entity_tool.rb             # Retrieves entities by ID
-│   ├── search_entities_tool.rb        # Searches for entities by name
-│   ├── list_entities_tool.rb          # Lists entities with pagination
-│   └── delete_entity_tool.rb          # Deletes entities
-├── observation/
-│   ├── create_observation_tool.rb     # Adds observations to entities
-│   └── delete_observation_tool.rb     # Removes observations
-└── relation/
-    ├── create_relation_tool.rb        # Creates relationships
-    ├── delete_relation_tool.rb        # Removes relationships
-    ├── find_relations_tool.rb         # Finds relationships
-    ├── get_subgraph_by_ids_tool.rb    # Gets a subgraph of entities
-    └── get_current_time_tool.rb       # Gets server time
-```
-
-### Base Tool Class
-
-The `ApplicationTool` class serves as the base class for all tools:
-
-```ruby
-# app/tools/application_tool.rb
-class ApplicationTool < FastMcp::Tool
-  def tool_name
-    self.class.tool_name
-  end
-  
-  def self.tool_name
-    name.demodulize.underscore.sub(/_tool$/, '')
-  end
-  
-  # Additional shared functionality...
-end
-```
-
-### Tool Registration
-
-Tools are registered in the FastMcp server configuration:
-
-```ruby
-# config/initializers/fast_mcp.rb
-server = FastMcp::Server.new(
-  version: GraphMem::VERSION,
-  transport: transport
-)
-
-# Auto-discover and register tool classes
-Dir[Rails.root.join('app/tools/**/*_tool.rb')].each do |file|
-  require file
-  tool_class_name = File.basename(file, '.rb').camelize
-  tool_class = tool_class_name.constantize
-  server.register_tool(tool_class.new)
-end
-```
-
-## Creating New Tools
-
-### Step 1: Create the Tool Class
-
-Create a new Ruby class in `app/tools/` that inherits from `ApplicationTool`:
-
-```ruby
-# app/tools/my_custom_tool.rb
-class MyCustomTool < ApplicationTool
-  schema do
-    required(:param1).filled(:string)
-    optional(:param2).filled(:integer)
-  end
-  
-  def call(params)
-    # Your implementation here
-    # Return value will be sent as JSON response
-    { result: "Success!" }
-  end
-end
-```
-
-### Step 2: Define the JSON Schema
-
-Use the `schema` block to define the parameters your tool accepts:
-
-```ruby
-schema do
-  required(:required_param).filled(:string)
-  optional(:optional_param).filled(:integer)
-  optional(:complex_param).schema do
-    required(:nested_param).filled(:string)
+#### `search_subgraph`
+- **Description:** Searches a query across entity names, types, aliases, and observations. Returns a paginated subgraph of matching entities (with observations) and relations exclusively between them.
+- **Parameters:**
+  - `query` (string, required): The search term to find.
+  - `search_in_name` (boolean, optional, default: true): Whether to search in entity names.
+  - `search_in_type` (boolean, optional, default: true): Whether to search in entity types.
+  - `search_in_aliases` (boolean, optional, default: true): Whether to search in entity aliases.
+  - `search_in_observations` (boolean, optional, default: true): Whether to search in entity observations.
+  - `page` (integer, optional, default: 1): The page number to retrieve.
+  - `per_page` (integer, optional, default: 20, max: 100): The number of entities per page.
+- **Response Example:**
+  ```json
+  {
+    "entities": [
+      {
+        "entity_id": 1,
+        "name": "Matching Project",
+        "entity_type": "Project",
+        "aliases": "match",
+        "created_at": "2024-05-15T11:00:00Z",
+        "updated_at": "2024-05-15T11:05:00Z",
+        "observations": [
+          {
+            "observation_id": 105,
+            "content": "This entity matches the search query.",
+            "created_at": "2024-05-15T11:00:00Z",
+            "updated_at": "2024-05-15T11:00:00Z"
+          }
+        ]
+      }
+    ],
+    "relations": [],
+    "pagination": {
+      "current_page": 1,
+      "per_page": 20,
+      "total_entries": 1,
+      "total_pages": 1
+    }
+  }
+  ```
   end
 end
 ```
