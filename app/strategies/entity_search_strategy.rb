@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 # Strategy class for searching MemoryEntity records with relevance ranking
-# 
+#
 # This strategy:
 # - Splits query into tokens separated by spaces
 # - Searches name, entity_type, and aliases fields
@@ -26,7 +26,7 @@ class EntitySearchStrategy
 
   # Field weights for relevance scoring (higher values = more important)
   FIELD_WEIGHTS = {
-    entity_type: 15,  # Highest weight for entity type matches (parent category) 
+    entity_type: 15,  # Highest weight for entity type matches (parent category)
     name: 10,         # High weight for name matches
     aliases: 5        # Lower weight for alias matches
   }.freeze
@@ -52,10 +52,10 @@ class EntitySearchStrategy
 
     # Get all potential matches
     entities = fetch_candidate_entities(tokens)
-    
+
     # Score and rank results
     scored_results = score_and_rank_entities(entities, tokens)
-    
+
     # Filter by minimum score and limit results
     scored_results
       .select { |result| result.score >= MIN_SCORE_THRESHOLD }
@@ -86,7 +86,7 @@ class EntitySearchStrategy
     tokens.each do |token|
       like_token = "%#{token}%"
       conditions << "(LOWER(name) LIKE ? OR LOWER(entity_type) LIKE ? OR LOWER(aliases) LIKE ?)"
-      params += [like_token, like_token, like_token]
+      params += [ like_token, like_token, like_token ]
     end
 
     where_clause = conditions.join(" OR ")
@@ -104,7 +104,7 @@ class EntitySearchStrategy
     end
 
     # Sort by entity_type first (alphabetically), then by score (descending), then by name (ascending)
-    results.sort_by { |result| [result.entity.entity_type.to_s.downcase, -result.score, result.entity.name.to_s.downcase] }
+    results.sort_by { |result| [ result.entity.entity_type.to_s.downcase, -result.score, result.entity.name.to_s.downcase ] }
   end
 
   # Calculate relevance score for a single entity
@@ -124,7 +124,7 @@ class EntitySearchStrategy
       if entity_type_lower.include?(token)
         score += FIELD_WEIGHTS[:entity_type]
         matched_fields << "entity_type" unless matched_fields.include?("entity_type")
-        
+
         # Bonus for exact word matches in entity_type
         if entity_type_lower.split(/\s+/).include?(token)
           score += FIELD_WEIGHTS[:entity_type] * 0.5
@@ -135,7 +135,7 @@ class EntitySearchStrategy
       if name_lower.include?(token)
         score += FIELD_WEIGHTS[:name]
         matched_fields << "name" unless matched_fields.include?("name")
-        
+
         # Bonus for exact word matches in name
         if name_lower.split(/\s+/).include?(token)
           score += FIELD_WEIGHTS[:name] * 0.5
@@ -146,7 +146,7 @@ class EntitySearchStrategy
       if aliases_lower.include?(token)
         score += FIELD_WEIGHTS[:aliases]
         matched_fields << "aliases" unless matched_fields.include?("aliases")
-        
+
         # Bonus for exact word matches in aliases
         if aliases_lower.split(/\s+/).include?(token)
           score += FIELD_WEIGHTS[:aliases] * 0.5
@@ -159,12 +159,12 @@ class EntitySearchStrategy
       matched_token_count = tokens.count do |token|
         entity_type_lower.include?(token) || name_lower.include?(token) || aliases_lower.include?(token)
       end
-      
+
       if matched_token_count > 1
         score += (matched_token_count - 1) * 3  # 3 point bonus per additional token (increased from 2)
       end
     end
 
-    [score.to_i, matched_fields.uniq]
+    [ score.to_i, matched_fields.uniq ]
   end
 end

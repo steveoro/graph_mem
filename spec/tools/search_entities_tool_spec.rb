@@ -41,7 +41,7 @@ RSpec.describe SearchEntitiesTool, type: :model do
   describe '#input_schema_to_json' do
     it 'returns the correct schema' do
       schema = tool.input_schema_to_json
-      
+
       expect(schema).to eq({
         type: "object",
         properties: { query: { type: "string", description: "The search term to find within entity names, entity types, or aliases. Multiple words will be tokenized for better matching (case-insensitive)." } },
@@ -54,10 +54,10 @@ RSpec.describe SearchEntitiesTool, type: :model do
     context 'with valid query' do
       it 'returns search results with relevance scoring' do
         results = tool.call(query: 'apple')
-        
+
         expect(results).to be_an(Array)
         expect(results.length).to eq(2)
-        
+
         # Check result format
         result = results.first
         expect(result).to include(
@@ -70,7 +70,7 @@ RSpec.describe SearchEntitiesTool, type: :model do
           :relevance_score,
           :matched_fields
         )
-        
+
         expect(result[:entity_id]).to be_a(Integer)
         expect(result[:relevance_score]).to be_a(Integer)
         expect(result[:matched_fields]).to be_an(Array)
@@ -78,11 +78,11 @@ RSpec.describe SearchEntitiesTool, type: :model do
 
       it 'returns results ordered by entity_type first, then by relevance' do
         results = tool.call(query: 'apple')
-        
+
         # Results should be ordered by entity_type alphabetically first
         entity_types = results.map { |r| r[:entity_type] }
-        expect(entity_types).to eq(['Beverage', 'Dessert'])
-        
+        expect(entity_types).to eq([ 'Beverage', 'Dessert' ])
+
         # Within same entity_type, should be ordered by score
         expect(results.first[:name]).to eq('Apple Juice') # Beverage
         expect(results.second[:name]).to eq('Apple Pie') # Dessert
@@ -90,10 +90,10 @@ RSpec.describe SearchEntitiesTool, type: :model do
 
       it 'handles entity_type queries' do
         results = tool.call(query: 'dessert')
-        
+
         expect(results).to be_an(Array)
         expect(results.length).to eq(1)
-        
+
         # Apple Pie should be the result
         expect(results.first[:name]).to eq('Apple Pie')
         expect(results.first[:entity_type]).to eq('Dessert')
@@ -103,10 +103,10 @@ RSpec.describe SearchEntitiesTool, type: :model do
 
       it 'handles multi-token queries across fields' do
         results = tool.call(query: 'apple dessert')
-        
+
         expect(results).to be_an(Array)
         expect(results.length).to be >= 1
-        
+
         # Apple Pie should be the top result (matches both: apple in name, dessert in entity_type)
         expect(results.first[:name]).to eq('Apple Pie')
         expect(results.first[:matched_fields]).to include('name', 'entity_type')
@@ -116,7 +116,7 @@ RSpec.describe SearchEntitiesTool, type: :model do
       it 'is case insensitive' do
         lowercase_results = tool.call(query: 'dessert')
         uppercase_results = tool.call(query: 'DESSERT')
-        
+
         expect(lowercase_results.length).to eq(uppercase_results.length)
         expect(lowercase_results.map { |r| r[:entity_id] }.sort).to eq(
           uppercase_results.map { |r| r[:entity_id] }.sort
@@ -125,22 +125,22 @@ RSpec.describe SearchEntitiesTool, type: :model do
 
       it 'searches in entity_type field' do
         results = tool.call(query: 'beverage')
-        
+
         expect(results.length).to eq(1)
         expect(results.first[:name]).to eq('Apple Juice')
         expect(results.first[:entity_type]).to eq('Beverage')
-        
+
         # Check that matched_fields includes entity_type
         expect(results.first[:matched_fields]).to include('entity_type')
       end
 
       it 'searches in aliases' do
         results = tool.call(query: 'fruit')
-        
+
         expect(results.length).to eq(2)
         entity_names = results.map { |r| r[:name] }
         expect(entity_names).to contain_exactly('Apple Pie', 'Apple Juice')
-        
+
         # Check that matched_fields includes aliases
         results.each do |result|
           expect(result[:matched_fields]).to include('aliases')
@@ -150,7 +150,7 @@ RSpec.describe SearchEntitiesTool, type: :model do
       it 'includes all required fields in output' do
         results = tool.call(query: 'apple')
         result = results.find { |r| r[:entity_id] == apple_entity.id }
-        
+
         expect(result[:entity_id]).to eq(apple_entity.id)
         expect(result[:name]).to eq(apple_entity.name)
         expect(result[:entity_type]).to eq(apple_entity.entity_type)
@@ -171,15 +171,15 @@ RSpec.describe SearchEntitiesTool, type: :model do
           entity_type: 'Product',
           aliases: 'other'
         )
-        
+
         results = tool.call(query: 'test')
-        
+
         # Should be ordered by entity_type, but type_match should have higher score
         type_result = results.find { |r| r[:entity_id] == type_match.id }
         name_result = results.find { |r| r[:entity_id] == name_match.id }
-        
+
         expect(type_result[:relevance_score]).to be > name_result[:relevance_score]
-        
+
       ensure
         type_match&.destroy
         name_match&.destroy
@@ -208,7 +208,7 @@ RSpec.describe SearchEntitiesTool, type: :model do
     context 'error handling' do
       it 'raises InternalServerError on database errors' do
         allow(EntitySearchStrategy).to receive(:new).and_raise(StandardError.new('Database error'))
-        
+
         expect {
           tool.call(query: 'apple')
         }.to raise_error(McpGraphMemErrors::InternalServerError, /An internal server error occurred in SearchEntitiesTool/)
@@ -217,11 +217,11 @@ RSpec.describe SearchEntitiesTool, type: :model do
       it 'logs errors appropriately' do
         allow(EntitySearchStrategy).to receive(:new).and_raise(StandardError.new('Test error'))
         allow(Rails.logger).to receive(:error)
-        
+
         expect {
           tool.call(query: 'apple')
         }.to raise_error(McpGraphMemErrors::InternalServerError)
-        
+
         expect(Rails.logger).to have_received(:error).with(/InternalServerError in SearchEntitiesTool: Test error/)
       end
     end
@@ -231,9 +231,9 @@ RSpec.describe SearchEntitiesTool, type: :model do
         strategy_instance = instance_double(EntitySearchStrategy)
         allow(EntitySearchStrategy).to receive(:new).and_return(strategy_instance)
         allow(strategy_instance).to receive(:search).with('apple').and_return([])
-        
+
         tool.call(query: 'apple')
-        
+
         expect(EntitySearchStrategy).to have_received(:new)
         expect(strategy_instance).to have_received(:search).with('apple')
       end
@@ -249,15 +249,15 @@ RSpec.describe SearchEntitiesTool, type: :model do
           created_at: Time.current.iso8601,
           updated_at: Time.current.iso8601,
           relevance_score: 15,
-          matched_fields: ['entity_type']
+          matched_fields: [ 'entity_type' ]
         })
-        
+
         strategy_instance = instance_double(EntitySearchStrategy)
         allow(EntitySearchStrategy).to receive(:new).and_return(strategy_instance)
-        allow(strategy_instance).to receive(:search).and_return([mock_result])
-        
+        allow(strategy_instance).to receive(:search).and_return([ mock_result ])
+
         results = tool.call(query: 'test')
-        
+
         expect(results.length).to eq(1)
         expect(results.first[:entity_type]).to eq('Test Type')
         expect(results.first[:matched_fields]).to include('entity_type')
@@ -288,11 +288,11 @@ RSpec.describe SearchEntitiesTool, type: :model do
           aliases: "alias#{i}, test#{i}"
         )
       end
-      
+
       start_time = Time.current
       results = tool.call(query: 'test')
       end_time = Time.current
-      
+
       expect(results.length).to be > 0
       expect(end_time - start_time).to be < 2.0 # Should complete within 2 seconds
     end
@@ -304,7 +304,7 @@ RSpec.describe SearchEntitiesTool, type: :model do
       entity_type_results = tool.call(query: 'dessert')
       name_results = tool.call(query: 'apple')
       alias_results = tool.call(query: 'fruit')
-      
+
       # Should get different sets of results
       expect(entity_type_results.first[:matched_fields]).to include('entity_type')
       expect(name_results.first[:matched_fields]).to include('name')
@@ -317,13 +317,13 @@ RSpec.describe SearchEntitiesTool, type: :model do
         entity_type: 'Kitchen Equipment',
         aliases: 'cooking tool'
       )
-      
+
       # Should match partial entity_type
       results = tool.call(query: 'kitchen')
       expect(results.length).to eq(1)
       expect(results.first[:name]).to eq('Mixer Tool')
       expect(results.first[:matched_fields]).to include('entity_type')
-      
+
     ensure
       compound_entity&.destroy
     end

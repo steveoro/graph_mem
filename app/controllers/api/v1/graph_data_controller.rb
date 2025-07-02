@@ -7,7 +7,7 @@ module Api
 
         nodes = entities.map do |entity|
           {
-            group: 'nodes',
+            group: "nodes",
             data: {
               id: entity.id.to_s,
               label: entity.name,
@@ -19,7 +19,7 @@ module Api
 
         edges = relations.map do |relation|
           {
-            group: 'edges',
+            group: "edges",
             data: {
               id: "r#{relation.id}",
               source: relation.from_entity_id.to_s,
