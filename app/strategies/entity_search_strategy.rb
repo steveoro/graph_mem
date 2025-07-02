@@ -4,9 +4,9 @@
 # 
 # This strategy:
 # - Splits query into tokens separated by spaces
-# - Searches both name and aliases fields
-# - Ranks results by number of matching tokens and field priority (name > aliases)
-# - Returns results ordered by relevance score (highest first)
+# - Searches name, entity_type, and aliases fields
+# - Ranks results by number of matching tokens and field priority (entity_type > name > aliases)
+# - Returns results ordered by entity_type first, then relevance score (highest first)
 class EntitySearchStrategy
   # Result struct to hold entity data with relevance score
   SearchResult = Struct.new(:entity, :score, :matched_fields) do
@@ -24,10 +24,11 @@ class EntitySearchStrategy
     end
   end
 
-  # Field weights for relevance scoring
+  # Field weights for relevance scoring (higher values = more important)
   FIELD_WEIGHTS = {
-    name: 10,      # Higher weight for name matches
-    aliases: 5     # Lower weight for alias matches
+    entity_type: 15,  # Highest weight for entity type matches (parent category) 
+    name: 10,         # High weight for name matches
+    aliases: 5        # Lower weight for alias matches
   }.freeze
 
   # Minimum score threshold to include in results
@@ -40,7 +41,7 @@ class EntitySearchStrategy
   # Main search method
   # @param query [String] The search query to process
   # @param limit [Integer] Maximum number of results to return (default: 50)
-  # @return [Array<SearchResult>] Array of search results ordered by relevance
+  # @return [Array<SearchResult>] Array of search results ordered by entity_type, then relevance
   def search(query, limit: 50)
     return [] if query.blank?
 
@@ -84,8 +85,8 @@ class EntitySearchStrategy
 
     tokens.each do |token|
       like_token = "%#{token}%"
-      conditions << "(LOWER(name) LIKE ? OR LOWER(aliases) LIKE ?)"
-      params += [like_token, like_token]
+      conditions << "(LOWER(name) LIKE ? OR LOWER(entity_type) LIKE ? OR LOWER(aliases) LIKE ?)"
+      params += [like_token, like_token, like_token]
     end
 
     where_clause = conditions.join(" OR ")
@@ -102,8 +103,8 @@ class EntitySearchStrategy
       SearchResult.new(entity, score, matched_fields)
     end
 
-    # Sort by score (descending), then by name (ascending) for consistency
-    results.sort_by { |result| [-result.score, result.entity.name] }
+    # Sort by entity_type first (alphabetically), then by score (descending), then by name (ascending)
+    results.sort_by { |result| [result.entity.entity_type.to_s.downcase, -result.score, result.entity.name.to_s.downcase] }
   end
 
   # Calculate relevance score for a single entity
@@ -115,9 +116,21 @@ class EntitySearchStrategy
     matched_fields = []
 
     name_lower = entity.name.to_s.downcase
+    entity_type_lower = entity.entity_type.to_s.downcase
     aliases_lower = entity.aliases.to_s.downcase
 
     tokens.each do |token|
+      # Check entity_type matches (highest priority)
+      if entity_type_lower.include?(token)
+        score += FIELD_WEIGHTS[:entity_type]
+        matched_fields << "entity_type" unless matched_fields.include?("entity_type")
+        
+        # Bonus for exact word matches in entity_type
+        if entity_type_lower.split(/\s+/).include?(token)
+          score += FIELD_WEIGHTS[:entity_type] * 0.5
+        end
+      end
+
       # Check name matches
       if name_lower.include?(token)
         score += FIELD_WEIGHTS[:name]
@@ -144,11 +157,11 @@ class EntitySearchStrategy
     # Bonus for matching multiple tokens
     if tokens.length > 1
       matched_token_count = tokens.count do |token|
-        name_lower.include?(token) || aliases_lower.include?(token)
+        entity_type_lower.include?(token) || name_lower.include?(token) || aliases_lower.include?(token)
       end
       
       if matched_token_count > 1
-        score += (matched_token_count - 1) * 2  # 2 point bonus per additional token
+        score += (matched_token_count - 1) * 3  # 3 point bonus per additional token (increased from 2)
       end
     end
 
