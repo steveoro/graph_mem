@@ -30,6 +30,21 @@ RSpec.configure do |config|
       ],
       components: {
         schemas: {
+          MemoryEntitySearchResult: {
+            type: :object,
+            properties: {
+              entity_id: { type: :integer },
+              name: { type: :string },
+              entity_type: { type: :string },
+              aliases: { type: [ :string, :null ] },
+              observations_count: { type: :integer },
+              created_at: { type: :string, format: 'date-time' },
+              updated_at: { type: :string, format: 'date-time' },
+              relevance_score: { type: :number, format: 'float' },
+              matched_fields: { type: :array, items: { type: :string } }
+            },
+            required: [ 'entity_id', 'name', 'entity_type', 'observations_count', 'created_at', 'updated_at', 'relevance_score', 'matched_fields' ]
+          },
           memory_entity: {
             type: :object,
             properties: {

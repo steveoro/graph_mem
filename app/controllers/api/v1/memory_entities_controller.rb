@@ -34,8 +34,8 @@ module Api
       def search
         query = params[:q]
         if query.present?
-          @memory_entities = ::MemoryEntity.where("(LOWER(name) LIKE ?) OR (LOWER(entity_type) LIKE ?) OR (LOWER(aliases) LIKE ?)",
-                                                 "%#{query.downcase}%", "%#{query.downcase}%", "%#{query.downcase}%")
+          # Use the EntitySearchStrategy for improved search with relevance ranking
+          @memory_entities = EntitySearchStrategy.new.search(query)
         else
           @memory_entities = ::MemoryEntity.none
         end

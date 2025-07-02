@@ -1,0 +1,42 @@
+default_sqlt3: &default_sqlt3
+  adapter: sqlite3
+  pool: <%= ENV.fetch("RAILS_MAX_THREADS") { 5 } %>
+  timeout: 5000
+
+default: &default
+  adapter: mysql2
+  encoding: utf8mb4
+  pool: <%= ENV.fetch("RAILS_MAX_THREADS") { 5 } %>
+  host: mariadb
+  port: 3306
+  username: root
+  # Set the default DB password here or set the ENV variable to override:
+  password: <%= ENV.fetch("DB_PASSWORD", 'Password123!') %>
+
+development:
+  <<: *default
+  database: graph_mem_development
+
+test:
+  <<: *default
+  database: graph_mem_test
+
+# Store production support databases in the storage/ directory, which by default
+# is mounted as a persistent Docker volume in config/deploy.yml.
+production:
+  primary:
+    <<: *default
+    database: graph_mem
+  cache:
+    <<: *default_sqlt3
+    database: storage/production_cache.sqlite3
+    migrations_paths: db/cache_migrate
+  queue:
+    <<: *default_sqlt3
+    database: storage/production_queue.sqlite3
+    migrations_paths: db/queue_migrate
+  cable:
+    <<: *default_sqlt3
+    database: storage/production_cable.sqlite3
+    migrations_paths: db/cable_migrate
+

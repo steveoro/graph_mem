@@ -80,7 +80,7 @@ jobs:
           bundler-cache: true
 
       - name: Setup database configuration
-        run: cp config/database.example.yml config/database.yml
+        run: cp config/database.ci.yml config/database.yml
 
       - name: Wait for MariaDB to be ready
         run: |

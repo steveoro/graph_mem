@@ -237,8 +237,7 @@ RSpec.describe 'API V1 Memory Entities', type: :request do
       parameter name: :q, in: :query, type: :string, required: true, description: 'Search query for entity name (case-insensitive)'
 
       response(200, 'successful') do
-        schema type: :array,
-               items: { '$ref' => '#/components/schemas/memory_entity' }
+        schema type: :array, items: { '$ref' => '#/components/schemas/MemoryEntitySearchResult' }
 
         # Create entities for searching
         let!(:entity_apple) { MemoryEntity.create!(name: 'Apple Pie', entity_type: 'Dessert') }
@@ -250,8 +249,10 @@ RSpec.describe 'API V1 Memory Entities', type: :request do
           let(:q) { 'apple pie' }
           run_test! do |response|
             data = JSON.parse(response.body)
-            expect(data.size).to eq(1)
-            expect(data.first['id']).to eq(entity_apple.id)
+            expect(data.size).to eq(2) # "apple pie" and "apple juice", the second with less relevance
+            expect(data.first['entity_id']).to eq(entity_apple.id)
+            expect(data.last['entity_id']).to eq(entity_apple_juice.id)
+            expect(data.first['relevance_score']).to be > data.last['relevance_score']
           end
         end
 
@@ -260,7 +261,8 @@ RSpec.describe 'API V1 Memory Entities', type: :request do
           run_test! do |response|
             data = JSON.parse(response.body)
             expect(data.size).to eq(2)
-            expect(data.map { |e| e['id'] }).to contain_exactly(entity_apple.id, entity_apple_juice.id)
+            expect(data.map { |e| e['entity_id'] }).to contain_exactly(entity_apple.id, entity_apple_juice.id)
+            expect(data.first['relevance_score']).to be >= data.last['relevance_score']
           end
         end
 
