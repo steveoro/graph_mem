@@ -6,7 +6,7 @@
 # - Splits query into tokens separated by spaces
 # - Searches name, entity_type, and aliases fields
 # - Ranks results by number of matching tokens and field priority (entity_type > name > aliases)
-# - Returns results ordered by entity_type first, then relevance score (highest first)
+# - Returns results ordered by relevance score (highest first), then by entity_type
 class EntitySearchStrategy
   # Result struct to hold entity data with relevance score
   SearchResult = Struct.new(:entity, :score, :matched_fields) do
@@ -34,6 +34,9 @@ class EntitySearchStrategy
   # Minimum score threshold to include in results
   MIN_SCORE_THRESHOLD = 1
 
+  # Regex to split strings into words, handling commas and spaces
+  WORD_SPLIT_REGEX = /[\s,]+/
+
   def initialize
     @logger = Rails.logger
   end
@@ -41,7 +44,7 @@ class EntitySearchStrategy
   # Main search method
   # @param query [String] The search query to process
   # @param limit [Integer] Maximum number of results to return (default: 50)
-  # @return [Array<SearchResult>] Array of search results ordered by entity_type, then relevance
+  # @return [Array<SearchResult>] Array of search results ordered by relevance
   def search(query, limit: 50)
     return [] if query.blank?
 
@@ -103,16 +106,16 @@ class EntitySearchStrategy
       SearchResult.new(entity, score, matched_fields)
     end
 
-    # Sort by entity_type first (alphabetically), then by score (descending), then by name (ascending)
-    results.sort_by { |result| [ result.entity.entity_type.to_s.downcase, -result.score, result.entity.name.to_s.downcase ] }
+    # Sort by score (descending), then by entity_type (alphabetically), then by name (ascending)
+    results.sort_by { |result| [ -result.score, result.entity.entity_type.to_s.downcase, result.entity.name.to_s.downcase ] }
   end
 
   # Calculate relevance score for a single entity
   # @param entity [MemoryEntity] The entity to score
   # @param tokens [Array<String>] Search tokens
-  # @return [Array<Integer, Array<String>>] Score and list of matched fields
+  # @return [Array<Float, Array<String>>] Score and list of matched fields
   def calculate_entity_score(entity, tokens)
-    score = 0
+    score = 0.0
     matched_fields = []
 
     name_lower = entity.name.to_s.downcase
@@ -123,10 +126,10 @@ class EntitySearchStrategy
       # Check entity_type matches (highest priority)
       if entity_type_lower.include?(token)
         score += FIELD_WEIGHTS[:entity_type]
-        matched_fields << "entity_type" unless matched_fields.include?("entity_type")
+        matched_fields << "entity_type"
 
         # Bonus for exact word matches in entity_type
-        if entity_type_lower.split(/\s+/).include?(token)
+        if entity_type_lower.split(WORD_SPLIT_REGEX).include?(token)
           score += FIELD_WEIGHTS[:entity_type] * 0.5
         end
       end
@@ -134,10 +137,10 @@ class EntitySearchStrategy
       # Check name matches
       if name_lower.include?(token)
         score += FIELD_WEIGHTS[:name]
-        matched_fields << "name" unless matched_fields.include?("name")
+        matched_fields << "name"
 
         # Bonus for exact word matches in name
-        if name_lower.split(/\s+/).include?(token)
+        if name_lower.split(WORD_SPLIT_REGEX).include?(token)
           score += FIELD_WEIGHTS[:name] * 0.5
         end
       end
@@ -145,10 +148,10 @@ class EntitySearchStrategy
       # Check aliases matches
       if aliases_lower.include?(token)
         score += FIELD_WEIGHTS[:aliases]
-        matched_fields << "aliases" unless matched_fields.include?("aliases")
+        matched_fields << "aliases"
 
         # Bonus for exact word matches in aliases
-        if aliases_lower.split(/\s+/).include?(token)
+        if aliases_lower.split(WORD_SPLIT_REGEX).include?(token)
           score += FIELD_WEIGHTS[:aliases] * 0.5
         end
       end
@@ -161,10 +164,10 @@ class EntitySearchStrategy
       end
 
       if matched_token_count > 1
-        score += (matched_token_count - 1) * 3  # 3 point bonus per additional token (increased from 2)
+        score += (matched_token_count - 1) * 3  # 3 point bonus per additional token
       end
     end
 
-    [ score.to_i, matched_fields.uniq ]
+    [ score, matched_fields.uniq ]
   end
 end

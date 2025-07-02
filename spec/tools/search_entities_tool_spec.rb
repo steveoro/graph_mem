@@ -72,7 +72,7 @@ RSpec.describe SearchEntitiesTool, type: :model do
         )
 
         expect(result[:entity_id]).to be_a(Integer)
-        expect(result[:relevance_score]).to be_a(Integer)
+        expect(result[:relevance_score]).to be_a(Float)
         expect(result[:matched_fields]).to be_an(Array)
       end
 

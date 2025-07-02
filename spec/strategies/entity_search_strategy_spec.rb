@@ -94,12 +94,12 @@ RSpec.describe EntitySearchStrategy, type: :model do
         end
       end
 
-      it 'finds entities by alias match' do
+      it 'finds entities by alias or type match' do
         results = strategy.search('fruit')
 
-        expect(results.length).to eq(2)
+        expect(results.length).to eq(3)
         entity_names = results.map { |r| r.entity.name }
-        expect(entity_names).to contain_exactly('Apple Pie', 'Apple Juice')
+        expect(entity_names).to contain_exactly('Apple Pie', 'Apple Juice', 'Green Apple')
       end
 
       it 'is case insensitive' do
@@ -110,17 +110,21 @@ RSpec.describe EntitySearchStrategy, type: :model do
         expect(entity_names).to contain_exactly('Apple Pie', 'Carrot Cake')
       end
 
-      it 'returns results ordered by entity_type first, then by relevance score' do
+      it 'returns results ordered by score first, then by entity_type' do
         results = strategy.search('apple')
 
-        # Results should be grouped by entity_type alphabetically
+        # All three 'apple' entities have the same score in this case,
+        # so they should be ordered by entity_type as a tie-breaker.
+        scores = results.map(&:score)
+        expect(scores.uniq.length).to eq(1) # Verify they all have the same score
+
         entity_types = results.map { |r| r.entity.entity_type }
         expect(entity_types).to eq([ 'Beverage', 'Dessert', 'Fruit' ])
 
-        # Within same entity_type, should be ordered by score
-        expect(results.first.entity.name).to eq('Apple Juice') # Beverage
-        expect(results.second.entity.name).to eq('Apple Pie') # Dessert
-        expect(results.third.entity.name).to eq('Green Apple') # Fruit
+        # Verify the final order based on the tie-breakers
+        expect(results.first.entity.name).to eq('Apple Juice')
+        expect(results.second.entity.name).to eq('Apple Pie')
+        expect(results.third.entity.name).to eq('Green Apple')
       end
     end
 
@@ -330,7 +334,7 @@ RSpec.describe EntitySearchStrategy, type: :model do
         expect(result_hash[:entity_id]).to be_a(Integer)
         expect(result_hash[:name]).to be_a(String)
         expect(result_hash[:entity_type]).to be_a(String)
-        expect(result_hash[:relevance_score]).to be_a(Integer)
+        expect(result_hash[:relevance_score]).to be_a(Numeric)
         expect(result_hash[:matched_fields]).to be_an(Array)
       end
     end
