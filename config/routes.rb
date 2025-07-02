@@ -18,7 +18,7 @@ Rails.application.routes.draw do
       get "memory_entities/search", to: "memory_entities#search"
 
       resources :memory_entities do
-        post 'merge_into/:target_id', to: 'memory_entities#merge', on: :member
+        post "merge_into/:target_id", to: "memory_entities#merge", on: :member
         # Nested routes for observations associated with an entity
         resources :memory_observations, only: [ :index, :create, :destroy, :show, :update ]
       end
