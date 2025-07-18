@@ -36,7 +36,7 @@ class EntitySearchStrategy
   MIN_SCORE_THRESHOLD = 1
 
   # Regex to split strings into words, handling commas and spaces
-  WORD_SPLIT_REGEX = /[\s,]+/
+  WORD_SPLIT_REGEX = /[\s,|]+/
 
   def initialize
     @logger = Rails.logger

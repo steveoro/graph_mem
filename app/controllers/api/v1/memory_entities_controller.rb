@@ -111,7 +111,7 @@ module Api
       # Only allow a list of trusted parameters through.
       def entity_params
         # Allow name and entity_type. observations_count is handled by counter_cache.
-        params.require(:memory_entity).permit(:name, :entity_type)
+        params.require(:memory_entity).permit(:name, :entity_type, :aliases)
       end
     end
   end

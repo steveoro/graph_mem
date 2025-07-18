@@ -36,3 +36,6 @@
 .env
 /db/backup/*.sql.bz2
 /db/backup/*.sql
+
+/app/assets/builds/*
+!/app/assets/builds/.keep
