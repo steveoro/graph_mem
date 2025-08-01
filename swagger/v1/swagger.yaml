@@ -484,7 +484,7 @@ components:
           type: string
         entity_type:
           type: string
-        observations_count:
+        memory_observations_count:
           type: integer
           readOnly: true
         created_at:
@@ -499,7 +499,7 @@ components:
       - id
       - name
       - entity_type
-      - observations_count
+      - memory_observations_count
       - created_at
       - updated_at
     memory_observation:

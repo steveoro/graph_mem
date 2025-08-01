@@ -51,7 +51,6 @@ The response includes:
   "id": 42,
   "name": "Project A",
   "entity_type": "Project",
-  "observations_count": 3,
   "created_at": "2023-06-10T09:00:00Z",
   "updated_at": "2023-06-15T11:00:00Z",
   "memory_observations_count": 3,
@@ -76,7 +75,6 @@ The response includes:
         "id": 43,
         "name": "Feature B",
         "entity_type": "Feature",
-        "observations_count": 2,
         "created_at": "2023-06-11T10:00:00Z",
         "updated_at": "2023-06-11T10:00:00Z",
         "memory_observations_count": 2,
@@ -104,7 +102,6 @@ The response includes:
         "id": 44,
         "name": "Project C",
         "entity_type": "Project",
-        "observations_count": 1,
         "created_at": "2023-06-12T11:00:00Z",
         "updated_at": "2023-06-12T11:00:00Z",
         "memory_observations_count": 1

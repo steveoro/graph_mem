@@ -78,7 +78,7 @@ The response includes the following sections:
         "id": 42,
         "name": "Important Entity",
         "entity_type": "Feature",
-        "observations_count": 5,
+        "aliases": "important_entity,entity_a",
         "created_at": "2023-06-10T09:00:00Z",
         "updated_at": "2023-06-15T11:00:00Z"
       }

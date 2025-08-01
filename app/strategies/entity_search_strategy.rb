@@ -16,7 +16,7 @@ class EntitySearchStrategy
         name: entity.name,
         entity_type: entity.entity_type,
         aliases: entity.aliases,
-        observations_count: entity.observations_count,
+        memory_observations_count: entity.memory_observations_count,
         created_at: entity.created_at.iso8601,
         updated_at: entity.updated_at.iso8601,
         relevance_score: score,

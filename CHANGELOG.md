@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changes
 - Substitute deprecated :unprocessable_entity status code with :unprocessable_content; bundle updated
+- Fixed merge operation on node-to-node action in graph visualization
+- Removed legacy `observations_count` (proper counter cache column: `memory_observations_count`)
 
 ## [0.8.3] - 2025-07-18
 

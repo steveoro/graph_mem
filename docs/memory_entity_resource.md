@@ -83,7 +83,7 @@ Supported sort fields:
 - `id`
 - `name`
 - `entity_type`
-- `observations_count`
+- `memory_observations_count`
 - `created_at`
 - `updated_at`
 
@@ -119,7 +119,7 @@ All responses follow this format:
       "id": 345,
       "name": "MemoryEntityResource MCP Implementation",
       "entity_type": "Feature",
-      "observations_count": 0,
+      "aliases": "memory_entity_resource,mcp_implementation",
       "created_at": "2025-06-09T12:32:38.328Z",
       "updated_at": "2025-06-09T12:32:38.328Z",
       "memory_observations_count": 7,

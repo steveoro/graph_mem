@@ -37,10 +37,10 @@ class DeleteEntityTool < ApplicationTool
         entity_id: entity_attributes["id"],
         name: entity_attributes["name"],
         entity_type: entity_attributes["entity_type"],
+        aliases: entity_attributes["aliases"],
+        memory_observations_count: entity_attributes["memory_observations_count"],
         created_at: entity_attributes["created_at"].iso8601(3),
         updated_at: entity_attributes["updated_at"].iso8601(3),
-        # observations_count was part of the original entity, include if it makes sense
-        # observations_count: entity_attributes["observations_count"],
         message: "Entity with ID=#{entity_id} and its associated data deleted successfully."
       }
     rescue ActiveRecord::RecordNotFound => e

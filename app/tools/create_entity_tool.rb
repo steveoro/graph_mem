@@ -62,7 +62,7 @@ class CreateEntityTool < ApplicationTool
       created_at: new_entity.created_at.iso8601,
       updated_at: new_entity.updated_at.iso8601,
       aliases: new_entity.aliases,
-      observations_count: new_entity.memory_observations.count # Ensure this reflects observations within the transaction
+      memory_observations_count: new_entity.memory_observations.count # Ensure this reflects observations within the transaction
     }
   rescue ActiveRecord::RecordInvalid => e
     error_message = "Validation Failed: #{e.record.errors.full_messages.join(', ')}"

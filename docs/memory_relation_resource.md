@@ -106,7 +106,7 @@ The response includes the following sections:
         "id": 42,
         "name": "Project A",
         "entity_type": "Project",
-        "observations_count": 5,
+        "aliases": "project_a",
         "created_at": "2023-06-10T09:00:00Z",
         "updated_at": "2023-06-15T11:00:00Z"
       },
@@ -114,7 +114,7 @@ The response includes the following sections:
         "id": 43,
         "name": "Task B",
         "entity_type": "Task",
-        "observations_count": 3,
+        "aliases": "task_b",
         "created_at": "2023-06-12T14:00:00Z",
         "updated_at": "2023-06-14T16:30:00Z"
       }

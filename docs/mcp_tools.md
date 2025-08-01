@@ -48,7 +48,7 @@ GraphMem provides the following MCP tools, categorized by their function:
     "name": "New Project Alpha",
     "entity_type": "Project",
     "aliases": "alpha|project_a",
-    "observations_count": 1,
+    "memory_observations_count": 1,
     "created_at": "2024-05-15T10:30:00Z",
     "updated_at": "2024-05-15T10:30:00Z"
   }
@@ -370,10 +370,10 @@ Put your business logic in the `call` method:
 def call(params)
   # Access validated parameters
   entity_id = params[:entity_id]
-  
+
   # Perform operations
   entity = MemoryEntity.find(entity_id)
-  
+
   # Return a response (will be automatically converted to JSON)
   entity.as_json(include: :observations)
 end
@@ -406,7 +406,7 @@ GraphMem defines custom error classes for common scenarios:
 module McpGraphMemErrors
   # Used when a requested resource is not found
   class ResourceNotFound < StandardError; end
-  
+
   # Used when an operation fails
   class OperationFailed < StandardError; end
 end
@@ -431,7 +431,7 @@ module FastMcp
         # Find tool by name
         tool = @tools.find { |t| t.tool_name.to_s == tool_name.to_s }
         raise FastMcp::Error::MethodNotFound.new if tool.nil?
-        
+
         # Call the tool directly (not tool.new)
         actual_tool_data = tool.call_with_schema_validation!(ActionController::Parameters.new(params))
 
@@ -448,7 +448,7 @@ module FastMcp
             ]
           }
         }
-        
+
         @transport.send_message(response_payload)
       rescue => e
         # Error handling code...

@@ -9,7 +9,7 @@ class MemoryEntityResource < ApplicationResource
   mime_type "application/json"
 
   # Valid sort fields to prevent SQL injection
-  VALID_SORT_FIELDS = %w[id name entity_type aliases observations_count created_at updated_at].freeze
+  VALID_SORT_FIELDS = %w[id name entity_type aliases memory_observations_count created_at updated_at].freeze
 
   # Valid sort directions to prevent SQL injection
   VALID_SORT_DIRECTIONS = %w[asc desc].freeze
@@ -109,7 +109,7 @@ class MemoryEntityResource < ApplicationResource
 
     # Filter by having observations (minimum count)
     if params[:min_observations].present?
-      query = query.where("observations_count >= ?", params[:min_observations].to_i)
+      query = query.where("memory_observations_count >= ?", params[:min_observations].to_i)
     end
 
     query

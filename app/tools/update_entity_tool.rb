@@ -59,7 +59,7 @@ class UpdateEntityTool < ApplicationTool
       aliases: entity.aliases,
       created_at: entity.created_at.iso8601,
       updated_at: entity.updated_at.iso8601,
-      observations_count: entity.observations_count
+      memory_observations_count: entity.memory_observations_count
     }
   rescue ActiveRecord::RecordInvalid => e
     error_message = "Validation Failed: #{e.record.errors.full_messages.join(', ')}"

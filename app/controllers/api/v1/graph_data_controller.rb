@@ -65,7 +65,7 @@ module Api
               label: entity.name,
               type: entity.entity_type,
               aliases: entity.aliases,
-              observations_count: entity.memory_observations.count,
+              memory_observations_count: entity.memory_observations_count,
               is_focus: options[:focus_entity_id] == entity.id.to_s
             }
           }

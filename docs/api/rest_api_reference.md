@@ -67,7 +67,7 @@ Retrieves a list of memory entities.
     "id": 1,
     "name": "Project A",
     "entity_type": "Project",
-    "observations_count": 5,
+    "aliases": "project_a",
     "created_at": "2025-06-01T10:00:00Z",
     "updated_at": "2025-06-02T14:30:00Z"
   },
@@ -75,7 +75,7 @@ Retrieves a list of memory entities.
     "id": 2,
     "name": "Task B",
     "entity_type": "Task",
-    "observations_count": 2,
+    "aliases": "task_b",
     "created_at": "2025-06-01T11:00:00Z",
     "updated_at": "2025-06-01T11:00:00Z"
   }
@@ -108,7 +108,7 @@ Creates a new memory entity.
   "id": 3,
   "name": "New Project",
   "entity_type": "Project",
-  "observations_count": 0,
+  "aliases": "new_project",
   "created_at": "2025-06-09T15:00:00Z",
   "updated_at": "2025-06-09T15:00:00Z"
 }
@@ -127,7 +127,7 @@ Retrieves a specific memory entity by ID.
   "id": 1,
   "name": "Project A",
   "entity_type": "Project",
-  "observations_count": 5,
+  "aliases": "project_a",
   "created_at": "2025-06-01T10:00:00Z",
   "updated_at": "2025-06-02T14:30:00Z"
 }
@@ -154,7 +154,7 @@ Updates an existing memory entity.
   "id": 1,
   "name": "Updated Project Name",
   "entity_type": "Project",
-  "observations_count": 5,
+  "aliases": "updated_project_name",
   "created_at": "2025-06-01T10:00:00Z",
   "updated_at": "2025-06-09T16:00:00Z"
 }

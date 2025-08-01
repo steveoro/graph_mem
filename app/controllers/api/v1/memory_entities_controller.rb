@@ -6,7 +6,7 @@ require_dependency "memory_entity"
 module Api
   module V1
     class MemoryEntitiesController < ApplicationController
-      before_action :set_entity, only: [ :show, :update, :destroy ]
+      before_action :set_entity, only: [ :show, :update, :destroy, :merge ]
 
       # GET /api/v1/memory_entities
       def index
@@ -63,6 +63,9 @@ module Api
         target_entity = ::MemoryEntity.find(params[:target_id])
 
         ActiveRecord::Base.transaction do
+          # Merge source entity's aliases into target entity's using a single type of separator:
+          target_entity.aliases = (target_entity.aliases.split(/,\|\;/) + source_entity.aliases.split(/,\|\;/)).uniq.join(",")
+          target_entity.save!
           # Re-assign observations from source to target
           source_entity.memory_observations.update_all(memory_entity_id: target_entity.id)
 
@@ -81,6 +84,9 @@ module Api
           # Delete relations that were directly between source and target to prevent self-loops
           ::MemoryRelation.where(from_entity_id: source_entity.id, to_entity_id: target_entity.id).destroy_all
           ::MemoryRelation.where(from_entity_id: target_entity.id, to_entity_id: source_entity.id).destroy_all
+
+          # Update counter cache:
+          target_entity.update_column(:memory_observations_count, target_entity.memory_observations.count)
 
           # Note: This simplified merge might create duplicate relations if, for example,
           # A->C and B->C exist, and A is merged into B, resulting in two B->C relations
@@ -110,7 +116,7 @@ module Api
 
       # Only allow a list of trusted parameters through.
       def entity_params
-        # Allow name and entity_type. observations_count is handled by counter_cache.
+        # Allow name and entity_type. memory_observations_count is handled by counter_cache.
         params.require(:memory_entity).permit(:name, :entity_type, :aliases)
       end
     end

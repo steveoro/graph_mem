@@ -3,9 +3,9 @@
 one:
   name: MyString
   entity_type: MyString
-  observations_count: 1
+  memory_observations_count: 1
 
 two:
   name: MyString
   entity_type: MyString
-  observations_count: 1
+  memory_observations_count: 1
