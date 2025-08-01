@@ -58,7 +58,7 @@ RSpec.describe 'API V1 Memory Entities', type: :request do
 
         run_test! do |response|
           data = JSON.parse(response.body)
-          expect(response).to have_http_status(:unprocessable_entity)
+          expect(response).to have_http_status(:unprocessable_content)
           expect(data['name']).to include("can't be blank") # Check specific error message
           expect(MemoryEntity.count).to eq(0)
         end
@@ -145,7 +145,7 @@ RSpec.describe 'API V1 Memory Entities', type: :request do
         # RSpec Example Tests
         run_test! do |response|
           data = JSON.parse(response.body)
-          expect(response).to have_http_status(:unprocessable_entity)
+          expect(response).to have_http_status(:unprocessable_content)
           expect(data['name']).to include("can't be blank")
           expect(existing_entity.reload.name).to eq('Existing Entity') # Verify DB unchanged
         end
@@ -198,7 +198,7 @@ RSpec.describe 'API V1 Memory Entities', type: :request do
         # RSpec Example Tests
         run_test! do |response|
           data = JSON.parse(response.body)
-          expect(response).to have_http_status(:unprocessable_entity)
+          expect(response).to have_http_status(:unprocessable_content)
           expect(data['name']).to include("can't be blank")
           expect(existing_entity.reload.name).to eq('Existing Entity') # Verify DB unchanged
           expect(existing_entity.reload.entity_type).to eq('ExistingType') # Verify DB unchanged

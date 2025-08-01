@@ -36,7 +36,7 @@ module Api
           render json: @memory_relation, status: :created # , location: api_v1_memory_relation_url(@memory_relation)
         else
           # Default belongs_to validation errors will now be more accurate
-          render json: @memory_relation.errors, status: :unprocessable_entity
+          render json: @memory_relation.errors, status: :unprocessable_content
         end
       end
 
@@ -51,7 +51,7 @@ module Api
         if @memory_relation.update(update_relation_params)
           render json: @memory_relation
         else
-          render json: @memory_relation.errors, status: :unprocessable_entity
+          render json: @memory_relation.errors, status: :unprocessable_content
         end
       end
 

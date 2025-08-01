@@ -72,7 +72,7 @@ RSpec.describe 'API V1 Memory Observations', type: :request do
         # RSpec Example Tests
         run_test! do |response|
           data = JSON.parse(response.body)
-          expect(response).to have_http_status(:unprocessable_entity)
+          expect(response).to have_http_status(:unprocessable_content)
           expect(data['content']).to include("can't be blank")
           expect(memory_entity.reload.memory_observations.count).to eq(0)
         end
@@ -165,7 +165,7 @@ RSpec.describe 'API V1 Memory Observations', type: :request do
         # RSpec Example Tests
         run_test! do |response|
           data = JSON.parse(response.body)
-          expect(response).to have_http_status(:unprocessable_entity)
+          expect(response).to have_http_status(:unprocessable_content)
           expect(data['content']).to include("can't be blank")
           expect(existing_observation.reload.content).to eq('Existing Observation') # Check it didn't change
         end
@@ -223,7 +223,7 @@ RSpec.describe 'API V1 Memory Observations', type: :request do
         # RSpec Example Tests
         run_test! do |response|
           data = JSON.parse(response.body)
-          expect(response).to have_http_status(:unprocessable_entity)
+          expect(response).to have_http_status(:unprocessable_content)
           expect(data['content']).to include("can't be blank")
           expect(existing_observation.reload.content).to eq('Existing Observation') # Check it didn't change
         end

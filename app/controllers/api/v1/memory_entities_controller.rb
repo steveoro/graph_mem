@@ -26,7 +26,7 @@ module Api
         if @memory_entity.save
           render json: @memory_entity, status: :created, location: api_v1_memory_entity_url(@memory_entity)
         else
-          render json: @memory_entity.errors, status: :unprocessable_entity
+          render json: @memory_entity.errors, status: :unprocessable_content
         end
       end
 
@@ -47,7 +47,7 @@ module Api
         if @memory_entity.update(entity_params)
           render json: @memory_entity
         else
-          render json: @memory_entity.errors, status: :unprocessable_entity
+          render json: @memory_entity.errors, status: :unprocessable_content
         end
       end
 
@@ -96,7 +96,7 @@ module Api
       rescue ActiveRecord::RecordNotFound
         render json: { error: "Target MemoryEntity not found when attempting to merge." }, status: :not_found
       rescue ActiveRecord::RecordInvalid => e
-        render json: { error: "Merge failed: #{e.message}" }, status: :unprocessable_entity
+        render json: { error: "Merge failed: #{e.message}" }, status: :unprocessable_content
       end
 
       private

@@ -17,7 +17,7 @@ module Api
         if @memory_observation.save
           render json: @memory_observation, status: :created, location: api_v1_memory_entity_memory_observation_url(@memory_entity, @memory_observation)
         else
-          render json: @memory_observation.errors, status: :unprocessable_entity
+          render json: @memory_observation.errors, status: :unprocessable_content
         end
       end
 
@@ -31,7 +31,7 @@ module Api
         if @memory_observation.update(observation_params)
           render json: @memory_observation
         else
-          render json: @memory_observation.errors, status: :unprocessable_entity
+          render json: @memory_observation.errors, status: :unprocessable_content
         end
       end
 

@@ -112,7 +112,7 @@ RSpec.describe 'API V1 Memory Relations', type: :request do
 
           run_test! do |response|
             data = JSON.parse(response.body)
-            expect(response).to have_http_status(:unprocessable_entity)
+            expect(response).to have_http_status(:unprocessable_content)
             expect(data['from_entity']).to include('must exist')
             expect(data['to_entity']).to include('must exist')
             expect(MemoryRelation.count).to eq(0)
@@ -126,7 +126,7 @@ RSpec.describe 'API V1 Memory Relations', type: :request do
 
           run_test! do |response|
             data = JSON.parse(response.body)
-            expect(response).to have_http_status(:unprocessable_entity)
+            expect(response).to have_http_status(:unprocessable_content)
             expect(data['relation_type']).to include("can't be blank")
             expect(MemoryRelation.count).to eq(0)
           end
@@ -203,7 +203,7 @@ RSpec.describe 'API V1 Memory Relations', type: :request do
 
         run_test! do |response|
           data = JSON.parse(response.body)
-          expect(response).to have_http_status(:unprocessable_entity)
+          expect(response).to have_http_status(:unprocessable_content)
           expect(data['relation_type']).to include("can't be blank")
           expect(existing_relation.reload.relation_type).to eq('has_link') # Verify no change
         end
@@ -253,7 +253,7 @@ RSpec.describe 'API V1 Memory Relations', type: :request do
 
         run_test! do |response|
           data = JSON.parse(response.body)
-          expect(response).to have_http_status(:unprocessable_entity)
+          expect(response).to have_http_status(:unprocessable_content)
           expect(data['relation_type']).to include("can't be blank")
           expect(existing_relation.reload.relation_type).to eq('has_link') # Verify no change
         end

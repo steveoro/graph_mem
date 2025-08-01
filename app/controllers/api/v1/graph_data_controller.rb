@@ -4,8 +4,8 @@ module Api
       def index
         # Check if we're filtering to root level or getting a subgraph
         entity_id = params[:entity_id]
-        root_only = params[:root_only] == 'true'
-        
+        root_only = params[:root_only] == "true"
+
         if entity_id.present?
           # Get subgraph for specific entity
           render_subgraph(entity_id)
@@ -28,7 +28,7 @@ module Api
 
       def render_root_graph
         # Only show entities with type 'Project' or nil (root-level)
-        entities = MemoryEntity.where(entity_type: ['Project', nil]).includes(:memory_observations)
+        entities = MemoryEntity.where(entity_type: [ "Project", nil ]).includes(:memory_observations)
         # Only show relations between root-level entities
         entity_ids = entities.pluck(:id)
         relations = MemoryRelation.where(from_entity_id: entity_ids, to_entity_id: entity_ids)
@@ -38,21 +38,21 @@ module Api
       def render_subgraph(entity_id)
         # Get the main entity
         main_entity = MemoryEntity.find(entity_id)
-        
+
         # Get all directly connected entities (one hop)
         connected_entity_ids = MemoryRelation.where(
           "from_entity_id = ? OR to_entity_id = ?", entity_id, entity_id
         ).pluck(:from_entity_id, :to_entity_id).flatten.uniq
-        
+
         # Include the main entity
-        all_entity_ids = ([entity_id.to_i] + connected_entity_ids).uniq
-        
+        all_entity_ids = ([ entity_id.to_i ] + connected_entity_ids).uniq
+
         entities = MemoryEntity.where(id: all_entity_ids).includes(:memory_observations)
         relations = MemoryRelation.where(
           from_entity_id: all_entity_ids,
           to_entity_id: all_entity_ids
         )
-        
+
         render_graph_data(entities, relations, { focus_entity_id: entity_id })
       end
 
