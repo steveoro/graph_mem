@@ -492,23 +492,44 @@ export default class extends Controller {
       if (!response.ok) throw new Error('Failed to fetch observations');
 
       const observations = await response.json();
+      
+      // Check if there are duplicates (same content)
+      const contentCounts = {};
+      observations.forEach(obs => {
+        contentCounts[obs.content] = (contentCounts[obs.content] || 0) + 1;
+      });
+      const hasDuplicates = Object.values(contentCounts).some(count => count > 1);
+      const duplicateCount = Object.values(contentCounts).reduce((sum, count) => sum + (count > 1 ? count - 1 : 0), 0);
 
       this.showModal('Entity Observations', `
         <h3>${nodeData.label} (ID: ${nodeData.id})</h3>
         <p><strong>Type:</strong> ${nodeData.type || 'N/A'}</p>
         <p><strong>Total Observations:</strong> ${observations.length}</p>
+        ${hasDuplicates ? `
+          <div style="margin: 10px 0; padding: 10px; background: #fff3cd; border: 1px solid #ffeaa7; border-radius: 4px;">
+            <p style="margin: 0 0 10px 0; color: #856404;"><strong>⚠️ Found ${duplicateCount} duplicate observation(s)</strong></p>
+            <button onclick="window.graphController.deleteDuplicateObservations(${nodeData.id})" 
+                    style="padding: 6px 12px; background: #dc3545; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 12px;">
+              🗑️ Delete All Duplicates
+            </button>
+          </div>
+        ` : ''}
         <hr>
         ${observations.length > 0 ?
           observations
             .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
-            .map(obs => `
-              <div style="margin-bottom: 10px; padding: 8px; background: #f8f9fa; border-radius: 4px;">
-                <div style="font-size: 11px; color: #666; margin-bottom: 4px;">
-                  ${new Date(obs.created_at).toLocaleString()}
+            .map(obs => {
+              const isDuplicate = contentCounts[obs.content] > 1;
+              return `
+                <div style="margin-bottom: 10px; padding: 8px; background: ${isDuplicate ? '#ffe6e6' : '#f8f9fa'}; border-radius: 4px; ${isDuplicate ? 'border-left: 3px solid #dc3545;' : ''}">
+                  <div style="font-size: 11px; color: #666; margin-bottom: 4px;">
+                    ${new Date(obs.created_at).toLocaleString()}
+                    ${isDuplicate ? '<span style="color: #dc3545; font-weight: bold; margin-left: 8px;">[DUPLICATE]</span>' : ''}
+                  </div>
+                  <div>${obs.content}</div>
                 </div>
-                <div>${obs.text_content}</div>
-              </div>
-            `).join('')
+              `;
+            }).join('')
           : '<p>No observations found.</p>'
         }
       `);
@@ -1170,6 +1191,55 @@ export default class extends Controller {
     } catch (error) {
       console.error('Error creating relation:', error);
       alert('An error occurred while creating the relation.');
+    }
+  }
+
+  async deleteDuplicateObservations(entityId) {
+    // Show confirmation dialog
+    const confirmed = confirm(
+      'Are you sure you want to delete all duplicate observations? This action cannot be undone.\n\n' +
+      'Duplicate observations (with identical content) will be removed, keeping only the oldest one of each.'
+    );
+    
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      const csrfToken = this.getCSRFToken();
+      const response = await fetch(`/api/v1/memory_entities/${entityId}/memory_observations/delete_duplicates`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRF-Token': csrfToken
+        }
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        alert(`Success! ${result.message}`);
+        
+        // Close the current modal
+        this.closeModal();
+        
+        // Refresh the graph to update observation counts
+        this.fetchDataAndRenderGraph(this.currentView === 'root', this.currentEntityId);
+        
+        // Optionally, reopen the observations modal to show the updated list
+        // Find the node data and reopen the modal
+        const nodeData = this.cy.getElementById(entityId.toString()).data();
+        if (nodeData) {
+          setTimeout(() => {
+            this.showObservationsModal(nodeData);
+          }, 500); // Small delay to let the graph refresh
+        }
+      } else {
+        const error = await response.json();
+        alert(`Failed to delete duplicates: ${error.error || 'Unknown error'}`);
+      }
+    } catch (error) {
+      console.error('Error deleting duplicate observations:', error);
+      alert('An error occurred while deleting duplicate observations.');
     }
   }
 

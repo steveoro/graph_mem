@@ -272,4 +272,93 @@ RSpec.describe 'API V1 Memory Observations', type: :request do
       end
     end
   end
+
+  # Test the delete_duplicates endpoint
+  path '/api/v1/memory_entities/{memory_entity_id}/memory_observations/delete_duplicates' do
+    parameter name: 'memory_entity_id', in: :path, type: :string, description: 'ID of the parent Memory Entity'
+
+    delete('delete duplicate observations') do
+      tags 'Memory Observations'
+      produces 'application/json'
+
+      response(200, 'successful deletion') do
+        schema type: :object,
+               properties: {
+                 message: { type: :string, example: 'Successfully deleted 2 duplicate observations' },
+                 deleted_count: { type: :integer, example: 2 }
+               },
+               required: [ 'message', 'deleted_count' ]
+
+        # Create test data with duplicates
+        let!(:obs1) { memory_entity.memory_observations.create!(content: 'Duplicate content') }
+        let!(:obs2) { memory_entity.memory_observations.create!(content: 'Unique content') }
+        let!(:obs3) { memory_entity.memory_observations.create!(content: 'Duplicate content') } # Same as obs1
+        let!(:obs4) { memory_entity.memory_observations.create!(content: 'Another duplicate') }
+        let!(:obs5) { memory_entity.memory_observations.create!(content: 'Another duplicate') } # Same as obs4
+
+        # RSpec Example Tests
+        run_test! do |response|
+          data = JSON.parse(response.body)
+          expect(response).to have_http_status(:ok)
+          expect(data['deleted_count']).to eq(2) # Should delete obs3 and obs5
+          expect(data['message']).to include('Successfully deleted 2 duplicate observations')
+
+          # Verify the correct observations remain (oldest of each content)
+          remaining_observations = memory_entity.reload.memory_observations.order(:created_at)
+          expect(remaining_observations.count).to eq(3)
+          expect(remaining_observations.pluck(:content)).to contain_exactly(
+            'Duplicate content', 'Unique content', 'Another duplicate'
+          )
+
+          # Verify the oldest observations were kept
+          expect(remaining_observations.find_by(content: 'Duplicate content').id).to eq(obs1.id)
+          expect(remaining_observations.find_by(content: 'Another duplicate').id).to eq(obs4.id)
+        end
+      end
+
+      response(200, 'no duplicates found') do
+        schema type: :object,
+               properties: {
+                 message: { type: :string, example: 'Successfully deleted 0 duplicate observations' },
+                 deleted_count: { type: :integer, example: 0 }
+               },
+               required: [ 'message', 'deleted_count' ]
+
+        # Create test data with no duplicates
+        let!(:obs1) { memory_entity.memory_observations.create!(content: 'Unique content 1') }
+        let!(:obs2) { memory_entity.memory_observations.create!(content: 'Unique content 2') }
+        let!(:obs3) { memory_entity.memory_observations.create!(content: 'Unique content 3') }
+
+        # RSpec Example Tests
+        run_test! do |response|
+          data = JSON.parse(response.body)
+          expect(response).to have_http_status(:ok)
+          expect(data['deleted_count']).to eq(0)
+          expect(data['message']).to include('Successfully deleted 0 duplicate observations')
+
+          # Verify all observations remain
+          expect(memory_entity.reload.memory_observations.count).to eq(3)
+        end
+      end
+
+      response(404, 'parent entity not found') do
+        let(:memory_entity_id) { 'invalid-id' }
+
+        # RSpec Example Tests
+        run_test! do |response|
+          expect(response).to have_http_status(:not_found)
+        end
+      end
+
+      response(422, 'operation failed') do
+        # This would be difficult to test without mocking, but we include it for documentation
+        # In a real scenario, this might happen if there's a database constraint violation
+        schema type: :object,
+               properties: {
+                 error: { type: :string, example: 'Failed to delete duplicates: Database error' }
+               },
+               required: [ 'error' ]
+      end
+    end
+  end
 end
