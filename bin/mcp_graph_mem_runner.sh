@@ -11,20 +11,34 @@ echo "[RunnerLog] RVM_PATH: $RVM_PATH" >&2
 echo "[RunnerLog] Checking if RVM needs sourcing..." >&2
 if ! command -v rvm >/dev/null || ! declare -F rvm >/dev/null; then
   echo "[RunnerLog] RVM not found or not a function, attempting to source..." >&2
-  if [ -s "$HOME/.rvm/scripts/rvm" ]; then
-    echo "[RunnerLog] Sourcing $HOME/.rvm/scripts/rvm" >&2
-    # shellcheck source=/dev/null
-    . "$HOME/.rvm/scripts/rvm"
-    RVM_SOURCED=$?
-    echo "[RunnerLog] Sourced $HOME/.rvm/scripts/rvm (exit code: $RVM_SOURCED)" >&2
-  elif [ -s "/usr/local/rvm/scripts/rvm" ]; then
-    echo "[RunnerLog] Sourcing /usr/local/rvm/scripts/rvm" >&2
-    # shellcheck source=/dev/null
-    . "/usr/local/rvm/scripts/rvm"
-    RVM_SOURCED=$?
-    echo "[RunnerLog] Sourced /usr/local/rvm/scripts/rvm (exit code: $RVM_SOURCED)" >&2
-  else
-    echo "[RunnerLog] Error: RVM script not found. Cannot set Ruby environment." >&2
+
+  # List of possible RVM installation paths (user, system, apt-installed)
+  RVM_PATHS=(
+    "$HOME/.rvm/scripts/rvm"        # User installation (default)
+    "/usr/local/rvm/scripts/rvm"    # System-wide installation (manual)
+    "/usr/share/rvm/scripts/rvm"    # Apt package installation (Ubuntu/Debian)
+  )
+
+  RVM_FOUND=0
+  for rvm_script in "${RVM_PATHS[@]}"; do
+    if [ -s "$rvm_script" ]; then
+      echo "[RunnerLog] Found RVM at: $rvm_script" >&2
+      echo "[RunnerLog] Sourcing $rvm_script" >&2
+      # shellcheck source=/dev/null
+      . "$rvm_script"
+      RVM_SOURCED=$?
+      echo "[RunnerLog] Sourced $rvm_script (exit code: $RVM_SOURCED)" >&2
+      RVM_FOUND=1
+      break
+    fi
+  done
+
+  if [ "$RVM_FOUND" -eq 0 ]; then
+    echo "[RunnerLog] Error: RVM script not found in any of the expected locations:" >&2
+    for rvm_script in "${RVM_PATHS[@]}"; do
+      echo "[RunnerLog]   - $rvm_script" >&2
+    done
+    echo "[RunnerLog] Cannot set Ruby environment." >&2
     exit 1
   fi
 else
