@@ -1,5 +1,6 @@
 import { Controller } from "@hotwired/stimulus"
 import cytoscape from 'cytoscape';
+import { createConsumer } from "@rails/actioncable"
 
 // Connects to data-controller="graph"
 export default class extends Controller {
@@ -8,6 +9,7 @@ export default class extends Controller {
   connect() {
     console.log("Graph controller connected");
     this.currentView = 'root'; // 'root', 'full', or 'subgraph'
+    this.cable = null; // ActionCable consumer
     this.currentEntityId = null;
     this.addNavigationControls();
     this.fetchDataAndRenderGraph(true); // Start with root view
@@ -58,19 +60,19 @@ export default class extends Controller {
     backBtn.style.cssText = 'padding: 5px 10px; background: #28a745; color: white; border: none; border-radius: 3px; cursor: pointer; display: none; font-size: 12px;';
     backBtn.onclick = () => this.switchToRootView();
 
-    const dataExchangeBtn = document.createElement('button');
-    dataExchangeBtn.textContent = 'Data Exchange';
-    dataExchangeBtn.style.cssText = 'margin-left: 20px; padding: 5px 10px; background: #17a2b8; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 12px;';
-    dataExchangeBtn.onclick = () => this.showDataExchangeModal();
+    const dataManageBtn = document.createElement('button');
+    dataManageBtn.textContent = 'Data Manage';
+    dataManageBtn.style.cssText = 'margin-left: 20px; padding: 5px 10px; background: #17a2b8; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 12px;';
+    dataManageBtn.onclick = () => this.showDataManageModal();
 
     navDiv.appendChild(rootBtn);
     navDiv.appendChild(fullBtn);
     navDiv.appendChild(backBtn);
-    navDiv.appendChild(dataExchangeBtn);
+    navDiv.appendChild(dataManageBtn);
 
     // Add the navigation as a child of the graph container
     this.containerTarget.appendChild(navDiv);
-    this.navControls = { rootBtn, fullBtn, backBtn, dataExchangeBtn };
+    this.navControls = { rootBtn, fullBtn, backBtn, dataManageBtn };
 
     // Update button states based on current view
     this.updateNavigationButtons();
@@ -1299,33 +1301,50 @@ export default class extends Controller {
   }
 
   // ============================================
-  // Data Exchange (Import/Export) Methods
+  // Data Manage (Export/Import/Cleanup) Methods
   // ============================================
 
-  async showDataExchangeModal() {
-    // Fetch root nodes for export selection
+  async showDataManageModal() {
+    // Fetch root nodes for export selection and projects for cleanup
     let rootNodes = [];
+    let orphanNodes = [];
+    let projects = [];
+
     try {
-      const response = await fetch('/data_exchange/root_nodes');
-      if (response.ok) {
-        const data = await response.json();
+      const [rootNodesRes, orphansRes] = await Promise.all([
+        fetch('/data_exchange/root_nodes'),
+        fetch('/data_exchange/orphan_nodes')
+      ]);
+
+      if (rootNodesRes.ok) {
+        const data = await rootNodesRes.json();
         rootNodes = data.nodes || [];
+        projects = rootNodes.filter(n => n.entity_type === 'Project');
+      }
+
+      if (orphansRes.ok) {
+        const data = await orphansRes.json();
+        orphanNodes = data.orphans || [];
       }
     } catch (error) {
-      console.error('Error fetching root nodes:', error);
+      console.error('Error fetching data for Data Manage modal:', error);
     }
 
     const content = `
-      <div style="min-width: 70%;">
+      <div style="min-width: 70%; max-width: 900px;">
         <!-- Tabs -->
         <div style="display: flex; border-bottom: 2px solid #dee2e6; margin-bottom: 20px;">
-          <button id="export-tab" onclick="window.graphController.switchDataExchangeTab('export')"
+          <button id="export-tab" onclick="window.graphController.switchDataManageTab('export')"
                   style="padding: 10px 20px; border: none; background: #007bff; color: white; cursor: pointer; border-radius: 4px 4px 0 0; margin-right: 4px; font-weight: bold;">
             Export
           </button>
-          <button id="import-tab" onclick="window.graphController.switchDataExchangeTab('import')"
-                  style="padding: 10px 20px; border: none; background: #e9ecef; color: #495057; cursor: pointer; border-radius: 4px 4px 0 0; font-weight: bold;">
+          <button id="import-tab" onclick="window.graphController.switchDataManageTab('import')"
+                  style="padding: 10px 20px; border: none; background: #e9ecef; color: #495057; cursor: pointer; border-radius: 4px 4px 0 0; margin-right: 4px; font-weight: bold;">
             Import
+          </button>
+          <button id="cleanup-tab" onclick="window.graphController.switchDataManageTab('cleanup')"
+                  style="padding: 10px 20px; border: none; background: #e9ecef; color: #495057; cursor: pointer; border-radius: 4px 4px 0 0; font-weight: bold;">
+            Clean up
           </button>
         </div>
 
@@ -1335,7 +1354,18 @@ export default class extends Controller {
             Select root nodes to export. All linked children and observations will be included.
           </p>
           
-          <div style="max-height: 300px; overflow-y: auto; border: 1px solid #dee2e6; border-radius: 4px; padding: 10px; margin-bottom: 15px;">
+          <!-- Progress bar (hidden initially) -->
+          <div id="export-progress-container" style="display: none; margin-bottom: 15px;">
+            <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+              <span id="export-progress-message">Starting export...</span>
+              <span id="export-progress-percentage">0%</span>
+            </div>
+            <div style="background: #e9ecef; border-radius: 4px; height: 20px; overflow: hidden;">
+              <div id="export-progress-bar" style="background: #007bff; height: 100%; width: 0%; transition: width 0.3s ease;"></div>
+            </div>
+          </div>
+          
+          <div id="export-node-list" style="max-height: 300px; overflow-y: auto; border: 1px solid #dee2e6; border-radius: 4px; padding: 10px; margin-bottom: 15px;">
             ${rootNodes.length > 0 ? `
               <div style="margin-bottom: 10px;">
                 <label style="display: flex; align-items: center; cursor: pointer; padding: 5px; background: #f8f9fa; border-radius: 4px;">
@@ -1360,12 +1390,12 @@ export default class extends Controller {
             ` : '<p style="color: #666; text-align: center; padding: 20px;">No root nodes found.</p>'}
           </div>
 
-          <div style="text-align: right;">
+          <div id="export-buttons" style="text-align: right;">
             <button type="button" onclick="window.graphController.closeModal()"
                     style="margin-right: 10px; padding: 8px 16px; background: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer;">
               Cancel
             </button>
-            <button type="button" onclick="window.graphController.exportSelectedNodes()"
+            <button type="button" id="export-btn" onclick="window.graphController.exportSelectedNodes()"
                     style="padding: 8px 16px; background: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer;">
               Export Selected
             </button>
@@ -1405,32 +1435,233 @@ export default class extends Controller {
             </div>
           </form>
         </div>
+
+        <!-- Cleanup Tab Content -->
+        <div id="cleanup-content" style="display: none;">
+          <p style="margin-bottom: 15px; color: #666;">
+            Manage orphan nodes: move them under a project, merge with existing nodes, or delete them.
+          </p>
+          
+          <div style="max-height: 400px; overflow-y: auto; border: 1px solid #dee2e6; border-radius: 4px; margin-bottom: 15px;">
+            ${orphanNodes.length > 0 ? `
+              <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+                <thead>
+                  <tr style="background: #f8f9fa; position: sticky; top: 0;">
+                    <th style="padding: 10px; text-align: left; border-bottom: 2px solid #dee2e6;">Node</th>
+                    <th style="padding: 10px; text-align: left; border-bottom: 2px solid #dee2e6;">Suggested Parent</th>
+                    <th style="padding: 10px; text-align: center; border-bottom: 2px solid #dee2e6; width: 150px;">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${orphanNodes.map(orphan => `
+                    <tr id="orphan-row-${orphan.id}" style="border-bottom: 1px solid #eee;">
+                      <td style="padding: 10px;">
+                        <div style="font-weight: 500;">${this.escapeHtml(orphan.name)}</div>
+                        <div style="font-size: 11px; color: #666;">
+                          (${orphan.entity_type}) - ${orphan.observations_count || 0} obs, ${orphan.children_count || 0} children
+                        </div>
+                      </td>
+                      <td style="padding: 10px;">
+                        <select id="parent-select-${orphan.id}" style="width: 100%; padding: 5px; border: 1px solid #ccc; border-radius: 4px; font-size: 12px;">
+                          <option value="">-- Select parent --</option>
+                          ${orphan.suggested_parents && orphan.suggested_parents.length > 0 ? 
+                            orphan.suggested_parents.map(p => `
+                              <option value="${p.id}" ${orphan.suggested_parents[0].id === p.id ? 'selected' : ''}>
+                                ${this.escapeHtml(p.name)} (score: ${p.score})
+                              </option>
+                            `).join('') : ''}
+                          <optgroup label="All Projects">
+                            ${projects.filter(p => !orphan.suggested_parents?.find(sp => sp.id === p.id)).map(p => `
+                              <option value="${p.id}">${this.escapeHtml(p.name)}</option>
+                            `).join('')}
+                          </optgroup>
+                        </select>
+                      </td>
+                      <td style="padding: 10px; text-align: center;">
+                        <button onclick="window.graphController.moveOrphanNode(${orphan.id})" 
+                                title="Move to selected parent"
+                                style="padding: 4px 8px; margin: 2px; background: #28a745; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 11px;">
+                          Move
+                        </button>
+                        <button onclick="window.graphController.mergeOrphanNode(${orphan.id})" 
+                                title="Merge into selected parent"
+                                style="padding: 4px 8px; margin: 2px; background: #17a2b8; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 11px;">
+                          Merge
+                        </button>
+                        <button onclick="window.graphController.deleteOrphanNode(${orphan.id}, '${this.escapeHtml(orphan.name).replace(/'/g, "\\'")}'"
+                                title="Delete this node"
+                                style="padding: 4px 8px; margin: 2px; background: #dc3545; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 11px;">
+                          Delete
+                        </button>
+                      </td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+            ` : '<p style="color: #666; text-align: center; padding: 40px;">No orphan nodes found. All nodes are properly organized.</p>'}
+          </div>
+
+          <div style="text-align: right;">
+            <button type="button" onclick="window.graphController.closeModal()"
+                    style="padding: 8px 16px; background: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer;">
+              Close
+            </button>
+          </div>
+        </div>
       </div>
     `;
 
-    this.showModal('Data Exchange', content);
+    this.showModal('Data Manage', content);
   }
 
-  switchDataExchangeTab(tab) {
+  switchDataManageTab(tab) {
     const exportTab = document.getElementById('export-tab');
     const importTab = document.getElementById('import-tab');
+    const cleanupTab = document.getElementById('cleanup-tab');
     const exportContent = document.getElementById('export-content');
     const importContent = document.getElementById('import-content');
+    const cleanupContent = document.getElementById('cleanup-content');
 
+    // Reset all tabs
+    [exportTab, importTab, cleanupTab].forEach(t => {
+      if (t) {
+        t.style.background = '#e9ecef';
+        t.style.color = '#495057';
+      }
+    });
+
+    // Hide all content
+    [exportContent, importContent, cleanupContent].forEach(c => {
+      if (c) c.style.display = 'none';
+    });
+
+    // Show selected tab
     if (tab === 'export') {
       exportTab.style.background = '#007bff';
       exportTab.style.color = 'white';
-      importTab.style.background = '#e9ecef';
-      importTab.style.color = '#495057';
       exportContent.style.display = 'block';
-      importContent.style.display = 'none';
-    } else {
+    } else if (tab === 'import') {
       importTab.style.background = '#007bff';
       importTab.style.color = 'white';
-      exportTab.style.background = '#e9ecef';
-      exportTab.style.color = '#495057';
       importContent.style.display = 'block';
-      exportContent.style.display = 'none';
+    } else if (tab === 'cleanup') {
+      cleanupTab.style.background = '#007bff';
+      cleanupTab.style.color = 'white';
+      cleanupContent.style.display = 'block';
+    }
+  }
+
+  // Cleanup action handlers
+  async moveOrphanNode(nodeId) {
+    const parentSelect = document.getElementById(`parent-select-${nodeId}`);
+    const parentId = parentSelect?.value;
+
+    if (!parentId) {
+      alert('Please select a parent project first.');
+      return;
+    }
+
+    if (!confirm('Are you sure you want to move this node under the selected parent?')) {
+      return;
+    }
+
+    try {
+      const response = await fetch('/data_exchange/move_node', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRF-Token': this.getCSRFToken()
+        },
+        body: JSON.stringify({ node_id: nodeId, parent_id: parentId })
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        alert(result.message);
+        // Remove the row from the table
+        const row = document.getElementById(`orphan-row-${nodeId}`);
+        if (row) row.remove();
+        // Refresh the graph
+        this.fetchDataAndRenderGraph(this.currentView === 'root', this.currentEntityId);
+      } else {
+        alert('Error: ' + (result.error || 'Failed to move node'));
+      }
+    } catch (error) {
+      console.error('Error moving node:', error);
+      alert('An error occurred while moving the node.');
+    }
+  }
+
+  async mergeOrphanNode(nodeId) {
+    const parentSelect = document.getElementById(`parent-select-${nodeId}`);
+    const targetId = parentSelect?.value;
+
+    if (!targetId) {
+      alert('Please select a target node to merge into first.');
+      return;
+    }
+
+    if (!confirm('Are you sure you want to merge this node into the selected target? The source node will be deleted and its data will be transferred to the target.')) {
+      return;
+    }
+
+    try {
+      const response = await fetch('/data_exchange/merge_node', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRF-Token': this.getCSRFToken()
+        },
+        body: JSON.stringify({ source_id: nodeId, target_id: targetId })
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        alert(result.message);
+        // Remove the row from the table
+        const row = document.getElementById(`orphan-row-${nodeId}`);
+        if (row) row.remove();
+        // Refresh the graph
+        this.fetchDataAndRenderGraph(this.currentView === 'root', this.currentEntityId);
+      } else {
+        alert('Error: ' + (result.error || 'Failed to merge node'));
+      }
+    } catch (error) {
+      console.error('Error merging node:', error);
+      alert('An error occurred while merging the node.');
+    }
+  }
+
+  async deleteOrphanNode(nodeId, nodeName) {
+    if (!confirm(`Are you sure you want to delete "${nodeName}" forever? This action cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`/data_exchange/delete_node?node_id=${nodeId}`, {
+        method: 'DELETE',
+        headers: {
+          'X-CSRF-Token': this.getCSRFToken()
+        }
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        alert(result.message);
+        // Remove the row from the table
+        const row = document.getElementById(`orphan-row-${nodeId}`);
+        if (row) row.remove();
+        // Refresh the graph
+        this.fetchDataAndRenderGraph(this.currentView === 'root', this.currentEntityId);
+      } else {
+        alert('Error: ' + (result.error || 'Failed to delete node'));
+      }
+    } catch (error) {
+      console.error('Error deleting node:', error);
+      alert('An error occurred while deleting the node.');
     }
   }
 
@@ -1448,14 +1679,149 @@ export default class extends Controller {
       return;
     }
 
-    // Build URL with selected IDs
-    const params = new URLSearchParams();
-    selectedIds.forEach(id => params.append('ids[]', id));
+    // Check if we should use async export (for larger selections)
+    // Use async for 3+ nodes or if user prefers it
+    const useAsync = selectedIds.length >= 3;
 
-    // Trigger download
-    window.location.href = `/data_exchange/export?${params.toString()}`;
-    
-    this.closeModal();
+    if (!useAsync) {
+      // Sync export for small selections (direct download)
+      const params = new URLSearchParams();
+      selectedIds.forEach(id => params.append('ids[]', id));
+      window.location.href = `/data_exchange/export?${params.toString()}`;
+      this.closeModal();
+      return;
+    }
+
+    // Async export with progress updates
+    await this.startAsyncExport(selectedIds);
+  }
+
+  async startAsyncExport(selectedIds) {
+    // Show progress bar, hide node list
+    const progressContainer = document.getElementById('export-progress-container');
+    const nodeList = document.getElementById('export-node-list');
+    const exportBtn = document.getElementById('export-btn');
+
+    if (progressContainer) progressContainer.style.display = 'block';
+    if (nodeList) nodeList.style.display = 'none';
+    if (exportBtn) {
+      exportBtn.disabled = true;
+      exportBtn.style.opacity = '0.6';
+      exportBtn.textContent = 'Exporting...';
+    }
+
+    try {
+      // Start the async export
+      const response = await fetch('/data_exchange/export_async', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRF-Token': this.getCSRFToken()
+        },
+        body: JSON.stringify({ ids: selectedIds })
+      });
+
+      const result = await response.json();
+
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to start export');
+      }
+
+      const exportId = result.export_id;
+
+      // Subscribe to progress updates via ActionCable
+      this.subscribeToExportProgress(exportId);
+
+    } catch (error) {
+      console.error('Error starting async export:', error);
+      alert('Failed to start export: ' + error.message);
+      this.resetExportUI();
+    }
+  }
+
+  subscribeToExportProgress(exportId) {
+    // Create ActionCable consumer if not exists
+    if (!this.cable) {
+      this.cable = createConsumer();
+    }
+
+    // Subscribe to the export progress channel
+    this.exportSubscription = this.cable.subscriptions.create(
+      { channel: 'ExportProgressChannel', export_id: exportId },
+      {
+        received: (data) => {
+          this.handleExportProgress(data);
+        },
+        connected: () => {
+          console.log('Connected to ExportProgressChannel');
+        },
+        disconnected: () => {
+          console.log('Disconnected from ExportProgressChannel');
+        }
+      }
+    );
+  }
+
+  handleExportProgress(data) {
+    const progressBar = document.getElementById('export-progress-bar');
+    const progressMessage = document.getElementById('export-progress-message');
+    const progressPercentage = document.getElementById('export-progress-percentage');
+
+    if (data.type === 'progress') {
+      // Update progress bar
+      if (progressBar) progressBar.style.width = `${data.percentage}%`;
+      if (progressMessage) progressMessage.textContent = data.message || 'Exporting...';
+      if (progressPercentage) progressPercentage.textContent = `${Math.round(data.percentage)}%`;
+
+    } else if (data.type === 'complete') {
+      // Export complete - trigger download
+      if (progressBar) progressBar.style.width = '100%';
+      if (progressMessage) progressMessage.textContent = 'Export complete! Starting download...';
+      if (progressPercentage) progressPercentage.textContent = '100%';
+
+      // Unsubscribe from channel
+      this.unsubscribeFromExportProgress();
+
+      if (data.success && data.download_path) {
+        // Trigger download
+        setTimeout(() => {
+          window.location.href = data.download_path;
+          this.closeModal();
+        }, 500);
+      } else {
+        alert('Export completed but download link not available.');
+        this.resetExportUI();
+      }
+
+    } else if (data.type === 'error') {
+      // Export failed
+      this.unsubscribeFromExportProgress();
+      alert('Export failed: ' + (data.error || 'Unknown error'));
+      this.resetExportUI();
+    }
+  }
+
+  unsubscribeFromExportProgress() {
+    if (this.exportSubscription) {
+      this.exportSubscription.unsubscribe();
+      this.exportSubscription = null;
+    }
+  }
+
+  resetExportUI() {
+    const progressContainer = document.getElementById('export-progress-container');
+    const nodeList = document.getElementById('export-node-list');
+    const exportBtn = document.getElementById('export-btn');
+    const progressBar = document.getElementById('export-progress-bar');
+
+    if (progressContainer) progressContainer.style.display = 'none';
+    if (nodeList) nodeList.style.display = 'block';
+    if (progressBar) progressBar.style.width = '0%';
+    if (exportBtn) {
+      exportBtn.disabled = false;
+      exportBtn.style.opacity = '1';
+      exportBtn.textContent = 'Export Selected';
+    }
   }
 
   handleImportFileSelect(input) {

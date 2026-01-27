@@ -389,4 +389,185 @@ RSpec.describe 'DataExchange', type: :request do
       expect(response).to redirect_to(root_path)
     end
   end
+
+  # Cleanup endpoints
+  describe 'GET /data_exchange/orphan_nodes' do
+    let!(:orphan_task) do
+      MemoryEntity.create!(
+        name: 'Orphan Task',
+        entity_type: 'Task',
+        aliases: ''
+      )
+    end
+
+    it 'returns list of orphan nodes' do
+      get orphan_nodes_data_exchange_index_path
+
+      expect(response).to have_http_status(:ok)
+      data = JSON.parse(response.body)
+
+      expect(data['orphans']).to be_an(Array)
+      orphan_names = data['orphans'].map { |o| o['name'] }
+      expect(orphan_names).to include('Orphan Task')
+    end
+
+    it 'excludes Projects from orphan list' do
+      get orphan_nodes_data_exchange_index_path
+
+      data = JSON.parse(response.body)
+      entity_types = data['orphans'].map { |o| o['entity_type'] }
+      expect(entity_types).not_to include('Project')
+    end
+  end
+
+  describe 'POST /data_exchange/move_node' do
+    let!(:orphan_task) do
+      MemoryEntity.create!(
+        name: 'Move Me Task',
+        entity_type: 'Task',
+        aliases: ''
+      )
+    end
+
+    it 'moves node to new parent' do
+      post move_node_data_exchange_index_path, params: {
+        node_id: orphan_task.id,
+        parent_id: project1.id
+      }, as: :json
+
+      expect(response).to have_http_status(:ok)
+      data = JSON.parse(response.body)
+      expect(data['success']).to be true
+
+      relation = MemoryRelation.find_by(
+        from_entity_id: orphan_task.id,
+        to_entity_id: project1.id
+      )
+      expect(relation).to be_present
+    end
+
+    it 'returns error for invalid node' do
+      post move_node_data_exchange_index_path, params: {
+        node_id: 99999,
+        parent_id: project1.id
+      }, as: :json
+
+      expect(response).to have_http_status(:unprocessable_content)
+    end
+  end
+
+  describe 'POST /data_exchange/merge_node' do
+    let!(:source_task) do
+      entity = MemoryEntity.create!(
+        name: 'Source Task',
+        entity_type: 'Task',
+        aliases: ''
+      )
+      MemoryObservation.create!(memory_entity: entity, content: 'Source observation')
+      entity
+    end
+
+    let!(:target_task) do
+      MemoryEntity.create!(
+        name: 'Target Task',
+        entity_type: 'Task',
+        aliases: ''
+      )
+    end
+
+    it 'merges source into target' do
+      post merge_node_data_exchange_index_path, params: {
+        source_id: source_task.id,
+        target_id: target_task.id
+      }, as: :json
+
+      expect(response).to have_http_status(:ok)
+      data = JSON.parse(response.body)
+      expect(data['success']).to be true
+
+      # Source should be deleted
+      expect(MemoryEntity.find_by(id: source_task.id)).to be_nil
+
+      # Target should have the observation
+      target_task.reload
+      expect(target_task.memory_observations.count).to eq(1)
+    end
+
+    it 'returns error for invalid source' do
+      post merge_node_data_exchange_index_path, params: {
+        source_id: 99999,
+        target_id: target_task.id
+      }, as: :json
+
+      expect(response).to have_http_status(:unprocessable_content)
+    end
+  end
+
+  describe 'DELETE /data_exchange/delete_node' do
+    let!(:delete_me_task) do
+      MemoryEntity.create!(
+        name: 'Delete Me Task',
+        entity_type: 'Task',
+        aliases: ''
+      )
+    end
+
+    it 'deletes the node' do
+      delete delete_node_data_exchange_index_path, params: {
+        node_id: delete_me_task.id
+      }
+
+      expect(response).to have_http_status(:ok)
+      data = JSON.parse(response.body)
+      expect(data['success']).to be true
+
+      expect(MemoryEntity.find_by(id: delete_me_task.id)).to be_nil
+    end
+
+    it 'returns error for invalid node' do
+      delete delete_node_data_exchange_index_path, params: {
+        node_id: 99999
+      }
+
+      expect(response).to have_http_status(:unprocessable_content)
+    end
+  end
+
+  # Async export endpoints
+  describe 'POST /data_exchange/export_async' do
+    it 'starts async export and returns export_id' do
+      expect {
+        post export_async_data_exchange_index_path, params: {
+          ids: [ project1.id ]
+        }, as: :json
+      }.to have_enqueued_job(ExportJob)
+
+      expect(response).to have_http_status(:ok)
+      data = JSON.parse(response.body)
+      expect(data['success']).to be true
+      expect(data['export_id']).to be_present
+    end
+
+    it 'returns error without entity IDs' do
+      post export_async_data_exchange_index_path, params: {}, as: :json
+
+      expect(response).to have_http_status(:unprocessable_content)
+    end
+  end
+
+  describe 'GET /data_exchange/download_export' do
+    it 'returns error when export file not found' do
+      get download_export_data_exchange_index_path, params: {
+        export_id: 'non-existent-id'
+      }
+
+      expect(response).to have_http_status(:not_found)
+    end
+
+    it 'returns error without export_id' do
+      get download_export_data_exchange_index_path
+
+      expect(response).to have_http_status(:unprocessable_content)
+    end
+  end
 end

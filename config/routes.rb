@@ -35,16 +35,27 @@ Rails.application.routes.draw do
     end
   end
 
-  # Data Exchange routes for import/export
+  # Data Exchange routes for import/export and cleanup
   resources :data_exchange, only: [] do
     collection do
-      get :export
+      # Export routes (sync and async)
+      get :export              # Sync export (direct download)
+      post :export_async       # Async export with progress (starts job)
+      get :download_export     # Download completed async export
       get :root_nodes
+
+      # Import routes
       post :import_upload
       get :import_review
       post :import_execute
       get :import_report
       delete :import_cancel
+
+      # Cleanup routes
+      get :orphan_nodes
+      post :move_node
+      post :merge_node
+      delete :delete_node
     end
   end
 

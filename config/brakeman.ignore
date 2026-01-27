@@ -1,0 +1,28 @@
+{
+  "ignored_warnings": [
+    {
+      "warning_type": "File Access",
+      "warning_code": 16,
+      "fingerprint": "882aef7a28469b2193f57f7b3c3633745da3c7479c7ea5cbc91e8f4a68444511",
+      "check_name": "SendFile",
+      "message": "Parameter value used in file name",
+      "file": "app/controllers/data_exchange_controller.rb",
+      "line": 67,
+      "link": "https://brakemanscanner.org/docs/warning_types/file_access/",
+      "code": "send_file(ExportJob.download_path(params[:export_id]), :type => \"application/json\", :disposition => \"attachment\", :filename => (\"graph_mem_export_#{Time.current.strftime(\"%Y%m%d_%H%M%S\")}.json\"))",
+      "render_path": null,
+      "location": {
+        "type": "method",
+        "class": "DataExchangeController",
+        "method": "download_export"
+      },
+      "user_input": "params[:export_id]",
+      "confidence": "Weak",
+      "cwe_id": [
+        22
+      ],
+      "note": ""
+    }
+  ],
+  "brakeman_version": "7.1.2"
+}

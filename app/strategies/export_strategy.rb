@@ -66,6 +66,35 @@ class ExportStrategy
     JSON.pretty_generate(export(entity_ids))
   end
 
+  # Export selected root nodes with progress callback support
+  # @param entity_ids [Array<Integer>] IDs of root entities to export
+  # @param progress_callback [Proc, nil] Optional callback called for each node processed
+  # @return [Hash] Export data in portable JSON format
+  def export_with_progress(entity_ids, progress_callback = nil)
+    return empty_export if entity_ids.blank?
+
+    @progress_callback = progress_callback
+
+    entities = MemoryEntity.where(id: entity_ids).includes(:memory_observations)
+    root_nodes_data = entities.map { |entity| build_entity_tree_with_progress(entity, Set.new) }
+
+    @progress_callback = nil
+
+    {
+      version: FORMAT_VERSION,
+      exported_at: Time.current.iso8601,
+      root_nodes: root_nodes_data
+    }
+  end
+
+  # Export to JSON string with progress callback support
+  # @param entity_ids [Array<Integer>] IDs of root entities to export
+  # @param progress_callback [Proc, nil] Optional callback called for each node processed
+  # @return [String] JSON string
+  def export_json_with_progress(entity_ids, progress_callback = nil)
+    JSON.pretty_generate(export_with_progress(entity_ids, progress_callback))
+  end
+
   private
 
   def empty_export
@@ -82,12 +111,36 @@ class ExportStrategy
   # @param relation_type [String, nil] The relation type from parent to this entity
   # @return [Hash] Entity data with nested children
   def build_entity_tree(entity, visited, relation_type = nil)
+    build_entity_tree_internal(entity, visited, relation_type, false)
+  end
+
+  # Recursively build entity tree with children and progress callback
+  # @param entity [MemoryEntity] The entity to serialize
+  # @param visited [Set<Integer>] Set of already visited entity IDs (for cycle detection)
+  # @param relation_type [String, nil] The relation type from parent to this entity
+  # @return [Hash] Entity data with nested children
+  def build_entity_tree_with_progress(entity, visited, relation_type = nil)
+    build_entity_tree_internal(entity, visited, relation_type, true)
+  end
+
+  # Internal method for building entity tree
+  # @param entity [MemoryEntity] The entity to serialize
+  # @param visited [Set<Integer>] Set of already visited entity IDs (for cycle detection)
+  # @param relation_type [String, nil] The relation type from parent to this entity
+  # @param with_progress [Boolean] Whether to call progress callback
+  # @return [Hash] Entity data with nested children
+  def build_entity_tree_internal(entity, visited, relation_type, with_progress)
     # Cycle detection
     return nil if visited.include?(entity.id)
 
     visited.add(entity.id)
 
     @logger.debug "ExportStrategy: Building tree for entity #{entity.id} (#{entity.name})"
+
+    # Call progress callback if available and requested
+    if with_progress && @progress_callback
+      @progress_callback.call(entity.name)
+    end
 
     node_data = {
       name: entity.name,
@@ -110,7 +163,7 @@ class ExportStrategy
       child_entity = relation.from_entity
       next unless child_entity
 
-      child_tree = build_entity_tree(child_entity, visited.dup, relation.relation_type)
+      child_tree = build_entity_tree_internal(child_entity, visited.dup, relation.relation_type, with_progress)
       node_data[:children] << child_tree if child_tree
     end
 
@@ -126,7 +179,7 @@ class ExportStrategy
       next unless related_entity
       next if visited.include?(related_entity.id)
 
-      related_tree = build_entity_tree(related_entity, visited.dup, relation.relation_type)
+      related_tree = build_entity_tree_internal(related_entity, visited.dup, relation.relation_type, with_progress)
       node_data[:children] << related_tree if related_tree
     end
 
