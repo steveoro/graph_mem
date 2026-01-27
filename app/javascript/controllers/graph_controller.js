@@ -58,13 +58,19 @@ export default class extends Controller {
     backBtn.style.cssText = 'padding: 5px 10px; background: #28a745; color: white; border: none; border-radius: 3px; cursor: pointer; display: none; font-size: 12px;';
     backBtn.onclick = () => this.switchToRootView();
 
+    const dataExchangeBtn = document.createElement('button');
+    dataExchangeBtn.textContent = 'Data Exchange';
+    dataExchangeBtn.style.cssText = 'margin-left: 20px; padding: 5px 10px; background: #17a2b8; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 12px;';
+    dataExchangeBtn.onclick = () => this.showDataExchangeModal();
+
     navDiv.appendChild(rootBtn);
     navDiv.appendChild(fullBtn);
     navDiv.appendChild(backBtn);
+    navDiv.appendChild(dataExchangeBtn);
 
     // Add the navigation as a child of the graph container
     this.containerTarget.appendChild(navDiv);
-    this.navControls = { rootBtn, fullBtn, backBtn };
+    this.navControls = { rootBtn, fullBtn, backBtn, dataExchangeBtn };
 
     // Update button states based on current view
     this.updateNavigationButtons();
@@ -694,7 +700,7 @@ export default class extends Controller {
       background: white;
       border-radius: 8px;
       padding: 20px;
-      max-width: 500px;
+      max-width: '80%';
       max-height: 80vh;
       overflow-y: auto;
       position: relative;
@@ -1290,5 +1296,190 @@ export default class extends Controller {
     } catch (error) {
       console.error('Error adding target name as alias:', error);
     }
+  }
+
+  // ============================================
+  // Data Exchange (Import/Export) Methods
+  // ============================================
+
+  async showDataExchangeModal() {
+    // Fetch root nodes for export selection
+    let rootNodes = [];
+    try {
+      const response = await fetch('/data_exchange/root_nodes');
+      if (response.ok) {
+        const data = await response.json();
+        rootNodes = data.nodes || [];
+      }
+    } catch (error) {
+      console.error('Error fetching root nodes:', error);
+    }
+
+    const content = `
+      <div style="min-width: 70%;">
+        <!-- Tabs -->
+        <div style="display: flex; border-bottom: 2px solid #dee2e6; margin-bottom: 20px;">
+          <button id="export-tab" onclick="window.graphController.switchDataExchangeTab('export')"
+                  style="padding: 10px 20px; border: none; background: #007bff; color: white; cursor: pointer; border-radius: 4px 4px 0 0; margin-right: 4px; font-weight: bold;">
+            Export
+          </button>
+          <button id="import-tab" onclick="window.graphController.switchDataExchangeTab('import')"
+                  style="padding: 10px 20px; border: none; background: #e9ecef; color: #495057; cursor: pointer; border-radius: 4px 4px 0 0; font-weight: bold;">
+            Import
+          </button>
+        </div>
+
+        <!-- Export Tab Content -->
+        <div id="export-content">
+          <p style="margin-bottom: 15px; color: #666;">
+            Select root nodes to export. All linked children and observations will be included.
+          </p>
+          
+          <div style="max-height: 300px; overflow-y: auto; border: 1px solid #dee2e6; border-radius: 4px; padding: 10px; margin-bottom: 15px;">
+            ${rootNodes.length > 0 ? `
+              <div style="margin-bottom: 10px;">
+                <label style="display: flex; align-items: center; cursor: pointer; padding: 5px; background: #f8f9fa; border-radius: 4px;">
+                  <input type="checkbox" id="select-all-nodes" onchange="window.graphController.toggleSelectAllNodes(this.checked)"
+                         style="margin-right: 10px; transform: scale(1.2);">
+                  <strong>Select All</strong>
+                </label>
+              </div>
+              <hr style="margin: 10px 0; border: none; border-top: 1px solid #dee2e6;">
+              ${rootNodes.map(node => `
+                <label style="display: flex; align-items: center; cursor: pointer; padding: 8px; border-radius: 4px; margin-bottom: 4px;"
+                       onmouseover="this.style.backgroundColor='#f8f9fa'" onmouseout="this.style.backgroundColor='transparent'">
+                  <input type="checkbox" class="export-node-checkbox" value="${node.id}"
+                         style="margin-right: 10px; transform: scale(1.2);">
+                  <span style="flex: 1;">
+                    <strong>${this.escapeHtml(node.name)}</strong>
+                    <span style="color: #666; font-size: 12px;">(${node.entity_type || 'N/A'})</span>
+                  </span>
+                  <span style="color: #888; font-size: 11px;">${node.observations_count || 0} obs</span>
+                </label>
+              `).join('')}
+            ` : '<p style="color: #666; text-align: center; padding: 20px;">No root nodes found.</p>'}
+          </div>
+
+          <div style="text-align: right;">
+            <button type="button" onclick="window.graphController.closeModal()"
+                    style="margin-right: 10px; padding: 8px 16px; background: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer;">
+              Cancel
+            </button>
+            <button type="button" onclick="window.graphController.exportSelectedNodes()"
+                    style="padding: 8px 16px; background: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer;">
+              Export Selected
+            </button>
+          </div>
+        </div>
+
+        <!-- Import Tab Content -->
+        <div id="import-content" style="display: none;">
+          <p style="margin-bottom: 15px; color: #666;">
+            Select a JSON file to import. The file should be in the graph_mem export format.
+          </p>
+          
+          <form id="import-form" action="/data_exchange/import_upload" method="post" enctype="multipart/form-data">
+            <input type="hidden" name="authenticity_token" value="${this.getCSRFToken()}">
+            
+            <div style="border: 2px dashed #dee2e6; border-radius: 8px; padding: 30px; text-align: center; margin-bottom: 15px;">
+              <input type="file" id="import-file" name="file" accept=".json"
+                     style="display: none;"
+                     onchange="window.graphController.handleImportFileSelect(this)">
+              <label for="import-file" style="cursor: pointer;">
+                <div style="font-size: 48px; color: #6c757d; margin-bottom: 10px;">📁</div>
+                <div style="color: #495057; font-weight: bold;">Click to select a JSON file</div>
+                <div style="color: #888; font-size: 12px; margin-top: 5px;">or drag and drop here</div>
+              </label>
+              <div id="selected-file-name" style="margin-top: 15px; color: #28a745; font-weight: bold; display: none;"></div>
+            </div>
+
+            <div style="text-align: right;">
+              <button type="button" onclick="window.graphController.closeModal()"
+                      style="margin-right: 10px; padding: 8px 16px; background: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                Cancel
+              </button>
+              <button type="submit" id="import-submit-btn" disabled
+                      style="padding: 8px 16px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: not-allowed; opacity: 0.6;">
+                Upload and Review
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    `;
+
+    this.showModal('Data Exchange', content);
+  }
+
+  switchDataExchangeTab(tab) {
+    const exportTab = document.getElementById('export-tab');
+    const importTab = document.getElementById('import-tab');
+    const exportContent = document.getElementById('export-content');
+    const importContent = document.getElementById('import-content');
+
+    if (tab === 'export') {
+      exportTab.style.background = '#007bff';
+      exportTab.style.color = 'white';
+      importTab.style.background = '#e9ecef';
+      importTab.style.color = '#495057';
+      exportContent.style.display = 'block';
+      importContent.style.display = 'none';
+    } else {
+      importTab.style.background = '#007bff';
+      importTab.style.color = 'white';
+      exportTab.style.background = '#e9ecef';
+      exportTab.style.color = '#495057';
+      importContent.style.display = 'block';
+      exportContent.style.display = 'none';
+    }
+  }
+
+  toggleSelectAllNodes(checked) {
+    const checkboxes = document.querySelectorAll('.export-node-checkbox');
+    checkboxes.forEach(cb => cb.checked = checked);
+  }
+
+  async exportSelectedNodes() {
+    const checkboxes = document.querySelectorAll('.export-node-checkbox:checked');
+    const selectedIds = Array.from(checkboxes).map(cb => cb.value);
+
+    if (selectedIds.length === 0) {
+      alert('Please select at least one node to export.');
+      return;
+    }
+
+    // Build URL with selected IDs
+    const params = new URLSearchParams();
+    selectedIds.forEach(id => params.append('ids[]', id));
+
+    // Trigger download
+    window.location.href = `/data_exchange/export?${params.toString()}`;
+    
+    this.closeModal();
+  }
+
+  handleImportFileSelect(input) {
+    const file = input.files[0];
+    const fileNameDisplay = document.getElementById('selected-file-name');
+    const submitBtn = document.getElementById('import-submit-btn');
+
+    if (file) {
+      fileNameDisplay.textContent = `Selected: ${file.name}`;
+      fileNameDisplay.style.display = 'block';
+      submitBtn.disabled = false;
+      submitBtn.style.cursor = 'pointer';
+      submitBtn.style.opacity = '1';
+    } else {
+      fileNameDisplay.style.display = 'none';
+      submitBtn.disabled = true;
+      submitBtn.style.cursor = 'not-allowed';
+      submitBtn.style.opacity = '0.6';
+    }
+  }
+
+  escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
   }
 }

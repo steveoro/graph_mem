@@ -35,6 +35,19 @@ Rails.application.routes.draw do
     end
   end
 
+  # Data Exchange routes for import/export
+  resources :data_exchange, only: [] do
+    collection do
+      get :export
+      get :root_nodes
+      post :import_upload
+      get :import_review
+      post :import_execute
+      get :import_report
+      delete :import_cancel
+    end
+  end
+
   # Defines the root path route ("/")
   root "pages#home"
 end

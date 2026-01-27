@@ -1,0 +1,174 @@
+<div class="container mx-auto w-full">
+  <div class="flex justify-between items-center mb-6">
+    <h1 class="text-3xl font-bold">Import Review</h1>
+    <%= link_to "Cancel Import", import_cancel_data_exchange_index_path, 
+        method: :delete, 
+        class: "bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded",
+        data: { confirm: "Are you sure you want to cancel this import?" } %>
+  </div>
+
+  <% if @stats.present? %>
+    <div class="bg-white rounded-lg shadow p-4 mb-6">
+      <h2 class="text-lg font-semibold mb-3">Import Summary</h2>
+      <div class="grid grid-cols-4 gap-4 text-center">
+        <div class="bg-gray-50 p-3 rounded">
+          <div class="text-2xl font-bold"><%= @stats[:total] || @stats["total"] %></div>
+          <div class="text-gray-600 text-sm">Total Nodes</div>
+        </div>
+        <div class="bg-green-50 p-3 rounded">
+          <div class="text-2xl font-bold text-green-600"><%= @stats[:high_confidence] || @stats["high_confidence"] %></div>
+          <div class="text-gray-600 text-sm">High Confidence</div>
+        </div>
+        <div class="bg-yellow-50 p-3 rounded">
+          <div class="text-2xl font-bold text-yellow-600"><%= @stats[:low_confidence] || @stats["low_confidence"] %></div>
+          <div class="text-gray-600 text-sm">Low Confidence</div>
+        </div>
+        <div class="bg-gray-100 p-3 rounded">
+          <div class="text-2xl font-bold text-gray-600"><%= @stats[:new] || @stats["new"] %></div>
+          <div class="text-gray-600 text-sm">New Nodes</div>
+        </div>
+      </div>
+    </div>
+  <% end %>
+
+  <%= form_with url: import_execute_data_exchange_index_path, method: :post, local: true, class: "w-full" do |f| %>
+    <div class="bg-white rounded-lg shadow overflow-hidden mb-6">
+      <table class="min-w-full divide-y divide-gray-200">
+        <thead class="bg-gray-50">
+          <tr>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Import</th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Existing Matches</th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24">Status</th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Make Children Of</th>
+          </tr>
+        </thead>
+        <tbody class="bg-white divide-y divide-gray-200">
+          <% @matches.each_with_index do |match, index| %>
+            <% 
+              import_node = match[:import_node] || match["import_node"]
+              matches_list = match[:matches] || match["matches"] || []
+              status = match[:status] || match["status"]
+              selected_match = match[:selected_match_id] || match["selected_match_id"]
+              node_path = match[:node_path] || match["node_path"]
+              is_root = !node_path.to_s.include?("children")
+            %>
+            <tr class="<%= index.even? ? 'bg-white' : 'bg-gray-50' %>">
+              <!-- Import Node Info -->
+              <td class="px-4 py-3">
+                <div class="font-medium text-gray-900">
+                  "<%= import_node[:name] || import_node["name"] %>"
+                </div>
+                <div class="text-sm text-gray-500">
+                  (<%= import_node[:entity_type] || import_node["entity_type"] %>)
+                </div>
+                <% if (import_node[:observations_count] || import_node["observations_count"]).to_i > 0 %>
+                  <div class="text-xs text-gray-400">
+                    <%= import_node[:observations_count] || import_node["observations_count"] %> observations
+                  </div>
+                <% end %>
+                <% if (import_node[:children_count] || import_node["children_count"]).to_i > 0 %>
+                  <div class="text-xs text-gray-400">
+                    <%= import_node[:children_count] || import_node["children_count"] %> children
+                  </div>
+                <% end %>
+                <%= hidden_field_tag "decisions[#{index}][node_path]", node_path %>
+              </td>
+
+              <!-- Existing Matches Dropdown -->
+              <td class="px-4 py-3">
+                <% if matches_list.any? %>
+                  <select name="decisions[<%= index %>][target_id]" 
+                          class="match-select w-full border border-gray-300 rounded px-2 py-1 text-sm"
+                          data-index="<%= index %>">
+                    <option value="">-- Create New --</option>
+                    <% matches_list.each do |m| %>
+                      <option value="<%= m[:entity_id] || m["entity_id"] %>"
+                              <%= 'selected' if (m[:entity_id] || m["entity_id"]) == selected_match %>>
+                        "<%= m[:name] || m["name"] %>" (<%= m[:entity_type] || m["entity_type"] %>) - score <%= m[:score] || m["score"] %>
+                      </option>
+                    <% end %>
+                  </select>
+                  <input type="hidden" name="decisions[<%= index %>][action]" 
+                         value="<%= selected_match.present? ? 'merge' : 'create' %>"
+                         class="action-input"
+                         data-index="<%= index %>">
+                <% else %>
+                  <span class="text-gray-400 text-sm italic">No matches found</span>
+                  <input type="hidden" name="decisions[<%= index %>][action]" value="create">
+                <% end %>
+              </td>
+
+              <!-- Status Indicator -->
+              <td class="px-4 py-3 text-center">
+                <% case status %>
+                <% when "high" %>
+                  <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                    <svg class="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                      <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+                    </svg>
+                    High
+                  </span>
+                <% when "low" %>
+                  <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                    <svg class="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                      <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
+                    </svg>
+                    Low
+                  </span>
+                <% else %>
+                  <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
+                    <svg class="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                      <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-11a1 1 0 10-2 0v2H7a1 1 0 100 2h2v2a1 1 0 102 0v-2h2a1 1 0 100-2h-2V7z" clip-rule="evenodd"/>
+                    </svg>
+                    New
+                  </span>
+                <% end %>
+              </td>
+
+              <!-- Make Children Of (only for root nodes) -->
+              <td class="px-4 py-3">
+                <% if is_root && @available_parents.present? %>
+                  <select name="decisions[<%= index %>][parent_id]" 
+                          class="w-full border border-gray-300 rounded px-2 py-1 text-sm">
+                    <option value="">-- None (root node) --</option>
+                    <% @available_parents.each do |parent| %>
+                      <option value="<%= parent[:id] %>">
+                        <%= parent[:name] %> (<%= parent[:entity_type] %>)
+                      </option>
+                    <% end %>
+                  </select>
+                <% else %>
+                  <span class="text-gray-400 text-sm">--</span>
+                <% end %>
+              </td>
+            </tr>
+          <% end %>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="flex justify-end gap-4">
+      <%= link_to "Cancel", import_cancel_data_exchange_index_path, 
+          method: :delete,
+          class: "bg-gray-500 hover:bg-gray-600 text-white px-6 py-2 rounded",
+          data: { confirm: "Are you sure you want to cancel this import?" } %>
+      <%= submit_tag "Proceed with Import", 
+          class: "bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded cursor-pointer" %>
+    </div>
+  <% end %>
+</div>
+
+<script>
+  // Update action field when match selection changes
+  document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('.match-select').forEach(function(select) {
+      select.addEventListener('change', function() {
+        var index = this.dataset.index;
+        var actionInput = document.querySelector('.action-input[data-index="' + index + '"]');
+        if (actionInput) {
+          actionInput.value = this.value ? 'merge' : 'create';
+        }
+      });
+    });
+  });
+</script>
