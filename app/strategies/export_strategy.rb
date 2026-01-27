@@ -34,7 +34,9 @@ class ExportStrategy
     root_entities = MemoryEntity.where.not(id: child_entity_ids)
 
     # Separate Projects from other entities
-    projects = root_entities.where(entity_type: "Project").order(:name)
+    # Note that 'Projects' are considered root entities regardless of whether they have incoming relations or not
+    # (as projects can be children of other projects).
+    projects = MemoryEntity.where(entity_type: "Project").order(:name)
     others = root_entities.where.not(entity_type: "Project").order(:name)
 
     # Projects first, then others
