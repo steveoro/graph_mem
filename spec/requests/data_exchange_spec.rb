@@ -72,7 +72,7 @@ RSpec.describe 'DataExchange', type: :request do
   describe 'GET /data_exchange/export' do
     context 'with valid entity IDs' do
       it 'returns JSON file download' do
-        get export_data_exchange_index_path, params: { ids: [project1.id] }
+        get export_data_exchange_index_path, params: { ids: [ project1.id ] }
 
         expect(response).to have_http_status(:ok)
         expect(response.content_type).to include('application/json')
@@ -80,7 +80,7 @@ RSpec.describe 'DataExchange', type: :request do
       end
 
       it 'exports selected entities with children' do
-        get export_data_exchange_index_path, params: { ids: [project1.id] }
+        get export_data_exchange_index_path, params: { ids: [ project1.id ] }
 
         data = JSON.parse(response.body)
 
@@ -94,7 +94,7 @@ RSpec.describe 'DataExchange', type: :request do
       end
 
       it 'includes child entities' do
-        get export_data_exchange_index_path, params: { ids: [project1.id] }
+        get export_data_exchange_index_path, params: { ids: [ project1.id ] }
 
         data = JSON.parse(response.body)
         root_node = data['root_nodes'].first
@@ -108,7 +108,7 @@ RSpec.describe 'DataExchange', type: :request do
       it 'returns error' do
         get export_data_exchange_index_path
 
-        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response).to have_http_status(:unprocessable_content)
         data = JSON.parse(response.body)
         expect(data['error']).to eq('No entity IDs provided')
       end
@@ -116,7 +116,7 @@ RSpec.describe 'DataExchange', type: :request do
 
     context 'with multiple entity IDs' do
       it 'exports multiple root nodes' do
-        get export_data_exchange_index_path, params: { ids: [project1.id, project2.id] }
+        get export_data_exchange_index_path, params: { ids: [ project1.id, project2.id ] }
 
         data = JSON.parse(response.body)
         expect(data['root_nodes'].length).to eq(2)
@@ -254,7 +254,7 @@ RSpec.describe 'DataExchange', type: :request do
               name: 'Imported Project',
               entity_type: 'Project',
               aliases: '',
-              observations: [{ content: 'Imported observation' }],
+              observations: [ { content: 'Imported observation' } ],
               children: []
             }
           ]

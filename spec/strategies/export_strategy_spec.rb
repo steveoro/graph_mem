@@ -101,7 +101,7 @@ RSpec.describe ExportStrategy, type: :model do
       projects = roots.take_while { |e| e.entity_type == 'Project' }
       project_names = projects.map(&:name)
 
-      expect(project_names).to eq(['Project Alpha', 'Project Beta'])
+      expect(project_names).to eq([ 'Project Alpha', 'Project Beta' ])
     end
 
     it 'returns other root entities after Projects, sorted by name' do
@@ -131,7 +131,7 @@ RSpec.describe ExportStrategy, type: :model do
 
     context 'with single entity' do
       it 'exports entity with its observations' do
-        result = strategy.export([project1.id])
+        result = strategy.export([ project1.id ])
 
         expect(result[:root_nodes].length).to eq(1)
 
@@ -143,7 +143,7 @@ RSpec.describe ExportStrategy, type: :model do
       end
 
       it 'includes children through part_of relations' do
-        result = strategy.export([project1.id])
+        result = strategy.export([ project1.id ])
 
         root_node = result[:root_nodes].first
         children = root_node[:children]
@@ -157,7 +157,7 @@ RSpec.describe ExportStrategy, type: :model do
       end
 
       it 'recursively includes nested children' do
-        result = strategy.export([project1.id])
+        result = strategy.export([ project1.id ])
 
         root_node = result[:root_nodes].first
         task_child = root_node[:children].find { |c| c[:name] == 'Task One' }
@@ -169,7 +169,7 @@ RSpec.describe ExportStrategy, type: :model do
       end
 
       it 'includes observations for child entities' do
-        result = strategy.export([project1.id])
+        result = strategy.export([ project1.id ])
 
         root_node = result[:root_nodes].first
         task_child = root_node[:children].find { |c| c[:name] == 'Task One' }
@@ -181,7 +181,7 @@ RSpec.describe ExportStrategy, type: :model do
 
     context 'with multiple entities' do
       it 'exports multiple root nodes' do
-        result = strategy.export([project1.id, project2.id])
+        result = strategy.export([ project1.id, project2.id ])
 
         expect(result[:root_nodes].length).to eq(2)
 
@@ -200,24 +200,24 @@ RSpec.describe ExportStrategy, type: :model do
         )
 
         # This should not hang
-        expect { strategy.export([project1.id]) }.not_to raise_error
+        expect { strategy.export([ project1.id ]) }.not_to raise_error
       end
     end
 
     context 'export format' do
       it 'includes version in export' do
-        result = strategy.export([project1.id])
+        result = strategy.export([ project1.id ])
         expect(result[:version]).to eq('1.0')
       end
 
       it 'includes exported_at timestamp' do
-        result = strategy.export([project1.id])
+        result = strategy.export([ project1.id ])
         expect(result[:exported_at]).to be_present
         expect { Time.parse(result[:exported_at]) }.not_to raise_error
       end
 
       it 'includes observation created_at in ISO8601 format' do
-        result = strategy.export([project1.id])
+        result = strategy.export([ project1.id ])
 
         root_node = result[:root_nodes].first
         obs = root_node[:observations].first
@@ -230,21 +230,21 @@ RSpec.describe ExportStrategy, type: :model do
 
   describe '#export_json' do
     it 'returns valid JSON string' do
-      json = strategy.export_json([project1.id])
+      json = strategy.export_json([ project1.id ])
 
       expect(json).to be_a(String)
       expect { JSON.parse(json) }.not_to raise_error
     end
 
     it 'produces pretty-printed JSON' do
-      json = strategy.export_json([project1.id])
+      json = strategy.export_json([ project1.id ])
 
       # Pretty-printed JSON has newlines
       expect(json).to include("\n")
     end
 
     it 'parses back to the same structure' do
-      json = strategy.export_json([project1.id])
+      json = strategy.export_json([ project1.id ])
       parsed = JSON.parse(json)
 
       expect(parsed['version']).to eq('1.0')

@@ -64,7 +64,7 @@ RSpec.describe ImportMatchingStrategy, type: :model do
               name: 'Project Alpha',
               entity_type: 'Project',
               aliases: 'alpha',
-              observations: [{ content: 'New observation' }],
+              observations: [ { content: 'New observation' } ],
               children: []
             }
           ]
@@ -163,7 +163,7 @@ RSpec.describe ImportMatchingStrategy, type: :model do
           match_result = result[:match_results].first.to_h
           # This could be low (matches entity_type "Project") or new (no name match)
           # depending on search scoring
-          expect(['low', 'new', 'high']).to include(match_result[:status])
+          expect([ 'low', 'new', 'high' ]).to include(match_result[:status])
         end
       end
 
@@ -344,7 +344,7 @@ RSpec.describe ImportMatchingStrategy, type: :model do
       entity = project_alpha
       match_result = ImportMatchingStrategy::MatchResult.new(
         import_node: { name: 'Test', entity_type: 'Type', observations: [], children: [] },
-        matches: [{ entity: entity, score: 25.0, matched_fields: ['name', 'entity_type'] }],
+        matches: [ { entity: entity, score: 25.0, matched_fields: [ 'name', 'entity_type' ] } ],
         status: 'high',
         selected_match_id: entity.id,
         parent_entity_id: nil,

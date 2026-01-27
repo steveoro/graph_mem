@@ -178,7 +178,7 @@ RSpec.describe ImportExecutionStrategy, type: :model do
                   'entity_type' => 'Task',
                   'aliases' => '',
                   'relation_type' => 'part_of',
-                  'observations' => [{ 'content' => 'Child observation' }],
+                  'observations' => [ { 'content' => 'Child observation' } ],
                   'children' => [
                     {
                       'name' => 'Grandchild Issue',
@@ -279,7 +279,7 @@ RSpec.describe ImportExecutionStrategy, type: :model do
               'name' => 'Existing Project',  # Same name as existing entity
               'entity_type' => 'Project',
               'aliases' => 'new-alias',
-              'observations' => [{ 'content' => 'New observation' }],
+              'observations' => [ { 'content' => 'New observation' } ],
               'children' => []
             }
           ]
@@ -366,7 +366,7 @@ RSpec.describe ImportExecutionStrategy, type: :model do
             }
           ]
         }
-        decisions = [{ node_path: '0', action: 'create', target_id: nil, parent_id: nil }]
+        decisions = [ { node_path: '0', action: 'create', target_id: nil, parent_id: nil } ]
 
         initial_count = MemoryEntity.count
         report = strategy.execute(import_data, decisions)
@@ -384,7 +384,7 @@ RSpec.describe ImportExecutionStrategy, type: :model do
             { 'name' => 'Test', 'entity_type' => 'Type', 'observations' => [], 'children' => [] }
           ]
         }
-        decisions = [{ node_path: '0', action: 'merge', target_id: 99999, parent_id: nil }]
+        decisions = [ { node_path: '0', action: 'merge', target_id: 99999, parent_id: nil } ]
 
         report = strategy.execute(import_data, decisions)
 

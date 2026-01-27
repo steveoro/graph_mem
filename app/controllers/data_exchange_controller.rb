@@ -2,7 +2,7 @@
 
 class DataExchangeController < ApplicationController
   # Skip CSRF for API-like endpoints (file download)
-  skip_before_action :verify_authenticity_token, only: [:export]
+  skip_before_action :verify_authenticity_token, only: [ :export ]
 
   # GET /data_exchange/export?ids[]=1&ids[]=2
   # Returns JSON file with selected root nodes and all their children
@@ -10,7 +10,7 @@ class DataExchangeController < ApplicationController
     entity_ids = params[:ids]
 
     if entity_ids.blank?
-      return render json: { error: "No entity IDs provided" }, status: :unprocessable_entity
+      return render json: { error: "No entity IDs provided" }, status: :unprocessable_content
     end
 
     strategy = ExportStrategy.new
