@@ -352,6 +352,198 @@ RSpec.describe ImportExecutionStrategy, type: :model do
       end
     end
 
+    context 'skip action for child nodes' do
+      let!(:existing_relation) do
+        MemoryRelation.create!(
+          from_entity: existing_task,
+          to_entity: existing_project,
+          relation_type: 'part_of'
+        )
+      end
+
+      let(:import_data) do
+        {
+          'root_nodes' => [
+            {
+              'name' => 'Existing Project',
+              'entity_type' => 'Project',
+              'aliases' => '',
+              'observations' => [],
+              'children' => [
+                {
+                  'name' => 'Existing Task',
+                  'entity_type' => 'Task',
+                  'aliases' => '',
+                  'relation_type' => 'part_of',
+                  'observations' => [],
+                  'children' => []
+                }
+              ]
+            }
+          ]
+        }
+      end
+
+      let(:decisions) do
+        [
+          { node_path: '0', action: 'merge', target_id: existing_project.id, parent_id: nil },
+          { node_path: '0.children.0', action: 'skip', child_action: 'skip', target_id: existing_task.id, parent_id: nil }
+        ]
+      end
+
+      it 'does not create new entity for skip action' do
+        expect {
+          strategy.execute(import_data, decisions)
+        }.not_to change(MemoryEntity, :count)
+      end
+
+      it 'does not create new relation for skip action' do
+        expect {
+          strategy.execute(import_data, decisions)
+        }.not_to change(MemoryRelation, :count)
+      end
+
+      it 'reports skipped entities in report' do
+        report = strategy.execute(import_data, decisions)
+
+        expect(report.success).to be true
+        expect(report.entities_skipped).to eq(1)
+      end
+
+      it 'still processes children of skipped nodes' do
+        import_data_with_grandchild = {
+          'root_nodes' => [
+            {
+              'name' => 'Existing Project',
+              'entity_type' => 'Project',
+              'aliases' => '',
+              'observations' => [],
+              'children' => [
+                {
+                  'name' => 'Existing Task',
+                  'entity_type' => 'Task',
+                  'aliases' => '',
+                  'relation_type' => 'part_of',
+                  'observations' => [],
+                  'children' => [
+                    {
+                      'name' => 'New Grandchild',
+                      'entity_type' => 'Issue',
+                      'aliases' => '',
+                      'relation_type' => 'part_of',
+                      'observations' => [],
+                      'children' => []
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+
+        decisions_with_grandchild = [
+          { node_path: '0', action: 'merge', target_id: existing_project.id, parent_id: nil },
+          { node_path: '0.children.0', action: 'skip', child_action: 'skip', target_id: existing_task.id, parent_id: nil },
+          { node_path: '0.children.0.children.0', action: 'create', child_action: 'create', target_id: nil, parent_id: nil }
+        ]
+
+        expect {
+          strategy.execute(import_data_with_grandchild, decisions_with_grandchild)
+        }.to change(MemoryEntity, :count).by(1)
+
+        grandchild = MemoryEntity.find_by(name: 'New Grandchild')
+        expect(grandchild).to be_present
+
+        # Grandchild should be linked to the skipped task
+        relation = MemoryRelation.find_by(from_entity_id: grandchild.id, to_entity_id: existing_task.id)
+        expect(relation).to be_present
+      end
+    end
+
+    context 'add_relation action for child nodes' do
+      let!(:other_project) do
+        MemoryEntity.create!(
+          name: 'Other Project',
+          entity_type: 'Project',
+          aliases: ''
+        )
+      end
+
+      let!(:existing_relation) do
+        MemoryRelation.create!(
+          from_entity: existing_task,
+          to_entity: existing_project,
+          relation_type: 'part_of'
+        )
+      end
+
+      let(:import_data) do
+        {
+          'root_nodes' => [
+            {
+              'name' => 'Other Project',
+              'entity_type' => 'Project',
+              'aliases' => '',
+              'observations' => [],
+              'children' => [
+                {
+                  'name' => 'Existing Task',
+                  'entity_type' => 'Task',
+                  'aliases' => '',
+                  'relation_type' => 'part_of',
+                  'observations' => [ { 'content' => 'New observation via add_relation' } ],
+                  'children' => []
+                }
+              ]
+            }
+          ]
+        }
+      end
+
+      let(:decisions) do
+        [
+          { node_path: '0', action: 'merge', target_id: other_project.id, parent_id: nil },
+          { node_path: '0.children.0', action: 'add_relation', child_action: 'add_relation', target_id: existing_task.id, parent_id: nil }
+        ]
+      end
+
+      it 'does not create new entity for add_relation action' do
+        expect {
+          strategy.execute(import_data, decisions)
+        }.not_to change(MemoryEntity, :count)
+      end
+
+      it 'creates new relation to new parent' do
+        expect {
+          strategy.execute(import_data, decisions)
+        }.to change(MemoryRelation, :count).by(1)
+
+        new_relation = MemoryRelation.find_by(
+          from_entity_id: existing_task.id,
+          to_entity_id: other_project.id,
+          relation_type: 'part_of'
+        )
+        expect(new_relation).to be_present
+      end
+
+      it 'adds new observations' do
+        expect {
+          strategy.execute(import_data, decisions)
+        }.to change(MemoryObservation, :count).by(1)
+
+        existing_task.reload
+        expect(existing_task.memory_observations.pluck(:content)).to include('New observation via add_relation')
+      end
+
+      it 'reports merged entities (not created)' do
+        report = strategy.execute(import_data, decisions)
+
+        expect(report.success).to be true
+        expect(report.entities_merged).to eq(2)  # other_project + existing_task
+        expect(report.entities_created).to eq(0)
+      end
+    end
+
     context 'transaction rollback on error' do
       it 'rolls back all changes on failure' do
         # Create import data that will fail (invalid entity)
@@ -400,6 +592,7 @@ RSpec.describe ImportExecutionStrategy, type: :model do
         success: true,
         entities_created: 5,
         entities_merged: 2,
+        entities_skipped: 1,
         observations_created: 10,
         relations_created: 3,
         errors: []
@@ -408,6 +601,7 @@ RSpec.describe ImportExecutionStrategy, type: :model do
       expect(report.success).to be true
       expect(report.entities_created).to eq(5)
       expect(report.entities_merged).to eq(2)
+      expect(report.entities_skipped).to eq(1)
       expect(report.observations_created).to eq(10)
       expect(report.relations_created).to eq(3)
       expect(report.errors).to eq([])
@@ -418,6 +612,7 @@ RSpec.describe ImportExecutionStrategy, type: :model do
         success: true,
         entities_created: 5,
         entities_merged: 2,
+        entities_skipped: 1,
         observations_created: 10,
         relations_created: 3,
         errors: []
@@ -429,6 +624,7 @@ RSpec.describe ImportExecutionStrategy, type: :model do
         success: true,
         entities_created: 5,
         entities_merged: 2,
+        entities_skipped: 1,
         observations_created: 10,
         relations_created: 3,
         errors: []

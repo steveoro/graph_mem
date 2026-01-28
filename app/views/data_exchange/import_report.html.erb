@@ -29,7 +29,7 @@
   <div class="bg-white rounded-lg shadow p-6 mb-6">
     <h2 class="text-xl font-semibold mb-4">Import Statistics</h2>
     
-    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+    <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
       <div class="bg-blue-50 p-4 rounded-lg text-center">
         <div class="text-3xl font-bold text-blue-600">
           <%= @report[:entities_created] || @report["entities_created"] || 0 %>
@@ -42,6 +42,13 @@
           <%= @report[:entities_merged] || @report["entities_merged"] || 0 %>
         </div>
         <div class="text-gray-600 text-sm mt-1">Entities Merged</div>
+      </div>
+      
+      <div class="bg-gray-50 p-4 rounded-lg text-center">
+        <div class="text-3xl font-bold text-gray-600">
+          <%= @report[:entities_skipped] || @report["entities_skipped"] || 0 %>
+        </div>
+        <div class="text-gray-600 text-sm mt-1">Entities Skipped</div>
       </div>
       
       <div class="bg-green-50 p-4 rounded-lg text-center">

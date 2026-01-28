@@ -1477,22 +1477,14 @@ export default class extends Controller {
                           </optgroup>
                         </select>
                       </td>
-                      <td style="padding: 10px; text-align: center;">
+                      <td style="padding: 10px; text-align: center; white-space: nowrap;">
                         <button onclick="window.graphController.moveOrphanNode(${orphan.id})" 
                                 title="Move to selected parent"
-                                style="padding: 4px 8px; margin: 2px; background: #28a745; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 11px;">
-                          Move
-                        </button>
-                        <button onclick="window.graphController.mergeOrphanNode(${orphan.id})" 
+                                style="padding: 5px 8px; margin-right: 4px; background: #28a745; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 11px; height: 26px; vertical-align: middle;">Move</button><button onclick="window.graphController.mergeOrphanNode(${orphan.id})" 
                                 title="Merge into selected parent"
-                                style="padding: 4px 8px; margin: 2px; background: #17a2b8; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 11px;">
-                          Merge
-                        </button>
-                        <button onclick="window.graphController.deleteOrphanNode(${orphan.id}, '${this.escapeHtml(orphan.name).replace(/'/g, "\\'")}'"
+                                style="padding: 5px 8px; margin-right: 4px; background: #17a2b8; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 11px; height: 26px; vertical-align: middle;">Merge</button><button onclick="window.graphController.deleteOrphanNode(${orphan.id}, '${this.escapeHtml(orphan.name).replace(/'/g, "\\'")}'"
                                 title="Delete this node"
-                                style="padding: 4px 8px; margin: 2px; background: #dc3545; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 11px;">
-                          Delete
-                        </button>
+                                style="padding: 5px 7px; background: #dc3545; color: white; border: none; border-radius: 3px; cursor: pointer; height: 26px; vertical-align: middle; display: inline-flex; align-items: center;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg></button>
                       </td>
                     </tr>
                   `).join('')}

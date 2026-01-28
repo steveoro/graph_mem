@@ -96,14 +96,14 @@ RSpec.describe ImportMatchingStrategy, type: :model do
         expect(result[:match_results].length).to eq(1)
       end
 
-      it 'returns stats' do
+      it 'returns stats with all keys' do
         result = strategy.match(import_data)
 
-        expect(result[:stats]).to include(:total, :high_confidence, :low_confidence, :new)
+        expect(result[:stats]).to include(:total, :root_nodes, :high_confidence, :low_confidence, :new, :skip, :add_relation)
       end
     end
 
-    context 'matching behavior' do
+    context 'matching behavior for root nodes' do
       context 'high confidence matches' do
         let(:import_data) do
           {
@@ -141,29 +141,12 @@ RSpec.describe ImportMatchingStrategy, type: :model do
           first_match = match_result[:matches].first
           expect(first_match[:entity_id]).to eq(project_alpha.id)
         end
-      end
 
-      context 'low confidence matches' do
-        let(:import_data) do
-          {
-            root_nodes: [
-              {
-                name: 'XyzProject123',
-                entity_type: 'Project',
-                observations: [],
-                children: []
-              }
-            ]
-          }
-        end
-
-        it 'identifies low or new confidence match when entity_type matches but name is different' do
+        it 'marks root node as not a child' do
           result = strategy.match(import_data)
 
           match_result = result[:match_results].first.to_h
-          # This could be low (matches entity_type "Project") or new (no name match)
-          # depending on search scoring
-          expect([ 'low', 'new', 'high' ]).to include(match_result[:status])
+          expect(match_result[:is_child]).to be false
         end
       end
 
@@ -202,8 +185,26 @@ RSpec.describe ImportMatchingStrategy, type: :model do
           expect(match_result[:selected_match_id]).to be_nil
         end
       end
+    end
 
-      context 'with nested children' do
+    context 'child node matching (1:1 exact match)' do
+      # Create relation so Task One is a child of Project Alpha
+      let!(:task_relation) do
+        MemoryRelation.create!(
+          from_entity: task_one,
+          to_entity: project_alpha,
+          relation_type: 'part_of'
+        )
+      end
+
+      let!(:observation_one) do
+        MemoryObservation.create!(
+          memory_entity: task_one,
+          content: 'Existing observation'
+        )
+      end
+
+      context 'skip - child exists with same parent' do
         let(:import_data) do
           {
             root_nodes: [
@@ -218,12 +219,73 @@ RSpec.describe ImportMatchingStrategy, type: :model do
                     relation_type: 'part_of',
                     observations: [],
                     children: []
-                  },
+                  }
+                ]
+              }
+            ]
+          }
+        end
+
+        it 'marks child with same parent as skip' do
+          result = strategy.match(import_data)
+
+          child_match = result[:match_results].find { |r| r.to_h[:node_path] == '0.children.0' }
+          expect(child_match.to_h[:status]).to eq('skip')
+          expect(child_match.to_h[:child_action]).to eq('skip')
+        end
+
+        it 'marks child as is_child true' do
+          result = strategy.match(import_data)
+
+          child_match = result[:match_results].find { |r| r.to_h[:node_path] == '0.children.0' }
+          expect(child_match.to_h[:is_child]).to be true
+        end
+
+        it 'includes import_parent_name' do
+          result = strategy.match(import_data)
+
+          child_match = result[:match_results].find { |r| r.to_h[:node_path] == '0.children.0' }
+          expect(child_match.to_h[:import_parent_name]).to eq('Project Alpha')
+        end
+
+        it 'includes exact_match entity' do
+          result = strategy.match(import_data)
+
+          child_match = result[:match_results].find { |r| r.to_h[:node_path] == '0.children.0' }
+          expect(child_match.to_h[:exact_match]).not_to be_nil
+          expect(child_match.to_h[:exact_match][:entity_id]).to eq(task_one.id)
+        end
+
+        it 'will_add_observations is false when no new observations' do
+          result = strategy.match(import_data)
+
+          child_match = result[:match_results].find { |r| r.to_h[:node_path] == '0.children.0' }
+          expect(child_match.to_h[:will_add_observations]).to be false
+        end
+      end
+
+      context 'add_relation - child exists but different parent' do
+        let!(:other_project) do
+          MemoryEntity.create!(
+            name: 'Other Project',
+            entity_type: 'Project',
+            aliases: ''
+          )
+        end
+
+        let(:import_data) do
+          {
+            root_nodes: [
+              {
+                name: 'Other Project',
+                entity_type: 'Project',
+                observations: [],
+                children: [
                   {
-                    name: 'ZyxUnique987',
-                    entity_type: 'UniqueType456',
+                    name: 'Task One',
+                    entity_type: 'Task',
                     relation_type: 'part_of',
-                    observations: [],
+                    observations: [ { content: 'New observation for task' } ],
                     children: []
                   }
                 ]
@@ -232,37 +294,84 @@ RSpec.describe ImportMatchingStrategy, type: :model do
           }
         end
 
-        it 'matches all nodes including children' do
+        it 'marks child with different parent as add_relation' do
           result = strategy.match(import_data)
 
-          expect(result[:match_results].length).to eq(3)
+          child_match = result[:match_results].find { |r| r.to_h[:node_path] == '0.children.0' }
+          expect(child_match.to_h[:status]).to eq('add_relation')
+          expect(child_match.to_h[:child_action]).to eq('add_relation')
         end
 
-        it 'includes correct node_path for each match' do
+        it 'includes import_parent_name' do
           result = strategy.match(import_data)
 
-          paths = result[:match_results].map { |r| r.to_h[:node_path] }
-          expect(paths).to contain_exactly('0', '0.children.0', '0.children.1')
+          child_match = result[:match_results].find { |r| r.to_h[:node_path] == '0.children.0' }
+          expect(child_match.to_h[:import_parent_name]).to eq('Other Project')
         end
 
-        it 'correctly matches children' do
+        it 'will_add_observations is true when new observations exist' do
           result = strategy.match(import_data)
 
-          task_match = result[:match_results].find { |r| r.to_h[:node_path] == '0.children.0' }
-          expect(task_match.to_h[:status]).to eq('high')
-          expect(task_match.to_h[:selected_match_id]).to eq(task_one.id)
+          child_match = result[:match_results].find { |r| r.to_h[:node_path] == '0.children.0' }
+          expect(child_match.to_h[:will_add_observations]).to be true
+        end
+      end
+
+      context 'create - child does not exist' do
+        let(:import_data) do
+          {
+            root_nodes: [
+              {
+                name: 'Project Alpha',
+                entity_type: 'Project',
+                observations: [],
+                children: [
+                  {
+                    name: 'Completely New Child',
+                    entity_type: 'NewType',
+                    relation_type: 'part_of',
+                    observations: [ { content: 'Observation' } ],
+                    children: []
+                  }
+                ]
+              }
+            ]
+          }
         end
 
-        it 'identifies new children' do
+        it 'marks non-existent child as new with create action' do
           result = strategy.match(import_data)
 
-          new_task_match = result[:match_results].find { |r| r.to_h[:node_path] == '0.children.1' }
-          expect(new_task_match.to_h[:status]).to eq('new')
+          child_match = result[:match_results].find { |r| r.to_h[:node_path] == '0.children.0' }
+          expect(child_match.to_h[:status]).to eq('new')
+          expect(child_match.to_h[:child_action]).to eq('create')
+        end
+
+        it 'exact_match is nil for new child' do
+          result = strategy.match(import_data)
+
+          child_match = result[:match_results].find { |r| r.to_h[:node_path] == '0.children.0' }
+          expect(child_match.to_h[:exact_match]).to be_nil
+        end
+
+        it 'will_add_observations is true for new child with observations' do
+          result = strategy.match(import_data)
+
+          child_match = result[:match_results].find { |r| r.to_h[:node_path] == '0.children.0' }
+          expect(child_match.to_h[:will_add_observations]).to be true
         end
       end
     end
 
     context 'stats calculation' do
+      let!(:task_relation) do
+        MemoryRelation.create!(
+          from_entity: task_one,
+          to_entity: project_alpha,
+          relation_type: 'part_of'
+        )
+      end
+
       let(:import_data) do
         {
           root_nodes: [
@@ -285,18 +394,24 @@ RSpec.describe ImportMatchingStrategy, type: :model do
         expect(result[:stats][:total]).to eq(3)
       end
 
-      it 'calculates high_confidence correctly' do
+      it 'calculates root_nodes correctly' do
         result = strategy.match(import_data)
 
-        # Project Alpha and Task One should be high confidence
-        expect(result[:stats][:high_confidence]).to be >= 1
+        expect(result[:stats][:root_nodes]).to eq(1)
+      end
+
+      it 'calculates skip correctly' do
+        result = strategy.match(import_data)
+
+        # Task One should be skipped (same parent)
+        expect(result[:stats][:skip]).to eq(1)
       end
 
       it 'calculates new correctly' do
         result = strategy.match(import_data)
 
-        # ZyxUnique789 should be new (completely unique name and type)
-        expect(result[:stats][:new]).to be >= 1
+        # ZyxUnique789 should be new
+        expect(result[:stats][:new]).to eq(1)
       end
     end
 
@@ -324,23 +439,50 @@ RSpec.describe ImportMatchingStrategy, type: :model do
   end
 
   describe 'MatchResult' do
-    it 'has expected structure' do
+    it 'has expected structure for root node' do
       match_result = ImportMatchingStrategy::MatchResult.new(
         import_node: { name: 'Test', entity_type: 'Type' },
         matches: [],
         status: 'new',
         selected_match_id: nil,
         parent_entity_id: nil,
-        node_path: '0'
+        node_path: '0',
+        is_child: false,
+        import_parent_name: nil,
+        exact_match: nil,
+        child_action: nil,
+        will_add_observations: nil
       )
 
       expect(match_result.import_node).to eq({ name: 'Test', entity_type: 'Type' })
       expect(match_result.matches).to eq([])
       expect(match_result.status).to eq('new')
       expect(match_result.node_path).to eq('0')
+      expect(match_result.is_child).to be false
     end
 
-    it 'to_h returns expected format' do
+    it 'has expected structure for child node' do
+      match_result = ImportMatchingStrategy::MatchResult.new(
+        import_node: { name: 'Child', entity_type: 'Task' },
+        matches: [],
+        status: 'skip',
+        selected_match_id: task_one.id,
+        parent_entity_id: nil,
+        node_path: '0.children.0',
+        is_child: true,
+        import_parent_name: 'Project Alpha',
+        exact_match: task_one,
+        child_action: 'skip',
+        will_add_observations: false
+      )
+
+      expect(match_result.is_child).to be true
+      expect(match_result.import_parent_name).to eq('Project Alpha')
+      expect(match_result.exact_match).to eq(task_one)
+      expect(match_result.child_action).to eq('skip')
+    end
+
+    it 'to_h returns expected format for root node' do
       entity = project_alpha
       match_result = ImportMatchingStrategy::MatchResult.new(
         import_node: { name: 'Test', entity_type: 'Type', observations: [], children: [] },
@@ -348,7 +490,12 @@ RSpec.describe ImportMatchingStrategy, type: :model do
         status: 'high',
         selected_match_id: entity.id,
         parent_entity_id: nil,
-        node_path: '0'
+        node_path: '0',
+        is_child: false,
+        import_parent_name: nil,
+        exact_match: nil,
+        child_action: nil,
+        will_add_observations: nil
       )
 
       hash = match_result.to_h
@@ -359,6 +506,32 @@ RSpec.describe ImportMatchingStrategy, type: :model do
       expect(hash[:status]).to eq('high')
       expect(hash[:selected_match_id]).to eq(entity.id)
       expect(hash[:node_path]).to eq('0')
+      expect(hash[:is_child]).to be false
+    end
+
+    it 'to_h returns expected format for child node' do
+      match_result = ImportMatchingStrategy::MatchResult.new(
+        import_node: { name: 'Child', entity_type: 'Task', observations: [], children: [] },
+        matches: [],
+        status: 'add_relation',
+        selected_match_id: task_one.id,
+        parent_entity_id: nil,
+        node_path: '0.children.0',
+        is_child: true,
+        import_parent_name: 'Parent Node',
+        exact_match: task_one,
+        child_action: 'add_relation',
+        will_add_observations: true
+      )
+
+      hash = match_result.to_h
+
+      expect(hash[:is_child]).to be true
+      expect(hash[:import_parent_name]).to eq('Parent Node')
+      expect(hash[:child_action]).to eq('add_relation')
+      expect(hash[:will_add_observations]).to be true
+      expect(hash[:exact_match][:entity_id]).to eq(task_one.id)
+      expect(hash[:matches]).to eq([])  # Empty for child nodes
     end
   end
 
@@ -375,6 +548,14 @@ RSpec.describe ImportMatchingStrategy, type: :model do
       expect(ImportMatchingStrategy::STATUS_HIGH_CONFIDENCE).to eq('high')
       expect(ImportMatchingStrategy::STATUS_LOW_CONFIDENCE).to eq('low')
       expect(ImportMatchingStrategy::STATUS_NEW).to eq('new')
+      expect(ImportMatchingStrategy::STATUS_SKIP).to eq('skip')
+      expect(ImportMatchingStrategy::STATUS_ADD_RELATION).to eq('add_relation')
+    end
+
+    it 'defines child action constants' do
+      expect(ImportMatchingStrategy::CHILD_ACTION_SKIP).to eq('skip')
+      expect(ImportMatchingStrategy::CHILD_ACTION_ADD_RELATION).to eq('add_relation')
+      expect(ImportMatchingStrategy::CHILD_ACTION_CREATE).to eq('create')
     end
   end
 end
