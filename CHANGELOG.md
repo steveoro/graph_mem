@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changes
 - Added data-exchange/management feature in graph_mem server landing page, with dedicated clean-up tab for manual node merging/moving/deletion
 - Add also missing observations in skipped nodes during data-import
+- Added support for relation edit/deletion in context menu
 - Bundle update
 
 ## [0.8.6] - 2025-12-07

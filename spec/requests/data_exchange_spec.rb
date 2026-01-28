@@ -304,6 +304,139 @@ RSpec.describe 'DataExchange', type: :request do
         expect(MemoryEntity.where(name: 'Imported Project')).not_to exist
       end
     end
+
+    context 'with child nodes (merged decisions)' do
+      before do
+        # Create import data with root and child nodes
+        json_with_children = {
+          version: '1.0',
+          root_nodes: [
+            {
+              name: 'Parent Project',
+              entity_type: 'Project',
+              aliases: '',
+              observations: [],
+              children: [
+                {
+                  name: 'Child Task New',
+                  entity_type: 'Task',
+                  aliases: '',
+                  relation_type: 'part_of',
+                  observations: [ { content: 'Child observation' } ],
+                  children: []
+                },
+                {
+                  name: 'Task One',  # This exists in the DB
+                  entity_type: 'Task',
+                  aliases: '',
+                  relation_type: 'part_of',
+                  observations: [ { content: 'New observation for existing task' } ],
+                  children: []
+                }
+              ]
+            }
+          ]
+        }.to_json
+
+        uploaded_file = Rack::Test::UploadedFile.new(
+          StringIO.new(json_with_children),
+          'application/json',
+          original_filename: 'import_with_children.json'
+        )
+
+        post import_upload_data_exchange_index_path, params: { file: uploaded_file }
+      end
+
+      it 'processes import with only root node form params' do
+        # Only submit decision for root node (index 0)
+        # Child decisions should be loaded from stored matches
+        expect {
+          post import_execute_data_exchange_index_path, params: {
+            decisions: {
+              '0' => { node_path: '0', action: 'create', target_id: '', parent_id: '' }
+            }
+          }
+        }.to change(MemoryEntity, :count).by(2)  # Parent + new child (existing task is merged/skipped)
+
+        expect(response).to redirect_to(import_report_data_exchange_index_path)
+      end
+
+      it 'creates child entities from stored match decisions' do
+        post import_execute_data_exchange_index_path, params: {
+          decisions: {
+            '0' => { node_path: '0', action: 'create', target_id: '', parent_id: '' }
+          }
+        }
+
+        # New child should be created
+        new_child = MemoryEntity.find_by(name: 'Child Task New')
+        expect(new_child).to be_present
+        expect(new_child.entity_type).to eq('Task')
+      end
+
+      it 'creates relations for child entities' do
+        post import_execute_data_exchange_index_path, params: {
+          decisions: {
+            '0' => { node_path: '0', action: 'create', target_id: '', parent_id: '' }
+          }
+        }
+
+        parent = MemoryEntity.find_by(name: 'Parent Project')
+        new_child = MemoryEntity.find_by(name: 'Child Task New')
+
+        relation = MemoryRelation.find_by(
+          from_entity_id: new_child.id,
+          to_entity_id: parent.id,
+          relation_type: 'part_of'
+        )
+        expect(relation).to be_present
+      end
+
+      it 'imports observations for child entities' do
+        post import_execute_data_exchange_index_path, params: {
+          decisions: {
+            '0' => { node_path: '0', action: 'create', target_id: '', parent_id: '' }
+          }
+        }
+
+        new_child = MemoryEntity.find_by(name: 'Child Task New')
+        expect(new_child.memory_observations.pluck(:content)).to include('Child observation')
+      end
+    end
+
+    context 'with empty decisions params (uses default decisions from stored matches)' do
+      before do
+        # Use a truly unique name that won't match any existing entities
+        valid_json = {
+          version: '1.0',
+          root_nodes: [
+            {
+              name: 'UniqueXyzProject999ForDefaultTest',
+              entity_type: 'UniqueTypeXyz',
+              aliases: '',
+              observations: [],
+              children: []
+            }
+          ]
+        }.to_json
+
+        uploaded_file = Rack::Test::UploadedFile.new(
+          StringIO.new(valid_json),
+          'application/json',
+          original_filename: 'default_test.json'
+        )
+
+        post import_upload_data_exchange_index_path, params: { file: uploaded_file }
+      end
+
+      it 'uses default create action when decisions param is empty hash' do
+        expect {
+          post import_execute_data_exchange_index_path, params: { decisions: {} }
+        }.to change(MemoryEntity, :count).by(1)
+
+        expect(MemoryEntity.find_by(name: 'UniqueXyzProject999ForDefaultTest')).to be_present
+      end
+    end
   end
 
   describe 'GET /data_exchange/import_report' do
@@ -568,6 +701,161 @@ RSpec.describe 'DataExchange', type: :request do
       get download_export_data_exchange_index_path
 
       expect(response).to have_http_status(:unprocessable_content)
+    end
+  end
+
+  # Relation management endpoints
+  describe 'GET /data_exchange/duplicate_relations' do
+    context 'with no duplicates' do
+      it 'returns empty duplicates list' do
+        get duplicate_relations_data_exchange_index_path
+
+        expect(response).to have_http_status(:ok)
+        data = JSON.parse(response.body)
+
+        expect(data['count']).to eq(0)
+        expect(data['duplicates']).to be_empty
+      end
+    end
+
+    context 'with duplicate relations' do
+      let!(:relation_a_to_b) do
+        MemoryRelation.create!(
+          from_entity: task1,
+          to_entity: project1,
+          relation_type: 'depends_on'
+        )
+      end
+
+      let!(:relation_b_to_a) do
+        MemoryRelation.create!(
+          from_entity: project1,
+          to_entity: task1,
+          relation_type: 'depends_on'
+        )
+      end
+
+      it 'returns duplicate relation pairs' do
+        get duplicate_relations_data_exchange_index_path
+
+        expect(response).to have_http_status(:ok)
+        data = JSON.parse(response.body)
+
+        expect(data['count']).to eq(1)
+        expect(data['duplicates'].length).to eq(1)
+
+        dup = data['duplicates'].first
+        expect(dup['relation_type']).to eq('depends_on')
+        expect(dup['keep']['id']).to eq(relation_a_to_b.id)  # older one
+        expect(dup['delete']['id']).to eq(relation_b_to_a.id)  # newer one
+      end
+    end
+  end
+
+  describe 'DELETE /data_exchange/delete_duplicate_relations' do
+    let!(:relation_a_to_b) do
+      MemoryRelation.create!(
+        from_entity: task1,
+        to_entity: project1,
+        relation_type: 'depends_on'
+      )
+    end
+
+    let!(:relation_b_to_a) do
+      MemoryRelation.create!(
+        from_entity: project1,
+        to_entity: task1,
+        relation_type: 'depends_on'
+      )
+    end
+
+    it 'deletes duplicate relations keeping the older one' do
+      expect {
+        delete delete_duplicate_relations_data_exchange_index_path
+      }.to change(MemoryRelation, :count).by(-1)
+
+      expect(response).to have_http_status(:ok)
+      data = JSON.parse(response.body)
+
+      expect(data['success']).to be true
+      expect(data['deleted_count']).to eq(1)
+
+      # Older relation should remain
+      expect(MemoryRelation.find_by(id: relation_a_to_b.id)).to be_present
+      # Newer relation should be deleted
+      expect(MemoryRelation.find_by(id: relation_b_to_a.id)).to be_nil
+    end
+
+    it 'returns success when no duplicates exist' do
+      # Delete one to remove the duplicate
+      relation_b_to_a.destroy
+
+      delete delete_duplicate_relations_data_exchange_index_path
+
+      expect(response).to have_http_status(:ok)
+      data = JSON.parse(response.body)
+
+      expect(data['success']).to be true
+      expect(data['deleted_count']).to eq(0)
+    end
+  end
+
+  describe 'PATCH /data_exchange/update_relation' do
+    it 'updates the relation type' do
+      patch update_relation_data_exchange_index_path, params: {
+        id: relation1.id,
+        relation_type: 'depends_on'
+      }, as: :json
+
+      expect(response).to have_http_status(:ok)
+      data = JSON.parse(response.body)
+
+      expect(data['success']).to be true
+      expect(data['relation']['relation_type']).to eq('depends_on')
+
+      relation1.reload
+      expect(relation1.relation_type).to eq('depends_on')
+    end
+
+    it 'returns error for invalid relation ID' do
+      patch update_relation_data_exchange_index_path, params: {
+        id: 99999,
+        relation_type: 'depends_on'
+      }, as: :json
+
+      expect(response).to have_http_status(:not_found)
+    end
+
+    it 'returns error when relation type is missing' do
+      patch update_relation_data_exchange_index_path, params: {
+        id: relation1.id
+      }, as: :json
+
+      expect(response).to have_http_status(:unprocessable_content)
+    end
+  end
+
+  describe 'DELETE /data_exchange/delete_relation' do
+    it 'deletes the relation' do
+      expect {
+        delete delete_relation_data_exchange_index_path, params: {
+          id: relation1.id
+        }
+      }.to change(MemoryRelation, :count).by(-1)
+
+      expect(response).to have_http_status(:ok)
+      data = JSON.parse(response.body)
+
+      expect(data['success']).to be true
+      expect(MemoryRelation.find_by(id: relation1.id)).to be_nil
+    end
+
+    it 'returns error for invalid relation ID' do
+      delete delete_relation_data_exchange_index_path, params: {
+        id: 99999
+      }
+
+      expect(response).to have_http_status(:not_found)
     end
   end
 end

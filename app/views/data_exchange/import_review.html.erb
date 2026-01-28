@@ -42,6 +42,9 @@
     </div>
   <% end %>
 
+  <%# Track root node index for form fields - only root nodes submit form data %>
+  <% root_index = 0 %>
+
   <%= form_with url: import_execute_data_exchange_index_path, method: :post, local: true, class: "w-full" do |f| %>
     <div class="bg-white rounded-lg shadow overflow-hidden mb-6">
       <table class="min-w-full divide-y divide-gray-200">
@@ -90,13 +93,16 @@
                     <%= import_node[:children_count] || import_node["children_count"] %> children
                   </div>
                 <% end %>
-                <%= hidden_field_tag "decisions[#{index}][node_path]", node_path %>
+                <%# Only include node_path hidden field for root nodes %>
+                <% if is_root %>
+                  <%= hidden_field_tag "decisions[#{root_index}][node_path]", node_path %>
+                <% end %>
               </td>
 
               <!-- Existing Matches -->
               <td class="px-4 py-3">
                 <% if is_child %>
-                  <!-- Child nodes: show label, not dropdown -->
+                  <!-- Child nodes: display only, no form fields -->
                   <% if exact_match %>
                     <div class="flex items-center">
                       <svg class="w-4 h-4 text-green-500 mr-2 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
@@ -107,20 +113,15 @@
                         (<%= exact_match[:entity_type] || exact_match["entity_type"] %>)
                       </span>
                     </div>
-                    <%= hidden_field_tag "decisions[#{index}][target_id]", exact_match[:entity_id] || exact_match["entity_id"] %>
-                    <%= hidden_field_tag "decisions[#{index}][action]", child_action %>
-                    <%= hidden_field_tag "decisions[#{index}][child_action]", child_action %>
                   <% else %>
                     <span class="text-gray-400 text-sm italic">No match (will create new)</span>
-                    <%= hidden_field_tag "decisions[#{index}][action]", "create" %>
-                    <%= hidden_field_tag "decisions[#{index}][child_action]", "create" %>
                   <% end %>
                 <% else %>
-                  <!-- Root nodes: show dropdown -->
+                  <!-- Root nodes: show dropdown with form fields -->
                   <% if matches_list.any? %>
-                    <select name="decisions[<%= index %>][target_id]" 
+                    <select name="decisions[<%= root_index %>][target_id]" 
                             class="match-select w-full border border-gray-300 rounded px-2 py-1 text-sm"
-                            data-index="<%= index %>">
+                            data-index="<%= root_index %>">
                       <option value="">-- Create New --</option>
                       <% matches_list.each do |m| %>
                         <option value="<%= m[:entity_id] || m["entity_id"] %>"
@@ -129,13 +130,13 @@
                         </option>
                       <% end %>
                     </select>
-                    <input type="hidden" name="decisions[<%= index %>][action]" 
+                    <input type="hidden" name="decisions[<%= root_index %>][action]" 
                            value="<%= selected_match.present? ? 'merge' : 'create' %>"
                            class="action-input"
-                           data-index="<%= index %>">
+                           data-index="<%= root_index %>">
                   <% else %>
                     <span class="text-gray-400 text-sm italic">No matches found</span>
-                    <%= hidden_field_tag "decisions[#{index}][action]", "create" %>
+                    <%= hidden_field_tag "decisions[#{root_index}][action]", "create" %>
                   <% end %>
                 <% end %>
               </td>
@@ -184,6 +185,7 @@
               <!-- Action Description -->
               <td class="px-4 py-3">
                 <% if is_child %>
+                  <!-- Child nodes: display only, no form fields -->
                   <% case child_action %>
                   <% when "skip" %>
                     <span class="text-blue-600 text-sm">
@@ -205,7 +207,8 @@
                     </span>
                   <% end %>
                 <% elsif is_root && @available_parents.present? %>
-                  <select name="decisions[<%= index %>][parent_id]" 
+                  <!-- Root nodes: parent selection dropdown -->
+                  <select name="decisions[<%= root_index %>][parent_id]" 
                           class="w-full border border-gray-300 rounded px-2 py-1 text-sm">
                     <option value="">-- None (root node) --</option>
                     <% @available_parents.each do |parent| %>
@@ -219,6 +222,8 @@
                 <% end %>
               </td>
             </tr>
+            <%# Increment root index only for root nodes %>
+            <% root_index += 1 if is_root %>
           <% end %>
         </tbody>
       </table>

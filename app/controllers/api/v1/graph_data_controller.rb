@@ -76,9 +76,12 @@ module Api
             group: "edges",
             data: {
               id: "r#{relation.id}",
+              relation_id: relation.id,
               source: relation.from_entity_id.to_s,
               target: relation.to_entity_id.to_s,
-              label: relation.relation_type
+              label: relation.relation_type,
+              from_entity_name: relation.from_entity&.name,
+              to_entity_name: relation.to_entity&.name
             }
           }
         end

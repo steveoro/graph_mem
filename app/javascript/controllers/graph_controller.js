@@ -328,10 +328,16 @@ export default class extends Controller {
       }
     });
 
-    // Right-click for contextual menu
+    // Right-click for contextual menu on nodes
     this.cy.on('cxttap', 'node', (event) => {
       event.preventDefault();
       this.showContextualMenu(event);
+    });
+
+    // Right-click for contextual menu on edges (relations)
+    this.cy.on('cxttap', 'edge', (event) => {
+      event.preventDefault();
+      this.showEdgeContextMenu(event);
     });
 
     // Click elsewhere to hide contextual menu
@@ -471,6 +477,219 @@ export default class extends Controller {
     if (this.currentContextualMenu) {
       this.currentContextualMenu.remove();
       this.currentContextualMenu = null;
+    }
+  }
+
+  showEdgeContextMenu(event) {
+    const edge = event.target;
+    const data = edge.data();
+    const position = event.renderedPosition || event.position;
+
+    this.hideContextualMenu();
+
+    const menu = document.createElement('div');
+    menu.className = 'contextual-menu edge-menu';
+    menu.style.cssText = `
+      position: absolute;
+      background: white;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+      z-index: 1001;
+      min-width: 200px;
+      font-size: 12px;
+    `;
+
+    const fromName = data.from_entity_name || data.source;
+    const toName = data.to_entity_name || data.target;
+
+    const menuItems = [
+      { text: `<strong>Relation</strong>`, divider: true },
+      { text: `${fromName} → ${toName}` },
+      { text: `Type: ${data.label}` },
+      { divider: true },
+      { text: 'Edit Type', action: 'edit-type', icon: '✏️' },
+      { text: 'Delete Relation', action: 'delete', danger: true, icon: '🗑️' }
+    ];
+
+    menuItems.forEach(item => {
+      const menuItem = document.createElement('div');
+      if (item.divider && !item.text) {
+        menuItem.style.cssText = 'border-top: 1px solid #eee; margin: 4px 0;';
+      } else if (item.divider) {
+        menuItem.innerHTML = item.text;
+        menuItem.style.cssText = 'padding: 6px 12px; font-weight: bold; border-bottom: 1px solid #eee;';
+      } else {
+        menuItem.innerHTML = `${item.icon ? item.icon + ' ' : ''}${item.text}`;
+        menuItem.style.cssText = `
+          padding: 6px 12px;
+          cursor: ${item.action ? 'pointer' : 'default'};
+          ${item.danger ? 'color: #dc3545;' : ''}
+        `;
+
+        if (item.action) {
+          menuItem.onmouseover = () => menuItem.style.backgroundColor = '#f8f9fa';
+          menuItem.onmouseout = () => menuItem.style.backgroundColor = 'transparent';
+
+          menuItem.onclick = (e) => {
+            e.stopPropagation();
+            this.handleEdgeContextMenuAction(item.action, data, edge);
+            this.hideContextualMenu();
+          };
+        }
+      }
+      menu.appendChild(menuItem);
+    });
+
+    // Position menu near the click
+    const containerRect = this.containerTarget.getBoundingClientRect();
+    menu.style.left = (containerRect.left + position.x) + 'px';
+    menu.style.top = (containerRect.top + position.y) + 'px';
+
+    document.body.appendChild(menu);
+    this.currentContextualMenu = menu;
+  }
+
+  async handleEdgeContextMenuAction(action, edgeData, edge) {
+    switch (action) {
+      case 'edit-type':
+        this.showEditRelationTypeModal(edgeData);
+        break;
+      case 'delete':
+        await this.deleteRelation(edgeData, edge);
+        break;
+    }
+  }
+
+  showEditRelationTypeModal(edgeData) {
+    const relationTypes = ['part_of', 'depends_on', 'relates_to', 'implements', 'extends', 'solves', 'configured_by', 'tested_by', 'migrated_by', 'authorizes', 'integrates_with', 'replaces'];
+    const currentType = edgeData.label;
+    const fromName = edgeData.from_entity_name || edgeData.source;
+    const toName = edgeData.to_entity_name || edgeData.target;
+
+    const optionsHtml = relationTypes.map(type => 
+      `<option value="${type}" ${type === currentType ? 'selected' : ''}>${type}</option>`
+    ).join('');
+
+    this.showModal('Edit Relation Type', `
+      <div style="margin-bottom: 15px;">
+        <p><strong>From:</strong> ${fromName}</p>
+        <p><strong>To:</strong> ${toName}</p>
+      </div>
+      <div style="margin-bottom: 15px;">
+        <label for="relation-type-select" style="display: block; margin-bottom: 5px; font-weight: bold;">Relation Type:</label>
+        <select id="relation-type-select" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px;">
+          ${optionsHtml}
+        </select>
+      </div>
+      <div style="display: flex; gap: 10px; justify-content: flex-end;">
+        <button onclick="window.graphController.closeModal()" style="padding: 8px 16px; border: 1px solid #ccc; background: white; border-radius: 4px; cursor: pointer;">Cancel</button>
+        <button onclick="window.graphController.updateRelationType(${edgeData.relation_id})" style="padding: 8px 16px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer;">Save</button>
+      </div>
+    `);
+  }
+
+  async updateRelationType(relationId) {
+    const select = document.getElementById('relation-type-select');
+    if (!select) return;
+
+    const newType = select.value;
+
+    try {
+      const response = await fetch('/data_exchange/update_relation', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRF-Token': this.getCSRFToken()
+        },
+        body: JSON.stringify({ id: relationId, relation_type: newType })
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        this.closeModal();
+        // Refresh the graph
+        this.fetchDataAndRenderGraph(this.currentView === 'root', this.currentEntityId);
+        alert('Relation type updated successfully.');
+      } else {
+        alert('Error: ' + (result.error || 'Failed to update relation type'));
+      }
+    } catch (error) {
+      console.error('Error updating relation type:', error);
+      alert('An error occurred while updating the relation type.');
+    }
+  }
+
+  async deleteRelation(edgeData, edge) {
+    const fromName = edgeData.from_entity_name || edgeData.source;
+    const toName = edgeData.to_entity_name || edgeData.target;
+
+    if (!confirm(`Delete relation "${fromName} -[${edgeData.label}]-> ${toName}"?`)) {
+      return;
+    }
+
+    try {
+      const response = await fetch('/data_exchange/delete_relation', {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRF-Token': this.getCSRFToken()
+        },
+        body: JSON.stringify({ id: edgeData.relation_id })
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        // Remove the edge from the graph
+        edge.remove();
+        alert(result.message || 'Relation deleted successfully.');
+      } else {
+        alert('Error: ' + (result.error || 'Failed to delete relation'));
+      }
+    } catch (error) {
+      console.error('Error deleting relation:', error);
+      alert('An error occurred while deleting the relation.');
+    }
+  }
+
+  async deleteAllDuplicateRelations(count) {
+    if (!confirm(`Delete ${count} duplicate relation(s)?\n\nThe older relation in each pair will be kept.`)) {
+      return;
+    }
+
+    try {
+      const response = await fetch('/data_exchange/delete_duplicate_relations', {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRF-Token': this.getCSRFToken()
+        }
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        // Close modal, refresh graph, and reopen modal to show updated state
+        this.closeModal();
+        this.fetchDataAndRenderGraph(this.currentView === 'root', this.currentEntityId);
+        alert(result.message || `Deleted ${result.deleted_count} duplicate relations.`);
+        
+        // Reopen the modal after a short delay to show updated state
+        setTimeout(() => {
+          this.showDataManageModal();
+          // Switch to cleanup tab
+          setTimeout(() => {
+            this.switchDataManageTab('cleanup');
+          }, 100);
+        }, 300);
+      } else {
+        alert('Error: ' + (result.error || 'Failed to delete duplicate relations'));
+      }
+    } catch (error) {
+      console.error('Error deleting duplicate relations:', error);
+      alert('An error occurred while deleting duplicate relations.');
     }
   }
 
@@ -1305,15 +1524,17 @@ export default class extends Controller {
   // ============================================
 
   async showDataManageModal() {
-    // Fetch root nodes for export selection and projects for cleanup
+    // Fetch root nodes for export selection, orphans for cleanup, and duplicate relations
     let rootNodes = [];
     let orphanNodes = [];
     let projects = [];
+    let duplicateRelations = { count: 0, duplicates: [] };
 
     try {
-      const [rootNodesRes, orphansRes] = await Promise.all([
+      const [rootNodesRes, orphansRes, duplicatesRes] = await Promise.all([
         fetch('/data_exchange/root_nodes'),
-        fetch('/data_exchange/orphan_nodes')
+        fetch('/data_exchange/orphan_nodes'),
+        fetch('/data_exchange/duplicate_relations')
       ]);
 
       if (rootNodesRes.ok) {
@@ -1325,6 +1546,10 @@ export default class extends Controller {
       if (orphansRes.ok) {
         const data = await orphansRes.json();
         orphanNodes = data.orphans || [];
+      }
+
+      if (duplicatesRes.ok) {
+        duplicateRelations = await duplicatesRes.json();
       }
     } catch (error) {
       console.error('Error fetching data for Data Manage modal:', error);
@@ -1438,11 +1663,56 @@ export default class extends Controller {
 
         <!-- Cleanup Tab Content -->
         <div id="cleanup-content" style="display: none;">
-          <p style="margin-bottom: 15px; color: #666;">
+          <!-- Duplicate Relations Section -->
+          <div id="duplicate-relations-section" style="margin-bottom: 20px; padding: 15px; background: ${duplicateRelations.count > 0 ? '#fff3cd' : '#d4edda'}; border: 1px solid ${duplicateRelations.count > 0 ? '#ffc107' : '#28a745'}; border-radius: 6px;">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <div>
+                <strong style="color: ${duplicateRelations.count > 0 ? '#856404' : '#155724'};">
+                  ${duplicateRelations.count > 0 ? '⚠️' : '✅'} Duplicate Relations
+                </strong>
+                <p style="margin: 5px 0 0 0; color: ${duplicateRelations.count > 0 ? '#856404' : '#155724'}; font-size: 13px;">
+                  ${duplicateRelations.count > 0 
+                    ? `Found ${duplicateRelations.count} duplicate relation pair(s) (A→B and B→A with same type)`
+                    : 'No duplicate relations found'}
+                </p>
+              </div>
+              ${duplicateRelations.count > 0 ? `
+                <button onclick="window.graphController.deleteAllDuplicateRelations(${duplicateRelations.count})"
+                        style="padding: 8px 16px; background: #dc3545; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; white-space: nowrap;">
+                  🗑️ Delete All Duplicates
+                </button>
+              ` : ''}
+            </div>
+            ${duplicateRelations.count > 0 && duplicateRelations.duplicates.length > 0 ? `
+              <div style="margin-top: 10px; max-height: 150px; overflow-y: auto; font-size: 11px; background: white; border-radius: 4px; padding: 8px;">
+                <table style="width: 100%; border-collapse: collapse;">
+                  <tr style="background: #f8f9fa;">
+                    <th style="padding: 4px 8px; text-align: left; border-bottom: 1px solid #dee2e6;">Keep (older)</th>
+                    <th style="padding: 4px 8px; text-align: left; border-bottom: 1px solid #dee2e6;">Delete (newer)</th>
+                    <th style="padding: 4px 8px; text-align: left; border-bottom: 1px solid #dee2e6;">Type</th>
+                  </tr>
+                  ${duplicateRelations.duplicates.slice(0, 10).map(d => `
+                    <tr>
+                      <td style="padding: 4px 8px; border-bottom: 1px solid #eee;">${this.escapeHtml(d.keep.from_name)} → ${this.escapeHtml(d.keep.to_name)}</td>
+                      <td style="padding: 4px 8px; border-bottom: 1px solid #eee;">${this.escapeHtml(d.delete.from_name)} → ${this.escapeHtml(d.delete.to_name)}</td>
+                      <td style="padding: 4px 8px; border-bottom: 1px solid #eee;">${d.relation_type}</td>
+                    </tr>
+                  `).join('')}
+                  ${duplicateRelations.duplicates.length > 10 ? `
+                    <tr><td colspan="3" style="padding: 4px 8px; color: #666; font-style: italic;">...and ${duplicateRelations.duplicates.length - 10} more</td></tr>
+                  ` : ''}
+                </table>
+              </div>
+            ` : ''}
+          </div>
+
+          <!-- Orphan Nodes Section -->
+          <h4 style="margin-bottom: 10px; color: #333;">Orphan Nodes</h4>
+          <p style="margin-bottom: 15px; color: #666; font-size: 13px;">
             Manage orphan nodes: move them under a project, merge with existing nodes, or delete them.
           </p>
           
-          <div style="max-height: 400px; overflow-y: auto; border: 1px solid #dee2e6; border-radius: 4px; margin-bottom: 15px;">
+          <div style="max-height: 300px; overflow-y: auto; border: 1px solid #dee2e6; border-radius: 4px; margin-bottom: 15px;">
             ${orphanNodes.length > 0 ? `
               <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
                 <thead>

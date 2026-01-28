@@ -56,6 +56,12 @@ Rails.application.routes.draw do
       post :move_node
       post :merge_node
       delete :delete_node
+
+      # Relation management routes
+      get :duplicate_relations
+      delete :delete_duplicate_relations
+      patch :update_relation
+      delete :delete_relation
     end
   end
 
