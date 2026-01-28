@@ -148,7 +148,7 @@ class ImportExecutionStrategy
   end
 
   # Handle skip action - entity already exists with same parent
-  # Just return the existing entity ID for child processing
+  # Import any missing observations, then return the existing entity ID for child processing
   # @param node [Hash] Import node data
   # @return [Integer, nil] The existing entity ID
   def handle_skip_action(node)
@@ -159,6 +159,13 @@ class ImportExecutionStrategy
 
     if existing
       @logger.info "ImportExecutionStrategy: Skipping entity '#{name}' (already exists with same parent)"
+
+      # Import any missing observations
+      import_observations(node, existing.id)
+
+      # Update counter cache if observations were added
+      existing.update_column(:memory_observations_count, existing.memory_observations.count)
+
       @entities_skipped += 1
       existing.id
     else

@@ -410,6 +410,36 @@ RSpec.describe ImportExecutionStrategy, type: :model do
         expect(report.entities_skipped).to eq(1)
       end
 
+      it 'imports missing observations for skipped nodes' do
+        import_data_with_obs = {
+          'root_nodes' => [
+            {
+              'name' => 'Existing Project',
+              'entity_type' => 'Project',
+              'aliases' => '',
+              'observations' => [],
+              'children' => [
+                {
+                  'name' => 'Existing Task',
+                  'entity_type' => 'Task',
+                  'aliases' => '',
+                  'relation_type' => 'part_of',
+                  'observations' => [ { 'content' => 'New observation for skipped node' } ],
+                  'children' => []
+                }
+              ]
+            }
+          ]
+        }
+
+        expect {
+          strategy.execute(import_data_with_obs, decisions)
+        }.to change(MemoryObservation, :count).by(1)
+
+        existing_task.reload
+        expect(existing_task.memory_observations.pluck(:content)).to include('New observation for skipped node')
+      end
+
       it 'still processes children of skipped nodes' do
         import_data_with_grandchild = {
           'root_nodes' => [
