@@ -35,6 +35,7 @@ class GetEntityTool < ApplicationTool
         entity_id: entity.id,
         name: entity.name,
         entity_type: entity.entity_type,
+        description: entity.description,
         created_at: entity.created_at.iso8601,
         updated_at: entity.updated_at.iso8601,
         observations: entity.memory_observations.map do |obs|

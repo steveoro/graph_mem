@@ -1,0 +1,7 @@
+{
+  "setup-worktree": [
+    "npm install",
+    "rvm use 3.4.1@graph_mem",
+    "bundle install"
+  ]
+}

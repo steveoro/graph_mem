@@ -35,6 +35,10 @@ gem "kamal", require: false
 # Add HTTP asset caching/compression and X-Sendfile acceleration to Puma [https://github.com/basecamp/thruster/]
 gem "thruster", require: false
 
+# Swagger/OpenAPI docs served at /api-docs (needed in all envs including production)
+gem "rswag-api"
+gem "rswag-ui"
+
 # Use Active Storage variants [https://guides.rubyonrails.org/active_storage_overview.html#transforming-images]
 # gem "image_processing", "~> 1.2"
 
@@ -59,9 +63,7 @@ group :development, :test do
   # Use rack-mini-profiler for performance analysis
   gem "rack-mini-profiler"
 
-  # Rswag for Swagger documentation
-  gem "rswag-api"
-  gem "rswag-ui"
+  # Rswag spec generation (only needed for dev/test)
   gem "rswag-specs"
 end
 

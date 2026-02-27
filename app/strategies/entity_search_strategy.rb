@@ -15,6 +15,7 @@ class EntitySearchStrategy
         entity_id: entity.id,
         name: entity.name,
         entity_type: entity.entity_type,
+        description: entity.description,
         aliases: entity.aliases,
         memory_observations_count: entity.memory_observations_count,
         created_at: entity.created_at.iso8601,

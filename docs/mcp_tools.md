@@ -1,518 +1,192 @@
 # MCP Tools Documentation
 
-This document provides detailed information about the Model Context Protocol (MCP) tools available in GraphMem.
+This document provides detailed information about the Model Context Protocol (MCP) tools available in GraphMem v1.0.
 
 ## Overview
 
-MCP tools in GraphMem are Ruby classes that implement specific operations on the knowledge graph. Each tool is designed to handle a specific type of operation, such as entity creation, relationship management, or data retrieval. They are accessed via JSON-RPC calls, typically managed by an MCP client.
+MCP tools in GraphMem are Ruby classes that implement specific operations on the knowledge graph. Each tool is accessed via JSON-RPC calls, managed by an MCP client. Tools auto-register via `ApplicationTool` inheritance.
 
 ## Available Tools
-
-GraphMem provides the following MCP tools, categorized by their function:
 
 ### Utility Tools
 
 #### `get_version`
 - **Description:** Returns the current version of the GraphMem server.
 - **Parameters:** None
-- **Response Example:**
-  ```json
-  {
-    "version": "0.8.0"
-  }
-  ```
 
 #### `get_current_time`
-- **Description:** Retrieves the current server time.
+- **Description:** Returns the current server time as an ISO 8601 string.
 - **Parameters:** None
-- **Response Example:**
-  ```json
-  {
-    "time": "2024-05-15T10:30:00Z"
-  }
-  ```
 
 ### Entity Management
 
 #### `create_entity`
-- **Description:** Creates a new entity in the knowledge graph.
+- **Description:** Creates a new entity. Performs auto-deduplication: if a semantically similar entity exists (cosine distance < 0.25), returns a warning with the existing entity instead of creating a duplicate.
 - **Parameters:**
   - `name` (string, required): The unique name for the new entity.
-  - `entity_type` (string, required): The type classification for the new entity (e.g., 'Project', 'Task').
-  - `aliases` (string, optional): Pipe-separated string of alternative names for the entity.
-  - `observations` (array of strings, optional): Initial observation strings to associate with the entity.
-- **Response Example:**
-  ```json
-  {
-    "entity_id": 1,
-    "name": "New Project Alpha",
-    "entity_type": "Project",
-    "aliases": "alpha|project_a",
-    "memory_observations_count": 1,
-    "created_at": "2024-05-15T10:30:00Z",
-    "updated_at": "2024-05-15T10:30:00Z"
-  }
-  ```
+  - `entity_type` (string, required): The type classification (auto-canonicalized, e.g., "workspace" becomes "Project").
+  - `aliases` (string, optional): Pipe-separated alternative names.
+  - `description` (string, optional): Short description of the entity.
+  - `observations` (array of strings, optional): Initial observations.
+- **Notes:** Entity types are automatically mapped to canonical forms via `EntityTypeMapping`. For example, "project", "workspace", "context", and "repo" all map to "Project".
 
 #### `get_entity`
-- **Description:** Retrieves a specific entity by its ID, including its observations and relations.
+- **Description:** Retrieves an entity by ID, including observations and relations.
 - **Parameters:**
-  - `entity_id` (integer, required): The ID of the entity to retrieve.
-- **Response Example:**
-  ```json
-  {
-    "entity_id": 1,
-    "name": "Project Alpha",
-    "entity_type": "Project",
-    "aliases": "alpha|project_a",
-    "created_at": "2024-05-15T10:30:00Z",
-    "updated_at": "2024-05-15T10:35:00Z",
-    "observations": [
-      {
-        "observation_id": 101,
-        "content": "Initial setup complete.",
-        "created_at": "2024-05-15T10:30:00Z",
-        "updated_at": "2024-05-15T10:30:00Z"
-      }
-    ],
-    "relations_from": [
-      {
-        "relation_id": 201,
-        "to_entity_id": 2,
-        "to_entity_name": "Task Beta",
-        "relation_type": "has_task",
-        "created_at": "2024-05-15T10:35:00Z",
-        "updated_at": "2024-05-15T10:35:00Z"
-      }
-    ],
-    "relations_to": []
-  }
-  ```
+  - `entity_id` (integer, required): The ID of the entity.
 
 #### `update_entity`
-- **Description:** Updates an existing entity's core properties (name, type, aliases).
+- **Description:** Updates entity name, type, aliases, and/or description.
 - **Parameters:**
-  - `entity_id` (integer, required): The ID of the entity to update.
-  - `name` (string, optional): The new name for the entity. If provided, must be unique.
-  - `entity_type` (string, optional): The new type classification for the entity.
-  - `aliases` (string, optional): The new pipe-separated string of aliases. This will replace existing aliases. Pass empty string to clear aliases.
-- **Response Example:**
-  ```json
-  {
-    "entity_id": 1,
-    "name": "Project Alpha Updated",
-    "entity_type": "Project",
-    "aliases": "alpha_v2|project_alpha_prime",
-    "created_at": "2024-05-15T10:30:00Z",
-    "updated_at": "2024-05-15T10:40:00Z"
-  }
-  ```
+  - `entity_id` (integer, required): The ID of the entity.
+  - `name` (string, optional): New name (must be unique).
+  - `entity_type` (string, optional): New type (auto-canonicalized).
+  - `aliases` (string, optional): New aliases (replaces existing). Empty string clears.
+  - `description` (string, optional): New description. Empty string clears.
 
 #### `delete_entity`
-- **Description:** Deletes a specific entity by ID. This will also delete associated observations and relations.
+- **Description:** Deletes an entity and all associated observations and relations.
 - **Parameters:**
-  - `entity_id` (integer, required): The ID of the entity to delete.
-- **Response Example:**
-  ```json
-  {
-    "entity_id": 1,
-    "name": "Project Alpha Updated",
-    "entity_type": "Project",
-    "aliases": "alpha_v2|project_alpha_prime",
-    "created_at": "2024-05-15T10:30:00Z",
-    "updated_at": "2024-05-15T10:40:00Z",
-    "message": "Entity and associated data deleted successfully."
-  }
-  ```
+  - `entity_id` (integer, required): The ID of the entity.
 
 ### Observation Management
 
 #### `create_observation`
-- **Description:** Creates a new observation and associates it with an existing entity.
+- **Description:** Adds an observation to an existing entity. Automatically generates a vector embedding for semantic search.
 - **Parameters:**
-  - `entity_id` (integer, required): The ID of the entity to add the observation to.
-  - `text_content` (string, required): The textual content of the observation.
-- **Response Example:**
-  ```json
-  {
-    "observation_id": 102,
-    "memory_entity_id": 1,
-    "content": "A new piece of information.",
-    "created_at": "2024-05-15T10:45:00Z",
-    "updated_at": "2024-05-15T10:45:00Z"
-  }
-  ```
+  - `entity_id` (integer, required): The entity to attach the observation to.
+  - `text_content` (string, required): The observation content.
 
 #### `delete_observation`
-- **Description:** Deletes a specific observation by ID.
+- **Description:** Deletes an observation by ID.
 - **Parameters:**
-  - `observation_id` (integer, required): The ID of the observation to delete.
-- **Response Example:**
-  ```json
-  {
-    "observation_id": 102,
-    "memory_entity_id": 1,
-    "content": "A new piece of information.",
-    "created_at": "2024-05-15T10:45:00Z",
-    "updated_at": "2024-05-15T10:45:00Z",
-    "message": "Observation deleted successfully."
-  }
-  ```
+  - `observation_id` (integer, required): The ID of the observation.
 
 ### Relation Management
 
 #### `create_relation`
-- **Description:** Creates a relationship between two existing entities.
+- **Description:** Creates a typed relationship between two entities.
 - **Parameters:**
-  - `from_entity_id` (integer, required): The ID of the entity where the relation starts.
-  - `to_entity_id` (integer, required): The ID of the entity where the relation ends.
-  - `relation_type` (string, required): The type classification for the relationship (e.g., 'related_to', 'depends_on').
-- **Response Example:**
-  ```json
-  {
-    "relation_id": 202,
-    "from_entity_id": 1,
-    "to_entity_id": 3,
-    "relation_type": "linked_to",
-    "created_at": "2024-05-15T10:50:00Z",
-    "updated_at": "2024-05-15T10:50:00Z"
-  }
-  ```
+  - `from_entity_id` (integer, required): Source entity ID.
+  - `to_entity_id` (integer, required): Target entity ID.
+  - `relation_type` (string, required): Relationship type (e.g., "part_of", "depends_on").
 
 #### `delete_relation`
-- **Description:** Deletes a specific relation by ID.
+- **Description:** Deletes a relation by ID.
 - **Parameters:**
-  - `relation_id` (integer, required): The ID of the relation to delete.
-- **Response Example:**
-  ```json
-  {
-    "relation_id": 202,
-    "from_entity_id": 1,
-    "to_entity_id": 3,
-    "relation_type": "linked_to",
-    "created_at": "2024-05-15T10:50:00Z",
-    "updated_at": "2024-05-15T10:50:00Z",
-    "message": "Relation deleted successfully."
-  }
-  ```
+  - `relation_id` (integer, required): The ID of the relation.
+
+#### `find_relations`
+- **Description:** Finds relations by optional filters.
+- **Parameters:**
+  - `from_entity_id` (integer, optional): Filter by source entity.
+  - `to_entity_id` (integer, optional): Filter by target entity.
+  - `relation_type` (string, optional): Filter by relation type.
 
 ### Search & Query Tools
 
-#### `list_entities`
-- **Description:** Retrieves a paginated list of all entities.
-- **Parameters:**
-  - `page` (integer, optional, default: 1): The page number to retrieve. Must be 1 or greater.
-  - `per_page` (integer, optional, default: 20, max: 100): The maximum number of entities to return per page. Must be between 1 and 100.
-- **Response Example:**
-  ```json
-  {
-    "entities": [
-      {
-        "entity_id": 1,
-        "name": "Project Alpha Updated",
-        "entity_type": "Project",
-        "aliases": "alpha_v2|project_alpha_prime",
-        "created_at": "2024-05-15T10:30:00Z",
-        "updated_at": "2024-05-15T10:40:00Z"
-      },
-      {
-        "entity_id": 2,
-        "name": "Task Beta",
-        "entity_type": "Task",
-        "aliases": null,
-        "created_at": "2024-05-15T10:32:00Z",
-        "updated_at": "2024-05-15T10:32:00Z"
-      }
-    ],
-    "pagination": {
-      "current_page": 1,
-      "per_page": 20,
-      "total_entries": 2,
-      "total_pages": 1
-    }
-  }
-  ```
-
 #### `search_entities`
-- **Description:** Searches for entities by name, type, or aliases (case-insensitive).
+- **Description:** Hybrid search combining text tokenization with vector semantic similarity. Uses Reciprocal Rank Fusion to merge text and vector results. Falls back to text-only when embeddings are unavailable.
 - **Parameters:**
-  - `query` (string, required): The search term to find within entity names, types, or aliases.
-- **Response Example (array of matching entities):**
-  ```json
-  [
-    {
-      "entity_id": 1,
-      "name": "Project Alpha Updated",
-      "entity_type": "Project",
-      "aliases": "alpha_v2|project_alpha_prime",
-      "created_at": "2024-05-15T10:30:00Z",
-      "updated_at": "2024-05-15T10:40:00Z"
-    }
-  ]
-  ```
+  - `query` (string, required): The search term. Multiple words are tokenized for matching.
+- **Response fields:** `entity_id`, `name`, `entity_type`, `description`, `aliases`, `memory_observations_count`, `relevance_score`, `matched_fields`
 
-#### `find_relations`
-- **Description:** Finds relations based on optional filtering criteria (from_entity_id, to_entity_id, relation_type).
+#### `list_entities`
+- **Description:** Paginated listing of all entities.
 - **Parameters:**
-  - `from_entity_id` (integer, optional): Filter relations starting from this entity ID.
-  - `to_entity_id` (integer, optional): Filter relations ending at this entity ID.
-  - `relation_type` (string, optional): Filter relations by this type.
-- **Response Example (array of matching relations):**
-  ```json
-  [
-    {
-      "relation_id": 201,
-      "from_entity_id": 1,
-      "to_entity_id": 2,
-      "relation_type": "has_task",
-      "created_at": "2024-05-15T10:35:00Z",
-      "updated_at": "2024-05-15T10:35:00Z"
-    }
-  ]
-  ```
-
-#### `get_subgraph_by_ids`
-- **Description:** Retrieves a specific set of entities by their IDs, including their observations, and all relations that exist exclusively between them.
-- **Parameters:**
-  - `entity_ids` (array of integers, required): An array of entity IDs to include in the subgraph.
-- **Response Example:**
-  ```json
-  {
-    "entities": [
-      {
-        "entity_id": 1,
-        "name": "Project Alpha Updated",
-        "entity_type": "Project",
-        "aliases": "alpha_v2|project_alpha_prime",
-        "created_at": "2024-05-15T10:30:00Z",
-        "updated_at": "2024-05-15T10:40:00Z",
-        "observations": [
-          {
-            "observation_id": 101,
-            "content": "Initial setup complete.",
-            "created_at": "2024-05-15T10:30:00Z",
-            "updated_at": "2024-05-15T10:30:00Z"
-          }
-        ]
-      },
-      {
-        "entity_id": 2,
-        "name": "Task Beta",
-        "entity_type": "Task",
-        "aliases": null,
-        "created_at": "2024-05-15T10:32:00Z",
-        "updated_at": "2024-05-15T10:32:00Z",
-        "observations": []
-      }
-    ],
-    "relations": [
-      {
-        "relation_id": 201,
-        "from_entity_id": 1,
-        "to_entity_id": 2,
-        "relation_type": "has_task",
-        "created_at": "2024-05-15T10:35:00Z",
-        "updated_at": "2024-05-15T10:35:00Z"
-      }
-    ]
-  }
-  ```
+  - `page` (integer, optional, default: 1): Page number.
+  - `per_page` (integer, optional, default: 20, max: 100): Entities per page.
 
 #### `search_subgraph`
-- **Description:** Searches a query across entity names, types, aliases, and observations. Returns a paginated subgraph of matching entities (with observations) and relations exclusively between them.
+- **Description:** Searches across entity names, types, aliases, and observations. Returns a paginated subgraph with matching entities (including observations) and inter-entity relations. Automatically merges vector search results when available.
 - **Parameters:**
-  - `query` (string, required): The search term to find.
-  - `search_in_name` (boolean, optional, default: true): Whether to search in entity names.
-  - `search_in_type` (boolean, optional, default: true): Whether to search in entity types.
-  - `search_in_aliases` (boolean, optional, default: true): Whether to search in entity aliases.
-  - `search_in_observations` (boolean, optional, default: true): Whether to search in entity observations.
-  - `page` (integer, optional, default: 1): The page number to retrieve.
-  - `per_page` (integer, optional, default: 20, max: 100): The number of entities per page.
-- **Response Example:**
-  ```json
-  {
-    "entities": [
-      {
-        "entity_id": 1,
-        "name": "Matching Project",
-        "entity_type": "Project",
-        "aliases": "match",
-        "created_at": "2024-05-15T11:00:00Z",
-        "updated_at": "2024-05-15T11:05:00Z",
-        "observations": [
-          {
-            "observation_id": 105,
-            "content": "This entity matches the search query.",
-            "created_at": "2024-05-15T11:00:00Z",
-            "updated_at": "2024-05-15T11:00:00Z"
-          }
-        ]
-      }
-    ],
-    "relations": [],
-    "pagination": {
-      "current_page": 1,
-      "per_page": 20,
-      "total_entries": 1,
-      "total_pages": 1
-    }
-  }
-  ```
-  end
-end
-```
+  - `query` (string, required): Search term.
+  - `search_in_name` (boolean, optional, default: true)
+  - `search_in_type` (boolean, optional, default: true)
+  - `search_in_aliases` (boolean, optional, default: true)
+  - `search_in_observations` (boolean, optional, default: true)
+  - `page` (integer, optional, default: 1)
+  - `per_page` (integer, optional, default: 20, max: 100)
 
-### Step 3: Implement Business Logic
+#### `get_subgraph_by_ids`
+- **Description:** Retrieves a set of entities by their IDs with observations and inter-entity relations.
+- **Parameters:**
+  - `entity_ids` (array of integers, required): Entity IDs to include.
 
-Put your business logic in the `call` method:
+### Context Scoping
 
-```ruby
-def call(params)
-  # Access validated parameters
-  entity_id = params[:entity_id]
+#### `set_context`
+- **Description:** Sets the active project context. Useful for scoping subsequent operations to a specific project.
+- **Parameters:**
+  - `project_id` (integer, required): The ID of the project entity to scope to.
+- **Response:** `{ status, project_id, project_name, project_type }`
 
-  # Perform operations
-  entity = MemoryEntity.find(entity_id)
+#### `get_context`
+- **Description:** Returns the currently active project context, if any.
+- **Parameters:** None
+- **Response:** `{ status, project_id, project_name, project_type, description }` or `{ status: "no_context" }`
 
-  # Return a response (will be automatically converted to JSON)
-  entity.as_json(include: :observations)
-end
-```
+#### `clear_context`
+- **Description:** Clears the active project context.
+- **Parameters:** None
 
-### Step 4: Handle Errors
+### Batch & Maintenance Tools
 
-Use Ruby exceptions for error handling:
+#### `bulk_update`
+- **Description:** Performs multiple operations in a single atomic transaction. Maximum 50 operations per call. Rolls back entirely on any error.
+- **Parameters:**
+  - `entities` (array, optional): Entities to create. Each: `{ name, entity_type, aliases?, description?, observations?[] }`
+  - `observations` (array, optional): Observations to add. Each: `{ entity_id, text_content }`
+  - `relations` (array, optional): Relations to create. Each: `{ from_entity_id, to_entity_id, relation_type }`
 
-```ruby
-def call(params)
-  begin
-    entity = MemoryEntity.find(params[:entity_id])
-    entity.as_json
-  rescue ActiveRecord::RecordNotFound
-    # Will be converted to a JSON-RPC error response
-    raise McpGraphMemErrors::ResourceNotFound, "Entity not found"
-  rescue => e
-    # Generic error
-    raise McpGraphMemErrors::OperationFailed, e.message
-  end
-end
-```
+#### `suggest_merges`
+- **Description:** Finds potential duplicate entities using vector cosine similarity. Returns pairs of entities that may represent the same concept.
+- **Parameters:**
+  - `threshold` (float, optional, default: 0.3): Maximum cosine distance (0 = identical, 1 = unrelated).
+  - `limit` (integer, optional, default: 20): Maximum suggestions.
+  - `entity_type` (string, optional): Filter to a specific entity type.
+- **Response:** Array of `{ entity_a, entity_b, cosine_distance, recommendation }`
+
+## Entity Type Canonicalization
+
+GraphMem v1.0 introduces automatic entity type normalization. When creating or updating entities, the `entity_type` field is looked up in the `entity_type_mappings` table. Known variants are rewritten to their canonical form:
+
+| Canonical Type | Accepted Variants |
+|---|---|
+| Project | project, workspace, context, repo, repository, codebase |
+| Task | task, todo |
+| Issue | issue, bug, problem |
+| Error | error, exception |
+| PossibleSolution | solution, workaround, fix |
+| Service | service |
+| Component | component, widget |
+| ... | (see `db/seeds/entity_type_mappings.rb` for full list) |
+
+New mappings can be added via `db/seeds/entity_type_mappings.rb` or directly in the `entity_type_mappings` table.
+
+## Vector Search Architecture
+
+GraphMem uses MariaDB 11.8's native VECTOR columns with the MHNSW algorithm for approximate nearest-neighbor search:
+
+1. **Embedding generation**: On entity create/update, the `EmbeddingService` calls Ollama to generate a 768-dimensional vector from the entity's composite text (type + name + aliases + description).
+2. **Storage**: Vectors are stored in `VECTOR(768)` columns with cosine distance indexes.
+3. **Search**: `VectorSearchStrategy` embeds the query and finds nearest entities via `VEC_DISTANCE_COSINE`.
+4. **Hybrid fusion**: `HybridSearchStrategy` merges text and vector results using Reciprocal Rank Fusion (RRF).
+
+The embedding service is configurable via environment variables (`OLLAMA_URL`, `EMBEDDING_MODEL`, etc.) and gracefully degrades when unavailable.
 
 ## Error Handling
 
-GraphMem defines custom error classes for common scenarios:
+Custom error classes:
 
-```ruby
-module McpGraphMemErrors
-  # Used when a requested resource is not found
-  class ResourceNotFound < StandardError; end
-
-  # Used when an operation fails
-  class OperationFailed < StandardError; end
-end
-```
-
-These errors map to specific JSON-RPC error codes:
-
-- `ResourceNotFound` → `-32002`
-- `OperationFailed` → `-32003`
-
-## Response Formatting
-
-The FastMcp server has been patched to ensure proper response formatting for the Cascade MCP client:
-
-```ruby
-# config/initializers/zzz_fast_mcp_patches.rb
-module FastMcp
-  class Server
-    # Monkey patch to fix tool instantiation issue and ensure proper response format
-    def handle_tools_call(id, tool_name, params)
-      begin
-        # Find tool by name
-        tool = @tools.find { |t| t.tool_name.to_s == tool_name.to_s }
-        raise FastMcp::Error::MethodNotFound.new if tool.nil?
-
-        # Call the tool directly (not tool.new)
-        actual_tool_data = tool.call_with_schema_validation!(ActionController::Parameters.new(params))
-
-        # Format response for Cascade MCP client
-        response_payload = {
-          jsonrpc: "2.0",
-          id: id,
-          result: {
-            content: [
-              {
-                type: "json",
-                json: actual_tool_data.to_json # Convert to JSON string
-              }
-            ]
-          }
-        }
-
-        @transport.send_message(response_payload)
-      rescue => e
-        # Error handling code...
-      end
-    end
-  end
-end
-```
+- `McpGraphMemErrors::ResourceNotFound` -- requested entity/relation not found
+- `McpGraphMemErrors::InternalServerError` -- unexpected server error
+- `FastMcp::Tool::InvalidArgumentsError` -- invalid input parameters
 
 ## Best Practices
 
-### Tool Design
-
-1. **Single Responsibility:** Each tool should do one thing well.
-2. **Input Validation:** Always validate input parameters using the schema block.
-3. **Error Handling:** Use appropriate error classes for different error scenarios.
-4. **Response Format:** Return structured data that can be easily serialized to JSON.
-
-### Performance
-
-1. **Pagination:** Always implement pagination for list operations.
-2. **Eager Loading:** Use eager loading to avoid N+1 query issues.
-3. **Limit Recursion:** Set reasonable limits for graph traversal operations.
-4. **Response Size:** Be mindful of response size, especially for graph operations.
-
-### Security
-
-1. **Input Validation:** Always validate and sanitize input parameters.
-2. **Resource Authorization:** Verify access permissions for sensitive operations.
-3. **Rate Limiting:** Consider implementing rate limiting for production use.
-
-## Testing
-
-Tools should have comprehensive test coverage:
-
-```ruby
-# spec/tools/get_entity_tool_spec.rb
-require 'rails_helper'
-
-RSpec.describe GetEntityTool do
-  describe '#call' do
-    let(:entity) { create(:memory_entity, name: 'Test Entity') }
-    let(:params) { { entity_id: entity.id } }
-
-    it 'returns the entity when found' do
-      result = subject.call(params)
-      expect(result[:id]).to eq(entity.id)
-      expect(result[:name]).to eq('Test Entity')
-    end
-
-    it 'raises ResourceNotFound when entity does not exist' do
-      expect {
-        subject.call(entity_id: 999999)
-      }.to raise_error(McpGraphMemErrors::ResourceNotFound)
-    end
-  end
-end
-```
-
-## MCP Resources vs. Tools
-
-GraphMem provides both MCP tools and higher-level resources:
-
-- **Tools:** Direct operations with simple parameter validation
-- **Resources:** More complex querying with filtering, sorting, and pagination
-
-For complex data access patterns, consider using the resource approach rather than creating overly complex tools.
+1. **Search before create** to avoid duplicates (auto-dedup helps but isn't foolproof for text-only search)
+2. **Use `set_context`** when working on a specific project to improve relevance
+3. **Use `bulk_update`** for session-end "save what I learned" operations
+4. **Run `suggest_merges`** periodically to identify and clean up duplicate entities
+5. **Keep observations concise** and factual for better embedding quality

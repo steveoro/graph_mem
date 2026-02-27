@@ -1,0 +1,40 @@
+services:
+  db:
+    image: mariadb:11.8
+    restart: unless-stopped
+    volumes:
+      - graph_mem_db:/var/lib/mysql
+    environment:
+      MARIADB_ROOT_PASSWORD: ${DB_PASSWORD:-my_password}
+      MARIADB_DATABASE: ${DB_NAME:-graph_mem}
+    ports:
+      - "${DB_PORT:-3307}:3306"
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "${APP_PORT:-3003}:3003"
+    environment:
+      RAILS_ENV: production
+      RAILS_MASTER_KEY: ${RAILS_MASTER_KEY}
+      DATABASE_URL: mysql2://root:${DB_PASSWORD:-my_password}@db:3306/${DB_NAME:-graph_mem}
+      OLLAMA_URL: ${OLLAMA_URL:-http://host.docker.internal:11434}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-nomic-embed-text}
+      EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-ollama}
+      EMBEDDING_DIMS: ${EMBEDDING_DIMS:-768}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ${DB_BACKUP_HOST_PATH:-./db/backup}:/rails/db/backup
+
+volumes:
+  graph_mem_db:

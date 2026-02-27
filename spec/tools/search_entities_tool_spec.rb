@@ -207,7 +207,7 @@ RSpec.describe SearchEntitiesTool, type: :model do
 
     context 'error handling' do
       it 'raises InternalServerError on database errors' do
-        allow(EntitySearchStrategy).to receive(:new).and_raise(StandardError.new('Database error'))
+        allow(HybridSearchStrategy).to receive(:new).and_raise(StandardError.new('Database error'))
 
         expect {
           tool.call(query: 'apple')
@@ -215,7 +215,7 @@ RSpec.describe SearchEntitiesTool, type: :model do
       end
 
       it 'logs errors appropriately' do
-        allow(EntitySearchStrategy).to receive(:new).and_raise(StandardError.new('Test error'))
+        allow(HybridSearchStrategy).to receive(:new).and_raise(StandardError.new('Test error'))
         allow(Rails.logger).to receive(:error)
 
         expect {
@@ -226,34 +226,35 @@ RSpec.describe SearchEntitiesTool, type: :model do
       end
     end
 
-    context 'integration with EntitySearchStrategy' do
-      it 'uses EntitySearchStrategy for search' do
-        strategy_instance = instance_double(EntitySearchStrategy)
-        allow(EntitySearchStrategy).to receive(:new).and_return(strategy_instance)
-        allow(strategy_instance).to receive(:search).with('apple').and_return([])
+    context 'integration with HybridSearchStrategy' do
+      it 'uses HybridSearchStrategy for search' do
+        strategy_instance = instance_double(HybridSearchStrategy)
+        allow(HybridSearchStrategy).to receive(:new).and_return(strategy_instance)
+        allow(strategy_instance).to receive(:search).with('apple', semantic: true).and_return([])
 
         tool.call(query: 'apple')
 
-        expect(EntitySearchStrategy).to have_received(:new)
-        expect(strategy_instance).to have_received(:search).with('apple')
+        expect(HybridSearchStrategy).to have_received(:new)
+        expect(strategy_instance).to have_received(:search).with('apple', semantic: true)
       end
 
       it 'converts SearchResult objects to hash format' do
-        # Mock a SearchResult
-        mock_result = instance_double(EntitySearchStrategy::SearchResult)
+        mock_result = instance_double(HybridSearchStrategy::SearchResult)
         allow(mock_result).to receive(:to_h).and_return({
           entity_id: 1,
           name: 'Test Entity',
           entity_type: 'Test Type',
+          description: nil,
           aliases: 'test alias',
+          memory_observations_count: 0,
           created_at: Time.current.iso8601,
           updated_at: Time.current.iso8601,
-          relevance_score: 15,
+          relevance_score: 0.0164,
           matched_fields: [ 'entity_type' ]
         })
 
-        strategy_instance = instance_double(EntitySearchStrategy)
-        allow(EntitySearchStrategy).to receive(:new).and_return(strategy_instance)
+        strategy_instance = instance_double(HybridSearchStrategy)
+        allow(HybridSearchStrategy).to receive(:new).and_return(strategy_instance)
         allow(strategy_instance).to receive(:search).and_return([ mock_result ])
 
         results = tool.call(query: 'test')

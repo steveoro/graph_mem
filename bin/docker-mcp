@@ -1,0 +1,9 @@
+#!/bin/bash
+# Thin wrapper for stdio MCP transport via Docker.
+# Use this as the MCP command when graph_mem runs in a container.
+# Example MCP client config:
+#   { "command": "/bin/bash", "args": ["<path>/bin/docker-mcp"] }
+
+CONTAINER_NAME="${GRAPH_MEM_CONTAINER:-graph_mem-app-1}"
+
+exec docker exec -i "$CONTAINER_NAME" bundle exec ruby bin/mcp_stdio_runner.rb

@@ -36,5 +36,8 @@ module GraphMem
 
     # === Add lib to autoload paths ===
     config.autoload_paths << Rails.root.join("lib")
+
+    # Use SQL schema format -- schema.rb can't represent MariaDB VECTOR columns
+    config.active_record.schema_format = :sql
   end
 end

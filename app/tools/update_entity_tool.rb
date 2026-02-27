@@ -6,16 +6,16 @@ class UpdateEntityTool < ApplicationTool
     "update_entity"
   end
 
-  description "Updates an existing entity in the graph memory database. Allows modification of name, entity_type, and aliases."
+  description "Updates an existing entity in the graph memory database. Allows modification of name, entity_type, aliases, and description."
 
   arguments do
     required(:entity_id).filled(:integer).description("The ID of the entity to update.")
     optional(:name).maybe(:string).description("The new name for the entity. If provided, must be unique.")
     optional(:entity_type).maybe(:string).description("The new type classification for the entity.")
     optional(:aliases).maybe(:string).description("The new pipe-separated string of aliases. This will replace existing aliases. Pass empty string to clear aliases.")
+    optional(:description).maybe(:string).description("A short description of the entity. Pass empty string to clear.")
   end
 
-  # Defines the input schema for this tool.
   def input_schema_to_json
     {
       type: "object",
@@ -23,18 +23,19 @@ class UpdateEntityTool < ApplicationTool
         entity_id: { type: "integer", description: "The ID of the entity to update." },
         name: { type: [ "string", "null" ], description: "The new name for the entity. If provided, must be unique." },
         entity_type: { type: [ "string", "null" ], description: "The new type classification for the entity." },
-        aliases: { type: [ "string", "null" ], description: "The new pipe-separated string of aliases. This will replace existing aliases. Pass empty string to clear aliases." }
+        aliases: { type: [ "string", "null" ], description: "The new pipe-separated string of aliases. This will replace existing aliases. Pass empty string to clear aliases." },
+        description: { type: [ "string", "null" ], description: "A short description of the entity. Pass empty string to clear." }
       },
       required: [ "entity_id" ]
     }
   end
 
-  def call(entity_id:, name: nil, entity_type: nil, aliases: nil)
+  def call(entity_id:, name: nil, entity_type: nil, aliases: nil, description: nil)
     logger.info "Performing UpdateEntityTool for entity_id: #{entity_id}"
 
     # Check if at least one updatable attribute is provided
-    unless name.present? || entity_type.present? || !aliases.nil? # !aliases.nil? allows empty string for clearing
-      raise FastMcp::Tool::InvalidArgumentsError, "At least one attribute (name, entity_type, or aliases) must be provided for update."
+    unless name.present? || entity_type.present? || !aliases.nil? || !description.nil?
+      raise FastMcp::Tool::InvalidArgumentsError, "At least one attribute (name, entity_type, aliases, or description) must be provided for update."
     end
 
     entity = MemoryEntity.find_by(id: entity_id)
@@ -45,7 +46,8 @@ class UpdateEntityTool < ApplicationTool
     ActiveRecord::Base.transaction do
       entity.name = name if name.present?
       entity.entity_type = entity_type if entity_type.present?
-      entity.aliases = aliases unless aliases.nil? # Update if aliases is provided (even if empty string)
+      entity.aliases = aliases unless aliases.nil?
+      entity.description = description unless description.nil?
 
       entity.save!
     end
@@ -56,6 +58,7 @@ class UpdateEntityTool < ApplicationTool
       entity_id: entity.id,
       name: entity.name,
       entity_type: entity.entity_type,
+      description: entity.description,
       aliases: entity.aliases,
       created_at: entity.created_at.iso8601,
       updated_at: entity.updated_at.iso8601,

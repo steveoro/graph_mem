@@ -5,6 +5,33 @@ All notable changes to GraphMem will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.0] - 2026-02-27
+
+### Added
+- **Vector semantic search**: Native MariaDB 11.8 VECTOR(768) columns with cosine distance indexing for entity and observation embeddings
+- **Embedding service**: Configurable `EmbeddingService` using Ollama (or OpenAI-compatible) API via `OLLAMA_URL` env var; supports LAN-wide embedding host architecture
+- **Hybrid search**: `HybridSearchStrategy` combining text-based tokenized search with vector similarity using Reciprocal Rank Fusion (RRF)
+- **Entity type canonicalization**: `EntityTypeMapping` table normalizes free-text entity types to canonical forms (e.g., "workspace" -> "Project"), preventing graph fragmentation
+- **Entity description field**: New `description` column on `memory_entities` for richer semantic context
+- **FULLTEXT index**: Combined fulltext index on `(name, aliases)` for faster text search
+- **Auto-deduplication**: `CreateEntityTool` checks for similar existing entities via vector search before creating; warns if a close match exists
+- **Context scoping**: New `set_context`, `get_context`, `clear_context` tools to scope operations to a specific project
+- **Merge suggestions**: New `suggest_merges` tool finds potential duplicate entities using vector similarity
+- **Bulk operations**: New `bulk_update` tool for creating multiple entities, observations, and relations in a single atomic transaction
+- **Docker Compose**: Production-ready `docker-compose.yml` with MariaDB 11.8 and Rails app; `docker-compose.override.yml` for development with hot reload
+- **Docker MCP wrapper**: `bin/docker-mcp` script for stdio MCP transport via containerized graph_mem
+- **Embedding backfill**: `rake embeddings:backfill` and `rake embeddings:regenerate` tasks
+
+### Changed
+- Upgraded to MariaDB 11.8 (Docker image) for native vector support
+- `SearchEntitiesTool` now uses `HybridSearchStrategy` (text + semantic) by default
+- `SearchSubgraphTool` merges vector search results with text search results when embeddings are available
+- Dockerfile updated: includes MariaDB client libs, exposes port 3003, removes Thruster dependency for flexibility
+- All entity-returning tools now include `description` field in responses
+
+### Removed
+- Dropped 5 unused `action_mcp_*` tables from the legacy ActionMCP gem
+
 ## [0.9.3] - 2026-01-28
 
 ### Changes

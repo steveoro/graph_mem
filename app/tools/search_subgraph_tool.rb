@@ -180,8 +180,19 @@ class SearchSubgraphTool < ApplicationTool
     # Combine conditions with OR
     combined_sql_conditions = sql_conditions.join(" OR ")
 
-    # Get all matching entity IDs first
+    # Text-based matching
     matching_entity_ids = base_query.where(combined_sql_conditions, sql_params).pluck(:id).uniq
+
+    # Merge in vector search results when embeddings are available
+    begin
+      vector_strategy = VectorSearchStrategy.new
+      vector_results = vector_strategy.search(query_term, limit: effective_per_page * 2)
+      vector_ids = vector_results.map { |r| r.entity.id }
+      matching_entity_ids = (matching_entity_ids + vector_ids).uniq
+    rescue StandardError => e
+      logger.debug "SearchSubgraphTool: vector search unavailable, using text only — #{e.message}"
+    end
+
     total_matching_entities = matching_entity_ids.length
 
     # Apply pagination to the IDs
