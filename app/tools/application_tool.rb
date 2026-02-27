@@ -19,7 +19,10 @@ class ApplicationTool < FastMcp::Tool
     end
   end
 
-  # write your custom logic to be shared across all tools here
+  def call(...)
+    Current.actor = "mcp:#{tool_name}"
+    super
+  end
 
   def logger
     Rails.logger

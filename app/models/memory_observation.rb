@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 class MemoryObservation < ApplicationRecord
+  include Auditable
+
   belongs_to :memory_entity, counter_cache: true
 
   validates :content, presence: true

@@ -31,10 +31,14 @@ services:
       EMBEDDING_MODEL: ${EMBEDDING_MODEL:-nomic-embed-text}
       EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-ollama}
       EMBEDDING_DIMS: ${EMBEDDING_DIMS:-768}
+      SOLID_QUEUE_IN_PUMA: "true"
+      RAILS_FORCE_SSL: "false"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
       - ${DB_BACKUP_HOST_PATH:-./db/backup}:/rails/db/backup
+      - graph_mem_storage:/rails/storage
 
 volumes:
   graph_mem_db:
+  graph_mem_storage:

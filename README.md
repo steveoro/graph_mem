@@ -253,6 +253,7 @@ bin/rails db:restore
 | `APP_PORT` | `3003` | Host port for the Rails app (Docker) |
 | `RAILS_MASTER_KEY` | -- | Rails credentials key (required for Docker) |
 | `DATABASE_URL` | -- | Full database URL (overrides individual DB settings) |
+| `DB_BACKUP_HOST_PATH` | `./db/backup` | full path to DB backup(s) folder (default is invalid: docker-compose won't expand special characters) |
 
 ## Documentation
 
@@ -267,7 +268,7 @@ bin/rails db:restore
 
 ## Contributing
 
-Pull requests are welcome. For major changes, please open an issue first to discuss what you would like to change. Please make sure to update tests as appropriate.
+Pull requests are welcome. For major changes, please open an issue first to discuss what you would like to change. Please make sure to update tests as appropriate. Pull requests without proper test cases won't be accepted.
 
 ## License
 

@@ -96,7 +96,7 @@ class GetSubgraphByIdsTool < ApplicationTool
         entity_id: entity.id,
         name: entity.name,
         entity_type: entity.entity_type,
-        observations: entity.observations.map do |obs|
+        observations: entity.memory_observations.map do |obs|
           {
             observation_id: obs.id,
             content: obs.content,
@@ -127,6 +127,8 @@ class GetSubgraphByIdsTool < ApplicationTool
       entities: entities_data,
       relations: relations_data
     }
+  rescue FastMcp::Tool::InvalidArgumentsError
+    raise
   rescue ActiveRecord::RecordNotFound => e
     logger.error "ResourceNotFound in GetSubgraphByIDsTool: #{e.message} - #{e.backtrace.join("\n")}"
     raise McpGraphMemErrors::ResourceNotFound, "Error finding records: #{e.message}"

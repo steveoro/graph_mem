@@ -1,4 +1,6 @@
 class MemoryRelation < ApplicationRecord
+  include Auditable
+
   belongs_to :from_entity, class_name: "MemoryEntity", foreign_key: "from_entity_id"
   belongs_to :to_entity, class_name: "MemoryEntity", foreign_key: "to_entity_id"
 

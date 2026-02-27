@@ -111,9 +111,10 @@ class ListEntitiesTool < ApplicationTool
         total_pages: total_pages_count
       }
     }
+  rescue FastMcp::Tool::InvalidArgumentsError
+    raise
   rescue StandardError => e
     logger.error "InternalServerError in ListEntitiesTool: #{e.message} - #{e.backtrace.join("\n")}"
-    # Consider if a more specific error type is needed for bad pagination params if not caught by `arguments`
     raise McpGraphMemErrors::InternalServerError, "An unexpected error occurred: #{e.message}"
   end
 end

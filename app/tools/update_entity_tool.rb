@@ -64,11 +64,13 @@ class UpdateEntityTool < ApplicationTool
       updated_at: entity.updated_at.iso8601,
       memory_observations_count: entity.memory_observations_count
     }
+  rescue FastMcp::Tool::InvalidArgumentsError
+    raise
   rescue ActiveRecord::RecordInvalid => e
     error_message = "Validation Failed: #{e.record.errors.full_messages.join(', ')}"
     logger.error "InvalidArguments in UpdateEntityTool: #{error_message} (was: #{e.message})"
     raise FastMcp::Tool::InvalidArgumentsError, error_message
-  rescue McpGraphMemErrors::ResourceNotFound => e # Re-raise specific error
+  rescue McpGraphMemErrors::ResourceNotFound => e
     raise e
   rescue StandardError => e
     logger.error "InternalServerError in UpdateEntityTool: #{e.message} - #{e.backtrace.join("\n")}"
