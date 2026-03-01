@@ -4,6 +4,46 @@ require "rails"
 DUMP_FILENAME = "graph_mem.sql.bz2"
 
 namespace :db do
+  namespace :support do
+    desc "Initialize SQLite3 support databases (queue, cache, cable) if not already set up"
+    task initialize: :environment do
+      db_configs = Rails.application.config.database_configuration
+      env = Rails.env
+
+      {
+        "queue" => { "table" => "solid_queue_jobs", "migrations_path" => "db/queue_migrate" },
+        "cache" => { "table" => "solid_cache_entries", "migrations_path" => "db/cache_migrate" },
+        "cable" => { "table" => "solid_cable_messages", "migrations_path" => "db/cable_migrate" }
+      }.each do |db_name, config|
+        next unless db_configs[env] && db_configs[env][db_name]
+
+        db_config = db_configs[env][db_name]
+        check_table = config["table"]
+        migrations_path = config["migrations_path"]
+
+        # Check if database exists and has the required table
+        begin
+          ActiveRecord::Base.establish_connection(db_config)
+          if ActiveRecord::Base.connection.table_exists?(check_table)
+            puts "#{db_name} database already initialized."
+            next
+          end
+        rescue ActiveRecord::NoDatabaseError
+          puts "Creating #{db_name} database..."
+          ActiveRecord::Tasks::DatabaseTasks.create(db_config)
+        end
+
+        # Load schema for this database
+        puts "Initializing #{db_name} database schema..."
+        ActiveRecord::Tasks::DatabaseTasks.load_schema_for(
+          db_config,
+          :ruby,
+          file: Rails.root.join(migrations_path)
+        )
+      end
+    end
+  end
+
   desc "Dump the current database to db/backup/#{DUMP_FILENAME}"
   task dump: :environment do
     db_name, cmd_params = extract_cmd_params
