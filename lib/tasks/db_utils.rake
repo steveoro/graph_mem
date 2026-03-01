@@ -11,9 +11,9 @@ namespace :db do
       env = Rails.env
 
       {
-        "queue" => { "table" => "solid_queue_jobs", "migrations_path" => "db/queue_migrate" },
-        "cache" => { "table" => "solid_cache_entries", "migrations_path" => "db/cache_migrate" },
-        "cable" => { "table" => "solid_cable_messages", "migrations_path" => "db/cable_migrate" }
+        "queue" => { "table" => "solid_queue_jobs", "schema_file" => "db/queue_schema.rb" },
+        "cache" => { "table" => "solid_cache_entries", "schema_file" => "db/cache_schema.rb" },
+        "cable" => { "table" => "solid_cable_messages", "schema_file" => "db/cable_schema.rb" }
       }.each do |db_name, config|
         next unless db_configs[env] && db_configs[env][db_name]
 
