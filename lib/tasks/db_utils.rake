@@ -7,39 +7,22 @@ namespace :db do
   namespace :support do
     desc "Initialize SQLite3 support databases (queue, cache, cable) if not already set up"
     task initialize: :environment do
-      db_configs = Rails.application.config.database_configuration
-      env = Rails.env
-
       {
-        "queue" => { "table" => "solid_queue_jobs", "schema_file" => "db/queue_schema.rb" },
-        "cache" => { "table" => "solid_cache_entries", "schema_file" => "db/cache_schema.rb" },
-        "cable" => { "table" => "solid_cable_messages", "schema_file" => "db/cable_schema.rb" }
-      }.each do |db_name, config|
-        next unless db_configs[env] && db_configs[env][db_name]
-
-        db_config = db_configs[env][db_name]
-        check_table = config["table"]
-        migrations_path = config["migrations_path"]
-
-        # Check if database exists and has the required table
-        begin
-          ActiveRecord::Base.establish_connection(db_config)
-          if ActiveRecord::Base.connection.table_exists?(check_table)
+        "queue" => "solid_queue_jobs",
+        "cache" => "solid_cache_entries",
+        "cable" => "solid_cable_messages"
+      }.each do |db_name, check_table|
+        ActiveRecord::Tasks::DatabaseTasks.with_temporary_pool_for_each(name: db_name) do |pool|
+          if pool.with_connection { |c| c.table_exists?(check_table) }
             puts "#{db_name} database already initialized."
             next
           end
-        rescue ActiveRecord::NoDatabaseError
-          puts "Creating #{db_name} database..."
-          ActiveRecord::Tasks::DatabaseTasks.create(db_config)
-        end
 
-        # Load schema for this database
-        puts "Initializing #{db_name} database schema..."
-        ActiveRecord::Tasks::DatabaseTasks.load_schema_for(
-          db_config,
-          :ruby,
-          file: Rails.root.join(migrations_path)
-        )
+          puts "Initializing #{db_name} database schema..."
+          ActiveRecord::Tasks::DatabaseTasks.load_schema(pool.db_config)
+        end
+      rescue ActiveRecord::AdapterNotSpecified
+        # No config for this db_name in current environment — skip silently
       end
     end
   end
