@@ -1,6 +1,36 @@
 # frozen_string_literal: true
 
 namespace :embeddings do
+  desc "Smoke-test the embedding endpoint (uses OLLAMA_URL, EMBEDDING_MODEL, EMBEDDING_PROVIDER)"
+  task check: :environment do
+    url   = ENV.fetch("OLLAMA_URL", "http://localhost:11434")
+    model = ENV.fetch("EMBEDDING_MODEL", "nomic-embed-text")
+    prov  = ENV.fetch("EMBEDDING_PROVIDER", "ollama")
+    dims  = ENV.fetch("EMBEDDING_DIMS", "768").to_i
+
+    puts "Provider : #{prov}"
+    puts "URL      : #{url}"
+    puts "Model    : #{model}"
+    puts "Dims     : #{dims}"
+    puts
+
+    svc = EmbeddingService.new
+    start = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+    vec = svc.embed("connection test")
+    elapsed = ((Process.clock_gettime(Process::CLOCK_MONOTONIC) - start) * 1000).round(1)
+
+    if vec.nil?
+      abort "FAIL: embed returned nil — check logs for details."
+    end
+
+    puts "OK: got #{vec.length}-dim vector in #{elapsed} ms"
+    puts "    first 5: [#{vec.first(5).map { |v| v.round(6) }.join(', ')}]"
+
+    if vec.length != dims
+      puts "WARN: expected #{dims} dims, got #{vec.length} — check EMBEDDING_DIMS"
+    end
+  end
+
   desc "Backfill embeddings for all entities and observations missing them"
   task backfill: :environment do
     puts "Backfilling embeddings (model: #{ENV.fetch('EMBEDDING_MODEL', 'nomic-embed-text')})..."
@@ -8,12 +38,11 @@ namespace :embeddings do
     puts "Done. Embedded #{result[:entities]} entities, #{result[:observations]} observations."
   end
 
-  desc "Re-generate all embeddings (clears existing, then backfills)"
+  desc "Re-generate all embeddings (recomputes every vector in-place)"
   task regenerate: :environment do
-    puts "Clearing all existing embeddings..."
-    MemoryEntity.update_all(embedding: nil)
-    MemoryObservation.update_all(embedding: nil)
-    Rake::Task["embeddings:backfill"].invoke
+    puts "Regenerating all embeddings (model: #{ENV.fetch('EMBEDDING_MODEL', 'nomic-embed-text')})..."
+    result = EmbeddingService.regenerate_all
+    puts "Done. Re-embedded #{result[:entities]} entities, #{result[:observations]} observations."
   end
 
   desc "Add VECTOR INDEX after all embeddings are backfilled (requires MariaDB 11.7+)"

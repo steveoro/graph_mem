@@ -227,6 +227,52 @@ If running GraphMem on a workstation and accessing from other machines on the LA
    { "url": "http://<workstation-ip>:3003/mcp/sse" }
    ```
 
+## Embedding Management
+
+### Testing Ollama Connectivity
+
+Before backfilling or regenerating embeddings, verify that the app can reach your Ollama instance:
+
+```bash
+# Docker
+docker compose exec app bin/rails embeddings:check
+
+# Native
+bin/rails embeddings:check
+```
+
+This sends a single test embedding through `EmbeddingService` using the configured `OLLAMA_URL`, `EMBEDDING_MODEL`, and `EMBEDDING_PROVIDER`. It reports the resolved config, response latency, and vector dimensions — the exact same code path used by `backfill` and `regenerate`.
+
+For a lower-level check, `curl` is available inside the production container:
+
+```bash
+# Verify Ollama is reachable and list available models
+docker compose exec app curl -sf "$OLLAMA_URL/api/tags"
+
+# Test a raw embedding request
+docker compose exec app curl -sf "$OLLAMA_URL/api/embed" \
+  -d '{"model":"nomic-embed-text","input":"hello"}'
+```
+
+### Rake Tasks
+
+| Task | Description |
+|---|---|
+| `embeddings:check` | Smoke-test Ollama connectivity and config |
+| `embeddings:backfill` | Generate embeddings for records missing them |
+| `embeddings:regenerate` | Recompute all embeddings in-place (e.g. after switching models) |
+| `embeddings:add_indexes` | Add `VECTOR INDEX` (HNSW, cosine) after all rows are populated |
+| `embeddings:drop_indexes` | Remove indexes and revert columns to nullable |
+
+### Switching Embedding Models
+
+To change the model (e.g. from `nomic-embed-text` to a different one):
+
+1. Pull the new model on the Ollama host: `ollama pull <model-name>`
+2. Update `EMBEDDING_MODEL` (and `EMBEDDING_DIMS` if different) in `.env`
+3. Verify connectivity: `bin/rails embeddings:check`
+4. Recompute all vectors: `bin/rails embeddings:regenerate`
+
 ## Database Backup & Restore
 
 Dumps are portable across database names (no `CREATE DATABASE` / `USE` statements):

@@ -21,7 +21,7 @@ class EmbeddingService
       @instance ||= new
     end
 
-    delegate :embed, :embed_entity, :embed_observation, :backfill_all, to: :instance
+    delegate :embed, :embed_entity, :embed_observation, :backfill_all, :regenerate_all, to: :instance
 
     # Runtime check: does the DB have VECTOR columns?
     # Cached per-process to avoid repeated schema queries.
@@ -99,6 +99,32 @@ class EmbeddingService
     return unless vector
 
     store_vector(observation, vector)
+  end
+
+  # Force-recompute embeddings for every entity and observation,
+  # overwriting existing vectors without nullifying the column first
+  # (VECTOR columns on MariaDB 11.8+ cannot be set to NULL).
+  def regenerate_all(batch_size: 100)
+    unless self.class.vector_enabled?
+      @logger.warn "EmbeddingService: vector columns not present, skipping regenerate"
+      return { entities: 0, observations: 0 }
+    end
+
+    total_entities = 0
+    total_observations = 0
+
+    MemoryEntity.find_each(batch_size: batch_size) do |entity|
+      embed_entity(entity)
+      total_entities += 1
+    end
+
+    MemoryObservation.find_each(batch_size: batch_size) do |obs|
+      embed_observation(obs)
+      total_observations += 1
+    end
+
+    @logger.info "EmbeddingService: regenerated #{total_entities} entities, #{total_observations} observations"
+    { entities: total_entities, observations: total_observations }
   end
 
   # Backfill embeddings for all entities and observations missing them.
