@@ -77,7 +77,19 @@ Full REST API at `/api/v1` for direct integration. Swagger docs available at `/a
 
 Interactive Cytoscape.js-based graph visualization at the server root (`/`), with contextual menus, drag-and-drop operations, and data management features.
 
+
 ## Quick Start with Docker
+
+**Prerequisites:** Ollama must be running on the host with at least one embedding model pulled:
+
+```bash
+# Install Ollama (https://ollama.com) then pull the default embedding model
+ollama pull nomic-embed-text
+```
+
+> The `app` container uses `network_mode: host`, so it shares the host's network
+> stack. `localhost:11434` reaches Ollama with no bridge/firewall configuration needed.
+> The app binds directly to host port 3003.
 
 ```bash
 # Clone and enter the project
@@ -94,11 +106,23 @@ docker compose up -d
 # Seed canonical entity types
 docker compose exec app bin/rails db:seed
 
-# Backfill embeddings (requires Ollama running on host)
+# Verify Ollama connectivity
+docker compose exec app bin/rails embeddings:check
+
+# Backfill embeddings
 docker compose exec app bin/rails embeddings:backfill
+
+# Update the container after a repository pull
+docker compose down && docker compose up -d --build
 ```
 
 The app is available at `http://localhost:3003`. Swagger API docs at `http://localhost:3003/api-docs`.
+
+The app port (3003) is hardcoded on Dockerfile and docker-compose.yml because the service relies on host networking to access the embedding service by `ollama`. This allows a simpler container setup on different machines without resorting to iptables or firewall mangling.
+
+This containerized app is supposed to be run locally on a machine and/or accessible only through a LAN.
+THIS APP IS NOT SUPPOSED TO BE INSTALLED ON A WAN PROVIDER.
+
 
 ## Native Development Setup
 
@@ -217,15 +241,44 @@ For Docker-based setups, use `bin/docker-mcp` as the command argument.
 
 If running GraphMem on a workstation and accessing from other machines on the LAN:
 
-1. Expose Ollama on the workstation: set `OLLAMA_HOST=0.0.0.0` in the Ollama config
-2. On remote machines, set in `.env`:
-   ```
-   OLLAMA_URL=http://<workstation-ip>:11434
-   ```
-3. Point MCP clients to the workstation's SSE endpoint:
-   ```json
-   { "url": "http://<workstation-ip>:3003/mcp/sse" }
-   ```
+**1. Expose Ollama on the workstation**
+
+By default Ollama only listens on `127.0.0.1`. Create a systemd drop-in override
+(survives Ollama package upgrades):
+
+```bash
+sudo mkdir -p /etc/systemd/system/ollama.service.d
+echo '[Service]
+Environment="OLLAMA_HOST=0.0.0.0"' | sudo tee /etc/systemd/system/ollama.service.d/override.conf
+sudo systemctl daemon-reload
+sudo systemctl restart ollama
+```
+
+Verify it's bound to all interfaces:
+
+```bash
+ss -tlnp | grep 11434
+# Should show *:11434 instead of 127.0.0.1:11434
+```
+
+**2. Configure OLLAMA_URL**
+
+On the workstation running GraphMem, `OLLAMA_URL=http://localhost:11434` (the default) works
+because the `app` container uses host networking.
+
+If Ollama runs on a *different* machine, set in `.env`:
+
+```
+OLLAMA_URL=http://<ollama-host-ip>:11434
+```
+
+**3. Connect MCP clients from other LAN machines**
+
+Point them to the workstation's SSE endpoint:
+
+```json
+{ "url": "http://<workstation-ip>:3003/mcp/sse" }
+```
 
 ## Embedding Management
 
@@ -243,14 +296,15 @@ bin/rails embeddings:check
 
 This sends a single test embedding through `EmbeddingService` using the configured `OLLAMA_URL`, `EMBEDDING_MODEL`, and `EMBEDDING_PROVIDER`. It reports the resolved config, response latency, and vector dimensions — the exact same code path used by `backfill` and `regenerate`.
 
-For a lower-level check, `curl` is available inside the production container:
+For a lower-level check, `curl` is available inside the production container (host networking
+means `localhost` reaches Ollama directly):
 
 ```bash
 # Verify Ollama is reachable and list available models
-docker compose exec app curl -sf "$OLLAMA_URL/api/tags"
+docker compose exec app curl -sf http://localhost:11434/api/tags
 
 # Test a raw embedding request
-docker compose exec app curl -sf "$OLLAMA_URL/api/embed" \
+docker compose exec app curl -sf http://localhost:11434/api/embed \
   -d '{"model":"nomic-embed-text","input":"hello"}'
 ```
 
@@ -296,7 +350,6 @@ bin/rails db:restore
 | `DB_PASSWORD` | `my_password` | MariaDB root password |
 | `DB_NAME` | `graph_mem` | Database name |
 | `DB_PORT` | `3307` | Host port for MariaDB (Docker) |
-| `APP_PORT` | `3003` | Host port for the Rails app (Docker) |
 | `RAILS_MASTER_KEY` | -- | Rails credentials key (required for Docker) |
 | `DATABASE_URL` | -- | Full database URL (overrides individual DB settings) |
 | `DB_BACKUP_HOST_PATH` | `./db/backup` | full path to DB backup(s) folder (default is invalid: docker-compose won't expand special characters) |

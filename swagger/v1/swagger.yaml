@@ -470,7 +470,7 @@ paths:
                 - status
                 - version
 servers:
-- url: http://localhost:3000
+- url: http://localhost:3003
   description: Local development server
 components:
   schemas:
