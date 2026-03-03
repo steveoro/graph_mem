@@ -19,10 +19,13 @@ namespace :db do
           end
 
           puts "Initializing #{db_name} database schema..."
-          ActiveRecord::Tasks::DatabaseTasks.load_schema(pool.db_config)
+          ActiveRecord::Tasks::DatabaseTasks.load_schema(pool.db_config, :ruby)
         end
-      rescue ActiveRecord::AdapterNotSpecified
+
+      # Allow this task to run in development which doesn't usually have DBs for Queue, Cache, or Cable:
+      rescue ActiveRecord::AdapterNotSpecified, TypeError
         # No config for this db_name in current environment — skip silently
+        puts "No config for #{db_name} in current environment — skipping."
       end
     end
   end
