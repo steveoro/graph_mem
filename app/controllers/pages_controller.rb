@@ -1,5 +1,5 @@
 class PagesController < ApplicationController
   def home
-    # This action will render app/views/pages/home.html.erb
+    @vector_available = EmbeddingService.vector_enabled?
   end
 end

@@ -1,0 +1,52 @@
+<div class="container mx-auto search-results-page">
+  <h1 class="text-2xl font-bold mb-4 text-center">
+    <a href="<%= root_path %>" class="search-results-page__home-link">GraphMem</a>
+    &mdash; Search Results
+  </h1>
+
+  <%= render "search/form", vector_available: @vector_available %>
+
+  <% if @query.present? %>
+    <p class="search-results-page__summary">
+      <%= @results.total_count %> result<%= "s" unless @results.total_count == 1 %>
+      for &ldquo;<strong><%= @query %></strong>&rdquo;
+      using <strong><%= @strategy == "vector" ? "vector" : "text" %></strong> search
+    </p>
+
+    <% if @results.any? %>
+      <div class="search-results-table-wrap">
+        <table class="search-results-table">
+          <thead>
+            <tr>
+              <th>Entity</th>
+              <th>Type</th>
+              <th class="search-results-table__count-col">Scope</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% @results.each do |entity| %>
+              <tr>
+                <td>
+                  <a href="<%= root_path(scoped_entity_id: entity.id) %>" class="search-results-table__name">
+                    <%= entity.name %>
+                  </a>
+                  <% if entity.aliases.present? %>
+                    <div class="search-results-table__aliases"><%= entity.aliases %></div>
+                  <% end %>
+                </td>
+                <td><span class="search-results-table__type"><%= entity.entity_type %></span></td>
+                <td class="search-results-table__count-col"><%= (@scoped_counts[entity.id] || 0) + 1 %></td>
+              </tr>
+            <% end %>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="search-results-page__pagination">
+        <%= paginate @results %>
+      </div>
+    <% else %>
+      <p class="search-results-page__empty">No matching entities found.</p>
+    <% end %>
+  <% end %>
+</div>

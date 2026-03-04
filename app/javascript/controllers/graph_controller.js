@@ -16,6 +16,7 @@ export default class extends Controller {
   connect() {
     this.currentView = 'root';
     this.currentEntityId = null;
+    this.scopedEntityId = null;
 
     this.api = new GraphApiClient();
     this.modal = new ModalManager();
@@ -28,11 +29,25 @@ export default class extends Controller {
 
     this.containerTarget.style.position = 'relative';
     this.#addNavigationOverlay();
-    this.fetchDataAndRenderGraph(true);
+
+    const urlParams = new URLSearchParams(window.location.search);
+    const scopedId = urlParams.get('scoped_entity_id');
+    if (scopedId) {
+      this.scopedEntityId = scopedId;
+      this.currentView = 'scoped';
+      this.#updateNavigationButtons();
+      this.fetchDataAndRenderGraph(false, null, { scopedEntityId: scopedId });
+    } else {
+      this.fetchDataAndRenderGraph(true);
+    }
   }
 
   refreshGraph() {
-    this.fetchDataAndRenderGraph(this.currentView === 'root', this.currentEntityId);
+    if (this.currentView === 'scoped') {
+      this.fetchDataAndRenderGraph(false, null, { scopedEntityId: this.scopedEntityId });
+    } else {
+      this.fetchDataAndRenderGraph(this.currentView === 'root', this.currentEntityId);
+    }
   }
 
   // --- Navigation ---
@@ -77,6 +92,7 @@ export default class extends Controller {
   #switchView(view, entityId = null) {
     this.currentView = view;
     this.currentEntityId = entityId;
+    this.scopedEntityId = null;
     this.#updateNavigationButtons();
 
     if (view === 'root') {
@@ -100,16 +116,16 @@ export default class extends Controller {
     } else if (this.currentView === 'full') {
       fullBtn.classList.add('graph-nav-btn--active');
       backBtn.classList.add('graph-hidden');
-    } else {
+    } else if (this.currentView === 'scoped' || this.currentView === 'subgraph') {
       backBtn.className = 'graph-nav-btn graph-nav-btn--back';
     }
   }
 
   // --- Data fetching & rendering ---
 
-  async fetchDataAndRenderGraph(rootOnly = false, entityId = null) {
+  async fetchDataAndRenderGraph(rootOnly = false, entityId = null, options = {}) {
     try {
-      const graphData = await this.api.fetchGraphData(rootOnly, entityId);
+      const graphData = await this.api.fetchGraphData(rootOnly, entityId, options);
       this.#renderGraph(graphData.elements);
     } catch (error) {
       console.error("Could not fetch or render graph data:", error);

@@ -1,4 +1,5 @@
 import { createConsumer } from "@rails/actioncable"
+import { analyzeObservations, renderObservationCards, renderDuplicateWarning } from 'graph/observation_renderer'
 
 export class DataManageManager {
   constructor(api, modal, { onRefreshGraph }) {
@@ -208,6 +209,7 @@ export class DataManageManager {
       if (result.success) {
         alert(result.message);
         document.getElementById(`orphan-row-${nodeId}`)?.remove();
+        document.getElementById(`orphan-obs-row-${nodeId}`)?.remove();
         this.onRefreshGraph();
       } else {
         alert('Error: ' + (result.error || 'Failed to move node'));
@@ -229,6 +231,7 @@ export class DataManageManager {
       if (result.success) {
         alert(result.message);
         document.getElementById(`orphan-row-${nodeId}`)?.remove();
+        document.getElementById(`orphan-obs-row-${nodeId}`)?.remove();
         this.onRefreshGraph();
       } else {
         alert('Error: ' + (result.error || 'Failed to merge node'));
@@ -247,6 +250,7 @@ export class DataManageManager {
       if (result.success) {
         alert(result.message);
         document.getElementById(`orphan-row-${nodeId}`)?.remove();
+        document.getElementById(`orphan-obs-row-${nodeId}`)?.remove();
         this.onRefreshGraph();
       } else {
         alert('Error: ' + (result.error || 'Failed to delete node'));
@@ -254,6 +258,49 @@ export class DataManageManager {
     } catch (error) {
       console.error('Error deleting node:', error);
       alert('An error occurred while deleting the node.');
+    }
+  }
+
+  async toggleOrphanObservations(orphanId) {
+    const detailRow = document.getElementById(`orphan-obs-row-${orphanId}`);
+    const contentDiv = document.getElementById(`orphan-obs-content-${orphanId}`);
+    const btn = document.getElementById(`orphan-obs-${orphanId}`);
+    if (!detailRow || !contentDiv || !btn) return;
+
+    const isVisible = !detailRow.classList.contains('graph-hidden');
+    if (isVisible) {
+      detailRow.classList.add('graph-hidden');
+      btn.textContent = '+';
+      return;
+    }
+
+    if (contentDiv.dataset.loaded) {
+      detailRow.classList.remove('graph-hidden');
+      btn.textContent = '\u2212';
+      return;
+    }
+
+    contentDiv.innerHTML = '<p class="dm-obs-detail__summary">Loading observations\u2026</p>';
+    detailRow.classList.remove('graph-hidden');
+    btn.textContent = '\u2212';
+
+    try {
+      const observations = await this.api.fetchObservations(orphanId);
+      const analysis = analyzeObservations(observations);
+
+      contentDiv.innerHTML = `
+        <p class="dm-obs-detail__summary">
+          <strong>${observations.length}</strong> observation(s)
+          ${analysis.hasDuplicates
+            ? ` \u2014 <span class="obs-card__dup-badge">${analysis.duplicateCount} duplicate(s)</span>`
+            : ''}
+        </p>
+        ${renderObservationCards(observations, analysis)}
+      `;
+      contentDiv.dataset.loaded = 'true';
+    } catch (error) {
+      console.error('Error fetching observations for orphan:', error);
+      contentDiv.innerHTML = '<p class="dm-obs-detail__summary" style="color:#dc3545;">Failed to load observations.</p>';
     }
   }
 
@@ -288,9 +335,11 @@ export class DataManageManager {
     }
 
     orphanNodes.forEach(orphan => {
+      const obsBtn = document.getElementById(`orphan-obs-${orphan.id}`);
       const moveBtn = document.getElementById(`orphan-move-${orphan.id}`);
       const mergeBtn = document.getElementById(`orphan-merge-${orphan.id}`);
       const deleteBtn = document.getElementById(`orphan-delete-${orphan.id}`);
+      if (obsBtn) obsBtn.onclick = () => this.toggleOrphanObservations(orphan.id);
       if (moveBtn) moveBtn.onclick = () => this.moveOrphanNode(orphan.id);
       if (mergeBtn) mergeBtn.onclick = () => this.mergeOrphanNode(orphan.id);
       if (deleteBtn) deleteBtn.onclick = () => this.deleteOrphanNode(orphan.id, orphan.name);
@@ -502,10 +551,16 @@ export class DataManageManager {
           </select>
         </td>
         <td class="dm-orphan-actions">
-          <button id="orphan-move-${orphan.id}" title="Move to selected parent"
+          <button id="orphan-obs-${orphan.id}" title="Show observations"
+                  class="dm-orphan-btn dm-orphan-btn--obs">+</button><button id="orphan-move-${orphan.id}" title="Move to selected parent"
                   class="dm-orphan-btn dm-orphan-btn--move">Move</button><button id="orphan-merge-${orphan.id}" title="Merge into selected parent"
                   class="dm-orphan-btn dm-orphan-btn--merge">Merge</button><button id="orphan-delete-${orphan.id}" title="Delete this node"
                   class="dm-orphan-btn dm-orphan-btn--delete"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg></button>
+        </td>
+      </tr>
+      <tr id="orphan-obs-row-${orphan.id}" class="dm-obs-detail-row graph-hidden">
+        <td colspan="3">
+          <div class="dm-obs-detail" id="orphan-obs-content-${orphan.id}"></div>
         </td>
       </tr>
     `;

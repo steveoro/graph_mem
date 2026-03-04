@@ -10,11 +10,13 @@ export class GraphApiClient {
     return h;
   }
 
-  async fetchGraphData(rootOnly = false, entityId = null) {
+  async fetchGraphData(rootOnly = false, entityId = null, { scopedEntityId = null } = {}) {
     let url = '/api/v1/graph_data';
     const params = new URLSearchParams();
 
-    if (entityId) {
+    if (scopedEntityId) {
+      params.append('scoped_entity_id', scopedEntityId);
+    } else if (entityId) {
       params.append('entity_id', entityId);
     } else if (rootOnly) {
       params.append('root_only', 'true');
@@ -29,7 +31,7 @@ export class GraphApiClient {
 
   async fetchObservations(entityId) {
     const response = await fetch(`/api/v1/memory_entities/${entityId}/memory_observations`);
-    if (!response.ok) throw new Error('Failed to fetch observations');
+    if (!response.ok) throw new Error(`Failed to fetch observations (HTTP ${response.status})`);
     return response.json();
   }
 

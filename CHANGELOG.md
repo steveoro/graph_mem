@@ -5,6 +5,15 @@ All notable changes to GraphMem will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-03-04
+
+### Added
+- **Search box on landing page**: node search with both text & vector based strategy (switchable)
+
+### Improved
+- **Container setup**: README notes; simplified update process with just `docker compose up -d --build`; now container uses host network for an easier LAN sharing of the MCP service
+
+
 ## [1.0.0] - 2026-02-27
 
 ### Added

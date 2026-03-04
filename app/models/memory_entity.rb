@@ -16,6 +16,10 @@ class MemoryEntity < ApplicationRecord
 
   EMBEDDING_FIELDS = %w[name entity_type aliases description].freeze
 
+  def as_json(options = {})
+    super(options.merge(except: Array(options[:except]) | [ :embedding ]))
+  end
+
   private
 
   def set_default_counter_cache

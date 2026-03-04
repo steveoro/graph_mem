@@ -28,6 +28,7 @@ gem "solid_queue"
 gem "solid_cable"
 
 gem "fast-mcp" # MCP Server implementation
+gem "kaminari" # Pagination
 
 gem "bootsnap", require: false # Reduces boot times through caching; required in config/boot.rb
 # Deploy this application anywhere as a Docker container [https://kamal-deploy.org]

@@ -65,6 +65,8 @@ Rails.application.routes.draw do
     end
   end
 
+  get "search", to: "search#results"
+
   # Defines the root path route ("/")
   root "pages#home"
 end

@@ -2,18 +2,17 @@ module Api
   module V1
     class GraphDataController < ApplicationController
       def index
-        # Check if we're filtering to root level or getting a subgraph
         entity_id = params[:entity_id]
+        scoped_entity_id = params[:scoped_entity_id]
         root_only = params[:root_only] == "true"
 
-        if entity_id.present?
-          # Get subgraph for specific entity
+        if scoped_entity_id.present?
+          render_scoped_subgraph(scoped_entity_id)
+        elsif entity_id.present?
           render_subgraph(entity_id)
         elsif root_only
-          # Get only root-level entities (Project type or nil type)
           render_root_graph
         else
-          # Get full graph (existing behavior)
           render_full_graph
         end
       end
@@ -33,6 +32,21 @@ module Api
         entity_ids = entities.pluck(:id)
         relations = MemoryRelation.where(from_entity_id: entity_ids, to_entity_id: entity_ids)
         render_graph_data(entities, relations)
+      end
+
+      def render_scoped_subgraph(scoped_entity_id)
+        root_entity = MemoryEntity.find(scoped_entity_id)
+
+        child_ids = MemoryRelation
+          .where(relation_type: "part_of", to_entity_id: root_entity.id)
+          .pluck(:from_entity_id)
+
+        all_ids = ([ root_entity.id ] + child_ids).uniq
+
+        entities = MemoryEntity.where(id: all_ids).includes(:memory_observations)
+        relations = MemoryRelation.where(from_entity_id: all_ids, to_entity_id: all_ids)
+
+        render_graph_data(entities, relations, { focus_entity_id: scoped_entity_id })
       end
 
       def render_subgraph(entity_id)

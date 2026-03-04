@@ -1,3 +1,5 @@
+import { analyzeObservations, renderDuplicateWarning, renderObservationCards } from 'graph/observation_renderer'
+
 const RELATION_TYPES = [
   'part_of', 'depends_on', 'relates_to', 'implements', 'extends',
   'solves', 'configured_by', 'tested_by', 'migrated_by',
@@ -156,47 +158,18 @@ export class ContextMenuManager {
   async #showObservationsModal(nodeData, cy) {
     try {
       const observations = await this.api.fetchObservations(nodeData.id);
-
-      const contentCounts = {};
-      observations.forEach(obs => {
-        contentCounts[obs.content] = (contentCounts[obs.content] || 0) + 1;
-      });
-      const hasDuplicates = Object.values(contentCounts).some(count => count > 1);
-      const duplicateCount = Object.values(contentCounts).reduce((sum, count) => sum + (count > 1 ? count - 1 : 0), 0);
+      const analysis = analyzeObservations(observations);
 
       this.modal.show('Entity Observations', `
         <h3>${nodeData.label} (ID: ${nodeData.id})</h3>
         <p><strong>Type:</strong> ${nodeData.type || 'N/A'}</p>
         <p><strong>Total Observations:</strong> ${observations.length}</p>
-        ${hasDuplicates ? `
-          <div class="obs-warning-box">
-            <p><strong>Found ${duplicateCount} duplicate observation(s)</strong></p>
-            <button id="delete-dup-obs-btn" class="graph-btn graph-btn--danger">
-              Delete All Duplicates
-            </button>
-          </div>
-        ` : ''}
+        ${renderDuplicateWarning(analysis)}
         <hr>
-        ${observations.length > 0 ?
-          observations
-            .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
-            .map(obs => {
-              const isDuplicate = contentCounts[obs.content] > 1;
-              return `
-                <div class="obs-card ${isDuplicate ? 'obs-card--duplicate' : ''}">
-                  <div class="obs-card__date">
-                    ${new Date(obs.created_at).toLocaleString()}
-                    ${isDuplicate ? '<span class="obs-card__dup-badge">[DUPLICATE]</span>' : ''}
-                  </div>
-                  <div>${obs.content}</div>
-                </div>
-              `;
-            }).join('')
-          : '<p>No observations found.</p>'
-        }
+        ${renderObservationCards(observations, analysis)}
       `);
 
-      if (hasDuplicates) {
+      if (analysis.hasDuplicates) {
         const btn = document.getElementById('delete-dup-obs-btn');
         if (btn) btn.onclick = () => this.#deleteDuplicateObservations(nodeData.id, cy);
       }

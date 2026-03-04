@@ -9,6 +9,10 @@ class MemoryObservation < ApplicationRecord
 
   after_commit :refresh_embedding, on: [ :create, :update ], if: :content_previously_changed?
 
+  def as_json(options = {})
+    super(options.merge(except: Array(options[:except]) | [ :embedding ]))
+  end
+
   private
 
   def refresh_embedding
