@@ -124,6 +124,19 @@ This containerized app is supposed to be run locally on a machine and/or accessi
 THIS APP IS NOT SUPPOSED TO BE INSTALLED ON A WAN PROVIDER.
 
 
+## LAN sharing
+
+To allow a local Ubuntu server running `graph_mem` in a container with `ollama` running as a service for embedding processing, remember to allow incoming trafic if you're using `ufw` (assuming your local LAN is set on 192.168.0.0/24):
+
+```bash
+sudo ufw allow from 192.168.0.0/24 to any port 3003 proto tcp comment "GraphMem from LAN"
+
+sudo ufw allow from 192.168.0.0/24 to any port 11434 proto tcp comment "Ollama from LAN"
+```
+
+This way, the graph_mem UI will be accessible on `http://<graph_mem_server_ip>:3003/` while the MCP server will be at `http://<graph_mem_server_ip>:3003/mcp/sse`.
+
+
 ## Native Development Setup
 
 For local development, run the app natively with MariaDB on localhost.
