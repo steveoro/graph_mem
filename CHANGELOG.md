@@ -7,7 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.3.0] - 2026-03-05
 
-- update to Rails 8.1.2
+- Update to Rails 8.1.2
+- Context persistance using Mutex (single-user, single conversation, thread-safe)
 
 
 ## [1.2.0] - 2026-03-04

@@ -51,7 +51,7 @@ RSpec.describe GraphMemContext do
       described_class.current_project_id = project.id
 
       ids = described_class.scoped_entity_ids
-      expect(ids).to eq([project.id])
+      expect(ids).to eq([ project.id ])
     end
 
     it "includes entities related via part_of to the project" do
@@ -71,7 +71,7 @@ RSpec.describe GraphMemContext do
       described_class.current_project_id = project.id
 
       ids = described_class.scoped_entity_ids
-      expect(ids).to eq([project.id])
+      expect(ids).to eq([ project.id ])
     end
 
     it "deduplicates IDs" do
