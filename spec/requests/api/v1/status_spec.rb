@@ -27,4 +27,26 @@ RSpec.describe 'API V1 Status', type: :request do
       end
     end
   end
+
+  path '/api/v1/time' do
+    get('show current time') do
+      tags 'Status'
+      produces 'application/json'
+
+      response(200, 'successful') do
+        schema type: :object,
+               properties: {
+                 current_time: { type: :string, format: 'date-time' }
+               },
+               required: [ 'current_time' ]
+
+        run_test! do |response|
+          data = JSON.parse(response.body)
+          expect(response).to have_http_status(:ok)
+          expect(data['current_time']).to be_present
+          expect { Time.iso8601(data['current_time']) }.not_to raise_error
+        end
+      end
+    end
+  end
 end

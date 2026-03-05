@@ -95,6 +95,7 @@ The GraphMem project follows a standard Rails application structure with a few a
 └── spec/                 # Tests
 ```
 
+
 ## Code Style Guidelines
 
 GraphMem follows the [Ruby Style Guide](https://github.com/rubocop/ruby-style-guide) with a few customizations. We use RuboCop to enforce these guidelines.
@@ -120,6 +121,7 @@ To automatically fix issues:
 bundle exec rubocop -a
 ```
 
+
 ## Running Tests
 
 GraphMem uses RSpec for testing. To run all tests:
@@ -128,146 +130,6 @@ GraphMem uses RSpec for testing. To run all tests:
 bundle exec rspec
 ```
 
-To run specific test files:
-
-```bash
-bundle exec rspec spec/models/memory_entity_spec.rb
-```
-
-### Test Coverage
-
-We use SimpleCov to track test coverage. After running the tests, you can view the coverage report at `coverage/index.html`.
-
-## Adding Features
-
-### Adding a New MCP Tool
-
-1. Create a new tool class in `app/tools/`:
-
-```ruby
-# app/tools/my_new_tool.rb
-class MyNewTool < ApplicationTool
-  schema do
-    required(:param).filled(:string)
-  end
-
-  def call(params)
-    # Implementation
-    { result: "Success" }
-  end
-end
-```
-
-2. Add tests in `spec/tools/`:
-
-```ruby
-# spec/tools/my_new_tool_spec.rb
-require 'rails_helper'
-
-RSpec.describe MyNewTool do
-  # Tests
-end
-```
-
-### Adding a New Model
-
-1. Generate the model and migration:
-
-```bash
-bin/rails generate model NewModel attribute:type
-```
-
-2. Edit the migration in `db/migrate/`
-
-3. Apply the migration:
-
-```bash
-bin/rails db:migrate
-```
-
-4. Add appropriate validations and relationships to the model:
-
-```ruby
-# app/models/new_model.rb
-class NewModel < ApplicationRecord
-  validates :attribute, presence: true
-  
-  # Relationships
-  belongs_to :memory_entity
-end
-```
-
-5. Add tests to `spec/models/`
-
-## Database Migrations
-
-When making changes to the database schema:
-
-1. Create a new migration:
-
-```bash
-bin/rails generate migration AddColumnToTable column:type
-```
-
-2. Edit the migration file if necessary
-
-3. Apply the migration:
-
-```bash
-bin/rails db:migrate
-```
-
-4. Update the schema documentation
-
-## Debugging
-
-### Rails Console
-
-Use the Rails console for interactive debugging:
-
-```bash
-bin/rails console
-```
-
-Example debugging session:
-
-```ruby
-# Find an entity
-entity = MemoryEntity.find(1)
-
-# Inspect its relations
-entity.outgoing_relations
-
-# Test a method
-result = MyNewTool.new.call({ param: "test" })
-```
-
-### Logging
-
-Logs are stored in `log/development.log`. To increase log detail:
-
-1. Edit `config/environments/development.rb`:
-
-```ruby
-config.log_level = :debug
-```
-
-2. Restart the server
-
-### Debugging MCP
-
-To debug MCP tools:
-
-1. Add logging statements to your tool:
-
-```ruby
-def call(params)
-  Rails.logger.debug "Tool called with params: #{params.inspect}"
-  # Rest of implementation
-end
-```
-
-2. Monitor the logs when making MCP calls
 
 ## Pull Request Workflow
 
@@ -317,6 +179,7 @@ git push origin feature/my-new-feature
 4. Code must comply with style guidelines
 5. Documentation must be updated to reflect changes
 
+
 ## Versioning
 
 GraphMem follows [Semantic Versioning](https://semver.org/):
@@ -333,6 +196,7 @@ The current version is stored in `lib/graph_mem/version.rb`.
 * [Fast-MCP Documentation](https://github.com/yjacquin/fast-mcp)
 * [MCP Specification](https://github.com/mcporg/mcp)
 
+
 ## Getting Help
 
 If you encounter issues or have questions:
@@ -345,6 +209,7 @@ If you encounter issues or have questions:
    * Expected and actual behavior
    * Any error messages or logs
    * Your environment details (Ruby version, Rails version, etc.)
+
 
 ## License
 

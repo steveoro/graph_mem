@@ -61,13 +61,15 @@ namespace :embeddings do
             "Run `bundle exec rake embeddings:backfill` first."
     end
 
-    puts "All rows have embeddings. Converting columns to NOT NULL..."
+    zero_vec_default = "(VEC_FromText(CONCAT('[', REPEAT('0,', 767), '0]')))"
 
-    conn.execute "ALTER TABLE memory_entities MODIFY embedding VECTOR(768) NOT NULL"
-    puts "  ✓ memory_entities.embedding → NOT NULL"
+    puts "All rows have embeddings. Converting columns to NOT NULL with zero-vector default..."
 
-    conn.execute "ALTER TABLE memory_observations MODIFY embedding VECTOR(768) NOT NULL"
-    puts "  ✓ memory_observations.embedding → NOT NULL"
+    conn.execute "ALTER TABLE memory_entities MODIFY embedding VECTOR(768) NOT NULL DEFAULT #{zero_vec_default}"
+    puts "  ✓ memory_entities.embedding → NOT NULL (with default)"
+
+    conn.execute "ALTER TABLE memory_observations MODIFY embedding VECTOR(768) NOT NULL DEFAULT #{zero_vec_default}"
+    puts "  ✓ memory_observations.embedding → NOT NULL (with default)"
 
     puts "Adding VECTOR INDEX (HNSW, cosine distance)..."
 

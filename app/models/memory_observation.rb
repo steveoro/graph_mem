@@ -7,13 +7,20 @@ class MemoryObservation < ApplicationRecord
 
   validates :content, presence: true
 
-  after_commit :refresh_embedding, on: [ :create, :update ], if: :content_previously_changed?
+  after_create :set_initial_embedding
+  after_commit :refresh_embedding, on: [ :update ], if: :content_previously_changed?
 
   def as_json(options = {})
     super(options.merge(except: Array(options[:except]) | [ :embedding ]))
   end
 
   private
+
+  def set_initial_embedding
+    EmbeddingService.embed_observation(self)
+  rescue StandardError => e
+    Rails.logger.warn "MemoryObservation#set_initial_embedding failed: #{e.message}"
+  end
 
   def refresh_embedding
     EmbeddingService.embed_observation(self)

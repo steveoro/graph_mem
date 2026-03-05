@@ -21,7 +21,9 @@ class EmbeddingService
       @instance ||= new
     end
 
-    delegate :embed, :embed_entity, :embed_observation, :backfill_all, :regenerate_all, to: :instance
+    delegate :embed, :embed_entity, :embed_observation,
+             :embed_entity_binary, :embed_observation_binary,
+             :backfill_all, :regenerate_all, to: :instance
 
     # Runtime check: does the DB have VECTOR columns?
     # Cached per-process to avoid repeated schema queries.
@@ -99,6 +101,28 @@ class EmbeddingService
     return unless vector
 
     store_vector(observation, vector)
+  end
+
+  # Return packed binary embedding for a MemoryEntity (for use in before_create).
+  # MariaDB VECTOR columns accept IEEE 754 binary32 little-endian float sequences.
+  def embed_entity_binary(entity)
+    return nil unless self.class.vector_enabled?
+
+    text = compose_entity_text(entity)
+    vector = embed(text)
+    return nil unless vector
+
+    vector.pack("e*")
+  end
+
+  # Return packed binary embedding for a MemoryObservation (for use in before_create).
+  def embed_observation_binary(observation)
+    return nil unless self.class.vector_enabled?
+
+    vector = embed(observation.content)
+    return nil unless vector
+
+    vector.pack("e*")
   end
 
   # Force-recompute embeddings for every entity and observation,

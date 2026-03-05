@@ -1,24 +1,42 @@
 # MCP Tools Documentation
 
-This document provides detailed information about the Model Context Protocol (MCP) tools available in GraphMem v1.0.
+Detailed reference for the 21 Model Context Protocol (MCP) tools available in GraphMem v1.2.
 
 ## Overview
 
-MCP tools in GraphMem are Ruby classes that implement specific operations on the knowledge graph. Each tool is accessed via JSON-RPC calls, managed by an MCP client. Tools auto-register via `ApplicationTool` inheritance.
+MCP tools in GraphMem are Ruby classes that implement operations on the knowledge graph. Each tool is accessed via JSON-RPC calls from an MCP client. Tools auto-register via `ApplicationTool` inheritance.
 
-## Available Tools
+## Recommended Session Workflow
 
-### Utility Tools
+Tools are designed to be used in four phases per session:
 
-#### `get_version`
-- **Description:** Returns the current version of the GraphMem server.
+1. **Orient** -- `get_context` / `search_entities` / `set_context`
+2. **Recall** -- `search_entities` / `search_subgraph` / `get_entity` / `get_subgraph_by_ids`
+3. **Work** -- Execute the task, consulting the graph as needed
+4. **Persist** -- `create_observation` / `create_entity` / `create_relation` / `bulk_update`
+
+## Context Scoping (3 tools)
+
+Context scoping allows search tools to **boost** entities related to the active project. When a context is set via `set_context`, both `search_entities` and `search_subgraph` prioritize in-context entities in their results (cross-project results still appear, but ranked lower).
+
+Context is stored in a thread-local variable (`GraphMemContext`) and persists for the duration of the MCP connection.
+
+#### `set_context`
+- **Description:** Sets the active project context. Subsequent searches will prioritize entities related to this project via `part_of` relations.
+- **Parameters:**
+  - `project_id` (integer, required): The ID of the project entity to scope to.
+- **Response:** `{ status, project_id, project_name, project_type }`
+
+#### `get_context`
+- **Description:** Returns the currently active project context, if any. Auto-clears if the project entity no longer exists.
+- **Parameters:** None
+- **Response:** `{ status, project_id, project_name, project_type, description }` or `{ status: "no_context" }`
+
+#### `clear_context`
+- **Description:** Clears the active project context. Searches return to global scope.
 - **Parameters:** None
 
-#### `get_current_time`
-- **Description:** Returns the current server time as an ISO 8601 string.
-- **Parameters:** None
-
-### Entity Management
+## Entity Management (4 tools)
 
 #### `create_entity`
 - **Description:** Creates a new entity. Performs auto-deduplication: if a semantically similar entity exists (cosine distance < 0.25), returns a warning with the existing entity instead of creating a duplicate.
@@ -49,7 +67,7 @@ MCP tools in GraphMem are Ruby classes that implement specific operations on the
 - **Parameters:**
   - `entity_id` (integer, required): The ID of the entity.
 
-### Observation Management
+## Observation Management (2 tools)
 
 #### `create_observation`
 - **Description:** Adds an observation to an existing entity. Automatically generates a vector embedding for semantic search.
@@ -62,7 +80,7 @@ MCP tools in GraphMem are Ruby classes that implement specific operations on the
 - **Parameters:**
   - `observation_id` (integer, required): The ID of the observation.
 
-### Relation Management
+## Relation Management (3 tools)
 
 #### `create_relation`
 - **Description:** Creates a typed relationship between two entities.
@@ -77,16 +95,16 @@ MCP tools in GraphMem are Ruby classes that implement specific operations on the
   - `relation_id` (integer, required): The ID of the relation.
 
 #### `find_relations`
-- **Description:** Finds relations by optional filters.
+- **Description:** Finds relations by optional filters. All filters use AND when combined.
 - **Parameters:**
   - `from_entity_id` (integer, optional): Filter by source entity.
   - `to_entity_id` (integer, optional): Filter by target entity.
   - `relation_type` (string, optional): Filter by relation type.
 
-### Search & Query Tools
+## Search & Query Tools (4 tools)
 
 #### `search_entities`
-- **Description:** Hybrid search combining text tokenization with vector semantic similarity. Uses Reciprocal Rank Fusion to merge text and vector results. Falls back to text-only when embeddings are unavailable.
+- **Description:** Hybrid search combining text tokenization with vector semantic similarity. Uses Reciprocal Rank Fusion (RRF) to merge text and vector results. Falls back to text-only when embeddings are unavailable. **Context-aware:** boosts in-context entities when a project context is active.
 - **Parameters:**
   - `query` (string, required): The search term. Multiple words are tokenized for matching.
 - **Response fields:** `entity_id`, `name`, `entity_type`, `description`, `aliases`, `memory_observations_count`, `relevance_score`, `matched_fields`
@@ -98,7 +116,7 @@ MCP tools in GraphMem are Ruby classes that implement specific operations on the
   - `per_page` (integer, optional, default: 20, max: 100): Entities per page.
 
 #### `search_subgraph`
-- **Description:** Searches across entity names, types, aliases, and observations. Returns a paginated subgraph with matching entities (including observations) and inter-entity relations. Automatically merges vector search results when available.
+- **Description:** Searches across entity names, types, aliases, and observations. Returns a paginated subgraph with matching entities (including observations) and inter-entity relations. Merges vector search results when available. **Context-aware:** boosts in-context entities to the front of results.
 - **Parameters:**
   - `query` (string, required): Search term.
   - `search_in_name` (boolean, optional, default: true)
@@ -113,24 +131,7 @@ MCP tools in GraphMem are Ruby classes that implement specific operations on the
 - **Parameters:**
   - `entity_ids` (array of integers, required): Entity IDs to include.
 
-### Context Scoping
-
-#### `set_context`
-- **Description:** Sets the active project context. Useful for scoping subsequent operations to a specific project.
-- **Parameters:**
-  - `project_id` (integer, required): The ID of the project entity to scope to.
-- **Response:** `{ status, project_id, project_name, project_type }`
-
-#### `get_context`
-- **Description:** Returns the currently active project context, if any.
-- **Parameters:** None
-- **Response:** `{ status, project_id, project_name, project_type, description }` or `{ status: "no_context" }`
-
-#### `clear_context`
-- **Description:** Clears the active project context.
-- **Parameters:** None
-
-### Batch & Maintenance Tools
+## Batch & Maintenance Tools (3 tools)
 
 #### `bulk_update`
 - **Description:** Performs multiple operations in a single atomic transaction. Maximum 50 operations per call. Rolls back entirely on any error.
@@ -147,9 +148,23 @@ MCP tools in GraphMem are Ruby classes that implement specific operations on the
   - `entity_type` (string, optional): Filter to a specific entity type.
 - **Response:** Array of `{ entity_a, entity_b, cosine_distance, recommendation }`
 
+#### `get_graph_stats`
+- **Description:** Returns health metrics and statistics about the knowledge graph: totals, entity type distribution, orphan count, stale entities (not updated in 6+ months), most connected entities, and recent updates.
+- **Parameters:** None
+
+## Utility Tools (2 tools)
+
+#### `get_version`
+- **Description:** Returns the current version of the GraphMem server.
+- **Parameters:** None
+
+#### `get_current_time`
+- **Description:** Returns the current server time as an ISO 8601 string.
+- **Parameters:** None
+
 ## Entity Type Canonicalization
 
-GraphMem v1.0 introduces automatic entity type normalization. When creating or updating entities, the `entity_type` field is looked up in the `entity_type_mappings` table. Known variants are rewritten to their canonical form:
+GraphMem automatically normalizes entity types. When creating or updating entities, the `entity_type` field is looked up in the `entity_type_mappings` table. Known variants are rewritten to their canonical form:
 
 | Canonical Type | Accepted Variants |
 |---|---|
@@ -162,8 +177,6 @@ GraphMem v1.0 introduces automatic entity type normalization. When creating or u
 | Component | component, widget |
 | ... | (see `db/seeds/entity_type_mappings.rb` for full list) |
 
-New mappings can be added via `db/seeds/entity_type_mappings.rb` or directly in the `entity_type_mappings` table.
-
 ## Vector Search Architecture
 
 GraphMem uses MariaDB 11.8's native VECTOR columns with the MHNSW algorithm for approximate nearest-neighbor search:
@@ -171,7 +184,7 @@ GraphMem uses MariaDB 11.8's native VECTOR columns with the MHNSW algorithm for 
 1. **Embedding generation**: On entity create/update, the `EmbeddingService` calls Ollama to generate a 768-dimensional vector from the entity's composite text (type + name + aliases + description).
 2. **Storage**: Vectors are stored in `VECTOR(768)` columns with cosine distance indexes.
 3. **Search**: `VectorSearchStrategy` embeds the query and finds nearest entities via `VEC_DISTANCE_COSINE`.
-4. **Hybrid fusion**: `HybridSearchStrategy` merges text and vector results using Reciprocal Rank Fusion (RRF).
+4. **Hybrid fusion**: `HybridSearchStrategy` merges text and vector results using Reciprocal Rank Fusion (RRF). When a project context is active, in-context entities receive a score boost.
 
 The embedding service is configurable via environment variables (`OLLAMA_URL`, `EMBEDDING_MODEL`, etc.) and gracefully degrades when unavailable.
 
@@ -185,8 +198,9 @@ Custom error classes:
 
 ## Best Practices
 
-1. **Search before create** to avoid duplicates (auto-dedup helps but isn't foolproof for text-only search)
-2. **Use `set_context`** when working on a specific project to improve relevance
-3. **Use `bulk_update`** for session-end "save what I learned" operations
-4. **Run `suggest_merges`** periodically to identify and clean up duplicate entities
-5. **Keep observations concise** and factual for better embedding quality
+1. **Use `set_context`** at the start of each session to scope searches to the active project.
+2. **Search before create** to avoid duplicates (auto-dedup catches some, not all).
+3. **Use `bulk_update`** for session-end "save what I learned" operations.
+4. **Run `suggest_merges`** periodically to identify and clean up duplicate entities.
+5. **Keep observations concise** and factual for better embedding quality.
+6. **Clear context** (`clear_context`) when switching between projects.

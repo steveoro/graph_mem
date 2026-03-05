@@ -1,177 +1,231 @@
 ---
 openapi: 3.0.1
 info:
-  title: API V1
-  version: v1
+  title: GraphMem API
+  description: REST API for the GraphMem knowledge graph memory system. Provides entity, observation, relation management, search, context scoping, bulk operations, and maintenance utilities.
+  version: v1 (1.3.0)
+servers:
+- url: http://localhost:3003
+  description: Local development server
+
 paths:
+  # ── Memory Entities ────────────────────────────────────────────────
   "/api/v1/memory_entities":
     get:
-      summary: list memory entities
-      tags:
-      - Memory Entities
+      summary: List memory entities (paginated)
+      tags: [Memory Entities]
+      parameters:
+      - name: page
+        in: query
+        required: false
+        description: Page number (default 1)
+        schema:
+          type: integer
+          default: 1
+      - name: per_page
+        in: query
+        required: false
+        description: Entities per page (default 20, max 100)
+        schema:
+          type: integer
+          default: 20
+          maximum: 100
       responses:
         '200':
-          description: successful
+          description: Paginated list of entities
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  "$ref": "#/components/schemas/memory_entity"
+                type: object
+                properties:
+                  entities:
+                    type: array
+                    items:
+                      "$ref": "#/components/schemas/memory_entity"
+                  pagination:
+                    "$ref": "#/components/schemas/pagination"
     post:
-      summary: create memory entity
-      tags:
-      - Memory Entities
-      parameters: []
-      responses:
-        '201':
-          description: created
-          content:
-            application/json:
-              schema:
-                "$ref": "#/components/schemas/memory_entity"
-        '422':
-          description: unprocessable entity
+      summary: Create memory entity
+      tags: [Memory Entities]
       requestBody:
+        required: true
         content:
           application/json:
             schema:
               type: object
               properties:
-                name:
-                  type: string
-                  example: New Project
-                entity_type:
-                  type: string
-                  example: Project
-              required:
-              - name
-              - entity_type
+                memory_entity:
+                  type: object
+                  properties:
+                    name:
+                      type: string
+                      example: My Project
+                    entity_type:
+                      type: string
+                      example: Project
+                    aliases:
+                      type: string
+                      example: "MyProj|mp"
+                      description: Pipe-separated alternative names
+                    description:
+                      type: string
+                      example: A short description
+                  required: [name, entity_type]
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/memory_entity"
+        '422':
+          description: Unprocessable entity
+
   "/api/v1/memory_entities/{id}":
     parameters:
     - name: id
       in: path
-      description: id
       required: true
       schema:
-        type: string
+        type: integer
     get:
-      summary: show memory entity
-      tags:
-      - Memory Entities
+      summary: Show memory entity with observations and relations
+      tags: [Memory Entities]
       responses:
         '200':
-          description: successful
+          description: Entity with full details
           content:
             application/json:
               schema:
-                "$ref": "#/components/schemas/memory_entity"
+                "$ref": "#/components/schemas/memory_entity_full"
         '404':
-          description: not found
+          description: Not found
     patch:
-      summary: update memory entity
-      tags:
-      - Memory Entities
-      parameters: []
-      responses:
-        '200':
-          description: successful
-          content:
-            application/json:
-              schema:
-                "$ref": "#/components/schemas/memory_entity"
-        '404':
-          description: not found
-        '422':
-          description: unprocessable entity
+      summary: Update memory entity
+      tags: [Memory Entities]
       requestBody:
         content:
           application/json:
             schema:
               type: object
               properties:
-                name:
-                  type: string
-                  example: Updated Name
-                entity_type:
-                  type: string
-                  example: Updated Type
+                memory_entity:
+                  type: object
+                  properties:
+                    name:
+                      type: string
+                    entity_type:
+                      type: string
+                    aliases:
+                      type: string
+                    description:
+                      type: string
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/memory_entity"
+        '404':
+          description: Not found
+        '422':
+          description: Unprocessable entity
     put:
-      summary: update memory entity
-      tags:
-      - Memory Entities
-      parameters: []
-      responses:
-        '200':
-          description: successful
-          content:
-            application/json:
-              schema:
-                "$ref": "#/components/schemas/memory_entity"
-        '404':
-          description: not found
-        '422':
-          description: unprocessable entity
+      summary: Update memory entity (full replace)
+      tags: [Memory Entities]
       requestBody:
         content:
           application/json:
             schema:
               type: object
               properties:
-                name:
-                  type: string
-                  example: Updated Name
-                entity_type:
-                  type: string
-                  example: Updated Type
-              required:
-              - name
-              - entity_type
+                memory_entity:
+                  type: object
+                  properties:
+                    name:
+                      type: string
+                    entity_type:
+                      type: string
+                    aliases:
+                      type: string
+                    description:
+                      type: string
+                  required: [name, entity_type]
+      responses:
+        '200':
+          description: Updated
+        '404':
+          description: Not found
+        '422':
+          description: Unprocessable entity
     delete:
-      summary: delete memory entity
-      tags:
-      - Memory Entities
+      summary: Delete memory entity (cascades to observations and relations)
+      tags: [Memory Entities]
       responses:
         '204':
-          description: no content
+          description: Deleted
         '404':
-          description: not found
+          description: Not found
+
   "/api/v1/memory_entities/search":
     get:
-      summary: search memory entities
-      tags:
-      - Memory Entities
+      summary: Search entities (hybrid text + vector)
+      tags: [Memory Entities]
       parameters:
       - name: q
         in: query
         required: true
-        description: Search query for entity name (case-insensitive)
+        description: Search query (case-insensitive, tokenized)
         schema:
           type: string
       responses:
         '200':
-          description: successful
+          description: Relevance-ranked results
           content:
             application/json:
               schema:
                 type: array
                 items:
-                  "$ref": "#/components/schemas/memory_entity"
+                  "$ref": "#/components/schemas/search_result"
+
+  "/api/v1/memory_entities/{id}/merge_into/{target_id}":
+    parameters:
+    - name: id
+      in: path
+      required: true
+      description: Source entity ID (will be deleted)
+      schema:
+        type: integer
+    - name: target_id
+      in: path
+      required: true
+      description: Target entity ID (will receive merged data)
+      schema:
+        type: integer
+    post:
+      summary: Merge source entity into target
+      tags: [Memory Entities]
+      responses:
+        '204':
+          description: Merged successfully
+        '404':
+          description: Entity not found
+
+  # ── Memory Observations ────────────────────────────────────────────
   "/api/v1/memory_entities/{memory_entity_id}/memory_observations":
     parameters:
     - name: memory_entity_id
       in: path
-      description: ID of the parent Memory Entity
       required: true
       schema:
-        type: string
+        type: integer
     get:
-      summary: list memory observations for an entity
-      tags:
-      - Memory Observations
+      summary: List observations for an entity
+      tags: [Memory Observations]
       responses:
         '200':
-          description: successful
+          description: List of observations
           content:
             application/json:
               schema:
@@ -179,151 +233,137 @@ paths:
                 items:
                   "$ref": "#/components/schemas/memory_observation"
         '404':
-          description: parent entity not found
+          description: Parent entity not found
     post:
-      summary: create memory observation for an entity
-      tags:
-      - Memory Observations
-      parameters: []
-      responses:
-        '201':
-          description: created
-          content:
-            application/json:
-              schema:
-                "$ref": "#/components/schemas/memory_observation"
-        '422':
-          description: unprocessable entity
-        '404':
-          description: parent entity not found
+      summary: Create observation for an entity
+      tags: [Memory Observations]
       requestBody:
         content:
           application/json:
             schema:
               type: object
               properties:
-                content:
-                  type: string
-                  example: This is an observation.
-              required:
-              - content
+                memory_observation:
+                  type: object
+                  properties:
+                    content:
+                      type: string
+                      example: An important observation
+                  required: [content]
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/memory_observation"
+        '404':
+          description: Parent entity not found
+        '422':
+          description: Unprocessable entity
+
   "/api/v1/memory_entities/{memory_entity_id}/memory_observations/{id}":
     parameters:
     - name: memory_entity_id
       in: path
-      description: ID of the parent Memory Entity
       required: true
       schema:
-        type: string
+        type: integer
     - name: id
       in: path
-      description: ID of the Memory Observation
       required: true
       schema:
-        type: string
+        type: integer
     get:
-      summary: show memory observation
-      tags:
-      - Memory Observations
+      summary: Show observation
+      tags: [Memory Observations]
       responses:
         '200':
-          description: successful
+          description: Observation details
           content:
             application/json:
               schema:
                 "$ref": "#/components/schemas/memory_observation"
         '404':
-          description: parent entity not found
+          description: Not found
     patch:
-      summary: update memory observation
-      tags:
-      - Memory Observations
-      parameters: []
-      responses:
-        '200':
-          description: successful
-          content:
-            application/json:
-              schema:
-                "$ref": "#/components/schemas/memory_observation"
-        '422':
-          description: unprocessable entity
-        '404':
-          description: parent entity not found
+      summary: Update observation
+      tags: [Memory Observations]
       requestBody:
         content:
           application/json:
             schema:
               type: object
               properties:
-                content:
-                  type: string
-                  example: Updated Observation Content
-              required:
-              - content
-    put:
-      summary: update memory observation
-      tags:
-      - Memory Observations
-      parameters: []
+                memory_observation:
+                  type: object
+                  properties:
+                    content:
+                      type: string
+                  required: [content]
       responses:
         '200':
-          description: successful
-          content:
-            application/json:
-              schema:
-                "$ref": "#/components/schemas/memory_observation"
-        '422':
-          description: unprocessable entity
+          description: Updated
         '404':
-          description: parent entity not found
-      requestBody:
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                content:
-                  type: string
-                  example: Updated Observation Content via PUT
-              required:
-              - content
+          description: Not found
+        '422':
+          description: Unprocessable entity
     delete:
-      summary: delete memory observation
-      tags:
-      - Memory Observations
+      summary: Delete observation
+      tags: [Memory Observations]
       responses:
         '204':
-          description: no content
+          description: Deleted
         '404':
-          description: not found
+          description: Not found
+
+  "/api/v1/memory_entities/{memory_entity_id}/memory_observations/delete_duplicates":
+    parameters:
+    - name: memory_entity_id
+      in: path
+      required: true
+      schema:
+        type: integer
+    delete:
+      summary: Delete duplicate observations for an entity
+      tags: [Memory Observations]
+      responses:
+        '200':
+          description: Duplicates removed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  deleted_count:
+                    type: integer
+
+  # ── Memory Relations ───────────────────────────────────────────────
   "/api/v1/memory_relations":
     get:
-      summary: list memory relations
-      tags:
-      - Memory Relations
+      summary: List/filter relations
+      tags: [Memory Relations]
       parameters:
       - name: from_entity_id
         in: query
         required: false
-        description: Filter by source entity ID
         schema:
           type: integer
       - name: to_entity_id
         in: query
         required: false
-        description: Filter by target entity ID
         schema:
           type: integer
       - name: relation_type
         in: query
         required: false
-        description: Filter by relation type
         schema:
           type: string
       responses:
         '200':
-          description: successful
+          description: Filtered list of relations
           content:
             application/json:
               schema:
@@ -331,130 +371,438 @@ paths:
                 items:
                   "$ref": "#/components/schemas/memory_relation"
     post:
-      summary: create memory relation
-      tags:
-      - Memory Relations
-      parameters: []
-      responses:
-        '201':
-          description: created
-          content:
-            application/json:
-              schema:
-                "$ref": "#/components/schemas/memory_relation"
-        '422':
-          description: unprocessable entity
+      summary: Create relation
+      tags: [Memory Relations]
       requestBody:
         content:
           application/json:
             schema:
               type: object
               properties:
-                from_entity_id:
-                  type: integer
-                  description: ID of the source entity
-                to_entity_id:
-                  type: integer
-                  description: ID of the target entity
-                relation_type:
-                  type: string
-                  example: related_to
-              required:
-              - from_entity_id
-              - to_entity_id
-              - relation_type
+                memory_relation:
+                  type: object
+                  properties:
+                    from_entity_id:
+                      type: integer
+                    to_entity_id:
+                      type: integer
+                    relation_type:
+                      type: string
+                      example: part_of
+                  required: [from_entity_id, to_entity_id, relation_type]
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/memory_relation"
+        '422':
+          description: Unprocessable entity
+
   "/api/v1/memory_relations/{id}":
     parameters:
     - name: id
       in: path
-      description: ID of the Memory Relation
       required: true
       schema:
-        type: string
+        type: integer
     get:
-      summary: show memory relation
-      tags:
-      - Memory Relations
+      summary: Show relation
+      tags: [Memory Relations]
       responses:
         '200':
-          description: successful
+          description: Relation details
           content:
             application/json:
               schema:
                 "$ref": "#/components/schemas/memory_relation"
         '404':
-          description: not found
+          description: Not found
     patch:
-      summary: update memory relation
-      tags:
-      - Memory Relations
-      parameters: []
-      responses:
-        '200':
-          description: successful
-          content:
-            application/json:
-              schema:
-                "$ref": "#/components/schemas/memory_relation"
-        '422':
-          description: unprocessable entity
-        '404':
-          description: not found
+      summary: Update relation type
+      tags: [Memory Relations]
       requestBody:
         content:
           application/json:
             schema:
               type: object
               properties:
-                relation_type:
-                  type: string
-                  example: updated_link
-              required:
-              - relation_type
-    put:
-      summary: update memory relation
-      tags:
-      - Memory Relations
-      parameters: []
+                memory_relation:
+                  type: object
+                  properties:
+                    relation_type:
+                      type: string
+                  required: [relation_type]
       responses:
         '200':
-          description: successful
-          content:
-            application/json:
-              schema:
-                "$ref": "#/components/schemas/memory_relation"
-        '422':
-          description: unprocessable entity
+          description: Updated
         '404':
-          description: not found
-      requestBody:
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                relation_type:
-                  type: string
-                  example: updated_link_put
-              required:
-              - relation_type
+          description: Not found
+        '422':
+          description: Unprocessable entity
     delete:
-      summary: delete memory relation
-      tags:
-      - Memory Relations
+      summary: Delete relation
+      tags: [Memory Relations]
       responses:
         '204':
-          description: no content
+          description: Deleted
         '404':
-          description: not found
-  "/api/v1/status":
+          description: Not found
+
+  # ── Context ────────────────────────────────────────────────────────
+  "/api/v1/context":
     get:
-      summary: show status
-      tags:
-      - Status
+      summary: Get current project context
+      tags: [Context]
       responses:
         '200':
-          description: successful
+          description: Current context status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum: [context_active, no_context, context_cleared]
+                  project_id:
+                    type: integer
+                  project_name:
+                    type: string
+                  project_type:
+                    type: string
+                  description:
+                    type: string
+    post:
+      summary: Set project context
+      tags: [Context]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                project_id:
+                  type: integer
+                  description: ID of the project entity to scope to
+              required: [project_id]
+      responses:
+        '200':
+          description: Context set
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: context_set
+                  project_id:
+                    type: integer
+                  project_name:
+                    type: string
+                  project_type:
+                    type: string
+        '404':
+          description: Entity not found
+        '422':
+          description: Missing project_id
+    delete:
+      summary: Clear project context
+      tags: [Context]
+      responses:
+        '200':
+          description: Context cleared
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: context_cleared
+                  was_active:
+                    type: boolean
+
+  # ── Search ─────────────────────────────────────────────────────────
+  "/api/v1/search/subgraph":
+    get:
+      summary: Search subgraph (entities + relations, paginated)
+      tags: [Search]
+      parameters:
+      - name: q
+        in: query
+        required: true
+        description: Search term
+        schema:
+          type: string
+      - name: search_in_name
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: true
+      - name: search_in_type
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: true
+      - name: search_in_aliases
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: true
+      - name: search_in_observations
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: true
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          default: 1
+      - name: per_page
+        in: query
+        required: false
+        schema:
+          type: integer
+          default: 20
+          maximum: 100
+      responses:
+        '200':
+          description: Subgraph of matching entities and inter-relations
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/subgraph"
+
+  "/api/v1/search/subgraph_by_ids":
+    post:
+      summary: Get subgraph by entity IDs
+      tags: [Search]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                entity_ids:
+                  type: array
+                  items:
+                    type: integer
+                  minItems: 1
+              required: [entity_ids]
+      responses:
+        '200':
+          description: Subgraph of specified entities
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  entities:
+                    type: array
+                    items:
+                      "$ref": "#/components/schemas/entity_with_observations"
+                  relations:
+                    type: array
+                    items:
+                      "$ref": "#/components/schemas/memory_relation"
+        '422':
+          description: Invalid or empty entity_ids
+
+  # ── Bulk Operations ────────────────────────────────────────────────
+  "/api/v1/bulk":
+    post:
+      summary: Bulk create entities, observations, and relations (atomic)
+      tags: [Bulk Operations]
+      description: Maximum 50 total operations per call. Rolls back entirely on any error.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                entities:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      name:
+                        type: string
+                      entity_type:
+                        type: string
+                      aliases:
+                        type: string
+                      description:
+                        type: string
+                      observations:
+                        type: array
+                        items:
+                          type: string
+                    required: [name, entity_type]
+                observations:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      entity_id:
+                        type: integer
+                      text_content:
+                        type: string
+                    required: [entity_id, text_content]
+                relations:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      from_entity_id:
+                        type: integer
+                      to_entity_id:
+                        type: integer
+                      relation_type:
+                        type: string
+                    required: [from_entity_id, to_entity_id, relation_type]
+      responses:
+        '201':
+          description: All operations succeeded
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  created_entities:
+                    type: array
+                    items:
+                      type: object
+                  created_observations:
+                    type: array
+                    items:
+                      type: object
+                  created_relations:
+                    type: array
+                    items:
+                      type: object
+                  summary:
+                    type: object
+                    properties:
+                      entities_created:
+                        type: integer
+                      observations_created:
+                        type: integer
+                      relations_created:
+                        type: integer
+        '422':
+          description: Rolled back due to errors
+
+  # ── Maintenance ────────────────────────────────────────────────────
+  "/api/v1/maintenance/suggest_merges":
+    get:
+      summary: Find potential duplicate entities via vector similarity
+      tags: [Maintenance]
+      parameters:
+      - name: threshold
+        in: query
+        required: false
+        description: "Max cosine distance (0.0=identical, 1.0=unrelated). Default: 0.3"
+        schema:
+          type: number
+          default: 0.3
+      - name: limit
+        in: query
+        required: false
+        description: "Max suggestions. Default: 20"
+        schema:
+          type: integer
+          default: 20
+      - name: entity_type
+        in: query
+        required: false
+        description: Filter to a specific entity type
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Merge suggestions
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  suggestions:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        entity_a:
+                          type: object
+                        entity_b:
+                          type: object
+                        cosine_distance:
+                          type: number
+                        recommendation:
+                          type: string
+                          enum: [high_confidence_merge, review_manually]
+                  total:
+                    type: integer
+                  threshold_used:
+                    type: number
+
+  "/api/v1/maintenance/stats":
+    get:
+      summary: Graph health metrics and statistics
+      tags: [Maintenance]
+      responses:
+        '200':
+          description: Graph statistics
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  totals:
+                    type: object
+                    properties:
+                      entities:
+                        type: integer
+                      observations:
+                        type: integer
+                      relations:
+                        type: integer
+                      audit_logs:
+                        type: integer
+                  entity_type_distribution:
+                    type: object
+                  orphan_count:
+                    type: integer
+                  stale_count:
+                    type: integer
+                  most_connected:
+                    type: array
+                    items:
+                      type: object
+                  recently_updated:
+                    type: array
+                    items:
+                      type: object
+
+  # ── Status & Utilities ─────────────────────────────────────────────
+  "/api/v1/status":
+    get:
+      summary: Health check and version
+      tags: [Status]
+      responses:
+        '200':
+          description: Server status
           content:
             application/json:
               schema:
@@ -465,13 +813,64 @@ paths:
                     example: ok
                   version:
                     type: string
-                    example: 0.1.0
-                required:
-                - status
-                - version
-servers:
-- url: http://localhost:3003
-  description: Local development server
+                    example: 1.3.0
+                required: [status, version]
+
+  "/api/v1/time":
+    get:
+      summary: Current server time (ISO 8601)
+      tags: [Status]
+      responses:
+        '200':
+          description: Current time
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  current_time:
+                    type: string
+                    format: date-time
+
+  # ── Graph Data (UI) ────────────────────────────────────────────────
+  "/api/v1/graph_data":
+    get:
+      summary: Graph visualization data (Cytoscape format)
+      tags: [Graph Data]
+      parameters:
+      - name: entity_id
+        in: query
+        required: false
+        description: Show subgraph centered on this entity
+        schema:
+          type: integer
+      - name: scoped_entity_id
+        in: query
+        required: false
+        description: Show scoped subgraph (entity + part_of children)
+        schema:
+          type: integer
+      - name: root_only
+        in: query
+        required: false
+        description: Show only root-level (Project) entities
+        schema:
+          type: boolean
+      responses:
+        '200':
+          description: Graph elements (nodes + edges)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  elements:
+                    type: array
+                    items:
+                      type: object
+                  options:
+                    type: object
+
 components:
   schemas:
     memory_entity:
@@ -484,6 +883,12 @@ components:
           type: string
         entity_type:
           type: string
+        aliases:
+          type: string
+          nullable: true
+        description:
+          type: string
+          nullable: true
         memory_observations_count:
           type: integer
           readOnly: true
@@ -495,13 +900,44 @@ components:
           type: string
           format: date-time
           readOnly: true
-      required:
-      - id
-      - name
-      - entity_type
-      - memory_observations_count
-      - created_at
-      - updated_at
+      required: [id, name, entity_type]
+
+    memory_entity_full:
+      allOf:
+      - "$ref": "#/components/schemas/memory_entity"
+      - type: object
+        properties:
+          observations:
+            type: array
+            items:
+              "$ref": "#/components/schemas/memory_observation"
+          relations_from:
+            type: array
+            items:
+              type: object
+              properties:
+                relation_id:
+                  type: integer
+                to_entity_id:
+                  type: integer
+                to_entity_name:
+                  type: string
+                relation_type:
+                  type: string
+          relations_to:
+            type: array
+            items:
+              type: object
+              properties:
+                relation_id:
+                  type: integer
+                from_entity_id:
+                  type: integer
+                from_entity_name:
+                  type: string
+                relation_type:
+                  type: string
+
     memory_observation:
       type: object
       properties:
@@ -521,12 +957,8 @@ components:
           type: string
           format: date-time
           readOnly: true
-      required:
-      - id
-      - content
-      - memory_entity_id
-      - created_at
-      - updated_at
+      required: [id, content, memory_entity_id]
+
     memory_relation:
       type: object
       properties:
@@ -547,10 +979,94 @@ components:
           type: string
           format: date-time
           readOnly: true
-      required:
-      - id
-      - from_entity_id
-      - to_entity_id
-      - relation_type
-      - created_at
-      - updated_at
+      required: [id, from_entity_id, to_entity_id, relation_type]
+
+    search_result:
+      type: object
+      properties:
+        entity_id:
+          type: integer
+        name:
+          type: string
+        entity_type:
+          type: string
+        description:
+          type: string
+          nullable: true
+        aliases:
+          type: string
+          nullable: true
+        memory_observations_count:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        relevance_score:
+          type: number
+        matched_fields:
+          type: array
+          items:
+            type: string
+
+    entity_with_observations:
+      type: object
+      properties:
+        entity_id:
+          type: integer
+        name:
+          type: string
+        entity_type:
+          type: string
+        aliases:
+          type: string
+          nullable: true
+        observations:
+          type: array
+          items:
+            type: object
+            properties:
+              observation_id:
+                type: integer
+              content:
+                type: string
+              created_at:
+                type: string
+                format: date-time
+              updated_at:
+                type: string
+                format: date-time
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    subgraph:
+      type: object
+      properties:
+        entities:
+          type: array
+          items:
+            "$ref": "#/components/schemas/entity_with_observations"
+        relations:
+          type: array
+          items:
+            "$ref": "#/components/schemas/memory_relation"
+        pagination:
+          "$ref": "#/components/schemas/pagination"
+
+    pagination:
+      type: object
+      properties:
+        total_entities:
+          type: integer
+        per_page:
+          type: integer
+        current_page:
+          type: integer
+        total_pages:
+          type: integer

@@ -12,7 +12,8 @@ class MemoryEntity < ApplicationRecord
 
   after_initialize :set_default_counter_cache
   before_validation :canonicalize_entity_type
-  after_commit :refresh_embedding, if: :embedding_fields_changed?
+  after_create :set_initial_embedding
+  after_commit :refresh_embedding, on: [ :update ], if: :embedding_fields_changed?
 
   EMBEDDING_FIELDS = %w[name entity_type aliases description].freeze
 
@@ -31,6 +32,12 @@ class MemoryEntity < ApplicationRecord
 
     canonical = EntityTypeMapping.canonicalize(entity_type)
     self.entity_type = canonical if canonical.present?
+  end
+
+  def set_initial_embedding
+    EmbeddingService.embed_entity(self)
+  rescue StandardError => e
+    Rails.logger.warn "MemoryEntity#set_initial_embedding failed: #{e.message}"
   end
 
   def embedding_fields_changed?

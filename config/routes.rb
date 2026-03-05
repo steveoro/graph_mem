@@ -19,16 +19,32 @@ Rails.application.routes.draw do
 
       resources :memory_entities do
         post "merge_into/:target_id", to: "memory_entities#merge", on: :member
-        # Nested routes for observations associated with an entity
         resources :memory_observations, only: [ :index, :create, :destroy, :show, :update ] do
           delete "delete_duplicates", to: "memory_observations#delete_duplicates", on: :collection
         end
       end
 
-      # Update memory_relations to include show and update actions
       resources :memory_relations, only: [ :index, :create, :destroy, :show, :update ]
-      # Add status endpoint
+
+      # Context management
+      get "/context", to: "context#show"
+      post "/context", to: "context#create"
+      delete "/context", to: "context#destroy"
+
+      # Subgraph search
+      get "/search/subgraph", to: "search#subgraph"
+      post "/search/subgraph_by_ids", to: "search#subgraph_by_ids"
+
+      # Bulk operations
+      post "/bulk", to: "bulk#create"
+
+      # Maintenance and stats
+      get "/maintenance/suggest_merges", to: "maintenance#suggest_merges"
+      get "/maintenance/stats", to: "maintenance#stats"
+
+      # Status and utilities
       get "/status", to: "status#index"
+      get "/time", to: "status#time"
 
       # Graph data endpoint
       get "graph_data", to: "graph_data#index"

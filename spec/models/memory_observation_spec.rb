@@ -79,17 +79,31 @@ RSpec.describe MemoryObservation, type: :model do
   end
 
   describe "embedding callback" do
-    it "calls EmbeddingService after content changes" do
+    it "calls embed_observation on create via after_create" do
+      allow(EmbeddingService).to receive(:vector_enabled?).and_return(true)
       service = instance_double(EmbeddingService)
       allow(EmbeddingService).to receive(:instance).and_return(service)
-      allow(service).to receive(:embed_entity)
       allow(service).to receive(:embed_observation)
+      allow(service).to receive(:embed_entity)
 
       described_class.create!(memory_entity: entity, content: "embed test")
       expect(service).to have_received(:embed_observation)
     end
 
-    it "does not raise when embedding service fails" do
+    it "calls embed_observation via after_commit on update when content changes" do
+      obs = described_class.create!(memory_entity: entity, content: "original")
+
+      allow(EmbeddingService).to receive(:vector_enabled?).and_return(true)
+      service = instance_double(EmbeddingService)
+      allow(EmbeddingService).to receive(:instance).and_return(service)
+      allow(service).to receive(:embed_observation)
+
+      obs.update!(content: "updated")
+      expect(service).to have_received(:embed_observation)
+    end
+
+    it "does not raise when embedding service fails on create" do
+      allow(EmbeddingService).to receive(:vector_enabled?).and_return(true)
       allow(EmbeddingService).to receive(:instance).and_raise(StandardError, "service down")
 
       expect {

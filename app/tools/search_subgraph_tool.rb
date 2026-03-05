@@ -193,6 +193,14 @@ class SearchSubgraphTool < ApplicationTool
       logger.debug "SearchSubgraphTool: vector search unavailable, using text only — #{e.message}"
     end
 
+    # Boost context-scoped entities to the front of results
+    context_ids = GraphMemContext.scoped_entity_ids
+    if context_ids.present?
+      context_set = context_ids.to_set
+      in_context, out_of_context = matching_entity_ids.partition { |id| context_set.include?(id) }
+      matching_entity_ids = in_context + out_of_context
+    end
+
     total_matching_entities = matching_entity_ids.length
 
     # Apply pagination to the IDs

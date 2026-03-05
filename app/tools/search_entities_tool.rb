@@ -23,7 +23,7 @@ class SearchEntitiesTool < ApplicationTool
     logger.info "Performing SearchEntitiesTool with query: #{query}"
     begin
       strategy = HybridSearchStrategy.new
-      results = strategy.search(query, semantic: true)
+      results = strategy.search(query, semantic: true, context_entity_ids: GraphMemContext.scoped_entity_ids)
       results.map(&:to_h)
     rescue StandardError => e
       logger.error "InternalServerError in SearchEntitiesTool: #{e.message} - #{e.backtrace.join("\n")}"

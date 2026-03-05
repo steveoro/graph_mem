@@ -17,7 +17,9 @@ class BulkUpdateTool < ApplicationTool
     optional(:relations).description("Array of relations to create. Each: {from_entity_id, to_entity_id, relation_type}")
   end
 
-  def input_schema_to_json
+  # Override as class method -- fast-mcp calls input_schema_to_json on the class,
+  # and Dry::Schema cannot express this nested structure via the arguments DSL alone.
+  def self.input_schema_to_json
     {
       type: "object",
       properties: {
@@ -28,8 +30,8 @@ class BulkUpdateTool < ApplicationTool
             properties: {
               name: { type: "string" },
               entity_type: { type: "string" },
-              aliases: { type: [ "string", "null" ] },
-              description: { type: [ "string", "null" ] },
+              aliases: { type: %w[string null] },
+              description: { type: %w[string null] },
               observations: { type: "array", items: { type: "string" } }
             },
             required: %w[name entity_type]

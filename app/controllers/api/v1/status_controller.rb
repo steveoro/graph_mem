@@ -10,6 +10,11 @@ module Api
           version: GraphMem::VERSION
         }
       end
+
+      # GET /api/v1/time
+      def time
+        render json: { current_time: Time.current.iso8601 }
+      end
     end
   end
 end

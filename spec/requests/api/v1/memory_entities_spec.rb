@@ -8,20 +8,30 @@ RSpec.describe 'API V1 Memory Entities', type: :request do
       produces 'application/json'
 
       response(200, 'successful') do
-        schema type: :array,
-               'items': {
-                 '$ref' => '#/components/schemas/memory_entity'
-               }
+        schema type: :object,
+               properties: {
+                 entities: { type: :array, items: { '$ref' => '#/components/schemas/memory_entity' } },
+                 pagination: {
+                   type: :object,
+                   properties: {
+                     total_entities: { type: :integer },
+                     per_page: { type: :integer },
+                     current_page: { type: :integer },
+                     total_pages: { type: :integer }
+                   }
+                 }
+               },
+               required: %w[entities pagination]
 
-        # RSpec Example Tests
         let!(:entity1) { MemoryEntity.create!(name: 'Entity One', entity_type: 'TypeA') }
         let!(:entity2) { MemoryEntity.create!(name: 'Entity Two', entity_type: 'TypeB') }
 
         run_test! do |response|
           data = JSON.parse(response.body)
-          expect(data.size).to eq(2)
-          expect(data.first['name']).to eq(entity1.name)
-          expect(data.last['name']).to eq(entity2.name)
+          expect(data['entities'].size).to eq(2)
+          expect(data['entities'].first['name']).to eq(entity1.name)
+          expect(data['entities'].last['name']).to eq(entity2.name)
+          expect(data['pagination']['total_entities']).to eq(2)
         end
       end
     end
@@ -77,22 +87,37 @@ RSpec.describe 'API V1 Memory Entities', type: :request do
       produces 'application/json'
 
       response(200, 'successful') do
-        schema '$ref' => '#/components/schemas/memory_entity'
-        let(:id) { existing_entity.id } # Define ID for successful case
+        schema type: :object,
+               properties: {
+                 entity_id: { type: :integer },
+                 name: { type: :string },
+                 entity_type: { type: :string },
+                 aliases: { type: [ :string, :null ] },
+                 description: { type: [ :string, :null ] },
+                 memory_observations_count: { type: :integer },
+                 created_at: { type: :string },
+                 updated_at: { type: :string },
+                 observations: { type: :array },
+                 relations_from: { type: :array },
+                 relations_to: { type: :array }
+               },
+               required: %w[entity_id name entity_type]
+        let(:id) { existing_entity.id }
 
-        # RSpec Example Tests
         run_test! do |response|
           data = JSON.parse(response.body)
           expect(response).to have_http_status(:ok)
-          expect(data['id']).to eq(existing_entity.id)
+          expect(data['entity_id']).to eq(existing_entity.id)
           expect(data['name']).to eq(existing_entity.name)
+          expect(data).to have_key('observations')
+          expect(data).to have_key('relations_from')
+          expect(data).to have_key('relations_to')
         end
       end
 
       response(404, 'not found') do
-        let(:id) { 'invalid-or-nonexistent-id' } # Use a more descriptive invalid ID
+        let(:id) { 'invalid-or-nonexistent-id' }
 
-        # RSpec Example Tests
         run_test! do |response|
           expect(response).to have_http_status(:not_found)
         end

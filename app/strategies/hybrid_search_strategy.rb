@@ -23,6 +23,11 @@ class HybridSearchStrategy
     end
   end
 
+  # Boost multiplier for entities within the active project context.
+  # Applied additively to fused RRF scores so in-context results float up
+  # without filtering out cross-project matches.
+  CONTEXT_BOOST = 0.02
+
   def initialize
     @text_strategy = EntitySearchStrategy.new
     @vector_strategy = VectorSearchStrategy.new
@@ -32,8 +37,9 @@ class HybridSearchStrategy
   # @param query [String]
   # @param limit [Integer]
   # @param semantic [Boolean] When false, skip vector search entirely
+  # @param context_entity_ids [Array<Integer>, nil] Entity IDs to boost (from GraphMemContext)
   # @return [Array<SearchResult>]
-  def search(query, limit: 50, semantic: true)
+  def search(query, limit: 50, semantic: true, context_entity_ids: nil)
     text_results = @text_strategy.search(query, limit: limit * 2)
 
     vector_results = if semantic
@@ -43,15 +49,16 @@ class HybridSearchStrategy
     end
 
     if vector_results.empty?
-      return text_results.first(limit)
+      results = text_results.first(limit)
+      return apply_context_boost(results, context_entity_ids)
     end
 
-    fuse(text_results, vector_results, limit)
+    fuse(text_results, vector_results, limit, context_entity_ids: context_entity_ids)
   end
 
   private
 
-  def fuse(text_results, vector_results, limit)
+  def fuse(text_results, vector_results, limit, context_entity_ids: nil)
     scores = Hash.new(0.0)
     entities = {}
     matched_fields = Hash.new { |h, k| h[k] = [] }
@@ -70,6 +77,13 @@ class HybridSearchStrategy
       matched_fields[id] |= [ "semantic" ]
     end
 
+    if context_entity_ids.present?
+      context_set = context_entity_ids.to_set
+      scores.each_key do |id|
+        scores[id] += CONTEXT_BOOST if context_set.include?(id)
+      end
+    end
+
     scores
       .sort_by { |_id, score| -score }
       .first(limit)
@@ -80,5 +94,15 @@ class HybridSearchStrategy
           matched_fields: matched_fields[id]
         )
       end
+  end
+
+  def apply_context_boost(results, context_entity_ids)
+    return results if context_entity_ids.blank?
+
+    context_set = context_entity_ids.to_set
+    results.each do |result|
+      result.score += CONTEXT_BOOST if context_set.include?(result.entity.id)
+    end
+    results.sort_by { |r| -r.score }
   end
 end

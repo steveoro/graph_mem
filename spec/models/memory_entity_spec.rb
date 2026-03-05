@@ -123,7 +123,8 @@ RSpec.describe MemoryEntity, type: :model do
   end
 
   describe "embedding callback" do
-    it "calls EmbeddingService after embedding-relevant fields change" do
+    it "calls embed_entity on create via after_create" do
+      allow(EmbeddingService).to receive(:vector_enabled?).and_return(true)
       service = instance_double(EmbeddingService)
       allow(EmbeddingService).to receive(:instance).and_return(service)
       allow(service).to receive(:embed_entity)
@@ -132,7 +133,20 @@ RSpec.describe MemoryEntity, type: :model do
       expect(service).to have_received(:embed_entity)
     end
 
-    it "does not raise when embedding service fails" do
+    it "calls embed_entity via after_commit on update when embedding fields change" do
+      entity = described_class.create!(name: "EmbedUpdate", entity_type: "Project")
+
+      allow(EmbeddingService).to receive(:vector_enabled?).and_return(true)
+      service = instance_double(EmbeddingService)
+      allow(EmbeddingService).to receive(:instance).and_return(service)
+      allow(service).to receive(:embed_entity)
+
+      entity.update!(name: "EmbedUpdated")
+      expect(service).to have_received(:embed_entity)
+    end
+
+    it "does not raise when embedding service fails on create" do
+      allow(EmbeddingService).to receive(:vector_enabled?).and_return(true)
       allow(EmbeddingService).to receive(:instance).and_raise(StandardError, "service down")
 
       expect {

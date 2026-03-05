@@ -10,13 +10,40 @@ module Api
 
       # GET /api/v1/memory_entities
       def index
-        @memory_entities = ::MemoryEntity.all
-        render json: @memory_entities
+        page = [ params.fetch(:page, 1).to_i, 1 ].max
+        per_page = params.fetch(:per_page, 20).to_i.clamp(1, 100)
+
+        entities = ::MemoryEntity.order(:id)
+        total = entities.count
+        paginated = entities.offset((page - 1) * per_page).limit(per_page)
+
+        render json: {
+          entities: paginated.as_json(only: [ :id, :name, :entity_type, :aliases, :description, :memory_observations_count, :created_at, :updated_at ]),
+          pagination: { total_entities: total, per_page: per_page, current_page: page, total_pages: [ (total.to_f / per_page).ceil, 1 ].max }
+        }
       end
 
       # GET /api/v1/memory_entities/:id
       def show
-        render json: @memory_entity
+        render json: {
+          entity_id: @memory_entity.id,
+          name: @memory_entity.name,
+          entity_type: @memory_entity.entity_type,
+          aliases: @memory_entity.aliases,
+          description: @memory_entity.description,
+          memory_observations_count: @memory_entity.memory_observations_count,
+          created_at: @memory_entity.created_at.iso8601,
+          updated_at: @memory_entity.updated_at.iso8601,
+          observations: @memory_entity.memory_observations.map { |o|
+            { observation_id: o.id, content: o.content, created_at: o.created_at.iso8601, updated_at: o.updated_at.iso8601 }
+          },
+          relations_from: @memory_entity.relations_from.map { |r|
+            { relation_id: r.id, to_entity_id: r.to_entity_id, to_entity_name: r.to_entity&.name, relation_type: r.relation_type }
+          },
+          relations_to: @memory_entity.relations_to.map { |r|
+            { relation_id: r.id, from_entity_id: r.from_entity_id, from_entity_name: r.from_entity&.name, relation_type: r.relation_type }
+          }
+        }
       end
 
       # POST /api/v1/memory_entities
@@ -34,12 +61,12 @@ module Api
       def search
         query = params[:q]
         if query.present?
-          # Use the EntitySearchStrategy for improved search with relevance ranking
-          @memory_entities = EntitySearchStrategy.new.search(query)
+          strategy = HybridSearchStrategy.new
+          results = strategy.search(query, semantic: true, context_entity_ids: GraphMemContext.scoped_entity_ids)
+          render json: results.map(&:to_h)
         else
-          @memory_entities = ::MemoryEntity.none
+          render json: []
         end
-        render json: @memory_entities
       end
 
       # PATCH/PUT /api/v1/memory_entities/:id
@@ -109,7 +136,7 @@ module Api
 
       # Use callbacks to share common setup or constraints between actions.
       def set_entity
-        @memory_entity = ::MemoryEntity.find(params[:id])
+        @memory_entity = ::MemoryEntity.includes(:memory_observations, :relations_from, :relations_to).find(params[:id])
       rescue ActiveRecord::RecordNotFound
         render json: { error: "MemoryEntity not found" }, status: :not_found
       end

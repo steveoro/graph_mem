@@ -2,27 +2,34 @@
 
 GraphMem is a Ruby on Rails application implementing a Model Context Protocol (MCP) server for graph-based memory management. It enables AI assistants and other clients to create, retrieve, search, and manage knowledge entities and their relationships through a standardized interface.
 
-[![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)](lib/graph_mem/version.rb)
-[![Rails](https://img.shields.io/badge/rails-8.0.2-orange.svg)](Gemfile)
+[![Version](https://img.shields.io/badge/version-1.3.0-blue.svg)](lib/graph_mem/version.rb)
+[![Rails](https://img.shields.io/badge/rails-8.1.2-orange.svg)](Gemfile)
 [![Ruby](https://img.shields.io/badge/ruby-3.4.1-red.svg)](Gemfile)
 
 ## Overview
 
 GraphMem provides persistent, structured storage for knowledge entities, their relationships, and observations. It's designed as an MCP server that enables AI assistants to maintain memory across sessions, build domain-specific knowledge graphs, and effectively reference past interactions.
 
-**Key capabilities in v1.0:**
+### Single-User Design
+
+GraphMem is designed as a **single-user, local-network server**. There is no authentication layer -- the server trusts all incoming requests. The project context (set via `set_context`) is a single process-global value shared across all requests: one user sets a project scope, and all subsequent tool calls see it.
+
+This is intentional: the server is meant to run on a local machine or LAN, accessed by one AI assistant at a time. If you need multi-user or multi-tenant support, an authentication and per-session context layer would need to be added.
+
+**Key capabilities:**
 - **Vector semantic search** via MariaDB 11.8 native VECTOR support + Ollama embeddings
+- **Project context scoping** -- set once, persists across all MCP tool calls within the process
 - **Entity type canonicalization** to prevent graph fragmentation
 - **Auto-deduplication** on entity creation
-- **Hybrid search** combining text tokenization with vector similarity
+- **Hybrid search** combining text tokenization with vector similarity (with context boosting)
 - **Docker Compose** deployment with auto-start support
 - **LAN-wide embedding** architecture using a centralized Ollama host
 
 ## Technology Stack
 
 * **Ruby**: 3.4.1+
-* **Rails**: 8.0.2+
-* **MCP Implementation**: [fast-mcp](https://github.com/yjacquin/fast-mcp) gem, vers. 1.5+
+* **Rails**: 8.1.2+
+* **MCP Implementation**: [fast-mcp](https://github.com/yjacquin/fast-mcp) gem
 * **Database**: MariaDB 11.8+ (VECTOR support required)
 * **Embeddings**: Ollama with nomic-embed-text (768 dimensions)
 
@@ -120,8 +127,9 @@ The app is available at `http://localhost:3003`. Swagger API docs at `http://loc
 
 The app port (3003) is hardcoded on Dockerfile and docker-compose.yml because the service relies on host networking to access the embedding service by `ollama`. This allows a simpler container setup on different machines without resorting to iptables or firewall mangling.
 
-This containerized app is supposed to be run locally on a machine and/or accessible only through a LAN.
-THIS APP IS NOT SUPPOSED TO BE INSTALLED ON A WAN PROVIDER.
+This containerized app is a **single-user server** with no authentication layer -- it is
+designed to run locally on a machine and/or be accessible only through a trusted LAN.
+**Do not expose this service to the public internet.**
 
 
 ## LAN sharing
