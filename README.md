@@ -2,7 +2,7 @@
 
 GraphMem is a Ruby on Rails application implementing a Model Context Protocol (MCP) server for graph-based memory management. It enables AI assistants and other clients to create, retrieve, search, and manage knowledge entities and their relationships through a standardized interface.
 
-[![Version](https://img.shields.io/badge/version-1.3.0-blue.svg)](lib/graph_mem/version.rb)
+[![Version](https://img.shields.io/badge/version-1.3.2-blue.svg)](lib/graph_mem/version.rb)
 [![Rails](https://img.shields.io/badge/rails-8.1.2-orange.svg)](Gemfile)
 [![Ruby](https://img.shields.io/badge/ruby-3.4.1-red.svg)](Gemfile)
 
@@ -182,11 +182,12 @@ For local development, run the app natively with MariaDB on localhost.
    bin/dev
    ```
 
+
 ## Setting Up the MCP Client
 
 ### Cursor
 
-Add to `~/.cursor/mcp.json`:
+Edit your Cursor's `mcp.json`:
 
 **Option A -- SSE transport (recommended with Docker):**
 ```json
@@ -199,7 +200,7 @@ Add to `~/.cursor/mcp.json`:
 }
 ```
 
-**Option B -- stdio transport (native development):**
+**Option B -- stdio transport (native development / real-time changes applied):**
 ```json
 {
   "mcpServers": {
@@ -224,45 +225,60 @@ Add to `~/.cursor/mcp.json`:
 }
 ```
 
+
 ### Windsurf
 
-Add to `~/.codeium/windsurf/mcp_config.json` (or `windsurf-next`):
+Edit your Windsurf's `mcp_config.json` using the same approach as Cursor's. Usually the SSE container doesn't yield any issue.
+
+
+### Antigravity
+
+SSE doesn't work with Antigravity — Antigravity uses the newer Streamable HTTP transport (POST/DELETE directly to the serverUrl), while the current FastMCP gem (v1.6.0) only supports the older SSE dual-endpoint protocol (GET /sse + POST /messages). But stdio works fine.
+
+Assuming `graph_mem-app-1` is the running container name, edit `mcp_servers.json`:
 
 ```json
 {
-  "mcpServers": {
-    "graph_mem": {
-      "command": "/bin/bash",
-      "args": ["/absolute/path/to/graph_mem/bin/mcp_graph_mem_runner.sh"],
-      "env": { "RAILS_ENV": "development" }
+    "mcpServers": {
+        "graph_mem": {
+            "command": "/usr/bin/docker",
+            "args": [
+                "exec",
+                "-i",
+                "graph_mem-app-1",
+                "bash",
+                "-c",
+                "'bin/bundle exec ruby bin/mcp_stdio_runner.rb'"
+                // For development, change env below and replace the command with bash, first arg "-c" and second arg:
+                // "cd /home/steve/Projects/graph_mem && exec /usr/share/rvm/wrappers/ruby-3.4.1@graph_mem/bundle exec ruby bin/mcp_stdio_runner.rb"
+            ],
+            "env": {
+                "RAILS_ENV": "production"
+            }
+        }
     }
-  }
 }
 ```
 
-For Docker-based setups, use `bin/docker-mcp` as the command instead, or configure SSE transport if your Windsurf version supports it.
 
 ### Claude Code
 
-Add to `~/.claude/mcp_servers.json`:
+Typically both stdio and SSE should work as all 3 options highlighted above should.
+Edit your Claude's `mcp_servers.json` with the one of your choosing.
 
-```json
-{
-  "graph_mem": {
-    "command": "/bin/bash",
-    "args": ["/absolute/path/to/graph_mem/bin/mcp_graph_mem_runner.sh"],
-    "env": { "RAILS_ENV": "development" }
-  }
-}
-```
-
-For Docker-based setups, use `bin/docker-mcp` as the command argument.
 
 ### LAN Access (Multiple Machines)
 
-If running GraphMem on a workstation and accessing from other machines on the LAN:
+See [Architecture](docs/architecture.md) for details.
 
-**1. Expose Ollama on the workstation**
+Mind that the current version of GraphMem is specifically designed for single-user usage only, meaning 1 AI user per installation: currently there's no session storage per conversation, so multiple AI agents connecting and using the same running GraphMem instance may overwrite each other's work (one could reset the current context of another preventing the "context valve" to work as expected, thus leading to context bloat).
+
+But nothing prevents you to share the same generated memory graph among different workstations, provided GraphMem will be used by a single AI user at a time.
+Or, more realistically, deploy GraphMem on a performant server and access it your usual workstation.
+
+So, when running GraphMem on a local server and accessing it from other machines on the LAN:
+
+**1. Expose Ollama on the runner host**
 
 By default Ollama only listens on `127.0.0.1`. Create a systemd drop-in override
 (survives Ollama package upgrades):
@@ -284,10 +300,10 @@ ss -tlnp | grep 11434
 
 **2. Configure OLLAMA_URL**
 
-On the workstation running GraphMem, `OLLAMA_URL=http://localhost:11434` (the default) works
+On the host running GraphMem, `OLLAMA_URL=http://localhost:11434` (the default) works
 because the `app` container uses host networking.
 
-If Ollama runs on a *different* machine, set in `.env`:
+If Ollama runs on an another *different* machine, set in `.env`:
 
 ```
 OLLAMA_URL=http://<ollama-host-ip>:11434
@@ -300,6 +316,7 @@ Point them to the workstation's SSE endpoint:
 ```json
 { "url": "http://<workstation-ip>:3003/mcp/sse" }
 ```
+
 
 ## Embedding Management
 
@@ -348,6 +365,8 @@ To change the model (e.g. from `nomic-embed-text` to a different one):
 3. Verify connectivity: `bin/rails embeddings:check`
 4. Recompute all vectors: `bin/rails embeddings:regenerate`
 
+
+
 ## Database Backup & Restore
 
 Dumps are portable across database names (no `CREATE DATABASE` / `USE` statements):
@@ -359,6 +378,7 @@ bin/rails db:dump
 # Restore into the current environment's database
 bin/rails db:restore
 ```
+
 
 ## Environment Variables
 
@@ -375,6 +395,7 @@ bin/rails db:restore
 | `DATABASE_URL` | -- | Full database URL (overrides individual DB settings) |
 | `DB_BACKUP_HOST_PATH` | `./db/backup` | full path to DB backup(s) folder (default is invalid: docker-compose won't expand special characters) |
 
+
 ## Documentation
 
 * [MCP Tools Reference](docs/mcp_tools.md)
@@ -386,9 +407,11 @@ bin/rails db:restore
 * [Memory Relation Resource](docs/memory_relation_resource.md)
 * [Memory Graph Resource](docs/memory_graph_resource.md)
 
+
 ## Contributing
 
 Pull requests are welcome. For major changes, please open an issue first to discuss what you would like to change. Please make sure to update tests as appropriate. Pull requests without proper test cases won't be accepted.
+
 
 ## License
 
