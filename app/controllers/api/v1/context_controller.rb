@@ -2,9 +2,7 @@
 
 module Api
   module V1
-    class ContextController < ApplicationController
-      skip_forgery_protection
-
+    class ContextController < BaseController
       # GET /api/v1/context
       def show
         project_id = GraphMemContext.current_project_id
@@ -32,12 +30,12 @@ module Api
       def create
         project_id = params[:project_id]&.to_i
         unless project_id
-          return render json: { error: "project_id is required" }, status: :unprocessable_content
+          return render_error("project_id is required")
         end
 
         entity = MemoryEntity.find_by(id: project_id)
         unless entity
-          return render json: { error: "Entity with ID #{project_id} not found" }, status: :not_found
+          return render_error("Entity with ID #{project_id} not found", status: :not_found)
         end
 
         GraphMemContext.current_project_id = project_id

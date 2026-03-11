@@ -1,6 +1,9 @@
+# frozen_string_literal: true
+
 module Api
   module V1
-    class GraphDataController < ApplicationController
+    class GraphDataController < BaseController
+      # GET /api/v1/graph_data
       def index
         entity_id = params[:entity_id]
         scoped_entity_id = params[:scoped_entity_id]
@@ -26,9 +29,7 @@ module Api
       end
 
       def render_root_graph
-        # Only show entities with type 'Project' or nil (root-level)
         entities = MemoryEntity.where(entity_type: [ "Project", nil ]).includes(:memory_observations)
-        # Only show relations between root-level entities
         entity_ids = entities.pluck(:id)
         relations = MemoryRelation.where(from_entity_id: entity_ids, to_entity_id: entity_ids)
         render_graph_data(entities, relations)
@@ -50,15 +51,12 @@ module Api
       end
 
       def render_subgraph(entity_id)
-        # Get the main entity
-        main_entity = MemoryEntity.find(entity_id)
+        MemoryEntity.find(entity_id)
 
-        # Get all directly connected entities (one hop)
         connected_entity_ids = MemoryRelation.where(
           "from_entity_id = ? OR to_entity_id = ?", entity_id, entity_id
         ).pluck(:from_entity_id, :to_entity_id).flatten.uniq
 
-        # Include the main entity
         all_entity_ids = ([ entity_id.to_i ] + connected_entity_ids).uniq
 
         entities = MemoryEntity.where(id: all_entity_ids).includes(:memory_observations)

@@ -2,7 +2,7 @@
 
 module Api
   module V1
-    class MaintenanceController < ApplicationController
+    class MaintenanceController < BaseController
       # GET /api/v1/maintenance/suggest_merges
       def suggest_merges
         threshold = (params[:threshold] || 0.3).to_f

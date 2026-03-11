@@ -8,10 +8,34 @@ servers:
 - url: http://localhost:3003
   description: Local development server
 
+tags:
+- name: Memory Entities
+  description: CRUD operations for knowledge graph entities
+- name: Memory Observations
+  description: Manage observations (facts) attached to entities
+- name: Memory Relations
+  description: Directed relations between entities
+- name: Context
+  description: Project-scoped context management
+- name: Search
+  description: Subgraph search and retrieval
+- name: Bulk Operations
+  description: Atomic batch creation of entities, observations, and relations
+- name: Maintenance
+  description: Graph health, statistics, and merge suggestions
+- name: Status
+  description: Health check, version, and server time
+- name: Graph Data
+  description: Cytoscape-format visualization data
+
+security:
+- McpClientHeader: []
+
 paths:
   # ── Memory Entities ────────────────────────────────────────────────
   "/api/v1/memory_entities":
     get:
+      operationId: listMemoryEntities
       summary: List memory entities (paginated)
       tags: [Memory Entities]
       parameters:
@@ -45,6 +69,7 @@ paths:
                   pagination:
                     "$ref": "#/components/schemas/pagination"
     post:
+      operationId: createMemoryEntity
       summary: Create memory entity
       tags: [Memory Entities]
       requestBody:
@@ -79,7 +104,11 @@ paths:
               schema:
                 "$ref": "#/components/schemas/memory_entity"
         '422':
-          description: Unprocessable entity
+          description: Validation failed
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/error_response"
 
   "/api/v1/memory_entities/{id}":
     parameters:
@@ -89,6 +118,7 @@ paths:
       schema:
         type: integer
     get:
+      operationId: showMemoryEntity
       summary: Show memory entity with observations and relations
       tags: [Memory Entities]
       responses:
@@ -100,8 +130,13 @@ paths:
                 "$ref": "#/components/schemas/memory_entity_full"
         '404':
           description: Not found
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/error_response"
     patch:
-      summary: Update memory entity
+      operationId: patchMemoryEntity
+      summary: Update memory entity (partial)
       tags: [Memory Entities]
       requestBody:
         content:
@@ -129,9 +164,18 @@ paths:
                 "$ref": "#/components/schemas/memory_entity"
         '404':
           description: Not found
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/error_response"
         '422':
-          description: Unprocessable entity
+          description: Validation failed
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/error_response"
     put:
+      operationId: putMemoryEntity
       summary: Update memory entity (full replace)
       tags: [Memory Entities]
       requestBody:
@@ -155,11 +199,24 @@ paths:
       responses:
         '200':
           description: Updated
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/memory_entity"
         '404':
           description: Not found
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/error_response"
         '422':
-          description: Unprocessable entity
+          description: Validation failed or missing required fields
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/error_response"
     delete:
+      operationId: deleteMemoryEntity
       summary: Delete memory entity (cascades to observations and relations)
       tags: [Memory Entities]
       responses:
@@ -167,9 +224,14 @@ paths:
           description: Deleted
         '404':
           description: Not found
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/error_response"
 
   "/api/v1/memory_entities/search":
     get:
+      operationId: searchMemoryEntities
       summary: Search entities (hybrid text + vector)
       tags: [Memory Entities]
       parameters:
@@ -204,6 +266,7 @@ paths:
       schema:
         type: integer
     post:
+      operationId: mergeMemoryEntity
       summary: Merge source entity into target
       tags: [Memory Entities]
       responses:
@@ -211,6 +274,10 @@ paths:
           description: Merged successfully
         '404':
           description: Entity not found
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/error_response"
 
   # ── Memory Observations ────────────────────────────────────────────
   "/api/v1/memory_entities/{memory_entity_id}/memory_observations":
@@ -221,6 +288,7 @@ paths:
       schema:
         type: integer
     get:
+      operationId: listMemoryObservations
       summary: List observations for an entity
       tags: [Memory Observations]
       responses:
@@ -234,7 +302,12 @@ paths:
                   "$ref": "#/components/schemas/memory_observation"
         '404':
           description: Parent entity not found
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/error_response"
     post:
+      operationId: createMemoryObservation
       summary: Create observation for an entity
       tags: [Memory Observations]
       requestBody:
@@ -259,8 +332,16 @@ paths:
                 "$ref": "#/components/schemas/memory_observation"
         '404':
           description: Parent entity not found
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/error_response"
         '422':
-          description: Unprocessable entity
+          description: Validation failed
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/error_response"
 
   "/api/v1/memory_entities/{memory_entity_id}/memory_observations/{id}":
     parameters:
@@ -275,6 +356,7 @@ paths:
       schema:
         type: integer
     get:
+      operationId: showMemoryObservation
       summary: Show observation
       tags: [Memory Observations]
       responses:
@@ -286,8 +368,13 @@ paths:
                 "$ref": "#/components/schemas/memory_observation"
         '404':
           description: Not found
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/error_response"
     patch:
-      summary: Update observation
+      operationId: patchMemoryObservation
+      summary: Update observation (partial)
       tags: [Memory Observations]
       requestBody:
         content:
@@ -304,11 +391,59 @@ paths:
       responses:
         '200':
           description: Updated
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/memory_observation"
         '404':
           description: Not found
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/error_response"
         '422':
-          description: Unprocessable entity
+          description: Validation failed
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/error_response"
+    put:
+      operationId: putMemoryObservation
+      summary: Update observation (full replace)
+      tags: [Memory Observations]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                memory_observation:
+                  type: object
+                  properties:
+                    content:
+                      type: string
+                  required: [content]
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/memory_observation"
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/error_response"
+        '422':
+          description: Validation failed
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/error_response"
     delete:
+      operationId: deleteMemoryObservation
       summary: Delete observation
       tags: [Memory Observations]
       responses:
@@ -316,6 +451,10 @@ paths:
           description: Deleted
         '404':
           description: Not found
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/error_response"
 
   "/api/v1/memory_entities/{memory_entity_id}/memory_observations/delete_duplicates":
     parameters:
@@ -325,6 +464,7 @@ paths:
       schema:
         type: integer
     delete:
+      operationId: deleteDuplicateObservations
       summary: Delete duplicate observations for an entity
       tags: [Memory Observations]
       responses:
@@ -339,10 +479,17 @@ paths:
                     type: string
                   deleted_count:
                     type: integer
+        '404':
+          description: Parent entity not found
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/error_response"
 
   # ── Memory Relations ───────────────────────────────────────────────
   "/api/v1/memory_relations":
     get:
+      operationId: listMemoryRelations
       summary: List/filter relations
       tags: [Memory Relations]
       parameters:
@@ -371,6 +518,7 @@ paths:
                 items:
                   "$ref": "#/components/schemas/memory_relation"
     post:
+      operationId: createMemoryRelation
       summary: Create relation
       tags: [Memory Relations]
       requestBody:
@@ -398,7 +546,11 @@ paths:
               schema:
                 "$ref": "#/components/schemas/memory_relation"
         '422':
-          description: Unprocessable entity
+          description: Validation failed
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/error_response"
 
   "/api/v1/memory_relations/{id}":
     parameters:
@@ -408,6 +560,7 @@ paths:
       schema:
         type: integer
     get:
+      operationId: showMemoryRelation
       summary: Show relation
       tags: [Memory Relations]
       responses:
@@ -419,8 +572,13 @@ paths:
                 "$ref": "#/components/schemas/memory_relation"
         '404':
           description: Not found
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/error_response"
     patch:
-      summary: Update relation type
+      operationId: patchMemoryRelation
+      summary: Update relation type (partial)
       tags: [Memory Relations]
       requestBody:
         content:
@@ -437,11 +595,59 @@ paths:
       responses:
         '200':
           description: Updated
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/memory_relation"
         '404':
           description: Not found
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/error_response"
         '422':
-          description: Unprocessable entity
+          description: Validation failed
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/error_response"
+    put:
+      operationId: putMemoryRelation
+      summary: Update relation type (full replace)
+      tags: [Memory Relations]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                memory_relation:
+                  type: object
+                  properties:
+                    relation_type:
+                      type: string
+                  required: [relation_type]
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/memory_relation"
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/error_response"
+        '422':
+          description: Validation failed
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/error_response"
     delete:
+      operationId: deleteMemoryRelation
       summary: Delete relation
       tags: [Memory Relations]
       responses:
@@ -449,10 +655,15 @@ paths:
           description: Deleted
         '404':
           description: Not found
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/error_response"
 
   # ── Context ────────────────────────────────────────────────────────
   "/api/v1/context":
     get:
+      operationId: getContext
       summary: Get current project context
       tags: [Context]
       responses:
@@ -475,6 +686,7 @@ paths:
                   description:
                     type: string
     post:
+      operationId: setContext
       summary: Set project context
       tags: [Context]
       requestBody:
@@ -507,9 +719,18 @@ paths:
                     type: string
         '404':
           description: Entity not found
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/error_response"
         '422':
           description: Missing project_id
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/error_response"
     delete:
+      operationId: clearContext
       summary: Clear project context
       tags: [Context]
       responses:
@@ -529,6 +750,7 @@ paths:
   # ── Search ─────────────────────────────────────────────────────────
   "/api/v1/search/subgraph":
     get:
+      operationId: searchSubgraph
       summary: Search subgraph (entities + relations, paginated)
       tags: [Search]
       parameters:
@@ -582,9 +804,16 @@ paths:
             application/json:
               schema:
                 "$ref": "#/components/schemas/subgraph"
+        '422':
+          description: Missing or invalid parameters
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/error_response"
 
   "/api/v1/search/subgraph_by_ids":
     post:
+      operationId: getSubgraphByIds
       summary: Get subgraph by entity IDs
       tags: [Search]
       requestBody:
@@ -618,10 +847,15 @@ paths:
                       "$ref": "#/components/schemas/memory_relation"
         '422':
           description: Invalid or empty entity_ids
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/error_response"
 
   # ── Bulk Operations ────────────────────────────────────────────────
   "/api/v1/bulk":
     post:
+      operationId: bulkCreate
       summary: Bulk create entities, observations, and relations (atomic)
       tags: [Bulk Operations]
       description: Maximum 50 total operations per call. Rolls back entirely on any error.
@@ -703,10 +937,15 @@ paths:
                         type: integer
         '422':
           description: Rolled back due to errors
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/error_response"
 
   # ── Maintenance ────────────────────────────────────────────────────
   "/api/v1/maintenance/suggest_merges":
     get:
+      operationId: suggestMerges
       summary: Find potential duplicate entities via vector similarity
       tags: [Maintenance]
       parameters:
@@ -759,6 +998,7 @@ paths:
 
   "/api/v1/maintenance/stats":
     get:
+      operationId: getGraphStats
       summary: Graph health metrics and statistics
       tags: [Maintenance]
       responses:
@@ -798,6 +1038,7 @@ paths:
   # ── Status & Utilities ─────────────────────────────────────────────
   "/api/v1/status":
     get:
+      operationId: getStatus
       summary: Health check and version
       tags: [Status]
       responses:
@@ -818,6 +1059,7 @@ paths:
 
   "/api/v1/time":
     get:
+      operationId: getServerTime
       summary: Current server time (ISO 8601)
       tags: [Status]
       responses:
@@ -835,6 +1077,7 @@ paths:
   # ── Graph Data (UI) ────────────────────────────────────────────────
   "/api/v1/graph_data":
     get:
+      operationId: getGraphData
       summary: Graph visualization data (Cytoscape format)
       tags: [Graph Data]
       parameters:
@@ -870,9 +1113,32 @@ paths:
                       type: object
                   options:
                     type: object
+        '404':
+          description: Referenced entity not found
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/error_response"
 
 components:
+  securitySchemes:
+    McpClientHeader:
+      type: apiKey
+      in: header
+      name: X-MCP-Client
+      description: Optional MCP client identifier for request attribution
+
   schemas:
+    error_response:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Human-readable error message
+        details:
+          description: Additional error details (e.g., field-level validation errors)
+      required: [error]
+
     memory_entity:
       type: object
       properties:
@@ -1021,6 +1287,9 @@ components:
         entity_type:
           type: string
         aliases:
+          type: string
+          nullable: true
+        description:
           type: string
           nullable: true
         observations:

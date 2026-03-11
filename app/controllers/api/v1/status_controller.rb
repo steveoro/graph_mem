@@ -2,7 +2,7 @@
 
 module Api
   module V1
-    class StatusController < ApplicationController
+    class StatusController < BaseController
       # GET /api/v1/status
       def index
         render json: {

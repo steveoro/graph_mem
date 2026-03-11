@@ -4,8 +4,8 @@ class MemoryEntity < ApplicationRecord
   include Auditable
 
   has_many :memory_observations, dependent: :destroy
-  has_many :relations_from, class_name: "MemoryRelation", foreign_key: "to_entity_id", dependent: :destroy, inverse_of: :to_entity
-  has_many :relations_to, class_name: "MemoryRelation", foreign_key: "from_entity_id", dependent: :destroy, inverse_of: :from_entity
+  has_many :relations_from, class_name: "MemoryRelation", foreign_key: "from_entity_id", dependent: :destroy, inverse_of: :from_entity
+  has_many :relations_to, class_name: "MemoryRelation", foreign_key: "to_entity_id", dependent: :destroy, inverse_of: :to_entity
 
   validates :name, presence: true, uniqueness: true
   validates :entity_type, presence: true

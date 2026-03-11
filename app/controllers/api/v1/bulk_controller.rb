@@ -2,8 +2,7 @@
 
 module Api
   module V1
-    class BulkController < ApplicationController
-      skip_forgery_protection
+    class BulkController < BaseController
       MAX_OPERATIONS = 50
 
       # POST /api/v1/bulk
@@ -14,10 +13,10 @@ module Api
 
         total_ops = entities_data.length + observations_data.length + relations_data.length
         if total_ops == 0
-          return render json: { error: "At least one operation is required" }, status: :unprocessable_content
+          return render_error("At least one operation is required")
         end
         if total_ops > MAX_OPERATIONS
-          return render json: { error: "Maximum #{MAX_OPERATIONS} operations per call (got #{total_ops})" }, status: :unprocessable_content
+          return render_error("Maximum #{MAX_OPERATIONS} operations per call (got #{total_ops})")
         end
 
         created_entities = []
@@ -56,7 +55,7 @@ module Api
         end
 
         if errors.any?
-          return render json: { error: "Bulk operation rolled back", details: errors }, status: :unprocessable_content
+          return render_error("Bulk operation rolled back", details: errors)
         end
 
         render json: {

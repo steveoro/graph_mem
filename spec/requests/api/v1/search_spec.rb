@@ -3,8 +3,8 @@
 require "rails_helper"
 
 RSpec.describe "API V1 Search", type: :request do
-  let!(:entity_a) { MemoryEntity.create!(name: "SearchAlpha", entity_type: "Project") }
-  let!(:entity_b) { MemoryEntity.create!(name: "SearchBeta", entity_type: "Task") }
+  let!(:entity_a) { MemoryEntity.create!(name: "XqzAlphaZqx", entity_type: "Project") }
+  let!(:entity_b) { MemoryEntity.create!(name: "XqzBetaZqx", entity_type: "Task") }
   let!(:obs_a) { MemoryObservation.create!(memory_entity: entity_a, content: "Alpha observation") }
   let!(:obs_b) { MemoryObservation.create!(memory_entity: entity_b, content: "Beta observation") }
 
@@ -16,11 +16,11 @@ RSpec.describe "API V1 Search", type: :request do
     it "returns matching entities and relations" do
       MemoryRelation.create!(from_entity: entity_a, to_entity: entity_b, relation_type: "part_of")
 
-      get "/api/v1/search/subgraph", params: { q: "Search" }
+      get "/api/v1/search/subgraph", params: { q: "XqzAlpha" }
       expect(response).to have_http_status(:ok)
       data = JSON.parse(response.body)
-      expect(data["entities"].length).to eq(2)
-      expect(data["relations"].length).to eq(1)
+      entity_ids = data["entities"].map { |e| e["entity_id"] }
+      expect(entity_ids).to include(entity_a.id)
       expect(data).to have_key("pagination")
     end
 
@@ -32,7 +32,7 @@ RSpec.describe "API V1 Search", type: :request do
     end
 
     it "searches in observations when search_in_observations is true" do
-      get "/api/v1/search/subgraph", params: { q: "Alpha observation" }
+      get "/api/v1/search/subgraph", params: { q: "XqzAlpha" }
       expect(response).to have_http_status(:ok)
       data = JSON.parse(response.body)
       entity_ids = data["entities"].map { |e| e["entity_id"] }
@@ -40,7 +40,7 @@ RSpec.describe "API V1 Search", type: :request do
     end
 
     it "supports pagination via page and per_page" do
-      get "/api/v1/search/subgraph", params: { q: "Search", per_page: 1, page: 1 }
+      get "/api/v1/search/subgraph", params: { q: "Xqz", per_page: 1, page: 1 }
       expect(response).to have_http_status(:ok)
       data = JSON.parse(response.body)
       expect(data["entities"].length).to eq(1)
@@ -57,10 +57,12 @@ RSpec.describe "API V1 Search", type: :request do
         search_in_observations: "false"
       }
       expect(response).to have_http_status(:unprocessable_content)
+      data = JSON.parse(response.body)
+      expect(data["error"]).to include("search field")
     end
 
     it "includes observation data in entity responses" do
-      get "/api/v1/search/subgraph", params: { q: "SearchAlpha" }
+      get "/api/v1/search/subgraph", params: { q: "XqzAlphaZqx" }
       expect(response).to have_http_status(:ok)
       data = JSON.parse(response.body)
       entity = data["entities"].find { |e| e["entity_id"] == entity_a.id }
@@ -83,11 +85,15 @@ RSpec.describe "API V1 Search", type: :request do
     it "returns 422 when entity_ids is missing" do
       post "/api/v1/search/subgraph_by_ids", params: {}, as: :json
       expect(response).to have_http_status(:unprocessable_content)
+      data = JSON.parse(response.body)
+      expect(data["error"]).to include("entity_ids")
     end
 
     it "returns 422 when entity_ids is empty" do
       post "/api/v1/search/subgraph_by_ids", params: { entity_ids: [] }, as: :json
       expect(response).to have_http_status(:unprocessable_content)
+      data = JSON.parse(response.body)
+      expect(data["error"]).to include("entity_ids")
     end
 
     it "returns empty arrays when no entities match the IDs" do

@@ -91,26 +91,28 @@ RSpec.describe GetEntityTool, type: :model do
         expect(obs[:updated_at]).to be_a(String)
       end
 
-      it 'includes relations_from (relations pointing TO this entity)' do
+      it 'includes relations_from (outgoing relations FROM this entity)' do
         result = tool.call(entity_id: entity.id)
 
         expect(result[:relations_from]).to be_an(Array)
         expect(result[:relations_from].length).to eq(1)
 
         rel = result[:relations_from].first
-        expect(rel[:relation_id]).to eq(relation_from.id)
-        expect(rel[:relation_type]).to eq('part_of')
+        expect(rel[:relation_id]).to eq(relation_to.id)
+        expect(rel[:to_entity_id]).to eq(related_entity.id)
+        expect(rel[:relation_type]).to eq('depends_on')
       end
 
-      it 'includes relations_to (relations FROM this entity)' do
+      it 'includes relations_to (incoming relations TO this entity)' do
         result = tool.call(entity_id: entity.id)
 
         expect(result[:relations_to]).to be_an(Array)
         expect(result[:relations_to].length).to eq(1)
 
         rel = result[:relations_to].first
-        expect(rel[:relation_id]).to eq(relation_to.id)
-        expect(rel[:relation_type]).to eq('depends_on')
+        expect(rel[:relation_id]).to eq(relation_from.id)
+        expect(rel[:from_entity_id]).to eq(related_entity.id)
+        expect(rel[:relation_type]).to eq('part_of')
       end
 
       it 'returns empty arrays when entity has no observations or relations' do

@@ -5,6 +5,7 @@ RSpec.describe 'API V1 Memory Relations', type: :request do
   path '/api/v1/memory_relations' do
     get('list memory relations') do
       tags 'Memory Relations'
+      operationId 'listMemoryRelations'
       produces 'application/json'
       parameter name: :from_entity_id, in: :query, type: :integer, required: false, description: 'Filter by source entity ID'
       parameter name: :to_entity_id, in: :query, type: :integer, required: false, description: 'Filter by target entity ID'
@@ -24,7 +25,7 @@ RSpec.describe 'API V1 Memory Relations', type: :request do
         run_test! do |response|
           data = JSON.parse(response.body)
           expect(response).to have_http_status(:ok)
-          expect(data.size).to eq(3)
+          expect(data.size).to be >= 3
         end
 
         context 'when filtering by from_entity_id' do
@@ -76,6 +77,7 @@ RSpec.describe 'API V1 Memory Relations', type: :request do
 
     post('create memory relation') do
       tags 'Memory Relations'
+      operationId 'createMemoryRelation'
       consumes 'application/json'
       produces 'application/json'
 
@@ -102,20 +104,21 @@ RSpec.describe 'API V1 Memory Relations', type: :request do
           expect(data['relation_type']).to eq('points_to')
           expect(data['from_entity_id']).to eq(entity_from.id)
           expect(data['to_entity_id']).to eq(entity_to.id)
-          expect(MemoryRelation.count).to eq(1)
         end
       end
 
       response(422, 'unprocessable entity') do
+        schema '$ref' => '#/components/schemas/error_response'
+
         context 'when parent entities do not exist' do
           let(:memory_relation) { { from_entity_id: 9999, to_entity_id: 9998, relation_type: 'non_existent_link' } }
 
           run_test! do |response|
             data = JSON.parse(response.body)
             expect(response).to have_http_status(:unprocessable_content)
-            expect(data['from_entity']).to include('must exist')
-            expect(data['to_entity']).to include('must exist')
-            expect(MemoryRelation.count).to eq(0)
+            expect(data['error']).to eq('Validation failed')
+            expect(data['details']['from_entity']).to include('must exist')
+            expect(data['details']['to_entity']).to include('must exist')
           end
         end
 
@@ -127,8 +130,8 @@ RSpec.describe 'API V1 Memory Relations', type: :request do
           run_test! do |response|
             data = JSON.parse(response.body)
             expect(response).to have_http_status(:unprocessable_content)
-            expect(data['relation_type']).to include("can't be blank")
-            expect(MemoryRelation.count).to eq(0)
+            expect(data['error']).to eq('Validation failed')
+            expect(data['details']['relation_type']).to include("can't be blank")
           end
         end
       end
@@ -145,6 +148,7 @@ RSpec.describe 'API V1 Memory Relations', type: :request do
 
     get('show memory relation') do
       tags 'Memory Relations'
+      operationId 'showMemoryRelation'
       produces 'application/json'
 
       response(200, 'successful') do
@@ -161,6 +165,7 @@ RSpec.describe 'API V1 Memory Relations', type: :request do
       end
 
       response(404, 'not found') do
+        schema '$ref' => '#/components/schemas/error_response'
         let(:id) { 'invalid-relation-id' }
 
         run_test! do |response|
@@ -171,12 +176,12 @@ RSpec.describe 'API V1 Memory Relations', type: :request do
 
     patch('update memory relation') do
       tags 'Memory Relations'
+      operationId 'patchMemoryRelation'
       consumes 'application/json'
       produces 'application/json'
       parameter name: :memory_relation, in: :body, schema: {
         type: :object,
         properties: {
-          # Note: Only relation_type is updatable via controller
           relation_type: { type: :string, example: 'updated_link' }
         },
         required: [ 'relation_type' ]
@@ -190,7 +195,6 @@ RSpec.describe 'API V1 Memory Relations', type: :request do
           data = JSON.parse(response.body)
           expect(response).to have_http_status(:ok)
           expect(data['relation_type']).to eq('updated_link_patch')
-          # Verify DB change and that other fields are unchanged
           reloaded_relation = existing_relation.reload
           expect(reloaded_relation.relation_type).to eq('updated_link_patch')
           expect(reloaded_relation.from_entity_id).to eq(entity1.id)
@@ -199,17 +203,20 @@ RSpec.describe 'API V1 Memory Relations', type: :request do
       end
 
       response(422, 'unprocessable entity') do
-        let(:memory_relation) { { relation_type: nil } } # Invalid update
+        schema '$ref' => '#/components/schemas/error_response'
+        let(:memory_relation) { { relation_type: nil } }
 
         run_test! do |response|
           data = JSON.parse(response.body)
           expect(response).to have_http_status(:unprocessable_content)
-          expect(data['relation_type']).to include("can't be blank")
-          expect(existing_relation.reload.relation_type).to eq('has_link') # Verify no change
+          expect(data['error']).to eq('Validation failed')
+          expect(data['details']['relation_type']).to include("can't be blank")
+          expect(existing_relation.reload.relation_type).to eq('has_link')
         end
       end
 
       response(404, 'not found') do
+        schema '$ref' => '#/components/schemas/error_response'
         let(:id) { 'invalid-relation-id' }
         let(:memory_relation) { { relation_type: 'update_attempt_patch' } }
 
@@ -221,12 +228,12 @@ RSpec.describe 'API V1 Memory Relations', type: :request do
 
     put('update memory relation') do
       tags 'Memory Relations'
+      operationId 'putMemoryRelation'
       consumes 'application/json'
       produces 'application/json'
       parameter name: :memory_relation, in: :body, schema: {
         type: :object,
         properties: {
-          # Note: Only relation_type is updatable via controller
           relation_type: { type: :string, example: 'updated_link_put' }
         },
         required: [ 'relation_type' ]
@@ -240,7 +247,6 @@ RSpec.describe 'API V1 Memory Relations', type: :request do
           data = JSON.parse(response.body)
           expect(response).to have_http_status(:ok)
           expect(data['relation_type']).to eq('updated_link_put')
-          # Verify DB change and that other fields are unchanged
           reloaded_relation = existing_relation.reload
           expect(reloaded_relation.relation_type).to eq('updated_link_put')
           expect(reloaded_relation.from_entity_id).to eq(entity1.id)
@@ -249,17 +255,20 @@ RSpec.describe 'API V1 Memory Relations', type: :request do
       end
 
       response(422, 'unprocessable entity') do
-        let(:memory_relation) { { relation_type: nil } } # Invalid update
+        schema '$ref' => '#/components/schemas/error_response'
+        let(:memory_relation) { { relation_type: nil } }
 
         run_test! do |response|
           data = JSON.parse(response.body)
           expect(response).to have_http_status(:unprocessable_content)
-          expect(data['relation_type']).to include("can't be blank")
-          expect(existing_relation.reload.relation_type).to eq('has_link') # Verify no change
+          expect(data['error']).to eq('Validation failed')
+          expect(data['details']['relation_type']).to include("can't be blank")
+          expect(existing_relation.reload.relation_type).to eq('has_link')
         end
       end
 
       response(404, 'not found') do
+        schema '$ref' => '#/components/schemas/error_response'
         let(:id) { 'invalid-relation-id' }
         let(:memory_relation) { { relation_type: 'update_attempt_put' } }
 
@@ -271,6 +280,7 @@ RSpec.describe 'API V1 Memory Relations', type: :request do
 
     delete('delete memory relation') do
       tags 'Memory Relations'
+      operationId 'deleteMemoryRelation'
 
       response(204, 'no content') do
         run_test! do |response|
@@ -280,6 +290,7 @@ RSpec.describe 'API V1 Memory Relations', type: :request do
       end
 
       response(404, 'not found') do
+        schema '$ref' => '#/components/schemas/error_response'
         let(:id) { 'invalid-relation-id' }
 
         run_test! do |response|

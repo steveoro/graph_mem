@@ -1,11 +1,10 @@
 # frozen_string_literal: true
 
-# Ensure model is loaded (useful in development/testing environments)
 require_dependency "memory_entity"
 
 module Api
   module V1
-    class MemoryEntitiesController < ApplicationController
+    class MemoryEntitiesController < BaseController
       before_action :set_entity, only: [ :show, :update, :destroy, :merge ]
 
       # GET /api/v1/memory_entities
@@ -26,7 +25,7 @@ module Api
       # GET /api/v1/memory_entities/:id
       def show
         render json: {
-          entity_id: @memory_entity.id,
+          id: @memory_entity.id,
           name: @memory_entity.name,
           entity_type: @memory_entity.entity_type,
           aliases: @memory_entity.aliases,
@@ -35,7 +34,7 @@ module Api
           created_at: @memory_entity.created_at.iso8601,
           updated_at: @memory_entity.updated_at.iso8601,
           observations: @memory_entity.memory_observations.map { |o|
-            { observation_id: o.id, content: o.content, created_at: o.created_at.iso8601, updated_at: o.updated_at.iso8601 }
+            { id: o.id, content: o.content, memory_entity_id: o.memory_entity_id, created_at: o.created_at.iso8601, updated_at: o.updated_at.iso8601 }
           },
           relations_from: @memory_entity.relations_from.map { |r|
             { relation_id: r.id, to_entity_id: r.to_entity_id, to_entity_name: r.to_entity&.name, relation_type: r.relation_type }
@@ -53,7 +52,7 @@ module Api
         if @memory_entity.save
           render json: @memory_entity, status: :created, location: api_v1_memory_entity_url(@memory_entity)
         else
-          render json: @memory_entity.errors, status: :unprocessable_content
+          render_validation_errors(@memory_entity)
         end
       end
 
@@ -71,10 +70,19 @@ module Api
 
       # PATCH/PUT /api/v1/memory_entities/:id
       def update
+        if request.put?
+          missing = []
+          missing << "name" unless params.dig(:memory_entity, :name).present?
+          missing << "entity_type" unless params.dig(:memory_entity, :entity_type).present?
+          if missing.any?
+            return render_error("PUT requires all fields: #{missing.join(', ')}")
+          end
+        end
+
         if @memory_entity.update(entity_params)
           render json: @memory_entity
         else
-          render json: @memory_entity.errors, status: :unprocessable_content
+          render_validation_errors(@memory_entity)
         end
       end
 
@@ -86,64 +94,44 @@ module Api
 
       # POST /api/v1/memory_entities/:id/merge_into/:target_id
       def merge
-        source_entity = @memory_entity # Set by before_action :set_entity for params[:id]
+        source_entity = @memory_entity
         target_entity = ::MemoryEntity.find(params[:target_id])
 
         ActiveRecord::Base.transaction do
-          # Merge source entity's aliases into target entity's using a single type of separator:
           target_entity.aliases = (target_entity.aliases.split(/,\|\;/) + source_entity.aliases.split(/,\|\;/)).uniq.join(",")
           target_entity.save!
-          # Re-assign observations from source to target
           source_entity.memory_observations.update_all(memory_entity_id: target_entity.id)
 
-          # Re-assign relations where source_entity is the 'from' entity
-          # Avoid creating self-loops if target_entity was the original 'to'
           ::MemoryRelation.where(from_entity_id: source_entity.id)
                           .where.not(to_entity_id: target_entity.id)
                           .update_all(from_entity_id: target_entity.id)
 
-          # Re-assign relations where source_entity is the 'to' entity
-          # Avoid creating self-loops if target_entity was the original 'from'
           ::MemoryRelation.where(to_entity_id: source_entity.id)
                           .where.not(from_entity_id: target_entity.id)
                           .update_all(to_entity_id: target_entity.id)
 
-          # Delete relations that were directly between source and target to prevent self-loops
           ::MemoryRelation.where(from_entity_id: source_entity.id, to_entity_id: target_entity.id).destroy_all
           ::MemoryRelation.where(from_entity_id: target_entity.id, to_entity_id: source_entity.id).destroy_all
 
-          # Update counter cache:
           target_entity.update_column(:memory_observations_count, target_entity.memory_observations.count)
 
-          # Note: This simplified merge might create duplicate relations if, for example,
-          # A->C and B->C exist, and A is merged into B, resulting in two B->C relations
-          # if (from_entity_id, to_entity_id, relation_type) is not unique.
-          # This matches the behavior of the existing rake task `graph:merge_entities`.
-          # A robust solution would involve a unique index in the database or more complex de-duplication logic here.
-
-          # Delete the source entity
           source_entity.destroy!
         end
 
         head :no_content
       rescue ActiveRecord::RecordNotFound
-        render json: { error: "Target MemoryEntity not found when attempting to merge." }, status: :not_found
+        render_error("Target MemoryEntity not found when attempting to merge.", status: :not_found)
       rescue ActiveRecord::RecordInvalid => e
-        render json: { error: "Merge failed: #{e.message}" }, status: :unprocessable_content
+        render_error("Merge failed: #{e.message}")
       end
 
       private
 
-      # Use callbacks to share common setup or constraints between actions.
       def set_entity
         @memory_entity = ::MemoryEntity.includes(:memory_observations, :relations_from, :relations_to).find(params[:id])
-      rescue ActiveRecord::RecordNotFound
-        render json: { error: "MemoryEntity not found" }, status: :not_found
       end
 
-      # Only allow a list of trusted parameters through.
       def entity_params
-        # Allow name and entity_type. memory_observations_count is handled by counter_cache.
         params.require(:memory_entity).permit(:name, :entity_type, :aliases, :description)
       end
     end

@@ -16,15 +16,15 @@ RSpec.describe MemoryEntity, type: :model do
       expect { entity.destroy! }.to change(MemoryObservation, :count).by(-1)
     end
 
-    it "has many relations_from (inbound)" do
-      other = described_class.create!(name: "OtherFrom", entity_type: "Task")
-      rel = MemoryRelation.create!(from_entity: other, to_entity: entity, relation_type: "part_of")
+    it "has many relations_from (outbound)" do
+      other = described_class.create!(name: "OtherTo", entity_type: "Task")
+      rel = MemoryRelation.create!(from_entity: entity, to_entity: other, relation_type: "depends_on")
       expect(entity.relations_from).to include(rel)
     end
 
-    it "has many relations_to (outbound)" do
-      other = described_class.create!(name: "OtherTo", entity_type: "Task")
-      rel = MemoryRelation.create!(from_entity: entity, to_entity: other, relation_type: "depends_on")
+    it "has many relations_to (inbound)" do
+      other = described_class.create!(name: "OtherFrom", entity_type: "Task")
+      rel = MemoryRelation.create!(from_entity: other, to_entity: entity, relation_type: "part_of")
       expect(entity.relations_to).to include(rel)
     end
 

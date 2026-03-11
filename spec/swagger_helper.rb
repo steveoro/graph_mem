@@ -30,6 +30,14 @@ RSpec.configure do |config|
       ],
       components: {
         schemas: {
+          error_response: {
+            type: :object,
+            properties: {
+              error: { type: :string },
+              details: {}
+            },
+            required: [ 'error' ]
+          },
           MemoryEntitySearchResult: {
             type: :object,
             properties: {
@@ -51,6 +59,8 @@ RSpec.configure do |config|
               id: { type: :integer, readOnly: true },
               name: { type: :string },
               entity_type: { type: :string },
+              aliases: { type: [ :string, :null ], nullable: true },
+              description: { type: [ :string, :null ], nullable: true },
               memory_observations_count: { type: :integer, readOnly: true },
               created_at: { type: :string, format: 'date-time', readOnly: true },
               updated_at: { type: :string, format: 'date-time', readOnly: true }

@@ -2,11 +2,11 @@
 
 module Api
   module V1
-    class SearchController < ApplicationController
+    class SearchController < BaseController
       # GET /api/v1/search/subgraph
       def subgraph
         query = params[:q]
-        return render json: { error: "q parameter is required" }, status: :unprocessable_content if query.blank?
+        return render_error("q parameter is required") if query.blank?
 
         search_in_name = params.fetch(:search_in_name, "true") == "true"
         search_in_type = params.fetch(:search_in_type, "true") == "true"
@@ -16,7 +16,7 @@ module Api
         per_page = params.fetch(:per_page, 20).to_i.clamp(1, 100)
 
         unless search_in_name || search_in_type || search_in_aliases || search_in_observations
-          return render json: { error: "At least one search field must be enabled" }, status: :unprocessable_content
+          return render_error("At least one search field must be enabled")
         end
 
         like_term = "%#{query.downcase}%"
@@ -37,7 +37,6 @@ module Api
           vector_results = VectorSearchStrategy.new.search(query, limit: per_page * 2)
           matching_ids = (matching_ids + vector_results.map { |r| r.entity.id }).uniq
         rescue StandardError
-          # vector search unavailable
         end
 
         context_ids = GraphMemContext.scoped_entity_ids
@@ -72,7 +71,7 @@ module Api
       def subgraph_by_ids
         ids = params[:entity_ids]
         unless ids.is_a?(Array) && ids.any?
-          return render json: { error: "entity_ids array is required and must not be empty" }, status: :unprocessable_content
+          return render_error("entity_ids array is required and must not be empty")
         end
 
         ids = ids.map(&:to_i).uniq

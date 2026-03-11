@@ -2,7 +2,6 @@ require 'rails_helper'
 require 'swagger_helper'
 
 RSpec.describe 'API V1 Memory Observations', type: :request do
-  # Shared setup for memory_entity_id parameter
   let(:memory_entity) { MemoryEntity.create!(name: 'Parent Entity', entity_type: 'ParentType') }
   let(:memory_entity_id) { memory_entity.id }
 
@@ -11,13 +10,13 @@ RSpec.describe 'API V1 Memory Observations', type: :request do
 
     get('list memory observations for an entity') do
       tags 'Memory Observations'
+      operationId 'listMemoryObservations'
       produces 'application/json'
 
       response(200, 'successful') do
         schema type: :array,
                'items': { '$ref' => '#/components/schemas/memory_observation' }
 
-        # RSpec Example Tests
         let!(:observation1) { memory_entity.memory_observations.create!(content: 'Observation 1') }
         let!(:observation2) { memory_entity.memory_observations.create!(content: 'Observation 2') }
 
@@ -30,9 +29,9 @@ RSpec.describe 'API V1 Memory Observations', type: :request do
       end
 
       response(404, 'parent entity not found') do
+        schema '$ref' => '#/components/schemas/error_response'
         let(:memory_entity_id) { 'invalid-id' }
 
-        # RSpec Example Tests
         run_test! do |response|
           expect(response).to have_http_status(:not_found)
         end
@@ -41,6 +40,7 @@ RSpec.describe 'API V1 Memory Observations', type: :request do
 
     post('create memory observation for an entity') do
       tags 'Memory Observations'
+      operationId 'createMemoryObservation'
       consumes 'application/json'
       produces 'application/json'
 
@@ -56,33 +56,33 @@ RSpec.describe 'API V1 Memory Observations', type: :request do
         schema '$ref' => '#/components/schemas/memory_observation'
         let(:memory_observation) { { content: 'Test Observation Content' } }
 
-        # RSpec Example Tests
         run_test! do |response|
           data = JSON.parse(response.body)
           expect(response).to have_http_status(:created)
           expect(data['content']).to eq('Test Observation Content')
           expect(data['memory_entity_id']).to eq(memory_entity.id)
-          expect(memory_entity.reload.memory_observations.count).to eq(1) # Assuming clean before
+          expect(memory_entity.reload.memory_observations.count).to eq(1)
         end
       end
 
       response(422, 'unprocessable entity') do
-        let(:memory_observation) { { content: nil } } # Invalid example
+        schema '$ref' => '#/components/schemas/error_response'
+        let(:memory_observation) { { content: nil } }
 
-        # RSpec Example Tests
         run_test! do |response|
           data = JSON.parse(response.body)
           expect(response).to have_http_status(:unprocessable_content)
-          expect(data['content']).to include("can't be blank")
+          expect(data['error']).to eq('Validation failed')
+          expect(data['details']['content']).to include("can't be blank")
           expect(memory_entity.reload.memory_observations.count).to eq(0)
         end
       end
 
       response(404, 'parent entity not found') do
+        schema '$ref' => '#/components/schemas/error_response'
         let(:memory_entity_id) { 'invalid-id' }
         let(:memory_observation) { { content: 'Test Observation Content' } }
 
-        # RSpec Example Tests
         run_test! do |response|
           expect(response).to have_http_status(:not_found)
         end
@@ -94,18 +94,17 @@ RSpec.describe 'API V1 Memory Observations', type: :request do
     parameter name: 'memory_entity_id', in: :path, type: :string, description: 'ID of the parent Memory Entity'
     parameter name: 'id', in: :path, type: :string, description: 'ID of the Memory Observation'
 
-    # Shared setup for existing observation
     let(:existing_observation) { memory_entity.memory_observations.create!(content: 'Existing Observation') }
     let(:id) { existing_observation.id }
 
     get('show memory observation') do
       tags 'Memory Observations'
+      operationId 'showMemoryObservation'
       produces 'application/json'
 
       response(200, 'successful') do
         schema '$ref' => '#/components/schemas/memory_observation'
 
-        # RSpec Example Tests
         run_test! do |response|
           data = JSON.parse(response.body)
           expect(response).to have_http_status(:ok)
@@ -116,18 +115,18 @@ RSpec.describe 'API V1 Memory Observations', type: :request do
       end
 
       response(404, 'observation not found') do
+        schema '$ref' => '#/components/schemas/error_response'
         let(:id) { 'invalid-observation-id' }
 
-        # RSpec Example Tests
         run_test! do |response|
           expect(response).to have_http_status(:not_found)
         end
       end
 
       response(404, 'parent entity not found') do
+        schema '$ref' => '#/components/schemas/error_response'
         let(:memory_entity_id) { 'invalid-entity-id' }
 
-        # RSpec Example Tests
         run_test! do |response|
           expect(response).to have_http_status(:not_found)
         end
@@ -136,6 +135,7 @@ RSpec.describe 'API V1 Memory Observations', type: :request do
 
     patch('update memory observation') do
       tags 'Memory Observations'
+      operationId 'patchMemoryObservation'
       consumes 'application/json'
       produces 'application/json'
       parameter name: :memory_observation, in: :body, schema: {
@@ -150,7 +150,6 @@ RSpec.describe 'API V1 Memory Observations', type: :request do
         schema '$ref' => '#/components/schemas/memory_observation'
         let(:memory_observation) { { content: 'Updated Content' } }
 
-        # RSpec Example Tests
         run_test! do |response|
           data = JSON.parse(response.body)
           expect(response).to have_http_status(:ok)
@@ -160,32 +159,33 @@ RSpec.describe 'API V1 Memory Observations', type: :request do
       end
 
       response(422, 'unprocessable entity') do
+        schema '$ref' => '#/components/schemas/error_response'
         let(:memory_observation) { { content: nil } }
 
-        # RSpec Example Tests
         run_test! do |response|
           data = JSON.parse(response.body)
           expect(response).to have_http_status(:unprocessable_content)
-          expect(data['content']).to include("can't be blank")
-          expect(existing_observation.reload.content).to eq('Existing Observation') # Check it didn't change
+          expect(data['error']).to eq('Validation failed')
+          expect(data['details']['content']).to include("can't be blank")
+          expect(existing_observation.reload.content).to eq('Existing Observation')
         end
       end
 
       response(404, 'observation not found') do
+        schema '$ref' => '#/components/schemas/error_response'
         let(:id) { 'invalid-observation-id' }
         let(:memory_observation) { { content: 'Update Attempt' } }
 
-        # RSpec Example Tests
         run_test! do |response|
           expect(response).to have_http_status(:not_found)
         end
       end
 
       response(404, 'parent entity not found') do
+        schema '$ref' => '#/components/schemas/error_response'
         let(:memory_entity_id) { 'invalid-entity-id' }
         let(:memory_observation) { { content: 'Update Attempt' } }
 
-        # RSpec Example Tests
         run_test! do |response|
           expect(response).to have_http_status(:not_found)
         end
@@ -194,6 +194,7 @@ RSpec.describe 'API V1 Memory Observations', type: :request do
 
     put('update memory observation') do
       tags 'Memory Observations'
+      operationId 'putMemoryObservation'
       consumes 'application/json'
       produces 'application/json'
       parameter name: :memory_observation, in: :body, schema: {
@@ -208,7 +209,6 @@ RSpec.describe 'API V1 Memory Observations', type: :request do
         schema '$ref' => '#/components/schemas/memory_observation'
         let(:memory_observation) { { content: 'Updated Content via PUT' } }
 
-        # RSpec Example Tests
         run_test! do |response|
           data = JSON.parse(response.body)
           expect(response).to have_http_status(:ok)
@@ -218,32 +218,33 @@ RSpec.describe 'API V1 Memory Observations', type: :request do
       end
 
       response(422, 'unprocessable entity') do
+        schema '$ref' => '#/components/schemas/error_response'
         let(:memory_observation) { { content: nil } }
 
-        # RSpec Example Tests
         run_test! do |response|
           data = JSON.parse(response.body)
           expect(response).to have_http_status(:unprocessable_content)
-          expect(data['content']).to include("can't be blank")
-          expect(existing_observation.reload.content).to eq('Existing Observation') # Check it didn't change
+          expect(data['error']).to eq('Validation failed')
+          expect(data['details']['content']).to include("can't be blank")
+          expect(existing_observation.reload.content).to eq('Existing Observation')
         end
       end
 
       response(404, 'observation not found') do
+        schema '$ref' => '#/components/schemas/error_response'
         let(:id) { 'invalid-observation-id' }
         let(:memory_observation) { { content: 'Update Attempt via PUT' } }
 
-        # RSpec Example Tests
         run_test! do |response|
           expect(response).to have_http_status(:not_found)
         end
       end
 
       response(404, 'parent entity not found') do
+        schema '$ref' => '#/components/schemas/error_response'
         let(:memory_entity_id) { 'invalid-entity-id' }
         let(:memory_observation) { { content: 'Update Attempt via PUT' } }
 
-        # RSpec Example Tests
         run_test! do |response|
           expect(response).to have_http_status(:not_found)
         end
@@ -252,9 +253,9 @@ RSpec.describe 'API V1 Memory Observations', type: :request do
 
     delete('delete memory observation') do
       tags 'Memory Observations'
+      operationId 'deleteMemoryObservation'
 
       response(204, 'no content') do
-        # RSpec Example Tests
         run_test! do |response|
           expect(response).to have_http_status(:no_content)
           expect(MemoryObservation.exists?(existing_observation.id)).to be_falsey
@@ -263,9 +264,9 @@ RSpec.describe 'API V1 Memory Observations', type: :request do
       end
 
       response(404, 'not found') do
+        schema '$ref' => '#/components/schemas/error_response'
         let(:id) { 'invalid-observation-id' }
 
-        # RSpec Example Tests
         run_test! do |response|
           expect(response).to have_http_status(:not_found)
         end
@@ -273,12 +274,12 @@ RSpec.describe 'API V1 Memory Observations', type: :request do
     end
   end
 
-  # Test the delete_duplicates endpoint
   path '/api/v1/memory_entities/{memory_entity_id}/memory_observations/delete_duplicates' do
     parameter name: 'memory_entity_id', in: :path, type: :string, description: 'ID of the parent Memory Entity'
 
     delete('delete duplicate observations') do
       tags 'Memory Observations'
+      operationId 'deleteDuplicateObservations'
       produces 'application/json'
 
       response(200, 'successful deletion') do
@@ -289,28 +290,24 @@ RSpec.describe 'API V1 Memory Observations', type: :request do
                },
                required: [ 'message', 'deleted_count' ]
 
-        # Create test data with duplicates
         let!(:obs1) { memory_entity.memory_observations.create!(content: 'Duplicate content') }
         let!(:obs2) { memory_entity.memory_observations.create!(content: 'Unique content') }
-        let!(:obs3) { memory_entity.memory_observations.create!(content: 'Duplicate content') } # Same as obs1
+        let!(:obs3) { memory_entity.memory_observations.create!(content: 'Duplicate content') }
         let!(:obs4) { memory_entity.memory_observations.create!(content: 'Another duplicate') }
-        let!(:obs5) { memory_entity.memory_observations.create!(content: 'Another duplicate') } # Same as obs4
+        let!(:obs5) { memory_entity.memory_observations.create!(content: 'Another duplicate') }
 
-        # RSpec Example Tests
         run_test! do |response|
           data = JSON.parse(response.body)
           expect(response).to have_http_status(:ok)
-          expect(data['deleted_count']).to eq(2) # Should delete obs3 and obs5
+          expect(data['deleted_count']).to eq(2)
           expect(data['message']).to include('Successfully deleted 2 duplicate observations')
 
-          # Verify the correct observations remain (oldest of each content)
           remaining_observations = memory_entity.reload.memory_observations.order(:created_at)
           expect(remaining_observations.count).to eq(3)
           expect(remaining_observations.pluck(:content)).to contain_exactly(
             'Duplicate content', 'Unique content', 'Another duplicate'
           )
 
-          # Verify the oldest observations were kept
           expect(remaining_observations.find_by(content: 'Duplicate content').id).to eq(obs1.id)
           expect(remaining_observations.find_by(content: 'Another duplicate').id).to eq(obs4.id)
         end
@@ -324,40 +321,31 @@ RSpec.describe 'API V1 Memory Observations', type: :request do
                },
                required: [ 'message', 'deleted_count' ]
 
-        # Create test data with no duplicates
         let!(:obs1) { memory_entity.memory_observations.create!(content: 'Unique content 1') }
         let!(:obs2) { memory_entity.memory_observations.create!(content: 'Unique content 2') }
         let!(:obs3) { memory_entity.memory_observations.create!(content: 'Unique content 3') }
 
-        # RSpec Example Tests
         run_test! do |response|
           data = JSON.parse(response.body)
           expect(response).to have_http_status(:ok)
           expect(data['deleted_count']).to eq(0)
           expect(data['message']).to include('Successfully deleted 0 duplicate observations')
 
-          # Verify all observations remain
           expect(memory_entity.reload.memory_observations.count).to eq(3)
         end
       end
 
       response(404, 'parent entity not found') do
+        schema '$ref' => '#/components/schemas/error_response'
         let(:memory_entity_id) { 'invalid-id' }
 
-        # RSpec Example Tests
         run_test! do |response|
           expect(response).to have_http_status(:not_found)
         end
       end
 
       response(422, 'operation failed') do
-        # This would be difficult to test without mocking, but we include it for documentation
-        # In a real scenario, this might happen if there's a database constraint violation
-        schema type: :object,
-               properties: {
-                 error: { type: :string, example: 'Failed to delete duplicates: Database error' }
-               },
-               required: [ 'error' ]
+        schema '$ref' => '#/components/schemas/error_response'
       end
     end
   end
