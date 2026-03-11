@@ -1,17 +1,24 @@
 return unless defined?(Rswag::Ui)
 
 Rswag::Ui.configure do |c|
-  # List the Swagger endpoints that you want to be documented through the
-  # swagger-ui. The first parameter is the path (absolute or relative to the UI
-  # host) to the corresponding endpoint and the second is a title that will be
-  # displayed in the document selector.
-  # NOTE: If you're using rspec-api to expose Swagger files
-  # (under openapi_root) as JSON or YAML endpoints, then the list below should
-  # correspond to the relative paths for those endpoints.
-
   c.swagger_endpoint "/api-docs/v1/swagger.yaml", "API V1 Docs"
+end
 
-  # Add Basic Auth in case your API is private
-  # c.basic_auth_enabled = true
-  # c.basic_auth_credentials 'username', 'password'
+# Override rswag-ui's hardcoded CSP to allow API connections from any access
+# origin. The gem's default CSP omits connect-src (falling back to
+# default-src 'self'), which blocks Swagger "Try it out" calls when the page
+# is accessed via a different hostname than the spec's server URL.
+Rswag::Ui::Middleware.class_eval do
+  private
+
+  def csp
+    <<~POLICY.tr("\n", " ")
+      default-src 'self';
+      connect-src 'self' http://localhost:3003;
+      img-src 'self' data: https://validator.swagger.io;
+      font-src 'self' https://fonts.gstatic.com;
+      style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
+      script-src 'self' 'unsafe-inline';
+    POLICY
+  end
 end
