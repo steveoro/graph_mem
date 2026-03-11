@@ -3,7 +3,7 @@ openapi: 3.0.1
 info:
   title: GraphMem API
   description: REST API for the GraphMem knowledge graph memory system. Provides entity, observation, relation management, search, context scoping, bulk operations, and maintenance utilities.
-  version: v1 (1.3.2)
+  version: v1 (1.4.0)
 servers:
 - url: http://localhost:3003
   description: Local development server
@@ -1054,7 +1054,7 @@ paths:
                     example: ok
                   version:
                     type: string
-                    example: 1.3.2
+                    example: 1.4.0
                 required: [status, version]
 
   "/api/v1/time":
