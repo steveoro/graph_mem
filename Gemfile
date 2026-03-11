@@ -29,6 +29,7 @@ gem "solid_cable"
 
 gem "fast-mcp" # MCP Server implementation
 gem "kaminari" # Pagination
+gem "rack-cors" # CORS support for cross-origin API/MCP access
 
 gem "bootsnap", require: false # Reduces boot times through caching; required in config/boot.rb
 # Deploy this application anywhere as a Docker container [https://kamal-deploy.org]

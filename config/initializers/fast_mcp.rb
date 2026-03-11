@@ -23,16 +23,12 @@ FastMcp.mount_in_rails(
   Rails.application,
   name: Rails.application.class.module_parent_name.underscore.dasherize,
   version: GraphMem::VERSION.to_s,
-  path_prefix: "/mcp", # This is the default path prefix
-  messages_route: "messages", # This is the default route for the messages endpoint
-  sse_route: "sse", # This is the default route for the SSE endpoint
-  # Add allowed origins below, it defaults to Rails.application.config.hosts
-  # allowed_origins: ['localhost', '127.0.0.1', 'example.com', /.*\.example\.com/],
-  # localhost_only: true, # Set to false to allow connections from other hosts
-  # whitelist specific ips to if you want to run on localhost and allow connections from other IPs
-  # allowed_ips: ['127.0.0.1', '::1']
-  # authenticate: true,       # Uncomment to enable authentication
-  # auth_token: 'your-token' # Required if authenticate: true
+  path_prefix: "/mcp",
+  messages_route: "messages",
+  sse_route: "sse",
+  allowed_origins: [ "localhost", "127.0.0.1", "::1", /\A192\.168\.\d{1,3}\.\d{1,3}\z/, /\A10\.\d{1,3}\.\d{1,3}\.\d{1,3}\z/ ],
+  localhost_only: false,
+  allowed_ips: [ "127.0.0.1", "::1", "::ffff:127.0.0.1" ]
 ) do |server|
   Rails.application.config.after_initialize do
     # FastMcp will automatically discover and register:

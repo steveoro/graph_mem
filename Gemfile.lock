@@ -278,6 +278,9 @@ GEM
     raabro (1.4.0)
     racc (1.8.1)
     rack (3.2.5)
+    rack-cors (3.0.0)
+      logger
+      rack (>= 3.0.14)
     rack-mini-profiler (4.0.1)
       rack (>= 1.2.0)
     rack-session (2.1.1)
@@ -491,6 +494,7 @@ DEPENDENCIES
   pry
   pry-rails
   puma (>= 5)
+  rack-cors
   rack-mini-profiler
   rails (~> 8)
   rspec
@@ -512,4 +516,4 @@ DEPENDENCIES
   web-console
 
 BUNDLED WITH
-   2.6.8
+   2.6.2
