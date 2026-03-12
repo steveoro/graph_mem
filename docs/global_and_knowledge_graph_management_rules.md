@@ -22,8 +22,8 @@ Use the `graph_mem` MCP tools every session. "Knowledge graph", "graph mem", "me
 
 **Phase 1 — Orient** (start of every conversation)
 1. Say "Remembering..." then call `get_context` to check for an active project.
-2. If no context: `search_entities` for the relevant project name → `set_context` with its ID.
-3. If no project entity exists yet: `create_entity` (type `Project`) → `set_context`.
+2. If no context: `search_entities` for the relevant project name → `set_context(entity_id: <ID from search result>)`.
+3. If no project entity exists yet: `create_entity` (type `Project`) → `set_context(entity_id: <new entity ID>)`.
 
 **Phase 2 — Recall** (before doing work)
 - `search_entities` or `search_subgraph` with keywords from the user's request.

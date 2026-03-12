@@ -5,46 +5,46 @@ module Api
     class ContextController < BaseController
       # GET /api/v1/context
       def show
-        project_id = GraphMemContext.current_project_id
+        current_id = GraphMemContext.current_project_id
 
-        unless project_id
+        unless current_id
           return render json: { status: "no_context", message: "No project context is currently set." }
         end
 
-        entity = MemoryEntity.find_by(id: project_id)
+        entity = MemoryEntity.find_by(id: current_id)
         unless entity
           GraphMemContext.clear!
-          return render json: { status: "context_cleared", message: "Previously set project (ID #{project_id}) no longer exists. Context cleared." }
+          return render json: { status: "context_cleared", message: "Previously set context entity (ID #{current_id}) no longer exists. Context cleared." }
         end
 
         render json: {
           status: "context_active",
-          project_id: entity.id,
-          project_name: entity.name,
-          project_type: entity.entity_type,
+          entity_id: entity.id,
+          entity_name: entity.name,
+          entity_type: entity.entity_type,
           description: entity.description
         }
       end
 
       # POST /api/v1/context
       def create
-        project_id = params[:project_id]&.to_i
-        unless project_id
-          return render_error("project_id is required")
+        entity_id = params[:entity_id]&.to_i
+        unless entity_id
+          return render_error("entity_id is required")
         end
 
-        entity = MemoryEntity.find_by(id: project_id)
+        entity = MemoryEntity.find_by(id: entity_id)
         unless entity
-          return render_error("Entity with ID #{project_id} not found", status: :not_found)
+          return render_error("Entity with ID #{entity_id} not found", status: :not_found)
         end
 
-        GraphMemContext.current_project_id = project_id
+        GraphMemContext.current_project_id = entity_id
 
         render json: {
           status: "context_set",
-          project_id: entity.id,
-          project_name: entity.name,
-          project_type: entity.entity_type
+          entity_id: entity.id,
+          entity_name: entity.name,
+          entity_type: entity.entity_type
         }
       end
 

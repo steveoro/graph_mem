@@ -5,6 +5,9 @@ All notable changes to GraphMem will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.2] - 2026-03-12
+- Improved coherence in tool parameters naming; updated default global rules
+
 ## [1.4.1] - 2026-03-11
 - Full OpenAPI compliance with metadata generation and improved API coherence
 - Full CORS support for usage with browser-based UIs (e.g.: OpenWebUI)

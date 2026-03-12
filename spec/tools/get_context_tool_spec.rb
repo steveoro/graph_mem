@@ -53,13 +53,13 @@ RSpec.describe GetContextTool, type: :model do
     context 'when context is active' do
       before { GraphMemContext.current_project_id = project.id }
 
-      it 'returns context_active status with project details' do
+      it 'returns context_active status with entity details' do
         result = tool.call
 
         expect(result[:status]).to eq("context_active")
-        expect(result[:project_id]).to eq(project.id)
-        expect(result[:project_name]).to eq('Active Project')
-        expect(result[:project_type]).to eq('Project')
+        expect(result[:entity_id]).to eq(project.id)
+        expect(result[:entity_name]).to eq('Active Project')
+        expect(result[:entity_type]).to eq('Project')
         expect(result[:description]).to eq('A project with context')
       end
     end

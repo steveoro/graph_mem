@@ -25,9 +25,9 @@ RSpec.describe "API V1 Context", type: :request do
         expect(response).to have_http_status(:ok)
         data = JSON.parse(response.body)
         expect(data["status"]).to eq("context_active")
-        expect(data["project_id"]).to eq(project.id)
-        expect(data["project_name"]).to eq("CtxProject")
-        expect(data["project_type"]).to eq("Project")
+        expect(data["entity_id"]).to eq(project.id)
+        expect(data["entity_name"]).to eq("CtxProject")
+        expect(data["entity_type"]).to eq("Project")
         expect(data["description"]).to eq("Desc")
       end
     end
@@ -46,31 +46,31 @@ RSpec.describe "API V1 Context", type: :request do
   end
 
   describe "POST /api/v1/context" do
-    context "with a valid project_id" do
+    context "with a valid entity_id" do
       let!(:project) { MemoryEntity.create!(name: "SetCtx", entity_type: "Project") }
 
       it "sets the context and returns context_set" do
-        post "/api/v1/context", params: { project_id: project.id }
+        post "/api/v1/context", params: { entity_id: project.id }
         expect(response).to have_http_status(:ok)
         data = JSON.parse(response.body)
         expect(data["status"]).to eq("context_set")
-        expect(data["project_id"]).to eq(project.id)
+        expect(data["entity_id"]).to eq(project.id)
         expect(GraphMemContext.current_project_id).to eq(project.id)
       end
     end
 
-    context "without project_id" do
+    context "without entity_id" do
       it "returns 422 with error" do
         post "/api/v1/context", params: {}
         expect(response).to have_http_status(:unprocessable_content)
         data = JSON.parse(response.body)
-        expect(data["error"]).to include("project_id")
+        expect(data["error"]).to include("entity_id")
       end
     end
 
-    context "with a non-existent project_id" do
+    context "with a non-existent entity_id" do
       it "returns 404" do
-        post "/api/v1/context", params: { project_id: 999_999 }
+        post "/api/v1/context", params: { entity_id: 999_999 }
         expect(response).to have_http_status(:not_found)
       end
     end

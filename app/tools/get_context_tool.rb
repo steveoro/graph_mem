@@ -22,9 +22,9 @@ class GetContextTool < ApplicationTool
 
     {
       status: "context_active",
-      project_id: entity.id,
-      project_name: entity.name,
-      project_type: entity.entity_type,
+      entity_id: entity.id,
+      entity_name: entity.name,
+      entity_type: entity.entity_type,
       description: entity.description
     }
   rescue StandardError => e

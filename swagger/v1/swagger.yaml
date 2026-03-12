@@ -3,7 +3,7 @@ openapi: 3.0.1
 info:
   title: GraphMem API
   description: REST API for the GraphMem knowledge graph memory system. Provides entity, observation, relation management, search, context scoping, bulk operations, and maintenance utilities.
-  version: v1 (1.4.1)
+  version: v1 (1.4.2)
 servers:
 - url: http://localhost:3003
   description: Local development server
@@ -16,7 +16,7 @@ tags:
 - name: Memory Relations
   description: Directed relations between entities
 - name: Context
-  description: Project-scoped context management
+  description: Entity-scoped context management
 - name: Search
   description: Subgraph search and retrieval
 - name: Bulk Operations
@@ -664,7 +664,7 @@ paths:
   "/api/v1/context":
     get:
       operationId: getContext
-      summary: Get current project context
+      summary: Get current context
       tags: [Context]
       responses:
         '200':
@@ -677,17 +677,17 @@ paths:
                   status:
                     type: string
                     enum: [context_active, no_context, context_cleared]
-                  project_id:
+                  entity_id:
                     type: integer
-                  project_name:
+                  entity_name:
                     type: string
-                  project_type:
+                  entity_type:
                     type: string
                   description:
                     type: string
     post:
       operationId: setContext
-      summary: Set project context
+      summary: Set context
       tags: [Context]
       requestBody:
         required: true
@@ -696,10 +696,10 @@ paths:
             schema:
               type: object
               properties:
-                project_id:
+                entity_id:
                   type: integer
-                  description: ID of the project entity to scope to
-              required: [project_id]
+                  description: ID of the entity to scope to
+              required: [entity_id]
       responses:
         '200':
           description: Context set
@@ -711,11 +711,11 @@ paths:
                   status:
                     type: string
                     example: context_set
-                  project_id:
+                  entity_id:
                     type: integer
-                  project_name:
+                  entity_name:
                     type: string
-                  project_type:
+                  entity_type:
                     type: string
         '404':
           description: Entity not found
@@ -724,14 +724,14 @@ paths:
               schema:
                 "$ref": "#/components/schemas/error_response"
         '422':
-          description: Missing project_id
+          description: Missing entity_id
           content:
             application/json:
               schema:
                 "$ref": "#/components/schemas/error_response"
     delete:
       operationId: clearContext
-      summary: Clear project context
+      summary: Clear context
       tags: [Context]
       responses:
         '200':
@@ -1054,7 +1054,7 @@ paths:
                     example: ok
                   version:
                     type: string
-                    example: 1.4.1
+                    example: 1.4.2
                 required: [status, version]
 
   "/api/v1/time":

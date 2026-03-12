@@ -8,32 +8,32 @@ class SetContextTool < ApplicationTool
   description "Set the active project context. Subsequent search operations will prioritize entities related to this project."
 
   arguments do
-    required(:project_id).filled(:integer).description("The ID of the project entity to scope to.")
+    required(:entity_id).filled(:integer).description("The ID of the entity to set as the active context.")
   end
 
   def input_schema_to_json
     {
       type: "object",
       properties: {
-        project_id: { type: "integer", description: "The ID of the project entity to scope to." }
+        entity_id: { type: "integer", description: "The ID of the entity to set as the active context." }
       },
-      required: [ "project_id" ]
+      required: [ "entity_id" ]
     }
   end
 
-  def call(project_id:)
-    entity = MemoryEntity.find_by(id: project_id)
+  def call(entity_id:)
+    entity = MemoryEntity.find_by(id: entity_id)
     unless entity
-      raise McpGraphMemErrors::ResourceNotFound, "Entity with ID #{project_id} not found."
+      raise McpGraphMemErrors::ResourceNotFound, "Entity with ID #{entity_id} not found."
     end
 
-    GraphMemContext.current_project_id = project_id
+    GraphMemContext.current_project_id = entity_id
 
     {
       status: "context_set",
-      project_id: entity.id,
-      project_name: entity.name,
-      project_type: entity.entity_type
+      entity_id: entity.id,
+      entity_name: entity.name,
+      entity_type: entity.entity_type
     }
   rescue McpGraphMemErrors::ResourceNotFound
     raise
