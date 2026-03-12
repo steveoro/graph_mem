@@ -6,7 +6,8 @@ alwaysApply: true
 ### Core Rules
 
 - **Schema first**: DB schema is the primary source of truth for data structure.
-- **Know your context**: Verify project folder, runtime target, and containers before running commands.
+- **Know your context**: Verify project folder and development environment, runtime target, and containers before running commands.
+  Example: most workspaces include more than one project root, each with its own dev stack and languages. Focus on the target project, look for relevant files in the project root that might include target versions of the dev stack in use. (E.g: `.versions.conf`, `.ruby-version`, `docker-compose.yml`, `Gemfile`, `package.json`, `.rvmrc`, ...)
 - **Keep it simple**: Prefer straightforward solutions and small, testable units.
 - **Test like production**: Real instances over doubles; randomize factories; no fake data in dev/prod.
 - **Don't sprawl**: Touch only code relevant to the task; avoid architecture shifts unless asked.
