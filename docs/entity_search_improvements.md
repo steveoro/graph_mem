@@ -211,6 +211,32 @@ FIELD_WEIGHTS = {
 MIN_SCORE_THRESHOLD = 5  # Require higher relevance
 ```
 
+## Post-Fusion Relevance Boosts (v1.5)
+
+After the `EntitySearchStrategy` text scores are combined with vector results via weighted RRF in `HybridSearchStrategy`, several post-fusion boosts are applied. These are defined in the shared `SearchRelevanceBooster` module and used by both `HybridSearchStrategy` and `SearchSubgraphTool`.
+
+### Exact Name Match Boost
+When the query exactly matches an entity name, a bonus of +0.10 is applied. When the query is a prefix of (or prefixed by) an entity name, a bonus of +0.04 is applied. This ensures that searching for "AdminHub" returns the `AdminHub` Project entity first, not a longer-named child entity.
+
+### Entity Type Priority Multiplier
+Final scores are multiplied by entity type importance:
+- `Project`: 1.6x
+- `ApplicationStack`, `Framework`, `BestPractice`, `Workflow`: 1.3x
+- `Feature`, `Service`, `Component`, `Configuration`: 1.15x
+- All other types: 1.0x (no change)
+
+### Structural Importance Boost
+Entities with more relations (graph hubs) receive a small additive boost: `log2(1 + relation_count) * 0.003`. A Project with 100 relations gets ~+0.020, while an isolated entity gets nothing.
+
+### Graduated Context Boost
+When a project context is active via `set_context`, the root project entity receives a boost of +0.04 while its `part_of` children receive +0.02. This differentiates the project itself from its sub-entities.
+
+### Vector Distance Quality Gate
+`VectorSearchStrategy` filters out results with cosine distance > 0.85, preventing weak semantic matches from unrelated projects from polluting results.
+
+### Weighted RRF
+Text strategy scores are preserved through RRF fusion as weights: `(1/(K + rank + 1)) * (1 + normalized_score)`. This prevents the rank-only compression that previously flattened well-differentiated text scores.
+
 ## Future Enhancements
 
 The strategy pattern makes it easy to add new features:
@@ -220,7 +246,6 @@ The strategy pattern makes it easy to add new features:
 3. **Field Expansion**: Search in additional fields like descriptions
 4. **Caching**: Add result caching for frequently searched terms
 5. **Analytics**: Track search patterns and optimize accordingly
-6. **Hierarchical Types**: Support for nested entity type hierarchies
 
 ## Migration Notes
 
@@ -228,12 +253,12 @@ The strategy pattern makes it easy to add new features:
 - Existing API calls continue to work unchanged
 - Old output format is preserved with additional fields
 - No database schema changes required
-- Result ordering changed but is more logical and consistent
+- Result ordering improved: relevance-first with entity type and structural importance as signals
 
 ### Performance Impact
-- Slightly increased memory usage due to Ruby-based scoring
-- Comparable or better database performance due to optimized queries
-- Overall response times improved for most use cases
+- Two additional lightweight SQL count queries per search (relation counts for structural boost)
+- Comparable or better database performance due to optimized queries and vector distance filtering
+- Overall response times remain sub-second for typical datasets
 
 ## Troubleshooting
 
@@ -245,9 +270,9 @@ The strategy pattern makes it easy to add new features:
 - Try single-word queries first
 
 **Unexpected result ordering:**
-- Results are now ordered by entity_type first, then relevance
-- Review relevance scoring algorithm
-- Check if entity names/types/aliases match expectations
+- Results are ordered by combined relevance score (text + vector + boosts)
+- Project entities rank higher than Issues/Steps at equal text match quality
+- Exact name matches rank highest regardless of entity type
 - Examine `matched_fields` in response for debugging
 
 **Performance issues:**
@@ -257,9 +282,9 @@ The strategy pattern makes it easy to add new features:
 
 ### Field Priority Understanding
 
-The search prioritizes fields in this order:
+Text scoring prioritizes fields in this order:
 1. **Entity Type** (15 points) - Highest because it represents the category/classification
 2. **Name** (10 points) - High because it's the primary identifier
 3. **Aliases** (5 points) - Lower because they're alternative references
 
-This hierarchy ensures that searching for "dessert" will prioritize entities with entity_type="Dessert" over entities that just mention "dessert" in their name or aliases.
+Post-fusion boosts then layer on name matching, type priority, structural importance, and context awareness to produce the final ranking.

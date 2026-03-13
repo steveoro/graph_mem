@@ -6,6 +6,11 @@
 class VectorSearchStrategy
   SearchResult = Struct.new(:entity, :distance, keyword_init: true)
 
+  # Filter out vector results with cosine distance above this threshold.
+  # Cosine distance range: 0 (identical) to 2 (opposite).
+  # 0.85 removes weak semantic matches that introduce cross-project noise.
+  MAX_COSINE_DISTANCE = 0.85
+
   def initialize(embedding_service: EmbeddingService.instance)
     @embedding_service = embedding_service
     @logger = Rails.logger
@@ -26,6 +31,7 @@ class VectorSearchStrategy
     entities = MemoryEntity
       .where.not(embedding: nil)
       .select("memory_entities.*, VEC_DISTANCE_COSINE(embedding, VEC_FromText('#{vector_sql}')) AS vec_distance")
+      .having("vec_distance < ?", MAX_COSINE_DISTANCE)
       .order(Arel.sql("vec_distance ASC"))
       .limit(limit)
 

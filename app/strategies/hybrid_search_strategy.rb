@@ -1,9 +1,10 @@
 # frozen_string_literal: true
 
 # Combines text-based (EntitySearchStrategy) and vector-based (VectorSearchStrategy)
-# search results using Reciprocal Rank Fusion (RRF).
+# search results using weighted Reciprocal Rank Fusion (RRF), then applies
+# post-fusion boosts for name matching, entity type priority, structural
+# importance, and graduated context boosting.
 class HybridSearchStrategy
-  # RRF constant -- higher values smooth out rank differences
   RRF_K = 60
 
   SearchResult = Struct.new(:entity, :score, :matched_fields, keyword_init: true) do
@@ -23,11 +24,6 @@ class HybridSearchStrategy
     end
   end
 
-  # Boost multiplier for entities within the active project context.
-  # Applied additively to fused RRF scores so in-context results float up
-  # without filtering out cross-project matches.
-  CONTEXT_BOOST = 0.02
-
   def initialize
     @text_strategy = EntitySearchStrategy.new
     @vector_strategy = VectorSearchStrategy.new
@@ -40,6 +36,8 @@ class HybridSearchStrategy
   # @param context_entity_ids [Array<Integer>, nil] Entity IDs to boost (from GraphMemContext)
   # @return [Array<SearchResult>]
   def search(query, limit: 50, semantic: true, context_entity_ids: nil)
+    @query = query.to_s.strip
+
     text_results = @text_strategy.search(query, limit: limit * 2)
 
     vector_results = if semantic
@@ -48,41 +46,8 @@ class HybridSearchStrategy
       []
     end
 
-    if vector_results.empty?
-      results = text_results.first(limit)
-      return apply_context_boost(results, context_entity_ids)
-    end
-
-    fuse(text_results, vector_results, limit, context_entity_ids: context_entity_ids)
-  end
-
-  private
-
-  def fuse(text_results, vector_results, limit, context_entity_ids: nil)
-    scores = Hash.new(0.0)
-    entities = {}
-    matched_fields = Hash.new { |h, k| h[k] = [] }
-
-    text_results.each_with_index do |result, rank|
-      id = result.entity.id
-      scores[id] += 1.0 / (RRF_K + rank + 1)
-      entities[id] = result.entity
-      matched_fields[id] = result.matched_fields
-    end
-
-    vector_results.each_with_index do |result, rank|
-      id = result.entity.id
-      scores[id] += 1.0 / (RRF_K + rank + 1)
-      entities[id] ||= result.entity
-      matched_fields[id] |= [ "semantic" ]
-    end
-
-    if context_entity_ids.present?
-      context_set = context_entity_ids.to_set
-      scores.each_key do |id|
-        scores[id] += CONTEXT_BOOST if context_set.include?(id)
-      end
-    end
+    scores, entities, matched = build_score_maps(text_results, vector_results)
+    apply_relevance_boosts(scores, entities, context_entity_ids)
 
     scores
       .sort_by { |_id, score| -score }
@@ -91,18 +56,106 @@ class HybridSearchStrategy
         SearchResult.new(
           entity: entities[id],
           score: score,
-          matched_fields: matched_fields[id]
+          matched_fields: matched[id]
         )
       end
   end
 
-  def apply_context_boost(results, context_entity_ids)
-    return results if context_entity_ids.blank?
+  private
 
-    context_set = context_entity_ids.to_set
-    results.each do |result|
-      result.score += CONTEXT_BOOST if context_set.include?(result.entity.id)
+  # Build initial score maps from text and vector results using weighted RRF.
+  # Text scores are preserved as weights on the RRF contribution so that
+  # well-differentiated text rankings survive the fusion.
+  def build_score_maps(text_results, vector_results)
+    scores = Hash.new(0.0)
+    entities = {}
+    matched = Hash.new { |h, k| h[k] = [] }
+
+    max_text_score = text_results.map(&:score).max || 1.0
+    max_text_score = [ max_text_score, 1.0 ].max
+
+    text_results.each_with_index do |result, rank|
+      id = result.entity.id
+      normalized = result.score / max_text_score
+      scores[id] += (1.0 / (RRF_K + rank + 1)) * (1.0 + normalized)
+      entities[id] = result.entity
+      matched[id] = result.matched_fields
     end
-    results.sort_by { |r| -r.score }
+
+    vector_results.each_with_index do |result, rank|
+      id = result.entity.id
+      scores[id] += 1.0 / (RRF_K + rank + 1)
+      entities[id] ||= result.entity
+      matched[id] |= [ "semantic" ]
+    end
+
+    [ scores, entities, matched ]
+  end
+
+  def apply_relevance_boosts(scores, entities, context_entity_ids)
+    return if scores.empty?
+
+    apply_name_match_boost(scores, entities)
+    apply_type_priority(scores, entities)
+    apply_structural_boost(scores, entities)
+    apply_graduated_context_boost(scores, context_entity_ids)
+  end
+
+  def apply_name_match_boost(scores, entities)
+    return if @query.blank?
+
+    query_lower = @query.downcase
+
+    scores.each_key do |id|
+      entity = entities[id]
+      next unless entity
+
+      name_lower = entity.name.to_s.downcase
+
+      if name_lower == query_lower
+        scores[id] += SearchRelevanceBooster::EXACT_NAME_MATCH_BONUS
+      elsif name_lower.start_with?(query_lower) || query_lower.start_with?(name_lower)
+        scores[id] += SearchRelevanceBooster::NAME_PREFIX_MATCH_BONUS
+      end
+    end
+  end
+
+  def apply_type_priority(scores, entities)
+    scores.each_key do |id|
+      entity = entities[id]
+      next unless entity
+
+      multiplier = SearchRelevanceBooster::ENTITY_TYPE_PRIORITY[entity.entity_type] ||
+                   SearchRelevanceBooster::DEFAULT_TYPE_PRIORITY
+      scores[id] *= multiplier
+    end
+  end
+
+  def apply_structural_boost(scores, entities)
+    entity_ids = scores.keys
+    return if entity_ids.empty?
+
+    from_counts = MemoryRelation.where(from_entity_id: entity_ids).group(:from_entity_id).count
+    to_counts = MemoryRelation.where(to_entity_id: entity_ids).group(:to_entity_id).count
+
+    scores.each_key do |id|
+      count = (from_counts[id] || 0) + (to_counts[id] || 0)
+      scores[id] += Math.log2(1 + count) * SearchRelevanceBooster::STRUCTURAL_BOOST_FACTOR if count > 0
+    end
+  end
+
+  def apply_graduated_context_boost(scores, context_entity_ids)
+    return if context_entity_ids.blank?
+
+    root_id = GraphMemContext.current_project_id
+    context_set = context_entity_ids.to_set
+
+    scores.each_key do |id|
+      if id == root_id
+        scores[id] += SearchRelevanceBooster::CONTEXT_ROOT_BOOST
+      elsif context_set.include?(id)
+        scores[id] += SearchRelevanceBooster::CONTEXT_CHILD_BOOST
+      end
+    end
   end
 end

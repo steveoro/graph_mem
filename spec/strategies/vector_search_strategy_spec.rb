@@ -54,6 +54,23 @@ RSpec.describe VectorSearchStrategy do
           expect(sql_str).to include("VEC_FromText")
           relation
         end
+        allow(relation).to receive(:having).and_return(relation)
+        allow(relation).to receive(:order).and_return(relation)
+        allow(relation).to receive(:limit).and_return([])
+
+        strategy.search("test query")
+      end
+
+      it "applies a cosine distance quality gate via HAVING clause" do
+        relation = double("relation")
+        allow(MemoryEntity).to receive(:where).and_return(relation)
+        allow(relation).to receive(:not).and_return(relation)
+        allow(relation).to receive(:select).and_return(relation)
+        allow(relation).to receive(:having) do |clause, threshold|
+          expect(clause).to include("vec_distance")
+          expect(threshold).to eq(described_class::MAX_COSINE_DISTANCE)
+          relation
+        end
         allow(relation).to receive(:order).and_return(relation)
         allow(relation).to receive(:limit).and_return([])
 

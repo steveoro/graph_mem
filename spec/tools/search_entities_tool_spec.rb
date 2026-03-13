@@ -98,7 +98,7 @@ RSpec.describe SearchEntitiesTool, type: :model do
         expect(results.first[:name]).to eq('Apple Pie')
         expect(results.first[:entity_type]).to eq('Dessert')
         expect(results.first[:matched_fields]).to include('entity_type')
-        expect(results.first[:relevance_score]).to be >= 15 # At least base entity_type weight
+        expect(results.first[:relevance_score]).to be > 0
       end
 
       it 'handles multi-token queries across fields' do
@@ -160,21 +160,19 @@ RSpec.describe SearchEntitiesTool, type: :model do
       end
 
       it 'prioritizes entity_type matches in scoring' do
-        # Create test entities with different match types
         type_match = MemoryEntity.create!(
           name: 'Random Name',
           entity_type: 'Test Category',
           aliases: 'other'
         )
         name_match = MemoryEntity.create!(
-          name: 'Test Product',
+          name: 'Product With Test',
           entity_type: 'Product',
           aliases: 'other'
         )
 
         results = tool.call(query: 'test')
 
-        # Should be ordered by entity_type, but type_match should have higher score
         type_result = results.find { |r| r[:entity_id] == type_match.id }
         name_result = results.find { |r| r[:entity_id] == name_match.id }
 

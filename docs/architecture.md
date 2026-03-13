@@ -79,15 +79,16 @@ Controllers in `app/controllers/api/v1/` provide REST equivalents for all MCP op
 #### Search Strategies (`app/strategies/`)
 
 - **EntitySearchStrategy** - Text-based search with token matching and relevance scoring
-- **VectorSearchStrategy** - Semantic search using MariaDB VECTOR cosine distance
-- **HybridSearchStrategy** - Combines text and vector via Reciprocal Rank Fusion (RRF). Accepts optional `context_entity_ids` to boost in-context results.
+- **VectorSearchStrategy** - Semantic search using MariaDB VECTOR cosine distance, with a quality gate that filters results above a maximum cosine distance threshold
+- **HybridSearchStrategy** - Combines text and vector via weighted Reciprocal Rank Fusion (RRF), then applies post-fusion relevance boosts: exact name matching, entity type priority, structural importance (relation count), and graduated context boosting
+- **SearchRelevanceBooster** - Shared module providing boost constants and a `rank_entity_ids` method used by both `HybridSearchStrategy` and `SearchSubgraphTool`
 
 #### Context Scoping (`app/models/graph_mem_context.rb`)
 
 Thread-local storage for the active project context. When set:
 - `GraphMemContext.scoped_entity_ids` returns the project ID plus all entities with `part_of` relations to it
-- `HybridSearchStrategy` applies a score boost to these entities
-- `SearchSubgraphTool` partitions results to surface in-context entities first
+- `HybridSearchStrategy` applies a graduated context boost (stronger for the root project entity, lighter for its children)
+- `SearchSubgraphTool` ranks results using `SearchRelevanceBooster` with context-aware scoring
 
 #### Embedding Service (`app/services/embedding_service.rb`)
 
