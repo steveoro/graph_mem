@@ -119,10 +119,20 @@ A typical MCP request flows through:
 
 1. MCP client sends JSON-RPC request via SSE or STDIO transport
 2. `FastMcp::Server` routes to the appropriate tool class
-3. Tool validates parameters (via Dry::Schema `arguments` block)
-4. Tool executes business logic using ActiveRecord models and search strategies
-5. Results are returned as a Ruby hash, serialized to JSON by FastMcp
-6. Response delivered to client via the transport
+3. `ApplicationTool#call_with_schema_validation!` normalizes incoming parameters via `ParameterNormalizer` (camelCase to snake_case, entity name to ID resolution, `operations` array parsing for `bulk_update`)
+4. Tool validates normalized parameters (via Dry::Schema `arguments` block)
+5. Tool executes business logic using ActiveRecord models and search strategies
+6. Results are returned as a Ruby hash, serialized to JSON by FastMcp
+7. Response delivered to client via the transport
+
+### Parameter Normalization
+
+`ParameterNormalizer` (`app/tools/concerns/parameter_normalizer.rb`) ensures compatibility with both graph_mem's native snake_case/ID-based conventions and the `@modelcontextprotocol/server-memory` camelCase/name-based conventions. This runs at step 3 before schema validation, handling:
+
+- **camelCase to snake_case key conversion** (recursive, for nested hashes in arrays)
+- **Standard field aliases** (`content` to `text_content`, `entity_name` to `entity_id` via DB lookup)
+- **Entity name resolution** (string entity names resolved to integer IDs via `MemoryEntity.find_by`)
+- **`operations` array parsing** (for `bulk_update` only: type-discriminated items split into three arrays)
 
 REST API requests follow a similar path through Rails controllers instead of MCP tools, sharing the same models, strategies, and services.
 

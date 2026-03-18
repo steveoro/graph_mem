@@ -55,8 +55,8 @@ RSpec.describe "FastMcp tool registration", type: :integration do
             expect(tool.description.length).to be > 5
           end
 
-          it "returns a valid input_schema_to_json hash from the instance" do
-            schema = tool.input_schema_to_json
+          it "returns a valid input_schema_to_json hash from the class" do
+            schema = tool_class.input_schema_to_json
             expect(schema).to be_a(Hash)
             expect(schema).to have_key(:type)
           end

@@ -6,22 +6,12 @@ class GetEntityTool < ApplicationTool
     "get_entity"
   end
 
-  description "Retrieve a specific entity by ID, including its observations and relations."
+  description "Retrieve a specific entity by ID, including its observations and relations. " \
+    "Accepts entity_id (integer) or entity name (string)."
 
   arguments do
     required(:entity_id).filled(:integer).description("The ID of the entity to retrieve.")
   end
-
-  # Defines the input schema for this tool. Overrides the shared behavior from ApplicationTool
-  def input_schema_to_json
-    {
-      type: "object",
-      properties: { entity_id: { type: "integer", description: "The ID of the entity to retrieve." } },
-      required: [ "entity_id" ]
-    }
-  end
-
-  # Output: Complex object with entity details, observations, and relations (from/to)
 
   def call(entity_id:)
     logger.info "Performing GetEntityTool with entity_id: #{entity_id}"

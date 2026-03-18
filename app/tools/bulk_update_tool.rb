@@ -9,16 +9,17 @@ class BulkUpdateTool < ApplicationTool
 
   description "Perform multiple graph memory operations in a single atomic transaction. " \
     "Supports creating entities, adding observations, and creating relations in one call. " \
-    "Maximum #{MAX_OPERATIONS} total operations per call."
+    "Maximum #{MAX_OPERATIONS} total operations per call. " \
+    "Accepts three separate arrays (entities, observations, relations) " \
+    "or an operations array with type-discriminated items. " \
+    "Entity references accept both entity_id (integer) and entity name (string)."
 
   arguments do
-    optional(:entities).description("Array of entities to create. Each: {name, entity_type, aliases?, description?, observations?[]}")
-    optional(:observations).description("Array of observations to add. Each: {entity_id, text_content}")
-    optional(:relations).description("Array of relations to create. Each: {from_entity_id, to_entity_id, relation_type}")
+    optional(:entities).description("Entities to create.")
+    optional(:observations).description("Observations to add to existing entities.")
+    optional(:relations).description("Relations to create between entities.")
   end
 
-  # Override as class method -- fast-mcp calls input_schema_to_json on the class,
-  # and Dry::Schema cannot express this nested structure via the arguments DSL alone.
   def self.input_schema_to_json
     {
       type: "object",

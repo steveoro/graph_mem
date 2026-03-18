@@ -7,7 +7,8 @@ class CreateEntityTool < ApplicationTool
     "create_entity"
   end
 
-  description "Create a new entity in the graph memory database."
+  description "Create a new entity in the graph memory database. " \
+    "Also accepts entityType (camelCase) as an alias for entity_type."
 
   arguments do
     required(:name).filled(:string).description("The unique name for the new entity.")
@@ -15,20 +16,6 @@ class CreateEntityTool < ApplicationTool
     optional(:observations).array(:string).description("Optional list of initial observation strings associated with the entity.")
     optional(:aliases).maybe(:string).description("Optional pipe-separated string of alternative names for the entity.")
     optional(:description).maybe(:string).description("Optional short description of the entity.")
-  end
-
-  def input_schema_to_json
-    {
-      type: "object",
-      properties: {
-        name: { type: "string", description: "The name of the entity" },
-        entity_type: { type: "string", description: "The type of the entity" },
-        observations: { type: "array", items: { type: "string" }, description: "Optional list of initial observation strings associated with the entity." },
-        aliases: { type: "string", description: "Optional pipe-separated string of alternative names for the entity." },
-        description: { type: "string", description: "Optional short description of the entity." }
-      },
-      required: [ "name", "entity_type" ]
-    }
   end
 
   def call(name:, entity_type:, observations: [], aliases: nil, description: nil)

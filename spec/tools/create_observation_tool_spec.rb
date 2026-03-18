@@ -26,11 +26,11 @@ RSpec.describe CreateObservationTool, type: :model do
 
   describe '#input_schema_to_json' do
     it 'returns the correct schema' do
-      schema = tool.input_schema_to_json
+      schema = described_class.input_schema_to_json
       expect(schema[:type]).to eq("object")
-      expect(schema[:required]).to contain_exactly("entity_id", "content")
+      expect(schema[:required]).to contain_exactly("entity_id", "text_content")
       expect(schema[:properties]).to have_key(:entity_id)
-      expect(schema[:properties]).to have_key(:content)
+      expect(schema[:properties]).to have_key(:text_content)
     end
   end
 

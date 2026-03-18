@@ -38,15 +38,14 @@ RSpec.describe SearchEntitiesTool, type: :model do
     end
   end
 
-  describe '#input_schema_to_json' do
+  describe '.input_schema_to_json' do
     it 'returns the correct schema' do
-      schema = tool.input_schema_to_json
+      schema = described_class.input_schema_to_json
 
-      expect(schema).to eq({
-        type: "object",
-        properties: { query: { type: "string", description: "The search term to find within entity names, entity types, or aliases. Multiple words will be tokenized for better matching (case-insensitive)." } },
-        required: [ "query" ]
-      })
+      expect(schema[:type]).to eq("object")
+      expect(schema[:required]).to eq([ "query" ])
+      expect(schema[:properties]).to have_key(:query)
+      expect(schema[:properties][:query][:type]).to eq("string")
     end
   end
 

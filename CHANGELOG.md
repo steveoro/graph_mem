@@ -5,6 +5,9 @@ All notable changes to GraphMem will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.0] - 2026-03-18
+- Support for both camelCase and snake_case arguments; support for @modelcontextprotocol/server-memory-like syntax (models have been already trained excessively on that, so graph_mem syntax is prone to misunderstanding); improved ruleset with quick reference; updated docs
+
 ## [1.5.0] - 2026-03-12
 - Improve search results with more nuanced weighting and ranking (cosine distance + quality gate)
 

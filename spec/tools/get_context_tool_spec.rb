@@ -34,7 +34,7 @@ RSpec.describe GetContextTool, type: :model do
 
   describe '#input_schema_to_json' do
     it 'returns an empty-properties schema (no arguments)' do
-      schema = tool.input_schema_to_json
+      schema = described_class.input_schema_to_json
       expect(schema[:type]).to eq("object")
       expect(schema[:properties]).to eq({})
     end

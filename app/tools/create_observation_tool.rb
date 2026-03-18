@@ -1,28 +1,17 @@
 # frozen_string_literal: true
 
 class CreateObservationTool < ApplicationTool
-  # Provide a custom tool name:
   def self.tool_name
     "create_observation"
   end
 
-  description "Creates new observations to existing entities in the knowledge graph"
+  description "Creates new observations to existing entities in the knowledge graph. " \
+    "Requires entity_id (integer) and text_content (string). " \
+    "Also accepts entity name (string) instead of entity_id, and content/contents as aliases for text_content."
 
   arguments do
     required(:entity_id).filled(:integer).description("The ID of the entity to add the observation to")
     required(:text_content).filled(:string).description("The textual content of the observation")
-  end
-
-  # Defines the input schema for this tool. Overrides the shared behavior from ApplicationTool
-  def input_schema_to_json
-    {
-      type: "object",
-      properties: {
-        entity_id: { type: "integer", description: "The ID of the entity to add the observation to" },
-        content: { type: "string", description: "The textual content of the observation" }
-      },
-      required: [ "entity_id", "content" ]
-    }
   end
 
   def call(entity_id:, text_content:)

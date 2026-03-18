@@ -5,20 +5,11 @@ class SetContextTool < ApplicationTool
     "set_context"
   end
 
-  description "Set the active project context. Subsequent search operations will prioritize entities related to this project."
+  description "Set the active project context. Subsequent search operations will prioritize entities related to this project. " \
+    "Accepts entity_id (integer) or entity name (string)."
 
   arguments do
     required(:entity_id).filled(:integer).description("The ID of the entity to set as the active context.")
-  end
-
-  def input_schema_to_json
-    {
-      type: "object",
-      properties: {
-        entity_id: { type: "integer", description: "The ID of the entity to set as the active context." }
-      },
-      required: [ "entity_id" ]
-    }
   end
 
   def call(entity_id:)

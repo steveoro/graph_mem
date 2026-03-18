@@ -22,7 +22,7 @@ RSpec.describe SuggestMergesTool, type: :model do
 
   describe '#input_schema_to_json' do
     it 'returns the correct schema with all optional parameters' do
-      schema = tool.input_schema_to_json
+      schema = described_class.input_schema_to_json
       expect(schema[:type]).to eq("object")
       expect(schema[:required]).to eq([])
       expect(schema[:properties]).to have_key(:threshold)

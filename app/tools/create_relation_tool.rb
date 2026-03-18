@@ -1,12 +1,13 @@
 # frozen_string_literal: true
 
-class CreateRelationTool < ApplicationTool # Assuming ApplicationTool inherits from ActionTool::Base
-  # Provide a custom tool name:
+class CreateRelationTool < ApplicationTool
   def self.tool_name
     "create_relation"
   end
 
-  description "Create a relationship between two existing entities."
+  description "Create a relationship between two existing entities. " \
+    "Requires from_entity_id (integer), to_entity_id (integer), and relation_type (string). " \
+    "Also accepts entity names (string) for from/to instead of integer IDs."
 
   arguments do
     required(:from_entity_id).filled(:integer).description("The ID of the entity where the relation starts.")
@@ -14,22 +15,7 @@ class CreateRelationTool < ApplicationTool # Assuming ApplicationTool inherits f
     required(:relation_type).filled(:string).description("The type classification for the relationship (e.g., 'related_to', 'depends_on').")
   end
 
-  # Defines the input schema for this tool. Overrides the shared behavior from ApplicationTool
-  def input_schema_to_json
-    {
-      type: "object",
-      properties: {
-        from_entity_id: { type: "integer", description: "The ID of the entity where the relation starts." },
-        to_entity_id: { type: "integer", description: "The ID of the entity where the relation ends." },
-        relation_type: { type: "string", description: "The type classification for the relationship (e.g., 'related_to', 'depends_on')." }
-      },
-      required: [ "from_entity_id", "to_entity_id", "relation_type" ]
-    }
-  end
-
-  # Output: Relation object
-
-  def call(from_entity_id:, to_entity_id:, relation_type:) # Changed from perform
+  def call(from_entity_id:, to_entity_id:, relation_type:)
     logger.info "Performing CreateRelationTool with from_id: #{from_entity_id}, to_id: #{to_entity_id}, type: #{relation_type}"
     begin
       # Explicitly find entities to ensure they exist before creating the relation

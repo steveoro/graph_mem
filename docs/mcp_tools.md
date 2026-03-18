@@ -1,10 +1,19 @@
 # MCP Tools Documentation
 
-Detailed reference for the 21 Model Context Protocol (MCP) tools available in GraphMem v1.2.
+Detailed reference for the 21 Model Context Protocol (MCP) tools available in GraphMem.
 
 ## Overview
 
 MCP tools in GraphMem are Ruby classes that implement operations on the knowledge graph. Each tool is accessed via JSON-RPC calls from an MCP client. Tools auto-register via `ApplicationTool` inheritance.
+
+## Standard Compatibility
+
+All tools accept both graph_mem's native snake_case/ID-based parameters and the `@modelcontextprotocol/server-memory` camelCase/name-based conventions. A `ParameterNormalizer` layer automatically converts incoming parameters before validation:
+
+- **camelCase keys** are converted to snake_case (e.g. `entityType` becomes `entity_type`)
+- **Entity names** (strings) are resolved to integer entity IDs where an ID is expected
+- **Field aliases** are normalized (`content` to `text_content`, `from`/`to` to `from_entity_id`/`to_entity_id`)
+- **`operations` array** is supported by `bulk_update` as an alternative to three separate arrays
 
 ## Recommended Session Workflow
 
@@ -22,10 +31,10 @@ Context scoping allows search tools to **boost** entities related to the active 
 Context is stored in a thread-local variable (`GraphMemContext`) and persists for the duration of the MCP connection.
 
 #### `set_context`
-- **Description:** Sets the active project context. Subsequent searches will prioritize entities related to this project via `part_of` relations.
+- **Description:** Sets the active project context. Subsequent searches will prioritize entities related to this project via `part_of` relations. Accepts entity_id (integer) or entity name (string).
 - **Parameters:**
-  - `project_id` (integer, required): The ID of the project entity to scope to.
-- **Response:** `{ status, project_id, project_name, project_type }`
+  - `entity_id` (integer, required): The ID of the entity to set as context. Also accepts entity name (string).
+- **Response:** `{ status, entity_id, entity_name, entity_type }`
 
 #### `get_context`
 - **Description:** Returns the currently active project context, if any. Auto-clears if the project entity no longer exists.
@@ -49,9 +58,9 @@ Context is stored in a thread-local variable (`GraphMemContext`) and persists fo
 - **Notes:** Entity types are automatically mapped to canonical forms via `EntityTypeMapping`. For example, "project", "workspace", "context", and "repo" all map to "Project".
 
 #### `get_entity`
-- **Description:** Retrieves an entity by ID, including observations and relations.
+- **Description:** Retrieves an entity by ID, including observations and relations. Accepts entity_id (integer) or entity name (string).
 - **Parameters:**
-  - `entity_id` (integer, required): The ID of the entity.
+  - `entity_id` (integer, required): The ID of the entity. Also accepts entity name (string).
 
 #### `update_entity`
 - **Description:** Updates entity name, type, aliases, and/or description.
@@ -70,10 +79,10 @@ Context is stored in a thread-local variable (`GraphMemContext`) and persists fo
 ## Observation Management (2 tools)
 
 #### `create_observation`
-- **Description:** Adds an observation to an existing entity. Automatically generates a vector embedding for semantic search.
+- **Description:** Adds an observation to an existing entity. Automatically generates a vector embedding for semantic search. Accepts entity_id (integer) or entity name (string). Observation text accepted via `text_content`, `content`, or `contents`.
 - **Parameters:**
-  - `entity_id` (integer, required): The entity to attach the observation to.
-  - `text_content` (string, required): The observation content.
+  - `entity_id` (integer, required): The entity to attach the observation to. Also accepts entity name (string).
+  - `text_content` (string, required): The observation content. Also accepted as `content`.
 
 #### `delete_observation`
 - **Description:** Deletes an observation by ID.
@@ -83,10 +92,10 @@ Context is stored in a thread-local variable (`GraphMemContext`) and persists fo
 ## Relation Management (3 tools)
 
 #### `create_relation`
-- **Description:** Creates a typed relationship between two entities.
+- **Description:** Creates a typed relationship between two entities. Accepts entity IDs (integer) or entity names (string) for from/to endpoints.
 - **Parameters:**
-  - `from_entity_id` (integer, required): Source entity ID.
-  - `to_entity_id` (integer, required): Target entity ID.
+  - `from_entity_id` (integer, required): Source entity ID. Also accepts entity name (string) via `from_entity_id`, `from_entity`, or `from`.
+  - `to_entity_id` (integer, required): Target entity ID. Also accepts entity name (string) via `to_entity_id`, `to_entity`, or `to`.
   - `relation_type` (string, required): Relationship type (e.g., "part_of", "depends_on").
 
 #### `delete_relation`
@@ -134,11 +143,13 @@ Context is stored in a thread-local variable (`GraphMemContext`) and persists fo
 ## Batch & Maintenance Tools (3 tools)
 
 #### `bulk_update`
-- **Description:** Performs multiple operations in a single atomic transaction. Maximum 50 operations per call. Rolls back entirely on any error.
-- **Parameters:**
+- **Description:** Performs multiple operations in a single atomic transaction. Maximum 50 operations per call. Rolls back entirely on any error. Accepts three separate arrays or an `operations` array with type-discriminated items. Entity references accept both entity_id (integer) and entity name (string).
+- **Parameters (canonical format):**
   - `entities` (array, optional): Entities to create. Each: `{ name, entity_type, aliases?, description?, observations?[] }`
   - `observations` (array, optional): Observations to add. Each: `{ entity_id, text_content }`
   - `relations` (array, optional): Relations to create. Each: `{ from_entity_id, to_entity_id, relation_type }`
+- **Parameters (operations format):**
+  - `operations` (array, optional): Type-discriminated items. Each has a `type` field (`create_entity`, `create_observation`, `create_relation`) plus the relevant fields for that operation type.
 
 #### `suggest_merges`
 - **Description:** Finds potential duplicate entities using vector cosine similarity. Returns pairs of entities that may represent the same concept.

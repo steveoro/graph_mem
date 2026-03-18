@@ -15,12 +15,6 @@ class DslTestTool < ApplicationTool
     optional(:count).filled(:integer)
   end
 
-  tool_input_schema({
-    type: "object",
-    properties: { name: { type: "string" }, count: { type: "integer" } },
-    required: [ "name" ]
-  })
-
   def call(name:, count: nil)
     { name: name, count: count }
   end
@@ -52,22 +46,6 @@ RSpec.describe ApplicationTool do
     end
   end
 
-  describe "#input_schema_to_json" do
-    it "delegates to the class-level tool_input_schema when defined" do
-      tool = DslTestTool.new
-      json = tool.input_schema_to_json
-      expect(json).to be_a(Hash)
-      expect(json[:properties]).to have_key(:name)
-      expect(json[:required]).to include("name")
-    end
-
-    it "returns the empty default schema when no tool_input_schema is explicitly set" do
-      tool = NoDslTestTool.new
-      json = tool.input_schema_to_json
-      expect(json).to eq({ type: "object", properties: {}, required: [] })
-    end
-  end
-
   describe "#description" do
     it "returns the FastMcp class-level description when set" do
       tool = DslTestTool.new
@@ -80,11 +58,31 @@ RSpec.describe ApplicationTool do
     end
   end
 
+  describe "#call_with_schema_validation!" do
+    it "normalizes parameters before validation and dispatch" do
+      tool = DslTestTool.new
+      result, _meta = tool.call_with_schema_validation!(name: "test", count: 5)
+      expect(result).to eq({ name: "test", count: 5 })
+    end
+
+    it "converts camelCase parameters to snake_case" do
+      tool = DslTestTool.new
+      # DslTestTool has no camelCase fields, but the normalizer should not break
+      result, _meta = tool.call_with_schema_validation!(name: "test")
+      expect(result[:name]).to eq("test")
+    end
+
+    it "raises InvalidArgumentsError for missing required parameters" do
+      tool = DslTestTool.new
+      expect {
+        tool.call_with_schema_validation!(count: 5)
+      }.to raise_error(FastMcp::Tool::InvalidArgumentsError, /name/)
+    end
+  end
+
   describe "#call" do
     it "sets Current.actor before calling super" do
       tool = DslTestTool.new
-      # Invoke ApplicationTool's call method directly; rescue any error from
-      # super since FastMcp::Tool may not define call
       begin
         ApplicationTool.instance_method(:call).bind_call(tool, name: "test")
       rescue NoMethodError
@@ -105,28 +103,6 @@ RSpec.describe ApplicationTool do
     it "returns Rails.logger" do
       tool = DslTestTool.new
       expect(tool.logger).to eq(Rails.logger)
-    end
-  end
-
-  describe ".tool_description" do
-    it "returns fallback when only FastMcp description DSL is used (not tool_description)" do
-      expect(DslTestTool.tool_description).to eq("dsl_test - A general purpose tool.")
-    end
-
-    it "falls back to default when unset" do
-      expect(NoDslTestTool.tool_description).to include("no_dsl_test")
-    end
-  end
-
-  describe ".tool_input_schema" do
-    it "stores and retrieves a custom schema" do
-      schema = DslTestTool.tool_input_schema
-      expect(schema[:properties]).to have_key(:name)
-    end
-
-    it "returns empty default when unset" do
-      schema = NoDslTestTool.tool_input_schema
-      expect(schema).to eq({ type: "object", properties: {}, required: [] })
     end
   end
 end

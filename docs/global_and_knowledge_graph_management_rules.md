@@ -53,6 +53,16 @@ Use the `graph_mem` MCP tools every session. "Knowledge graph", "graph mem", "me
 | Persist | `create_entity`, `update_entity`, `delete_entity`, `create_observation`, `delete_observation`, `create_relation`, `find_relations`, `delete_relation`, `bulk_update` |
 | Maintain | `suggest_merges`, `get_graph_stats`, `get_version`, `get_current_time` |
 
+### Standard Compatibility
+
+graph_mem accepts both its native snake_case/ID-based parameters and the
+`@modelcontextprotocol/server-memory` camelCase/name-based conventions:
+- Entity references accept either `entity_id` (integer) or entity name (string).
+- Field names accept camelCase (e.g. `entityType`) or snake_case (`entity_type`).
+- `bulk_update` accepts either three arrays (`entities`, `observations`, `relations`) or a single `operations` array with `type`-discriminated items.
+- Observation text accepts `text_content`, `content`, or `contents` (array).
+- Relation endpoints accept `from_entity_id`/`to_entity_id` (int), `from`/`to` (name), or `from_entity`/`to_entity` (name).
+
 ### Query Strategy
 - **Search before create** to avoid duplicates (vector dedup catches some, not all).
 - **Start broad, then narrow** using entity IDs from search results.

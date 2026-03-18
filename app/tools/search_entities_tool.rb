@@ -11,14 +11,6 @@ class SearchEntitiesTool < ApplicationTool
     required(:query).filled(:string).description("The search term to find within entity names, entity types, or aliases. Multiple words will be tokenized for better matching (case-insensitive).")
   end
 
-  def input_schema_to_json
-    {
-      type: "object",
-      properties: { query: { type: "string", description: "The search term to find within entity names, entity types, or aliases. Multiple words will be tokenized for better matching (case-insensitive)." } },
-      required: [ "query" ]
-    }
-  end
-
   def call(query:)
     logger.info "Performing SearchEntitiesTool with query: #{query}"
     begin
