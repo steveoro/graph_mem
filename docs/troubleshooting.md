@@ -21,7 +21,7 @@ This guide addresses common issues you might encounter when working with GraphMe
    - Verify you're using the correct protocol, host, and port
    - Default URLs are:
      - HTTP/JSON-RPC: `http://localhost:3000/mcp/messages`
-     - SSE: `http://localhost:3003/mcp/sse`
+     - SSE: `http://localhost:3030/mcp/sse`
 
 3. **CORS Issues (Browser Clients Only)**
    - Check browser console for CORS errors
@@ -34,7 +34,7 @@ This guide addresses common issues you might encounter when working with GraphMe
 
 4. **Firewall Blocking Connections**
    - Check if your firewall is blocking the port
-   - Allow connections to the relevant ports (3000 or 3003)
+   - Allow connections to the relevant ports (3000 or 3030)
 
 ### Problem: MCP Requests Return Errors
 

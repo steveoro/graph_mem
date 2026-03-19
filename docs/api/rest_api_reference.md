@@ -5,7 +5,7 @@ REST API for the GraphMem knowledge graph memory system. The API mirrors the cap
 ## Base URL
 
 ```
-http://localhost:3003/api/v1
+http://localhost:3030/api/v1
 ```
 
 ## Swagger / OpenAPI

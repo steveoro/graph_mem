@@ -55,7 +55,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Upgraded to MariaDB 11.8 (Docker image) for native vector support
 - `SearchEntitiesTool` now uses `HybridSearchStrategy` (text + semantic) by default
 - `SearchSubgraphTool` merges vector search results with text search results when embeddings are available
-- Dockerfile updated: includes MariaDB client libs, exposes port 3003, removes Thruster dependency for flexibility
+- Dockerfile updated: includes MariaDB client libs, exposes port 3030, removes Thruster dependency for flexibility
 - All entity-returning tools now include `description` field in responses
 
 ### Removed

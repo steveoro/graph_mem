@@ -5,7 +5,7 @@ info:
   description: REST API for the GraphMem knowledge graph memory system. Provides entity, observation, relation management, search, context scoping, bulk operations, and maintenance utilities.
   version: v1 (1.5.0)
 servers:
-- url: http://localhost:3003
+- url: http://localhost:3030
   description: Local development server
 
 tags:

@@ -5,7 +5,7 @@
 #   docker compose up --build
 # Or standalone:
 #   docker build -t graph_mem .
-#   docker run -d -p 3003:3003 -e RAILS_MASTER_KEY=<key> --name graph_mem graph_mem
+#   docker run -d -p 3030:3030 -e RAILS_MASTER_KEY=<key> --name graph_mem graph_mem
 
 ARG RUBY_VERSION=3.4.1
 FROM docker.io/library/ruby:$RUBY_VERSION-slim AS base
@@ -57,5 +57,5 @@ USER 1000:1000
 
 ENTRYPOINT ["/rails/bin/docker-entrypoint"]
 
-EXPOSE 3003
-CMD ["./bin/rails", "server", "-b", "0.0.0.0", "-p", "3003"]
+EXPOSE 3030
+CMD ["./bin/rails", "server", "-b", "0.0.0.0", "-p", "3030"]

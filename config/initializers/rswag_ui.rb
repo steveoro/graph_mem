@@ -14,7 +14,7 @@ Rswag::Ui::Middleware.class_eval do
   def csp
     <<~POLICY.tr("\n", " ")
       default-src 'self';
-      connect-src 'self' http://localhost:3003;
+      connect-src 'self' http://localhost:3030;
       img-src 'self' data: https://validator.swagger.io;
       font-src 'self' https://fonts.gstatic.com;
       style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;

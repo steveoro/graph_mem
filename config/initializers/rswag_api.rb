@@ -14,7 +14,7 @@ Rswag::Api.configure do |c|
     scheme = env["rack.url_scheme"] || "http"
     swagger["servers"] = [
       { "url" => "#{scheme}://#{host}", "description" => "Current host" },
-      { "url" => "http://localhost:3003", "description" => "Localhost (default)" }
+      { "url" => "http://localhost:3030", "description" => "Localhost (default)" }
     ]
   }
 end

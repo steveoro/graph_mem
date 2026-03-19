@@ -96,7 +96,7 @@ ollama pull nomic-embed-text
 
 > The `app` container uses `network_mode: host`, so it shares the host's network
 > stack. `localhost:11434` reaches Ollama with no bridge/firewall configuration needed.
-> The app binds directly to host port 3003.
+> The app binds directly to host port 3030.
 
 ```bash
 # Clone and enter the project
@@ -123,9 +123,9 @@ docker compose exec app bin/rails embeddings:backfill
 docker compose down && docker compose up -d --build
 ```
 
-The app is available at `http://localhost:3003`. Swagger API docs at `http://localhost:3003/api-docs`.
+The app is available at `http://localhost:3030`. Swagger API docs at `http://localhost:3030/api-docs`.
 
-The app port (3003) is hardcoded on Dockerfile and docker-compose.yml because the service relies on host networking to access the embedding service by `ollama`. This allows a simpler container setup on different machines without resorting to iptables or firewall mangling.
+The app port (3030) is hardcoded on Dockerfile and docker-compose.yml because the service relies on host networking to access the embedding service by `ollama`. This allows a simpler container setup on different machines without resorting to iptables or firewall mangling.
 
 This containerized app is a **single-user server** with no authentication layer -- it is
 designed to run locally on a machine and/or be accessible only through a trusted LAN.
@@ -137,12 +137,12 @@ designed to run locally on a machine and/or be accessible only through a trusted
 To allow a local Ubuntu server running `graph_mem` in a container with `ollama` running as a service for embedding processing, remember to allow incoming trafic if you're using `ufw` (assuming your local LAN is set on 192.168.0.0/24):
 
 ```bash
-sudo ufw allow from 192.168.0.0/24 to any port 3003 proto tcp comment "GraphMem from LAN"
+sudo ufw allow from 192.168.0.0/24 to any port 3030 proto tcp comment "GraphMem from LAN"
 
 sudo ufw allow from 192.168.0.0/24 to any port 11434 proto tcp comment "Ollama from LAN"
 ```
 
-This way, the graph_mem UI will be accessible on `http://<graph_mem_server_ip>:3003/` while the MCP server will be at `http://<graph_mem_server_ip>:3003/mcp/sse`.
+This way, the graph_mem UI will be accessible on `http://<graph_mem_server_ip>:3030/` while the MCP server will be at `http://<graph_mem_server_ip>:3030/mcp/sse`.
 
 
 ## Native Development Setup
@@ -194,7 +194,7 @@ Edit your Cursor's `mcp.json`:
 {
   "mcpServers": {
     "graph_mem": {
-      "url": "http://localhost:3003/mcp/sse"
+      "url": "http://localhost:3030/mcp/sse"
     }
   }
 }
@@ -314,7 +314,7 @@ OLLAMA_URL=http://<ollama-host-ip>:11434
 Point them to the workstation's SSE endpoint:
 
 ```json
-{ "url": "http://<workstation-ip>:3003/mcp/sse" }
+{ "url": "http://<workstation-ip>:3030/mcp/sse" }
 ```
 
 
