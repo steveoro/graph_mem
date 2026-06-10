@@ -20,12 +20,14 @@ GraphMem is designed as a **single-user, local-network server**. There is no aut
 {
   "mcpServers": {
     "graph_mem": {
-      "url": "http://localhost:3000/mcp/sse",
-      "headers": { "X-MCP-Client": "cursor-A" }
+      "url": "http://localhost:3030/mcp/sse",
+      "headers": { "X-MCP-Client": "Agent-1" }
     }
   }
 }
 ```
+
+The example above assumes using the container setup, which is hardcoded to port 3030. (APP_PORT is currently hardcoded in Dockerfile and docker-compose.yml)
 
 Context set via `set_context` is stored per `client_id` in the database and survives server restarts. Agents without the header share the `"default"` client bucket (backward-compatible single-agent behavior).
 
