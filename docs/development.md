@@ -68,6 +68,19 @@ For the STDIO interface (useful for Windsurf integration):
 bin/windsurf_mcp_graph_mem_runner.sh
 ```
 
+## Adding MCP Tools
+
+1. Create `app/tools/my_feature_tool.rb` inheriting from `ApplicationTool` with a `tool_name` class method.
+2. Add the tool name to `spec/integration/fast_mcp_registration_spec.rb` (`EXPECTED_TOOL_NAMES`).
+3. Add a request/tool spec under `spec/tools/`.
+
+Tool files are **not** registered by filename alone. `GraphMem::McpToolRegistry` eager-loads every `*_tool.rb` before calling `server.register_tools`, so new classes are picked up even in development lazy-load mode.
+
+After adding a tool:
+
+1. Restart `bin/dev` (or touch a file to trigger `to_prepare` re-registration in development).
+2. **Reconnect the MCP server in Cursor** (disable/re-enable `graph_mem_development` in MCP settings) so the client refreshes its cached `tools/list`.
+
 ## Project Structure
 
 The GraphMem project follows a standard Rails application structure with a few additions:

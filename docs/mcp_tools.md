@@ -1,6 +1,6 @@
 # MCP Tools Documentation
 
-Detailed reference for the 21 Model Context Protocol (MCP) tools available in GraphMem.
+Detailed reference for the 24 Model Context Protocol (MCP) tools available in GraphMem.
 
 ## Overview
 
@@ -28,7 +28,7 @@ Tools are designed to be used in four phases per session:
 
 Context scoping allows search tools to **boost** entities related to the active project. When a context is set via `set_context`, both `search_entities` and `search_subgraph` prioritize in-context entities in their results (cross-project results still appear, but ranked lower).
 
-Context is stored in a thread-local variable (`GraphMemContext`) and persists for the duration of the MCP connection.
+Context is stored per MCP client in the `agent_contexts` table, keyed by the `X-MCP-Client` request header. Agents without the header share the `"default"` bucket.
 
 #### `set_context`
 - **Description:** Sets the active project context. Subsequent searches will prioritize entities related to this project via `part_of` relations. Accepts entity_id (integer) or entity name (string).
@@ -140,7 +140,7 @@ Context is stored in a thread-local variable (`GraphMemContext`) and persists fo
 - **Parameters:**
   - `entity_ids` (array of integers, required): Entity IDs to include.
 
-## Batch & Maintenance Tools (3 tools)
+## Batch & Maintenance Tools (6 tools)
 
 #### `bulk_update`
 - **Description:** Performs multiple operations in a single atomic transaction. Maximum 50 operations per call. Rolls back entirely on any error. Accepts three separate arrays or an `operations` array with type-discriminated items. Entity references accept both entity_id (integer) and entity name (string).
@@ -158,6 +158,23 @@ Context is stored in a thread-local variable (`GraphMemContext`) and persists fo
   - `limit` (integer, optional, default: 20): Maximum suggestions.
   - `entity_type` (string, optional): Filter to a specific entity type.
 - **Response:** Array of `{ entity_a, entity_b, cosine_distance, recommendation }`
+
+#### `merge_entities`
+- **Description:** Merges a source entity into a target entity using `NodeOperationsStrategy`. Transfers observations, re-parents relations, adds the source name to target aliases, and deletes the source.
+- **Parameters:**
+  - `source_entity_id` (integer, required): Entity to merge from (deleted).
+  - `target_entity_id` (integer, required): Entity to merge into (kept).
+
+#### `dream_state_status`
+- **Description:** Reports the background dream-state compaction run: `dream_state` (idle/running/paused/completed/failed), `phase`, `cursor_entity_id`, `stats`, and timestamps.
+- **Parameters:** None
+
+#### `get_maintenance_reports`
+- **Description:** Retrieves recent maintenance and dream-state compaction reports, including the `compaction_review` queue of merge/orphan suggestions awaiting manual review. Pair with `merge_entities` to action queued duplicates.
+- **Parameters:**
+  - `report_type` (string, optional): One of `orphans`, `stale`, `duplicates`, `compaction_review`. Omit to get the latest report of each type.
+  - `limit` (integer, optional, default: 5, max: 30): Maximum number of reports to return (applies when `report_type` is given).
+- **Response:** `{ reports: [{ id, report_type, created_at, data }], total }`
 
 #### `get_graph_stats`
 - **Description:** Returns health metrics and statistics about the knowledge graph: totals, entity type distribution, orphan count, stale entities (not updated in 6+ months), most connected entities, and recent updates.
@@ -207,11 +224,36 @@ Custom error classes:
 - `McpGraphMemErrors::InternalServerError` -- unexpected server error
 - `FastMcp::Tool::InvalidArgumentsError` -- invalid input parameters
 
+## Tool Overlap Guide
+
+Some tools overlap by design; pick by intent:
+
+| Goal | Prefer | Alternative |
+|---|---|---|
+| Find entities by keyword/semantic match | `search_entities` | `search_subgraph` (when you also need observation text and relations in one payload) |
+| Load known entities by ID | `get_subgraph_by_ids` | `get_entity` (single entity with full detail) |
+| Review duplicate entities | `suggest_merges` | `get_maintenance_reports` (the dream-state `compaction_review` queue) |
+| Inspect background compaction state | `dream_state_status` | `get_maintenance_reports` (queued review items) |
+| Execute a merge | `merge_entities` | Web cleanup UI / REST API |
+
+## Dream-State Background Compaction
+
+Solid Queue runs `DreamStateCompactionJob` on a schedule (`config/recurring.yml`). The job:
+
+1. **Orphans phase** -- matches orphan nodes to `Project` roots; auto-parents high-confidence token matches
+2. **Tree-walk phase** -- walks each project subtree; deduplicates identical observations; auto-merges entities with cosine distance &lt; 0.10
+3. **Review queue** -- writes lower-confidence items to `maintenance_reports` (`compaction_review`), readable via `get_maintenance_reports`
+
+Mutating and heavy search tools cooperatively **pause** an active compaction run (`CompactionValve`) so live MCP traffic takes priority. Paused runs resume from `cursor_entity_id` on the next trigger.
+
+To close the loop on the review queue: call `get_maintenance_reports(report_type: "compaction_review")`, inspect the suggested merges/parents, and apply the good ones with `merge_entities`.
+
 ## Best Practices
 
-1. **Use `set_context`** at the start of each session to scope searches to the active project.
-2. **Search before create** to avoid duplicates (auto-dedup catches some, not all).
-3. **Use `bulk_update`** for session-end "save what I learned" operations.
-4. **Run `suggest_merges`** periodically to identify and clean up duplicate entities.
-5. **Keep observations concise** and factual for better embedding quality.
-6. **Clear context** (`clear_context`) when switching between projects.
+1. **Set `X-MCP-Client`** in your MCP config when multiple agents share one GraphMem instance.
+2. **Use `set_context`** at the start of each session to scope searches to the active project.
+3. **Search before create** to avoid duplicates (auto-dedup catches some, not all).
+4. **Use `bulk_update`** for session-end "save what I learned" operations.
+5. **Run `suggest_merges`** or check `dream_state_status` for compaction progress and review queues.
+6. **Keep observations concise** and factual for better embedding quality.
+7. **Clear context** (`clear_context`) when switching between projects.

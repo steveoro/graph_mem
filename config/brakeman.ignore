@@ -7,7 +7,7 @@
       "check_name": "SendFile",
       "message": "Parameter value used in file name",
       "file": "app/controllers/data_exchange_controller.rb",
-      "line": 67,
+      "line": 70,
       "link": "https://brakemanscanner.org/docs/warning_types/file_access/",
       "code": "send_file(ExportJob.download_path(params[:export_id]), :type => \"application/json\", :disposition => \"attachment\", :filename => (\"graph_mem_export_#{Time.current.strftime(\"%Y%m%d_%H%M%S\")}.json\"))",
       "render_path": null,
@@ -22,7 +22,53 @@
         22
       ],
       "note": ""
+    },
+    {
+      "warning_type": "SQL Injection",
+      "warning_code": 0,
+      "fingerprint": "a297d4a407f71ea76951f14c42165ef028a22c0a78ff762fd7a391c5e20d4095",
+      "check_name": "SQL",
+      "message": "Possible SQL injection",
+      "file": "app/strategies/vector_search_strategy.rb",
+      "line": 33,
+      "link": "https://brakemanscanner.org/docs/warning_types/sql_injection/",
+      "code": "MemoryEntity.where.not(:embedding => nil).select(\"memory_entities.*, VEC_DISTANCE_COSINE(embedding, VEC_FromText('#{\"[#{embedding_service.embed(query).join(\",\")}]\"}')) AS vec_distance\")",
+      "render_path": null,
+      "location": {
+        "type": "method",
+        "class": "VectorSearchStrategy",
+        "method": "search"
+      },
+      "user_input": "embedding_service.embed(query).join(\",\")",
+      "confidence": "Medium",
+      "cwe_id": [
+        89
+      ],
+      "note": ""
+    },
+    {
+      "warning_type": "SQL Injection",
+      "warning_code": 0,
+      "fingerprint": "b6fe48d14c11aaac330fe173887712bb030ea4bec9dfb0bbe472ff66e634ceb6",
+      "check_name": "SQL",
+      "message": "Possible SQL injection",
+      "file": "app/strategies/vector_search_strategy.rb",
+      "line": 56,
+      "link": "https://brakemanscanner.org/docs/warning_types/sql_injection/",
+      "code": "MemoryObservation.where.not(:embedding => nil).select(\"memory_entity_id, MIN(VEC_DISTANCE_COSINE(embedding, VEC_FromText('#{\"[#{embedding_service.embed(query).join(\",\")}]\"}'))) AS vec_distance\")",
+      "render_path": null,
+      "location": {
+        "type": "method",
+        "class": "VectorSearchStrategy",
+        "method": "search_observations"
+      },
+      "user_input": "embedding_service.embed(query).join(\",\")",
+      "confidence": "Medium",
+      "cwe_id": [
+        89
+      ],
+      "note": ""
     }
   ],
-  "brakeman_version": "7.1.2"
+  "brakeman_version": "8.0.4"
 }

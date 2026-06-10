@@ -8,7 +8,7 @@ RSpec.describe SetContextTool, type: :model do
   let!(:project) { MemoryEntity.create!(name: 'My Project', entity_type: 'Project') }
 
   after(:each) do
-    GraphMemContext.clear!
+    GraphMemContext.clear_all!
   end
 
   describe 'class methods' do
@@ -46,9 +46,17 @@ RSpec.describe SetContextTool, type: :model do
         expect(result[:entity_type]).to eq('Project')
       end
 
-      it 'sets GraphMemContext.current_project_id' do
+      it 'sets graph_mem_context.current_project_id' do
         tool.call(entity_id: project.id)
-        expect(GraphMemContext.current_project_id).to eq(project.id)
+        expect(tool.graph_mem_context.current_project_id).to eq(project.id)
+      end
+
+      it 'scopes context to the X-MCP-Client header' do
+        agent_tool = described_class.new(headers: { "HTTP_X_MCP_CLIENT" => "cursor-A" })
+        agent_tool.call(entity_id: project.id)
+
+        expect(GraphMemContext.for("cursor-A").current_project_id).to eq(project.id)
+        expect(GraphMemContext.for("default").current_project_id).to be_nil
       end
 
       it 'can overwrite an existing context' do

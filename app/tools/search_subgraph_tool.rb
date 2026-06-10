@@ -195,7 +195,7 @@ class SearchSubgraphTool < ApplicationTool
 
     # Rank results using shared relevance boosts (name match, type priority,
     # structural importance, graduated context boost).
-    context_ids = GraphMemContext.scoped_entity_ids
+    context_ids = graph_mem_context.scoped_entity_ids
     matching_entity_ids = SearchRelevanceBooster.rank_entity_ids(
       matching_entity_ids,
       query: query_term,

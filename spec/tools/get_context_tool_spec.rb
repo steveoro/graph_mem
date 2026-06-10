@@ -14,7 +14,7 @@ RSpec.describe GetContextTool, type: :model do
   end
 
   after(:each) do
-    GraphMemContext.clear!
+    GraphMemContext.clear_all!
   end
 
   describe 'class methods' do

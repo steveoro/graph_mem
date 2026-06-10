@@ -1,6 +1,12 @@
 # frozen_string_literal: true
 
 class ApplicationTool < FastMcp::Tool
+  COMPACTION_VALVE_TOOLS = %w[
+    bulk_update create_entity create_observation create_relation
+    delete_entity delete_observation delete_relation update_entity merge_entities
+    search_entities search_subgraph suggest_merges
+  ].freeze
+
   attr_accessor :server
 
   class << self
@@ -15,6 +21,8 @@ class ApplicationTool < FastMcp::Tool
   # Normalize incoming parameters (camelCase, entity names, operations array)
   # before schema validation and dispatch.
   def call_with_schema_validation!(**args)
+    CompactionValve.request_pause_if_running! if COMPACTION_VALVE_TOOLS.include?(tool_name)
+
     normalized = ParameterNormalizer.normalize(tool_name, args)
     arg_validation = self.class.input_schema.call(normalized)
     if arg_validation.errors.any?
@@ -30,6 +38,18 @@ class ApplicationTool < FastMcp::Tool
 
   def logger
     Rails.logger
+  end
+
+  def current_client_id
+    hdrs = respond_to?(:headers, true) ? headers : nil
+    return GraphMemContext::DEFAULT_CLIENT_ID if hdrs.blank?
+
+    client = hdrs["HTTP_X_MCP_CLIENT"] || hdrs["X-MCP-CLIENT"] || hdrs["X-MCP-Client"]
+    GraphMemContext.normalize_client_id(client)
+  end
+
+  def graph_mem_context
+    GraphMemContext.for(current_client_id)
   end
 
   def tool_name

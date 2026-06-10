@@ -10,6 +10,21 @@
 /*!40014 SET @OLD_FOREIGN_KEY_CHECKS=@@FOREIGN_KEY_CHECKS, FOREIGN_KEY_CHECKS=0 */;
 /*!40101 SET @OLD_SQL_MODE=@@SQL_MODE, SQL_MODE='NO_AUTO_VALUE_ON_ZERO' */;
 /*M!100616 SET @OLD_NOTE_VERBOSITY=@@NOTE_VERBOSITY, NOTE_VERBOSITY=0 */;
+DROP TABLE IF EXISTS `agent_contexts`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `agent_contexts` (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT,
+  `client_id` varchar(255) NOT NULL,
+  `current_project_id` bigint(20) DEFAULT NULL,
+  `last_seen_at` datetime(6) DEFAULT NULL,
+  `created_at` datetime(6) NOT NULL,
+  `updated_at` datetime(6) NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `index_agent_contexts_on_client_id` (`client_id`),
+  KEY `index_agent_contexts_on_current_project_id` (`current_project_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `ar_internal_metadata`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8mb4 */;
@@ -35,7 +50,26 @@ CREATE TABLE `audit_logs` (
   PRIMARY KEY (`id`),
   KEY `index_audit_logs_on_auditable_type_and_auditable_id` (`auditable_type`,`auditable_id`),
   KEY `index_audit_logs_on_created_at` (`created_at`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=19 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `compaction_runs`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `compaction_runs` (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT,
+  `status` varchar(255) NOT NULL DEFAULT 'idle',
+  `cursor_entity_id` bigint(20) DEFAULT NULL,
+  `phase` varchar(255) DEFAULT NULL,
+  `stats` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(`stats`)),
+  `pause_requested` tinyint(1) NOT NULL DEFAULT 0,
+  `started_at` datetime(6) DEFAULT NULL,
+  `finished_at` datetime(6) DEFAULT NULL,
+  `created_at` datetime(6) NOT NULL,
+  `updated_at` datetime(6) NOT NULL,
+  PRIMARY KEY (`id`),
+  KEY `index_compaction_runs_on_status` (`status`),
+  KEY `index_compaction_runs_on_created_at` (`created_at`)
+) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `entity_type_mappings`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
@@ -49,7 +83,7 @@ CREATE TABLE `entity_type_mappings` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `index_entity_type_mappings_on_variant` (`variant`),
   KEY `index_entity_type_mappings_on_canonical_type` (`canonical_type`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=111 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `maintenance_reports`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
@@ -62,7 +96,7 @@ CREATE TABLE `maintenance_reports` (
   PRIMARY KEY (`id`),
   KEY `index_maintenance_reports_on_report_type` (`report_type`),
   KEY `index_maintenance_reports_on_created_at` (`created_at`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=22 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `memory_entities`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
@@ -76,12 +110,13 @@ CREATE TABLE `memory_entities` (
   `memory_observations_count` int(11) DEFAULT NULL,
   `aliases` text DEFAULT NULL,
   `description` text DEFAULT NULL,
-  `embedding` vector(768) DEFAULT NULL,
+  `embedding` vector(768) NOT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `index_memory_entities_on_name` (`name`),
   KEY `index_memory_entities_on_entity_type` (`entity_type`),
-  FULLTEXT KEY `index_memory_entities_fulltext` (`name`,`aliases`)
-) ENGINE=InnoDB AUTO_INCREMENT=386 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+  FULLTEXT KEY `index_memory_entities_fulltext` (`name`,`aliases`),
+  VECTOR KEY `idx_memory_entities_embedding` (`embedding`) `DISTANCE`=cosine
+) ENGINE=InnoDB AUTO_INCREMENT=654 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `memory_observations`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
@@ -92,11 +127,12 @@ CREATE TABLE `memory_observations` (
   `memory_entity_id` bigint(20) NOT NULL,
   `created_at` datetime(6) NOT NULL,
   `updated_at` datetime(6) NOT NULL,
-  `embedding` vector(768) DEFAULT NULL,
+  `embedding` vector(768) NOT NULL,
   PRIMARY KEY (`id`),
   KEY `index_memory_observations_on_memory_entity_id` (`memory_entity_id`),
+  VECTOR KEY `idx_memory_observations_embedding` (`embedding`) `DISTANCE`=cosine,
   CONSTRAINT `fk_rails_675e0d9a7a` FOREIGN KEY (`memory_entity_id`) REFERENCES `memory_entities` (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=1516 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=3422 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `memory_relations`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
@@ -115,7 +151,7 @@ CREATE TABLE `memory_relations` (
   KEY `index_memory_relations_on_to_entity_id` (`to_entity_id`),
   CONSTRAINT `fk_rails_4ecabb48c2` FOREIGN KEY (`from_entity_id`) REFERENCES `memory_entities` (`id`),
   CONSTRAINT `fk_rails_6777b355f4` FOREIGN KEY (`to_entity_id`) REFERENCES `memory_entities` (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=367 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=1090 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `schema_migrations`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
@@ -136,6 +172,8 @@ CREATE TABLE `schema_migrations` (
 /*M!100616 SET NOTE_VERBOSITY=@OLD_NOTE_VERBOSITY */;
 
 INSERT INTO `schema_migrations` (version) VALUES
+('20260610130000'),
+('20260610120000'),
 ('20260227122158'),
 ('20260227122157'),
 ('20260227122156'),

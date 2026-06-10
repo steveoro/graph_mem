@@ -59,6 +59,28 @@ RSpec.describe ApplicationTool do
   end
 
   describe "#call_with_schema_validation!" do
+    after { CompactionRun.delete_all }
+
+    it "requests compaction pause for valve-enabled tools" do
+      valve_tool_class = Class.new(ApplicationTool) do
+        def self.tool_name
+          "create_entity"
+        end
+
+        arguments do
+          required(:name).filled(:string)
+        end
+
+        def call(name:)
+          { name: name }
+        end
+      end
+
+      expect(CompactionValve).to receive(:request_pause_if_running!)
+      tool = valve_tool_class.new
+      tool.call_with_schema_validation!(name: "test")
+    end
+
     it "normalizes parameters before validation and dispatch" do
       tool = DslTestTool.new
       result, _meta = tool.call_with_schema_validation!(name: "test", count: 5)
@@ -103,6 +125,34 @@ RSpec.describe ApplicationTool do
     it "returns Rails.logger" do
       tool = DslTestTool.new
       expect(tool.logger).to eq(Rails.logger)
+    end
+  end
+
+  describe "#current_client_id" do
+    it "returns default when headers are absent" do
+      tool = DslTestTool.new
+      expect(tool.current_client_id).to eq(GraphMemContext::DEFAULT_CLIENT_ID)
+    end
+
+    it "reads HTTP_X_MCP_CLIENT from headers" do
+      tool = DslTestTool.new(headers: { "HTTP_X_MCP_CLIENT" => "cursor-A" })
+      expect(tool.current_client_id).to eq("cursor-A")
+    end
+
+    it "reads X-MCP-CLIENT from headers" do
+      tool = DslTestTool.new(headers: { "X-MCP-CLIENT" => "cursor-B" })
+      expect(tool.current_client_id).to eq("cursor-B")
+    end
+  end
+
+  describe "#graph_mem_context" do
+    after { GraphMemContext.clear_all! }
+
+    it "returns a GraphMemContext scoped to current_client_id" do
+      tool = DslTestTool.new(headers: { "HTTP_X_MCP_CLIENT" => "cursor-A" })
+      ctx = tool.graph_mem_context
+      expect(ctx).to be_a(GraphMemContext)
+      expect(ctx.client_id).to eq("cursor-A")
     end
   end
 end

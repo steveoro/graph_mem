@@ -1,5 +1,15 @@
+development:
+  dream_state_compaction:
+    class: DreamStateCompactionJob
+    queue: default
+    schedule: every hour
+
 production:
   garbage_collection:
     class: GarbageCollectionJob
     queue: default
     schedule: at 2pm every day
+  dream_state_compaction:
+    class: DreamStateCompactionJob
+    queue: default
+    schedule: at 3am every day

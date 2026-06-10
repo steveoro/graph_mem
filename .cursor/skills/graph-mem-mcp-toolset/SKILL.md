@@ -34,10 +34,10 @@ Before calling `CallMcpTool` for any `user-graph_mem` tool:
 ## Phase 1 - Orient (start of session)
 
 1. Say `Remembering...`.
-2. Call `get_context`.
+2. Call `get_context`. Context is per-agent and persisted, so you may already have one from a prior session.
 3. If no context:
    - Run `search_entities` for the project name.
-   - If found, call `set_context(entity_id: <id>)`.
+   - If found, call `set_context(<id or name>)`.
    - If not found, call `create_entity(name:, entity_type: "Project")`, then `set_context`.
 
 ## Phase 2 - Recall (before implementation)
@@ -61,8 +61,16 @@ Before calling `CallMcpTool` for any `user-graph_mem` tool:
    - `create_entity`
    - `create_relation` with a specific relation type.
 3. For batch updates, prefer `bulk_update` (max 50 operations).
-4. Run `suggest_merges` periodically to detect duplicates.
-5. Call `clear_context` only when project scope is no longer relevant.
+4. Routine duplicate compaction is handled by the background dream-state job. When you spot duplicates, confirm with `suggest_merges`, then execute with `merge_entities(source_entity_id, target_entity_id)`.
+5. Call `clear_context` only when project scope is no longer relevant (safe: affects only your own client bucket).
+
+## Multi-Agent & Dream-State Awareness
+
+- Context is per-agent, keyed by the `X-MCP-Client` header and persisted in the DB. `set_context`/`clear_context` affect only your own bucket; agents without the header share `"default"`.
+- A background dream-state job auto-parents orphans, auto-merges near-identical entities (cosine < 0.10), and dedupes identical observations. Lower-confidence cases are queued for review.
+- `dream_state_status` reports whether compaction is running/paused plus stats.
+- `get_maintenance_reports(report_type: "compaction_review")` returns the queued merge/orphan suggestions; action good ones with `merge_entities`.
+- Mutating tools auto-pause compaction, so no coordination is needed — but search results may shift slightly mid-run.
 
 ## Parameter Compatibility
 

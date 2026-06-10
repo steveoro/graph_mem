@@ -22,9 +22,10 @@ alwaysApply: true
 Use the `graph_mem` MCP tools every session. "Knowledge graph", "graph mem", "memory graph" all refer to the same toolset.
 
 **Phase 1 — Orient** (start of every conversation)
-1. Say "Remembering..." then call `get_context` to check for an active project.
-2. If no context: `search_entities` for the relevant project name → `set_context(entity_id: <ID from search result>)`.
-3. If no project entity exists yet: `create_entity` (type `Project`) → `set_context(entity_id: <new entity ID>)`.
+1. Say "Remembering..." then call `get_context` to check for an active project. Context is per-agent and persisted, so you may already have one from a prior session.
+2. If no context: `search_entities` for the relevant project name → `set_context(<ID or entity name from search result>)`.
+3. If no project entity exists yet: `create_entity` (type `Project`) → `set_context(<new entity ID or name>)`.
+4. Optionally call `dream_state_status` for a cheap health check (whether background compaction is running/paused).
 
 **Phase 2 — Recall** (before doing work)
 - `search_entities` or `search_subgraph` with keywords from the user's request.
@@ -36,11 +37,11 @@ Use the `graph_mem` MCP tools every session. "Knowledge graph", "graph mem", "me
 - Consult the graph mid-task if you encounter related issues or need prior solutions.
 
 **Phase 4 — Persist** (before ending)
-- `create_observation` for new facts on existing entities.
+- `create_observation` for new facts on existing entities. Write dedupe-aware: search/get the entity first and append only new facts rather than re-stating existing ones.
 - `create_entity` + `create_relation` for new concepts discovered.
 - Use `bulk_update` to batch multiple writes in one call (max 50 ops).
-- `clear_context` if the project scope is no longer relevant.
-- Periodically run `suggest_merges` to find and flag duplicate entities.
+- `clear_context` if the project scope is no longer relevant (safe: affects only your own client bucket).
+- Routine duplicate compaction is handled by the background dream-state job. When you *spot* duplicates during work, confirm with `suggest_merges`, then execute with `merge_entities(source_entity_id, target_entity_id)`.
 
 ---
 
@@ -51,7 +52,22 @@ Use the `graph_mem` MCP tools every session. "Knowledge graph", "graph mem", "me
 | Orient | `get_context`, `set_context`, `clear_context`, `search_entities` |
 | Recall | `search_entities`, `search_subgraph`, `get_entity`, `get_subgraph_by_ids`, `list_entities` |
 | Persist | `create_entity`, `update_entity`, `delete_entity`, `create_observation`, `delete_observation`, `create_relation`, `find_relations`, `delete_relation`, `bulk_update` |
-| Maintain | `suggest_merges`, `get_graph_stats`, `get_version`, `get_current_time` |
+| Maintain | `suggest_merges`, `merge_entities`, `dream_state_status`, `get_maintenance_reports`, `get_graph_stats`, `get_version`, `get_current_time` |
+
+### Multi-Agent Context Scoping
+
+- Context is **per-agent**, keyed by the `X-MCP-Client` header, and persisted in the DB (survives restarts).
+- `set_context` / `clear_context` affect ONLY your own client bucket — they never disturb other agents sharing the graph.
+- Agents without the header share the `"default"` bucket. Set a stable `X-MCP-Client` in your MCP config when multiple agents use one instance.
+- Because context persists, on Orient you may already have an active context from a prior session — always `get_context` first before assuming none.
+
+### Dream-State Compaction Awareness
+
+- A background "dream-state" job periodically compacts the graph: it auto-parents orphans, auto-merges near-identical entities (cosine distance < 0.10), and deletes byte-identical duplicate observations. Lower-confidence cases are queued for review.
+- Call `dream_state_status` to see whether compaction is `running`/`paused` plus its progress/stats.
+- Call `get_maintenance_reports(report_type: "compaction_review")` to read the queue of merge/orphan suggestions the job flagged for review, then action good ones with `merge_entities`.
+- Mutating tools cooperatively pause compaction automatically — no action needed, but search results may shift slightly while a run is in progress.
+- Implication for writes: don't rely on the job to clean up sloppiness. Prefer `create_observation` on an existing entity or `update_entity` over creating near-duplicates.
 
 ### Standard Compatibility
 

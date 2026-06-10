@@ -12,14 +12,17 @@ RSpec.describe "FastMcp tool registration", type: :integration do
     delete_entity
     delete_observation
     delete_relation
+    dream_state_status
     find_relations
     get_context
     get_current_time
     get_entity
     get_graph_stats
+    get_maintenance_reports
     get_subgraph_by_ids
     get_version
     list_entities
+    merge_entities
     search_entities
     search_subgraph
     set_context

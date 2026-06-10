@@ -12,13 +12,28 @@ GraphMem provides persistent, structured storage for knowledge entities, their r
 
 ### Single-User Design
 
-GraphMem is designed as a **single-user, local-network server**. There is no authentication layer -- the server trusts all incoming requests. The project context (set via `set_context`) is a single process-global value shared across all requests: one user sets a project scope, and all subsequent tool calls see it.
+GraphMem is designed as a **single-user, local-network server**. There is no authentication layer -- the server trusts all incoming requests.
 
-This is intentional: the server is meant to run on a local machine or LAN, accessed by one AI assistant at a time. If you need multi-user or multi-tenant support, an authentication and per-session context layer would need to be added.
+**Per-agent project context:** Multiple MCP clients can connect concurrently without clobbering each other's scope. Each agent identifies itself with an `X-MCP-Client` header in its MCP configuration:
+
+```json
+{
+  "mcpServers": {
+    "graph_mem": {
+      "url": "http://localhost:3000/mcp/sse",
+      "headers": { "X-MCP-Client": "cursor-A" }
+    }
+  }
+}
+```
+
+Context set via `set_context` is stored per `client_id` in the database and survives server restarts. Agents without the header share the `"default"` client bucket (backward-compatible single-agent behavior).
+
+Authentication and multi-tenant isolation are out of scope for now; the header is a cooperative scope key, not a security boundary.
 
 **Key capabilities:**
 - **Vector semantic search** via MariaDB 11.8 native VECTOR support + Ollama embeddings
-- **Project context scoping** -- set once, persists across all MCP tool calls within the process
+- **Project context scoping** -- per-agent via `X-MCP-Client`, persisted across restarts
 - **Entity type canonicalization** to prevent graph fragmentation
 - **Auto-deduplication** on entity creation
 - **Hybrid search** combining text tokenization with vector similarity (with context boosting)
@@ -34,6 +49,13 @@ This is intentional: the server is meant to run on a local machine or LAN, acces
 * **Embeddings**: Ollama with nomic-embed-text (768 dimensions)
 
 ## Features
+
+### Rules & Skills
+
+GraphMem includes installable user rules and a skill inside this repo:
+
+- rules: docs/global_and_knowledge_graph_management_rules.md
+- skill: .cursor/skills/graph-mem-mcp-toolset/SKILL.md
 
 ### MCP Tools
 
@@ -59,15 +81,28 @@ GraphMem exposes the following MCP tools:
 * `search_subgraph` -- Search across entities and observations with pagination
 
 #### Context and Workflow
-* `set_context` -- Scope subsequent operations to a project
+* `set_context` -- Scope subsequent operations to a project (per `X-MCP-Client`)
 * `get_context` -- Check the active project context
 * `clear_context` -- Remove project scoping
 * `bulk_update` -- Batch create entities, observations, and relations atomically
 * `suggest_merges` -- Find potential duplicate entities via vector similarity
+* `merge_entities` -- Merge a source entity into a target (transfers observations and relations)
+* `dream_state_status` -- Report background graph compaction state (running/paused/cursor)
+* `get_maintenance_reports` -- Read maintenance/compaction reports, including the `compaction_review` queue
 
 #### Utility
 * `get_version` -- Server version
 * `get_current_time` -- Server time in ISO 8601
+
+### Dream-State Compaction
+
+A background **dream-state** job (`DreamStateCompactionJob`, scheduled via Solid Queue `recurring.yml`) periodically compacts the knowledge graph:
+
+- **Orphan phase** -- attaches high-confidence orphan nodes to matching `Project` roots
+- **Tree-walk phase** -- deduplicates identical observations and auto-merges very similar entities (cosine distance &lt; 0.10)
+- **Review queue** -- lower-confidence merges and orphan matches are written to `maintenance_reports` (`compaction_review`), readable via `get_maintenance_reports`
+
+The job is **cooperatively pausable**: mutating MCP tools request a pause when compaction is running, so live tool traffic takes priority. Use `dream_state_status` to inspect cursor position and stats, and `get_maintenance_reports` to review and action the queued suggestions. Paused runs resume on the next scheduled trigger.
 
 ### MCP Resources
 

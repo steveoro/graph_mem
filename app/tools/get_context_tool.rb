@@ -8,7 +8,8 @@ class GetContextTool < ApplicationTool
   description "Get the currently active project context, if any."
 
   def call
-    project_id = GraphMemContext.current_project_id
+    context = graph_mem_context
+    project_id = context.current_project_id
 
     unless project_id
       return { status: "no_context", message: "No project context is currently set." }
@@ -16,7 +17,7 @@ class GetContextTool < ApplicationTool
 
     entity = MemoryEntity.find_by(id: project_id)
     unless entity
-      GraphMemContext.clear!
+      context.clear!
       return { status: "context_cleared", message: "Previously set project (ID #{project_id}) no longer exists. Context cleared." }
     end
 

@@ -11,7 +11,7 @@ RSpec.describe MaintenanceReport, type: :model do
     end
 
     it "only allows valid report types" do
-      %w[orphans stale duplicates].each do |type|
+      %w[orphans stale duplicates compaction_review].each do |type|
         report = MaintenanceReport.new(report_type: type, data: { count: 0 })
         report.valid?
         expect(report.errors[:report_type]).to be_empty
@@ -88,7 +88,7 @@ RSpec.describe MaintenanceReport, type: :model do
 
   describe "REPORT_TYPES" do
     it "contains the expected types" do
-      expect(MaintenanceReport::REPORT_TYPES).to eq(%w[orphans stale duplicates])
+      expect(MaintenanceReport::REPORT_TYPES).to eq(%w[orphans stale duplicates compaction_review])
     end
   end
 end

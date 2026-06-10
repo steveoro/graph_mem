@@ -1,0 +1,32 @@
+# frozen_string_literal: true
+
+class DreamStateCompactionJob < ApplicationJob
+  queue_as :default
+
+  # Re-enqueue while work remains so recurring triggers can also resume paused runs.
+  def perform(run_id = nil)
+    run = resolve_run(run_id)
+    return unless run
+    return if run.status.in?(%w[completed failed])
+
+    compactor = DreamStateCompactor.new(run: run)
+    result = compactor.process_batch!
+
+    case result
+    when :continued
+      self.class.perform_later(run.id)
+    when :paused, :completed
+      Rails.logger.info "[DreamState] run #{run.id} #{result}"
+    end
+  rescue StandardError => e
+    run&.mark_failed!(e.message)
+    Rails.logger.error "[DreamState] run #{run_id} failed: #{e.message}"
+    raise
+  end
+
+  private
+
+  def resolve_run(run_id)
+    run_id ? CompactionRun.find_by(id: run_id) : CompactionRunner.acquire_run!
+  end
+end

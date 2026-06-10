@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
-require_relative "../../lib/graph_mem/version" # Ensure GraphMem::VERSION is loaded
+require_relative "../../lib/graph_mem/version"
+require_relative "../../lib/graph_mem/mcp_tool_registry"
 require "fast_mcp"
 
 # Toggle this to enable/disable debug output
@@ -31,14 +32,14 @@ FastMcp.mount_in_rails(
   allowed_ips: [ "127.0.0.1", "::1", "::ffff:127.0.0.1" ]
 ) do |server|
   Rails.application.config.after_initialize do
-    # FastMcp will automatically discover and register:
-    # - All classes that inherit from ApplicationTool (which uses ActionTool::Base)
-    # - All classes that inherit from ApplicationResource (which uses ActionResource::Base)
-    server.register_tools(*ApplicationTool.descendants)
-    server.register_resources(*ApplicationResource.descendants)
-    # alternatively, you can register tools and resources manually:
-    # server.register_tool(MyTool)
-    # server.register_resource(MyResource)
+    GraphMem::McpToolRegistry.register_with!(server)
+  end
+
+  # Re-register after code reload so new tool files appear without a full restart.
+  if Rails.env.development?
+    Rails.application.config.to_prepare do
+      GraphMem::McpToolRegistry.register_with!(FastMcp.server) if FastMcp.server
+    end
   end
 end
 

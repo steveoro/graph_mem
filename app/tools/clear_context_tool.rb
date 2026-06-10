@@ -8,8 +8,9 @@ class ClearContextTool < ApplicationTool
   description "Clear the currently active project context. Searches will return results across all projects."
 
   def call
-    was_set = GraphMemContext.current_project_id.present?
-    GraphMemContext.clear!
+    context = graph_mem_context
+    was_set = context.current_project_id.present?
+    context.clear!
 
     {
       status: "context_cleared",

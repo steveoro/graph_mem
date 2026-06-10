@@ -6,7 +6,7 @@ RSpec.describe ClearContextTool, type: :model do
   let(:tool) { described_class.new }
 
   after(:each) do
-    GraphMemContext.clear!
+    GraphMemContext.clear_all!
   end
 
   describe 'class methods' do
@@ -71,7 +71,7 @@ RSpec.describe ClearContextTool, type: :model do
 
     context 'error handling' do
       it 'raises InternalServerError on unexpected errors' do
-        allow(GraphMemContext).to receive(:current_project_id).and_raise(StandardError.new("unexpected"))
+        allow(tool).to receive(:graph_mem_context).and_raise(StandardError.new("unexpected"))
 
         expect {
           tool.call

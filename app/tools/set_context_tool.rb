@@ -18,7 +18,7 @@ class SetContextTool < ApplicationTool
       raise McpGraphMemErrors::ResourceNotFound, "Entity with ID #{entity_id} not found."
     end
 
-    GraphMemContext.current_project_id = entity_id
+    graph_mem_context.current_project_id = entity_id
 
     {
       status: "context_set",
