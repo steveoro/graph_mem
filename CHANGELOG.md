@@ -6,19 +6,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [1.7.0] - 2026-06-10
+
 - Added support for per-agent project context scoping via `X-MCP-Client` header
 - Added "dream state" background job to periodically review knowledge base for "compactification" opportunities
 
 ## [1.6.0] - 2026-03-18
+
 - Support for both camelCase and snake_case arguments; support for @modelcontextprotocol/server-memory-like syntax (models have been already trained excessively on that, so graph_mem syntax is prone to misunderstanding); improved ruleset with quick reference; updated docs
 
 ## [1.5.0] - 2026-03-12
+
 - Improve search results with more nuanced weighting and ranking (cosine distance + quality gate)
 
 ## [1.4.2] - 2026-03-12
+
 - Improved coherence in tool parameters naming; updated default global rules
 
 ## [1.4.1] - 2026-03-11
+
 - Full OpenAPI compliance with metadata generation and improved API coherence
 - Full CORS support for usage with browser-based UIs (e.g.: OpenWebUI)
 
@@ -32,15 +37,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.2.0] - 2026-03-04
 
 ### Added
+
 - **Search box on landing page**: node search with both text & vector based strategy (switchable)
 
 ### Improved
+
 - **Container setup**: README notes; simplified update process with just `docker compose up -d --build`; now container uses host network for an easier LAN sharing of the MCP service
 
 
 ## [1.0.0] - 2026-02-27
 
 ### Added
+
 - **Vector semantic search**: Native MariaDB 11.8 VECTOR(768) columns with cosine distance indexing for entity and observation embeddings
 - **Embedding service**: Configurable `EmbeddingService` using Ollama (or OpenAI-compatible) API via `OLLAMA_URL` env var; supports LAN-wide embedding host architecture
 - **Hybrid search**: `HybridSearchStrategy` combining text-based tokenized search with vector similarity using Reciprocal Rank Fusion (RRF)
@@ -56,6 +64,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Embedding backfill**: `rake embeddings:backfill` and `rake embeddings:regenerate` tasks
 
 ### Changed
+
 - Upgraded to MariaDB 11.8 (Docker image) for native vector support
 - `SearchEntitiesTool` now uses `HybridSearchStrategy` (text + semantic) by default
 - `SearchSubgraphTool` merges vector search results with text search results when embeddings are available
@@ -63,11 +72,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - All entity-returning tools now include `description` field in responses
 
 ### Removed
+
 - Dropped 5 unused `action_mcp_*` tables from the legacy ActionMCP gem
 
 ## [0.9.3] - 2026-01-28
 
 ### Changes
+
 - Added data-exchange/management feature in graph_mem server landing page, with dedicated clean-up tab for manual node merging/moving/deletion
 - Add also missing observations in skipped nodes during data-import
 - Added support for relation edit/deletion in context menu
@@ -76,12 +87,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.8.6] - 2025-12-07
 
 ### Changes
+
 - Generalized RVM sourcing in runner script to support multiple installation paths
 - Bundle update
 
 ## [0.8.5] - 2025-08-02
 
 ### Changes
+
 - Set default value for `memory_observations_count` to 0
 - Added tests for `delete_duplicates` API endpoint
 - Added "delete duplicates" action to graph visualization in observation details show pop-up menu
@@ -89,6 +102,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.8.4] - 2025-08-01
 
 ### Changes
+
 - Substitute deprecated :unprocessable_content status code with :unprocessable_content; bundle updated
 - Fixed merge operation on node-to-node action in graph visualization
 - Removed legacy `observations_count` (proper counter cache column: `memory_observations_count`)
@@ -96,22 +110,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.8.3] - 2025-07-18
 
 ### Added
+
 - Improved "knowledge graph visualization": contextual menu for nodes and edges, with options to navigate to related entities and observations; double-click to close up to a node subgraph; editable entity data
 
 ## [0.8.2] - 2025-07-02
 
 ### Added
+
 - Tokenized search for entities, by name, aliases and entity_type, with overall relevance score (float)
 
 ## [0.8.1] - 2025-06-16
 
 ### Added
+
 - Preliminary graph visualization with Cytoscape.js + Stimulus.js using the localhost Rails server
 
 
 ## [0.8.0] - 2025-06-13
 
 ### Added
+
 - `update_entity_tool` to update an existing entity
 - support for entity names aliases as pipe-separated strings
 
@@ -119,6 +137,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.7.1] - 2025-06-10
 
 ### Added
+
 - `db:append_json` task to merge matching objects in legacy memory.json data files into existing database rows
 - `db:merge_entity` task to merge a single entity into an existing entity
 - `db:project_report` task to generate a consolidated Markdown report with Mermaid diagrams for all projects in the database
@@ -127,6 +146,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.7.0] - 2025-06-09
 
 ### Added
+
 - MCP Resources for higher-level structured access:
   - `memory_entities` resource with advanced filtering, sorting, and relation inclusion
   - `memory_observations` resource with text search and entity inclusion
@@ -138,12 +158,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Improved error handling with custom error classes
 
 ### Changed
+
 - Refactored MCP tools to use unified application tool base class
 - Improved response formatting for better compatibility with Cascade MCP client
 - Enhanced JSON serialization for better performance
 - Updated README with more detailed installation and usage instructions
 
 ### Fixed
+
 - Monkey-patched `FastMcp::Server#handle_tools_call` to fix tool instantiation issue
 - Fixed response formatting for Cascade compatibility
 - Corrected CORS configuration for cross-origin requests
@@ -152,12 +174,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.6.0] - 2025-05-20
 
 ### Added
+
 - SSE transport for real-time updates
 - Support for complex graph traversal operations
 - `get_subgraph_by_ids` tool for retrieving connected subgraphs
 - Improved entity search with partial name matching
 
 ### Changed
+
 - Updated to fast-mcp 1.4.0
 - Enhanced entity serialization with observation counts
 - Better error handling and validation for tool parameters
@@ -165,12 +189,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.5.0] - 2025-04-12
 
 ### Added
+
 - Complete RESTful API at `/api/v1` for non-MCP clients
 - Swagger API documentation
 - Authentication framework (disabled by default)
 - Database indices for improved performance
 
 ### Changed
+
 - Moved to Ruby 3.4.1
 - Updated Rails to 8.0.2
 - Refactored database schema for better performance
@@ -179,6 +205,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.4.0] - 2025-03-05
 
 ### Added
+
 - Relation management tools:
   - `create_relation`
   - `delete_relation`
@@ -189,6 +216,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.3.0] - 2025-02-18
 
 ### Added
+
 - Observation management tools:
   - `create_observation`
   - `delete_observation`
@@ -196,12 +224,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Observation count tracking
 
 ### Fixed
+
 - Entity deletion cascade to associated observations
 - Proper JSON-RPC error codes for common error scenarios
 
 ## [0.2.0] - 2025-01-27
 
 ### Added
+
 - Entity management tools:
   - `create_entity`
   - `get_entity`
@@ -212,12 +242,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Integration with MariaDB
 
 ### Changed
+
 - Updated project structure to Rails 8.0 conventions
 - Enhanced tool parameter validation
 
 ## [0.1.0] - 2025-01-06
 
 ### Added
+
 - Initial project setup
 - Basic MCP server implementation
 - `version` tool
