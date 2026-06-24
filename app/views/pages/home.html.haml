@@ -1,0 +1,41 @@
+.dashboard-page
+  %header.dashboard-header
+    %div
+      %h1.dashboard-header__title Operator Dashboard
+      %p.dashboard-header__subtitle
+        GraphMem knowledge graph — #{Rails.env} environment
+    %div.dashboard-header__meta
+      %span.dashboard-header__refreshed
+        Refreshed #{l(@refreshed_at, format: :short)}
+
+  %section.dashboard-health-strip
+    - totals = @graph_stats[:totals]
+    = dashboard_stat_chip("Entities", totals[:entities])
+    = dashboard_stat_chip("Observations", totals[:observations])
+    = dashboard_stat_chip("Relations", totals[:relations])
+    = dashboard_stat_chip("Orphans", @graph_stats[:orphan_count])
+    = dashboard_stat_chip("Stale", @graph_stats[:stale_count])
+    = dashboard_stat_chip("Audit logs", totals[:audit_logs])
+
+  %section.dashboard-actions-grid
+    .dashboard-card.dashboard-card--action
+      %h2.dashboard-card__title Data Search & Node Graph
+      %p.dashboard-card__summary
+        Search entities with text or vector strategies, then explore relationships in the interactive Cytoscape graph.
+      .dashboard-card__actions
+        = link_to "Search entities", search_path, class: "dashboard-btn dashboard-btn--primary", id: "btn-dashboard-search"
+        = link_to "Open graph explorer", graph_path, class: "dashboard-btn dashboard-btn--secondary", id: "btn-dashboard-graph"
+
+    .dashboard-card.dashboard-card--action
+      %h2.dashboard-card__title Maintenance
+      %p.dashboard-card__summary
+        Import and export graph data, clean up orphans and duplicate relations, and review import reports.
+      .dashboard-card__actions
+        = link_to "Open maintenance hub", maintenance_path, class: "dashboard-btn dashboard-btn--primary", id: "btn-dashboard-maintenance"
+
+  %section.dashboard-state-grid
+    = render "pages/dashboard/dream_state_compactor_card", compaction: @compaction, cursor_entity: @cursor_entity, schedules: @schedules, latest_reports: @latest_reports
+    = render "pages/dashboard/garbage_collector_card", latest_reports: @latest_reports, schedules: @schedules
+
+  %section.dashboard-details
+    = render "pages/dashboard/reports_details", latest_reports: @latest_reports, compaction: @compaction

@@ -10,6 +10,12 @@ class CompactionRunner
         return run
       end
 
+      failed_run = CompactionRun.where(status: "failed").order(updated_at: :desc).first
+      if failed_run && CompactionRun.current.nil? && !CompactionRun.exists?(status: "running")
+        failed_run.resume_from_failure!
+        return failed_run
+      end
+
       return CompactionRun.find_by(status: "running") if CompactionRun.exists?(status: "running")
 
       CompactionRun.create!(

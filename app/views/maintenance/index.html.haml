@@ -1,0 +1,45 @@
+.dashboard-page
+  %header.dashboard-header
+    %div
+      %h1.dashboard-header__title Maintenance Hub
+      %p.dashboard-header__subtitle Import, export, and cleanup graph data
+    = link_to "Back to dashboard", root_path, class: "dashboard-btn dashboard-btn--secondary"
+
+  %section.dashboard-actions-grid
+    .dashboard-card
+      %h2.dashboard-card__title Export
+      %p.dashboard-card__summary Select root nodes to export as JSON (includes descendants).
+      - if @root_nodes.any?
+        = form_with url: export_data_exchange_index_path, method: :get, local: true, class: "maintenance-export-form" do
+          .maintenance-export-list
+            - @root_nodes.each do |entity|
+              %label.maintenance-export-item
+                = check_box_tag "ids[]", entity.id, false, class: "maintenance-export-checkbox"
+                %span
+                  %strong= entity.name
+                  %span.text-gray-500 (#{entity.entity_type})
+                  — #{entity.memory_observations_count} observations
+          = submit_tag "Export selected", class: "dashboard-btn dashboard-btn--primary", id: "btn-maintenance-export"
+      - else
+        %p.dashboard-card__empty No root nodes available for export.
+
+    .dashboard-card
+      %h2.dashboard-card__title Import
+      %p.dashboard-card__summary Upload a GraphMem JSON export file for review and merge decisions.
+      = form_with url: import_upload_data_exchange_index_path, method: :post, local: true, multipart: true, class: "maintenance-import-form" do
+        .maintenance-import-field
+          = file_field_tag :file, accept: "application/json,.json", required: true, class: "maintenance-import-file"
+        = submit_tag "Upload for review", class: "dashboard-btn dashboard-btn--primary", id: "btn-maintenance-import"
+
+    .dashboard-card
+      %h2.dashboard-card__title Cleanup
+      %p.dashboard-card__summary
+        Orphan entities: #{@graph_stats[:orphan_count]}.
+        Stale entities (&gt;6 months): #{@graph_stats[:stale_count]}.
+      %p.dashboard-card__hint
+        Use the graph explorer context menu for per-node merge, move, and relation edits.
+        Run garbage-collection diagnostics from the
+        = link_to "dashboard", root_path, class: "dashboard-link"
+        for orphan, stale, and duplicate observation reports.
+      .dashboard-card__actions
+        = link_to "Open graph explorer", graph_path, class: "dashboard-btn dashboard-btn--secondary", id: "btn-maintenance-graph"

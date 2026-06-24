@@ -1,0 +1,13 @@
+.dashboard-page
+  %h1.text-3xl.font-bold.mb-6.text-center
+    GraphMem — Knowledge Graph Explorer
+    %span.text-lg.text-gray-500 v#{GraphMem::VERSION}
+
+  = render "search/form", vector_available: @vector_available
+
+  = render "pages/graph_explorer"
+
+  %p.mt-6.text-sm.text-gray-600.text-center
+    %i
+      %small Interactive graph powered by Cytoscape.js and Stimulus.
+      = link_to "Back to dashboard", root_path, class: "dashboard-link"

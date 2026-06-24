@@ -83,19 +83,8 @@ class NodeOperationsStrategy
       transferred_observations = source.memory_observations.count
       source.memory_observations.update_all(memory_entity_id: target_id)
 
-      # Re-assign relations where source is the 'from' entity (source -> X becomes target -> X)
-      # Avoid creating self-loops
-      MemoryRelation
-        .where(from_entity_id: source_id)
-        .where.not(to_entity_id: target_id)
-        .update_all(from_entity_id: target_id)
-
-      # Re-assign relations where source is the 'to' entity (X -> source becomes X -> target)
-      # This means children of source become children of target
-      MemoryRelation
-        .where(to_entity_id: source_id)
-        .where.not(from_entity_id: target_id)
-        .update_all(to_entity_id: target_id)
+      reassign_outgoing_relations!(source_id, target_id)
+      reassign_incoming_relations!(source_id, target_id)
 
       # Delete any relations that were directly between source and target
       MemoryRelation.where(from_entity_id: source_id, to_entity_id: target_id).destroy_all
@@ -117,6 +106,8 @@ class NodeOperationsStrategy
     success_result("Successfully merged '#{source.name}' into '#{target.name}'")
   rescue ActiveRecord::RecordInvalid => e
     error_result("Failed to merge nodes: #{e.message}")
+  rescue ActiveRecord::RecordNotUnique => e
+    error_result("Failed to merge nodes: duplicate relation would be created (#{e.message})")
   end
 
   # Delete a node
@@ -188,6 +179,36 @@ class NodeOperationsStrategy
     return [] if aliases_string.blank?
 
     aliases_string.split(/[,|;]/).map(&:strip).reject(&:blank?)
+  end
+
+  # Re-assign outgoing relations (source -> X) without violating uniqueness.
+  def reassign_outgoing_relations!(source_id, target_id)
+    MemoryRelation.where(from_entity_id: source_id).where.not(to_entity_id: target_id).find_each do |relation|
+      if MemoryRelation.exists?(
+        from_entity_id: target_id,
+        to_entity_id: relation.to_entity_id,
+        relation_type: relation.relation_type
+      )
+        relation.destroy!
+      else
+        relation.update!(from_entity_id: target_id)
+      end
+    end
+  end
+
+  # Re-assign incoming relations (X -> source) without violating uniqueness.
+  def reassign_incoming_relations!(source_id, target_id)
+    MemoryRelation.where(to_entity_id: source_id).where.not(from_entity_id: target_id).find_each do |relation|
+      if MemoryRelation.exists?(
+        from_entity_id: relation.from_entity_id,
+        to_entity_id: target_id,
+        relation_type: relation.relation_type
+      )
+        relation.destroy!
+      else
+        relation.update!(to_entity_id: target_id)
+      end
+    end
   end
 
   # Clean up duplicate relations for a target entity

@@ -82,6 +82,15 @@ Rails.application.routes.draw do
   end
 
   get "search", to: "search#results"
+  get "graph", to: "pages#graph"
+  get "maintenance", to: "maintenance#index"
+
+  namespace :operator do
+    post "maintenance/compaction/start", to: "maintenance#start_compaction", as: :start_compaction
+    post "maintenance/compaction/pause", to: "maintenance#pause_compaction", as: :pause_compaction
+    post "maintenance/garbage_collection/run", to: "maintenance#run_garbage_collection", as: :run_garbage_collection
+    post "maintenance/relations/repair", to: "maintenance#repair_relations", as: :repair_relations
+  end
 
   # Defines the root path route ("/")
   root "pages#home"

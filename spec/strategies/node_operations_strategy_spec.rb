@@ -213,6 +213,21 @@ RSpec.describe NodeOperationsStrategy, type: :model do
       expect(result[:success]).to be false
       expect(result[:error]).to include("Cannot merge a node into itself")
     end
+
+    it "succeeds when source and target share colliding child relations" do
+      child = MemoryEntity.create!(name: "SharedChild", entity_type: "Task")
+      source = MemoryEntity.create!(name: "CollisionSource", entity_type: "Task")
+      target = MemoryEntity.create!(name: "CollisionTarget", entity_type: "Task")
+
+      MemoryRelation.create!(from_entity: child, to_entity: source, relation_type: "part_of")
+      MemoryRelation.create!(from_entity: child, to_entity: target, relation_type: "part_of")
+
+      result = strategy.merge_into(source.id, target.id)
+
+      expect(result[:success]).to be true
+      expect(MemoryEntity.exists?(source.id)).to be false
+      expect(MemoryRelation.where(from_entity_id: child.id, to_entity_id: target.id, relation_type: "part_of").count).to eq(1)
+    end
   end
 
   describe "#delete_node" do

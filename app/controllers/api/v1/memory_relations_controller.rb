@@ -20,6 +20,15 @@ module Api
         from_entity = MemoryEntity.find_by(id: relation_params[:from_entity_id])
         to_entity = MemoryEntity.find_by(id: relation_params[:to_entity_id])
 
+        existing = MemoryRelation.find_by(
+          from_entity_id: relation_params[:from_entity_id],
+          to_entity_id: relation_params[:to_entity_id],
+          relation_type: relation_params[:relation_type]
+        )
+        if existing
+          return render json: existing, status: :ok
+        end
+
         @memory_relation = MemoryRelation.new(
           from_entity: from_entity,
           to_entity: to_entity,
@@ -40,6 +49,20 @@ module Api
 
       # PATCH/PUT /api/v1/memory_relations/:id
       def update
+        if update_relation_params[:relation_type].present?
+          existing = MemoryRelation.find_by(
+            from_entity_id: @memory_relation.from_entity_id,
+            to_entity_id: @memory_relation.to_entity_id,
+            relation_type: update_relation_params[:relation_type]
+          )
+          if existing && existing.id != @memory_relation.id
+            return render_error(
+              "Relation already exists for this from/to pair and type",
+              details: { existing_relation_id: existing.id }
+            )
+          end
+        end
+
         if @memory_relation.update(update_relation_params)
           render json: @memory_relation
         else

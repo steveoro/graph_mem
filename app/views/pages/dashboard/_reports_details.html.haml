@@ -1,0 +1,23 @@
+- compaction_review = latest_reports["compaction_review"]
+.dashboard-details
+  %h2.dashboard-details__title Maintenance Reports
+  %details.dashboard-details__panel
+    %summary Compaction review (#{compaction_review ? compaction_review[:count] : 0})
+    - if compaction_review
+      %pre.dashboard-code= JSON.pretty_generate(compaction_review[:data])
+    - else
+      %p.dashboard-card__empty No compaction review reports.
+
+  - %w[orphans stale duplicates].each do |type|
+    - report = latest_reports[type]
+    %details.dashboard-details__panel
+      %summary= "#{type.humanize} (#{report ? report[:count] : 0})"
+      - if report
+        %p.dashboard-card__hint Report ##{report[:id]} — #{l(report[:created_at], format: :short)}
+        %pre.dashboard-code= JSON.pretty_generate(report[:data])
+      - else
+        %p.dashboard-card__empty No #{type} reports yet.
+
+  %details.dashboard-details__panel
+    %summary Full compaction snapshot
+    %pre.dashboard-code= JSON.pretty_generate(compaction)

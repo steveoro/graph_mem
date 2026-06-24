@@ -28,6 +28,20 @@ class CompactionRun < ApplicationRecord
     status == "paused"
   end
 
+  def failed?
+    status == "failed"
+  end
+
+  def resume_from_failure!
+    cleared_stats = (stats || {}).except("error")
+    update!(
+      status: "running",
+      finished_at: nil,
+      pause_requested: false,
+      stats: cleared_stats
+    )
+  end
+
   def merge_stats!(updates)
     merged = (stats || {}).merge(updates.stringify_keys)
     update!(stats: merged)

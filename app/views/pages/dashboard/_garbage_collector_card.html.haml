@@ -1,0 +1,39 @@
+- gc_types = %w[orphans stale duplicates]
+.dashboard-card.dashboard-card--state
+  .dashboard-card__header
+    %h2.dashboard-card__title Garbage Collector
+    %span.dashboard-card__hint Diagnostic reports
+  .dashboard-card__body
+    - if schedules["garbage_collection"].present?
+      %p.dashboard-card__hint
+        Scheduled: #{schedules["garbage_collection"]}
+    - else
+      %p.dashboard-card__hint
+        Not scheduled in #{Rails.env} (see production recurring config).
+
+    .dashboard-stat-chips
+      - gc_types.each do |type|
+        - report = latest_reports[type]
+        - count = report ? report[:count] : "—"
+        = dashboard_stat_chip(type.humanize, count)
+
+    %dl.dashboard-kv
+      - gc_types.each do |type|
+        - report = latest_reports[type]
+        %dt= "Last #{type}"
+        %dd
+          - if report
+            #{l(report[:created_at], format: :short)} (report ##{report[:id]})
+          - else
+            —
+
+  .dashboard-card__actions
+    = button_to "Run now", operator_run_garbage_collection_path, method: :post, class: "dashboard-btn dashboard-btn--primary", id: "btn-gc-run", data: { turbo_confirm: "Run garbage collection diagnostics now?" }
+
+  %details.dashboard-card__details
+    %summary Latest GC report samples
+    - gc_types.each do |type|
+      - report = latest_reports[type]
+      - next unless report
+      %h3.dashboard-details__subtitle= type.humanize
+      %pre.dashboard-code= JSON.pretty_generate(report[:data])

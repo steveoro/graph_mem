@@ -13,6 +13,10 @@ module Api
         render json: { error: e.message }, status: :unprocessable_content
       end
 
+      rescue_from ActiveRecord::RecordNotUnique do |e|
+        render json: { error: "Relation already exists", details: e.message }, status: :unprocessable_content
+      end
+
       private
 
       def render_error(message, status: :unprocessable_content, details: nil)

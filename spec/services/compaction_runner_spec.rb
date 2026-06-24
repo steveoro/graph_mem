@@ -31,6 +31,26 @@ RSpec.describe CompactionRunner, type: :service do
 
       expect(described_class.acquire_run!.id).to eq(existing.id)
     end
+
+    it "resumes a failed run instead of creating a new one" do
+      failed = CompactionRun.create!(
+        status: "failed",
+        phase: "tree_walk",
+        cursor_entity_id: 99,
+        stats: { "entities_processed" => 12, "error" => "boom" },
+        started_at: 1.hour.ago,
+        finished_at: 30.minutes.ago
+      )
+
+      run = described_class.acquire_run!
+
+      expect(run.id).to eq(failed.id)
+      expect(run.reload).to be_running
+      expect(run.phase).to eq("tree_walk")
+      expect(run.cursor_entity_id).to eq(99)
+      expect(run.stats).not_to have_key("error")
+      expect(CompactionRun.count).to eq(1)
+    end
   end
 
   describe ".start_or_resume!" do

@@ -97,32 +97,14 @@ module Api
         source_entity = @memory_entity
         target_entity = ::MemoryEntity.find(params[:target_id])
 
-        ActiveRecord::Base.transaction do
-          target_entity.aliases = (target_entity.aliases.split(/,\|\;/) + source_entity.aliases.split(/,\|\;/)).uniq.join(",")
-          target_entity.save!
-          source_entity.memory_observations.update_all(memory_entity_id: target_entity.id)
-
-          ::MemoryRelation.where(from_entity_id: source_entity.id)
-                          .where.not(to_entity_id: target_entity.id)
-                          .update_all(from_entity_id: target_entity.id)
-
-          ::MemoryRelation.where(to_entity_id: source_entity.id)
-                          .where.not(from_entity_id: target_entity.id)
-                          .update_all(to_entity_id: target_entity.id)
-
-          ::MemoryRelation.where(from_entity_id: source_entity.id, to_entity_id: target_entity.id).destroy_all
-          ::MemoryRelation.where(from_entity_id: target_entity.id, to_entity_id: source_entity.id).destroy_all
-
-          target_entity.update_column(:memory_observations_count, target_entity.memory_observations.count)
-
-          source_entity.destroy!
+        result = NodeOperationsStrategy.new.merge_into(source_entity.id, target_entity.id)
+        if result[:success]
+          head :no_content
+        else
+          render_error(result[:error])
         end
-
-        head :no_content
       rescue ActiveRecord::RecordNotFound
         render_error("Target MemoryEntity not found when attempting to merge.", status: :not_found)
-      rescue ActiveRecord::RecordInvalid => e
-        render_error("Merge failed: #{e.message}")
       end
 
       private

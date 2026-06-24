@@ -7,7 +7,6 @@ import { ModalManager } from "graph/modal_manager"
 import { Tooltip } from "graph/tooltip"
 import { ContextMenuManager } from "graph/context_menu"
 import { DragDropManager } from "graph/drag_drop_manager"
-import { DataManageManager } from "graph/data_manage"
 
 // Connects to data-controller="graph"
 export default class extends Controller {
@@ -25,7 +24,6 @@ export default class extends Controller {
     const refreshCallback = { onRefreshGraph: () => this.refreshGraph() };
     this.contextMenu = new ContextMenuManager(this.api, this.modal, refreshCallback);
     this.dragDrop = new DragDropManager(this.api, this.modal, refreshCallback);
-    this.dataManage = new DataManageManager(this.api, this.modal, refreshCallback);
 
     this.containerTarget.style.position = 'relative';
     this.#addNavigationOverlay();
@@ -74,15 +72,9 @@ export default class extends Controller {
     backBtn.className = 'graph-nav-btn graph-nav-btn--back graph-hidden';
     backBtn.onclick = () => this.#switchView('root');
 
-    const dataManageBtn = document.createElement('button');
-    dataManageBtn.textContent = 'Data Manage';
-    dataManageBtn.className = 'graph-nav-btn graph-nav-btn--data-manage';
-    dataManageBtn.onclick = () => this.dataManage.show();
-
     navDiv.appendChild(rootBtn);
     navDiv.appendChild(fullBtn);
     navDiv.appendChild(backBtn);
-    navDiv.appendChild(dataManageBtn);
     this.containerTarget.appendChild(navDiv);
 
     this.navControls = { rootBtn, fullBtn, backBtn };

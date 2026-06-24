@@ -1,0 +1,77 @@
+- stats = compaction[:stats] || {}
+.dashboard-card.dashboard-card--state
+  .dashboard-card__header
+    %h2.dashboard-card__title Dream State / Compactor Run
+    = dashboard_status_badge(compaction[:dream_state])
+    - if compaction[:run_id]
+      %span.dashboard-card__run-id Run ##{compaction[:run_id]}
+  .dashboard-card__body
+    .dashboard-phase-stepper
+      - compaction_phases.each do |phase|
+        - css = []
+        - css << "dashboard-phase-step--active" if phase_active?(compaction[:phase], phase)
+        - css << "dashboard-phase-step--complete" if phase_complete?(compaction[:phase], phase, compaction[:dream_state])
+        %div{class: "dashboard-phase-step #{css.join(' ')}"}
+          %span.dashboard-phase-step__label= compaction_phase_label(phase)
+
+    %dl.dashboard-kv
+      %dt Phase
+      %dd= compaction[:phase].present? ? compaction_phase_label(compaction[:phase]) : "—"
+      %dt Cursor
+      %dd
+        - if cursor_entity
+          = "#{cursor_entity[:name]} (#{cursor_entity[:entity_type]}, ##{cursor_entity[:id]})"
+        - elsif compaction[:cursor_entity_id]
+          = "##{compaction[:cursor_entity_id]}"
+        - else
+          —
+      %dt Pause requested
+      %dd= compaction[:pause_requested] ? "Yes" : "No"
+      %dt Started
+      %dd= format_dashboard_time(compaction[:started_at])
+      %dt Duration
+      %dd= compaction_duration(compaction)
+      %dt Finished
+      %dd= format_dashboard_time(compaction[:finished_at])
+      %dt Run ID
+      %dd= compaction[:run_id] || "—"
+
+    - if schedules["dream_state_compaction"].present?
+      %p.dashboard-card__hint
+        Scheduled: #{schedules["dream_state_compaction"]}
+
+    - if stats["error"].present?
+      .dashboard-alert.dashboard-alert--danger
+        %strong Error:
+        = stats["error"]
+
+    .dashboard-stat-chips
+      = dashboard_stat_chip("Processed", stats["entities_processed"] || 0)
+      = dashboard_stat_chip("Auto merges", stats["merges_auto"] || 0)
+      = dashboard_stat_chip("Queued merges", stats["merges_queued"] || 0)
+      = dashboard_stat_chip("Deduped obs", stats["observations_deduped"] || 0)
+      = dashboard_stat_chip("Orphans parented", stats["orphans_parented"] || 0)
+      = dashboard_stat_chip("Orphans queued", stats["orphans_queued"] || 0)
+
+  .dashboard-card__actions
+    - if compaction_pausable?(compaction)
+      = button_to "Pause", operator_pause_compaction_path, method: :post, class: "dashboard-btn dashboard-btn--warning", id: "btn-dream-state-pause"
+    - if compaction_resumable?(compaction)
+      = button_to "Start / Resume", operator_start_compaction_path, method: :post, class: "dashboard-btn dashboard-btn--primary", id: "btn-dream-state-resume"
+    - if stats["error"].present?
+      = button_to "Repair relation duplicates", operator_repair_relations_path, method: :post, class: "dashboard-btn dashboard-btn--warning", id: "btn-repair-relations", data: { turbo_confirm: "Remove duplicate and conflicting relations (keeps oldest row per tuple)? Then use Start / Resume to retry compaction." }
+    = link_to "Refresh", root_path, class: "dashboard-btn dashboard-btn--secondary", id: "btn-dream-state-refresh"
+
+  %details.dashboard-card__details
+    %summary Compaction review queue
+    - review = latest_reports["compaction_review"]
+    - if review
+      %p.dashboard-card__hint
+        Latest report ##{review[:id]} — #{review[:count]} items — #{l(review[:created_at], format: :short)}
+      %pre.dashboard-code= JSON.pretty_generate(review[:data])
+    - else
+      %p.dashboard-card__empty No compaction review reports yet.
+
+  %details.dashboard-card__details
+    %summary Raw dream-state snapshot
+    %pre.dashboard-code= JSON.pretty_generate(compaction)

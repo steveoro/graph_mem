@@ -1,0 +1,40 @@
+.container.mx-auto.search-results-page
+  %h1.text-2xl.font-bold.mb-4.text-center
+    = link_to "GraphMem", root_path, class: "search-results-page__home-link"
+    \— Search Results
+
+  = render "search/form", vector_available: @vector_available
+
+  - if @query.present?
+    %p.search-results-page__summary
+      = @results.total_count
+      result#{"s" unless @results.total_count == 1}
+      for “
+      %strong= @query
+      ” using
+      %strong= @strategy == "vector" ? "vector" : "text"
+      search
+
+    - if @results.any?
+      .search-results-table-wrap
+        %table.search-results-table
+          %thead
+            %tr
+              %th Entity
+              %th Type
+              %th.search-results-table__count-col Scope
+          %tbody
+            - @results.each do |entity|
+              %tr
+                %td
+                  = link_to entity.name, graph_path(scoped_entity_id: entity.id), class: "search-results-table__name"
+                  - if entity.aliases.present?
+                    .search-results-table__aliases= entity.aliases
+                %td
+                  %span.search-results-table__type= entity.entity_type
+                %td.search-results-table__count-col= (@scoped_counts[entity.id] || 0) + 1
+
+      .search-results-page__pagination
+        = paginate @results
+    - else
+      %p.search-results-page__empty No matching entities found.
