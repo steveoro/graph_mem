@@ -2,15 +2,12 @@
 
 # Runs garbage-collection diagnostics and returns created report summaries.
 class GarbageCollectionRunner
-  STALE_MONTHS = GarbageCollectionJob::STALE_MONTHS
-
   def self.call
     new.call
   end
 
   def call
     report_orphans
-    report_stale
     report_duplicates
     prune_audit_logs
 
@@ -40,24 +37,6 @@ class GarbageCollectionRunner
     Rails.logger.info "[GC] Found #{entities.size} orphan entities"
   end
 
-  def report_stale
-    cutoff = STALE_MONTHS.months.ago
-    stale = MemoryEntity
-      .where("memory_entities.updated_at < ?", cutoff)
-      .pluck(:id, :name, :entity_type, :updated_at)
-
-    entities = stale.map do |id, name, type, updated_at|
-      { id: id, name: name, entity_type: type, last_updated: updated_at.iso8601 }
-    end
-
-    @stale_report = MaintenanceReport.create!(
-      report_type: "stale",
-      data: { count: entities.size, cutoff_months: STALE_MONTHS, entities: entities.first(100) }
-    )
-
-    Rails.logger.info "[GC] Found #{entities.size} stale entities (>#{STALE_MONTHS} months)"
-  end
-
   def report_duplicates
     dupes = MemoryObservation
       .select(:memory_entity_id, :content, "COUNT(*) as cnt")
@@ -85,7 +64,7 @@ class GarbageCollectionRunner
   end
 
   def latest_reports
-    [ @orphans_report, @stale_report, @duplicates_report ].map do |report|
+    [ @orphans_report, @duplicates_report ].map do |report|
       {
         id: report.id,
         report_type: report.report_type,

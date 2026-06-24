@@ -8,14 +8,14 @@ RSpec.describe GarbageCollectionRunner do
 
     before { MemoryObservation.create!(memory_entity: project, content: "obs") }
 
-    it "creates three maintenance reports and returns summaries" do
+    it "creates two maintenance reports and returns summaries" do
       MaintenanceReport.delete_all
 
       result = described_class.call
 
-      expect(MaintenanceReport.count).to eq(3)
-      expect(result[:reports].size).to eq(3)
-      expect(result[:reports].map { |r| r[:report_type] }).to match_array(%w[orphans stale duplicates])
+      expect(MaintenanceReport.count).to eq(2)
+      expect(result[:reports].size).to eq(2)
+      expect(result[:reports].map { |r| r[:report_type] }).to match_array(%w[orphans duplicates])
     end
 
     it "prunes old audit logs" do

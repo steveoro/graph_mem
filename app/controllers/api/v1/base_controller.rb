@@ -3,6 +3,7 @@
 module Api
   module V1
     class BaseController < ApplicationController
+      skip_before_action :authenticate_operator!
       skip_forgery_protection
 
       rescue_from ActiveRecord::RecordNotFound do |e|

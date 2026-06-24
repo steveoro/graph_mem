@@ -1024,8 +1024,6 @@ paths:
                     type: object
                   orphan_count:
                     type: integer
-                  stale_count:
-                    type: integer
                   most_connected:
                     type: array
                     items:

@@ -16,16 +16,25 @@
     = stylesheet_link_tag "dashboard", "data-turbo-track": "reload"
     = javascript_importmap_tags
   %body
-    %header.dashboard-topnav
-      .dashboard-topnav__inner
-        = link_to root_path, class: "dashboard-topnav__brand" do
-          GraphMem
-          %span.dashboard-topnav__version v#{GraphMem::VERSION}
-        %nav.dashboard-topnav__links
-          = link_to "Dashboard", root_path, class: "dashboard-topnav__link"
-          = link_to "Search", search_path, class: "dashboard-topnav__link"
-          = link_to "Graph", graph_path, class: "dashboard-topnav__link"
-          = link_to "Maintenance", maintenance_path, class: "dashboard-topnav__link"
+    - if operator_signed_in?
+      %header.dashboard-topnav
+        .dashboard-topnav__inner
+          = link_to root_path, class: "dashboard-topnav__brand" do
+            GraphMem
+            %span.dashboard-topnav__version v#{GraphMem::VERSION}
+          %nav.dashboard-topnav__links
+            = link_to "Dashboard", root_path, class: "dashboard-topnav__link"
+            = link_to "Search", search_path, class: "dashboard-topnav__link"
+            = link_to "Graph", graph_path, class: "dashboard-topnav__link"
+            = link_to "Maintenance", maintenance_path, class: "dashboard-topnav__link"
+            = link_to "Settings", operator_settings_path, class: "dashboard-topnav__link"
+            = link_to "Jobs", "/operator/jobs", class: "dashboard-topnav__link"
+            = button_to "Sign out",
+              operator_logout_path,
+              method: :delete,
+              class: "dashboard-topnav__link dashboard-topnav__link--button",
+              id: "btn-operator-logout",
+              data: { testid: "btn-operator-logout" }
     - if flash[:notice].present?
       .dashboard-flash.dashboard-flash--notice= flash[:notice]
     - if flash[:alert].present?

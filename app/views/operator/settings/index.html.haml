@@ -1,0 +1,123 @@
+.dashboard-page
+  %header.dashboard-header
+    %div
+      %h1.dashboard-header__title= t("operator.settings.title")
+      %p.dashboard-header__subtitle= t("operator.settings.subtitle")
+
+  .dashboard-card
+    .dashboard-settings-tabs{ role: "tablist" }
+      - @settings_by_group.each do |group_key, group_data|
+        = link_to group_data[:title],
+          operator_settings_path(tab: group_key),
+          class: "dashboard-settings-tabs__tab #{'dashboard-settings-tabs__tab--active' if @active_tab == group_key.to_s}",
+          id: "settings-tab-#{group_key}",
+          data: { testid: "operator-settings-tab-#{group_key}" }
+
+    - @settings_by_group.each do |group_key, group_data|
+      - next unless @active_tab == group_key.to_s
+
+      .dashboard-settings-panel{ id: group_key.to_s, data: { testid: "operator-settings-panel-#{group_key}" } }
+        = form_with url: operator_settings_bulk_update_path, method: :patch, local: true, class: "dashboard-settings-form" do
+          = hidden_field_tag :tab, group_key
+
+          - group_data[:settings].each do |setting_key|
+            - field = AppSettings.get_field(setting_key)
+            - current_value = AppSettings.send(setting_key)
+            - field_type = field[:type] || field["type"]
+            - field_readonly = field[:readonly] || field["readonly"]
+            - field_validates = field[:validates] || field["validates"]
+
+            .dashboard-settings-field
+              %label.dashboard-settings-field__label{ for: "setting_#{setting_key}" }
+                = t("operator.settings.fields.#{setting_key}.label", default: setting_key.humanize)
+              %p.dashboard-settings-field__hint
+                = t("operator.settings.fields.#{setting_key}.description", default: "")
+
+              - if field_type == :boolean
+                .dashboard-settings-switch
+                  = hidden_field_tag "settings[#{setting_key}]", "0", id: nil
+                  = check_box_tag "settings[#{setting_key}]", "1", current_value,
+                    id: "setting_#{setting_key}",
+                    class: "dashboard-settings-switch__input",
+                    disabled: field_readonly,
+                    data: { testid: "setting-#{setting_key}" }
+              - elsif field_type == :integer
+                = number_field_tag "settings[#{setting_key}]",
+                  current_value,
+                  id: "setting_#{setting_key}",
+                  class: "dashboard-settings-field__input",
+                  disabled: field_readonly,
+                  data: { testid: "setting-#{setting_key}" }
+                - if field_validates
+                  - numericality = field_validates[:numericality] || field_validates["numericality"]
+                  - if numericality
+                    %small.dashboard-settings-field__validation
+                      - if numericality[:greater_than] || numericality["greater_than"]
+                        = t("operator.settings.validation.greater_than", value: numericality[:greater_than] || numericality["greater_than"])
+                      - if numericality[:less_than_or_equal_to] || numericality["less_than_or_equal_to"]
+                        = t("operator.settings.validation.less_than_or_equal_to", value: numericality[:less_than_or_equal_to] || numericality["less_than_or_equal_to"])
+              - else
+                = text_field_tag "settings[#{setting_key}]",
+                  current_value,
+                  id: "setting_#{setting_key}",
+                  class: "dashboard-settings-field__input",
+                  disabled: field_readonly,
+                  data: { testid: "setting-#{setting_key}" }
+
+          .dashboard-card__actions
+            = submit_tag t("operator.settings.save_group"),
+              class: "dashboard-btn dashboard-btn--primary",
+              data: { testid: "operator-settings-save-btn-#{group_key}" }
+            = link_to t("operator.settings.reset"),
+              operator_settings_path(tab: group_key),
+              class: "dashboard-btn dashboard-btn--secondary",
+              data: { testid: "operator-settings-reset-btn-#{group_key}" }
+
+        - if group_key == :database_backup
+          .dashboard-settings-backup-actions
+            %h3.dashboard-details__subtitle= t("operator.settings.backup.actions_title")
+            = button_to t("operator.settings.backup.run_now"),
+              operator_run_backup_path,
+              method: :post,
+              class: "dashboard-btn dashboard-btn--primary",
+              id: "btn-backup-run-now",
+              data: { turbo_confirm: t("operator.settings.backup.run_confirm"), testid: "btn-backup-run-now" }
+
+          .dashboard-settings-backup-list
+            %h3.dashboard-details__subtitle= t("operator.settings.backup.list_title")
+            - if @backup_files.blank?
+              %p.dashboard-card__hint= t("operator.settings.backup.empty")
+            - else
+              %table.dashboard-settings-backup-table{ data: { testid: "backup-files-table" } }
+                %thead
+                  %tr
+                    %th= t("operator.settings.backup.columns.filename")
+                    %th= t("operator.settings.backup.columns.size")
+                    %th= t("operator.settings.backup.columns.modified")
+                    %th= t("operator.settings.backup.columns.actions")
+                %tbody
+                  - @backup_files.each do |backup|
+                    %tr{ data: { testid: "backup-row-#{backup[:filename]}" } }
+                      %td= backup[:filename]
+                      %td= "#{backup[:size_mb]} MB"
+                      %td= l(backup[:modified_at], format: :short)
+                      %td.dashboard-settings-backup-table__actions
+                        = button_to t("operator.settings.backup.restore"),
+                          operator_restore_backup_path,
+                          method: :post,
+                          params: { filename: backup[:filename] },
+                          class: "dashboard-btn dashboard-btn--secondary dashboard-btn--icon",
+                          id: "btn-backup-restore-#{backup[:filename]}",
+                          data: { turbo_confirm: t("operator.settings.backup.restore_confirm", filename: backup[:filename]), testid: "btn-backup-restore-#{backup[:filename]}" },
+                          title: t("operator.settings.backup.restore")
+                        = button_to t("operator.settings.backup.delete"),
+                          operator_destroy_backup_path,
+                          method: :delete,
+                          params: { filename: backup[:filename] },
+                          class: "dashboard-btn dashboard-btn--danger dashboard-btn--icon",
+                          id: "btn-backup-delete-#{backup[:filename]}",
+                          data: { turbo_confirm: t("operator.settings.backup.delete_confirm", filename: backup[:filename]), testid: "btn-backup-delete-#{backup[:filename]}" },
+                          title: t("operator.settings.backup.delete")
+
+    .dashboard-settings-footer
+      %small= t("operator.settings.footer_info")

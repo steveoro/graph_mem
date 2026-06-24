@@ -76,4 +76,33 @@ RSpec.describe DreamStateCompactor, type: :model do
       expect(run.reload.status).to eq("completed")
     end
   end
+
+  describe "project root protection" do
+    it "does not auto-merge Project entities" do
+      project_a = MemoryEntity.create!(name: "MergeProjectA", entity_type: "Project")
+      project_b = MemoryEntity.create!(name: "MergeProjectB", entity_type: "Project")
+      node_ops = instance_double(NodeOperationsStrategy)
+      allow(node_ops).to receive(:merge_into)
+
+      compactor = described_class.new(run: run, node_ops: node_ops)
+      compactor.send(:process_entity_merges, project_a.id)
+
+      expect(node_ops).not_to have_received(:merge_into)
+      expect(MemoryEntity.find_by(id: project_a.id)).to be_present
+      expect(MemoryEntity.find_by(id: project_b.id)).to be_present
+    end
+
+    it "does not queue merge reviews involving Project entities" do
+      task = MemoryEntity.create!(name: "MergeTask", entity_type: "Task")
+      node_ops = instance_double(NodeOperationsStrategy)
+      allow(node_ops).to receive(:merge_into)
+
+      compactor = described_class.new(run: run, node_ops: node_ops)
+      compactor.send(:process_entity_merges, project.id)
+
+      review_items = compactor.instance_variable_get(:@review_items)
+      expect(review_items).to be_empty
+      expect(node_ops).not_to have_received(:merge_into)
+    end
+  end
 end

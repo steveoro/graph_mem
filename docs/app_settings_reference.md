@@ -1,0 +1,43 @@
+# App Settings Reference
+
+GraphMem stores operator-tunable runtime settings in the primary MariaDB `settings` table via [`rails-settings-cached`](https://github.com/huacnlee/rails-settings-cached) and the `AppSettings` model.
+
+## Operator UI
+
+- **URL:** `/operator/settings`
+- **Auth:** session login at `/operator/login` (`OPERATOR_USERNAME` / `OPERATOR_PASSWORD`, or `credentials.operator.username` / `credentials.operator.password`)
+- **Tabs:** Feature Flags, Database Backup
+
+## Feature Flags
+
+| Setting | Default | Effect |
+|---|---|---|
+| `enable_dream_state_compactor` | `true` | When `false`, `DreamStateCompactionJob` and manual compaction start are skipped. |
+| `enable_garbage_collector` | `true` | When `false`, `GarbageCollectionJob` and manual GC runs are skipped. |
+
+Boolean flags consumed by background workers use direct database reads so Solid Queue processes see UI changes without restart.
+
+## Database Backup
+
+| Setting | Default | Effect |
+|---|---|---|
+| `backup_folder_path` | `db/backup` | Relative to `Rails.root` or absolute path for `.sql.bz2` files. |
+| `backup_keep_max` | `10` | Keep the N newest managed backups per environment (`*_<env>.sql.bz2`) after each successful dump. Legacy manually named files are not pruned. |
+| `backup_schedule_cron` | from `recurring.yml` | Read-only display of `DatabaseBackupJob` schedules for the current environment. |
+| `enable_scheduled_backups` | `false` | When `true`, `DatabaseBackupJob` runs on the production schedule in `config/recurring.yml` (1pm and 5pm GMT). |
+
+### Rake tasks
+
+- `bin/rails db:dump` — create `{YYYYMMDDHHMM}_{env}.sql.bz2`, then prune old files
+- `bin/rails db:list_backups` — list backups for the current environment
+- `bin/rails db:restore` — destructive restore (`FILE=` optional)
+
+### Docker
+
+Mount the host backup directory to match `backup_folder_path` (see `DB_BACKUP_HOST_PATH` in `docker-compose.yml`).
+
+## Mission Control Jobs
+
+- **URL:** `/operator/jobs`
+- **Auth:** same operator session (sign in at `/operator/login`)
+- **Purpose:** inspect Solid Queue jobs, recurring tasks, and failures

@@ -151,10 +151,12 @@ class DreamStateCompactor
   def process_entity_merges(entity_id)
     entity = MemoryEntity.find_by(id: entity_id)
     return unless entity
+    return if entity.entity_type == NodeOperationsStrategy::PROJECT_ENTITY_TYPE
     return if entity.embedding.blank?
 
     candidates = MemoryEntity
       .where.not(id: entity.id)
+      .where.not(entity_type: NodeOperationsStrategy::PROJECT_ENTITY_TYPE)
       .where.not(embedding: nil)
       .where("id > ?", entity.id)
       .select("memory_entities.*, VEC_DISTANCE_COSINE(embedding, (SELECT embedding FROM memory_entities WHERE id = #{entity.id})) AS vec_distance")

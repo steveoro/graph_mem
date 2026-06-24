@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 
 class GetGraphStatsTool < ApplicationTool
-  STALE_MONTHS = 6
-
   def self.tool_name
     "get_graph_stats"
   end
@@ -14,7 +12,6 @@ class GetGraphStatsTool < ApplicationTool
       totals: totals,
       entity_type_distribution: entity_type_distribution,
       orphan_count: orphan_count,
-      stale_count: stale_count,
       most_connected: most_connected,
       recently_updated: recently_updated,
       latest_maintenance: latest_maintenance
@@ -46,10 +43,6 @@ class GetGraphStatsTool < ApplicationTool
       .where.not(id: MemoryRelation.select(:from_entity_id))
       .where.not(id: MemoryRelation.select(:to_entity_id))
       .count
-  end
-
-  def stale_count
-    MemoryEntity.where("updated_at < ?", STALE_MONTHS.months.ago).count
   end
 
   def most_connected

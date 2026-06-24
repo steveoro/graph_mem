@@ -214,6 +214,16 @@ RSpec.describe NodeOperationsStrategy, type: :model do
       expect(result[:error]).to include("Cannot merge a node into itself")
     end
 
+    it "rejects merging away a Project root entity" do
+      project_source = MemoryEntity.create!(name: "ProtectedProject", entity_type: "Project")
+
+      result = strategy.merge_into(project_source.id, target_node.id)
+
+      expect(result[:success]).to be false
+      expect(result[:error]).to include("Project root entities cannot be deleted or merged away")
+      expect(MemoryEntity.find_by(id: project_source.id)).to be_present
+    end
+
     it "succeeds when source and target share colliding child relations" do
       child = MemoryEntity.create!(name: "SharedChild", entity_type: "Task")
       source = MemoryEntity.create!(name: "CollisionSource", entity_type: "Task")
@@ -281,6 +291,30 @@ RSpec.describe NodeOperationsStrategy, type: :model do
 
       expect(result[:success]).to be false
       expect(result[:error]).to include("Node not found")
+    end
+
+    it "rejects deleting a Project root entity" do
+      result = strategy.delete_node(project.id)
+
+      expect(result[:success]).to be false
+      expect(result[:error]).to include("Project root entities cannot be deleted or merged away")
+      expect(MemoryEntity.find_by(id: project.id)).to be_present
+    end
+
+    it "rejects cascade deletion when a descendant is a Project" do
+      project_child = MemoryEntity.create!(name: "ChildProject", entity_type: "Project")
+      MemoryRelation.create!(
+        from_entity: project_child,
+        to_entity: node_with_children,
+        relation_type: "part_of"
+      )
+
+      result = strategy.delete_node(node_with_children.id, cascade_delete: true)
+
+      expect(result[:success]).to be false
+      expect(result[:error]).to include("Project root entities cannot be deleted or merged away")
+      expect(MemoryEntity.find_by(id: node_with_children.id)).to be_present
+      expect(MemoryEntity.find_by(id: project_child.id)).to be_present
     end
   end
 end

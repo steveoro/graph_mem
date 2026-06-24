@@ -1,0 +1,33 @@
+.dashboard-page
+  %header.dashboard-header
+    %div
+      %h1.dashboard-header__title= t("operator.sessions.title")
+      %p.dashboard-header__subtitle= t("operator.sessions.subtitle")
+
+  .dashboard-card.dashboard-card--state
+    = form_with url: operator_session_path, method: :post, local: true, class: "dashboard-settings-form", data: { testid: "operator-login-form" } do
+      .dashboard-settings-field
+        %label.dashboard-settings-field__label{ for: "operator_username" }
+          = t("operator.sessions.username_label")
+        = text_field_tag :username, params[:username],
+          id: "operator_username",
+          class: "dashboard-settings-field__input",
+          required: true,
+          autocomplete: "username",
+          data: { testid: "operator-login-username" }
+
+      .dashboard-settings-field
+        %label.dashboard-settings-field__label{ for: "operator_password" }
+          = t("operator.sessions.password_label")
+        = password_field_tag :password, nil,
+          id: "operator_password",
+          class: "dashboard-settings-field__input",
+          required: true,
+          autocomplete: "current-password",
+          data: { testid: "operator-login-password" }
+
+      .dashboard-card__actions
+        = submit_tag t("operator.sessions.sign_in"),
+          class: "dashboard-btn dashboard-btn--primary",
+          id: "btn-operator-sign-in",
+          data: { testid: "btn-operator-sign-in" }

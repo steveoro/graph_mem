@@ -1,9 +1,82 @@
-require "yaml"
-require "rails"
+# frozen_string_literal: true
 
-DUMP_FILENAME = "graph_mem.sql.bz2"
+require "fileutils"
 
 namespace :db do
+  desc "Dump the current database to a timestamped backup file"
+  task dump: :environment do
+    db_config = extract_mysql_config
+    backup_dir = resolve_backup_dir
+    timestamp = Time.current.strftime("%Y%m%d%H%M")
+    backup_file = backup_dir.join("#{timestamp}_#{Rails.env}.sql.bz2")
+
+    FileUtils.mkdir_p(backup_dir)
+
+    puts "Dumping database '#{db_config[:database]}' to '#{backup_file}'..."
+
+    mysqldump_cmd = build_mysqldump_command(db_config)
+    full_cmd = "#{mysqldump_cmd} | bzip2 > #{backup_file}"
+
+    success = system(full_cmd)
+
+    if success && File.exist?(backup_file) && File.size(backup_file) > 0
+      puts "Database dump completed successfully: #{backup_file}"
+      prune_old_backups(backup_dir)
+    else
+      puts "Database dump failed."
+      File.delete(backup_file) if File.exist?(backup_file)
+      exit 1
+    end
+  end
+
+  desc "Restore the database from the most recent backup or a specified file (FILE=path)"
+  task restore: :environment do
+    db_config = extract_mysql_config
+    backup_dir = resolve_backup_dir
+    backup_file = determine_restore_file(backup_dir)
+
+    unless backup_file && File.exist?(backup_file)
+      puts "Backup file not found: #{backup_file || 'No backups available'}"
+      exit 1
+    end
+
+    puts "Restoring database '#{db_config[:database]}' from '#{backup_file}'..."
+    puts "*** THIS WILL DROP THE EXISTING DATABASE '#{db_config[:database]}' ***"
+
+    unless drop_and_create_database(db_config)
+      puts "Failed to prepare database for restore."
+      exit 1
+    end
+
+    mysql_cmd = build_mysql_command(db_config)
+    restore_cmd = "bzcat #{backup_file} | #{mysql_cmd}"
+
+    puts "Restoring data..."
+    unless system(restore_cmd)
+      puts "Failed to restore database."
+      exit 1
+    end
+
+    puts "Database restore completed successfully."
+  end
+
+  desc "List available backup files in the backup folder (newest first)"
+  task list_backups: :environment do
+    backup_dir = resolve_backup_dir
+    backups = find_all_backups(backup_dir)
+
+    if backups.empty?
+      puts "No backups found in #{backup_dir}"
+    else
+      puts "Available backups in #{backup_dir}:"
+      backups.each_with_index do |file, index|
+        size = (File.size(file) / 1024.0 / 1024.0).round(2)
+        mtime = File.mtime(file).strftime("%Y-%m-%d %H:%M:%S")
+        puts "  #{index + 1}. #{File.basename(file)} (#{size} MB, #{mtime})"
+      end
+    end
+  end
+
   namespace :support do
     desc "Initialize SQLite3 support databases (queue, cache, cable) if not already set up"
     task initialize: :environment do
@@ -22,114 +95,161 @@ namespace :db do
           ActiveRecord::Tasks::DatabaseTasks.load_schema(pool.db_config, :ruby)
         end
 
-      # Allow this task to run in development which doesn't usually have DBs for Queue, Cache, or Cable:
       rescue ActiveRecord::AdapterNotSpecified, TypeError
-        # No config for this db_name in current environment — skip silently
         puts "No config for #{db_name} in current environment — skipping."
       end
     end
   end
 
-  desc "Dump the current database to db/backup/#{DUMP_FILENAME}"
-  task dump: :environment do
-    db_name, cmd_params = extract_cmd_params
-    backup_dir = Rails.root.join("db", "backup")
-    backup_file = backup_dir.join(DUMP_FILENAME)
+  def resolve_backup_dir
+    backup_path = begin
+      AppSettings.backup_folder_path
+    rescue StandardError
+      nil
+    end
 
-    FileUtils.mkdir_p(backup_dir)
+    backup_path = "db/backup" if backup_path.blank?
 
-    puts "Dumping database '#{db_name}' to '#{backup_file}'..."
-
-    mysqldump_cmd = "mariadb-dump" + cmd_params
-    mysqldump_cmd += " --no-tablespaces"
-    mysqldump_cmd += " --no-create-db"
-    mysqldump_cmd += " #{db_name}"
-
-    full_cmd = "#{mysqldump_cmd} | bzip2 > #{backup_file}"
-
-    success = system(full_cmd)
-
-    if success
-      puts "Database dump completed successfully."
+    if Pathname.new(backup_path).absolute?
+      Pathname.new(backup_path)
     else
-      puts "Database dump failed."
+      Rails.root.join(backup_path)
     end
   end
-  # ---------------------------------------------------------------------------
 
-  desc "Restore the current database from db/backup/#{DUMP_FILENAME} (Drops existing DB!)"
-  task restore: :environment do
-    db_name, cmd_params = extract_cmd_params
-    backup_dir = Rails.root.join("db", "backup")
-    backup_file = backup_dir.join(DUMP_FILENAME)
+  def find_all_backups(backup_dir)
+    return [] unless backup_dir.exist?
 
-    unless File.exist?(backup_file)
-      puts "Backup file not found: #{backup_file}"
-      exit 1
+    Dir.glob(backup_dir.join("*.sql.bz2"))
+       .map { |f| Pathname.new(f) }
+       .select { |path| safe_backup_filename?(path.basename.to_s) }
+       .sort_by { |path| File.mtime(path) }
+       .reverse
+  end
+
+  def find_managed_backups_for_env(backup_dir)
+    return [] unless backup_dir.exist?
+
+    pattern = "*_#{Rails.env}.sql.bz2"
+    Dir.glob(backup_dir.join(pattern))
+       .map { |f| Pathname.new(f) }
+       .sort_by { |f| f.basename.to_s }
+       .reverse
+  end
+
+  def safe_backup_filename?(filename)
+    return false if filename.blank?
+    return false if filename.start_with?(".")
+    return false if filename.include?("..")
+
+    filename.match?(BackupFileService::SAFE_BACKUP_FILENAME)
+  end
+
+  def determine_restore_file(backup_dir)
+    if ENV["FILE"].present?
+      file_path = ENV["FILE"]
+      return Pathname.new(file_path) if Pathname.new(file_path).absolute?
+
+      return backup_dir.join(file_path)
     end
 
-    puts "Restoring database '#{db_name}' from '#{backup_file}'..."
-    puts "*** THIS WILL DROP THE EXISTING DATABASE '#{db_name}' ***"
+    find_all_backups(backup_dir).first
+  end
 
-    mysql_base_cmd = "mariadb" + cmd_params
+  def prune_old_backups(backup_dir)
+    keep_max = begin
+      AppSettings.backup_keep_max
+    rescue StandardError
+      10
+    end
 
-    drop_cmd = "#{mysql_base_cmd} -e 'DROP DATABASE IF EXISTS \`#{db_name}\`;'"
-    create_cmd = "#{mysql_base_cmd} -e 'CREATE DATABASE \`#{db_name}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;'"
-    restore_cmd = "bzcat #{backup_file} | #{mysql_base_cmd} #{db_name}"
+    backups = find_managed_backups_for_env(backup_dir)
+    return if backups.size <= keep_max
+
+    old_backups = backups.drop(keep_max)
+    old_backups.each do |file|
+      puts "Pruning old backup: #{file.basename}"
+      File.delete(file)
+    end
+
+    puts "Pruned #{old_backups.size} old backup(s), keeping #{keep_max} most recent."
+  end
+
+  def extract_mysql_config
+    if ENV["DATABASE_URL"].present?
+      uri = URI.parse(ENV["DATABASE_URL"])
+      {
+        database: uri.path.sub(%r{^/}, ""),
+        username: uri.user,
+        password: uri.password,
+        host: uri.host,
+        port: uri.port,
+        socket: nil
+      }
+    else
+      rails_config = resolve_db_config
+      {
+        database: rails_config["database"],
+        username: rails_config["username"],
+        password: rails_config["password"],
+        host: rails_config["host"],
+        port: rails_config["port"],
+        socket: rails_config["socket"]
+      }
+    end.tap do |config|
+      abort "ERROR: Could not determine database name." if config[:database].blank?
+    end
+  end
+
+  def build_mysqldump_command(config)
+    cmd = "MYSQL_PWD='#{config[:password]}' mariadb-dump"
+    cmd += " -h #{config[:host]}" if config[:host].present? && config[:host] != "localhost"
+    cmd += " -P #{config[:port]}" if config[:port].present? && config[:port].to_i != 3306
+    cmd += " -S #{config[:socket]}" if config[:socket].present?
+    cmd += " -u #{config[:username]}" if config[:username].present?
+    cmd += " --no-tablespaces --no-create-db"
+    cmd += " --single-transaction --routines --triggers --quick"
+    cmd += " #{config[:database]}"
+    cmd
+  end
+
+  def build_mysql_command(config)
+    cmd = "MYSQL_PWD='#{config[:password]}' mariadb"
+    cmd += " -h #{config[:host]}" if config[:host].present? && config[:host] != "localhost"
+    cmd += " -P #{config[:port]}" if config[:port].present? && config[:port].to_i != 3306
+    cmd += " -S #{config[:socket]}" if config[:socket].present?
+    cmd += " -u #{config[:username]}" if config[:username].present?
+    cmd += " #{config[:database]}"
+    cmd
+  end
+
+  def build_mysql_admin_command(config)
+    cmd = "MYSQL_PWD='#{config[:password]}' mariadb"
+    cmd += " -h #{config[:host]}" if config[:host].present? && config[:host] != "localhost"
+    cmd += " -P #{config[:port]}" if config[:port].present? && config[:port].to_i != 3306
+    cmd += " -S #{config[:socket]}" if config[:socket].present?
+    cmd += " -u #{config[:username]}" if config[:username].present?
+    cmd
+  end
+
+  def drop_and_create_database(config)
+    admin_cmd = build_mysql_admin_command(config)
+    db_name = config[:database]
 
     puts "Dropping database..."
+    drop_cmd = "#{admin_cmd} -e 'DROP DATABASE IF EXISTS `#{db_name}`;'"
     unless system(drop_cmd)
-      puts "Failed to drop database."
-      exit 1
+      puts "Warning: Could not drop database (may not exist)"
     end
 
     puts "Creating database..."
-    unless system(create_cmd)
-      puts "Failed to create database."
-      exit 1
-    end
-
-    puts "Restoring data..."
-    unless system(restore_cmd)
-      puts "Failed to restore database."
-      exit 1
-    end
-
-    puts "Database restore completed successfully."
-  end
-  # ---------------------------------------------------------------------------
-
-  def extract_cmd_params
-    if ENV["DATABASE_URL"].present?
-      uri = URI.parse(ENV["DATABASE_URL"])
-      db_name  = uri.path.sub(%r{^/}, "")
-      db_user  = uri.user
-      db_pass  = uri.password
-      db_host  = uri.host
-      db_port  = uri.port
-    else
-      db_config = resolve_db_config
-      db_name   = db_config["database"]
-      db_user   = db_config["username"]
-      db_pass   = db_config["password"]
-      db_host   = db_config["host"]
-      db_port   = db_config["port"]
-      db_socket = db_config["socket"]
-    end
-
-    abort "ERROR: Could not determine database name." if db_name.blank?
-
-    result = " -u #{db_user}"
-    result += " -p'#{db_pass}'" if db_pass.present?
-    result += " -h #{db_host}" if db_host.present? && db_host != "localhost"
-    result += " -P #{db_port}" if db_port.present? && db_port.to_i != 3306
-    result += " -S #{db_socket}" if db_socket.present?
-    [ db_name, result ]
+    create_cmd = "#{admin_cmd} -e 'CREATE DATABASE `#{db_name}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;'"
+    system(create_cmd)
   end
 
   def resolve_db_config
     config = Rails.configuration.database_configuration[Rails.env]
-    config.is_a?(Hash) && config.key?("primary") ? config["primary"] : config
+    config = config["primary"] if config.is_a?(Hash) && config.key?("primary")
+    config
   end
-  # ---------------------------------------------------------------------------
 end

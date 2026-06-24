@@ -8,7 +8,7 @@
     - else
       %p.dashboard-card__empty No compaction review reports.
 
-  - %w[orphans stale duplicates].each do |type|
+  - %w[orphans duplicates].each do |type|
     - report = latest_reports[type]
     %details.dashboard-details__panel
       %summary= "#{type.humanize} (#{report ? report[:count] : 0})"

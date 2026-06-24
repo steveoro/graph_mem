@@ -18,6 +18,13 @@ RSpec.describe DreamStateCompactionJob, type: :job do
   end
 
   describe "#perform" do
+    it "skips when dream-state compactor is disabled" do
+      AppSettings.enable_dream_state_compactor = false
+
+      expect(CompactionRunner).not_to receive(:acquire_run!)
+      described_class.new.perform
+    end
+
     it "acquires a run when no run_id is provided" do
       expect(CompactionRunner).to receive(:acquire_run!).and_call_original
 

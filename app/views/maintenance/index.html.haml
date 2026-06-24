@@ -35,11 +35,10 @@
       %h2.dashboard-card__title Cleanup
       %p.dashboard-card__summary
         Orphan entities: #{@graph_stats[:orphan_count]}.
-        Stale entities (&gt;6 months): #{@graph_stats[:stale_count]}.
       %p.dashboard-card__hint
         Use the graph explorer context menu for per-node merge, move, and relation edits.
         Run garbage-collection diagnostics from the
         = link_to "dashboard", root_path, class: "dashboard-link"
-        for orphan, stale, and duplicate observation reports.
+        for orphan and duplicate observation reports.
       .dashboard-card__actions
         = link_to "Open graph explorer", graph_path, class: "dashboard-btn dashboard-btn--secondary", id: "btn-maintenance-graph"

@@ -23,6 +23,8 @@ gem "turbo-rails" # Hotwire's SPA-like page accelerator [https://turbo.hotwired.
 gem "tzinfo-data", platforms: %i[ windows jruby ]
 
 # Use the database-backed adapters for Rails.cache, Active Job, and Action Cable
+gem "mission_control-jobs"
+gem "rails-settings-cached"
 gem "solid_cache"
 gem "solid_queue"
 gem "solid_cable"

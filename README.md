@@ -406,15 +406,23 @@ To change the model (e.g. from `nomic-embed-text` to a different one):
 
 ## Database Backup & Restore
 
-Dumps are portable across database names (no `CREATE DATABASE` / `USE` statements):
+Backups are managed through **System Settings** (`/operator/settings`, session login) and rake tasks. Dumps are timestamped, environment-scoped, and retained according to `backup_keep_max`:
 
 ```bash
-# Dump current database to db/backup/graph_mem.sql.bz2
+# Dump current database to <backup_folder>/<YYYYMMDDHHMM>_<env>.sql.bz2
 bin/rails db:dump
 
-# Restore into the current environment's database
+# List backups for the current environment
+bin/rails db:list_backups
+
+# Restore from newest backup, or a specific file
 bin/rails db:restore
+FILE=202601011200_production.sql.bz2 bin/rails db:restore
 ```
+
+Scheduled backups run via Solid Queue (`DatabaseBackupJob`) when **Enable scheduled backups** is on in System Settings. Production schedule: 1pm and 5pm GMT (`config/recurring.yml`). Use the **Jobs** dashboard at `/operator/jobs` (same operator session) to inspect queue status.
+
+Sign in at `/operator/login`. Default operator credentials: `operator` / `changeme` (override with `OPERATOR_USERNAME` / `OPERATOR_PASSWORD` or Rails credentials under `operator:`).
 
 
 ## Environment Variables
@@ -431,11 +439,14 @@ bin/rails db:restore
 | `RAILS_MASTER_KEY` | -- | Rails credentials key (required for Docker) |
 | `DATABASE_URL` | -- | Full database URL (overrides individual DB settings) |
 | `DB_BACKUP_HOST_PATH` | `./db/backup` | full path to DB backup(s) folder (default is invalid: docker-compose won't expand special characters) |
+| `OPERATOR_USERNAME` | `operator` | Operator login username for the web dashboard |
+| `OPERATOR_PASSWORD` | `changeme` | Operator login password (change in production) |
 
 
 ## Documentation
 
 * [MCP Tools Reference](docs/mcp_tools.md)
+* [App Settings Reference](docs/app_settings_reference.md)
 * [Architecture](docs/architecture.md)
 * [Development Guide](docs/development.md)
 * [Troubleshooting](docs/troubleshooting.md)

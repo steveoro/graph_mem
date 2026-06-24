@@ -7,8 +7,12 @@
 # - Merge: Merge a source node into a target node (combining data)
 # - Delete: Remove a node (with options for handling children)
 class NodeOperationsStrategy
+  class ProjectRootProtected < StandardError; end
+
   # Relation types that define parent-child relationships
   CHILD_RELATION_TYPES = %w[part_of depends_on].freeze
+  PROJECT_ENTITY_TYPE = "Project"
+  PROJECT_ROOT_PROTECTED_ERROR = "Project root entities cannot be deleted or merged away"
 
   def initialize
     @logger = Rails.logger
@@ -74,6 +78,7 @@ class NodeOperationsStrategy
     return error_result("Source node not found") unless source
     return error_result("Target node not found") unless target
     return error_result("Cannot merge a node into itself") if source_id == target_id
+    return error_result(PROJECT_ROOT_PROTECTED_ERROR) if project_root?(source)
 
     ActiveRecord::Base.transaction do
       # Add source name and aliases to target aliases
@@ -119,6 +124,7 @@ class NodeOperationsStrategy
     node = MemoryEntity.find_by(id: node_id)
 
     return error_result("Node not found") unless node
+    return error_result(PROJECT_ROOT_PROTECTED_ERROR) if project_root?(node)
 
     node_name = node.name
     deleted_count = 0
@@ -148,9 +154,15 @@ class NodeOperationsStrategy
     success_result(message)
   rescue ActiveRecord::RecordInvalid => e
     error_result("Failed to delete node: #{e.message}")
+  rescue ProjectRootProtected
+    error_result(PROJECT_ROOT_PROTECTED_ERROR)
   end
 
   private
+
+  def project_root?(entity)
+    entity.entity_type == PROJECT_ENTITY_TYPE
+  end
 
   def success_result(message)
     { success: true, message: message }
@@ -262,15 +274,14 @@ class NodeOperationsStrategy
       .pluck(:from_entity_id)
 
     child_ids.each do |child_id|
-      # Recursively delete descendants of child
-      count += delete_descendants(child_id)
-
-      # Delete the child
       child = MemoryEntity.find_by(id: child_id)
-      if child
-        child.destroy!
-        count += 1
-      end
+      next unless child
+
+      raise ProjectRootProtected if project_root?(child)
+
+      count += delete_descendants(child_id)
+      child.destroy!
+      count += 1
     end
 
     count

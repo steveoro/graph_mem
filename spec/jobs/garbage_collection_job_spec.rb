@@ -14,16 +14,23 @@ RSpec.describe GarbageCollectionJob, type: :job do
   end
 
   describe "#perform" do
+    it "skips when garbage collector is disabled" do
+      AppSettings.enable_garbage_collector = false
+
+      expect(GarbageCollectionRunner).not_to receive(:call)
+      described_class.new.perform
+    end
+
     let!(:project) { MemoryEntity.create!(name: "GCProject", entity_type: "Project") }
     let!(:obs) { MemoryObservation.create!(memory_entity: project, content: "obs content") }
 
-    it "creates three maintenance reports (orphans, stale, duplicates)" do
+    it "creates two maintenance reports (orphans, duplicates)" do
       MaintenanceReport.delete_all
 
       described_class.new.perform
 
-      expect(MaintenanceReport.count).to eq(3)
-      expect(MaintenanceReport.pluck(:report_type).sort).to eq(%w[duplicates orphans stale])
+      expect(MaintenanceReport.count).to eq(2)
+      expect(MaintenanceReport.pluck(:report_type).sort).to eq(%w[duplicates orphans])
     end
 
     describe "orphan detection" do
@@ -60,40 +67,6 @@ RSpec.describe GarbageCollectionJob, type: :job do
         report = MaintenanceReport.find_by(report_type: "orphans")
         orphan_ids = report.data["entities"].map { |e| e["id"] }
         expect(orphan_ids).not_to include(related.id)
-      end
-    end
-
-    describe "stale detection" do
-      it "identifies entities not updated in over 6 months" do
-        stale = MemoryEntity.create!(name: "GCStale", entity_type: "Task")
-        stale.update_columns(updated_at: 7.months.ago)
-        MaintenanceReport.delete_all
-
-        described_class.new.perform
-
-        report = MaintenanceReport.find_by(report_type: "stale")
-        expect(report.data["count"]).to be >= 1
-        stale_ids = report.data["entities"].map { |e| e["id"] }
-        expect(stale_ids).to include(stale.id)
-      end
-
-      it "does not flag recently updated entities" do
-        MaintenanceReport.delete_all
-
-        described_class.new.perform
-
-        report = MaintenanceReport.find_by(report_type: "stale")
-        stale_ids = report.data["entities"].map { |e| e["id"] }
-        expect(stale_ids).not_to include(project.id)
-      end
-
-      it "includes cutoff_months in report data" do
-        MaintenanceReport.delete_all
-
-        described_class.new.perform
-
-        report = MaintenanceReport.find_by(report_type: "stale")
-        expect(report.data["cutoff_months"]).to eq(6)
       end
     end
 
@@ -145,8 +118,16 @@ RSpec.describe GarbageCollectionJob, type: :job do
       end
     end
 
-    it "caps entity lists to 100 entries per report" do
-      expect(described_class::STALE_MONTHS).to eq(6)
+    it "caps entity lists to 100 entries per orphan report" do
+      MaintenanceReport.delete_all
+      105.times do |i|
+        MemoryEntity.create!(name: "GCOrphanCap#{i}", entity_type: "Task")
+      end
+
+      described_class.new.perform
+
+      report = MaintenanceReport.find_by(report_type: "orphans")
+      expect(report.data["entities"].size).to eq(100)
     end
   end
 end

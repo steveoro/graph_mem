@@ -3,9 +3,12 @@
 class GarbageCollectionJob < ApplicationJob
   queue_as :default
 
-  STALE_MONTHS = 6
-
   def perform
+    unless AppSettings.garbage_collector_enabled?
+      Rails.logger.info("[GC] Skipping garbage collection — garbage collector is disabled")
+      return
+    end
+
     GarbageCollectionRunner.call
   end
 end

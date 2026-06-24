@@ -3,6 +3,8 @@
 require 'rails_helper'
 
 RSpec.describe 'DataExchange', type: :request do
+  before { sign_in_operator }
+
   # Setup test data
   let!(:project1) do
     MemoryEntity.create!(

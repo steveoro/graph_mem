@@ -3,6 +3,11 @@
 module Operator
   class MaintenanceController < ApplicationController
     def start_compaction
+      unless AppSettings.dream_state_compactor_enabled?
+        redirect_to root_path, alert: t("operator.maintenance.compactor_disabled")
+        return
+      end
+
       run = CompactionRunner.start_or_resume!
       redirect_to root_path, notice: "Dream-state compaction started (run ##{run.id})."
     end
@@ -18,6 +23,11 @@ module Operator
     end
 
     def run_garbage_collection
+      unless AppSettings.garbage_collector_enabled?
+        redirect_to root_path, alert: t("operator.maintenance.gc_disabled")
+        return
+      end
+
       result = GarbageCollectionRunner.call
       counts = result[:reports].map { |r| "#{r[:report_type]}: #{r[:count]}" }.join(", ")
       redirect_to root_path,

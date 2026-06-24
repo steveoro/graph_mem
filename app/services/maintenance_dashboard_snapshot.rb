@@ -33,8 +33,7 @@ class MaintenanceDashboardSnapshot
         relations: MemoryRelation.count,
         audit_logs: AuditLog.count
       },
-      orphan_count: orphan_count,
-      stale_count: MemoryEntity.where("updated_at < ?", 6.months.ago).count
+      orphan_count: orphan_count
     }
   end
 

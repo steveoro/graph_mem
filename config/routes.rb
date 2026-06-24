@@ -86,11 +86,23 @@ Rails.application.routes.draw do
   get "maintenance", to: "maintenance#index"
 
   namespace :operator do
+    get "login", to: "sessions#new", as: :login
+    post "login", to: "sessions#create", as: :session
+    delete "logout", to: "sessions#destroy", as: :logout
+
     post "maintenance/compaction/start", to: "maintenance#start_compaction", as: :start_compaction
     post "maintenance/compaction/pause", to: "maintenance#pause_compaction", as: :pause_compaction
     post "maintenance/garbage_collection/run", to: "maintenance#run_garbage_collection", as: :run_garbage_collection
     post "maintenance/relations/repair", to: "maintenance#repair_relations", as: :repair_relations
+
+    get "settings", to: "settings#index", as: :settings
+    patch "settings", to: "settings#bulk_update", as: :settings_bulk_update
+    post "settings/backup/run", to: "settings#run_backup", as: :run_backup
+    post "settings/backup/restore", to: "settings#restore_backup", as: :restore_backup
+    delete "settings/backup", to: "settings#destroy_backup", as: :destroy_backup
   end
+
+  mount MissionControl::Jobs::Engine, at: "/operator/jobs"
 
   # Defines the root path route ("/")
   root "pages#home"

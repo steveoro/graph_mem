@@ -59,7 +59,6 @@ module Api
             .where.not(id: MemoryRelation.select(:from_entity_id))
             .where.not(id: MemoryRelation.select(:to_entity_id))
             .count,
-          stale_count: MemoryEntity.where("updated_at < ?", 6.months.ago).count,
           most_connected: most_connected_entities,
           recently_updated: MemoryEntity.order(updated_at: :desc).limit(10).pluck(:id, :name, :entity_type, :updated_at)
             .map { |id, name, type, at| { id: id, name: name, entity_type: type, updated_at: at.iso8601 } }

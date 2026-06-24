@@ -5,9 +5,21 @@ require "rails_helper"
 RSpec.describe "Operator maintenance controls", type: :request do
   include ActiveJob::TestHelper
 
+  before { sign_in_operator }
+
   after { CompactionRun.delete_all; MaintenanceReport.delete_all }
 
   describe "POST /operator/maintenance/compaction/start" do
+    it "redirects when dream-state compactor is disabled" do
+      AppSettings.enable_dream_state_compactor = false
+
+      post operator_start_compaction_path
+
+      expect(response).to redirect_to(root_path)
+      follow_redirect!
+      expect(response.body).to include("disabled")
+    end
+
     it "starts compaction and redirects with notice" do
       expect {
         post operator_start_compaction_path
@@ -39,6 +51,16 @@ RSpec.describe "Operator maintenance controls", type: :request do
   end
 
   describe "POST /operator/maintenance/garbage_collection/run" do
+    it "redirects when garbage collector is disabled" do
+      AppSettings.enable_garbage_collector = false
+
+      post operator_run_garbage_collection_path
+
+      expect(response).to redirect_to(root_path)
+      follow_redirect!
+      expect(response.body).to include("disabled")
+    end
+
     it "runs garbage collection and redirects with report summary" do
       MemoryEntity.create!(name: "OpGC", entity_type: "Project")
 
@@ -47,7 +69,7 @@ RSpec.describe "Operator maintenance controls", type: :request do
       expect(response).to redirect_to(root_path)
       follow_redirect!
       expect(response.body).to include("Garbage collection completed")
-      expect(MaintenanceReport.count).to eq(3)
+      expect(MaintenanceReport.count).to eq(2)
     end
   end
 

@@ -3,6 +3,8 @@
 require "rails_helper"
 
 RSpec.describe "Operator dashboard pages", type: :request do
+  before { sign_in_operator }
+
   after { CompactionRun.delete_all }
 
   describe "GET /" do

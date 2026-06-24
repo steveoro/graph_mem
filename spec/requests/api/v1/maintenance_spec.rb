@@ -17,7 +17,6 @@ RSpec.describe "API V1 Maintenance", type: :request do
       expect(data["totals"]["observations"]).to be >= 1
       expect(data).to have_key("entity_type_distribution")
       expect(data).to have_key("orphan_count")
-      expect(data).to have_key("stale_count")
       expect(data).to have_key("most_connected")
       expect(data).to have_key("recently_updated")
     end

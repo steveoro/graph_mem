@@ -29,6 +29,12 @@ class DeleteEntityTool < ApplicationTool
       # Find and destroy the entity
       # Assuming dependent: :destroy is set correctly on MemoryEntity model for relations/observations
       entity = MemoryEntity.find(entity_id)
+      if entity.entity_type == NodeOperationsStrategy::PROJECT_ENTITY_TYPE
+        error_message = NodeOperationsStrategy::PROJECT_ROOT_PROTECTED_ERROR
+        logger.error "OperationFailed in DeleteEntityTool: #{error_message}"
+        raise McpGraphMemErrors::OperationFailed, error_message
+      end
+
       entity_attributes = entity.attributes # Capture attributes before destroy
       entity.destroy!
 
@@ -47,6 +53,8 @@ class DeleteEntityTool < ApplicationTool
       error_message = "Entity with ID=#{entity_id} not found."
       logger.error "ResourceNotFound in DeleteEntityTool: #{error_message} (was: #{e.message})"
       raise McpGraphMemErrors::ResourceNotFound, error_message
+    rescue McpGraphMemErrors::OperationFailed
+      raise
     rescue ActiveRecord::RecordNotDestroyed => e
       error_message = "Failed to delete entity with ID=#{entity_id}: #{e.message}"
       logger.error "OperationFailed in DeleteEntityTool: #{error_message}"

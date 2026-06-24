@@ -58,16 +58,16 @@ RSpec.describe GetMaintenanceReportsTool, type: :model do
 
     context "limit handling" do
       before do
-        3.times { |i| MaintenanceReport.create!(report_type: "stale", data: { count: i }) }
+        3.times { |i| MaintenanceReport.create!(report_type: "orphans", data: { count: i }) }
       end
 
       it "caps the number of returned reports" do
-        result = tool.call(report_type: "stale", limit: 2)
+        result = tool.call(report_type: "orphans", limit: 2)
         expect(result[:total]).to eq(2)
       end
 
       it "orders reports most-recent first" do
-        result = tool.call(report_type: "stale", limit: 3)
+        result = tool.call(report_type: "orphans", limit: 3)
         created_ats = result[:reports].map { |r| r[:created_at] }
         expect(created_ats).to eq(created_ats.sort.reverse)
       end

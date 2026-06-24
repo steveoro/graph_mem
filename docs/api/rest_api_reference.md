@@ -219,7 +219,7 @@ Atomic transaction supporting up to 50 total operations. Rolls back entirely on 
 
 `GET /api/v1/maintenance/stats`
 
-Returns totals (entities, observations, relations, audit_logs), entity type distribution, orphan count, stale count, most connected entities, and recently updated entities.
+Returns totals (entities, observations, relations, audit_logs), entity type distribution, orphan count, most connected entities, and recently updated entities.
 
 ---
 

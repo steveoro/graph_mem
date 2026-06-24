@@ -39,5 +39,9 @@ module GraphMem
 
     # Use SQL schema format -- schema.rb can't represent MariaDB VECTOR columns
     config.active_record.schema_format = :sql
+
+    # Mission Control job dashboard (operator session auth via Operator::JobsDashboardController)
+    config.mission_control.jobs.base_controller_class = "Operator::JobsDashboardController"
+    config.mission_control.jobs.http_basic_auth_enabled = false
   end
 end

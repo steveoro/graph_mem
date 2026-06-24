@@ -13,3 +13,12 @@ production:
     class: DreamStateCompactionJob
     queue: default
     schedule: at 3am every day
+  # NOTE: All times are in Greenwich Mean Time (GMT)
+  database_backup_at_13:
+    class: DatabaseBackupJob
+    queue: low_priority
+    schedule: every day at 1pm
+  database_backup_at_17:
+    class: DatabaseBackupJob
+    queue: low_priority
+    schedule: every day at 5pm

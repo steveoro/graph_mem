@@ -172,12 +172,12 @@ Context is stored per MCP client in the `agent_contexts` table, keyed by the `X-
 #### `get_maintenance_reports`
 - **Description:** Retrieves recent maintenance and dream-state compaction reports, including the `compaction_review` queue of merge/orphan suggestions awaiting manual review. Pair with `merge_entities` to action queued duplicates.
 - **Parameters:**
-  - `report_type` (string, optional): One of `orphans`, `stale`, `duplicates`, `compaction_review`. Omit to get the latest report of each type.
+  - `report_type` (string, optional): One of `orphans`, `duplicates`, `compaction_review`. Omit to get the latest report of each type.
   - `limit` (integer, optional, default: 5, max: 30): Maximum number of reports to return (applies when `report_type` is given).
 - **Response:** `{ reports: [{ id, report_type, created_at, data }], total }`
 
 #### `get_graph_stats`
-- **Description:** Returns health metrics and statistics about the knowledge graph: totals, entity type distribution, orphan count, stale entities (not updated in 6+ months), most connected entities, and recent updates.
+- **Description:** Returns health metrics and statistics about the knowledge graph: totals, entity type distribution, orphan count, most connected entities, and recent updates.
 - **Parameters:** None
 
 ## Utility Tools (2 tools)

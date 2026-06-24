@@ -5,6 +5,11 @@ class DreamStateCompactionJob < ApplicationJob
 
   # Re-enqueue while work remains so recurring triggers can also resume paused runs.
   def perform(run_id = nil)
+    unless AppSettings.dream_state_compactor_enabled?
+      Rails.logger.info("[DreamState] Skipping compaction — dream-state compactor is disabled")
+      return
+    end
+
     run = resolve_run(run_id)
     return unless run
     return if run.status.in?(%w[completed failed])

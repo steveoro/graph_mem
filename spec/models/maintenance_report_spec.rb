@@ -11,7 +11,7 @@ RSpec.describe MaintenanceReport, type: :model do
     end
 
     it "only allows valid report types" do
-      %w[orphans stale duplicates compaction_review].each do |type|
+      %w[orphans duplicates compaction_review].each do |type|
         report = MaintenanceReport.new(report_type: type, data: { count: 0 })
         report.valid?
         expect(report.errors[:report_type]).to be_empty
@@ -19,6 +19,9 @@ RSpec.describe MaintenanceReport, type: :model do
 
       report = MaintenanceReport.new(report_type: "invalid", data: {})
       expect(report).not_to be_valid
+
+      legacy_stale = MaintenanceReport.new(report_type: "stale", data: { count: 0 })
+      expect(legacy_stale).not_to be_valid
     end
   end
 
@@ -41,11 +44,11 @@ RSpec.describe MaintenanceReport, type: :model do
     describe ".by_type" do
       it "filters by report_type" do
         orphan_report = MaintenanceReport.create!(report_type: "orphans", data: { count: 0 })
-        stale_report = MaintenanceReport.create!(report_type: "stale", data: { count: 5 })
+        duplicate_report = MaintenanceReport.create!(report_type: "duplicates", data: { count: 5 })
 
         result = MaintenanceReport.by_type("orphans")
         expect(result).to include(orphan_report)
-        expect(result).not_to include(stale_report)
+        expect(result).not_to include(duplicate_report)
       end
     end
   end
@@ -76,19 +79,19 @@ RSpec.describe MaintenanceReport, type: :model do
     it "does not prune reports of other types" do
       MaintenanceReport.delete_all
 
-      stale = MaintenanceReport.create!(report_type: "stale", data: { count: 99 })
+      duplicate = MaintenanceReport.create!(report_type: "duplicates", data: { count: 99 })
 
       (MaintenanceReport::MAX_REPORTS_PER_TYPE + 1).times do
         MaintenanceReport.create!(report_type: "orphans", data: { count: 0 })
       end
 
-      expect(MaintenanceReport.find_by(id: stale.id)).to be_present
+      expect(MaintenanceReport.find_by(id: duplicate.id)).to be_present
     end
   end
 
   describe "REPORT_TYPES" do
     it "contains the expected types" do
-      expect(MaintenanceReport::REPORT_TYPES).to eq(%w[orphans stale duplicates compaction_review])
+      expect(MaintenanceReport::REPORT_TYPES).to eq(%w[orphans duplicates compaction_review])
     end
   end
 end

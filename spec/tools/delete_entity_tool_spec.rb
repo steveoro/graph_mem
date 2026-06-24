@@ -53,7 +53,7 @@ RSpec.describe DeleteEntityTool, type: :model do
       end
 
       it 'cascades deletion to observations' do
-        entity = MemoryEntity.create!(name: 'With Obs', entity_type: 'Project')
+        entity = MemoryEntity.create!(name: 'With Obs', entity_type: 'Task')
         MemoryObservation.create!(memory_entity: entity, content: 'obs 1')
         MemoryObservation.create!(memory_entity: entity, content: 'obs 2')
 
@@ -63,14 +63,26 @@ RSpec.describe DeleteEntityTool, type: :model do
       end
 
       it 'cascades deletion to relations' do
-        entity = MemoryEntity.create!(name: 'With Rels', entity_type: 'Project')
-        other = MemoryEntity.create!(name: 'Other', entity_type: 'Task')
+        entity = MemoryEntity.create!(name: 'With Rels', entity_type: 'Task')
+        other = MemoryEntity.create!(name: 'Other', entity_type: 'Project')
         MemoryRelation.create!(from_entity_id: entity.id, to_entity_id: other.id, relation_type: 'depends_on')
         MemoryRelation.create!(from_entity_id: other.id, to_entity_id: entity.id, relation_type: 'part_of')
 
         expect {
           tool.call(entity_id: entity.id)
         }.to change(MemoryRelation, :count).by(-2)
+      end
+
+      it 'rejects deletion of Project root entities' do
+        entity = MemoryEntity.create!(name: 'Protected Project', entity_type: 'Project')
+        MemoryObservation.create!(memory_entity: entity, content: 'obs 1')
+
+        expect {
+          tool.call(entity_id: entity.id)
+        }.to raise_error(McpGraphMemErrors::OperationFailed, /Project root entities cannot be deleted or merged away/)
+
+        expect(MemoryEntity.find_by(id: entity.id)).to be_present
+        expect(entity.memory_observations.count).to eq(1)
       end
 
       it 'returns ISO 8601 timestamps' do

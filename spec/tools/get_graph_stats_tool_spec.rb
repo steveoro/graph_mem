@@ -41,7 +41,6 @@ RSpec.describe GetGraphStatsTool, type: :model do
       expect(result).to have_key(:totals)
       expect(result).to have_key(:entity_type_distribution)
       expect(result).to have_key(:orphan_count)
-      expect(result).to have_key(:stale_count)
       expect(result).to have_key(:most_connected)
       expect(result).to have_key(:recently_updated)
       expect(result).to have_key(:latest_maintenance)
@@ -92,21 +91,6 @@ RSpec.describe GetGraphStatsTool, type: :model do
         MemoryObservation.create!(memory_entity: entity_with_obs, content: "not orphan")
         result_after = tool.call[:orphan_count]
         expect(result_after).to eq(result_before)
-      end
-    end
-
-    describe "stale_count" do
-      it "counts entities not updated in over 6 months" do
-        stale = MemoryEntity.create!(name: "StaleEntity", entity_type: "Task")
-        stale.update_columns(updated_at: 7.months.ago)
-        result = tool.call
-        expect(result[:stale_count]).to be >= 1
-      end
-
-      it "does not count recently updated entities" do
-        result = tool.call
-        fresh_entities = MemoryEntity.where("updated_at >= ?", 6.months.ago).count
-        expect(result[:stale_count]).to be < MemoryEntity.count if fresh_entities > 0
       end
     end
 

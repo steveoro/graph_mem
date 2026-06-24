@@ -5,6 +5,15 @@ All notable changes to GraphMem will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.8.2] - 2026-06-24
+
+- Settings page behind front-end sign-in for operators; API & MCP remain auth-less
+- Auto-backup feature
+
+## [1.8.1] - 2026-06-24
+
+- Protect Project nodes from being garbage-collected (urgh! +_+ ): no more "stale" nodes clean-up
+
 ## [1.8.0] - 2026-06-24
 
 - Improved dashboard, with compactor run and garbage collector states, plus force run/pause controls

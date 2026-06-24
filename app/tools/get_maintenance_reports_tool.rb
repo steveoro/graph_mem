@@ -9,13 +9,13 @@ class GetMaintenanceReportsTool < ApplicationTool
   end
 
   description "Retrieve recent maintenance and dream-state compaction reports. " \
-    "Report types: 'orphans' (entities lacking parents/observations), 'stale' (not updated in 6+ months), " \
+    "Report types: 'orphans' (entities lacking parents/observations), " \
     "'duplicates' (duplicate observation groups), and 'compaction_review' (merge/orphan suggestions the dream-state " \
     "job queued for manual review). Omit report_type to get the latest report of each type."
 
   arguments do
     optional(:report_type).maybe(:string)
-      .description("Filter to one type: orphans, stale, duplicates, or compaction_review. Omit for the latest of each type.")
+      .description("Filter to one type: orphans, duplicates, or compaction_review. Omit for the latest of each type.")
     optional(:limit).filled(:integer)
       .description("Maximum number of reports to return. Default: #{DEFAULT_LIMIT}, max: #{MAX_LIMIT}.")
   end

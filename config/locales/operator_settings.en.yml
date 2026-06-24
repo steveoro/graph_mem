@@ -1,0 +1,70 @@
+en:
+  operator:
+    maintenance:
+      compactor_disabled: "Dream-state compaction is disabled in System Settings."
+      gc_disabled: "Garbage collection is disabled in System Settings."
+    sessions:
+      title: "Operator Sign In"
+      subtitle: "Sign in to access the GraphMem operator dashboard."
+      username_label: "Username"
+      password_label: "Password"
+      sign_in: "Sign in"
+      login_required: "Please sign in to continue."
+      signed_in: "Signed in successfully."
+      signed_out: "Signed out."
+      invalid_credentials: "Invalid username or password."
+    settings:
+      title: "System Settings"
+      subtitle: "Configure feature flags and database backup behavior."
+      save_group: "Save changes"
+      reset: "Reset"
+      footer_info: "Changes apply immediately: no need to restart the application. Scheduled backup times are defined in config/recurring.yml."
+      groups:
+        feature_flags: "Feature Flags"
+        database_backup: "Database Backup"
+      bulk_update:
+        success: "Saved %{count} setting(s) successfully."
+        partial: "Saved %{success} setting(s); %{failed} failed."
+      validation:
+        greater_than: "Must be greater than %{value}."
+        less_than_or_equal_to: "Must be at most %{value}."
+      fields:
+        enable_dream_state_compactor:
+          label: "Dream state / compactor"
+          description: "When disabled, scheduled and manual dream-state compaction jobs are skipped."
+        enable_garbage_collector:
+          label: "Garbage collector"
+          description: "When disabled, scheduled and manual garbage collection runs are skipped."
+        backup_folder_path:
+          label: "Backup folder path"
+          description: "Relative to Rails root or an absolute path. Docker deployments should mount this folder as a volume."
+        backup_keep_max:
+          label: "Maximum backups to keep"
+          description: "Oldest managed backups for the current environment are deleted after each successful dump. Legacy manually named files are kept."
+        backup_schedule_cron:
+          label: "Scheduled backup times"
+          description: "Read from config/recurring.yml for the current environment."
+        enable_scheduled_backups:
+          label: "Enable scheduled backups"
+          description: "When enabled, Solid Queue runs DatabaseBackupJob on the schedule shown above."
+      backup:
+        actions_title: "Manual backup"
+        list_title: "Available backups"
+        empty: "No backup files found in the backup folder."
+        run_now: "Run backup now"
+        run_confirm: "Create a new database backup now?"
+        run_success: "Database backup completed successfully."
+        run_failed: "Database backup failed: %{error}"
+        restore: "Restore"
+        restore_confirm: "Restore database from %{filename}? This will DROP and recreate the current database."
+        restore_success: "Database restored from %{filename}."
+        restore_failed: "Restore failed: %{error}"
+        delete: "Delete"
+        delete_confirm: "Delete backup file %{filename}? This cannot be undone."
+        delete_success: "Deleted backup %{filename}."
+        delete_failed: "Delete failed: %{error}"
+        columns:
+          filename: "Filename"
+          size: "Size"
+          modified: "Modified"
+          actions: "Actions"
