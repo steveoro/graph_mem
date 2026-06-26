@@ -1,0 +1,43 @@
+en:
+  operator:
+    audit_logs:
+      label: "Audit logs"
+      title: "Audit Logs"
+      subtitle: "Browse change history for entities, observations, and relations"
+      back_to_dashboard: "Back to dashboard"
+      summary:
+        total: "Total logs"
+        filtered: "Matching filters"
+        expired: "Expired (prune eligible)"
+      filters:
+        action: "Action"
+        auditable_type: "Record type"
+        actor: "Actor"
+        auditable_id: "Record ID"
+        since_days: "Time window"
+        all_actions: "All actions"
+        all_types: "All types"
+        all_time: "All time"
+        submit: "Apply filters"
+        reset: "Reset"
+      since_days_options:
+        days_7: "Last 7 days"
+        days_30: "Last 30 days"
+        days_90: "Last 90 days"
+        all: "All time"
+      columns:
+        time: "Time"
+        action: "Action"
+        record: "Record"
+        actor: "Actor"
+        changes: "Changes"
+      actions:
+        create: "Create"
+        update: "Update"
+        delete: "Delete"
+      changes_summary: "View changes"
+      empty: "No audit logs match the current filters."
+      prune_button: "Prune expired logs"
+      prune_confirm: "Delete %{count} audit log(s) older than 90 days? This cannot be undone."
+      prune_notice: "Pruned %{count} audit log(s) older than 90 days."
+      unknown_actor: "—"

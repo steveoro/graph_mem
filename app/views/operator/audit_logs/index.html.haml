@@ -1,0 +1,74 @@
+.dashboard-page
+  %header.dashboard-header
+    %div
+      %h1.dashboard-header__title= t("operator.audit_logs.title")
+      %p.dashboard-header__subtitle= t("operator.audit_logs.subtitle")
+    = link_to t("operator.audit_logs.back_to_dashboard"), root_path, class: "dashboard-btn dashboard-btn--secondary", id: "btn-audit-logs-back"
+
+  %section.dashboard-stat-chips
+    = dashboard_stat_chip(t("operator.audit_logs.summary.total"), @summary[:total])
+    = dashboard_stat_chip(t("operator.audit_logs.summary.filtered"), @summary[:filtered_count])
+    = dashboard_stat_chip(t("operator.audit_logs.summary.expired"), @summary[:expired_count])
+
+  .dashboard-card
+    = form_with url: operator_audit_logs_path, method: :get, local: true, class: "audit-logs-filters" do
+      .audit-logs-filters__row
+        .audit-logs-filters__field
+          %label.audit-logs-filters__label{ for: "audit_filter_log_action" }= t("operator.audit_logs.filters.action")
+          = select_tag :log_action, options_for_select(audit_log_action_options, @filters[:log_action]), id: "audit_filter_log_action", class: "audit-logs-filters__input"
+
+        .audit-logs-filters__field
+          %label.audit-logs-filters__label{ for: "audit_filter_auditable_type" }= t("operator.audit_logs.filters.auditable_type")
+          = select_tag :auditable_type, options_for_select(audit_log_auditable_type_options, @filters[:auditable_type]), id: "audit_filter_auditable_type", class: "audit-logs-filters__input"
+
+        .audit-logs-filters__field
+          %label.audit-logs-filters__label{ for: "audit_filter_actor" }= t("operator.audit_logs.filters.actor")
+          = text_field_tag :actor, @filters[:actor], id: "audit_filter_actor", class: "audit-logs-filters__input"
+
+        .audit-logs-filters__field
+          %label.audit-logs-filters__label{ for: "audit_filter_auditable_id" }= t("operator.audit_logs.filters.auditable_id")
+          = number_field_tag :auditable_id, @filters[:auditable_id], id: "audit_filter_auditable_id", class: "audit-logs-filters__input", min: 1
+
+        .audit-logs-filters__field
+          %label.audit-logs-filters__label{ for: "audit_filter_since_days" }= t("operator.audit_logs.filters.since_days")
+          = select_tag :since_days, options_for_select(audit_log_since_days_options, @filters[:since_days]), id: "audit_filter_since_days", class: "audit-logs-filters__input"
+
+      .audit-logs-filters__actions
+        = submit_tag t("operator.audit_logs.filters.submit"), class: "dashboard-btn dashboard-btn--primary", id: "btn-audit-logs-filter"
+        = link_to t("operator.audit_logs.filters.reset"), operator_audit_logs_path, class: "dashboard-btn dashboard-btn--secondary", id: "btn-audit-logs-reset"
+
+    - if @summary[:expired_count].positive?
+      .dashboard-card__actions
+        = button_to t("operator.audit_logs.prune_button"),
+          operator_prune_audit_logs_path(request.query_parameters),
+          method: :post,
+          class: "dashboard-btn dashboard-btn--secondary",
+          id: "btn-audit-logs-prune",
+          data: { turbo_confirm: t("operator.audit_logs.prune_confirm", count: @summary[:expired_count]) }
+
+    - if @audit_logs.any?
+      .audit-logs-table-wrap
+        %table.audit-logs-table
+          %thead
+            %tr
+              %th= t("operator.audit_logs.columns.time")
+              %th= t("operator.audit_logs.columns.action")
+              %th= t("operator.audit_logs.columns.record")
+              %th= t("operator.audit_logs.columns.actor")
+              %th= t("operator.audit_logs.columns.changes")
+          %tbody
+            - @audit_logs.each do |log|
+              %tr{ id: "audit-log-#{log.id}" }
+                %td.audit-logs-table__time= l(log.created_at, format: :short)
+                %td= audit_log_action_badge(log.action)
+                %td.audit-logs-table__record= audit_log_record_label(log)
+                %td.audit-logs-table__actor= audit_log_actor_label(log.actor)
+                %td.audit-logs-table__changes
+                  %details
+                    %summary= t("operator.audit_logs.changes_summary")
+                    %pre.dashboard-code= audit_log_changed_fields_json(log)
+
+      .audit-logs-pagination
+        = paginate @audit_logs
+    - else
+      %p.dashboard-card__empty= t("operator.audit_logs.empty")

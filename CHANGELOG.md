@@ -5,6 +5,10 @@ All notable changes to GraphMem will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.8.3] - 2026-06-26
+- Operator audit log browse page with filters, pagination, and dashboard stat-chip link
+- Standalone prune action for audit logs older than 90 days (with confirmation)
+
 ## [1.8.2] - 2026-06-24
 
 - Settings page behind front-end sign-in for operators; API & MCP remain auth-less

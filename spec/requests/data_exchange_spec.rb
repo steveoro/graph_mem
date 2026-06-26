@@ -79,6 +79,7 @@ RSpec.describe 'DataExchange', type: :request do
         expect(response).to have_http_status(:ok)
         expect(response.content_type).to include('application/json')
         expect(response.headers['Content-Disposition']).to include('attachment')
+        expect(response.headers['Content-Disposition']).to match(/graph_mem_export_\d{8}_\d{6}\.json/)
       end
 
       it 'exports selected entities with children' do

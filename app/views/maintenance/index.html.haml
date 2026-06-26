@@ -10,7 +10,7 @@
       %h2.dashboard-card__title Export
       %p.dashboard-card__summary Select root nodes to export as JSON (includes descendants).
       - if @root_nodes.any?
-        = form_with url: export_data_exchange_index_path, method: :get, local: true, class: "maintenance-export-form" do
+        = form_with url: export_data_exchange_index_path, method: :get, local: true, class: "maintenance-export-form", data: { turbo: false } do
           .maintenance-export-list
             - @root_nodes.each do |entity|
               %label.maintenance-export-item
@@ -28,7 +28,10 @@
       %p.dashboard-card__summary Upload a GraphMem JSON export file for review and merge decisions.
       = form_with url: import_upload_data_exchange_index_path, method: :post, local: true, multipart: true, class: "maintenance-import-form" do
         .maintenance-import-field
-          = file_field_tag :file, accept: "application/json,.json", required: true, class: "maintenance-import-file"
+          = file_field_tag :file, accept: "application/json,.json", required: true, class: "maintenance-import-file", id: "maintenance-import-file"
+          %label.maintenance-import-file-label{ for: "maintenance-import-file", id: "btn-maintenance-choose-file", data: { testid: "btn-maintenance-choose-file" } }
+            = dashboard_icon(:file_choose, css_class: "maintenance-import-file-icon")
+            %span.maintenance-import-file-text= t("dashboard.maintenance.choose_file")
         = submit_tag "Upload for review", class: "dashboard-btn dashboard-btn--primary", id: "btn-maintenance-import"
 
     .dashboard-card

@@ -24,10 +24,10 @@
             %span.dashboard-topnav__version v#{GraphMem::VERSION}
           %nav.dashboard-topnav__links
             = link_to "Dashboard", root_path, class: "dashboard-topnav__link"
-            = link_to "Search", search_path, class: "dashboard-topnav__link"
+            = dashboard_topnav_icon_link search_path, icon: :search, label: t("dashboard.topnav.search"), testid: "topnav-search"
             = link_to "Graph", graph_path, class: "dashboard-topnav__link"
-            = link_to "Maintenance", maintenance_path, class: "dashboard-topnav__link"
-            = link_to "Settings", operator_settings_path, class: "dashboard-topnav__link"
+            = dashboard_topnav_icon_link maintenance_path, icon: :maintenance, label: t("dashboard.topnav.maintenance"), testid: "topnav-maintenance"
+            = dashboard_topnav_icon_link operator_settings_path, icon: :settings, label: t("dashboard.topnav.settings"), testid: "topnav-settings"
             = link_to "Jobs", "/operator/jobs", class: "dashboard-topnav__link"
             = button_to "Sign out",
               operator_logout_path,

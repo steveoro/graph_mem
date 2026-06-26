@@ -14,7 +14,7 @@
     = dashboard_stat_chip("Observations", totals[:observations])
     = dashboard_stat_chip("Relations", totals[:relations])
     = dashboard_stat_chip("Orphans", @graph_stats[:orphan_count])
-    = dashboard_stat_chip("Audit logs", totals[:audit_logs])
+    = dashboard_stat_chip_link(t("operator.audit_logs.label"), totals[:audit_logs], operator_audit_logs_path, id: "chip-audit-logs")
 
   %section.dashboard-actions-grid
     .dashboard-card.dashboard-card--action

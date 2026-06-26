@@ -95,6 +95,9 @@ Rails.application.routes.draw do
     post "maintenance/garbage_collection/run", to: "maintenance#run_garbage_collection", as: :run_garbage_collection
     post "maintenance/relations/repair", to: "maintenance#repair_relations", as: :repair_relations
 
+    get "audit_logs", to: "audit_logs#index", as: :audit_logs
+    post "audit_logs/prune", to: "audit_logs#prune", as: :prune_audit_logs
+
     get "settings", to: "settings#index", as: :settings
     patch "settings", to: "settings#bulk_update", as: :settings_bulk_update
     post "settings/backup/run", to: "settings#run_backup", as: :run_backup

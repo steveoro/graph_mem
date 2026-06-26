@@ -20,6 +20,20 @@ RSpec.describe "Operator dashboard pages", type: :request do
       expect(response.body).to include('id="btn-dream-state-resume"')
       expect(response.body).to include('id="btn-dream-state-refresh"')
       expect(response.body).to include("Compaction review queue")
+      expect(response.body).to include('data-testid="topnav-search"')
+      expect(response.body).to include('data-testid="topnav-maintenance"')
+      expect(response.body).to include('data-testid="topnav-settings"')
+      expect(response.body).to include('class="dashboard-topnav__link dashboard-topnav__link--icon"')
+      expect(response.body).to include('aria-label="Search"')
+      expect(response.body).to include('aria-label="Maintenance"')
+      expect(response.body).to include('aria-label="Settings"')
+    end
+
+    it "links the audit logs stat chip to the audit log browse page" do
+      get root_path
+
+      expect(response.body).to include('id="chip-audit-logs"')
+      expect(response.body).to include(operator_audit_logs_path)
     end
 
     it "shows repair action when compaction failed with a relation error" do
@@ -61,6 +75,20 @@ RSpec.describe "Operator dashboard pages", type: :request do
       expect(response.body).to include("Maintenance Hub")
       expect(response.body).to include('id="btn-maintenance-import"')
       expect(response.body).to include('id="btn-maintenance-export"')
+      expect(response.body).to include('id="btn-maintenance-choose-file"')
+      expect(response.body).to include('data-testid="btn-maintenance-choose-file"')
+      expect(response.body).to include("Choose JSON file")
+      expect(response.body).to include('id="maintenance-import-file"')
+    end
+
+    it "renders export form with Turbo disabled for direct file download" do
+      MemoryEntity.create!(name: "ExportRoot", entity_type: "Project")
+
+      get maintenance_path
+
+      expect(response.body).to include('class="maintenance-export-form"')
+      expect(response.body).to include('data-turbo="false"')
+      expect(response.body).to include(export_data_exchange_index_path)
     end
   end
 end
