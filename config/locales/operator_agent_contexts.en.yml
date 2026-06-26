@@ -1,0 +1,24 @@
+en:
+  operator:
+    agent_contexts:
+      title: MCP Clients & Project Context
+      subtitle: Per-agent scope from set_context (X-MCP-Client header)
+      empty: No MCP clients have called tools yet. Configure a unique X-MCP-Client header in each Cursor agent's MCP settings.
+      default_bucket_hint: Agents without X-MCP-Client share the "default" bucket — use unique client IDs when running multiple agents.
+      summary:
+        clients: Clients
+        recent: Active (5m)
+        with_context: With context
+      columns:
+        client: Client
+        activity: Activity
+        project_context: Project context
+        last_seen: Last seen
+        last_tool: Last tool
+      activity:
+        active: Active
+        idle: Idle
+        stale: Stale
+        unknown: Unknown
+      no_context: No project set
+      missing_project: "Missing entity #%{id}"

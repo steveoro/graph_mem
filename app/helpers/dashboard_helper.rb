@@ -6,12 +6,21 @@ module DashboardHelper
     "paused" => "dashboard-badge--paused",
     "completed" => "dashboard-badge--completed",
     "failed" => "dashboard-badge--failed",
-    "idle" => "dashboard-badge--idle"
+    "idle" => "dashboard-badge--idle",
+    "active" => "dashboard-badge--running",
+    "stale" => "dashboard-badge--idle",
+    "unknown" => "dashboard-badge--idle"
   }.freeze
 
   def dashboard_status_badge(status)
     css = STATUS_BADGE_CLASSES[status.to_s] || "dashboard-badge--idle"
     content_tag(:span, status.to_s.humanize, class: "dashboard-badge #{css}")
+  end
+
+  def agent_context_activity_badge(status)
+    label = t("operator.agent_contexts.activity.#{status}", default: status.to_s.humanize)
+    css = STATUS_BADGE_CLASSES[status.to_s] || "dashboard-badge--idle"
+    content_tag(:span, label, class: "dashboard-badge #{css}")
   end
 
   def dashboard_stat_chip(label, value)

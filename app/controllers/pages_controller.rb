@@ -9,6 +9,7 @@ class PagesController < ApplicationController
     @schedules = @snapshot[:schedules]
     @cursor_entity = @snapshot[:cursor_entity]
     @embeddings = @snapshot[:embeddings]
+    @agent_contexts = @snapshot[:agent_contexts]
     @refreshed_at = @snapshot[:refreshed_at]
   end
 

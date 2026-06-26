@@ -11,7 +11,7 @@ RSpec.describe MaintenanceDashboardSnapshot do
 
       result = described_class.call
 
-      expect(result).to include(:refreshed_at, :compaction, :graph_stats, :latest_reports, :schedules, :cursor_entity)
+      expect(result).to include(:refreshed_at, :compaction, :graph_stats, :latest_reports, :schedules, :cursor_entity, :agent_contexts)
       expect(result[:graph_stats][:totals][:entities]).to be >= 1
       expect(result[:compaction]).to include(:dream_state)
     end

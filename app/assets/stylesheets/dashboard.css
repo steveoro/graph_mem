@@ -737,6 +737,43 @@
   margin-top: 1rem;
 }
 
+.agent-contexts-table-wrap {
+  overflow-x: auto;
+  margin-top: 0.75rem;
+}
+
+.agent-contexts-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.agent-contexts-table th,
+.agent-contexts-table td {
+  padding: 0.5rem 0.65rem;
+  border-bottom: 1px solid #e2e8f0;
+  text-align: left;
+  vertical-align: top;
+}
+
+.agent-contexts-table th {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: #64748b;
+}
+
+.agent-contexts-table__client,
+.agent-contexts-table__tool {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.8rem;
+}
+
+.agent-contexts-table__muted {
+  color: #94a3b8;
+  font-style: italic;
+}
+
 .embeddings-config__url {
   word-break: break-all;
 }

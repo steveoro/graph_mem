@@ -37,4 +37,30 @@ RSpec.describe AgentContext, type: :model do
       expect(ctx.reload.last_seen_at).to be_within(2.seconds).of(Time.current)
     end
   end
+
+  describe ".record_activity!" do
+    it "creates a context row and stores last tool activity" do
+      described_class.record_activity!(client_id: "cursor-A", tool_name: "search_entities")
+
+      ctx = described_class.find_by!(client_id: "cursor-A")
+      expect(ctx.last_tool_name).to eq("search_entities")
+      expect(ctx.last_seen_at).to be_within(2.seconds).of(Time.current)
+    end
+
+    it "normalizes blank client ids to default" do
+      described_class.record_activity!(client_id: "  ", tool_name: "get_context")
+
+      expect(described_class.find_by!(client_id: GraphMemContext::DEFAULT_CLIENT_ID).last_tool_name).to eq("get_context")
+    end
+
+    it "updates an existing context row" do
+      ctx = described_class.create!(client_id: "cursor-A", last_tool_name: "get_context", last_seen_at: 1.day.ago)
+
+      described_class.record_activity!(client_id: "cursor-A", tool_name: "create_entity")
+
+      ctx.reload
+      expect(ctx.last_tool_name).to eq("create_entity")
+      expect(ctx.last_seen_at).to be_within(2.seconds).of(Time.current)
+    end
+  end
 end

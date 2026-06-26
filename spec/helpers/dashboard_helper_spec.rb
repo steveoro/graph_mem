@@ -41,4 +41,13 @@ RSpec.describe DashboardHelper, type: :helper do
       expect(html).to include("Audit logs")
     end
   end
+
+  describe "#agent_context_activity_badge" do
+    it "renders a localized activity badge" do
+      html = helper.agent_context_activity_badge("active")
+
+      expect(html).to include("Active")
+      expect(html).to include("dashboard-badge--running")
+    end
+  end
 end

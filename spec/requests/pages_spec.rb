@@ -5,7 +5,10 @@ require "rails_helper"
 RSpec.describe "Operator dashboard pages", type: :request do
   before { sign_in_operator }
 
-  after { CompactionRun.delete_all }
+  after do
+    CompactionRun.delete_all
+    AgentContext.delete_all
+  end
 
   describe "GET /" do
     it "renders the operator dashboard" do
@@ -41,6 +44,24 @@ RSpec.describe "Operator dashboard pages", type: :request do
 
       expect(response.body).to include('id="btn-dashboard-embeddings"')
       expect(response.body).to include(operator_embeddings_path)
+    end
+
+    it "includes the MCP clients and project context card" do
+      project = MemoryEntity.create!(name: "AdminHub", entity_type: "Project")
+      AgentContext.create!(
+        client_id: "cursor-test",
+        current_project: project,
+        last_seen_at: 1.minute.ago,
+        last_tool_name: "set_context"
+      )
+
+      get root_path
+
+      expect(response.body).to include('data-testid="dashboard-agent-contexts-card"')
+      expect(response.body).to include("MCP Clients &amp; Project Context")
+      expect(response.body).to include("cursor-test")
+      expect(response.body).to include("AdminHub")
+      expect(response.body).to include("set_context")
     end
 
     it "shows repair action when compaction failed with a relation error" do

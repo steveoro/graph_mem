@@ -32,7 +32,10 @@ class NoDslTestTool < ApplicationTool
 end
 
 RSpec.describe ApplicationTool do
-  after { Current.reset }
+  after do
+    Current.reset
+    AgentContext.delete_all
+  end
 
   describe ".input_schema" do
     it "returns a Dry::Schema when the subclass uses the arguments DSL" do
@@ -99,6 +102,26 @@ RSpec.describe ApplicationTool do
       expect {
         tool.call_with_schema_validation!(count: 5)
       }.to raise_error(FastMcp::Tool::InvalidArgumentsError, /name/)
+    end
+
+    it "records MCP client activity after validation succeeds" do
+      tool = DslTestTool.new(headers: { "HTTP_X_MCP_CLIENT" => "cursor-A" })
+
+      tool.call_with_schema_validation!(name: "test")
+
+      ctx = AgentContext.find_by!(client_id: "cursor-A")
+      expect(ctx.last_tool_name).to eq("dsl_test")
+      expect(ctx.last_seen_at).to be_within(2.seconds).of(Time.current)
+    end
+
+    it "does not record MCP client activity when validation fails" do
+      tool = DslTestTool.new(headers: { "HTTP_X_MCP_CLIENT" => "cursor-A" })
+
+      expect {
+        tool.call_with_schema_validation!(count: 5)
+      }.to raise_error(FastMcp::Tool::InvalidArgumentsError)
+
+      expect(AgentContext.find_by(client_id: "cursor-A")).to be_nil
     end
   end
 

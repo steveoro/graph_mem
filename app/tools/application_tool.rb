@@ -28,6 +28,7 @@ class ApplicationTool < FastMcp::Tool
     if arg_validation.errors.any?
       raise FastMcp::Tool::InvalidArgumentsError, arg_validation.errors.to_h.to_json
     end
+    record_client_activity!
     [ call(**normalized), _meta ]
   end
 
@@ -62,5 +63,13 @@ class ApplicationTool < FastMcp::Tool
     else
       "#{tool_name} - A general purpose tool."
     end
+  end
+
+  private
+
+  def record_client_activity!
+    AgentContext.record_activity!(client_id: current_client_id, tool_name: tool_name)
+  rescue StandardError => e
+    logger.warn "AgentContext activity record failed for #{current_client_id}: #{e.message}"
   end
 end

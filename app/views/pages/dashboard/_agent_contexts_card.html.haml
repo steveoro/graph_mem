@@ -1,0 +1,45 @@
+- snapshot = agent_contexts
+.dashboard-card.dashboard-card--state{ data: { testid: "dashboard-agent-contexts-card" } }
+  .dashboard-card__header
+    %h2.dashboard-card__title= t("operator.agent_contexts.title")
+    %span.dashboard-card__hint= t("operator.agent_contexts.subtitle")
+
+  .dashboard-card__body
+    .dashboard-stat-chips
+      = dashboard_stat_chip(t("operator.agent_contexts.summary.clients"), snapshot[:summary][:total])
+      = dashboard_stat_chip(t("operator.agent_contexts.summary.recent"), snapshot[:summary][:recent_count])
+      = dashboard_stat_chip(t("operator.agent_contexts.summary.with_context"), snapshot[:summary][:with_context_count])
+
+    - if snapshot[:summary][:default_bucket]
+      %p.dashboard-card__hint{ data: { testid: "dashboard-agent-contexts-default-hint" } }
+        = t("operator.agent_contexts.default_bucket_hint")
+
+    - if snapshot[:clients].any?
+      .agent-contexts-table-wrap
+        %table.agent-contexts-table
+          %thead
+            %tr
+              %th= t("operator.agent_contexts.columns.client")
+              %th= t("operator.agent_contexts.columns.activity")
+              %th= t("operator.agent_contexts.columns.project_context")
+              %th= t("operator.agent_contexts.columns.last_seen")
+              %th= t("operator.agent_contexts.columns.last_tool")
+          %tbody
+            - snapshot[:clients].each do |client|
+              %tr{ data: { testid: "agent-context-row-#{client[:client_id]}" } }
+                %td.agent-contexts-table__client= client[:client_id]
+                %td= agent_context_activity_badge(client[:activity_status])
+                %td
+                  - if client[:project]
+                    = link_to "#{client[:project][:name]} (#{client[:project][:entity_type]})",
+                      graph_path(scoped_entity_id: client[:project][:id]),
+                      class: "dashboard-link",
+                      id: "link-agent-context-project-#{client[:client_id]}"
+                  - else
+                    %span.agent-contexts-table__muted= t("operator.agent_contexts.no_context")
+                %td= format_dashboard_time(client[:last_seen_at])
+                %td.agent-contexts-table__tool
+                  = client[:last_tool_name].presence || "—"
+    - else
+      %p.dashboard-card__empty{ data: { testid: "dashboard-agent-contexts-empty" } }
+        = t("operator.agent_contexts.empty")
