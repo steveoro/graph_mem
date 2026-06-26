@@ -32,7 +32,7 @@
       .dashboard-card__actions
         = link_to "Open maintenance hub", maintenance_path, class: "dashboard-btn dashboard-btn--primary", id: "btn-dashboard-maintenance"
 
-  %section.dashboard-state-grid
+  %section.dashboard-state-grid.dashboard-state-grid--2x2
     = render "pages/dashboard/dream_state_compactor_card", compaction: @compaction, cursor_entity: @cursor_entity, schedules: @schedules, latest_reports: @latest_reports
     = render "pages/dashboard/garbage_collector_card", latest_reports: @latest_reports, schedules: @schedules
     = render "pages/dashboard/embeddings_card", embeddings: @embeddings

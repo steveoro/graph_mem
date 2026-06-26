@@ -168,6 +168,16 @@
   margin-bottom: 1.5rem;
 }
 
+.dashboard-state-grid--2x2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+@media (max-width: 768px) {
+  .dashboard-state-grid--2x2 {
+    grid-template-columns: 1fr;
+  }
+}
+
 .dashboard-card {
   background: #fff;
   border: 1px solid #e2e8f0;
