@@ -9,10 +9,12 @@ RSpec.describe EmbeddingService do
 
   let(:service) do
     described_class.new(
-      url: "http://ollama.test:11434",
-      model: "test-model",
-      provider: "ollama",
-      dims: dims
+      config: {
+        url: "http://ollama.test:11434",
+        model: "test-model",
+        provider: "ollama",
+        dims: dims
+      }
     )
   end
 
@@ -38,6 +40,15 @@ RSpec.describe EmbeddingService do
     allow(http).to receive(:read_timeout=)
     allow(http).to receive(:request).and_return(response)
     http
+  end
+
+  describe ".config_snapshot" do
+    it "returns env-based configuration" do
+      snapshot = described_class.config_snapshot
+
+      expect(snapshot).to include(:url, :model, :provider, :dims)
+      expect(snapshot[:dims]).to be_a(Integer)
+    end
   end
 
   describe ".vector_enabled?" do
@@ -146,7 +157,14 @@ RSpec.describe EmbeddingService do
 
   describe "#embed (openai_compatible provider)" do
     let(:openai_service) do
-      described_class.new(url: "http://openai.test", model: "text-embed", provider: "openai_compatible", dims: dims)
+      described_class.new(
+        config: {
+          url: "http://openai.test",
+          model: "text-embed",
+          provider: "openai_compatible",
+          dims: dims
+        }
+      )
     end
 
     it "uses the /embeddings endpoint and extracts from data[0].embedding" do
@@ -278,6 +296,37 @@ RSpec.describe EmbeddingService do
     end
   end
 
+  describe "#check_connection" do
+    it "returns ok with dims and latency when embed succeeds" do
+      stub_successful_embed
+
+      result = service.check_connection
+
+      expect(result[:ok]).to be true
+      expect(result[:dims]).to eq(dims)
+      expect(result[:latency_ms]).to be_a(Numeric)
+      expect(result[:error]).to be_nil
+    end
+
+    it "returns failure when embed returns nil" do
+      allow(service).to receive(:embed).and_return(nil)
+
+      result = service.check_connection
+
+      expect(result[:ok]).to be false
+      expect(result[:error]).to include("nil")
+    end
+
+    it "returns failure on dimension mismatch" do
+      allow(service).to receive(:embed).and_return([ 0.1, 0.2 ])
+
+      result = service.check_connection
+
+      expect(result[:ok]).to be false
+      expect(result[:error]).to match(/Dimension mismatch/)
+    end
+  end
+
   describe "#regenerate_all" do
     it "returns zeros when vector is disabled" do
       allow(described_class).to receive(:vector_enabled?).and_return(false)
@@ -291,6 +340,24 @@ RSpec.describe EmbeddingService do
       allow(described_class).to receive(:vector_enabled?).and_return(false)
       result = service.backfill_all
       expect(result).to eq({ entities: 0, observations: 0 })
+    end
+  end
+
+  describe ".reset_instance!" do
+    it "clears the singleton so the next instance uses fresh config" do
+      first = described_class.instance
+      described_class.reset_instance!
+      second = described_class.instance
+
+      expect(second).not_to equal(first)
+    end
+  end
+
+  describe ".config_snapshot" do
+    it "delegates to EmbeddingConfig" do
+      expect(EmbeddingConfig).to receive(:resolved_config).and_return(url: "http://test", model: "m", provider: "ollama", dims: 4)
+
+      expect(described_class.config_snapshot[:url]).to eq("http://test")
     end
   end
 end

@@ -5,11 +5,7 @@ require "json"
 require "uri"
 
 # Generates vector embeddings via Ollama (or OpenAI-compatible) API.
-# Configuration via environment variables:
-#   OLLAMA_URL        - Base URL of the embedding server (default: http://localhost:11434)
-#   EMBEDDING_MODEL   - Model name (default: nomic-embed-text)
-#   EMBEDDING_PROVIDER- "ollama" or "openai_compatible" (default: ollama)
-#   EMBEDDING_DIMS    - Expected dimension count (default: 768)
+# Configuration priority: AppSettings → ENV → defaults (see EmbeddingConfig).
 class EmbeddingService
   MAX_RETRIES = 3
   RETRY_BASE_DELAY = 0.5
@@ -23,7 +19,15 @@ class EmbeddingService
 
     delegate :embed, :embed_entity, :embed_observation,
              :embed_entity_binary, :embed_observation_binary,
-             :backfill_all, :regenerate_all, to: :instance
+             :backfill_all, :regenerate_all, :check_connection, to: :instance
+
+    def config_snapshot
+      EmbeddingConfig.resolved_config
+    end
+
+    def reset_instance!
+      remove_instance_variable(:@instance) if defined?(@instance)
+    end
 
     # Runtime check: does the DB have VECTOR columns?
     # Cached per-process to avoid repeated schema queries.
@@ -41,16 +45,12 @@ class EmbeddingService
     end
   end
 
-  def initialize(
-    url: ENV.fetch("OLLAMA_URL", "http://localhost:11434"),
-    model: ENV.fetch("EMBEDDING_MODEL", "nomic-embed-text"),
-    provider: ENV.fetch("EMBEDDING_PROVIDER", "ollama"),
-    dims: ENV.fetch("EMBEDDING_DIMS", "768").to_i
-  )
-    @base_url = url.chomp("/")
-    @model = model
-    @provider = provider.to_s
-    @dims = dims
+  def initialize(config: nil)
+    config ||= EmbeddingConfig.resolved_config
+    @base_url = config[:url].to_s.chomp("/")
+    @model = config[:model].to_s
+    @provider = config[:provider].to_s
+    @dims = config[:dims].to_i
     @logger = Rails.logger
     @mutex = Mutex.new
   end
@@ -123,6 +123,32 @@ class EmbeddingService
     return nil unless vector
 
     vector.pack("e*")
+  end
+
+  # Smoke-test the embedding endpoint (same path as rake embeddings:check).
+  # Returns { ok:, dims:, latency_ms:, error: } — never raises.
+  def check_connection
+    start = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+    vector = embed("connection test")
+    latency_ms = ((Process.clock_gettime(Process::CLOCK_MONOTONIC) - start) * 1000).round(1)
+
+    if vector.nil?
+      return { ok: false, dims: nil, latency_ms: latency_ms, error: "Embedding request returned nil" }
+    end
+
+    if vector.length != @dims
+      return {
+        ok: false,
+        dims: vector.length,
+        latency_ms: latency_ms,
+        error: "Dimension mismatch: expected #{@dims}, got #{vector.length}"
+      }
+    end
+
+    { ok: true, dims: vector.length, latency_ms: latency_ms, error: nil }
+  rescue StandardError => e
+    latency_ms = ((Process.clock_gettime(Process::CLOCK_MONOTONIC) - start) * 1000).round(1) if start
+    { ok: false, dims: nil, latency_ms: latency_ms, error: e.message }
   end
 
   # Force-recompute embeddings for every entity and observation,

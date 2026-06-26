@@ -457,6 +457,58 @@
   font-size: 0.9rem;
 }
 
+.dashboard-settings-field__input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.dashboard-settings-field__fallback {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+  margin: 0;
+  color: #475569;
+  font-size: 0.8rem;
+}
+
+.dashboard-settings-field__fallback-label {
+  font-weight: 500;
+}
+
+.dashboard-settings-field__fallback-value {
+  padding: 0.1rem 0.35rem;
+  background: #f1f5f9;
+  border-radius: 4px;
+  font-size: 0.78rem;
+}
+
+.embeddings-source-badge {
+  display: inline-block;
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.embeddings-source-badge--app_settings {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.embeddings-source-badge--env {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.embeddings-source-badge--default {
+  background: #f1f5f9;
+  color: #475569;
+}
+
 .dashboard-settings-switch {
   position: relative;
   display: inline-flex;
@@ -683,4 +735,18 @@
 
 .audit-logs-pagination {
   margin-top: 1rem;
+}
+
+.embeddings-config__url {
+  word-break: break-all;
+}
+
+.embeddings-actions {
+  flex-wrap: wrap;
+}
+
+.embeddings-connection-result {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid #e2e8f0;
 }

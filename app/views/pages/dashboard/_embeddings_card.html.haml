@@ -1,0 +1,37 @@
+- status = embeddings
+.dashboard-card.dashboard-card--state
+  .dashboard-card__header
+    %h2.dashboard-card__title= t("operator.embeddings.title")
+    %span.dashboard-card__hint= status[:vector_enabled] ? t("operator.embeddings.enabled") : t("operator.embeddings.disabled")
+  .dashboard-card__body
+    - if status[:vector_enabled]
+      .dashboard-stat-chips
+        = dashboard_stat_chip(t("operator.embeddings.summary.coverage"), "#{status[:coverage_percent]}%")
+        = dashboard_stat_chip(t("operator.embeddings.summary.entities_missing"), status[:entities_missing])
+        = dashboard_stat_chip(t("operator.embeddings.summary.observations_missing"), status[:observations_missing])
+
+      %dl.dashboard-kv
+        %dt= t("operator.embeddings.summary.ann_index")
+        %dd
+          - if status[:indexes][:memory_entities] && status[:indexes][:memory_observations]
+            = t("operator.embeddings.yes")
+          - else
+            = t("operator.embeddings.no")
+        %dt= t("operator.embeddings.vector_search_ready")
+        %dd= status[:vector_search_ready] ? t("operator.embeddings.yes") : t("operator.embeddings.no")
+
+      - if status[:pending_job][:any]
+        %p.dashboard-card__hint{ data: { testid: "dashboard-embeddings-pending" } }
+          = t("operator.embeddings.pending_job")
+      - elsif status[:last_maintenance_report].present?
+        - data = status[:last_maintenance_report].data || {}
+        %p.dashboard-card__hint{ data: { testid: "dashboard-embeddings-last-report" } }
+          = t("operator.embeddings.dashboard_last_backfill",
+              mode: data["mode"],
+              entities: data["entities"],
+              observations: data["observations"])
+    - else
+      %p.dashboard-card__hint= t("operator.embeddings.hints.vector_disabled")
+
+  .dashboard-card__actions
+    = link_to t("operator.embeddings.manage"), operator_embeddings_path, class: "dashboard-btn dashboard-btn--primary", id: "btn-dashboard-embeddings"

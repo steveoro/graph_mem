@@ -36,6 +36,13 @@ RSpec.describe "Operator dashboard pages", type: :request do
       expect(response.body).to include(operator_audit_logs_path)
     end
 
+    it "includes the embeddings dashboard card" do
+      get root_path
+
+      expect(response.body).to include('id="btn-dashboard-embeddings"')
+      expect(response.body).to include(operator_embeddings_path)
+    end
+
     it "shows repair action when compaction failed with a relation error" do
       CompactionRun.create!(
         status: "failed",

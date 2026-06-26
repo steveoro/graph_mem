@@ -13,6 +13,7 @@ class MaintenanceDashboardSnapshot
       refreshed_at: Time.current,
       compaction: compaction_snapshot,
       graph_stats: graph_stats,
+      embeddings: EmbeddingStatusSnapshot.call,
       latest_reports: latest_reports_by_type,
       schedules: schedule_hints,
       cursor_entity: cursor_entity

@@ -15,6 +15,33 @@ class AppSettings < RailsSettings::Base
   field :backup_schedule_cron, default: "N/A", type: :string, readonly: true
   field :enable_scheduled_backups, default: false, type: :boolean
 
+  # Embedding service settings (empty / zero defers to ENV)
+  field :embedding_url, default: "", type: :string
+  field :embedding_model, default: "", type: :string
+  field :embedding_provider, default: "", type: :string
+  field :embedding_dims, default: 0, type: :integer
+  field :enable_scheduled_embedding_backfill, default: false, type: :boolean
+  field :embedding_backfill_schedule_cron, default: "N/A", type: :string, readonly: true
+
+  def self.embedding_backfill_schedule_cron
+    yaml = YAML.safe_load_file(
+      Rails.root.join("config", "recurring.yml"),
+      aliases: true
+    )
+    env_config = yaml[Rails.env] || {}
+    schedules = env_config.filter_map do |_key, entry|
+      entry["schedule"] if entry.is_a?(Hash) && entry["class"] == "EmbeddingScheduledBackfillJob"
+    end
+    schedules.presence&.join(", ") || "N/A"
+  rescue StandardError => e
+    Rails.logger.warn("Failed to read embedding backfill schedules from recurring.yml: #{e.message}")
+    "N/A"
+  end
+
+  def self.scheduled_embedding_backfill_enabled?
+    read_boolean_setting("enable_scheduled_embedding_backfill")
+  end
+
   def self.backup_schedule_cron
     yaml = YAML.safe_load_file(
       Rails.root.join("config", "recurring.yml"),

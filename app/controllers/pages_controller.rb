@@ -8,6 +8,7 @@ class PagesController < ApplicationController
     @latest_reports = @snapshot[:latest_reports]
     @schedules = @snapshot[:schedules]
     @cursor_entity = @snapshot[:cursor_entity]
+    @embeddings = @snapshot[:embeddings]
     @refreshed_at = @snapshot[:refreshed_at]
   end
 

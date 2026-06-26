@@ -214,7 +214,7 @@ GraphMem uses MariaDB 11.8's native VECTOR columns with the MHNSW algorithm for 
 3. **Search**: `VectorSearchStrategy` embeds the query and finds nearest entities via `VEC_DISTANCE_COSINE`.
 4. **Hybrid fusion**: `HybridSearchStrategy` merges text and vector results using Reciprocal Rank Fusion (RRF). When a project context is active, in-context entities receive a score boost.
 
-The embedding service is configurable via environment variables (`OLLAMA_URL`, `EMBEDDING_MODEL`, etc.) and gracefully degrades when unavailable.
+The embedding service is configurable via **System Settings → Embeddings** (AppSettings) or environment variables (`OLLAMA_URL`, `EMBEDDING_MODEL`, etc.). Resolution priority: AppSettings → ENV → defaults. It gracefully degrades when unavailable.
 
 ## Error Handling
 

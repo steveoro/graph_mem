@@ -15,13 +15,14 @@ en:
       invalid_credentials: "Invalid username or password."
     settings:
       title: "System Settings"
-      subtitle: "Configure feature flags and database backup behavior."
+      subtitle: "Configure feature flags, database backup, and embedding service behavior."
       save_group: "Save changes"
       reset: "Reset"
       footer_info: "Changes apply immediately: no need to restart the application. Scheduled backup times are defined in config/recurring.yml."
       groups:
         feature_flags: "Feature Flags"
         database_backup: "Database Backup"
+        embeddings: "Embeddings"
       bulk_update:
         success: "Saved %{count} setting(s) successfully."
         partial: "Saved %{success} setting(s); %{failed} failed."
@@ -47,6 +48,24 @@ en:
         enable_scheduled_backups:
           label: "Enable scheduled backups"
           description: "When enabled, Solid Queue runs DatabaseBackupJob on the schedule shown above."
+        embedding_url:
+          label: "Embedding server URL"
+          description: "Ollama or OpenAI-compatible embedding endpoint. Leave blank to use OLLAMA_URL from the environment."
+        embedding_model:
+          label: "Embedding model"
+          description: "Model name passed to the embedding API. Leave blank to use EMBEDDING_MODEL from the environment."
+        embedding_provider:
+          label: "Embedding provider"
+          description: "ollama or openai_compatible. Leave blank to use EMBEDDING_PROVIDER from the environment."
+        embedding_dims:
+          label: "Embedding dimensions"
+          description: "Expected vector size (e.g. 768). Set to 0 to use EMBEDDING_DIMS from the environment or the default."
+        enable_scheduled_embedding_backfill:
+          label: "Enable scheduled backfill"
+          description: "When enabled, Solid Queue runs a daily backfill job for missing embeddings."
+        embedding_backfill_schedule_cron:
+          label: "Scheduled backfill times"
+          description: "Read from config/recurring.yml for the current environment."
       backup:
         actions_title: "Manual backup"
         list_title: "Available backups"
@@ -68,3 +87,13 @@ en:
           size: "Size"
           modified: "Modified"
           actions: "Actions"
+      embeddings:
+        blank_uses_env: "Leave blank to use ENV"
+        used_when_blank: "Used when blank:"
+        provider_blank: "— use ENV / default —"
+        priority_hint: "Configuration priority: AppSettings (this tab) → environment variables → built-in defaults. Workers pick up changes after save."
+        manage_link: "Open embeddings dashboard"
+        test_title: "Connection test"
+        invalid_provider: "Invalid embedding provider. Use ollama or openai_compatible."
+        invalid_dims: "Dimensions must be 0 (use ENV/default) or between 1 and 4096."
+        invalid_url: "Embedding URL must be a valid http or https URL."

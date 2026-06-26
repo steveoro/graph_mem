@@ -6,7 +6,7 @@ GraphMem stores operator-tunable runtime settings in the primary MariaDB `settin
 
 - **URL:** `/operator/settings`
 - **Auth:** session login at `/operator/login` (`OPERATOR_USERNAME` / `OPERATOR_PASSWORD`, or `credentials.operator.username` / `credentials.operator.password`)
-- **Tabs:** Feature Flags, Database Backup
+- **Tabs:** Feature Flags, Database Backup, Embeddings
 
 ## Feature Flags
 
@@ -35,6 +35,21 @@ Boolean flags consumed by background workers use direct database reads so Solid 
 ### Docker
 
 Mount the host backup directory to match `backup_folder_path` (see `DB_BACKUP_HOST_PATH` in `docker-compose.yml`).
+
+## Embeddings
+
+| Setting | Default | Effect |
+|---|---|---|
+| `embedding_url` | `""` | Embedding server URL. Blank defers to `OLLAMA_URL` ENV. |
+| `embedding_model` | `""` | Model name. Blank defers to `EMBEDDING_MODEL` ENV. |
+| `embedding_provider` | `""` | `ollama` or `openai_compatible`. Blank defers to `EMBEDDING_PROVIDER` ENV. |
+| `embedding_dims` | `0` | Expected vector size. `0` defers to `EMBEDDING_DIMS` ENV or default `768`. |
+| `embedding_backfill_schedule_cron` | from `recurring.yml` | Read-only display of `EmbeddingScheduledBackfillJob` schedule. |
+| `enable_scheduled_embedding_backfill` | `false` | When `true`, daily backfill job runs for records missing embeddings. |
+
+Resolution order for runtime embedding config: **AppSettings → ENV → defaults** (`EmbeddingConfig`). Saving the Embeddings tab calls `EmbeddingService.reset_instance!`.
+
+See [operator embeddings guide](operator/embeddings.md).
 
 ## Mission Control Jobs
 

@@ -98,6 +98,13 @@ Rails.application.routes.draw do
     get "audit_logs", to: "audit_logs#index", as: :audit_logs
     post "audit_logs/prune", to: "audit_logs#prune", as: :prune_audit_logs
 
+    get "embeddings", to: "embeddings#index", as: :embeddings
+    post "embeddings/test_connection", to: "embeddings#test_connection", as: :test_embeddings_connection
+    post "embeddings/backfill", to: "embeddings#backfill", as: :backfill_embeddings
+    post "embeddings/regenerate", to: "embeddings#regenerate", as: :regenerate_embeddings
+    post "embeddings/add_indexes", to: "embeddings#add_indexes", as: :add_embeddings_indexes
+    post "embeddings/drop_indexes", to: "embeddings#drop_indexes", as: :drop_embeddings_indexes
+
     get "settings", to: "settings#index", as: :settings
     patch "settings", to: "settings#bulk_update", as: :settings_bulk_update
     post "settings/backup/run", to: "settings#run_backup", as: :run_backup

@@ -66,6 +66,56 @@ RSpec.describe "Operator settings", type: :request do
       expect(AppSettings.backup_keep_max).to eq(7)
       expect(AppSettings.enable_scheduled_backups).to be true
     end
+
+    it "updates embedding settings and resets the service instance" do
+      expect(EmbeddingService).to receive(:reset_instance!)
+
+      patch operator_settings_bulk_update_path,
+            params: {
+              tab: "embeddings",
+              settings: {
+                embedding_url: "http://embeddings.test:11434",
+                embedding_model: "custom-model",
+                embedding_provider: "ollama",
+                embedding_dims: "512",
+                enable_scheduled_embedding_backfill: "1"
+              }
+            }
+
+      expect(response).to redirect_to(operator_settings_path(tab: "embeddings"))
+      expect(AppSettings.embedding_url).to eq("http://embeddings.test:11434")
+      expect(AppSettings.embedding_model).to eq("custom-model")
+      expect(AppSettings.embedding_dims).to eq(512)
+      expect(AppSettings.enable_scheduled_embedding_backfill).to be true
+    end
+
+    it "rejects invalid embedding provider" do
+      patch operator_settings_bulk_update_path,
+            params: {
+              tab: "embeddings",
+              settings: {
+                embedding_provider: "invalid"
+              }
+            }
+
+      expect(response).to redirect_to(operator_settings_path(tab: "embeddings"))
+      follow_redirect!
+      expect(response.body).to include("Invalid embedding provider")
+    end
+
+    it "renders fallback values on the embeddings tab" do
+      ENV["OLLAMA_URL"] = "http://env-fallback.test:11434"
+      ENV.delete("EMBEDDING_MODEL")
+
+      get operator_settings_path(tab: "embeddings")
+
+      expect(response).to have_http_status(:ok)
+      expect(response.body).to include('data-testid="embedding-fallback-url"')
+      expect(response.body).to include("http://env-fallback.test:11434")
+      expect(response.body).to include("nomic-embed-text")
+      expect(response.body).to include('data-testid="embedding-source-env"')
+      expect(response.body).to include('data-testid="embedding-source-default"')
+    end
   end
 
   describe "POST /operator/settings/backup/run" do

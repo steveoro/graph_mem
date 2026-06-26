@@ -14,6 +14,15 @@ module Operator
       settings = params[:settings] || {}
       results = { success: [], failed: [] }
 
+      if params[:tab] == "embeddings"
+        validation_error = validate_embeddings_settings(settings)
+        if validation_error
+          flash[:alert] = validation_error
+          redirect_to operator_settings_path(tab: params[:tab])
+          return
+        end
+      end
+
       settings.each do |key, value|
         next unless AppSettings.defined_fields.map(&:key).include?(key)
 
@@ -30,6 +39,7 @@ module Operator
 
       if results[:failed].empty?
         flash[:notice] = t("operator.settings.bulk_update.success", count: results[:success].count)
+        EmbeddingService.reset_instance! if params[:tab] == "embeddings"
       else
         flash[:alert] = t("operator.settings.bulk_update.partial",
                           success: results[:success].count,
@@ -81,8 +91,41 @@ module Operator
         database_backup: {
           title: t("operator.settings.groups.database_backup"),
           settings: %w[backup_folder_path backup_keep_max backup_schedule_cron enable_scheduled_backups]
+        },
+        embeddings: {
+          title: t("operator.settings.groups.embeddings"),
+          settings: %w[
+            embedding_url embedding_model embedding_provider embedding_dims
+            enable_scheduled_embedding_backfill embedding_backfill_schedule_cron
+          ]
         }
       }
+    end
+
+    def validate_embeddings_settings(settings)
+      provider = settings["embedding_provider"].to_s
+      unless EmbeddingConfig.valid_provider?(provider)
+        return t("operator.settings.embeddings.invalid_provider")
+      end
+
+      dims = settings["embedding_dims"].to_i
+      if dims.positive? && (dims < 1 || dims > 4096)
+        return t("operator.settings.embeddings.invalid_dims")
+      end
+
+      url = settings["embedding_url"].to_s.strip
+      if url.present? && !valid_embedding_url?(url)
+        return t("operator.settings.embeddings.invalid_url")
+      end
+
+      nil
+    end
+
+    def valid_embedding_url?(url)
+      uri = URI.parse(url)
+      uri.is_a?(URI::HTTP) && uri.host.present?
+    rescue URI::InvalidURIError
+      false
     end
 
     def convert_value(value, type)

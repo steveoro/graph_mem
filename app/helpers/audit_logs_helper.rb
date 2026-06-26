@@ -25,11 +25,11 @@ module AuditLogsHelper
 
   def audit_log_action_badge(action)
     css = case action.to_s
-          when "create" then "dashboard-badge--completed"
-          when "update" then "dashboard-badge--running"
-          when "delete" then "dashboard-badge--failed"
-          else "dashboard-badge--idle"
-          end
+    when "create" then "dashboard-badge--completed"
+    when "update" then "dashboard-badge--running"
+    when "delete" then "dashboard-badge--failed"
+    else "dashboard-badge--idle"
+    end
 
     content_tag(:span, t("operator.audit_logs.actions.#{action}", default: action.to_s.humanize),
                 class: "dashboard-badge #{css}")

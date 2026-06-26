@@ -35,6 +35,7 @@
   %section.dashboard-state-grid
     = render "pages/dashboard/dream_state_compactor_card", compaction: @compaction, cursor_entity: @cursor_entity, schedules: @schedules, latest_reports: @latest_reports
     = render "pages/dashboard/garbage_collector_card", latest_reports: @latest_reports, schedules: @schedules
+    = render "pages/dashboard/embeddings_card", embeddings: @embeddings
 
   %section.dashboard-details
     = render "pages/dashboard/reports_details", latest_reports: @latest_reports, compaction: @compaction

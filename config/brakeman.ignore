@@ -1,6 +1,29 @@
 {
   "ignored_warnings": [
     {
+      "warning_type": "SQL Injection",
+      "warning_code": 0,
+      "fingerprint": "00861d96c9b5ff83ca5efb5296f8b3a5d392a074761874c71cde96d7728afc54",
+      "check_name": "SQL",
+      "message": "Possible SQL injection",
+      "file": "app/services/embedding_index_manager.rb",
+      "line": 38,
+      "link": "https://brakemanscanner.org/docs/warning_types/sql_injection/",
+      "code": "ActiveRecord::Base.connection.execute(\"ALTER TABLE memory_observations MODIFY embedding VECTOR(#{EmbeddingConfig.resolved_config[:dims]}) NOT NULL DEFAULT #{zero_vector_sql(EmbeddingConfig.resolved_config[:dims])}\")",
+      "render_path": null,
+      "location": {
+        "type": "method",
+        "class": "EmbeddingIndexManager",
+        "method": "add_indexes!"
+      },
+      "user_input": "EmbeddingConfig.resolved_config[:dims]",
+      "confidence": "Medium",
+      "cwe_id": [
+        89
+      ],
+      "note": ""
+    },
+    {
       "warning_type": "File Access",
       "warning_code": 16,
       "fingerprint": "882aef7a28469b2193f57f7b3c3633745da3c7479c7ea5cbc91e8f4a68444511",
@@ -20,6 +43,52 @@
       "confidence": "Weak",
       "cwe_id": [
         22
+      ],
+      "note": ""
+    },
+    {
+      "warning_type": "SQL Injection",
+      "warning_code": 0,
+      "fingerprint": "96dcd7b5de7a7d1ea8783dcbe3043a6534aebd9f122d37d8a04f4468e6a9e1e0",
+      "check_name": "SQL",
+      "message": "Possible SQL injection",
+      "file": "app/services/embedding_index_manager.rb",
+      "line": 71,
+      "link": "https://brakemanscanner.org/docs/warning_types/sql_injection/",
+      "code": "ActiveRecord::Base.connection.execute(\"ALTER TABLE #{:BRAKEMAN_SAFE_LITERAL} MODIFY embedding VECTOR(#{EmbeddingConfig.resolved_config[:dims]}) DEFAULT NULL\")",
+      "render_path": null,
+      "location": {
+        "type": "method",
+        "class": "EmbeddingIndexManager",
+        "method": "drop_indexes!"
+      },
+      "user_input": "EmbeddingConfig.resolved_config[:dims]",
+      "confidence": "Medium",
+      "cwe_id": [
+        89
+      ],
+      "note": ""
+    },
+    {
+      "warning_type": "SQL Injection",
+      "warning_code": 0,
+      "fingerprint": "9828bb42e1503f3d72a2ca90198703572154bb5e0544a922cc41128a4bfaf9c2",
+      "check_name": "SQL",
+      "message": "Possible SQL injection",
+      "file": "app/services/embedding_index_status.rb",
+      "line": 25,
+      "link": "https://brakemanscanner.org/docs/warning_types/sql_injection/",
+      "code": "ActiveRecord::Base.connection.execute(\"SHOW INDEX FROM #{table} WHERE Key_name = #{ActiveRecord::Base.connection.quote(index_name)}\")",
+      "render_path": null,
+      "location": {
+        "type": "method",
+        "class": "EmbeddingIndexStatus",
+        "method": "index_exists?"
+      },
+      "user_input": "table",
+      "confidence": "Medium",
+      "cwe_id": [
+        89
       ],
       "note": ""
     },
@@ -47,6 +116,29 @@
       "note": ""
     },
     {
+      "warning_type": "HTTP Verb Confusion",
+      "warning_code": 118,
+      "fingerprint": "a2a42f98e88831fc3b59e589ff9c98fa204e2754b3f916139e1f4a8e288ec54c",
+      "check_name": "VerbConfusion",
+      "message": "Potential HTTP verb confusion. `HEAD` is routed like `GET` but `request.get?` will return `false`",
+      "file": "app/controllers/application_controller.rb",
+      "line": 43,
+      "link": "https://brakemanscanner.org/docs/warning_types/http_verb_confusion/",
+      "code": "session[:operator_return_to] = request.fullpath if request.get?",
+      "render_path": null,
+      "location": {
+        "type": "method",
+        "class": "ApplicationController",
+        "method": "authenticate_operator!"
+      },
+      "user_input": "request.get?",
+      "confidence": "Weak",
+      "cwe_id": [
+        352
+      ],
+      "note": ""
+    },
+    {
       "warning_type": "SQL Injection",
       "warning_code": 0,
       "fingerprint": "b6fe48d14c11aaac330fe173887712bb030ea4bec9dfb0bbe472ff66e634ceb6",
@@ -63,6 +155,29 @@
         "method": "search_observations"
       },
       "user_input": "embedding_service.embed(query).join(\",\")",
+      "confidence": "Medium",
+      "cwe_id": [
+        89
+      ],
+      "note": ""
+    },
+    {
+      "warning_type": "SQL Injection",
+      "warning_code": 0,
+      "fingerprint": "c51df2de48440a7fe5eee0957f6d3e113e992e19f415c6663ad9da5b1305206c",
+      "check_name": "SQL",
+      "message": "Possible SQL injection",
+      "file": "app/services/embedding_index_manager.rb",
+      "line": 37,
+      "link": "https://brakemanscanner.org/docs/warning_types/sql_injection/",
+      "code": "ActiveRecord::Base.connection.execute(\"ALTER TABLE memory_entities MODIFY embedding VECTOR(#{EmbeddingConfig.resolved_config[:dims]}) NOT NULL DEFAULT #{zero_vector_sql(EmbeddingConfig.resolved_config[:dims])}\")",
+      "render_path": null,
+      "location": {
+        "type": "method",
+        "class": "EmbeddingIndexManager",
+        "method": "add_indexes!"
+      },
+      "user_input": "EmbeddingConfig.resolved_config[:dims]",
       "confidence": "Medium",
       "cwe_id": [
         89

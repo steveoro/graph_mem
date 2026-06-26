@@ -357,6 +357,22 @@ Point them to the workstation's SSE endpoint:
 
 ## Embedding Management
 
+### Operator dashboard
+
+Sign in at `/operator/login`, then open **Embeddings** from the home dashboard or go to `/operator/embeddings`. The page shows coverage, index status, resolved configuration (with source badges: AppSettings / ENV / Default), connection test, backfill/regenerate jobs, and add/drop ANN index actions.
+
+Embedding service settings live under **System Settings → Embeddings** (`/operator/settings?tab=embeddings`). Configuration resolves in this order:
+
+| Priority | Source |
+|---|---|
+| 1 | AppSettings (operator UI) — blank string or `0` dims defers to ENV |
+| 2 | Environment variables (`OLLAMA_URL`, `EMBEDDING_MODEL`, `EMBEDDING_PROVIDER`, `EMBEDDING_DIMS`) |
+| 3 | Built-in defaults (`http://localhost:11434`, `nomic-embed-text`, `ollama`, 768) |
+
+ENV variables remain the right choice for Docker and deployment manifests; the UI overrides them when values are set. Enable **scheduled backfill** in settings to run `EmbeddingScheduledBackfillJob` daily (see `config/recurring.yml`).
+
+See [docs/operator/embeddings.md](docs/operator/embeddings.md) for the recommended operator workflow.
+
 ### Testing Ollama Connectivity
 
 Before backfilling or regenerating embeddings, verify that the app can reach your Ollama instance:
@@ -369,7 +385,7 @@ docker compose exec app bin/rails embeddings:check
 bin/rails embeddings:check
 ```
 
-This sends a single test embedding through `EmbeddingService` using the configured `OLLAMA_URL`, `EMBEDDING_MODEL`, and `EMBEDDING_PROVIDER`. It reports the resolved config, response latency, and vector dimensions — the exact same code path used by `backfill` and `regenerate`.
+This sends a single test embedding through `EmbeddingService` using the resolved configuration (AppSettings → ENV → defaults). It reports the resolved config, response latency, and vector dimensions — the exact same code path used by `backfill` and `regenerate`.
 
 For a lower-level check, `curl` is available inside the production container (host networking
 means `localhost` reaches Ollama directly):
@@ -398,9 +414,9 @@ docker compose exec app curl -sf http://localhost:11434/api/embed \
 To change the model (e.g. from `nomic-embed-text` to a different one):
 
 1. Pull the new model on the Ollama host: `ollama pull <model-name>`
-2. Update `EMBEDDING_MODEL` (and `EMBEDDING_DIMS` if different) in `.env`
-3. Verify connectivity: `bin/rails embeddings:check`
-4. Recompute all vectors: `bin/rails embeddings:regenerate`
+2. Update the model (and dimensions if different) in **System Settings → Embeddings** or via `EMBEDDING_MODEL` / `EMBEDDING_DIMS` in `.env`
+3. Verify connectivity: `bin/rails embeddings:check` or the operator **Test connection** button
+4. Recompute all vectors: `bin/rails embeddings:regenerate` or the operator **Regenerate all** action
 
 
 
@@ -429,7 +445,7 @@ Sign in at `/operator/login`. Default operator credentials: `operator` / `change
 
 | Variable | Default | Description |
 |---|---|---|
-| `OLLAMA_URL` | `http://localhost:11434` | Ollama API base URL |
+| `OLLAMA_URL` | `http://localhost:11434` | Ollama API base URL (overridden by AppSettings `embedding_url` when set) |
 | `EMBEDDING_MODEL` | `nomic-embed-text` | Ollama model name for embeddings |
 | `EMBEDDING_PROVIDER` | `ollama` | `ollama` or `openai_compatible` |
 | `EMBEDDING_DIMS` | `768` | Vector dimensions (must match model) |
@@ -445,6 +461,7 @@ Sign in at `/operator/login`. Default operator credentials: `operator` / `change
 
 ## Documentation
 
+* [Operator embeddings guide](docs/operator/embeddings.md)
 * [MCP Tools Reference](docs/mcp_tools.md)
 * [App Settings Reference](docs/app_settings_reference.md)
 * [Architecture](docs/architecture.md)

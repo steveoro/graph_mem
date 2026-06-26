@@ -3,6 +3,10 @@ development:
     class: DreamStateCompactionJob
     queue: default
     schedule: every hour
+  embedding_backfill:
+    class: EmbeddingScheduledBackfillJob
+    queue: low_priority
+    schedule: every day at 4am
 
 production:
   garbage_collection:
@@ -22,3 +26,7 @@ production:
     class: DatabaseBackupJob
     queue: low_priority
     schedule: every day at 5pm
+  embedding_backfill:
+    class: EmbeddingScheduledBackfillJob
+    queue: low_priority
+    schedule: at 4am every day

@@ -1,0 +1,124 @@
+.dashboard-page
+  %header.dashboard-header
+    %div
+      %h1.dashboard-header__title= t("operator.embeddings.title")
+      %p.dashboard-header__subtitle= t("operator.embeddings.subtitle")
+    = link_to t("operator.embeddings.back_to_dashboard"), root_path, class: "dashboard-btn dashboard-btn--secondary", id: "btn-embeddings-back"
+
+  %section.dashboard-stat-chips
+    = dashboard_stat_chip(t("operator.embeddings.summary.coverage"), "#{@status[:coverage_percent]}%")
+    = dashboard_stat_chip(t("operator.embeddings.summary.entities_missing"), @status[:entities_missing])
+    = dashboard_stat_chip(t("operator.embeddings.summary.observations_missing"), @status[:observations_missing])
+    = dashboard_stat_chip(t("operator.embeddings.vector_search_ready"), @status[:vector_search_ready] ? t("operator.embeddings.yes") : t("operator.embeddings.no"))
+
+  - if @status[:pending_job][:any]
+    %p.dashboard-card__hint.embeddings-pending-job{ data: { testid: "embeddings-pending-job" } }
+      = t("operator.embeddings.pending_job")
+
+  .dashboard-card
+    %h2.dashboard-card__title= t("operator.embeddings.config.title")
+    %p.dashboard-card__hint
+      = link_to t("operator.embeddings.edit_settings"), operator_settings_path(tab: "embeddings"), id: "link-embeddings-settings"
+
+    %dl.dashboard-kv.embeddings-config
+      = embedding_config_row(t("operator.embeddings.config.provider"), @status[:config][:provider], @status[:config][:sources][:provider])
+      = embedding_config_row(t("operator.embeddings.config.model"), @status[:config][:model], @status[:config][:sources][:model])
+      %dt= t("operator.embeddings.config.url")
+      %dd.embeddings-config__url
+        = @status[:config][:url]
+        = embedding_config_source_badge(@status[:config][:sources][:url])
+      = embedding_config_row(t("operator.embeddings.config.dims"), @status[:config][:dims], @status[:config][:sources][:dims])
+      %dt= t("operator.embeddings.vector_enabled")
+      %dd= @status[:vector_enabled] ? t("operator.embeddings.enabled") : t("operator.embeddings.disabled")
+
+    %h3.dashboard-details__subtitle= t("operator.embeddings.indexes.title")
+    %dl.dashboard-kv
+      %dt= t("operator.embeddings.indexes.memory_entities")
+      %dd= @status[:indexes][:memory_entities] ? t("operator.embeddings.yes") : t("operator.embeddings.no")
+      %dt= t("operator.embeddings.indexes.memory_observations")
+      %dd= @status[:indexes][:memory_observations] ? t("operator.embeddings.yes") : t("operator.embeddings.no")
+
+    - if @status[:last_maintenance_report].present?
+      - report = @status[:last_maintenance_report]
+      - data = report.data || {}
+      .embeddings-last-report{ data: { testid: "embeddings-last-report" } }
+        %h3.dashboard-details__subtitle= t("operator.embeddings.last_report.title")
+        %dl.dashboard-kv
+          %dt= t("operator.embeddings.last_report.mode")
+          %dd= data["mode"]
+          %dt= t("operator.embeddings.last_report.entities")
+          %dd= data["entities"]
+          %dt= t("operator.embeddings.last_report.observations")
+          %dd= data["observations"]
+          %dt= t("operator.embeddings.last_report.finished_at")
+          %dd= data["finished_at"]
+          %dt= t("operator.embeddings.last_report.duration")
+          %dd= "#{data['duration_ms']} ms"
+
+    %p.dashboard-card__hint
+      - if @status[:vector_search_ready]
+        = t("operator.embeddings.hints.vector_search_ready")
+      - elsif @status[:vector_enabled]
+        = t("operator.embeddings.hints.vector_search_not_ready")
+      - else
+        = t("operator.embeddings.hints.vector_disabled")
+
+    %p.dashboard-card__hint= t("operator.embeddings.hints.config_change")
+
+    .dashboard-card__actions.embeddings-actions
+      = button_to t("operator.embeddings.actions.test_connection"),
+        operator_test_embeddings_connection_path,
+        method: :post,
+        class: "dashboard-btn dashboard-btn--primary",
+        id: "btn-embeddings-test",
+        disabled: !@status[:vector_enabled]
+
+      - backfill_disabled = !@status[:vector_enabled] || (@status[:entities_missing].zero? && @status[:observations_missing].zero?) || @status[:pending_job][:backfill]
+      = button_to t("operator.embeddings.actions.backfill"),
+        operator_backfill_embeddings_path,
+        method: :post,
+        class: "dashboard-btn dashboard-btn--secondary",
+        id: "btn-embeddings-backfill",
+        disabled: backfill_disabled
+
+      = button_to t("operator.embeddings.actions.regenerate"),
+        operator_regenerate_embeddings_path,
+        method: :post,
+        class: "dashboard-btn dashboard-btn--secondary",
+        id: "btn-embeddings-regenerate",
+        disabled: !@status[:vector_enabled] || @status[:pending_job][:regenerate],
+        data: { turbo_confirm: t("operator.embeddings.regenerate_confirm") }
+
+      - indexes_present = @status[:indexes][:memory_entities] && @status[:indexes][:memory_observations]
+      - can_add_indexes = @status[:vector_enabled] && !indexes_present && @status[:entities_missing].zero? && @status[:observations_missing].zero?
+      = button_to t("operator.embeddings.actions.add_indexes"),
+        operator_add_embeddings_indexes_path,
+        method: :post,
+        class: "dashboard-btn dashboard-btn--secondary",
+        id: "btn-embeddings-add-indexes",
+        disabled: !can_add_indexes,
+        data: { turbo_confirm: t("operator.embeddings.add_indexes_confirm") }
+
+      = button_to t("operator.embeddings.actions.drop_indexes"),
+        operator_drop_embeddings_indexes_path,
+        method: :post,
+        class: "dashboard-btn dashboard-btn--secondary",
+        id: "btn-embeddings-drop-indexes",
+        disabled: !indexes_present,
+        data: { turbo_confirm: t("operator.embeddings.drop_indexes_confirm") }
+
+      = link_to t("operator.embeddings.actions.view_jobs"), "/operator/jobs", class: "dashboard-btn dashboard-btn--secondary", id: "btn-embeddings-jobs"
+
+    - if @connection_result.present?
+      .embeddings-connection-result
+        %h3.dashboard-details__subtitle= t("operator.embeddings.connection_result.title")
+        %dl.dashboard-kv
+          %dt Status
+          %dd= @connection_result[:ok] ? t("operator.embeddings.connection_result.ok") : t("operator.embeddings.connection_result.failed")
+          %dt= t("operator.embeddings.connection_result.dims")
+          %dd= @connection_result[:dims] || "—"
+          %dt= t("operator.embeddings.connection_result.latency")
+          %dd= @connection_result[:latency_ms] || "—"
+          - if @connection_result[:error].present?
+            %dt= t("operator.embeddings.connection_result.error")
+            %dd= @connection_result[:error]

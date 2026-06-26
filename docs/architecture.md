@@ -90,9 +90,13 @@ Thread-local storage for the active project context. When set:
 - `HybridSearchStrategy` applies a graduated context boost (stronger for the root project entity, lighter for its children)
 - `SearchSubgraphTool` ranks results using `SearchRelevanceBooster` with context-aware scoring
 
+#### Embedding configuration (`app/services/embedding_config.rb`)
+
+Resolves URL, model, provider, and dimensions with priority **AppSettings → ENV → defaults**. Used by `EmbeddingService`, rake tasks, and the operator embeddings UI. Operators can edit values under **System Settings → Embeddings**; workers pick up changes after save via `EmbeddingService.reset_instance!`.
+
 #### Embedding Service (`app/services/embedding_service.rb`)
 
-Calls Ollama to generate 768-dimensional vectors from entity composite text. Configurable via `OLLAMA_URL` and `EMBEDDING_MODEL` environment variables. Gracefully degrades when unavailable.
+Calls Ollama (or an OpenAI-compatible endpoint) to generate vectors from entity composite text. Uses `EmbeddingConfig.resolved_config`. Gracefully degrades when unavailable.
 
 ### 4. Data Access Layer
 
