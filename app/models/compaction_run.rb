@@ -2,7 +2,7 @@
 
 class CompactionRun < ApplicationRecord
   STATUSES = %w[idle running paused completed failed].freeze
-  PHASES = %w[orphans tree_walk].freeze
+  PHASES = %w[orphans tree_walk relationship_discovery].freeze
 
   serialize :stats, coder: JSON
 

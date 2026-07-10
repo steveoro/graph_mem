@@ -68,12 +68,51 @@ RSpec.describe DreamStateCompactor, type: :model do
 
   describe "phase completion" do
     it "marks the run completed after the final phase batch" do
-      run.update!(phase: "tree_walk", cursor_entity_id: project.id)
+      run.update!(phase: "relationship_discovery", cursor_entity_id: project.id)
 
       result = described_class.new(run: run).process_batch!
 
       expect(result).to eq(:completed)
       expect(run.reload.status).to eq("completed")
+    end
+  end
+
+  describe "relationship discovery" do
+    let(:discovery) { instance_double(RelationshipDiscoveryStrategy) }
+
+    it "queues relationship proposals and flushes them to compaction_review" do
+      issue = MemoryEntity.create!(name: "DiscoveryIssue", entity_type: "Issue")
+      MemoryObservation.create!(memory_entity: issue, content: "Blocks DiscoveryProject login flow")
+      solution = MemoryEntity.create!(name: "DiscoverySolution", entity_type: "PossibleSolution")
+      MemoryObservation.create!(memory_entity: solution, content: "Fixes DiscoveryProject login flow")
+
+      discovery_run = CompactionRun.create!(
+        status: "running",
+        phase: "relationship_discovery",
+        stats: {},
+        started_at: Time.current
+      )
+
+      allow(discovery).to receive(:proposals_for_entity).and_return(
+        [ {
+          kind: "relationship_proposal",
+          from_entity_id: solution.id,
+          to_entity_id: issue.id,
+          relation_type: "solves",
+          confidence_band: "high",
+          score: 11,
+          supporting_observation_ids: [ 1, 2 ],
+          explanation: "test"
+        } ]
+      )
+
+      compactor = described_class.new(run: discovery_run, relationship_discovery: discovery)
+      compactor.send(:process_relationship_discovery, solution.id)
+      compactor.send(:flush_review_queue!)
+
+      expect(discovery_run.reload.stats["relationships_queued"]).to eq(1)
+      report = MaintenanceReport.by_type("compaction_review").recent.first
+      expect(report.data["items"].first["kind"]).to eq("relationship_proposal")
     end
   end
 

@@ -57,7 +57,8 @@ class CompactionRunner
         "merges_queued" => 0,
         "observations_deduped" => 0,
         "orphans_parented" => 0,
-        "orphans_queued" => 0
+        "orphans_queued" => 0,
+        "relationships_queued" => 0
       }
     end
   end

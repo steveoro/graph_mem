@@ -12,6 +12,8 @@ class CompactionTraversal
       orphan_ids
     when "tree_walk"
       tree_walk_ids
+    when "relationship_discovery"
+      relationship_discovery_ids
     else
       []
     end
@@ -51,5 +53,9 @@ class CompactionTraversal
     end
 
     ids
+  end
+
+  def relationship_discovery_ids
+    MemoryEntity.where.not(entity_type: NodeOperationsStrategy::PROJECT_ENTITY_TYPE).order(:id).pluck(:id)
   end
 end

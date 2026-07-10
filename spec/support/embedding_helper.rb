@@ -21,8 +21,12 @@ RSpec.configure do |config|
     end
   end
 
-  config.before(:each) do
-    allow(EmbeddingService).to receive(:vector_enabled?).and_return(false)
+  config.before(:each) do |example|
+    if example.metadata[:with_test_embeddings]
+      allow(EmbeddingService).to receive(:vector_enabled?).and_return(true)
+    else
+      allow(EmbeddingService).to receive(:vector_enabled?).and_return(false)
+    end
   end
 
   config.after(:suite) do

@@ -45,6 +45,7 @@ module DashboardHelper
     case phase.to_s
     when "orphans" then "Orphan parenting"
     when "tree_walk" then "Tree walk compaction"
+    when "relationship_discovery" then "Relationship discovery"
     else phase.to_s.humanize
     end
   end

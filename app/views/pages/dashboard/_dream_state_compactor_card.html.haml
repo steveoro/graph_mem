@@ -52,6 +52,7 @@
       = dashboard_stat_chip("Deduped obs", stats["observations_deduped"] || 0)
       = dashboard_stat_chip("Orphans parented", stats["orphans_parented"] || 0)
       = dashboard_stat_chip("Orphans queued", stats["orphans_queued"] || 0)
+      = dashboard_stat_chip("Relationships queued", stats["relationships_queued"] || 0)
 
   .dashboard-card__actions
     - if compaction_pausable?(compaction)

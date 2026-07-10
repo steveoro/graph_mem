@@ -48,7 +48,7 @@ CompactionValve     ←── cooperative pause from MCP tools
 
 ## Compaction phases
 
-Each run progresses through two phases in order:
+Each run progresses through three phases in order:
 
 ### Phase 1: `orphans`
 
@@ -86,6 +86,26 @@ Each run progresses through two phases in order:
   - Otherwise, queue a merge review item.
 
 `Project` entities are never auto-merged or queued for merge review.
+
+### Phase 3: `relationship_discovery`
+
+**Entity set:** All non-`Project` entities ordered by ID.
+
+**Per entity:** `RelationshipDiscoveryStrategy` scans observation text and entity metadata for explainable link candidates. Proposals are **review-only** — dream-state never auto-creates inferred relations.
+
+**Current rules:**
+
+| Rule | Relation type | Evidence |
+|------|---------------|----------|
+| Shared observation phrase | `relates_to` | Byte-identical observation content on two entities (minimum length 15) |
+| Issue/solution pairing | `solves` | `PossibleSolution` + `Issue` observations sharing topic tokens, with fix/solve vs block/problem language |
+| Named dependency | `depends_on` | Observation contains dependency language and references another entity by name or alias |
+
+Each proposal is queued as `relationship_proposal` with `from_entity_id`, `to_entity_id`, `relation_type`, `confidence_band`, `score`, `supporting_observation_ids`, `explanation`, and optional `evidence_terms`.
+
+Safety filters: no self-links, no duplicate same-direction relations, no Project-root involvement, allowed relation types only, max 3 proposals per entity per run.
+
+To accept a proposal: inspect `get_maintenance_reports(report_type: "compaction_review")`, then create the relation manually (web UI or `create_relation`).
 
 ## Batch processing and cursor
 
@@ -134,6 +154,7 @@ Items that are not safe to apply automatically are batched into `MaintenanceRepo
 | --------------- | ---------------------------------------------------------------------------- |
 | `orphan_parent` | Orphan entity, top 3 suggested `Project` parents with scores, optional error |
 | `entity_merge`  | Two entities, cosine distance, `recommendation: "review_manually"`           |
+| `relationship_proposal` | Suggested link with relation type, confidence band, supporting observation IDs, explanation |
 
 
 Reports are flushed at the end of each batch and when advancing phases. Read them via:
@@ -142,6 +163,8 @@ Reports are flushed at the end of each batch and when advancing phases. Read the
 - **Dashboard:** Dream State card → "Compaction review queue" details
 
 To action a queued merge: inspect the report, then call `merge_entities(source_entity_id:, target_entity_id:)`.
+
+To action a queued relationship proposal: inspect the evidence, then call `create_relation(from_entity_id:, to_entity_id:, relation_type:)`.
 
 ## Run stats
 
@@ -156,6 +179,7 @@ To action a queued merge: inspect the report, then call `merge_entities(source_e
 | `observations_deduped` | Duplicate observation rows removed |
 | `merges_auto`          | Entities auto-merged               |
 | `merges_queued`        | Merge pairs sent to review         |
+| `relationships_queued` | Relationship proposals sent to review |
 | `error`                | Present when status is `failed`    |
 
 
@@ -191,7 +215,7 @@ Configure under **Operator → System Settings → Feature Flags**.
 The dashboard **Dream State / Compactor Run** card shows:
 
 - Run status badge (`idle`, `running`, `paused`, `completed`, `failed`)
-- Phase stepper (`orphans` → `tree_walk`)
+- Phase stepper (`orphans` → `tree_walk` → `relationship_discovery`)
 - Cursor entity, pause flag, timestamps, duration
 - Live stat chips
 - **Pause** / **Start / Resume** buttons
@@ -245,6 +269,39 @@ The dashboard **Repair relation duplicates** button runs the repairer, then oper
 
 
 See [garbage_collector.md](garbage_collector.md) for the diagnostic-only job.
+
+## Acceptance and usefulness benchmark
+
+GraphMem includes a deterministic integration benchmark that exercises the real dream-state pipeline end to end:
+
+- **Spec:** `spec/integration/dream_state_usefulness_spec.rb`
+- **Helpers:** `spec/support/dream_state_acceptance_helper.rb`
+- **Tag:** `:with_test_embeddings` (enables MariaDB `VEC_FromText` test vectors without Ollama)
+
+### What the passing scenarios cover
+
+The benchmark builds a deliberately messy graph (orphans, duplicate observations, auto-merge and review-band entity pairs, protected Project roots, and control entities) and runs compaction through `CompactionRunner` → `DreamStateCompactionJob` until `completed`.
+
+It asserts:
+
+- safe orphan parenting and low-confidence review queueing;
+- byte-identical observation deduplication;
+- high-confidence auto-merge with provenance preserved;
+- review-band pairs queued in `compaction_review`;
+- cooperative pause/resume from `cursor_entity_id` without losing progress;
+- structural usefulness deltas (fewer entities, observations, orphans, duplicate groups);
+- deterministic text-search behavior before and after compaction;
+- MCP readability via `dream_state_status` and `get_maintenance_reports`.
+
+### Pending discovery scenarios
+
+The benchmark also covers **relationship discovery** end to end: shared cross-project evidence, `solves` proposals for issue/solution pairs, duplicate-suppression for existing relations, and reachability improvements after manually accepting a proposal.
+
+Run the benchmark:
+
+```bash
+bundle exec rspec spec/integration/dream_state_usefulness_spec.rb
+```
 
 ## Typical agent workflow
 

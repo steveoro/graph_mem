@@ -12,8 +12,10 @@ RSpec.describe CompactionRun, type: :model do
     end
 
     it "accepts known phases" do
-      run = described_class.new(status: "running", phase: "orphans")
-      expect(run).to be_valid
+      %w[orphans tree_walk relationship_discovery].each do |phase|
+        run = described_class.new(status: "running", phase: phase)
+        expect(run).to be_valid
+      end
     end
   end
 

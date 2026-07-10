@@ -13,12 +13,14 @@ class DreamStateCompactor
     run:,
     traversal: CompactionTraversal.new,
     orphan_matcher: OrphanMatchingStrategy.new,
-    node_ops: NodeOperationsStrategy.new
+    node_ops: NodeOperationsStrategy.new,
+    relationship_discovery: RelationshipDiscoveryStrategy.new
   )
     @run = run
     @traversal = traversal
     @orphan_matcher = orphan_matcher
     @node_ops = node_ops
+    @relationship_discovery = relationship_discovery
     @review_items = []
   end
 
@@ -86,6 +88,15 @@ class DreamStateCompactor
     when "tree_walk"
       dedupe_observations_for_entity(entity_id)
       process_entity_merges(entity_id)
+    when "relationship_discovery"
+      process_relationship_discovery(entity_id)
+    end
+  end
+
+  def process_relationship_discovery(entity_id)
+    @relationship_discovery.proposals_for_entity(entity_id).each do |proposal|
+      @review_items << proposal
+      @run.increment_stat!("relationships_queued")
     end
   end
 

@@ -23,6 +23,12 @@ RSpec.describe CompactionTraversal, type: :model do
       ids = traversal.entity_ids_for_phase("tree_walk")
       expect(ids).to eq([ project.id, child.id ])
     end
+
+    it "lists non-project entities for relationship discovery" do
+      ids = traversal.entity_ids_for_phase("relationship_discovery")
+      expect(ids).to include(orphan.id, child.id)
+      expect(ids).not_to include(project.id)
+    end
   end
 
   describe "#next_phase_after" do
@@ -30,8 +36,12 @@ RSpec.describe CompactionTraversal, type: :model do
       expect(traversal.next_phase_after("orphans")).to eq("tree_walk")
     end
 
+    it "returns relationship_discovery after tree_walk" do
+      expect(traversal.next_phase_after("tree_walk")).to eq("relationship_discovery")
+    end
+
     it "returns nil after the final phase" do
-      expect(traversal.next_phase_after("tree_walk")).to be_nil
+      expect(traversal.next_phase_after("relationship_discovery")).to be_nil
     end
   end
 end
