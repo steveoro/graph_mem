@@ -54,6 +54,10 @@ RSpec.describe "Operator embeddings", type: :request do
       expect(response).to redirect_to(operator_embeddings_path)
       follow_redirect!
       expect(response.body).to include("Connection OK")
+      expect(response.body).to include("Last connection test")
+      expect(response.body).to include("OK")
+      expect(response.body).to include("768")
+      expect(response.body).to include("42.5")
     end
 
     it "redirects with alert when connection fails" do
@@ -66,6 +70,9 @@ RSpec.describe "Operator embeddings", type: :request do
       expect(response).to redirect_to(operator_embeddings_path)
       follow_redirect!
       expect(response.body).to include("Connection failed")
+      expect(response.body).to include("Last connection test")
+      expect(response.body).to include("Failed")
+      expect(response.body).to include("HTTP 500")
     end
   end
 

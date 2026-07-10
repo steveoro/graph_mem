@@ -44,6 +44,7 @@ RSpec.describe EmbeddingIndexManager do
       allow(MemoryEntity).to receive_message_chain(:where, :count).and_return(0)
       allow(MemoryObservation).to receive_message_chain(:where, :count).and_return(0)
       expect(conn).to receive(:execute).at_least(:once)
+      expect(EmbeddingVectorTriggerManager).to receive(:install!)
       expect(EmbeddingService).to receive(:reset_vector_cache!)
       expect(EmbeddingService).to receive(:reset_instance!)
 
@@ -57,6 +58,7 @@ RSpec.describe EmbeddingIndexManager do
   describe ".drop_indexes!" do
     it "drops indexes and resets caches" do
       allow(conn).to receive(:execute).and_return([])
+      expect(EmbeddingVectorTriggerManager).to receive(:drop!)
       expect(EmbeddingService).to receive(:reset_vector_cache!)
       expect(EmbeddingService).to receive(:reset_instance!)
 

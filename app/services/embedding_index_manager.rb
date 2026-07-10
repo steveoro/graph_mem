@@ -37,6 +37,8 @@ class EmbeddingIndexManager
     conn.execute "ALTER TABLE memory_entities MODIFY embedding VECTOR(#{dims}) NOT NULL DEFAULT #{zero_vec_default}"
     conn.execute "ALTER TABLE memory_observations MODIFY embedding VECTOR(#{dims}) NOT NULL DEFAULT #{zero_vec_default}"
 
+    EmbeddingVectorTriggerManager.install!
+
     conn.execute <<~SQL
       ALTER TABLE memory_entities
         ADD VECTOR INDEX idx_memory_entities_embedding (embedding)
@@ -62,6 +64,8 @@ class EmbeddingIndexManager
   def drop_indexes!
     conn = ActiveRecord::Base.connection
     dims = EmbeddingConfig.resolved_config[:dims]
+
+    EmbeddingVectorTriggerManager.drop!
 
     %w[memory_entities memory_observations].each do |table|
       index_name = "idx_#{table}_embedding"

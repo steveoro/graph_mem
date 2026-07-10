@@ -13,12 +13,8 @@ namespace :embeddings do
 
     svc = EmbeddingService.new
     start = Process.clock_gettime(Process::CLOCK_MONOTONIC)
-    vec = svc.embed("connection test")
+    vec = svc.embed!("connection test")
     elapsed = ((Process.clock_gettime(Process::CLOCK_MONOTONIC) - start) * 1000).round(1)
-
-    if vec.nil?
-      abort "FAIL: embed returned nil — check logs for details."
-    end
 
     puts "OK: got #{vec.length}-dim vector in #{elapsed} ms"
     puts "    first 5: [#{vec.first(5).map { |v| v.round(6) }.join(', ')}]"
@@ -26,6 +22,8 @@ namespace :embeddings do
     if vec.length != config[:dims]
       puts "WARN: expected #{config[:dims]} dims, got #{vec.length} — check embedding dimensions config"
     end
+  rescue StandardError => e
+    abort "FAIL: #{e.class}: #{e.message}"
   end
 
   desc "Backfill embeddings for all entities and observations missing them"

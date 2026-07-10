@@ -155,6 +155,24 @@ RSpec.describe EmbeddingService do
     end
   end
 
+  describe "#embed!" do
+    it "returns a vector array on success" do
+      stub_successful_embed
+
+      expect(service.embed!("hello world")).to eq(fake_vector)
+    end
+
+    it "raises the final embedding error on failure" do
+      allow(service).to receive(:sleep)
+      stub_failed_embed(code: "503", body: "unavailable")
+
+      expect {
+        service.embed!("test")
+      }.to raise_error(described_class::EmbeddingError, /HTTP 503/)
+      expect(service.last_error).to be_a(described_class::EmbeddingError)
+    end
+  end
+
   describe "#embed (openai_compatible provider)" do
     let(:openai_service) do
       described_class.new(
@@ -308,8 +326,8 @@ RSpec.describe EmbeddingService do
       expect(result[:error]).to be_nil
     end
 
-    it "returns failure when embed returns nil" do
-      allow(service).to receive(:embed).and_return(nil)
+    it "returns failure when embed! returns nil" do
+      allow(service).to receive(:embed!).and_return(nil)
 
       result = service.check_connection
 
@@ -317,8 +335,19 @@ RSpec.describe EmbeddingService do
       expect(result[:error]).to include("nil")
     end
 
+    it "returns the underlying embedding error details" do
+      allow(service).to receive(:sleep)
+      stub_failed_embed(code: "503", body: "unavailable")
+
+      result = service.check_connection
+
+      expect(result[:ok]).to be false
+      expect(result[:error]).to include("EmbeddingService::EmbeddingError")
+      expect(result[:error]).to include("HTTP 503")
+    end
+
     it "returns failure on dimension mismatch" do
-      allow(service).to receive(:embed).and_return([ 0.1, 0.2 ])
+      allow(service).to receive(:embed!).and_return([ 0.1, 0.2 ])
 
       result = service.check_connection
 

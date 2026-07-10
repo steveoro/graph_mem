@@ -4,6 +4,13 @@ RSpec.configure do |config|
   config.before(:suite) do
     conn = ActiveRecord::Base.connection
 
+    %w[
+      trg_memory_entities_embedding_bi
+      trg_memory_observations_embedding_bi
+    ].each do |trigger|
+      conn.execute("DROP TRIGGER IF EXISTS #{trigger}")
+    end
+
     %w[memory_entities memory_observations].each do |table|
       idx = "idx_#{table}_embedding"
       result = conn.execute("SHOW INDEX FROM #{table} WHERE Key_name = '#{idx}'")

@@ -5,6 +5,9 @@ All notable changes to GraphMem will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.1] - 2026-07-10
+- Fixes for embeddings generation and connection testing; bundle update
+
 ## [1.9.0] - 2026-06-26
 - MCP clients dashboard card: per-agent project context, recent activity, and last tool used (via `X-MCP-Client`)
 - Embeddings operator dashboard v2: AppSettings-backed config (AppSettings → ENV → defaults) with dedicated Settings tab

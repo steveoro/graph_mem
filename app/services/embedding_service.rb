@@ -60,23 +60,18 @@ class EmbeddingService
   def embed(text)
     return nil if text.blank?
 
-    retries = 0
-    begin
-      body = request_embedding(text)
-      vector = extract_vector(body)
-      validate_dimensions!(vector)
-      vector
-    rescue StandardError => e
-      retries += 1
-      if retries <= MAX_RETRIES
-        delay = RETRY_BASE_DELAY * (2**(retries - 1))
-        @logger.warn "EmbeddingService: retry #{retries}/#{MAX_RETRIES} after #{delay}s — #{e.message}"
-        sleep(delay)
-        retry
-      end
-      @logger.error "EmbeddingService: failed after #{MAX_RETRIES} retries — #{e.message}"
-      nil
-    end
+    embed_with_retries(text, raise_on_failure: false)
+  end
+
+  # Generate an embedding vector and raise the final error on failure.
+  def embed!(text)
+    raise EmbeddingError, "Text is blank" if text.blank?
+
+    embed_with_retries(text, raise_on_failure: true)
+  end
+
+  def last_error
+    @last_error
   end
 
   # Build composite text and embed a MemoryEntity.
@@ -103,8 +98,7 @@ class EmbeddingService
     store_vector(observation, vector)
   end
 
-  # Return packed binary embedding for a MemoryEntity (for use in before_create).
-  # MariaDB VECTOR columns accept IEEE 754 binary32 little-endian float sequences.
+  # Return packed binary embedding for a MemoryEntity.
   def embed_entity_binary(entity)
     return nil unless self.class.vector_enabled?
 
@@ -115,7 +109,7 @@ class EmbeddingService
     vector.pack("e*")
   end
 
-  # Return packed binary embedding for a MemoryObservation (for use in before_create).
+  # Return packed binary embedding for a MemoryObservation.
   def embed_observation_binary(observation)
     return nil unless self.class.vector_enabled?
 
@@ -129,7 +123,7 @@ class EmbeddingService
   # Returns { ok:, dims:, latency_ms:, error: } — never raises.
   def check_connection
     start = Process.clock_gettime(Process::CLOCK_MONOTONIC)
-    vector = embed("connection test")
+    vector = embed!("connection test")
     latency_ms = ((Process.clock_gettime(Process::CLOCK_MONOTONIC) - start) * 1000).round(1)
 
     if vector.nil?
@@ -148,7 +142,7 @@ class EmbeddingService
     { ok: true, dims: vector.length, latency_ms: latency_ms, error: nil }
   rescue StandardError => e
     latency_ms = ((Process.clock_gettime(Process::CLOCK_MONOTONIC) - start) * 1000).round(1) if start
-    { ok: false, dims: nil, latency_ms: latency_ms, error: e.message }
+    { ok: false, dims: nil, latency_ms: latency_ms, error: "#{e.class}: #{e.message}" }
   end
 
   # Force-recompute embeddings for every entity and observation,
@@ -202,6 +196,30 @@ class EmbeddingService
   end
 
   private
+
+  def embed_with_retries(text, raise_on_failure:)
+    @last_error = nil
+    retries = 0
+    begin
+      body = request_embedding(text)
+      vector = extract_vector(body)
+      validate_dimensions!(vector)
+      vector
+    rescue StandardError => e
+      retries += 1
+      if retries <= MAX_RETRIES
+        delay = RETRY_BASE_DELAY * (2**(retries - 1))
+        @logger.warn "EmbeddingService: retry #{retries}/#{MAX_RETRIES} after #{delay}s — #{e.message}"
+        sleep(delay)
+        retry
+      end
+      @logger.error "EmbeddingService: failed after #{MAX_RETRIES} retries — #{e.message}"
+      @last_error = e
+      raise if raise_on_failure
+
+      nil
+    end
+  end
 
   def compose_entity_text(entity)
     parts = []

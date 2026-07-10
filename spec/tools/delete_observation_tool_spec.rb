@@ -43,7 +43,8 @@ RSpec.describe DeleteObservationTool, type: :model do
 
         expect(result[:observation_id]).to eq(obs_id)
         expect(result[:memory_entity_id]).to eq(entity.id)
-        expect(result[:content]).to eq('To delete')
+        expect(result[:observation_content]).to eq('To delete')
+        expect(result).not_to have_key(:content)
         expect(result[:message]).to include("deleted successfully")
         expect(MemoryObservation.find_by(id: obs_id)).to be_nil
       end

@@ -4,7 +4,7 @@ module Operator
   class EmbeddingsController < ApplicationController
     def index
       @status = EmbeddingStatusSnapshot.call
-      @connection_result = session.delete(:embeddings_connection_result)
+      @connection_result = session.delete(:embeddings_connection_result)&.with_indifferent_access
     end
 
     def test_connection
