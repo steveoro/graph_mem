@@ -6,8 +6,8 @@ RSpec.describe "Per-client MCP context isolation", type: :integration do
   let!(:project_a) { MemoryEntity.create!(name: "Agent A Project", entity_type: "Project") }
   let!(:project_b) { MemoryEntity.create!(name: "Agent B Project", entity_type: "Project") }
 
-  let(:agent_a_headers) { { "HTTP_X_MCP_CLIENT" => "cursor-A" } }
-  let(:agent_b_headers) { { "HTTP_X_MCP_CLIENT" => "cursor-B" } }
+  let(:agent_a_headers) { { "x-mcp-client" => "cursor-A" } }
+  let(:agent_b_headers) { { "X-MCP-Client" => "cursor-B" } }
 
   let(:set_context_a) { SetContextTool.new(headers: agent_a_headers) }
   let(:set_context_b) { SetContextTool.new(headers: agent_b_headers) }
@@ -17,7 +17,7 @@ RSpec.describe "Per-client MCP context isolation", type: :integration do
 
   after { GraphMemContext.clear_all! }
 
-  it "isolates set_context between agents" do
+  it "isolates set_context between agents using normalized HTTP header shapes" do
     set_context_a.call(entity_id: project_a.id)
     set_context_b.call(entity_id: project_b.id)
 

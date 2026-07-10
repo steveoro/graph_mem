@@ -37,7 +37,7 @@ This document provides an overview of GraphMem's architecture, explaining how th
 
 GraphMem follows a layered architecture that separates concerns between:
 
-1. **MCP Interface Layer** - 21 tools accessed via JSON-RPC/SSE
+1. **MCP Interface Layer** - 24 tools accessed via JSON-RPC/SSE
 2. **REST API Layer** - Traditional RESTful endpoints mirroring MCP capabilities
 3. **Application Logic Layer** - Search strategies, context scoping, embedding service
 4. **Data Access Layer** - ActiveRecord models with vector extensions
@@ -45,7 +45,7 @@ GraphMem follows a layered architecture that separates concerns between:
 
 ## Component Breakdown
 
-### 1. MCP Interface Layer (21 tools)
+### 1. MCP Interface Layer (24 tools)
 
 Tools are Ruby classes in `app/tools/` that inherit from `ApplicationTool` (which inherits from `FastMcp::Tool`). They auto-register via `ApplicationTool.descendants` in `config/initializers/fast_mcp.rb`.
 
@@ -55,7 +55,7 @@ Tool categories:
 - **Observation** (2): `create_observation`, `delete_observation`
 - **Relation** (3): `create_relation`, `delete_relation`, `find_relations`
 - **Search** (4): `search_entities`, `search_subgraph`, `list_entities`, `get_subgraph_by_ids`
-- **Batch/Maintenance** (3): `bulk_update`, `suggest_merges`, `get_graph_stats`
+- **Batch/Maintenance** (6): `bulk_update`, `suggest_merges`, `merge_entities`, `dream_state_status`, `get_maintenance_reports`, `get_graph_stats`
 - **Utility** (2): `get_version`, `get_current_time`
 
 ### 2. REST API Layer
@@ -85,10 +85,15 @@ Controllers in `app/controllers/api/v1/` provide REST equivalents for all MCP op
 
 #### Context Scoping (`app/models/graph_mem_context.rb`)
 
-Thread-local storage for the active project context. When set:
+Persisted per-client storage for the active project context. MCP clients identify
+themselves with the `X-MCP-Client` header; `ApplicationTool` normalizes HTTP
+header key variants before `GraphMemContext` stores the scope in the
+`agent_contexts` table. Agents without a client header share the `"default"`
+bucket for backward compatibility. When set:
 - `GraphMemContext.scoped_entity_ids` returns the project ID plus all entities with `part_of` relations to it
 - `HybridSearchStrategy` applies a graduated context boost (stronger for the root project entity, lighter for its children)
 - `SearchSubgraphTool` ranks results using `SearchRelevanceBooster` with context-aware scoring
+- `AgentContextsSnapshot` exposes active clients, current projects, and recent tool activity to the operator dashboard
 
 #### Embedding configuration (`app/services/embedding_config.rb`)
 
@@ -108,6 +113,7 @@ Calls Ollama (or an OpenAI-compatible endpoint) to generate vectors from entity 
 - **EntityTypeMapping** - Canonicalization rules for entity types
 - **AuditLog** - Change tracking for entities
 - **MaintenanceReport** - Results from maintenance operations
+- **AgentContext** - Per-MCP-client project scope and last activity, keyed by `client_id`
 
 ### 5. Storage Layer
 
@@ -123,11 +129,12 @@ A typical MCP request flows through:
 
 1. MCP client sends JSON-RPC request via SSE or STDIO transport
 2. `FastMcp::Server` routes to the appropriate tool class
-3. `ApplicationTool#call_with_schema_validation!` normalizes incoming parameters via `ParameterNormalizer` (camelCase to snake_case, entity name to ID resolution, `operations` array parsing for `bulk_update`)
-4. Tool validates normalized parameters (via Dry::Schema `arguments` block)
-5. Tool executes business logic using ActiveRecord models and search strategies
-6. Results are returned as a Ruby hash, serialized to JSON by FastMcp
-7. Response delivered to client via the transport
+3. `ApplicationTool` resolves the caller's MCP client ID from request headers and records activity in `agent_contexts`
+4. `ApplicationTool#call_with_schema_validation!` normalizes incoming parameters via `ParameterNormalizer` (camelCase to snake_case, entity name to ID resolution, `operations` array parsing for `bulk_update`)
+5. Tool validates normalized parameters (via Dry::Schema `arguments` block)
+6. Tool executes business logic using ActiveRecord models and search strategies
+7. Results are returned as a Ruby hash, serialized to JSON by FastMcp
+8. Response delivered to client via the transport
 
 ### Parameter Normalization
 
@@ -147,4 +154,5 @@ GraphMem includes a web UI (served by Rails) for browsing and managing the knowl
 - **Graph visualization** using Cytoscape.js (data from `GraphDataController`)
 - **Entity browser** with search, create, edit, delete
 - **Data Exchange** for import/export (`DataExchangeController`)
+- **Operator Dashboard** with MCP client/project context status from `AgentContextsSnapshot`
 - **Swagger UI** at `/api-docs` for REST API exploration

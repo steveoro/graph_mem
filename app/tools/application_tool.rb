@@ -6,6 +6,7 @@ class ApplicationTool < FastMcp::Tool
     delete_entity delete_observation delete_relation update_entity merge_entities
     search_entities search_subgraph suggest_merges
   ].freeze
+  MCP_CLIENT_HEADER = "x-mcp-client"
 
   attr_accessor :server
 
@@ -45,7 +46,7 @@ class ApplicationTool < FastMcp::Tool
     hdrs = respond_to?(:headers, true) ? headers : nil
     return GraphMemContext::DEFAULT_CLIENT_ID if hdrs.blank?
 
-    client = hdrs["HTTP_X_MCP_CLIENT"] || hdrs["X-MCP-CLIENT"] || hdrs["X-MCP-Client"]
+    client = client_header_value(hdrs)
     GraphMemContext.normalize_client_id(client)
   end
 
@@ -66,6 +67,18 @@ class ApplicationTool < FastMcp::Tool
   end
 
   private
+
+  def client_header_value(headers)
+    headers.each do |key, value|
+      return value if normalized_header_key(key) == MCP_CLIENT_HEADER
+    end
+
+    nil
+  end
+
+  def normalized_header_key(key)
+    key.to_s.sub(/\Ahttp[-_]/i, "").tr("_", "-").downcase
+  end
 
   def record_client_activity!
     AgentContext.record_activity!(client_id: current_client_id, tool_name: tool_name)

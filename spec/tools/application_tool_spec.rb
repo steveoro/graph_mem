@@ -114,6 +114,16 @@ RSpec.describe ApplicationTool do
       expect(ctx.last_seen_at).to be_within(2.seconds).of(Time.current)
     end
 
+    it "records MCP client activity from fast-mcp normalized headers" do
+      tool = DslTestTool.new(headers: { "x-mcp-client" => "cursor-fast-mcp" })
+
+      tool.call_with_schema_validation!(name: "test")
+
+      ctx = AgentContext.find_by!(client_id: "cursor-fast-mcp")
+      expect(ctx.last_tool_name).to eq("dsl_test")
+      expect(ctx.last_seen_at).to be_within(2.seconds).of(Time.current)
+    end
+
     it "does not record MCP client activity when validation fails" do
       tool = DslTestTool.new(headers: { "HTTP_X_MCP_CLIENT" => "cursor-A" })
 
@@ -165,6 +175,26 @@ RSpec.describe ApplicationTool do
     it "reads X-MCP-CLIENT from headers" do
       tool = DslTestTool.new(headers: { "X-MCP-CLIENT" => "cursor-B" })
       expect(tool.current_client_id).to eq("cursor-B")
+    end
+
+    it "reads X-MCP-Client from configured MCP headers" do
+      tool = DslTestTool.new(headers: { "X-MCP-Client" => "cursor-C" })
+      expect(tool.current_client_id).to eq("cursor-C")
+    end
+
+    it "reads x-mcp-client from fast-mcp normalized headers" do
+      tool = DslTestTool.new(headers: { "x-mcp-client" => "cursor-D" })
+      expect(tool.current_client_id).to eq("cursor-D")
+    end
+
+    it "normalizes equivalent case and underscore header variants" do
+      tool = DslTestTool.new(headers: { "http_x_mcp_client" => "cursor-E" })
+      expect(tool.current_client_id).to eq("cursor-E")
+    end
+
+    it "returns default when the MCP client header is blank" do
+      tool = DslTestTool.new(headers: { "x-mcp-client" => " " })
+      expect(tool.current_client_id).to eq(GraphMemContext::DEFAULT_CLIENT_ID)
     end
   end
 
