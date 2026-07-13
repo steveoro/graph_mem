@@ -146,6 +146,7 @@ class DataExchangeController < ApplicationController
     @matches = ImportSession.load_matches(import_session_id)
     @stats = ImportSession.load_stats(import_session_id)
     @version = ImportSession.load_version(import_session_id)
+    @items = ImportReviewService.items(@matches, page: params[:page])
 
     # Get available parent entities for the "Make children of" dropdown
     @available_parents = ExportStrategy.new.root_nodes.map do |entity|

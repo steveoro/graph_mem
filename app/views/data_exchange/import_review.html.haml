@@ -40,7 +40,7 @@
             %th.px-4.py-3.text-left.text-xs.font-medium.text-gray-500.uppercase.tracking-wider.w-24 Status
             %th.px-4.py-3.text-left.text-xs.font-medium.text-gray-500.uppercase.tracking-wider Action
         %tbody.bg-white.divide-y.divide-gray-200
-          - @matches.each_with_index do |match, index|
+          - @items.each_with_index do |match, index|
             - import_node = match[:import_node] || match["import_node"]
             - matches_list = match[:matches] || match["matches"] || []
             - status = match[:status] || match["status"]
@@ -153,9 +153,13 @@
                 - else
                   %span.text-gray-400.text-sm Root node
               - root_index += 1 if is_root
+      .mt-4
+        = paginate @items, theme: 'tailwind'
+
       .flex.justify-end.gap-4
         = link_to "Cancel", import_cancel_data_exchange_index_path, class: "bg-gray-500 hover:bg-gray-600 text-white px-6 py-2 rounded", data: { turbo_method: :delete, turbo_confirm: "Are you sure you want to cancel this import?" }
         = submit_tag "Proceed with Import", class: "bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded cursor-pointer"
+
   :javascript
     // Update action field when match selection changes (for root nodes)
     document.addEventListener('DOMContentLoaded', function() {

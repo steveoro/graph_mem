@@ -87,8 +87,9 @@
                   = button_to "Approve", compaction_review_action_data_exchange_index_path(item_id: item["id"], page: params[:page], review_action: "approve"), method: :post, class: "rounded bg-green-600 px-3 py-1 text-white hover:bg-green-700"
                   = button_to "Reject", compaction_review_action_data_exchange_index_path(item_id: item["id"], page: params[:page], review_action: "reject"), method: :post, class: "rounded bg-gray-200 px-3 py-1 text-gray-700 hover:bg-gray-300"
     .mt-4
-      = paginate @items
+      = paginate @items, theme: 'tailwind'
   - else
     %p.text-gray-500 No active compaction review suggestions.
+
   .mt-6
     = link_to "Back to dashboard", root_path, class: "text-sm text-blue-600 hover:underline"

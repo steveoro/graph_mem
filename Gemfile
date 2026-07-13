@@ -29,8 +29,13 @@ gem "solid_cache"
 gem "solid_queue"
 gem "solid_cable"
 
+gem "tailwindcss-rails", "~> 4.3"
+
 gem "fast-mcp" # MCP Server implementation
+gem "haml-rails", "~> 2.1"
+gem "html2haml"
 gem "kaminari" # Pagination
+gem "kaminari-tailwind"
 gem "rack-cors" # CORS support for cross-origin API/MCP access
 
 gem "bootsnap", require: false # Reduces boot times through caching; required in config/boot.rb
@@ -79,6 +84,3 @@ end
 group :test do
   # Use system testing [https://guides.rubyonrails.org/testing.html#system-testing]
 end
-
-gem "tailwindcss-rails", "~> 4.3"
-gem "haml-rails", "~> 2.1"

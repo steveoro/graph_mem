@@ -139,6 +139,7 @@ GEM
     ed25519 (1.4.0)
     erb (6.0.4)
     erubi (1.13.1)
+    erubis (2.7.0)
     et-orbi (1.4.0)
       tzinfo
     fast-mcp (1.6.0)
@@ -162,6 +163,11 @@ GEM
       activesupport (>= 5.1)
       haml (>= 4.0.6)
       railties (>= 5.1)
+    html2haml (2.3.0)
+      erubis (~> 2.7.0)
+      haml (>= 4.0)
+      nokogiri (>= 1.6.0)
+      ruby_parser (~> 3.5)
     i18n (1.15.2)
       concurrent-ruby (~> 1.0)
     importmap-rails (2.2.3)
@@ -177,7 +183,7 @@ GEM
     jbuilder (2.15.1)
       actionview (>= 7.0.0)
       activesupport (>= 7.0.0)
-    json (2.20.0)
+    json (2.21.1)
     json-schema (6.2.0)
       addressable (~> 2.8)
       bigdecimal (>= 3.1, < 5)
@@ -204,6 +210,7 @@ GEM
       activerecord
       kaminari-core (= 1.2.2)
     kaminari-core (1.2.2)
+    kaminari-tailwind (0.1.0)
     language_server-protocol (3.17.0.6)
     lint_roller (1.1.0)
     logger (1.7.0)
@@ -402,7 +409,7 @@ GEM
       lint_roller (~> 1.1)
       rubocop (>= 1.75.0, < 2.0)
       rubocop-ast (>= 1.47.1, < 2.0)
-    rubocop-rails (2.35.5)
+    rubocop-rails (2.36.0)
       activesupport (>= 4.2.0)
       lint_roller (~> 1.1)
       rack (>= 1.1)
@@ -413,14 +420,18 @@ GEM
       rubocop-performance (>= 1.24)
       rubocop-rails (>= 2.30)
     ruby-progressbar (1.13.0)
+    ruby_parser (3.22.0)
+      racc (~> 1.5)
+      sexp_processor (~> 4.16)
     rubyzip (3.4.1)
     securerandom (0.4.1)
-    selenium-webdriver (4.45.0)
+    selenium-webdriver (4.46.0)
       base64 (~> 0.2)
       logger (~> 1.4)
       rexml (~> 3.2, >= 3.2.5)
       rubyzip (>= 1.2.2, < 4.0)
       websocket (~> 1.0)
+    sexp_processor (4.17.5)
     solid_cable (4.0.0)
       actioncable (>= 7.2)
       activejob (>= 7.2)
@@ -508,10 +519,12 @@ DEPENDENCIES
   debug
   fast-mcp
   haml-rails (~> 2.1)
+  html2haml
   importmap-rails
   jbuilder
   kamal
   kaminari
+  kaminari-tailwind
   mission_control-jobs
   mysql2
   propshaft
