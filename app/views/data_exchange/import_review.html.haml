@@ -56,22 +56,22 @@
               / Import Node Info
               %td.px-4.py-3
                 .font-medium.text-gray-900
-                  "#{import_node[:name] || import_node[name]}"
+                  "#{import_node[:name] || import_node["name"]}"
                 .text-sm.text-gray-500
-                  (#{import_node[:entity_type] || import_node[entity_type]})
-                  - if is_child  import_parent_name.present?
+                  (#{import_node[:entity_type] || import_node["entity_type"]})
+                  - if is_child && import_parent_name.present?
                     %span.text-blue-600.ml-1
                       \- child of "#{import_parent_name}"
-                - if (import_node[:observations_count] || import_node[observations_count]).to_i  0
+                - if (import_node[:observations_count] || import_node["observations_count"]).to_i > 0
                   .text-xs.text-gray-400
-                    = import_node[:observations_count] || import_node[observations_count]
+                    = import_node[:observations_count] || import_node["observations_count"]
                     observations
-                - if (import_node[:children_count] || import_node[children_count]).to_i  0
+                - if (import_node[:children_count] || import_node["children_count"]).to_i > 0
                   .text-xs.text-gray-400
-                    = import_node[:children_count] || import_node[children_count]
+                    = import_node[:children_count] || import_node["children_count"]
                     children
                 - if is_root
-                  = hidden_field_tag decisions[#{root_index}][node_path], node_path
+                  = hidden_field_tag "decisions[#{root_index}][node_path]", node_path
               / Existing Matches
               %td.px-4.py-3
                 - if is_child
@@ -81,8 +81,8 @@
                       %svg.w-4.h-4.text-green-500.mr-2.flex-shrink-0{:fill => "currentColor", :viewBox => "0 0 20 20"}
                         %path{"clip-rule" => "evenodd", :d => "M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z", "fill-rule" => "evenodd"}
                       %span.text-sm
-                        "#{exact_match[:name] || exact_match[name]}"
-                        (#{exact_match[:entity_type] || exact_match[entity_type]})
+                        "#{exact_match[:name] || exact_match["name"]}"
+                        (#{exact_match[:entity_type] || exact_match["entity_type"]})
                   - else
                     %span.text-gray-400.text-sm.italic No match (will create new)
                 - else
@@ -91,33 +91,31 @@
                     %select.match-select.w-full.border.border-gray-300.rounded.px-2.py-1.text-sm{"data-index" => root_index, :name => "decisions[#{root_index}][target_id]"}
                       %option{:value => ""} -- Create New --
                       - matches_list.each do |m|
-                        %option{:value => "#{m[:entity_id] || m["entity_id"]}"}
-                        = 'selected' if (m[:entity_id] || m[entity_id]).to_s == selected_match.to_s
-                        \&gt;
-                        "#{m[:name] || m[name]}" (#{m[:entity_type] || m[entity_type]}) - score #{m[:score] || m[score]}
-                  %input.action-input{"data-index" => root_index, :name => "decisions[#{root_index}][action]", :type => "hidden", :value => "#{selected_match.present? ? 'merge' : 'create'}"}
+                        %option{:value => "#{m[:entity_id] || m["entity_id"]}", :selected => (m[:entity_id] || m["entity_id"]).to_s == selected_match.to_s}
+                          "#{m[:name] || m["name"]}" (#{m[:entity_type] || m["entity_type"]}) - score #{m[:score] || m["score"]}
+                    = hidden_field_tag "decisions[#{root_index}][action]", selected_match.present? ? "merge" : "create", class: "action-input", data: { index: root_index }
                   - else
                     %span.text-gray-400.text-sm.italic No matches found
-                    = hidden_field_tag decisions[#{root_index}][action], create
+                    = hidden_field_tag "decisions[#{root_index}][action]", "create", class: "action-input", data: { index: root_index }
               / Status Indicator
               %td.px-4.py-3.text-center
                 - case status
-                - when skip
+                - when "skip"
                   %span.inline-flex.items-center.px-2.py-1.rounded-full.text-xs.font-medium.bg-blue-100.text-blue-800
                     %svg.w-4.h-4.mr-1{:fill => "currentColor", :viewBox => "0 0 20 20"}
                       %path{"clip-rule" => "evenodd", :d => "M10 18a8 8 0 100-16 8 8 0 000 16zM8 7a1 1 0 00-1 1v4a1 1 0 001 1h4a1 1 0 001-1V8a1 1 0 00-1-1H8z", "fill-rule" => "evenodd"}
                     Skip
-                - when add_relation
+                - when "add_relation"
                   %span.inline-flex.items-center.px-2.py-1.rounded-full.text-xs.font-medium.bg-purple-100.text-purple-800
                     %svg.w-4.h-4.mr-1{:fill => "currentColor", :viewBox => "0 0 20 20"}
                       %path{:d => "M12.586 4.586a2 2 0 112.828 2.828l-3 3a2 2 0 01-2.828 0 1 1 0 00-1.414 1.414 4 4 0 005.656 0l3-3a4 4 0 00-5.656-5.656l-1.5 1.5a1 1 0 101.414 1.414l1.5-1.5zm-5 5a2 2 0 012.828 0 1 1 0 101.414-1.414 4 4 0 00-5.656 0l-3 3a4 4 0 105.656 5.656l1.5-1.5a1 1 0 10-1.414-1.414l-1.5 1.5a2 2 0 11-2.828-2.828l3-3z"}
                     Link
-                - when high
+                - when "high"
                   %span.inline-flex.items-center.px-2.py-1.rounded-full.text-xs.font-medium.bg-green-100.text-green-800
                     %svg.w-4.h-4.mr-1{:fill => "currentColor", :viewBox => "0 0 20 20"}
                       %path{"clip-rule" => "evenodd", :d => "M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z", "fill-rule" => "evenodd"}
                     High
-                - when low
+                - when "low"
                   %span.inline-flex.items-center.px-2.py-1.rounded-full.text-xs.font-medium.bg-yellow-100.text-yellow-800
                     %svg.w-4.h-4.mr-1{:fill => "currentColor", :viewBox => "0 0 20 20"}
                       %path{"clip-rule" => "evenodd", :d => "M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z", "fill-rule" => "evenodd"}
@@ -130,38 +128,34 @@
               / Action Description
               %td.px-4.py-3
                 - if is_child
-                  / Child nodes: display only, no form fields
                   - case child_action
-                  - when skip
+                  - when "skip"
                     %span.text-blue-600.text-sm
                       %svg.w-4.h-4.inline.mr-1{:fill => "currentColor", :viewBox => "0 0 20 20"}
                         %path{"clip-rule" => "evenodd", :d => "M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z", "fill-rule" => "evenodd"}
                       Already linked to "#{import_parent_name}"
-                  - when add_relation
+                  - when "add_relation"
                     %span.text-purple-600.text-sm
                       + Add relation to "#{import_parent_name}"
                       - if will_add_observations
                         %br
                           %span.text-purple-400 + Add new observations
-                    - else
-                      %span.text-green-600.text-sm
-                        Create new, link to "#{import_parent_name}"
-                  - elsif is_root  @available_parents.present?
-                    / Root nodes: parent selection dropdown
-                    %select.w-full.border.border-gray-300.rounded.px-2.py-1.text-sm{:name => "decisions[#{root_index}][parent_id]"}
-                      %option{:value => ""} -- None (root node) --
-                      - @available_parents.each do |parent|
-                        %option{:value => "#{parent[:id]}"}
-                          Make child of "#{parent[:name]}"
                   - else
-                    %span.text-gray-400.text-sm Root node
+                    %span.text-green-600.text-sm
+                      Create new, link to "#{import_parent_name}"
+                - elsif is_root && @available_parents.present?
+                  / Root nodes: parent selection dropdown
+                  %select.w-full.border.border-gray-300.rounded.px-2.py-1.text-sm{:name => "decisions[#{root_index}][parent_id]"}
+                    %option{:value => ""} -- None (root node) --
+                    - @available_parents.each do |parent|
+                      %option{:value => "#{parent[:id]}"}
+                        Make child of "#{parent[:name]}"
+                - else
+                  %span.text-gray-400.text-sm Root node
               - root_index += 1 if is_root
       .flex.justify-end.gap-4
-        = link_to Cancel, import_cancel_data_exchange_index_path,                                      |
-          class: bg-gray-500 hover:bg-gray-600 text-white px-6 py-2 rounded,                           |
-          data: { turbo_method: :delete, turbo_confirm: Are you sure you want to cancel this import? } |
-        = submit_tag Proceed with Import,                                                  |
-          class: bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded cursor-pointer |
+        = link_to "Cancel", import_cancel_data_exchange_index_path, class: "bg-gray-500 hover:bg-gray-600 text-white px-6 py-2 rounded", data: { turbo_method: :delete, turbo_confirm: "Are you sure you want to cancel this import?" }
+        = submit_tag "Proceed with Import", class: "bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded cursor-pointer"
   :javascript
     // Update action field when match selection changes (for root nodes)
     document.addEventListener('DOMContentLoaded', function() {
