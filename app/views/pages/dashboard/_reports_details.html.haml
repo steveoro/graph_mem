@@ -4,6 +4,8 @@
   %details.dashboard-details__panel
     %summary Compaction review (#{compaction_review ? compaction_review[:count] : 0})
     - if compaction_review
+      %p.dashboard-card__hint
+        = link_to "Open review UI", compaction_review_data_exchange_index_path, class: "dashboard-btn dashboard-btn--secondary"
       %pre.dashboard-code= JSON.pretty_generate(compaction_review[:data])
     - else
       %p.dashboard-card__empty No compaction review reports.

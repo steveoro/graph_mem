@@ -14,17 +14,22 @@ class DreamStateCompactionJob < ApplicationJob
     return unless run
     return if run.status.in?(%w[completed failed])
 
-    compactor = DreamStateCompactor.new(run: run)
-    result = compactor.process_batch!
+    run.with_lock do
+      run.reload
+      return if run.status.in?(%w[completed failed])
 
-    case result
-    when :continued
-      self.class.perform_later(run.id)
-    when :paused, :completed
-      Rails.logger.info "[DreamState] run #{run.id} #{result}"
+      compactor = DreamStateCompactor.new(run: run)
+      result = compactor.process_batch!
+
+      case result
+      when :continued
+        self.class.perform_later(run.id)
+      when :paused, :completed
+        Rails.logger.info "[DreamState] run #{run.id} #{result}"
+      end
     end
   rescue StandardError => e
-    run&.mark_failed!(e.message)
+    run&.mark_failed!(e)
     Rails.logger.error "[DreamState] run #{run_id} failed: #{e.message}"
     raise
   end

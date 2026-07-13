@@ -82,5 +82,20 @@ RSpec.describe CompactionRunner, type: :service do
       expect(snapshot[:cursor_entity_id]).to eq(42)
       expect(snapshot[:stats]["entities_processed"]).to eq(3)
     end
+
+    it "uses a fixed overall denominator and caps completion at 100%" do
+      CompactionRun.create!(
+        status: "completed",
+        phase: "relationship_discovery",
+        stats: { "entities_processed" => 12, "total_entities" => 10 },
+        started_at: Time.current,
+        finished_at: Time.current
+      )
+
+      snapshot = described_class.status_snapshot
+
+      expect(snapshot[:progress][:overall][:total]).to eq(10 * CompactionRun::PHASES.size)
+      expect(snapshot[:progress][:overall][:percent]).to eq(100)
+    end
   end
 end

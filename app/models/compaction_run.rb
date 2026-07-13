@@ -32,8 +32,12 @@ class CompactionRun < ApplicationRecord
     status == "failed"
   end
 
+  def completed?
+    status == "completed"
+  end
+
   def resume_from_failure!
-    cleared_stats = (stats || {}).except("error")
+    cleared_stats = (stats || {}).except("error", "error_class", "error_backtrace")
     update!(
       status: "running",
       finished_at: nil,
@@ -65,8 +69,25 @@ class CompactionRun < ApplicationRecord
     update!(status: "completed", finished_at: Time.current, pause_requested: false)
   end
 
-  def mark_failed!(message)
-    merged = (stats || {}).merge("error" => message)
-    update!(status: "failed", finished_at: Time.current, stats: merged, pause_requested: false)
+  def mark_failed!(error)
+    message = error.is_a?(Exception) ? error.message : error.to_s
+    error_class = error.is_a?(Exception) ? error.class.name : nil
+    error_backtrace = error.is_a?(Exception) ? error.backtrace&.first(5) : nil
+
+    merged = (stats || {}).merge(
+      "error" => message,
+      "error_class" => error_class,
+      "error_backtrace" => error_backtrace
+    )
+
+    updates = {
+      status: "failed",
+      finished_at: Time.current,
+      stats: merged,
+      pause_requested: false
+    }
+    updates[:cursor_entity_id] = cursor_entity_id if cursor_entity_id.present?
+
+    update!(**updates)
   end
 end

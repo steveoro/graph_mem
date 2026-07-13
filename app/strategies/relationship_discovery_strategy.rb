@@ -55,7 +55,9 @@ class RelationshipDiscoveryStrategy
             score: 10,
             supporting_observation_ids: [ observation.id, other_observation.id ],
             explanation: "Shared observation evidence on both entities",
-            evidence_terms: shared_significant_tokens(observation.content, other_observation.content)
+            evidence_terms: shared_significant_tokens(observation.content, other_observation.content),
+            from_entity: entity,
+            to_entity: other_entity
           )
         end
     end
@@ -82,7 +84,9 @@ class RelationshipDiscoveryStrategy
         score: pair[:score],
         supporting_observation_ids: [ pair[:solution_observation].id, pair[:issue_observation].id ],
         explanation: pair[:explanation],
-        evidence_terms: pair[:evidence_terms]
+        evidence_terms: pair[:evidence_terms],
+        from_entity: entity,
+        to_entity: issue
       )
     end
   end
@@ -103,7 +107,9 @@ class RelationshipDiscoveryStrategy
           score: 8,
           supporting_observation_ids: [ observation.id ],
           explanation: "Observation references dependency on #{mentioned.name}",
-          evidence_terms: [ mentioned.name.downcase ]
+          evidence_terms: [ mentioned.name.downcase ],
+          from_entity: entity,
+          to_entity: mentioned
         )
       end
     end
@@ -151,15 +157,24 @@ class RelationshipDiscoveryStrategy
   end
 
   def build_proposal(from_entity_id:, to_entity_id:, relation_type:, confidence_band:, score:,
-                     supporting_observation_ids:, explanation:, evidence_terms: [])
+                     supporting_observation_ids:, explanation:, evidence_terms: [],
+                     from_entity: nil, to_entity: nil)
     return nil if from_entity_id == to_entity_id
     return nil unless ALLOWED_RELATION_TYPES.include?(relation_type)
     return nil if relation_exists?(from_entity_id, to_entity_id, relation_type)
 
+    from = from_entity || MemoryEntity.find_by(id: from_entity_id)
+    to = to_entity || MemoryEntity.find_by(id: to_entity_id)
+
     {
+      id: SecureRandom.uuid,
       kind: "relationship_proposal",
       from_entity_id: from_entity_id,
+      from_name: from&.name,
+      from_entity_type: from&.entity_type,
       to_entity_id: to_entity_id,
+      to_name: to&.name,
+      to_entity_type: to&.entity_type,
       relation_type: relation_type,
       confidence_band: confidence_band,
       score: score,

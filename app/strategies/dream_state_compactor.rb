@@ -123,9 +123,11 @@ class DreamStateCompactor
 
   def queue_orphan_review(orphan, matches, error: nil)
     @review_items << {
+      id: SecureRandom.uuid,
       kind: "orphan_parent",
       entity_id: orphan.id,
       entity_name: orphan.name,
+      entity_type: orphan.entity_type,
       suggested_parents: matches.first(3).map do |m|
         {
           project_id: m[:project].id,
@@ -193,6 +195,7 @@ class DreamStateCompactor
 
   def queue_merge_review(entity_a, entity_b, distance)
     @review_items << {
+      id: SecureRandom.uuid,
       kind: "entity_merge",
       entity_a: { entity_id: entity_a.id, name: entity_a.name, entity_type: entity_a.entity_type },
       entity_b: { entity_id: entity_b.id, name: entity_b.name, entity_type: entity_b.entity_type },

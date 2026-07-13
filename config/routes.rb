@@ -67,6 +67,10 @@ Rails.application.routes.draw do
       get :import_report
       delete :import_cancel
 
+      # Compaction review routes
+      get :compaction_review
+      post :compaction_review_action
+
       # Cleanup routes
       get :orphan_nodes
       post :move_node
@@ -76,6 +80,7 @@ Rails.application.routes.draw do
       # Relation management routes
       get :duplicate_relations
       delete :delete_duplicate_relations
+      post :create_relation
       patch :update_relation
       delete :delete_relation
     end

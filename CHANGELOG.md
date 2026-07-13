@@ -5,6 +5,9 @@ All notable changes to GraphMem will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.4] - 2026-07-13
+- Prevent concurrent compactor runs; compactor review UI
+
 ## [1.9.3] - 2026-07-10
 - Fixes for multi-agent client tool usage; documentation update; dream state compactor 3rd phase: relationship suggestion + integration tests
 

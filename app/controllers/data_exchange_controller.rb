@@ -6,7 +6,7 @@ class DataExchangeController < ApplicationController
   # Skip CSRF for API-like endpoints (file download and JSON responses)
   skip_before_action :verify_authenticity_token, only: [
     :export, :export_async, :move_node, :merge_node, :delete_node,
-    :delete_duplicate_relations, :update_relation, :delete_relation
+    :delete_duplicate_relations, :create_relation, :update_relation, :delete_relation
   ]
 
   # GET /data_exchange/export?ids[]=1&ids[]=2
@@ -207,6 +207,109 @@ class DataExchangeController < ApplicationController
     redirect_to root_path
   end
 
+  # GET /data_exchange/compaction_review
+  # Shows the latest compaction review report with operator controls
+  def compaction_review
+    @report = CompactionReviewService.latest_report
+
+    unless @report
+      flash[:error] = "No compaction review report found. Run the compactor first."
+      return redirect_to root_path
+    end
+
+    @items = CompactionReviewService.items(@report, page: params[:page])
+    @active_count = CompactionReviewService.active_count(@report)
+    @current_item = CompactionReviewService.find_item(@report, params[:item_id]) if params[:item_id].present?
+  end
+
+  # POST /data_exchange/compaction_review_action
+  # Handles reject or approve-confirm actions for a compaction review item
+  def compaction_review_action
+    report = CompactionReviewService.latest_report
+
+    unless report
+      return redirect_to root_path, alert: "No compaction review report found."
+    end
+
+    item_id = params[:item_id]
+    item = CompactionReviewService.find_item(report, item_id)
+
+    unless item
+      return redirect_to compaction_review_data_exchange_index_path, alert: "Suggestion not found."
+    end
+
+    action = params[:review_action]
+
+    if action == "reject"
+      CompactionReviewService.mark_ignored(report, item_id)
+      flash[:notice] = "Suggestion ignored."
+      return redirect_to compaction_review_data_exchange_index_path(page: params[:page])
+    end
+
+    if action == "approve"
+      @report = report
+      @items = CompactionReviewService.items(report, page: params[:page])
+      @active_count = CompactionReviewService.active_count(report)
+      @current_item = item
+      @confirm_action = true
+      return render :compaction_review
+    end
+
+    if action == "confirm"
+      result = CompactionReviewService.apply_action(item, compaction_action_params)
+
+      if result[:success]
+        CompactionReviewService.mark_approved(report, item_id)
+        flash[:notice] = result[:message] || "Suggestion applied."
+      else
+        flash[:alert] = result[:error] || "Failed to apply suggestion."
+      end
+
+      return redirect_to compaction_review_data_exchange_index_path(page: params[:page])
+    end
+
+    redirect_to compaction_review_data_exchange_index_path, alert: "Unknown action."
+  end
+
+  # POST /data_exchange/create_relation
+  # Creates a new relation between two entities
+  def create_relation
+    from_id = params[:from_id].to_i
+    to_id = params[:to_id].to_i
+    relation_type = params[:relation_type]
+
+    if from_id.zero? || to_id.zero? || relation_type.blank?
+      return render json: { error: "Invalid relation parameters" }, status: :unprocessable_content
+    end
+
+    from = MemoryEntity.find_by(id: from_id)
+    to = MemoryEntity.find_by(id: to_id)
+
+    unless from && to
+      return render json: { error: "Entity not found" }, status: :not_found
+    end
+
+    relation = MemoryRelation.new(
+      from_entity_id: from_id,
+      to_entity_id: to_id,
+      relation_type: relation_type
+    )
+
+    if relation.save
+      render json: {
+        success: true,
+        relation: {
+          id: relation.id,
+          from_entity_id: relation.from_entity_id,
+          to_entity_id: relation.to_entity_id,
+          relation_type: relation.relation_type
+        }
+      }
+    else
+      render json: { success: false, error: relation.errors.full_messages.join(", ") }, status: :unprocessable_content
+    end
+  end
+
   # GET /data_exchange/orphan_nodes
   # Returns list of orphan nodes with suggested parent matches (JSON API)
   def orphan_nodes
@@ -377,6 +480,10 @@ class DataExchangeController < ApplicationController
   end
 
   private
+
+  def compaction_action_params
+    params.permit(:source_id, :target_id, :from_id, :to_id, :relation_type, :node_id, :parent_id)
+  end
 
   # Find duplicate relation pairs (A→B and B→A with same type)
   # Returns the older relation (lower ID) to keep and newer to delete

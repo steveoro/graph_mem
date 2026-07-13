@@ -1,0 +1,93 @@
+- content_for :title, "Compaction Review"
+%h1.text-2xl.font-bold.mb-4 Compaction Review
+- if @report
+  %p.text-sm.text-gray-600.mb-4
+    Report ##{@report.id} — #{@active_count} active suggestion#{"s" unless @active_count == 1}
+    %span.text-gray-400
+      (created #{l(@report.created_at, format: :short)})
+- if @current_item && @confirm_action
+  .bg-yellow-50.border.border-yellow-200.rounded.p-4.mb-6
+    %h2.font-semibold.mb-2 Confirm action
+    = render "compaction_review_confirm", item: @current_item
+- if @items && @items.any?
+  .overflow-x-auto
+    %table.min-w-full.divide-y.divide-gray-200
+      %thead
+        %tr
+          %th.px-4.py-2.text-left.text-sm.font-medium.text-gray-500 Kind
+          %th.px-4.py-2.text-left.text-sm.font-medium.text-gray-500 Source
+          %th.px-4.py-2.text-left.text-sm.font-medium.text-gray-500 Target
+          %th.px-4.py-2.text-left.text-sm.font-medium.text-gray-500 Details
+          %th.px-4.py-2.text-left.text-sm.font-medium.text-gray-500 Actions
+      %tbody.divide-y.divide-gray-200
+        - @items.each do |item|
+          %tr.hover:bg-gray-50
+            %td.px-4.py-3.text-sm
+              %span.inline-flex.items-center.rounded.bg-blue-100.px-2.py-1.text-xs.font-medium.text-blue-800
+                = item["kind"]
+            %td.px-4.py-3.text-sm
+              - if item["kind"] == "entity_merge"
+                %strong= item["entity_a"]["name"]
+                %br/
+                %span.text-gray-500
+                  = item["entity_a"]["entity_type"]
+                  \##{item["entity_a"]["entity_id"]}
+              - elsif item["kind"] == "relationship_proposal"
+                %strong= item["from_name"]
+                %br/
+                %span.text-gray-500
+                  = item["from_entity_type"]
+                  \##{item["from_entity_id"]}
+              - elsif item["kind"] == "orphan_parent"
+                %strong= item["entity_name"]
+                %br/
+                %span.text-gray-500
+                  = item["entity_type"]
+                  \##{item["entity_id"]}
+            %td.px-4.py-3.text-sm
+              - if item["kind"] == "entity_merge"
+                %strong= item["entity_b"]["name"]
+                %br/
+                %span.text-gray-500
+                  = item["entity_b"]["entity_type"]
+                  \##{item["entity_b"]["entity_id"]}
+              - elsif item["kind"] == "relationship_proposal"
+                %strong= item["to_name"]
+                %br/
+                %span.text-gray-500
+                  = item["to_entity_type"]
+                  \##{item["to_entity_id"]}
+              - elsif item["kind"] == "orphan_parent"
+                - if item["suggested_parents"].present?
+                  - item["suggested_parents"].first(3).each do |parent|
+                    .mb-1
+                      %strong= parent["project_name"]
+                      %span.text-gray-500
+                        \##{parent["project_id"]}
+                      %span.text-xs.text-gray-400
+                        (score #{parent["score"]})
+                - else
+                  %span.text-gray-400 No suggestions
+            %td.px-4.py-3.text-sm.text-gray-600
+              - if item["kind"] == "entity_merge"
+                Cosine distance: #{item["cosine_distance"]}
+              - elsif item["kind"] == "relationship_proposal"
+                %span.font-medium= item["relation_type"]
+                %span.text-gray-400
+                  — #{item["confidence_band"]}
+                %span.text-gray-400
+                  (score #{item["score"]})
+                - if item["explanation"].present?
+                  %p.text-xs.mt-1= item["explanation"]
+              - elsif item["kind"] == "orphan_parent" && item["error"].present?
+                %p.text-xs.text-red-600= item["error"]
+            %td.px-4.py-3.text-sm
+              .flex.gap-2
+                = button_to "Approve", compaction_review_action_data_exchange_index_path(item_id: item["id"], page: params[:page], review_action: "approve"), method: :post, class: "rounded bg-green-600 px-3 py-1 text-white hover:bg-green-700"
+                = button_to "Reject", compaction_review_action_data_exchange_index_path(item_id: item["id"], page: params[:page], review_action: "reject"), method: :post, class: "rounded bg-gray-200 px-3 py-1 text-gray-700 hover:bg-gray-300"
+  .mt-4
+    = paginate @items
+- else
+  %p.text-gray-500 No active compaction review suggestions.
+.mt-6
+  = link_to "Back to dashboard", root_path, class: "text-sm text-blue-600 hover:underline"

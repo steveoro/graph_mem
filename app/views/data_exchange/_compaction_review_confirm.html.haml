@@ -1,0 +1,44 @@
+= form_with url: compaction_review_action_data_exchange_index_path, method: :post, class: "space-y-4" do |f|
+  = hidden_field_tag :item_id, item["id"]
+  = hidden_field_tag :review_action, "confirm"
+  = hidden_field_tag :page, params[:page]
+  - if item["kind"] == "entity_merge"
+    %p
+      Merge
+      %strong= item["entity_a"]["name"]
+      into
+      = succeed "?" do
+        %strong= item["entity_b"]["name"]
+    = hidden_field_tag :source_id, item["entity_a"]["entity_id"]
+    = hidden_field_tag :target_id, item["entity_b"]["entity_id"]
+  - elsif item["kind"] == "relationship_proposal"
+    %p
+      Create
+      %strong= item["relation_type"]
+      relation from
+      %strong= item["from_name"]
+      to
+      = succeed "?" do
+        %strong= item["to_name"]
+    = hidden_field_tag :from_id, item["from_entity_id"]
+    = hidden_field_tag :to_id, item["to_entity_id"]
+    = hidden_field_tag :relation_type, item["relation_type"]
+  - elsif item["kind"] == "orphan_parent"
+    %p
+      Move
+      %strong= item["entity_name"]
+      under a parent project:
+    - if item["suggested_parents"].present?
+      .space-y-2
+        - item["suggested_parents"].each do |parent|
+          %label.flex.items-center.gap-2
+            = radio_button_tag :parent_id, parent["project_id"], false, required: true
+            %span
+              = parent["project_name"]
+              (score #{parent["score"]})
+    - else
+      %p.text-red-600 No suggested parents available. Please reject this suggestion.
+    = hidden_field_tag :node_id, item["entity_id"]
+  .flex.gap-2
+    = f.submit "Confirm", class: "rounded bg-green-600 px-4 py-2 text-white hover:bg-green-700"
+    = link_to "Cancel", compaction_review_data_exchange_index_path(page: params[:page]), class: "rounded bg-gray-200 px-4 py-2 text-gray-700 hover:bg-gray-300"

@@ -320,6 +320,24 @@
   font-size: 0.85rem;
 }
 
+.dashboard-progress {
+  margin: 0.75rem 0;
+}
+
+.dashboard-progress__label {
+  font-size: 0.85rem;
+  color: #475569;
+  margin-bottom: 0.25rem;
+}
+
+.dashboard-progress__bar {
+  width: 100%;
+  height: 0.75rem;
+  margin-bottom: 0.5rem;
+  border-radius: 4px;
+  accent-color: #2563eb;
+}
+
 .dashboard-code {
   background: #0f172a;
   color: #e2e8f0;

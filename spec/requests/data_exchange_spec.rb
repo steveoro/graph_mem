@@ -861,4 +861,123 @@ RSpec.describe 'DataExchange', type: :request do
       expect(response).to have_http_status(:not_found)
     end
   end
+
+  describe 'POST /data_exchange/create_relation' do
+    it 'creates a new relation' do
+      expect {
+        post create_relation_data_exchange_index_path, params: {
+          from_id: task1.id,
+          to_id: project2.id,
+          relation_type: 'part_of'
+        }, as: :json
+      }.to change(MemoryRelation, :count).by(1)
+
+      expect(response).to have_http_status(:ok)
+      data = JSON.parse(response.body)
+
+      expect(data['success']).to be true
+      expect(data['relation']['relation_type']).to eq('part_of')
+    end
+
+    it 'returns error for invalid parameters' do
+      post create_relation_data_exchange_index_path, params: {
+        from_id: task1.id
+      }, as: :json
+
+      expect(response).to have_http_status(:unprocessable_content)
+    end
+  end
+
+  describe 'GET /data_exchange/compaction_review' do
+    let!(:compaction_report) do
+      MaintenanceReport.create!(
+        report_type: 'compaction_review',
+        data: {
+          'run_id' => 1,
+          'phase' => 'tree_walk',
+          'count' => 1,
+          'items' => [
+            {
+              'id' => 'review-1',
+              'kind' => 'entity_merge',
+              'entity_a' => { 'entity_id' => task1.id, 'name' => task1.name, 'entity_type' => 'Task' },
+              'entity_b' => { 'entity_id' => project1.id, 'name' => project1.name, 'entity_type' => 'Project' },
+              'cosine_distance' => 0.12
+            }
+          ]
+        }
+      )
+    end
+
+    it 'renders the review page' do
+      get compaction_review_data_exchange_index_path
+
+      expect(response).to have_http_status(:ok)
+      expect(response.body).to include('Compaction Review')
+      expect(response.body).to include('entity_merge')
+    end
+
+    it 'redirects when no report exists' do
+      compaction_report.destroy!
+
+      get compaction_review_data_exchange_index_path
+
+      expect(response).to redirect_to(root_path)
+    end
+  end
+
+  describe 'POST /data_exchange/compaction_review_action' do
+    let!(:compaction_report) do
+      MaintenanceReport.create!(
+        report_type: 'compaction_review',
+        data: {
+          'run_id' => 1,
+          'phase' => 'tree_walk',
+          'count' => 1,
+          'items' => [
+            {
+              'id' => 'review-1',
+              'kind' => 'entity_merge',
+              'entity_a' => { 'entity_id' => task1.id, 'name' => task1.name, 'entity_type' => 'Task' },
+              'entity_b' => { 'entity_id' => project1.id, 'name' => project1.name, 'entity_type' => 'Project' },
+              'cosine_distance' => 0.12
+            }
+          ]
+        }
+      )
+    end
+
+    it 'marks a suggestion as ignored' do
+      post compaction_review_action_data_exchange_index_path, params: {
+        item_id: 'review-1',
+        review_action: 'reject'
+      }
+
+      expect(response).to redirect_to(compaction_review_data_exchange_index_path)
+      expect(compaction_report.reload.data['items'].first['status']).to eq('ignored')
+    end
+
+    it 'renders the confirmation form for approval' do
+      post compaction_review_action_data_exchange_index_path, params: {
+        item_id: 'review-1',
+        review_action: 'approve'
+      }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.body).to include('Confirm')
+    end
+
+    it 'applies the confirmed action' do
+      post compaction_review_action_data_exchange_index_path, params: {
+        item_id: 'review-1',
+        review_action: 'confirm',
+        source_id: task1.id,
+        target_id: project1.id
+      }
+
+      expect(response).to redirect_to(compaction_review_data_exchange_index_path)
+      expect(compaction_report.reload.data['items'].first['status']).to eq('approved')
+      expect(MemoryEntity.find_by(id: task1.id)).to be_nil
+    end
+  end
 end
