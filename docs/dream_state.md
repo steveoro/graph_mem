@@ -262,13 +262,15 @@ The dashboard **Repair relation duplicates** button runs the repairer, then oper
 
 |                     | Dream-state compactor          | Garbage collector                        |
 | ------------------- | ------------------------------ | ---------------------------------------- |
-| **Mutates graph?**  | Yes                            | No (audit logs only)                     |
+| **Mutates graph?**  | Yes                            | Yes (through `GraphIntegrityService`)    |
 | **Orphan handling** | Auto-parent or queue           | Report only (stricter orphan definition) |
-| **Duplicates**      | Deletes identical observations | Reports duplicate groups                 |
+| **Duplicates**      | Deletes identical observations | Deletes duplicate observations           |
 | **Entity merges**   | Auto-merge when cosine < 0.10  | —                                        |
 
 
-See [garbage_collector.md](garbage_collector.md) for the diagnostic-only job.
+The garbage collector still creates diagnostic reports, but it now actively deletes duplicate observations and repairs `memory_observations_count` counters. A brand-new compaction run also runs `GraphIntegrityService` before processing to repair relation integrity and stale counters. Per-entity failures inside `tree_walk` are logged and skipped instead of halting the whole run.
+
+See [garbage_collector.md](garbage_collector.md) for details on the self-healing GC job.
 
 ## Acceptance and usefulness benchmark
 

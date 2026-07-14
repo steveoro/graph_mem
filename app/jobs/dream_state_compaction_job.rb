@@ -14,6 +14,14 @@ class DreamStateCompactionJob < ApplicationJob
     return unless run
     return if run.status.in?(%w[completed failed])
 
+    if run.cursor_entity_id.blank? && (run.stats["entities_processed"].to_i == 0)
+      begin
+        GraphIntegrityService.call
+      rescue StandardError => e
+        Rails.logger.error "[DreamState] Pre-flight integrity sweep failed: #{e.message}"
+      end
+    end
+
     run.with_lock do
       run.reload
       return if run.status.in?(%w[completed failed])

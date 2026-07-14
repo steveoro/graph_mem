@@ -9,6 +9,6 @@ class GarbageCollectionJob < ApplicationJob
       return
     end
 
-    GarbageCollectionRunner.call
+    GraphIntegrityService.call
   end
 end

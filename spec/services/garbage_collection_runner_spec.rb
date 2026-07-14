@@ -30,5 +30,31 @@ RSpec.describe GarbageCollectionRunner do
       expect(AuditLog.find_by(id: old_log.id)).to be_nil
       expect(result[:audit_logs_pruned]).to be >= 1
     end
+
+    it "deletes duplicate observations and keeps the lowest id" do
+      entity = MemoryEntity.create!(name: "DupEntity", entity_type: "Task")
+      first = MemoryObservation.create!(memory_entity: entity, content: "dup note")
+      MemoryObservation.create!(memory_entity: entity, content: "dup note")
+      MemoryObservation.create!(memory_entity: entity, content: "dup note")
+
+      entity.update_column(:memory_observations_count, 5)
+
+      described_class.call
+
+      expect(entity.memory_observations.pluck(:id)).to contain_exactly(first.id)
+      expect(entity.reload.memory_observations_count).to eq(1)
+    end
+
+    it "reports deleted duplicate observations in the duplicates report" do
+      entity = MemoryEntity.create!(name: "DupReportEntity", entity_type: "Task")
+      MemoryObservation.create!(memory_entity: entity, content: "report dup")
+      MemoryObservation.create!(memory_entity: entity, content: "report dup")
+
+      result = described_class.call
+      duplicates_report = result[:reports].find { |r| r[:report_type] == "duplicates" }
+
+      expect(duplicates_report[:count]).to eq(1)
+      expect(duplicates_report[:report_type]).to eq("duplicates")
+    end
   end
 end

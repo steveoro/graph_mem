@@ -1,6 +1,6 @@
 # Garbage Collector
 
-GraphMem's **garbage collector** is a scheduled maintenance job that scans the knowledge graph for hygiene issues, writes diagnostic reports, and prunes old audit logs. It is intentionally **non-destructive toward graph data**: it does not delete entities, observations, or relations. Operators and MCP clients use its reports to decide what to clean up manually—or rely on the separate [dream-state compactor](dream_state.md) for automated graph compaction.
+GraphMem's **garbage collector** is a scheduled maintenance job that scans the knowledge graph for hygiene issues, writes diagnostic reports, deletes duplicate observations, and prunes old audit logs. It is **non-destructive toward entities and relations**, but it actively repairs `MemoryObservation` duplicates and `memory_observations_count` counters. Operators and MCP clients use its reports to decide what else to clean up manually—or rely on the separate [dream-state compactor](dream_state.md) for automated graph compaction.
 
 ## Purpose
 
@@ -10,7 +10,7 @@ Over time, agent sessions can leave behind:
 - **Duplicate observations** — the same text stored more than once on one entity
 - **Stale audit history** — change logs that exceed the retention window
 
-The garbage collector surfaces the first two categories as `MaintenanceReport` records and performs the one automatic cleanup it is allowed to do: deleting expired `AuditLog` rows.
+The garbage collector surfaces orphans as `MaintenanceReport` records and performs the automatic cleanups it is allowed to do: deleting duplicate observations, repairing `memory_observations_count` counters, and deleting expired `AuditLog` rows.
 
 ## Architecture
 
@@ -23,8 +23,10 @@ GarbageCollectionJob
         ▼
 GarbageCollectionRunner
         ├── report_orphans      → MaintenanceReport (type: orphans)
-        ├── report_duplicates   → MaintenanceReport (type: duplicates)
+        ├── cleanup_duplicates  → MaintenanceReport (type: duplicates)
         └── prune_audit_logs    → AuditLog.prune! (90-day retention)
+
+`GraphIntegrityService` (called by `GarbageCollectionJob` and before a new dream-state run) wraps `GarbageCollectionRunner` plus `RelationIntegrityRepairer` and a full counter recount.
 ```
 
 | Component | Location | Role |
@@ -50,17 +52,18 @@ The report stores:
 - `count` — total orphans found
 - `entities` — up to 100 sample rows (`id`, `name`, `entity_type`)
 
-### 2. Duplicate observation detection (`report_duplicates`)
+### 2. Duplicate observation cleanup (`cleanup_duplicates`)
 
-Scans `MemoryObservation` grouped by `(memory_entity_id, content)`. Groups with `COUNT(*) > 1` are reported.
+Scans `MemoryObservation` grouped by `(memory_entity_id, content)`. Groups with `COUNT(*) > 1` are cleaned by deleting every row except the lowest `id` for that group.
 
 Each reported group includes:
 
 - `entity_id`
 - `content_preview` — truncated to 100 characters
-- `count` — number of duplicate rows
+- `count` — original number of duplicate rows
+- `deleted_count` — total duplicate observations removed across all groups
 
-Again, this step **reports only**; it does not delete duplicate observations. The dream-state compactor handles byte-identical deduplication during its tree-walk phase.
+The counter cache on affected entities is repaired after deletion. This keeps the graph healthy even if a dream-state run failed before it could finish deduplication.
 
 ### 3. Audit log pruning (`prune_audit_logs`)
 
@@ -121,9 +124,9 @@ Valid report types today: `orphans`, `duplicates`, `compaction_review`, `embeddi
 | | Garbage collector | Dream-state compactor |
 |---|---|---|
 | **Goal** | Diagnose hygiene issues | Actively compact the graph |
-| **Mutates graph?** | No (except audit logs) | Yes — parents orphans, dedupes observations, auto-merges entities |
+| **Mutates graph?** | Yes (duplicate observations + counters) | Yes — parents orphans, dedupes observations, auto-merges entities |
 | **Orphan definition** | No observations **and** no relations | No incoming `part_of`/`depends_on` (non-Project) |
-| **Duplicate observations** | Reports only | Deletes byte-identical duplicates |
+| **Duplicate observations** | Deletes duplicates, keeps lowest id | Deletes byte-identical duplicates |
 | **Schedule (production)** | 2:00 PM GMT daily | 3:00 AM GMT daily |
 | **MCP status tool** | — | `dream_state_status` |
 
@@ -134,5 +137,5 @@ Use the garbage collector for periodic **visibility** into graph health. Use dre
 1. Review dashboard stat chips after the daily run (or click **Run now**).
 2. For orphan reports, inspect sample entities in the dashboard details panel or via `get_maintenance_reports`.
 3. Decide whether to delete empty stray nodes (web UI / `delete_entity`) or attach them to a project (`merge_entities`, relation tools, or let dream-state handle high-confidence matches).
-4. For duplicate reports, either wait for dream-state deduplication or remove duplicates manually.
+4. For duplicate reports, the GC has already removed duplicates; review the report if any edge cases remain.
 5. Audit log pruning requires no action; it runs automatically every GC pass.

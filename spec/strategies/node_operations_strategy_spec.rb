@@ -240,6 +240,42 @@ RSpec.describe NodeOperationsStrategy, type: :model do
     end
   end
 
+  describe "#merge_into concurrency handling" do
+    it "retries a transient stale-record failure and succeeds" do
+      attempts = 0
+      allow(strategy).to receive(:merge_into_once) do
+        attempts += 1
+        raise ActiveRecord::StatementInvalid, "Record has changed since last read in table 'memory_entities'" if attempts == 1
+
+        { success: true, message: "merged" }
+      end
+
+      expect(strategy.merge_into(orphan_node.id, project.id)).to eq(success: true, message: "merged")
+      expect(attempts).to eq(2)
+    end
+
+    it "does not retry unrelated statement errors" do
+      attempts = 0
+      allow(strategy).to receive(:merge_into_once) do
+        attempts += 1
+        raise ActiveRecord::StatementInvalid, "syntax error"
+      end
+
+      expect { strategy.merge_into(orphan_node.id, project.id) }.to raise_error(ActiveRecord::StatementInvalid, "syntax error")
+      expect(attempts).to eq(1)
+    end
+
+    it "returns a not-found result when the source disappears before locking" do
+      source_id = orphan_node.id
+      orphan_node.destroy!
+
+      expect(strategy.merge_into(source_id, project.id)).to eq(
+        success: false,
+        error: "Source node not found"
+      )
+    end
+  end
+
   describe "#delete_node" do
     it "deletes the node" do
       node_id = orphan_node.id

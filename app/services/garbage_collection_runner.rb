@@ -8,7 +8,7 @@ class GarbageCollectionRunner
 
   def call
     report_orphans
-    report_duplicates
+    cleanup_duplicates
     prune_audit_logs
 
     {
@@ -37,25 +37,56 @@ class GarbageCollectionRunner
     Rails.logger.info "[GC] Found #{entities.size} orphan entities"
   end
 
-  def report_duplicates
-    dupes = MemoryObservation
-      .select(:memory_entity_id, :content, "COUNT(*) as cnt")
+  def cleanup_duplicates
+    groups = MemoryObservation
+      .select(:memory_entity_id, :content, "MIN(id) AS keep_id", "COUNT(*) AS cnt")
       .group(:memory_entity_id, :content)
       .having("COUNT(*) > 1")
-      .map do |obs|
-        {
-          entity_id: obs.memory_entity_id,
-          content_preview: obs.content.truncate(100),
-          count: obs.cnt
-        }
-      end
+
+    deleted_count = 0
+    affected_entity_ids = []
+    duplicate_groups = []
+
+    groups.each do |group|
+      delete_ids = MemoryObservation
+        .where(memory_entity_id: group.memory_entity_id, content: group.content)
+        .where.not(id: group.keep_id)
+        .order(:id)
+        .pluck(:id)
+
+      next if delete_ids.empty?
+
+      MemoryObservation.where(id: delete_ids).destroy_all
+      deleted_count += delete_ids.size
+      affected_entity_ids << group.memory_entity_id
+
+      duplicate_groups << {
+        entity_id: group.memory_entity_id,
+        content_preview: group.content.truncate(100),
+        count: group.cnt
+      }
+    end
+
+    repair_counters_for(affected_entity_ids.uniq)
 
     @duplicates_report = MaintenanceReport.create!(
       report_type: "duplicates",
-      data: { count: dupes.size, observations: dupes.first(100) }
+      data: {
+        count: deleted_count,
+        group_count: duplicate_groups.size,
+        observations: duplicate_groups.first(100)
+      }
     )
 
-    Rails.logger.info "[GC] Found #{dupes.size} duplicate observation groups"
+    Rails.logger.info "[GC] Deleted #{deleted_count} duplicate observations from #{duplicate_groups.size} groups"
+  end
+
+  def repair_counters_for(entity_ids)
+    return if entity_ids.empty?
+
+    MemoryEntity.where(id: entity_ids).find_each do |entity|
+      entity.update_column(:memory_observations_count, entity.memory_observations.count)
+    end
   end
 
   def prune_audit_logs

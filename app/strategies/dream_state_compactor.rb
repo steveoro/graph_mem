@@ -7,7 +7,7 @@ class DreamStateCompactor
   AUTO_MERGE_DISTANCE = 0.10
   REVIEW_MERGE_DISTANCE = 0.30
   AUTO_ORPHAN_SCORE = 10
-  BATCH_SIZE = 5
+  BATCH_SIZE = 1
 
   def initialize(
     run:,
@@ -41,9 +41,19 @@ class DreamStateCompactor
     end
 
     entity_ids[start_idx, BATCH_SIZE].each do |entity_id|
-      process_entity_for_phase(phase, entity_id)
       @run.update!(cursor_entity_id: entity_id)
       @run.increment_stat!("entities_processed")
+
+      begin
+        ActiveRecord::Base.transaction(requires_new: true) do
+          process_entity_for_phase(phase, entity_id)
+        end
+      rescue StandardError => e
+        log_entity_error(entity_id, phase, e)
+        @run.increment_stat!("entity_errors")
+      end
+
+      flush_review_queue!
 
       if @run.reload.pause_requested?
         @run.pause!
@@ -86,8 +96,8 @@ class DreamStateCompactor
     when "orphans"
       process_orphan(entity_id)
     when "tree_walk"
-      dedupe_observations_for_entity(entity_id)
       process_entity_merges(entity_id)
+      dedupe_observations_for_entity(entity_id)
     when "relationship_discovery"
       process_relationship_discovery(entity_id)
     end
@@ -141,6 +151,8 @@ class DreamStateCompactor
   end
 
   def dedupe_observations_for_entity(entity_id)
+    return unless MemoryEntity.exists?(id: entity_id)
+
     duplicates = MemoryObservation
       .where(memory_entity_id: entity_id)
       .select(:content)
@@ -161,21 +173,38 @@ class DreamStateCompactor
     end
   end
 
+  def embedding_sql_literal(entity)
+    return if entity.embedding.blank?
+
+    vector = entity.embedding.to_s.unpack("e*")
+    return if vector.empty?
+
+    text = "[#{vector.join(',')}]"
+    quoted = ActiveRecord::Base.connection.quote(text)
+    "VEC_FromText(#{quoted})"
+  rescue StandardError
+    nil
+  end
+
   def process_entity_merges(entity_id)
     entity = MemoryEntity.find_by(id: entity_id)
     return unless entity
     return if entity.entity_type == NodeOperationsStrategy::PROJECT_ENTITY_TYPE
     return if entity.embedding.blank?
 
+    source_vector_sql = embedding_sql_literal(entity)
+    return unless source_vector_sql
+
     candidates = MemoryEntity
       .where.not(id: entity.id)
       .where.not(entity_type: NodeOperationsStrategy::PROJECT_ENTITY_TYPE)
       .where.not(embedding: nil)
       .where("id > ?", entity.id)
-      .select("memory_entities.*, VEC_DISTANCE_COSINE(embedding, (SELECT embedding FROM memory_entities WHERE id = #{entity.id})) AS vec_distance")
+      .select("memory_entities.*, VEC_DISTANCE_COSINE(embedding, #{source_vector_sql}) AS vec_distance")
       .having("vec_distance < ?", REVIEW_MERGE_DISTANCE)
       .order(Arel.sql("vec_distance ASC"))
       .limit(3)
+      .to_a
 
     candidates.each do |candidate|
       distance = candidate[:vec_distance].to_f
@@ -201,6 +230,20 @@ class DreamStateCompactor
       entity_b: { entity_id: entity_b.id, name: entity_b.name, entity_type: entity_b.entity_type },
       cosine_distance: distance.round(4),
       recommendation: "review_manually"
+    }
+  end
+
+  def log_entity_error(entity_id, phase, error)
+    message = "[DreamState] entity #{entity_id} in phase #{phase} failed: #{error.class} - #{error.message}"
+    Rails.logger.error(message)
+
+    @review_items << {
+      id: SecureRandom.uuid,
+      kind: "entity_error",
+      entity_id: entity_id,
+      phase: phase,
+      error_class: error.class.name,
+      error_message: error.message
     }
   end
 

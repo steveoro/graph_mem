@@ -78,5 +78,50 @@ RSpec.describe DreamStateCompactionJob, type: :job do
       expect(run.reload.status).to eq("failed")
       expect(run.stats["error"]).to eq("boom")
     end
+
+    it "runs a pre-flight integrity sweep for a brand-new run" do
+      CompactionRun.create!(
+        status: "running",
+        phase: "tree_walk",
+        stats: {},
+        started_at: Time.current
+      )
+
+      allow_any_instance_of(DreamStateCompactor).to receive(:process_batch!).and_return(:completed)
+      expect(GraphIntegrityService).to receive(:call)
+
+      described_class.new.perform
+    end
+
+    it "skips the pre-flight sweep when resuming a run" do
+      CompactionRun.create!(
+        status: "running",
+        phase: "tree_walk",
+        cursor_entity_id: project.id,
+        stats: { "entities_processed" => 5 },
+        started_at: Time.current
+      )
+
+      allow_any_instance_of(DreamStateCompactor).to receive(:process_batch!).and_return(:completed)
+      expect(GraphIntegrityService).not_to receive(:call)
+
+      described_class.new.perform
+    end
+
+    it "logs and continues when the pre-flight sweep raises" do
+      CompactionRun.create!(
+        status: "running",
+        phase: "tree_walk",
+        stats: {},
+        started_at: Time.current
+      )
+
+      allow_any_instance_of(DreamStateCompactor).to receive(:process_batch!).and_return(:completed)
+      allow(GraphIntegrityService).to receive(:call).and_raise(StandardError, "sweep failed")
+
+      expect(Rails.logger).to receive(:error).with(/Pre-flight integrity sweep failed/)
+
+      described_class.new.perform
+    end
   end
 end

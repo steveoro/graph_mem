@@ -5,8 +5,15 @@ All notable changes to GraphMem will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.5] - 2026-07-14
+
+- Dream-state compactor: process one entity per batch with per-entity transaction isolation, advance cursor before processing, and skip per-entity errors instead of halting the run
+- Harden `tree_walk` vector similarity query by using an in-memory `VEC_FromText` literal instead of a subquery against `memory_entities` and by running merge scan before deduplication
+- `GarbageCollectionRunner` now deletes duplicate observations and repairs `memory_observations_count` counters
+- `GraphIntegrityService` orchestrates `RelationIntegrityRepairer`, `GarbageCollectionRunner`, and a full counter recount; called by `GarbageCollectionJob` and before each new dream-state run
+
 ## [1.9.4] - 2026-07-13
-- Prevent concurrent compactor runs; compactor review UI
+- Prevent concurrent compactor runs; compactor review UI; increased concurrent stability
 
 ## [1.9.3] - 2026-07-10
 - Fixes for multi-agent client tool usage; documentation update; dream state compactor 3rd phase: relationship suggestion + integration tests

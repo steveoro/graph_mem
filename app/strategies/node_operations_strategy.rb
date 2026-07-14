@@ -13,6 +13,13 @@ class NodeOperationsStrategy
   CHILD_RELATION_TYPES = %w[part_of depends_on].freeze
   PROJECT_ENTITY_TYPE = "Project"
   PROJECT_ROOT_PROTECTED_ERROR = "Project root entities cannot be deleted or merged away"
+  MAX_MERGE_RETRIES = 3
+  MERGE_RETRY_BASE_DELAY = 0.05
+  TRANSIENT_MERGE_ERRORS = [
+    /record has changed since last read/i,
+    /deadlock found/i,
+    /lock wait timeout/i
+  ].freeze
 
   def initialize
     @logger = Rails.logger
@@ -72,15 +79,56 @@ class NodeOperationsStrategy
   # @param target_id [Integer] The target node to merge into
   # @return [Hash] Result with :success and :message or :error
   def merge_into(source_id, target_id)
-    source = MemoryEntity.find_by(id: source_id)
-    target = MemoryEntity.find_by(id: target_id)
+    attempts = 0
 
-    return error_result("Source node not found") unless source
-    return error_result("Target node not found") unless target
+    begin
+      merge_into_once(source_id, target_id)
+    rescue ActiveRecord::RecordNotUnique => e
+      error_result("Failed to merge nodes: duplicate relation would be created (#{e.message})")
+    rescue ActiveRecord::StatementInvalid => e
+      raise unless transient_merge_error?(e) && attempts < MAX_MERGE_RETRIES
+
+      attempts += 1
+      delay = MERGE_RETRY_BASE_DELAY * (2**(attempts - 1))
+      @logger.warn "NodeOperationsStrategy: retrying merge #{source_id}->#{target_id} (#{attempts}/#{MAX_MERGE_RETRIES}) after #{e.class}: #{e.message}"
+      sleep(delay)
+      retry
+    rescue ActiveRecord::RecordInvalid => e
+      error_result("Failed to merge nodes: #{e.message}")
+    end
+  end
+
+  def merge_into_once(source_id, target_id)
     return error_result("Cannot merge a node into itself") if source_id == target_id
-    return error_result(PROJECT_ROOT_PROTECTED_ERROR) if project_root?(source)
+
+    source_name = nil
+    target_name = nil
+    transferred_observations = 0
+    result = nil
 
     ActiveRecord::Base.transaction do
+      locked_entities = MemoryEntity
+        .where(id: [ source_id, target_id ])
+        .order(:id)
+        .lock
+        .to_a
+        .index_by(&:id)
+      source = locked_entities[source_id]
+      target = locked_entities[target_id]
+
+      unless source
+        result = error_result("Source node not found")
+        next
+      end
+      unless target
+        result = error_result("Target node not found")
+        next
+      end
+      if project_root?(source)
+        result = error_result(PROJECT_ROOT_PROTECTED_ERROR)
+        next
+      end
+
       # Add source name and aliases to target aliases
       merge_aliases(source, target)
 
@@ -103,16 +151,15 @@ class NodeOperationsStrategy
 
       # Delete the source entity
       source_name = source.name
+      target_name = target.name
       source.destroy!
 
-      @logger.info "NodeOperationsStrategy: Merged '#{source_name}' (#{source_id}) into '#{target.name}' (#{target_id}). Transferred #{transferred_observations} observations."
+      @logger.info "NodeOperationsStrategy: Merged '#{source_name}' (#{source_id}) into '#{target_name}' (#{target_id}). Transferred #{transferred_observations} observations."
     end
 
-    success_result("Successfully merged '#{source.name}' into '#{target.name}'")
-  rescue ActiveRecord::RecordInvalid => e
-    error_result("Failed to merge nodes: #{e.message}")
-  rescue ActiveRecord::RecordNotUnique => e
-    error_result("Failed to merge nodes: duplicate relation would be created (#{e.message})")
+    return result if result
+
+    success_result("Successfully merged '#{source_name}' into '#{target_name}'")
   end
 
   # Delete a node
@@ -170,6 +217,11 @@ class NodeOperationsStrategy
 
   def error_result(error)
     { success: false, error: error }
+  end
+
+  def transient_merge_error?(error)
+    message = error.message.to_s
+    TRANSIENT_MERGE_ERRORS.any? { |pattern| message.match?(pattern) }
   end
 
   # Merge aliases from source to target
