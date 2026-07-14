@@ -194,7 +194,7 @@ module ParameterNormalizer
         end
       end
 
-      %i[entity_id from_entity_id to_entity_id].each do |id_field|
+      %i[entity_id start_entity_id from_entity_id to_entity_id].each do |id_field|
         val = result[id_field]
         next unless val.is_a?(String) && val.present?
 

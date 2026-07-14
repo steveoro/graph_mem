@@ -37,7 +37,7 @@ This document provides an overview of GraphMem's architecture, explaining how th
 
 GraphMem follows a layered architecture that separates concerns between:
 
-1. **MCP Interface Layer** - 24 tools accessed via JSON-RPC/SSE
+1. **MCP Interface Layer** - 26 tools accessed via JSON-RPC/SSE
 2. **REST API Layer** - Traditional RESTful endpoints mirroring MCP capabilities
 3. **Application Logic Layer** - Search strategies, context scoping, embedding service
 4. **Data Access Layer** - ActiveRecord models with vector extensions
@@ -45,7 +45,7 @@ GraphMem follows a layered architecture that separates concerns between:
 
 ## Component Breakdown
 
-### 1. MCP Interface Layer (24 tools)
+### 1. MCP Interface Layer (26 tools)
 
 Tools are Ruby classes in `app/tools/` that inherit from `ApplicationTool` (which inherits from `FastMcp::Tool`). They auto-register via `ApplicationTool.descendants` in `config/initializers/fast_mcp.rb`.
 
@@ -54,6 +54,7 @@ Tool categories:
 - **Entity CRUD** (4): `create_entity`, `get_entity`, `update_entity`, `delete_entity`
 - **Observation** (2): `create_observation`, `delete_observation`
 - **Relation** (3): `create_relation`, `delete_relation`, `find_relations`
+- **Graph Traversal** (2): `traverse_graph`, `find_shortest_path`
 - **Search** (4): `search_entities`, `search_subgraph`, `list_entities`, `get_subgraph_by_ids`
 - **Batch/Maintenance** (6): `bulk_update`, `suggest_merges`, `merge_entities`, `dream_state_status`, `get_maintenance_reports`, `get_graph_stats`
 - **Utility** (2): `get_version`, `get_current_time`
@@ -73,8 +74,13 @@ Controllers in `app/controllers/api/v1/` provide REST equivalents for all MCP op
 | `MaintenanceController` | suggest_merges, stats |
 | `StatusController` | health check, time |
 | `GraphDataController` | Cytoscape-format graph data for web UI |
+| `GraphTraversalController` | multi-hop traverse, shortest_path |
 
 ### 3. Application Logic Layer
+
+#### Graph Traversal (`app/services/graph_traversal_service.rb`)
+
+`GraphTraversalService` performs bounded breadth-first expansion and hop-count shortest-path searches. It queries one frontier at a time, supports incoming/outgoing/bidirectional traversal, canonical relation-type filters, cycle protection, deterministic ordering, and result caps. MCP tools, REST endpoints, and `MemoryGraphResource` share this implementation.
 
 #### Search Strategies (`app/strategies/`)
 

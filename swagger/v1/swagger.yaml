@@ -1256,6 +1256,170 @@ paths:
               schema:
                 "$ref": "#/components/schemas/error_response"
 
+  # ── Graph Traversal ────────────────────────────────────────────────
+  "/api/v1/graph/traverse":
+    get:
+      operationId: traverseGraph
+      summary: Bounded multi-hop breadth-first traversal from an entity
+      tags: [Graph Traversal]
+      parameters:
+      - name: start_entity_id
+        in: query
+        required: true
+        description: The entity to start traversal from
+        schema:
+          type: integer
+      - name: max_depth
+        in: query
+        required: false
+        description: Maximum number of hops to expand
+        schema:
+          type: integer
+          default: 2
+          maximum: 5
+      - name: direction
+        in: query
+        required: false
+        description: Traversal direction
+        schema:
+          type: string
+          enum: [both, outgoing, incoming]
+          default: both
+      - name: relation_types
+        in: query
+        required: false
+        description: Comma-separated relation types to restrict traversal (canonicalized)
+        schema:
+          type: string
+      - name: max_entities
+        in: query
+        required: false
+        description: Maximum number of entities to return
+        schema:
+          type: integer
+          default: 100
+          maximum: 1000
+      responses:
+        '200':
+          description: Reachable entities and connecting relations
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  entities:
+                    type: array
+                    items:
+                      "$ref": "#/components/schemas/entity_with_observations"
+                  relations:
+                    type: array
+                    items:
+                      "$ref": "#/components/schemas/traversal_relation"
+                  traversal:
+                    type: object
+                    properties:
+                      start_entity_id:
+                        type: integer
+                      max_depth:
+                        type: integer
+                      direction:
+                        type: string
+                      visited_depth:
+                        type: integer
+                      truncated:
+                        type: boolean
+                    required: [start_entity_id, max_depth, direction, visited_depth, truncated]
+                required: [entities, relations, traversal]
+        '404':
+          description: Start entity not found
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/error_response"
+        '422':
+          description: Missing or invalid parameters
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/error_response"
+
+  "/api/v1/graph/shortest_path":
+    get:
+      operationId: findShortestPath
+      summary: Shortest path (by hop count) between two entities
+      tags: [Graph Traversal]
+      parameters:
+      - name: from_entity_id
+        in: query
+        required: true
+        description: Source entity
+        schema:
+          type: integer
+      - name: to_entity_id
+        in: query
+        required: true
+        description: Target entity
+        schema:
+          type: integer
+      - name: max_depth
+        in: query
+        required: false
+        description: Maximum number of hops to search
+        schema:
+          type: integer
+          default: 2
+          maximum: 5
+      - name: direction
+        in: query
+        required: false
+        description: Traversal direction
+        schema:
+          type: string
+          enum: [both, outgoing, incoming]
+          default: both
+      - name: relation_types
+        in: query
+        required: false
+        description: Comma-separated relation types to restrict traversal (canonicalized)
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Shortest path result (found may be false when no path exists)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  found:
+                    type: boolean
+                  hop_count:
+                    type: integer
+                    nullable: true
+                  direction:
+                    type: string
+                  entities:
+                    type: array
+                    items:
+                      "$ref": "#/components/schemas/entity_with_observations"
+                  relations:
+                    type: array
+                    items:
+                      "$ref": "#/components/schemas/traversal_relation"
+                required: [found, hop_count, direction, entities, relations]
+        '404':
+          description: Endpoint entity not found
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/error_response"
+        '422':
+          description: Missing or invalid parameters
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/error_response"
+
 components:
   securitySchemes:
     McpClientHeader:
@@ -1439,6 +1603,39 @@ components:
           format: date-time
           readOnly: true
       required: [id, from_entity_id, to_entity_id, relation_type]
+
+    traversal_relation:
+      type: object
+      properties:
+        relation_id:
+          type: integer
+        from_entity_id:
+          type: integer
+        to_entity_id:
+          type: integer
+        relation_type:
+          type: string
+        weight:
+          type: number
+          format: float
+          minimum: 0
+          nullable: true
+        confidence:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+          nullable: true
+        properties:
+          type: object
+          additionalProperties: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+      required: [relation_id, from_entity_id, to_entity_id, relation_type, created_at, updated_at]
 
     search_result:
       type: object

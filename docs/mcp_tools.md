@@ -1,6 +1,6 @@
 # MCP Tools Documentation
 
-Detailed reference for the 24 Model Context Protocol (MCP) tools available in GraphMem.
+Detailed reference for the 26 Model Context Protocol (MCP) tools available in GraphMem.
 
 ## Overview
 
@@ -152,6 +152,30 @@ Context is stored per MCP client in the `agent_contexts` table, keyed by the `X-
 - **Parameters:**
   - `entity_ids` (array of integers, required): Entity IDs to include.
 
+## Graph Traversal (2 tools)
+
+These tools perform multi-hop graph traversal. Unlike `find_relations` (which is single-hop), they walk the graph breadth-first from a starting entity. `direction` is one of `outgoing` (source -> target), `incoming` (target <- source), or `both` (default).
+
+#### `traverse_graph`
+- **Description:** Performs a bounded, multi-hop breadth-first traversal from an entity. Returns the reachable entities (with observations) and the relations connecting them.
+- **Parameters:**
+  - `start_entity_id` (integer, required): The entity to start from. Also accepts entity name (string).
+  - `max_depth` (integer, optional, default: 2, max: 5): Maximum number of hops to expand.
+  - `direction` (string, optional, default: `both`): One of `both`, `outgoing`, `incoming`.
+  - `relation_types` (array of strings, optional): Restrict traversal to these relation types (canonicalized).
+  - `max_entities` (integer, optional, default: 100, max: 1000): Maximum number of entities to return.
+- **Response:** `{ entities: [...], relations: [...], traversal: { start_entity_id, max_depth, direction, visited_depth, truncated } }`. `truncated` is `true` when the `max_entities` cap stopped expansion.
+
+#### `find_shortest_path`
+- **Description:** Finds the shortest path (by hop count) between two entities using bounded breadth-first search.
+- **Parameters:**
+  - `from_entity_id` (integer, required): Source entity. Also accepts entity name (string).
+  - `to_entity_id` (integer, required): Target entity. Also accepts entity name (string).
+  - `max_depth` (integer, optional, default: 2, max: 5): Maximum number of hops to search.
+  - `direction` (string, optional, default: `both`): One of `both`, `outgoing`, `incoming`.
+  - `relation_types` (array of strings, optional): Restrict traversal to these relation types (canonicalized).
+- **Response:** `{ found, hop_count, direction, entities: [...], relations: [...] }`. When no path exists within `max_depth`, `found` is `false`, `hop_count` is `null`, and `entities`/`relations` are empty.
+
 ## Batch & Maintenance Tools (6 tools)
 
 #### `bulk_update`
@@ -244,6 +268,8 @@ Some tools overlap by design; pick by intent:
 |---|---|---|
 | Find entities by keyword/semantic match | `search_entities` | `search_subgraph` (when you also need observation text and relations in one payload) |
 | Load known entities by ID | `get_subgraph_by_ids` | `get_entity` (single entity with full detail) |
+| Explore multi-hop neighborhoods | `traverse_graph` | `find_relations` (single-hop edges only) |
+| Find how two entities connect | `find_shortest_path` | `traverse_graph` (full neighborhood) |
 | Review duplicate entities | `suggest_merges` | `get_maintenance_reports` (the dream-state `compaction_review` queue) |
 | Inspect background compaction state | `dream_state_status` | `get_maintenance_reports` (queued review items) |
 | Execute a merge | `merge_entities` | Web cleanup UI / REST API |
