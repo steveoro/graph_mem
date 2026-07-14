@@ -84,6 +84,11 @@ Context is stored per MCP client in the `agent_contexts` table, keyed by the `X-
 - **Parameters:**
   - `entity_id` (integer, required): The entity to attach the observation to. Also accepts entity name (string).
   - `text_content` (string, required): The observation content. Also accepted as `content`.
+  - `confidence` (number, optional): Confidence score from 0.0 to 1.0.
+  - `source` (string, optional): Source or provenance identifier.
+  - `valid_from` / `valid_until` (ISO 8601 strings, optional): Validity window.
+  - `tags` (array of strings, optional): Structured tags.
+- **Embedding refresh:** Changes to content, source, or tags regenerate the observation embedding; confidence and validity-only changes do not.
 
 #### `delete_observation`
 - **Description:** Deletes an observation by ID.
@@ -99,6 +104,10 @@ Context is stored per MCP client in the `agent_contexts` table, keyed by the `X-
   - `from_entity_id` (integer, required): Source entity ID. Also accepts entity name (string) via `from_entity_id`, `from_entity`, or `from`.
   - `to_entity_id` (integer, required): Target entity ID. Also accepts entity name (string) via `to_entity_id`, `to_entity`, or `to`.
   - `relation_type` (string, required): Relationship type (e.g., "part_of", "depends_on").
+  - `weight` (number, optional): Non-negative relation weight.
+  - `confidence` (number, optional): Confidence score from 0.0 to 1.0.
+  - `properties` (object, optional): Arbitrary structured relation properties.
+- **Notes:** Known relation-type variants are mapped to canonical values via `RelationTypeMapping`.
 
 #### `delete_relation`
 - **Description:** Deletes a relation by ID.
@@ -111,7 +120,7 @@ Context is stored per MCP client in the `agent_contexts` table, keyed by the `X-
 - **Parameters:**
   - `from_entity_id` (integer, optional): Filter by source entity.
   - `to_entity_id` (integer, optional): Filter by target entity.
-  - `relation_type` (string, optional): Filter by relation type.
+  - `relation_type` (string, optional): Filter by relation type; known variants are canonicalized.
 
 ## Search & Query Tools (4 tools)
 

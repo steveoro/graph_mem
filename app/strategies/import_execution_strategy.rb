@@ -143,7 +143,14 @@ class ImportExecutionStrategy
       actual_parent_id = parent_entity_id || tree_parent_id
       if actual_parent_id.present? && actual_parent_id != entity_id
         relation_type = node[:relation_type] || node["relation_type"] || "part_of"
-        create_relation_safe(entity_id, actual_parent_id, relation_type)
+        create_relation_safe(
+          entity_id,
+          actual_parent_id,
+          relation_type,
+          weight: node[:relation_weight] || node["relation_weight"],
+          confidence: node[:relation_confidence] || node["relation_confidence"],
+          properties: node[:relation_properties] || node["relation_properties"] || {}
+        )
       end
     end
 
@@ -327,7 +334,12 @@ class ImportExecutionStrategy
 
       MemoryObservation.create!(
         memory_entity_id: entity_id,
-        content: content
+        content: content,
+        confidence: obs_data[:confidence] || obs_data["confidence"],
+        source: obs_data[:source] || obs_data["source"],
+        valid_from: obs_data[:valid_from] || obs_data["valid_from"],
+        valid_until: obs_data[:valid_until] || obs_data["valid_until"],
+        tags: obs_data[:tags] || obs_data["tags"] || []
       )
       @observations_created += 1
     rescue ActiveRecord::RecordInvalid => e
@@ -339,21 +351,24 @@ class ImportExecutionStrategy
   # @param from_entity_id [Integer] Child/source entity ID
   # @param to_entity_id [Integer] Parent/target entity ID
   # @param relation_type [String] Type of relation
-  def create_relation_safe(from_entity_id, to_entity_id, relation_type)
+  def create_relation_safe(from_entity_id, to_entity_id, relation_type, weight: nil, confidence: nil, properties: {})
     return if from_entity_id == to_entity_id # No self-loops
 
     # Check for existing relation
     existing = MemoryRelation.exists?(
       from_entity_id: from_entity_id,
       to_entity_id: to_entity_id,
-      relation_type: relation_type
+      relation_type: MemoryRelation.canonical_relation_type(relation_type)
     )
     return if existing
 
     MemoryRelation.create!(
       from_entity_id: from_entity_id,
       to_entity_id: to_entity_id,
-      relation_type: relation_type
+      relation_type: relation_type,
+      weight: weight,
+      confidence: confidence,
+      properties: properties
     )
     @relations_created += 1
     @logger.debug "ImportExecutionStrategy: Created relation #{from_entity_id} -[#{relation_type}]-> #{to_entity_id}"

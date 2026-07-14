@@ -90,6 +90,11 @@ class SearchSubgraphTool < ApplicationTool
                   properties: {
                     observation_id: { type: :integer },
                     content: { type: :string },
+                    confidence: { type: [ :number, :null ] },
+                    source: { type: [ :string, :null ] },
+                    valid_from: { type: [ :string, :null ], format: "date-time" },
+                    valid_until: { type: [ :string, :null ], format: "date-time" },
+                    tags: { type: :array, items: { type: :string } },
                     created_at: { type: :string, format: "date-time" },
                     updated_at: { type: :string, format: "date-time" }
                   },
@@ -111,6 +116,9 @@ class SearchSubgraphTool < ApplicationTool
               from_entity_id: { type: :integer },
               to_entity_id: { type: :integer },
               relation_type: { type: :string },
+              weight: { type: [ :number, :null ] },
+              confidence: { type: [ :number, :null ] },
+              properties: { type: :object },
               created_at: { type: :string, format: "date-time" },
               updated_at: { type: :string, format: "date-time" }
             },
@@ -229,6 +237,11 @@ class SearchSubgraphTool < ApplicationTool
             {
               observation_id: obs.id,
               content: obs.content,
+              confidence: obs.confidence,
+              source: obs.source,
+              valid_from: obs.valid_from&.iso8601,
+              valid_until: obs.valid_until&.iso8601,
+              tags: obs.tags,
               created_at: obs.created_at.iso8601,
               updated_at: obs.updated_at.iso8601
             }
@@ -246,6 +259,9 @@ class SearchSubgraphTool < ApplicationTool
           from_entity_id: relation.from_entity_id,
           to_entity_id: relation.to_entity_id,
           relation_type: relation.relation_type,
+          weight: relation.weight,
+          confidence: relation.confidence,
+          properties: relation.properties,
           created_at: relation.created_at.iso8601,
           updated_at: relation.updated_at.iso8601
         }

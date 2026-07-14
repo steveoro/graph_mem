@@ -92,6 +92,9 @@ module Api
               source: relation.from_entity_id.to_s,
               target: relation.to_entity_id.to_s,
               label: relation.relation_type,
+              weight: relation.weight,
+              confidence: relation.confidence,
+              properties: relation.properties,
               from_entity_name: relation.from_entity&.name,
               to_entity_name: relation.to_entity&.name
             }

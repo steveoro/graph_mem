@@ -150,8 +150,16 @@ class ExportStrategy
       children: []
     }
 
-    # Add relation_type if this is a child node
-    node_data[:relation_type] = relation_type if relation_type.present?
+    if relation_type.present?
+      if relation_type.is_a?(Hash)
+        node_data[:relation_type] = relation_type[:relation_type]
+        node_data[:relation_weight] = relation_type[:weight]
+        node_data[:relation_confidence] = relation_type[:confidence]
+        node_data[:relation_properties] = relation_type[:properties]
+      else
+        node_data[:relation_type] = relation_type
+      end
+    end
 
     # Find children: entities that have a "part_of" or "depends_on" relation TO this entity
     # (from_entity_id is the child, to_entity_id is the parent)
@@ -163,7 +171,7 @@ class ExportStrategy
       child_entity = relation.from_entity
       next unless child_entity
 
-      child_tree = build_entity_tree_internal(child_entity, visited.dup, relation.relation_type, with_progress)
+      child_tree = build_entity_tree_internal(child_entity, visited.dup, serialize_relation(relation), with_progress)
       node_data[:children] << child_tree if child_tree
     end
 
@@ -179,7 +187,7 @@ class ExportStrategy
       next unless related_entity
       next if visited.include?(related_entity.id)
 
-      related_tree = build_entity_tree_internal(related_entity, visited.dup, relation.relation_type, with_progress)
+      related_tree = build_entity_tree_internal(related_entity, visited.dup, serialize_relation(relation), with_progress)
       node_data[:children] << related_tree if related_tree
     end
 
@@ -193,8 +201,22 @@ class ExportStrategy
     entity.memory_observations.map do |obs|
       {
         content: obs.content,
+        confidence: obs.confidence,
+        source: obs.source,
+        valid_from: obs.valid_from&.iso8601,
+        valid_until: obs.valid_until&.iso8601,
+        tags: obs.tags,
         created_at: obs.created_at.iso8601
       }
     end
+  end
+
+  def serialize_relation(relation)
+    {
+      relation_type: relation.relation_type,
+      weight: relation.weight,
+      confidence: relation.confidence,
+      properties: relation.properties
+    }
   end
 end

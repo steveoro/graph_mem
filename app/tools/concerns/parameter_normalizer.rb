@@ -125,9 +125,9 @@ module ParameterNormalizer
       texts = normalize_contents_to_array(op)
 
       if texts.any?
-        texts.map { |t| { entity_id: entity_id, text_content: t } }
+        texts.map { |text| observation_attributes(op).merge(entity_id: entity_id, text_content: text) }
       elsif op[:text_content]
-        [ { entity_id: entity_id, text_content: op[:text_content] } ]
+        [ observation_attributes(op).merge(entity_id: entity_id, text_content: op[:text_content]) ]
       else
         []
       end
@@ -137,8 +137,21 @@ module ParameterNormalizer
       {
         from_entity_id: op[:from_entity_id],
         to_entity_id:   op[:to_entity_id],
-        relation_type:  op[:relation_type]
+        relation_type:  op[:relation_type],
+        weight:         op[:weight],
+        confidence:     op[:confidence],
+        properties:     op[:properties]
       }
+    end
+
+    def observation_attributes(op)
+      {
+        confidence: op[:confidence],
+        source: op[:source],
+        valid_from: op[:valid_from],
+        valid_until: op[:valid_until],
+        tags: op[:tags]
+      }.compact
     end
 
     # The standard server uses `contents` (array of strings) and/or

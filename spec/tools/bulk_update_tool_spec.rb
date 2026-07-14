@@ -75,6 +75,21 @@ RSpec.describe BulkUpdateTool, type: :model do
         expect(result[:created_observations].length).to eq(2)
         expect(result[:summary][:observations_created]).to eq(2)
       end
+
+      it 'creates observations with structured metadata' do
+        result = tool.call(observations: [
+          {
+            entity_id: entity.id,
+            text_content: 'Metadata observation',
+            confidence: 0.8,
+            source: 'bulk',
+            tags: [ 'batch' ]
+          }
+        ])
+
+        observation = MemoryObservation.find(result[:created_observations].first[:observation_id])
+        expect(observation).to have_attributes(confidence: 0.8, source: 'bulk', tags: [ 'batch' ])
+      end
     end
 
     context 'creating relations' do
@@ -93,6 +108,25 @@ RSpec.describe BulkUpdateTool, type: :model do
         expect(rel[:from]).to eq(entity_a.id)
         expect(rel[:to]).to eq(entity_b.id)
         expect(rel[:type]).to eq('depends_on')
+      end
+
+      it 'creates relations with metadata and canonicalized types' do
+        RelationTypeMapping.create!(canonical_type: 'depends_on', variant: 'requires')
+
+        result = tool.call(relations: [
+          {
+            from_entity_id: entity_a.id,
+            to_entity_id: entity_b.id,
+            relation_type: 'requires',
+            weight: 2.0,
+            confidence: 0.9,
+            properties: { 'source' => 'bulk' }
+          }
+        ])
+
+        relation = MemoryRelation.find(result[:created_relations].first[:relation_id])
+        expect(relation).to have_attributes(relation_type: 'depends_on', weight: 2.0, confidence: 0.9)
+        expect(relation.properties).to eq('source' => 'bulk')
       end
     end
 

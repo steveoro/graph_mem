@@ -49,7 +49,12 @@ RSpec.describe ExportStrategy, type: :model do
   let!(:observation1) do
     MemoryObservation.create!(
       memory_entity: project1,
-      content: 'This is the first observation'
+      content: 'This is the first observation',
+      confidence: 0.9,
+      source: 'export-spec',
+      valid_from: Time.zone.parse('2026-07-01'),
+      valid_until: Time.zone.parse('2026-08-01'),
+      tags: %w[export verified]
     )
   end
 
@@ -72,7 +77,10 @@ RSpec.describe ExportStrategy, type: :model do
     MemoryRelation.create!(
       from_entity: task1,
       to_entity: project1,
-      relation_type: 'part_of'
+      relation_type: 'part_of',
+      weight: 2.0,
+      confidence: 0.8,
+      properties: { 'source' => 'export-spec' }
     )
   end
 
@@ -176,6 +184,24 @@ RSpec.describe ExportStrategy, type: :model do
 
         expect(task_child[:observations].length).to eq(1)
         expect(task_child[:observations].first[:content]).to eq('Task observation content')
+      end
+
+      it 'includes observation and relation metadata' do
+        result = strategy.export([ project1.id ])
+        root_node = result[:root_nodes].first
+        observation = root_node[:observations].find { |item| item[:content] == observation1.content }
+        task_child = root_node[:children].find { |child| child[:name] == task1.name }
+
+        expect(observation).to include(
+          confidence: 0.9,
+          source: 'export-spec',
+          tags: %w[export verified]
+        )
+        expect(task_child).to include(
+          relation_weight: 2.0,
+          relation_confidence: 0.8,
+          relation_properties: { 'source' => 'export-spec' }
+        )
       end
     end
 

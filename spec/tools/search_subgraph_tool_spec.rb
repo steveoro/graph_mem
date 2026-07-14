@@ -18,7 +18,13 @@ RSpec.describe SearchSubgraphTool, type: :model do
   end
 
   let!(:obs_project) do
-    MemoryObservation.create!(memory_entity: project, content: 'Uses Ruby on Rails framework')
+    MemoryObservation.create!(
+      memory_entity: project,
+      content: 'Uses Ruby on Rails framework',
+      confidence: 0.95,
+      source: 'architecture-doc',
+      tags: [ 'rails' ]
+    )
   end
 
   let!(:obs_task) do
@@ -26,7 +32,14 @@ RSpec.describe SearchSubgraphTool, type: :model do
   end
 
   let!(:relation) do
-    MemoryRelation.create!(from_entity_id: task.id, to_entity_id: project.id, relation_type: 'part_of')
+    MemoryRelation.create!(
+      from_entity_id: task.id,
+      to_entity_id: project.id,
+      relation_type: 'part_of',
+      weight: 2.0,
+      confidence: 0.9,
+      properties: { 'scope' => 'project' }
+    )
   end
 
   describe 'class methods' do
@@ -112,6 +125,11 @@ RSpec.describe SearchSubgraphTool, type: :model do
         expect(entity[:observations]).to be_an(Array)
         expect(entity[:observations].length).to eq(1)
         expect(entity[:observations].first[:content]).to eq('Uses Ruby on Rails framework')
+        expect(entity[:observations].first).to include(
+          confidence: 0.95,
+          source: 'architecture-doc',
+          tags: [ 'rails' ]
+        )
       end
 
       it 'returns relations between matched entities' do
@@ -124,6 +142,20 @@ RSpec.describe SearchSubgraphTool, type: :model do
             expect(matched_ids).to include(rel[:to_entity_id])
           end
         end
+      end
+
+      it 'returns relation metadata' do
+        MemoryObservation.create!(memory_entity: project, content: 'SharedRelationMetadata')
+        MemoryObservation.create!(memory_entity: task, content: 'SharedRelationMetadata')
+
+        result = tool.call(query: 'SharedRelationMetadata')
+        returned_relation = result[:relations].find { |item| item[:relation_id] == relation.id }
+
+        expect(returned_relation).to include(
+          weight: 2.0,
+          confidence: 0.9,
+          properties: { 'scope' => 'project' }
+        )
       end
 
       it 'returns pagination metadata' do

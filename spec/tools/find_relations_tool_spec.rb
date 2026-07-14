@@ -10,7 +10,14 @@ RSpec.describe FindRelationsTool, type: :model do
   let!(:entity_c) { MemoryEntity.create!(name: 'Entity C', entity_type: 'Issue') }
 
   let!(:rel_ab) do
-    MemoryRelation.create!(from_entity_id: entity_a.id, to_entity_id: entity_b.id, relation_type: 'depends_on')
+    MemoryRelation.create!(
+      from_entity_id: entity_a.id,
+      to_entity_id: entity_b.id,
+      relation_type: 'depends_on',
+      weight: 2.0,
+      confidence: 0.75,
+      properties: { 'evidence' => 'spec' }
+    )
   end
 
   let!(:rel_bc) do
@@ -62,6 +69,9 @@ RSpec.describe FindRelationsTool, type: :model do
         expect(rel).to have_key(:from_entity_id)
         expect(rel).to have_key(:to_entity_id)
         expect(rel).to have_key(:relation_type)
+        expect(rel).to have_key(:weight)
+        expect(rel).to have_key(:confidence)
+        expect(rel).to have_key(:properties)
         expect(rel).to have_key(:created_at)
         expect(rel).to have_key(:updated_at)
       end
@@ -97,6 +107,14 @@ RSpec.describe FindRelationsTool, type: :model do
         results = tool.call(relation_type: 'part_of')
         expect(results.length).to eq(1)
         expect(results.first[:relation_id]).to eq(rel_bc.id)
+      end
+
+      it 'canonicalizes a mapped relation type filter' do
+        RelationTypeMapping.create!(canonical_type: 'depends_on', variant: 'requires')
+
+        results = tool.call(relation_type: 'REQUIRES')
+
+        expect(results.map { |relation| relation[:relation_id] }).to contain_exactly(rel_ab.id, rel_ac.id)
       end
     end
 

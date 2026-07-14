@@ -132,8 +132,16 @@ CREATE TABLE `memory_observations` (
   `created_at` datetime(6) NOT NULL,
   `updated_at` datetime(6) NOT NULL,
   `embedding` vector(768) DEFAULT NULL,
+  `confidence` float DEFAULT NULL,
+  `source` varchar(255) DEFAULT NULL,
+  `valid_from` datetime(6) DEFAULT NULL,
+  `valid_until` datetime(6) DEFAULT NULL,
+  `tags` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL DEFAULT '[]' CHECK (json_valid(`tags`)),
   PRIMARY KEY (`id`),
   KEY `index_memory_observations_on_memory_entity_id` (`memory_entity_id`),
+  KEY `index_memory_observations_on_source` (`source`),
+  KEY `index_memory_observations_on_valid_from` (`valid_from`),
+  KEY `index_memory_observations_on_valid_until` (`valid_until`),
   CONSTRAINT `fk_rails_675e0d9a7a` FOREIGN KEY (`memory_entity_id`) REFERENCES `memory_entities` (`id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=4633 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
@@ -147,6 +155,9 @@ CREATE TABLE `memory_relations` (
   `relation_type` varchar(255) DEFAULT NULL,
   `created_at` datetime(6) NOT NULL,
   `updated_at` datetime(6) NOT NULL,
+  `weight` float DEFAULT NULL,
+  `confidence` float DEFAULT NULL,
+  `properties` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL DEFAULT '{}' CHECK (json_valid(`properties`)),
   PRIMARY KEY (`id`),
   UNIQUE KEY `index_memory_relations_uniqueness` (`from_entity_id`,`to_entity_id`,`relation_type`),
   KEY `index_memory_relations_on_from_entity_id` (`from_entity_id`),
@@ -183,6 +194,20 @@ CREATE TABLE `operation_progresses` (
   KEY `index_operation_progresses_on_created_at` (`created_at`)
 ) ENGINE=InnoDB AUTO_INCREMENT=84 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `relation_type_mappings`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `relation_type_mappings` (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT,
+  `canonical_type` varchar(255) NOT NULL,
+  `variant` varchar(255) NOT NULL,
+  `created_at` datetime(6) NOT NULL,
+  `updated_at` datetime(6) NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `index_relation_type_mappings_on_variant` (`variant`),
+  KEY `index_relation_type_mappings_on_canonical_type` (`canonical_type`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `schema_migrations`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8mb4 */;
@@ -215,6 +240,8 @@ CREATE TABLE `settings` (
 /*M!100616 SET NOTE_VERBOSITY=@OLD_NOTE_VERBOSITY */;
 
 INSERT INTO `schema_migrations` (version) VALUES
+('20260714171001'),
+('20260714171000'),
 ('20260714155706'),
 ('20260714120100'),
 ('20260714120000'),
@@ -241,4 +268,3 @@ INSERT INTO `schema_migrations` (version) VALUES
 ('20250512095346'),
 ('20250512095341'),
 ('20250512095340');
-

@@ -86,7 +86,10 @@ RSpec.describe 'API V1 Memory Relations', type: :request do
         properties: {
           from_entity_id: { type: :integer, description: 'ID of the source entity' },
           to_entity_id: { type: :integer, description: 'ID of the target entity' },
-          relation_type: { type: :string, example: 'related_to' }
+          relation_type: { type: :string, example: 'related_to' },
+          weight: { type: :number, format: :float, minimum: 0, nullable: true },
+          confidence: { type: :number, format: :float, minimum: 0, maximum: 1, nullable: true },
+          properties: { type: :object, additionalProperties: true }
         },
         required: [ 'from_entity_id', 'to_entity_id', 'relation_type' ]
       }
@@ -96,7 +99,16 @@ RSpec.describe 'API V1 Memory Relations', type: :request do
 
         let(:entity_from) { MemoryEntity.create!(name: 'Create From Entity', entity_type: 'CreateFrom') }
         let(:entity_to) { MemoryEntity.create!(name: 'Create To Entity', entity_type: 'CreateTo') }
-        let(:memory_relation) { { from_entity_id: entity_from.id, to_entity_id: entity_to.id, relation_type: 'points_to' } }
+        let(:memory_relation) do
+          {
+            from_entity_id: entity_from.id,
+            to_entity_id: entity_to.id,
+            relation_type: 'points_to',
+            weight: 2.5,
+            confidence: 0.8,
+            properties: { evidence: 'request-spec' }
+          }
+        end
 
         run_test! do |response|
           data = JSON.parse(response.body)
@@ -104,6 +116,9 @@ RSpec.describe 'API V1 Memory Relations', type: :request do
           expect(data['relation_type']).to eq('points_to')
           expect(data['from_entity_id']).to eq(entity_from.id)
           expect(data['to_entity_id']).to eq(entity_to.id)
+          expect(data['weight']).to eq(2.5)
+          expect(data['confidence']).to eq(0.8)
+          expect(data['properties']).to eq('evidence' => 'request-spec')
         end
       end
 
@@ -182,19 +197,24 @@ RSpec.describe 'API V1 Memory Relations', type: :request do
       parameter name: :memory_relation, in: :body, schema: {
         type: :object,
         properties: {
-          relation_type: { type: :string, example: 'updated_link' }
+          relation_type: { type: :string, example: 'updated_link' },
+          weight: { type: :number, format: :float, minimum: 0, nullable: true },
+          confidence: { type: :number, format: :float, minimum: 0, maximum: 1, nullable: true },
+          properties: { type: :object, additionalProperties: true }
         },
-        required: [ 'relation_type' ]
+        required: []
       }
 
       response(200, 'successful') do
         schema '$ref' => '#/components/schemas/memory_relation'
-        let(:memory_relation) { { relation_type: 'updated_link_patch' } }
+        let(:memory_relation) { { relation_type: 'updated_link_patch', confidence: 0.6, properties: { changed: true } } }
 
         run_test! do |response|
           data = JSON.parse(response.body)
           expect(response).to have_http_status(:ok)
           expect(data['relation_type']).to eq('updated_link_patch')
+          expect(data['confidence']).to eq(0.6)
+          expect(data['properties']).to eq('changed' => true)
           reloaded_relation = existing_relation.reload
           expect(reloaded_relation.relation_type).to eq('updated_link_patch')
           expect(reloaded_relation.from_entity_id).to eq(entity1.id)
@@ -234,7 +254,10 @@ RSpec.describe 'API V1 Memory Relations', type: :request do
       parameter name: :memory_relation, in: :body, schema: {
         type: :object,
         properties: {
-          relation_type: { type: :string, example: 'updated_link_put' }
+          relation_type: { type: :string, example: 'updated_link_put' },
+          weight: { type: :number, format: :float, minimum: 0, nullable: true },
+          confidence: { type: :number, format: :float, minimum: 0, maximum: 1, nullable: true },
+          properties: { type: :object, additionalProperties: true }
         },
         required: [ 'relation_type' ]
       }

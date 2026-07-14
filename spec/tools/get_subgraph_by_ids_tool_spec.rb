@@ -9,11 +9,26 @@ RSpec.describe GetSubgraphByIdsTool, type: :model do
   let!(:entity_b) { MemoryEntity.create!(name: 'Entity B', entity_type: 'Task') }
   let!(:entity_c) { MemoryEntity.create!(name: 'Entity C', entity_type: 'Issue') }
 
-  let!(:obs_a) { MemoryObservation.create!(memory_entity: entity_a, content: 'Obs for A') }
+  let!(:obs_a) do
+    MemoryObservation.create!(
+      memory_entity: entity_a,
+      content: 'Obs for A',
+      confidence: 0.9,
+      source: 'spec',
+      tags: [ 'subgraph' ]
+    )
+  end
   let!(:obs_b) { MemoryObservation.create!(memory_entity: entity_b, content: 'Obs for B') }
 
   let!(:rel_ab) do
-    MemoryRelation.create!(from_entity_id: entity_a.id, to_entity_id: entity_b.id, relation_type: 'depends_on')
+    MemoryRelation.create!(
+      from_entity_id: entity_a.id,
+      to_entity_id: entity_b.id,
+      relation_type: 'depends_on',
+      weight: 1.5,
+      confidence: 0.8,
+      properties: { 'scope' => 'test' }
+    )
   end
 
   let!(:rel_ac) do
@@ -48,6 +63,11 @@ RSpec.describe GetSubgraphByIdsTool, type: :model do
         expect(entity_a_data[:entity_type]).to eq('Project')
         expect(entity_a_data[:created_at]).to be_a(String)
         expect(entity_a_data[:updated_at]).to be_a(String)
+        expect(entity_a_data[:observations].first).to include(
+          confidence: 0.9,
+          source: 'spec',
+          tags: [ 'subgraph' ]
+        )
       end
 
       it 'includes only relations between the requested entities' do
@@ -55,6 +75,11 @@ RSpec.describe GetSubgraphByIdsTool, type: :model do
 
         expect(result[:relations].length).to eq(1)
         expect(result[:relations].first[:relation_id]).to eq(rel_ab.id)
+        expect(result[:relations].first).to include(
+          weight: 1.5,
+          confidence: 0.8,
+          properties: { 'scope' => 'test' }
+        )
       end
 
       it 'excludes relations to entities outside the requested set' do

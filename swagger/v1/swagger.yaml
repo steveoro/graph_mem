@@ -322,6 +322,27 @@ paths:
                     content:
                       type: string
                       example: An important observation
+                    confidence:
+                      type: number
+                      format: float
+                      minimum: 0
+                      maximum: 1
+                      nullable: true
+                    source:
+                      type: string
+                      nullable: true
+                    valid_from:
+                      type: string
+                      format: date-time
+                      nullable: true
+                    valid_until:
+                      type: string
+                      format: date-time
+                      nullable: true
+                    tags:
+                      type: array
+                      items:
+                        type: string
                   required: [content]
       responses:
         '201':
@@ -387,7 +408,27 @@ paths:
                   properties:
                     content:
                       type: string
-                  required: [content]
+                    confidence:
+                      type: number
+                      format: float
+                      minimum: 0
+                      maximum: 1
+                      nullable: true
+                    source:
+                      type: string
+                      nullable: true
+                    valid_from:
+                      type: string
+                      format: date-time
+                      nullable: true
+                    valid_until:
+                      type: string
+                      format: date-time
+                      nullable: true
+                    tags:
+                      type: array
+                      items:
+                        type: string
       responses:
         '200':
           description: Updated
@@ -422,6 +463,27 @@ paths:
                   properties:
                     content:
                       type: string
+                    confidence:
+                      type: number
+                      format: float
+                      minimum: 0
+                      maximum: 1
+                      nullable: true
+                    source:
+                      type: string
+                      nullable: true
+                    valid_from:
+                      type: string
+                      format: date-time
+                      nullable: true
+                    valid_until:
+                      type: string
+                      format: date-time
+                      nullable: true
+                    tags:
+                      type: array
+                      items:
+                        type: string
                   required: [content]
       responses:
         '200':
@@ -537,6 +599,20 @@ paths:
                     relation_type:
                       type: string
                       example: part_of
+                    weight:
+                      type: number
+                      format: float
+                      minimum: 0
+                      nullable: true
+                    confidence:
+                      type: number
+                      format: float
+                      minimum: 0
+                      maximum: 1
+                      nullable: true
+                    properties:
+                      type: object
+                      additionalProperties: true
                   required: [from_entity_id, to_entity_id, relation_type]
       responses:
         '201':
@@ -578,7 +654,7 @@ paths:
                 "$ref": "#/components/schemas/error_response"
     patch:
       operationId: patchMemoryRelation
-      summary: Update relation type (partial)
+      summary: Update relation (partial)
       tags: [Memory Relations]
       requestBody:
         content:
@@ -591,7 +667,20 @@ paths:
                   properties:
                     relation_type:
                       type: string
-                  required: [relation_type]
+                    weight:
+                      type: number
+                      format: float
+                      minimum: 0
+                      nullable: true
+                    confidence:
+                      type: number
+                      format: float
+                      minimum: 0
+                      maximum: 1
+                      nullable: true
+                    properties:
+                      type: object
+                      additionalProperties: true
       responses:
         '200':
           description: Updated
@@ -613,7 +702,7 @@ paths:
                 "$ref": "#/components/schemas/error_response"
     put:
       operationId: putMemoryRelation
-      summary: Update relation type (full replace)
+      summary: Update relation (full replace)
       tags: [Memory Relations]
       requestBody:
         content:
@@ -626,6 +715,20 @@ paths:
                   properties:
                     relation_type:
                       type: string
+                    weight:
+                      type: number
+                      format: float
+                      minimum: 0
+                      nullable: true
+                    confidence:
+                      type: number
+                      format: float
+                      minimum: 0
+                      maximum: 1
+                      nullable: true
+                    properties:
+                      type: object
+                      additionalProperties: true
                   required: [relation_type]
       responses:
         '200':
@@ -893,6 +996,27 @@ paths:
                         type: integer
                       text_content:
                         type: string
+                      confidence:
+                        type: number
+                        format: float
+                        minimum: 0
+                        maximum: 1
+                        nullable: true
+                      source:
+                        type: string
+                        nullable: true
+                      valid_from:
+                        type: string
+                        format: date-time
+                        nullable: true
+                      valid_until:
+                        type: string
+                        format: date-time
+                        nullable: true
+                      tags:
+                        type: array
+                        items:
+                          type: string
                     required: [entity_id, text_content]
                 relations:
                   type: array
@@ -905,6 +1029,20 @@ paths:
                         type: integer
                       relation_type:
                         type: string
+                      weight:
+                        type: number
+                        format: float
+                        minimum: 0
+                        nullable: true
+                      confidence:
+                        type: number
+                        format: float
+                        minimum: 0
+                        maximum: 1
+                        nullable: true
+                      properties:
+                        type: object
+                        additionalProperties: true
                     required: [from_entity_id, to_entity_id, relation_type]
       responses:
         '201':
@@ -1188,6 +1326,17 @@ components:
                   type: string
                 relation_type:
                   type: string
+                weight:
+                  type: number
+                  format: float
+                  nullable: true
+                confidence:
+                  type: number
+                  format: float
+                  nullable: true
+                properties:
+                  type: object
+                  additionalProperties: true
           relations_to:
             type: array
             items:
@@ -1201,6 +1350,17 @@ components:
                   type: string
                 relation_type:
                   type: string
+                weight:
+                  type: number
+                  format: float
+                  nullable: true
+                confidence:
+                  type: number
+                  format: float
+                  nullable: true
+                properties:
+                  type: object
+                  additionalProperties: true
 
     memory_observation:
       type: object
@@ -1213,6 +1373,27 @@ components:
         memory_entity_id:
           type: integer
           readOnly: true
+        confidence:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+          nullable: true
+        source:
+          type: string
+          nullable: true
+        valid_from:
+          type: string
+          format: date-time
+          nullable: true
+        valid_until:
+          type: string
+          format: date-time
+          nullable: true
+        tags:
+          type: array
+          items:
+            type: string
         created_at:
           type: string
           format: date-time
@@ -1235,6 +1416,20 @@ components:
           type: integer
         relation_type:
           type: string
+        weight:
+          type: number
+          format: float
+          minimum: 0
+          nullable: true
+        confidence:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+          nullable: true
+        properties:
+          type: object
+          additionalProperties: true
         created_at:
           type: string
           format: date-time
@@ -1299,6 +1494,25 @@ components:
                 type: integer
               content:
                 type: string
+              confidence:
+                type: number
+                format: float
+                nullable: true
+              source:
+                type: string
+                nullable: true
+              valid_from:
+                type: string
+                format: date-time
+                nullable: true
+              valid_until:
+                type: string
+                format: date-time
+                nullable: true
+              tags:
+                type: array
+                items:
+                  type: string
               created_at:
                 type: string
                 format: date-time

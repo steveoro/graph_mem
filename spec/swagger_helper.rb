@@ -73,6 +73,11 @@ RSpec.configure do |config|
               id: { type: :integer, readOnly: true },
               content: { type: :string },
               memory_entity_id: { type: :integer, readOnly: true },
+              confidence: { type: [ :number, :null ], format: :float, nullable: true, minimum: 0, maximum: 1 },
+              source: { type: [ :string, :null ], nullable: true },
+              valid_from: { type: [ :string, :null ], format: 'date-time', nullable: true },
+              valid_until: { type: [ :string, :null ], format: 'date-time', nullable: true },
+              tags: { type: :array, items: { type: :string } },
               created_at: { type: :string, format: 'date-time', readOnly: true },
               updated_at: { type: :string, format: 'date-time', readOnly: true }
             },
@@ -85,6 +90,9 @@ RSpec.configure do |config|
               from_entity_id: { type: :integer },
               to_entity_id: { type: :integer },
               relation_type: { type: :string },
+              weight: { type: [ :number, :null ], format: :float, nullable: true, minimum: 0 },
+              confidence: { type: [ :number, :null ], format: :float, nullable: true, minimum: 0, maximum: 1 },
+              properties: { type: :object, additionalProperties: true },
               created_at: { type: :string, format: 'date-time', readOnly: true },
               updated_at: { type: :string, format: 'date-time', readOnly: true }
             },

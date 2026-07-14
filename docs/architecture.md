@@ -108,9 +108,10 @@ Calls Ollama (or an OpenAI-compatible endpoint) to generate vectors from entity 
 #### Core Models
 
 - **MemoryEntity** - Graph node with name, entity_type, aliases, description, and VECTOR(768) embedding
-- **MemoryObservation** - Text content attached to entities, with its own VECTOR(768) embedding
-- **MemoryRelation** - Directed edge between entities with a relation_type
+- **MemoryObservation** - Text content plus confidence, provenance, validity, and tags attached to entities, with its own VECTOR(768) embedding
+- **MemoryRelation** - Directed edge with a canonicalized relation_type, weight, confidence, and structured properties
 - **EntityTypeMapping** - Canonicalization rules for entity types
+- **RelationTypeMapping** - Canonicalization rules for relation types
 - **AuditLog** - Change tracking for entities
 - **MaintenanceReport** - Results from maintenance operations
 - **AgentContext** - Per-MCP-client project scope and last activity, keyed by `client_id`

@@ -36,8 +36,24 @@ module Api
           raise ActiveRecord::Rollback if errors.any?
 
           observations_data.each_with_index do |obs, idx|
-            record = MemoryObservation.create!(memory_entity_id: obs[:entity_id], content: obs[:text_content])
-            created_observations << { observation_id: record.id, entity_id: record.memory_entity_id }
+            record = MemoryObservation.create!(
+              memory_entity_id: obs[:entity_id],
+              content: obs[:text_content],
+              confidence: obs[:confidence],
+              source: obs[:source],
+              valid_from: obs[:valid_from],
+              valid_until: obs[:valid_until],
+              tags: obs[:tags] || []
+            )
+            created_observations << {
+              observation_id: record.id,
+              entity_id: record.memory_entity_id,
+              confidence: record.confidence,
+              source: record.source,
+              valid_from: record.valid_from&.iso8601,
+              valid_until: record.valid_until&.iso8601,
+              tags: record.tags
+            }
           rescue ActiveRecord::RecordInvalid, ActiveRecord::RecordNotFound => e
             errors << { type: "observation", index: idx, error: e.message }
             raise ActiveRecord::Rollback
@@ -45,8 +61,23 @@ module Api
           raise ActiveRecord::Rollback if errors.any?
 
           relations_data.each_with_index do |rel, idx|
-            record = MemoryRelation.create!(from_entity_id: rel[:from_entity_id], to_entity_id: rel[:to_entity_id], relation_type: rel[:relation_type])
-            created_relations << { relation_id: record.id, from_entity_id: record.from_entity_id, to_entity_id: record.to_entity_id, relation_type: record.relation_type }
+            record = MemoryRelation.create!(
+              from_entity_id: rel[:from_entity_id],
+              to_entity_id: rel[:to_entity_id],
+              relation_type: MemoryRelation.canonical_relation_type(rel[:relation_type]),
+              weight: rel[:weight],
+              confidence: rel[:confidence],
+              properties: rel[:properties] || {}
+            )
+            created_relations << {
+              relation_id: record.id,
+              from_entity_id: record.from_entity_id,
+              to_entity_id: record.to_entity_id,
+              relation_type: record.relation_type,
+              weight: record.weight,
+              confidence: record.confidence,
+              properties: record.properties
+            }
           rescue ActiveRecord::RecordInvalid, ActiveRecord::RecordNotFound => e
             errors << { type: "relation", index: idx, error: e.message }
             raise ActiveRecord::Rollback

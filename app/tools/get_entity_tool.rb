@@ -32,6 +32,11 @@ class GetEntityTool < ApplicationTool
           {
             observation_id: obs.id,
             observation_content: obs.content,
+            confidence: obs.confidence,
+            source: obs.source,
+            valid_from: obs.valid_from&.iso8601,
+            valid_until: obs.valid_until&.iso8601,
+            tags: obs.tags,
             created_at: obs.created_at.iso8601,
             updated_at: obs.updated_at.iso8601
           }
@@ -41,6 +46,9 @@ class GetEntityTool < ApplicationTool
             relation_id: rel.id,
             to_entity_id: rel.to_entity_id,
             relation_type: rel.relation_type,
+            weight: rel.weight,
+            confidence: rel.confidence,
+            properties: rel.properties,
             created_at: rel.created_at.iso8601,
             updated_at: rel.updated_at.iso8601
             # Include to_entity details here if desired
@@ -51,6 +59,9 @@ class GetEntityTool < ApplicationTool
             relation_id: rel.id,
             from_entity_id: rel.from_entity_id,
             relation_type: rel.relation_type,
+            weight: rel.weight,
+            confidence: rel.confidence,
+            properties: rel.properties,
             created_at: rel.created_at.iso8601,
             updated_at: rel.updated_at.iso8601
             # Include from_entity details here if desired

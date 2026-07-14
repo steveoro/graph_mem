@@ -31,6 +31,11 @@ RSpec.describe CreateObservationTool, type: :model do
       expect(schema[:required]).to contain_exactly("entity_id", "text_content")
       expect(schema[:properties]).to have_key(:entity_id)
       expect(schema[:properties]).to have_key(:text_content)
+      expect(schema[:properties]).to have_key(:confidence)
+      expect(schema[:properties]).to have_key(:source)
+      expect(schema[:properties]).to have_key(:valid_from)
+      expect(schema[:properties]).to have_key(:valid_until)
+      expect(schema[:properties]).to have_key(:tags)
     end
   end
 
@@ -50,6 +55,23 @@ RSpec.describe CreateObservationTool, type: :model do
         expect(result[:observation_content]).to eq('New observation')
         expect(result[:created_at]).to be_a(String)
         expect(result[:updated_at]).to be_a(String)
+      end
+
+      it 'persists and returns structured metadata' do
+        result = tool.call(
+          entity_id: entity.id,
+          text_content: 'Metadata observation',
+          confidence: 0.85,
+          source: 'mcp-client',
+          valid_from: '2026-07-01T00:00:00Z',
+          valid_until: '2026-08-01T00:00:00Z',
+          tags: %w[mcp verified]
+        )
+
+        observation = MemoryObservation.find(result[:observation_id])
+        expect(result).to include(confidence: 0.85, source: 'mcp-client', tags: %w[mcp verified])
+        expect(observation.valid_from).to be_present
+        expect(observation.valid_until).to be_present
       end
 
       it 'increments the entity counter cache' do

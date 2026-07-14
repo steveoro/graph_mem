@@ -17,7 +17,10 @@ RSpec.describe GetEntityTool, type: :model do
   let!(:observation) do
     MemoryObservation.create!(
       memory_entity: entity,
-      content: 'This is a test observation'
+      content: 'This is a test observation',
+      confidence: 0.8,
+      source: 'spec',
+      tags: [ 'verified' ]
     )
   end
 
@@ -29,7 +32,10 @@ RSpec.describe GetEntityTool, type: :model do
     MemoryRelation.create!(
       from_entity_id: entity.id,
       to_entity_id: related_entity.id,
-      relation_type: 'depends_on'
+      relation_type: 'depends_on',
+      weight: 2.0,
+      confidence: 0.7,
+      properties: { 'kind' => 'dependency' }
     )
   end
 
@@ -87,6 +93,7 @@ RSpec.describe GetEntityTool, type: :model do
         obs = result[:observations].first
         expect(obs[:observation_id]).to eq(observation.id)
         expect(obs[:observation_content]).to eq('This is a test observation')
+        expect(obs).to include(confidence: 0.8, source: 'spec', tags: [ 'verified' ])
         expect(obs[:created_at]).to be_a(String)
         expect(obs[:updated_at]).to be_a(String)
       end
@@ -101,6 +108,7 @@ RSpec.describe GetEntityTool, type: :model do
         expect(rel[:relation_id]).to eq(relation_to.id)
         expect(rel[:to_entity_id]).to eq(related_entity.id)
         expect(rel[:relation_type]).to eq('depends_on')
+        expect(rel).to include(weight: 2.0, confidence: 0.7, properties: { 'kind' => 'dependency' })
       end
 
       it 'includes relations_to (incoming relations TO this entity)' do
