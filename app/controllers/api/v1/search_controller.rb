@@ -86,13 +86,35 @@ module Api
       def entity_json(entity)
         {
           entity_id: entity.id, name: entity.name, entity_type: entity.entity_type, aliases: entity.aliases,
-          observations: entity.memory_observations.map { |o| { observation_id: o.id, content: o.content, created_at: o.created_at.iso8601, updated_at: o.updated_at.iso8601 } },
+          observations: entity.memory_observations.map do |observation|
+            {
+              observation_id: observation.id,
+              content: observation.content,
+              confidence: observation.confidence,
+              source: observation.source,
+              valid_from: observation.valid_from&.iso8601,
+              valid_until: observation.valid_until&.iso8601,
+              tags: observation.tags,
+              created_at: observation.created_at.iso8601,
+              updated_at: observation.updated_at.iso8601
+            }
+          end,
           created_at: entity.created_at.iso8601, updated_at: entity.updated_at.iso8601
         }
       end
 
       def relation_json(rel)
-        { relation_id: rel.id, from_entity_id: rel.from_entity_id, to_entity_id: rel.to_entity_id, relation_type: rel.relation_type, created_at: rel.created_at.iso8601, updated_at: rel.updated_at.iso8601 }
+        {
+          relation_id: rel.id,
+          from_entity_id: rel.from_entity_id,
+          to_entity_id: rel.to_entity_id,
+          relation_type: rel.relation_type,
+          weight: rel.weight,
+          confidence: rel.confidence,
+          properties: rel.properties,
+          created_at: rel.created_at.iso8601,
+          updated_at: rel.updated_at.iso8601
+        }
       end
     end
   end

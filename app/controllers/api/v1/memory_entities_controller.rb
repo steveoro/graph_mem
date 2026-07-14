@@ -34,13 +34,40 @@ module Api
           created_at: @memory_entity.created_at.iso8601,
           updated_at: @memory_entity.updated_at.iso8601,
           observations: @memory_entity.memory_observations.map { |o|
-            { id: o.id, content: o.content, memory_entity_id: o.memory_entity_id, created_at: o.created_at.iso8601, updated_at: o.updated_at.iso8601 }
+            {
+              id: o.id,
+              content: o.content,
+              memory_entity_id: o.memory_entity_id,
+              confidence: o.confidence,
+              source: o.source,
+              valid_from: o.valid_from&.iso8601,
+              valid_until: o.valid_until&.iso8601,
+              tags: o.tags,
+              created_at: o.created_at.iso8601,
+              updated_at: o.updated_at.iso8601
+            }
           },
           relations_from: @memory_entity.relations_from.map { |r|
-            { relation_id: r.id, to_entity_id: r.to_entity_id, to_entity_name: r.to_entity&.name, relation_type: r.relation_type }
+            {
+              relation_id: r.id,
+              to_entity_id: r.to_entity_id,
+              to_entity_name: r.to_entity&.name,
+              relation_type: r.relation_type,
+              weight: r.weight,
+              confidence: r.confidence,
+              properties: r.properties
+            }
           },
           relations_to: @memory_entity.relations_to.map { |r|
-            { relation_id: r.id, from_entity_id: r.from_entity_id, from_entity_name: r.from_entity&.name, relation_type: r.relation_type }
+            {
+              relation_id: r.id,
+              from_entity_id: r.from_entity_id,
+              from_entity_name: r.from_entity&.name,
+              relation_type: r.relation_type,
+              weight: r.weight,
+              confidence: r.confidence,
+              properties: r.properties
+            }
           }
         }
       end

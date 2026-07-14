@@ -42,6 +42,46 @@ RSpec.describe MemoryObservation, type: :model do
       observation = described_class.new(memory_entity: entity, content: "valid obs")
       expect(observation).to be_valid
     end
+
+    it "accepts structured metadata" do
+      observation = described_class.new(
+        memory_entity: entity,
+        content: "metadata",
+        confidence: 0.8,
+        source: "operator",
+        valid_from: Time.zone.parse("2026-07-01"),
+        valid_until: Time.zone.parse("2026-08-01"),
+        tags: %w[verified project]
+      )
+
+      expect(observation).to be_valid
+    end
+
+    it "requires confidence to be between zero and one" do
+      observation = described_class.new(memory_entity: entity, content: "invalid", confidence: 1.1)
+
+      expect(observation).not_to be_valid
+      expect(observation.errors[:confidence]).to be_present
+    end
+
+    it "requires valid_until to be on or after valid_from" do
+      observation = described_class.new(
+        memory_entity: entity,
+        content: "invalid dates",
+        valid_from: Time.zone.parse("2026-08-01"),
+        valid_until: Time.zone.parse("2026-07-01")
+      )
+
+      expect(observation).not_to be_valid
+      expect(observation.errors[:valid_until]).to include("must be on or after valid_from")
+    end
+
+    it "requires tags to be an array of strings" do
+      observation = described_class.new(memory_entity: entity, content: "invalid tags", tags: [ "valid", 1 ])
+
+      expect(observation).not_to be_valid
+      expect(observation.errors[:tags]).to include("must be an array of strings")
+    end
   end
 
   describe "#as_json" do
@@ -57,6 +97,11 @@ RSpec.describe MemoryObservation, type: :model do
       expect(json).to have_key("id")
       expect(json).to have_key("content")
       expect(json).to have_key("memory_entity_id")
+      expect(json).to have_key("confidence")
+      expect(json).to have_key("source")
+      expect(json).to have_key("valid_from")
+      expect(json).to have_key("valid_until")
+      expect(json).to have_key("tags")
       expect(json).to have_key("created_at")
       expect(json).to have_key("updated_at")
     end
@@ -100,6 +145,30 @@ RSpec.describe MemoryObservation, type: :model do
 
       obs.update!(content: "updated")
       expect(service).to have_received(:embed_observation)
+    end
+
+    it "refreshes embeddings when semantic metadata changes" do
+      obs = described_class.create!(memory_entity: entity, content: "original")
+
+      allow(EmbeddingService).to receive(:vector_enabled?).and_return(true)
+      service = instance_double(EmbeddingService, embed_observation: nil)
+      allow(EmbeddingService).to receive(:instance).and_return(service)
+
+      obs.update!(source: "new source", tags: [ "updated" ])
+
+      expect(service).to have_received(:embed_observation).once
+    end
+
+    it "does not refresh embeddings when non-semantic metadata changes" do
+      obs = described_class.create!(memory_entity: entity, content: "original")
+
+      allow(EmbeddingService).to receive(:vector_enabled?).and_return(true)
+      service = instance_double(EmbeddingService, embed_observation: nil)
+      allow(EmbeddingService).to receive(:instance).and_return(service)
+
+      obs.update!(confidence: 0.9, valid_until: 1.day.from_now)
+
+      expect(service).not_to have_received(:embed_observation)
     end
 
     it "does not raise when embedding service fails on create" do

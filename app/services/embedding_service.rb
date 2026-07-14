@@ -92,7 +92,7 @@ class EmbeddingService
   def embed_observation(observation)
     return unless self.class.vector_enabled?
 
-    vector = embed(observation.content)
+    vector = embed(compose_observation_text(observation))
     return unless vector
 
     store_vector(observation, vector)
@@ -113,7 +113,7 @@ class EmbeddingService
   def embed_observation_binary(observation)
     return nil unless self.class.vector_enabled?
 
-    vector = embed(observation.content)
+    vector = embed(compose_observation_text(observation))
     return nil unless vector
 
     vector.pack("e*")
@@ -196,6 +196,13 @@ class EmbeddingService
   end
 
   private
+
+  def compose_observation_text(observation)
+    parts = [ observation.content ]
+    parts << "Source: #{observation.source}" if observation.source.present?
+    parts << "Tags: #{observation.tags.join(', ')}" if observation.tags.present?
+    parts.join("\n")
+  end
 
   def embed_with_retries(text, raise_on_failure:)
     @last_error = nil

@@ -302,6 +302,21 @@ RSpec.describe EmbeddingService do
     end
   end
 
+  describe "compose_observation_text (private)" do
+    it "includes content, source, and tags" do
+      observation = double(
+        "Observation",
+        content: "The deployment succeeded",
+        source: "ci",
+        tags: %w[deployment verified]
+      )
+
+      text = service.send(:compose_observation_text, observation)
+
+      expect(text).to eq("The deployment succeeded\nSource: ci\nTags: deployment, verified")
+    end
+  end
+
   describe "validate_dimensions! (private)" do
     it "does not raise for matching dimensions" do
       expect { service.send(:validate_dimensions!, fake_vector) }.not_to raise_error

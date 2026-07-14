@@ -9,7 +9,7 @@ class MemoryObservationResource < ApplicationResource
   mime_type "application/json"
 
   # Valid sort fields to prevent SQL injection
-  VALID_SORT_FIELDS = %w[id memory_entity_id content created_at updated_at].freeze
+  VALID_SORT_FIELDS = %w[id memory_entity_id content confidence source valid_from valid_until created_at updated_at].freeze
 
   # Valid sort directions to prevent SQL injection
   VALID_SORT_DIRECTIONS = %w[asc desc].freeze

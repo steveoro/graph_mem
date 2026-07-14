@@ -39,7 +39,15 @@ RSpec.describe ImportExecutionStrategy, type: :model do
               'entity_type' => 'Project',
               'aliases' => 'new-proj',
               'observations' => [
-                { 'content' => 'First observation', 'created_at' => '2026-01-27T12:00:00Z' },
+                {
+                  'content' => 'First observation',
+                  'created_at' => '2026-01-27T12:00:00Z',
+                  'confidence' => 0.9,
+                  'source' => 'import-spec',
+                  'valid_from' => '2026-07-01T00:00:00Z',
+                  'valid_until' => '2026-08-01T00:00:00Z',
+                  'tags' => %w[import verified]
+                },
                 { 'content' => 'Second observation', 'created_at' => '2026-01-27T12:01:00Z' }
               ],
               'children' => []
@@ -73,6 +81,19 @@ RSpec.describe ImportExecutionStrategy, type: :model do
         expect {
           strategy.execute(import_data, decisions)
         }.to change(MemoryObservation, :count).by(2)
+      end
+
+      it 'imports structured observation metadata' do
+        strategy.execute(import_data, decisions)
+
+        observation = MemoryObservation.find_by!(content: 'First observation')
+        expect(observation).to have_attributes(
+          confidence: 0.9,
+          source: 'import-spec',
+          tags: %w[import verified]
+        )
+        expect(observation.valid_from).to be_present
+        expect(observation.valid_until).to be_present
       end
 
       it 'returns successful report' do
@@ -178,6 +199,9 @@ RSpec.describe ImportExecutionStrategy, type: :model do
                   'entity_type' => 'Task',
                   'aliases' => '',
                   'relation_type' => 'part_of',
+                  'relation_weight' => 2.0,
+                  'relation_confidence' => 0.8,
+                  'relation_properties' => { 'source' => 'import-spec' },
                   'observations' => [ { 'content' => 'Child observation' } ],
                   'children' => [
                     {
@@ -228,6 +252,17 @@ RSpec.describe ImportExecutionStrategy, type: :model do
 
         relation2 = MemoryRelation.find_by(from_entity_id: grandchild.id, to_entity_id: child.id)
         expect(relation2.relation_type).to eq('depends_on')
+      end
+
+      it 'imports structured relation metadata' do
+        strategy.execute(import_data, decisions)
+
+        parent = MemoryEntity.find_by(name: 'Parent Project')
+        child = MemoryEntity.find_by(name: 'Child Task')
+        relation = MemoryRelation.find_by!(from_entity_id: child.id, to_entity_id: parent.id)
+
+        expect(relation).to have_attributes(weight: 2.0, confidence: 0.8)
+        expect(relation.properties).to eq('source' => 'import-spec')
       end
 
       it 'returns correct counts in report' do

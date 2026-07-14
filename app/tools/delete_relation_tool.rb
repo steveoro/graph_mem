@@ -47,6 +47,9 @@ class DeleteRelationTool < ApplicationTool
         from_entity_id: relation_attributes["from_entity_id"],
         to_entity_id: relation_attributes["to_entity_id"],
         relation_type: relation_attributes["relation_type"],
+        weight: relation_attributes["weight"],
+        confidence: relation_attributes["confidence"],
+        properties: relation_attributes["properties"] || {},
         created_at: relation_attributes["created_at"].iso8601(3),
         updated_at: relation_attributes["updated_at"].iso8601(3),
         message: "Relation with ID=#{relation_id} deleted successfully."

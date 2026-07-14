@@ -47,6 +47,11 @@ class DeleteObservationTool < ApplicationTool
         observation_id: observation_attributes["id"],
         memory_entity_id: observation_attributes["memory_entity_id"],
         observation_content: observation_attributes["content"],
+        confidence: observation_attributes["confidence"],
+        source: observation_attributes["source"],
+        valid_from: observation_attributes["valid_from"]&.iso8601,
+        valid_until: observation_attributes["valid_until"]&.iso8601,
+        tags: observation_attributes["tags"] || [],
         created_at: observation_attributes["created_at"].iso8601(3),
         updated_at: observation_attributes["updated_at"].iso8601(3),
         message: "Observation with ID=#{observation_id} deleted successfully."

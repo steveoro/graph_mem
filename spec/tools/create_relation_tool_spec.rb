@@ -28,7 +28,14 @@ RSpec.describe CreateRelationTool, type: :model do
       schema = described_class.input_schema_to_json
       expect(schema[:type]).to eq("object")
       expect(schema[:required]).to contain_exactly("from_entity_id", "to_entity_id", "relation_type")
-      expect(schema[:properties].keys).to contain_exactly(:from_entity_id, :to_entity_id, :relation_type)
+      expect(schema[:properties].keys).to contain_exactly(
+        :from_entity_id,
+        :to_entity_id,
+        :relation_type,
+        :weight,
+        :confidence,
+        :properties
+      )
     end
   end
 
@@ -49,6 +56,31 @@ RSpec.describe CreateRelationTool, type: :model do
         expect(result[:relation_type]).to eq('depends_on')
         expect(result[:created_at]).to be_a(String)
         expect(result[:updated_at]).to be_a(String)
+      end
+
+      it 'persists and returns structured metadata' do
+        result = tool.call(
+          from_entity_id: entity_a.id,
+          to_entity_id: entity_b.id,
+          relation_type: 'depends_on',
+          weight: 3.0,
+          confidence: 0.9,
+          properties: { 'evidence' => 'mcp' }
+        )
+
+        expect(result).to include(weight: 3.0, confidence: 0.9, properties: { 'evidence' => 'mcp' })
+      end
+
+      it 'canonicalizes mapped relation types' do
+        RelationTypeMapping.create!(canonical_type: 'depends_on', variant: 'requires')
+
+        result = tool.call(
+          from_entity_id: entity_a.id,
+          to_entity_id: entity_b.id,
+          relation_type: 'REQUIRES'
+        )
+
+        expect(result[:relation_type]).to eq('depends_on')
       end
 
       it 'allows different relation types' do

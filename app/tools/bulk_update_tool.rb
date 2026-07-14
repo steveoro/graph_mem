@@ -45,7 +45,12 @@ class BulkUpdateTool < ApplicationTool
             type: "object",
             properties: {
               entity_id: { type: "integer" },
-              text_content: { type: "string" }
+              text_content: { type: "string" },
+              confidence: { type: %w[number null], minimum: 0, maximum: 1 },
+              source: { type: %w[string null] },
+              valid_from: { type: %w[string null], format: "date-time" },
+              valid_until: { type: %w[string null], format: "date-time" },
+              tags: { type: "array", items: { type: "string" } }
             },
             required: %w[entity_id text_content]
           },
@@ -58,7 +63,10 @@ class BulkUpdateTool < ApplicationTool
             properties: {
               from_entity_id: { type: "integer" },
               to_entity_id: { type: "integer" },
-              relation_type: { type: "string" }
+              relation_type: { type: "string" },
+              weight: { type: %w[number null], minimum: 0 },
+              confidence: { type: %w[number null], minimum: 0, maximum: 1 },
+              properties: { type: "object", additionalProperties: true }
             },
             required: %w[from_entity_id to_entity_id relation_type]
           },
@@ -113,9 +121,22 @@ class BulkUpdateTool < ApplicationTool
         obs_data = obs_data.symbolize_keys
         obs = MemoryObservation.create!(
           memory_entity_id: obs_data[:entity_id],
-          content: obs_data[:text_content]
+          content: obs_data[:text_content],
+          confidence: obs_data[:confidence],
+          source: obs_data[:source],
+          valid_from: obs_data[:valid_from],
+          valid_until: obs_data[:valid_until],
+          tags: obs_data[:tags] || []
         )
-        created_observations << { observation_id: obs.id, entity_id: obs.memory_entity_id }
+        created_observations << {
+          observation_id: obs.id,
+          entity_id: obs.memory_entity_id,
+          confidence: obs.confidence,
+          source: obs.source,
+          valid_from: obs.valid_from&.iso8601,
+          valid_until: obs.valid_until&.iso8601,
+          tags: obs.tags
+        }
       rescue ActiveRecord::RecordInvalid, ActiveRecord::RecordNotFound => e
         errors << { type: "observation", index: idx, error: e.message }
         raise ActiveRecord::Rollback
@@ -128,9 +149,20 @@ class BulkUpdateTool < ApplicationTool
         rel = MemoryRelation.create!(
           from_entity_id: rel_data[:from_entity_id],
           to_entity_id: rel_data[:to_entity_id],
-          relation_type: rel_data[:relation_type]
+          relation_type: MemoryRelation.canonical_relation_type(rel_data[:relation_type]),
+          weight: rel_data[:weight],
+          confidence: rel_data[:confidence],
+          properties: rel_data[:properties] || {}
         )
-        created_relations << { relation_id: rel.id, from: rel.from_entity_id, to: rel.to_entity_id, type: rel.relation_type }
+        created_relations << {
+          relation_id: rel.id,
+          from: rel.from_entity_id,
+          to: rel.to_entity_id,
+          type: rel.relation_type,
+          weight: rel.weight,
+          confidence: rel.confidence,
+          properties: rel.properties
+        }
       rescue ActiveRecord::RecordInvalid, ActiveRecord::RecordNotFound => e
         errors << { type: "relation", index: idx, error: e.message }
         raise ActiveRecord::Rollback

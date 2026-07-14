@@ -29,6 +29,59 @@ RSpec.describe MemoryRelation, type: :model do
       rel = described_class.new(from_entity: entity_a, to_entity: entity_b, relation_type: "depends_on")
       expect(rel).to be_valid
     end
+
+    it "accepts structured metadata" do
+      rel = described_class.new(
+        from_entity: entity_a,
+        to_entity: entity_b,
+        relation_type: "depends_on",
+        weight: 2.5,
+        confidence: 0.75,
+        properties: { "evidence" => "operator" }
+      )
+
+      expect(rel).to be_valid
+    end
+
+    it "validates relation metadata ranges and shape" do
+      rel = described_class.new(
+        from_entity: entity_a,
+        to_entity: entity_b,
+        relation_type: "depends_on",
+        weight: -1,
+        confidence: 1.1,
+        properties: []
+      )
+
+      expect(rel).not_to be_valid
+      expect(rel.errors[:weight]).to be_present
+      expect(rel.errors[:confidence]).to be_present
+      expect(rel.errors[:properties]).to include("must be an object")
+    end
+  end
+
+  describe "relation type canonicalization" do
+    it "canonicalizes mapped relation type variants before validation" do
+      RelationTypeMapping.create!(canonical_type: "depends_on", variant: "requires")
+
+      rel = described_class.create!(
+        from_entity: entity_a,
+        to_entity: entity_b,
+        relation_type: "REQUIRES"
+      )
+
+      expect(rel.relation_type).to eq("depends_on")
+    end
+
+    it "preserves unmapped relation types" do
+      rel = described_class.create!(
+        from_entity: entity_a,
+        to_entity: entity_b,
+        relation_type: "custom_link"
+      )
+
+      expect(rel.relation_type).to eq("custom_link")
+    end
   end
 
   describe "uniqueness constraint" do

@@ -9,7 +9,7 @@ class MemoryRelationResource < ApplicationResource
   mime_type "application/json"
 
   # Valid sort fields to prevent SQL injection
-  VALID_SORT_FIELDS = %w[id from_entity_id to_entity_id relation_type created_at updated_at].freeze
+  VALID_SORT_FIELDS = %w[id from_entity_id to_entity_id relation_type weight confidence created_at updated_at].freeze
 
   # Valid sort directions to prevent SQL injection
   VALID_SORT_DIRECTIONS = %w[asc desc].freeze
@@ -63,7 +63,9 @@ class MemoryRelationResource < ApplicationResource
     query = query.where(to_entity_id: params[:to_entity_id]) if params[:to_entity_id].present?
 
     # Filter by relation_type (exact match)
-    query = query.where(relation_type: params[:relation_type]) if params[:relation_type].present?
+    if params[:relation_type].present?
+      query = query.where(relation_type: MemoryRelation.canonical_relation_type(params[:relation_type]))
+    end
 
     # Date range filters for created_at
     query = query.where("created_at >= ?", Time.zone.parse(params[:created_after])) if params[:created_after].present?

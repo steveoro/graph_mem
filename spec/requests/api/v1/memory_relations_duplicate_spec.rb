@@ -30,6 +30,30 @@ RSpec.describe "API V1 Memory Relations duplicate handling", type: :request do
       data = JSON.parse(response.body)
       expect(data["id"]).to eq(existing.id)
     end
+
+    it "detects duplicates after relation type canonicalization" do
+      RelationTypeMapping.create!(canonical_type: "depends_on", variant: "requires")
+      existing = MemoryRelation.create!(
+        from_entity: entity_from,
+        to_entity: entity_to,
+        relation_type: "depends_on"
+      )
+
+      expect {
+        post "/api/v1/memory_relations",
+             params: {
+               memory_relation: {
+                 from_entity_id: entity_from.id,
+                 to_entity_id: entity_to.id,
+                 relation_type: "REQUIRES"
+               }
+             },
+             as: :json
+      }.not_to change(MemoryRelation, :count)
+
+      expect(response).to have_http_status(:ok)
+      expect(JSON.parse(response.body)["id"]).to eq(existing.id)
+    end
   end
 
   describe "PATCH /api/v1/memory_relations/:id" do

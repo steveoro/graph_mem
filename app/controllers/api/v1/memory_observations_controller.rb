@@ -90,7 +90,14 @@ module Api
       end
 
       def observation_params
-        params.require(:memory_observation).permit(:content)
+        params.require(:memory_observation).permit(
+          :content,
+          :confidence,
+          :source,
+          :valid_from,
+          :valid_until,
+          tags: []
+        )
       end
     end
   end

@@ -208,6 +208,41 @@ RSpec.describe ParameterNormalizer do
         expect(result[:observations].map { |o| o[:text_content] }).to eq(%w[fact1 fact2 fact3])
       end
 
+      it "preserves structured metadata on observation and relation operations" do
+        result = described_class.normalize("bulk_update", {
+          operations: [
+            {
+              type: "create_observation",
+              entity_id: project.id,
+              text_content: "metadata fact",
+              confidence: 0.8,
+              source: "normalizer",
+              tags: [ "bulk" ]
+            },
+            {
+              type: "create_relation",
+              from_entity_id: project.id,
+              to_entity_id: project.id,
+              relation_type: "relates_to",
+              weight: 2.0,
+              confidence: 0.9,
+              properties: { evidence: "normalizer" }
+            }
+          ]
+        })
+
+        expect(result[:observations].first).to include(
+          confidence: 0.8,
+          source: "normalizer",
+          tags: [ "bulk" ]
+        )
+        expect(result[:relations].first).to include(
+          weight: 2.0,
+          confidence: 0.9,
+          properties: { evidence: "normalizer" }
+        )
+      end
+
       it "handles entity type aliases: entity, observation, relation" do
         result = described_class.normalize("bulk_update", {
           operations: [

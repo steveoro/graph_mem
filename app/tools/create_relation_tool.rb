@@ -13,9 +13,12 @@ class CreateRelationTool < ApplicationTool
     required(:from_entity_id).filled(:integer).description("The ID of the entity where the relation starts.")
     required(:to_entity_id).filled(:integer).description("The ID of the entity where the relation ends.")
     required(:relation_type).filled(:string).description("The type classification for the relationship (e.g., 'related_to', 'depends_on').")
+    optional(:weight).maybe(:float).description("Optional non-negative relation weight.")
+    optional(:confidence).maybe(:float).description("Optional confidence score from 0.0 to 1.0.")
+    optional(:properties).hash.description("Optional structured relation properties.")
   end
 
-  def call(from_entity_id:, to_entity_id:, relation_type:)
+  def call(from_entity_id:, to_entity_id:, relation_type:, weight: nil, confidence: nil, properties: {})
     logger.info "Performing CreateRelationTool with from_id: #{from_entity_id}, to_id: #{to_entity_id}, type: #{relation_type}"
     begin
       # Explicitly find entities to ensure they exist before creating the relation
@@ -27,7 +30,10 @@ class CreateRelationTool < ApplicationTool
       new_relation = MemoryRelation.create!(
         from_entity_id: from_entity_id,
         to_entity_id: to_entity_id,
-        relation_type: relation_type
+        relation_type: MemoryRelation.canonical_relation_type(relation_type),
+        weight: weight,
+        confidence: confidence,
+        properties: properties
       )
       logger.info "Created relation: #{new_relation.inspect}"
 
@@ -37,6 +43,9 @@ class CreateRelationTool < ApplicationTool
         from_entity_id: new_relation.from_entity_id,
         to_entity_id: new_relation.to_entity_id,
         relation_type: new_relation.relation_type,
+        weight: new_relation.weight,
+        confidence: new_relation.confidence,
+        properties: new_relation.properties,
         created_at: new_relation.created_at.iso8601,
         updated_at: new_relation.updated_at.iso8601
       }

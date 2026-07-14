@@ -48,6 +48,26 @@ RSpec.describe "API V1 Bulk", type: :request do
         data = JSON.parse(response.body)
         expect(data["created_observations"].length).to eq(2)
       end
+
+      it "creates observations with structured metadata" do
+        params = {
+          observations: [
+            {
+              entity_id: entity.id,
+              text_content: "Metadata observation",
+              confidence: 0.8,
+              source: "bulk-api",
+              tags: [ "request" ]
+            }
+          ]
+        }
+
+        post "/api/v1/bulk", params: params, as: :json
+
+        data = JSON.parse(response.body)
+        observation = MemoryObservation.find(data["created_observations"].first["observation_id"])
+        expect(observation).to have_attributes(confidence: 0.8, source: "bulk-api", tags: [ "request" ])
+      end
     end
 
     context "creating relations" do
@@ -64,6 +84,29 @@ RSpec.describe "API V1 Bulk", type: :request do
         expect(response).to have_http_status(:created)
         data = JSON.parse(response.body)
         expect(data["created_relations"].length).to eq(1)
+      end
+
+      it "creates relations with metadata and canonicalized types" do
+        RelationTypeMapping.create!(canonical_type: "depends_on", variant: "requires")
+        params = {
+          relations: [
+            {
+              from_entity_id: ent_a.id,
+              to_entity_id: ent_b.id,
+              relation_type: "requires",
+              weight: 2.0,
+              confidence: 0.9,
+              properties: { source: "bulk-api" }
+            }
+          ]
+        }
+
+        post "/api/v1/bulk", params: params, as: :json
+
+        data = JSON.parse(response.body)
+        relation = MemoryRelation.find(data["created_relations"].first["relation_id"])
+        expect(relation).to have_attributes(relation_type: "depends_on", weight: 2.0, confidence: 0.9)
+        expect(relation.properties).to eq("source" => "bulk-api")
       end
     end
 

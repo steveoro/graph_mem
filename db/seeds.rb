@@ -3,3 +3,4 @@
 # The data can then be loaded with the bin/rails db:seed command (or created alongside the database with db:setup).
 
 load Rails.root.join("db/seeds/entity_type_mappings.rb")
+load Rails.root.join("db/seeds/relation_type_mappings.rb")

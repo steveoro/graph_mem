@@ -39,7 +39,9 @@ class FindRelationsTool < ApplicationTool
       # Apply filters if provided
       relations_query = relations_query.where(from_entity_id: from_entity_id) if from_entity_id.present?
       relations_query = relations_query.where(to_entity_id: to_entity_id) if to_entity_id.present?
-      relations_query = relations_query.where(relation_type: relation_type) if relation_type.present?
+      if relation_type.present?
+        relations_query = relations_query.where(relation_type: MemoryRelation.canonical_relation_type(relation_type))
+      end
 
       # Execute the query and get results
       matching_relations = relations_query.to_a
@@ -51,6 +53,9 @@ class FindRelationsTool < ApplicationTool
           from_entity_id: relation.from_entity_id,
           to_entity_id: relation.to_entity_id,
           relation_type: relation.relation_type,
+          weight: relation.weight,
+          confidence: relation.confidence,
+          properties: relation.properties,
           created_at: relation.created_at.iso8601,
           updated_at: relation.updated_at.iso8601
         }

@@ -47,20 +47,37 @@ RSpec.describe 'API V1 Memory Observations', type: :request do
       parameter name: :memory_observation, in: :body, schema: {
         type: :object,
         properties: {
-          content: { type: :string, example: 'This is an observation.' }
+          content: { type: :string, example: 'This is an observation.' },
+          confidence: { type: :number, format: :float, minimum: 0, maximum: 1, nullable: true },
+          source: { type: :string, nullable: true },
+          valid_from: { type: :string, format: 'date-time', nullable: true },
+          valid_until: { type: :string, format: 'date-time', nullable: true },
+          tags: { type: :array, items: { type: :string } }
         },
         required: [ 'content' ]
       }
 
       response(201, 'created') do
         schema '$ref' => '#/components/schemas/memory_observation'
-        let(:memory_observation) { { content: 'Test Observation Content' } }
+        let(:memory_observation) do
+          {
+            content: 'Test Observation Content',
+            confidence: 0.9,
+            source: 'integration-test',
+            valid_from: '2026-07-01T00:00:00Z',
+            valid_until: '2026-08-01T00:00:00Z',
+            tags: %w[test api]
+          }
+        end
 
         run_test! do |response|
           data = JSON.parse(response.body)
           expect(response).to have_http_status(:created)
           expect(data['content']).to eq('Test Observation Content')
           expect(data['memory_entity_id']).to eq(memory_entity.id)
+          expect(data['confidence']).to eq(0.9)
+          expect(data['source']).to eq('integration-test')
+          expect(data['tags']).to eq(%w[test api])
           expect(memory_entity.reload.memory_observations.count).to eq(1)
         end
       end
@@ -141,19 +158,26 @@ RSpec.describe 'API V1 Memory Observations', type: :request do
       parameter name: :memory_observation, in: :body, schema: {
         type: :object,
         properties: {
-          content: { type: :string, example: 'Updated Observation Content' }
+          content: { type: :string, example: 'Updated Observation Content' },
+          confidence: { type: :number, format: :float, minimum: 0, maximum: 1, nullable: true },
+          source: { type: :string, nullable: true },
+          valid_from: { type: :string, format: 'date-time', nullable: true },
+          valid_until: { type: :string, format: 'date-time', nullable: true },
+          tags: { type: :array, items: { type: :string } }
         },
-        required: [ 'content' ]
+        required: []
       }
 
       response(200, 'successful') do
         schema '$ref' => '#/components/schemas/memory_observation'
-        let(:memory_observation) { { content: 'Updated Content' } }
+        let(:memory_observation) { { content: 'Updated Content', confidence: 0.75, tags: [ 'updated' ] } }
 
         run_test! do |response|
           data = JSON.parse(response.body)
           expect(response).to have_http_status(:ok)
           expect(data['content']).to eq('Updated Content')
+          expect(data['confidence']).to eq(0.75)
+          expect(data['tags']).to eq([ 'updated' ])
           expect(existing_observation.reload.content).to eq('Updated Content')
         end
       end
@@ -200,7 +224,12 @@ RSpec.describe 'API V1 Memory Observations', type: :request do
       parameter name: :memory_observation, in: :body, schema: {
         type: :object,
         properties: {
-          content: { type: :string, example: 'Updated Observation Content via PUT' }
+          content: { type: :string, example: 'Updated Observation Content via PUT' },
+          confidence: { type: :number, format: :float, minimum: 0, maximum: 1, nullable: true },
+          source: { type: :string, nullable: true },
+          valid_from: { type: :string, format: 'date-time', nullable: true },
+          valid_until: { type: :string, format: 'date-time', nullable: true },
+          tags: { type: :array, items: { type: :string } }
         },
         required: [ 'content' ]
       }
