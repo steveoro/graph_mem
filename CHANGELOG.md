@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `GarbageCollectionRunner` now deletes duplicate observations and repairs `memory_observations_count` counters
 - `GraphIntegrityService` orchestrates `RelationIntegrityRepairer`, `GarbageCollectionRunner`, and a full counter recount; called by `GarbageCollectionJob` and before each new dream-state run
 - Add OperationProgress tracking to import, export, compaction, and garbage collection jobs with real-time broadcasting
+- Add CircleCI config
 
 ## [1.9.4] - 2026-07-13
 - Prevent concurrent compactor runs; compactor review UI; increased concurrent stability
