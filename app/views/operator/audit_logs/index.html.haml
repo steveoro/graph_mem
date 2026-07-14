@@ -53,6 +53,7 @@
             %tr
               %th= t("operator.audit_logs.columns.time")
               %th= t("operator.audit_logs.columns.action")
+              %th= t("operator.audit_logs.columns.reason")
               %th= t("operator.audit_logs.columns.record")
               %th= t("operator.audit_logs.columns.actor")
               %th= t("operator.audit_logs.columns.changes")
@@ -61,6 +62,7 @@
               %tr{ id: "audit-log-#{log.id}" }
                 %td.audit-logs-table__time= l(log.created_at, format: :short)
                 %td= audit_log_action_badge(log.action)
+                %td= audit_log_reason_label(log.reason)
                 %td.audit-logs-table__record= audit_log_record_label(log)
                 %td.audit-logs-table__actor= audit_log_actor_label(log.actor)
                 %td.audit-logs-table__changes

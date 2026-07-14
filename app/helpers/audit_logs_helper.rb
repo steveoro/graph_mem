@@ -51,6 +51,10 @@ module AuditLogsHelper
     actor.presence || t("operator.audit_logs.unknown_actor")
   end
 
+  def audit_log_reason_label(reason)
+    reason.presence || t("operator.audit_logs.unknown_reason")
+  end
+
   def audit_log_changed_fields_json(log)
     return "{}" if log.changed_fields.blank?
 

@@ -75,6 +75,7 @@ Context is stored per MCP client in the `agent_contexts` table, keyed by the `X-
 - **Description:** Deletes an entity and all associated observations and relations.
 - **Parameters:**
   - `entity_id` (integer, required): The ID of the entity.
+  - `reason` (string, optional): Reason for the deletion (e.g., "duplicate" or "API/operator"). Recorded in the audit log.
 
 ## Observation Management (2 tools)
 
@@ -88,6 +89,7 @@ Context is stored per MCP client in the `agent_contexts` table, keyed by the `X-
 - **Description:** Deletes an observation by ID.
 - **Parameters:**
   - `observation_id` (integer, required): The ID of the observation.
+  - `reason` (string, optional): Reason for the deletion. Recorded in the audit log.
 
 ## Relation Management (3 tools)
 
@@ -102,6 +104,7 @@ Context is stored per MCP client in the `agent_contexts` table, keyed by the `X-
 - **Description:** Deletes a relation by ID.
 - **Parameters:**
   - `relation_id` (integer, required): The ID of the relation.
+  - `reason` (string, optional): Reason for the deletion. Recorded in the audit log.
 
 #### `find_relations`
 - **Description:** Finds relations by optional filters. All filters use AND when combined.

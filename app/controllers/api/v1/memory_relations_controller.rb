@@ -72,7 +72,12 @@ module Api
 
       # DELETE /api/v1/memory_relations/:id
       def destroy
-        @memory_relation.destroy!
+        begin
+          Current.deletion_reason = params[:reason]
+          @memory_relation.destroy!
+        ensure
+          Current.deletion_reason = nil
+        end
         head :no_content
       end
 

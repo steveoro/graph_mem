@@ -377,7 +377,7 @@ class DataExchangeController < ApplicationController
     end
 
     strategy = NodeOperationsStrategy.new
-    result = strategy.delete_node(node_id)
+    result = strategy.delete_node(node_id, reason: params[:reason])
 
     if result[:success]
       render json: { success: true, message: result[:message] }
@@ -403,14 +403,19 @@ class DataExchangeController < ApplicationController
     duplicates = find_duplicate_relations
     deleted_count = 0
 
-    ActiveRecord::Base.transaction do
-      duplicates.each do |dup|
-        relation = MemoryRelation.find_by(id: dup[:delete][:id])
-        if relation
-          relation.destroy!
-          deleted_count += 1
+    begin
+      Current.deletion_reason = "duplicate"
+      ActiveRecord::Base.transaction do
+        duplicates.each do |dup|
+          relation = MemoryRelation.find_by(id: dup[:delete][:id])
+          if relation
+            relation.destroy!
+            deleted_count += 1
+          end
         end
       end
+    ensure
+      Current.deletion_reason = nil
     end
 
     render json: {
@@ -477,7 +482,12 @@ class DataExchangeController < ApplicationController
     to_name = relation.to_entity&.name
     relation_type = relation.relation_type
 
-    relation.destroy!
+    begin
+      Current.deletion_reason = params[:reason]
+      relation.destroy!
+    ensure
+      Current.deletion_reason = nil
+    end
 
     render json: {
       success: true,

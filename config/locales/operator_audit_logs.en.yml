@@ -28,6 +28,7 @@ en:
       columns:
         time: "Time"
         action: "Action"
+        reason: "Reason"
         record: "Record"
         actor: "Actor"
         changes: "Changes"
@@ -41,3 +42,4 @@ en:
       prune_confirm: "Delete %{count} audit log(s) older than 90 days? This cannot be undone."
       prune_notice: "Pruned %{count} audit log(s) older than 90 days."
       unknown_actor: "—"
+      unknown_reason: "—"

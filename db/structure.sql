@@ -24,7 +24,7 @@ CREATE TABLE `agent_contexts` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `index_agent_contexts_on_client_id` (`client_id`),
   KEY `index_agent_contexts_on_current_project_id` (`current_project_id`)
-) ENGINE=InnoDB AUTO_INCREMENT=923 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=211 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `ar_internal_metadata`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
@@ -48,10 +48,11 @@ CREATE TABLE `audit_logs` (
   `actor` varchar(255) DEFAULT NULL,
   `changed_fields` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(`changed_fields`)),
   `created_at` datetime(6) NOT NULL,
+  `reason` varchar(255) DEFAULT NULL,
   PRIMARY KEY (`id`),
   KEY `index_audit_logs_on_auditable_type_and_auditable_id` (`auditable_type`,`auditable_id`),
   KEY `index_audit_logs_on_created_at` (`created_at`)
-) ENGINE=InnoDB AUTO_INCREMENT=47625 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=7628 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `compaction_runs`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
@@ -73,7 +74,7 @@ CREATE TABLE `compaction_runs` (
   KEY `index_compaction_runs_on_created_at` (`created_at`),
   KEY `index_compaction_runs_on_operation_progress_id` (`operation_progress_id`),
   CONSTRAINT `fk_rails_3c6a427e3c` FOREIGN KEY (`operation_progress_id`) REFERENCES `operation_progresses` (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=637 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=70 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `entity_type_mappings`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
@@ -87,7 +88,7 @@ CREATE TABLE `entity_type_mappings` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `index_entity_type_mappings_on_variant` (`variant`),
   KEY `index_entity_type_mappings_on_canonical_type` (`canonical_type`)
-) ENGINE=InnoDB AUTO_INCREMENT=10 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=113 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `maintenance_reports`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
@@ -100,7 +101,7 @@ CREATE TABLE `maintenance_reports` (
   PRIMARY KEY (`id`),
   KEY `index_maintenance_reports_on_report_type` (`report_type`),
   KEY `index_maintenance_reports_on_created_at` (`created_at`)
-) ENGINE=InnoDB AUTO_INCREMENT=3499 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=641 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `memory_entities`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
@@ -119,7 +120,7 @@ CREATE TABLE `memory_entities` (
   UNIQUE KEY `index_memory_entities_on_name` (`name`),
   KEY `index_memory_entities_on_entity_type` (`entity_type`),
   FULLTEXT KEY `index_memory_entities_fulltext` (`name`,`aliases`)
-) ENGINE=InnoDB AUTO_INCREMENT=26293 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=5331 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `memory_observations`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
@@ -134,7 +135,7 @@ CREATE TABLE `memory_observations` (
   PRIMARY KEY (`id`),
   KEY `index_memory_observations_on_memory_entity_id` (`memory_entity_id`),
   CONSTRAINT `fk_rails_675e0d9a7a` FOREIGN KEY (`memory_entity_id`) REFERENCES `memory_entities` (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=11099 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=4633 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `memory_relations`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
@@ -153,7 +154,7 @@ CREATE TABLE `memory_relations` (
   KEY `index_memory_relations_on_to_entity_id` (`to_entity_id`),
   CONSTRAINT `fk_rails_4ecabb48c2` FOREIGN KEY (`from_entity_id`) REFERENCES `memory_entities` (`id`),
   CONSTRAINT `fk_rails_6777b355f4` FOREIGN KEY (`to_entity_id`) REFERENCES `memory_entities` (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=7198 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=2044 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `operation_progresses`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
@@ -180,7 +181,7 @@ CREATE TABLE `operation_progresses` (
   UNIQUE KEY `index_operation_progresses_on_operation_id` (`operation_id`),
   KEY `index_operation_progresses_on_operation_type_and_status` (`operation_type`,`status`),
   KEY `index_operation_progresses_on_created_at` (`created_at`)
-) ENGINE=InnoDB AUTO_INCREMENT=81 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=84 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `schema_migrations`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
@@ -201,7 +202,7 @@ CREATE TABLE `settings` (
   `updated_at` datetime(6) NOT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `index_settings_on_var` (`var`)
-) ENGINE=InnoDB AUTO_INCREMENT=914 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=169 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 
@@ -214,6 +215,7 @@ CREATE TABLE `settings` (
 /*M!100616 SET NOTE_VERBOSITY=@OLD_NOTE_VERBOSITY */;
 
 INSERT INTO `schema_migrations` (version) VALUES
+('20260714155706'),
 ('20260714120100'),
 ('20260714120000'),
 ('20260710102000'),

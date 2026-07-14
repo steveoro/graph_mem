@@ -10,21 +10,25 @@ class DeleteEntityTool < ApplicationTool
 
   arguments do
     required(:entity_id).filled(:integer).description("The ID of the entity to delete.")
+    optional(:reason).maybe(:string).description("Optional reason for deletion, e.g., 'duplicate' or 'API/operator'.")
   end
 
   # Defines the input schema for this tool. Overrides the shared behavior from ApplicationTool
   def input_schema_to_json
     {
       type: "object",
-      properties: { entity_id: { type: "integer", description: "The ID of the entity to delete." } },
+      properties: {
+        entity_id: { type: "integer", description: "The ID of the entity to delete." },
+        reason: { type: "string", description: "Optional reason for deletion, e.g., 'duplicate' or 'API/operator'." }
+      },
       required: [ "entity_id" ]
     }
   end
 
   # Output: Success message object
 
-  def call(entity_id:)
-    logger.info "Performing DeleteEntityTool with entity_id: #{entity_id}"
+  def call(entity_id:, reason: nil)
+    logger.info "Performing DeleteEntityTool with entity_id: #{entity_id}, reason: #{reason}"
     begin
       # Find and destroy the entity
       # Assuming dependent: :destroy is set correctly on MemoryEntity model for relations/observations
@@ -36,7 +40,12 @@ class DeleteEntityTool < ApplicationTool
       end
 
       entity_attributes = entity.attributes # Capture attributes before destroy
-      entity.destroy!
+      begin
+        Current.deletion_reason = reason
+        entity.destroy!
+      ensure
+        Current.deletion_reason = nil
+      end
 
       # Return the attributes of the deleted entity as a simple hash, plus a success message
       {

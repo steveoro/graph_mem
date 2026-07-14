@@ -96,6 +96,17 @@ RSpec.describe Auditable, type: :model do
       log = AuditLog.for_record("MemoryEntity", entity.id).where(action: "delete").first
       expect(log.changed_fields).not_to have_key("embedding")
     end
+
+    it "records the deletion reason from Current.deletion_reason" do
+      entity = MemoryEntity.create!(name: "AuditDeleteReason", entity_type: "Task")
+      Current.deletion_reason = "duplicate"
+      entity.destroy!
+
+      log = AuditLog.for_record("MemoryEntity", entity.id).where(action: "delete").first
+      expect(log.reason).to eq("duplicate")
+    ensure
+      Current.deletion_reason = nil
+    end
   end
 
   describe "error resilience" do

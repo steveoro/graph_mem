@@ -166,12 +166,17 @@ class RelationIntegrityRepairer
   end
 
   def delete_relation_ids(ids)
-    ids.filter_map do |relation_id|
-      relation = MemoryRelation.find_by(id: relation_id)
-      next unless relation
+    begin
+      Current.deletion_reason = "duplicate"
+      ids.filter_map do |relation_id|
+        relation = MemoryRelation.find_by(id: relation_id)
+        next unless relation
 
-      relation.destroy!
-      relation_id
+        relation.destroy!
+        relation_id
+      end
+    ensure
+      Current.deletion_reason = nil
     end
   end
 

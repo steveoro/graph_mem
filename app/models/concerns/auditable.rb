@@ -34,7 +34,8 @@ module Auditable
       auditable_id: id,
       action: action,
       actor: Current.actor,
-      changed_fields: changed_fields
+      changed_fields: changed_fields,
+      reason: action == "delete" ? Current.deletion_reason : nil
     )
   rescue StandardError => e
     Rails.logger.warn "Audit write failed for #{self.class.name}##{id}: #{e.message}"

@@ -10,6 +10,7 @@ class DeleteRelationTool < ApplicationTool
 
   arguments do
     required(:relation_id).filled(:integer).description("The ID of the relation to delete.")
+    optional(:reason).maybe(:string).description("Optional reason for deletion, e.g., 'duplicate' or 'API/operator'.")
   end
 
   # Defines the input schema for this tool. Overrides the shared behavior from ApplicationTool
@@ -17,20 +18,28 @@ class DeleteRelationTool < ApplicationTool
   def input_schema_to_json
     {
       type: "object",
-      properties: { relation_id: { type: "integer", description: "The ID of the relation to delete." } },
+      properties: {
+        relation_id: { type: "integer", description: "The ID of the relation to delete." },
+        reason: { type: "string", description: "Optional reason for deletion, e.g., 'duplicate' or 'API/operator'." }
+      },
       required: [ "relation_id" ]
     }
   end
 
   # Output: Success message object
 
-  def call(relation_id:)
-    logger.info "Performing DeleteRelationTool with relation_id: #{relation_id}"
+  def call(relation_id:, reason: nil)
+    logger.info "Performing DeleteRelationTool with relation_id: #{relation_id}, reason: #{reason}"
     begin
       # Find and destroy the relation
       relation = MemoryRelation.find(relation_id)
       relation_attributes = relation.attributes # Capture attributes before destroy
-      relation.destroy!
+      begin
+        Current.deletion_reason = reason
+        relation.destroy!
+      ensure
+        Current.deletion_reason = nil
+      end
 
       # Return the attributes of the deleted relation as a simple hash, plus a success message
       {

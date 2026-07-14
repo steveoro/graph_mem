@@ -5,7 +5,7 @@ All notable changes to GraphMem will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.9.5] - 2026-07-14
+## [1.9.6] - 2026-07-14
 
 - Dream-state compactor: process one entity per batch with per-entity transaction isolation, advance cursor before processing, and skip per-entity errors instead of halting the run
 - Harden `tree_walk` vector similarity query by using an in-memory `VEC_FromText` literal instead of a subquery against `memory_entities` and by running merge scan before deduplication

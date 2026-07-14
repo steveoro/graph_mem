@@ -39,7 +39,12 @@ module Api
 
       # DELETE /api/v1/memory_entities/:memory_entity_id/memory_observations/:id
       def destroy
-        @memory_observation.destroy!
+        begin
+          Current.deletion_reason = params[:reason]
+          @memory_observation.destroy!
+        ensure
+          Current.deletion_reason = nil
+        end
         head :no_content
       end
 
@@ -49,16 +54,21 @@ module Api
 
         content_groups = @memory_entity.memory_observations.group_by(&:content)
 
-        content_groups.each do |_content, observations|
-          if observations.length > 1
-            sorted_observations = observations.sort_by(&:created_at)
-            observations_to_delete = sorted_observations[1..-1]
+        begin
+          Current.deletion_reason = "duplicate"
+          content_groups.each do |_content, observations|
+            if observations.length > 1
+              sorted_observations = observations.sort_by(&:created_at)
+              observations_to_delete = sorted_observations[1..-1]
 
-            observations_to_delete.each do |obs|
-              obs.destroy!
-              duplicates_deleted += 1
+              observations_to_delete.each do |obs|
+                obs.destroy!
+                duplicates_deleted += 1
+              end
             end
           end
+        ensure
+          Current.deletion_reason = nil
         end
 
         render json: {

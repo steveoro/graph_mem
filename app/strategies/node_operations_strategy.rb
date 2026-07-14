@@ -106,8 +106,10 @@ class NodeOperationsStrategy
     transferred_observations = 0
     result = nil
 
-    ActiveRecord::Base.transaction do
-      locked_entities = MemoryEntity
+    begin
+      Current.deletion_reason = "duplicate"
+      ActiveRecord::Base.transaction do
+        locked_entities = MemoryEntity
         .where(id: [ source_id, target_id ])
         .order(:id)
         .lock
@@ -156,6 +158,9 @@ class NodeOperationsStrategy
 
       @logger.info "NodeOperationsStrategy: Merged '#{source_name}' (#{source_id}) into '#{target_name}' (#{target_id}). Transferred #{transferred_observations} observations."
     end
+    ensure
+      Current.deletion_reason = nil
+    end
 
     return result if result
 
@@ -166,8 +171,9 @@ class NodeOperationsStrategy
   # Children will become orphans unless cascade_delete is true
   # @param node_id [Integer] The node to delete
   # @param cascade_delete [Boolean] If true, delete all descendants too
+  # @param reason [String, nil] Optional reason for the deletion
   # @return [Hash] Result with :success and :message or :error
-  def delete_node(node_id, cascade_delete: false)
+  def delete_node(node_id, cascade_delete: false, reason: nil)
     node = MemoryEntity.find_by(id: node_id)
 
     return error_result("Node not found") unless node
@@ -176,22 +182,27 @@ class NodeOperationsStrategy
     node_name = node.name
     deleted_count = 0
 
-    ActiveRecord::Base.transaction do
-      if cascade_delete
+    begin
+      Current.deletion_reason = reason
+      ActiveRecord::Base.transaction do
+        if cascade_delete
         # Delete all descendants first
         deleted_count = delete_descendants(node_id)
-      else
+        else
         # Just remove relations pointing to this node (children become orphans)
         MemoryRelation
           .where(to_entity_id: node_id, relation_type: CHILD_RELATION_TYPES)
           .destroy_all
-      end
+        end
 
       # Delete the node itself (observations will be deleted via dependent: :destroy)
       node.destroy!
       deleted_count += 1
 
       @logger.info "NodeOperationsStrategy: Deleted node '#{node_name}' (#{node_id}). Total deleted: #{deleted_count}"
+    end
+    ensure
+      Current.deletion_reason = nil
     end
 
     message = cascade_delete ?

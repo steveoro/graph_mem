@@ -199,7 +199,12 @@ class DreamStateCompactor
 
       next if observations.size <= 1
 
-      observations.drop(1).each(&:destroy!)
+      begin
+        Current.deletion_reason = "duplicate"
+        observations.drop(1).each(&:destroy!)
+      ensure
+        Current.deletion_reason = nil
+      end
       @run.increment_stat!("observations_deduped", observations.size - 1)
     end
   end

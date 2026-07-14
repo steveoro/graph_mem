@@ -88,7 +88,12 @@ module Api
 
       # DELETE /api/v1/memory_entities/:id
       def destroy
-        @memory_entity.destroy!
+        begin
+          Current.deletion_reason = params[:reason]
+          @memory_entity.destroy!
+        ensure
+          Current.deletion_reason = nil
+        end
         head :no_content
       end
 

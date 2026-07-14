@@ -10,27 +10,36 @@ class DeleteObservationTool < ApplicationTool
 
   arguments do
     required(:observation_id).filled(:integer).description("The ID of the observation to delete.")
+    optional(:reason).maybe(:string).description("Optional reason for deletion, e.g., 'duplicate' or 'API/operator'.")
   end
 
   # Defines the input schema for this tool. Overrides the shared behavior from ApplicationTool
   def input_schema_to_json
     {
       type: "object",
-      properties: { observation_id: { type: "integer", description: "The ID of the observation to delete." } },
+      properties: {
+        observation_id: { type: "integer", description: "The ID of the observation to delete." },
+        reason: { type: "string", description: "Optional reason for deletion, e.g., 'duplicate' or 'API/operator'." }
+      },
       required: [ "observation_id" ]
     }
   end
 
   # Output: Success message object
 
-  def call(observation_id:)
-    logger.info "Performing DeleteObservationTool with observation_id: #{observation_id}"
+  def call(observation_id:, reason: nil)
+    logger.info "Performing DeleteObservationTool with observation_id: #{observation_id}, reason: #{reason}"
 
     begin
       # Find and destroy the observation
       observation = MemoryObservation.find(observation_id)
       observation_attributes = observation.attributes # Capture attributes before destroy
-      observation.destroy!
+      begin
+        Current.deletion_reason = reason
+        observation.destroy!
+      ensure
+        Current.deletion_reason = nil
+      end
       logger.info "Deleted observation with ID #{observation_attributes["id"]}"
 
       # Return the attributes of the deleted observation as a simple hash

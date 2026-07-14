@@ -73,7 +73,12 @@ class GarbageCollectionRunner
         next
       end
 
-      MemoryObservation.where(id: delete_ids).destroy_all
+      begin
+        Current.deletion_reason = "duplicate"
+        MemoryObservation.where(id: delete_ids).destroy_all
+      ensure
+        Current.deletion_reason = nil
+      end
       deleted_count += delete_ids.size
       affected_entity_ids << group.memory_entity_id
 

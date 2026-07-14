@@ -92,6 +92,15 @@ RSpec.describe DeleteEntityTool, type: :model do
         expect { Time.iso8601(result[:created_at]) }.not_to raise_error
         expect { Time.iso8601(result[:updated_at]) }.not_to raise_error
       end
+
+      it 'records the deletion reason in the audit log' do
+        entity = MemoryEntity.create!(name: 'Delete With Reason', entity_type: 'Task')
+
+        tool.call(entity_id: entity.id, reason: 'duplicate')
+
+        log = AuditLog.for_record('MemoryEntity', entity.id).where(action: 'delete').first
+        expect(log.reason).to eq('duplicate')
+      end
     end
 
     context 'entity not found' do

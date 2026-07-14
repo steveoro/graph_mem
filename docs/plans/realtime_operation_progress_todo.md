@@ -37,3 +37,12 @@ This checklist tracks the implementation across separate runs; keep completed it
 - [x] Run focused Rails specs, request specs, RuboCop, syntax checks, and `git diff --check`; full-suite verification remains for the next run.
 - [ ] Decide retention policy and add cleanup for old completed operation rows.
 - [ ] Update user-facing documentation with operation stream and progress counter semantics.
+
+## Run 5 — SolidCable production troubleshooting
+
+- [x] Diagnose real-time updates not working in a local production container (page refresh shows correct counts, but no live UI updates).
+- [x] Fix missing `ActionCable.server` mount in `config/routes.rb` (WebSocket endpoint `/cable` was not exposed).
+- [x] Verify `db:prepare` + `db:support:initialize` correctly create the `solid_cable_messages` table in `storage/production_cable.sqlite3`.
+- [x] Rebuild the production Docker image and restart the container to pick up the route change.
+- [x] Verify live updates by starting a compaction/export/import and watching the dashboard progress target update without refreshes.
+- [x] If running the container on plain HTTP (`http://localhost:3030`), set `-e RAILS_FORCE_SSL=false` so the WebSocket handshake is not redirected to HTTPS.
