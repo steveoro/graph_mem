@@ -53,7 +53,7 @@
       "check_name": "SQL",
       "message": "Possible SQL injection",
       "file": "app/services/embedding_index_manager.rb",
-      "line": 71,
+      "line": 75,
       "link": "https://brakemanscanner.org/docs/warning_types/sql_injection/",
       "code": "ActiveRecord::Base.connection.execute(\"ALTER TABLE #{:BRAKEMAN_SAFE_LITERAL} MODIFY embedding VECTOR(#{EmbeddingConfig.resolved_config[:dims]}) DEFAULT NULL\")",
       "render_path": null,
@@ -86,6 +86,29 @@
         "method": "index_exists?"
       },
       "user_input": "table",
+      "confidence": "Medium",
+      "cwe_id": [
+        89
+      ],
+      "note": ""
+    },
+    {
+      "warning_type": "SQL Injection",
+      "warning_code": 0,
+      "fingerprint": "999e97b9fc330cf224485035a0086746acef5f946f33a4117eb415e0d133eb5d",
+      "check_name": "SQL",
+      "message": "Possible SQL injection",
+      "file": "app/services/embedding_vector_trigger_manager.rb",
+      "line": 56,
+      "link": "https://brakemanscanner.org/docs/warning_types/sql_injection/",
+      "code": "connection.execute(\"DROP TRIGGER IF EXISTS #{trigger}\")",
+      "render_path": null,
+      "location": {
+        "type": "method",
+        "class": "EmbeddingVectorTriggerManager",
+        "method": "drop_trigger"
+      },
+      "user_input": "trigger",
       "confidence": "Medium",
       "cwe_id": [
         89
@@ -185,6 +208,29 @@
       "note": ""
     },
     {
+      "warning_type": "SQL Injection",
+      "warning_code": 0,
+      "fingerprint": "c59dc6c08b96ad6658d9db009f95db7bd155006a1f6de71f376c53bd6460c0c7",
+      "check_name": "SQL",
+      "message": "Possible SQL injection",
+      "file": "app/strategies/dream_state_compactor.rb",
+      "line": 239,
+      "link": "https://brakemanscanner.org/docs/warning_types/sql_injection/",
+      "code": "MemoryEntity.where.not(:id => MemoryEntity.find_by(:id => entity_id).id).where.not(:entity_type => (NodeOperationsStrategy::PROJECT_ENTITY_TYPE)).where.not(:embedding => nil).where(\"id > ?\", MemoryEntity.find_by(:id => entity_id).id).select(\"memory_entities.*, VEC_DISTANCE_COSINE(embedding, #{embedding_sql_literal(MemoryEntity.find_by(:id => entity_id))}) AS vec_distance\")",
+      "render_path": null,
+      "location": {
+        "type": "method",
+        "class": "DreamStateCompactor",
+        "method": "process_entity_merges"
+      },
+      "user_input": "MemoryEntity.find_by(:id => entity_id)",
+      "confidence": "High",
+      "cwe_id": [
+        89
+      ],
+      "note": ""
+    },
+    {
       "warning_type": "File Access",
       "warning_code": 16,
       "fingerprint": "f593cb3c0e84811a3407ae9b8c6732ffd493a000fce9935045d504fa88d58423",
@@ -204,6 +250,29 @@
       "confidence": "Medium",
       "cwe_id": [
         22
+      ],
+      "note": ""
+    },
+    {
+      "warning_type": "SQL Injection",
+      "warning_code": 0,
+      "fingerprint": "f9c98df965e16f145267494d8e7af59517f64ae0fd2c316791a00233ed1aad8b",
+      "check_name": "SQL",
+      "message": "Possible SQL injection",
+      "file": "app/services/embedding_vector_trigger_manager.rb",
+      "line": 28,
+      "link": "https://brakemanscanner.org/docs/warning_types/sql_injection/",
+      "code": "connection.execute(\"CREATE TRIGGER #{trigger}\\nBEFORE INSERT ON #{table}\\nFOR EACH ROW\\nSET NEW.embedding = IFNULL(NEW.embedding, #{zero_vector_sql})\\n\".squish)",
+      "render_path": null,
+      "location": {
+        "type": "method",
+        "class": "EmbeddingVectorTriggerManager",
+        "method": "install!"
+      },
+      "user_input": "trigger",
+      "confidence": "Medium",
+      "cwe_id": [
+        89
       ],
       "note": ""
     }

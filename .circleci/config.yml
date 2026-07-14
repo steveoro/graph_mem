@@ -1,0 +1,75 @@
+version: 2.1
+orbs:
+  ruby: circleci/ruby@3.0.0
+
+ruby: &ruby
+  image: cimg/ruby:3.4.1
+  environment:
+    RAILS_ENV: test
+    BUNDLE_JOBS: 2
+    BUNDLE_RETRY: 2
+    PAGER: cat
+    DB_PASSWORD: Password123!
+
+common: &common
+  resource_class: medium
+  working_directory: ~/graph_mem
+  shell: /bin/bash --login
+
+jobs:
+  rubocop:
+    <<: *common
+    docker:
+      - *ruby
+    steps:
+      - checkout
+      - ruby/install-deps:
+          key: graph_mem-v1
+      - run:
+          name: Rubocop
+          command: bundle exec rubocop
+
+  brakeman:
+    <<: *common
+    docker:
+      - *ruby
+    steps:
+      - checkout
+      - ruby/install-deps:
+          key: graph_mem-v1
+      - run:
+          name: Brakeman
+          command: bundle exec brakeman
+
+  rspec:
+    <<: *common
+    docker:
+      - *ruby
+      - image: cimg/mariadb:11.8.6
+        environment:
+          MARIADB_ROOT_PASSWORD: Password123!
+    steps:
+      - checkout
+      - run:
+          name: Install database client
+          command: |
+            sudo apt-get update
+            sudo apt-get install -y --no-install-recommends mariadb-client
+      - ruby/install-deps:
+          key: graph_mem-v1
+      - run:
+          name: DB setup
+          command: |
+            cp config/database.ci.yml config/database.yml
+            dockerize -wait tcp://localhost:3306 -timeout 2m
+            bin/rails db:create db:schema:load
+      - run:
+          name: RSpec
+          command: bundle exec rspec
+
+workflows:
+  test:
+    jobs:
+      - rubocop
+      - brakeman
+      - rspec
