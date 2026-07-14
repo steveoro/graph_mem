@@ -16,6 +16,7 @@ class MaintenanceDashboardSnapshot
       embeddings: EmbeddingStatusSnapshot.call,
       agent_contexts: AgentContextsSnapshot.call,
       latest_reports: latest_reports_by_type,
+      operations: operation_snapshots,
       schedules: schedule_hints,
       cursor_entity: cursor_entity
     }
@@ -46,6 +47,12 @@ class MaintenanceDashboardSnapshot
       .where.not(id: MemoryRelation.select(:from_entity_id))
       .where.not(id: MemoryRelation.select(:to_entity_id))
       .count
+  end
+
+  def operation_snapshots
+    {
+      garbage_collection: OperationProgress.where(operation_type: "garbage_collection").recent.first&.snapshot
+    }
   end
 
   def latest_reports_by_type

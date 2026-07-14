@@ -7,18 +7,30 @@ class CompactionRunner
       run = CompactionRun.current
       if run&.paused?
         run.update!(status: "running", pause_requested: false)
+        run.operation_progress&.resume!(message: "Resuming compaction")
         return run
       end
 
       failed_run = CompactionRun.where(status: "failed").order(updated_at: :desc).first
       if failed_run && CompactionRun.current.nil? && !CompactionRun.exists?(status: "running")
         failed_run.resume_from_failure!
+        failed_run.operation_progress&.resume!(message: "Resuming compaction after failure")
         return failed_run
       end
 
       return CompactionRun.find_by(status: "running") if CompactionRun.exists?(status: "running")
 
+      total_entities = MemoryEntity.count
+      operation = OperationProgress.start!(
+        operation_type: "compaction",
+        total_count: total_entities * CompactionRun::PHASES.size,
+        phase: CompactionTraversal::PHASES.first,
+        message: "Starting compaction",
+        counters: default_stats
+      )
+
       CompactionRun.create!(
+        operation_progress: operation,
         status: "running",
         phase: CompactionTraversal::PHASES.first,
         stats: default_stats,
@@ -45,6 +57,7 @@ class CompactionRunner
         pause_requested: run.pause_requested,
         stats: stats,
         progress: progress_for(run),
+        operation_id: run.operation_progress&.operation_id,
         started_at: run.started_at&.iso8601,
         finished_at: run.finished_at&.iso8601
       }
@@ -61,40 +74,27 @@ class CompactionRunner
     private
 
     def progress_for(run)
-      stats = run.stats || {}
-      traversal = CompactionTraversal.new
-      phase_ids = traversal.entity_ids_for_phase(run.phase)
-      phase_total = phase_ids.length
-      overall_current = stats["entities_processed"].to_i
-      overall_total = stats["total_entities"].to_i * CompactionRun::PHASES.size
-      overall_total = MemoryEntity.count * CompactionRun::PHASES.size if overall_total.zero?
-
-      phase_current = if run.cursor_entity_id.present?
-        idx = phase_ids.index(run.cursor_entity_id)
-        idx ? idx + 1 : [ overall_current, phase_total ].min
-      else
-        0
+      if run.operation_progress
+        snapshot = run.operation_progress.snapshot
+        return {
+          phase: {
+            current: snapshot[:current],
+            total: snapshot[:total],
+            percent: snapshot[:percentage]
+          },
+          overall: {
+            current: snapshot[:current],
+            total: snapshot[:total],
+            percent: snapshot[:percentage]
+          }
+        }
       end
 
-      percent = ->(current, total) {
-        return 0 if total.zero?
-        [ [ (current.to_f / total) * 100, 100 ].min, 0 ].max.round
-      }
-
-      overall_percent = run.completed? ? 100 : percent.call(overall_current, overall_total)
-
-      {
-        phase: {
-          current: phase_current,
-          total: phase_total,
-          percent: percent.call(phase_current, phase_total)
-        },
-        overall: {
-          current: overall_current,
-          total: overall_total,
-          percent: overall_percent
-        }
-      }
+      stats = run.stats || {}
+      total = [ stats["total_entities"].to_i * CompactionRun::PHASES.size, 0 ].max
+      current = [ stats["entities_processed"].to_i, total ].min
+      percent = run.completed? ? 100 : (total.zero? ? 0 : ((current.to_f / total) * 100).round)
+      { phase: { current: current, total: total, percent: percent }, overall: { current: current, total: total, percent: percent } }
     end
 
     def default_stats

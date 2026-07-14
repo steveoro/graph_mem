@@ -18,7 +18,13 @@ class ExportJob < ApplicationJob
     # Count total nodes first
     strategy = ExportStrategy.new
     total_count = count_total_nodes(entity_ids)
-
+    operation = OperationProgress.start!(
+      operation_type: "export",
+      operation_id: export_id,
+      total_count: total_count,
+      message: "Starting export"
+    )
+    broadcast_operation(operation)
     broadcast_progress(export_id, 0, total_count, "Starting export...")
 
     begin
@@ -26,6 +32,8 @@ class ExportJob < ApplicationJob
       current_count = 0
       progress_callback = lambda do |node_name|
         current_count += 1
+        operation.update_progress!(current: current_count, total: total_count, message: "Exporting: #{node_name}")
+        broadcast_operation(operation)
         broadcast_progress(export_id, current_count, total_count, "Exporting: #{node_name}")
       end
 
@@ -36,6 +44,8 @@ class ExportJob < ApplicationJob
       filepath = File.join(TEMP_DIR, filename)
       File.write(filepath, json_content)
 
+      operation.complete!(current: current_count, message: "Export complete")
+      broadcast_operation(operation)
       broadcast_complete(export_id, {
         success: true,
         download_path: "/data_exchange/download_export?export_id=#{export_id}",
@@ -44,6 +54,8 @@ class ExportJob < ApplicationJob
 
     rescue StandardError => e
       Rails.logger.error "ExportJob failed: #{e.message}\n#{e.backtrace.first(5).join("\n")}"
+      operation&.fail!(e)
+      broadcast_operation(operation) if operation
       broadcast_error(export_id, "Export failed: #{e.message}")
     end
   end
@@ -92,6 +104,10 @@ class ExportJob < ApplicationJob
     end
 
     count
+  end
+
+  def broadcast_operation(operation)
+    OperationProgressBroadcaster.call(operation)
   end
 
   def broadcast_progress(export_id, current, total, message)

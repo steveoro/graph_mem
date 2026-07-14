@@ -7,6 +7,15 @@
     - if compaction[:run_id]
       %span.dashboard-card__run-id Run ##{compaction[:run_id]}
   .dashboard-card__body
+    - if compaction[:operation_id]
+      .operation-progress{ data: { controller: "operation-progress", operation_progress_operation_id_value: compaction[:operation_id], operation_progress_id: compaction[:operation_id] } }
+        %span{ data: { progress_status: true } }= compaction[:dream_state]
+        %span{ data: { progress_phase: true } }= compaction[:phase]
+        %span{ data: { progress_current: true } }= progress&.dig(:overall, :current) || 0
+        %span= "/"
+        %span{ data: { progress_total: true } }= progress&.dig(:overall, :total) || 0
+        %span{ data: { progress_percentage: true } }= "#{progress&.dig(:overall, :percent) || 0}%"
+        %progress{ max: 100, value: progress&.dig(:overall, :percent) || 0 }
     .dashboard-phase-stepper
       - compaction_phases.each do |phase|
         - css = []

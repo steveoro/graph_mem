@@ -54,16 +54,19 @@ class DreamStateCompactor
       end
 
       flush_review_queue!
+      broadcast_progress(phase, entity_id)
 
       if @run.reload.pause_requested?
         @run.pause!
         flush_review_queue!
+        broadcast_operation(message: "Compaction paused")
         return :paused
       end
     end
 
     if start_idx + BATCH_SIZE >= entity_ids.length
       advance_phase!(phase)
+      broadcast_operation(message: @run.completed? ? "Compaction completed" : "Completed #{phase} phase")
       return @run.reload.status == "completed" ? :completed : :continued
     end
 
@@ -89,6 +92,34 @@ class DreamStateCompactor
     else
       @run.mark_completed!
     end
+  end
+
+  def broadcast_progress(phase, entity_id = nil)
+    operation = @run.operation_progress
+    return unless operation
+
+    operation.update_progress!(
+      current: operation.current_count.to_i + 1,
+      total: operation.total_count,
+      phase: phase,
+      message: entity_id ? "Processed entity ##{entity_id}" : "Processing #{phase}",
+      counters: @run.reload.stats
+    )
+    OperationProgressBroadcaster.call(operation)
+  end
+
+  def broadcast_operation(message:)
+    operation = @run.operation_progress
+    return unless operation
+
+    if @run.completed?
+      operation.complete!(current: operation.total_count, message: message, counters: @run.reload.stats)
+    elsif @run.paused?
+      operation.pause!(message: message)
+    else
+      operation.update!(message: message, phase: @run.phase, counters: @run.reload.stats)
+    end
+    OperationProgressBroadcaster.call(operation)
   end
 
   def process_entity_for_phase(phase, entity_id)

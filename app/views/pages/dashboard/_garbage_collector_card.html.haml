@@ -4,6 +4,15 @@
     %h2.dashboard-card__title Garbage Collector
     %span.dashboard-card__hint Diagnostic reports
   .dashboard-card__body
+    - if operation
+      .operation-progress{ data: { controller: "operation-progress", operation_progress_operation_id_value: operation[:operation_id], operation_progress_id: operation[:operation_id] } }
+        %span{ data: { progress_status: true } }= operation[:status]
+        %span{ data: { progress_phase: true } }= operation[:phase]
+        %span{ data: { progress_current: true } }= operation[:current]
+        %span= "/"
+        %span{ data: { progress_total: true } }= operation[:total]
+        %span{ data: { progress_percentage: true } }= "#{operation[:percentage]}%"
+        %progress{ max: 100, value: operation[:percentage] }
     - if schedules["garbage_collection"].present?
       %p.dashboard-card__hint
         Scheduled: #{schedules["garbage_collection"]}

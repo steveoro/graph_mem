@@ -171,11 +171,17 @@ class DataExchangeController < ApplicationController
     # Merge root decisions from form with child decisions from stored matches
     decisions = build_merged_decisions(params[:decisions], stored_matches)
 
-    strategy = ImportExecutionStrategy.new
+    operation = OperationProgress.start!(
+      operation_type: "import",
+      total_count: 0,
+      message: "Starting import"
+    )
+    tracker = OperationProgressTracker.new(operation_progress: operation, total: 0, message: "Starting import")
+    strategy = ImportExecutionStrategy.new(progress_tracker: tracker)
     report = strategy.execute(import_data, decisions)
 
     # Store report in temp file and clear import data files
-    ImportSession.store_report(import_session_id, report.to_h)
+    ImportSession.store_report(import_session_id, report.to_h.merge(operation_id: operation.operation_id))
 
     redirect_to import_report_data_exchange_index_path
   end
@@ -191,6 +197,7 @@ class DataExchangeController < ApplicationController
     end
 
     @report = ImportSession.load_report(import_session_id)
+    @operation = OperationProgress.find_by(operation_id: @report[:operation_id] || @report["operation_id"])
   end
 
   # DELETE /data_exchange/import_cancel

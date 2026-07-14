@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 class CompactionRun < ApplicationRecord
+  belongs_to :operation_progress, optional: true
+
   STATUSES = %w[idle running paused completed failed].freeze
   PHASES = %w[orphans tree_walk relationship_discovery].freeze
 

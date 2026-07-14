@@ -34,8 +34,9 @@ class ImportExecutionStrategy
     end
   end
 
-  def initialize
+  def initialize(progress_tracker: nil)
     @logger = Rails.logger
+    @progress_tracker = progress_tracker
     @entities_created = 0
     @entities_merged = 0
     @entities_skipped = 0
@@ -55,6 +56,7 @@ class ImportExecutionStrategy
 
     # Build decision lookup by node path
     decision_map = decisions.index_by { |d| d[:node_path] || d["node_path"] }
+    initialize_progress!(import_data)
 
     ActiveRecord::Base.transaction do
       root_nodes = import_data["root_nodes"] || import_data[:root_nodes] || []
@@ -68,6 +70,8 @@ class ImportExecutionStrategy
       end
     end
 
+    @progress_tracker&.complete!(message: "Import completed", counters: progress_counters)
+
     ImportReport.new(
       success: @errors.empty?,
       entities_created: @entities_created,
@@ -80,6 +84,8 @@ class ImportExecutionStrategy
   rescue ActiveRecord::RecordInvalid => e
     @logger.error "ImportExecutionStrategy: Transaction failed: #{e.message}"
     @errors << "Transaction failed: #{e.message}"
+
+    @progress_tracker&.fail!(e)
 
     ImportReport.new(
       success: false,
@@ -123,7 +129,10 @@ class ImportExecutionStrategy
       create_new_entity(node)
     end
 
-    return unless entity_id
+    unless entity_id
+      @progress_tracker&.increment!(message: "Processed import node #{path}", counters: progress_counters)
+      return
+    end
 
     # Store the mapping for child processing
     @entity_mapping[path] = entity_id
@@ -145,6 +154,35 @@ class ImportExecutionStrategy
       # Children inherit this entity as their tree parent
       process_node_recursive(child, child_path, decision_map, nil, entity_id)
     end
+
+    @progress_tracker&.increment!(message: "Processed import node #{path}", counters: progress_counters)
+  end
+
+  def initialize_progress!(import_data)
+    return unless @progress_tracker
+
+    @progress_tracker.set_total!(flattened_node_count(import_data))
+  end
+
+  def flattened_node_count(import_data)
+    nodes = import_data["root_nodes"] || import_data[:root_nodes] || []
+    nodes.sum { |node| 1 + flattened_children_count(node) }
+  end
+
+  def flattened_children_count(node)
+    children = node["children"] || node[:children] || []
+    children.sum { |child| 1 + flattened_children_count(child) }
+  end
+
+  def progress_counters
+    {
+      entities_created: @entities_created,
+      entities_merged: @entities_merged,
+      entities_skipped: @entities_skipped,
+      observations_created: @observations_created,
+      relations_created: @relations_created,
+      errors: @errors.length
+    }
   end
 
   # Handle skip action - entity already exists with same parent

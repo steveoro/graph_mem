@@ -5,6 +5,15 @@
 
   - success = @report[:success] || @report["success"]
 
+  - if @operation
+    .operation-progress{ data: { controller: "operation-progress", operation_progress_operation_id_value: @operation.operation_id, operation_progress_id: @operation.operation_id } }
+      %span{ data: { progress_status: true } }= @operation.status
+      %span{ data: { progress_current: true } }= @operation.current_count
+      %span= "/"
+      %span{ data: { progress_total: true } }= @operation.total_count
+      %span{ data: { progress_percentage: true } }= "#{@operation.percentage}%"
+      %progress{ max: 100, value: @operation.percentage.to_f }
+
   - if success
     .bg-green-50.border.border-green-200.rounded-lg.p-4.mb-6
       .flex.items-center

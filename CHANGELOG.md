@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Harden `tree_walk` vector similarity query by using an in-memory `VEC_FromText` literal instead of a subquery against `memory_entities` and by running merge scan before deduplication
 - `GarbageCollectionRunner` now deletes duplicate observations and repairs `memory_observations_count` counters
 - `GraphIntegrityService` orchestrates `RelationIntegrityRepairer`, `GarbageCollectionRunner`, and a full counter recount; called by `GarbageCollectionJob` and before each new dream-state run
+- Add OperationProgress tracking to import, export, compaction, and garbage collection jobs with real-time broadcasting
 
 ## [1.9.4] - 2026-07-13
 - Prevent concurrent compactor runs; compactor review UI; increased concurrent stability

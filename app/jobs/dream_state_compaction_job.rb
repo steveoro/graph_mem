@@ -38,6 +38,10 @@ class DreamStateCompactionJob < ApplicationJob
     end
   rescue StandardError => e
     run&.mark_failed!(e)
+    if run&.operation_progress
+      run.operation_progress.fail!(e)
+      OperationProgressBroadcaster.call(run.operation_progress)
+    end
     Rails.logger.error "[DreamState] run #{run_id} failed: #{e.message}"
     raise
   end
