@@ -50,10 +50,14 @@ RSpec.describe TraverseGraphTool, type: :model do
     end
 
     it "serializes observations and relation metadata" do
+      obsolete = MemoryObservation.create!(memory_entity: a, content: "Historical observation")
+      obsolete.mark_obsolete!
       result = tool.call(start_entity_id: a.id, max_depth: 1, direction: "outgoing")
 
       start_entity = result[:entities].find { |e| e[:entity_id] == a.id }
       expect(start_entity[:observations].first[:content]).to eq("Observation on A")
+      expect(start_entity[:observations].first[:status]).to eq(MemoryObservation::ACTIVE_STATUS)
+      expect(start_entity[:observations].pluck(:observation_id)).not_to include(obsolete.id)
 
       relation = result[:relations].find { |r| r[:relation_id] == r_ab.id }
       expect(relation[:weight]).to eq(1.5)

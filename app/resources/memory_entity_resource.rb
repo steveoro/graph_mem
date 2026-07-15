@@ -3,7 +3,7 @@
 # MemoryEntity Resource implementation with pagination, filtering, sorting, and relation inclusion
 class MemoryEntityResource < ApplicationResource
   # Templated URI with all supported query parameters
-  uri "memory_entities{?page,per_page,entity_type,name,aliases,id,created_after,created_before,updated_after,updated_before,min_observations,sort_by,sort_dir,include_observations,include_relations,or_filters}"
+  uri "memory_entities{?page,per_page,entity_type,name,aliases,id,created_after,created_before,updated_after,updated_before,min_observations,sort_by,sort_dir,include_observations,include_relations,include_obsolete,or_filters}"
   resource_name "MemoryEntities"
   description "Access memory entities with pagination, filtering, sorting and relation inclusion"
   mime_type "application/json"
@@ -145,6 +145,7 @@ class MemoryEntityResource < ApplicationResource
     # Add boolean flags for each inclusion option
     summary[:include_observations] = true if params[:include_observations] == "true"
     summary[:include_relations] = true if params[:include_relations] == "true"
+    summary[:include_obsolete] = true if params[:include_obsolete] == "true"
 
     summary
   end
@@ -248,9 +249,12 @@ class MemoryEntityResource < ApplicationResource
       # Include observations if requested
       if include_observations
         Rails.logger.debug "Including observations for entity #{entity.id}"
-        if entity.memory_observations_count.to_i.positive?
-          entity_data["observations"] = entity.memory_observations.as_json
+        observations = if params[:include_obsolete] == "true"
+          entity.memory_observations
+        else
+          entity.active_memory_observations
         end
+        entity_data["observations"] = observations.as_json if observations.any?
       end
 
       # Include relations if requested

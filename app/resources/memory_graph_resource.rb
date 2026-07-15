@@ -86,7 +86,7 @@ class MemoryGraphResource < ApplicationResource
 
   def traversal_entities(traversal)
     @traversal_entities ||= MemoryEntity.where(id: traversal.entity_ids)
-      .includes(:memory_observations)
+      .includes(:active_memory_observations)
       .index_by(&:id)
   end
 
@@ -96,8 +96,8 @@ class MemoryGraphResource < ApplicationResource
 
   def entity_result(entity, include_observations)
     result = entity.as_json
-    if include_observations && entity.memory_observations_count.to_i.positive?
-      result["observations"] = entity.memory_observations.as_json
+    if include_observations && entity.active_memory_observations.any?
+      result["observations"] = entity.active_memory_observations.as_json
     end
     result
   end

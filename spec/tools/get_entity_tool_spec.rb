@@ -68,6 +68,7 @@ RSpec.describe GetEntityTool, type: :model do
       expect(schema[:type]).to eq("object")
       expect(schema[:required]).to eq([ "entity_id" ])
       expect(schema[:properties]).to have_key(:entity_id)
+      expect(schema[:properties]).to have_key(:include_obsolete)
     end
   end
 
@@ -94,8 +95,26 @@ RSpec.describe GetEntityTool, type: :model do
         expect(obs[:observation_id]).to eq(observation.id)
         expect(obs[:observation_content]).to eq('This is a test observation')
         expect(obs).to include(confidence: 0.8, source: 'spec', tags: [ 'verified' ])
+        expect(obs[:status]).to eq(MemoryObservation::ACTIVE_STATUS)
         expect(obs[:created_at]).to be_a(String)
         expect(obs[:updated_at]).to be_a(String)
+      end
+
+      it 'excludes inactive observations by default and includes them on request' do
+        obsolete = MemoryObservation.create!(memory_entity: entity, content: 'Historical')
+        obsolete.mark_obsolete!(reason: 'Outdated')
+
+        current_result = tool.call(entity_id: entity.id)
+        historical_result = tool.call(entity_id: entity.id, include_obsolete: true)
+
+        expect(current_result[:observations].pluck(:observation_id)).not_to include(obsolete.id)
+        expect(historical_result[:observations].pluck(:observation_id)).to include(obsolete.id)
+        expect(
+          historical_result[:observations].find { |item| item[:observation_id] == obsolete.id }
+        ).to include(
+          status: MemoryObservation::OBSOLETE_STATUS,
+          obsolescence_reason: 'Outdated'
+        )
       end
 
       it 'includes relations_from (outgoing relations FROM this entity)' do

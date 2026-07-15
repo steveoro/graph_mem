@@ -4,6 +4,10 @@ class MemoryEntity < ApplicationRecord
   include Auditable
 
   has_many :memory_observations, dependent: :destroy
+  has_many :active_memory_observations,
+           -> { active },
+           class_name: "MemoryObservation",
+           inverse_of: :memory_entity
   has_many :relations_from, class_name: "MemoryRelation", foreign_key: "from_entity_id", dependent: :destroy, inverse_of: :from_entity
   has_many :relations_to, class_name: "MemoryRelation", foreign_key: "to_entity_id", dependent: :destroy, inverse_of: :to_entity
 

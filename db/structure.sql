@@ -137,11 +137,19 @@ CREATE TABLE `memory_observations` (
   `valid_from` datetime(6) DEFAULT NULL,
   `valid_until` datetime(6) DEFAULT NULL,
   `tags` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL DEFAULT '[]' CHECK (json_valid(`tags`)),
+  `status` varchar(255) NOT NULL DEFAULT 'active',
+  `obsoleted_at` datetime(6) DEFAULT NULL,
+  `obsolescence_reason` varchar(255) DEFAULT NULL,
+  `superseded_by_id` bigint(20) DEFAULT NULL,
   PRIMARY KEY (`id`),
   KEY `index_memory_observations_on_memory_entity_id` (`memory_entity_id`),
   KEY `index_memory_observations_on_source` (`source`),
   KEY `index_memory_observations_on_valid_from` (`valid_from`),
   KEY `index_memory_observations_on_valid_until` (`valid_until`),
+  KEY `index_memory_observations_on_status` (`status`),
+  KEY `index_memory_observations_on_memory_entity_id_and_status` (`memory_entity_id`,`status`),
+  KEY `index_memory_observations_on_superseded_by_id` (`superseded_by_id`),
+  CONSTRAINT `fk_rails_59348732bc` FOREIGN KEY (`superseded_by_id`) REFERENCES `memory_observations` (`id`) ON DELETE SET NULL,
   CONSTRAINT `fk_rails_675e0d9a7a` FOREIGN KEY (`memory_entity_id`) REFERENCES `memory_entities` (`id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=4633 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
@@ -240,6 +248,7 @@ CREATE TABLE `settings` (
 /*M!100616 SET NOTE_VERBOSITY=@OLD_NOTE_VERBOSITY */;
 
 INSERT INTO `schema_migrations` (version) VALUES
+('20260715095315'),
 ('20260714171001'),
 ('20260714171000'),
 ('20260714155706'),

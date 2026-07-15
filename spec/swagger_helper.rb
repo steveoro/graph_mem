@@ -78,10 +78,14 @@ RSpec.configure do |config|
               valid_from: { type: [ :string, :null ], format: 'date-time', nullable: true },
               valid_until: { type: [ :string, :null ], format: 'date-time', nullable: true },
               tags: { type: :array, items: { type: :string } },
+              status: { type: :string, enum: MemoryObservation::STATUSES, readOnly: true },
+              obsoleted_at: { type: [ :string, :null ], format: 'date-time', nullable: true, readOnly: true },
+              obsolescence_reason: { type: [ :string, :null ], nullable: true, readOnly: true },
+              superseded_by_id: { type: [ :integer, :null ], nullable: true, readOnly: true },
               created_at: { type: :string, format: 'date-time', readOnly: true },
               updated_at: { type: :string, format: 'date-time', readOnly: true }
             },
-            required: [ 'id', 'content', 'memory_entity_id', 'created_at', 'updated_at' ]
+            required: [ 'id', 'content', 'memory_entity_id', 'status', 'created_at', 'updated_at' ]
           },
           memory_relation: {
             type: :object,
@@ -117,10 +121,14 @@ RSpec.configure do |config|
                     valid_from: { type: [ :string, :null ], format: 'date-time', nullable: true },
                     valid_until: { type: [ :string, :null ], format: 'date-time', nullable: true },
                     tags: { type: :array, items: { type: :string } },
+                    status: { type: :string, enum: MemoryObservation::STATUSES },
+                    obsoleted_at: { type: [ :string, :null ], format: 'date-time', nullable: true },
+                    obsolescence_reason: { type: [ :string, :null ], nullable: true },
+                    superseded_by_id: { type: [ :integer, :null ], nullable: true },
                     created_at: { type: :string, format: 'date-time' },
                     updated_at: { type: :string, format: 'date-time' }
                   },
-                  required: [ 'observation_id', 'content', 'created_at', 'updated_at' ]
+                  required: [ 'observation_id', 'content', 'status', 'created_at', 'updated_at' ]
                 }
               },
               created_at: { type: :string, format: 'date-time' },

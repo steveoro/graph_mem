@@ -39,6 +39,23 @@ RSpec.describe "API V1 Search", type: :request do
       expect(entity_ids).to include(entity_a.id)
     end
 
+    it "does not match or serialize obsolete observations" do
+      obsolete = MemoryObservation.create!(memory_entity: entity_b, content: "HistoricalOnlyTerm")
+      obsolete.mark_obsolete!
+
+      get "/api/v1/search/subgraph", params: {
+        q: "HistoricalOnlyTerm",
+        search_in_name: "false",
+        search_in_type: "false",
+        search_in_aliases: "false"
+      }
+      expect(JSON.parse(response.body)["entities"]).to be_empty
+
+      get "/api/v1/search/subgraph", params: { q: "XqzBetaZqx" }
+      entity = JSON.parse(response.body)["entities"].find { |item| item["entity_id"] == entity_b.id }
+      expect(entity["observations"].pluck("observation_id")).not_to include(obsolete.id)
+    end
+
     it "supports pagination via page and per_page" do
       get "/api/v1/search/subgraph", params: { q: "Xqz", per_page: 1, page: 1 }
       expect(response).to have_http_status(:ok)

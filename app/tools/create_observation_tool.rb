@@ -35,18 +35,11 @@ class CreateObservationTool < ApplicationTool
       )
       logger.info "Created observation: #{new_observation.inspect}"
 
-      {
-        observation_id: new_observation.id,
-        memory_entity_id: new_observation.memory_entity_id,
-        observation_content: new_observation.content,
-        confidence: new_observation.confidence,
-        source: new_observation.source,
-        valid_from: new_observation.valid_from&.iso8601,
-        valid_until: new_observation.valid_until&.iso8601,
-        tags: new_observation.tags,
-        created_at: new_observation.created_at.iso8601,
-        updated_at: new_observation.updated_at.iso8601
-      }
+      MemoryObservationSerializer.call(
+        new_observation,
+        content_key: :observation_content,
+        include_entity_id: true
+      )
     rescue ActiveRecord::RecordNotFound => e
       error_message = "Entity with ID=#{entity_id} not found."
       logger.error "ResourceNotFound in CreateObservationTool: #{error_message} (was: #{e.message})"

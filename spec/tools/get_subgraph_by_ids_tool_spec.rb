@@ -53,6 +53,8 @@ RSpec.describe GetSubgraphByIdsTool, type: :model do
   describe '#call' do
     context 'with valid entity_ids' do
       it 'returns entities with their observations' do
+        obsolete = MemoryObservation.create!(memory_entity: entity_a, content: 'Historical')
+        obsolete.mark_obsolete!
         result = tool.call(entity_ids: [ entity_a.id, entity_b.id ])
 
         expect(result[:entities]).to be_an(Array)
@@ -66,8 +68,10 @@ RSpec.describe GetSubgraphByIdsTool, type: :model do
         expect(entity_a_data[:observations].first).to include(
           confidence: 0.9,
           source: 'spec',
-          tags: [ 'subgraph' ]
+          tags: [ 'subgraph' ],
+          status: MemoryObservation::ACTIVE_STATUS
         )
+        expect(entity_a_data[:observations].pluck(:observation_id)).not_to include(obsolete.id)
       end
 
       it 'includes only relations between the requested entities' do

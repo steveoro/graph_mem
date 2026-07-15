@@ -33,10 +33,14 @@ module GraphTraversalToolSchema
         valid_from: { type: [ :string, :null ], format: "date-time" },
         valid_until: { type: [ :string, :null ], format: "date-time" },
         tags: { type: :array, items: { type: :string } },
+        status: { type: :string, enum: MemoryObservation::STATUSES },
+        obsoleted_at: { type: [ :string, :null ], format: "date-time" },
+        obsolescence_reason: { type: [ :string, :null ] },
+        superseded_by_id: { type: [ :integer, :null ] },
         created_at: { type: :string, format: "date-time" },
         updated_at: { type: :string, format: "date-time" }
       },
-      required: [ :observation_id, :content, :created_at, :updated_at ]
+      required: [ :observation_id, :content, :status, :created_at, :updated_at ]
     }
   end
 

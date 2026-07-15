@@ -23,6 +23,7 @@ memory_observations
 | sort_by | Field to sort by | `sort_by=created_at` |
 | sort_dir | Sort direction (asc or desc) | `sort_dir=desc` |
 | include_entity | Include parent entity details | `include_entity=true` |
+| include_obsolete | Include obsolete and superseded history; defaults to active observations only | `include_obsolete=true` |
 
 ## Sorting
 
@@ -72,6 +73,10 @@ The response includes the following sections:
       "id": 123,
       "memory_entity_id": 42,
       "content": "This is an important observation",
+      "status": "active",
+      "obsoleted_at": null,
+      "obsolescence_reason": null,
+      "superseded_by_id": null,
       "created_at": "2023-06-15T10:30:00Z",
       "updated_at": "2023-06-15T10:30:00Z",
       "entity": {

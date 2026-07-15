@@ -109,6 +109,28 @@ RSpec.describe VectorSearchStrategy do
         expect(strategy.search_observations("test")).to eq([])
       end
     end
+
+    context "when vector search succeeds" do
+      before do
+        allow(EmbeddingService).to receive(:vector_enabled?).and_return(true)
+        allow(embedding_service).to receive(:embed).and_return(fake_vector)
+      end
+
+      it "searches active observations only" do
+        relation = double("relation")
+        allow(MemoryObservation).to receive(:active).and_return(relation)
+        allow(relation).to receive(:where).and_return(relation)
+        allow(relation).to receive(:not).and_return(relation)
+        allow(relation).to receive(:select).and_return(relation)
+        allow(relation).to receive(:group).and_return(relation)
+        allow(relation).to receive(:order).and_return(relation)
+        allow(relation).to receive(:limit).and_return(relation)
+        allow(relation).to receive(:pluck).and_return([ 123 ])
+
+        expect(strategy.search_observations("test")).to eq([ 123 ])
+        expect(MemoryObservation).to have_received(:active)
+      end
+    end
   end
 
   describe "SearchResult struct" do

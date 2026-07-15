@@ -27,6 +27,16 @@ RSpec.describe RelationshipDiscoveryStrategy, type: :model do
       )
     end
 
+    it "ignores obsolete observation evidence" do
+      left = MemoryEntity.create!(name: "HistoricalLeft", entity_type: "Task")
+      right = MemoryEntity.create!(name: "HistoricalRight", entity_type: "Task")
+      shared_content = "Historical shared dependency on auth module"
+      MemoryObservation.create!(memory_entity: left, content: shared_content).mark_obsolete!
+      MemoryObservation.create!(memory_entity: right, content: shared_content)
+
+      expect(strategy.proposals_for_entity(left.id)).to be_empty
+    end
+
     it "proposes solves for issue and solution observation pairs" do
       issue = MemoryEntity.create!(name: "BenchProject_auth_issue", entity_type: "Issue")
       solution = MemoryEntity.create!(name: "BenchProject_auth_fix", entity_type: "PossibleSolution")

@@ -50,10 +50,14 @@ class VectorSearchStrategy
     return [] unless query_vector
 
     vector_sql = "[#{query_vector.join(',')}]"
+    distance_sql = MemoryObservation.sanitize_sql_array(
+      [ "MIN(VEC_DISTANCE_COSINE(embedding, VEC_FromText(?))) AS vec_distance", vector_sql ]
+    )
 
     MemoryObservation
+      .active
       .where.not(embedding: nil)
-      .select("memory_entity_id, MIN(VEC_DISTANCE_COSINE(embedding, VEC_FromText('#{vector_sql}'))) AS vec_distance")
+      .select(:memory_entity_id, Arel.sql(distance_sql))
       .group(:memory_entity_id)
       .order(Arel.sql("vec_distance ASC"))
       .limit(limit)

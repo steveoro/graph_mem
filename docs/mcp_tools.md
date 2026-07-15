@@ -1,6 +1,6 @@
 # MCP Tools Documentation
 
-Detailed reference for the 26 Model Context Protocol (MCP) tools available in GraphMem.
+Detailed reference for the 27 Model Context Protocol (MCP) tools available in GraphMem.
 
 ## Overview
 
@@ -77,7 +77,7 @@ Context is stored per MCP client in the `agent_contexts` table, keyed by the `X-
   - `entity_id` (integer, required): The ID of the entity.
   - `reason` (string, optional): Reason for the deletion (e.g., "duplicate" or "API/operator"). Recorded in the audit log.
 
-## Observation Management (2 tools)
+## Observation Management (3 tools)
 
 #### `create_observation`
 - **Description:** Adds an observation to an existing entity. Automatically generates a vector embedding for semantic search. Accepts entity_id (integer) or entity name (string). Observation text accepted via `text_content`, `content`, or `contents`.
@@ -90,11 +90,21 @@ Context is stored per MCP client in the `agent_contexts` table, keyed by the `X-
   - `tags` (array of strings, optional): Structured tags.
 - **Embedding refresh:** Changes to content, source, or tags regenerate the observation embedding; confidence and validity-only changes do not.
 
+#### `update_observation`
+- **Description:** Updates an active observation in place or creates a replacement version while retaining the original as superseded. Inactive observations cannot be edited.
+- **Parameters:**
+  - `observation_id` (integer, required): The active observation to update.
+  - `text_content` (string, optional): Replacement content.
+  - `confidence`, `source`, `valid_from`, `valid_until`, `tags` (optional): Structured metadata updates.
+  - `supersede` (boolean, optional, default: false): Create a new active observation and link the original to it with status `superseded`.
+  - `reason` (string, optional): Reason for supersession.
+- **Lifecycle:** Active observations appear in reads, traversal, relationship discovery, and observation search by default. `get_entity(include_obsolete: true)` and REST/resource `include_obsolete=true` expose retained history.
+
 #### `delete_observation`
-- **Description:** Deletes an observation by ID.
+- **Description:** Marks an observation `obsolete` by ID instead of deleting it. Repeating the operation on an inactive observation is safe.
 - **Parameters:**
   - `observation_id` (integer, required): The ID of the observation.
-  - `reason` (string, optional): Reason for the deletion. Recorded in the audit log.
+  - `reason` (string, optional): Reason for obsolescence.
 
 ## Relation Management (3 tools)
 
