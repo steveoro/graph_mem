@@ -9,7 +9,7 @@ This checklist tracks the implementation across separate runs; keep completed it
 - [x] Add shared ActionCable broadcaster and `OperationProgressChannel`.
 - [x] Add Stimulus subscriber that updates every matching operation target on the page.
 - [x] Apply the two operation-progress migrations in the current test database; repeat for development/staging/production deployment databases.
-- [ ] Confirm production Solid Cable delivery for job-originated broadcasts.
+- [x] Confirm production Solid Cable delivery for job-originated broadcasts.
 
 ## Run 2 — operation instrumentation
 

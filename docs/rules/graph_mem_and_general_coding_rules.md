@@ -1,20 +1,7 @@
 ---
-description: General coding rules and graph_mem MCP usage (Knowledge Graph)
+description: GraphMem MCP usage (Knowledge Graph) and general coding rules
 globs:
 alwaysApply: true
----
-### Core Rules
-
-- **Schema first**: DB schema is the primary source of truth for data structure.
-- **Know your context**: Verify project folder and development environment, runtime target, and containers before running commands.
-  Example: most workspaces include more than one project root, each with its own dev stack and languages. Focus on the target project, look for relevant files in the project root that might include target versions of the dev stack in use. (E.g: `.versions.conf`, `.ruby-version`, `docker-compose.yml`, `Gemfile`, `package.json`, `.rvmrc`, ...)
-- **Keep it simple**: Prefer straightforward solutions and small, testable units.
-- **Test like production**: Real instances over doubles; randomize factories; no fake data in dev/prod.
-- **Don't sprawl**: Touch only code relevant to the task; avoid architecture shifts unless asked.
-- **Refactor early**: Split files >500 lines or functions >60 lines.
-- **Evolve, don't fork**: Fix within current patterns before introducing new tech; remove old impls if replaced.
-- **Document**: Record critical changes; remove one-off helpers once used.
-
 ---
 
 ### Graph Memory — 4-Phase Session Workflow
@@ -100,3 +87,17 @@ graph_mem accepts both its native snake_case/ID-based parameters and the
 2. Research (graph history / web / user) to resolve.
 3. Update the graph: new observations, mark outdated ones, edit entity if needed.
 4. Record the resolution; inform the user if open questions remain.
+
+---
+
+### Core Coding Rules
+
+- **Schema first**: DB schema is the primary source of truth for data structure.
+- **Know your context**: Verify project folder and development environment, runtime target, and containers before running commands.
+  Example: most workspaces include more than one project root, each with its own dev stack and languages. Focus on the target project, look for relevant files in the project root that might include target versions of the dev stack in use. (E.g: `.versions.conf`, `.ruby-version`, `docker-compose.yml`, `Gemfile`, `package.json`, `.rvmrc`, ...)
+- **Keep it simple**: Prefer straightforward solutions and small, testable units.
+- **Test like production**: Real instances over doubles; randomize factories; no fake data in dev/prod.
+- **Don't sprawl**: Touch only code relevant to the task; avoid architecture shifts unless asked.
+- **Refactor early**: Split files >500 lines or functions >60 lines.
+- **Evolve, don't fork**: Fix within current patterns before introducing new tech; remove old impls if replaced.
+- **Document**: Record critical changes; remove one-off helpers once used.
