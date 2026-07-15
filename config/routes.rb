@@ -52,6 +52,9 @@ Rails.application.routes.draw do
 
       # Graph data endpoint
       get "graph_data", to: "graph_data#index"
+
+      get "/graph/traverse", to: "graph_traversal#traverse"
+      get "/graph/shortest_path", to: "graph_traversal#shortest_path"
     end
   end
 

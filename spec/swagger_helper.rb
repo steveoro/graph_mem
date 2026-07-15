@@ -97,6 +97,62 @@ RSpec.configure do |config|
               updated_at: { type: :string, format: 'date-time', readOnly: true }
             },
             required: [ 'id', 'from_entity_id', 'to_entity_id', 'relation_type', 'created_at', 'updated_at' ]
+          },
+          traversal_entity: {
+            type: :object,
+            properties: {
+              entity_id: { type: :integer },
+              name: { type: :string },
+              entity_type: { type: :string },
+              aliases: { type: [ :string, :null ], nullable: true },
+              observations: {
+                type: :array,
+                items: {
+                  type: :object,
+                  properties: {
+                    observation_id: { type: :integer },
+                    content: { type: :string },
+                    confidence: { type: [ :number, :null ], format: :float, nullable: true },
+                    source: { type: [ :string, :null ], nullable: true },
+                    valid_from: { type: [ :string, :null ], format: 'date-time', nullable: true },
+                    valid_until: { type: [ :string, :null ], format: 'date-time', nullable: true },
+                    tags: { type: :array, items: { type: :string } },
+                    created_at: { type: :string, format: 'date-time' },
+                    updated_at: { type: :string, format: 'date-time' }
+                  },
+                  required: [ 'observation_id', 'content', 'created_at', 'updated_at' ]
+                }
+              },
+              created_at: { type: :string, format: 'date-time' },
+              updated_at: { type: :string, format: 'date-time' }
+            },
+            required: [ 'entity_id', 'name', 'entity_type', 'observations', 'created_at', 'updated_at' ]
+          },
+          traversal_relation: {
+            type: :object,
+            properties: {
+              relation_id: { type: :integer },
+              from_entity_id: { type: :integer },
+              to_entity_id: { type: :integer },
+              relation_type: { type: :string },
+              weight: { type: [ :number, :null ], format: :float, nullable: true },
+              confidence: { type: [ :number, :null ], format: :float, nullable: true },
+              properties: { type: :object, additionalProperties: true },
+              created_at: { type: :string, format: 'date-time' },
+              updated_at: { type: :string, format: 'date-time' }
+            },
+            required: [ 'relation_id', 'from_entity_id', 'to_entity_id', 'relation_type', 'created_at', 'updated_at' ]
+          },
+          graph_traversal: {
+            type: :object,
+            properties: {
+              start_entity_id: { type: :integer },
+              max_depth: { type: :integer },
+              direction: { type: :string, enum: %w[both outgoing incoming] },
+              visited_depth: { type: :integer },
+              truncated: { type: :boolean }
+            },
+            required: [ 'start_entity_id', 'max_depth', 'direction', 'visited_depth', 'truncated' ]
           }
         }
       }

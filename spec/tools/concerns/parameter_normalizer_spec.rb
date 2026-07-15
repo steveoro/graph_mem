@@ -125,6 +125,13 @@ RSpec.describe ParameterNormalizer do
         expect(result[:to_entity_id]).to eq(task.id)
       end
 
+      it "resolves string values in start_entity_id fields" do
+        result = described_class.normalize("traverse_graph", {
+          start_entity_id: "MyProject"
+        })
+        expect(result[:start_entity_id]).to eq(project.id)
+      end
+
       it "does not resolve entity_name when entity_id is already set" do
         result = described_class.normalize("create_observation", {
           entity_id: 999,

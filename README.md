@@ -79,6 +79,8 @@ GraphMem exposes the following MCP tools:
 * `create_relation` -- Create typed relationships between entities
 * `delete_relation` -- Remove relationships
 * `find_relations` -- Find relationships by entity or type
+* `traverse_graph` -- Bounded multi-hop breadth-first traversal from an entity
+* `find_shortest_path` -- Shortest path (by hop count) between two entities
 * `get_subgraph_by_ids` -- Get connected subgraph of specified entities
 * `search_subgraph` -- Search across entities and observations with pagination
 
