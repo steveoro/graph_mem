@@ -277,3 +277,6 @@ INSERT INTO `schema_migrations` (version) VALUES
 ('20250512095346'),
 ('20250512095341'),
 ('20250512095340');
+
+INSERT INTO `ar_internal_metadata` (`key`, `value`, `created_at`, `updated_at`) VALUES
+('environment', 'test', '2026-07-15 00:00:00', '2026-07-15 00:00:00');
