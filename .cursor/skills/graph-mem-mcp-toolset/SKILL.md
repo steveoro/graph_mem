@@ -5,14 +5,17 @@ description: Use the graph_mem MCP toolset with a repeatable 4-phase workflow (o
 
 # Graph Mem MCP Toolset
 
-Use this skill to operate `graph_mem` reliably and consistently.
+Use this skill to operate `graph_mem` reliably and consistently. The repository
+documentation under `docs/` is the detailed reference; this skill is the
+short operational checklist for an agent.
 
 ## Quick Start
 
 1. **Schema first**
-   - Read the tool descriptor JSON before each MCP tool call.
-   - Path pattern: `mcps/user-graph_mem/tools/<tool-name>.json`.
-   - Validate required params from schema, then call the tool.
+   - Use `GetMcpTools` for the exact `user-graph_mem` tool before each
+     `CallMcpTool` invocation.
+   - Validate required parameters and constraints from the returned schema.
+   - Do not infer a schema from an old example or from a different MCP server.
 
 2. **Follow the 4-phase workflow**
    - Orient -> Recall -> Work -> Persist.
@@ -24,9 +27,10 @@ Use this skill to operate `graph_mem` reliably and consistently.
 
 Before calling `CallMcpTool` for any `user-graph_mem` tool:
 
-1. List available descriptors under `mcps/user-graph_mem/tools/`.
-2. Read descriptor(s) for the exact tool(s) you will invoke.
-3. If a descriptor named `mcp_auth` exists, run `mcp_auth` first (one server at a time).
+1. Confirm the server is available with `GetMcpTools`.
+2. Fetch the exact tool schema with `GetMcpTools`.
+3. If the server reports `needsAuth`, authenticate once with its `mcp_auth`
+   tool, then inspect the server again.
 4. Only then call `CallMcpTool`.
 
 ## 4-Phase Session Workflow
@@ -45,8 +49,12 @@ Before calling `CallMcpTool` for any `user-graph_mem` tool:
 1. Run `search_entities` or `search_subgraph` with task keywords.
 2. Inspect top matches with `get_entity`.
 3. For related clusters, run `get_subgraph_by_ids`.
-4. Use `traverse_graph` for bounded multi-hop exploration or `find_shortest_path` to explain how two entities connect.
-5. Prioritize `Issue` + `PossibleSolution`, `BestPractice`, and `Preference` entities.
+4. Use `traverse_graph` for bounded multi-hop exploration or
+   `find_shortest_path` to explain how two entities connect.
+5. Use `summarize` for a source-backed answer to a knowledge question; use
+   direct search/traversal when exact graph structure is needed.
+6. Prioritize `Issue` + `PossibleSolution`, `BestPractice`, and `Preference`
+   entities.
 
 ## Phase 3 - Work
 
@@ -62,7 +70,9 @@ Before calling `CallMcpTool` for any `user-graph_mem` tool:
 1. Write newly learned facts with `create_observation` on existing entities.
    - Use `update_observation` for corrections.
    - Set `supersede: true` when retaining the prior version matters.
-   - Use `delete_observation` to mark a fact obsolete rather than hard-delete it.
+   - Use `delete_observation` to mark a fact obsolete rather than hard-delete
+     it.
+   - Search or load the entity first and do not restate an existing fact.
 2. For new concepts:
    - `create_entity`
    - `create_relation` with a specific relation type.
@@ -73,10 +83,13 @@ Before calling `CallMcpTool` for any `user-graph_mem` tool:
 ## Multi-Agent & Dream-State Awareness
 
 - Context is per-agent, keyed by the `X-MCP-Client` header and persisted in the DB. `set_context`/`clear_context` affect only your own bucket; agents without the header share `"default"`.
-- A background dream-state job auto-parents orphans, auto-merges near-identical entities (cosine < 0.10), and dedupes identical observations. Lower-confidence cases are queued for review.
+- A background dream-state job auto-parents orphans, auto-merges near-identical
+  entities (cosine < 0.10), and dedupes identical observations. Lower-confidence
+  cases are queued for review.
 - `dream_state_status` reports whether compaction is running/paused plus stats.
 - `get_maintenance_reports(report_type: "compaction_review")` returns the queued merge/orphan suggestions; action good ones with `merge_entities`.
-- Mutating tools auto-pause compaction, so no coordination is needed — but search results may shift slightly mid-run.
+- Mutating tools auto-pause compaction, so no coordination is needed — but
+  search results may shift slightly mid-run.
 
 ## Parameter Compatibility
 
@@ -99,7 +112,9 @@ Default recommendation: use native snake_case keys unless compatibility with ext
 4. Use `find_shortest_path` for the shortest unweighted connection within `max_depth`.
 5. Keep traversal bounds small and narrow with `direction` and canonical `relation_types`.
 6. Prefer graph traversal over repeated fuzzy searches after locating the relevant entities.
-7. Keep observations factual and timestamped when possible.
+7. Remember that context-aware search boosts in-context entities; it is not
+   necessarily a hard filter.
+8. Keep observations factual and timestamped when possible.
 
 ## Preferred Entity And Relation Types
 
@@ -139,6 +154,16 @@ If no context:
 {"server":"user-graph_mem","toolName":"get_entity","arguments":{"entity_id":456}}
 ```
 
+### Summarize template
+
+```json
+{"server":"user-graph_mem","toolName":"summarize","arguments":{"query":"<topic>","max_results":10,"max_observations":20,"max_depth":0,"include_sources":true,"style":"concise"}}
+```
+
+Use the returned deterministic evidence and `sources` as the authority. An
+LLM summary is optional synthesis; do not accept source IDs or unsupported
+claims supplied by the model.
+
 ### Persist template
 
 ```json
@@ -146,7 +171,7 @@ If no context:
 ```
 
 ```json
-{"server":"user-graph_mem","toolName":"bulk_update","arguments":{"operations":[{"type":"observation","entity_id":456,"text_content":"<fact>"}]}}
+{"server":"user-graph_mem","toolName":"bulk_update","arguments":{"operations":[{"type":"create_observation","entity_id":456,"text_content":"<fact>"}]}}
 ```
 
 ## Quality Guardrails
@@ -156,3 +181,9 @@ If no context:
 - Keep entries concise, factual, and reusable.
 - Prefer updating existing entities over creating near-duplicates.
 - Record blockers as `Issue` and link confirmed fixes as `PossibleSolution`.
+- Treat only active observations as current by default; preserve uncertainty
+  and conflicting facts rather than silently choosing one.
+- Treat `summarize` output as on-demand and source-backed. Source IDs are
+  assigned by GraphMem, not trusted from generated text.
+- Expect deterministic fallback when synthesis is disabled, unconfigured, or
+  unavailable; do not retry a failed provider indefinitely.

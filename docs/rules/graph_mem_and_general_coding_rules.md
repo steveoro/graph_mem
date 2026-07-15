@@ -6,7 +6,9 @@ alwaysApply: true
 
 ### Graph Memory — 4-Phase Session Workflow
 
-Use the `graph_mem` MCP tools every session. "Knowledge graph", "graph mem", "memory graph" all refer to the same toolset.
+Use the `graph_mem` MCP tools every session. "Knowledge graph", "graph mem", and
+"memory graph" all refer to the same toolset. Treat this workflow as session
+state management, not as a substitute for inspecting the repository.
 
 **Phase 1 — Orient** (start of every conversation)
 1. Say "Remembering..." then call `get_context` to check for an active project. Context is per-agent and persisted, so you may already have one from a prior session.
@@ -19,6 +21,9 @@ Use the `graph_mem` MCP tools every session. "Knowledge graph", "graph mem", "me
 - Drill into hits: `get_entity` for details, `get_subgraph_by_ids` for a cluster of related entities.
 - After locating a root entity, use `traverse_graph` for a bounded multi-hop neighborhood or `find_shortest_path` to explain how two entities connect.
 - Look for prior `Issue`/`PossibleSolution` pairs, `BestPractice`, and `Preference` entities.
+- Use `summarize` when the goal is to answer “what does the graph know about
+  X?”; use search and traversal directly when exact records or relationships
+  are required.
 
 **Phase 3 — Work**
 - Execute the user's request using recalled context.
@@ -26,7 +31,12 @@ Use the `graph_mem` MCP tools every session. "Knowledge graph", "graph mem", "me
 
 **Phase 4 — Persist** (before ending)
 - `create_observation` for new facts on existing entities. Write dedupe-aware: search/get the entity first and append only new facts rather than re-stating existing ones.
-- `update_observation` for corrections. Use `supersede: true` when preserving the prior fact/version matters; use `delete_observation` to mark a fact obsolete rather than hard-delete it.
+- `update_observation` for corrections. Use `supersede: true` when preserving
+  the prior fact/version matters; use `delete_observation` to mark a fact
+  obsolete rather than hard-delete it.
+- Treat active observations as the default truth surface. Request
+  `include_obsolete: true` only when historical or superseded versions are
+  relevant.
 - `create_entity` + `create_relation` for new concepts discovered.
 - Use `bulk_update` to batch multiple writes in one call (max 50 ops).
 - `clear_context` if the project scope is no longer relevant (safe: affects only your own client bucket).
@@ -39,7 +49,7 @@ Use the `graph_mem` MCP tools every session. "Knowledge graph", "graph mem", "me
 | Phase | Tools |
 |-------|-------|
 | Orient | `get_context`, `set_context`, `clear_context`, `search_entities` |
-| Recall | `search_entities`, `search_subgraph`, `get_entity`, `get_subgraph_by_ids`, `list_entities` |
+| Recall | `search_entities`, `search_subgraph`, `get_entity`, `get_subgraph_by_ids`, `summarize`, `list_entities` |
 | Traverse | `find_relations`, `traverse_graph`, `find_shortest_path` |
 | Persist | `create_entity`, `update_entity`, `delete_entity`, `create_observation`, `update_observation`, `delete_observation`, `create_relation`, `delete_relation`, `bulk_update` |
 | Maintain | `suggest_merges`, `merge_entities`, `dream_state_status`, `get_maintenance_reports`, `get_graph_stats`, `get_version`, `get_current_time` |
@@ -53,11 +63,17 @@ Use the `graph_mem` MCP tools every session. "Knowledge graph", "graph mem", "me
 
 ### Dream-State Compaction Awareness
 
-- A background "dream-state" job periodically compacts the graph: it auto-parents orphans, auto-merges near-identical entities (cosine distance < 0.10), and deletes byte-identical duplicate observations. Lower-confidence cases are queued for review.
+- A background "dream-state" job periodically compacts the graph: it
+  auto-parents orphans, auto-merges near-identical entities (cosine distance <
+  0.10), and deletes byte-identical duplicate observations. Lower-confidence
+  cases are queued for review.
 - Call `dream_state_status` to see whether compaction is `running`/`paused` plus its progress/stats.
 - Call `get_maintenance_reports(report_type: "compaction_review")` to read the queue of merge/orphan suggestions the job flagged for review, then action good ones with `merge_entities`.
 - Mutating tools cooperatively pause compaction automatically — no action needed, but search results may shift slightly while a run is in progress.
-- Implication for writes: don't rely on the job to clean up sloppiness. Prefer `create_observation` on an existing entity or `update_entity` over creating near-duplicates.
+- Implication for writes: don't rely on the job to clean up sloppiness. Prefer
+  `create_observation` on an existing entity or `update_entity` over creating
+  near-duplicates. Mutating tools may pause compaction, so do not assume that
+  maintenance state is unchanged during a session.
 
 ### Standard Compatibility
 
@@ -69,14 +85,21 @@ graph_mem accepts both its native snake_case/ID-based parameters and the
 - `bulk_update` accepts either three arrays (`entities`, `observations`, `relations`) or a single `operations` array with `type`-discriminated items.
 - Observation text accepts `text_content`, `content`, or `contents` (array).
 - Relation endpoints accept `from_entity_id`/`to_entity_id` (int), `from`/`to` (name), or `from_entity`/`to_entity` (name).
+- Use native snake_case keys by default. Compatibility aliases are for
+  interoperating clients, not a reason to mix naming styles in one request.
 
 ### Query Strategy
 - **Search before create** to avoid duplicates (vector dedup catches some, not all).
 - **Start broad, then narrow** using entity IDs from search results.
 - **Prioritize root nodes**: find the `Project` first, then traverse its relations.
 - **Use `find_relations` for one hop** when you need the immediate incoming or outgoing edges of an entity.
-- **Use `traverse_graph` for bounded exploration** instead of chaining repeated one-hop calls. Keep `max_depth` and `max_entities` as small as the task permits; narrow with `direction` and canonical `relation_types`.
+- **Use `traverse_graph` for bounded exploration** instead of chaining repeated
+  one-hop calls. Keep `max_depth` and `max_entities` as small as the task
+  permits; narrow with `direction` and canonical `relation_types`.
 - **Use `find_shortest_path` for connectivity questions**. It returns the shortest unweighted path by hop count within `max_depth`; `found: false` means no matching path was found inside that bound.
+- Context scoping boosts entities related to the active project; it does not
+  make unrelated entities impossible to return. Do not describe a context-aware
+  search as a hard project filter unless the API explicitly guarantees that.
 - **Navigate by graph structure** (`find_relations`, `traverse_graph`, `find_shortest_path`, `get_entity`) instead of repeated searches after locating the relevant entities.
 
 ### Entity Types
@@ -88,6 +111,14 @@ graph_mem accepts both its native snake_case/ID-based parameters and the
 ### Observations
 - Keep observations **crisp and factual**; include timestamps and code paths where relevant.
 - For longform content, write to `/docs` and store the file path as an observation.
+- Keep generated summaries ephemeral unless persistence is explicitly requested.
+  `summarize` always derives evidence from the current active graph and returns
+  source entity/observation IDs; never treat IDs or claims emitted by an LLM as
+  authoritative.
+- The deterministic evidence path is authoritative and always available.
+  LLM synthesis is optional; provider failure, missing configuration, or a
+  disabled feature must degrade to deterministic output without exposing
+  credentials or internal exception details.
 
 ### Conflict Handling
 1. Note the conflict as an observation on the relevant entity.
