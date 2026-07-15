@@ -45,14 +45,17 @@ Before calling `CallMcpTool` for any `user-graph_mem` tool:
 1. Run `search_entities` or `search_subgraph` with task keywords.
 2. Inspect top matches with `get_entity`.
 3. For related clusters, run `get_subgraph_by_ids`.
-4. Prioritize `Issue` + `PossibleSolution`, `BestPractice`, and `Preference` entities.
+4. Use `traverse_graph` for bounded multi-hop exploration or `find_shortest_path` to explain how two entities connect.
+5. Prioritize `Issue` + `PossibleSolution`, `BestPractice`, and `Preference` entities.
 
 ## Phase 3 - Work
 
 1. Execute the requested task using recalled knowledge.
 2. If blocked or uncertain, query graph_mem again mid-task:
    - `search_entities` for new clues.
-   - `find_relations` to traverse linked nodes.
+   - `find_relations` for immediate edges.
+   - `traverse_graph` for a bounded neighborhood.
+   - `find_shortest_path` for connectivity between known entities.
 
 ## Phase 4 - Persist (before final response)
 
@@ -89,8 +92,11 @@ Default recommendation: use native snake_case keys unless compatibility with ext
 
 1. Start broad (`search_entities`) then narrow by IDs.
 2. Find the root `Project`, then traverse relations.
-3. Prefer relation traversal (`find_relations`, `get_entity`) over repeated fuzzy searches.
-4. Keep observations factual and timestamped when possible.
+3. Use `find_relations` for one hop and `traverse_graph` for bounded multi-hop exploration.
+4. Use `find_shortest_path` for the shortest unweighted connection within `max_depth`.
+5. Keep traversal bounds small and narrow with `direction` and canonical `relation_types`.
+6. Prefer graph traversal over repeated fuzzy searches after locating the relevant entities.
+7. Keep observations factual and timestamped when possible.
 
 ## Preferred Entity And Relation Types
 
