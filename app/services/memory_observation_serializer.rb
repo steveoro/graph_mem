@@ -8,6 +8,7 @@ module MemoryObservationSerializer
       id_key => observation.id,
       content_key => observation.content,
       confidence: observation.confidence,
+      trust_score: observation.trust_score,
       source: observation.source,
       valid_from: observation.valid_from&.iso8601,
       valid_until: observation.valid_until&.iso8601,

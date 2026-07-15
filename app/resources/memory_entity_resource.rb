@@ -3,7 +3,7 @@
 # MemoryEntity Resource implementation with pagination, filtering, sorting, and relation inclusion
 class MemoryEntityResource < ApplicationResource
   # Templated URI with all supported query parameters
-  uri "memory_entities{?page,per_page,entity_type,name,aliases,id,created_after,created_before,updated_after,updated_before,min_observations,sort_by,sort_dir,include_observations,include_relations,include_obsolete,or_filters}"
+  uri "memory_entities{?page,per_page,entity_type,name,aliases,id,created_after,created_before,updated_after,updated_before,min_observations,sort_by,sort_dir,include_observations,include_relations,include_obsolete,include_ranked,or_filters}"
   resource_name "MemoryEntities"
   description "Access memory entities with pagination, filtering, sorting and relation inclusion"
   mime_type "application/json"
@@ -146,6 +146,7 @@ class MemoryEntityResource < ApplicationResource
     summary[:include_observations] = true if params[:include_observations] == "true"
     summary[:include_relations] = true if params[:include_relations] == "true"
     summary[:include_obsolete] = true if params[:include_obsolete] == "true"
+    summary[:include_ranked] = true if params[:include_ranked] == "true"
 
     summary
   end
@@ -254,6 +255,7 @@ class MemoryEntityResource < ApplicationResource
         else
           entity.active_memory_observations
         end
+        observations = observations.sort_by { |obs| -obs.trust_score.to_f } if params[:include_ranked] == "true"
         entity_data["observations"] = observations.as_json if observations.any?
       end
 

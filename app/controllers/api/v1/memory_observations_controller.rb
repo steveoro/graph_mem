@@ -16,6 +16,55 @@ module Api
         render json: @memory_observations
       end
 
+      # GET /api/v1/memory_entities/:memory_entity_id/memory_observations/rank
+      def rank
+        observations = if include_obsolete?
+          @memory_entity.memory_observations
+        else
+          @memory_entity.active_memory_observations
+        end
+        observations = observations.sort_by { |obs| -obs.trust_score.to_f }
+        observations = observations.first(params[:limit].to_i) if params[:limit].to_i > 0
+
+        render json: {
+          entity_id: @memory_entity.id,
+          name: @memory_entity.name,
+          observations: observations.map { |observation|
+            MemoryObservationSerializer.call(observation, id_key: :id, content_key: :content, include_entity_id: true)
+          }
+        }
+      end
+
+      # POST /api/v1/memory_entities/:memory_entity_id/memory_observations/detect_contradictions
+      def detect_contradictions
+        max_distance = params[:max_distance].to_f
+        max_distance = ContradictionDetector::DEFAULT_MAX_DISTANCE if max_distance <= 0.0
+
+        max_results = params[:max_results].to_i
+        max_results = ContradictionDetector::DEFAULT_MAX_RESULTS if max_results <= 0
+
+        pairs = ContradictionDetector.detect(
+          @memory_entity.id,
+          max_distance: max_distance,
+          max_results: max_results,
+          persist: true
+        )
+
+        render json: {
+          entity_id: @memory_entity.id,
+          name: @memory_entity.name,
+          candidate_count: pairs.length,
+          candidates: pairs.map { |p|
+            {
+              observation_id_1: p.observation_id_1,
+              observation_id_2: p.observation_id_2,
+              distance: p.distance,
+              confidence: p.confidence
+            }
+          }
+        }
+      end
+
       # POST /api/v1/memory_entities/:memory_entity_id/memory_observations
       def create
         @memory_observation = @memory_entity.memory_observations.build(observation_params)

@@ -441,4 +441,73 @@ RSpec.describe 'API V1 Memory Observations', type: :request do
       end
     end
   end
+
+  path '/api/v1/memory_entities/{memory_entity_id}/memory_observations/rank' do
+    parameter name: 'memory_entity_id', in: :path, type: :string, description: 'ID of the parent Memory Entity'
+
+    get('rank observations by trust score') do
+      tags 'Memory Observations'
+      operationId 'rankMemoryObservations'
+      produces 'application/json'
+      parameter name: :include_obsolete, in: :query, type: :boolean, required: false
+      parameter name: :limit, in: :query, type: :integer, required: false
+
+      response(200, 'successful') do
+        let!(:high) { memory_entity.memory_observations.create!(content: 'high', confidence: 0.95, source: 'official') }
+        let!(:low) { memory_entity.memory_observations.create!(content: 'low', confidence: 0.2, source: 'hearsay') }
+
+        run_test! do |response|
+          data = JSON.parse(response.body)
+          expect(response).to have_http_status(:ok)
+          expect(data['observations'].first['id']).to eq(high.id)
+          expect(data['observations'].last['id']).to eq(low.id)
+          expect(data['observations'].first).to have_key('trust_score')
+        end
+      end
+
+      response(404, 'parent entity not found') do
+        schema '$ref' => '#/components/schemas/error_response'
+        let(:memory_entity_id) { 'invalid-id' }
+
+        run_test! do |response|
+          expect(response).to have_http_status(:not_found)
+        end
+      end
+    end
+  end
+
+  path '/api/v1/memory_entities/{memory_entity_id}/memory_observations/detect_contradictions' do
+    parameter name: 'memory_entity_id', in: :path, type: :string, description: 'ID of the parent Memory Entity'
+
+    post('detect contradictions between observations') do
+      tags 'Memory Observations'
+      operationId 'detectContradictions'
+      produces 'application/json'
+      parameter name: :max_distance, in: :query, type: :number, format: :float, required: false
+      parameter name: :max_results, in: :query, type: :integer, required: false
+
+      response(200, 'successful') do
+        before { allow(EmbeddingService).to receive(:vector_enabled?).and_return(false) }
+
+        let!(:obs1) { memory_entity.memory_observations.create!(content: 'Feature is enabled') }
+
+        run_test! do |response|
+          data = JSON.parse(response.body)
+          expect(response).to have_http_status(:ok)
+          expect(data['entity_id']).to eq(memory_entity.id)
+          expect(data['candidate_count']).to eq(0)
+          expect(data['candidates']).to eq([])
+        end
+      end
+
+      response(404, 'parent entity not found') do
+        schema '$ref' => '#/components/schemas/error_response'
+        let(:memory_entity_id) { 'invalid-id' }
+
+        run_test! do |response|
+          expect(response).to have_http_status(:not_found)
+        end
+      end
+    end
+  end
 end

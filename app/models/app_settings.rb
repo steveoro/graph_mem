@@ -7,6 +7,7 @@ class AppSettings < RailsSettings::Base
   # Feature flags
   field :enable_dream_state_compactor, default: true, type: :boolean
   field :enable_garbage_collector, default: true, type: :boolean
+  field :enable_contradiction_detection, default: true, type: :boolean
 
   # Database backup settings
   field :backup_folder_path, default: "db/backup", type: :string
@@ -77,6 +78,10 @@ class AppSettings < RailsSettings::Base
 
   def self.garbage_collector_enabled?
     read_boolean_setting("enable_garbage_collector", default: true)
+  end
+
+  def self.contradiction_detection_enabled?
+    read_boolean_setting("enable_contradiction_detection", default: true)
   end
 
   def self.read_boolean_setting(var_name, default: false)

@@ -1,6 +1,6 @@
 # GraphMem REST API Reference
 
-REST API for the GraphMem knowledge graph memory system. The API mirrors the capabilities of the 21 MCP tools, providing entity, observation, relation management, search, context scoping, bulk operations, and maintenance utilities.
+REST API for the GraphMem knowledge graph memory system. The API mirrors the capabilities of the 29 MCP tools, providing entity, observation, relation management, search, context scoping, bulk operations, and maintenance utilities.
 
 ## Base URL
 
@@ -40,6 +40,10 @@ Interactive documentation is available at `/api-docs` when the server is running
 `GET /api/v1/memory_entities/:id`
 
 **Response:** `200 OK` -- includes `observations`, `relations_from`, and `relations_to` arrays.
+
+Query parameters:
+- `include_ranked=true` sorts observations by `trust_score` descending.
+- `include_obsolete=true` includes obsolete and superseded observations.
 
 ### Create Entity
 
@@ -103,6 +107,26 @@ Observations are nested under entities: `/api/v1/memory_entities/:memory_entity_
 `DELETE .../memory_observations/delete_duplicates`
 
 Removes duplicate observations (by content) for the entity, keeping the oldest.
+
+### Rank Observations by Trust Score
+
+`GET .../memory_observations/rank`
+
+Returns the entity's observations sorted by `trust_score` descending. Each observation includes `trust_score`.
+
+Query parameters:
+- `include_obsolete=true` includes obsolete and superseded observations.
+- `limit=10` limits the number of returned observations.
+
+### Detect Contradictions
+
+`POST .../memory_observations/detect_contradictions`
+
+Scans active observations for semantically similar pairs with opposite polarity. Returns candidate pairs and persists a `contradictions` `MaintenanceReport`.
+
+Query parameters:
+- `max_distance=0.35` cosine distance threshold (smaller = stricter).
+- `max_results=20` maximum candidate pairs.
 
 ---
 

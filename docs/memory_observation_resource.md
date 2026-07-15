@@ -24,6 +24,7 @@ memory_observations
 | sort_dir | Sort direction (asc or desc) | `sort_dir=desc` |
 | include_entity | Include parent entity details | `include_entity=true` |
 | include_obsolete | Include obsolete and superseded history; defaults to active observations only | `include_obsolete=true` |
+| trust_score | Computed per observation; exposed in serialized responses and available for filtering via `sort_by=trust_score` | `sort_by=trust_score` |
 
 ## Sorting
 
@@ -53,6 +54,13 @@ Use the `include_entity=true` parameter to include the parent entity details wit
 ```
 memory_observations?include_entity=true
 ```
+
+## Ranking and Contradiction Detection
+
+Observations expose a `trust_score` computed from confidence, source, validity, status, and structural support.
+
+- **REST ranking:** `GET /api/v1/memory_entities/:memory_entity_id/memory_observations/rank?include_obsolete=true&limit=10`
+- **REST contradiction detection:** `POST /api/v1/memory_entities/:memory_entity_id/memory_observations/detect_contradictions?max_distance=0.35&max_results=20`
 
 ## Response Format
 

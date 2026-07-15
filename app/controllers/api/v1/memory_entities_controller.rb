@@ -24,6 +24,9 @@ module Api
 
       # GET /api/v1/memory_entities/:id
       def show
+        observations = @memory_entity.active_memory_observations
+        observations = observations.sort_by { |obs| -obs.trust_score.to_f } if params[:include_ranked] == "true"
+
         render json: {
           id: @memory_entity.id,
           name: @memory_entity.name,
@@ -33,7 +36,7 @@ module Api
           memory_observations_count: @memory_entity.memory_observations_count,
           created_at: @memory_entity.created_at.iso8601,
           updated_at: @memory_entity.updated_at.iso8601,
-          observations: @memory_entity.active_memory_observations.map { |observation|
+          observations: observations.map { |observation|
             MemoryObservationSerializer.call(
               observation,
               id_key: :id,

@@ -1,6 +1,6 @@
 # MCP Tools Documentation
 
-Detailed reference for the 27 Model Context Protocol (MCP) tools available in GraphMem.
+Detailed reference for the 29 Model Context Protocol (MCP) tools available in GraphMem.
 
 ## Overview
 
@@ -61,6 +61,8 @@ Context is stored per MCP client in the `agent_contexts` table, keyed by the `X-
 - **Description:** Retrieves an entity by ID, including observations and relations. Accepts entity_id (integer) or entity name (string).
 - **Parameters:**
   - `entity_id` (integer, required): The ID of the entity. Also accepts entity name (string).
+  - `include_obsolete` (boolean, optional, default: false): Include obsolete and superseded observations.
+  - `include_ranked` (boolean, optional, default: false): Sort observations by trust score descending.
 
 #### `update_entity`
 - **Description:** Updates entity name, type, aliases, and/or description.
@@ -105,6 +107,20 @@ Context is stored per MCP client in the `agent_contexts` table, keyed by the `X-
 - **Parameters:**
   - `observation_id` (integer, required): The ID of the observation.
   - `reason` (string, optional): Reason for obsolescence.
+
+#### `rank_observations`
+- **Description:** Returns an entity's observations sorted by trust score, with the most reliable observation first. Each observation now exposes a `trust_score` field.
+- **Parameters:**
+  - `entity_id` (integer, required): The ID of the entity. Also accepts entity name (string).
+  - `include_obsolete` (boolean, optional, default: false): Include obsolete and superseded observations in the ranking.
+  - `limit` (integer, optional): Maximum number of observations to return.
+
+#### `detect_contradictions`
+- **Description:** Scans an entity's active observations (and observations from 1-hop related entities) for pairs that are semantically similar but have opposite polarity. Candidate contradictions are returned and stored as a `contradictions` `MaintenanceReport` for operator review.
+- **Parameters:**
+  - `entity_id` (integer, required): The ID of the entity. Also accepts entity name (string).
+  - `max_distance` (number, optional, default: 0.35): Maximum cosine distance threshold (smaller = stricter).
+  - `max_results` (integer, optional, default: 20): Maximum candidate pairs to return.
 
 ## Relation Management (3 tools)
 

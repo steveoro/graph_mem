@@ -24,6 +24,8 @@ Rails.application.routes.draw do
       resources :memory_entities do
         post "merge_into/:target_id", to: "memory_entities#merge", on: :member
         resources :memory_observations, only: [ :index, :create, :destroy, :show, :update ] do
+          get "rank", to: "memory_observations#rank", on: :collection
+          post "detect_contradictions", to: "memory_observations#detect_contradictions", on: :collection
           delete "delete_duplicates", to: "memory_observations#delete_duplicates", on: :collection
         end
       end

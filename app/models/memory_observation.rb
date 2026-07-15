@@ -30,16 +30,22 @@ class MemoryObservation < ApplicationRecord
 
   validates :content, presence: true
   validates :confidence, numericality: { greater_than_or_equal_to: 0, less_than_or_equal_to: 1 }, allow_nil: true
+  validates :trust_score, numericality: { greater_than_or_equal_to: 0, less_than_or_equal_to: 1 }, allow_nil: true
   validates :status, inclusion: { in: STATUSES }
   validate :validity_range_is_ordered
   validate :tags_are_strings
   validate :lifecycle_state_is_consistent
 
+  before_save :assign_trust_score
   after_create :set_initial_embedding
   after_commit :refresh_embedding, on: [ :update ], if: :embedding_fields_changed?
 
   def as_json(options = {})
     super(options.merge(except: Array(options[:except]) | [ :embedding ]))
+  end
+
+  def assign_trust_score
+    self.trust_score = ObservationTrustRanker.rank(self)
   end
 
   def active?

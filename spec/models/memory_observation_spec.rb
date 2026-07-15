@@ -223,6 +223,7 @@ RSpec.describe MemoryObservation, type: :model do
       expect(json).to have_key("content")
       expect(json).to have_key("memory_entity_id")
       expect(json).to have_key("confidence")
+      expect(json).to have_key("trust_score")
       expect(json).to have_key("source")
       expect(json).to have_key("valid_from")
       expect(json).to have_key("valid_until")
@@ -249,6 +250,34 @@ RSpec.describe MemoryObservation, type: :model do
         expect(item).not_to have_key("embedding")
         expect(item).to have_key("content")
       end
+    end
+  end
+
+  describe "trust_score" do
+    it "computes and persists a trust_score on create" do
+      obs = described_class.create!(memory_entity: entity, content: "scored", confidence: 0.8)
+
+      expect(obs.trust_score).to be_a(Numeric)
+      expect(obs.trust_score).to be >= 0.0
+      expect(obs.trust_score).to be <= 1.0
+    end
+
+    it "updates trust_score when confidence changes" do
+      obs = described_class.create!(memory_entity: entity, content: "scored", confidence: 0.2)
+      original = obs.trust_score
+
+      obs.update!(confidence: 0.9)
+
+      expect(obs.reload.trust_score).to be > original
+    end
+
+    it "drops trust_score to zero when marked obsolete" do
+      obs = described_class.create!(memory_entity: entity, content: "scored", confidence: 0.9)
+      expect(obs.trust_score).to be > 0
+
+      obs.mark_obsolete!(reason: "Outdated")
+
+      expect(obs.reload.trust_score).to eq(0.0)
     end
   end
 

@@ -8,6 +8,8 @@ class MemoryRelation < ApplicationRecord
 
   serialize :properties, coder: JSON
 
+  after_commit :recompute_observation_trust_scores, on: [ :create, :destroy ]
+
   before_validation :canonicalize_relation_type
 
   validates :relation_type, presence: true
@@ -32,5 +34,15 @@ class MemoryRelation < ApplicationRecord
     return if properties.is_a?(Hash)
 
     errors.add(:properties, "must be an object")
+  end
+
+  def recompute_observation_trust_scores
+    [ from_entity_id, to_entity_id ].compact.uniq.each do |entity_id|
+      MemoryObservation
+        .where(memory_entity_id: entity_id, status: MemoryObservation::ACTIVE_STATUS)
+        .find_each do |observation|
+          observation.update_column(:trust_score, ObservationTrustRanker.rank(observation))
+        end
+    end
   end
 end
