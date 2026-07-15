@@ -53,59 +53,60 @@ jobs:
       - name: Lint code for consistent style
         run: bin/rubocop -f github
 
-  test:
-    runs-on: ubuntu-latest
+  # [Steve, 2026-07-15] Superseded by CircleCI configuration, kept for future reference
+  # test:
+  #   runs-on: ubuntu-latest
 
-    services:
-      mariadb:
-        image: mariadb:10.11
-        env:
-          MYSQL_ROOT_PASSWORD: Password123!
-          MYSQL_DATABASE: graph_mem_test
-        ports:
-          - 3306:3306
-        options: --health-cmd="mysqladmin ping --silent" --health-interval=10s --health-timeout=5s --health-retries=3
+  #   services:
+  #     mariadb:
+  #       image: mariadb:10.11
+  #       env:
+  #         MYSQL_ROOT_PASSWORD: Password123!
+  #         MYSQL_DATABASE: graph_mem_test
+  #       ports:
+  #         - 3306:3306
+  #       options: --health-cmd="mysqladmin ping --silent" --health-interval=10s --health-timeout=5s --health-retries=3
 
-    steps:
-      - name: Install packages
-        run: sudo apt-get update && sudo apt-get install --no-install-recommends -y build-essential git libyaml-dev pkg-config google-chrome-stable
+  #   steps:
+  #     - name: Install packages
+  #       run: sudo apt-get update && sudo apt-get install --no-install-recommends -y build-essential git libyaml-dev pkg-config google-chrome-stable
 
-      - name: Checkout code
-        uses: actions/checkout@v4
+  #     - name: Checkout code
+  #       uses: actions/checkout@v4
 
-      - name: Set up Ruby
-        uses: ruby/setup-ruby@v1
-        with:
-          ruby-version: .ruby-version
-          bundler-cache: true
+  #     - name: Set up Ruby
+  #       uses: ruby/setup-ruby@v1
+  #       with:
+  #         ruby-version: .ruby-version
+  #         bundler-cache: true
 
-      - name: Setup database configuration
-        run: cp config/database.ci.yml config/database.yml
+  #     - name: Setup database configuration
+  #       run: cp config/database.ci.yml config/database.yml
 
-      - name: Wait for MariaDB to be ready
-        run: |
-          until mysqladmin ping -h 127.0.0.1 -P 3306 -u root -pPassword123! --silent; do
-            echo 'Waiting for MariaDB...'
-            sleep 2
-          done
-          echo 'MariaDB is ready!'
+  #     - name: Wait for MariaDB to be ready
+  #       run: |
+  #         until mysqladmin ping -h 127.0.0.1 -P 3306 -u root -pPassword123! --silent; do
+  #           echo 'Waiting for MariaDB...'
+  #           sleep 2
+  #         done
+  #         echo 'MariaDB is ready!'
 
-      - name: Setup database
-        env:
-          RAILS_ENV: test
-          DB_PASSWORD: Password123!
-        run: bin/rails db:create db:migrate
+  #     - name: Setup database
+  #       env:
+  #         RAILS_ENV: test
+  #         DB_PASSWORD: Password123!
+  #       run: bin/rails db:create db:migrate
 
-      - name: Run tests
-        env:
-          RAILS_ENV: test
-          DB_PASSWORD: Password123!
-        run: bundle exec rspec
+  #     - name: Run tests
+  #       env:
+  #         RAILS_ENV: test
+  #         DB_PASSWORD: Password123!
+  #       run: bundle exec rspec
 
-      - name: Keep screenshots from failed system tests
-        uses: actions/upload-artifact@v4
-        if: failure()
-        with:
-          name: screenshots
-          path: ${{ github.workspace }}/tmp/screenshots
-          if-no-files-found: ignore
+  #     - name: Keep screenshots from failed system tests
+  #       uses: actions/upload-artifact@v4
+  #       if: failure()
+  #       with:
+  #         name: screenshots
+  #         path: ${{ github.workspace }}/tmp/screenshots
+  #         if-no-files-found: ignore
