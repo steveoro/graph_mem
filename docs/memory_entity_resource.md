@@ -5,7 +5,7 @@ The `MemoryEntityResource` provides a RESTful interface to access memory entitie
 ## Resource URI
 
 ```
-memory_entities{?page,per_page,entity_type,name,id,created_after,created_before,updated_after,updated_before,min_observations,sort_by,sort_dir,include,or_filters}
+memory_entities{?page,per_page,entity_type,name,id,created_after,created_before,updated_after,updated_before,min_observations,sort_by,sort_dir,include_observations,include_relations,include_obsolete,or_filters}
 ```
 
 ## Basic Usage
@@ -99,6 +99,7 @@ The resource supports including related observations and relations using boolean
 
 - `include_observations=true` - Include memory observations for each entity
 - `include_relations=true` - Include incoming and outgoing relations for each entity
+- `include_obsolete=true` - When observations are included, also include obsolete and superseded history
 
 You can combine both parameters in a single request:
 

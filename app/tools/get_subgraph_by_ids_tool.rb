@@ -52,10 +52,14 @@ class GetSubgraphByIdsTool < ApplicationTool
                     valid_from: { type: [ :string, :null ], format: "date-time" },
                     valid_until: { type: [ :string, :null ], format: "date-time" },
                     tags: { type: :array, items: { type: :string } },
+                    status: { type: :string, enum: MemoryObservation::STATUSES },
+                    obsoleted_at: { type: [ :string, :null ], format: "date-time" },
+                    obsolescence_reason: { type: [ :string, :null ] },
+                    superseded_by_id: { type: [ :integer, :null ] },
                     created_at: { type: :string, format: "date-time" },
                     updated_at: { type: :string, format: "date-time" }
                   },
-                  required: [ :observation_id, :content, :created_at, :updated_at ]
+                  required: [ :observation_id, :content, :status, :created_at, :updated_at ]
                 }
               },
               created_at: { type: :string, format: "date-time" },
@@ -99,23 +103,13 @@ class GetSubgraphByIdsTool < ApplicationTool
     end
 
     # Fetch entities with their observations
-    entities_data = MemoryEntity.where(id: entity_ids).includes(:memory_observations).map do |entity|
+    entities_data = MemoryEntity.where(id: entity_ids).includes(:active_memory_observations).map do |entity|
       {
         entity_id: entity.id,
         name: entity.name,
         entity_type: entity.entity_type,
-        observations: entity.memory_observations.map do |obs|
-          {
-            observation_id: obs.id,
-            content: obs.content,
-            confidence: obs.confidence,
-            source: obs.source,
-            valid_from: obs.valid_from&.iso8601,
-            valid_until: obs.valid_until&.iso8601,
-            tags: obs.tags,
-            created_at: obs.created_at.iso8601,
-            updated_at: obs.updated_at.iso8601
-          }
+        observations: entity.active_memory_observations.map do |observation|
+          MemoryObservationSerializer.call(observation)
         end,
         created_at: entity.created_at.iso8601,
         updated_at: entity.updated_at.iso8601

@@ -329,7 +329,7 @@ class ImportExecutionStrategy
       next if content.blank?
 
       # Skip duplicates
-      existing = MemoryObservation.exists?(memory_entity_id: entity_id, content: content)
+      existing = MemoryObservation.active.exists?(memory_entity_id: entity_id, content: content)
       next if existing
 
       MemoryObservation.create!(

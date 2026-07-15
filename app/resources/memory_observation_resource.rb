@@ -3,7 +3,7 @@
 # MemoryObservation Resource implementation with pagination, filtering, sorting, and entity inclusion
 class MemoryObservationResource < ApplicationResource
   # Templated URI with all supported query parameters
-  uri "memory_observations{?page,per_page,memory_entity_id,content,created_after,created_before,updated_after,updated_before,sort_by,sort_dir,include_entity}"
+  uri "memory_observations{?page,per_page,memory_entity_id,content,created_after,created_before,updated_after,updated_before,sort_by,sort_dir,include_entity,include_obsolete}"
   resource_name "MemoryObservations"
   description "Access memory observations with pagination, filtering, sorting and entity inclusion"
   mime_type "application/json"
@@ -21,7 +21,7 @@ class MemoryObservationResource < ApplicationResource
     per_page = [ per_page, 100 ].min # Cap at 100 items per page for performance
 
     # Start with base query
-    query = MemoryObservation
+    query = include_obsolete? ? MemoryObservation.all : MemoryObservation.active
     query = apply_filters(query)
     query = apply_sorting(query)
 
@@ -116,7 +116,12 @@ class MemoryObservationResource < ApplicationResource
   def include_summary
     summary = {}
     summary[:include_entity] = true if params[:include_entity] == "true"
+    summary[:include_obsolete] = true if include_obsolete?
     summary
+  end
+
+  def include_obsolete?
+    params[:include_obsolete] == "true"
   end
 
   # Apply sorting to the query based on params

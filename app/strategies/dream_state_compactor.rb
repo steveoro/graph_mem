@@ -184,7 +184,7 @@ class DreamStateCompactor
   def dedupe_observations_for_entity(entity_id)
     return unless MemoryEntity.exists?(id: entity_id)
 
-    duplicates = MemoryObservation
+    duplicates = MemoryObservation.active
       .where(memory_entity_id: entity_id)
       .select(:content)
       .group(:content)
@@ -192,7 +192,7 @@ class DreamStateCompactor
       .pluck(:content)
 
     duplicates.each do |content|
-      observations = MemoryObservation
+      observations = MemoryObservation.active
         .where(memory_entity_id: entity_id, content: content)
         .order(:id)
         .to_a

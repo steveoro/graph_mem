@@ -73,7 +73,10 @@ GraphMem exposes the following MCP tools:
 
 #### Observation Management
 * `create_observation` -- Add observations to existing entities
-* `delete_observation` -- Remove observations
+* `update_observation` -- Update an active observation or supersede it with a retained replacement
+* `delete_observation` -- Mark observations obsolete while retaining their history
+
+Observations use an `active`, `obsolete`, or `superseded` lifecycle. Normal entity reads, graph traversal, relationship discovery, and search expose active observations only. Use `get_entity(include_obsolete: true)` or `include_obsolete=true` on observation REST/resource listings to inspect retained history. Explicit duplicate-cleanup maintenance operations still hard-delete redundant active rows.
 
 #### Relationship Management
 * `create_relation` -- Create typed relationships between entities

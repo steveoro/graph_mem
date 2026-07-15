@@ -104,6 +104,12 @@ RSpec.describe 'API V1 Memory Entities', type: :request do
                },
                required: %w[id name entity_type]
         let(:id) { existing_entity.id }
+        let!(:active_observation) do
+          MemoryObservation.create!(memory_entity: existing_entity, content: 'Current')
+        end
+        let!(:obsolete_observation) do
+          MemoryObservation.create!(memory_entity: existing_entity, content: 'Historical').tap(&:mark_obsolete!)
+        end
 
         run_test! do |response|
           data = JSON.parse(response.body)
@@ -113,6 +119,9 @@ RSpec.describe 'API V1 Memory Entities', type: :request do
           expect(data).to have_key('observations')
           expect(data).to have_key('relations_from')
           expect(data).to have_key('relations_to')
+          expect(data['observations'].pluck('id')).to contain_exactly(active_observation.id)
+          expect(data['observations'].pluck('id')).not_to include(obsolete_observation.id)
+          expect(data['observations'].first['status']).to eq(MemoryObservation::ACTIVE_STATUS)
         end
       end
 

@@ -60,6 +60,9 @@ Before calling `CallMcpTool` for any `user-graph_mem` tool:
 ## Phase 4 - Persist (before final response)
 
 1. Write newly learned facts with `create_observation` on existing entities.
+   - Use `update_observation` for corrections.
+   - Set `supersede: true` when retaining the prior version matters.
+   - Use `delete_observation` to mark a fact obsolete rather than hard-delete it.
 2. For new concepts:
    - `create_entity`
    - `create_relation` with a specific relation type.

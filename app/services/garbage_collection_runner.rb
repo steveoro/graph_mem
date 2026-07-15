@@ -52,7 +52,7 @@ class GarbageCollectionRunner
   end
 
   def cleanup_duplicates
-    groups = MemoryObservation
+    groups = MemoryObservation.active
       .select(:memory_entity_id, :content, "MIN(id) AS keep_id", "COUNT(*) AS cnt")
       .group(:memory_entity_id, :content)
       .having("COUNT(*) > 1")
@@ -62,7 +62,7 @@ class GarbageCollectionRunner
     duplicate_groups = []
 
     groups.each do |group|
-      delete_ids = MemoryObservation
+      delete_ids = MemoryObservation.active
         .where(memory_entity_id: group.memory_entity_id, content: group.content)
         .where.not(id: group.keep_id)
         .order(:id)
@@ -125,7 +125,7 @@ class GarbageCollectionRunner
       .where.not(id: MemoryRelation.select(:from_entity_id))
       .where.not(id: MemoryRelation.select(:to_entity_id))
       .count
-    duplicate_total = MemoryObservation
+    duplicate_total = MemoryObservation.active
       .select(:memory_entity_id, :content, "COUNT(*) AS cnt")
       .group(:memory_entity_id, :content)
       .having("COUNT(*) > 1")

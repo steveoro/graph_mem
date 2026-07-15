@@ -299,7 +299,7 @@ class ImportMatchingStrategy
     content = observation["content"] || observation[:content]
     return false if content.blank?
 
-    MemoryObservation.exists?(memory_entity_id: entity_id, content: content)
+    MemoryObservation.active.exists?(memory_entity_id: entity_id, content: content)
   end
 
   # Determine confidence status for root nodes based on matches

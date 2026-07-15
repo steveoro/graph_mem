@@ -12,6 +12,8 @@ RSpec.describe 'API V1 Memory Observations', type: :request do
       tags 'Memory Observations'
       operationId 'listMemoryObservations'
       produces 'application/json'
+      parameter name: :include_obsolete, in: :query, type: :boolean, required: false,
+                description: 'Include obsolete and superseded observation history'
 
       response(200, 'successful') do
         schema type: :array,
@@ -19,12 +21,38 @@ RSpec.describe 'API V1 Memory Observations', type: :request do
 
         let!(:observation1) { memory_entity.memory_observations.create!(content: 'Observation 1') }
         let!(:observation2) { memory_entity.memory_observations.create!(content: 'Observation 2') }
+        let!(:obsolete_observation) do
+          memory_entity.memory_observations.create!(content: 'Obsolete').tap(&:mark_obsolete!)
+        end
 
         run_test! do |response|
           data = JSON.parse(response.body)
           expect(response).to have_http_status(:ok)
           expect(data.size).to eq(2)
           expect(data.first['content']).to eq(observation1.content)
+          expect(data.pluck('status')).to all(eq(MemoryObservation::ACTIVE_STATUS))
+          expect(data.pluck('id')).not_to include(obsolete_observation.id)
+        end
+      end
+
+      response(200, 'historical observations included') do
+        schema type: :array,
+               'items': { '$ref' => '#/components/schemas/memory_observation' }
+        let(:include_obsolete) { true }
+        let!(:active_observation) { memory_entity.memory_observations.create!(content: 'Current observation') }
+        let!(:obsolete_observation) do
+          memory_entity.memory_observations.create!(content: 'Historical observation').tap do |observation|
+            observation.mark_obsolete!(reason: 'Outdated')
+          end
+        end
+
+        run_test! do |response|
+          data = JSON.parse(response.body)
+          expect(data.pluck('id')).to contain_exactly(active_observation.id, obsolete_observation.id)
+          expect(data.find { |item| item['id'] == obsolete_observation.id }).to include(
+            'status' => MemoryObservation::OBSOLETE_STATUS,
+            'obsolescence_reason' => 'Outdated'
+          )
         end
       end
 
@@ -128,6 +156,12 @@ RSpec.describe 'API V1 Memory Observations', type: :request do
           expect(data['id']).to eq(existing_observation.id)
           expect(data['content']).to eq(existing_observation.content)
           expect(data['memory_entity_id']).to eq(memory_entity.id)
+          expect(data['status']).to eq(MemoryObservation::ACTIVE_STATUS)
+          expect(data).to include(
+            'obsoleted_at' => nil,
+            'obsolescence_reason' => nil,
+            'superseded_by_id' => nil
+          )
         end
       end
 
@@ -163,7 +197,9 @@ RSpec.describe 'API V1 Memory Observations', type: :request do
           source: { type: :string, nullable: true },
           valid_from: { type: :string, format: 'date-time', nullable: true },
           valid_until: { type: :string, format: 'date-time', nullable: true },
-          tags: { type: :array, items: { type: :string } }
+          tags: { type: :array, items: { type: :string } },
+          supersede: { type: :boolean, default: false },
+          reason: { type: :string, nullable: true }
         },
         required: []
       }
@@ -178,7 +214,25 @@ RSpec.describe 'API V1 Memory Observations', type: :request do
           expect(data['content']).to eq('Updated Content')
           expect(data['confidence']).to eq(0.75)
           expect(data['tags']).to eq([ 'updated' ])
+          expect(data['status']).to eq(MemoryObservation::ACTIVE_STATUS)
           expect(existing_observation.reload.content).to eq('Updated Content')
+        end
+      end
+
+      response(200, 'superseded') do
+        schema '$ref' => '#/components/schemas/memory_observation'
+        let(:memory_observation) do
+          { content: 'Replacement Content', supersede: true, reason: 'Corrected' }
+        end
+
+        run_test! do |response|
+          data = JSON.parse(response.body)
+          replacement = MemoryObservation.find(data['id'])
+          expect(replacement).to be_active
+          expect(replacement.content).to eq('Replacement Content')
+          expect(existing_observation.reload).to be_superseded
+          expect(existing_observation.superseded_by_id).to eq(replacement.id)
+          expect(existing_observation.obsolescence_reason).to eq('Corrected')
         end
       end
 
@@ -229,7 +283,9 @@ RSpec.describe 'API V1 Memory Observations', type: :request do
           source: { type: :string, nullable: true },
           valid_from: { type: :string, format: 'date-time', nullable: true },
           valid_until: { type: :string, format: 'date-time', nullable: true },
-          tags: { type: :array, items: { type: :string } }
+          tags: { type: :array, items: { type: :string } },
+          supersede: { type: :boolean, default: false },
+          reason: { type: :string, nullable: true }
         },
         required: [ 'content' ]
       }
@@ -280,15 +336,22 @@ RSpec.describe 'API V1 Memory Observations', type: :request do
       end
     end
 
-    delete('delete memory observation') do
+    delete('mark memory observation obsolete') do
       tags 'Memory Observations'
       operationId 'deleteMemoryObservation'
+      parameter name: :reason, in: :query, type: :string, required: false,
+                description: 'Reason for marking the observation obsolete'
 
       response(204, 'no content') do
+        let(:reason) { 'Outdated' }
+
         run_test! do |response|
           expect(response).to have_http_status(:no_content)
-          expect(MemoryObservation.exists?(existing_observation.id)).to be_falsey
-          expect(memory_entity.reload.memory_observations.count).to eq(0)
+          expect(MemoryObservation.exists?(existing_observation.id)).to be(true)
+          expect(existing_observation.reload).to be_obsolete
+          expect(existing_observation.obsoleted_at).to be_present
+          expect(existing_observation.obsolescence_reason).to eq('Outdated')
+          expect(memory_entity.reload.memory_observations.count).to eq(1)
         end
       end
 

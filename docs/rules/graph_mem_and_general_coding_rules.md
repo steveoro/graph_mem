@@ -26,6 +26,7 @@ Use the `graph_mem` MCP tools every session. "Knowledge graph", "graph mem", "me
 
 **Phase 4 — Persist** (before ending)
 - `create_observation` for new facts on existing entities. Write dedupe-aware: search/get the entity first and append only new facts rather than re-stating existing ones.
+- `update_observation` for corrections. Use `supersede: true` when preserving the prior fact/version matters; use `delete_observation` to mark a fact obsolete rather than hard-delete it.
 - `create_entity` + `create_relation` for new concepts discovered.
 - Use `bulk_update` to batch multiple writes in one call (max 50 ops).
 - `clear_context` if the project scope is no longer relevant (safe: affects only your own client bucket).
@@ -40,7 +41,7 @@ Use the `graph_mem` MCP tools every session. "Knowledge graph", "graph mem", "me
 | Orient | `get_context`, `set_context`, `clear_context`, `search_entities` |
 | Recall | `search_entities`, `search_subgraph`, `get_entity`, `get_subgraph_by_ids`, `list_entities` |
 | Traverse | `find_relations`, `traverse_graph`, `find_shortest_path` |
-| Persist | `create_entity`, `update_entity`, `delete_entity`, `create_observation`, `delete_observation`, `create_relation`, `delete_relation`, `bulk_update` |
+| Persist | `create_entity`, `update_entity`, `delete_entity`, `create_observation`, `update_observation`, `delete_observation`, `create_relation`, `delete_relation`, `bulk_update` |
 | Maintain | `suggest_merges`, `merge_entities`, `dream_state_status`, `get_maintenance_reports`, `get_graph_stats`, `get_version`, `get_current_time` |
 
 ### Multi-Agent Context Scoping

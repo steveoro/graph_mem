@@ -34,27 +34,30 @@ RSpec.describe DeleteObservationTool, type: :model do
   end
 
   describe '#call' do
-    context 'deleting an existing observation' do
-      it 'deletes the observation and returns its attributes' do
+    context 'marking an existing observation obsolete' do
+      it 'retains the observation and returns its lifecycle attributes' do
         observation = MemoryObservation.create!(memory_entity: entity, content: 'To delete')
         obs_id = observation.id
 
-        result = tool.call(observation_id: obs_id)
+        result = tool.call(observation_id: obs_id, reason: 'Outdated')
 
         expect(result[:observation_id]).to eq(obs_id)
         expect(result[:memory_entity_id]).to eq(entity.id)
         expect(result[:observation_content]).to eq('To delete')
         expect(result).not_to have_key(:content)
-        expect(result[:message]).to include("deleted successfully")
-        expect(MemoryObservation.find_by(id: obs_id)).to be_nil
+        expect(result[:status]).to eq(MemoryObservation::OBSOLETE_STATUS)
+        expect(result[:obsoleted_at]).to be_present
+        expect(result[:obsolescence_reason]).to eq('Outdated')
+        expect(result[:message]).to include('marked obsolete successfully')
+        expect(MemoryObservation.find(obs_id)).to be_obsolete
       end
 
-      it 'decrements the observation count' do
+      it 'does not decrement the observation count' do
         observation = MemoryObservation.create!(memory_entity: entity, content: 'Count test')
 
         expect {
           tool.call(observation_id: observation.id)
-        }.to change(MemoryObservation, :count).by(-1)
+        }.not_to change(MemoryObservation, :count)
       end
 
       it 'returns ISO 8601 timestamps' do
@@ -63,6 +66,17 @@ RSpec.describe DeleteObservationTool, type: :model do
 
         expect { Time.iso8601(result[:created_at]) }.not_to raise_error
         expect { Time.iso8601(result[:updated_at]) }.not_to raise_error
+        expect { Time.iso8601(result[:obsoleted_at]) }.not_to raise_error
+      end
+
+      it 'is idempotent for an already inactive observation' do
+        observation = MemoryObservation.create!(memory_entity: entity, content: 'Already inactive')
+        observation.mark_obsolete!(reason: 'Initial')
+
+        result = tool.call(observation_id: observation.id, reason: 'Ignored')
+
+        expect(result[:status]).to eq(MemoryObservation::OBSOLETE_STATUS)
+        expect(result[:obsolescence_reason]).to eq('Initial')
       end
     end
 
@@ -74,16 +88,16 @@ RSpec.describe DeleteObservationTool, type: :model do
       end
     end
 
-    context 'destroy failure' do
-      it 'raises OperationFailed when destroy! fails' do
-        observation = MemoryObservation.create!(memory_entity: entity, content: 'Fail destroy')
-        allow_any_instance_of(MemoryObservation).to receive(:destroy!).and_raise(
-          ActiveRecord::RecordNotDestroyed.new("Cannot delete")
+    context 'obsolescence failure' do
+      it 'raises OperationFailed when the lifecycle update fails validation' do
+        observation = MemoryObservation.create!(memory_entity: entity, content: 'Fail update')
+        allow_any_instance_of(MemoryObservation).to receive(:mark_obsolete!).and_raise(
+          ActiveRecord::RecordInvalid.new(observation)
         )
 
         expect {
           tool.call(observation_id: observation.id)
-        }.to raise_error(McpGraphMemErrors::OperationFailed, /Failed to delete/)
+        }.to raise_error(McpGraphMemErrors::OperationFailed, /Failed to mark/)
       end
     end
 

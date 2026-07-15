@@ -99,6 +99,23 @@ RSpec.describe SearchSubgraphTool, type: :model do
         entity_names = result[:entities].map { |e| e[:name] }
         expect(entity_names).to include('Fix Login Bug')
       end
+
+      it 'does not match or serialize obsolete observations' do
+        obsolete = MemoryObservation.create!(memory_entity: issue, content: 'HistoricalOnlyTerm')
+        obsolete.mark_obsolete!
+
+        match_result = tool.call(
+          query: 'HistoricalOnlyTerm',
+          search_in_name: false,
+          search_in_type: false,
+          search_in_aliases: false
+        )
+        entity_result = tool.call(query: 'Performance Issue')
+
+        expect(match_result[:entities]).to be_empty
+        issue_data = entity_result[:entities].find { |item| item[:entity_id] == issue.id }
+        expect(issue_data[:observations].pluck(:observation_id)).not_to include(obsolete.id)
+      end
     end
 
     context 'toggling search fields' do
@@ -128,7 +145,8 @@ RSpec.describe SearchSubgraphTool, type: :model do
         expect(entity[:observations].first).to include(
           confidence: 0.95,
           source: 'architecture-doc',
-          tags: [ 'rails' ]
+          tags: [ 'rails' ],
+          status: MemoryObservation::ACTIVE_STATUS
         )
       end
 

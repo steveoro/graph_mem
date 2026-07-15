@@ -33,19 +33,12 @@ module Api
           memory_observations_count: @memory_entity.memory_observations_count,
           created_at: @memory_entity.created_at.iso8601,
           updated_at: @memory_entity.updated_at.iso8601,
-          observations: @memory_entity.memory_observations.map { |o|
-            {
-              id: o.id,
-              content: o.content,
-              memory_entity_id: o.memory_entity_id,
-              confidence: o.confidence,
-              source: o.source,
-              valid_from: o.valid_from&.iso8601,
-              valid_until: o.valid_until&.iso8601,
-              tags: o.tags,
-              created_at: o.created_at.iso8601,
-              updated_at: o.updated_at.iso8601
-            }
+          observations: @memory_entity.active_memory_observations.map { |observation|
+            MemoryObservationSerializer.call(
+              observation,
+              id_key: :id,
+              include_entity_id: true
+            )
           },
           relations_from: @memory_entity.relations_from.map { |r|
             {
@@ -142,7 +135,7 @@ module Api
       private
 
       def set_entity
-        @memory_entity = ::MemoryEntity.includes(:memory_observations, :relations_from, :relations_to).find(params[:id])
+        @memory_entity = ::MemoryEntity.includes(:active_memory_observations, :relations_from, :relations_to).find(params[:id])
       end
 
       def entity_params

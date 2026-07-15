@@ -289,8 +289,16 @@ paths:
         type: integer
     get:
       operationId: listMemoryObservations
-      summary: List observations for an entity
+      summary: List active observations for an entity
       tags: [Memory Observations]
+      parameters:
+      - name: include_obsolete
+        in: query
+        required: false
+        description: Include obsolete and superseded observation history
+        schema:
+          type: boolean
+          default: false
       responses:
         '200':
           description: List of observations
@@ -429,6 +437,12 @@ paths:
                       type: array
                       items:
                         type: string
+                    supersede:
+                      type: boolean
+                      default: false
+                    reason:
+                      type: string
+                      nullable: true
       responses:
         '200':
           description: Updated
@@ -484,6 +498,12 @@ paths:
                       type: array
                       items:
                         type: string
+                    supersede:
+                      type: boolean
+                      default: false
+                    reason:
+                      type: string
+                      nullable: true
                   required: [content]
       responses:
         '200':
@@ -506,11 +526,18 @@ paths:
                 "$ref": "#/components/schemas/error_response"
     delete:
       operationId: deleteMemoryObservation
-      summary: Delete observation
+      summary: Mark observation obsolete
       tags: [Memory Observations]
+      parameters:
+      - name: reason
+        in: query
+        required: false
+        description: Reason for marking the observation obsolete
+        schema:
+          type: string
       responses:
         '204':
-          description: Deleted
+          description: Marked obsolete and retained for history
         '404':
           description: Not found
           content:
@@ -1558,6 +1585,23 @@ components:
           type: array
           items:
             type: string
+        status:
+          type: string
+          enum: [active, obsolete, superseded]
+          readOnly: true
+        obsoleted_at:
+          type: string
+          format: date-time
+          nullable: true
+          readOnly: true
+        obsolescence_reason:
+          type: string
+          nullable: true
+          readOnly: true
+        superseded_by_id:
+          type: integer
+          nullable: true
+          readOnly: true
         created_at:
           type: string
           format: date-time
@@ -1566,7 +1610,7 @@ components:
           type: string
           format: date-time
           readOnly: true
-      required: [id, content, memory_entity_id]
+      required: [id, content, memory_entity_id, status]
 
     memory_relation:
       type: object
@@ -1710,6 +1754,19 @@ components:
                 type: array
                 items:
                   type: string
+              status:
+                type: string
+                enum: [active, obsolete, superseded]
+              obsoleted_at:
+                type: string
+                format: date-time
+                nullable: true
+              obsolescence_reason:
+                type: string
+                nullable: true
+              superseded_by_id:
+                type: integer
+                nullable: true
               created_at:
                 type: string
                 format: date-time

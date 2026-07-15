@@ -30,7 +30,7 @@ module GraphTraversalSerializer
   def entities_for(entity_ids)
     return [] if entity_ids.blank?
 
-    by_id = MemoryEntity.where(id: entity_ids).includes(:memory_observations).index_by(&:id)
+    by_id = MemoryEntity.where(id: entity_ids).includes(:active_memory_observations).index_by(&:id)
     entity_ids.filter_map { |id| by_id[id] }.map { |entity| entity_json(entity) }
   end
 
@@ -47,24 +47,14 @@ module GraphTraversalSerializer
       name: entity.name,
       entity_type: entity.entity_type,
       aliases: entity.aliases,
-      observations: entity.memory_observations.map { |observation| observation_json(observation) },
+      observations: entity.active_memory_observations.map { |observation| observation_json(observation) },
       created_at: entity.created_at.iso8601,
       updated_at: entity.updated_at.iso8601
     }
   end
 
   def observation_json(observation)
-    {
-      observation_id: observation.id,
-      content: observation.content,
-      confidence: observation.confidence,
-      source: observation.source,
-      valid_from: observation.valid_from&.iso8601,
-      valid_until: observation.valid_until&.iso8601,
-      tags: observation.tags,
-      created_at: observation.created_at.iso8601,
-      updated_at: observation.updated_at.iso8601
-    }
+    MemoryObservationSerializer.call(observation)
   end
 
   def relation_json(relation)

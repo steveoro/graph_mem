@@ -23,13 +23,13 @@ module Api
       private
 
       def render_full_graph
-        entities = MemoryEntity.all.includes(:memory_observations)
+        entities = MemoryEntity.all.includes(:active_memory_observations)
         relations = MemoryRelation.all
         render_graph_data(entities, relations)
       end
 
       def render_root_graph
-        entities = MemoryEntity.where(entity_type: [ "Project", nil ]).includes(:memory_observations)
+        entities = MemoryEntity.where(entity_type: [ "Project", nil ]).includes(:active_memory_observations)
         entity_ids = entities.pluck(:id)
         relations = MemoryRelation.where(from_entity_id: entity_ids, to_entity_id: entity_ids)
         render_graph_data(entities, relations)
@@ -44,7 +44,7 @@ module Api
 
         all_ids = ([ root_entity.id ] + child_ids).uniq
 
-        entities = MemoryEntity.where(id: all_ids).includes(:memory_observations)
+        entities = MemoryEntity.where(id: all_ids).includes(:active_memory_observations)
         relations = MemoryRelation.where(from_entity_id: all_ids, to_entity_id: all_ids)
 
         render_graph_data(entities, relations, { focus_entity_id: scoped_entity_id })
@@ -59,7 +59,7 @@ module Api
 
         all_entity_ids = ([ entity_id.to_i ] + connected_entity_ids).uniq
 
-        entities = MemoryEntity.where(id: all_entity_ids).includes(:memory_observations)
+        entities = MemoryEntity.where(id: all_entity_ids).includes(:active_memory_observations)
         relations = MemoryRelation.where(
           from_entity_id: all_entity_ids,
           to_entity_id: all_entity_ids
@@ -77,7 +77,7 @@ module Api
               label: entity.name,
               type: entity.entity_type,
               aliases: entity.aliases,
-              memory_observations_count: entity.memory_observations_count,
+              memory_observations_count: entity.active_memory_observations.size,
               is_focus: options[:focus_entity_id] == entity.id.to_s
             }
           }

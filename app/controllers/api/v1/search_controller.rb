@@ -26,12 +26,14 @@ module Api
         conditions << "LOWER(memory_entities.name) LIKE :q" if search_in_name
         conditions << "LOWER(memory_entities.entity_type) LIKE :q" if search_in_type
         conditions << "LOWER(memory_entities.aliases) LIKE :q" if search_in_aliases
+        sql_params = { q: like_term }
         if search_in_observations
-          base = base.joins(:memory_observations) unless base.joins_values.include?(:memory_observations)
-          conditions << "LOWER(memory_observations.content) LIKE :q"
+          base = base.left_joins(:memory_observations)
+          conditions << "(memory_observations.status = :active_status AND LOWER(memory_observations.content) LIKE :q)"
+          sql_params[:active_status] = MemoryObservation::ACTIVE_STATUS
         end
 
-        matching_ids = base.where(conditions.join(" OR "), q: like_term).pluck(:id).uniq
+        matching_ids = base.where(conditions.join(" OR "), sql_params).pluck(:id).uniq
 
         begin
           vector_results = VectorSearchStrategy.new.search(query, limit: per_page * 2)
@@ -54,7 +56,7 @@ module Api
         relations = []
 
         if page_ids.any?
-          db_entities = MemoryEntity.where(id: page_ids).includes(:memory_observations)
+          db_entities = MemoryEntity.where(id: page_ids).includes(:active_memory_observations)
           entities = db_entities.map { |e| entity_json(e) }
 
           relations = MemoryRelation.where(from_entity_id: page_ids, to_entity_id: page_ids).map { |r| relation_json(r) }
@@ -75,7 +77,7 @@ module Api
         end
 
         ids = ids.map(&:to_i).uniq
-        entities = MemoryEntity.where(id: ids).includes(:memory_observations).map { |e| entity_json(e) }
+        entities = MemoryEntity.where(id: ids).includes(:active_memory_observations).map { |e| entity_json(e) }
         relations = MemoryRelation.where(from_entity_id: ids, to_entity_id: ids).map { |r| relation_json(r) }
 
         render json: { entities: entities, relations: relations }
@@ -86,18 +88,8 @@ module Api
       def entity_json(entity)
         {
           entity_id: entity.id, name: entity.name, entity_type: entity.entity_type, aliases: entity.aliases,
-          observations: entity.memory_observations.map do |observation|
-            {
-              observation_id: observation.id,
-              content: observation.content,
-              confidence: observation.confidence,
-              source: observation.source,
-              valid_from: observation.valid_from&.iso8601,
-              valid_until: observation.valid_until&.iso8601,
-              tags: observation.tags,
-              created_at: observation.created_at.iso8601,
-              updated_at: observation.updated_at.iso8601
-            }
+          observations: entity.active_memory_observations.map do |observation|
+            MemoryObservationSerializer.call(observation)
           end,
           created_at: entity.created_at.iso8601, updated_at: entity.updated_at.iso8601
         }

@@ -33,10 +33,11 @@ class RelationshipDiscoveryStrategy
   end
 
   def shared_observation_proposals(entity)
-    entity.memory_observations.flat_map do |observation|
+    entity.active_memory_observations.flat_map do |observation|
       next [] if observation.content.to_s.length < MIN_SHARED_CONTENT_LENGTH
 
       MemoryObservation
+        .active
         .where(content: observation.content)
         .where.not(memory_entity_id: entity.id)
         .includes(:memory_entity)
@@ -69,8 +70,8 @@ class RelationshipDiscoveryStrategy
     MemoryEntity.where(entity_type: "Issue").order(:id).filter_map do |issue|
       next if project_root?(issue)
 
-      solution_observations = entity.memory_observations.to_a
-      issue_observations = issue.memory_observations.to_a
+      solution_observations = entity.active_memory_observations.to_a
+      issue_observations = issue.active_memory_observations.to_a
       next if solution_observations.empty? || issue_observations.empty?
 
       pair = best_issue_solution_pair(solution_observations, issue_observations)
@@ -92,7 +93,7 @@ class RelationshipDiscoveryStrategy
   end
 
   def dependency_proposals(entity)
-    entity.memory_observations.flat_map do |observation|
+    entity.active_memory_observations.flat_map do |observation|
       next [] unless dependency_marked?(observation.content)
 
       entities_mentioned_in_text(observation.content).filter_map do |mentioned|

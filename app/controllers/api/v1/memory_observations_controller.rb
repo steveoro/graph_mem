@@ -8,7 +8,11 @@ module Api
 
       # GET /api/v1/memory_entities/:memory_entity_id/memory_observations
       def index
-        @memory_observations = @memory_entity.memory_observations
+        @memory_observations = if include_obsolete?
+          @memory_entity.memory_observations
+        else
+          @memory_entity.active_memory_observations
+        end
         render json: @memory_observations
       end
 
@@ -30,21 +34,27 @@ module Api
 
       # PATCH/PUT /api/v1/memory_entities/:memory_entity_id/memory_observations/:id
       def update
-        if @memory_observation.update(observation_params)
-          render json: @memory_observation
+        attributes = observation_params.to_h.symbolize_keys
+        return render_error("At least one observation attribute must be provided") if attributes.empty?
+
+        result = if supersede?
+          @memory_observation.supersede!(attributes, reason: lifecycle_params[:reason])
         else
-          render_validation_errors(@memory_observation)
+          @memory_observation.update_active!(attributes)
         end
+
+        render json: result.as_json.merge(
+          superseded_observation_id: supersede? ? @memory_observation.id : nil
+        )
+      rescue MemoryObservation::InactiveObservationError => e
+        render_error(e.message)
+      rescue ActiveRecord::RecordInvalid => e
+        render_validation_errors(e.record)
       end
 
       # DELETE /api/v1/memory_entities/:memory_entity_id/memory_observations/:id
       def destroy
-        begin
-          Current.deletion_reason = params[:reason]
-          @memory_observation.destroy!
-        ensure
-          Current.deletion_reason = nil
-        end
+        @memory_observation.mark_obsolete!(reason: params[:reason])
         head :no_content
       end
 
@@ -52,7 +62,7 @@ module Api
       def delete_duplicates
         duplicates_deleted = 0
 
-        content_groups = @memory_entity.memory_observations.group_by(&:content)
+        content_groups = @memory_entity.active_memory_observations.group_by(&:content)
 
         begin
           Current.deletion_reason = "duplicate"
@@ -98,6 +108,21 @@ module Api
           :valid_until,
           tags: []
         )
+      end
+
+      def lifecycle_params
+        lifecycle = params.fetch(:memory_observation, ActionController::Parameters.new).permit(:supersede, :reason)
+        lifecycle[:supersede] = params[:supersede] if params.key?(:supersede)
+        lifecycle[:reason] = params[:reason] if params.key?(:reason) && lifecycle[:reason].blank?
+        lifecycle
+      end
+
+      def supersede?
+        ActiveModel::Type::Boolean.new.cast(lifecycle_params[:supersede])
+      end
+
+      def include_obsolete?
+        ActiveModel::Type::Boolean.new.cast(params[:include_obsolete])
       end
     end
   end

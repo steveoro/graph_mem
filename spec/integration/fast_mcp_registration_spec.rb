@@ -30,6 +30,7 @@ RSpec.describe "FastMcp tool registration", type: :integration do
     suggest_merges
     traverse_graph
     update_entity
+    update_observation
   ].freeze
 
   # Filter out test-only tool subclasses defined in other spec files

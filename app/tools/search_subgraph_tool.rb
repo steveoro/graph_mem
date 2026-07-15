@@ -95,10 +95,14 @@ class SearchSubgraphTool < ApplicationTool
                     valid_from: { type: [ :string, :null ], format: "date-time" },
                     valid_until: { type: [ :string, :null ], format: "date-time" },
                     tags: { type: :array, items: { type: :string } },
+                    status: { type: :string, enum: MemoryObservation::STATUSES },
+                    obsoleted_at: { type: [ :string, :null ], format: "date-time" },
+                    obsolescence_reason: { type: [ :string, :null ] },
+                    superseded_by_id: { type: [ :integer, :null ] },
                     created_at: { type: :string, format: "date-time" },
                     updated_at: { type: :string, format: "date-time" }
                   },
-                  required: [ :observation_id, :content, :created_at, :updated_at ]
+                  required: [ :observation_id, :content, :status, :created_at, :updated_at ]
                 }
               },
               created_at: { type: :string, format: "date-time" },
@@ -180,9 +184,9 @@ class SearchSubgraphTool < ApplicationTool
     sql_params[:like_query_term] = like_query_term
 
     if search_in_observations
-      # Ensure join is added only if searching observations
-      base_query = base_query.joins(:memory_observations) unless base_query.joins_values.include?(:memory_observations)
-      sql_conditions << "LOWER(memory_observations.content) LIKE :like_query_term"
+      base_query = base_query.left_joins(:memory_observations)
+      sql_conditions << "(memory_observations.status = :active_status AND LOWER(memory_observations.content) LIKE :like_query_term)"
+      sql_params[:active_status] = MemoryObservation::ACTIVE_STATUS
     end
 
     # Combine conditions with OR
@@ -223,7 +227,7 @@ class SearchSubgraphTool < ApplicationTool
       # Fetch the entities for the current page, including their observations
       # Order them by the paginated_entity_ids to maintain the slice order
       db_entities = MemoryEntity.where(id: paginated_entity_ids)
-                                .includes(:memory_observations)
+                                .includes(:active_memory_observations)
                                 .order(Arel.sql("CASE id #{paginated_entity_ids.map.with_index { |id, index| "WHEN #{id} THEN #{index}" }.join(' ')} END"))
                                 .to_a
 
@@ -233,18 +237,8 @@ class SearchSubgraphTool < ApplicationTool
           name: entity.name,
           entity_type: entity.entity_type,
           aliases: entity.aliases,
-          observations: entity.memory_observations.map do |obs|
-            {
-              observation_id: obs.id,
-              content: obs.content,
-              confidence: obs.confidence,
-              source: obs.source,
-              valid_from: obs.valid_from&.iso8601,
-              valid_until: obs.valid_until&.iso8601,
-              tags: obs.tags,
-              created_at: obs.created_at.iso8601,
-              updated_at: obs.updated_at.iso8601
-            }
+          observations: entity.active_memory_observations.map do |observation|
+            MemoryObservationSerializer.call(observation)
           end,
           created_at: entity.created_at.iso8601,
           updated_at: entity.updated_at.iso8601

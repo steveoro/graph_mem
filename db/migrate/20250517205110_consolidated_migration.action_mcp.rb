@@ -143,10 +143,18 @@ class ConsolidatedMigration < ActiveRecord::Migration[8.0]
   private
 
   def table_exists?(table_name)
-    ActionMCP::ApplicationRecord.connection.table_exists?(table_name)
+    migration_connection.table_exists?(table_name)
   end
 
   def column_exists?(table_name, column_name)
-    ActionMCP::ApplicationRecord.connection.column_exists?(table_name, column_name)
+    migration_connection.column_exists?(table_name, column_name)
+  end
+
+  def migration_connection
+    if defined?(ActionMCP::ApplicationRecord)
+      ActionMCP::ApplicationRecord.connection
+    else
+      ApplicationRecord.connection
+    end
   end
 end

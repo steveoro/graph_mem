@@ -37,7 +37,7 @@ This document provides an overview of GraphMem's architecture, explaining how th
 
 GraphMem follows a layered architecture that separates concerns between:
 
-1. **MCP Interface Layer** - 26 tools accessed via JSON-RPC/SSE
+1. **MCP Interface Layer** - 27 tools accessed via JSON-RPC/SSE
 2. **REST API Layer** - Traditional RESTful endpoints mirroring MCP capabilities
 3. **Application Logic Layer** - Search strategies, context scoping, embedding service
 4. **Data Access Layer** - ActiveRecord models with vector extensions
@@ -45,14 +45,14 @@ GraphMem follows a layered architecture that separates concerns between:
 
 ## Component Breakdown
 
-### 1. MCP Interface Layer (26 tools)
+### 1. MCP Interface Layer (27 tools)
 
 Tools are Ruby classes in `app/tools/` that inherit from `ApplicationTool` (which inherits from `FastMcp::Tool`). They auto-register via `ApplicationTool.descendants` in `config/initializers/fast_mcp.rb`.
 
 Tool categories:
 - **Context** (3): `set_context`, `get_context`, `clear_context`
 - **Entity CRUD** (4): `create_entity`, `get_entity`, `update_entity`, `delete_entity`
-- **Observation** (2): `create_observation`, `delete_observation`
+- **Observation** (3): `create_observation`, `update_observation`, `delete_observation`
 - **Relation** (3): `create_relation`, `delete_relation`, `find_relations`
 - **Graph Traversal** (2): `traverse_graph`, `find_shortest_path`
 - **Search** (4): `search_entities`, `search_subgraph`, `list_entities`, `get_subgraph_by_ids`
@@ -114,7 +114,7 @@ Calls Ollama (or an OpenAI-compatible endpoint) to generate vectors from entity 
 #### Core Models
 
 - **MemoryEntity** - Graph node with name, entity_type, aliases, description, and VECTOR(768) embedding
-- **MemoryObservation** - Text content plus confidence, provenance, validity, and tags attached to entities, with its own VECTOR(768) embedding
+- **MemoryObservation** - Versioned text facts plus confidence, provenance, validity, tags, and `active`/`obsolete`/`superseded` lifecycle state, with its own VECTOR(768) embedding
 - **MemoryRelation** - Directed edge with a canonicalized relation_type, weight, confidence, and structured properties
 - **EntityTypeMapping** - Canonicalization rules for entity types
 - **RelationTypeMapping** - Canonicalization rules for relation types
@@ -128,6 +128,8 @@ MariaDB 11.8 with:
 - Native `VECTOR(768)` columns for entity and observation embeddings
 - `MHNSW` approximate nearest-neighbor indexes for cosine distance search
 - Counter caches (`memory_observations_count`) for performance
+
+Observation lifecycle transitions retain historical rows. User deletion marks a row obsolete, while supersession creates a new active row and links the old row to its replacement. Normal reads and search filter to active observations; explicit `include_obsolete` access exposes history. Maintenance duplicate cleanup remains a physical deletion path.
 - Foreign key constraints for referential integrity
 
 ## Data Flow
