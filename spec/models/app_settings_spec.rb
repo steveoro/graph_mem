@@ -17,6 +17,28 @@ RSpec.describe AppSettings, type: :model do
       expect(AppSettings).to respond_to(:backup_schedule_cron)
       expect(AppSettings).to respond_to(:enable_scheduled_backups)
     end
+
+    it "defines summarization fields" do
+      expect(AppSettings).to respond_to(:summary_url)
+      expect(AppSettings).to respond_to(:summary_model)
+      expect(AppSettings).to respond_to(:summary_provider)
+      expect(AppSettings).to respond_to(:summary_timeout)
+      expect(AppSettings).to respond_to(:summary_max_tokens)
+      expect(AppSettings).to respond_to(:enable_llm_summarization)
+    end
+  end
+
+  describe "summarization defaults" do
+    it "disables LLM summarization by default" do
+      expect(AppSettings.enable_llm_summarization).to be false
+    end
+  end
+
+  describe ".llm_summarization_enabled?" do
+    it "reads directly from the database" do
+      AppSettings.enable_llm_summarization = true
+      expect(AppSettings.llm_summarization_enabled?).to be true
+    end
   end
 
   describe "default values" do

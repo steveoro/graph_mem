@@ -116,6 +116,67 @@ RSpec.describe "Operator settings", type: :request do
       expect(response.body).to include('data-testid="embedding-source-env"')
       expect(response.body).to include('data-testid="embedding-source-default"')
     end
+
+    it "updates summary settings and resets the generation client" do
+      expect(SummaryGenerationClient).to receive(:reset_instance!)
+
+      patch operator_settings_bulk_update_path,
+            params: {
+              tab: "summaries",
+              settings: {
+                enable_llm_summarization: "1",
+                summary_url: "http://summary.test:11434",
+                summary_model: "qwen3:8b",
+                summary_provider: "ollama",
+                summary_timeout: "20",
+                summary_max_tokens: "128"
+              }
+            }
+
+      expect(response).to redirect_to(operator_settings_path(tab: "summaries"))
+      expect(AppSettings.enable_llm_summarization).to be true
+      expect(AppSettings.summary_model).to eq("qwen3:8b")
+      expect(AppSettings.summary_timeout).to eq(20)
+    end
+
+    it "strips leading and trailing spaces from summary_model on save" do
+      allow(SummaryGenerationClient).to receive(:reset_instance!)
+
+      patch operator_settings_bulk_update_path,
+            params: {
+              tab: "summaries",
+              settings: {
+                summary_model: "  qwen3:8b  "
+              }
+            }
+
+      expect(AppSettings.summary_model).to eq("qwen3:8b")
+    end
+
+    it "rejects invalid summary provider" do
+      patch operator_settings_bulk_update_path,
+            params: {
+              tab: "summaries",
+              settings: {
+                summary_provider: "invalid"
+              }
+            }
+
+      expect(response).to redirect_to(operator_settings_path(tab: "summaries"))
+      follow_redirect!
+      expect(response.body).to include("Invalid summary provider")
+    end
+
+    it "renders fallback values on the summaries tab" do
+      ENV["SUMMARY_MODEL"] = "env-summary-model"
+
+      get operator_settings_path(tab: "summaries")
+
+      expect(response).to have_http_status(:ok)
+      expect(response.body).to include('data-testid="summary-fallback-model"')
+      expect(response.body).to include("env-summary-model")
+      expect(response.body).to include('data-testid="setting-enable_llm_summarization"')
+    end
   end
 
   describe "POST /operator/settings/backup/run" do

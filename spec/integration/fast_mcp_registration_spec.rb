@@ -28,6 +28,7 @@ RSpec.describe "FastMcp tool registration", type: :integration do
     rank_observations
     search_entities
     search_subgraph
+    summarize
     set_context
     suggest_merges
     traverse_graph

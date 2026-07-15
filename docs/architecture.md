@@ -12,7 +12,7 @@ This document provides an overview of GraphMem's architecture, explaining how th
 │         │                                    │                  │
 │  ┌──────▼──────────┐              ┌──────────▼───────────┐      │
 │  │  FastMcp Server │              │  Rails Controllers   │      │
-│  │  (21 MCP Tools) │              │  (api/v1/*)          │      │
+│  │  (30 MCP Tools) │              │  (api/v1/*)          │      │
 │  └────────┬────────┘              └──────────┬───────────┘      │
 │           │                                  │                  │
 │  ┌────────▼──────────────────────────────────▼───────────┐      │
@@ -33,11 +33,12 @@ This document provides an overview of GraphMem's architecture, explaining how th
 │  └───────────────────────────────────────────────────────┘      │
 └─────────────────────────────────────────────────────────────────┘
         Ollama (external) ──► EmbeddingService (768-dim vectors)
+        Ollama (external) ──► SummaryGenerationClient (optional text synthesis)
 ```
 
 GraphMem follows a layered architecture that separates concerns between:
 
-1. **MCP Interface Layer** - 27 tools accessed via JSON-RPC/SSE
+1. **MCP Interface Layer** - 30 tools accessed via JSON-RPC/SSE
 2. **REST API Layer** - Traditional RESTful endpoints mirroring MCP capabilities
 3. **Application Logic Layer** - Search strategies, context scoping, embedding service
 4. **Data Access Layer** - ActiveRecord models with vector extensions
@@ -45,7 +46,7 @@ GraphMem follows a layered architecture that separates concerns between:
 
 ## Component Breakdown
 
-### 1. MCP Interface Layer (27 tools)
+### 1. MCP Interface Layer (30 tools)
 
 Tools are Ruby classes in `app/tools/` that inherit from `ApplicationTool` (which inherits from `FastMcp::Tool`). They auto-register via `ApplicationTool.descendants` in `config/initializers/fast_mcp.rb`.
 
@@ -55,7 +56,7 @@ Tool categories:
 - **Observation** (3): `create_observation`, `update_observation`, `delete_observation`
 - **Relation** (3): `create_relation`, `delete_relation`, `find_relations`
 - **Graph Traversal** (2): `traverse_graph`, `find_shortest_path`
-- **Search** (4): `search_entities`, `search_subgraph`, `list_entities`, `get_subgraph_by_ids`
+- **Search** (5): `search_entities`, `search_subgraph`, `list_entities`, `get_subgraph_by_ids`, `summarize`
 - **Batch/Maintenance** (6): `bulk_update`, `suggest_merges`, `merge_entities`, `dream_state_status`, `get_maintenance_reports`, `get_graph_stats`
 - **Utility** (2): `get_version`, `get_current_time`
 
@@ -104,6 +105,10 @@ bucket for backward compatibility. When set:
 #### Embedding configuration (`app/services/embedding_config.rb`)
 
 Resolves URL, model, provider, and dimensions with priority **AppSettings → ENV → defaults**. Used by `EmbeddingService`, rake tasks, and the operator embeddings UI. Operators can edit values under **System Settings → Embeddings**; workers pick up changes after save via `EmbeddingService.reset_instance!`.
+
+#### Summarization configuration (`app/services/summarization_config.rb`)
+
+Resolves URL, model, provider, timeout, and output token limits with the same **AppSettings → ENV → defaults** priority. Used by `SummaryGenerationClient` and `SummarizerService`. Operators configure values under **System Settings → Summaries**; saving resets `SummaryGenerationClient` so subsequent summarize requests use the new settings.
 
 #### Embedding Service (`app/services/embedding_service.rb`)
 

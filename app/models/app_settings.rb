@@ -24,6 +24,14 @@ class AppSettings < RailsSettings::Base
   field :enable_scheduled_embedding_backfill, default: false, type: :boolean
   field :embedding_backfill_schedule_cron, default: "N/A", type: :string, readonly: true
 
+  # Summarization service settings (empty / zero defers to ENV)
+  field :summary_url, default: "", type: :string
+  field :summary_model, default: "", type: :string
+  field :summary_provider, default: "", type: :string
+  field :summary_timeout, default: 0, type: :integer
+  field :summary_max_tokens, default: 0, type: :integer
+  field :enable_llm_summarization, default: false, type: :boolean
+
   def self.embedding_backfill_schedule_cron
     yaml = YAML.safe_load_file(
       Rails.root.join("config", "recurring.yml"),
@@ -82,6 +90,10 @@ class AppSettings < RailsSettings::Base
 
   def self.contradiction_detection_enabled?
     read_boolean_setting("enable_contradiction_detection", default: true)
+  end
+
+  def self.llm_summarization_enabled?
+    read_boolean_setting("enable_llm_summarization", default: false)
   end
 
   def self.read_boolean_setting(var_name, default: false)

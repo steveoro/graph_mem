@@ -57,6 +57,8 @@ Rails.application.routes.draw do
 
       get "/graph/traverse", to: "graph_traversal#traverse"
       get "/graph/shortest_path", to: "graph_traversal#shortest_path"
+
+      post "summarize", to: "summaries#create"
     end
   end
 

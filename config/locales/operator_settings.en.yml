@@ -15,7 +15,7 @@ en:
       invalid_credentials: "Invalid username or password."
     settings:
       title: "System Settings"
-      subtitle: "Configure feature flags, database backup, and embedding service behavior."
+      subtitle: "Configure feature flags, database backup, embedding service, and summarization behavior."
       save_group: "Save changes"
       reset: "Reset"
       footer_info: "Changes apply immediately: no need to restart the application. Scheduled backup times are defined in config/recurring.yml."
@@ -23,6 +23,7 @@ en:
         feature_flags: "Feature Flags"
         database_backup: "Database Backup"
         embeddings: "Embeddings"
+        summaries: "Summaries"
       bulk_update:
         success: "Saved %{count} setting(s) successfully."
         partial: "Saved %{success} setting(s); %{failed} failed."
@@ -66,6 +67,24 @@ en:
         embedding_backfill_schedule_cron:
           label: "Scheduled backfill times"
           description: "Read from config/recurring.yml for the current environment."
+        enable_llm_summarization:
+          label: "Enable LLM summarization"
+          description: "When disabled, summarize returns deterministic extractive evidence only. The summarize endpoint remains available."
+        summary_url:
+          label: "Summary server URL"
+          description: "Ollama or OpenAI-compatible text-generation endpoint. Leave blank to use SUMMARY_URL or OLLAMA_URL from the environment."
+        summary_model:
+          label: "Summary model"
+          description: "Interchangeable model name passed to the generation API (e.g. qwen3:8b). Leave blank to use SUMMARY_MODEL from the environment."
+        summary_provider:
+          label: "Summary provider"
+          description: "ollama or openai_compatible. Leave blank to use SUMMARY_PROVIDER from the environment."
+        summary_timeout:
+          label: "Summary timeout (seconds)"
+          description: "HTTP timeout for generation requests. Set to 0 to use SUMMARY_TIMEOUT from the environment or the default."
+        summary_max_tokens:
+          label: "Summary max tokens"
+          description: "Maximum output tokens for generated summaries. Set to 0 to use SUMMARY_MAX_TOKENS from the environment or the default."
       backup:
         actions_title: "Manual backup"
         list_title: "Available backups"
@@ -97,3 +116,13 @@ en:
         invalid_provider: "Invalid embedding provider. Use ollama or openai_compatible."
         invalid_dims: "Dimensions must be 0 (use ENV/default) or between 1 and 4096."
         invalid_url: "Embedding URL must be a valid http or https URL."
+      summaries:
+        blank_uses_env: "Leave blank to use ENV"
+        used_when_blank: "Used when blank:"
+        provider_blank: "— use ENV / default —"
+        priority_hint: "Configuration priority: AppSettings (this tab) → environment variables → built-in defaults. Changes apply on the next summarize request."
+        deterministic_hint: "When LLM summarization is disabled or unavailable, summarize returns deterministic extractive evidence with source IDs."
+        invalid_provider: "Invalid summary provider. Use ollama or openai_compatible."
+        invalid_timeout: "Timeout must be 0 (use ENV/default) or between 1 and 300 seconds."
+        invalid_max_tokens: "Max tokens must be 0 (use ENV/default) or between 16 and 4096."
+        invalid_url: "Summary URL must be a valid http or https URL."

@@ -6,7 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [1.9.8] - 2026-07-15
-- 
+- Add `summarize` MCP tool and `POST /api/v1/summarize` for query-scoped summarization with deterministic source-backed evidence
+- Add optional LLM synthesis via `SummarizationConfig`, `SummaryGenerationClient`, and operator **System Settings → Summaries** tab
+- Deterministic fallback when LLM summarization is disabled, unconfigured, or provider-unavailable; embedding and summary models remain independent
+- Documentation: `docs/summarization.md`, updates to MCP tools, REST API reference, and app settings reference
 
 ## [1.9.6] - 2026-07-14
 

@@ -23,6 +23,15 @@ module Operator
         end
       end
 
+      if params[:tab] == "summaries"
+        validation_error = validate_summaries_settings(settings)
+        if validation_error
+          flash[:alert] = validation_error
+          redirect_to operator_settings_path(tab: params[:tab])
+          return
+        end
+      end
+
       settings.each do |key, value|
         next unless AppSettings.defined_fields.map(&:key).include?(key)
 
@@ -30,7 +39,7 @@ module Operator
         next if field[:readonly] || field["readonly"]
 
         field_type = field[:type] || field["type"]
-        converted_value = convert_value(value, field_type)
+        converted_value = convert_value(value, field_type, key: key)
         AppSettings.send("#{key}=", converted_value)
         results[:success] << { key: key, value: AppSettings.send(key) }
       rescue StandardError => e
@@ -40,6 +49,7 @@ module Operator
       if results[:failed].empty?
         flash[:notice] = t("operator.settings.bulk_update.success", count: results[:success].count)
         EmbeddingService.reset_instance! if params[:tab] == "embeddings"
+        SummaryGenerationClient.reset_instance! if params[:tab] == "summaries"
       else
         flash[:alert] = t("operator.settings.bulk_update.partial",
                           success: results[:success].count,
@@ -98,6 +108,13 @@ module Operator
             embedding_url embedding_model embedding_provider embedding_dims
             enable_scheduled_embedding_backfill embedding_backfill_schedule_cron
           ]
+        },
+        summaries: {
+          title: t("operator.settings.groups.summaries"),
+          settings: %w[
+            enable_llm_summarization summary_url summary_model summary_provider
+            summary_timeout summary_max_tokens
+          ]
         }
       }
     end
@@ -121,6 +138,30 @@ module Operator
       nil
     end
 
+    def validate_summaries_settings(settings)
+      provider = settings["summary_provider"].to_s
+      unless SummarizationConfig.valid_provider?(provider)
+        return t("operator.settings.summaries.invalid_provider")
+      end
+
+      timeout = settings["summary_timeout"].to_i
+      if timeout.positive? && (timeout < 1 || timeout > 300)
+        return t("operator.settings.summaries.invalid_timeout")
+      end
+
+      max_tokens = settings["summary_max_tokens"].to_i
+      if max_tokens.positive? && (max_tokens < 16 || max_tokens > 4096)
+        return t("operator.settings.summaries.invalid_max_tokens")
+      end
+
+      url = settings["summary_url"].to_s.strip
+      if url.present? && !valid_embedding_url?(url)
+        return t("operator.settings.summaries.invalid_url")
+      end
+
+      nil
+    end
+
     def valid_embedding_url?(url)
       uri = URI.parse(url)
       uri.is_a?(URI::HTTP) && uri.host.present?
@@ -128,7 +169,7 @@ module Operator
       false
     end
 
-    def convert_value(value, type)
+    def convert_value(value, type, key: nil)
       case type
       when :boolean
         return false if value.nil? || value == "" || value == "0" || value.to_s.downcase == "false"
@@ -137,7 +178,9 @@ module Operator
       when :integer
         value.to_i
       else
-        value.to_s
+        str = value.to_s
+        str = str.strip if key == "summary_model"
+        str
       end
     end
   end

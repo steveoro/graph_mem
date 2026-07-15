@@ -1,6 +1,6 @@
 # MCP Tools Documentation
 
-Detailed reference for the 29 Model Context Protocol (MCP) tools available in GraphMem.
+Detailed reference for the 30 Model Context Protocol (MCP) tools available in GraphMem.
 
 ## Overview
 
@@ -178,6 +178,18 @@ Context is stored per MCP client in the `agent_contexts` table, keyed by the `X-
 - **Parameters:**
   - `entity_ids` (array of integers, required): Entity IDs to include.
 
+#### `summarize`
+- **Description:** Summarizes what the knowledge graph knows about a query within the active project context. Always returns deterministic, source-backed evidence. When LLM summarization is enabled in operator settings, also returns an LLM-generated synthesis with the same sources.
+- **Parameters:**
+  - `query` (string, required): The topic or question to summarize.
+  - `entity_id` (integer, optional): Scope summarization to a single entity.
+  - `max_results` (integer, optional, default: 10): Maximum entities to retrieve before ranking observations.
+  - `max_observations` (integer, optional, default: 20): Maximum observations to include.
+  - `max_depth` (integer, optional, default: 0): Optional graph traversal depth from matched entities.
+  - `include_sources` (boolean, optional, default: true): Include source entity and observation IDs.
+  - `style` (string, optional, default: `concise`): `concise` or `detailed`.
+- **Response fields:** `query`, `summary`, `generation_mode`, `generated_by`, `fallback_reason`, `entity_count`, `observation_count`, `observations`, `sources`
+
 ## Graph Traversal (2 tools)
 
 These tools perform multi-hop graph traversal. Unlike `find_relations` (which is single-hop), they walk the graph breadth-first from a starting entity. `direction` is one of `outgoing` (source -> target), `incoming` (target <- source), or `both` (default).
@@ -299,6 +311,7 @@ Some tools overlap by design; pick by intent:
 | Review duplicate entities | `suggest_merges` | `get_maintenance_reports` (the dream-state `compaction_review` queue) |
 | Inspect background compaction state | `dream_state_status` | `get_maintenance_reports` (queued review items) |
 | Execute a merge | `merge_entities` | Web cleanup UI / REST API |
+| Summarize what the graph knows about a topic | `summarize` | `search_subgraph` + manual reading |
 
 ## Dream-State Background Compaction
 

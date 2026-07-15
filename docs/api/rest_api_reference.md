@@ -209,6 +209,46 @@ Returns the specified entities with observations and all relations exclusively b
 
 ---
 
+## Summarization
+
+### Summarize
+
+`POST /api/v1/summarize`
+
+Returns deterministic source-backed evidence for a query. When LLM summarization is enabled in operator settings, also returns an LLM-generated synthesis with the same sources.
+
+```json
+{
+  "query": "Steve programming languages",
+  "entity_id": null,
+  "max_results": 10,
+  "max_observations": 20,
+  "max_depth": 0,
+  "include_sources": true,
+  "style": "concise"
+}
+```
+
+Example response:
+
+```json
+{
+  "query": "Steve programming languages",
+  "summary": "Steve primarily uses Ruby for Rails projects.",
+  "generation_mode": "llm",
+  "generated_by": "qwen3:8b",
+  "fallback_reason": null,
+  "entity_count": 1,
+  "observation_count": 2,
+  "observations": [],
+  "sources": [{ "entity_id": 12, "observation_id": 123 }]
+}
+```
+
+When LLM summarization is disabled or unavailable, `generation_mode` is `deterministic` and `fallback_reason` may be `disabled`, `unconfigured`, or `provider_unavailable`.
+
+---
+
 ## Bulk Operations
 
 ### Bulk Create

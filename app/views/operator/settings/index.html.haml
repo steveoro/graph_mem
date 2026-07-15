@@ -19,6 +19,8 @@
       .dashboard-settings-panel{ id: group_key.to_s, data: { testid: "operator-settings-panel-#{group_key}" } }
         - if group_key == :embeddings
           = render "embeddings_panel", group_key: group_key
+        - elsif group_key == :summaries
+          = render "summaries_panel", group_key: group_key
         - else
           = form_with url: operator_settings_bulk_update_path, method: :patch, local: true, class: "dashboard-settings-form" do
             = hidden_field_tag :tab, group_key
