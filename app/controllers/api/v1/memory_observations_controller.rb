@@ -111,7 +111,10 @@ module Api
       end
 
       def lifecycle_params
-        params.fetch(:memory_observation, ActionController::Parameters.new).permit(:supersede, :reason)
+        lifecycle = params.fetch(:memory_observation, ActionController::Parameters.new).permit(:supersede, :reason)
+        lifecycle[:supersede] = params[:supersede] if params.key?(:supersede)
+        lifecycle[:reason] = params[:reason] if params.key?(:reason) && lifecycle[:reason].blank?
+        lifecycle
       end
 
       def supersede?

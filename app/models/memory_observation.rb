@@ -66,21 +66,21 @@ class MemoryObservation < ApplicationRecord
     self
   end
 
-  def update_active!(attributes)
+  def update_active!(attributes = nil, **extra_attributes)
     raise InactiveObservationError, "Inactive observations cannot be updated." unless active?
 
-    update!(attributes.slice(*MUTABLE_FIELDS))
+    update!(normalize_mutable_attributes(attributes, extra_attributes))
     self
   end
 
-  def supersede!(attributes, reason: nil)
+  def supersede!(attributes = nil, reason: nil, **extra_attributes)
     replacement = nil
 
     self.class.transaction do
       lock!
       raise InactiveObservationError, "Inactive observations cannot be superseded." unless active?
 
-      replacement = self.class.create!(replacement_attributes.merge(attributes.slice(*MUTABLE_FIELDS)))
+      replacement = self.class.create!(replacement_attributes.merge(normalize_mutable_attributes(attributes, extra_attributes)))
       update!(
         status: SUPERSEDED_STATUS,
         obsoleted_at: Time.current,
@@ -142,6 +142,14 @@ class MemoryObservation < ApplicationRecord
       valid_until: valid_until,
       tags: tags.dup
     }
+  end
+
+  def normalize_mutable_attributes(attributes, extra_attributes)
+    base = attributes || {}
+    base = base.to_h if base.respond_to?(:to_h)
+    base = base.symbolize_keys if base.respond_to?(:symbolize_keys)
+
+    base.merge(extra_attributes.symbolize_keys).slice(*MUTABLE_FIELDS)
   end
 
   def set_initial_embedding
