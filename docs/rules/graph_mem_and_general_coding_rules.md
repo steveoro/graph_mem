@@ -17,6 +17,7 @@ Use the `graph_mem` MCP tools every session. "Knowledge graph", "graph mem", "me
 **Phase 2 — Recall** (before doing work)
 - `search_entities` or `search_subgraph` with keywords from the user's request.
 - Drill into hits: `get_entity` for details, `get_subgraph_by_ids` for a cluster of related entities.
+- After locating a root entity, use `traverse_graph` for a bounded multi-hop neighborhood or `find_shortest_path` to explain how two entities connect.
 - Look for prior `Issue`/`PossibleSolution` pairs, `BestPractice`, and `Preference` entities.
 
 **Phase 3 — Work**
@@ -38,7 +39,8 @@ Use the `graph_mem` MCP tools every session. "Knowledge graph", "graph mem", "me
 |-------|-------|
 | Orient | `get_context`, `set_context`, `clear_context`, `search_entities` |
 | Recall | `search_entities`, `search_subgraph`, `get_entity`, `get_subgraph_by_ids`, `list_entities` |
-| Persist | `create_entity`, `update_entity`, `delete_entity`, `create_observation`, `delete_observation`, `create_relation`, `find_relations`, `delete_relation`, `bulk_update` |
+| Traverse | `find_relations`, `traverse_graph`, `find_shortest_path` |
+| Persist | `create_entity`, `update_entity`, `delete_entity`, `create_observation`, `delete_observation`, `create_relation`, `delete_relation`, `bulk_update` |
 | Maintain | `suggest_merges`, `merge_entities`, `dream_state_status`, `get_maintenance_reports`, `get_graph_stats`, `get_version`, `get_current_time` |
 
 ### Multi-Agent Context Scoping
@@ -61,6 +63,7 @@ Use the `graph_mem` MCP tools every session. "Knowledge graph", "graph mem", "me
 graph_mem accepts both its native snake_case/ID-based parameters and the
 `@modelcontextprotocol/server-memory` camelCase/name-based conventions:
 - Entity references accept either `entity_id` (integer) or entity name (string).
+- Traversal references (`start_entity_id`, `from_entity_id`, `to_entity_id`) also accept entity IDs or names.
 - Field names accept camelCase (e.g. `entityType`) or snake_case (`entity_type`).
 - `bulk_update` accepts either three arrays (`entities`, `observations`, `relations`) or a single `operations` array with `type`-discriminated items.
 - Observation text accepts `text_content`, `content`, or `contents` (array).
@@ -70,7 +73,10 @@ graph_mem accepts both its native snake_case/ID-based parameters and the
 - **Search before create** to avoid duplicates (vector dedup catches some, not all).
 - **Start broad, then narrow** using entity IDs from search results.
 - **Prioritize root nodes**: find the `Project` first, then traverse its relations.
-- **Navigate via relations** (`find_relations`, `get_entity`) instead of repeated searches.
+- **Use `find_relations` for one hop** when you need the immediate incoming or outgoing edges of an entity.
+- **Use `traverse_graph` for bounded exploration** instead of chaining repeated one-hop calls. Keep `max_depth` and `max_entities` as small as the task permits; narrow with `direction` and canonical `relation_types`.
+- **Use `find_shortest_path` for connectivity questions**. It returns the shortest unweighted path by hop count within `max_depth`; `found: false` means no matching path was found inside that bound.
+- **Navigate by graph structure** (`find_relations`, `traverse_graph`, `find_shortest_path`, `get_entity`) instead of repeated searches after locating the relevant entities.
 
 ### Entity Types
 `Project`, `Framework`, `ApplicationStack`, `Workflow`, `BestPractice`, `Task`, `Step`, `Issue`, `Error`, `PossibleSolution`, `Model`, `DatabaseTable`, `Class`, `APIEndpoint`, `Route`, `Component`, `Service`, `Configuration`, `Migration`, `TestCase`, `Permission`, `User`, `Preference`.
