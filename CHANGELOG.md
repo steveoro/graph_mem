@@ -5,9 +5,15 @@ All notable changes to GraphMem will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.9.10] - 2026-07-18
+## [1.10.1] - 2026-07-18
 - Added `summary_observations_per_entity` setting to control how many observations are included in each entity summary
 - Fixed parameter inversion in a private method call in SummarizeService
+- Add compaction review UI with editable suggestions and suppression tracking
+- Replace in-memory report items with `MaintenanceReportRow` model for persistent review queue
+- Add `MaintenanceReportSuppression` model to track dismissed suggestions and prevent duplicates
+- Support editing merge targets, relation endpoints, and parent assignments before applying
+- Add status filters (active/dismissed/approved/ignored) and kind filters (entity_merge/relationship_proposal/orphan_parent)
+- Implement bulk dismiss
 
 
 ## [1.9.8] - 2026-07-15
