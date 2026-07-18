@@ -30,17 +30,18 @@ class SummarizerService
   def call
     raise ArgumentError, "query is required" if @query.blank?
 
-    entity_scores, entities = fetch_entities
+    entities, entity_scores = fetch_entities
   rescue ActiveRecord::RecordNotFound
     raise
   else
-    evidence = build_evidence(entity_scores, entities)
-    response = build_deterministic_response(evidence, entities)
+    evidence = build_evidence(entities, entity_scores)
+    response = build_deterministic_response(entities, evidence)
     attempt_llm_synthesis(response, evidence)
   end
 
   private
 
+  # Returns unique entities with the corresponding scores
   def fetch_entities
     if @entity_id.present?
       entity = MemoryEntity.find(@entity_id)
@@ -61,9 +62,10 @@ class SummarizerService
       entities, entity_scores = expand_entities(entities, entity_scores)
     end
 
-    [ entity_scores, entities.uniq ]
+    [ entities.uniq, entity_scores ]
   end
 
+  # Expand entities by traversing the graph, collecting the overall scores
   def expand_entities(entities, entity_scores)
     expanded_ids = entities.map(&:id).to_set
     traversal = GraphTraversalService.new
@@ -85,10 +87,11 @@ class SummarizerService
     end
 
     expanded_entities = MemoryEntity.where(id: expanded_ids.to_a).to_a
-    [ entity_scores, expanded_entities ]
+    [ expanded_entities, entity_scores ]
   end
 
-  def build_evidence(entity_scores, entities)
+  # Build evidence from observations, ranked by entity relevance and observation quality
+  def build_evidence(entities, entity_scores)
     observations = entities.flat_map do |entity|
       entity.active_memory_observations.map do |observation|
         {
@@ -159,7 +162,8 @@ class SummarizerService
     ContradictionDetector::NEGATIVE_MARKERS.any? { |marker| words.include?(marker) }
   end
 
-  def build_deterministic_response(evidence, entities)
+  # Build deterministic response from evidence regarding each entity
+  def build_deterministic_response(entities, evidence)
     observations_payload = evidence.map do |entry|
       payload = MemoryObservationSerializer.call(
         entry[:observation],
