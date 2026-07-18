@@ -5,6 +5,11 @@ All notable changes to GraphMem will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.10] - 2026-07-18
+- Added `summary_observations_per_entity` setting to control how many observations are included in each entity summary
+- Fixed parameter inversion in a private method call in SummarizeService
+
+
 ## [1.9.8] - 2026-07-15
 - Add `summarize` MCP tool and `POST /api/v1/summarize` for query-scoped summarization with deterministic source-backed evidence
 - Add optional LLM synthesis via `SummarizationConfig`, `SummaryGenerationClient`, and operator **System Settings → Summaries** tab

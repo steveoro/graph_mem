@@ -113,7 +113,7 @@ module Operator
           title: t("operator.settings.groups.summaries"),
           settings: %w[
             enable_llm_summarization summary_url summary_model summary_provider
-            summary_timeout summary_max_tokens
+            summary_timeout summary_max_tokens summary_observations_per_entity
           ]
         }
       }
@@ -152,6 +152,11 @@ module Operator
       max_tokens = settings["summary_max_tokens"].to_i
       if max_tokens.positive? && (max_tokens < 16 || max_tokens > 4096)
         return t("operator.settings.summaries.invalid_max_tokens")
+      end
+
+      per_entity = settings["summary_observations_per_entity"].to_s
+      if per_entity.present? && (per_entity.to_i.negative? || per_entity.to_i > 100)
+        return t("operator.settings.summaries.invalid_observations_per_entity")
       end
 
       url = settings["summary_url"].to_s.strip

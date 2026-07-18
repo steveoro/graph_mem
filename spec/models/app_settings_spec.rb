@@ -24,6 +24,7 @@ RSpec.describe AppSettings, type: :model do
       expect(AppSettings).to respond_to(:summary_provider)
       expect(AppSettings).to respond_to(:summary_timeout)
       expect(AppSettings).to respond_to(:summary_max_tokens)
+      expect(AppSettings).to respond_to(:summary_observations_per_entity)
       expect(AppSettings).to respond_to(:enable_llm_summarization)
     end
   end

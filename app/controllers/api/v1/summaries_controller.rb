@@ -13,6 +13,7 @@ module Api
           entity_id: params[:entity_id],
           max_results: params[:max_results],
           max_observations: params[:max_observations],
+          observations_per_entity: params[:observations_per_entity],
           max_depth: params[:max_depth],
           include_sources: params.fetch(:include_sources, true),
           style: params[:style],

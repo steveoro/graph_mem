@@ -10,6 +10,7 @@ RSpec.describe SummarizationConfig do
       SUMMARY_PROVIDER: ENV["SUMMARY_PROVIDER"],
       SUMMARY_TIMEOUT: ENV["SUMMARY_TIMEOUT"],
       SUMMARY_MAX_TOKENS: ENV["SUMMARY_MAX_TOKENS"],
+      SUMMARY_OBSERVATIONS_PER_ENTITY: ENV["SUMMARY_OBSERVATIONS_PER_ENTITY"],
       OLLAMA_URL: ENV["OLLAMA_URL"]
     }
     example.run
@@ -24,6 +25,7 @@ RSpec.describe SummarizationConfig do
     AppSettings.summary_provider = ""
     AppSettings.summary_timeout = 0
     AppSettings.summary_max_tokens = 0
+    AppSettings.summary_observations_per_entity = 0
     AppSettings.enable_llm_summarization = false
   end
 
@@ -45,6 +47,7 @@ RSpec.describe SummarizationConfig do
       expect(config[:provider]).to eq("ollama")
       expect(config[:timeout]).to eq(30)
       expect(config[:max_tokens]).to eq(256)
+      expect(config[:observations_per_entity]).to eq(3)
       expect(config[:llm_enabled]).to be false
     end
 
@@ -54,6 +57,18 @@ RSpec.describe SummarizationConfig do
 
       expect(described_class.resolved_config[:model]).to eq("gemma3:4b")
       expect(described_class.config_sources[:model]).to eq(:app_settings)
+    end
+
+    it "resolves observations_per_entity from AppSettings, ENV, then defaults" do
+      expect(described_class.resolved_config[:observations_per_entity]).to eq(3)
+
+      ENV["SUMMARY_OBSERVATIONS_PER_ENTITY"] = "5"
+      expect(described_class.resolved_config[:observations_per_entity]).to eq(5)
+      expect(described_class.config_sources[:observations_per_entity]).to eq(:env)
+
+      AppSettings.summary_observations_per_entity = 7
+      expect(described_class.resolved_config[:observations_per_entity]).to eq(7)
+      expect(described_class.config_sources[:observations_per_entity]).to eq(:app_settings)
     end
 
     it "falls back to OLLAMA_URL when SUMMARY_URL is blank" do

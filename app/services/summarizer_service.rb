@@ -4,6 +4,7 @@
 class SummarizerService
   DEFAULT_MAX_RESULTS = 10
   DEFAULT_MAX_OBSERVATIONS = 20
+  DEFAULT_OBSERVATIONS_PER_ENTITY = 3
   DEFAULT_MAX_DEPTH = 0
   DEFAULT_STYLE = "concise"
 
@@ -14,12 +15,17 @@ class SummarizerService
   end
 
   def initialize(query:, entity_id: nil, max_results: DEFAULT_MAX_RESULTS,
-                 max_observations: DEFAULT_MAX_OBSERVATIONS, max_depth: DEFAULT_MAX_DEPTH,
+                 max_observations: DEFAULT_MAX_OBSERVATIONS,
+                 observations_per_entity: nil, max_depth: DEFAULT_MAX_DEPTH,
                  include_sources: true, style: DEFAULT_STYLE, context_entity_ids: nil)
     @query = query.to_s.strip
     @entity_id = entity_id
     @max_results = normalize_positive(max_results, DEFAULT_MAX_RESULTS, max: 50)
     @max_observations = normalize_positive(max_observations, DEFAULT_MAX_OBSERVATIONS, max: 100)
+    @observations_per_entity = normalize_per_entity_cap(
+      observations_per_entity,
+      SummarizationConfig.resolved_config[:observations_per_entity]
+    )
     @max_depth = normalize_depth(max_depth)
     @include_sources = include_sources != false
     @style = style.presence || DEFAULT_STYLE
@@ -45,7 +51,7 @@ class SummarizerService
   def fetch_entities
     if @entity_id.present?
       entity = MemoryEntity.find(@entity_id)
-      return [ { entity.id => 1.0 }, [ entity ] ]
+      return [ [ entity ], { entity.id => 1.0 } ]
     end
 
     results = HybridSearchStrategy.new.search(
@@ -112,7 +118,7 @@ class SummarizerService
       ]
     end
 
-    selected = ranked.first(@max_observations)
+    selected = select_diverse_evidence(ranked)
     mark_contradictions(selected)
     selected
   end
@@ -254,9 +260,35 @@ class SummarizerService
     lines.join("\n")
   end
 
+  def select_diverse_evidence(ranked)
+    selected = []
+    counts = Hash.new(0)
+
+    ranked.each do |entry|
+      break if selected.size >= @max_observations
+
+      entity_id = entry[:entity].id
+      next if @observations_per_entity.positive? && counts[entity_id] >= @observations_per_entity
+
+      selected << entry
+      counts[entity_id] += 1
+    end
+
+    selected
+  end
+
   def normalize_positive(value, default, max:)
     parsed = value.to_i
     return default if parsed <= 0
+
+    [ parsed, max ].min
+  end
+
+  def normalize_per_entity_cap(value, default, max: 100)
+    return default if value.nil? || value.to_s.strip == ""
+
+    parsed = value.to_i
+    return default if parsed.negative?
 
     [ parsed, max ].min
   end

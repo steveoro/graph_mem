@@ -61,6 +61,7 @@ See [operator embeddings guide](operator/embeddings.md).
 | `summary_provider` | `""` | `ollama` or `openai_compatible`. Blank defers to `SUMMARY_PROVIDER` ENV or `ollama`. |
 | `summary_timeout` | `0` | HTTP timeout in seconds. `0` defers to `SUMMARY_TIMEOUT` ENV or default `30`. |
 | `summary_max_tokens` | `0` | Maximum generated output tokens. `0` defers to `SUMMARY_MAX_TOKENS` ENV or default `256`. |
+| `summary_observations_per_entity` | `3` | Maximum observations selected per entity before capping. `0` disables the cap. |
 
 Resolution order for runtime summarization config: **AppSettings → ENV → defaults** (`SummarizationConfig`). Saving the Summaries tab calls `SummaryGenerationClient.reset_instance!`.
 

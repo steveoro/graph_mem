@@ -4,10 +4,11 @@
 class SummarizationConfig
   DEFAULTS = {
     url: "http://localhost:11434",
-    model: "qwen3:8b",
+    model: "qwen3:8b",  # Alternative: gemma3:4b
     provider: "ollama",
-    timeout: 30,
-    max_tokens: 256
+    timeout: 30,        # Slow systems/laptops: 120
+    max_tokens: 256,    # detailed style: 1024
+    observations_per_entity: 3
   }.freeze
 
   ALLOWED_PROVIDERS = %w[ollama openai_compatible].freeze
@@ -17,7 +18,8 @@ class SummarizationConfig
     model: "SUMMARY_MODEL",
     provider: "SUMMARY_PROVIDER",
     timeout: "SUMMARY_TIMEOUT",
-    max_tokens: "SUMMARY_MAX_TOKENS"
+    max_tokens: "SUMMARY_MAX_TOKENS",
+    observations_per_entity: "SUMMARY_OBSERVATIONS_PER_ENTITY"
   }.freeze
 
   APP_SETTINGS_KEYS = {
@@ -25,7 +27,8 @@ class SummarizationConfig
     model: :summary_model,
     provider: :summary_provider,
     timeout: :summary_timeout,
-    max_tokens: :summary_max_tokens
+    max_tokens: :summary_max_tokens,
+    observations_per_entity: :summary_observations_per_entity
   }.freeze
 
   class << self
@@ -36,6 +39,7 @@ class SummarizationConfig
         provider: resolve_string(:provider),
         timeout: resolve_integer(:timeout),
         max_tokens: resolve_integer(:max_tokens),
+        observations_per_entity: resolve_integer(:observations_per_entity),
         llm_enabled: AppSettings.llm_summarization_enabled?
       }
     end
@@ -47,6 +51,7 @@ class SummarizationConfig
         provider: resolve_source(:provider),
         timeout: resolve_integer_source(:timeout),
         max_tokens: resolve_integer_source(:max_tokens),
+        observations_per_entity: resolve_integer_source(:observations_per_entity),
         llm_enabled: :app_settings
       }
     end
@@ -54,7 +59,7 @@ class SummarizationConfig
     def fallback_for(key)
       key = key.to_sym
       case key
-      when :timeout, :max_tokens
+      when :timeout, :max_tokens, :observations_per_entity
         fallback_integer(key)
       when :url, :model, :provider
         fallback_string(key)

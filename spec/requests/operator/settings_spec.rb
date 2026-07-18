@@ -129,7 +129,8 @@ RSpec.describe "Operator settings", type: :request do
                 summary_model: "qwen3:8b",
                 summary_provider: "ollama",
                 summary_timeout: "20",
-                summary_max_tokens: "128"
+                summary_max_tokens: "128",
+                summary_observations_per_entity: "3"
               }
             }
 
@@ -137,6 +138,7 @@ RSpec.describe "Operator settings", type: :request do
       expect(AppSettings.enable_llm_summarization).to be true
       expect(AppSettings.summary_model).to eq("qwen3:8b")
       expect(AppSettings.summary_timeout).to eq(20)
+      expect(AppSettings.summary_observations_per_entity).to eq(3)
     end
 
     it "strips leading and trailing spaces from summary_model on save" do
@@ -165,6 +167,20 @@ RSpec.describe "Operator settings", type: :request do
       expect(response).to redirect_to(operator_settings_path(tab: "summaries"))
       follow_redirect!
       expect(response.body).to include("Invalid summary provider")
+    end
+
+    it "rejects an out-of-range observations_per_entity value" do
+      patch operator_settings_bulk_update_path,
+            params: {
+              tab: "summaries",
+              settings: {
+                summary_observations_per_entity: "101"
+              }
+            }
+
+      expect(response).to redirect_to(operator_settings_path(tab: "summaries"))
+      follow_redirect!
+      expect(response.body).to include("Observations per entity must be")
     end
 
     it "renders fallback values on the summaries tab" do

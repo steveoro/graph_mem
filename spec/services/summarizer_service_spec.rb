@@ -120,5 +120,43 @@ RSpec.describe SummarizerService do
       expect(result[:entity_count]).to eq(1)
       expect(result[:observations].map { |obs| obs[:memory_entity_id] }).to all(eq(entity.id))
     end
+
+    it "caps evidence per entity when observations_per_entity is set" do
+      other = MemoryEntity.create!(name: "Other", entity_type: "Project")
+      3.times { |i| MemoryObservation.create!(memory_entity: other, content: "Other fact #{i}.") }
+      3.times { |i| MemoryObservation.create!(memory_entity: entity, content: "Entity fact #{i}.") }
+
+      allow(HybridSearchStrategy).to receive(:new).and_return(
+        instance_double(HybridSearchStrategy, search: [
+          HybridSearchStrategy::SearchResult.new(entity: entity, score: 0.95, matched_fields: [ "name" ]),
+          HybridSearchStrategy::SearchResult.new(entity: other, score: 0.85, matched_fields: [ "name" ])
+        ])
+      )
+
+      result = described_class.call(query: "facts", max_observations: 10, observations_per_entity: 2)
+
+      counts = result[:sources].group_by { |s| s[:entity_id] }.transform_values(&:count)
+      expect(counts.values).to all(be <= 2)
+      expect(result[:observation_count]).to eq(4)
+      expect(counts.keys).to contain_exactly(entity.id, other.id)
+    end
+
+    it "disables the per-entity cap when observations_per_entity is 0" do
+      other = MemoryEntity.create!(name: "Other", entity_type: "Project")
+      4.times { |i| MemoryObservation.create!(memory_entity: other, content: "Other fact #{i}.") }
+      4.times { |i| MemoryObservation.create!(memory_entity: entity, content: "Entity fact #{i}.") }
+
+      allow(HybridSearchStrategy).to receive(:new).and_return(
+        instance_double(HybridSearchStrategy, search: [
+          HybridSearchStrategy::SearchResult.new(entity: entity, score: 0.95, matched_fields: [ "name" ]),
+          HybridSearchStrategy::SearchResult.new(entity: other, score: 0.85, matched_fields: [ "name" ])
+        ])
+      )
+
+      result = described_class.call(query: "facts", max_observations: 4, observations_per_entity: 0)
+
+      counts = result[:sources].group_by { |s| s[:entity_id] }.transform_values(&:count)
+      expect(counts[entity.id]).to eq(4)
+    end
   end
 end
