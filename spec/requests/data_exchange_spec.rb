@@ -890,21 +890,24 @@ RSpec.describe 'DataExchange', type: :request do
 
   describe 'GET /data_exchange/compaction_review' do
     let!(:compaction_report) do
-      MaintenanceReport.create!(
+      MaintenanceReport.create!(report_type: 'compaction_review', data: { 'source' => 'test' })
+    end
+
+    let!(:merge_row) do
+      MaintenanceReportRow.create!(
+        maintenance_report: compaction_report,
         report_type: 'compaction_review',
-        data: {
-          'run_id' => 1,
-          'phase' => 'tree_walk',
-          'count' => 1,
-          'items' => [
-            {
-              'id' => 'review-1',
-              'kind' => 'entity_merge',
-              'entity_a' => { 'entity_id' => task1.id, 'name' => task1.name, 'entity_type' => 'Task' },
-              'entity_b' => { 'entity_id' => project1.id, 'name' => project1.name, 'entity_type' => 'Project' },
-              'cosine_distance' => 0.12
-            }
-          ]
+        row_uuid: 'review-1',
+        kind: 'entity_merge',
+        status: 'active',
+        signature: CompactionReviewService.signature_for('entity_merge', {
+          'entity_a' => { 'entity_id' => task1.id },
+          'entity_b' => { 'entity_id' => project1.id }
+        }),
+        payload: {
+          'entity_a' => { 'entity_id' => task1.id, 'name' => task1.name, 'entity_type' => 'Task' },
+          'entity_b' => { 'entity_id' => project1.id, 'name' => project1.name, 'entity_type' => 'Project' },
+          'cosine_distance' => 0.12
         }
       )
     end
@@ -917,32 +920,37 @@ RSpec.describe 'DataExchange', type: :request do
       expect(response.body).to include('entity_merge')
     end
 
-    it 'redirects when no report exists' do
+    it 'renders an empty review page when there are no suggestions' do
+      compaction_report.maintenance_report_rows.destroy_all
       compaction_report.destroy!
 
       get compaction_review_data_exchange_index_path
 
-      expect(response).to redirect_to(root_path)
+      expect(response).to have_http_status(:ok)
+      expect(response.body).to include('No active compaction review suggestions')
     end
   end
 
   describe 'POST /data_exchange/compaction_review_action' do
     let!(:compaction_report) do
-      MaintenanceReport.create!(
+      MaintenanceReport.create!(report_type: 'compaction_review', data: { 'source' => 'test' })
+    end
+
+    let!(:merge_row) do
+      MaintenanceReportRow.create!(
+        maintenance_report: compaction_report,
         report_type: 'compaction_review',
-        data: {
-          'run_id' => 1,
-          'phase' => 'tree_walk',
-          'count' => 1,
-          'items' => [
-            {
-              'id' => 'review-1',
-              'kind' => 'entity_merge',
-              'entity_a' => { 'entity_id' => task1.id, 'name' => task1.name, 'entity_type' => 'Task' },
-              'entity_b' => { 'entity_id' => project1.id, 'name' => project1.name, 'entity_type' => 'Project' },
-              'cosine_distance' => 0.12
-            }
-          ]
+        row_uuid: 'review-1',
+        kind: 'entity_merge',
+        status: 'active',
+        signature: CompactionReviewService.signature_for('entity_merge', {
+          'entity_a' => { 'entity_id' => task1.id },
+          'entity_b' => { 'entity_id' => project1.id }
+        }),
+        payload: {
+          'entity_a' => { 'entity_id' => task1.id, 'name' => task1.name, 'entity_type' => 'Task' },
+          'entity_b' => { 'entity_id' => project1.id, 'name' => project1.name, 'entity_type' => 'Project' },
+          'cosine_distance' => 0.12
         }
       )
     end
@@ -950,33 +958,34 @@ RSpec.describe 'DataExchange', type: :request do
     it 'marks a suggestion as ignored' do
       post compaction_review_action_data_exchange_index_path, params: {
         item_id: 'review-1',
-        review_action: 'reject'
+        review_action: 'ignore'
       }
 
       expect(response).to redirect_to(compaction_review_data_exchange_index_path)
-      expect(compaction_report.reload.data['items'].first['status']).to eq('ignored')
+      expect(merge_row.reload.status).to eq('ignored')
     end
 
-    it 'renders the confirmation form for approval' do
+    it 'dismisses a suggestion' do
       post compaction_review_action_data_exchange_index_path, params: {
         item_id: 'review-1',
-        review_action: 'approve'
+        review_action: 'dismiss'
       }
 
-      expect(response).to have_http_status(:ok)
-      expect(response.body).to include('Confirm')
+      expect(response).to redirect_to(compaction_review_data_exchange_index_path)
+      expect(merge_row.reload.status).to eq('dismissed')
+      expect(MaintenanceReportSuppression.suppressed?('compaction_review', merge_row.signature)).to be true
     end
 
     it 'applies the confirmed action' do
       post compaction_review_action_data_exchange_index_path, params: {
         item_id: 'review-1',
-        review_action: 'confirm',
+        review_action: 'apply',
         source_id: task1.id,
         target_id: project1.id
       }
 
       expect(response).to redirect_to(compaction_review_data_exchange_index_path)
-      expect(compaction_report.reload.data['items'].first['status']).to eq('approved')
+      expect(merge_row.reload.status).to eq('approved')
       expect(MemoryEntity.find_by(id: task1.id)).to be_nil
     end
   end

@@ -164,6 +164,12 @@ class RelationshipDiscoveryStrategy
     return nil unless ALLOWED_RELATION_TYPES.include?(relation_type)
     return nil if relation_exists?(from_entity_id, to_entity_id, relation_type)
 
+    return nil if CompactionReviewService.suppressed?("relationship_proposal", {
+      from_entity_id: from_entity_id,
+      to_entity_id: to_entity_id,
+      relation_type: relation_type
+    })
+
     from = from_entity || MemoryEntity.find_by(id: from_entity_id)
     to = to_entity || MemoryEntity.find_by(id: to_entity_id)
 

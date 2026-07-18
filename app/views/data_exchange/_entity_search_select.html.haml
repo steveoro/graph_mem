@@ -1,0 +1,11 @@
+- current_id ||= nil
+- current_name ||= "Unknown"
+- field_name ||= "entity_id"
+- label_text ||= "Entity"
+- select_id ||= "entity-select-#{row&.row_uuid || SecureRandom.hex(4)}-#{field_name}"
+- search_id ||= "entity-search-#{row&.row_uuid || SecureRandom.hex(4)}-#{field_name}"
+.field.mb-3
+  = label_tag select_id, label_text, class: "block text-xs font-medium text-gray-600"
+  - options = current_id ? [["#{current_name} (#{current_id})", current_id]] : [["Select...", ""]]
+  = select_tag field_name, options_for_select(options, current_id), id: select_id, class: "mt-1 block w-full rounded border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500", data: { "compaction-review-target": "select" }
+  = text_field_tag nil, nil, id: search_id, placeholder: "Search entities...", class: "mt-1 block w-full rounded border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500", autocomplete: "off", data: { action: "input->compaction-review#searchEntity", select_id: select_id, "compaction-review-target": "search" }

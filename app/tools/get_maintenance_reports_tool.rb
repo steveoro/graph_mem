@@ -71,7 +71,19 @@ class GetMaintenanceReportsTool < ApplicationTool
       id: report.id,
       report_type: report.report_type,
       created_at: report.created_at.iso8601,
-      data: report.data
+      data: report.data,
+      rows: report.maintenance_report_rows.map do |row|
+        {
+          id: row.id,
+          row_uuid: row.row_uuid,
+          kind: row.kind,
+          status: row.status,
+          payload: row.payload,
+          edited_payload: row.edited_payload,
+          signature: row.signature,
+          created_at: row.created_at.iso8601
+        }
+      end
     }
   end
 end

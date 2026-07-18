@@ -58,12 +58,15 @@ class SuggestMergesTool < ApplicationTool
         .limit(3)
 
       candidates.each do |candidate|
-        suggestions << {
+        proposal = {
           entity_a: { entity_id: entity.id, name: entity.name, entity_type: entity.entity_type },
           entity_b: { entity_id: candidate.id, name: candidate.name, entity_type: candidate.entity_type },
           cosine_distance: candidate[:vec_distance].to_f.round(4),
           recommendation: candidate[:vec_distance].to_f < 0.15 ? "high_confidence_merge" : "review_manually"
         }
+        next if CompactionReviewService.suppressed?("entity_merge", proposal)
+
+        suggestions << proposal
         break if suggestions.length >= effective_limit
       end
     end

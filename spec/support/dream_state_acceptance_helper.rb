@@ -172,10 +172,10 @@ module DreamStateAcceptanceHelper
   end
 
   def compaction_review_items
-    MaintenanceReport
-      .by_type("compaction_review")
-      .recent
-      .flat_map { |report| Array(report.data["items"] || report.data[:items]) }
+    MaintenanceReportRow
+      .by_report_type("compaction_review")
+      .order(created_at: :desc)
+      .map(&:payload)
   end
 
   def cosine_distance_between(entity_a, entity_b)

@@ -6,6 +6,8 @@ class MaintenanceReport < ApplicationRecord
 
   serialize :data, coder: JSON
 
+  has_many :maintenance_report_rows, dependent: :nullify
+
   validates :report_type, presence: true, inclusion: { in: REPORT_TYPES }
 
   scope :recent, -> { order(created_at: :desc) }

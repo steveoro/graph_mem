@@ -216,67 +216,104 @@ class DataExchangeController < ApplicationController
   end
 
   # GET /data_exchange/compaction_review
-  # Shows the latest compaction review report with operator controls
+  # Shows reviewable suggestions with filters and editable controls.
   def compaction_review
     @report = CompactionReviewService.latest_report
 
-    unless @report
-      flash[:error] = "No compaction review report found. Run the compactor first."
-      return redirect_to root_path
-    end
-
-    @items = CompactionReviewService.items(@report, page: params[:page])
-    @active_count = CompactionReviewService.active_count(@report)
-    @current_item = CompactionReviewService.find_item(@report, params[:item_id]) if params[:item_id].present?
+    @status_filter = params[:status].presence || "active"
+    @kind_filter = params[:kind].presence
+    @items = CompactionReviewService.items(
+      status: @status_filter,
+      kind: @kind_filter,
+      page: params[:page]
+    )
+    @active_count = CompactionReviewService.active_count
+    @stats = CompactionReviewService.status_counts
+    @current_item = CompactionReviewService.find_item(params[:item_id]) if params[:item_id].present?
   end
 
   # POST /data_exchange/compaction_review_action
-  # Handles reject or approve-confirm actions for a compaction review item
+  # Handles apply/dismiss/restore/edit/ignore for a compaction review item.
   def compaction_review_action
-    report = CompactionReviewService.latest_report
-
-    unless report
-      return redirect_to root_path, alert: "No compaction review report found."
-    end
-
     item_id = params[:item_id]
-    item = CompactionReviewService.find_item(report, item_id)
-
-    unless item
-      return redirect_to compaction_review_data_exchange_index_path, alert: "Suggestion not found."
-    end
-
     action = params[:review_action]
 
-    if action == "reject"
-      CompactionReviewService.mark_ignored(report, item_id)
-      flash[:notice] = "Suggestion ignored."
-      return redirect_to compaction_review_data_exchange_index_path(page: params[:page])
+    if action.blank?
+      return redirect_to compaction_review_data_exchange_index_path, alert: "Missing action."
     end
 
-    if action == "approve"
-      @report = report
-      @items = CompactionReviewService.items(report, page: params[:page])
-      @active_count = CompactionReviewService.active_count(report)
-      @current_item = item
-      @confirm_action = true
-      return render :compaction_review
+    result = case action
+    when "edit"
+               CompactionReviewService.edit_item(item_id, compaction_edit_params)
+    when "apply"
+               CompactionReviewService.apply(item_id, compaction_action_params)
+    when "dismiss"
+               CompactionReviewService.dismiss(item_id, reason: params[:reason])
+    when "bulk_dismiss"
+               CompactionReviewService.bulk_dismiss(params[:item_ids] || [])
+    when "restore"
+               CompactionReviewService.restore(item_id)
+    when "ignore"
+               CompactionReviewService.ignore(item_id)
+    when "approve"
+               @current_item = CompactionReviewService.find_item(item_id)
+               @confirm_action = true
+               @status_filter = params[:status].presence || "active"
+               @items = CompactionReviewService.items(status: @status_filter, page: params[:page])
+               return render :compaction_review
+    else
+               { success: false, error: "Unknown action." }
     end
 
-    if action == "confirm"
-      result = CompactionReviewService.apply_action(item, compaction_action_params)
-
-      if result[:success]
-        CompactionReviewService.mark_approved(report, item_id)
-        flash[:notice] = result[:message] || "Suggestion applied."
-      else
-        flash[:alert] = result[:error] || "Failed to apply suggestion."
-      end
-
-      return redirect_to compaction_review_data_exchange_index_path(page: params[:page])
+    if request.xhr? || request.format.json?
+      return render json: result
     end
 
-    redirect_to compaction_review_data_exchange_index_path, alert: "Unknown action."
+    flash[result[:success] ? :notice : :alert] = result[:success] ? (result[:message] || "Done.") : (result[:error] || "Action failed.")
+    redirect_to compaction_review_data_exchange_index_path(status: params[:status], page: params[:page])
+  end
+
+  # POST /data_exchange/compaction_review/import_suggest_merges
+  # Imports live suggest_merges output into the review queue.
+  def compaction_review_import_suggest_merges
+    threshold = params[:threshold].presence&.to_f
+    limit = params[:limit].presence&.to_i
+    entity_type = params[:entity_type].presence
+
+    result = SuggestMergesTool.new.call(
+      threshold: threshold,
+      limit: limit,
+      entity_type: entity_type
+    )
+
+    rows = CompactionReviewService.seed_report(
+      report_type: "compaction_review",
+      source: "suggest_merges",
+      source_ref: "data_exchange/#{Time.current.to_i}",
+      items: result[:suggestions].map { |s| { id: SecureRandom.uuid, kind: "entity_merge", **s } }
+    )
+
+    flash[:notice] = "Imported #{rows.size} new merge suggestion(s)."
+    redirect_to compaction_review_data_exchange_index_path
+  rescue StandardError => e
+    Rails.logger.error("compaction_review_import_suggest_merges failed: #{e.message}")
+    redirect_to compaction_review_data_exchange_index_path, alert: "Failed to import suggestions: #{e.message}"
+  end
+
+  # GET /data_exchange/entity_search?q=foo
+  # Lightweight autocomplete endpoint for the review UI.
+  def entity_search
+    query = params[:q].to_s.strip
+    return render json: { entities: [] } if query.blank?
+
+    entities = MemoryEntity
+      .where("name LIKE ? OR aliases LIKE ?", "%#{query}%", "%#{query}%")
+      .order(:name)
+      .limit(20)
+
+    render json: {
+      entities: entities.map { |e| { id: e.id, name: e.name, entity_type: e.entity_type } }
+    }
   end
 
   # POST /data_exchange/create_relation
@@ -500,7 +537,11 @@ class DataExchangeController < ApplicationController
   private
 
   def compaction_action_params
-    params.permit(:source_id, :target_id, :from_id, :to_id, :relation_type, :node_id, :parent_id)
+    params.permit(:source_id, :target_id, :from_id, :to_id, :relation_type, :node_id, :parent_id, :reason)
+  end
+
+  def compaction_edit_params
+    params.permit(:source_id, :target_id, :from_id, :to_id, :relation_type, :node_id, :parent_id, :reason)
   end
 
   # Find duplicate relation pairs (A→B and B→A with same type)

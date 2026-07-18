@@ -112,7 +112,10 @@ RSpec.describe DreamStateCompactor, type: :model do
 
       expect(discovery_run.reload.stats["relationships_queued"]).to eq(1)
       report = MaintenanceReport.by_type("compaction_review").recent.first
-      expect(report.data["items"].first["kind"]).to eq("relationship_proposal")
+      row = report.maintenance_report_rows.first
+      expect(row).to be_present
+      expect(row.kind).to eq("relationship_proposal")
+      expect(row.payload["from_entity_id"]).to eq(solution.id)
     end
   end
 
@@ -132,7 +135,7 @@ RSpec.describe DreamStateCompactor, type: :model do
     end
 
     it "does not queue merge reviews involving Project entities" do
-      task = MemoryEntity.create!(name: "MergeTask", entity_type: "Task")
+      _task = MemoryEntity.create!(name: "MergeTask", entity_type: "Task")
       node_ops = instance_double(NodeOperationsStrategy)
       allow(node_ops).to receive(:merge_into)
 

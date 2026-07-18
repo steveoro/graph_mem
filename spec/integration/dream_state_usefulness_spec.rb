@@ -134,7 +134,7 @@ RSpec.describe "Dream-state usefulness acceptance benchmark", :with_test_embeddi
       result = maintenance_reports_tool.call(report_type: "compaction_review", limit: 5)
 
       expect(result[:total]).to be >= 1
-      items = result[:reports].flat_map { |report| report[:data]["items"] }
+      items = result[:reports].flat_map { |report| report[:rows].map { |row| row[:payload] } }
       kinds = items.map { |item| item["kind"] }
       expect(kinds).to include("orphan_parent", "entity_merge", "relationship_proposal")
     end

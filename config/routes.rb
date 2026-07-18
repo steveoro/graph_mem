@@ -81,6 +81,8 @@ Rails.application.routes.draw do
       # Compaction review routes
       get :compaction_review
       post :compaction_review_action
+      post :compaction_review_import_suggest_merges
+      get :entity_search
 
       # Cleanup routes
       get :orphan_nodes

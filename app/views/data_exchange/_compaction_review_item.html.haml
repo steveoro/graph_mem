@@ -1,0 +1,77 @@
+- payload = row.effective_payload
+- form_id = "row-form-#{row.row_uuid}"
+.border.rounded.p-4.bg-white.shadow-sm{ id: dom_id(row) }
+  = form_with url: compaction_review_action_data_exchange_index_path, method: :post, local: true, html: { id: form_id } do
+    = hidden_field_tag :item_id, row.row_uuid
+    = hidden_field_tag :status, @status_filter
+    = hidden_field_tag :page, params[:page]
+    .grid.grid-cols-1.md:grid-cols-12.gap-4
+      .md:col-span-1
+        .flex.items-center.gap-2
+          = check_box_tag "item_ids[]", row.row_uuid, false, form: "bulk-form", class: "h-4 w-4", data: { "compaction-review-target": "rowCheckbox" }
+          %span.inline-flex.items-center.rounded.bg-blue-100.px-2.py-1.text-xs.font-medium.text-blue-800= row.kind
+      .md:col-span-5
+        - case row.kind
+        - when "entity_merge"
+          - source_id = payload["source_id"] || payload.dig("entity_a", "entity_id")
+          - target_id = payload["target_id"] || payload.dig("entity_b", "entity_id")
+          - source_name = MemoryEntity.find_by(id: source_id)&.name || payload.dig("entity_a", "name")
+          - target_name = MemoryEntity.find_by(id: target_id)&.name || payload.dig("entity_b", "name")
+          = render "entity_search_select", row: row, field_name: "source_id", label_text: "Source", current_id: source_id, current_name: source_name, select_id: "source-select-#{row.row_uuid}", search_id: "source-search-#{row.row_uuid}"
+          = render "entity_search_select", row: row, field_name: "target_id", label_text: "Target", current_id: target_id, current_name: target_name, select_id: "target-select-#{row.row_uuid}", search_id: "target-search-#{row.row_uuid}"
+        - when "relationship_proposal"
+          - from_id = payload["from_id"] || payload["from_entity_id"]
+          - to_id = payload["to_id"] || payload["to_entity_id"]
+          - from_name = MemoryEntity.find_by(id: from_id)&.name || payload["from_name"]
+          - to_name = MemoryEntity.find_by(id: to_id)&.name || payload["to_name"]
+          = render "entity_search_select", row: row, field_name: "from_id", label_text: "From", current_id: from_id, current_name: from_name, select_id: "from-select-#{row.row_uuid}", search_id: "from-search-#{row.row_uuid}"
+          = render "entity_search_select", row: row, field_name: "to_id", label_text: "To", current_id: to_id, current_name: to_name, select_id: "to-select-#{row.row_uuid}", search_id: "to-search-#{row.row_uuid}"
+          .field.mb-3
+            = label_tag "relation-type-#{row.row_uuid}", "Relation type", class: "block text-xs font-medium text-gray-600"
+            = select_tag "relation_type", options_for_select(RelationshipDiscoveryStrategy::ALLOWED_RELATION_TYPES, payload["relation_type"]), id: "relation-type-#{row.row_uuid}", class: "mt-1 block w-full rounded border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500"
+        - when "orphan_parent"
+          - entity_id = payload["entity_id"]
+          - entity_name = payload["entity_name"]
+          - parent_id = payload["parent_id"] || Array(payload["suggested_parents"]).first&.[]('project_id')
+          - parent_name = MemoryEntity.find_by(id: parent_id)&.name || Array(payload["suggested_parents"]).first&.[]('project_name')
+          %p.text-sm.mb-2
+            %strong= entity_name
+            %span.text-gray-500= " (#{payload['entity_type']} ##{entity_id})"
+          = render "entity_search_select", row: row, field_name: "parent_id", label_text: "Parent project", current_id: parent_id, current_name: parent_name, select_id: "parent-select-#{row.row_uuid}", search_id: "parent-search-#{row.row_uuid}"
+        - when "entity_error"
+          %p.text-sm
+            %strong #{payload["error_class"]}:
+          %p.text-xs.text-red-600= payload["error_message"]
+      .md:col-span-3.text-sm.text-gray-600
+        - case row.kind
+        - when "entity_merge"
+          %p Cosine distance: #{payload["cosine_distance"]}
+          - if payload["recommendation"].present?
+            %p.text-xs.mt-1= payload["recommendation"]
+        - when "relationship_proposal"
+          %p
+            %span.font-medium= payload["relation_type"]
+            %span.text-gray-400 — #{payload["confidence_band"]}
+            %span.text-gray-400 (score #{payload["score"]})
+          - if payload["explanation"].present?
+            %p.text-xs.mt-1= payload["explanation"]
+        - when "orphan_parent"
+          - if payload["suggested_parents"].present?
+            - Array(payload["suggested_parents"]).first(3).each do |parent|
+              .mb-1
+                %strong= parent["project_name"]
+                %span.text-gray-500 ##{parent["project_id"]}
+                %span.text-xs.text-gray-400 (score #{parent["score"]})
+          - if payload["error"].present?
+            %p.text-xs.text-red-600= payload["error"]
+      .md:col-span-3.flex.flex-wrap.items-start.gap-2
+        - if row.active? || row.ignored?
+          = submit_tag "Save", name: "review_action", value: "edit", class: "rounded bg-blue-600 px-2 py-1 text-xs text-white hover:bg-blue-700", form: form_id
+          = submit_tag "Apply", name: "review_action", value: "apply", class: "rounded bg-green-600 px-2 py-1 text-xs text-white hover:bg-green-700", form: form_id, data: { turbo_confirm: "Apply this suggestion?" }
+          = submit_tag "Dismiss", name: "review_action", value: "dismiss", class: "rounded bg-gray-500 px-2 py-1 text-xs text-white hover:bg-gray-600", form: form_id
+        - if row.dismissed? || row.approved?
+          = submit_tag "Restore", name: "review_action", value: "restore", class: "rounded bg-yellow-500 px-2 py-1 text-xs text-white hover:bg-yellow-600", form: form_id
+        - if row.active?
+          = submit_tag "Ignore", name: "review_action", value: "ignore", class: "rounded bg-gray-200 px-2 py-1 text-xs text-gray-700 hover:bg-gray-300", form: form_id
+        - if row.resolution_reason.present?
+          %p.text-xs.text-gray-500.w-full.mt-1= row.resolution_reason

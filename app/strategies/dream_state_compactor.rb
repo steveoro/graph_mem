@@ -136,6 +136,8 @@ class DreamStateCompactor
 
   def process_relationship_discovery(entity_id)
     @relationship_discovery.proposals_for_entity(entity_id).each do |proposal|
+      next if CompactionReviewService.suppressed?(proposal[:kind], proposal)
+
       @review_items << proposal
       @run.increment_stat!("relationships_queued")
     end
@@ -155,15 +157,16 @@ class DreamStateCompactor
         @run.increment_stat!("orphans_parented")
       else
         queue_orphan_review(orphan, matches, error: result[:error])
+        @run.increment_stat!("orphans_queued") unless @review_items.last && CompactionReviewService.suppressed?(@review_items.last[:kind], @review_items.last)
       end
     else
-      queue_orphan_review(orphan, matches)
-      @run.increment_stat!("orphans_queued")
+      queued = queue_orphan_review(orphan, matches)
+      @run.increment_stat!("orphans_queued") if queued
     end
   end
 
   def queue_orphan_review(orphan, matches, error: nil)
-    @review_items << {
+    item = {
       id: SecureRandom.uuid,
       kind: "orphan_parent",
       entity_id: orphan.id,
@@ -179,6 +182,10 @@ class DreamStateCompactor
       end,
       error: error
     }.compact
+
+    return if CompactionReviewService.suppressed?(item[:kind], item)
+
+    @review_items << item
   end
 
   def dedupe_observations_for_entity(entity_id)
@@ -252,14 +259,13 @@ class DreamStateCompactor
           return
         end
       else
-        queue_merge_review(entity, candidate, distance)
-        @run.increment_stat!("merges_queued")
+        queue_merge_review(entity, candidate, distance) and @run.increment_stat!("merges_queued")
       end
     end
   end
 
   def queue_merge_review(entity_a, entity_b, distance)
-    @review_items << {
+    item = {
       id: SecureRandom.uuid,
       kind: "entity_merge",
       entity_a: { entity_id: entity_a.id, name: entity_a.name, entity_type: entity_a.entity_type },
@@ -267,6 +273,11 @@ class DreamStateCompactor
       cosine_distance: distance.round(4),
       recommendation: "review_manually"
     }
+
+    return false if CompactionReviewService.suppressed?(item[:kind], item)
+
+    @review_items << item
+    true
   end
 
   def log_entity_error(entity_id, phase, error)
@@ -284,16 +295,11 @@ class DreamStateCompactor
   end
 
   def flush_review_queue!
-    return if @review_items.empty?
-
-    MaintenanceReport.create!(
+    CompactionReviewService.seed_report(
       report_type: "compaction_review",
-      data: {
-        run_id: @run.id,
-        phase: @run.phase,
-        count: @review_items.size,
-        items: @review_items.first(100)
-      }
+      source: "compaction_run",
+      source_ref: @run.id,
+      items: @review_items
     )
     @review_items.clear
   end
