@@ -123,6 +123,37 @@ RSpec.describe CreateEntityTool, type: :model do
       end
     end
 
+    context 'cross-type dedup' do
+      it 'does not block creation when a similar entity exists with a different entity_type' do
+        _existing = MemoryEntity.create!(name: 'Database Migration', entity_type: 'Project')
+
+        allow_any_instance_of(CreateEntityTool).to receive(:find_similar_entity)
+          .with('Database Migration Plan', 'Task')
+          .and_return(nil)
+
+        result = tool.call(name: 'Database Migration Plan', entity_type: 'Task')
+
+        expect(result[:entity_id]).to be_a(Integer)
+        expect(result[:entity_type]).to eq('Task')
+        expect(result).not_to have_key(:warning)
+      end
+
+      it 'still blocks creation when a similar entity exists with the same entity_type' do
+        existing = MemoryEntity.create!(name: 'Database Migration', entity_type: 'Task')
+
+        similar_result = VectorSearchStrategy::SearchResult.new(
+          entity: existing, distance: 0.15
+        )
+        allow_any_instance_of(CreateEntityTool).to receive(:find_similar_entity)
+          .and_return(similar_result)
+
+        result = tool.call(name: 'Database Migration Copy', entity_type: 'Task')
+
+        expect(result).to have_key(:warning)
+        expect(result[:existing_entity][:entity_id]).to eq(existing.id)
+      end
+    end
+
     context 'validation errors' do
       it 'raises InvalidArgumentsError for duplicate name' do
         MemoryEntity.create!(name: 'Duplicate', entity_type: 'Project')

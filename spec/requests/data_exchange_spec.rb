@@ -932,6 +932,14 @@ RSpec.describe 'DataExchange', type: :request do
   end
 
   describe 'POST /data_exchange/compaction_review_action' do
+    let!(:task2) do
+      MemoryEntity.create!(
+        name: 'Task Two',
+        entity_type: 'Task',
+        aliases: ''
+      )
+    end
+
     let!(:compaction_report) do
       MaintenanceReport.create!(report_type: 'compaction_review', data: { 'source' => 'test' })
     end
@@ -945,11 +953,11 @@ RSpec.describe 'DataExchange', type: :request do
         status: 'active',
         signature: CompactionReviewService.signature_for('entity_merge', {
           'entity_a' => { 'entity_id' => task1.id },
-          'entity_b' => { 'entity_id' => project1.id }
+          'entity_b' => { 'entity_id' => task2.id }
         }),
         payload: {
           'entity_a' => { 'entity_id' => task1.id, 'name' => task1.name, 'entity_type' => 'Task' },
-          'entity_b' => { 'entity_id' => project1.id, 'name' => project1.name, 'entity_type' => 'Project' },
+          'entity_b' => { 'entity_id' => task2.id, 'name' => task2.name, 'entity_type' => 'Task' },
           'cosine_distance' => 0.12
         }
       )
@@ -981,7 +989,7 @@ RSpec.describe 'DataExchange', type: :request do
         item_id: 'review-1',
         review_action: 'apply',
         source_id: task1.id,
-        target_id: project1.id
+        target_id: task2.id
       }
 
       expect(response).to redirect_to(compaction_review_data_exchange_index_path)

@@ -65,8 +65,8 @@ state management, not as a substitute for inspecting the repository.
 
 - A background "dream-state" job periodically compacts the graph: it
   auto-parents orphans, auto-merges near-identical entities (cosine distance <
-  0.10), and deletes byte-identical duplicate observations. Lower-confidence
-  cases are queued for review.
+  0.10, same `entity_type` only), and deletes byte-identical duplicate
+  observations. Lower-confidence cases are queued for review.
 - Call `dream_state_status` to see whether compaction is `running`/`paused` plus its progress/stats.
 - Call `get_maintenance_reports(report_type: "compaction_review")` to read the queue of merge/orphan suggestions the job flagged for review, then action good ones with `merge_entities`.
 - Mutating tools cooperatively pause compaction automatically — no action needed, but search results may shift slightly while a run is in progress.

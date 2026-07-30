@@ -49,6 +49,7 @@ RSpec.describe VectorSearchStrategy do
         relation = double("relation")
         allow(MemoryEntity).to receive(:where).and_return(relation)
         allow(relation).to receive(:not).and_return(relation)
+        allow(relation).to receive(:where).and_return(relation)
         allow(relation).to receive(:select) do |sql_str|
           expect(sql_str).to include("VEC_DISTANCE_COSINE")
           expect(sql_str).to include("VEC_FromText")
@@ -65,6 +66,7 @@ RSpec.describe VectorSearchStrategy do
         relation = double("relation")
         allow(MemoryEntity).to receive(:where).and_return(relation)
         allow(relation).to receive(:not).and_return(relation)
+        allow(relation).to receive(:where).and_return(relation)
         allow(relation).to receive(:select).and_return(relation)
         allow(relation).to receive(:having) do |clause, threshold|
           expect(clause).to include("vec_distance")
@@ -75,6 +77,21 @@ RSpec.describe VectorSearchStrategy do
         allow(relation).to receive(:limit).and_return([])
 
         strategy.search("test query")
+      end
+
+      it "filters by entity_type when provided" do
+        relation = double("relation")
+        allow(MemoryEntity).to receive(:where).and_return(relation)
+        allow(relation).to receive(:not).and_return(relation)
+        allow(relation).to receive(:where).with(entity_type: "Task").and_return(relation)
+        allow(relation).to receive(:select).and_return(relation)
+        allow(relation).to receive(:having).and_return(relation)
+        allow(relation).to receive(:order).and_return(relation)
+        allow(relation).to receive(:limit).and_return([])
+
+        strategy.search("test query", entity_type: "Task")
+
+        expect(relation).to have_received(:where).with(entity_type: "Task")
       end
     end
   end

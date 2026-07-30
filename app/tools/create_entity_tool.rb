@@ -79,7 +79,7 @@ class CreateEntityTool < ApplicationTool
   def find_similar_entity(name, entity_type)
     composite = "#{entity_type}: #{name}"
     vector_strategy = VectorSearchStrategy.new
-    results = vector_strategy.search(composite, limit: 1)
+    results = vector_strategy.search(composite, limit: 1, entity_type: entity_type)
     result = results.first
     return result if result && result.distance < DEDUP_DISTANCE_THRESHOLD
 

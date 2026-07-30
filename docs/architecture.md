@@ -86,7 +86,7 @@ Controllers in `app/controllers/api/v1/` provide REST equivalents for all MCP op
 #### Search Strategies (`app/strategies/`)
 
 - **EntitySearchStrategy** - Text-based search with token matching and relevance scoring
-- **VectorSearchStrategy** - Semantic search using MariaDB VECTOR cosine distance, with a quality gate that filters results above a maximum cosine distance threshold
+- **VectorSearchStrategy** - Semantic search using MariaDB VECTOR cosine distance, with a quality gate that filters results above a maximum cosine distance threshold. Supports an optional `entity_type` filter to restrict results to a specific type (used by `CreateEntityTool` dedup and other type-aware callers)
 - **HybridSearchStrategy** - Combines text and vector via weighted Reciprocal Rank Fusion (RRF), then applies post-fusion relevance boosts: exact name matching, entity type priority, structural importance (relation count), and graduated context boosting
 - **SearchRelevanceBooster** - Shared module providing boost constants and a `rank_entity_ids` method used by both `HybridSearchStrategy` and `SearchSubgraphTool`
 

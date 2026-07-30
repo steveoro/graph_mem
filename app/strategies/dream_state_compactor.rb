@@ -241,6 +241,7 @@ class DreamStateCompactor
     candidates = MemoryEntity
       .where.not(id: entity.id)
       .where.not(entity_type: NodeOperationsStrategy::PROJECT_ENTITY_TYPE)
+      .where(entity_type: entity.entity_type)
       .where.not(embedding: nil)
       .where("id > ?", entity.id)
       .select("memory_entities.*, VEC_DISTANCE_COSINE(embedding, #{source_vector_sql}) AS vec_distance")

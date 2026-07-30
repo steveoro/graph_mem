@@ -106,6 +106,10 @@ class CompactionRunner
         "orphans_parented" => 0,
         "orphans_queued" => 0,
         "relationships_queued" => 0,
+        "embeddings_backfilled" => 0,
+        "counters_repaired" => 0,
+        "dangling_relations_removed" => 0,
+        "lifecycle_issues_found" => 0,
         "total_entities" => MemoryEntity.count
       }
     end

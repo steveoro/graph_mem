@@ -16,7 +16,9 @@ class DreamStateCompactionJob < ApplicationJob
 
     if run.cursor_entity_id.blank? && (run.stats["entities_processed"].to_i == 0)
       begin
-        GraphIntegrityService.call
+        result = GraphIntegrityService.call
+        queue_integrity_issues(run, result)
+        log_integrity_summary(result)
       rescue StandardError => e
         Rails.logger.error "[DreamState] Pre-flight integrity sweep failed: #{e.message}"
       end
@@ -50,5 +52,40 @@ class DreamStateCompactionJob < ApplicationJob
 
   def resolve_run(run_id)
     run_id ? CompactionRun.find_by(id: run_id) : CompactionRunner.acquire_run!
+  end
+
+  def queue_integrity_issues(run, result)
+    review_items = []
+
+    (result.dig(:embeddings_backfilled, :failed) || []).each do |failed|
+      review_items << {
+        id: SecureRandom.uuid,
+        kind: "embedding_backfill_failed",
+        entity_id: failed[:entity_id],
+        entity_name: failed[:name],
+        issue: "Embedding backfill failed — Ollama may be unavailable"
+      }
+    end
+
+    (result[:observation_lifecycle_issues] || []).each do |issue|
+      review_items << issue.merge(id: SecureRandom.uuid)
+    end
+
+    return if review_items.empty?
+
+    CompactionReviewService.seed_report(
+      report_type: "compaction_review",
+      source: "integrity_sweep",
+      source_ref: run.id,
+      items: review_items
+    )
+  end
+
+  def log_integrity_summary(result)
+    Rails.logger.info "[DreamState] Pre-flight: " \
+      "backfilled #{result.dig(:embeddings_backfilled, :backfilled) || 0} embeddings, " \
+      "repaired #{result[:counters_repaired]} counters, " \
+      "removed #{result[:dangling_relations_removed]} dangling relations, " \
+      "found #{(result[:observation_lifecycle_issues] || []).size} lifecycle issues"
   end
 end

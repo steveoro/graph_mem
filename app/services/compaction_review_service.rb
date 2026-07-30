@@ -171,6 +171,16 @@ class CompactionReviewService
         return nil if entity_id.blank?
 
         [ "entity_error", entity_id, phase ].compact.join("|")
+      when "embedding_backfill_failed"
+        entity_id = payload[:entity_id]
+        return nil if entity_id.blank?
+
+        [ "embedding_backfill_failed", entity_id ].join("|")
+      when "lifecycle_corruption"
+        observation_id = payload[:observation_id]
+        return nil if observation_id.blank?
+
+        [ "lifecycle_corruption", observation_id ].join("|")
       else
         nil
       end

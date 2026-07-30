@@ -81,7 +81,7 @@ Each run progresses through three phases in order:
 
 1. **Observation deduplication** — for each duplicate `content` on the entity, keep the lowest `id` and delete the rest.
 2. **Entity merge scan** — if the entity has an embedding and is not a `Project`:
-  - Find up to 3 candidates with cosine distance **< 0.30** (`REVIEW_MERGE_DISTANCE`), excluding Projects, requiring `id > entity.id` for deterministic ordering.
+  - Find up to 3 candidates with cosine distance **< 0.30** (`REVIEW_MERGE_DISTANCE`), excluding Projects, **requiring the same `entity_type`**, and `id > entity.id` for deterministic ordering.
   - If distance **< 0.10** (`AUTO_MERGE_DISTANCE`), auto-merge via `NodeOperationsStrategy#merge_into`.
   - Otherwise, queue a merge review item.
 
@@ -253,7 +253,9 @@ The dashboard **Repair relation duplicates** button runs the repairer, then oper
 - `Project` **roots are protected** — never auto-merged, never deleted by compaction logic (`NodeOperationsStrategy::PROJECT_ROOT_PROTECTED_ERROR`).
 - **Deterministic traversal** — sorted IDs and `id > entity.id` merge ordering make runs reproducible.
 - **Review band** — cosine distance between **0.10** and **0.30** requires human or agent confirmation.
+- **Type-safe merges** — only entities of the same `entity_type` are considered for auto-merge or merge review. `NodeOperationsStrategy#merge_into` refuses cross-type merges.
 - **Low-confidence orphans** — token scores below **10** are never auto-parented.
+- **Pre-flight integrity sweep** — before each run, `GraphIntegrityService` auto-repairs counter cache drift and dangling relations, backfills missing embeddings (queuing failures for review), and detects observation lifecycle corruption (active with `obsoleted_at`, superseded without `superseded_by`, cross-entity `superseded_by` references). Lifecycle issues and embedding failures are queued into `compaction_review`.
 
 
 

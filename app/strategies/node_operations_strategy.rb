@@ -131,6 +131,14 @@ class NodeOperationsStrategy
         next
       end
 
+      if source.entity_type != target.entity_type
+        result = error_result(
+          "Cannot merge entities of different types: " \
+          "'#{source.entity_type}' into '#{target.entity_type}'"
+        )
+        next
+      end
+
       # Add source name and aliases to target aliases
       merge_aliases(source, target)
 

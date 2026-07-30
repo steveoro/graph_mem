@@ -51,6 +51,7 @@ class SuggestMergesTool < ApplicationTool
       candidates = MemoryEntity
         .where.not(id: entity.id)
         .where.not(embedding: nil)
+        .where(entity_type: entity.entity_type)
         .where("id > ?", entity.id)
         .select("memory_entities.*, VEC_DISTANCE_COSINE(embedding, (SELECT embedding FROM memory_entities WHERE id = #{entity.id})) AS vec_distance")
         .having("vec_distance < ?", effective_threshold)

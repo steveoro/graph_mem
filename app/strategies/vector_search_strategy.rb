@@ -19,8 +19,9 @@ class VectorSearchStrategy
   # Semantic search: embed the query, then find nearest entities.
   # @param query [String] Natural language query
   # @param limit [Integer] Max results
+  # @param entity_type [String, nil] When provided, restrict results to this entity_type
   # @return [Array<SearchResult>] Ordered by cosine distance (smallest = most similar)
-  def search(query, limit: 20)
+  def search(query, limit: 20, entity_type: nil)
     return [] unless EmbeddingService.vector_enabled?
 
     query_vector = @embedding_service.embed(query)
@@ -30,6 +31,7 @@ class VectorSearchStrategy
 
     entities = MemoryEntity
       .where.not(embedding: nil)
+      .where(entity_type: entity_type)
       .select("memory_entities.*, VEC_DISTANCE_COSINE(embedding, VEC_FromText('#{vector_sql}')) AS vec_distance")
       .having("vec_distance < ?", MAX_COSINE_DISTANCE)
       .order(Arel.sql("vec_distance ASC"))

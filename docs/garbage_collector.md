@@ -26,7 +26,7 @@ GarbageCollectionRunner
         ├── cleanup_duplicates  → MaintenanceReport (type: duplicates)
         └── prune_audit_logs    → AuditLog.prune! (90-day retention)
 
-`GraphIntegrityService` (called by `GarbageCollectionJob` and before a new dream-state run) wraps `GarbageCollectionRunner` plus `RelationIntegrityRepairer` and a full counter recount.
+`GraphIntegrityService` (called by `GarbageCollectionJob` and before a new dream-state run) wraps `GarbageCollectionRunner` plus `RelationIntegrityRepairer`, a full counter recount, dangling relation removal, missing embedding backfill, and observation lifecycle corruption detection.
 ```
 
 | Component | Location | Role |
