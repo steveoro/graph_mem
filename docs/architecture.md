@@ -97,7 +97,10 @@ themselves with the `X-MCP-Client` header; `ApplicationTool` normalizes HTTP
 header key variants before `GraphMemContext` stores the scope in the
 `agent_contexts` table. Agents without a client header share the `"default"`
 bucket for backward compatibility. When set:
-- `GraphMemContext.scoped_entity_ids` returns the project ID plus all entities with `part_of` relations to it
+- `ProjectSubtree` (`app/services/project_subtree.rb`) resolves the recursive `part_of` subtree for a project root (and ancestor-project lookup for background jobs). The walk is capped at `GraphMemContext::MAX_SCOPED_ENTITIES` (default 1_000).
+- `GraphMemContext.scoped_entity_scope` returns `{ entity_ids, truncated, max_entities }`; when the cap is hit, truncation is logged and callers continue with the partial set.
+- `GraphMemContext.scoped_entity_ids` remains the backward-compatible ID array (`nil` when no context is active).
+- Context/search/summarize responses expose `scope_truncated` and `scope_max_entities` wherever scope counts are reported.
 - `HybridSearchStrategy` applies a graduated context boost (stronger for the root project entity, lighter for its children)
 - `SearchSubgraphTool` ranks results using `SearchRelevanceBooster` with context-aware scoring
 - `AgentContextsSnapshot` exposes active clients, current projects, and recent tool activity to the operator dashboard
@@ -167,6 +170,6 @@ GraphMem includes a web UI (served by Rails) for browsing and managing the knowl
 
 - **Graph visualization** using Cytoscape.js (data from `GraphDataController`)
 - **Entity browser** with search, create, edit, delete
-- **Data Exchange** for import/export (`DataExchangeController`)
+- **Data Exchange** for import/export (`DataExchangeController`). Import matching and execution share `ImportEntityResolver`: lookups use exact name plus canonical entity type (for example `workspace` → `Project`). Same-name entities of a different type are not treated as matches; the import creates a new entity path instead of attaching observations or relations to the wrong typed node.
 - **Operator Dashboard** with MCP client/project context status from `AgentContextsSnapshot`
 - **Swagger UI** at `/api-docs` for REST API exploration

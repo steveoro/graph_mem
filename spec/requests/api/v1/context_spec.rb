@@ -29,6 +29,9 @@ RSpec.describe "API V1 Context", type: :request do
         expect(data["entity_name"]).to eq("CtxProject")
         expect(data["entity_type"]).to eq("Project")
         expect(data["description"]).to eq("Desc")
+        expect(data["scope_entity_count"]).to eq(1)
+        expect(data["scope_truncated"]).to be(false)
+        expect(data["scope_max_entities"]).to eq(GraphMemContext::MAX_SCOPED_ENTITIES)
       end
     end
 

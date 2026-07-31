@@ -248,14 +248,20 @@ These tools perform multi-hop graph traversal. Unlike `find_relations` (which is
 - **Parameters:** None
 
 #### `get_maintenance_reports`
-- **Description:** Retrieves recent maintenance and dream-state compaction reports, including the `compaction_review` queue of merge/orphan suggestions awaiting manual review. Pair with `merge_entities` to action queued duplicates.
-
-#### `apply_maintenance_review`
-- **Description:** Applies a queued maintenance item. Relation-integrity reviews remove the selected duplicate relation IDs while preserving the reviewed `keep_id`; already-deleted relations are reported as a safe stale outcome.
+- **Description:** Retrieves recent maintenance and dream-state compaction reports, including the `compaction_review` queue of merge/orphan/relation-integrity suggestions awaiting manual review. Pair with `list_maintenance_review` / `apply_maintenance_review` (or `merge_entities`) to inspect and action queued items.
 - **Parameters:**
   - `report_type` (string, optional): One of `orphans`, `duplicates`, `compaction_review`. Omit to get the latest report of each type.
   - `limit` (integer, optional, default: 5, max: 30): Maximum number of reports to return (applies when `report_type` is given).
 - **Response:** `{ reports: [{ id, report_type, created_at, data }], total }`
+
+#### `apply_maintenance_review`
+- **Description:** Applies a queued maintenance review row (merge, relationship proposal, orphan parent, or relation integrity). Relation-integrity reviews remove the selected duplicate relation IDs while preserving the reviewed `keep_id`; already-deleted relations are reported as a safe stale outcome.
+- **Parameters:**
+  - `item_id` (string, required): Maintenance report row UUID.
+  - `report_type` (string, optional, default: `compaction_review`): Report type that owns the row.
+  - `dry_run` (boolean, optional, default: false): When true, validate and preview without applying.
+  - `action_params` (object, optional): Optional overrides for merge/relation/orphan endpoints.
+- **Response:** Apply result hash (`success`, `message`, and kind-specific fields such as `deleted_relation_ids`), or a dry-run preview with `kind` and `payload`.
 
 #### `get_graph_stats`
 - **Description:** Returns health metrics and statistics about the knowledge graph: totals, entity type distribution, orphan count, most connected entities, and recent updates.
@@ -273,7 +279,9 @@ These tools perform multi-hop graph traversal. Unlike `find_relations` (which is
 
 ## Entity Type Canonicalization
 
-GraphMem automatically normalizes entity types. When creating or updating entities, the `entity_type` field is looked up in the `entity_type_mappings` table. Known variants are rewritten to their canonical form:
+GraphMem automatically normalizes entity types. When creating or updating entities, the `entity_type` field is looked up in the `entity_type_mappings` table. Known variants are rewritten to their canonical form.
+
+Data-exchange import matching and execution share the same canonicalization via `ImportEntityResolver`: an existing entity is reused only on exact name **and** canonical type. A same-name node of another type is not a match (no name-only fallback), so observations and relations stay on the correctly typed entity.
 
 | Canonical Type | Accepted Variants |
 |---|---|

@@ -167,7 +167,7 @@ Manage the active project context. When set, search endpoints prioritize entitie
 
 `GET /api/v1/context`
 
-Returns `{ status: "context_active", project_id, project_name, project_type, description }` or `{ status: "no_context" }`.
+Returns `{ status: "context_active", entity_id, entity_name, entity_type, description, scope_entity_count, scope_truncated, scope_max_entities }` or `{ status: "no_context" }`. When the bounded project subtree hits its cap, `scope_truncated` is `true` and callers continue with the partial ID set.
 
 ### Set Context
 
@@ -198,7 +198,7 @@ Returns `{ status: "context_active", project_id, project_name, project_type, des
 | page | integer | 1 | Page number |
 | per_page | integer | 20 | Items per page (max 100) |
 
-Returns entities (with observations) and relations between them, paginated. Context-aware.
+Returns entities (with observations) and relations between them, paginated. Context-aware; includes a `retrieval` object with `scope_entity_count`, `scope_truncated`, and `scope_max_entities` when a project context is active.
 
 ### Subgraph by IDs
 
@@ -249,6 +249,8 @@ Example response:
   "retrieval": {
     "scope": "context",
     "context_entity_count": 42,
+    "scope_truncated": false,
+    "scope_max_entities": 1000,
     "candidate_entity_count": 8,
     "selected_entity_count": 1,
     "excluded_out_of_scope_count": 3,

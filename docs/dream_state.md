@@ -242,11 +242,13 @@ Compaction merges and moves assume relations are well-formed. Duplicate or confl
 
 `RelationIntegrityRepairer` (`app/services/relation_integrity_repairer.rb`) scans for:
 
-- Same-direction duplicates — multiple rows for the same `(from, to, type)`
+- Same-direction duplicates — multiple rows for the same `(from, to, type)` (auto-deleted)
 - Reverse pairs — `A→B` and `B→A` with the same type
-- Merge collisions — one child linked to multiple parents with the same relation type
+- Merge collisions — one child linked to multiple parents with a single-parent type such as `part_of`
 
-The dashboard **Repair relation duplicates** button runs the repairer, then operators can **Start / Resume** compaction.
+Default integrity sweeps (`GraphIntegrityService`) auto-repair same-direction duplicates and queue ambiguous reverse pairs / merge collisions into `compaction_review` as `relation_integrity` rows. Each row preserves a reviewed `keep_id` and the selected `delete_id` / `delete_ids`.
+
+Operators and agents can apply those rows from the compaction-review UI or via `apply_maintenance_review` (deletes the reviewed duplicates with `Current.deletion_reason = "duplicate"`; already-absent relations are a safe stale outcome). The dashboard **Repair relation duplicates** button still runs an explicit destructive repair (`review_ambiguous: false`), then operators can **Start / Resume** compaction.
 
 ## Safety guarantees
 
