@@ -7,9 +7,13 @@
 # - Recursively traverses the graph from selected root nodes
 # - Collects all linked children with their observations
 # - Serializes to a portable JSON format with cycle detection
+# - Stops recursion at nested Project entities (keeps the shallow node + relation metadata)
 class ExportStrategy
   # Export format version
   FORMAT_VERSION = "1.0"
+
+  # Entity type treated as an export boundary when reached via recursion
+  PROJECT_ENTITY_TYPE = "Project"
 
   # Relation types that define parent-child relationships (incoming means child)
   CHILD_RELATION_TYPES = %w[part_of depends_on].freeze
@@ -78,13 +82,13 @@ class ExportStrategy
     entities = MemoryEntity.where(id: entity_ids).includes(:memory_observations)
     root_nodes_data = entities.map { |entity| build_entity_tree_with_progress(entity, Set.new) }
 
-    @progress_callback = nil
-
     {
       version: FORMAT_VERSION,
       exported_at: Time.current.iso8601,
       root_nodes: root_nodes_data
     }
+  ensure
+    @progress_callback = nil
   end
 
   # Export to JSON string with progress callback support
@@ -162,6 +166,11 @@ class ExportStrategy
       end
     end
 
+    # Nested Projects are export boundaries: keep the node and relation metadata,
+    # but do not recurse into their subgraphs. Explicit export roots still expand fully
+    # because they are invoked with relation_type = nil.
+    return node_data if nested_project_boundary?(entity, relation_type)
+
     # Find children: entities that have a "part_of" or "depends_on" relation TO this entity
     # (from_entity_id is the child, to_entity_id is the parent)
     child_relations = MemoryRelation
@@ -230,5 +239,11 @@ class ExportStrategy
       properties: relation.properties,
       direction: direction
     }
+  end
+
+  # True when this Project was reached via recursion (has a parent relation),
+  # not as an explicit top-level export root.
+  def nested_project_boundary?(entity, relation_type)
+    entity.entity_type == PROJECT_ENTITY_TYPE && relation_type.present?
   end
 end

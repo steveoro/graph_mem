@@ -63,6 +63,51 @@ RSpec.describe ExportJob, type: :job do
       FileUtils.rm_f(described_class.download_path(export_id))
     end
 
+    it "counts nested Projects as shallow boundaries in progress totals" do
+      linked_project = MemoryEntity.create!(
+        name: "Linked Export Project",
+        entity_type: "Project"
+      )
+      nested_task = MemoryEntity.create!(
+        name: "Nested Export Task",
+        entity_type: "Task"
+      )
+      MemoryRelation.create!(
+        from_entity: nested_task,
+        to_entity: linked_project,
+        relation_type: "part_of"
+      )
+      MemoryRelation.create!(
+        from_entity: linked_project,
+        to_entity: project,
+        relation_type: "part_of"
+      )
+
+      export_id = SecureRandom.uuid
+      totals = []
+      completion_message = nil
+
+      allow(ExportProgressChannel).to receive(:broadcast_progress) do |_id, payload|
+        totals << payload[:total]
+      end
+      allow(ExportProgressChannel).to receive(:broadcast_complete) do |_id, payload|
+        completion_message = payload[:message]
+      end
+
+      described_class.new.perform(export_id, [ project.id ])
+
+      # Selected root + shallow linked Project only (nested task excluded)
+      expect(totals).to all(eq(2))
+      expect(completion_message).to include("2 nodes exported")
+
+      exported = JSON.parse(File.read(described_class.download_path(export_id)))
+      linked_child = exported["root_nodes"].first["children"].find { |child| child["name"] == linked_project.name }
+      expect(linked_child["children"]).to eq([])
+      expect(File.read(described_class.download_path(export_id))).not_to include(nested_task.name)
+
+      FileUtils.rm_f(described_class.download_path(export_id))
+    end
+
     it "broadcasts error on failure" do
       export_id = SecureRandom.uuid
 

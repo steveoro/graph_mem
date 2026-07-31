@@ -217,6 +217,117 @@ RSpec.describe ExportStrategy, type: :model do
           relation_direction: 'parent_to_child'
         )
       end
+
+      it 'exports a nested Project as a shallow boundary without its descendants' do
+        linked_project = MemoryEntity.create!(
+          name: 'Linked Project',
+          entity_type: 'Project',
+          aliases: 'linked'
+        )
+        linked_observation = MemoryObservation.create!(
+          memory_entity: linked_project,
+          content: 'Linked project observation'
+        )
+        nested_task = MemoryEntity.create!(
+          name: 'Nested Task Under Linked Project',
+          entity_type: 'Task'
+        )
+        MemoryRelation.create!(
+          from_entity: nested_task,
+          to_entity: linked_project,
+          relation_type: 'part_of'
+        )
+        MemoryRelation.create!(
+          from_entity: linked_project,
+          to_entity: project1,
+          relation_type: 'part_of',
+          weight: 1.5,
+          confidence: 0.7,
+          properties: { 'source' => 'project-boundary' }
+        )
+
+        result = strategy.export([ project1.id ])
+        root_node = result[:root_nodes].first
+        linked_child = root_node[:children].find { |child| child[:name] == linked_project.name }
+
+        expect(linked_child).to include(
+          name: 'Linked Project',
+          entity_type: 'Project',
+          aliases: 'linked',
+          relation_type: 'part_of',
+          relation_weight: 1.5,
+          relation_confidence: 0.7,
+          relation_properties: { 'source' => 'project-boundary' },
+          relation_direction: 'child_to_parent',
+          children: []
+        )
+        expect(linked_child[:observations].map { |obs| obs[:content] }).to include(linked_observation.content)
+        expect(JSON.generate(result)).not_to include(nested_task.name)
+      end
+
+      it 'exports a related Project via non-hierarchical relation as a shallow boundary' do
+        related_project = MemoryEntity.create!(
+          name: 'Related Project',
+          entity_type: 'Project'
+        )
+        nested_task = MemoryEntity.create!(
+          name: 'Task Inside Related Project',
+          entity_type: 'Task'
+        )
+        MemoryRelation.create!(
+          from_entity: nested_task,
+          to_entity: related_project,
+          relation_type: 'part_of'
+        )
+        MemoryRelation.create!(
+          from_entity: project1,
+          to_entity: related_project,
+          relation_type: 'relates_to'
+        )
+
+        result = strategy.export([ project1.id ])
+        related_child = result[:root_nodes].first[:children].find { |child| child[:name] == related_project.name }
+
+        expect(related_child).to include(
+          name: 'Related Project',
+          entity_type: 'Project',
+          relation_type: 'relates_to',
+          relation_direction: 'parent_to_child',
+          children: []
+        )
+        expect(JSON.generate(result)).not_to include(nested_task.name)
+      end
+
+      it 'fully expands a Project when it is an explicit export root' do
+        linked_project = MemoryEntity.create!(
+          name: 'Explicit Root Project',
+          entity_type: 'Project'
+        )
+        nested_task = MemoryEntity.create!(
+          name: 'Task Of Explicit Root',
+          entity_type: 'Task'
+        )
+        MemoryRelation.create!(
+          from_entity: nested_task,
+          to_entity: linked_project,
+          relation_type: 'part_of'
+        )
+        MemoryRelation.create!(
+          from_entity: linked_project,
+          to_entity: project1,
+          relation_type: 'part_of'
+        )
+
+        result = strategy.export([ project1.id, linked_project.id ])
+        explicit_root = result[:root_nodes].find { |node| node[:name] == linked_project.name }
+        nested_under_root = explicit_root[:children].find { |child| child[:name] == nested_task.name }
+        shallow_under_parent = result[:root_nodes]
+          .find { |node| node[:name] == project1.name }[:children]
+          .find { |child| child[:name] == linked_project.name }
+
+        expect(nested_under_root).to be_present
+        expect(shallow_under_parent).to include(children: [])
+      end
     end
 
     context 'with multiple entities' do
@@ -295,6 +406,10 @@ RSpec.describe ExportStrategy, type: :model do
   describe 'constants' do
     it 'defines FORMAT_VERSION' do
       expect(ExportStrategy::FORMAT_VERSION).to eq('1.0')
+    end
+
+    it 'defines PROJECT_ENTITY_TYPE' do
+      expect(ExportStrategy::PROJECT_ENTITY_TYPE).to eq('Project')
     end
 
     it 'defines CHILD_RELATION_TYPES' do

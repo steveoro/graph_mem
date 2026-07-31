@@ -67,40 +67,43 @@ class ExportJob < ApplicationJob
   end
 
   def count_total_nodes(entity_ids)
-    # Count all entities that will be exported (rough estimate)
     count = 0
 
     entities = MemoryEntity.where(id: entity_ids)
     entities.each do |entity|
-      count += count_subtree(entity.id, Set.new)
+      count += count_subtree(entity.id, Set.new, nested: false)
     end
 
     [ count, 1 ].max  # At least 1 to avoid division by zero
   end
 
-  def count_subtree(entity_id, visited)
+  def count_subtree(entity_id, visited, nested:)
     return 0 if visited.include?(entity_id)
 
     visited.add(entity_id)
     count = 1  # This entity
 
+    # Nested Projects are export boundaries: count the shallow node only.
+    entity = MemoryEntity.find_by(id: entity_id)
+    return count if nested && entity&.entity_type == ExportStrategy::PROJECT_ENTITY_TYPE
+
     # Count children
     child_ids = MemoryRelation
-      .where(to_entity_id: entity_id, relation_type: %w[part_of depends_on])
+      .where(to_entity_id: entity_id, relation_type: ExportStrategy::PARENT_TO_CHILD_RELATION_TYPES)
       .pluck(:from_entity_id)
 
     child_ids.each do |child_id|
-      count += count_subtree(child_id, visited)
+      count += count_subtree(child_id, visited.dup, nested: true)
     end
 
     # Count other related entities
     related_ids = MemoryRelation
       .where(from_entity_id: entity_id)
-      .where.not(relation_type: %w[part_of depends_on])
+      .where.not(relation_type: ExportStrategy::PARENT_TO_CHILD_RELATION_TYPES)
       .pluck(:to_entity_id)
 
     related_ids.each do |related_id|
-      count += count_subtree(related_id, visited)
+      count += count_subtree(related_id, visited.dup, nested: true)
     end
 
     count
