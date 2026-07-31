@@ -1,6 +1,6 @@
 {
   "query": "graph_mem project architecture, MCP toolset, and summarization",
-  "summary": "Here's a detailed summary of the observations, focusing on the key aspects of the graph_mem project and related tools:\n\n**Graph Memory (graph_mem) Project Architecture & Summarization:**\n\n*   **Phase 5 Summarization:** The graph_mem project is undergoing a significant shift in its summarization strategy (Phase 5). It utilizes a hybrid approach combining deterministic active-evidence selection with optional LLM synthesis via Ollama. This synthesis is controlled by `enable_llm_summarization` settings and associated parameters. A key feature is a robust fallback to deterministic output in case of LLM provider failures. The operator interface will include a \"Summaries\" section to manage these settings.\n*   **MCP Toolset Integration:** The project leverages the MCP (Memory Capture Platform) toolset, specifically the `GetMcpTools` for schema discovery and the `summarize` function. Documentation has been updated to reflect these changes.\n*   **Deterministic Fallback:** A core principle is a deterministic fallback mechanism for summarization, ensuring consistent results even when LLM synthesis is unavailable.\n*   **Configuration:** Summarization is configured through `SummarizationConfig`, `SummaryGenerationClient`, `SummarizerService`, and the `POST /api/v1/summarize` endpoint.\n*   **Testing:** The implementation has undergone focused specs (171 examples) and RuboCop validation.\n*   **Lifecycle Management:** Active observation lifecycle and supersession are explicitly handled.\n*   **Context Boosting vs. Filtering:** Context boosting is distinguished from hard filtering.\n\n**Technical Infrastructure & Tools:**\n\n*   **Rails Version:** The graph_mem project is built on Rails 8+ (version 1.4.0) and is used within the Project:graph_mem.\n*   **AdminHub Components:** Several related projects are being developed alongside graph_mem:\n    *   `AdminHub` (Rails 8+) is a rewritten core application built from “coach_in_a_box”.\n    *   `AdminHub` has a default main app for development and testing in the BTS workspace and works perfectly on localhost Ubuntu 22+ with Ruby 3+.\n*   **CoachInABox:** A separate project (`CoachInABox`) utilizes Rails 5.1.7 and is focused on transaction-record callbacks for VIA debrief creation/cancellation. A recent hotfix (commit 87df36c) addresses transaction management and includes extensive coverage for rollback scenarios.\n*   **Migration & Setup:** Initial models and migrations for graph_mem were developed and completed (Order: 3, Status: Done). The project was set up using Rails 8+ (Order: 1, Status: Done).\n\n**Project Planning & Personnel:**\n\n*   **Project Plan:** The Graph Memory Backend Project Plan (dated 2025-05-09) is led by Steve and aims to develop a standalone Rails 8+ application for AI's Graph Memory.\n*   **Legacy Application:** A legacy Rails 5.2 application (TwelveShifts v2) exists.\n\n**Uncertainties & Notes:**\n\n*   The specific LLM model used for synthesis is not explicitly defined, relying on configurable settings.\n*   The exact details of the \"context boosting\" mechanism are not fully detailed in the provided observations.\n\nDo you want me to focus on a specific aspect of this summary, such as the summarization process, the technical infrastructure, or the project plan?",
+  "summary": "Here's a detailed summary of the observations, focusing on the key aspects of the graph_mem project and related tools:\n\n**Graph Memory (graph_mem) Project Architecture & Summarization:**\n\n*   **Phase 5 Summarization:** The graph_mem project is undergoing a significant shift in its summarization strategy (Phase 5). It utilizes a hybrid approach combining deterministic active-evidence selection with optional LLM synthesis via Ollama. This synthesis is controlled by `enable_llm_summarization` settings and associated parameters. A key feature is a robust fallback to deterministic output in case of LLM provider failures. The operator interface will include a \"Summaries\" section to manage these settings.\n*   **MCP Toolset Integration:** The project leverages the MCP (Memory Capture Platform) toolset, specifically the `GetMcpTools` for schema discovery and the `summarize` function. Documentation has been updated to reflect these changes.\n*   **Deterministic Fallback:** A core principle is a deterministic fallback mechanism for summarization, ensuring consistent results even when LLM synthesis is unavailable.\n*   **Configuration:** Summarization is configured through `SummarizationConfig`, `SummaryGenerationClient`, `SummarizerService`, and the `POST /api/v1/summarize` endpoint.\n*   **Testing:** The implementation has undergone focused specs (171 examples) and RuboCop validation.\n*   **Lifecycle Management:** Active observation lifecycle and supersession are explicitly handled.\n*   **Context Boosting vs. Filtering:** Context boosting is distinguished from hard filtering.\n\n**Technical Infrastructure & Tools:**\n\n*   **Rails Version:** The graph_mem project is built on Rails 8+ (version 1.4.0) and is used within the Project:graph_mem.\n*   **[READACTED] Components:** Several related projects are being developed alongside graph_mem:\n    *   `[READACTED]` (Rails 8+) is a rewritten core application built from “[READACTED]”.\n    *   `[READACTED]` has a default main app for development and testing in the BTS workspace and works perfectly on localhost Ubuntu 22+ with Ruby 3+.\n*   **[READACTED]:** A separate project (`[READACTED]`) utilizes Rails 5.1.7 and is focused on transaction-record callbacks for VIA debrief creation/cancellation. A recent hotfix (commit 87df36c) addresses transaction management and includes extensive coverage for rollback scenarios.\n*   **Migration & Setup:** Initial models and migrations for graph_mem were developed and completed (Order: 3, Status: Done). The project was set up using Rails 8+ (Order: 1, Status: Done).\n\n**Project Planning & Personnel:**\n\n*   **Project Plan:** The Graph Memory Backend Project Plan (dated 2025-05-09) is led by Steve and aims to develop a standalone Rails 8+ application for AI's Graph Memory.\n*   **Legacy Application:** A legacy Rails 5.2 application ([READACTED] v2) exists.\n\n**Uncertainties & Notes:**\n\n*   The specific LLM model used for synthesis is not explicitly defined, relying on configurable settings.\n*   The exact details of the \"context boosting\" mechanism are not fully detailed in the provided observations.\n\nDo you want me to focus on a specific aspect of this summary, such as the summarization process, the technical infrastructure, or the project plan?",
   "generation_mode": "llm",
   "generated_by": "gemma3:4b",
   "fallback_reason": null,
@@ -69,7 +69,7 @@
     },
     {
       "id": 1494,
-      "content": "Rails 8+ application - new rewrite of core functionalities from coach_in_a_box",
+      "content": "Rails 8+ application - new rewrite of core functionalities from [READACTED]",
       "confidence": null,
       "trust_score": 0.7,
       "source": null,
@@ -83,7 +83,7 @@
       "created_at": "2026-01-28T11:01:36Z",
       "updated_at": "2026-01-28T11:01:36Z",
       "memory_entity_id": 387,
-      "entity_name": "AdminHub",
+      "entity_name": "[READACTED]",
       "entity_relevance": 0.0938,
       "has_contradiction": false
     },
@@ -103,7 +103,7 @@
       "created_at": "2026-01-28T11:01:36Z",
       "updated_at": "2026-01-28T11:01:36Z",
       "memory_entity_id": 387,
-      "entity_name": "AdminHub",
+      "entity_name": "[READACTED]",
       "entity_relevance": 0.0938,
       "has_contradiction": false
     },
@@ -123,7 +123,7 @@
       "created_at": "2026-01-28T11:01:37Z",
       "updated_at": "2026-01-28T11:01:37Z",
       "memory_entity_id": 387,
-      "entity_name": "AdminHub",
+      "entity_name": "[READACTED]",
       "entity_relevance": 0.0938,
       "has_contradiction": false
     },
@@ -152,7 +152,7 @@
       "content": "[2026-07-30] Reviewed hotfix/via-lock-debrief-issue commit 87df36c: AfterTransactionCommit correctly uses Rails 5.1 transaction-record callbacks to defer VIA debrief creation/cancellation ActiveJob enqueue until the outer commit and suppress enqueue on rollback. Added focused coverage for both savepoint boundaries: inner requires_new rollback with outer commit, and inner commit with outer rollback; callbacks remain suppressed in both cases. Container run passed 26 examples. Existing service specs already fail if the wrapper is removed.",
       "confidence": 0.98,
       "trust_score": 1.0,
-      "source": "coach_in_a_box commit 87df36c; spec/lib/after_transaction_commit_spec.rb; focused RSpec run",
+      "source": "[READACTED] commit [READACTED]; spec/lib/after_transaction_commit_spec.rb; focused RSpec run",
       "valid_from": null,
       "valid_until": null,
       "tags": ["VIA", "debrief", "transaction", "ActiveJob", "hotfix-review", "savepoint"],
@@ -163,13 +163,13 @@
       "created_at": "2026-07-30T09:47:42Z",
       "updated_at": "2026-07-30T09:47:42Z",
       "memory_entity_id": 399,
-      "entity_name": "CoachInABox",
+      "entity_name": "[READACTED]",
       "entity_relevance": 0.0515,
       "has_contradiction": false
     },
     {
       "id": 1568,
-      "content": "Project folder: coach_in_a_box",
+      "content": "Project folder: [READACTED]",
       "confidence": null,
       "trust_score": 0.0,
       "source": null,
@@ -183,7 +183,7 @@
       "created_at": "2026-01-28T11:01:40Z",
       "updated_at": "2026-01-28T11:01:40Z",
       "memory_entity_id": 399,
-      "entity_name": "CoachInABox",
+      "entity_name": "[READACTED]",
       "entity_relevance": 0.0515,
       "has_contradiction": false
     },
@@ -203,7 +203,7 @@
       "created_at": "2026-01-28T11:01:40Z",
       "updated_at": "2026-01-28T11:01:40Z",
       "memory_entity_id": 399,
-      "entity_name": "CoachInABox",
+      "entity_name": "[READACTED]",
       "entity_relevance": 0.0515,
       "has_contradiction": false
     },
@@ -403,7 +403,7 @@
       "created_at": "2026-01-28T13:31:02Z",
       "updated_at": "2026-01-28T13:31:02Z",
       "memory_entity_id": 455,
-      "entity_name": "TwelveShifts v2",
+      "entity_name": "[READACTED] v2",
       "entity_relevance": 0.0495,
       "has_contradiction": false
     }

@@ -16,6 +16,7 @@ module Api
           observations_per_entity: params[:observations_per_entity],
           max_depth: params[:max_depth],
           include_sources: params.fetch(:include_sources, true),
+          scope: params[:scope],
           style: params[:style],
           context_entity_ids: GraphMemContext.scoped_entity_ids
         )

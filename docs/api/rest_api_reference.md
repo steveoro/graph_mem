@@ -221,6 +221,7 @@ Returns deterministic source-backed evidence for a query. When LLM summarization
 {
   "query": "Steve programming languages",
   "entity_id": null,
+  "scope": "context",
   "max_results": 10,
   "max_observations": 20,
   "max_depth": 0,
@@ -238,10 +239,19 @@ Example response:
   "generation_mode": "llm",
   "generated_by": "qwen3:8b",
   "fallback_reason": null,
+  "scope": "context",
   "entity_count": 1,
   "observation_count": 2,
   "observations": [],
-  "sources": [{ "entity_id": 12, "observation_id": 123 }]
+  "sources": [{ "entity_id": 12, "observation_id": 123 }],
+  "retrieval": {
+    "scope": "context",
+    "context_entity_count": 42,
+    "candidate_entity_count": 8,
+    "selected_entity_count": 1,
+    "excluded_out_of_scope_count": 3,
+    "selected_observation_count": 2
+  }
 }
 ```
 

@@ -41,6 +41,7 @@ RSpec.describe SummarizeTool, type: :model do
 
       expect(result[:generation_mode]).to eq("deterministic")
       expect(result[:sources]).to include(entity_id: entity.id, observation_id: observation.id)
+      expect(result[:scope]).to eq("global")
     end
 
     it "raises ResourceNotFound for missing entity_id" do

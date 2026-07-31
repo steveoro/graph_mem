@@ -38,6 +38,8 @@ RSpec.describe "API V1 Summaries", type: :request do
         "entity_id" => entity.id,
         "observation_id" => observation.id
       )
+      expect(body["scope"]).to eq("global")
+      expect(body["retrieval"]).to include("scope" => "global")
     end
 
     it "returns an error when query is missing" do

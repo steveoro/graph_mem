@@ -79,6 +79,18 @@ RSpec.describe GraphMemContext do
       expect(ids).to contain_exactly(project.id, child.id)
     end
 
+    it "includes nested part_of descendants recursively" do
+      project = MemoryEntity.create!(name: "RootProject", entity_type: "Project")
+      child = MemoryEntity.create!(name: "ChildTask", entity_type: "Task")
+      grandchild = MemoryEntity.create!(name: "GrandchildStep", entity_type: "Step")
+      MemoryRelation.create!(from_entity: child, to_entity: project, relation_type: "part_of")
+      MemoryRelation.create!(from_entity: grandchild, to_entity: child, relation_type: "part_of")
+      described_class.for("cursor-A").current_project_id = project.id
+
+      ids = described_class.for("cursor-A").scoped_entity_ids
+      expect(ids).to contain_exactly(project.id, child.id, grandchild.id)
+    end
+
     it "does not include entities with non-part_of relations" do
       project = MemoryEntity.create!(name: "OnlyPartOf", entity_type: "Project")
       other = MemoryEntity.create!(name: "Related", entity_type: "Task")

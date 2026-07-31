@@ -43,13 +43,28 @@ For a laptop with about 15 GB RAM:
 `SummarizerService` performs:
 
 1. **Entity discovery** via `HybridSearchStrategy`, or direct load when `entity_id` is provided.
-2. **Context scoping** via `GraphMemContext.scoped_entity_ids` when a project context is active.
+2. **Scope selection** via `scope`:
+   - `context` (default when an active project context exists): hard-filters retrieval to the recursive `part_of` subtree of the active project.
+   - `global`: searches the full graph and uses context only as a relevance boost.
 3. **Optional traversal** via `GraphTraversalService` when `max_depth > 0`.
 4. **Active observation filtering** — obsolete and superseded rows are excluded.
-5. **Deterministic ranking** — entity relevance, `trust_score`, confidence, then stable ID tie-breakers.
+5. **Query-aware ranking** — observation token/vector relevance, then entity relevance, `trust_score`, confidence, then stable ID tie-breakers.
 6. **Contradiction hints** — when vectors are available, semantically similar polarity-opposite pairs are flagged with `has_contradiction: true` in the evidence payload.
 
 Source IDs are attached by GraphMem from the selected evidence. They are never taken from LLM output.
+
+### Scope behavior
+
+When a project context is active, `summarize` defaults to `scope: "context"`. This prevents unrelated workspace projects from entering the evidence set when a broad semantic query matches many `Project` entities. Use `scope: "global"` to opt back into workspace-wide retrieval.
+
+The response includes a `retrieval` diagnostics object:
+
+- `scope`
+- `context_entity_count`
+- `candidate_entity_count`
+- `selected_entity_count`
+- `excluded_out_of_scope_count`
+- `selected_observation_count`
 
 ## Generation modes
 
@@ -57,9 +72,11 @@ Source IDs are attached by GraphMem from the selected evidence. They are never t
 
 Returns:
 
-- `summary`: a short heading such as `Top facts about <query>`
-- `observations`: structured active evidence with provenance and trust metadata
+- `summary`: entity-grouped extractive facts with `observation_id` citations, or a no-evidence message when scoped retrieval finds nothing
+- `scope`: `context` or `global`
+- `observations`: structured active evidence with provenance, `query_relevance`, and trust metadata
 - `sources`: `{ entity_id, observation_id }` pairs
+- `retrieval`: candidate/selection diagnostics for the retrieval pass
 - `fallback_reason`: `disabled`, `unconfigured`, or `provider_unavailable` when LLM synthesis was skipped
 
 ### LLM (`generation_mode: "llm"`)
@@ -89,6 +106,7 @@ Temperature is low (`0.1` for concise, `0.3` for detailed).
 ```json
 {
   "query": "GraphMem search capabilities",
+  "scope": "context",
   "max_observations": 10,
   "style": "concise"
 }

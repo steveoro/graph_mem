@@ -7,6 +7,7 @@
 # agents. Agents without the header share the "default" client bucket.
 class GraphMemContext
   DEFAULT_CLIENT_ID = "default"
+  MAX_SCOPED_ENTITIES = 1_000
 
   class << self
     def for(client_id = DEFAULT_CLIENT_ID)
@@ -65,15 +66,26 @@ class GraphMemContext
     current_project_id.present?
   end
 
-  # Returns entity IDs related to the current project (via part_of relations).
-  # Used by search tools to boost in-context results.
+  # Returns entity IDs related to the current project (via recursive part_of relations).
+  # Used by search tools to boost in-context results and by summarization to hard-scope retrieval.
   def scoped_entity_ids
     return nil unless active?
 
-    ids = [ current_project_id ]
-    ids += MemoryRelation
-      .where(relation_type: "part_of", to_entity_id: current_project_id)
-      .pluck(:from_entity_id)
+    project_id = current_project_id
+    ids = [ project_id ]
+    frontier = [ project_id ]
+
+    while frontier.any? && ids.size < MAX_SCOPED_ENTITIES
+      children = MemoryRelation
+        .where(relation_type: "part_of", to_entity_id: frontier)
+        .pluck(:from_entity_id)
+      new_ids = children - ids
+      break if new_ids.empty?
+
+      ids.concat(new_ids)
+      frontier = new_ids
+    end
+
     ids.uniq
   end
 

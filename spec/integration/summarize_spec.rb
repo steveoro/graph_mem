@@ -40,6 +40,7 @@ RSpec.describe "Summarize integration", type: :integration do
     expect(result[:generation_mode]).to eq("deterministic")
     expect(result[:observations].map { |obs| obs[:id] }).to contain_exactly(active_observation.id)
     expect(result[:sources]).to eq([ { entity_id: entity.id, observation_id: active_observation.id } ])
+    expect(result[:scope]).to eq("global")
   end
 
   it "exposes summarize through the MCP tool" do

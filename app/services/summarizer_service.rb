@@ -7,6 +7,8 @@ class SummarizerService
   DEFAULT_OBSERVATIONS_PER_ENTITY = 3
   DEFAULT_MAX_DEPTH = 0
   DEFAULT_STYLE = "concise"
+  SCOPES = %w[context global].freeze
+  CONTEXT_SEARCH_OVERSAMPLE = 5
 
   class << self
     def call(**kwargs)
@@ -17,7 +19,8 @@ class SummarizerService
   def initialize(query:, entity_id: nil, max_results: DEFAULT_MAX_RESULTS,
                  max_observations: DEFAULT_MAX_OBSERVATIONS,
                  observations_per_entity: nil, max_depth: DEFAULT_MAX_DEPTH,
-                 include_sources: true, style: DEFAULT_STYLE, context_entity_ids: nil)
+                 include_sources: true, style: DEFAULT_STYLE, scope: nil,
+                 context_entity_ids: nil)
     @query = query.to_s.strip
     @entity_id = entity_id
     @max_results = normalize_positive(max_results, DEFAULT_MAX_RESULTS, max: 50)
@@ -30,6 +33,10 @@ class SummarizerService
     @include_sources = include_sources != false
     @style = style.presence || DEFAULT_STYLE
     @context_entity_ids = Array(context_entity_ids).compact
+    @allowed_entity_ids = entity_scope? ? nil : @context_entity_ids.presence
+    @scope = normalize_scope(scope)
+    @candidate_entity_count = 0
+    @excluded_out_of_scope_count = 0
     @logger = Rails.logger
   end
 
@@ -47,19 +54,40 @@ class SummarizerService
 
   private
 
+  def entity_scope?
+    @entity_id.present?
+  end
+
+  def normalize_scope(scope)
+    value = scope.to_s.strip.downcase.presence
+    if value.blank?
+      return @allowed_entity_ids.present? ? "context" : "global"
+    end
+
+    raise ArgumentError, "scope must be context or global" unless SCOPES.include?(value)
+    raise ArgumentError, "scope context requires an active project context" if value == "context" && @allowed_entity_ids.blank?
+
+    value
+  end
+
   # Returns unique entities with the corresponding scores
   def fetch_entities
-    if @entity_id.present?
+    if entity_scope?
       entity = MemoryEntity.find(@entity_id)
+      @candidate_entity_count = 1
       return [ [ entity ], { entity.id => 1.0 } ]
     end
 
+    search_limit = @scope == "context" ? @max_results * CONTEXT_SEARCH_OVERSAMPLE : @max_results
     results = HybridSearchStrategy.new.search(
       @query,
-      limit: @max_results,
+      limit: search_limit,
       semantic: true,
       context_entity_ids: @context_entity_ids.presence
     )
+
+    @candidate_entity_count = results.size
+    results = apply_scope_filter(results)
 
     entity_scores = results.to_h { |result| [ result.entity.id, result.score.to_f ] }
     entities = results.map(&:entity)
@@ -69,6 +97,15 @@ class SummarizerService
     end
 
     [ entities.uniq, entity_scores ]
+  end
+
+  def apply_scope_filter(results)
+    return results.first(@max_results) unless @scope == "context" && @allowed_entity_ids.present?
+
+    allowed = @allowed_entity_ids.to_set
+    in_scope, out_of_scope = results.partition { |result| allowed.include?(result.entity.id) }
+    @excluded_out_of_scope_count = out_of_scope.size
+    in_scope.first(@max_results)
   end
 
   # Expand entities by traversing the graph, collecting the overall scores
@@ -86,6 +123,7 @@ class SummarizerService
 
       result.entity_ids.each do |entity_id|
         next if expanded_ids.include?(entity_id)
+        next if @scope == "context" && @allowed_entity_ids.present? && !@allowed_entity_ids.include?(entity_id)
 
         expanded_ids << entity_id
         entity_scores[entity_id] ||= entity_scores[entity.id].to_f * 0.8
@@ -96,8 +134,9 @@ class SummarizerService
     [ expanded_entities, entity_scores ]
   end
 
-  # Build evidence from observations, ranked by entity relevance and observation quality
+  # Build evidence from observations, ranked by query relevance, entity relevance, and quality
   def build_evidence(entities, entity_scores)
+    ranker = ObservationRelevanceRanker.new(@query)
     observations = entities.flat_map do |entity|
       entity.active_memory_observations.map do |observation|
         {
@@ -108,9 +147,15 @@ class SummarizerService
       end
     end
 
+    query_scores = ranker.score_batch(observations.map { |entry| entry[:observation] })
+    observations.each_with_index do |entry, index|
+      entry[:query_relevance] = query_scores[index].to_f.round(4)
+    end
+
     ranked = observations.sort_by do |entry|
       observation = entry[:observation]
       [
+        -entry[:query_relevance],
         -entry[:entity_relevance],
         -observation.trust_score.to_f,
         -(observation.confidence || 0.0),
@@ -179,25 +224,49 @@ class SummarizerService
       )
       payload[:entity_name] = entry[:entity].name
       payload[:entity_relevance] = entry[:entity_relevance].round(4)
+      payload[:query_relevance] = entry[:query_relevance]
       payload[:has_contradiction] = entry[:has_contradiction] == true
       payload
     end
 
     {
       query: @query,
-      summary: deterministic_heading,
+      summary: build_deterministic_summary(evidence),
       generation_mode: "deterministic",
       generated_by: "deterministic",
       fallback_reason: nil,
+      scope: @scope,
       entity_count: entities.map(&:id).uniq.size,
       observation_count: observations_payload.size,
       observations: observations_payload,
-      sources: build_sources(evidence)
+      sources: build_sources(evidence),
+      retrieval: build_retrieval_diagnostics(entities, evidence)
     }
   end
 
-  def deterministic_heading
-    "Top facts about #{@query}"
+  def build_deterministic_summary(evidence)
+    return empty_scope_message if evidence.empty?
+
+    grouped = evidence.group_by { |entry| entry[:entity] }
+    sections = grouped.map do |entity, entries|
+      facts = entries.map do |entry|
+        observation = entry[:observation]
+        suffix = entry[:has_contradiction] ? " [possible contradiction]" : ""
+        "  - [observation_id=#{observation.id}] #{observation.content}#{suffix}"
+      end
+
+      "#{entity.name}:\n#{facts.join("\n")}"
+    end
+
+    sections.join("\n\n")
+  end
+
+  def empty_scope_message
+    if @scope == "context"
+      "No active evidence found for \"#{@query}\" within the active project scope."
+    else
+      "No active evidence found for \"#{@query}\"."
+    end
   end
 
   def build_sources(evidence)
@@ -209,6 +278,17 @@ class SummarizerService
         observation_id: entry[:observation].id
       }
     end
+  end
+
+  def build_retrieval_diagnostics(entities, evidence)
+    {
+      scope: @scope,
+      context_entity_count: @allowed_entity_ids&.size,
+      candidate_entity_count: @candidate_entity_count,
+      selected_entity_count: entities.map(&:id).uniq.size,
+      excluded_out_of_scope_count: @excluded_out_of_scope_count,
+      selected_observation_count: evidence.size
+    }
   end
 
   def attempt_llm_synthesis(response, evidence)
@@ -245,16 +325,30 @@ class SummarizerService
     lines = [
       "Query: #{@query}",
       "Style: #{@style}",
+      "Scope: #{@scope}",
       "",
-      "Summarize only the observations below. Do not invent facts.",
-      "If observations conflict, mention the uncertainty.",
+      "Write a #{@style} summary using only the observations below.",
+      "Use this structure:",
+      "1. One short overview paragraph.",
+      "2. Bullet points grouped by entity when helpful.",
+      "3. End with a Sources line listing observation_id values you used.",
+      "",
+      "Rules:",
+      "- Do not invent facts, acronym expansions, or entities.",
+      "- Mention uncertainty only when an observation is marked [possible contradiction].",
+      "- Do not ask follow-up questions.",
       ""
     ]
 
-    evidence.each do |entry|
-      observation = entry[:observation]
-      entity = entry[:entity]
-      lines << "- [observation_id=#{observation.id}, entity_id=#{entity.id}, entity=#{entity.name}] #{observation.content}"
+    if evidence.empty?
+      lines << "No observations were retrieved. Reply that no active evidence was found for this query."
+    else
+      evidence.each do |entry|
+        observation = entry[:observation]
+        entity = entry[:entity]
+        contradiction = entry[:has_contradiction] ? " [possible contradiction]" : ""
+        lines << "- [observation_id=#{observation.id}, entity_id=#{entity.id}, entity=#{entity.name}]#{contradiction} #{observation.content}"
+      end
     end
 
     lines.join("\n")

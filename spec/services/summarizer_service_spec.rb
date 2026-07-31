@@ -64,6 +64,11 @@ RSpec.describe SummarizerService do
 
       expect(result[:fallback_reason]).to eq("disabled")
       expect(result[:summary]).to include("Steve")
+      expect(result[:scope]).to eq("global")
+      expect(result[:retrieval]).to include(
+        scope: "global",
+        selected_observation_count: 1
+      )
     end
 
     it "uses LLM synthesis when enabled and configured" do
@@ -157,6 +162,108 @@ RSpec.describe SummarizerService do
 
       counts = result[:sources].group_by { |s| s[:entity_id] }.transform_values(&:count)
       expect(counts[entity.id]).to eq(4)
+    end
+
+    it "rejects an invalid scope" do
+      expect {
+        described_class.call(query: "Steve", scope: "workspace")
+      }.to raise_error(ArgumentError, "scope must be context or global")
+    end
+
+    it "requires active context when scope is context" do
+      expect {
+        described_class.call(query: "Steve", scope: "context")
+      }.to raise_error(ArgumentError, "scope context requires an active project context")
+    end
+
+    it "filters out-of-scope entities when scope is context" do
+      project = MemoryEntity.create!(name: "GraphMem", entity_type: "Project")
+      child = MemoryEntity.create!(name: "SummarizerService", entity_type: "Service")
+      other_project = MemoryEntity.create!(name: "AdminHub", entity_type: "Project")
+      MemoryRelation.create!(from_entity: child, to_entity: project, relation_type: "part_of")
+      MemoryObservation.create!(memory_entity: child, content: "graph_mem summarization uses scoped retrieval.")
+      MemoryObservation.create!(memory_entity: other_project, content: "AdminHub is the default BTS app.")
+
+      allow(HybridSearchStrategy).to receive(:new).and_return(
+        instance_double(HybridSearchStrategy, search: [
+          HybridSearchStrategy::SearchResult.new(entity: other_project, score: 0.95, matched_fields: [ "semantic" ]),
+          HybridSearchStrategy::SearchResult.new(entity: child, score: 0.80, matched_fields: [ "name" ])
+        ])
+      )
+
+      result = described_class.call(
+        query: "graph_mem summarization",
+        scope: "context",
+        context_entity_ids: [ project.id, child.id ]
+      )
+
+      expect(result[:scope]).to eq("context")
+      expect(result[:sources]).to all(include(entity_id: satisfy { |id| [ project.id, child.id ].include?(id) }))
+      expect(result[:sources].map { |source| source[:entity_id] }).not_to include(other_project.id)
+      expect(result[:retrieval][:excluded_out_of_scope_count]).to eq(1)
+      expect(result[:summary]).not_to include("AdminHub")
+    end
+
+    it "returns empty scoped evidence instead of falling back to global matches" do
+      project = MemoryEntity.create!(name: "GraphMem", entity_type: "Project")
+      other_project = MemoryEntity.create!(name: "AdminHub", entity_type: "Project")
+      MemoryObservation.create!(memory_entity: other_project, content: "AdminHub is unrelated.")
+
+      allow(HybridSearchStrategy).to receive(:new).and_return(
+        instance_double(HybridSearchStrategy, search: [
+          HybridSearchStrategy::SearchResult.new(entity: other_project, score: 0.95, matched_fields: [ "semantic" ])
+        ])
+      )
+
+      result = described_class.call(
+        query: "AdminHub",
+        scope: "context",
+        context_entity_ids: [ project.id ]
+      )
+
+      expect(result[:observation_count]).to eq(0)
+      expect(result[:summary]).to include("active project scope")
+      expect(result[:retrieval][:selected_entity_count]).to eq(0)
+    end
+
+    it "prefers query-matching observations over higher-trust unrelated observations" do
+      other = MemoryEntity.create!(name: "GraphMem Docs", entity_type: "Component")
+      matching = MemoryObservation.create!(
+        memory_entity: entity,
+        content: "Steve uses Ruby for graph_mem summarization.",
+        confidence: 0.5
+      )
+      MemoryObservation.create!(
+        memory_entity: other,
+        content: "Unrelated housekeeping note.",
+        confidence: 0.99,
+        source: "profile"
+      ).tap { |obs| obs.update_column(:trust_score, 0.99) }
+
+      allow(HybridSearchStrategy).to receive(:new).and_return(
+        instance_double(HybridSearchStrategy, search: [
+          HybridSearchStrategy::SearchResult.new(entity: entity, score: 0.95, matched_fields: [ "name" ]),
+          HybridSearchStrategy::SearchResult.new(entity: other, score: 0.90, matched_fields: [ "name" ])
+        ])
+      )
+
+      result = described_class.call(query: "graph_mem summarization", max_observations: 1)
+
+      expect(result[:observations].first[:id]).to eq(matching.id)
+      expect(result[:observations].first[:query_relevance]).to be > 0
+    end
+
+    it "groups deterministic output by entity with observation citations" do
+      allow(HybridSearchStrategy).to receive(:new).and_return(
+        instance_double(HybridSearchStrategy, search: [
+          HybridSearchStrategy::SearchResult.new(entity: entity, score: 0.9, matched_fields: [ "name" ])
+        ])
+      )
+
+      result = described_class.call(query: "Steve")
+
+      expect(result[:summary]).to include("Steve:")
+      expect(result[:summary]).to include("observation_id=#{active_observation.id}")
     end
   end
 end

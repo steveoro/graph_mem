@@ -16,11 +16,12 @@ class SummarizeTool < ApplicationTool
     optional(:observations_per_entity).filled(:integer).description("Maximum observations to include per entity before capping. 0 disables the cap. Defaults to the AppSetting.")
     optional(:max_depth).filled(:integer).description("Optional graph traversal depth from matched entities. Defaults to 0.")
     optional(:include_sources).filled(:bool).description("Include source entity and observation IDs. Defaults to true.")
+    optional(:scope).filled(:string).description('Retrieval scope: "context" (default when a project context is active) or "global".')
     optional(:style).filled(:string).description('Summary style: "concise" (default) or "detailed".')
   end
 
   def call(query:, entity_id: nil, max_results: 10, max_observations: 20, observations_per_entity: nil,
-           max_depth: 0, include_sources: true, style: "concise")
+           max_depth: 0, include_sources: true, scope: nil, style: "concise")
     logger.info "Performing SummarizeTool with query: #{query}"
     begin
       SummarizerService.call(
@@ -31,6 +32,7 @@ class SummarizeTool < ApplicationTool
         observations_per_entity: observations_per_entity,
         max_depth: max_depth,
         include_sources: include_sources,
+        scope: scope,
         style: style,
         context_entity_ids: graph_mem_context.scoped_entity_ids
       )

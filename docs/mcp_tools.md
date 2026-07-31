@@ -187,8 +187,9 @@ Context is stored per MCP client in the `agent_contexts` table, keyed by the `X-
   - `max_observations` (integer, optional, default: 20): Maximum observations to include.
   - `max_depth` (integer, optional, default: 0): Optional graph traversal depth from matched entities.
   - `include_sources` (boolean, optional, default: true): Include source entity and observation IDs.
+  - `scope` (string, optional, default: `context` when a project context is active, otherwise `global`): `context` hard-filters retrieval to the active project's recursive `part_of` subtree; `global` searches the full graph.
   - `style` (string, optional, default: `concise`): `concise` or `detailed`.
-- **Response fields:** `query`, `summary`, `generation_mode`, `generated_by`, `fallback_reason`, `entity_count`, `observation_count`, `observations`, `sources`
+- **Response fields:** `query`, `summary`, `generation_mode`, `generated_by`, `fallback_reason`, `scope`, `entity_count`, `observation_count`, `observations`, `sources`, `retrieval`
 
 ## Graph Traversal (2 tools)
 
