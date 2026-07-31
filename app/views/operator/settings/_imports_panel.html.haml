@@ -1,0 +1,32 @@
+- group_key = local_assigns.fetch(:group_key)
+- duplicate_distance = AppSettings.import_observation_duplicate_max_distance
+
+= form_with url: operator_settings_bulk_update_path, method: :patch, local: true, class: "dashboard-settings-form" do
+  = hidden_field_tag :tab, group_key
+
+  .dashboard-settings-field{ data: { controller: "import-threshold" } }
+    %label.dashboard-settings-field__label{ for: "setting_import_observation_duplicate_max_distance" }
+      = t("operator.settings.fields.import_observation_duplicate_max_distance.label")
+    %p.dashboard-settings-field__hint= t("operator.settings.fields.import_observation_duplicate_max_distance.description")
+    .dashboard-settings-field__input-group
+      = range_field_tag "settings[import_observation_duplicate_max_distance]",
+        duplicate_distance,
+        id: "setting_import_observation_duplicate_max_distance",
+        class: "dashboard-settings-field__input",
+        min: 0.2,
+        max: 0.5,
+        step: 0.01,
+        data: { action: "input->import-threshold#sync", import_threshold_target: "slider", testid: "setting-import_observation_duplicate_max_distance" }
+      %output.dashboard-settings-field__value{
+        data: { import_threshold_target: "output", testid: "import-observation-duplicate-distance-value" }
+      }= format("%.2f", duplicate_distance)
+    %p.dashboard-settings-field__hint= t("operator.settings.imports.distance_hint")
+
+  .dashboard-card__actions
+    = submit_tag t("operator.settings.save_group"),
+      class: "dashboard-btn dashboard-btn--primary",
+      data: { testid: "operator-settings-save-btn-imports" }
+    = link_to t("operator.settings.reset"),
+      operator_settings_path(tab: group_key),
+      class: "dashboard-btn dashboard-btn--secondary",
+      data: { testid: "operator-settings-reset-btn-imports" }

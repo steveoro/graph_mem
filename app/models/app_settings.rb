@@ -33,6 +33,10 @@ class AppSettings < RailsSettings::Base
   field :summary_observations_per_entity, default: 3, type: :integer
   field :enable_llm_summarization, default: false, type: :boolean
 
+  # Import matching settings
+  field :import_observation_duplicate_max_distance, default: 0.35, type: :float,
+        validates: { numericality: { greater_than_or_equal_to: 0.2, less_than_or_equal_to: 0.5 } }
+
   # Compaction review row retention (approved/dismissed rows are pruned after N days)
   field :compaction_review_row_retention_days, default: 30, type: :integer,
         validates: { numericality: { greater_than_or_equal_to: 0, less_than_or_equal_to: 365 } }

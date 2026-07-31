@@ -193,6 +193,41 @@ RSpec.describe "Operator settings", type: :request do
       expect(response.body).to include("env-summary-model")
       expect(response.body).to include('data-testid="setting-enable_llm_summarization"')
     end
+
+    it "updates import observation duplicate distance from the slider" do
+      patch operator_settings_bulk_update_path,
+            params: {
+              tab: "imports",
+              settings: {
+                import_observation_duplicate_max_distance: "0.42"
+              }
+            }
+
+      expect(response).to redirect_to(operator_settings_path(tab: "imports"))
+      expect(AppSettings.import_observation_duplicate_max_distance).to eq(0.42)
+    end
+
+    it "rejects an import observation duplicate distance outside the slider range" do
+      patch operator_settings_bulk_update_path,
+            params: {
+              tab: "imports",
+              settings: {
+                import_observation_duplicate_max_distance: "0.51"
+              }
+            }
+
+      expect(response).to redirect_to(operator_settings_path(tab: "imports"))
+      follow_redirect!
+      expect(response.body).to include("Observation duplicate distance must be between 0.20 and 0.50")
+    end
+
+    it "renders the import duplicate distance slider" do
+      get operator_settings_path(tab: "imports")
+
+      expect(response).to have_http_status(:ok)
+      expect(response.body).to include('data-testid="setting-import_observation_duplicate_max_distance"')
+      expect(response.body).to include('data-testid="import-observation-duplicate-distance-value"')
+    end
   end
 
   describe "POST /operator/settings/backup/run" do

@@ -25,9 +25,6 @@ class ImportMatchingStrategy
   CHILD_ACTION_ADD_RELATION = "add_relation"
   CHILD_ACTION_CREATE = "create"
 
-  # Relation types that define parent-child relationships
-  CHILD_RELATION_TYPES = %w[part_of depends_on].freeze
-
   # Result struct for individual node matching
   MatchResult = Struct.new(
     :import_node,          # Hash: the imported node data
@@ -87,9 +84,10 @@ class ImportMatchingStrategy
     end
   end
 
-  def initialize
+  def initialize(observation_duplicate_detector: ImportObservationDuplicateDetector.new)
     @logger = Rails.logger
     @search_strategy = EntitySearchStrategy.new
+    @observation_duplicate_detector = observation_duplicate_detector
   end
 
   # Parse and match import data
@@ -210,6 +208,8 @@ class ImportMatchingStrategy
     selected_match_id = nil
     if status == STATUS_HIGH_CONFIDENCE && matches.any?
       selected_match_id = matches.first[:entity].id
+      observations = node["observations"] || node[:observations] || []
+      observations.each { |observation| observation_exists?(matches.first[:entity], observation) }
     end
 
     MatchResult.new(
@@ -242,7 +242,9 @@ class ImportMatchingStrategy
 
     if exact_match
       # Check if already has same parent
-      has_same_parent = check_parent_match(exact_match.id, parent_name)
+      relation_type = node["relation_type"] || node[:relation_type] || "part_of"
+      relation_direction = node["relation_direction"] || node[:relation_direction]
+      has_same_parent = check_parent_match(exact_match.id, parent_name, relation_type, relation_direction)
 
       if has_same_parent
         child_action = CHILD_ACTION_SKIP
@@ -252,7 +254,7 @@ class ImportMatchingStrategy
         status = STATUS_ADD_RELATION
       end
 
-      will_add_observations = observations.any? { |o| !observation_exists?(exact_match.id, o) }
+      will_add_observations = observations.any? { |observation| !observation_exists?(exact_match, observation) }
     else
       child_action = CHILD_ACTION_CREATE
       status = STATUS_NEW
@@ -274,32 +276,34 @@ class ImportMatchingStrategy
     )
   end
 
-  # Check if an entity has a parent with the given name
-  # @param entity_id [Integer] The entity ID to check
-  # @param parent_name [String] The expected parent name
-  # @return [Boolean] True if the entity has a parent with this name
-  def check_parent_match(entity_id, parent_name)
+  # Check whether the imported relation already connects the entity to its parent.
+  def check_parent_match(entity_id, parent_name, raw_relation_type = "part_of", relation_direction = nil)
     return false if parent_name.blank?
 
-    # Find relations where this entity is the child (from_entity)
-    parent_relations = MemoryRelation
-      .where(from_entity_id: entity_id, relation_type: CHILD_RELATION_TYPES)
-      .includes(:to_entity)
+    relation_type = MemoryRelation.canonical_relation_type(raw_relation_type)
 
-    parent_relations.any? do |rel|
-      rel.to_entity&.name&.downcase == parent_name.downcase
+    if relation_direction == "parent_to_child"
+      return MemoryRelation
+        .where(to_entity_id: entity_id, relation_type: relation_type)
+        .includes(:from_entity)
+        .any? { |relation| relation.from_entity&.name&.casecmp?(parent_name) }
     end
+
+    MemoryRelation
+      .where(from_entity_id: entity_id, relation_type: relation_type)
+      .includes(:to_entity)
+      .any? { |relation| relation.to_entity&.name&.casecmp?(parent_name) }
   end
 
   # Check if an observation already exists for an entity
-  # @param entity_id [Integer] The entity ID
+  # @param entity [MemoryEntity] The target entity
   # @param observation [Hash] The observation data
   # @return [Boolean] True if observation exists
-  def observation_exists?(entity_id, observation)
+  def observation_exists?(entity, observation)
     content = observation["content"] || observation[:content]
     return false if content.blank?
 
-    MemoryObservation.active.exists?(memory_entity_id: entity_id, content: content)
+    @observation_duplicate_detector.find_duplicate(entity: entity, content: content).duplicate
   end
 
   # Determine confidence status for root nodes based on matches

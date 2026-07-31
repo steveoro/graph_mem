@@ -1,0 +1,2856 @@
+{
+  "version": "1.0",
+  "exported_at": "2026-07-31T00:00:00Z",
+  "root_nodes": [
+    {
+      "name": "graph_mem",
+      "entity_type": "Project",
+      "aliases": "GraphMem,Memory Graph,MemoryGraph,MemGraph,Graph Mem,knowledge graph MCP",
+      "observations": [
+        {
+          "content": "Path: /home/steve/Projects/graph_mem",
+          "confidence": null,
+          "source": null,
+          "valid_from": null,
+          "valid_until": null,
+          "tags": [],
+          "created_at": "2026-07-31T00:00:00Z"
+        },
+        {
+          "content": "Status: In Progress",
+          "confidence": null,
+          "source": null,
+          "valid_from": null,
+          "valid_until": null,
+          "tags": [],
+          "created_at": "2026-07-31T00:00:00Z"
+        },
+        {
+          "content": "Rails version: 8+",
+          "confidence": null,
+          "source": null,
+          "valid_from": null,
+          "valid_until": null,
+          "tags": [],
+          "created_at": "2026-07-31T00:00:00Z"
+        },
+        {
+          "content": "Database: MariaDB",
+          "confidence": null,
+          "source": null,
+          "valid_from": null,
+          "valid_until": null,
+          "tags": [],
+          "created_at": "2026-07-31T00:00:00Z"
+        },
+        {
+          "content": "Project path: /home/steve/Projects/graph_mem",
+          "confidence": null,
+          "source": null,
+          "valid_from": null,
+          "valid_until": null,
+          "tags": [],
+          "created_at": "2026-07-31T00:00:00Z"
+        },
+        {
+          "content": "Remote Git repository: git@github.com:steveoro/graph_mem.git",
+          "confidence": null,
+          "source": null,
+          "valid_from": null,
+          "valid_until": null,
+          "tags": [],
+          "created_at": "2026-07-31T00:00:00Z"
+        },
+        {
+          "content": "Local main branch successfully pushed to remote origin/main and is tracking the remote.",
+          "confidence": null,
+          "source": null,
+          "valid_from": null,
+          "valid_until": null,
+          "tags": [],
+          "created_at": "2026-07-31T00:00:00Z"
+        },
+        {
+          "content": "The main application module is `GraphMem` as defined in `config/application.rb`.",
+          "confidence": null,
+          "source": null,
+          "valid_from": null,
+          "valid_until": null,
+          "tags": [],
+          "created_at": "2026-07-31T00:00:00Z"
+        },
+        {
+          "content": "The project is a Rails application.",
+          "confidence": null,
+          "source": null,
+          "valid_from": null,
+          "valid_until": null,
+          "tags": [],
+          "created_at": "2026-07-31T00:00:00Z"
+        },
+        {
+          "content": "The project aims to implement an MCP server with SSE support using `fast-mcp`.",
+          "confidence": null,
+          "source": null,
+          "valid_from": null,
+          "valid_until": null,
+          "tags": [],
+          "created_at": "2026-07-31T00:00:00Z"
+        },
+        {
+          "content": "Primary objective: Integrate fast-mcp gem for MCP communication.",
+          "confidence": null,
+          "source": null,
+          "valid_from": null,
+          "valid_until": null,
+          "tags": [],
+          "created_at": "2026-07-31T00:00:00Z"
+        },
+        {
+          "content": "CorpusName: steveoro/graph_mem",
+          "confidence": null,
+          "source": null,
+          "valid_from": null,
+          "valid_until": null,
+          "tags": [],
+          "created_at": "2026-07-31T00:00:00Z"
+        },
+        {
+          "content": "Version: 0.6.1",
+          "confidence": null,
+          "source": null,
+          "valid_from": null,
+          "valid_until": null,
+          "tags": [],
+          "created_at": "2026-07-31T00:00:00Z"
+        },
+        {
+          "content": "Primary purpose: MCP server for graph-based memory and knowledge management, implemented in Ruby on Rails.",
+          "confidence": null,
+          "source": null,
+          "valid_from": null,
+          "valid_until": null,
+          "tags": [],
+          "created_at": "2026-07-31T00:00:00Z"
+        },
+        {
+          "content": "Handles entities, observations, and relations to build a knowledge graph.",
+          "confidence": null,
+          "source": null,
+          "valid_from": null,
+          "valid_until": null,
+          "tags": [],
+          "created_at": "2026-07-31T00:00:00Z"
+        },
+        {
+          "content": "The current working implementation on the main branch relies on the fastmcp gem version 1.5+",
+          "confidence": null,
+          "source": null,
+          "valid_from": null,
+          "valid_until": null,
+          "tags": [],
+          "created_at": "2026-07-31T00:00:00Z"
+        },
+        {
+          "content": "After upgrading to FastMCP 1.5.0, the project no longer requires a monkey patch for FastMcp::Server#handle_tools_call that was previously needed in version 1.4.0.",
+          "confidence": null,
+          "source": null,
+          "valid_from": null,
+          "valid_until": null,
+          "tags": [],
+          "created_at": "2026-07-31T00:00:00Z"
+        },
+        {
+          "content": "The key insight: parameter name 'content' was clashing with FastMCP's internal response format. Renaming this parameter prevents collision with MCP spec's response structure.",
+          "confidence": null,
+          "source": null,
+          "valid_from": null,
+          "valid_until": null,
+          "tags": [],
+          "created_at": "2026-07-31T00:00:00Z"
+        },
+        {
+          "content": "RSpec test failures identified: memory_observations_count field returning null instead of integer values, causing Swagger schema validation failures. Counter cache needs proper initialization. Need to add tests for delete_duplicates endpoint and fix existing test issues.",
+          "confidence": null,
+          "source": null,
+          "valid_from": null,
+          "valid_until": null,
+          "tags": [],
+          "created_at": "2026-07-31T00:00:00Z"
+        },
+        {
+          "content": "Successfully updated and expanded RSpec test coverage for graph_mem project. Fixed memory_observations_count counter cache issue that was causing null values instead of integers. Added comprehensive test coverage for delete_duplicates endpoint including edge cases. All 58 API tests now pass (memory_entities: 17 tests, memory_observations: 21 tests including new duplicate deletion tests, memory_relations: 19 tests, status: 1 test).",
+          "confidence": null,
+          "source": null,
+          "valid_from": null,
+          "valid_until": null,
+          "tags": [],
+          "created_at": "2026-07-31T00:00:00Z"
+        },
+        {
+          "content": "Rails 8 implementation of an MCP server.",
+          "confidence": null,
+          "source": null,
+          "valid_from": null,
+          "valid_until": null,
+          "tags": [],
+          "created_at": "2026-07-31T00:00:00Z"
+        },
+        {
+          "content": "Intended to provide tools similar to the JavaScript 'memory' MCP toolset.",
+          "confidence": null,
+          "source": null,
+          "valid_from": null,
+          "valid_until": null,
+          "tags": [],
+          "created_at": "2026-07-31T00:00:00Z"
+        },
+        {
+          "content": "Uses a database backend (PostgreSQL implied, similar to other user projects).",
+          "confidence": null,
+          "source": null,
+          "valid_from": null,
+          "valid_until": null,
+          "tags": [],
+          "created_at": "2026-07-31T00:00:00Z"
+        },
+        {
+          "content": "Has an internal API for potential direct MCP resource mapping.",
+          "confidence": null,
+          "source": null,
+          "valid_from": null,
+          "valid_until": null,
+          "tags": [],
+          "created_at": "2026-07-31T00:00:00Z"
+        },
+        {
+          "content": "Supports stdio and SSE protocols (stdio better tested).",
+          "confidence": null,
+          "source": null,
+          "valid_from": null,
+          "valid_until": null,
+          "tags": [],
+          "created_at": "2026-07-31T00:00:00Z"
+        },
+        {
+          "content": "Based on the FastMcp Rails gem.",
+          "confidence": null,
+          "source": null,
+          "valid_from": null,
+          "valid_until": null,
+          "tags": [],
+          "created_at": "2026-07-31T00:00:00Z"
+        },
+        {
+          "content": "Located in workspace: /home/steve/Projects/graph_mem",
+          "confidence": null,
+          "source": null,
+          "valid_from": null,
+          "valid_until": null,
+          "tags": [],
+          "created_at": "2026-07-31T00:00:00Z"
+        },
+        {
+          "content": "Rails application with Graph Memory functionality",
+          "confidence": null,
+          "source": null,
+          "valid_from": null,
+          "valid_until": null,
+          "tags": [],
+          "created_at": "2026-07-31T00:00:00Z"
+        },
+        {
+          "content": "Contains MCP tools for graph memory management",
+          "confidence": null,
+          "source": null,
+          "valid_from": null,
+          "valid_until": null,
+          "tags": [],
+          "created_at": "2026-07-31T00:00:00Z"
+        },
+        {
+          "content": "Uses Mermaid diagrams for visualization",
+          "confidence": null,
+          "source": null,
+          "valid_from": null,
+          "valid_until": null,
+          "tags": [],
+          "created_at": "2026-07-31T00:00:00Z"
+        },
+        {
+          "content": "Has data migration tasks for JSON import/export",
+          "confidence": null,
+          "source": null,
+          "valid_from": null,
+          "valid_until": null,
+          "tags": [],
+          "created_at": "2026-07-31T00:00:00Z"
+        },
+        {
+          "content": "Located at /home/steve/Projects/graph_mem",
+          "confidence": null,
+          "source": null,
+          "valid_from": null,
+          "valid_until": null,
+          "tags": [],
+          "created_at": "2026-07-31T00:00:00Z"
+        },
+        {
+          "content": "Converted Mermaid diagram generation from graph to ER diagram format in lib/tasks/memory_data.rake for better vertical layout and readability. Updated generate_project_overview_diagram() and generate_project_issues_diagram() functions to use erDiagram syntax with titles, entity definitions, and proper relationships.",
+          "confidence": null,
+          "source": null,
+          "valid_from": null,
+          "valid_until": null,
+          "tags": [],
+          "created_at": "2026-07-31T00:00:00Z"
+        },
+        {
+          "content": "Converted Mermaid diagram generation from graph to Class diagram format in lib/tasks/memory_data.rake. Updated generate_project_overview_diagram() and generate_project_issues_diagram() functions to use classDiagram syntax with direction LR for horizontal layout, class definitions with attributes, cardinality relationships, and clean styling. This provides better direction control and more compact layouts than ER diagrams.",
+          "confidence": null,
+          "source": null,
+          "valid_from": null,
+          "valid_until": null,
+          "tags": [],
+          "created_at": "2026-07-31T00:00:00Z"
+        },
+        {
+          "content": "2026-07-10: Fixed graph_mem embedding observation creation with NOT NULL MariaDB VECTOR columns by adding insert triggers for indexed columns, wiring them into EmbeddingIndexManager, improving EmbeddingService connection errors, and avoiding FastMCP delete_observation top-level content response collisions.",
+          "confidence": null,
+          "source": null,
+          "valid_from": null,
+          "valid_until": null,
+          "tags": [],
+          "created_at": "2026-07-31T00:00:00Z"
+        },
+        {
+          "content": "2026-07-10: Fixed operator embeddings UI false failure caused by session-stored connection result keys returning as strings after redirect; Operator::EmbeddingsController#index now uses with_indifferent_access and request specs assert rendered success dims/latency.",
+          "confidence": null,
+          "source": null,
+          "valid_from": null,
+          "valid_until": null,
+          "tags": [],
+          "created_at": "2026-07-31T00:00:00Z"
+        }
+      ],
+      "children": [
+        {
+          "name": "Drag-and-Drop Entity Merging",
+          "entity_type": "Feature",
+          "aliases": null,
+          "observations": [
+            {
+              "content": "Implement drag-and-drop functionality to merge one MemoryEntity into another in the graph visualization.",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            }
+          ],
+          "children": [],
+          "relation_type": "part_of",
+          "relation_weight": null,
+          "relation_confidence": null,
+          "relation_properties": {},
+          "relation_direction": "child_to_parent"
+        },
+        {
+          "name": "Adapt graph_mem to SSE",
+          "entity_type": "Task",
+          "aliases": null,
+          "observations": [
+            {
+              "content": "Priority: High",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            },
+            {
+              "content": "Status: In Progress",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            },
+            {
+              "content": "Goal: Replace pub-sub MCP with SSE MCP",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            },
+            {
+              "content": "Investigate mcp-rails gem as a potential solution",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            },
+            {
+              "content": "Finding: mcp-rails/mcp-rb do not seem to support SSE directly for the MCP server. Need to re-evaluate options.",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            },
+            {
+              "content": "Finding: Neither mcp-rails/mcp-rb nor actionmcp appear to support SSE directly for the MCP server-to-client link.",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            },
+            {
+              "content": "Next step: Search for other Ruby gems or consider custom SSE implementation.",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            },
+            {
+              "content": "Promising Solution: Use 'fast-mcp' gem. It supports SSE and has Rails integration.",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            },
+            {
+              "content": "Plan: Integrate fast-mcp, refactor existing tools/resources from actionmcp to fast-mcp syntax, remove/disable actionmcp, then test.",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            }
+          ],
+          "children": [
+            {
+              "name": "mcp-rails_gem",
+              "entity_type": "Framework",
+              "aliases": null,
+              "observations": [
+                {
+                  "content": "Potential alternative to actionmcp_gem",
+                  "confidence": null,
+                  "source": null,
+                  "valid_from": null,
+                  "valid_until": null,
+                  "tags": [],
+                  "created_at": "2026-07-31T00:00:00Z"
+                },
+                {
+                  "content": "Investigating for SSE support",
+                  "confidence": null,
+                  "source": null,
+                  "valid_from": null,
+                  "valid_until": null,
+                  "tags": [],
+                  "created_at": "2026-07-31T00:00:00Z"
+                },
+                {
+                  "content": "Acts as a bridge, converting MCP tool calls to HTTP requests to a Rails app.",
+                  "confidence": null,
+                  "source": null,
+                  "valid_from": null,
+                  "valid_until": null,
+                  "tags": [],
+                  "created_at": "2026-07-31T00:00:00Z"
+                },
+                {
+                  "content": "Depends on 'mcp-rb' gem for MCP server generation and communication.",
+                  "confidence": null,
+                  "source": null,
+                  "valid_from": null,
+                  "valid_until": null,
+                  "tags": [],
+                  "created_at": "2026-07-31T00:00:00Z"
+                },
+                {
+                  "content": "README does not explicitly state SSE support for the LLM-to-MCP-server link.",
+                  "confidence": null,
+                  "source": null,
+                  "valid_from": null,
+                  "valid_until": null,
+                  "tags": [],
+                  "created_at": "2026-07-31T00:00:00Z"
+                }
+              ],
+              "children": [],
+              "relation_type": "investigates_framework",
+              "relation_weight": null,
+              "relation_confidence": null,
+              "relation_properties": {},
+              "relation_direction": "parent_to_child"
+            },
+            {
+              "name": "fast-mcp_gem",
+              "entity_type": "Framework",
+              "aliases": null,
+              "observations": [
+                {
+                  "content": "Identified as a potential solution. GitHub summary claims support for STDIO, HTTP, and SSE transports.",
+                  "confidence": null,
+                  "source": null,
+                  "valid_from": null,
+                  "valid_until": null,
+                  "tags": [],
+                  "created_at": "2026-07-31T00:00:00Z"
+                },
+                {
+                  "content": "User has prior experience with this gem for the graph_mem project (Memory: e6256fbe-21c8-42b5-bd6c-978571844c97).",
+                  "confidence": null,
+                  "source": null,
+                  "valid_from": null,
+                  "valid_until": null,
+                  "tags": [],
+                  "created_at": "2026-07-31T00:00:00Z"
+                },
+                {
+                  "content": "README confirms explicit support for SSE transport.",
+                  "confidence": null,
+                  "source": null,
+                  "valid_from": null,
+                  "valid_until": null,
+                  "tags": [],
+                  "created_at": "2026-07-31T00:00:00Z"
+                },
+                {
+                  "content": "Provides Rails integration with a generator and configurable initializer.",
+                  "confidence": null,
+                  "source": null,
+                  "valid_from": null,
+                  "valid_until": null,
+                  "tags": [],
+                  "created_at": "2026-07-31T00:00:00Z"
+                },
+                {
+                  "content": "Rails integration allows specifying an 'sse_route'.",
+                  "confidence": null,
+                  "source": null,
+                  "valid_from": null,
+                  "valid_until": null,
+                  "tags": [],
+                  "created_at": "2026-07-31T00:00:00Z"
+                },
+                {
+                  "content": "Supports auto-discovery or manual registration of tools/resources.",
+                  "confidence": null,
+                  "source": null,
+                  "valid_from": null,
+                  "valid_until": null,
+                  "tags": [],
+                  "created_at": "2026-07-31T00:00:00Z"
+                },
+                {
+                  "content": "User has prior experience with this gem (Memory: e6256fbe-21c8-42b5-bd6c-978571844c97).",
+                  "confidence": null,
+                  "source": null,
+                  "valid_from": null,
+                  "valid_until": null,
+                  "tags": [],
+                  "created_at": "2026-07-31T00:00:00Z"
+                }
+              ],
+              "children": [],
+              "relation_type": "evaluates_framework",
+              "relation_weight": null,
+              "relation_confidence": null,
+              "relation_properties": {},
+              "relation_direction": "parent_to_child"
+            },
+            {
+              "name": "Refactor tools to fast-mcp",
+              "entity_type": "Step",
+              "aliases": null,
+              "observations": [
+                {
+                  "content": "Part of 'Adapt graph_mem to SSE' task.",
+                  "confidence": null,
+                  "source": null,
+                  "valid_from": null,
+                  "valid_until": null,
+                  "tags": [],
+                  "created_at": "2026-07-31T00:00:00Z"
+                },
+                {
+                  "content": "Order: 2 (after integrating fast-mcp)",
+                  "confidence": null,
+                  "source": null,
+                  "valid_from": null,
+                  "valid_until": null,
+                  "tags": [],
+                  "created_at": "2026-07-31T00:00:00Z"
+                },
+                {
+                  "content": "Done: false",
+                  "confidence": null,
+                  "source": null,
+                  "valid_from": null,
+                  "valid_until": null,
+                  "tags": [],
+                  "created_at": "2026-07-31T00:00:00Z"
+                },
+                {
+                  "content": "Involves changing DSL from actionmcp to fast-mcp.",
+                  "confidence": null,
+                  "source": null,
+                  "valid_from": null,
+                  "valid_until": null,
+                  "tags": [],
+                  "created_at": "2026-07-31T00:00:00Z"
+                },
+                {
+                  "content": "Refactored 'CreateObservationTool' from actionmcp to fast-mcp syntax. Changes include argument definition, method signature (perform to call), return value, and error handling.",
+                  "confidence": null,
+                  "source": null,
+                  "valid_from": null,
+                  "valid_until": null,
+                  "tags": [],
+                  "created_at": "2026-07-31T00:00:00Z"
+                },
+                {
+                  "content": "Refactored 'CreateRelationTool' from actionmcp to fast-mcp syntax.",
+                  "confidence": null,
+                  "source": null,
+                  "valid_from": null,
+                  "valid_until": null,
+                  "tags": [],
+                  "created_at": "2026-07-31T00:00:00Z"
+                },
+                {
+                  "content": "Refactored 'GetEntityTool' from actionmcp to fast-mcp syntax.",
+                  "confidence": null,
+                  "source": null,
+                  "valid_from": null,
+                  "valid_until": null,
+                  "tags": [],
+                  "created_at": "2026-07-31T00:00:00Z"
+                },
+                {
+                  "content": "Refactored 'FindRelationsTool' from actionmcp to fast-mcp syntax.",
+                  "confidence": null,
+                  "source": null,
+                  "valid_from": null,
+                  "valid_until": null,
+                  "tags": [],
+                  "created_at": "2026-07-31T00:00:00Z"
+                },
+                {
+                  "content": "Refactored 'DeleteRelationTool' from actionmcp to fast-mcp syntax.",
+                  "confidence": null,
+                  "source": null,
+                  "valid_from": null,
+                  "valid_until": null,
+                  "tags": [],
+                  "created_at": "2026-07-31T00:00:00Z"
+                },
+                {
+                  "content": "Refactored 'VersionTool' from actionmcp to fast-mcp syntax. It attempts to return `GraphMemoryBackend::VERSION`.",
+                  "confidence": null,
+                  "source": null,
+                  "valid_from": null,
+                  "valid_until": null,
+                  "tags": [],
+                  "created_at": "2026-07-31T00:00:00Z"
+                },
+                {
+                  "content": "Refactored 'CreateEntityTool' from actionmcp to fast-mcp syntax, including changing 'entityType' parameter to 'entity_type'.",
+                  "confidence": null,
+                  "source": null,
+                  "valid_from": null,
+                  "valid_until": null,
+                  "tags": [],
+                  "created_at": "2026-07-31T00:00:00Z"
+                },
+                {
+                  "content": "Refactored 'SearchEntitiesTool' from actionmcp to fast-mcp syntax.",
+                  "confidence": null,
+                  "source": null,
+                  "valid_from": null,
+                  "valid_until": null,
+                  "tags": [],
+                  "created_at": "2026-07-31T00:00:00Z"
+                },
+                {
+                  "content": "Refactored 'DeleteEntityTool' from actionmcp to fast-mcp syntax.",
+                  "confidence": null,
+                  "source": null,
+                  "valid_from": null,
+                  "valid_until": null,
+                  "tags": [],
+                  "created_at": "2026-07-31T00:00:00Z"
+                },
+                {
+                  "content": "Refactored 'DeleteObservationTool' from actionmcp to fast-mcp syntax.",
+                  "confidence": null,
+                  "source": null,
+                  "valid_from": null,
+                  "valid_until": null,
+                  "tags": [],
+                  "created_at": "2026-07-31T00:00:00Z"
+                },
+                {
+                  "content": "All identified tools have now been refactored to fast-mcp. Next step is testing.",
+                  "confidence": null,
+                  "source": null,
+                  "valid_from": null,
+                  "valid_until": null,
+                  "tags": [],
+                  "created_at": "2026-07-31T00:00:00Z"
+                },
+                {
+                  "content": "All tools refactored. User updated VersionTool to point to GraphMem::VERSION.",
+                  "confidence": null,
+                  "source": null,
+                  "valid_from": null,
+                  "valid_until": null,
+                  "tags": [],
+                  "created_at": "2026-07-31T00:00:00Z"
+                },
+                {
+                  "content": "Proceeding to test refactored tools. First step is to start the Rails server.",
+                  "confidence": null,
+                  "source": null,
+                  "valid_from": null,
+                  "valid_until": null,
+                  "tags": [],
+                  "created_at": "2026-07-31T00:00:00Z"
+                },
+                {
+                  "content": "Testing VersionTool via curl. Server returned Web Console HTML instead of JSON. Next step is to check server logs for errors.",
+                  "confidence": null,
+                  "source": null,
+                  "valid_from": null,
+                  "valid_until": null,
+                  "tags": [],
+                  "created_at": "2026-07-31T00:00:00Z"
+                },
+                {
+                  "content": "Still encountering 'Endpoint not found' for VersionTool. Removed explicit mount from routes.rb to rely on initializer. Next step: check full server startup logs for errors.",
+                  "confidence": null,
+                  "source": null,
+                  "valid_from": null,
+                  "valid_until": null,
+                  "tags": [],
+                  "created_at": "2026-07-31T00:00:00Z"
+                }
+              ],
+              "children": [],
+              "relation_type": "has_step",
+              "relation_weight": null,
+              "relation_confidence": null,
+              "relation_properties": {},
+              "relation_direction": "parent_to_child"
+            },
+            {
+              "name": "Integrate fast-mcp into Rails",
+              "entity_type": "Step",
+              "aliases": null,
+              "observations": [
+                {
+                  "content": "Part of 'Adapt graph_mem to SSE' task.",
+                  "confidence": null,
+                  "source": null,
+                  "valid_from": null,
+                  "valid_until": null,
+                  "tags": [],
+                  "created_at": "2026-07-31T00:00:00Z"
+                },
+                {
+                  "content": "Order: 1",
+                  "confidence": null,
+                  "source": null,
+                  "valid_from": null,
+                  "valid_until": null,
+                  "tags": [],
+                  "created_at": "2026-07-31T00:00:00Z"
+                },
+                {
+                  "content": "Done: false",
+                  "confidence": null,
+                  "source": null,
+                  "valid_from": null,
+                  "valid_until": null,
+                  "tags": [],
+                  "created_at": "2026-07-31T00:00:00Z"
+                },
+                {
+                  "content": "Add gem, run installer, configure initializer.",
+                  "confidence": null,
+                  "source": null,
+                  "valid_from": null,
+                  "valid_until": null,
+                  "tags": [],
+                  "created_at": "2026-07-31T00:00:00Z"
+                },
+                {
+                  "content": "Added 'fast-mcp' gem and ran installer.",
+                  "confidence": null,
+                  "source": null,
+                  "valid_from": null,
+                  "valid_until": null,
+                  "tags": [],
+                  "created_at": "2026-07-31T00:00:00Z"
+                },
+                {
+                  "content": "Initializer 'config/initializers/fast_mcp.rb' created; SSE route is '/mcp/sse'.",
+                  "confidence": null,
+                  "source": null,
+                  "valid_from": null,
+                  "valid_until": null,
+                  "tags": [],
+                  "created_at": "2026-07-31T00:00:00Z"
+                },
+                {
+                  "content": "Tools moved to 'app/tools/' by USER, aligning with auto-discovery.",
+                  "confidence": null,
+                  "source": null,
+                  "valid_from": null,
+                  "valid_until": null,
+                  "tags": [],
+                  "created_at": "2026-07-31T00:00:00Z"
+                },
+                {
+                  "content": "'app/tools/application_tool.rb' correctly inherits from 'ActionTool::Base'. Auto-discovery of tools should now work for tools in 'app/tools/' that inherit from 'ApplicationTool'.",
+                  "confidence": null,
+                  "source": null,
+                  "valid_from": null,
+                  "valid_until": null,
+                  "tags": [],
+                  "created_at": "2026-07-31T00:00:00Z"
+                }
+              ],
+              "children": [],
+              "relation_type": "has_step",
+              "relation_weight": null,
+              "relation_confidence": null,
+              "relation_properties": {},
+              "relation_direction": "parent_to_child"
+            },
+            {
+              "name": "Remove/Disable actionmcp",
+              "entity_type": "Step",
+              "aliases": null,
+              "observations": [
+                {
+                  "content": "Part of 'Adapt graph_mem to SSE' task.",
+                  "confidence": null,
+                  "source": null,
+                  "valid_from": null,
+                  "valid_until": null,
+                  "tags": [],
+                  "created_at": "2026-07-31T00:00:00Z"
+                },
+                {
+                  "content": "Order: 3",
+                  "confidence": null,
+                  "source": null,
+                  "valid_from": null,
+                  "valid_until": null,
+                  "tags": [],
+                  "created_at": "2026-07-31T00:00:00Z"
+                },
+                {
+                  "content": "Done: false",
+                  "confidence": null,
+                  "source": null,
+                  "valid_from": null,
+                  "valid_until": null,
+                  "tags": [],
+                  "created_at": "2026-07-31T00:00:00Z"
+                }
+              ],
+              "children": [],
+              "relation_type": "has_step",
+              "relation_weight": null,
+              "relation_confidence": null,
+              "relation_properties": {},
+              "relation_direction": "parent_to_child"
+            },
+            {
+              "name": "Test SSE MCP endpoint",
+              "entity_type": "Step",
+              "aliases": null,
+              "observations": [
+                {
+                  "content": "Part of 'Adapt graph_mem to SSE' task.",
+                  "confidence": null,
+                  "source": null,
+                  "valid_from": null,
+                  "valid_until": null,
+                  "tags": [],
+                  "created_at": "2026-07-31T00:00:00Z"
+                },
+                {
+                  "content": "Order: 4",
+                  "confidence": null,
+                  "source": null,
+                  "valid_from": null,
+                  "valid_until": null,
+                  "tags": [],
+                  "created_at": "2026-07-31T00:00:00Z"
+                },
+                {
+                  "content": "Done: false",
+                  "confidence": null,
+                  "source": null,
+                  "valid_from": null,
+                  "valid_until": null,
+                  "tags": [],
+                  "created_at": "2026-07-31T00:00:00Z"
+                }
+              ],
+              "children": [],
+              "relation_type": "has_step",
+              "relation_weight": null,
+              "relation_confidence": null,
+              "relation_properties": {},
+              "relation_direction": "parent_to_child"
+            }
+          ],
+          "relation_type": "part_of",
+          "relation_weight": null,
+          "relation_confidence": null,
+          "relation_properties": {},
+          "relation_direction": "child_to_parent"
+        },
+        {
+          "name": "ApplicationStack:fast-mcp_graph_mem",
+          "entity_type": "ApplicationStack",
+          "aliases": null,
+          "observations": [
+            {
+              "content": "Version: 1.4.0 (used in Project:graph_mem)",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            }
+          ],
+          "children": [],
+          "relation_type": "part_of",
+          "relation_weight": null,
+          "relation_confidence": null,
+          "relation_properties": {},
+          "relation_direction": "child_to_parent"
+        },
+        {
+          "name": "actionmcp_gem",
+          "entity_type": "Framework",
+          "aliases": null,
+          "observations": [
+            {
+              "content": "Used in graph_mem project",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            },
+            {
+              "content": "Provides an engine for MCP servers",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            },
+            {
+              "content": "Uses pub-sub for streaming",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            },
+            {
+              "content": "Uses a pub/sub system (SolidCable, Simple, Redis) for real-time communication.",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            },
+            {
+              "content": "Documentation does not indicate support for SSE as a transport protocol for MCP client-server interaction.",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            },
+            {
+              "content": "Explicitly does not support STDIO transport.",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            }
+          ],
+          "children": [],
+          "relation_type": "part_of",
+          "relation_weight": null,
+          "relation_confidence": null,
+          "relation_properties": {},
+          "relation_direction": "child_to_parent"
+        },
+        {
+          "name": "Cascade MCP Resources Support",
+          "entity_type": "Issue",
+          "aliases": null,
+          "observations": [
+            {
+              "content": "Implemented MemoryEntityResource in graph_mem project but Cascade client doesn't list it",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            },
+            {
+              "content": "The list_resources tool returns 'MCP server graph_mem does not have any resources'",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            },
+            {
+              "content": "Despite proper configuration in fast_mcp.rb initializer",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            },
+            {
+              "content": "Resources are properly defined in the Ruby app but not visible in Cascade UI",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            },
+            {
+              "content": "Resolved: Resources are now properly visible in Cascade after fixing resource registration in mcp_stdio_runner.rb",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            }
+          ],
+          "children": [],
+          "relation_type": "part_of",
+          "relation_weight": null,
+          "relation_confidence": null,
+          "relation_properties": {},
+          "relation_direction": "child_to_parent"
+        },
+        {
+          "name": "Configure MariaDB for graph_mem",
+          "entity_type": "Step",
+          "aliases": null,
+          "observations": [
+            {
+              "content": "Order: 2",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            },
+            {
+              "content": "Status: Done",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            },
+            {
+              "content": "Task: Develop Graph Memory Backend",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            }
+          ],
+          "children": [],
+          "relation_type": "part_of",
+          "relation_weight": null,
+          "relation_confidence": null,
+          "relation_properties": {},
+          "relation_direction": "child_to_parent"
+        },
+        {
+          "name": "CreateEntityTool",
+          "entity_type": "CodeItem",
+          "aliases": null,
+          "observations": [
+            {
+              "content": "Located at /home/steve/Projects/graph_mem/app/tools/create_entity_tool.rb",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            },
+            {
+              "content": "Successfully refactored to use fast-mcp syntax.",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            },
+            {
+              "content": "Handles 'name', 'entity_type', and optional 'observations' arguments.",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            }
+          ],
+          "children": [
+            {
+              "name": "Implement Entity Aliases",
+              "entity_type": "Task",
+              "aliases": null,
+              "observations": [
+                {
+                  "content": "Add an 'aliases' text column to MemoryEntity for storing alternative names.",
+                  "confidence": null,
+                  "source": null,
+                  "valid_from": null,
+                  "valid_until": null,
+                  "tags": [],
+                  "created_at": "2026-07-31T00:00:00Z"
+                },
+                {
+                  "content": "Update CreateEntityTool, SearchEntitiesTool, SearchSubgraphTool, and MemoryEntityResource.",
+                  "confidence": null,
+                  "source": null,
+                  "valid_from": null,
+                  "valid_until": null,
+                  "tags": [],
+                  "created_at": "2026-07-31T00:00:00Z"
+                },
+                {
+                  "content": "Use '|' as a separator for aliases.",
+                  "confidence": null,
+                  "source": null,
+                  "valid_from": null,
+                  "valid_until": null,
+                  "tags": [],
+                  "created_at": "2026-07-31T00:00:00Z"
+                }
+              ],
+              "children": [],
+              "relation_type": "modifies_tool",
+              "relation_weight": null,
+              "relation_confidence": null,
+              "relation_properties": {},
+              "relation_direction": "parent_to_child"
+            }
+          ],
+          "relation_type": "part_of",
+          "relation_weight": null,
+          "relation_confidence": null,
+          "relation_properties": {},
+          "relation_direction": "child_to_parent"
+        },
+        {
+          "name": "CreateObservationTool",
+          "entity_type": "CodeItem",
+          "aliases": null,
+          "observations": [
+            {
+              "content": "Located at /home/steve/Projects/graph_mem/app/mcp/tools/create_observation_tool.rb",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            },
+            {
+              "content": "Successfully refactored to use fast-mcp syntax.",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            }
+          ],
+          "children": [],
+          "relation_type": "part_of",
+          "relation_weight": null,
+          "relation_confidence": null,
+          "relation_properties": {},
+          "relation_direction": "child_to_parent"
+        },
+        {
+          "name": "Cytoscape.js",
+          "entity_type": "SoftwareLibrary",
+          "aliases": null,
+          "observations": [
+            {
+              "content": "A powerful open-source JavaScript graph theory library for visualization and analysis. Supports various layouts, event handling, and is suitable for interactive graphs. Tentatively chosen for the graph_mem interactive frontend.",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            }
+          ],
+          "children": [
+            {
+              "name": "JavaScript Graph Visualization Library",
+              "entity_type": "SoftwareLibrary",
+              "aliases": null,
+              "observations": [
+                {
+                  "content": "A category of JavaScript libraries used to render interactive graphs and networks. Examples include Vis.js, Cytoscape.js, D3.js, Sigma.js.",
+                  "confidence": null,
+                  "source": null,
+                  "valid_from": null,
+                  "valid_until": null,
+                  "tags": [],
+                  "created_at": "2026-07-31T00:00:00Z"
+                },
+                {
+                  "content": "Cytoscape.js (ID 358) has been tentatively chosen over Vis.js (ID 359) for implementing the interactive graph frontend for graph_mem.",
+                  "confidence": null,
+                  "source": null,
+                  "valid_from": null,
+                  "valid_until": null,
+                  "tags": [],
+                  "created_at": "2026-07-31T00:00:00Z"
+                }
+              ],
+              "children": [],
+              "relation_type": "instance_of",
+              "relation_weight": null,
+              "relation_confidence": null,
+              "relation_properties": {},
+              "relation_direction": "parent_to_child"
+            }
+          ],
+          "relation_type": "part_of",
+          "relation_weight": null,
+          "relation_confidence": null,
+          "relation_properties": {},
+          "relation_direction": "child_to_parent"
+        },
+        {
+          "name": "Define initial models and run migrations for graph_mem",
+          "entity_type": "Step",
+          "aliases": null,
+          "observations": [
+            {
+              "content": "Order: 3",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            },
+            {
+              "content": "Status: Done",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            },
+            {
+              "content": "Task: Develop Graph Memory Backend",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            }
+          ],
+          "children": [
+            {
+              "name": "graph_mem_schema",
+              "entity_type": "DatabaseSchema",
+              "aliases": null,
+              "observations": [
+                {
+                  "content": "MemoryEntity: name (string, unique, indexed), entity_type (string, indexed), observations_count (integer, default: 0)",
+                  "confidence": null,
+                  "source": null,
+                  "valid_from": null,
+                  "valid_until": null,
+                  "tags": [],
+                  "created_at": "2026-07-31T00:00:00Z"
+                },
+                {
+                  "content": "MemoryObservation: content (text), memory_entity_id (bigint, fk, indexed)",
+                  "confidence": null,
+                  "source": null,
+                  "valid_from": null,
+                  "valid_until": null,
+                  "tags": [],
+                  "created_at": "2026-07-31T00:00:00Z"
+                },
+                {
+                  "content": "MemoryRelation: from_entity_id (bigint, fk, indexed), to_entity_id (bigint, fk, indexed), relation_type (string, indexed), compound_unique_index (from_entity_id, to_entity_id, relation_type)",
+                  "confidence": null,
+                  "source": null,
+                  "valid_from": null,
+                  "valid_until": null,
+                  "tags": [],
+                  "created_at": "2026-07-31T00:00:00Z"
+                },
+                {
+                  "content": "Databases created: graph_mem_development, graph_mem_test",
+                  "confidence": null,
+                  "source": null,
+                  "valid_from": null,
+                  "valid_until": null,
+                  "tags": [],
+                  "created_at": "2026-07-31T00:00:00Z"
+                }
+              ],
+              "children": [],
+              "relation_type": "PRODUCED",
+              "relation_weight": null,
+              "relation_confidence": null,
+              "relation_properties": {},
+              "relation_direction": "parent_to_child"
+            }
+          ],
+          "relation_type": "part_of",
+          "relation_weight": null,
+          "relation_confidence": null,
+          "relation_properties": {},
+          "relation_direction": "child_to_parent"
+        },
+        {
+          "name": "CreateRelationTool",
+          "entity_type": "CodeItem",
+          "aliases": null,
+          "observations": [
+            {
+              "content": "Located at /home/steve/Projects/graph_mem/app/mcp/tools/create_relation_tool.rb",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            },
+            {
+              "content": "Successfully refactored to use fast-mcp syntax.",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            }
+          ],
+          "children": [],
+          "relation_type": "part_of",
+          "relation_weight": null,
+          "relation_confidence": null,
+          "relation_properties": {},
+          "relation_direction": "child_to_parent"
+        },
+        {
+          "name": "Delete Duplicate Observations Feature",
+          "entity_type": "Feature",
+          "aliases": "duplicate deletion,observation cleanup,duplicate removal",
+          "observations": [
+            {
+              "content": "Implemented a feature to delete duplicate observations from entities in the graph_mem project",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            },
+            {
+              "content": "Added backend API endpoint DELETE /api/v1/memory_entities/:memory_entity_id/memory_observations/delete_duplicates",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            },
+            {
+              "content": "Modified frontend observations modal to detect duplicates and show delete button with confirmation",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            },
+            {
+              "content": "Duplicates are identified by identical content regardless of creation date",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            },
+            {
+              "content": "When deleting duplicates, the oldest observation is kept and newer duplicates are removed",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            },
+            {
+              "content": "UI highlights duplicate observations with red background and [DUPLICATE] label",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            },
+            {
+              "content": "Feature includes confirmation dialog and success/error feedback",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            },
+            {
+              "content": "After deletion, the graph refreshes and the observations modal reopens to show updated list",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            }
+          ],
+          "children": [],
+          "relation_type": "part_of",
+          "relation_weight": null,
+          "relation_confidence": null,
+          "relation_properties": {},
+          "relation_direction": "child_to_parent"
+        },
+        {
+          "name": "DeleteEntityTool",
+          "entity_type": "CodeItem",
+          "aliases": null,
+          "observations": [
+            {
+              "content": "Located at /home/steve/Projects/graph_mem/app/tools/delete_entity_tool.rb",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            },
+            {
+              "content": "Successfully refactored to use fast-mcp syntax.",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            },
+            {
+              "content": "Deletes an entity and relies on model's dependent: :destroy for associated data.",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            }
+          ],
+          "children": [],
+          "relation_type": "part_of",
+          "relation_weight": null,
+          "relation_confidence": null,
+          "relation_properties": {},
+          "relation_direction": "child_to_parent"
+        },
+        {
+          "name": "DeleteObservationTool",
+          "entity_type": "CodeItem",
+          "aliases": null,
+          "observations": [
+            {
+              "content": "Located at /home/steve/Projects/graph_mem/app/tools/delete_observation_tool.rb",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            },
+            {
+              "content": "Successfully refactored to use fast-mcp syntax.",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            },
+            {
+              "content": "Deletes an observation by ID.",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            }
+          ],
+          "children": [],
+          "relation_type": "part_of",
+          "relation_weight": null,
+          "relation_confidence": null,
+          "relation_properties": {},
+          "relation_direction": "child_to_parent"
+        },
+        {
+          "name": "DeleteRelationTool",
+          "entity_type": "CodeItem",
+          "aliases": null,
+          "observations": [
+            {
+              "content": "Located at /home/steve/Projects/graph_mem/app/tools/delete_relation_tool.rb",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            },
+            {
+              "content": "Successfully refactored to use fast-mcp syntax.",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            }
+          ],
+          "children": [],
+          "relation_type": "part_of",
+          "relation_weight": null,
+          "relation_confidence": null,
+          "relation_properties": {},
+          "relation_direction": "child_to_parent"
+        },
+        {
+          "name": "Develop Graph Memory Backend",
+          "entity_type": "Task",
+          "aliases": null,
+          "observations": [
+            {
+              "content": "Priority: High",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            },
+            {
+              "content": "Status: In Progress",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            },
+            {
+              "content": "Project: graph_mem",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            }
+          ],
+          "children": [
+            {
+              "name": "Set up Rails 8+ project for graph_mem",
+              "entity_type": "Step",
+              "aliases": null,
+              "observations": [
+                {
+                  "content": "Order: 1",
+                  "confidence": null,
+                  "source": null,
+                  "valid_from": null,
+                  "valid_until": null,
+                  "tags": [],
+                  "created_at": "2026-07-31T00:00:00Z"
+                },
+                {
+                  "content": "Status: Done",
+                  "confidence": null,
+                  "source": null,
+                  "valid_from": null,
+                  "valid_until": null,
+                  "tags": [],
+                  "created_at": "2026-07-31T00:00:00Z"
+                },
+                {
+                  "content": "Task: Develop Graph Memory Backend",
+                  "confidence": null,
+                  "source": null,
+                  "valid_from": null,
+                  "valid_until": null,
+                  "tags": [],
+                  "created_at": "2026-07-31T00:00:00Z"
+                }
+              ],
+              "children": [],
+              "relation_type": "HAS_STEP",
+              "relation_weight": null,
+              "relation_confidence": null,
+              "relation_properties": {},
+              "relation_direction": "parent_to_child"
+            },
+            {
+              "name": "Start building out API endpoints for graph_mem",
+              "entity_type": "Step",
+              "aliases": null,
+              "observations": [
+                {
+                  "content": "Order: 4",
+                  "confidence": null,
+                  "source": null,
+                  "valid_from": null,
+                  "valid_until": null,
+                  "tags": [],
+                  "created_at": "2026-07-31T00:00:00Z"
+                },
+                {
+                  "content": "Status: Todo",
+                  "confidence": null,
+                  "source": null,
+                  "valid_from": null,
+                  "valid_until": null,
+                  "tags": [],
+                  "created_at": "2026-07-31T00:00:00Z"
+                },
+                {
+                  "content": "Task: Develop Graph Memory Backend",
+                  "confidence": null,
+                  "source": null,
+                  "valid_from": null,
+                  "valid_until": null,
+                  "tags": [],
+                  "created_at": "2026-07-31T00:00:00Z"
+                }
+              ],
+              "children": [],
+              "relation_type": "HAS_STEP",
+              "relation_weight": null,
+              "relation_confidence": null,
+              "relation_properties": {},
+              "relation_direction": "parent_to_child"
+            },
+            {
+              "name": "Document API for graph_mem",
+              "entity_type": "Step",
+              "aliases": null,
+              "observations": [
+                {
+                  "content": "Order: 5",
+                  "confidence": null,
+                  "source": null,
+                  "valid_from": null,
+                  "valid_until": null,
+                  "tags": [],
+                  "created_at": "2026-07-31T00:00:00Z"
+                },
+                {
+                  "content": "Status: Todo",
+                  "confidence": null,
+                  "source": null,
+                  "valid_from": null,
+                  "valid_until": null,
+                  "tags": [],
+                  "created_at": "2026-07-31T00:00:00Z"
+                },
+                {
+                  "content": "Task: Develop Graph Memory Backend",
+                  "confidence": null,
+                  "source": null,
+                  "valid_from": null,
+                  "valid_until": null,
+                  "tags": [],
+                  "created_at": "2026-07-31T00:00:00Z"
+                }
+              ],
+              "children": [],
+              "relation_type": "HAS_STEP",
+              "relation_weight": null,
+              "relation_confidence": null,
+              "relation_properties": {},
+              "relation_direction": "parent_to_child"
+            }
+          ],
+          "relation_type": "part_of",
+          "relation_weight": null,
+          "relation_confidence": null,
+          "relation_properties": {},
+          "relation_direction": "child_to_parent"
+        },
+        {
+          "name": "Enhance MemoryEntityResource with Filtering",
+          "entity_type": "Task",
+          "aliases": null,
+          "observations": [
+            {
+              "content": "Add filtering capabilities to the memory_entities MCP resource",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            },
+            {
+              "content": "Need to support filtering by entity_type, name pattern, and other attributes",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            },
+            {
+              "content": "Should preserve existing pagination functionality",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            },
+            {
+              "content": "Will enable more efficient data retrieval from Cascade",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            },
+            {
+              "content": "Enhanced MemoryEntityResource with comprehensive filtering options: entity_type, name (partial match), ID, date ranges, and observation count",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            },
+            {
+              "content": "Server restart required to apply changes to the resource implementation",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            }
+          ],
+          "children": [],
+          "relation_type": "part_of",
+          "relation_weight": null,
+          "relation_confidence": null,
+          "relation_properties": {},
+          "relation_direction": "child_to_parent"
+        },
+        {
+          "name": "fast-mcp Integration",
+          "entity_type": "Feature",
+          "aliases": null,
+          "observations": [
+            {
+              "content": "Integrated MCP server functionality directly into the Rails app using the fast-mcp gem.",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            },
+            {
+              "content": "Replaced standalone bin/mcp_graph_memory_server script.",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            }
+          ],
+          "children": [],
+          "relation_type": "part_of",
+          "relation_weight": null,
+          "relation_confidence": null,
+          "relation_properties": {},
+          "relation_direction": "child_to_parent"
+        },
+        {
+          "name": "fastmcp_gem",
+          "entity_type": "Framework",
+          "aliases": null,
+          "observations": [
+            {
+              "content": "Used on the main branch of graph_mem project",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            },
+            {
+              "content": "Version 1.5+ required for current implementation",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            },
+            {
+              "content": "Provides MCP server functionality",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            }
+          ],
+          "children": [],
+          "relation_type": "part_of",
+          "relation_weight": null,
+          "relation_confidence": null,
+          "relation_properties": {},
+          "relation_direction": "child_to_parent"
+        },
+        {
+          "name": "FindRelationsTool",
+          "entity_type": "CodeItem",
+          "aliases": null,
+          "observations": [
+            {
+              "content": "Located at /home/steve/Projects/graph_mem/app/tools/find_relations_tool.rb",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            },
+            {
+              "content": "Successfully refactored to use fast-mcp syntax with optional parameters.",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            }
+          ],
+          "children": [],
+          "relation_type": "part_of",
+          "relation_weight": null,
+          "relation_confidence": null,
+          "relation_properties": {},
+          "relation_direction": "child_to_parent"
+        },
+        {
+          "name": "Framework:Ruby on Rails_graph_mem",
+          "entity_type": "Framework",
+          "aliases": null,
+          "observations": [
+            {
+              "content": "Version: 8.0.2 (used in Project:graph_mem)",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            }
+          ],
+          "children": [],
+          "relation_type": "part_of",
+          "relation_weight": null,
+          "relation_confidence": null,
+          "relation_properties": {},
+          "relation_direction": "child_to_parent"
+        },
+        {
+          "name": "GraphMem::VERSION",
+          "entity_type": "Constant",
+          "aliases": null,
+          "observations": [
+            {
+              "content": "Located in /home/steve/Projects/graph_mem/lib/graph_mem/version.rb",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            },
+            {
+              "content": "Defines the version for the GraphMem project.",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            },
+            {
+              "content": "Used by VersionTool.",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            }
+          ],
+          "children": [],
+          "relation_type": "part_of",
+          "relation_weight": null,
+          "relation_confidence": null,
+          "relation_properties": {},
+          "relation_direction": "child_to_parent"
+        },
+        {
+          "name": "GraphMemToolSchemaIssue_CascadeAI_V2",
+          "entity_type": "Issue",
+          "aliases": null,
+          "observations": [
+            {
+              "content": "Description: The schemas for graph_mem MCP tools provided to the Cascade AI agent are inconsistent with the actual parameters expected by the tools. For example, mcp1_GetEntityTool expects 'entity_id' but was documented differently, and mcp1_CreateEntityTool only accepts 'name' and 'entity_type', requiring other attributes to be added as observations.",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            },
+            {
+              "content": "TestObservation: This observation is to verify the fix for the CreateObservationTool response format. The tool should now return a JSON array.",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            },
+            {
+              "content": "TestObservation_AfterRestart_And_PatchCleanup: Verifying CreateObservationTool response and debug logging.",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            },
+            {
+              "content": "TestObservation_AfterPatchToBypassSendFormattedResult: Final check.",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            },
+            {
+              "content": "TestObservation_AfterSecondRestart_BypassSendFormattedResult: Final check.",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            },
+            {
+              "content": "TestObservation_AfterAllToolsReturnArray: Confirming baseline.",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            },
+            {
+              "content": "TestObservation_ToolReturnsHash_PatchBypassesSendFormattedResult: Diagnostic test.",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            },
+            {
+              "content": "TestObservation_AfterRunnerLogsToStderr: Hoping for no timeout!",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            },
+            {
+              "content": "TestObservation_WithFullStdioDebug: Lets see the logs!",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            },
+            {
+              "content": "TestObservation_AfterFixingSendChain: FingersCrossed!",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            },
+            {
+              "content": "TestObservation_FinalArrayFormat: PleaseWork!",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            },
+            {
+              "content": "TestObservation_VarNameFix_MCPFormat: OneStepCloser!",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            }
+          ],
+          "children": [
+            {
+              "name": "UpdateCascadeToolSchemasForGraphMem_CascadeAI_V2",
+              "entity_type": "PossibleSolution",
+              "aliases": null,
+              "observations": [
+                {
+                  "content": "Description: Review and correct all graph_mem MCP tool schemas in Cascade's system prompt to accurately reflect required/optional parameters, their names, data types, and expected tool response structures. Also, document the workflow for adding entity attributes via observations.",
+                  "confidence": null,
+                  "source": null,
+                  "valid_from": null,
+                  "valid_until": null,
+                  "tags": [],
+                  "created_at": "2026-07-31T00:00:00Z"
+                }
+              ],
+              "children": [],
+              "relation_type": "HAS_PROPOSED_SOLUTION",
+              "relation_weight": null,
+              "relation_confidence": null,
+              "relation_properties": {},
+              "relation_direction": "parent_to_child"
+            }
+          ],
+          "relation_type": "part_of",
+          "relation_weight": null,
+          "relation_confidence": null,
+          "relation_properties": {},
+          "relation_direction": "child_to_parent"
+        },
+        {
+          "name": "Interactive Graph Frontend for graph_mem",
+          "entity_type": "Task",
+          "aliases": null,
+          "observations": [
+            {
+              "content": "User wants to add a simple graphical front end to `graph_mem` that renders the relationships between the memory entities as vectors between nodes of an interactive node graph.",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            },
+            {
+              "content": "To be implemented using a JavaScript library with Stimulus controllers in Rails 8.",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            },
+            {
+              "content": "Initial goal: graphical display on the local rails server.",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            },
+            {
+              "content": "Long-term goals: drag'n'drop node merging, contextual pop-up menus for node actions (show observations, destroy node).",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            }
+          ],
+          "children": [],
+          "relation_type": "part_of",
+          "relation_weight": null,
+          "relation_confidence": null,
+          "relation_properties": {},
+          "relation_direction": "child_to_parent"
+        },
+        {
+          "name": "Issue:FastMcpToolLoggerMissing_graph_mem",
+          "entity_type": "Issue",
+          "aliases": null,
+          "observations": [
+            {
+              "content": "Description: FastMcp::Tool instances (e.g., GetEntityTool) in Project:graph_mem were missing a logger method.",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            },
+            {
+              "content": "Symptom: Rails server log showed error: \"undefined local variable or method 'logger' for an instance of GetEntityTool\"",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            },
+            {
+              "content": "AffectedFile: app/tools/get_entity_tool.rb (and other tools inheriting from ApplicationTool)",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            }
+          ],
+          "children": [],
+          "relation_type": "part_of",
+          "relation_weight": null,
+          "relation_confidence": null,
+          "relation_properties": {},
+          "relation_direction": "child_to_parent"
+        },
+        {
+          "name": "GetEntityTool",
+          "entity_type": "CodeItem",
+          "aliases": null,
+          "observations": [
+            {
+              "content": "Located at /home/steve/Projects/graph_mem/app/tools/get_entity_tool.rb",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            },
+            {
+              "content": "Successfully refactored to use fast-mcp syntax.",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            }
+          ],
+          "children": [],
+          "relation_type": "part_of",
+          "relation_weight": null,
+          "relation_confidence": null,
+          "relation_properties": {},
+          "relation_direction": "child_to_parent"
+        },
+        {
+          "name": "Knowledge Graph Management Rules Improvement",
+          "entity_type": "Task",
+          "aliases": null,
+          "observations": [
+            {
+              "content": "Reviewing and improving knowledge graph management rules",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            },
+            {
+              "content": "Adding guidance on MCP resources vs tools usage",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            },
+            {
+              "content": "Making document more clear and structured",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            },
+            {
+              "content": "Focusing on practical implementation techniques",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            }
+          ],
+          "children": [],
+          "relation_type": "part_of",
+          "relation_weight": null,
+          "relation_confidence": null,
+          "relation_properties": {},
+          "relation_direction": "child_to_parent"
+        },
+        {
+          "name": "MCP Integration Test",
+          "entity_type": "Test",
+          "aliases": null,
+          "observations": [
+            {
+              "content": "Successfully invoked SearchEntitiesTool via mcp1_search_nodes tool call, confirming communication between AI platform and Rails MCP server.",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            }
+          ],
+          "children": [],
+          "relation_type": "part_of",
+          "relation_weight": null,
+          "relation_confidence": null,
+          "relation_properties": {},
+          "relation_direction": "child_to_parent"
+        },
+        {
+          "name": "MCP Resources Complete Implementation",
+          "entity_type": "Task",
+          "aliases": null,
+          "observations": [
+            {
+              "content": "Successfully implemented all three primary MCP resources: MemoryEntityResource, MemoryObservationResource, and MemoryRelationResource",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            },
+            {
+              "content": "Each resource supports pagination, filtering, sorting, and inclusion of related entities",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            },
+            {
+              "content": "Documentation created for each resource with comprehensive parameter descriptions and usage examples",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            },
+            {
+              "content": "All three resources successfully tested with various query parameters and inclusion options",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            }
+          ],
+          "children": [
+            {
+              "name": "MemoryGraphResource MCP Implementation",
+              "entity_type": "Feature",
+              "aliases": null,
+              "observations": [
+                {
+                  "content": "Convenience resource that provides a graph view starting from a seed entity",
+                  "confidence": null,
+                  "source": null,
+                  "valid_from": null,
+                  "valid_until": null,
+                  "tags": [],
+                  "created_at": "2026-07-31T00:00:00Z"
+                },
+                {
+                  "content": "Traverses related entities with configurable depth (max 3)",
+                  "confidence": null,
+                  "source": null,
+                  "valid_from": null,
+                  "valid_until": null,
+                  "tags": [],
+                  "created_at": "2026-07-31T00:00:00Z"
+                },
+                {
+                  "content": "Includes options for observations and relations",
+                  "confidence": null,
+                  "source": null,
+                  "valid_from": null,
+                  "valid_until": null,
+                  "tags": [],
+                  "created_at": "2026-07-31T00:00:00Z"
+                },
+                {
+                  "content": "Handles cycle detection to prevent infinite loops",
+                  "confidence": null,
+                  "source": null,
+                  "valid_from": null,
+                  "valid_until": null,
+                  "tags": [],
+                  "created_at": "2026-07-31T00:00:00Z"
+                },
+                {
+                  "content": "Successfully tested the MemoryGraphResource, which properly returns the requested entity with its observations, outgoing relations (with target entities and their observations), and incoming relations (with source entities and their observations).",
+                  "confidence": null,
+                  "source": null,
+                  "valid_from": null,
+                  "valid_until": null,
+                  "tags": [],
+                  "created_at": "2026-07-31T00:00:00Z"
+                },
+                {
+                  "content": "Tested the resource with increased depth (depth=2) to confirm traversal through connected entities works correctly. The resource includes related entities along with their observations at each level.",
+                  "confidence": null,
+                  "source": null,
+                  "valid_from": null,
+                  "valid_until": null,
+                  "tags": [],
+                  "created_at": "2026-07-31T00:00:00Z"
+                }
+              ],
+              "children": [],
+              "relation_type": "part_of",
+              "relation_weight": null,
+              "relation_confidence": null,
+              "relation_properties": {},
+              "relation_direction": "child_to_parent"
+            }
+          ],
+          "relation_type": "part_of",
+          "relation_weight": null,
+          "relation_confidence": null,
+          "relation_properties": {},
+          "relation_direction": "child_to_parent"
+        },
+        {
+          "name": "MCP Tool Classes",
+          "entity_type": "CodeComponent",
+          "aliases": null,
+          "observations": [
+            {
+              "content": "Created individual classes for each MCP action (CreateEntityTool, SearchEntitiesTool, etc.) under app/tools/.",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            },
+            {
+              "content": "Refactored classes to use fast-mcp DSL (description, arguments, call).",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            },
+            {
+              "content": "Confirmed successful loading and registration during Rails server startup.",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            }
+          ],
+          "children": [],
+          "relation_type": "part_of",
+          "relation_weight": null,
+          "relation_confidence": null,
+          "relation_properties": {},
+          "relation_direction": "child_to_parent"
+        },
+        {
+          "name": "mcp-rb_gem",
+          "entity_type": "Framework",
+          "aliases": null,
+          "observations": [
+            {
+              "content": "README lists 'stdio transport' as supported, but does not mention SSE transport for the MCP server-to-LLM communication.",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            }
+          ],
+          "children": [],
+          "relation_type": "part_of",
+          "relation_weight": null,
+          "relation_confidence": null,
+          "relation_properties": {},
+          "relation_direction": "child_to_parent"
+        },
+        {
+          "name": "MemoryEntityResource Documentation",
+          "entity_type": "Documentation",
+          "aliases": null,
+          "observations": [
+            {
+              "content": "Created comprehensive documentation for the MemoryEntityResource at /docs/memory_entity_resource.md",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            },
+            {
+              "content": "Documented pagination, filtering, sorting, OR filtering, and relation inclusion features",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            },
+            {
+              "content": "Verified functionality of sorting and OR filtering parameters",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            },
+            {
+              "content": "Potential issue identified: observations may not be properly included when requested with include=observations parameter",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            },
+            {
+              "content": "Fixed include functionality by updating the format_entities_with_includes method to properly handle entity associations. Now both observations and relations can be included in responses.",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            },
+            {
+              "content": "Resources are read-only in the MCP protocol - data modifications require tools instead",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            },
+            {
+              "content": "MCP resources implementation in fast-mcp only provides the content method for read-only access - there are no built-in methods for creating, updating or deleting in the Resource API",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            },
+            {
+              "content": "We've established that the most reliable approach for combined includes is to use the multiple parameter approach: include=observations&include=relations rather than comma-separation",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            }
+          ],
+          "children": [],
+          "relation_type": "part_of",
+          "relation_weight": null,
+          "relation_confidence": null,
+          "relation_properties": {},
+          "relation_direction": "child_to_parent"
+        },
+        {
+          "name": "MemoryEntityResource MCP Implementation",
+          "entity_type": "Feature",
+          "aliases": null,
+          "observations": [
+            {
+              "content": "Implemented paginated resource for memory entities",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            },
+            {
+              "content": "Added URI template with query parameters: memory_entities{?page,per_page,entity_type,name,id,created_after,created_before,updated_after,updated_before,min_observations}",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            },
+            {
+              "content": "Successfully tested filtering by entity_type, id, and name",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            },
+            {
+              "content": "Discovered critical requirement: explicit parameter declaration in URI template for MCP resources",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            },
+            {
+              "content": "Resource provides pagination with total_entities, current_page, per_page, and total_pages",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            },
+            {
+              "content": "Related to Issue #343: Cascade MCP Resources Support",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            },
+            {
+              "content": "Future enhancement priorities agreed upon: 1) Adding sorting capabilities, 2) Supporting more complex filtering operations, 3) Including related entities in response",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            }
+          ],
+          "children": [],
+          "relation_type": "part_of",
+          "relation_weight": null,
+          "relation_confidence": null,
+          "relation_properties": {},
+          "relation_direction": "child_to_parent"
+        },
+        {
+          "name": "MemoryEntityResource Pagination and Include Parameters",
+          "entity_type": "Feature",
+          "aliases": null,
+          "observations": [
+            {
+              "content": "Successfully implemented pagination with page and per_page parameters",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            },
+            {
+              "content": "Successfully implemented filtering by entity_type, name, id, and date ranges",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            },
+            {
+              "content": "Added OR filtering capability for complex queries",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            },
+            {
+              "content": "Fixed multiple parameter handling for include=observations&include=relations format",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            },
+            {
+              "content": "Comma-separated format (include=observations,relations) not working due to MCP parameter handling limitations",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            },
+            {
+              "content": "Considered alternative approach: using dedicated boolean parameters like include_observations=true and include_relations=true instead of the current include parameter",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            },
+            {
+              "content": "Successfully tested combined boolean parameters approach. Now include_observations=true and include_relations=true work independently and together to include related data in the response. Applied_includes in the response summary correctly shows both parameters.",
+              "confidence": null,
+              "source": null,
+              "valid_from": null,
+              "valid_until": null,
+              "tags": [],
+              "created_at": "2026-07-31T00:00:00Z"
+            }
+          ],
+          "children": [
+            {
+              "name": "Combined Include Parameter",
+              "entity_type": "Issue",
+              "aliases": null,
+              "observations": [
+                {
+                  "content": "The combined inclusion parameter (include=observations,relations) doesn't work",
+                  "confidence": null,
+                  "source": null,
+                  "valid_from": null,
+                  "valid_until": null,
+                  "tags": [],
+                  "created_at": "2026-07-31T00:00:00Z"
+                },
+                {
+                  "content": "Individual includes such as observations or relations work fine separately",
+                  "confidence": null,
+                  "source": null,
+                  "valid_from": null,
+                  "valid_until": null,
+                  "tags": [],
+                  "created_at": "2026-07-31T00:00:00Z"
+                },
+                {
+                  "content": "Need to fix the comma-separated parsing logic in format_entities_with_includes",
+                  "confidence": null,
+                  "source": null,
+                  "valid_from": null,
+                  "valid_until": null,
+                  "tags": [],
+                  "created_at": "2026-07-31T00:00:00Z"
+                },
+                {
+                  "content": "Made changes to params[:include] handling to be more defensive by ensuring it's processed as a string with params[:include].to_s before splitting",
+                  "confidence": null,
+                  "source": null,
+                  "valid_from": null,
+                  "valid_until": null,
+                  "tags": [],
+                  "created_at": "2026-07-31T00:00:00Z"
+                },
+                {
+                  "content": "Modified the URI template to use RFC 6570 explode modifier for 'include' parameter using 'include*' syntax to better handle multi-value parameters",
+                  "confidence": null,
+                  "source": null,
+                  "valid_from": null,
+                  "valid_until": null,
+                  "tags": [],
+                  "created_at": "2026-07-31T00:00:00Z"
+                },
+                {
+                  "content": "The issue might be related to how the RFC 6570 URI templates handle exploded parameters when they're URL-encoded - we need a different approach",
+                  "confidence": null,
+                  "source": null,
+                  "valid_from": null,
+                  "valid_until": null,
+                  "tags": [],
+                  "created_at": "2026-07-31T00:00:00Z"
+                },
+                {
+                  "content": "Individual includes for observations and relations still work, but the combined parameter (observations,relations) still doesn't return content",
+                  "confidence": null,
+                  "source": null,
+                  "valid_from": null,
+                  "valid_until": null,
+                  "tags": [],
+                  "created_at": "2026-07-31T00:00:00Z"
+                },
+                {
+                  "content": "Found a working approach for combined inclusion! Using multiple include parameters (include=observations&include=relations) works, but only recognizes the first parameter",
+                  "confidence": null,
+                  "source": null,
+                  "valid_from": null,
+                  "valid_until": null,
+                  "tags": [],
+                  "created_at": "2026-07-31T00:00:00Z"
+                },
+                {
+                  "content": "Still facing issues with combined includes: 1) include=observations&include=relations works but only includes observations, 2) include=observations,relations returns no content",
+                  "confidence": null,
+                  "source": null,
+                  "valid_from": null,
+                  "valid_until": null,
+                  "tags": [],
+                  "created_at": "2026-07-31T00:00:00Z"
+                },
+                {
+                  "content": "Comma-separated values for include parameter still don't work properly. The URL format include=observations,relations returns no content.",
+                  "confidence": null,
+                  "source": null,
+                  "valid_from": null,
+                  "valid_until": null,
+                  "tags": [],
+                  "created_at": "2026-07-31T00:00:00Z"
+                }
+              ],
+              "children": [],
+              "relation_type": "solves",
+              "relation_weight": null,
+              "relation_confidence": null,
+              "relation_properties": {},
+              "relation_direction": "parent_to_child"
+            }
+          ],
+          "relation_type": "part_of",
+          "relation_weight": null,
+          "relation_confidence": null,
+          "relation_properties": {},
+          "relation_direction": "child_to_parent"
+        }
+      ]
+    }
+  ]
+}

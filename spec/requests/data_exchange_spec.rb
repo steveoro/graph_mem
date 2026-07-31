@@ -257,7 +257,7 @@ RSpec.describe 'DataExchange', type: :request do
               name: 'Imported Project',
               entity_type: 'Project',
               aliases: '',
-              observations: [ { content: 'Imported observation' } ],
+              observations: [ { content: 'Test observation' } ],
               children: []
             }
           ]

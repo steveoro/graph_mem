@@ -24,6 +24,7 @@ en:
         database_backup: "Database Backup"
         embeddings: "Embeddings"
         summaries: "Summaries"
+        imports: "Imports"
       bulk_update:
         success: "Saved %{count} setting(s) successfully."
         partial: "Saved %{success} setting(s); %{failed} failed."
@@ -88,6 +89,9 @@ en:
         summary_observations_per_entity:
           label: "Observations per entity"
           description: "Maximum observations to include per entity before capping. 0 disables the cap. Set to 0 to use SUMMARY_OBSERVATIONS_PER_ENTITY from the environment or the default."
+        import_observation_duplicate_max_distance:
+          label: "Observation duplicate distance"
+          description: "Maximum semantic distance for treating imported observation text as an existing fact."
       backup:
         actions_title: "Manual backup"
         list_title: "Available backups"
@@ -130,3 +134,6 @@ en:
         invalid_max_tokens: "Max tokens must be 0 (use ENV/default) or between 16 and 4096."
         invalid_observations_per_entity: "Observations per entity must be 0 (use ENV/default) or between 0 and 100."
         invalid_url: "Summary URL must be a valid http or https URL."
+      imports:
+        distance_hint: "0.20 is strict and only skips very close paraphrases. 0.50 is broad and may suppress distinct facts. Imports requiring semantic checks are rejected if embeddings are unavailable."
+        invalid_observation_duplicate_max_distance: "Observation duplicate distance must be between 0.20 and 0.50."

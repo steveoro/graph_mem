@@ -123,6 +123,10 @@ class DataExchangeController < ApplicationController
       session[:import_session_id] = import_session_id
 
       redirect_to import_review_data_exchange_index_path
+    rescue ImportObservationDuplicateDetector::UnavailableError => e
+      Rails.logger.error "Import upload requires embeddings: #{e.message}"
+      flash[:error] = "Import requires the embedding service for observation de-duplication: #{e.message}"
+      redirect_to root_path
     rescue JSON::ParserError => e
       flash[:error] = "Invalid JSON file: #{e.message}"
       redirect_to root_path

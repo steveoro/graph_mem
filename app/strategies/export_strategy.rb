@@ -156,6 +156,7 @@ class ExportStrategy
         node_data[:relation_weight] = relation_type[:weight]
         node_data[:relation_confidence] = relation_type[:confidence]
         node_data[:relation_properties] = relation_type[:properties]
+        node_data[:relation_direction] = relation_type[:direction]
       else
         node_data[:relation_type] = relation_type
       end
@@ -171,7 +172,12 @@ class ExportStrategy
       child_entity = relation.from_entity
       next unless child_entity
 
-      child_tree = build_entity_tree_internal(child_entity, visited.dup, serialize_relation(relation), with_progress)
+      child_tree = build_entity_tree_internal(
+        child_entity,
+        visited.dup,
+        serialize_relation(relation, direction: "child_to_parent"),
+        with_progress
+      )
       node_data[:children] << child_tree if child_tree
     end
 
@@ -187,7 +193,12 @@ class ExportStrategy
       next unless related_entity
       next if visited.include?(related_entity.id)
 
-      related_tree = build_entity_tree_internal(related_entity, visited.dup, serialize_relation(relation), with_progress)
+      related_tree = build_entity_tree_internal(
+        related_entity,
+        visited.dup,
+        serialize_relation(relation, direction: "parent_to_child"),
+        with_progress
+      )
       node_data[:children] << related_tree if related_tree
     end
 
@@ -211,12 +222,13 @@ class ExportStrategy
     end
   end
 
-  def serialize_relation(relation)
+  def serialize_relation(relation, direction:)
     {
       relation_type: relation.relation_type,
       weight: relation.weight,
       confidence: relation.confidence,
-      properties: relation.properties
+      properties: relation.properties,
+      direction: direction
     }
   end
 end

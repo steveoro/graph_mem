@@ -27,6 +27,10 @@ RSpec.describe AppSettings, type: :model do
       expect(AppSettings).to respond_to(:summary_observations_per_entity)
       expect(AppSettings).to respond_to(:enable_llm_summarization)
     end
+
+    it "defines the import observation duplicate distance" do
+      expect(AppSettings).to respond_to(:import_observation_duplicate_max_distance)
+    end
   end
 
   describe "summarization defaults" do
@@ -52,6 +56,10 @@ RSpec.describe AppSettings, type: :model do
       expect(AppSettings.backup_folder_path).to eq("db/backup")
       expect(AppSettings.backup_keep_max).to eq(10)
       expect(AppSettings.enable_scheduled_backups).to be false
+    end
+
+    it "uses a balanced import observation duplicate distance" do
+      expect(AppSettings.import_observation_duplicate_max_distance).to eq(0.35)
     end
   end
 

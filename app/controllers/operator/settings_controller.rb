@@ -32,6 +32,15 @@ module Operator
         end
       end
 
+      if params[:tab] == "imports"
+        validation_error = validate_import_settings(settings)
+        if validation_error
+          flash[:alert] = validation_error
+          redirect_to operator_settings_path(tab: params[:tab])
+          return
+        end
+      end
+
       settings.each do |key, value|
         next unless AppSettings.defined_fields.map(&:key).include?(key)
 
@@ -115,6 +124,10 @@ module Operator
             enable_llm_summarization summary_url summary_model summary_provider
             summary_timeout summary_max_tokens summary_observations_per_entity
           ]
+        },
+        imports: {
+          title: t("operator.settings.groups.imports"),
+          settings: %w[import_observation_duplicate_max_distance]
         }
       }
     end
@@ -167,6 +180,13 @@ module Operator
       nil
     end
 
+    def validate_import_settings(settings)
+      distance = settings["import_observation_duplicate_max_distance"].to_f
+      return if distance.between?(0.2, 0.5)
+
+      t("operator.settings.imports.invalid_observation_duplicate_max_distance")
+    end
+
     def valid_embedding_url?(url)
       uri = URI.parse(url)
       uri.is_a?(URI::HTTP) && uri.host.present?
@@ -182,6 +202,8 @@ module Operator
         %w[true 1 yes on].include?(value.to_s.downcase)
       when :integer
         value.to_i
+      when :float
+        value.to_f
       else
         str = value.to_s
         str = str.strip if key == "summary_model"

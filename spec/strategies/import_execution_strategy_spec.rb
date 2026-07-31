@@ -3,7 +3,16 @@
 require 'rails_helper'
 
 RSpec.describe ImportExecutionStrategy, type: :model do
-  let(:strategy) { described_class.new }
+  let(:observation_duplicate_detector) { instance_double(ImportObservationDuplicateDetector) }
+  let(:strategy) { described_class.new(observation_duplicate_detector: observation_duplicate_detector) }
+
+  before do
+    allow(observation_duplicate_detector).to receive(:find_duplicate) do |entity:, content:|
+      ImportObservationDuplicateDetector::Result.new(
+        duplicate: MemoryObservation.active.exists?(memory_entity_id: entity.id, content: content)
+      )
+    end
+  end
 
   # Setup existing entities in the database
   let!(:existing_project) do

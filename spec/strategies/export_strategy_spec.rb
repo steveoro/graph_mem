@@ -200,7 +200,21 @@ RSpec.describe ExportStrategy, type: :model do
         expect(task_child).to include(
           relation_weight: 2.0,
           relation_confidence: 0.8,
-          relation_properties: { 'source' => 'export-spec' }
+          relation_properties: { 'source' => 'export-spec' },
+          relation_direction: 'child_to_parent'
+        )
+      end
+
+      it 'preserves the direction of non-hierarchical relations' do
+        related = MemoryEntity.create!(name: 'Related Entity', entity_type: 'Component')
+        MemoryRelation.create!(from_entity: project1, to_entity: related, relation_type: 'relates_to')
+
+        result = strategy.export([ project1.id ])
+        related_child = result[:root_nodes].first[:children].find { |child| child[:name] == related.name }
+
+        expect(related_child).to include(
+          relation_type: 'relates_to',
+          relation_direction: 'parent_to_child'
         )
       end
     end

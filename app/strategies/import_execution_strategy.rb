@@ -34,9 +34,10 @@ class ImportExecutionStrategy
     end
   end
 
-  def initialize(progress_tracker: nil)
+  def initialize(progress_tracker: nil, observation_duplicate_detector: ImportObservationDuplicateDetector.new)
     @logger = Rails.logger
     @progress_tracker = progress_tracker
+    @observation_duplicate_detector = observation_duplicate_detector
     @entities_created = 0
     @entities_merged = 0
     @entities_skipped = 0
@@ -83,21 +84,19 @@ class ImportExecutionStrategy
       relations_created: @relations_created,
       errors: @errors
     )
+  rescue ImportObservationDuplicateDetector::UnavailableError => e
+    @logger.error "ImportExecutionStrategy: Semantic observation de-duplication unavailable: #{e.message}"
+    @errors << "Semantic observation de-duplication unavailable: #{e.message}"
+    @progress_tracker&.fail!(e)
+
+    failed_report
   rescue ActiveRecord::RecordInvalid => e
     @logger.error "ImportExecutionStrategy: Transaction failed: #{e.message}"
     @errors << "Transaction failed: #{e.message}"
 
     @progress_tracker&.fail!(e)
 
-    ImportReport.new(
-      success: false,
-      entities_created: 0,
-      entities_merged: 0,
-      entities_skipped: 0,
-      observations_created: 0,
-      relations_created: 0,
-      errors: @errors
-    )
+    failed_report
   end
 
   private
@@ -145,9 +144,15 @@ class ImportExecutionStrategy
       actual_parent_id = parent_entity_id || tree_parent_id
       if actual_parent_id.present? && actual_parent_id != entity_id
         relation_type = node[:relation_type] || node["relation_type"] || "part_of"
-        create_relation_safe(
+        relation_direction = node[:relation_direction] || node["relation_direction"]
+        from_entity_id, to_entity_id = relation_endpoints(
           entity_id,
           actual_parent_id,
+          relation_direction
+        )
+        create_relation_safe(
+          from_entity_id,
+          to_entity_id,
           relation_type,
           weight: node[:relation_weight] || node["relation_weight"],
           confidence: node[:relation_confidence] || node["relation_confidence"],
@@ -325,14 +330,18 @@ class ImportExecutionStrategy
   # @param entity_id [Integer] Target entity ID
   def import_observations(node, entity_id)
     observations = node[:observations] || node["observations"] || []
-
-    observations.each do |obs_data|
+    entity = MemoryEntity.find(entity_id)
+    contents_seen = Set.new
+    observations_to_create = observations.filter do |obs_data|
       content = obs_data[:content] || obs_data["content"]
-      next if content.blank?
+      next false if content.blank? || contents_seen.include?(content)
 
-      # Skip duplicates
-      existing = MemoryObservation.active.exists?(memory_entity_id: entity_id, content: content)
-      next if existing
+      contents_seen.add(content)
+      !@observation_duplicate_detector.find_duplicate(entity: entity, content: content).duplicate
+    end
+
+    observations_to_create.each do |obs_data|
+      content = obs_data[:content] || obs_data["content"]
 
       MemoryObservation.create!(
         memory_entity_id: entity_id,
@@ -393,6 +402,24 @@ class ImportExecutionStrategy
 
   def find_entity_by_name_and_type(name, entity_type)
     ImportEntityResolver.find_by_name_and_type(name, entity_type)
+  end
+
+  def relation_endpoints(entity_id, parent_id, direction)
+    return [ parent_id, entity_id ] if direction == "parent_to_child"
+
+    [ entity_id, parent_id ]
+  end
+
+  def failed_report
+    ImportReport.new(
+      success: false,
+      entities_created: 0,
+      entities_merged: 0,
+      entities_skipped: 0,
+      observations_created: 0,
+      relations_created: 0,
+      errors: @errors
+    )
   end
 
   def resolve_parent_id(decision, path)

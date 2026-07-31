@@ -274,9 +274,34 @@ RSpec.describe ImportMatchingStrategy, type: :model do
           child_match = result[:match_results].find { |r| r.to_h[:node_path] == '0.children.0' }
           expect(child_match.to_h[:will_add_observations]).to be false
         end
+
+      it 'marks an existing outgoing non-hierarchical relation as skip' do
+        MemoryRelation.create!(
+          from_entity: project_alpha,
+          to_entity: task_one,
+          relation_type: 'relates_to'
+        )
+        directional_import = import_data.deep_dup
+        directional_child = directional_import[:root_nodes].first[:children].first
+        directional_child[:relation_type] = 'relates_to'
+        directional_child[:relation_direction] = 'parent_to_child'
+
+        result = strategy.match(directional_import)
+        child_match = result[:match_results].find { |r| r.to_h[:node_path] == '0.children.0' }
+
+        expect(child_match.to_h).to include(status: 'skip', child_action: 'skip')
+      end
       end
 
       context 'add_relation - child exists but different parent' do
+        let(:observation_duplicate_detector) { instance_double(ImportObservationDuplicateDetector) }
+        let(:strategy) { described_class.new(observation_duplicate_detector: observation_duplicate_detector) }
+
+        before do
+          allow(observation_duplicate_detector).to receive(:find_duplicate)
+            .and_return(ImportObservationDuplicateDetector::Result.new(duplicate: false))
+        end
+
         let!(:other_project) do
           MemoryEntity.create!(
             name: 'Other Project',
