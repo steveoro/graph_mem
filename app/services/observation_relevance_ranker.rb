@@ -40,17 +40,11 @@ class ObservationRelevanceRanker
   end
 
   def tokenize(text)
-    text.to_s.downcase.split(/\s+/).reject(&:blank?).uniq
+    QueryTokenizer.tokenize(text)
   end
 
   def token_overlap(content)
-    return 0.0 if @tokens.empty?
-
-    content_tokens = tokenize(content)
-    return 0.0 if content_tokens.empty?
-
-    matches = @tokens.count { |token| content_tokens.include?(token) }
-    matches.to_f / @tokens.size
+    QueryTokenizer.overlap_score(@tokens, content)
   end
 
   def batch_vector_similarity(observations)
@@ -59,7 +53,8 @@ class ObservationRelevanceRanker
     ids = observations.filter_map { |observation| observation.id if observation.embedding.present? }
     return observations.map { nil } if ids.empty?
 
-    vector_sql = "[#{@query_vector.join(',')}]"
+    vector_sql = QueryTokenizer.vector_literal(@query_vector)
+    return observations.map { nil } if vector_sql.blank?
     distances = MemoryObservation
       .where(id: ids)
       .select(

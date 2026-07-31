@@ -3,7 +3,7 @@
 # Deterministic, review-only relationship proposals for dream-state discovery.
 # Uses observation text and entity metadata only (no embeddings / LLM).
 class RelationshipDiscoveryStrategy
-  ALLOWED_RELATION_TYPES = %w[relates_to implements solves depends_on part_of].freeze
+  ALLOWED_RELATION_TYPES = %w[relates_to solves depends_on part_of].freeze
   MAX_PROPOSALS_PER_ENTITY = 3
   MIN_SHARED_CONTENT_LENGTH = 15
 
@@ -13,10 +13,13 @@ class RelationshipDiscoveryStrategy
   # With MIN_SHARED_TERMS = 2, score is (size * 3) + 5 → 11 at minimum; high band starts at 14 (3+ shared terms).
   ISSUE_SOLUTION_HIGH_SCORE = 14
 
-  def proposals_for_entity(entity_id)
+  def proposals_for_entity(entity_id, scope_entity_ids: nil)
     entity = MemoryEntity.find_by(id: entity_id)
     return [] unless entity
     return [] if project_root?(entity)
+    return [] if scope_entity_ids.present? && !scope_entity_ids.include?(entity.id)
+
+    @scope_entity_ids = scope_entity_ids
 
     proposals = []
     proposals.concat(shared_observation_proposals(entity))
@@ -148,7 +151,10 @@ class RelationshipDiscoveryStrategy
     return [] if text.blank?
 
     lowered = text.to_s.downcase
-    MemoryEntity.where.not(entity_type: NodeOperationsStrategy::PROJECT_ENTITY_TYPE).select do |entity|
+    scope = MemoryEntity.where.not(entity_type: NodeOperationsStrategy::PROJECT_ENTITY_TYPE)
+    scope = scope.where(id: @scope_entity_ids) if @scope_entity_ids.present?
+
+    scope.select do |entity|
       names = [ entity.name, entity.aliases ].compact.flat_map { |value| value.to_s.split(/[,|;]/) }
       names.any? do |name|
         token = name.to_s.strip.downcase
@@ -207,16 +213,16 @@ class RelationshipDiscoveryStrategy
     proposals
       .compact
       .uniq { |proposal| [ proposal[:from_entity_id], proposal[:to_entity_id], proposal[:relation_type] ] }
-      .sort_by { |proposal| [ proposal[:from_entity_id], proposal[:to_entity_id], proposal[:relation_type] ] }
+      .sort_by { |proposal| [ -proposal[:score].to_i, proposal[:from_entity_id], proposal[:to_entity_id], proposal[:relation_type] ] }
       .first(MAX_PROPOSALS_PER_ENTITY)
   end
 
   def shared_significant_tokens(left, right)
-    tokenize(left) & tokenize(right)
+    QueryTokenizer.tokenize(left) & QueryTokenizer.tokenize(right)
   end
 
   def tokenize(text)
-    text.to_s.downcase.split(/[\s_\-\.]+/).map(&:strip).reject { |token| token.length < 3 }.uniq
+    QueryTokenizer.tokenize(text, min_length: 3)
   end
 
   def issue_marked?(text)

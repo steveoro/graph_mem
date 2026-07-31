@@ -35,7 +35,8 @@ module Operator
     end
 
     def repair_relations
-      result = RelationIntegrityRepairer.call(dry_run: false)
+      # Operator "Repair" is an explicit destructive cleanup; ambiguous issues are deleted.
+      result = RelationIntegrityRepairer.call(dry_run: false, review_ambiguous: false)
       message = relation_repair_notice(result)
       redirect_to root_path, notice: message
     end

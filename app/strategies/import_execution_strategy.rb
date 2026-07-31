@@ -64,10 +64,12 @@ class ImportExecutionStrategy
       root_nodes.each_with_index do |root_node, index|
         path = index.to_s
         decision = decision_map[path]
-        parent_id = decision&.dig(:parent_id) || decision&.dig("parent_id")
+        parent_id = resolve_parent_id(decision, path)
 
         process_node_recursive(root_node, path, decision_map, parent_id, nil)
       end
+
+      raise ActiveRecord::Rollback if @errors.any?
     end
 
     @progress_tracker&.complete!(message: "Import completed", counters: progress_counters)
@@ -200,7 +202,7 @@ class ImportExecutionStrategy
     name = node[:name] || node["name"]
     entity_type = node[:entity_type] || node["entity_type"]
 
-    existing = MemoryEntity.find_by(name: name, entity_type: entity_type)
+    existing = find_entity_by_name_and_type(name, entity_type)
 
     if existing
       @logger.info "ImportExecutionStrategy: Skipping entity '#{name}' (already exists with same parent)"
@@ -228,7 +230,7 @@ class ImportExecutionStrategy
     name = node[:name] || node["name"]
     entity_type = node[:entity_type] || node["entity_type"]
 
-    existing = MemoryEntity.find_by(name: name, entity_type: entity_type)
+    existing = find_entity_by_name_and_type(name, entity_type)
 
     unless existing
       @logger.warn "ImportExecutionStrategy: Add relation action but entity '#{name}' not found, creating instead"
@@ -292,8 +294,8 @@ class ImportExecutionStrategy
 
     @logger.info "ImportExecutionStrategy: Creating new entity '#{name}' (#{entity_type})"
 
-    # Check if entity with same name already exists
-    existing = MemoryEntity.find_by(name: name)
+    # Check if entity with same name and type already exists
+    existing = find_entity_by_name_and_type(name, entity_type)
     if existing
       @logger.warn "ImportExecutionStrategy: Entity '#{name}' already exists, merging instead"
       return merge_into_existing(node, existing.id)
@@ -354,25 +356,53 @@ class ImportExecutionStrategy
   def create_relation_safe(from_entity_id, to_entity_id, relation_type, weight: nil, confidence: nil, properties: {})
     return if from_entity_id == to_entity_id # No self-loops
 
-    # Check for existing relation
+    canonical_type = MemoryRelation.canonical_relation_type(relation_type)
     existing = MemoryRelation.exists?(
       from_entity_id: from_entity_id,
       to_entity_id: to_entity_id,
-      relation_type: MemoryRelation.canonical_relation_type(relation_type)
+      relation_type: canonical_type
     )
     return if existing
+
+    # Hierarchy is single-parent: replace any existing part_of parent before attaching.
+    if RelationSemantics.single_parent?(canonical_type)
+      MemoryRelation.where(from_entity_id: from_entity_id, relation_type: canonical_type).destroy_all
+    end
+
+    RelationSemantics.validate_create!(
+      from_entity_id: from_entity_id,
+      to_entity_id: to_entity_id,
+      relation_type: canonical_type
+    )
 
     MemoryRelation.create!(
       from_entity_id: from_entity_id,
       to_entity_id: to_entity_id,
-      relation_type: relation_type,
+      relation_type: canonical_type,
       weight: weight,
       confidence: confidence,
       properties: properties
     )
     @relations_created += 1
-    @logger.debug "ImportExecutionStrategy: Created relation #{from_entity_id} -[#{relation_type}]-> #{to_entity_id}"
+    @logger.debug "ImportExecutionStrategy: Created relation #{from_entity_id} -[#{canonical_type}]-> #{to_entity_id}"
+  rescue RelationSemantics::ValidationError => e
+    @errors << "Failed to create relation (#{from_entity_id} -> #{to_entity_id}): #{e.message}"
   rescue ActiveRecord::RecordInvalid => e
     @errors << "Failed to create relation (#{from_entity_id} -> #{to_entity_id}): #{e.message}"
+  end
+
+  def find_entity_by_name_and_type(name, entity_type)
+    MemoryEntity.find_by(name: name, entity_type: entity_type) ||
+      MemoryEntity.find_by(name: name)
+  end
+
+  def resolve_parent_id(decision, path)
+    explicit_parent = decision&.dig(:parent_id) || decision&.dig("parent_id")
+    return explicit_parent if explicit_parent.present?
+
+    parent_path = decision&.dig(:parent_path) || decision&.dig("parent_path")
+    return @entity_mapping[parent_path] if parent_path.present?
+
+    nil
   end
 end

@@ -227,12 +227,15 @@ RSpec.describe SearchEntitiesTool, type: :model do
       it 'uses HybridSearchStrategy for search' do
         strategy_instance = instance_double(HybridSearchStrategy)
         allow(HybridSearchStrategy).to receive(:new).and_return(strategy_instance)
-        allow(strategy_instance).to receive(:search).with('apple', semantic: true, context_entity_ids: nil).and_return([])
+        allow(strategy_instance).to receive(:search)
+          .with('apple', hash_including(semantic: true, context_entity_ids: nil, limit: 50))
+          .and_return([])
 
         tool.call(query: 'apple')
 
         expect(HybridSearchStrategy).to have_received(:new)
-        expect(strategy_instance).to have_received(:search).with('apple', semantic: true, context_entity_ids: nil)
+        expect(strategy_instance).to have_received(:search)
+          .with('apple', hash_including(semantic: true, context_entity_ids: nil, limit: 50))
       end
 
       it 'converts SearchResult objects to hash format' do

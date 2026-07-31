@@ -127,6 +127,28 @@ RSpec.describe NodeOperationsStrategy, type: :model do
       expect(result[:success]).to be false
       expect(result[:error]).to include("already a child")
     end
+
+    it "preserves depends_on relations when moving hierarchy parent" do
+      MemoryRelation.create!(
+        from_entity: orphan_node,
+        to_entity: node_with_children,
+        relation_type: "depends_on"
+      )
+
+      result = strategy.move_to_parent(orphan_node.id, project.id)
+
+      expect(result[:success]).to be true
+      expect(MemoryRelation.exists?(from_entity_id: orphan_node.id, to_entity_id: node_with_children.id, relation_type: "depends_on")).to be true
+    end
+
+    it "rejects moves that would create a part_of cycle" do
+      MemoryRelation.create!(from_entity: project, to_entity: orphan_node, relation_type: "part_of")
+
+      result = strategy.move_to_parent(orphan_node.id, project.id)
+
+      expect(result[:success]).to be false
+      expect(result[:error]).to match(/cycle/)
+    end
   end
 
   describe "#merge_into" do
@@ -230,7 +252,8 @@ RSpec.describe NodeOperationsStrategy, type: :model do
       target = MemoryEntity.create!(name: "CollisionTarget", entity_type: "Task")
 
       MemoryRelation.create!(from_entity: child, to_entity: source, relation_type: "part_of")
-      MemoryRelation.create!(from_entity: child, to_entity: target, relation_type: "part_of")
+      colliding = MemoryRelation.new(from_entity: child, to_entity: target, relation_type: "part_of")
+      colliding.save!(validate: false)
 
       result = strategy.merge_into(source.id, target.id)
 

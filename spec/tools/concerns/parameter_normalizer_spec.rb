@@ -275,6 +275,14 @@ RSpec.describe ParameterNormalizer do
         expect(result[:entities].length).to eq(2)
       end
 
+      it "rejects unknown operation types" do
+        expect {
+          described_class.normalize("bulk_update", {
+            operations: [ { type: "unknown_op", name: "X" } ]
+          })
+        }.to raise_error(FastMcp::Tool::InvalidArgumentsError, /Unknown bulk_update operation type/)
+      end
+
       it "does not process operations for non-bulk_update tools" do
         result = described_class.normalize("create_entity", {
           operations: [ { type: "create_entity", name: "X", entity_type: "Y" } ],

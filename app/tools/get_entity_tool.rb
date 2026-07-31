@@ -13,16 +13,24 @@ class GetEntityTool < ApplicationTool
     required(:entity_id).filled(:integer).description("The ID of the entity to retrieve.")
     optional(:include_obsolete).filled(:bool).description("Include obsolete and superseded observations. Defaults to false.")
     optional(:include_ranked).filled(:bool).description("Sort observations by trust score descending. Defaults to false.")
+    optional(:query).filled(:string).description("Optional query for relevance-ranked observations.")
+    optional(:observation_limit).filled(:integer).description("Maximum observations to return per entity.")
   end
 
-  def call(entity_id:, include_obsolete: false, include_ranked: false)
+  def call(entity_id:, include_obsolete: false, include_ranked: false, query: nil, observation_limit: nil)
     logger.info "Performing GetEntityTool with entity_id: #{entity_id}"
     begin
       # Find the entity and pre-load associations for efficiency
       entity = MemoryEntity.includes(:memory_observations, :active_memory_observations, :relations_from, :relations_to)
                            .find(entity_id)
       observations = include_obsolete ? entity.memory_observations : entity.active_memory_observations
-      observations = observations.sort_by { |obs| -obs.trust_score.to_f } if include_ranked
+      if query.present?
+        observations = ObservationRankingService.rank(observations, query: query, limit: observation_limit)
+      elsif include_ranked
+        observations = ObservationRankingService.rank(observations, mode: "trust", limit: observation_limit)
+      elsif observation_limit.present?
+        observations = observations.first(observation_limit)
+      end
 
       # Format the output hash - return hash directly
       {

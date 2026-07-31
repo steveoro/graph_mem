@@ -26,29 +26,6 @@
     {
       "warning_type": "SQL Injection",
       "warning_code": 0,
-      "fingerprint": "2dd0e6f3b6eb132287e30bc6d0710aa8ba0dd34351d34f8550189765daa94f23",
-      "check_name": "SQL",
-      "message": "Possible SQL injection",
-      "file": "app/strategies/dream_state_compactor.rb",
-      "line": 247,
-      "link": "https://brakemanscanner.org/docs/warning_types/sql_injection/",
-      "code": "MemoryEntity.where.not(:id => MemoryEntity.find_by(:id => entity_id).id).where.not(:entity_type => (NodeOperationsStrategy::PROJECT_ENTITY_TYPE)).where(:entity_type => MemoryEntity.find_by(:id => entity_id).entity_type).where.not(:embedding => nil).where(\"id > ?\", MemoryEntity.find_by(:id => entity_id).id).select(\"memory_entities.*, VEC_DISTANCE_COSINE(embedding, #{embedding_sql_literal(MemoryEntity.find_by(:id => entity_id))}) AS vec_distance\")",
-      "render_path": null,
-      "location": {
-        "type": "method",
-        "class": "DreamStateCompactor",
-        "method": "process_entity_merges"
-      },
-      "user_input": "MemoryEntity.find_by(:id => entity_id)",
-      "confidence": "High",
-      "cwe_id": [
-        89
-      ],
-      "note": ""
-    },
-    {
-      "warning_type": "SQL Injection",
-      "warning_code": 0,
       "fingerprint": "7e164029d74bc6d89bcf9fecb9e8cc2435a1716a44cc905d9d781ac557046e95",
       "check_name": "SQL",
       "message": "Possible SQL injection",

@@ -19,9 +19,9 @@ RSpec.describe CompactionTraversal, type: :model do
       expect(traversal.entity_ids_for_phase("orphans")).not_to include(project.id)
     end
 
-    it "walks project roots and children in tree_walk phase" do
+    it "walks project roots and children in tree_walk phase, then disconnected nodes" do
       ids = traversal.entity_ids_for_phase("tree_walk")
-      expect(ids).to eq([ project.id, child.id ])
+      expect(ids).to eq([ project.id, child.id, orphan.id ])
     end
 
     it "lists non-project entities for relationship discovery" do

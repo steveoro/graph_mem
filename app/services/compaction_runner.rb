@@ -4,38 +4,41 @@
 class CompactionRunner
   class << self
     def acquire_run!
-      run = CompactionRun.current
-      if run&.paused?
-        run.update!(status: "running", pause_requested: false)
-        run.operation_progress&.resume!(message: "Resuming compaction")
-        return run
+      CompactionRun.transaction do
+        running = CompactionRun.lock.where(status: "running").first
+        return running if running
+
+        paused = CompactionRun.lock.where(status: "paused").order(updated_at: :desc).first
+        if paused
+          paused.update!(status: "running", pause_requested: false)
+          paused.operation_progress&.resume!(message: "Resuming compaction")
+          return paused
+        end
+
+        failed_run = CompactionRun.lock.where(status: "failed").order(updated_at: :desc).first
+        if failed_run
+          failed_run.resume_from_failure!
+          failed_run.operation_progress&.resume!(message: "Resuming compaction after failure")
+          return failed_run
+        end
+
+        total_entities = MemoryEntity.count
+        operation = OperationProgress.start!(
+          operation_type: "compaction",
+          total_count: total_entities * CompactionRun::PHASES.size,
+          phase: CompactionTraversal::PHASES.first,
+          message: "Starting compaction",
+          counters: default_stats
+        )
+
+        CompactionRun.create!(
+          operation_progress: operation,
+          status: "running",
+          phase: CompactionTraversal::PHASES.first,
+          stats: default_stats,
+          started_at: Time.current
+        )
       end
-
-      failed_run = CompactionRun.where(status: "failed").order(updated_at: :desc).first
-      if failed_run && CompactionRun.current.nil? && !CompactionRun.exists?(status: "running")
-        failed_run.resume_from_failure!
-        failed_run.operation_progress&.resume!(message: "Resuming compaction after failure")
-        return failed_run
-      end
-
-      return CompactionRun.find_by(status: "running") if CompactionRun.exists?(status: "running")
-
-      total_entities = MemoryEntity.count
-      operation = OperationProgress.start!(
-        operation_type: "compaction",
-        total_count: total_entities * CompactionRun::PHASES.size,
-        phase: CompactionTraversal::PHASES.first,
-        message: "Starting compaction",
-        counters: default_stats
-      )
-
-      CompactionRun.create!(
-        operation_progress: operation,
-        status: "running",
-        phase: CompactionTraversal::PHASES.first,
-        stats: default_stats,
-        started_at: Time.current
-      )
     end
 
     def start_or_resume!

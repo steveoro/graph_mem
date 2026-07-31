@@ -52,7 +52,13 @@ class CompactionTraversal
       queue.concat(child_ids)
     end
 
-    ids
+    disconnected_non_project_ids = MemoryEntity
+      .where.not(entity_type: NodeOperationsStrategy::PROJECT_ENTITY_TYPE)
+      .where.not(id: visited)
+      .order(:id)
+      .pluck(:id)
+
+    ids.concat(disconnected_non_project_ids)
   end
 
   def relationship_discovery_ids

@@ -83,7 +83,8 @@ class SummarizerService
       @query,
       limit: search_limit,
       semantic: true,
-      context_entity_ids: @context_entity_ids.presence
+      context_entity_ids: @context_entity_ids.presence,
+      scope_entity_ids: (@scope == "context" ? @allowed_entity_ids : nil)
     )
 
     @candidate_entity_count = results.size

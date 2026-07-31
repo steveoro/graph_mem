@@ -42,7 +42,7 @@ RSpec.describe SearchRelevanceBooster do
       leaf = MemoryEntity.create!(name: "LeafNode", entity_type: "Task")
       5.times do |i|
         target = MemoryEntity.create!(name: "Child#{i}", entity_type: "Task")
-        MemoryRelation.create!(from_entity: hub, to_entity: target, relation_type: "part_of")
+        MemoryRelation.create!(from_entity: hub, to_entity: target, relation_type: "relates_to")
       end
 
       ids = [ leaf.id, hub.id ]

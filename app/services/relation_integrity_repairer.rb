@@ -3,8 +3,8 @@
 # Scans and repairs relation integrity issues that can block dream-state compaction.
 #
 # - same_direction_duplicates: multiple rows for the same (from, to, type) tuple
-# - reverse_pairs: A→B and B→A with the same type (allowed by index, often accidental)
-# - merge_collisions: child X linked to multiple parents with the same relation type
+# - reverse_pairs: A→B and B→A with the same type (review-only when ambiguous)
+# - merge_collisions: child X linked to multiple parents with single-parent types
 class RelationIntegrityRepairer
   Result = Struct.new(
     :dry_run,
@@ -12,6 +12,7 @@ class RelationIntegrityRepairer
     :reverse_pairs,
     :merge_collisions,
     :deleted_relation_ids,
+    :review_items,
     keyword_init: true
   ) do
     def deleted_count
@@ -23,12 +24,13 @@ class RelationIntegrityRepairer
     end
   end
 
-  def self.call(dry_run: false)
-    new(dry_run: dry_run).call
+  def self.call(dry_run: false, review_ambiguous: true)
+    new(dry_run: dry_run, review_ambiguous: review_ambiguous).call
   end
 
-  def initialize(dry_run: false)
+  def initialize(dry_run: false, review_ambiguous: true)
     @dry_run = dry_run
+    @review_ambiguous = review_ambiguous
   end
 
   def call
@@ -37,10 +39,16 @@ class RelationIntegrityRepairer
     merge = find_merge_collisions
 
     deleted_ids = []
+    review_items = []
     unless @dry_run
       deleted_ids.concat(repair_same_direction_duplicates!(same_direction))
-      deleted_ids.concat(repair_reverse_pairs!(reverse))
-      deleted_ids.concat(repair_merge_collisions!(merge))
+      if @review_ambiguous
+        review_items.concat(queue_reverse_pairs!(reverse))
+        review_items.concat(queue_merge_collisions!(merge))
+      else
+        deleted_ids.concat(repair_reverse_pairs!(reverse))
+        deleted_ids.concat(repair_merge_collisions!(merge))
+      end
     end
 
     Result.new(
@@ -48,7 +56,8 @@ class RelationIntegrityRepairer
       same_direction_duplicates: same_direction,
       reverse_pairs: reverse,
       merge_collisions: merge,
-      deleted_relation_ids: deleted_ids.uniq
+      deleted_relation_ids: deleted_ids.uniq,
+      review_items: review_items
     )
   end
 
@@ -118,6 +127,8 @@ class RelationIntegrityRepairer
       .having("COUNT(DISTINCT to_entity_id) > 1")
       .pluck(:from_entity_id, :relation_type)
       .each do |child_id, rel_type|
+        next unless RelationSemantics.single_parent?(rel_type)
+
         relations = MemoryRelation
           .where(from_entity_id: child_id, relation_type: rel_type)
           .order(:id)
@@ -158,6 +169,28 @@ class RelationIntegrityRepairer
 
   def repair_merge_collisions!(issues)
     delete_ids_from_issues(issues, :delete_ids)
+  end
+
+  def queue_reverse_pairs!(issues)
+    issues.map do |issue|
+      {
+        id: SecureRandom.uuid,
+        kind: "relation_integrity",
+        issue_kind: "reverse_pair",
+        payload: issue
+      }
+    end
+  end
+
+  def queue_merge_collisions!(issues)
+    issues.map do |issue|
+      {
+        id: SecureRandom.uuid,
+        kind: "relation_integrity",
+        issue_kind: "merge_collision",
+        payload: issue
+      }
+    end
   end
 
   def delete_ids_from_issues(issues, key)

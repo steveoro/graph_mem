@@ -9,8 +9,8 @@
 class NodeOperationsStrategy
   class ProjectRootProtected < StandardError; end
 
-  # Relation types that define parent-child relationships
-  CHILD_RELATION_TYPES = %w[part_of depends_on].freeze
+  # Relation types that define parent-child hierarchy (part_of only)
+  CHILD_RELATION_TYPES = RelationSemantics::CHILD_RELATION_TYPES
   PROJECT_ENTITY_TYPE = "Project"
   PROJECT_ROOT_PROTECTED_ERROR = "Project root entities cannot be deleted or merged away"
   MAX_MERGE_RETRIES = 3
@@ -37,6 +37,9 @@ class NodeOperationsStrategy
     return error_result("Node not found") unless node
     return error_result("Parent node not found") unless parent
     return error_result("Cannot move a node to itself") if node_id == parent_id
+    if RelationSemantics.would_create_cycle?(node_id, parent_id)
+      return error_result("Cannot move node: would create a part_of cycle")
+    end
 
     # Check if relation already exists
     existing_relation = MemoryRelation.find_by(
@@ -50,9 +53,9 @@ class NodeOperationsStrategy
     end
 
     ActiveRecord::Base.transaction do
-      # Remove any existing parent relations (to make it a child of the new parent only)
+      # Remove only existing hierarchy parents; preserve depends_on edges
       MemoryRelation
-        .where(from_entity_id: node_id, relation_type: CHILD_RELATION_TYPES)
+        .where(from_entity_id: node_id, relation_type: "part_of")
         .destroy_all
 
       # Create new relation
@@ -126,7 +129,7 @@ class NodeOperationsStrategy
         result = error_result("Target node not found")
         next
       end
-      if project_root?(source)
+      if project_root?(source) || project_root?(target)
         result = error_result(PROJECT_ROOT_PROTECTED_ERROR)
         next
       end
@@ -139,12 +142,15 @@ class NodeOperationsStrategy
         next
       end
 
+      # Explicit merges keep the caller-provided source→target direction.
+      # Dream-state may call pick_survivor before invoking merge_into.
+
       # Add source name and aliases to target aliases
       merge_aliases(source, target)
 
-      # Transfer observations from source to target
+      # Transfer observations from source to target and recompute trust
       transferred_observations = source.memory_observations.count
-      source.memory_observations.update_all(memory_entity_id: target_id)
+      transfer_observations!(source, target)
 
       reassign_outgoing_relations!(source_id, target_id)
       reassign_incoming_relations!(source_id, target_id)
@@ -197,9 +203,9 @@ class NodeOperationsStrategy
         # Delete all descendants first
         deleted_count = delete_descendants(node_id)
         else
-        # Just remove relations pointing to this node (children become orphans)
+        # Remove hierarchy links only; descendants with another parent remain attached
         MemoryRelation
-          .where(to_entity_id: node_id, relation_type: CHILD_RELATION_TYPES)
+          .where(to_entity_id: node_id, relation_type: "part_of")
           .destroy_all
         end
 
@@ -255,6 +261,15 @@ class NodeOperationsStrategy
     all_aliases = (existing_aliases + source_aliases).map(&:strip).reject(&:blank?).uniq
 
     target.update!(aliases: all_aliases.join(","))
+  end
+
+  def transfer_observations!(source, target)
+    source.memory_observations.find_each do |observation|
+      observation.assign_attributes(memory_entity_id: target.id)
+      observation.trust_score = ObservationTrustRanker.rank(observation)
+      observation.save!
+      EmbeddingService.embed_observation(observation) if EmbeddingService.vector_enabled?
+    end
   end
 
   # Parse comma-separated aliases into array
@@ -341,7 +356,7 @@ class NodeOperationsStrategy
 
     # Find direct children
     child_ids = MemoryRelation
-      .where(to_entity_id: node_id, relation_type: CHILD_RELATION_TYPES)
+      .where(to_entity_id: node_id, relation_type: "part_of")
       .pluck(:from_entity_id)
 
     child_ids.each do |child_id|

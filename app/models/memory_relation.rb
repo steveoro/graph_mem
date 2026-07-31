@@ -16,6 +16,7 @@ class MemoryRelation < ApplicationRecord
   validates :weight, numericality: { greater_than_or_equal_to: 0 }, allow_nil: true
   validates :confidence, numericality: { greater_than_or_equal_to: 0, less_than_or_equal_to: 1 }, allow_nil: true
   validate :properties_are_an_object
+  validate :relation_semantics_are_valid, on: :create
 
   def self.canonical_relation_type(raw_type)
     RelationTypeMapping.canonicalize(raw_type) || raw_type
@@ -34,6 +35,16 @@ class MemoryRelation < ApplicationRecord
     return if properties.is_a?(Hash)
 
     errors.add(:properties, "must be an object")
+  end
+
+  def relation_semantics_are_valid
+    RelationSemantics.validate_create!(
+      from_entity_id: from_entity_id,
+      to_entity_id: to_entity_id,
+      relation_type: relation_type
+    )
+  rescue RelationSemantics::ValidationError => e
+    errors.add(:base, e.message)
   end
 
   def recompute_observation_trust_scores

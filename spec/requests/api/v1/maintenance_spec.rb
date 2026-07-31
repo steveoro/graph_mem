@@ -48,8 +48,8 @@ RSpec.describe "API V1 Maintenance", type: :request do
       a = MemoryEntity.create!(name: "Hub", entity_type: "Project")
       b = MemoryEntity.create!(name: "Spoke1", entity_type: "Task")
       c = MemoryEntity.create!(name: "Spoke2", entity_type: "Task")
-      MemoryRelation.create!(from_entity: a, to_entity: b, relation_type: "part_of")
-      MemoryRelation.create!(from_entity: a, to_entity: c, relation_type: "part_of")
+      MemoryRelation.create!(from_entity: b, to_entity: a, relation_type: "part_of")
+      MemoryRelation.create!(from_entity: c, to_entity: a, relation_type: "part_of")
 
       get "/api/v1/maintenance/stats"
       data = JSON.parse(response.body)

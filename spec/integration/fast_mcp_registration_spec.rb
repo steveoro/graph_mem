@@ -24,6 +24,7 @@ RSpec.describe "FastMcp tool registration", type: :integration do
     get_subgraph_by_ids
     get_version
     list_entities
+    list_maintenance_review
     merge_entities
     rank_observations
     search_entities
@@ -34,6 +35,8 @@ RSpec.describe "FastMcp tool registration", type: :integration do
     traverse_graph
     update_entity
     update_observation
+    apply_maintenance_review
+    dismiss_maintenance_review
   ].freeze
 
   # Filter out test-only tool subclasses defined in other spec files

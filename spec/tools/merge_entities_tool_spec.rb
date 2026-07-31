@@ -43,7 +43,7 @@ RSpec.describe MergeEntitiesTool, type: :model do
     it "raises when source and target are the same" do
       expect {
         tool.call(source_entity_id: target.id, target_entity_id: target.id)
-      }.to raise_error(McpGraphMemErrors::InternalServerError, /Cannot merge a node into itself/)
+      }.to raise_error(FastMcp::Tool::InvalidArgumentsError, /Cannot merge a node into itself/)
     end
 
     it "rejects merging away a Project root entity" do
@@ -51,32 +51,32 @@ RSpec.describe MergeEntitiesTool, type: :model do
 
       expect {
         tool.call(source_entity_id: project_source.id, target_entity_id: target.id)
-      }.to raise_error(McpGraphMemErrors::InternalServerError, /Project root entities cannot be deleted or merged away/)
+      }.to raise_error(FastMcp::Tool::InvalidArgumentsError, /Project root entities cannot be deleted or merged away/)
 
       expect(MemoryEntity.find_by(id: project_source.id)).to be_present
     end
 
     it "rejects merging entities of different types" do
-      project_target = MemoryEntity.create!(name: "ProjectTarget", entity_type: "Project")
+      issue_target = MemoryEntity.create!(name: "IssueTarget", entity_type: "Issue")
 
       expect {
-        tool.call(source_entity_id: source.id, target_entity_id: project_target.id)
-      }.to raise_error(McpGraphMemErrors::InternalServerError, /Cannot merge entities of different types/)
+        tool.call(source_entity_id: source.id, target_entity_id: issue_target.id)
+      }.to raise_error(FastMcp::Tool::InvalidArgumentsError, /Cannot merge entities of different types/)
 
       expect(MemoryEntity.find_by(id: source.id)).to be_present
-      expect(MemoryEntity.find_by(id: project_target.id)).to be_present
+      expect(MemoryEntity.find_by(id: issue_target.id)).to be_present
     end
 
     it "raises when source entity does not exist" do
       expect {
         tool.call(source_entity_id: 999_999, target_entity_id: target.id)
-      }.to raise_error(McpGraphMemErrors::InternalServerError, /Source node not found/)
+      }.to raise_error(McpGraphMemErrors::ResourceNotFound, /Source node not found/)
     end
 
     it "raises when target entity does not exist" do
       expect {
         tool.call(source_entity_id: source.id, target_entity_id: 999_999)
-      }.to raise_error(McpGraphMemErrors::InternalServerError, /Target node not found/)
+      }.to raise_error(McpGraphMemErrors::ResourceNotFound, /Target node not found/)
     end
 
     it "transfers all observations from source to target" do

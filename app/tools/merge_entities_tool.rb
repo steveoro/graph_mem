@@ -26,12 +26,22 @@ class MergeEntitiesTool < ApplicationTool
         target_entity_id: target_entity_id
       }
     else
-      raise McpGraphMemErrors::InternalServerError, result[:error]
+      raise map_merge_error(result[:error])
     end
-  rescue McpGraphMemErrors::InternalServerError
+  rescue McpGraphMemErrors::Error, FastMcp::Tool::InvalidArgumentsError
     raise
   rescue StandardError => e
     logger.error "MergeEntitiesTool error: #{e.message}"
     raise McpGraphMemErrors::InternalServerError, e.message
+  end
+
+  private
+
+  def map_merge_error(message)
+    text = message.to_s
+    return McpGraphMemErrors::ResourceNotFound.new(text) if text.match?(/not found/i)
+    return FastMcp::Tool::InvalidArgumentsError.new(text) if text.match?(/Cannot merge|Project root|protected|different types|into itself|cycle/i)
+
+    McpGraphMemErrors::OperationFailed.new(text)
   end
 end

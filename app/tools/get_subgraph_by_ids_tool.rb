@@ -11,6 +11,8 @@ class GetSubgraphByIdsTool < ApplicationTool
   # Defines arguments for fast-mcp validation.
   arguments do
     required(:entity_ids).array(:integer).description("An array of entity IDs to include in the subgraph.")
+    optional(:query).filled(:string).description("Optional query for relevance-ranked observations.")
+    optional(:observation_limit).filled(:integer).description("Maximum observations per entity.")
   end
 
   def tool_input_schema
@@ -91,7 +93,7 @@ class GetSubgraphByIdsTool < ApplicationTool
     }.freeze
   end
 
-  def call(entity_ids:)
+  def call(entity_ids:, query: nil, observation_limit: nil)
     # super # Validate input -> This is handled by fast-mcp's arguments DSL now
     entity_ids = entity_ids.uniq
 
@@ -104,17 +106,24 @@ class GetSubgraphByIdsTool < ApplicationTool
 
     # Fetch entities with their observations
     entities_data = MemoryEntity.where(id: entity_ids).includes(:active_memory_observations).map do |entity|
+      observations = ObservationRankingService.rank(
+        entity.active_memory_observations,
+        query: query,
+        limit: observation_limit
+      )
       {
         entity_id: entity.id,
         name: entity.name,
         entity_type: entity.entity_type,
-        observations: entity.active_memory_observations.map do |observation|
+        observations: observations.map do |observation|
           MemoryObservationSerializer.call(observation)
         end,
         created_at: entity.created_at.iso8601,
         updated_at: entity.updated_at.iso8601
       }
     end
+
+    missing_entity_ids = entity_ids - entities_data.map { |entity| entity[:entity_id] }
 
     # Fetch relations that are exclusively between the given entity_ids
     relations_data = MemoryRelation
@@ -135,7 +144,8 @@ class GetSubgraphByIdsTool < ApplicationTool
 
     {
       entities: entities_data,
-      relations: relations_data
+      relations: relations_data,
+      missing_entity_ids: missing_entity_ids
     }
   rescue FastMcp::Tool::InvalidArgumentsError
     raise

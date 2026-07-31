@@ -97,6 +97,13 @@ module ParameterNormalizer
         type_key = op.delete(:type)&.to_s&.strip&.downcase
         bucket = OPERATION_TYPE_MAP[type_key]
 
+        if type_key.blank?
+          raise FastMcp::Tool::InvalidArgumentsError, "bulk_update operation is missing type"
+        end
+        if bucket.nil?
+          raise FastMcp::Tool::InvalidArgumentsError, "Unknown bulk_update operation type: #{type_key}"
+        end
+
         case bucket
         when :entities
           entities << normalize_entity_op(op)

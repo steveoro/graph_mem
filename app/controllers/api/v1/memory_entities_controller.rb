@@ -25,7 +25,15 @@ module Api
       # GET /api/v1/memory_entities/:id
       def show
         observations = @memory_entity.active_memory_observations
-        observations = observations.sort_by { |obs| -obs.trust_score.to_f } if params[:include_ranked] == "true"
+        if params[:query].present?
+          observations = ObservationRankingService.rank(
+            observations,
+            query: params[:query],
+            limit: params[:observation_limit]
+          )
+        elsif params[:include_ranked] == "true"
+          observations = ObservationRankingService.rank(observations, mode: "trust", limit: params[:observation_limit])
+        end
 
         render json: {
           id: @memory_entity.id,
@@ -83,9 +91,19 @@ module Api
       def search
         query = params[:q]
         if query.present?
-          strategy = HybridSearchStrategy.new
-          results = strategy.search(query, semantic: true, context_entity_ids: GraphMemContext.scoped_entity_ids)
-          render json: results.map(&:to_h)
+          payload = EntityRetrievalService.search(
+            query,
+            limit: params.fetch(:limit, 50).to_i.clamp(1, 100),
+            semantic: params[:semantic] != "false",
+            context_entity_ids: GraphMemContext.scoped_entity_ids,
+            scope_entity_ids: GraphMemContext.scoped_entity_ids
+          )
+          results = payload[:results].map(&:to_h)
+          if params[:include_retrieval].to_s == "true"
+            render json: { results: results, retrieval: payload[:retrieval] }
+          else
+            render json: results
+          end
         else
           render json: []
         end

@@ -6,8 +6,8 @@
 class DreamStateCompactor
   AUTO_MERGE_DISTANCE = 0.10
   REVIEW_MERGE_DISTANCE = 0.30
-  AUTO_ORPHAN_SCORE = 10
-  BATCH_SIZE = 1
+  AUTO_ORPHAN_SCORE = OrphanMatchingStrategy::AUTO_PARENT_SCORE
+  BATCH_SIZE = ENV.fetch("DREAM_STATE_BATCH_SIZE", "1").to_i.clamp(1, 50)
 
   def initialize(
     run:,
@@ -80,7 +80,10 @@ class DreamStateCompactor
     return 0 if @run.cursor_entity_id.blank?
 
     idx = entity_ids.index(@run.cursor_entity_id)
-    idx ? idx + 1 : 0
+    return idx + 1 if idx
+
+    # Cursor entity may have been deleted (e.g. merged away). Resume after its id.
+    entity_ids.bsearch_index { |id| id > @run.cursor_entity_id } || entity_ids.length
   end
 
   def advance_phase!(phase)
@@ -151,13 +154,13 @@ class DreamStateCompactor
     best = matches.first
     return queue_orphan_review(orphan, matches) unless best
 
-    if best[:score] >= AUTO_ORPHAN_SCORE
+    if @orphan_matcher.auto_parent_match?(matches)
       result = @node_ops.move_to_parent(orphan.id, best[:project].id)
       if result[:success]
         @run.increment_stat!("orphans_parented")
       else
-        queue_orphan_review(orphan, matches, error: result[:error])
-        @run.increment_stat!("orphans_queued") unless @review_items.last && CompactionReviewService.suppressed?(@review_items.last[:kind], @review_items.last)
+        queued = queue_orphan_review(orphan, matches, error: result[:error])
+        @run.increment_stat!("orphans_queued") if queued
       end
     else
       queued = queue_orphan_review(orphan, matches)
@@ -183,9 +186,10 @@ class DreamStateCompactor
       error: error
     }.compact
 
-    return if CompactionReviewService.suppressed?(item[:kind], item)
+    return false if CompactionReviewService.suppressed?(item[:kind], item)
 
     @review_items << item
+    true
   end
 
   def dedupe_observations_for_entity(entity_id)
@@ -233,47 +237,40 @@ class DreamStateCompactor
     entity = MemoryEntity.find_by(id: entity_id)
     return unless entity
     return if entity.entity_type == NodeOperationsStrategy::PROJECT_ENTITY_TYPE
-    return if entity.embedding.blank?
 
-    source_vector_sql = embedding_sql_literal(entity)
-    return unless source_vector_sql
+    candidates = EntityMergeEvidence.candidates_for(entity)
+    return if candidates.empty?
 
-    candidates = MemoryEntity
-      .where.not(id: entity.id)
-      .where.not(entity_type: NodeOperationsStrategy::PROJECT_ENTITY_TYPE)
-      .where(entity_type: entity.entity_type)
-      .where.not(embedding: nil)
-      .where("id > ?", entity.id)
-      .select("memory_entities.*, VEC_DISTANCE_COSINE(embedding, #{source_vector_sql}) AS vec_distance")
-      .having("vec_distance < ?", REVIEW_MERGE_DISTANCE)
-      .order(Arel.sql("vec_distance ASC"))
-      .limit(3)
-      .to_a
-
-    candidates.each do |candidate|
-      distance = candidate[:vec_distance].to_f
-
-      if distance < AUTO_MERGE_DISTANCE
-        result = @node_ops.merge_into(entity.id, candidate.id)
-        if result[:success]
-          @run.increment_stat!("merges_auto")
-          return
-        end
-      else
-        queue_merge_review(entity, candidate, distance) and @run.increment_stat!("merges_queued")
+    best = candidates.first
+    # Near-identical embeddings plus composite lexical/shared evidence.
+    if best.distance < AUTO_MERGE_DISTANCE && best.score >= EntityMergeEvidence::AUTO_SCORE
+      merged, survivor = EntityMergeEvidence.pick_survivor(best.source, best.target)
+      result = @node_ops.merge_into(merged.id, survivor.id)
+      if result[:success]
+        @run.increment_stat!("merges_auto")
+        return
       end
+
+      queue_merge_review(best.source, best.target, best.distance, best.score, error: result[:error])
+      @run.increment_stat!("merges_queued")
+      return
     end
+
+    queue_merge_review(best.source, best.target, best.distance, best.score)
+    @run.increment_stat!("merges_queued")
   end
 
-  def queue_merge_review(entity_a, entity_b, distance)
+  def queue_merge_review(entity_a, entity_b, distance, score, error: nil)
     item = {
       id: SecureRandom.uuid,
       kind: "entity_merge",
       entity_a: { entity_id: entity_a.id, name: entity_a.name, entity_type: entity_a.entity_type },
       entity_b: { entity_id: entity_b.id, name: entity_b.name, entity_type: entity_b.entity_type },
       cosine_distance: distance.round(4),
-      recommendation: "review_manually"
-    }
+      score: score,
+      recommendation: "review_manually",
+      error: error
+    }.compact
 
     return false if CompactionReviewService.suppressed?(item[:kind], item)
 

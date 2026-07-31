@@ -58,11 +58,12 @@ class BulkUpdateTool < ApplicationTool
         },
         relations: {
           type: "array",
+          maxItems: MAX_OPERATIONS,
           items: {
             type: "object",
             properties: {
-              from_entity_id: { type: "integer" },
-              to_entity_id: { type: "integer" },
+              from_entity_id: { oneOf: [ { type: "integer" }, { type: "string" } ] },
+              to_entity_id: { oneOf: [ { type: "integer" }, { type: "string" } ] },
               relation_type: { type: "string" },
               weight: { type: %w[number null], minimum: 0 },
               confidence: { type: %w[number null], minimum: 0, maximum: 1 },
@@ -71,6 +72,27 @@ class BulkUpdateTool < ApplicationTool
             required: %w[from_entity_id to_entity_id relation_type]
           },
           description: "Relations to create between entities."
+        },
+        operations: {
+          type: "array",
+          maxItems: MAX_OPERATIONS,
+          items: {
+            type: "object",
+            properties: {
+              type: { type: "string" },
+              name: { type: "string" },
+              entity_type: { type: "string" },
+              entity_id: { oneOf: [ { type: "integer" }, { type: "string" } ] },
+              from_entity_id: { oneOf: [ { type: "integer" }, { type: "string" } ] },
+              to_entity_id: { oneOf: [ { type: "integer" }, { type: "string" } ] },
+              relation_type: { type: "string" },
+              text_content: { type: "string" },
+              content: { type: "string" },
+              contents: { type: "array", items: { type: "string" } }
+            },
+            required: %w[type]
+          },
+          description: "Type-discriminated operations alternative to entities/observations/relations arrays."
         }
       },
       required: []

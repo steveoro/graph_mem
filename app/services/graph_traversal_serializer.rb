@@ -27,11 +27,11 @@ module GraphTraversalSerializer
     }
   end
 
-  def entities_for(entity_ids)
+  def entities_for(entity_ids, query: nil, observation_limit: nil)
     return [] if entity_ids.blank?
 
     by_id = MemoryEntity.where(id: entity_ids).includes(:active_memory_observations).index_by(&:id)
-    entity_ids.filter_map { |id| by_id[id] }.map { |entity| entity_json(entity) }
+    entity_ids.filter_map { |id| by_id[id] }.map { |entity| entity_json(entity, query: query, observation_limit: observation_limit) }
   end
 
   def relations_for(relation_ids)
@@ -41,13 +41,18 @@ module GraphTraversalSerializer
     relation_ids.filter_map { |id| by_id[id] }.map { |relation| relation_json(relation) }
   end
 
-  def entity_json(entity)
+  def entity_json(entity, query: nil, observation_limit: nil)
+    observations = ObservationRankingService.rank(
+      entity.active_memory_observations,
+      query: query,
+      limit: observation_limit
+    )
     {
       entity_id: entity.id,
       name: entity.name,
       entity_type: entity.entity_type,
       aliases: entity.aliases,
-      observations: entity.active_memory_observations.map { |observation| observation_json(observation) },
+      observations: observations.map { |observation| observation_json(observation) },
       created_at: entity.created_at.iso8601,
       updated_at: entity.updated_at.iso8601
     }

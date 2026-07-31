@@ -7,11 +7,13 @@ class CompactionValve
 
   class << self
     def request_pause_if_running!
-      run = CompactionRun.find_by(status: "running")
+      run = CompactionRun.lock.where(status: "running").first
       return false unless run
 
       run.request_pause!
-      wait_for_pause(run)
+      paused = wait_for_pause(run)
+      Rails.logger.warn "[CompactionValve] compaction still running after timeout" unless paused
+      paused
     end
 
     private

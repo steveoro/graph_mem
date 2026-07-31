@@ -11,15 +11,15 @@ class RankObservationsTool < ApplicationTool
     required(:entity_id).filled(:integer).description("The ID of the entity whose observations should be ranked.")
     optional(:include_obsolete).filled(:bool).description("Include obsolete and superseded observations in the ranking. Defaults to false.")
     optional(:limit).filled(:integer).description("Maximum number of observations to return. Defaults to all.")
+    optional(:query).filled(:string).description("Optional query for relevance-ranked observations.")
   end
 
-  def call(entity_id:, include_obsolete: false, limit: nil)
+  def call(entity_id:, include_obsolete: false, limit: nil, query: nil)
     logger.info "Performing RankObservationsTool with entity_id: #{entity_id}"
     begin
       entity = MemoryEntity.find(entity_id)
       observations = include_obsolete ? entity.memory_observations : entity.active_memory_observations
-      observations = observations.sort_by { |obs| -obs.trust_score.to_f }
-      observations = observations.first(limit) if limit.present? && limit > 0
+      observations = ObservationRankingService.rank(observations, query: query, limit: limit)
 
       {
         entity_id: entity.id,

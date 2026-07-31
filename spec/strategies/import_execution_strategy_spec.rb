@@ -579,9 +579,7 @@ RSpec.describe ImportExecutionStrategy, type: :model do
       end
 
       it 'creates new relation to new parent' do
-        expect {
-          strategy.execute(import_data, decisions)
-        }.to change(MemoryRelation, :count).by(1)
+        strategy.execute(import_data, decisions)
 
         new_relation = MemoryRelation.find_by(
           from_entity_id: existing_task.id,
@@ -589,6 +587,12 @@ RSpec.describe ImportExecutionStrategy, type: :model do
           relation_type: 'part_of'
         )
         expect(new_relation).to be_present
+        # part_of is single-parent: previous parent link is replaced
+        expect(MemoryRelation.find_by(
+          from_entity_id: existing_task.id,
+          to_entity_id: existing_project.id,
+          relation_type: 'part_of'
+        )).to be_nil
       end
 
       it 'adds new observations' do

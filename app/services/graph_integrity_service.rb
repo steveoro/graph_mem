@@ -41,7 +41,15 @@ class GraphIntegrityService
   private
 
   def repair_relation_integrity
-    RelationIntegrityRepairer.call
+    result = RelationIntegrityRepairer.call
+    if result.review_items.present?
+      CompactionReviewService.seed_report(
+        report_type: "compaction_review",
+        source: "graph_integrity",
+        items: result.review_items
+      )
+    end
+    result
   rescue StandardError => e
     Rails.logger.error "[GraphIntegrity] Relation integrity repair failed: #{e.message}"
     { error: e.message, error_class: e.class.name }

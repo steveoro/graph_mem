@@ -81,6 +81,11 @@ class CompactionReviewService
       row = find_item(item_id, report_type: report_type)
       return { success: false, error: "Suggestion not found" } unless row
 
+      signature = signature_for(row.kind, row.effective_payload)
+      if signature.present?
+        MaintenanceReportSuppression.where(report_type: row.report_type, signature: signature).delete_all
+      end
+
       row.update!(status: "active", dismissed_at: nil, applied_at: nil, resolution_reason: nil)
       { success: true }
     end
@@ -181,6 +186,11 @@ class CompactionReviewService
         return nil if observation_id.blank?
 
         [ "lifecycle_corruption", observation_id ].join("|")
+      when "relation_integrity"
+        issue_kind = payload[:issue_kind] || payload.dig("payload", "kind")
+        keep_id = payload.dig(:payload, :keep_id) || payload[:keep_id]
+        delete_id = payload.dig(:payload, :delete_id) || payload[:delete_id]
+        [ "relation_integrity", issue_kind, keep_id, delete_id ].compact.join("|")
       else
         nil
       end
@@ -290,7 +300,7 @@ class CompactionReviewService
       MemoryRelation.create!(
         from_entity_id: from_id,
         to_entity_id: to_id,
-        relation_type: relation_type
+        relation_type: MemoryRelation.canonical_relation_type(relation_type)
       )
       { success: true, message: "Relation created" }
     rescue ActiveRecord::RecordInvalid, ActiveRecord::RecordNotUnique => e

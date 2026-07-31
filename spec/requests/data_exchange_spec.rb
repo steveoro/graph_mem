@@ -864,19 +864,19 @@ RSpec.describe 'DataExchange', type: :request do
 
   describe 'POST /data_exchange/create_relation' do
     it 'creates a new relation' do
-      expect {
-        post create_relation_data_exchange_index_path, params: {
-          from_id: task1.id,
-          to_id: project2.id,
-          relation_type: 'part_of'
-        }, as: :json
-      }.to change(MemoryRelation, :count).by(1)
+      post create_relation_data_exchange_index_path, params: {
+        from_id: task1.id,
+        to_id: project2.id,
+        relation_type: 'part_of'
+      }, as: :json
 
       expect(response).to have_http_status(:ok)
       data = JSON.parse(response.body)
 
       expect(data['success']).to be true
       expect(data['relation']['relation_type']).to eq('part_of')
+      expect(MemoryRelation.find_by(from_entity_id: task1.id, to_entity_id: project2.id, relation_type: 'part_of')).to be_present
+      expect(MemoryRelation.find_by(from_entity_id: task1.id, to_entity_id: project1.id, relation_type: 'part_of')).to be_nil
     end
 
     it 'returns error for invalid parameters' do

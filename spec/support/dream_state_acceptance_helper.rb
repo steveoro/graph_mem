@@ -54,6 +54,7 @@ module DreamStateAcceptanceHelper
     link_child!(merge_source_auto, bench_project)
     link_child!(merge_target_auto, bench_project)
     MemoryObservation.create!(memory_entity: merge_source_auto, content: "auto merge provenance")
+    MemoryObservation.create!(memory_entity: merge_target_auto, content: "auto merge provenance")
     assign_test_embedding!(merge_source_auto, 1.0, 0.0, 0.0)
     assign_test_embedding!(merge_target_auto, 1.0, 0.0, 0.0)
 
@@ -153,7 +154,7 @@ module DreamStateAcceptanceHelper
     EntitySearchStrategy.new.search(query, limit: limit).map { |result| result.entity.id }
   end
 
-  def drain_compaction_jobs!(max_iterations: 100)
+  def drain_compaction_jobs!(max_iterations: 200)
     max_iterations.times do
       job = enqueued_jobs.find { |entry| entry[:job] == DreamStateCompactionJob }
       break unless job

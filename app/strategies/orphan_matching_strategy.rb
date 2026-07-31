@@ -8,8 +8,10 @@
 # - Matches tokens against Project names and aliases
 # - Returns orphans with suggested parent matches for the Clean-up UI
 class OrphanMatchingStrategy
-  # Relation types that define parent-child relationships
-  CHILD_RELATION_TYPES = %w[part_of depends_on].freeze
+  # Relation types that define parent-child hierarchy
+  CHILD_RELATION_TYPES = RelationSemantics::CHILD_RELATION_TYPES
+  AUTO_PARENT_SCORE = 10
+  AUTO_PARENT_MARGIN = 3
 
   def initialize
     @logger = Rails.logger
@@ -31,6 +33,17 @@ class OrphanMatchingStrategy
       .where.not(id: child_entity_ids)
       .where.not(entity_type: "Project")
       .order(:name)
+  end
+
+  def auto_parent_match?(matches)
+    return false if matches.blank?
+
+    best = matches.first
+    runner_up = matches[1]
+    return false if best[:score].to_i < AUTO_PARENT_SCORE
+
+    margin = runner_up ? best[:score].to_i - runner_up[:score].to_i : AUTO_PARENT_MARGIN
+    margin >= AUTO_PARENT_MARGIN
   end
 
   # Get all orphan nodes with their potential parent Project matches
@@ -66,14 +79,14 @@ class OrphanMatchingStrategy
   # @return [Array<Hash>] Matches sorted by score (descending)
   def match_to_projects(node, projects = nil)
     projects ||= all_projects
-    tokens = tokenize(node.name)
+    tokens = evidence_tokens(node)
 
     return [] if tokens.empty?
 
     matches = []
 
     projects.each do |project|
-      score, matched_tokens = calculate_match_score(tokens, project)
+      score, matched_tokens = calculate_match_score(tokens, project, node)
 
       if score > 0
         matches << {
@@ -90,6 +103,16 @@ class OrphanMatchingStrategy
 
   private
 
+  def evidence_tokens(node)
+    tokens = tokenize(node.name)
+    tokens += tokenize(node.entity_type)
+    tokens += tokenize(node.description)
+    node.active_memory_observations.limit(5).each do |observation|
+      tokens.concat(tokenize(observation.content))
+    end
+    tokens.uniq
+  end
+
   # Get all Project entities
   # @return [Array<MemoryEntity>]
   def all_projects
@@ -100,24 +123,11 @@ class OrphanMatchingStrategy
   # @param name [String] The name to tokenize
   # @return [Array<String>] Array of lowercase tokens
   def tokenize(name)
-    return [] if name.blank?
-
-    # Split on common separators and normalize
-    name
-      .to_s
-      .split(/[\s_\-\.]+/)  # Split on spaces, underscores, hyphens, dots
-      .map(&:downcase)
-      .map(&:strip)
-      .reject(&:blank?)
-      .reject { |t| t.length < 2 }  # Ignore very short tokens
-      .uniq
+    QueryTokenizer.tokenize(name, min_length: 2)
   end
 
   # Calculate match score between tokens and a project
-  # @param tokens [Array<String>] Tokens from the orphan node name
-  # @param project [MemoryEntity] The project to match against
-  # @return [Array<Integer, Array<String>>] Score and matched tokens
-  def calculate_match_score(tokens, project)
+  def calculate_match_score(tokens, project, orphan = nil)
     score = 0
     matched_tokens = []
 
@@ -131,25 +141,25 @@ class OrphanMatchingStrategy
     tokens.each do |token|
       token_matched = false
 
-      # Exact token match in project name tokens (highest score)
       if project_name_tokens.include?(token)
         score += 10
         token_matched = true
-      # Substring match in project name
       elsif project_name_lower.include?(token)
         score += 5
         token_matched = true
-      # Exact token match in project alias tokens
       elsif project_alias_tokens.include?(token)
         score += 8
         token_matched = true
-      # Substring match in project aliases
       elsif project_aliases_lower.include?(token)
         score += 3
         token_matched = true
       end
 
       matched_tokens << token if token_matched
+    end
+
+    if orphan && project.id == GraphMemContext.current_project_id
+      score += 2
     end
 
     [ score, matched_tokens ]
