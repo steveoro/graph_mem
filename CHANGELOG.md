@@ -5,8 +5,8 @@ All notable changes to GraphMem will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.12.0] - 2026-07-31
-- Improved SummarizeTool with a focused context parameter; bundle updates; enhance data exchange and memory entity handling with new relation validation and improved observation ranking.
+## [1.20.0] - 2026-07-31
+- Improved SummarizeTool with a focused context parameter; bundle updates; enhance data exchange and memory entity handling with new relation validation and improved observation ranking; hardened relation-integrity, context scopes, import matching, ranked and ordered observation limits, dream-state discovery and focused specs
 
 ## [1.11.0] - 2026-07-30
 - Added entity_type as a parameter for CreateEntityTool, SuggestMergesTool and VectorSearchTool; updated documentation + bundle updates; improved DreamStateCompactor with more strategies from GraphIntegrityService

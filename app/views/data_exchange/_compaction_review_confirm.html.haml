@@ -39,6 +39,15 @@
     - else
       %p.text-red-600 No suggested parents available. Please reject this suggestion.
     = hidden_field_tag :node_id, item["entity_id"]
+  - elsif item["kind"] == "relation_integrity"
+    - issue = item["payload"] || {}
+    - delete_ids = Array(issue["delete_ids"]).presence || [issue["delete_id"]].compact
+    %p
+      Retain relation
+      %strong ##{issue["keep_id"]}
+      and remove duplicate relation(s)
+      %strong= delete_ids.map { |id| "##{id}" }.join(", ")
+      ?
   .flex.gap-2
     = f.submit "Confirm", class: "rounded bg-green-600 px-4 py-2 text-white hover:bg-green-700"
     = link_to "Cancel", compaction_review_data_exchange_index_path(page: params[:page]), class: "rounded bg-gray-200 px-4 py-2 text-gray-700 hover:bg-gray-300"

@@ -26,7 +26,7 @@ Tools are designed to be used in four phases per session:
 
 ## Context Scoping (3 tools)
 
-Context scoping allows search tools to **boost** entities related to the active project. When a context is set via `set_context`, both `search_entities` and `search_subgraph` prioritize in-context entities in their results (cross-project results still appear, but ranked lower).
+Context scoping allows search tools to **boost** entities related to the active project. The recursive `part_of` subtree is bounded; when the cap is reached, context-aware responses expose `scope_truncated: true` and continue with the partial scope. When a context is set via `set_context`, both `search_entities` and `search_subgraph` prioritize in-context entities in their results (cross-project results still appear, but ranked lower).
 
 Context is stored per MCP client in the `agent_contexts` table, keyed by the `X-MCP-Client` request header. Agents without the header share the `"default"` bucket.
 
@@ -39,7 +39,7 @@ Context is stored per MCP client in the `agent_contexts` table, keyed by the `X-
 #### `get_context`
 - **Description:** Returns the currently active project context, if any. Auto-clears if the project entity no longer exists.
 - **Parameters:** None
-- **Response:** `{ status, project_id, project_name, project_type, description }` or `{ status: "no_context" }`
+- **Response:** `{ status, entity_id, entity_name, entity_type, description, scope_entity_count, scope_truncated, scope_max_entities }` or `{ status: "no_context" }`
 
 #### `clear_context`
 - **Description:** Clears the active project context. Searches return to global scope.
@@ -63,6 +63,8 @@ Context is stored per MCP client in the `agent_contexts` table, keyed by the `X-
   - `entity_id` (integer, required): The ID of the entity. Also accepts entity name (string).
   - `include_obsolete` (boolean, optional, default: false): Include obsolete and superseded observations.
   - `include_ranked` (boolean, optional, default: false): Sort observations by trust score descending.
+  - `query` (string, optional): Rank observations by query relevance before trust.
+  - `observation_limit` (integer, optional): Return at most this many observations. Limits always apply after relevance ranking, or trust ranking when no query is supplied; `observations_truncated` reports omitted active observations.
 
 #### `update_entity`
 - **Description:** Updates entity name, type, aliases, and/or description.
@@ -190,6 +192,7 @@ Context is stored per MCP client in the `agent_contexts` table, keyed by the `X-
   - `scope` (string, optional, default: `context` when a project context is active, otherwise `global`): `context` hard-filters retrieval to the active project's recursive `part_of` subtree; `global` searches the full graph.
   - `style` (string, optional, default: `concise`): `concise` or `detailed`.
 - **Response fields:** `query`, `summary`, `generation_mode`, `generated_by`, `fallback_reason`, `scope`, `entity_count`, `observation_count`, `observations`, `sources`, `retrieval`
+- **Retrieval diagnostics:** `scope_truncated` and `scope_max_entities` signal that an active-project subtree is partial rather than complete.
 
 ## Graph Traversal (2 tools)
 
@@ -246,6 +249,9 @@ These tools perform multi-hop graph traversal. Unlike `find_relations` (which is
 
 #### `get_maintenance_reports`
 - **Description:** Retrieves recent maintenance and dream-state compaction reports, including the `compaction_review` queue of merge/orphan suggestions awaiting manual review. Pair with `merge_entities` to action queued duplicates.
+
+#### `apply_maintenance_review`
+- **Description:** Applies a queued maintenance item. Relation-integrity reviews remove the selected duplicate relation IDs while preserving the reviewed `keep_id`; already-deleted relations are reported as a safe stale outcome.
 - **Parameters:**
   - `report_type` (string, optional): One of `orphans`, `duplicates`, `compaction_review`. Omit to get the latest report of each type.
   - `limit` (integer, optional, default: 5, max: 30): Maximum number of reports to return (applies when `report_type` is given).

@@ -110,6 +110,10 @@ RSpec.describe DreamStateCompactor, type: :model do
       compactor.send(:process_relationship_discovery, solution.id)
       compactor.send(:flush_review_queue!)
 
+      expect(discovery).to have_received(:proposals_for_entity).with(
+        solution.id,
+        scope_entity_ids: [ solution.id ]
+      )
       expect(discovery_run.reload.stats["relationships_queued"]).to eq(1)
       report = MaintenanceReport.by_type("compaction_review").recent.first
       row = report.maintenance_report_rows.first

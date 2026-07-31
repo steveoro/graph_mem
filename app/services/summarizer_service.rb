@@ -20,7 +20,7 @@ class SummarizerService
                  max_observations: DEFAULT_MAX_OBSERVATIONS,
                  observations_per_entity: nil, max_depth: DEFAULT_MAX_DEPTH,
                  include_sources: true, style: DEFAULT_STYLE, scope: nil,
-                 context_entity_ids: nil)
+                 context_entity_ids: nil, context_scope: nil)
     @query = query.to_s.strip
     @entity_id = entity_id
     @max_results = normalize_positive(max_results, DEFAULT_MAX_RESULTS, max: 50)
@@ -33,6 +33,7 @@ class SummarizerService
     @include_sources = include_sources != false
     @style = style.presence || DEFAULT_STYLE
     @context_entity_ids = Array(context_entity_ids).compact
+    @context_scope = context_scope
     @allowed_entity_ids = entity_scope? ? nil : @context_entity_ids.presence
     @scope = normalize_scope(scope)
     @candidate_entity_count = 0
@@ -285,6 +286,8 @@ class SummarizerService
     {
       scope: @scope,
       context_entity_count: @allowed_entity_ids&.size,
+      scope_truncated: @context_scope&.truncated == true,
+      scope_max_entities: @context_scope&.max_entities,
       candidate_entity_count: @candidate_entity_count,
       selected_entity_count: entities.map(&:id).uniq.size,
       excluded_out_of_scope_count: @excluded_out_of_scope_count,

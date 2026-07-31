@@ -25,14 +25,17 @@ module Api
       # GET /api/v1/memory_entities/:id
       def show
         observations = @memory_entity.active_memory_observations
+        observation_limit = params[:observation_limit].presence&.to_i
         if params[:query].present?
           observations = ObservationRankingService.rank(
             observations,
             query: params[:query],
-            limit: params[:observation_limit]
+            limit: observation_limit
           )
         elsif params[:include_ranked] == "true"
-          observations = ObservationRankingService.rank(observations, mode: "trust", limit: params[:observation_limit])
+          observations = ObservationRankingService.rank(observations, mode: "trust", limit: observation_limit)
+        elsif observation_limit.present?
+          observations = ObservationRankingService.rank(observations, mode: "trust", limit: observation_limit)
         end
 
         render json: {
@@ -42,6 +45,7 @@ module Api
           aliases: @memory_entity.aliases,
           description: @memory_entity.description,
           memory_observations_count: @memory_entity.memory_observations_count,
+          observations_truncated: observation_limit.present? && observations.size < @memory_entity.active_memory_observations.size,
           created_at: @memory_entity.created_at.iso8601,
           updated_at: @memory_entity.updated_at.iso8601,
           observations: observations.map { |observation|
@@ -91,12 +95,14 @@ module Api
       def search
         query = params[:q]
         if query.present?
+          context_scope = GraphMemContext.scoped_entity_scope
           payload = EntityRetrievalService.search(
             query,
             limit: params.fetch(:limit, 50).to_i.clamp(1, 100),
             semantic: params[:semantic] != "false",
-            context_entity_ids: GraphMemContext.scoped_entity_ids,
-            scope_entity_ids: GraphMemContext.scoped_entity_ids
+            context_entity_ids: context_scope&.entity_ids,
+            scope_entity_ids: context_scope&.entity_ids,
+            context_scope: context_scope
           )
           results = payload[:results].map(&:to_h)
           if params[:include_retrieval].to_s == "true"

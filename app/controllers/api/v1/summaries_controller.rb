@@ -8,6 +8,7 @@ module Api
         query = params[:query].to_s.strip
         return render_error("query is required") if query.blank?
 
+        context_scope = GraphMemContext.scoped_entity_scope
         result = SummarizerService.call(
           query: query,
           entity_id: params[:entity_id],
@@ -18,7 +19,8 @@ module Api
           include_sources: params.fetch(:include_sources, true),
           scope: params[:scope],
           style: params[:style],
-          context_entity_ids: GraphMemContext.scoped_entity_ids
+          context_entity_ids: context_scope&.entity_ids,
+          context_scope: context_scope
         )
 
         render json: result

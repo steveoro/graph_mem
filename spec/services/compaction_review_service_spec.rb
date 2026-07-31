@@ -77,6 +77,39 @@ RSpec.describe CompactionReviewService, type: :service do
     )
   end
 
+  let(:integrity_keep) do
+    MemoryRelation.create!(from_entity: from_entity, to_entity: to_entity, relation_type: "relates_to")
+  end
+
+  let(:integrity_duplicate) do
+    relation = MemoryRelation.new(from_entity: to_entity, to_entity: from_entity, relation_type: "relates_to")
+    relation.save!(validate: false)
+    relation
+  end
+
+  let(:integrity_row) do
+    payload = {
+      "issue_kind" => "reverse_pair",
+      "payload" => {
+        "kind" => "reverse_pair",
+        "keep_id" => integrity_keep.id,
+        "delete_id" => integrity_duplicate.id,
+        "keep" => { "id" => integrity_keep.id },
+        "delete" => { "id" => integrity_duplicate.id }
+      }
+    }
+
+    MaintenanceReportRow.create!(
+      maintenance_report: report,
+      report_type: "compaction_review",
+      row_uuid: "integrity-1",
+      kind: "relation_integrity",
+      status: "active",
+      signature: described_class.signature_for("relation_integrity", payload),
+      payload: payload
+    )
+  end
+
   describe ".latest_report" do
     it "returns the latest compaction review report" do
       expect(described_class.latest_report).to eq(report)
@@ -157,6 +190,44 @@ RSpec.describe CompactionReviewService, type: :service do
       expect(result[:success]).to be true
       expect(MemoryRelation.find_by(from_entity_id: from_entity.id, to_entity_id: to_entity.id, relation_type: "solves")).to be_present
       expect(described_class.find_item("relation-1").status).to eq("approved")
+    end
+
+    it "applies a relation integrity repair and tolerates stale deleted relations" do
+      integrity_row
+      result = described_class.apply("integrity-1")
+
+      expect(result[:success]).to be true
+      expect(result[:deleted_relation_ids]).to eq([ integrity_duplicate.id ])
+      expect(MemoryRelation.find_by(id: integrity_keep.id)).to be_present
+      expect(MemoryRelation.find_by(id: integrity_duplicate.id)).to be_nil
+      expect(described_class.find_item("integrity-1").status).to eq("approved")
+
+      stale_row = integrity_row.dup
+      stale_row.row_uuid = "integrity-stale"
+      stale_row.status = "active"
+      stale_row.save!
+      expect(described_class.apply("integrity-stale")[:success]).to be true
+    end
+  end
+
+  describe "relation integrity review rows" do
+    it "uses a stable signature for every selected duplicate relation" do
+      payload = {
+        issue_kind: "merge_collision",
+        payload: { keep_id: 10, delete_ids: [ 13, 11, 12 ] }
+      }
+
+      expect(described_class.signature_for("relation_integrity", payload))
+        .to eq("relation_integrity|merge_collision|10|11-12-13")
+    end
+
+    it "can dismiss and restore a queued integrity repair" do
+      integrity_row
+
+      expect(described_class.dismiss("integrity-1")[:success]).to be(true)
+      expect(integrity_row.reload.status).to eq("dismissed")
+      expect(described_class.restore("integrity-1")[:success]).to be(true)
+      expect(integrity_row.reload.status).to eq("active")
     end
   end
 

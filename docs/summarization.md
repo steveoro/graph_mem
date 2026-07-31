@@ -55,12 +55,14 @@ Source IDs are attached by GraphMem from the selected evidence. They are never t
 
 ### Scope behavior
 
-When a project context is active, `summarize` defaults to `scope: "context"`. This prevents unrelated workspace projects from entering the evidence set when a broad semantic query matches many `Project` entities. Use `scope: "global"` to opt back into workspace-wide retrieval.
+When a project context is active, `summarize` defaults to `scope: "context"`. This prevents unrelated workspace projects from entering the evidence set when a broad semantic query matches many `Project` entities. Use `scope: "global"` to opt back into workspace-wide retrieval. Project subtrees are bounded: when the cap is reached, summarization continues with its partial scope and explicitly reports that condition.
 
 The response includes a `retrieval` diagnostics object:
 
 - `scope`
 - `context_entity_count`
+- `scope_truncated`
+- `scope_max_entities`
 - `candidate_entity_count`
 - `selected_entity_count`
 - `excluded_out_of_scope_count`

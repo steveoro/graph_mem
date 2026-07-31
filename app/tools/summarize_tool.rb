@@ -24,6 +24,7 @@ class SummarizeTool < ApplicationTool
            max_depth: 0, include_sources: true, scope: nil, style: "concise")
     logger.info "Performing SummarizeTool with query: #{query}"
     begin
+      context_scope = graph_mem_context.scoped_entity_scope
       SummarizerService.call(
         query: query,
         entity_id: entity_id,
@@ -34,7 +35,8 @@ class SummarizeTool < ApplicationTool
         include_sources: include_sources,
         scope: scope,
         style: style,
-        context_entity_ids: graph_mem_context.scoped_entity_ids
+        context_entity_ids: context_scope&.entity_ids,
+        context_scope: context_scope
       )
     rescue ActiveRecord::RecordNotFound => e
       error_message = "Entity with ID=#{entity_id} not found."

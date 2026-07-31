@@ -29,7 +29,7 @@ class GetEntityTool < ApplicationTool
       elsif include_ranked
         observations = ObservationRankingService.rank(observations, mode: "trust", limit: observation_limit)
       elsif observation_limit.present?
-        observations = observations.first(observation_limit)
+        observations = ObservationRankingService.rank(observations, mode: "trust", limit: observation_limit)
       end
 
       # Format the output hash - return hash directly
@@ -40,6 +40,7 @@ class GetEntityTool < ApplicationTool
         description: entity.description,
         created_at: entity.created_at.iso8601,
         updated_at: entity.updated_at.iso8601,
+        observations_truncated: observation_limit.present? && observations.size < (include_obsolete ? entity.memory_observations.size : entity.active_memory_observations.size),
         observations: observations.map do |observation|
           MemoryObservationSerializer.call(observation, content_key: :observation_content)
         end,

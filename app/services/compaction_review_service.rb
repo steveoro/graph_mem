@@ -189,8 +189,12 @@ class CompactionReviewService
       when "relation_integrity"
         issue_kind = payload[:issue_kind] || payload.dig("payload", "kind")
         keep_id = payload.dig(:payload, :keep_id) || payload[:keep_id]
-        delete_id = payload.dig(:payload, :delete_id) || payload[:delete_id]
-        [ "relation_integrity", issue_kind, keep_id, delete_id ].compact.join("|")
+        delete_ids = payload.dig(:payload, :delete_ids) || payload[:delete_ids]
+        delete_ids ||= [ payload.dig(:payload, :delete_id) || payload[:delete_id] ]
+        delete_ids = Array(delete_ids).compact.map(&:to_i).sort
+        return nil if issue_kind.blank? || keep_id.blank? || delete_ids.empty?
+
+        [ "relation_integrity", issue_kind, keep_id, delete_ids.join("-") ].join("|")
       else
         nil
       end
@@ -274,6 +278,8 @@ class CompactionReviewService
         create_relation(row, effective, action_params)
       when "orphan_parent"
         move_to_parent(row, effective, action_params)
+      when "relation_integrity"
+        apply_relation_integrity(effective)
       else
         { success: false, error: "Unknown review kind: #{row.kind}" }
       end
@@ -314,6 +320,40 @@ class CompactionReviewService
       return { success: false, error: "Node and parent are required" } if node_id.zero? || parent_id.zero?
 
       NodeOperationsStrategy.new.move_to_parent(node_id, parent_id)
+    end
+
+    def apply_relation_integrity(effective)
+      issue = effective[:payload].presence || effective
+      keep_id = issue[:keep_id].to_i
+      delete_ids = Array(issue[:delete_ids]).presence || [ issue[:delete_id] ]
+      delete_ids = delete_ids.compact.map(&:to_i).reject(&:zero?).uniq - [ keep_id ]
+      return { success: false, error: "No relations are selected for deletion" } if delete_ids.empty?
+
+      deleted_ids = []
+      missing_ids = []
+
+      ActiveRecord::Base.transaction do
+        begin
+          Current.deletion_reason = "duplicate"
+          delete_ids.each do |relation_id|
+            relation = MemoryRelation.find_by(id: relation_id)
+            if relation
+              relation.destroy!
+              deleted_ids << relation_id
+            else
+              missing_ids << relation_id
+            end
+          end
+        ensure
+          Current.deletion_reason = nil
+        end
+      end
+
+      message = "Deleted #{deleted_ids.size} duplicate relation(s)"
+      message += "; #{missing_ids.size} relation(s) were already absent" if missing_ids.any?
+      { success: true, message: message, deleted_relation_ids: deleted_ids, missing_relation_ids: missing_ids }
+    rescue ActiveRecord::RecordInvalid, ActiveRecord::RecordNotDestroyed => e
+      { success: false, error: "Failed to apply relation integrity repair: #{e.message}" }
     end
 
     def pick_id(action_params, key, effective, fallback_keys)

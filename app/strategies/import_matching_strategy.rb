@@ -189,7 +189,7 @@ class ImportMatchingStrategy
   # @return [MatchResult] Match result for this node
   def match_root_node(node, path)
     name = node["name"] || node[:name]
-    entity_type = node["entity_type"] || node[:entity_type]
+    entity_type = ImportEntityResolver.canonical_type(node["entity_type"] || node[:entity_type])
 
     # Build search query from name and entity_type
     search_query = "#{name} #{entity_type}".strip
@@ -238,7 +238,7 @@ class ImportMatchingStrategy
     observations = node["observations"] || node[:observations] || []
 
     # Find exact match by name AND entity_type
-    exact_match = MemoryEntity.find_by(name: name, entity_type: entity_type)
+    exact_match = ImportEntityResolver.find_by_name_and_type(name, entity_type)
 
     if exact_match
       # Check if already has same parent

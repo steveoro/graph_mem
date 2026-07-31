@@ -21,12 +21,17 @@ class GetContextTool < ApplicationTool
       return { status: "context_cleared", message: "Previously set project (ID #{project_id}) no longer exists. Context cleared." }
     end
 
+    scope = context.scoped_entity_scope
+
     {
       status: "context_active",
       entity_id: entity.id,
       entity_name: entity.name,
       entity_type: entity.entity_type,
-      description: entity.description
+      description: entity.description,
+      scope_entity_count: scope.entity_ids.size,
+      scope_truncated: scope.truncated,
+      scope_max_entities: scope.max_entities
     }
   rescue StandardError => e
     logger.error "GetContextTool error: #{e.message}"

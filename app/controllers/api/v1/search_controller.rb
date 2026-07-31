@@ -41,7 +41,8 @@ module Api
         rescue StandardError
         end
 
-        context_ids = GraphMemContext.scoped_entity_ids
+        context_scope = GraphMemContext.scoped_entity_scope
+        context_ids = context_scope&.entity_ids
         if context_ids.present?
           ctx = context_ids.to_set
           in_ctx, out_ctx = matching_ids.partition { |id| ctx.include?(id) }
@@ -65,7 +66,12 @@ module Api
         render json: {
           entities: entities,
           relations: relations,
-          pagination: { total_entities: total, per_page: per_page, current_page: page, total_pages: [ (total.to_f / per_page).ceil, 1 ].max }
+          pagination: { total_entities: total, per_page: per_page, current_page: page, total_pages: [ (total.to_f / per_page).ceil, 1 ].max },
+          retrieval: {
+            scope_entity_count: context_ids&.size,
+            scope_truncated: context_scope&.truncated == true,
+            scope_max_entities: context_scope&.max_entities
+          }
         }
       end
 

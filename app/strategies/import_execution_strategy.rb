@@ -392,8 +392,7 @@ class ImportExecutionStrategy
   end
 
   def find_entity_by_name_and_type(name, entity_type)
-    MemoryEntity.find_by(name: name, entity_type: entity_type) ||
-      MemoryEntity.find_by(name: name)
+    ImportEntityResolver.find_by_name_and_type(name, entity_type)
   end
 
   def resolve_parent_id(decision, path)

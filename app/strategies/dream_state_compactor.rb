@@ -138,7 +138,10 @@ class DreamStateCompactor
   end
 
   def process_relationship_discovery(entity_id)
-    @relationship_discovery.proposals_for_entity(entity_id).each do |proposal|
+    project_id = ProjectSubtree.ancestor_project_id(entity_id)
+    scope_ids = project_id ? ProjectSubtree.resolve(project_id).entity_ids : [ entity_id ]
+
+    @relationship_discovery.proposals_for_entity(entity_id, scope_entity_ids: scope_ids).each do |proposal|
       next if CompactionReviewService.suppressed?(proposal[:kind], proposal)
 
       @review_items << proposal

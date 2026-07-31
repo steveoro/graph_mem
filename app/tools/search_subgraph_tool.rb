@@ -207,7 +207,8 @@ class SearchSubgraphTool < ApplicationTool
 
     # Rank results using shared relevance boosts (name match, type priority,
     # structural importance, graduated context boost).
-    context_ids = graph_mem_context.scoped_entity_ids
+    context_scope = graph_mem_context.scoped_entity_scope
+    context_ids = context_scope&.entity_ids
     matching_entity_ids = SearchRelevanceBooster.rank_entity_ids(
       matching_entity_ids,
       query: query_term,
@@ -273,6 +274,11 @@ class SearchSubgraphTool < ApplicationTool
         per_page: effective_per_page,
         current_page: effective_page,
         total_pages: total_pages_count
+      },
+      retrieval: {
+        scope_entity_count: context_ids&.size,
+        scope_truncated: context_scope&.truncated == true,
+        scope_max_entities: context_scope&.max_entities
       }
     }
   rescue FastMcp::Tool::InvalidArgumentsError # Re-raise if it's our own validation

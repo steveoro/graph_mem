@@ -108,6 +108,22 @@ RSpec.describe GraphMemContext do
       ids = described_class.for("cursor-A").scoped_entity_ids
       expect(ids).to eq(ids.uniq)
     end
+
+    it "reports truncation metadata when the configured scope cap is reached" do
+      stub_const("#{described_class}::MAX_SCOPED_ENTITIES", 2)
+      project = MemoryEntity.create!(name: "CappedProject", entity_type: "Project")
+      first_child = MemoryEntity.create!(name: "CappedChildOne", entity_type: "Task")
+      second_child = MemoryEntity.create!(name: "CappedChildTwo", entity_type: "Task")
+      MemoryRelation.create!(from_entity: first_child, to_entity: project, relation_type: "part_of")
+      MemoryRelation.create!(from_entity: second_child, to_entity: project, relation_type: "part_of")
+      described_class.for("cursor-A").current_project_id = project.id
+
+      scope = described_class.for("cursor-A").scoped_entity_scope
+
+      expect(scope.entity_ids).to contain_exactly(project.id, first_child.id)
+      expect(scope).to be_truncated
+      expect(scope.max_entities).to eq(2)
+    end
   end
 
   describe "per-client isolation" do

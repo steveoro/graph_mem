@@ -27,6 +27,18 @@ RSpec.describe RelationshipDiscoveryStrategy, type: :model do
       )
     end
 
+    it "permits byte-identical shared observations across a supplied project scope" do
+      left = MemoryEntity.create!(name: "ScopedLeft", entity_type: "Task")
+      right = MemoryEntity.create!(name: "OutsideScopeRight", entity_type: "Task")
+      shared_content = "Identical evidence across separate project boundaries"
+      MemoryObservation.create!(memory_entity: left, content: shared_content)
+      MemoryObservation.create!(memory_entity: right, content: shared_content)
+
+      proposals = strategy.proposals_for_entity(left.id, scope_entity_ids: [ left.id ])
+
+      expect(proposals.map { |proposal| proposal[:relation_type] }).to include("relates_to")
+    end
+
     it "ignores obsolete observation evidence" do
       left = MemoryEntity.create!(name: "HistoricalLeft", entity_type: "Task")
       right = MemoryEntity.create!(name: "HistoricalRight", entity_type: "Task")
@@ -55,6 +67,15 @@ RSpec.describe RelationshipDiscoveryStrategy, type: :model do
         score: 14,
         supporting_observation_ids: [ solution_obs.id, issue_obs.id ]
       )
+    end
+
+    it "does not propose issue-solution links outside a supplied project scope" do
+      issue = MemoryEntity.create!(name: "OutsideScopeIssue", entity_type: "Issue")
+      solution = MemoryEntity.create!(name: "ScopedSolution", entity_type: "PossibleSolution")
+      MemoryObservation.create!(memory_entity: issue, content: "Blocks scoped authentication flow")
+      MemoryObservation.create!(memory_entity: solution, content: "Fixes scoped authentication flow")
+
+      expect(strategy.proposals_for_entity(solution.id, scope_entity_ids: [ solution.id ])).to be_empty
     end
 
     it "assigns medium confidence when issue-solution pairs share only two topic tokens" do

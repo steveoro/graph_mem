@@ -16,12 +16,14 @@ class SearchEntitiesTool < ApplicationTool
     logger.info "Performing SearchEntitiesTool with query: #{query}"
     begin
       limit = [ limit.to_i, 1 ].max.clamp(1, 100)
+      context_scope = graph_mem_context.scoped_entity_scope
       payload = EntityRetrievalService.search(
         query,
         limit: limit,
         semantic: true,
-        context_entity_ids: graph_mem_context.scoped_entity_ids,
-        scope_entity_ids: graph_mem_context.scoped_entity_ids
+        context_entity_ids: context_scope&.entity_ids,
+        scope_entity_ids: context_scope&.entity_ids,
+        context_scope: context_scope
       )
       payload[:results].map(&:to_h)
     rescue StandardError => e

@@ -39,6 +39,10 @@ class GraphMemContext
       self.for(DEFAULT_CLIENT_ID).scoped_entity_ids
     end
 
+    def scoped_entity_scope
+      self.for(DEFAULT_CLIENT_ID).scoped_entity_scope
+    end
+
     def clear_all!
       AgentContext.delete_all
     end
@@ -69,24 +73,21 @@ class GraphMemContext
   # Returns entity IDs related to the current project (via recursive part_of relations).
   # Used by search tools to boost in-context results and by summarization to hard-scope retrieval.
   def scoped_entity_ids
+    scoped_entity_scope&.entity_ids
+  end
+
+  # Returns bounded scope IDs plus truncation metadata for diagnostics.
+  def scoped_entity_scope
     return nil unless active?
 
-    project_id = current_project_id
-    ids = [ project_id ]
-    frontier = [ project_id ]
-
-    while frontier.any? && ids.size < MAX_SCOPED_ENTITIES
-      children = MemoryRelation
-        .where(relation_type: "part_of", to_entity_id: frontier)
-        .pluck(:from_entity_id)
-      new_ids = children - ids
-      break if new_ids.empty?
-
-      ids.concat(new_ids)
-      frontier = new_ids
+    scope = ProjectSubtree.resolve(current_project_id, max_entities: MAX_SCOPED_ENTITIES)
+    if scope.truncated
+      Rails.logger.warn(
+        "[GraphMemContext] project #{current_project_id} scope truncated at #{scope.max_entities} entities"
+      )
     end
 
-    ids.uniq
+    scope
   end
 
   private

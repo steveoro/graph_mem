@@ -86,6 +86,7 @@ RSpec.describe 'API V1 Memory Entities', type: :request do
       tags 'Memory Entities'
       operationId 'showMemoryEntity'
       produces 'application/json'
+      parameter name: :observation_limit, in: :query, type: :integer, required: false
 
       response(200, 'successful') do
         schema type: :object,
@@ -105,7 +106,14 @@ RSpec.describe 'API V1 Memory Entities', type: :request do
                required: %w[id name entity_type]
         let(:id) { existing_entity.id }
         let!(:active_observation) do
-          MemoryObservation.create!(memory_entity: existing_entity, content: 'Current')
+          MemoryObservation.create!(memory_entity: existing_entity, content: 'Current').tap do |observation|
+            observation.update_column(:trust_score, 0.1)
+          end
+        end
+        let!(:ranked_observation) do
+          MemoryObservation.create!(memory_entity: existing_entity, content: 'Most trusted').tap do |observation|
+            observation.update_column(:trust_score, 0.9)
+          end
         end
         let!(:obsolete_observation) do
           MemoryObservation.create!(memory_entity: existing_entity, content: 'Historical').tap(&:mark_obsolete!)
@@ -119,9 +127,31 @@ RSpec.describe 'API V1 Memory Entities', type: :request do
           expect(data).to have_key('observations')
           expect(data).to have_key('relations_from')
           expect(data).to have_key('relations_to')
-          expect(data['observations'].pluck('id')).to contain_exactly(active_observation.id)
+          expect(data['observations'].pluck('id')).to contain_exactly(active_observation.id, ranked_observation.id)
           expect(data['observations'].pluck('id')).not_to include(obsolete_observation.id)
           expect(data['observations'].first['status']).to eq(MemoryObservation::ACTIVE_STATUS)
+          expect(data['observations_truncated']).to be(false)
+        end
+      end
+
+      response(200, 'trust-limited observations') do
+        let(:id) { existing_entity.id }
+        let(:observation_limit) { 1 }
+        let!(:low_trust_observation) do
+          MemoryObservation.create!(memory_entity: existing_entity, content: 'Low trust').tap do |observation|
+            observation.update_column(:trust_score, 0.1)
+          end
+        end
+        let!(:high_trust_observation) do
+          MemoryObservation.create!(memory_entity: existing_entity, content: 'High trust').tap do |observation|
+            observation.update_column(:trust_score, 0.9)
+          end
+        end
+
+        run_test! do |response|
+          data = JSON.parse(response.body)
+          expect(data['observations'].pluck('id')).to eq([ high_trust_observation.id ])
+          expect(data['observations_truncated']).to be(true)
         end
       end
 

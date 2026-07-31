@@ -77,6 +77,18 @@ RSpec.describe ImportMatchingStrategy, type: :model do
         expect(result[:success]).to be true
       end
 
+      it "matches a child using a canonicalized type variant" do
+        EntityTypeMapping.find_or_create_by!(variant: "workspace") { |mapping| mapping.canonical_type = "Project" }
+        child = MemoryEntity.create!(name: "Canonical Child", entity_type: "Project")
+        parent = MemoryEntity.create!(name: "Canonical Parent", entity_type: "Project")
+        MemoryRelation.create!(from_entity: child, to_entity: parent, relation_type: "part_of")
+
+        result = strategy.send(:match_child_node, { "name" => child.name, "entity_type" => "workspace" }, "root/child", parent.name)
+
+        expect(result.exact_match).to eq(child)
+        expect(result.status).to eq(described_class::STATUS_SKIP)
+      end
+
       it 'includes version from import data' do
         result = strategy.match(import_data)
 

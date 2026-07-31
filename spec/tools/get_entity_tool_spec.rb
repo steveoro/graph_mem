@@ -100,6 +100,18 @@ RSpec.describe GetEntityTool, type: :model do
         expect(obs[:updated_at]).to be_a(String)
       end
 
+      it "trust-ranks observations before applying observation_limit" do
+        lower_trust = MemoryObservation.create!(memory_entity: entity, content: "lower trust")
+        higher_trust = MemoryObservation.create!(memory_entity: entity, content: "higher trust")
+        lower_trust.update_column(:trust_score, 0.1)
+        higher_trust.update_column(:trust_score, 0.9)
+
+        result = tool.call(entity_id: entity.id, observation_limit: 1)
+
+        expect(result[:observations].map { |item| item[:observation_id] }).to eq([ higher_trust.id ])
+        expect(result[:observations_truncated]).to be(true)
+      end
+
       it 'excludes inactive observations by default and includes them on request' do
         obsolete = MemoryObservation.create!(memory_entity: entity, content: 'Historical')
         obsolete.mark_obsolete!(reason: 'Outdated')

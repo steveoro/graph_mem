@@ -38,6 +38,19 @@
             %strong= entity_name
             %span.text-gray-500= " (#{payload['entity_type']} ##{entity_id})"
           = render "entity_search_select", row: row, field_name: "parent_id", label_text: "Parent project", current_id: parent_id, current_name: parent_name, select_id: "parent-select-#{row.row_uuid}", search_id: "parent-search-#{row.row_uuid}"
+        - when "relation_integrity"
+          - issue = payload["payload"] || {}
+          - keep_id = issue["keep_id"]
+          - delete_ids = Array(issue["delete_ids"]).presence || [issue["delete_id"]].compact
+          %p.text-sm.mb-2
+            %strong= issue["kind"] || payload["issue_kind"]
+            %span.text-gray-500= " — retain relation ##{keep_id}, remove #{delete_ids.map { |id| "##{id}" }.join(', ')}"
+          - if issue["keep"].present?
+            %p.text-xs.text-gray-600
+              Keep: #{issue.dig("keep", "from_name")} → #{issue.dig("keep", "to_name")}
+          - if issue["delete"].present?
+            %p.text-xs.text-gray-600
+              Remove: #{issue.dig("delete", "from_name")} → #{issue.dig("delete", "to_name")}
         - when "entity_error"
           %p.text-sm
             %strong #{payload["error_class"]}:
@@ -64,6 +77,11 @@
                 %span.text-xs.text-gray-400 (score #{parent["score"]})
           - if payload["error"].present?
             %p.text-xs.text-red-600= payload["error"]
+        - when "relation_integrity"
+          - issue = payload["payload"] || {}
+          %p.text-xs= "Integrity repair: #{issue['kind'] || payload['issue_kind']}"
+          - if issue["parent_entity_ids"].present?
+            %p.text-xs.text-gray-500= "Parents: #{issue['parent_entity_ids'].join(', ')}"
       .md:col-span-3.flex.flex-wrap.items-start.gap-2
         - if row.active? || row.ignored?
           = submit_tag "Save", name: "review_action", value: "edit", class: "rounded bg-blue-600 px-2 py-1 text-xs text-white hover:bg-blue-700", form: form_id

@@ -70,7 +70,10 @@ class RelationshipDiscoveryStrategy
   def issue_solution_proposals(entity)
     return [] unless entity.entity_type == "PossibleSolution"
 
-    MemoryEntity.where(entity_type: "Issue").order(:id).filter_map do |issue|
+    issues = MemoryEntity.where(entity_type: "Issue")
+    issues = issues.where(id: @scope_entity_ids) if @scope_entity_ids.present?
+
+    issues.order(:id).filter_map do |issue|
       next if project_root?(issue)
 
       solution_observations = entity.active_memory_observations.to_a

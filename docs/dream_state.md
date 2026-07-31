@@ -299,7 +299,7 @@ It asserts:
 
 ### Pending discovery scenarios
 
-The benchmark also covers **relationship discovery** end to end: shared cross-project evidence, `solves` proposals for issue/solution pairs, duplicate-suppression for existing relations, and reachability improvements after manually accepting a proposal.
+The benchmark also covers **relationship discovery** end to end: issue/solution and dependency proposals are limited to the source entity's resolved `part_of` project subtree. Disconnected entities are self-scoped. The sole cross-project exception is an active observation whose content is byte-identical on both entities; that evidence may propose `relates_to`. It also covers duplicate-suppression for existing relations and reachability improvements after manually accepting a proposal.
 
 Run the benchmark:
 

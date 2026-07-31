@@ -44,6 +44,8 @@ Interactive documentation is available at `/api-docs` when the server is running
 Query parameters:
 - `include_ranked=true` sorts observations by `trust_score` descending.
 - `include_obsolete=true` includes obsolete and superseded observations.
+- `query=<text>` ranks observations by relevance before trust.
+- `observation_limit=<n>` applies a limit after ranking and adds `observations_truncated` when active observations were omitted.
 
 ### Create Entity
 
@@ -71,7 +73,7 @@ Required: `name`, `entity_type`.
 
 `GET /api/v1/memory_entities/search?q=search+term`
 
-Returns relevance-ranked results with `relevance_score` and `matched_fields`. Context-aware when a project context is active.
+Returns relevance-ranked results with `relevance_score` and `matched_fields`. Context-aware when a project context is active; retrieval diagnostics report `scope_truncated` and `scope_max_entities` when the bounded context subtree is partial.
 
 ### Merge Entity
 
