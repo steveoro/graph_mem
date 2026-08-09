@@ -20,14 +20,16 @@ GraphMem is designed as a **single-user, local-network server**. There is no aut
 {
   "mcpServers": {
     "graph_mem": {
-      "url": "http://localhost:3030/mcp/sse",
+      "url": "http://localhost:3030/mcp",
       "headers": { "X-MCP-Client": "Agent-1" }
     }
   }
 }
 ```
 
-The example above assumes using the container setup, which is hardcoded to port 3030. (APP_PORT is currently hardcoded in Dockerfile and docker-compose.yml)
+The example above assumes using the container setup, which is hardcoded to port 3030. (APP_PORT is currently hardcoded in Dockerfile and docker-compose.yml).
+
+Use `/mcp` for the 2025-03-26 **Streamable HTTP** transport; the legacy 2024-11-05 SSE endpoint remains available at `/mcp/sse`.
 
 Context set via `set_context` is stored per `client_id` in the database and survives server restarts. Agents without the header share the `"default"` client bucket (backward-compatible single-agent behavior).
 
@@ -46,7 +48,7 @@ Authentication and multi-tenant isolation are out of scope for now; the header i
 
 * **Ruby**: 3.4.1+
 * **Rails**: 8.1.2+
-* **MCP Implementation**: [fast-mcp](https://github.com/yjacquin/fast-mcp) gem
+* **MCP Implementation**: [fast-mcp](https://github.com/yjacquin/fast-mcp) gem with a custom `GraphMem::McpStreamableHttpTransport` that adds 2025-03-26 Streamable HTTP support while keeping the 2024-11-05 SSE transport
 * **Database**: MariaDB 11.8+ (VECTOR support required)
 * **Embeddings**: Ollama with nomic-embed-text (768 dimensions)
 
@@ -231,7 +233,19 @@ For local development, run the app natively with MariaDB on localhost.
 
 Edit your Cursor's `mcp.json`:
 
-**Option A -- SSE transport (recommended with Docker):**
+**Option A -- Streamable HTTP transport (recommended for modern clients):**
+```json
+{
+  "mcpServers": {
+    "graph_mem": {
+      "url": "http://localhost:3030/mcp",
+      "headers": { "X-MCP-Client": "Agent-1" }
+    }
+  }
+}
+```
+
+**Option B -- Legacy SSE transport (Docker / older clients):**
 ```json
 {
   "mcpServers": {
@@ -242,7 +256,7 @@ Edit your Cursor's `mcp.json`:
 }
 ```
 
-**Option B -- stdio transport (native development / real-time changes applied):**
+**Option C -- stdio transport (native development / real-time changes applied):**
 ```json
 {
   "mcpServers": {
@@ -255,7 +269,7 @@ Edit your Cursor's `mcp.json`:
 }
 ```
 
-**Option C -- stdio via Docker:**
+**Option D -- stdio via Docker:**
 ```json
 {
   "mcpServers": {
@@ -273,9 +287,22 @@ Edit your Cursor's `mcp.json`:
 Edit your Windsurf's `mcp_config.json` using the same approach as Cursor's. Usually the SSE container doesn't yield any issue.
 
 
-### Antigravity
+### Antigravity / Devin (Streamable HTTP)
 
-SSE doesn't work with Antigravity — Antigravity uses the newer Streamable HTTP transport (POST/DELETE directly to the serverUrl), while the current FastMCP gem (v1.6.0) only supports the older SSE dual-endpoint protocol (GET /sse + POST /messages). But stdio works fine.
+GraphMem now supports the 2025-03-26 Streamable HTTP transport. Point these clients at the base MCP URL:
+
+```json
+{
+  "mcpServers": {
+    "graph_mem": {
+      "url": "http://localhost:3030/mcp",
+      "headers": { "X-MCP-Client": "Agent-1" }
+    }
+  }
+}
+```
+
+The legacy SSE endpoint (`/mcp/sse`) remains available for older clients.
 
 Assuming `graph_mem-app-1` is the running container name, edit `mcp_servers.json`:
 
@@ -353,7 +380,13 @@ OLLAMA_URL=http://<ollama-host-ip>:11434
 
 **3. Connect MCP clients from other LAN machines**
 
-Point them to the workstation's SSE endpoint:
+Use the Streamable HTTP endpoint for modern clients:
+
+```json
+{ "url": "http://<workstation-ip>:3030/mcp" }
+```
+
+The legacy SSE endpoint is still available:
 
 ```json
 { "url": "http://<workstation-ip>:3030/mcp/sse" }

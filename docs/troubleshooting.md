@@ -20,8 +20,9 @@ This guide addresses common issues you might encounter when working with GraphMe
 2. **Wrong Connection URL**
    - Verify you're using the correct protocol, host, and port
    - Default URLs are:
-     - HTTP/JSON-RPC: `http://localhost:3000/mcp/messages`
-     - SSE: `http://localhost:3030/mcp/sse`
+     - Streamable HTTP (2025-03-26, recommended): `http://localhost:3000/mcp`
+     - Legacy SSE (2024-11-05): `http://localhost:3000/mcp/sse`
+     - Legacy messages: `http://localhost:3000/mcp/messages`
 
 3. **CORS Issues (Browser Clients Only)**
    - Check browser console for CORS errors

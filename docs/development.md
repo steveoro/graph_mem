@@ -62,6 +62,8 @@ Alternatively, use the provided MCP server script:
 bin/mcp
 ```
 
+The server now exposes the 2025-03-26 Streamable HTTP endpoint at `/mcp` while keeping the 2024-11-05 SSE endpoint at `/mcp/sse`.
+
 For the STDIO interface (useful for Windsurf integration):
 
 ```bash
@@ -97,7 +99,7 @@ The GraphMem project follows a standard Rails application structure with a few a
 ├── config/
 │   ├── initializers/
 │   │   ├── fast_mcp.rb   # MCP server configuration
-│   │   └── zzz_fast_mcp_patches.rb  # Monkey patches
+│   │   └── ...           # See lib/graph_mem for transport code
 │   └── ...
 ├── db/
 │   ├── migrate/          # Database migrations
@@ -207,7 +209,7 @@ The current version is stored in `lib/graph_mem/version.rb`.
 
 * [Ruby on Rails Guides](https://guides.rubyonrails.org/)
 * [Fast-MCP Documentation](https://github.com/yjacquin/fast-mcp)
-* [MCP Specification](https://github.com/mcporg/mcp)
+* [MCP Specification](https://spec.modelcontextprotocol.io/specification/2025-03-26/basic/transports/)
 
 
 ## Getting Help

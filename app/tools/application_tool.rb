@@ -3,6 +3,7 @@
 class ApplicationTool < FastMcp::Tool
   COMPACTION_VALVE_TOOLS = ToolMutationPolicy::COMPACTION_VALVE_TOOLS
   MCP_CLIENT_HEADER = "x-mcp-client"
+  MCP_SESSION_HEADER = "mcp-session-id"
 
   attr_accessor :server
 
@@ -100,11 +101,16 @@ class ApplicationTool < FastMcp::Tool
   end
 
   def client_header_value(headers)
+    mcp_session_id = nil
+
     headers.each do |key, value|
-      return value if normalized_header_key(key) == MCP_CLIENT_HEADER
+      normalized = normalized_header_key(key)
+      return value if normalized == MCP_CLIENT_HEADER
+
+      mcp_session_id = value if normalized == MCP_SESSION_HEADER
     end
 
-    nil
+    mcp_session_id
   end
 
   def normalized_header_key(key)
