@@ -5,16 +5,24 @@ All notable changes to GraphMem will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.25.0] - 2026-08-09
+
+- Implemented Streamable HTTP transport alongside legacy SSE for MCP.
+
 ## [1.21.0] - 2026-07-31
+
 - Implement import observation duplicate distance settings and validation; enhance import handling with relation direction support. Vers. 1.21.0.
 
 ## [1.20.0] - 2026-07-31
+
 - Improved SummarizeTool with a focused context parameter; bundle updates; enhance data exchange and memory entity handling with new relation validation and improved observation ranking; hardened relation-integrity, context scopes, import matching, ranked and ordered observation limits, dream-state discovery and focused specs
 
 ## [1.11.0] - 2026-07-30
+
 - Added entity_type as a parameter for CreateEntityTool, SuggestMergesTool and VectorSearchTool; updated documentation + bundle updates; improved DreamStateCompactor with more strategies from GraphIntegrityService
 
 ## [1.10.1] - 2026-07-18
+
 - Added `summary_observations_per_entity` setting to control how many observations are included in each entity summary
 - Fixed parameter inversion in a private method call in SummarizeService
 - Add compaction review UI with editable suggestions and suppression tracking
@@ -26,6 +34,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 ## [1.9.8] - 2026-07-15
+
 - Add `summarize` MCP tool and `POST /api/v1/summarize` for query-scoped summarization with deterministic source-backed evidence
 - Add optional LLM synthesis via `SummarizationConfig`, `SummaryGenerationClient`, and operator **System Settings → Summaries** tab
 - Deterministic fallback when LLM summarization is disabled, unconfigured, or provider-unavailable; embedding and summary models remain independent
@@ -41,15 +50,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add CircleCI config
 
 ## [1.9.4] - 2026-07-13
+
 - Prevent concurrent compactor runs; compactor review UI; increased concurrent stability
 
 ## [1.9.3] - 2026-07-10
+
 - Fixes for multi-agent client tool usage; documentation update; dream state compactor 3rd phase: relationship suggestion + integration tests
 
 ## [1.9.1] - 2026-07-10
+
 - Fixes for embeddings generation and connection testing; bundle update
 
 ## [1.9.0] - 2026-06-26
+
 - MCP clients dashboard card: per-agent project context, recent activity, and last tool used (via `X-MCP-Client`)
 - Embeddings operator dashboard v2: AppSettings-backed config (AppSettings → ENV → defaults) with dedicated Settings tab
 - `EmbeddingConfig` module and `EmbeddingService.reset_instance!` for live config reload
@@ -58,6 +71,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Embeddings page: config source badges, last job report, pending job hints; operator guide at `docs/operator/embeddings.md`
 
 ## [1.8.3] - 2026-06-26
+
 - Operator audit log browse page with filters, pagination, and dashboard stat-chip link
 - Standalone prune action for audit logs older than 90 days (with confirmation)
 - Operator embeddings dashboard: coverage stats, connection test, and background backfill/regenerate jobs
@@ -163,15 +177,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.8.5] - 2025-08-02
 
-### Changes
-
 - Set default value for `memory_observations_count` to 0
 - Added tests for `delete_duplicates` API endpoint
 - Added "delete duplicates" action to graph visualization in observation details show pop-up menu
 
 ## [0.8.4] - 2025-08-01
-
-### Changes
 
 - Substitute deprecated :unprocessable_content status code with :unprocessable_content; bundle updated
 - Fixed merge operation on node-to-node action in graph visualization
@@ -179,26 +189,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.8.3] - 2025-07-18
 
-### Added
-
 - Improved "knowledge graph visualization": contextual menu for nodes and edges, with options to navigate to related entities and observations; double-click to close up to a node subgraph; editable entity data
 
 ## [0.8.2] - 2025-07-02
-
-### Added
 
 - Tokenized search for entities, by name, aliases and entity_type, with overall relevance score (float)
 
 ## [0.8.1] - 2025-06-16
 
-### Added
-
 - Preliminary graph visualization with Cytoscape.js + Stimulus.js using the localhost Rails server
 
 
 ## [0.8.0] - 2025-06-13
-
-### Added
 
 - `update_entity_tool` to update an existing entity
 - support for entity names aliases as pipe-separated strings
@@ -206,16 +208,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.7.1] - 2025-06-10
 
-### Added
-
 - `db:append_json` task to merge matching objects in legacy memory.json data files into existing database rows
 - `db:merge_entity` task to merge a single entity into an existing entity
 - `db:project_report` task to generate a consolidated Markdown report with Mermaid diagrams for all projects in the database
 
 
 ## [0.7.0] - 2025-06-09
-
-### Added
 
 - MCP Resources for higher-level structured access:
   - `memory_entities` resource with advanced filtering, sorting, and relation inclusion
@@ -226,8 +224,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Support for pagination in all list operations
 - Integration with Windsurf via STDIO transport
 - Improved error handling with custom error classes
-
-### Changed
 
 - Refactored MCP tools to use unified application tool base class
 - Improved response formatting for better compatibility with Cascade MCP client
@@ -243,14 +239,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.6.0] - 2025-05-20
 
-### Added
-
 - SSE transport for real-time updates
 - Support for complex graph traversal operations
 - `get_subgraph_by_ids` tool for retrieving connected subgraphs
 - Improved entity search with partial name matching
-
-### Changed
 
 - Updated to fast-mcp 1.4.0
 - Enhanced entity serialization with observation counts
@@ -258,14 +250,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.5.0] - 2025-04-12
 
-### Added
-
 - Complete RESTful API at `/api/v1` for non-MCP clients
 - Swagger API documentation
 - Authentication framework (disabled by default)
 - Database indices for improved performance
-
-### Changed
 
 - Moved to Ruby 3.4.1
 - Updated Rails to 8.0.2
@@ -273,8 +261,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Enhanced model validations
 
 ## [0.4.0] - 2025-03-05
-
-### Added
 
 - Relation management tools:
   - `create_relation`
@@ -284,8 +270,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Database migrations for relation model
 
 ## [0.3.0] - 2025-02-18
-
-### Added
 
 - Observation management tools:
   - `create_observation`
@@ -300,8 +284,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.2.0] - 2025-01-27
 
-### Added
-
 - Entity management tools:
   - `create_entity`
   - `get_entity`
@@ -311,14 +293,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Basic entity schema with name and type
 - Integration with MariaDB
 
-### Changed
-
 - Updated project structure to Rails 8.0 conventions
 - Enhanced tool parameter validation
 
 ## [0.1.0] - 2025-01-06
-
-### Added
 
 - Initial project setup
 - Basic MCP server implementation

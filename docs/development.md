@@ -9,7 +9,7 @@ This guide covers everything you need to know to set up a development environmen
 Before starting, ensure you have the following installed:
 
 * Ruby 3.4.1+ (we recommend using [RVM](https://rvm.io/) or [rbenv](https://github.com/rbenv/rbenv) for Ruby version management)
-* MariaDB 10.5+
+* MariaDB 11.8+ (with vector support)
 * [Bundler](https://bundler.io/)
 * Git
 
