@@ -41,6 +41,7 @@ module GraphMem
       "Access-Control-Allow-Origin" => "*",
       "Access-Control-Allow-Methods" => "GET, POST, DELETE, OPTIONS",
       "Access-Control-Allow-Headers" => "Content-Type, Mcp-Session-Id, X-MCP-Client",
+      "Access-Control-Expose-Headers" => "Mcp-Session-Id",
       "Access-Control-Max-Age" => "86400",
       "Keep-Alive" => "timeout=600",
       "Pragma" => "no-cache",
@@ -343,15 +344,19 @@ module GraphMem
     end
 
     def streamable_get_loop(session, io, queue, session_id)
-      write_sse_headers(io)
+      write_sse_headers(io, "Mcp-Session-Id" => session_id)
 
       loop do
         session[:last_active_at] = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+
+        break if queue.closed? && queue.empty?
 
         begin
           message = queue.pop(true)
           write_sse_message(io, message)
         rescue ThreadError
+          break if queue.closed?
+
           # No message waiting; send a keep-alive comment.
           write_sse_keep_alive(io)
           sleep 1
@@ -361,6 +366,12 @@ module GraphMem
       @logger.info("Streamable SSE client #{session_id} disconnected")
     ensure
       unregister_get_queue(session, queue)
+
+      begin
+        io.close unless io.closed?
+      rescue IOError, Errno::EPIPE, Errno::ECONNRESET
+        # Client already gone; socket may fail to close gracefully.
+      end
     end
 
     def register_get_queue(session, queue)
@@ -416,9 +427,9 @@ module GraphMem
       message.is_a?(String) ? message : JSON.generate(message)
     end
 
-    def write_sse_headers(io)
+    def write_sse_headers(io, extra_headers = {})
       io.write("HTTP/1.1 200 OK\r\n")
-      SSE_HEADERS.each { |key, value| io.write("#{key}: #{value}\r\n") }
+      SSE_HEADERS.merge(extra_headers).each { |key, value| io.write("#{key}: #{value}\r\n") }
       io.write("\r\n")
       io.write(": SSE connection established\n\n")
       io.flush
@@ -441,9 +452,6 @@ module GraphMem
       if (queues = session[:get_queues])
         queues.each(&:close)
       end
-      if (io = session[:io])
-        io.close unless io.closed?
-      end
     end
 
     def session_expired?(session)
@@ -452,11 +460,16 @@ module GraphMem
 
     def reap_expired_sessions
       now = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      expired_session_ids = []
 
       @sessions.each do |session_id, session|
-        next if now - session[:last_active_at] <= SESSION_TIMEOUT
+        expired_session_ids << session_id if now - session[:last_active_at] > SESSION_TIMEOUT
+      end
 
-        @sessions.delete(session_id)
+      expired_session_ids.each do |session_id|
+        session = @sessions.delete(session_id)
+        next unless session
+
         close_session(session)
         @logger.info("Reaped expired MCP session #{session_id}")
       end
