@@ -1,8 +1,7 @@
 # frozen_string_literal: true
 
 # CORS configuration for cross-origin API and MCP access.
-# Required when browser-based clients (e.g., OpenWebUI) on a different
-# origin/port make JavaScript requests to GraphMem endpoints.
+# The transport also emits headers for raw hijacked SSE responses.
 
 Rails.application.config.middleware.insert_before 0, Rack::Cors do
   allow do
@@ -19,7 +18,8 @@ Rails.application.config.middleware.insert_before 0, Rack::Cors do
 
     resource "/mcp/*",
       headers: :any,
-      methods: %i[get post options],
+      methods: %i[get post delete options],
+      expose: %w[Mcp-Session-Id],
       max_age: 86_400
 
     resource "/api-docs*",
@@ -44,7 +44,8 @@ Rails.application.config.middleware.insert_before 0, Rack::Cors do
 
     resource "/mcp/*",
       headers: :any,
-      methods: %i[get post options],
+      methods: %i[get post delete options],
+      expose: %w[Mcp-Session-Id],
       max_age: 86_400
 
     resource "/api-docs*",

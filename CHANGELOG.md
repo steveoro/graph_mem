@@ -5,6 +5,14 @@ All notable changes to GraphMem will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.26.0] - 2026-08-10
+
+- Refactor streamable HTTP transport with thread-safe session management and stream lifecycle handling.
+- Replace per-session response_queue with per-request thread-local queues to prevent concurrent POST races.
+- Introduce session leasing with active_requests counter and last_active_at tracking under @sessions_mutex.
+- Implement per-stream state (queue, io, closed flag, mutex) via register_stream/unregister_stream; each GET opens its own stream.
+- Add lazy session reaper (60s interval, 30min timeout) to prevent stale sessions to bloat memory.
+
 ## [1.25.0] - 2026-08-09
 
 - Implemented Streamable HTTP transport alongside legacy SSE for MCP.

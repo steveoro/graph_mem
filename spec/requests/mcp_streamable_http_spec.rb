@@ -23,11 +23,14 @@ RSpec.describe "MCP Streamable HTTP endpoint", type: :request do
         headers: {
           "CONTENT_TYPE" => "application/json",
           "HTTP_ACCEPT" => "application/json",
+          "HTTP_ORIGIN" => "http://localhost:3001",
           "X-MCP-Client" => "streamable-test"
         }
 
       expect(response).to have_http_status(:ok)
       expect(response.content_type).to eq("application/json")
+      expect(response.headers["Access-Control-Allow-Origin"]).to eq("*")
+      expect(response.headers["Access-Control-Expose-Headers"]).to include("Mcp-Session-Id")
       expect(response.headers["Mcp-Session-Id"]).to be_present
 
       body = response.parsed_body
@@ -215,6 +218,22 @@ RSpec.describe "MCP Streamable HTTP endpoint", type: :request do
 
       expect(response).to have_http_status(:not_found)
     end
+
+    it "includes CORS headers on JSON error responses" do
+      host! "localhost"
+
+      post "/mcp",
+        params: "{not-json",
+        headers: {
+          "CONTENT_TYPE" => "application/json",
+          "HTTP_ACCEPT" => "application/json",
+          "HTTP_ORIGIN" => "http://localhost:3001"
+        }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.headers["Access-Control-Allow-Origin"]).to eq("*")
+      expect(response.headers["Access-Control-Expose-Headers"]).to include("Mcp-Session-Id")
+    end
   end
 
   describe "DELETE /mcp" do
@@ -266,12 +285,18 @@ RSpec.describe "MCP Streamable HTTP endpoint", type: :request do
     it "responds to CORS preflight" do
       host! "localhost"
 
-      options "/mcp"
+      options "/mcp",
+        headers: {
+          "HTTP_ORIGIN" => "http://localhost:3001",
+          "HTTP_ACCESS_CONTROL_REQUEST_METHOD" => "DELETE",
+          "HTTP_ACCESS_CONTROL_REQUEST_HEADERS" => "content-type,mcp-session-id,x-mcp-client"
+        }
 
       expect(response).to have_http_status(:ok)
-      expect(response.headers["Access-Control-Allow-Methods"]).to include("POST")
-      expect(response.headers["Access-Control-Allow-Methods"]).to include("DELETE")
-      expect(response.headers["Access-Control-Allow-Headers"]).to include("Mcp-Session-Id")
+      expect(response.headers["access-control-allow-methods"]).to include("POST")
+      expect(response.headers["access-control-allow-methods"]).to include("DELETE")
+      expect(response.headers["access-control-allow-headers"]).to match(/content-type.*mcp-session-id.*x-mcp-client/i)
+      expect(response.headers["access-control-expose-headers"]).to include("Mcp-Session-Id")
     end
   end
 end
