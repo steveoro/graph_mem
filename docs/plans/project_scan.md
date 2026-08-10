@@ -181,12 +181,30 @@ wraps the MCP call for convenience.
    - Add a "Project Scans" card to the operator dashboard that lists recent
      `OperationProgress` entries of type `project_scan`.
 
-8. **Tests**
-   - Unit specs for `ProjectScanner` with a fixture repo and a stubbed LLM
-     client.
-   - Job specs verifying progress reporting and review-queue seeding.
-   - Tool specs for parameter validation and status lookup.
-   - RuboCop lint.
+8. **Summarization fallback**
+   - If `SummarizationConfig.llm_usable?` is false or the LLM call fails,
+     `ProjectScanner` switches to a deterministic fallback that still:
+     - creates/updates the `Project` root from `README` and directory name,
+     - creates `Configuration` entities for manifest files,
+     - creates `Component` entities for top-level directories,
+     - marks the result with `fallback: true` and a `fallback_reason`.
+
+9. **Devin-local multi-stage skill**
+   - Add `.devin/skills/project_scan/SKILL.md` for the no-LLM / human-guided case.
+   - The skill walks the project in progressive depths
+     (`birds_eye`, `architecture`, `usage`, `ui`, `tests_and_docs`),
+     uses existing GraphMem MCP tools (`create_entity`, `create_observation`,
+     `create_relation`) to persist facts, and asks the user whether to continue
+     after each depth. It records progress as an observation on the project entity
+     so scans can resume across sessions.
+
+10. **Tests**
+    - Unit specs for `ProjectScanner` with a fixture repo and a stubbed LLM
+      client, including the deterministic fallback path.
+    - Job specs verifying progress reporting and review-queue seeding.
+    - Tool specs for parameter validation and status lookup.
+    - Update registration and REPORT_TYPES specs to include the new tools/types.
+    - RuboCop lint.
 
 ## Success Criteria
 
@@ -200,11 +218,17 @@ wraps the MCP call for convenience.
   scan.
 - All new code passes RuboCop and focused RSpec tests.
 - No existing tools are broken.
+- When LLM summarization is unavailable, `ProjectScanner` falls back to a
+  deterministic, file-metadata-based extraction.
+- The Devin-local `project_scan` skill can perform a multi-stage, human-guided
+  scan without an LLM.
 
 ## Assumptions
 
 - The GraphMem server process has filesystem access to `project_root`.
-- The configured summarization/LLM endpoint is used for scan extraction.
+- The configured summarization/LLM endpoint is used for scan extraction when
+  enabled; when disabled, the deterministic fallback or the Devin-local skill
+  takes over.
 - Scan output is treated as authoritative for the project it scanned, but
   destructive actions are still reviewed.
 - The first pass does not attempt full AST parsing; it relies on file content

@@ -32,7 +32,13 @@ class ProjectScanJob < ApplicationJob
     if result.success
       operation.complete!(
         message: "Project scan completed",
-        counters: result.to_h.slice(:entities_created, :entities_updated, :observations_created, :observations_obsoleted, :relations_created, :dismissed_compaction_items).compact
+        counters: result.to_h.slice(:entities_created, :entities_updated, :observations_created, :observations_obsoleted, :relations_created, :dismissed_compaction_items).compact,
+        details: operation.details&.merge(
+          fallback: result.fallback,
+          fallback_reason: result.fallback_reason,
+          project_entity_id: result.project_entity&.id,
+          project_entity_name: result.project_entity&.name
+        )&.compact
       )
     else
       operation.fail!(result.errors.join("; "))

@@ -33,6 +33,8 @@ class ProjectScanner
     :scan_review_items,
     :dismissed_compaction_items,
     :errors,
+    :fallback,
+    :fallback_reason,
     keyword_init: true
   ) do
     def to_h
@@ -47,7 +49,9 @@ class ProjectScanner
         relations_created: relations_created || 0,
         scan_review_items: scan_review_items || [],
         dismissed_compaction_items: dismissed_compaction_items || 0,
-        errors: errors || []
+        errors: errors || [],
+        fallback: fallback || false,
+        fallback_reason: fallback_reason
       }
     end
   end
@@ -83,13 +87,13 @@ class ProjectScanner
     end
 
     update_progress!(phase: "discovering_files", message: "Discovering project files")
-    files = discover_files
-    return failed_result("No readable files found in project root") if files.empty?
+    @discovered_files = discover_files
+    return failed_result("No readable files found in project root") if @discovered_files.empty?
 
-    update_progress!(phase: "reading_files", message: "Reading #{files.size} project files")
-    context = build_context(files)
+    update_progress!(phase: "reading_files", message: "Reading #{@discovered_files.size} project files")
+    context = build_context(@discovered_files)
 
-    update_progress!(phase: "extracting_knowledge", message: "Extracting knowledge via LLM")
+    update_progress!(phase: "extracting_knowledge", message: "Extracting knowledge")
     extracted = extract_knowledge(context)
     return failed_result("Failed to extract knowledge: #{extracted[:error]}") unless extracted[:ok]
 
@@ -112,7 +116,9 @@ class ProjectScanner
       relations_created: @relations_created_count,
       scan_review_items: @scan_review_items,
       dismissed_compaction_items: @dismissed_compaction_items,
-      errors: @errors
+      errors: @errors,
+      fallback: extracted[:fallback] == true,
+      fallback_reason: extracted[:fallback_reason] || extracted[:error]
     )
   end
 
@@ -120,7 +126,7 @@ class ProjectScanner
 
   def failed_result(message)
     @errors << message
-    Result.new(success: false, errors: @errors)
+    Result.new(success: false, errors: @errors, fallback: false)
   end
 
   def discover_files
@@ -174,12 +180,24 @@ class ProjectScanner
   end
 
   def extract_knowledge(context)
+    if summarization_disabled_or_unavailable?
+      update_progress!(phase: "fallback_extraction", message: "LLM summarization unavailable; using deterministic fallback")
+      return { ok: true, data: deterministic_extraction, fallback: true, fallback_reason: "LLM summarization disabled or unavailable" }
+    end
+
     prompt = extraction_prompt(context)
     result = SummaryGenerationClient.generate(prompt, style: "concise")
-    return { ok: false, error: result[:error] } unless result[:ok]
+
+    unless result[:ok]
+      update_progress!(phase: "fallback_extraction", message: "LLM extraction failed; using deterministic fallback")
+      return { ok: true, data: deterministic_extraction, fallback: true, fallback_reason: result[:error] }
+    end
 
     data = parse_json(result[:text])
-    return { ok: false, error: "LLM response was not valid JSON" } unless data
+    unless data
+      update_progress!(phase: "fallback_extraction", message: "LLM response was not valid JSON; using deterministic fallback")
+      return { ok: true, data: deterministic_extraction, fallback: true, fallback_reason: "LLM response was not valid JSON" }
+    end
 
     { ok: true, data: data }
   end
@@ -234,6 +252,119 @@ class ProjectScanner
     JSON.parse(text)
   rescue JSON::ParserError
     nil
+  end
+
+  def summarization_disabled_or_unavailable?
+    !SummarizationConfig.llm_usable?
+  end
+
+  def deterministic_extraction
+    project_name = @project_name.presence || project_name_from_readme || File.basename(@project_root)
+    description = project_description_from_readme || "Project scanned from #{@project_root} (LLM summarization unavailable)"
+    architecture = []
+
+    manifests = @discovered_files.select { |file| manifest_file?(file) }
+    manifests.each do |file|
+      relative = Pathname.new(file).relative_path_from(@project_root).to_s
+      next if relative.blank?
+
+      content_preview = file_preview(file, 400)
+      architecture << {
+        "entity" => {
+          "name" => File.basename(relative),
+          "type" => "Configuration",
+          "aliases" => [],
+          "description" => "Project manifest file: #{relative}"
+        },
+        "observations" => [
+          "Manifest file #{relative} contains: #{content_preview}"
+        ],
+        "relations" => [
+          { "to" => project_name, "type" => "part_of", "confidence" => 0.9 }
+        ]
+      }
+    end
+
+    top_level_directories.each do |dir|
+      architecture << {
+        "entity" => {
+          "name" => dir,
+          "type" => "Component",
+          "aliases" => [],
+          "description" => "Top-level project directory: #{dir}/"
+        },
+        "observations" => [
+          "Top-level directory: #{dir}/"
+        ],
+        "relations" => [
+          { "to" => project_name, "type" => "part_of", "confidence" => 0.9 }
+        ]
+      }
+    end
+
+    {
+      "project" => {
+        "name" => project_name,
+        "aliases" => @aliases,
+        "description" => description
+      },
+      "architecture" => architecture
+    }
+  end
+
+  def project_name_from_readme
+    readme = @discovered_files.find { |file| File.basename(file).downcase.start_with?("readme") }
+    return nil unless readme
+
+    content = safe_read(readme)
+    content.lines.map(&:strip).find { |line| line =~ /^(#|##)\s+(.+)$/ }&.match(/^(#|##)\s+(.+)$/)&.[](2)
+  end
+
+  def project_description_from_readme
+    readme = @discovered_files.find { |file| File.basename(file).downcase.start_with?("readme") }
+    return nil unless readme
+
+    lines = safe_read(readme).lines.map(&:strip).reject { |line| line.blank? || line.start_with?("#") }
+    lines.first(2).join(" ").presence
+  end
+
+  def manifest_file?(path)
+    name = File.basename(path).downcase
+    name == "package.json" ||
+      name == "gemfile" ||
+      name == "gemfile.lock" ||
+      name == "pyproject.toml" ||
+      name.start_with?("requirements") ||
+      name == "cargo.toml" ||
+      name == "go.mod" ||
+      name.start_with?("docker-compose") ||
+      name == ".devin"
+  end
+
+  def top_level_directories
+    return [] unless Dir.exist?(@project_root)
+
+    Dir.children(@project_root).select do |child|
+      full = File.join(@project_root, child)
+      File.directory?(full) && !child.start_with?(".") && child != "node_modules" && child != "vendor"
+    end
+  rescue SystemCallError
+    []
+  end
+
+  def file_preview(file, max_bytes)
+    text = safe_read(file, max_bytes)
+    text.squish.truncate(max_bytes, separator: /\s/)
+  end
+
+  def safe_read(file, max_bytes = MAX_FILE_BYTES)
+    return "" unless File.readable?(file)
+
+    File.binread(file, [ File.size(file), max_bytes ].min)
+      .force_encoding("UTF-8")
+      .encode("UTF-8", invalid: :replace, undef: :replace)
+  rescue SystemCallError
+    ""
   end
 
   def reconcile(data)

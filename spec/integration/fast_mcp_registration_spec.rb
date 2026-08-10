@@ -37,6 +37,8 @@ RSpec.describe "FastMcp tool registration", type: :integration do
     update_observation
     apply_maintenance_review
     dismiss_maintenance_review
+    scan_project
+    scan_project_status
   ].freeze
 
   # Filter out test-only tool subclasses defined in other spec files

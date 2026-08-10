@@ -14,6 +14,7 @@ RSpec.describe ProjectScanner, type: :service do
     File.write(File.join(@project_root, "README.md"), "# TestProject\n\nA test project for the scanner.")
     File.write(File.join(@project_root, "package.json"), '{"name": "test-project", "version": "1.0.0"}')
 
+    allow(SummarizationConfig).to receive(:llm_usable?).and_return(true)
     allow(SummaryGenerationClient).to receive(:generate).and_return(
       ok: true,
       text: {
@@ -90,6 +91,19 @@ RSpec.describe ProjectScanner, type: :service do
     expect(result.success).to be true
     expect(MemoryEntity.find_by(name: "TestProject", entity_type: "Project")).to be_nil
     expect(result.entities_created).to eq(0)
+  end
+
+  it "uses deterministic fallback when summarization is disabled" do
+    allow(SummarizationConfig).to receive(:llm_usable?).and_return(false)
+
+    scanner = ProjectScanner.new(project_root: @project_root)
+    result = scanner.call
+
+    expect(result.success).to be true
+    expect(result.fallback).to be true
+    expect(result.project_entity).to be_present
+    expect(result.project_entity.name).to eq("TestProject")
+    expect(MemoryEntity.find_by(name: "package.json", entity_type: "Configuration")).to be_present
   end
 
   it "returns an error when the project root does not exist" do

@@ -9,6 +9,8 @@ class ScanProjectTool < ApplicationTool
 
   description "Scan a project root directory and reconcile the knowledge graph with the source. " \
     "Returns a scan_id; the scan runs asynchronously via Solid Queue. " \
+    "If LLM summarization is disabled or unreachable, the scan falls back to a " \
+    "deterministic extraction of project metadata, manifest files, and top-level directories. " \
     "Use scan_project_status to poll for completion."
 
   arguments do

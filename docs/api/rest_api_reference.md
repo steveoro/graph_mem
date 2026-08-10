@@ -368,11 +368,15 @@ Returns Cytoscape.js-compatible `{ elements: [...], options: {...} }`.
   "message": "Project scan completed",
   "progress": { "current": 5, "total": 5, "percentage": 100.0 },
   "counters": { "entities_created": 1, "observations_created": 3, "relations_created": 2 },
+  "fallback": false,
+  "fallback_reason": null,
   "scan_review_items": [],
   "started_at": "...",
   "finished_at": "..."
 }
 ```
+
+When LLM summarization is disabled or unreachable, `fallback` is `true` and `fallback_reason` describes why. The scan still creates/updates the `Project` root and extracts manifest and top-level directory entities deterministically.
 
 ---
 

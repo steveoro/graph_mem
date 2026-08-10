@@ -6,7 +6,7 @@ class ScanProjectStatusTool < ApplicationTool
   end
 
   description "Return the status of an asynchronous project scan. " \
-    "Includes progress, counters, and any scan_review items queued for operator approval."
+    "Includes progress, counters, fallback flags, and any scan_review items queued for operator approval."
 
   arguments do
     required(:scan_id).filled(:string).description("The scan_id returned by scan_project.")
@@ -41,6 +41,8 @@ class ScanProjectStatusTool < ApplicationTool
       },
       counters: operation.counters || {},
       details: operation.details || {},
+      fallback: operation.details&.dig("fallback"),
+      fallback_reason: operation.details&.dig("fallback_reason"),
       scan_review_items: review_items,
       started_at: operation.started_at&.iso8601,
       finished_at: operation.finished_at&.iso8601,

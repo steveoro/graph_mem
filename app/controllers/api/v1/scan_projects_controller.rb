@@ -63,6 +63,8 @@ module Api
           },
           counters: operation.counters || {},
           details: operation.details || {},
+          fallback: operation.details&.dig("fallback"),
+          fallback_reason: operation.details&.dig("fallback_reason"),
           scan_review_items: review_items,
           started_at: operation.started_at&.iso8601,
           finished_at: operation.finished_at&.iso8601,
