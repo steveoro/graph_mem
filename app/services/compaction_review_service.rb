@@ -195,6 +195,21 @@ class CompactionReviewService
         return nil if issue_kind.blank? || keep_id.blank? || delete_ids.empty?
 
         [ "relation_integrity", issue_kind, keep_id, delete_ids.join("-") ].join("|")
+      when "delete_relation"
+        relation_id = payload[:relation_id] || payload.dig("payload", "relation_id")
+        return nil if relation_id.blank?
+
+        [ "delete_relation", relation_id.to_i ].join("|")
+      when "delete_entity"
+        entity_id = payload[:entity_id] || payload.dig("payload", "entity_id")
+        return nil if entity_id.blank?
+
+        [ "delete_entity", entity_id.to_i ].join("|")
+      when "dismiss_compaction_review"
+        review_item_id = payload[:review_item_id] || payload.dig("payload", "review_item_id")
+        return nil if review_item_id.blank?
+
+        [ "dismiss_compaction_review", review_item_id.to_s ].join("|")
       else
         nil
       end
@@ -280,6 +295,12 @@ class CompactionReviewService
         move_to_parent(row, effective, action_params)
       when "relation_integrity"
         apply_relation_integrity(effective)
+      when "delete_relation"
+        delete_relation(effective)
+      when "delete_entity"
+        delete_entity(effective)
+      when "dismiss_compaction_review"
+        dismiss_compaction_review(effective)
       else
         { success: false, error: "Unknown review kind: #{row.kind}" }
       end
@@ -354,6 +375,44 @@ class CompactionReviewService
       { success: true, message: message, deleted_relation_ids: deleted_ids, missing_relation_ids: missing_ids }
     rescue ActiveRecord::RecordInvalid, ActiveRecord::RecordNotDestroyed => e
       { success: false, error: "Failed to apply relation integrity repair: #{e.message}" }
+    end
+
+    def delete_relation(effective)
+      relation_id = effective[:relation_id] || effective.dig("payload", "relation_id")
+      relation = MemoryRelation.find_by(id: relation_id)
+      return { success: false, error: "Relation not found" } unless relation
+
+      Current.deletion_reason = effective[:reason] || "scan_review"
+      relation.destroy!
+      { success: true, message: "Relation #{relation_id} deleted" }
+    rescue ActiveRecord::RecordNotDestroyed, ActiveRecord::RecordInvalid => e
+      { success: false, error: "Failed to delete relation: #{e.message}" }
+    ensure
+      Current.deletion_reason = nil
+    end
+
+    def delete_entity(effective)
+      entity_id = effective[:entity_id] || effective.dig("payload", "entity_id")
+      entity = MemoryEntity.find_by(id: entity_id)
+      return { success: false, error: "Entity not found" } unless entity
+
+      return { success: false, error: NodeOperationsStrategy::PROJECT_ROOT_PROTECTED_ERROR } if entity.entity_type == NodeOperationsStrategy::PROJECT_ENTITY_TYPE
+
+      Current.deletion_reason = effective[:reason] || "scan_review"
+      entity.destroy!
+      { success: true, message: "Entity #{entity_id} deleted" }
+    rescue ActiveRecord::RecordNotDestroyed, ActiveRecord::RecordInvalid => e
+      { success: false, error: "Failed to delete entity: #{e.message}" }
+    ensure
+      Current.deletion_reason = nil
+    end
+
+    def dismiss_compaction_review(effective)
+      review_item_id = effective[:review_item_id] || effective.dig("payload", "review_item_id")
+      reason = effective[:reason] || effective.dig("payload", "reason") || "contradicted by project scan"
+      result = dismiss(review_item_id, reason: reason, report_type: "compaction_review")
+      result[:message] = "Compaction review item dismissed" if result[:success]
+      result
     end
 
     def pick_id(action_params, key, effective, fallback_keys)
