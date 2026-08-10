@@ -1,6 +1,6 @@
 # MCP Tools Documentation
 
-Detailed reference for the 30 Model Context Protocol (MCP) tools available in GraphMem.
+Detailed reference for the 32 Model Context Protocol (MCP) tools available in GraphMem.
 
 ## Overview
 
@@ -276,6 +276,25 @@ These tools perform multi-hop graph traversal. Unlike `find_relations` (which is
 #### `get_current_time`
 - **Description:** Returns the current server time as an ISO 8601 string.
 - **Parameters:** None
+
+## Project Source Scan (2 tools)
+
+#### `scan_project`
+- **Description:** Scans a project root directory and reconciles the knowledge graph with the source. The scan runs asynchronously via Solid Queue. If LLM summarization is disabled or unreachable, it falls back to a deterministic extraction of project metadata, manifest files, and top-level directories. Use `scan_project_status` to poll for completion.
+- **Parameters:**
+  - `project_root` (string, required): Absolute or relative path to the project root directory.
+  - `project_name` (string, optional): Preferred project name. Defaults to the directory name or the LLM-extracted name.
+  - `aliases` (string, optional): Comma- or pipe-separated aliases for the project root entity.
+  - `mode` (string, optional): `initial`, `rescan`, or `validate`. Default: `initial`.
+  - `dry_run` (boolean, optional): When `true`, preview changes without writing to the graph.
+  - `file_globs` (array of strings, optional): Optional file globs to scan, relative to `project_root`.
+- **Response:** `{ scan_id, status: "queued", project_root, mode, dry_run }`
+
+#### `scan_project_status`
+- **Description:** Returns the status of an asynchronous project scan, including progress, counters, `fallback`/`fallback_reason` flags, and any `scan_review` items queued for operator approval.
+- **Parameters:**
+  - `scan_id` (string, required): The scan ID returned by `scan_project`.
+- **Response:** `{ scan_id, status, phase, message, progress, counters, details, fallback, fallback_reason, scan_review_items, started_at, finished_at, error }`
 
 ## Entity Type Canonicalization
 

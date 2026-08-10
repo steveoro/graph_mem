@@ -11,14 +11,19 @@ describe 'db:memory_data rake tasks', type: :task do
   after(:each) do
     Rake::Task['data:migrate_json'].reenable
     Rake::Task['data:append_json'].reenable
+    @temp_files&.each(&:unlink)
+    @temp_files = nil
   end
 
-  # Helper to create a temporary JSON lines file
+  # Helper to create a temporary JSON lines file. Keeps the Tempfile object
+  # alive so that Ruby's finalizer does not unlink it before the rake task runs.
   let(:create_temp_json_file) do
     lambda do |data|
       temp_file = Tempfile.new([ 'memory_data', '.json' ])
       data.each { |line| temp_file.puts(line.to_json) }
       temp_file.close
+      @temp_files ||= []
+      @temp_files << temp_file
       temp_file.path
     end
   end
@@ -48,13 +53,6 @@ describe 'db:memory_data rake tasks', type: :task do
 
   describe 'data:migrate_json' do
     let(:json_file_path) { create_temp_json_file.call(initial_json_data) }
-
-    before do
-      # Ensure DB is clean before migration
-      MemoryRelation.delete_all
-      MemoryObservation.delete_all
-      MemoryEntity.delete_all
-    end
 
     it 'populates the database from the JSON file' do
       Rake::Task['data:migrate_json'].invoke(json_file_path)
@@ -86,10 +84,7 @@ describe 'db:memory_data rake tasks', type: :task do
     let(:append_file_path) { create_temp_json_file.call(append_json_data) }
 
     before do
-      # Setup initial state by running migrate_json first
-      MemoryRelation.delete_all
-      MemoryObservation.delete_all
-      MemoryEntity.delete_all
+      # Setup initial state by running migrate_json first (it clears existing data)
       Rake::Task['data:migrate_json'].invoke(initial_file_path)
       Rake::Task['data:migrate_json'].reenable # Re-enable for the next test if needed
     end

@@ -327,6 +327,59 @@ Returns Cytoscape.js-compatible `{ elements: [...], options: {...} }`.
 
 ---
 
+## Project Source Scan
+
+### Start Scan
+
+`POST /api/v1/scan`
+
+```json
+{
+  "project_root": "/path/to/repo",
+  "project_name": "MyProject",
+  "aliases": "mp|myproject",
+  "mode": "initial",
+  "dry_run": false,
+  "file_globs": ["README*", "package.json"]
+}
+```
+
+**Response:** `202 Accepted`
+
+```json
+{
+  "scan_id": "uuid",
+  "status": "queued",
+  "project_root": "/path/to/repo",
+  "mode": "initial",
+  "dry_run": false
+}
+```
+
+### Scan Status
+
+`GET /api/v1/scan/:scan_id`
+
+```json
+{
+  "scan_id": "uuid",
+  "status": "completed",
+  "phase": "completed",
+  "message": "Project scan completed",
+  "progress": { "current": 5, "total": 5, "percentage": 100.0 },
+  "counters": { "entities_created": 1, "observations_created": 3, "relations_created": 2 },
+  "fallback": false,
+  "fallback_reason": null,
+  "scan_review_items": [],
+  "started_at": "...",
+  "finished_at": "..."
+}
+```
+
+When LLM summarization is disabled or unreachable, `fallback` is `true` and `fallback_reason` describes why. The scan still creates/updates the `Project` root and extracts manifest and top-level directory entities deterministically.
+
+---
+
 ## Error Codes
 
 | Code | Meaning |

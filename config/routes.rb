@@ -59,6 +59,10 @@ Rails.application.routes.draw do
       get "/graph/shortest_path", to: "graph_traversal#shortest_path"
 
       post "summarize", to: "summaries#create"
+
+      # Project source scan
+      post "scan", to: "scan_projects#create"
+      get "scan/:id", to: "scan_projects#show", as: :scan_project
     end
   end
 
