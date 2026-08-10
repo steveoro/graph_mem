@@ -27,6 +27,12 @@ module GraphMem
     DEFAULT_ALLOWED_ORIGINS = FastMcp::Transports::RackTransport::DEFAULT_ALLOWED_ORIGINS
     DEFAULT_ALLOWED_IPS = FastMcp::Transports::RackTransport::DEFAULT_ALLOWED_IPS
 
+    # Sessions are kept alive as long as they are active. A streamable GET
+    # loop bumps last_active_at each second, so an open SSE stream is never
+    # reaped. A session only used for POST JSON responses will expire after
+    # this timeout if no request is made.
+    SESSION_TIMEOUT = 30 * 60
+
     SSE_HEADERS = {
       "Content-Type" => "text/event-stream",
       "Cache-Control" => "no-cache, no-store, must-revalidate",
@@ -66,7 +72,6 @@ module GraphMem
       @localhost_only = options.fetch(:localhost_only, true)
       @legacy_transport = FastMcp::Transports::RackTransport.new(app, server, options)
       @sessions = Concurrent::Hash.new
-      @sessions_mutex = Mutex.new
 
       # Ensure the server has a transport reference for out-of-request notifications.
       @server.transport = self
@@ -90,6 +95,7 @@ module GraphMem
       path = request.path
 
       if path.start_with?(@path_prefix)
+        reap_expired_sessions
         Thread.current[:graph_mem_mcp_transport] = self
         handle_mcp_request(request, env)
       else
@@ -98,16 +104,29 @@ module GraphMem
     ensure
       Thread.current[:graph_mem_mcp_transport] = nil
       Thread.current[:graph_mem_mcp_session_id] = nil
+      Thread.current[:graph_mem_mcp_response_queue] = nil
     end
 
     # Called by FastMcp::Server#send_response (via GraphMem::McpServerPatch).
-    # Routes per-request responses to the active streamable session, and
-    # broadcasts notifications to every connected client.
+    # Routes per-request responses to the active request queue (if one is
+    # registered for this thread) and broadcasts notifications to every
+    # connected SSE stream.
     def send_message(message)
+      # If this is a response to a request with an id and a per-request queue
+      # exists, deliver it directly. This avoids races on session[:response_queue]
+      # and keeps the response off the public SSE stream.
+      if response?(message) && (queue = Thread.current[:graph_mem_mcp_response_queue])
+        queue.push(message)
+        return
+      end
+
+      # Notifications (no id) should be broadcast, even if a request is in
+      # progress. The client will receive them on its SSE stream, not as a
+      # request response body.
       session_id = Thread.current[:graph_mem_mcp_session_id]
 
       if session_id && (session = @sessions[session_id])
-        deliver_to_session(session, message)
+        broadcast_to_session_get_queues(session, message)
       else
         broadcast_to_streamable_sessions(message)
         @legacy_transport.send_message(message)
@@ -115,6 +134,10 @@ module GraphMem
     end
 
     private
+
+    def response?(message)
+      message.is_a?(Hash) && (message.key?(:id) || message.key?("id"))
+    end
 
     def handle_mcp_request(request, env)
       return forbidden_response("Forbidden: Remote IP not allowed") unless valid_client_ip?(request)
@@ -149,15 +172,15 @@ module GraphMem
       end
     end
 
-    def handle_streamable_post(request, _env)
+    def handle_streamable_post(request, env)
       content_type = request.env["CONTENT_TYPE"].to_s.split(";").first.to_s.strip.downcase
       unless content_type == "application/json"
         return json_rpc_error_response(415, -32_600, "Unsupported Media Type: Content-Type must be application/json")
       end
 
       accept = request.env["HTTP_ACCEPT"].to_s
-      unless accept.empty? || accept.include?("*/*") || accept.include?("application/json") || accept.include?("text/event-stream")
-        return json_rpc_error_response(406, -32_600, "Not Acceptable: Accept must include application/json or text/event-stream")
+      unless acceptable_post_accept?(accept)
+        return json_rpc_error_response(406, -32_600, "Not Acceptable: Accept must include application/json, text/event-stream, or */*")
       end
 
       body = request.body.read
@@ -172,27 +195,66 @@ module GraphMem
       session_id, session = resolve_session(request, parsed, method)
       return session if session.is_a?(Array) # error response
 
+      session[:last_active_at] = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+
       # Notifications (no id) get a 202 Accepted and do not return a body.
       if request_id.nil?
         @server.handle_request(body, headers: extract_headers(request))
         return [ 202, CORS_HEADERS.dup, [] ]
       end
 
-      session[:response_queue] = Queue.new
-      session[:last_active_at] = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      wants_sse = sse_response_requested?(accept)
+
+      if wants_sse && !env["rack.hijack"]
+        return json_rpc_error_response(406, -32_600, "Not Acceptable: SSE response requires rack.hijack support")
+      end
+
+      queue = Queue.new
+
+      # For SSE-mode POSTs, the single queue is both the response carrier and
+      # the long-lived SSE stream for the session. Register it so future
+      # server-initiated notifications are also delivered to the same stream.
+      register_get_queue(session, queue) if wants_sse
 
       Thread.current[:graph_mem_mcp_session_id] = session_id
+      Thread.current[:graph_mem_mcp_response_queue] = queue
+
+      if wants_sse
+        return streamable_post_sse_response(env, session, queue, session_id, body, request)
+      end
+
+      handle_streamable_post_json(session, queue, session_id, body, request)
+    ensure
+      Thread.current[:graph_mem_mcp_session_id] = nil
+      Thread.current[:graph_mem_mcp_response_queue] = nil
+    end
+
+    def streamable_post_sse_response(env, session, queue, session_id, body, request)
+      env["rack.hijack"].call
+      io = env["rack.hijack_io"]
+
+      Thread.new do
+        streamable_get_loop(session, io, queue, session_id)
+      end
 
       @server.handle_request(body, headers: extract_headers(request))
 
+      [ -1, {}, [] ]
+    ensure
+      Thread.current[:graph_mem_mcp_session_id] = nil
+      Thread.current[:graph_mem_mcp_response_queue] = nil
+    end
+
+    def handle_streamable_post_json(session, queue, session_id, body, request)
       response = nil
       begin
-        response = Timeout.timeout(RESPONSE_TIMEOUT) { session[:response_queue].pop }
+        @server.handle_request(body, headers: extract_headers(request))
+        response = Timeout.timeout(RESPONSE_TIMEOUT) { queue.pop }
       rescue Timeout::Error
         return json_rpc_error_response(504, -32_600, "Gateway Timeout: no response from MCP server")
       ensure
-        session[:response_queue] = nil
         Thread.current[:graph_mem_mcp_session_id] = nil
+        Thread.current[:graph_mem_mcp_response_queue] = nil
       end
 
       normalize_initialize_protocol_version!(session, response)
@@ -209,7 +271,9 @@ module GraphMem
       end
 
       session_id = request.env["HTTP_MCP_SESSION_ID"]
-      return json_rpc_error_response(400, -32_600, "Bad Request: missing Mcp-Session-Id header") if session_id.nil? || session_id.empty?
+      if session_id.nil? || session_id.empty?
+        return json_rpc_error_response(400, -32_600, "Bad Request: missing Mcp-Session-Id header")
+      end
 
       session = @sessions[session_id]
       return json_rpc_error_response(404, -32_001, "Session not found") unless session
@@ -219,17 +283,20 @@ module GraphMem
       env["rack.hijack"].call
       io = env["rack.hijack_io"]
 
-      session[:get_queue] = Queue.new
+      queue = Queue.new
+      register_get_queue(session, queue)
       session[:last_active_at] = Process.clock_gettime(Process::CLOCK_MONOTONIC)
 
-      Thread.new { streamable_get_loop(session, io, session_id) }
+      Thread.new { streamable_get_loop(session, io, queue, session_id) }
 
       [ -1, {}, [] ]
     end
 
     def handle_streamable_delete(request, _env)
       session_id = request.env["HTTP_MCP_SESSION_ID"]
-      return json_rpc_error_response(400, -32_600, "Bad Request: missing Mcp-Session-Id header") if session_id.nil? || session_id.empty?
+      if session_id.nil? || session_id.empty?
+        return json_rpc_error_response(400, -32_600, "Bad Request: missing Mcp-Session-Id header")
+      end
 
       session = @sessions.delete(session_id)
       return json_rpc_error_response(404, -32_001, "Session not found") unless session
@@ -248,8 +315,7 @@ module GraphMem
         session = {
           id: session_id,
           requested_protocol_version: version,
-          response_queue: nil,
-          get_queue: nil,
+          get_queues: Concurrent::Array.new,
           last_active_at: Process.clock_gettime(Process::CLOCK_MONOTONIC)
         }
         @sessions[session_id] = session
@@ -266,16 +332,24 @@ module GraphMem
           return [ nil, json_rpc_error_response(404, -32_001, "Session not found") ]
         end
 
+        if session_expired?(session)
+          @sessions.delete(session_id)
+          close_session(session)
+          return [ nil, json_rpc_error_response(404, -32_001, "Session expired") ]
+        end
+
         [ session_id, session ]
       end
     end
 
-    def streamable_get_loop(session, io, session_id)
+    def streamable_get_loop(session, io, queue, session_id)
       write_sse_headers(io)
 
       loop do
+        session[:last_active_at] = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+
         begin
-          message = session[:get_queue].pop(true)
+          message = queue.pop(true)
           write_sse_message(io, message)
         rescue ThreadError
           # No message waiting; send a keep-alive comment.
@@ -286,25 +360,32 @@ module GraphMem
     rescue IOError, Errno::EPIPE, Errno::ECONNRESET
       @logger.info("Streamable SSE client #{session_id} disconnected")
     ensure
-      close_session(session)
-      @sessions.delete(session_id)
+      unregister_get_queue(session, queue)
     end
 
-    def deliver_to_session(session, message)
-      if (queue = session[:response_queue])
+    def register_get_queue(session, queue)
+      session[:get_queues] ||= Concurrent::Array.new
+      session[:get_queues] << queue
+    end
+
+    def unregister_get_queue(session, queue)
+      session[:get_queues]&.delete(queue)
+    end
+
+    def broadcast_to_session_get_queues(session, message)
+      queues = session[:get_queues]
+      return unless queues
+
+      queues.each do |queue|
         queue.push(message)
-      elsif (queue = session[:get_queue])
-        queue.push(message)
+      rescue ClosedQueueError
+        # Queue closed; its reader will unregister it on exit.
       end
     end
 
     def broadcast_to_streamable_sessions(message)
       @sessions.each_value do |session|
-        next unless (queue = session[:get_queue])
-
-        queue.push(message)
-      rescue ClosedQueueError
-        # Client went away; will be cleaned up on next write.
+        broadcast_to_session_get_queues(session, message)
       end
     end
 
@@ -355,11 +436,43 @@ module GraphMem
     end
 
     def close_session(session)
-      session[:response_queue] = nil
-      session[:get_queue] = nil
+      return unless session
+
+      if (queues = session[:get_queues])
+        queues.each(&:close)
+      end
       if (io = session[:io])
         io.close unless io.closed?
       end
+    end
+
+    def session_expired?(session)
+      Process.clock_gettime(Process::CLOCK_MONOTONIC) - session[:last_active_at] > SESSION_TIMEOUT
+    end
+
+    def reap_expired_sessions
+      now = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+
+      @sessions.each do |session_id, session|
+        next if now - session[:last_active_at] <= SESSION_TIMEOUT
+
+        @sessions.delete(session_id)
+        close_session(session)
+        @logger.info("Reaped expired MCP session #{session_id}")
+      end
+    end
+
+    def acceptable_post_accept?(accept)
+      accept.empty? ||
+        accept.include?("*/*") ||
+        accept.include?("application/json") ||
+        accept.include?("text/event-stream")
+    end
+
+    def sse_response_requested?(accept)
+      accept.include?("text/event-stream") &&
+        !accept.include?("application/json") &&
+        !accept.include?("*/*")
     end
 
     # Re-implementing the simple DNS-rebinding / IP validation from FastMcp

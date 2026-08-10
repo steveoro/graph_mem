@@ -139,7 +139,7 @@ RSpec.describe "MCP Streamable HTTP endpoint", type: :request do
       expect(AgentContext.find_by(client_id: "streamable-test-client")).to be_present
     end
 
-    it "falls back to the Mcp-Session-Id as the client id" do
+    it "falls back to the default client id when X-MCP-Client is absent" do
       host! "localhost"
 
       post "/mcp",
@@ -177,7 +177,7 @@ RSpec.describe "MCP Streamable HTTP endpoint", type: :request do
         }
 
       expect(response).to have_http_status(:ok)
-      expect(AgentContext.find_by(client_id: session_id)).to be_present
+      expect(AgentContext.find_by(client_id: GraphMemContext::DEFAULT_CLIENT_ID)).to be_present
     end
 
     it "rejects non-initialize requests without a session id" do
