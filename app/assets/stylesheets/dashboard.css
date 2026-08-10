@@ -770,21 +770,25 @@
   margin-top: 0.75rem;
 }
 
-.agent-contexts-table {
+.agent-contexts-table,
+.project-scans-table {
   width: 100%;
   border-collapse: collapse;
   font-size: 0.875rem;
 }
 
 .agent-contexts-table th,
-.agent-contexts-table td {
+.agent-contexts-table td,
+.project-scans-table th,
+.project-scans-table td {
   padding: 0.5rem 0.65rem;
   border-bottom: 1px solid #e2e8f0;
   text-align: left;
   vertical-align: top;
 }
 
-.agent-contexts-table th {
+.agent-contexts-table th,
+.project-scans-table th {
   font-size: 0.75rem;
   text-transform: uppercase;
   letter-spacing: 0.03em;
@@ -800,6 +804,22 @@
 .agent-contexts-table__muted {
   color: #94a3b8;
   font-style: italic;
+}
+
+.project-scans-table__project {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-scans-table__actions {
+  white-space: nowrap;
+}
+
+.project-scans-table__progress progress {
+  margin-right: 0.25rem;
+  width: 60px;
 }
 
 .embeddings-config__url {

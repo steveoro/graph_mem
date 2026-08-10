@@ -7,8 +7,8 @@ class CompactionReviewService
   STATUSES = MaintenanceReportRow::STATUSES
 
   class << self
-    def latest_report
-      MaintenanceReport.by_type("compaction_review").recent.first
+    def latest_report(report_type: "compaction_review")
+      MaintenanceReport.by_type(report_type).recent.first
     end
 
     def items(report: nil, report_type: "compaction_review", status: "active", kind: nil, page: 1)

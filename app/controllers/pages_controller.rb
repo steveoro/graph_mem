@@ -10,6 +10,7 @@ class PagesController < ApplicationController
     @cursor_entity = @snapshot[:cursor_entity]
     @embeddings = @snapshot[:embeddings]
     @agent_contexts = @snapshot[:agent_contexts]
+    @project_scans = @snapshot.dig(:operations, :project_scans) || []
     @refreshed_at = @snapshot[:refreshed_at]
   end
 

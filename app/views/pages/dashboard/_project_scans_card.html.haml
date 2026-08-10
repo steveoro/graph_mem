@@ -1,0 +1,57 @@
+- scans = project_scans
+.dashboard-card.dashboard-card--state{ data: { testid: "dashboard-project-scans-card" } }
+  .dashboard-card__header
+    %h2.dashboard-card__title Project Scans
+    %span.dashboard-card__hint Recent source scans
+  .dashboard-card__body
+    - if scans.any?
+      .dashboard-stat-chips
+        = dashboard_stat_chip("Total", scans.count)
+        = dashboard_stat_chip("Running", scans.count { |s| s[:status] == "running" })
+        = dashboard_stat_chip("Completed", scans.count { |s| s[:status] == "completed" })
+        = dashboard_stat_chip("Failed", scans.count { |s| s[:status] == "failed" })
+
+      %table.project-scans-table
+        %thead
+          %tr
+            %th Project
+            %th Status
+            %th Mode
+            %th Phase
+            %th Progress
+            %th
+        %tbody
+          - scans.each do |scan|
+            - project_entity_id = scan.dig(:details, "project_entity_id")
+            %tr.project-scans-table__row{ data: { testid: "project-scan-row-#{scan[:operation_id]}" } }
+              %td.project-scans-table__project
+                - if project_entity_id
+                  = link_to project_scan_name(scan), graph_path(scoped_entity_id: project_entity_id), class: "dashboard-link", id: "link-project-scan-entity-#{scan[:operation_id]}"
+                - else
+                  = project_scan_name(scan)
+              %td= dashboard_status_badge(scan[:status])
+              %td= scan.dig(:details, "mode").presence || "—"
+              %td= project_scan_phase_label(scan[:phase])
+              %td.project-scans-table__progress
+                - if scan[:status].in?(%w[running pending paused])
+                  %progress{ max: 100, value: scan[:percentage] || 0 }
+                  %span= "#{scan[:percentage]}%"
+                - else
+                  %span= "#{scan[:percentage]}%"
+              %td.project-scans-table__actions
+                = link_to "Details", api_v1_scan_project_path(scan[:operation_id]), class: "dashboard-btn dashboard-btn--secondary", target: "_blank", id: "link-project-scan-details-#{scan[:operation_id]}"
+                - if scan.dig(:details, "fallback")
+                  %span.dashboard-card__hint{ title: scan.dig(:details, "fallback_reason") } Fallback
+
+      - latest = scans.first
+      - if latest
+        %details.dashboard-card__details{ data: { testid: "dashboard-project-scans-latest-details" } }
+          %summary Latest scan details
+          %pre.dashboard-code= JSON.pretty_generate(latest)
+    - else
+      %p.dashboard-card__empty{ data: { testid: "dashboard-project-scans-empty" } }
+        No project source scans yet.
+
+  .dashboard-card__actions
+    = link_to "Review scan suggestions", compaction_review_data_exchange_index_path(report_type: "scan_review"), class: "dashboard-btn dashboard-btn--secondary", id: "btn-project-scans-review"
+    = link_to "Refresh", root_path, class: "dashboard-btn dashboard-btn--secondary", id: "btn-project-scans-refresh"

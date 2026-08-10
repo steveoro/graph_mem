@@ -50,4 +50,30 @@ RSpec.describe DashboardHelper, type: :helper do
       expect(html).to include("dashboard-badge--running")
     end
   end
+
+  describe "#project_scan_phase_label" do
+    it "humanizes known scan phases" do
+      expect(helper.project_scan_phase_label("discovering_files")).to eq("Discovering files")
+      expect(helper.project_scan_phase_label("reconciling_graph")).to eq("Reconciling graph")
+      expect(helper.project_scan_phase_label("fallback_extraction")).to eq("Deterministic fallback")
+    end
+
+    it "falls back to humanizing unknown phases" do
+      expect(helper.project_scan_phase_label("unknown_phase")).to eq("Unknown phase")
+    end
+  end
+
+  describe "#project_scan_name" do
+    it "prefers project_name from scan details" do
+      scan = { details: { "project_name" => "graph-mem", "project_entity_name" => "GraphMem" } }
+
+      expect(helper.project_scan_name(scan)).to eq("graph-mem")
+    end
+
+    it "falls back to project_entity_name and message" do
+      expect(helper.project_scan_name({ details: { "project_entity_name" => "GraphMem" } })).to eq("GraphMem")
+      expect(helper.project_scan_name({ details: {}, message: "Scan started" })).to eq("Scan started")
+      expect(helper.project_scan_name({ details: {} })).to eq("—")
+    end
+  end
 end

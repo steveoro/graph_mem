@@ -50,6 +50,25 @@ module DashboardHelper
     end
   end
 
+  def project_scan_phase_label(phase)
+    case phase.to_s
+    when "discovering_files" then "Discovering files"
+    when "reading_files" then "Reading files"
+    when "extracting_knowledge" then "Extracting knowledge"
+    when "fallback_extraction" then "Deterministic fallback"
+    when "reconciling_graph" then "Reconciling graph"
+    when "completed" then "Completed"
+    else phase.to_s.humanize
+    end
+  end
+
+  def project_scan_name(scan)
+    scan.dig(:details, "project_name").presence ||
+      scan.dig(:details, "project_entity_name").presence ||
+      scan[:message].presence ||
+      "—"
+  end
+
   def compaction_phases
     CompactionRun::PHASES
   end

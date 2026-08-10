@@ -51,7 +51,8 @@ class MaintenanceDashboardSnapshot
 
   def operation_snapshots
     {
-      garbage_collection: OperationProgress.where(operation_type: "garbage_collection").recent.first&.snapshot
+      garbage_collection: OperationProgress.where(operation_type: "garbage_collection").recent.first&.snapshot,
+      project_scans: OperationProgress.where(operation_type: "project_scan").recent.limit(5).map(&:snapshot)
     }
   end
 

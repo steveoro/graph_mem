@@ -997,4 +997,62 @@ RSpec.describe 'DataExchange', type: :request do
       expect(MemoryEntity.find_by(id: task1.id)).to be_nil
     end
   end
+
+  describe 'GET /data_exchange/compaction_review report_type=scan_review' do
+    let!(:scan_report) do
+      MaintenanceReport.create!(report_type: 'scan_review', data: { 'source' => 'test' })
+    end
+
+    let!(:scan_row) do
+      MaintenanceReportRow.create!(
+        maintenance_report: scan_report,
+        report_type: 'scan_review',
+        row_uuid: 'scan-1',
+        kind: 'entity_merge',
+        status: 'active',
+        signature: CompactionReviewService.signature_for('entity_merge', {
+          'entity_a' => { 'entity_id' => task1.id },
+          'entity_b' => { 'entity_id' => project1.id }
+        }),
+        payload: {
+          'entity_a' => { 'entity_id' => task1.id, 'name' => task1.name, 'entity_type' => 'Task' },
+          'entity_b' => { 'entity_id' => project1.id, 'name' => project1.name, 'entity_type' => 'Project' },
+          'cosine_distance' => 0.12
+        }
+      )
+    end
+
+    it 'renders scan review items' do
+      get compaction_review_data_exchange_index_path, params: { report_type: 'scan_review' }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.body).to include('Scan Review')
+      expect(response.body).to include('scan-1')
+    end
+
+    it 'does not include compaction review items' do
+      compaction_report = MaintenanceReport.create!(report_type: 'compaction_review', data: { 'source' => 'test' })
+      MaintenanceReportRow.create!(
+        maintenance_report: compaction_report,
+        report_type: 'compaction_review',
+        row_uuid: 'compaction-1',
+        kind: 'entity_merge',
+        status: 'active',
+        signature: CompactionReviewService.signature_for('entity_merge', {
+          'entity_a' => { 'entity_id' => task1.id },
+          'entity_b' => { 'entity_id' => project1.id }
+        }),
+        payload: {
+          'entity_a' => { 'entity_id' => task1.id, 'name' => task1.name, 'entity_type' => 'Task' },
+          'entity_b' => { 'entity_id' => project1.id, 'name' => project1.name, 'entity_type' => 'Project' },
+          'cosine_distance' => 0.12
+        }
+      )
+
+      get compaction_review_data_exchange_index_path, params: { report_type: 'scan_review' }
+
+      expect(response.body).to include('scan-1')
+      expect(response.body).not_to include('compaction-1')
+    end
+  end
 end

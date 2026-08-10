@@ -219,51 +219,58 @@ class DataExchangeController < ApplicationController
     redirect_to root_path
   end
 
-  # GET /data_exchange/compaction_review
+  # GET /data_exchange/compaction_review?report_type=...
   # Shows reviewable suggestions with filters and editable controls.
+  # Defaults to compaction_review; pass report_type=scan_review to review project-scan suggestions.
   def compaction_review
-    @report = CompactionReviewService.latest_report
+    @report_type = review_report_type
+    @report = CompactionReviewService.latest_report(report_type: @report_type)
 
     @status_filter = params[:status].presence || "active"
     @kind_filter = params[:kind].presence
     @items = CompactionReviewService.items(
+      report_type: @report_type,
       status: @status_filter,
       kind: @kind_filter,
       page: params[:page]
     )
-    @active_count = CompactionReviewService.active_count
-    @stats = CompactionReviewService.status_counts
-    @current_item = CompactionReviewService.find_item(params[:item_id]) if params[:item_id].present?
+    @active_count = CompactionReviewService.active_count(report_type: @report_type)
+    @stats = CompactionReviewService.status_counts(report_type: @report_type)
+    @current_item = CompactionReviewService.find_item(params[:item_id], report_type: @report_type) if params[:item_id].present?
   end
 
   # POST /data_exchange/compaction_review_action
-  # Handles apply/dismiss/restore/edit/ignore for a compaction review item.
+  # Handles apply/dismiss/restore/edit/ignore for a maintenance review item.
   def compaction_review_action
+    @report_type = review_report_type
     item_id = params[:item_id]
     action = params[:review_action]
 
     if action.blank?
-      return redirect_to compaction_review_data_exchange_index_path, alert: "Missing action."
+      return redirect_to compaction_review_data_exchange_index_path(report_type: review_report_type_param, status: params[:status], page: params[:page]), alert: "Missing action."
     end
 
     result = case action
     when "edit"
-               CompactionReviewService.edit_item(item_id, compaction_edit_params)
+               CompactionReviewService.edit_item(item_id, compaction_edit_params, report_type: @report_type)
     when "apply"
-               CompactionReviewService.apply(item_id, compaction_action_params)
+               CompactionReviewService.apply(item_id, compaction_action_params, report_type: @report_type)
     when "dismiss"
-               CompactionReviewService.dismiss(item_id, reason: params[:reason])
+               CompactionReviewService.dismiss(item_id, reason: params[:reason], report_type: @report_type)
     when "bulk_dismiss"
-               CompactionReviewService.bulk_dismiss(params[:item_ids] || [])
+               CompactionReviewService.bulk_dismiss(params[:item_ids] || [], report_type: @report_type)
     when "restore"
-               CompactionReviewService.restore(item_id)
+               CompactionReviewService.restore(item_id, report_type: @report_type)
     when "ignore"
-               CompactionReviewService.ignore(item_id)
+               CompactionReviewService.ignore(item_id, report_type: @report_type)
     when "approve"
-               @current_item = CompactionReviewService.find_item(item_id)
+               @report = CompactionReviewService.latest_report(report_type: @report_type)
+               @current_item = CompactionReviewService.find_item(item_id, report_type: @report_type)
                @confirm_action = true
                @status_filter = params[:status].presence || "active"
-               @items = CompactionReviewService.items(status: @status_filter, page: params[:page])
+               @items = CompactionReviewService.items(report_type: @report_type, status: @status_filter, page: params[:page])
+               @active_count = CompactionReviewService.active_count(report_type: @report_type)
+               @stats = CompactionReviewService.status_counts(report_type: @report_type)
                return render :compaction_review
     else
                { success: false, error: "Unknown action." }
@@ -274,7 +281,7 @@ class DataExchangeController < ApplicationController
     end
 
     flash[result[:success] ? :notice : :alert] = result[:success] ? (result[:message] || "Done.") : (result[:error] || "Action failed.")
-    redirect_to compaction_review_data_exchange_index_path(status: params[:status], page: params[:page])
+    redirect_to compaction_review_data_exchange_index_path(report_type: review_report_type_param, status: params[:status], page: params[:page])
   end
 
   # POST /data_exchange/compaction_review/import_suggest_merges
@@ -558,6 +565,15 @@ class DataExchangeController < ApplicationController
   end
 
   private
+
+  def review_report_type
+    report_type = params[:report_type].presence || "compaction_review"
+    MaintenanceReport::REPORT_TYPES.include?(report_type) ? report_type : "compaction_review"
+  end
+
+  def review_report_type_param
+    @report_type == "compaction_review" ? nil : @report_type
+  end
 
   def compaction_action_params
     params.permit(:source_id, :target_id, :from_id, :to_id, :relation_type, :node_id, :parent_id, :reason)
