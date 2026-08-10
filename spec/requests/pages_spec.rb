@@ -85,6 +85,7 @@ RSpec.describe "Operator dashboard pages", type: :request do
       expect(response.body).to include("graph-mem")
       expect(response.body).to include("Completed")
       expect(response.body).to include("initial")
+      expect(response.body).to include(compaction_review_data_exchange_index_path(report_type: "scan_review"))
     end
 
     it "shows repair action when compaction failed with a relation error" do

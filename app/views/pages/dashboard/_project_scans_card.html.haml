@@ -53,5 +53,5 @@
         No project source scans yet.
 
   .dashboard-card__actions
-    = link_to "Review scan suggestions", compaction_review_data_exchange_index_path, class: "dashboard-btn dashboard-btn--secondary", id: "btn-project-scans-review"
+    = link_to "Review scan suggestions", compaction_review_data_exchange_index_path(report_type: "scan_review"), class: "dashboard-btn dashboard-btn--secondary", id: "btn-project-scans-review"
     = link_to "Refresh", root_path, class: "dashboard-btn dashboard-btn--secondary", id: "btn-project-scans-refresh"

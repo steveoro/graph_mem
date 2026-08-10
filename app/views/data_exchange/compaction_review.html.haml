@@ -1,6 +1,7 @@
+- review_title = @report_type == "scan_review" ? "Scan Review" : "Compaction Review"
 .w-full{ data: { controller: "compaction-review" } }
-  - content_for :title, "Compaction Review"
-  %h1.text-2xl.font-bold.mb-4 Compaction Review
+  - content_for :title, review_title
+  %h1.text-2xl.font-bold.mb-4= review_title
 
   - if @report
     %p.text-sm.text-gray-600.mb-4
@@ -8,30 +9,32 @@
       %span.text-gray-400
         (created #{l(@report.created_at, format: :short)})
 
-  .bg-white.border.rounded.p-4.mb-6.shadow-sm
-    %h2.font-semibold.mb-2 Seed from Suggest Merges
-    = form_with url: compaction_review_import_suggest_merges_data_exchange_index_path, method: :post, local: true do
-      .flex.flex-wrap.gap-4.items-end
-        .field
-          = label_tag :threshold, "Threshold", class: "block text-sm font-medium text-gray-700"
-          = number_field_tag :threshold, 0.3, step: 0.01, min: 0, max: 1, class: "mt-1 block rounded border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-        .field
-          = label_tag :limit, "Limit", class: "block text-sm font-medium text-gray-700"
-          = number_field_tag :limit, 20, min: 1, max: 100, class: "mt-1 block rounded border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-        .field
-          = label_tag :entity_type, "Entity type", class: "block text-sm font-medium text-gray-700"
-          = text_field_tag :entity_type, nil, placeholder: "Optional", class: "mt-1 block rounded border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-        = submit_tag "Import suggestions", class: "rounded bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
+  - if @report_type == "compaction_review"
+    .bg-white.border.rounded.p-4.mb-6.shadow-sm
+      %h2.font-semibold.mb-2 Seed from Suggest Merges
+      = form_with url: compaction_review_import_suggest_merges_data_exchange_index_path, method: :post, local: true do
+        .flex.flex-wrap.gap-4.items-end
+          .field
+            = label_tag :threshold, "Threshold", class: "block text-sm font-medium text-gray-700"
+            = number_field_tag :threshold, 0.3, step: 0.01, min: 0, max: 1, class: "mt-1 block rounded border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+          .field
+            = label_tag :limit, "Limit", class: "block text-sm font-medium text-gray-700"
+            = number_field_tag :limit, 20, min: 1, max: 100, class: "mt-1 block rounded border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+          .field
+            = label_tag :entity_type, "Entity type", class: "block text-sm font-medium text-gray-700"
+            = text_field_tag :entity_type, nil, placeholder: "Optional", class: "mt-1 block rounded border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+          = submit_tag "Import suggestions", class: "rounded bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
 
   - if @stats
     .flex.flex-wrap.gap-2.mb-4
       - { "" => "All", "active" => "Active", "ignored" => "Ignored", "dismissed" => "Dismissed", "approved" => "Approved" }.each do |status, label|
         - count = @stats[status] || 0
         - active_class = (@status_filter == status) ? "bg-blue-600 text-white" : "bg-gray-200 text-gray-700 hover:bg-gray-300"
-        = link_to "#{label} (#{count})", compaction_review_data_exchange_index_path(status: status.presence), class: "rounded px-3 py-1 text-sm #{active_class}"
+        = link_to "#{label} (#{count})", compaction_review_data_exchange_index_path(status: status.presence, report_type: (@report_type unless @report_type == "compaction_review")), class: "rounded px-3 py-1 text-sm #{active_class}"
 
   = form_with url: compaction_review_action_data_exchange_index_path, method: :post, local: true, html: { id: "bulk-form" } do
     = hidden_field_tag :review_action, "bulk_dismiss"
+    = hidden_field_tag :report_type, @report_type unless @report_type == "compaction_review"
     .mb-4.flex.flex-wrap.items-center.gap-4
       = check_box_tag "select_all", "1", false, data: { action: "change->compaction-review#toggleAll", "compaction-review-target": "selectAll" }, class: "h-4 w-4"
       = label_tag :select_all, "Select all", class: "text-sm"
@@ -44,7 +47,7 @@
     .mt-4
       = paginate @items, theme: 'tailwind'
   - else
-    %p.text-gray-500 No #{@status_filter.presence || "active"} compaction review suggestions.
+    %p.text-gray-500 No #{@status_filter.presence || "active"} #{@report_type.tr("_", " ")} suggestions.
 
   .mt-6
     = link_to "Back to dashboard", root_path, class: "text-sm text-blue-600 hover:underline"

@@ -3,6 +3,7 @@
 .border.rounded.p-4.bg-white.shadow-sm{ id: dom_id(row) }
   = form_with url: compaction_review_action_data_exchange_index_path, method: :post, local: true, html: { id: form_id } do
     = hidden_field_tag :item_id, row.row_uuid
+    = hidden_field_tag :report_type, @report_type unless @report_type == "compaction_review"
     = hidden_field_tag :status, @status_filter
     = hidden_field_tag :page, params[:page]
     .grid.grid-cols-1.md:grid-cols-12.gap-4
