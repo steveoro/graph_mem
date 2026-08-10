@@ -6,14 +6,15 @@ RSpec.describe MaintenanceDashboardSnapshot do
   after { CompactionRun.delete_all; MaintenanceReport.delete_all }
 
   describe ".call" do
-    it "returns compaction, graph stats, reports, and schedules" do
+    it "returns compaction, graph stats, reports, schedules, and project scans" do
       MemoryEntity.create!(name: "SnapEntity", entity_type: "Project")
 
       result = described_class.call
 
-      expect(result).to include(:refreshed_at, :compaction, :graph_stats, :latest_reports, :schedules, :cursor_entity, :agent_contexts)
+      expect(result).to include(:refreshed_at, :compaction, :graph_stats, :latest_reports, :schedules, :cursor_entity, :agent_contexts, :operations)
       expect(result[:graph_stats][:totals][:entities]).to be >= 1
       expect(result[:compaction]).to include(:dream_state)
+      expect(result[:operations]).to include(:garbage_collection, :project_scans)
     end
 
     it "resolves cursor entity when compaction has a cursor" do
@@ -41,6 +42,26 @@ RSpec.describe MaintenanceDashboardSnapshot do
       result = described_class.call
 
       expect(result[:latest_reports]["orphans"][:count]).to eq(2)
+    end
+
+    it "returns recent project_scan operations" do
+      MemoryEntity.create!(name: "SnapEntity", entity_type: "Project")
+      OperationProgress.create!(
+        operation_type: "project_scan",
+        operation_id: SecureRandom.uuid,
+        status: "completed",
+        total_count: 5,
+        current_count: 5,
+        percentage: 100.0,
+        phase: "completed",
+        details: { project_name: "graph-mem", mode: "initial", fallback: false }
+      )
+
+      result = described_class.call
+
+      expect(result[:operations][:project_scans]).to be_an(Array)
+      expect(result[:operations][:project_scans].size).to eq(1)
+      expect(result[:operations][:project_scans].first).to include(operation: "project_scan", status: "completed")
     end
   end
 end

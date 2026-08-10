@@ -65,6 +65,28 @@ RSpec.describe "Operator dashboard pages", type: :request do
       expect(response.body).to include("set_context")
     end
 
+    it "includes the project scans card with recent scans" do
+      project = MemoryEntity.create!(name: "graph-mem", entity_type: "Project")
+      OperationProgress.create!(
+        operation_type: "project_scan",
+        operation_id: SecureRandom.uuid,
+        status: "completed",
+        total_count: 5,
+        current_count: 5,
+        percentage: 100.0,
+        phase: "completed",
+        details: { "project_name" => "graph-mem", "mode" => "initial", "project_entity_id" => project.id, "fallback" => false }
+      )
+
+      get root_path
+
+      expect(response.body).to include('data-testid="dashboard-project-scans-card"')
+      expect(response.body).to include("Project Scans")
+      expect(response.body).to include("graph-mem")
+      expect(response.body).to include("Completed")
+      expect(response.body).to include("initial")
+    end
+
     it "shows repair action when compaction failed with a relation error" do
       CompactionRun.create!(
         status: "failed",
