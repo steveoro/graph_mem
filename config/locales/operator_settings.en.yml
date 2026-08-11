@@ -15,7 +15,7 @@ en:
       invalid_credentials: "Invalid username or password."
     settings:
       title: "System Settings"
-      subtitle: "Configure feature flags, database backup, embedding service, and summarization behavior."
+      subtitle: "Configure feature flags, database backup, embedding service, summarization behavior, and project scan settings."
       save_group: "Save changes"
       reset: "Reset"
       footer_info: "Changes apply immediately: no need to restart the application. Scheduled backup times are defined in config/recurring.yml."
@@ -25,6 +25,7 @@ en:
         embeddings: "Embeddings"
         summaries: "Summaries"
         imports: "Imports"
+        project_scans: "Project Scans"
       bulk_update:
         success: "Saved %{count} setting(s) successfully."
         partial: "Saved %{success} setting(s); %{failed} failed."
@@ -92,6 +93,9 @@ en:
         import_observation_duplicate_max_distance:
           label: "Observation duplicate distance"
           description: "Maximum semantic distance for treating imported observation text as an existing fact."
+        project_scan_roots:
+          label: "Allowed project scan roots"
+          description: "One or more filesystem directories that the project scan trigger is allowed to scan. Paths can be absolute or relative to the Rails root, separated by commas or newlines."
       backup:
         actions_title: "Manual backup"
         list_title: "Available backups"
@@ -137,3 +141,7 @@ en:
       imports:
         distance_hint: "0.20 is strict and only skips very close paraphrases. 0.50 is broad and may suppress distinct facts. Imports requiring semantic checks are rejected if embeddings are unavailable."
         invalid_observation_duplicate_max_distance: "Observation duplicate distance must be between 0.20 and 0.50."
+      project_scans:
+        roots_hint: "Each entry is expanded to an absolute path. If left blank, the Rails root, user home, and temp directory are used as defaults."
+        roots_required: "At least one project scan root is required."
+        invalid_root: "Invalid project scan root path: %{error}"

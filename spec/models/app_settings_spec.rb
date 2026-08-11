@@ -31,6 +31,11 @@ RSpec.describe AppSettings, type: :model do
     it "defines the import observation duplicate distance" do
       expect(AppSettings).to respond_to(:import_observation_duplicate_max_distance)
     end
+
+    it "defines the project scan roots setting" do
+      expect(AppSettings).to respond_to(:project_scan_roots)
+      expect(AppSettings).to respond_to(:project_scan_root_paths)
+    end
   end
 
   describe "summarization defaults" do
@@ -60,6 +65,10 @@ RSpec.describe AppSettings, type: :model do
 
     it "uses a balanced import observation duplicate distance" do
       expect(AppSettings.import_observation_duplicate_max_distance).to eq(0.35)
+    end
+
+    it "provides default project scan roots" do
+      expect(AppSettings.project_scan_root_paths).to include(Dir.pwd, Dir.home, Dir.tmpdir)
     end
   end
 

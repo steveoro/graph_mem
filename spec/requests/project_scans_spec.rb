@@ -62,7 +62,7 @@ RSpec.describe "Project scans", type: :request do
 
     it "rejects a project root outside the allowed directories" do
       Dir.mktmpdir do |dir|
-        stub_const("ProjectScansController::ALLOWED_ROOTS", [ "/nonexistent/allowed" ])
+        allow(AppSettings).to receive(:project_scan_root_paths).and_return([ "/nonexistent/allowed" ])
 
         post project_scans_path, params: { project_root: dir, mode: "initial" }
 

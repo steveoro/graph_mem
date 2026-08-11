@@ -1,10 +1,8 @@
 # frozen_string_literal: true
 
-class ProjectScansController < ApplicationController
-  ALLOWED_ROOTS = ENV.fetch("PROJECT_SCAN_ROOTS") do
-    [ Dir.pwd, Dir.home, Dir.tmpdir ].join(",")
-  end.split(",").map { |p| File.expand_path(p.strip) }.freeze
+require "pathname"
 
+class ProjectScansController < ApplicationController
   def create
     project_root = params[:project_root].to_s.strip
     return redirect_to root_path, alert: "Project root is required." if project_root.blank?
@@ -43,8 +41,12 @@ class ProjectScansController < ApplicationController
 
   private
 
+  def allowed_scan_roots
+    AppSettings.project_scan_root_paths
+  end
+
   def allowed_root?(real_path)
-    ALLOWED_ROOTS.any? do |root|
+    allowed_scan_roots.any? do |root|
       real_path == root || real_path.start_with?("#{root}/")
     end
   end
