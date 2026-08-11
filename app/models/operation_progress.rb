@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 class OperationProgress < ApplicationRecord
-  OPERATION_TYPES = %w[compaction import garbage_collection export project_scan].freeze
+  OPERATION_TYPES = %w[compaction import garbage_collection export project_scan project_scan_skill].freeze
   STATUSES = %w[pending running paused completed failed].freeze
 
   serialize :counters, coder: JSON

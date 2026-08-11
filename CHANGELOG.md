@@ -5,6 +5,12 @@ All notable changes to GraphMem will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.33.0] - 2026-08-11
+- Added the Project Scan Skill Companion: a dashboard UI for the human-guided, multi-stage `project_scan` skill with deterministic, no-LLM depth scanning.
+- New `project_scan_skill` operation type and `ProjectScanSkill` service covering `birds_eye`, `architecture`, `usage`, `ui`, and `tests_and_docs` depths.
+- `ProjectScanSkillJob` processes one depth per run, then pauses and broadcasts progress; operators continue or stop from the dashboard.
+- New dashboard card shows the depth stepper, live progress, and Continue/Stop actions, reusing `OperationProgressChannel` and the `operation-progress` Stimulus controller.
+
 ## [1.32.0] - 2026-08-11
 - Added live, real-time progress updates to the Project Scans dashboard card: active scan rows subscribe to `OperationProgressChannel` and update status, phase, percentage, and progress bar via ActionCable without page reloads.
 - `ProjectScansController` now creates a pending `OperationProgress` record immediately when a scan is triggered, so the dashboard can subscribe before the background job starts.

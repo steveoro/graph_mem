@@ -928,3 +928,106 @@
     align-items: start;
   }
 }
+
+.project-scan-skill-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.project-scan-skill-form__fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.project-scan-skill-form__fields .dashboard-input {
+  flex: 1 1 180px;
+  min-width: 180px;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  font-size: 0.85rem;
+}
+
+.project-scan-skill-form__options {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+}
+
+.project-scan-skill-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.project-scan-skill-row:last-child {
+  border-bottom: none;
+}
+
+.project-scan-skill-row__meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+}
+
+.project-scan-skill-row__name {
+  font-weight: 600;
+}
+
+.project-scan-skill-row__progress {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.project-scan-skill-row__progress progress {
+  flex: 1;
+  height: 8px;
+}
+
+.project-scan-skill-row__actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.project-scan-skill-row__stepper {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  font-size: 0.8rem;
+}
+
+.project-scan-skill-step {
+  display: inline-block;
+  padding: 0.2rem 0.4rem;
+  border-radius: 999px;
+  background: #f1f5f9;
+  color: #64748b;
+  border: 1px solid #e2e8f0;
+}
+
+.project-scan-skill-step--active {
+  background: #dbeafe;
+  color: #1d4ed8;
+  border-color: #93c5fd;
+  font-weight: 600;
+}
+
+.project-scan-skill-step--complete {
+  background: #dcfce7;
+  color: #15803d;
+  border-color: #86efac;
+}
+
+.project-scan-skill-step--pending {
+  background: #f1f5f9;
+  color: #64748b;
+}

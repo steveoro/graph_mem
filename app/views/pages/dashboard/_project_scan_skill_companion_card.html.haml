@@ -1,0 +1,51 @@
+.dashboard-card.dashboard-card--project-scan-skill
+  .dashboard-card__header
+    %h2.dashboard-card__title Project Scan Skill Companion
+    = dashboard_status_badge(project_scan_skills.any? { |s| s[:status].to_s.in?(%w[running pending]) } ? "running" : "idle", data: { progress_status: project_scan_skills.any? && project_scan_skills.first[:status] })
+
+  .dashboard-card__body
+    - if project_scan_skills.any?
+      .project-scan-skill-list
+        - project_scan_skills.each do |skill|
+          - row_data = { operation_progress_id: skill[:operation_id], testid: "project-scan-skill-row-#{skill[:operation_id]}" }
+          - if skill[:status].to_s.in?(%w[running pending paused])
+            - row_data[:controller] = "operation-progress"
+            - row_data[:operation_progress_operation_id_value] = skill[:operation_id]
+          .project-scan-skill-row{ data: row_data }
+            .project-scan-skill-row__meta
+              %span.project-scan-skill-row__name= project_scan_skill_name(skill)
+              = dashboard_status_badge(skill[:status], data: { progress_status: true })
+              %span.project-scan-skill-row__phase{ data: { progress_phase: true } }= project_scan_skill_current_depth_label(skill)
+
+            .project-scan-skill-row__stepper
+              - project_scan_skill_depths(skill).each do |depth|
+                - state = project_scan_skill_step_state(skill, depth)
+                %span{ class: "project-scan-skill-step project-scan-skill-step--#{state}", title: project_scan_skill_depth_label(depth) }
+                  = project_scan_skill_depth_label(depth)
+
+            .project-scan-skill-row__progress
+              %progress{ max: 100, value: skill[:percentage] || 0 }
+              %span{ data: { progress_percentage: true } }= "#{skill[:percentage] || 0}%"
+
+            - skill_status = skill[:status].to_s
+            .project-scan-skill-row__actions
+              %span{ data: { progress_action: true, progress_visible_for: "paused" }, style: ("display: none" unless skill_status == "paused") }
+                = button_to "Continue", project_scan_skill_path(skill[:operation_id], skill_action: "continue"), method: :patch, class: "dashboard-btn dashboard-btn--primary", data: { testid: "continue-project-scan-skill-#{skill[:operation_id]}" }
+              %span{ data: { progress_action: true, progress_visible_for: "running pending paused" }, style: ("display: none" unless %w[running pending paused].include?(skill_status)) }
+                = button_to "Stop", project_scan_skill_path(skill[:operation_id], skill_action: "stop"), method: :patch, class: "dashboard-btn dashboard-btn--secondary", data: { testid: "stop-project-scan-skill-#{skill[:operation_id]}" }
+              %span{ data: { progress_action: true, progress_visible_for: "completed failed" }, style: ("display: none" unless %w[completed failed].include?(skill_status)) }
+                %span.dashboard-card__hint= skill[:message]
+    - else
+      %p.dashboard-card__summary No guided project scan sessions yet.
+
+  .dashboard-card__footer
+    = form_with url: project_scan_skills_path, method: :post, class: "project-scan-skill-form", data: { testid: "project-scan-skill-form" } do |f|
+      .project-scan-skill-form__fields
+        = f.text_field :project_root, placeholder: "/path/to/project", class: "dashboard-input", required: true, data: { testid: "project-scan-skill-root" }
+        = f.text_field :project_name, placeholder: "Project name (optional)", class: "dashboard-input", data: { testid: "project-scan-skill-name" }
+        = f.text_field :aliases, placeholder: "Aliases (comma-separated, optional)", class: "dashboard-input", data: { testid: "project-scan-skill-aliases" }
+      .project-scan-skill-form__options
+        = f.label :dry_run, class: "dashboard-checkbox" do
+          = f.check_box :dry_run, data: { testid: "project-scan-skill-dry-run" }
+          Dry run
+      = f.submit "Start guided scan", class: "dashboard-btn dashboard-btn--primary", data: { testid: "project-scan-skill-submit" }

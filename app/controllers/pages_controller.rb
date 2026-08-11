@@ -11,6 +11,7 @@ class PagesController < ApplicationController
     @embeddings = @snapshot[:embeddings]
     @agent_contexts = @snapshot[:agent_contexts]
     @project_scans = @snapshot.dig(:operations, :project_scans) || []
+    @project_scan_skills = @snapshot.dig(:operations, :project_scan_skills) || []
     @scan_reviews = @snapshot[:scan_reviews] || { count: 0, items: [] }
     @refreshed_at = @snapshot[:refreshed_at]
   end
