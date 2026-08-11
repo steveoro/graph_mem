@@ -62,6 +62,9 @@
             %span.text-gray-500= " ##{observation_id}"
           - if observation
             %p.text-xs.text-gray-600.mb-2= observation.content
+          - if payload["candidate_ids"].present?
+            %p.text-xs.text-gray-500.mb-1
+              Candidates: #{payload["candidate_ids"].first(5).map { |id| "##{id}" }.join(', ')}
           = render "entity_search_select", row: row, field_name: "target_entity_id", label_text: "Target entity", current_id: target_id, current_name: target_name, select_id: "target-entity-select-#{row.row_uuid}", search_id: "target-entity-search-#{row.row_uuid}"
         - when "reparent_entity"
           - entity_id = payload["entity_id"] || payload["node_id"]
@@ -88,6 +91,16 @@
             %strong Delete entity
             %span.text-gray-500= " ##{entity_id}"
           %p.text-xs.text-gray-600= entity_name
+        - when "delete_observation"
+          - observation_id = payload["observation_id"]
+          - observation = MemoryObservation.find_by(id: observation_id)
+          - entity_name = observation&.memory_entity&.name || payload["entity_name"]
+          %p.text-sm.mb-2
+            %strong Delete observation
+            %span.text-gray-500= " ##{observation_id}"
+          - if observation
+            %p.text-xs.text-gray-600.mb-2= observation.content
+            %p.text-xs.text-gray-500= "from #{entity_name} (#{observation.memory_entity&.entity_type})"
         - when "dismiss_compaction_review"
           %p.text-sm.mb-2
             %strong Dismiss compaction review
@@ -138,6 +151,10 @@
             %p.text-xs.text-gray-500= payload["reason"]
         - when "delete_entity"
           %p.text-xs= "Delete an entity that was not found in the scan."
+        - when "delete_observation"
+          %p.text-xs= "Mark an observation obsolete because it does not reference its entity or project."
+          - if payload["reason"].present?
+            %p.text-xs.text-gray-500= payload["reason"]
         - when "dismiss_compaction_review"
           %p.text-xs= "Dismiss a conflicting compaction review item."
       .md:col-span-3.flex.flex-wrap.items-start.gap-2

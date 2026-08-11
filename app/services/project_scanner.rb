@@ -27,17 +27,6 @@ class ProjectScanner
   MAX_TOTAL_INPUT_BYTES = 200_000
   SUMMARY_PROVIDER = "ollama"
 
-  # Relation types that imply the source project actually uses the target.
-  USAGE_RELATION_TYPES = %w[
-    depends_on
-    requires
-    used_by
-    configured_by
-    implements
-    extends
-    integrates_with
-  ].freeze
-
   Result = Struct.new(
     :success,
     :project_entity,
@@ -669,233 +658,28 @@ class ProjectScanner
     return if @project_entity.nil?
     return unless AppSettings.project_scan_validation_enabled?
 
-    update_progress!(phase: "validating_subtree", message: "Validating existing project subtree")
-    entity_ids = ProjectSubtree.resolve(@project_entity.id).entity_ids - @created_entity_ids.to_a - [ @project_entity.id ]
-    return if entity_ids.empty?
+    validator = ProjectScanValidator.new(
+      project_entity: @project_entity,
+      scan_id: @scan_id,
+      created_entity_ids: @created_entity_ids,
+      context_text: @context_text,
+      extracted_data: @extracted_data,
+      project_root: @project_root,
+      dry_run: @dry_run,
+      logger: @logger,
+      operation_progress: @operation_progress
+    )
 
-    total = entity_ids.size
-    processed = 0
-    MemoryEntity.where(id: entity_ids).find_each do |entity|
-      validate_entity_observations(entity)
-      validate_entity_relations(entity)
-      processed += 1
-      if (processed % 10).zero? || processed == total
-        update_progress!(current: processed, total: total, phase: "validating_subtree", message: "Validated #{processed}/#{total} entities")
-      end
-    end
+    merge_validation_result(validator.call)
   end
 
-  def validate_entity_observations(entity)
-    entity.active_memory_observations.find_each do |observation|
-      next if observation.source.to_s.include?(@scan_id)
-      next unless from_prior_scan?(observation.source)
-      next if observation.content.blank?
-
-      action = resolve_observation_action(observation, entity)
-      case action[:type]
-      when :move
-        move_observation_to_entity(observation, action[:target_entity])
-      when :obsolete
-        mark_observation_obsolete(observation, action[:reason])
-      when :review
-        queue_scan_review(action[:payload])
-      end
-    end
-  rescue StandardError => e
-    @logger.warn "ProjectScanner: failed to validate observations for entity #{entity.id}: #{e.message}"
-  end
-
-  def resolve_observation_action(observation, entity)
-    content = observation.content.to_s
-
-    if mentions_owned_terms?(content, entity) || mentions_owned_terms?(content, @project_entity)
-      return { type: :keep }
-    end
-
-    candidates = find_observation_candidates(content, exclude: entity)
-
-    if candidates.size > 1
-      best = select_best_candidate(candidates)
-      return {
-        type: :review,
-        payload: {
-          id: SecureRandom.uuid,
-          kind: "move_observation",
-          observation_id: observation.id,
-          target_entity_id: best[:entity]&.id,
-          reason: "Ambiguous target: observation matches #{candidates.map { |c| "#{c[:entity].name} (#{c[:entity].entity_type})" }.join(', ')}"
-        }
-      }
-    end
-
-    best = select_best_candidate(candidates)
-
-    if best
-      return { type: :move, target_entity: best[:entity] }
-    end
-
-    # No clear target found; the observation does not reference its owner or
-    # project and no matching entity exists. Treat it as mis-assigned and
-    # obsolete it with maximum confidence.
-    {
-      type: :obsolete,
-      reason: "Observation does not reference its entity or project and no matching target was found"
-    }
-  end
-
-  def mentions_owned_terms?(content, owner)
-    return false unless owner
-
-    terms = entity_terms(owner)
-    terms.any? { |term| content_matches_term?(content, term) }
-  end
-
-  def entity_terms(entity)
-    terms = [ entity.name.to_s.strip ]
-    terms += entity.aliases.to_s.split(/[,|;]/).map(&:strip) if entity.aliases.present?
-    terms.map(&:downcase).reject(&:blank?).reject { |t| t.length < 3 }.uniq
-  end
-
-  def content_matches_term?(content, term)
-    return false if term.blank? || term.length < 3
-
-    words = term.split(/\s+/)
-    pattern = words.map { |w| Regexp.escape(w) }.join("\\W+")
-    content.to_s.match?(/(?:^|\W)#{pattern}(?:$|\W)/i)
-  end
-
-  def find_observation_candidates(content, exclude:)
-    candidates = []
-
-    # First pass: search for any entity whose full name/alias appears in the text.
-    EntitySearchStrategy.new.search(content, limit: 50).each do |result|
-      next if result.entity == exclude
-
-      matched_term = content_matches_entity?(content, result.entity)
-      next unless matched_term
-
-      candidates << { entity: result.entity, score: result.score, matched_term: matched_term }
-    end
-
-    # Also consider project roots explicitly, because short/generic project names
-    # can be missed by token-based search.
-    MemoryEntity.where(entity_type: NodeOperationsStrategy::PROJECT_ENTITY_TYPE).where.not(id: exclude.id).find_each do |project|
-      next if project == @project_entity
-
-      matched_term = content_matches_entity?(content, project)
-      next unless matched_term
-
-      candidates << { entity: project, score: 0.0, matched_term: matched_term }
-    end
-
-    candidates.uniq { |c| c[:entity].id }
-  end
-
-  def content_matches_entity?(content, entity)
-    entity_terms(entity).find { |term| content_matches_term?(content, term) }
-  end
-
-  def select_best_candidate(candidates)
-    return nil if candidates.empty?
-
-    candidates.sort_by.with_index do |c, idx|
-      # Prefer non-project entities (more specific), then longer matched names,
-      # then higher search score, then stable index.
-      [
-        c[:entity].entity_type == NodeOperationsStrategy::PROJECT_ENTITY_TYPE ? 1 : 0,
-        -c[:matched_term].length,
-        -c[:score].to_f,
-        idx
-      ]
-    end.first
-  end
-
-  def move_observation_to_entity(observation, target_entity)
-    return if observation.memory_entity_id == target_entity.id
-
-    ActiveRecord::Base.transaction do
-      MemoryObservation.create!(
-        memory_entity: target_entity,
-        content: observation.content,
-        source: scan_source("validation_move"),
-        confidence: 1.0
-      )
-      observation.mark_obsolete!(reason: "Moved to entity #{target_entity.name} (#{target_entity.id}) by project scan validation")
-      observation.update!(confidence: 1.0)
-    end
-    @observations_moved_count += 1
-  rescue StandardError => e
-    @logger.warn "ProjectScanner: failed to move observation #{observation.id} to #{target_entity.id}: #{e.message}"
-    @errors << "Failed to move observation #{observation.id}: #{e.message}"
-  end
-
-  def mark_observation_obsolete(observation, reason)
-    observation.mark_obsolete!(reason: reason)
-    observation.update!(confidence: 1.0)
-    @observations_obsoleted_count += 1
-  rescue StandardError => e
-    @logger.warn "ProjectScanner: failed to obsolete observation #{observation.id}: #{e.message}"
-    @errors << "Failed to obsolete observation #{observation.id}: #{e.message}"
-  end
-
-  def validate_entity_relations(entity)
-    entity.relations_from.find_each do |relation|
-      next if relation.properties.to_h["scan_id"] == @scan_id
-
-      if relation.relation_type == "part_of" && wrong_part_of_to_project_root?(relation)
-        delete_relation(relation, "part_of to wrong project root")
-        next
-      end
-
-      if @context_text.present? && usage_relation?(relation) && !relation_target_in_scan_context?(relation.to_entity)
-        queue_scan_review({
-          id: SecureRandom.uuid,
-          kind: "delete_relation",
-          relation_id: relation.id,
-          reason: "Target #{relation.to_entity&.name} not found in project scan context"
-        })
-      end
-    end
-  rescue StandardError => e
-    @logger.warn "ProjectScanner: failed to validate relations for entity #{entity.id}: #{e.message}"
-  end
-
-  def wrong_part_of_to_project_root?(relation)
-    return false unless relation.to_entity
-
-    relation.to_entity.entity_type == NodeOperationsStrategy::PROJECT_ENTITY_TYPE &&
-      relation.to_entity_id != @project_entity.id
-  end
-
-  def usage_relation?(relation)
-    USAGE_RELATION_TYPES.include?(relation.relation_type)
-  end
-
-  def relation_target_in_scan_context?(target_entity)
-    return true if target_entity.nil?
-
-    terms = entity_terms(target_entity)
-    return true if terms.any? { |term| content_matches_term?(@context_text, term) }
-
-    architecture_names.any? { |name| terms.any? { |term| content_matches_term?(name, term) } }
-  end
-
-  def architecture_names
-    @architecture_names ||= begin
-      names = (@extracted_data["architecture"] || []).map { |item| item.dig("entity", "name").to_s }
-      names.reject(&:blank?)
-    end
-  end
-
-  def delete_relation(relation, reason)
-    Current.deletion_reason = reason
-    relation.destroy!
-    @relations_deleted_count += 1
-  rescue StandardError => e
-    @logger.warn "ProjectScanner: failed to delete relation #{relation.id}: #{e.message}"
-    @errors << "Failed to delete relation #{relation.id}: #{e.message}"
-  ensure
-    Current.deletion_reason = nil
+  def merge_validation_result(result)
+    @observations_moved_count += result.observations_moved.to_i
+    @observations_obsoleted_count += result.observations_obsoleted.to_i
+    @relations_deleted_count += result.relations_deleted.to_i
+    @entities_reparented_count += result.entities_reparented.to_i
+    @scan_review_items.concat(result.scan_review_items || [])
+    @errors.concat(result.errors || [])
   end
 
   def dismiss_conflicting_compaction_reviews

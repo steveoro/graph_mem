@@ -66,6 +66,7 @@ a project directory and keep the graph synchronized with the actual source:
   - `move_observation` — reassign an observation to a better-matching entity.
   - `reparent_entity` — move an entity under a different `part_of` parent.
   - `delete_relation` — remove a stale usage relation.
+  - `delete_observation` — mark an observation obsolete because it does not reference its entity or project.
   - `delete_entity` — remove an entity that no longer appears in the source.
 - Per-run source-ref tagging (`project_scan:<scan_id>:<phase>`) on observations
   and `MemoryRelation#properties` so validation can distinguish entities created
@@ -153,9 +154,14 @@ wraps the MCP call for convenience.
    - Add `scan_review` handling in `CompactionReviewService` signatures and
      `apply_action` for the destructive cases it supports.
 
-4. **Core service: `ProjectScanner`**
-   - `ProjectScanner.new(project_root:, project_name:, aliases:, mode:, dry_run: false,
-     operation_progress: nil, file_globs: nil, scan_id: nil)`
+4. **Core services**
+   - `ProjectScanner` orchestrates file discovery, knowledge extraction,
+     and reconciliation. Signature: `ProjectScanner.new(project_root:, project_name:,
+     aliases:, mode:, dry_run: false, operation_progress: nil, file_globs: nil,
+     scan_id: nil)`.
+   - `ProjectScanValidator` is a dedicated, testable collaborator that performs
+     the final facts-checking pass over the existing project subtree. It is
+     called by `ProjectScanner` and can also be exercised in isolation.
    - `call` returns a result hash with counters and queued review items.
    - A new `mode: "validate"` skips file discovery and runs only the
      validation pass over the existing project subtree.
@@ -190,34 +196,45 @@ wraps the MCP call for convenience.
      - For pending `compaction_review` rows that conflict with scan facts:
        - Dismiss merge/relationship proposals with
          `reason: "contradicted by project scan"`.
-   - **Validation phase** (final automatic pass, gated by
-     `enable_project_scan_validation`):
+   - **Validation phase** (final automatic pass, implemented in the dedicated
+     `ProjectScanValidator` service and gated by `enable_project_scan_validation`):
      - Walk the existing project subtree, excluding entities created during this
        scan and the `Project` root itself.
+     - Distinguish scan-sourced observations from manually-created ones using
+       the `source` field. Observations produced by a prior scan run
+       (`project_scan:*` or `project_scan_skill:*`, but not the current
+       `scan_id`) may be repaired automatically. Observations with no scan
+       source are never silently deleted; they are queued for review.
      - For each pre-existing entity, check active observations:
        - Skip observations created in the current run.
        - If the content mentions the entity, its aliases, the project root, or
          the project root aliases, it is correctly placed.
-       - Use `EntitySearchStrategy` plus whole-word/phrase matching to find a
-         single, explicit target entity in the content. Prefer non-`Project`
-         targets and longer exact matches to avoid false moves.
-       - If a single clear target is found: create a new active observation on
-         the target, mark the original `obsolete` with `confidence: 1.0`.
-       - If no clear target is found: mark the observation `obsolete` with
+       - Use `EntitySearchStrategy` plus whole-word/phrase matching to find an
+         explicit target entity in the content. Prefer non-`Project` targets
+         and longer exact matches to avoid false moves.
+       - Scan-sourced, single clear target: create a new active observation on
+         the target and mark the original `obsolete` with `confidence: 1.0`.
+       - Scan-sourced, no target: mark the observation `obsolete` with
          `confidence: 1.0` and reason `"Observation does not reference its
          entity or project and no matching target was found"`.
-       - Ambiguous or multi-candidate cases can be queued as `move_observation`
-         `scan_review` items.
-     - For each pre-existing entity, check outgoing relations:
+       - Manual/sourceless, single clear target: queue a `move_observation`
+         `scan_review` item with `target_entity_id`.
+       - Manual/sourceless, no target: queue a `delete_observation`
+         `scan_review` item so the operator/agent can decide, preserving the
+         scan conclusion in the review payload.
+       - Ambiguous or multi-candidate cases: queue a `move_observation` review
+         with the best target and `candidate_ids`, recording the ambiguity in
+         the reason.
+     - For each pre-existing entity, check outgoing relations while respecting
+       ownership semantics:
+       - `part_of` is an ownership edge: a `MemoryEntity` may have only one
+         `part_of` parent. A `part_of` relation that points to a different
+         `Project` root is corrupt and is deleted automatically.
+       - `used_by`, `depends_on`, `requires`, `configured_by`, `implements`,
+         `extends`, and `integrates_with` are reference/usage edges and do not
+         assert ownership. These are only queued as `delete_relation` review
+         items when the target is not supported by the scan context.
        - Skip relations created in the current run.
-       - If a `part_of` relation points to a different `Project` root, delete
-         it automatically.
-       - For usage relations (`depends_on`, `requires`, `used_by`, etc.),
-         verify the target name/alias appears in the scan context. If not,
-         queue `delete_relation` for review.
-     - Wrong-parent entities that should be moved under a different project can
-       be queued as `reparent_entity` `scan_review` items (or handled by the
-       observation moves above).
 
 5. **Job: `ProjectScanJob`**
    - `queue_as :default`.

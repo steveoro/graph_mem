@@ -200,6 +200,11 @@ class CompactionReviewService
         return nil if relation_id.blank?
 
         [ "delete_relation", relation_id.to_i ].join("|")
+      when "delete_observation"
+        observation_id = payload[:observation_id] || payload.dig("payload", "observation_id")
+        return nil if observation_id.blank?
+
+        [ "delete_observation", observation_id.to_i ].join("|")
       when "delete_entity"
         entity_id = payload[:entity_id] || payload.dig("payload", "entity_id")
         return nil if entity_id.blank?
@@ -277,6 +282,8 @@ class CompactionReviewService
       when "move_observation"
         validate_observation_id!(edits[:observation_id]) if edits[:observation_id].present?
         validate_entity_ids!([ edits[:target_entity_id] || edits[:target_id] ].compact) if (edits[:target_entity_id] || edits[:target_id]).present?
+      when "delete_observation"
+        validate_observation_id!(edits[:observation_id]) if edits[:observation_id].present?
       when "reparent_entity"
         validate_entity_ids!([ edits[:entity_id] || edits[:node_id], edits[:parent_id] ].compact)
       end
@@ -326,6 +333,8 @@ class CompactionReviewService
         reparent_entity(effective, action_params)
       when "delete_relation"
         delete_relation(effective)
+      when "delete_observation"
+        delete_observation(effective)
       when "delete_entity"
         delete_entity(effective)
       when "dismiss_compaction_review"
@@ -442,6 +451,20 @@ class CompactionReviewService
       result = dismiss(review_item_id, reason: reason, report_type: "compaction_review")
       result[:message] = "Compaction review item dismissed" if result[:success]
       result
+    end
+
+    def delete_observation(effective)
+      observation_id = effective[:observation_id] || effective.dig("payload", "observation_id")
+      return { success: false, error: "Observation not found" } if observation_id.blank?
+
+      observation = MemoryObservation.find_by(id: observation_id.to_i)
+      return { success: false, error: "Observation not found" } unless observation
+
+      observation.mark_obsolete!(reason: effective[:reason] || "Removed via scan review")
+      observation.update!(confidence: 1.0)
+      { success: true, message: "Observation marked obsolete" }
+    rescue ActiveRecord::RecordInvalid => e
+      { success: false, error: "Failed to delete observation: #{e.message}" }
     end
 
     def move_observation(effective, action_params)

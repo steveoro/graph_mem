@@ -67,24 +67,38 @@ state management, not as a substitute for inspecting the repository.
   asynchronous source-scan of a project root. It treats the files as the source of truth,
   reconciles the graph, and then runs an automatic facts-checking pass over the existing
   project subtree.
-- The final validation pass:
-  - Skips entities, observations, and relations created during the same scan run
-    (identified by the per-run source ref `project_scan:<scan_id>:<phase>` and
-    `MemoryRelation#properties["scan_id"]`).
-  - Moves an observation to a better-matching target entity when the target is
-    unambiguous (the target name/alias appears as a whole word or phrase in the
-    observation text and the text does not reference its current entity or project).
-  - Marks observations that do not reference their entity or project and have no
-    clear target as `obsolete` with `confidence: 1.0`.
-  - Auto-deletes `part_of` relations that point to the wrong project root.
-  - Queues stale usage relations (`delete_relation`), entities that no longer appear
-    in the source (`delete_entity`), and wrong-parent moves (`reparent_entity`) as
-    `scan_review` maintenance rows.
+- The final validation pass is implemented in the `ProjectScanValidator` service and
+  is gated by `enable_project_scan_validation`.
+- It distinguishes scan-sourced observations from manually-created ones:
+  - Scan-sourced observations (`source` starts with `project_scan:` or
+    `project_scan_skill:` from a prior run) can be moved or obsoleted automatically.
+  - Manual/sourceless observations are never silently deleted. They are queued as
+    `move_observation` or `delete_observation` `scan_review` items so the
+    operator/agent can decide; the scan conclusion is preserved in the review payload.
+- Skips entities, observations, and relations created during the same scan run
+  (identified by the per-run source ref `project_scan:<scan_id>:<phase>` and
+  `MemoryRelation#properties["scan_id"]`).
+- Moves scan-sourced observations to a better-matching target entity when the target
+  is unambiguous (the target name/alias appears as a whole word or phrase in the
+  observation text and the text does not reference its current entity or project).
+- Marks scan-sourced observations that do not reference their entity or project and
+  have no clear target as `obsolete` with `confidence: 1.0`.
+- Handles relation ownership semantics:
+  - `part_of` is an ownership edge: a `MemoryEntity` may have only one `part_of`
+    parent. A `part_of` relation to the wrong `Project` root is corrupt and is
+    auto-deleted.
+  - `used_by`, `depends_on`, `requires`, `configured_by`, `implements`, `extends`,
+    and `integrates_with` are reference/usage edges. Stale ones are queued as
+    `delete_relation` review items, not auto-deleted.
+- Queues stale usage relations (`delete_relation`), entities that no longer appear
+  in the source (`delete_entity`), observations that do not belong (`delete_observation`),
+  and wrong-parent moves (`reparent_entity`, `move_observation`) as `scan_review`
+  maintenance rows.
 - Use `mode: "validate"` to run only the validation pass on an existing project
   without re-reading files.
 - Agents can consume `scan_review` rows via `get_maintenance_reports(report_type:
   "scan_review")` and apply `move_observation`, `reparent_entity`, `delete_relation`,
-  or `delete_entity` actions just like compaction reviews.
+  `delete_observation`, or `delete_entity` actions just like compaction reviews.
 
 ### Dream-State Compaction Awareness
 
