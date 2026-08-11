@@ -76,4 +76,56 @@ RSpec.describe DashboardHelper, type: :helper do
       expect(helper.project_scan_name({ details: {} })).to eq("—")
     end
   end
+
+  describe "#scan_review_item_label" do
+    it "describes a delete_entity scan review item" do
+      entity = MemoryEntity.create!(name: "StaleTask", entity_type: "Task")
+      row = MaintenanceReportRow.new(
+        kind: "delete_entity",
+        payload: { "entity_id" => entity.id, "reason" => "not found in project scan" }
+      )
+
+      expect(helper.scan_review_item_label(row)).to include("Delete entity: StaleTask")
+      expect(helper.scan_review_item_label(row)).to include("not found in project scan")
+    end
+
+    it "describes an entity_merge scan review item with source and target names" do
+      source = MemoryEntity.create!(name: "Alpha", entity_type: "Concept")
+      target = MemoryEntity.create!(name: "Beta", entity_type: "Concept")
+      row = MaintenanceReportRow.new(
+        kind: "entity_merge",
+        payload: { "entity_a" => { "entity_id" => source.id },
+                    "entity_b" => { "entity_id" => target.id },
+                    "reason" => "similar embeddings" }
+      )
+
+      label = helper.scan_review_item_label(row)
+      expect(label).to include("Merge entity: Alpha")
+      expect(label).to include("→ Beta")
+      expect(label).to include("similar embeddings")
+    end
+
+    it "describes a relationship_proposal scan review item" do
+      from = MemoryEntity.create!(name: "TaskA", entity_type: "Task")
+      to = MemoryEntity.create!(name: "TaskB", entity_type: "Task")
+      row = MaintenanceReportRow.new(
+        kind: "relationship_proposal",
+        payload: { "from_entity_id" => from.id, "to_entity_id" => to.id,
+                   "relation_type" => "part_of", "reason" => "context proximity" }
+      )
+
+      label = helper.scan_review_item_label(row)
+      expect(label).to include("Create relation: TaskA")
+      expect(label).to include("→ TaskB")
+      expect(label).to include("[part_of]")
+      expect(label).to include("context proximity")
+    end
+
+    it "falls back to the kind, reason, and known ids for unknown kinds" do
+      row = MaintenanceReportRow.new(kind: "custom_action",
+                                     payload: { "reason" => "review me", "entity_id" => 123 })
+
+      expect(helper.scan_review_item_label(row)).to eq("Custom action: review me (123)")
+    end
+  end
 end

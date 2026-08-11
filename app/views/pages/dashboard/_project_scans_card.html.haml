@@ -1,4 +1,5 @@
 - scans = project_scans
+- scan_reviews = local_assigns[:scan_reviews] || { count: 0, items: [] }
 .dashboard-card.dashboard-card--state{ data: { testid: "dashboard-project-scans-card" } }
   .dashboard-card__header
     %h2.dashboard-card__title Project Scans
@@ -51,6 +52,24 @@
     - else
       %p.dashboard-card__empty{ data: { testid: "dashboard-project-scans-empty" } }
         No project source scans yet.
+
+  - if scan_reviews[:count].positive?
+    .dashboard-card__section{ data: { testid: "dashboard-scan-reviews-section" } }
+      %h3.dashboard-card__subtitle
+        Pending Scan Reviews
+        %span.dashboard-card__hint (#{scan_reviews[:count]} total)
+      %ul.dashboard-scan-reviews
+        - scan_reviews[:items].each do |row|
+          %li.dashboard-scan-review{ data: { testid: "dashboard-scan-review-#{row.row_uuid}" } }
+            .dashboard-scan-review__summary= scan_review_item_label(row)
+            .dashboard-scan-review__actions
+              = form_with url: compaction_review_action_data_exchange_index_path, method: :post, local: true, html: { class: "dashboard-scan-review__form" } do
+                = hidden_field_tag :item_id, row.row_uuid
+                = hidden_field_tag :report_type, "scan_review"
+                = hidden_field_tag :return_to, "dashboard"
+                = hidden_field_tag :status, "active"
+                = button_tag "Approve", name: "review_action", value: "apply", type: :submit, class: "dashboard-btn dashboard-btn--primary dashboard-btn--small", data: { turbo_confirm: "Approve this suggestion?" }
+                = button_tag "Dismiss", name: "review_action", value: "dismiss", type: :submit, class: "dashboard-btn dashboard-btn--secondary dashboard-btn--small"
 
   .dashboard-card__actions
     = link_to "Review scan suggestions", compaction_review_data_exchange_index_path(report_type: "scan_review"), class: "dashboard-btn dashboard-btn--secondary", id: "btn-project-scans-review"

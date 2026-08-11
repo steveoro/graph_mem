@@ -247,7 +247,7 @@ class DataExchangeController < ApplicationController
     action = params[:review_action]
 
     if action.blank?
-      return redirect_to compaction_review_data_exchange_index_path(report_type: review_report_type_param, status: params[:status], page: params[:page]), alert: "Missing action."
+      return redirect_to review_action_redirect_path, alert: "Missing action."
     end
 
     result = case action
@@ -281,7 +281,7 @@ class DataExchangeController < ApplicationController
     end
 
     flash[result[:success] ? :notice : :alert] = result[:success] ? (result[:message] || "Done.") : (result[:error] || "Action failed.")
-    redirect_to compaction_review_data_exchange_index_path(report_type: review_report_type_param, status: params[:status], page: params[:page])
+    redirect_to review_action_redirect_path
   end
 
   # POST /data_exchange/compaction_review/import_suggest_merges
@@ -573,6 +573,14 @@ class DataExchangeController < ApplicationController
 
   def review_report_type_param
     @report_type == "compaction_review" ? nil : @report_type
+  end
+
+  def review_action_redirect_path
+    if params[:return_to] == "dashboard"
+      root_path
+    else
+      compaction_review_data_exchange_index_path(report_type: review_report_type_param, status: params[:status], page: params[:page])
+    end
   end
 
   def compaction_action_params

@@ -37,7 +37,7 @@
     = render "pages/dashboard/garbage_collector_card", latest_reports: @latest_reports, schedules: @schedules, operation: @snapshot.dig(:operations, :garbage_collection)
     = render "pages/dashboard/embeddings_card", embeddings: @embeddings
     = render "pages/dashboard/agent_contexts_card", agent_contexts: @agent_contexts
-    = render "pages/dashboard/project_scans_card", project_scans: @project_scans
+    = render "pages/dashboard/project_scans_card", project_scans: @project_scans, scan_reviews: @scan_reviews
 
   %section.dashboard-details
     = render "pages/dashboard/reports_details", latest_reports: @latest_reports, compaction: @compaction

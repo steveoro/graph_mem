@@ -17,6 +17,7 @@ class MaintenanceDashboardSnapshot
       agent_contexts: AgentContextsSnapshot.call,
       latest_reports: latest_reports_by_type,
       operations: operation_snapshots,
+      scan_reviews: scan_review_snapshot,
       schedules: schedule_hints,
       cursor_entity: cursor_entity
     }
@@ -53,6 +54,13 @@ class MaintenanceDashboardSnapshot
     {
       garbage_collection: OperationProgress.where(operation_type: "garbage_collection").recent.first&.snapshot,
       project_scans: OperationProgress.where(operation_type: "project_scan").recent.limit(5).map(&:snapshot)
+    }
+  end
+
+  def scan_review_snapshot
+    {
+      count: CompactionReviewService.active_count(report_type: "scan_review"),
+      items: CompactionReviewService.items(report_type: "scan_review", status: "active", page: 1).take(5)
     }
   end
 

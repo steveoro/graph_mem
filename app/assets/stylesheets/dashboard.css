@@ -230,6 +230,53 @@
   font-size: 0.85rem;
 }
 
+.dashboard-card__subtitle {
+  font-size: 0.95rem;
+  font-weight: 600;
+  margin: 0.75rem 0 0.35rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.dashboard-scan-reviews {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-size: 0.875rem;
+}
+
+.dashboard-scan-review {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.dashboard-scan-review:last-child {
+  border-bottom: none;
+}
+
+.dashboard-scan-review__summary {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dashboard-scan-review__actions {
+  display: flex;
+  gap: 0.35rem;
+  flex-shrink: 0;
+}
+
+.dashboard-scan-review__form {
+  display: inline;
+}
+
 .dashboard-badge {
   display: inline-block;
   padding: 0.2rem 0.55rem;
@@ -638,7 +685,8 @@
 }
 
 .dashboard-btn--danger { background: #dc2626; }
-.dashboard-btn--icon {
+.dashboard-btn--icon,
+.dashboard-btn--small {
   padding: 0.35rem 0.55rem;
   font-size: 0.75rem;
 }

@@ -1055,4 +1055,48 @@ RSpec.describe 'DataExchange', type: :request do
       expect(response.body).not_to include('compaction-1')
     end
   end
+
+  describe 'POST /data_exchange/compaction_review_action return_to=dashboard' do
+    let!(:scan_report) do
+      MaintenanceReport.create!(report_type: 'scan_review', data: { 'source' => 'test' })
+    end
+
+    let!(:scan_delete_row) do
+      MaintenanceReportRow.create!(
+        maintenance_report: scan_report,
+        report_type: 'scan_review',
+        row_uuid: 'scan-delete-1',
+        kind: 'delete_entity',
+        status: 'active',
+        signature: CompactionReviewService.signature_for('delete_entity', { entity_id: task1.id }),
+        payload: { 'entity_id' => task1.id, 'reason' => 'not found in project scan' }
+      )
+    end
+
+    it 'approves a scan review deletion and redirects back to the dashboard' do
+      post compaction_review_action_data_exchange_index_path, params: {
+        item_id: 'scan-delete-1',
+        review_action: 'apply',
+        report_type: 'scan_review',
+        return_to: 'dashboard'
+      }
+
+      expect(response).to redirect_to(root_path)
+      expect(scan_delete_row.reload.status).to eq('approved')
+      expect(MemoryEntity.find_by(id: task1.id)).to be_nil
+    end
+
+    it 'dismisses a scan review item and redirects back to the dashboard' do
+      post compaction_review_action_data_exchange_index_path, params: {
+        item_id: 'scan-delete-1',
+        review_action: 'dismiss',
+        report_type: 'scan_review',
+        return_to: 'dashboard'
+      }
+
+      expect(response).to redirect_to(root_path)
+      expect(scan_delete_row.reload.status).to eq('dismissed')
+      expect(MemoryEntity.find_by(id: task1.id)).to be_present
+    end
+  end
 end

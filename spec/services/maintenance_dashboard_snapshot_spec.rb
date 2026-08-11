@@ -11,10 +11,11 @@ RSpec.describe MaintenanceDashboardSnapshot do
 
       result = described_class.call
 
-      expect(result).to include(:refreshed_at, :compaction, :graph_stats, :latest_reports, :schedules, :cursor_entity, :agent_contexts, :operations)
+      expect(result).to include(:refreshed_at, :compaction, :graph_stats, :latest_reports, :schedules, :cursor_entity, :agent_contexts, :operations, :scan_reviews)
       expect(result[:graph_stats][:totals][:entities]).to be >= 1
       expect(result[:compaction]).to include(:dream_state)
       expect(result[:operations]).to include(:garbage_collection, :project_scans)
+      expect(result[:scan_reviews]).to include(:count, :items)
     end
 
     it "resolves cursor entity when compaction has a cursor" do
@@ -62,6 +63,25 @@ RSpec.describe MaintenanceDashboardSnapshot do
       expect(result[:operations][:project_scans]).to be_an(Array)
       expect(result[:operations][:project_scans].size).to eq(1)
       expect(result[:operations][:project_scans].first).to include(operation: "project_scan", status: "completed")
+    end
+
+    it "includes active scan_review items" do
+      entity = MemoryEntity.create!(name: "ReviewEntity", entity_type: "Task")
+      report = MaintenanceReport.create!(report_type: "scan_review", data: { "source" => "test" })
+      MaintenanceReportRow.create!(
+        maintenance_report: report,
+        report_type: "scan_review",
+        row_uuid: "scan-review-1",
+        kind: "delete_entity",
+        status: "active",
+        signature: CompactionReviewService.signature_for("delete_entity", { entity_id: entity.id }),
+        payload: { "entity_id" => entity.id, "reason" => "not found in project scan" }
+      )
+
+      result = described_class.call
+
+      expect(result[:scan_reviews][:count]).to eq(1)
+      expect(result[:scan_reviews][:items].map(&:row_uuid)).to include("scan-review-1")
     end
   end
 end
