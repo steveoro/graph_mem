@@ -69,6 +69,22 @@ module DashboardHelper
       "—"
   end
 
+  def scan_review_item_label(row)
+    payload = row.effective_payload
+    case row.kind
+    when "delete_entity"
+      entity = MemoryEntity.find_by(id: payload["entity_id"])
+      "Delete entity: #{entity&.name || 'Unknown'} (#{payload['reason']})"
+    when "delete_relation"
+      relation = MemoryRelation.find_by(id: payload["relation_id"])
+      "Delete relation: #{relation&.relation_type || 'Unknown'} (#{payload['reason']})"
+    when "dismiss_compaction_review"
+      "Dismiss compaction review: #{payload['reason']}"
+    else
+      "#{row.kind.humanize}: #{payload['reason'] || 'pending review'}"
+    end
+  end
+
   def compaction_phases
     CompactionRun::PHASES
   end

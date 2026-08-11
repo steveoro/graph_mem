@@ -88,6 +88,28 @@ RSpec.describe "Operator dashboard pages", type: :request do
       expect(response.body).to include(compaction_review_data_exchange_index_path(report_type: "scan_review"))
     end
 
+    it "shows pending scan reviews with approve and dismiss actions" do
+      entity = MemoryEntity.create!(name: "StaleTask", entity_type: "Task")
+      report = MaintenanceReport.create!(report_type: "scan_review", data: { "source" => "test" })
+      row = MaintenanceReportRow.create!(
+        maintenance_report: report,
+        report_type: "scan_review",
+        row_uuid: "scan-review-dashboard-1",
+        kind: "delete_entity",
+        status: "active",
+        signature: CompactionReviewService.signature_for("delete_entity", { entity_id: entity.id }),
+        payload: { "entity_id" => entity.id, "reason" => "not found in project scan" }
+      )
+
+      get root_path
+
+      expect(response.body).to include('data-testid="dashboard-scan-reviews-section"')
+      expect(response.body).to include("StaleTask")
+      expect(response.body).to include(row.row_uuid)
+      expect(response.body).to include("Approve")
+      expect(response.body).to include("Dismiss")
+    end
+
     it "shows repair action when compaction failed with a relation error" do
       CompactionRun.create!(
         status: "failed",

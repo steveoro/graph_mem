@@ -76,4 +76,23 @@ RSpec.describe DashboardHelper, type: :helper do
       expect(helper.project_scan_name({ details: {} })).to eq("—")
     end
   end
+
+  describe "#scan_review_item_label" do
+    it "describes a delete_entity scan review item" do
+      entity = MemoryEntity.create!(name: "StaleTask", entity_type: "Task")
+      row = MaintenanceReportRow.new(
+        kind: "delete_entity",
+        payload: { "entity_id" => entity.id, "reason" => "not found in project scan" }
+      )
+
+      expect(helper.scan_review_item_label(row)).to include("Delete entity: StaleTask")
+      expect(helper.scan_review_item_label(row)).to include("not found in project scan")
+    end
+
+    it "falls back to the kind and reason for unknown kinds" do
+      row = MaintenanceReportRow.new(kind: "custom_action", payload: { "reason" => "review me" })
+
+      expect(helper.scan_review_item_label(row)).to eq("Custom action: review me")
+    end
+  end
 end
