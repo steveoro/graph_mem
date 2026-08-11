@@ -648,7 +648,7 @@ class ProjectScanner
 
     @operation_progress.update_progress!(
       current: @operation_progress.current_count.to_i + 1,
-      total: [ @operation_progress.total_count.to_i, 5 ].max,
+      total: [ @operation_progress.total_count.to_i, 6 ].max,
       phase: phase,
       message: message,
       counters: {

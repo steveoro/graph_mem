@@ -27,7 +27,7 @@ class ProjectScansController < ApplicationController
       operation_type: "project_scan",
       operation_id: scan_id,
       status: "pending",
-      total_count: 5,
+      total_count: 6,
       current_count: 0,
       percentage: 0,
       phase: "queued",

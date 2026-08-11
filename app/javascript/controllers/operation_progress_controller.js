@@ -49,7 +49,7 @@ export default class extends Controller {
 
     const statusClassMap = { running: "running", paused: "paused", completed: "completed", failed: "failed", pending: "idle" }
     const suffix = statusClassMap[status] || "idle"
-    node.classList.forEach((cssClass) => {
+    Array.from(node.classList).forEach((cssClass) => {
       if (cssClass.startsWith("dashboard-badge--")) node.classList.remove(cssClass)
     })
     node.classList.add(`dashboard-badge--${suffix}`)

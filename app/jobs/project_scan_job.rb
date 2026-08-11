@@ -9,7 +9,7 @@ class ProjectScanJob < ApplicationJob
     operation ||= OperationProgress.start!(
       operation_type: "project_scan",
       operation_id: scan_id,
-      total_count: 5,
+      total_count: 6,
       message: "Starting project scan",
       details: {
         project_root: project_root,
