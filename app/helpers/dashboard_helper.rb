@@ -69,6 +69,40 @@ module DashboardHelper
       "—"
   end
 
+  def project_scan_skill_depth_label(depth)
+    ProjectScanSkill::DEPTH_LABELS[depth.to_s] || depth.to_s.humanize
+  end
+
+  def project_scan_skill_name(skill)
+    skill.dig(:details, "project_name").presence ||
+      File.basename(skill.dig(:details, "project_root").to_s).presence ||
+      skill[:message].presence ||
+      "—"
+  end
+
+  def project_scan_skill_current_depth_label(skill)
+    depth = skill[:phase]
+    project_scan_skill_depth_label(depth)
+  end
+
+  def project_scan_skill_depths(skill)
+    skill.dig(:details, "depths").presence || ProjectScanSkill::DEPTH_ORDER
+  end
+
+  def project_scan_skill_step_state(skill, depth)
+    depths = project_scan_skill_depths(skill)
+    depth_index = depths.index(depth.to_s) || -1
+    return "pending" if depth_index < 0
+
+    current_index = [ skill.dig(:details, "current_depth_index").to_i, depths.size ].min
+
+    return "complete" if depth_index < current_index
+    return "active" if depth_index == current_index && !skill[:status].to_s.in?(%w[completed failed])
+    return "active" if depth_index == current_index && skill[:status].to_s == "paused"
+
+    "pending"
+  end
+
   def scan_review_item_label(row)
     payload = row.effective_payload.with_indifferent_access
     reason = payload[:reason].presence

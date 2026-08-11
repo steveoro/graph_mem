@@ -67,6 +67,8 @@ a project directory and keep the graph synchronized with the actual source:
 - Auto-approval of destructive changes; those stay in the review queue.
 - Real-time scan progress is now wired into the Project Scans dashboard card via
   the existing `OperationProgress` / ActionCable channel.
+- The human-guided, multi-stage skill companion is now available on the
+  dashboard with deterministic, no-LLM depth scanning.
 
 ## Design Alternatives
 
@@ -184,6 +186,10 @@ wraps the MCP call for convenience.
    - Implemented: a trigger form on the card starts a new scan.
    - Implemented: active scan rows subscribe to `OperationProgressChannel` and
      update status, phase, percentage, and progress bar live via ActionCable.
+   - Implemented: a "Project Scan Skill Companion" dashboard card triggers and
+     controls the human-guided multi-stage scan, showing the depth stepper,
+     current depth, live progress, Continue/Stop actions, and reusing the
+     `OperationProgressChannel` for updates.
 
 8. **Summarization fallback**
    - If `SummarizationConfig.llm_usable?` is false or the LLM call fails,
@@ -194,13 +200,15 @@ wraps the MCP call for convenience.
      - marks the result with `fallback: true` and a `fallback_reason`.
 
 9. **Devin-local multi-stage skill**
-   - Add `.devin/skills/project_scan/SKILL.md` for the no-LLM / human-guided case.
-   - The skill walks the project in progressive depths
+   - Implemented: `.devin/skills/project_scan/SKILL.md` for the no-LLM / human-guided case.
+   - Implemented: server-side `ProjectScanSkill` service and `ProjectScanSkillJob`
+     that walk the project in progressive depths
      (`birds_eye`, `architecture`, `usage`, `ui`, `tests_and_docs`),
-     uses existing GraphMem MCP tools (`create_entity`, `create_observation`,
-     `create_relation`) to persist facts, and asks the user whether to continue
-     after each depth. It records progress as an observation on the project entity
-     so scans can resume across sessions.
+     using GraphMem models directly to persist `Project`, `Component`, `Route`,
+     `Model`, `Service`, `Configuration`, `TestCase`, and `Documentation` entities,
+     observations, and `part_of` relations. The job pauses after each depth and
+     waits for the operator to continue from the dashboard, so it works without an
+     LLM.
 
 10. **Tests**
     - Unit specs for `ProjectScanner` with a fixture repo and a stubbed LLM
@@ -226,6 +234,9 @@ wraps the MCP call for convenience.
   deterministic, file-metadata-based extraction.
 - The Devin-local `project_scan` skill can perform a multi-stage, human-guided
   scan without an LLM.
+- The dashboard Project Scan Skill Companion lets operators start, continue, and
+  stop a guided, no-LLM scan through the `birds_eye` → `architecture` → `usage` →
+  `ui` → `tests_and_docs` depths with live progress updates.
 
 ## Assumptions
 

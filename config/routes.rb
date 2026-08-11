@@ -106,6 +106,7 @@ Rails.application.routes.draw do
   get "search", to: "search#results"
   get "graph", to: "pages#graph"
   resources :project_scans, only: [ :create ]
+  resources :project_scan_skills, only: [ :create, :update ]
   get "maintenance", to: "maintenance#index"
 
   namespace :operator do
