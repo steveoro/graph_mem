@@ -40,8 +40,6 @@ class AppSettings < RailsSettings::Base
   # Project scan settings
   field :project_scan_roots, default: [ Dir.pwd, Dir.home, Dir.tmpdir ].join(","), type: :string
   field :enable_project_scan_validation, default: true, type: :boolean
-  field :project_scan_validation_batch_size, default: 10, type: :integer,
-        validates: { numericality: { greater_than: 0, less_than_or_equal_to: 100 } }
 
   # Compaction review row retention (approved/dismissed rows are pruned after N days)
   field :compaction_review_row_retention_days, default: 30, type: :integer,

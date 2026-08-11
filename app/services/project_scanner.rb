@@ -185,10 +185,12 @@ class ProjectScanner
 
     return failed_result("Project entity not found: #{@project_name}") unless @project_entity
 
-    validate_project_subtree!
-    seed_scan_review_items!
+    unless @dry_run
+      validate_project_subtree!
+      seed_scan_review_items!
+    end
 
-    update_progress!(phase: "completed", message: "Project validation completed")
+    update_progress!(phase: "completed", message: "Project validation completed (#{@dry_run ? 'dry run' : 'applied'})")
 
     Result.new(
       success: @errors.empty?,
@@ -636,7 +638,7 @@ class ProjectScanner
       next unless entity
       next if entity.entity_type == NodeOperationsStrategy::PROJECT_ENTITY_TYPE
 
-      # Obsolete observations sourced from prior scans or without a source.
+      # Obsolete observations sourced from prior project scan runs.
       entity.active_memory_observations.each do |observation|
         if from_prior_scan?(observation.source)
           observation.mark_obsolete!(reason: "not found in project scan")
@@ -660,7 +662,7 @@ class ProjectScanner
     source = source.to_s
     return false if source.include?(@scan_id)
 
-    source.start_with?("project_scan") || source.start_with?("project_scan_skill") || source.blank?
+    source.start_with?("project_scan") || source.start_with?("project_scan_skill")
   end
 
   def validate_project_subtree!
@@ -686,7 +688,7 @@ class ProjectScanner
   def validate_entity_observations(entity)
     entity.active_memory_observations.find_each do |observation|
       next if observation.source.to_s.include?(@scan_id)
-      next unless from_project_scan_source?(observation.source)
+      next unless from_prior_scan?(observation.source)
       next if observation.content.blank?
 
       action = resolve_observation_action(observation, entity)
@@ -703,11 +705,6 @@ class ProjectScanner
     @logger.warn "ProjectScanner: failed to validate observations for entity #{entity.id}: #{e.message}"
   end
 
-  def from_project_scan_source?(source)
-    source = source.to_s
-    source.start_with?("project_scan") || source.start_with?("project_scan_skill") || source.blank?
-  end
-
   def resolve_observation_action(observation, entity)
     content = observation.content.to_s
 
@@ -716,6 +713,21 @@ class ProjectScanner
     end
 
     candidates = find_observation_candidates(content, exclude: entity)
+
+    if candidates.size > 1
+      best = select_best_candidate(candidates)
+      return {
+        type: :review,
+        payload: {
+          id: SecureRandom.uuid,
+          kind: "move_observation",
+          observation_id: observation.id,
+          target_entity_id: best[:entity]&.id,
+          reason: "Ambiguous target: observation matches #{candidates.map { |c| "#{c[:entity].name} (#{c[:entity].entity_type})" }.join(', ')}"
+        }
+      }
+    end
+
     best = select_best_candidate(candidates)
 
     if best
@@ -976,5 +988,6 @@ class ProjectScanner
         entities_reparented: @entities_reparented_count
       }
     )
+    OperationProgressBroadcaster.call(@operation_progress)
   end
 end

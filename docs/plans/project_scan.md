@@ -146,8 +146,6 @@ wraps the MCP call for convenience.
 2. **Project scan settings**
    - `enable_project_scan_validation` (default `true`) toggles the final
      validation pass.
-   - `project_scan_validation_batch_size` (default `10`) controls how many
-     review items are surfaced or processed in one batch.
 
 3. **Models / enums**
    - Add `"scan_review"` to `MaintenanceReport::REPORT_TYPES`.

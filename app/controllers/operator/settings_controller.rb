@@ -140,7 +140,7 @@ module Operator
         },
         project_scans: {
           title: t("operator.settings.groups.project_scans"),
-          settings: %w[project_scan_roots enable_project_scan_validation project_scan_validation_batch_size]
+          settings: %w[project_scan_roots enable_project_scan_validation]
         }
       }
     end
@@ -208,11 +208,6 @@ module Operator
         File.expand_path(root)
       rescue StandardError => e
         return t("operator.settings.project_scans.invalid_root", error: e.message)
-      end
-
-      batch_size = settings["project_scan_validation_batch_size"].to_i
-      if batch_size.positive? && (batch_size < 1 || batch_size > 100)
-        return t("operator.settings.project_scans.invalid_validation_batch_size")
       end
 
       nil
