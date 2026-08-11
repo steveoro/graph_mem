@@ -5,6 +5,29 @@
     %h2.dashboard-card__title Project Scans
     %span.dashboard-card__hint Recent source scans
   .dashboard-card__body
+    .dashboard-card__section{ data: { testid: "dashboard-project-scan-trigger" } }
+      %h3.dashboard-card__subtitle Trigger scan
+      = form_with url: project_scans_path, method: :post, local: true, html: { class: "project-scan-form", data: { testid: "project-scan-trigger-form" } } do
+        .project-scan-form__field
+          = label_tag :project_root, "Project root"
+          = text_field_tag :project_root, nil, placeholder: "/path/to/project", required: true, class: "project-scan-form__input"
+        .project-scan-form__field
+          = label_tag :project_name, "Project name (optional)"
+          = text_field_tag :project_name, nil, placeholder: "Project name", class: "project-scan-form__input"
+        .project-scan-form__field
+          = label_tag :aliases, "Aliases (optional)"
+          = text_field_tag :aliases, nil, placeholder: "alias1, alias2", class: "project-scan-form__input"
+        .project-scan-form__field
+          = label_tag :mode, "Mode"
+          = select_tag :mode, options_for_select(ScanProjectTool::MODES, "initial"), class: "project-scan-form__input"
+        .project-scan-form__field
+          = label_tag :file_globs, "File globs (optional)"
+          = text_area_tag :file_globs, nil, rows: 2, placeholder: "README*, package.json, ...", class: "project-scan-form__input"
+        .project-scan-form__field.project-scan-form__field--inline
+          = label_tag :dry_run, "Dry run"
+          = check_box_tag :dry_run, "1", false, class: "project-scan-form__checkbox"
+        = submit_tag "Start scan", class: "dashboard-btn dashboard-btn--primary"
+
     - if scans.any?
       .dashboard-stat-chips
         = dashboard_stat_chip("Total", scans.count)

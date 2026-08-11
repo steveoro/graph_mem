@@ -1,0 +1,41 @@
+# frozen_string_literal: true
+
+class ProjectScansController < ApplicationController
+  def create
+    project_root = params[:project_root].to_s.strip
+    return redirect_to root_path, alert: "Project root is required." if project_root.blank?
+
+    expanded_root = File.expand_path(project_root)
+    unless File.directory?(expanded_root)
+      return redirect_to root_path, alert: "Project root is not a directory: #{project_root}"
+    end
+
+    mode = params[:mode].to_s.downcase.presence || "initial"
+    unless ScanProjectTool::MODES.include?(mode)
+      return redirect_to root_path, alert: "Mode must be one of: #{ScanProjectTool::MODES.join(', ')}"
+    end
+
+    scan_id = SecureRandom.uuid
+    ProjectScanJob.perform_later(
+      scan_id,
+      expanded_root,
+      params[:project_name].to_s.presence,
+      params[:aliases].to_s.presence,
+      mode,
+      params[:dry_run] == "1",
+      file_globs_param
+    )
+
+    redirect_to root_path, notice: "Project scan queued for #{expanded_root}. Scan ID: #{scan_id}"
+  rescue StandardError => e
+    Rails.logger.error "Project scan trigger failed: #{e.message}\n#{e.backtrace.first(5).join("\n")}"
+    redirect_to root_path, alert: "Failed to queue project scan: #{e.message}"
+  end
+
+  private
+
+  def file_globs_param
+    globs = params[:file_globs].to_s.split(/[\r\n,]+/).map(&:strip).reject(&:blank?)
+    globs.presence
+  end
+end
