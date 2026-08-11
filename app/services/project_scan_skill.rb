@@ -50,7 +50,7 @@ class ProjectScanSkill
     @depths = Array(details["depths"]).presence || DEPTH_ORDER
     @current_depth_index = details["current_depth_index"].to_i
     @project_entity = nil
-    reset_counters
+    load_counters
     @errors = []
   end
 
@@ -84,22 +84,24 @@ class ProjectScanSkill
   rescue StandardError => e
     Rails.logger.error "ProjectScanSkill failed: #{e.message}\n#{e.backtrace.first(5).join("\n")}"
     fail!(e)
-    raise
+    result(:failed)
   end
 
   def stop!
-    depth = @depths[@current_depth_index.to_i - 1]
+    previous_index = @current_depth_index.to_i - 1
+    depth = previous_index >= 0 ? @depths[previous_index] : nil
     message = depth ? "Stopped by operator after #{DEPTH_LABELS[depth] || depth}" : "Stopped by operator"
     complete!(message, @current_depth_index)
   end
 
   private
 
-  def reset_counters
-    @created_count = 0
-    @updated_count = 0
-    @observations_created_count = 0
-    @relations_created_count = 0
+  def load_counters
+    existing = (@operation.counters || {}).with_indifferent_access
+    @created_count = existing[:entities_created].to_i
+    @updated_count = existing[:entities_updated].to_i
+    @observations_created_count = existing[:observations_created].to_i
+    @relations_created_count = existing[:relations_created].to_i
   end
 
   def counters
@@ -223,6 +225,8 @@ class ProjectScanSkill
       app/controllers/**/*
       app/helpers/**/*
       frontend/**/*
+      config/routes.rb
+      config/routes/*
       routes.rb
       pages/**/*
       app/components/**/*

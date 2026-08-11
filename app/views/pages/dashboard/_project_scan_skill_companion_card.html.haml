@@ -27,12 +27,13 @@
               %progress{ max: 100, value: skill[:percentage] || 0 }
               %span{ data: { progress_percentage: true } }= "#{skill[:percentage] || 0}%"
 
+            - skill_status = skill[:status].to_s
             .project-scan-skill-row__actions
-              - if skill[:status].to_s == "paused"
+              %span{ data: { progress_action: true, progress_visible_for: "paused" }, style: ("display: none" unless skill_status == "paused") }
                 = button_to "Continue", project_scan_skill_path(skill[:operation_id], skill_action: "continue"), method: :patch, class: "dashboard-btn dashboard-btn--primary", data: { testid: "continue-project-scan-skill-#{skill[:operation_id]}" }
-              - if skill[:status].to_s.in?(%w[running pending paused])
+              %span{ data: { progress_action: true, progress_visible_for: "running pending paused" }, style: ("display: none" unless %w[running pending paused].include?(skill_status)) }
                 = button_to "Stop", project_scan_skill_path(skill[:operation_id], skill_action: "stop"), method: :patch, class: "dashboard-btn dashboard-btn--secondary", data: { testid: "stop-project-scan-skill-#{skill[:operation_id]}" }
-              - if skill[:status].to_s.in?(%w[completed failed])
+              %span{ data: { progress_action: true, progress_visible_for: "completed failed" }, style: ("display: none" unless %w[completed failed].include?(skill_status)) }
                 %span.dashboard-card__hint= skill[:message]
     - else
       %p.dashboard-card__summary No guided project scan sessions yet.

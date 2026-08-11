@@ -32,6 +32,16 @@ export default class extends Controller {
       element.querySelectorAll("[data-progress-percentage]").forEach((node) => { node.textContent = `${payload.percentage ?? 0}%` })
       element.querySelectorAll("progress").forEach((node) => { node.value = payload.percentage ?? 0 })
       element.dataset.progressStatus = status
+      this.updateActionVisibility(element, status)
+    })
+  }
+
+  updateActionVisibility(element, status) {
+    element.querySelectorAll("[data-progress-action]").forEach((node) => {
+      const visibleFor = (node.dataset.progressVisibleFor || "").split(/\s+/).filter(Boolean)
+      if (visibleFor.length === 0) return
+
+      node.style.display = visibleFor.includes(status) ? "" : "none"
     })
   }
 

@@ -8,7 +8,7 @@ class ProjectScanSkillJob < ApplicationJob
   def perform(operation_id)
     operation = OperationProgress.find_by(operation_id: operation_id)
     return unless operation
-    return if operation.status.in?(%w[completed failed])
+    return unless operation.status.in?(%w[pending paused])
 
     ProjectScanSkill.process!(operation)
   end
