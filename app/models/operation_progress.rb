@@ -30,7 +30,7 @@ class OperationProgress < ApplicationRecord
     )
   end
 
-  def update_progress!(current:, total: total_count, phase: phase, message: nil, counters: nil, details: nil)
+  def update_progress!(current:, total: total_count, phase: self.phase, message: nil, counters: nil, details: nil)
     next_current = [ current.to_i, 0 ].max
     next_total = [ total.to_i, 0 ].max
     next_current = [ next_current, next_total ].min
@@ -47,11 +47,12 @@ class OperationProgress < ApplicationRecord
     )
   end
 
-  def complete!(current: total_count, message: nil, counters: nil, details: nil)
+  def complete!(current: total_count, phase: "completed", message: nil, counters: nil, details: nil)
     final_total = [ total_count.to_i, current.to_i, 0 ].max
     update_progress!(
       current: final_total,
       total: final_total,
+      phase: phase,
       message: message,
       counters: counters,
       details: details
