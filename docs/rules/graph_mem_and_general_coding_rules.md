@@ -52,7 +52,7 @@ state management, not as a substitute for inspecting the repository.
 | Recall | `search_entities`, `search_subgraph`, `get_entity`, `get_subgraph_by_ids`, `summarize`, `list_entities` |
 | Traverse | `find_relations`, `traverse_graph`, `find_shortest_path` |
 | Persist | `create_entity`, `update_entity`, `delete_entity`, `create_observation`, `update_observation`, `delete_observation`, `create_relation`, `delete_relation`, `bulk_update` |
-| Maintain | `suggest_merges`, `merge_entities`, `dream_state_status`, `get_maintenance_reports`, `get_graph_stats`, `get_version`, `get_current_time` |
+| Maintain | `suggest_merges`, `merge_entities`, `dream_state_status`, `get_maintenance_reports`, `get_graph_stats`, `get_version`, `get_current_time`, `scan_project`, `scan_project_status` |
 
 ### Multi-Agent Context Scoping
 
@@ -60,6 +60,31 @@ state management, not as a substitute for inspecting the repository.
 - `set_context` / `clear_context` affect ONLY your own client bucket — they never disturb other agents sharing the graph.
 - Agents without the header share the `"default"` bucket. Set a stable `X-MCP-Client` in your MCP config when multiple agents use one instance.
 - Because context persists, on Orient you may already have an active context from a prior session — always `get_context` first before assuming none.
+
+### Project Scan Validation
+
+- `scan_project(project_root, project_name, aliases, mode, dry_run, file_globs)` starts an
+  asynchronous source-scan of a project root. It treats the files as the source of truth,
+  reconciles the graph, and then runs an automatic facts-checking pass over the existing
+  project subtree.
+- The final validation pass:
+  - Skips entities, observations, and relations created during the same scan run
+    (identified by the per-run source ref `project_scan:<scan_id>:<phase>` and
+    `MemoryRelation#properties["scan_id"]`).
+  - Moves an observation to a better-matching target entity when the target is
+    unambiguous (the target name/alias appears as a whole word or phrase in the
+    observation text and the text does not reference its current entity or project).
+  - Marks observations that do not reference their entity or project and have no
+    clear target as `obsolete` with `confidence: 1.0`.
+  - Auto-deletes `part_of` relations that point to the wrong project root.
+  - Queues stale usage relations (`delete_relation`), entities that no longer appear
+    in the source (`delete_entity`), and wrong-parent moves (`reparent_entity`) as
+    `scan_review` maintenance rows.
+- Use `mode: "validate"` to run only the validation pass on an existing project
+  without re-reading files.
+- Agents can consume `scan_review` rows via `get_maintenance_reports(report_type:
+  "scan_review")` and apply `move_observation`, `reparent_entity`, `delete_relation`,
+  or `delete_entity` actions just like compaction reviews.
 
 ### Dream-State Compaction Awareness
 

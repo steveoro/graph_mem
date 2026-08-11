@@ -210,6 +210,18 @@ class CompactionReviewService
         return nil if review_item_id.blank?
 
         [ "dismiss_compaction_review", review_item_id.to_s ].join("|")
+      when "move_observation"
+        observation_id = payload[:observation_id] || payload.dig("payload", "observation_id")
+        target_entity_id = payload[:target_entity_id] || payload[:target_id] || payload.dig("payload", "target_entity_id")
+        return nil if observation_id.blank? || target_entity_id.blank?
+
+        [ "move_observation", observation_id.to_i, target_entity_id.to_i ].join("|")
+      when "reparent_entity"
+        entity_id = payload[:entity_id] || payload[:node_id] || payload.dig("payload", "entity_id")
+        parent_id = payload[:parent_id] || payload.dig("payload", "parent_id")
+        return nil if entity_id.blank? || parent_id.blank?
+
+        [ "reparent_entity", entity_id.to_i, parent_id.to_i ].join("|")
       else
         nil
       end
@@ -262,6 +274,11 @@ class CompactionReviewService
         validate_relation_type!(edits[:relation_type]) if edits[:relation_type].present?
       when "orphan_parent"
         validate_entity_ids!([ edits[:parent_id] ].compact) if edits[:parent_id].present?
+      when "move_observation"
+        validate_observation_id!(edits[:observation_id]) if edits[:observation_id].present?
+        validate_entity_ids!([ edits[:target_entity_id] || edits[:target_id] ].compact) if (edits[:target_entity_id] || edits[:target_id]).present?
+      when "reparent_entity"
+        validate_entity_ids!([ edits[:entity_id] || edits[:node_id], edits[:parent_id] ].compact)
       end
     end
 
@@ -283,6 +300,14 @@ class CompactionReviewService
       raise ActiveRecord::RecordInvalid.new(record)
     end
 
+    def validate_observation_id!(observation_id)
+      return if MemoryObservation.exists?(id: observation_id.to_i)
+
+      record = MaintenanceReportRow.new
+      record.errors.add(:base, "Observation ##{observation_id} does not exist")
+      raise ActiveRecord::RecordInvalid.new(record)
+    end
+
     def apply_action(row, action_params)
       effective = row.effective_payload.with_indifferent_access
 
@@ -295,6 +320,10 @@ class CompactionReviewService
         move_to_parent(row, effective, action_params)
       when "relation_integrity"
         apply_relation_integrity(effective)
+      when "move_observation"
+        move_observation(effective, action_params)
+      when "reparent_entity"
+        reparent_entity(effective, action_params)
       when "delete_relation"
         delete_relation(effective)
       when "delete_entity"
@@ -413,6 +442,45 @@ class CompactionReviewService
       result = dismiss(review_item_id, reason: reason, report_type: "compaction_review")
       result[:message] = "Compaction review item dismissed" if result[:success]
       result
+    end
+
+    def move_observation(effective, action_params)
+      observation_id = pick_id(action_params, :observation_id, effective, [ :observation_id, [ "payload", "observation_id" ] ])
+      target_entity_id = pick_id(action_params, :target_entity_id, effective, [ :target_entity_id, :target_id, [ "payload", "target_entity_id" ] ])
+
+      return { success: false, error: "Observation and target entity are required" } if observation_id.zero? || target_entity_id.zero?
+
+      observation = MemoryObservation.find_by(id: observation_id)
+      return { success: false, error: "Observation not found" } unless observation
+
+      target_entity = MemoryEntity.find_by(id: target_entity_id)
+      return { success: false, error: "Target entity not found" } unless target_entity
+
+      return { success: true, message: "Observation already belongs to target entity" } if observation.memory_entity_id == target_entity.id
+
+      ActiveRecord::Base.transaction do
+        MemoryObservation.create!(
+          memory_entity: target_entity,
+          content: observation.content,
+          source: "project_scan:review_move:from_observation:#{observation.id}",
+          confidence: 1.0
+        )
+        observation.mark_obsolete!(reason: "Moved to entity #{target_entity.name} (#{target_entity.id}) via scan review")
+        observation.update!(confidence: 1.0)
+      end
+
+      { success: true, message: "Observation moved to #{target_entity.name}" }
+    rescue ActiveRecord::RecordInvalid, ActiveRecord::RecordNotUnique => e
+      { success: false, error: "Failed to move observation: #{e.message}" }
+    end
+
+    def reparent_entity(effective, action_params)
+      entity_id = pick_id(action_params, :entity_id, effective, [ :entity_id, :node_id, [ "payload", "entity_id" ] ])
+      parent_id = pick_id(action_params, :parent_id, effective, [ :parent_id, [ "payload", "parent_id" ] ])
+
+      return { success: false, error: "Entity and parent are required" } if entity_id.zero? || parent_id.zero?
+
+      NodeOperationsStrategy.new.move_to_parent(entity_id, parent_id)
     end
 
     def pick_id(action_params, key, effective, fallback_keys)

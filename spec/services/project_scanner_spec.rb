@@ -106,6 +106,113 @@ RSpec.describe ProjectScanner, type: :service do
     expect(MemoryEntity.find_by(name: "package.json", entity_type: "Configuration")).to be_present
   end
 
+  it "moves mis-assigned observations to the correct target entity during validation" do
+    project = MemoryEntity.create!(name: "TestProject", entity_type: "Project")
+    jquery = MemoryEntity.create!(name: "jQuery", entity_type: "Framework")
+    compactor = MemoryEntity.create!(name: "Dream State Compactor", entity_type: "Component")
+    MemoryRelation.create!(from_entity: jquery, to_entity: project, relation_type: "part_of")
+    MemoryRelation.create!(from_entity: compactor, to_entity: project, relation_type: "part_of")
+    observation = MemoryObservation.create!(
+      memory_entity: jquery,
+      content: "The dream state compactor schedules UI refreshes.",
+      source: "project_scan:old:reconcile"
+    )
+
+    allow(SummaryGenerationClient).to receive(:generate).and_return(
+      ok: true,
+      text: {
+        project: { name: "TestProject", aliases: [], description: "A test project" },
+        architecture: [
+          {
+            entity: { name: "AuthService", type: "Service", aliases: [], description: "" },
+            observations: [ "AuthService validates user credentials." ],
+            relations: [ { to: "TestProject", type: "part_of", confidence: 0.95 } ]
+          },
+          {
+            entity: { name: "jQuery", type: "Framework", aliases: [], description: "" },
+            observations: [],
+            relations: [ { to: "TestProject", type: "part_of", confidence: 0.95 } ]
+          },
+          {
+            entity: { name: "Dream State Compactor", type: "Component", aliases: [], description: "" },
+            observations: [],
+            relations: [ { to: "TestProject", type: "part_of", confidence: 0.95 } ]
+          }
+        ]
+      }.to_json
+    )
+
+    scanner = ProjectScanner.new(project_root: @project_root)
+    result = scanner.call
+
+    expect(result.success).to be true
+    expect(result.observations_moved).to eq(1)
+    expect(observation.reload).to be_obsolete
+    expect(compactor.active_memory_observations.first&.content).to eq(observation.content)
+  end
+
+  it "auto-deletes part_of relations that point to the wrong project root" do
+    project = MemoryEntity.create!(name: "TestProject", entity_type: "Project")
+    other_project = MemoryEntity.create!(name: "OtherProject", entity_type: "Project")
+    stray = MemoryEntity.create!(name: "StrayComponent", entity_type: "Component")
+    MemoryRelation.create!(from_entity: stray, to_entity: project, relation_type: "part_of")
+    wrong_relation = MemoryRelation.new(from_entity: stray, to_entity: other_project, relation_type: "part_of")
+    wrong_relation.save(validate: false)
+
+    allow(SummaryGenerationClient).to receive(:generate).and_return(
+      ok: true,
+      text: {
+        project: { name: "TestProject", aliases: [], description: "A test project" },
+        architecture: [
+          {
+            entity: { name: "StrayComponent", type: "Component", aliases: [], description: "" },
+            observations: [ "StrayComponent exists." ],
+            relations: [ { to: "TestProject", type: "part_of", confidence: 0.95 } ]
+          }
+        ]
+      }.to_json
+    )
+
+    scanner = ProjectScanner.new(project_root: @project_root)
+    result = scanner.call
+
+    expect(result.success).to be true
+    expect(result.relations_deleted).to eq(1)
+    expect(MemoryRelation.exists?(wrong_relation.id)).to be false
+  end
+
+  it "marks observations with no clear target as obsolete during validation" do
+    project = MemoryEntity.create!(name: "TestProject", entity_type: "Project")
+    entity = MemoryEntity.create!(name: "OrphanedFact", entity_type: "Component")
+    MemoryRelation.create!(from_entity: entity, to_entity: project, relation_type: "part_of")
+    observation = MemoryObservation.create!(
+      memory_entity: entity,
+      content: "Some totally unrelated fact with no matching target.",
+      source: "project_scan:old:reconcile"
+    )
+
+    allow(SummaryGenerationClient).to receive(:generate).and_return(
+      ok: true,
+      text: {
+        project: { name: "TestProject", aliases: [], description: "A test project" },
+        architecture: [
+          {
+            entity: { name: "OrphanedFact", type: "Component", aliases: [], description: "" },
+            observations: [ "OrphanedFact is present." ],
+            relations: [ { to: "TestProject", type: "part_of", confidence: 0.95 } ]
+          }
+        ]
+      }.to_json
+    )
+
+    scanner = ProjectScanner.new(project_root: @project_root)
+    result = scanner.call
+
+    expect(result.success).to be true
+    expect(observation.reload).to be_obsolete
+    expect(observation.confidence).to eq(1.0)
+  end
+
   it "returns an error when the project root does not exist" do
     scanner = ProjectScanner.new(project_root: "/nonexistent/path")
     result = scanner.call

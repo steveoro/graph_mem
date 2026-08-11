@@ -584,11 +584,13 @@ class DataExchangeController < ApplicationController
   end
 
   def compaction_action_params
-    params.permit(:source_id, :target_id, :from_id, :to_id, :relation_type, :node_id, :parent_id, :reason)
+    params.permit(:source_id, :target_id, :from_id, :to_id, :relation_type, :node_id, :parent_id,
+                  :observation_id, :target_entity_id, :entity_id, :reason)
   end
 
   def compaction_edit_params
-    params.permit(:source_id, :target_id, :from_id, :to_id, :relation_type, :node_id, :parent_id, :reason)
+    params.permit(:source_id, :target_id, :from_id, :to_id, :relation_type, :node_id, :parent_id,
+                  :observation_id, :target_entity_id, :entity_id, :reason)
   end
 
   # Find duplicate relation pairs (A→B and B→A with same type)

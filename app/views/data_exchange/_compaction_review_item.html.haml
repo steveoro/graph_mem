@@ -52,6 +52,47 @@
           - if issue["delete"].present?
             %p.text-xs.text-gray-600
               Remove: #{issue.dig("delete", "from_name")} → #{issue.dig("delete", "to_name")}
+        - when "move_observation"
+          - observation_id = payload["observation_id"]
+          - observation = MemoryObservation.find_by(id: observation_id)
+          - target_id = payload["target_entity_id"] || payload["target_id"]
+          - target_name = MemoryEntity.find_by(id: target_id)&.name || payload["target_name"]
+          %p.text-sm.mb-2
+            %strong Move observation
+            %span.text-gray-500= " ##{observation_id}"
+          - if observation
+            %p.text-xs.text-gray-600.mb-2= observation.content
+          = render "entity_search_select", row: row, field_name: "target_entity_id", label_text: "Target entity", current_id: target_id, current_name: target_name, select_id: "target-entity-select-#{row.row_uuid}", search_id: "target-entity-search-#{row.row_uuid}"
+        - when "reparent_entity"
+          - entity_id = payload["entity_id"] || payload["node_id"]
+          - entity_name = payload["entity_name"] || MemoryEntity.find_by(id: entity_id)&.name
+          - parent_id = payload["parent_id"]
+          - parent_name = MemoryEntity.find_by(id: parent_id)&.name || payload["parent_name"]
+          %p.text-sm.mb-2
+            %strong= entity_name
+            %span.text-gray-500= " (#{payload['entity_type']} ##{entity_id})"
+          = render "entity_search_select", row: row, field_name: "parent_id", label_text: "Parent project", current_id: parent_id, current_name: parent_name, select_id: "parent-select-#{row.row_uuid}", search_id: "parent-search-#{row.row_uuid}"
+        - when "delete_relation"
+          - relation_id = payload["relation_id"]
+          - relation = MemoryRelation.find_by(id: relation_id)
+          %p.text-sm.mb-2
+            %strong Delete relation
+            %span.text-gray-500= " ##{relation_id}"
+          - if relation
+            %p.text-xs.text-gray-600
+              #{relation.from_entity&.name} → #{relation.to_entity&.name} (#{relation.relation_type})
+        - when "delete_entity"
+          - entity_id = payload["entity_id"]
+          - entity_name = payload["entity_name"] || MemoryEntity.find_by(id: entity_id)&.name
+          %p.text-sm.mb-2
+            %strong Delete entity
+            %span.text-gray-500= " ##{entity_id}"
+          %p.text-xs.text-gray-600= entity_name
+        - when "dismiss_compaction_review"
+          %p.text-sm.mb-2
+            %strong Dismiss compaction review
+            %span.text-gray-500= " ##{payload["review_item_id"]}"
+          %p.text-xs.text-gray-600= payload["reason"]
         - when "entity_error"
           %p.text-sm
             %strong #{payload["error_class"]}:
@@ -83,6 +124,22 @@
           %p.text-xs= "Integrity repair: #{issue['kind'] || payload['issue_kind']}"
           - if issue["parent_entity_ids"].present?
             %p.text-xs.text-gray-500= "Parents: #{issue['parent_entity_ids'].join(', ')}"
+        - when "move_observation"
+          %p.text-xs= "Move observation to a better-matching entity."
+          - if payload["reason"].present?
+            %p.text-xs.text-gray-500= payload["reason"]
+        - when "reparent_entity"
+          %p.text-xs= "Change the part_of parent of this entity."
+          - if payload["reason"].present?
+            %p.text-xs.text-gray-500= payload["reason"]
+        - when "delete_relation"
+          %p.text-xs= "Delete a stale or unsupported relation."
+          - if payload["reason"].present?
+            %p.text-xs.text-gray-500= payload["reason"]
+        - when "delete_entity"
+          %p.text-xs= "Delete an entity that was not found in the scan."
+        - when "dismiss_compaction_review"
+          %p.text-xs= "Dismiss a conflicting compaction review item."
       .md:col-span-3.flex.flex-wrap.items-start.gap-2
         - if row.active? || row.ignored?
           = submit_tag "Save", name: "review_action", value: "edit", class: "rounded bg-blue-600 px-2 py-1 text-xs text-white hover:bg-blue-700", form: form_id

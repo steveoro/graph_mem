@@ -31,7 +31,8 @@ class ProjectScanJob < ApplicationJob
       mode: mode,
       dry_run: dry_run,
       file_globs: file_globs,
-      operation_progress: operation
+      operation_progress: operation,
+      scan_id: scan_id
     )
 
     result = scanner.call
@@ -39,7 +40,11 @@ class ProjectScanJob < ApplicationJob
       operation.reload
       operation.complete!(
         message: "Project scan completed",
-        counters: result.to_h.slice(:entities_created, :entities_updated, :observations_created, :observations_obsoleted, :relations_created, :dismissed_compaction_items).compact,
+        counters: result.to_h.slice(
+          :entities_created, :entities_updated, :observations_created, :observations_obsoleted,
+          :observations_moved, :relations_created, :relations_deleted, :entities_reparented,
+          :dismissed_compaction_items
+        ).compact,
         details: operation.details&.merge(
           fallback: result.fallback,
           fallback_reason: result.fallback_reason,
