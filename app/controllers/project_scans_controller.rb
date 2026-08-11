@@ -47,6 +47,9 @@ class ProjectScansController < ApplicationController
 
   def allowed_root?(real_path)
     allowed_scan_roots.any? do |root|
+      allowed_real = Pathname.new(root).realpath.to_s
+      real_path == allowed_real || real_path.start_with?("#{allowed_real}/")
+    rescue SystemCallError, ArgumentError
       real_path == root || real_path.start_with?("#{root}/")
     end
   end
