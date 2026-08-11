@@ -162,7 +162,14 @@ wraps the MCP call for convenience.
    - `ProjectScanValidator` is a dedicated, testable collaborator that performs
      the final facts-checking pass over the existing project subtree. It is
      called by `ProjectScanner` and can also be exercised in isolation.
-   - `call` returns a result hash with counters and queued review items.
+   - The validator supports batched, resumable execution. The batch size is
+     controlled by the `project_scan_validation_batch_size` setting (default 5).
+     When the batch limit is reached, the validator pauses, persists
+     `validation_state` in `OperationProgress#details`, and returns a paused
+     result. The next `mode: "validate"` scan with the same `scan_id` resumes
+     from the pending entity list.
+   - `call` returns a result hash with counters, queued review items, and a
+     `paused` flag with `remaining_entity_ids`.
    - A new `mode: "validate"` skips file discovery and runs only the
      validation pass over the existing project subtree.
    - File discovery:
@@ -198,6 +205,14 @@ wraps the MCP call for convenience.
          `reason: "contradicted by project scan"`.
    - **Validation phase** (final automatic pass, implemented in the dedicated
      `ProjectScanValidator` service and gated by `enable_project_scan_validation`):
+     - The `project_scan_validation_batch_size` setting (default `5`) controls
+       how many project subtree entities are validated in one batch. `0` disables
+       batching and processes the whole subtree in a single run.
+     - After each batch the validator persists `validation_state`
+       (`pending_entity_ids`, `processed_entity_ids`, `project_entity_id`,
+       `project_root`) in the current `OperationProgress` and returns `paused`.
+       The operation is paused; a subsequent `mode: "validate"` scan with the same
+       `scan_id` resumes from the saved pending list.
      - Walk the existing project subtree, excluding entities created during this
        scan and the `Project` root itself.
      - Distinguish scan-sourced observations from manually-created ones using

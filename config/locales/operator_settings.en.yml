@@ -99,6 +99,9 @@ en:
         enable_project_scan_validation:
           label: "Enable project scan validation"
           description: "When enabled, every project scan finishes with an automatic facts-checking pass over the existing project subtree. Mis-assigned observations and stale relations are either repaired automatically or queued as scan_review items."
+        project_scan_validation_batch_size:
+          label: "Validation batch size"
+          description: "Maximum number of project subtree entities to validate in one batch. When the value is greater than 0, the validation pass pauses after each batch and can be resumed by re-running a validate scan. Use 0 to process all entities in a single run."
       backup:
         actions_title: "Manual backup"
         list_title: "Available backups"
@@ -148,3 +151,4 @@ en:
         roots_hint: "Each entry is expanded to an absolute path. If left blank, the Rails root, user home, and temp directory are used as defaults."
         roots_required: "At least one project scan root is required."
         invalid_root: "Invalid project scan root path: %{error}"
+        batch_size_hint: "0 disables batching (process the whole subtree in one run). A value of 5-10 lets an agent digest the review queue in small, resumable rounds."

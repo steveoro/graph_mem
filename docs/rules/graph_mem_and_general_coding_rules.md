@@ -69,6 +69,14 @@ state management, not as a substitute for inspecting the repository.
   project subtree.
 - The final validation pass is implemented in the `ProjectScanValidator` service and
   is gated by `enable_project_scan_validation`.
+- It is batched and resumable:
+  - `project_scan_validation_batch_size` (default `5`) controls how many entities
+    are validated per batch. `0` disables batching.
+  - When the batch limit is reached, the `OperationProgress` is paused and
+    `validation_state` is persisted. A subsequent `mode: "validate"` scan with the
+    same `scan_id` resumes from the saved pending entity list.
+  - This lets an agent or operator digest the generated `scan_review` queue in
+    small, repeated rounds instead of one massive run.
 - It distinguishes scan-sourced observations from manually-created ones:
   - Scan-sourced observations (`source` starts with `project_scan:` or
     `project_scan_skill:` from a prior run) can be moved or obsoleted automatically.

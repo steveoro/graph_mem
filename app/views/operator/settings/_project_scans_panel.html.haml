@@ -28,6 +28,19 @@
       %label.dashboard-settings-field__label{ for: "setting_enable_project_scan_validation" }= t("operator.settings.fields.enable_project_scan_validation.label")
     %p.dashboard-settings-field__hint= t("operator.settings.fields.enable_project_scan_validation.description")
 
+  .dashboard-settings-field
+    %label.dashboard-settings-field__label{ for: "setting_project_scan_validation_batch_size" }
+      = t("operator.settings.fields.project_scan_validation_batch_size.label")
+    %p.dashboard-settings-field__hint= t("operator.settings.fields.project_scan_validation_batch_size.description")
+    = number_field_tag "settings[project_scan_validation_batch_size]",
+      AppSettings.project_scan_validation_batch_size,
+      min: 0,
+      max: 1000,
+      id: "setting_project_scan_validation_batch_size",
+      class: "dashboard-settings-field__input",
+      data: { testid: "setting-project_scan_validation_batch_size" }
+    %p.dashboard-settings-field__hint= t("operator.settings.project_scans.batch_size_hint")
+
   .dashboard-card__actions
     = submit_tag t("operator.settings.save_group"),
       class: "dashboard-btn dashboard-btn--primary",

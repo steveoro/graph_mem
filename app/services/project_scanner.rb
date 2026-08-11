@@ -29,6 +29,8 @@ class ProjectScanner
 
   Result = Struct.new(
     :success,
+    :status,
+    :message,
     :project_entity,
     :entities_created,
     :entities_updated,
@@ -45,9 +47,15 @@ class ProjectScanner
     :fallback_reason,
     keyword_init: true
   ) do
+    def initialize(success: true, status: "completed", message: nil, **kwargs)
+      super(success: success, status: status, message: message, **kwargs)
+    end
+
     def to_h
       {
         success: success,
+        status: status,
+        message: message,
         project_entity_id: project_entity&.id,
         project_entity_name: project_entity&.name,
         entities_created: entities_created || 0,
@@ -97,6 +105,7 @@ class ProjectScanner
     @observations_moved_count = 0
     @relations_deleted_count = 0
     @entities_reparented_count = 0
+    @validation_paused = false
   end
 
   def call
@@ -129,6 +138,33 @@ class ProjectScanner
       seed_scan_review_items!
     end
 
+    if @validation_paused
+      update_progress!(
+        phase: "validation_paused",
+        message: "Project scan validation paused for next batch"
+      )
+
+      return Result.new(
+        success: @errors.empty?,
+        status: "paused",
+        message: "Project scan validation paused for next batch",
+        project_entity: @project_entity,
+        entities_created: @created_count,
+        entities_updated: @updated_count,
+        observations_created: @observations_created_count,
+        observations_obsoleted: @observations_obsoleted_count,
+        observations_moved: @observations_moved_count,
+        relations_created: @relations_created_count,
+        relations_deleted: @relations_deleted_count,
+        entities_reparented: @entities_reparented_count,
+        scan_review_items: @scan_review_items,
+        dismissed_compaction_items: @dismissed_compaction_items,
+        errors: @errors,
+        fallback: extracted[:fallback] == true,
+        fallback_reason: extracted[:fallback_reason] || extracted[:error]
+      )
+    end
+
     update_progress!(phase: "completed", message: "Project scan completed")
 
     Result.new(
@@ -154,7 +190,7 @@ class ProjectScanner
 
   def failed_result(message)
     @errors << message
-    Result.new(success: false, errors: @errors, fallback: false)
+    Result.new(success: false, status: "failed", errors: @errors, fallback: false)
   end
 
   def scan_source(phase = "reconcile")
@@ -177,6 +213,33 @@ class ProjectScanner
     unless @dry_run
       validate_project_subtree!
       seed_scan_review_items!
+    end
+
+    if @validation_paused
+      update_progress!(
+        phase: "validation_paused",
+        message: "Project validation paused for next batch"
+      )
+
+      return Result.new(
+        success: @errors.empty?,
+        status: "paused",
+        message: "Project validation paused for next batch",
+        project_entity: @project_entity,
+        entities_created: 0,
+        entities_updated: 0,
+        observations_created: 0,
+        observations_obsoleted: @observations_obsoleted_count,
+        observations_moved: @observations_moved_count,
+        relations_created: 0,
+        relations_deleted: @relations_deleted_count,
+        entities_reparented: @entities_reparented_count,
+        scan_review_items: @scan_review_items,
+        dismissed_compaction_items: 0,
+        errors: @errors,
+        fallback: false,
+        fallback_reason: nil
+      )
     end
 
     update_progress!(phase: "completed", message: "Project validation completed (#{@dry_run ? 'dry run' : 'applied'})")
@@ -680,6 +743,7 @@ class ProjectScanner
     @entities_reparented_count += result.entities_reparented.to_i
     @scan_review_items.concat(result.scan_review_items || [])
     @errors.concat(result.errors || [])
+    @validation_paused = result.paused if result.respond_to?(:paused)
   end
 
   def dismiss_conflicting_compaction_reviews

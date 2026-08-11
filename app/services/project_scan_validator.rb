@@ -8,7 +8,9 @@
 # facts are collected as `scan_review` items so the operator/agent can decide.
 #
 # The validator is intentionally isolated from the scanner orchestrator and
-# can be unit-tested on its own.
+# can be unit-tested on its own. It also supports batched, resumable runs:
+# progress is persisted in `OperationProgress#details["validation_state"]` so
+# a subsequent `mode: "validate"` scan can continue from where it left off.
 class ProjectScanValidator
   # Relation types that imply the source project actually uses the target.
   USAGE_RELATION_TYPES = %w[
@@ -28,10 +30,16 @@ class ProjectScanValidator
     :entities_reparented,
     :scan_review_items,
     :errors,
+    :paused,
+    :remaining_entity_ids,
+    :processed_entity_ids,
+    :total_entity_count,
     keyword_init: true
   ) do
     def initialize(observations_moved: 0, observations_obsoleted: 0, relations_deleted: 0,
-                   entities_reparented: 0, scan_review_items: [], errors: [])
+                   entities_reparented: 0, scan_review_items: [], errors: [],
+                   paused: false, remaining_entity_ids: [], processed_entity_ids: [],
+                   total_entity_count: 0)
       super
     end
   end
@@ -54,49 +62,123 @@ class ProjectScanValidator
     @entities_reparented = 0
     @scan_review_items = []
     @errors = []
+
+    load_validation_state!
   end
 
   def call
-    return result if @project_entity.nil?
+    return result unless @project_entity
     return result unless AppSettings.project_scan_validation_enabled?
 
-    report_progress(phase: "validating_subtree", message: "Validating existing project subtree")
+    report_progress(phase: "validating_subtree", message: "Validating existing project subtree", details: validation_state)
 
-    entity_ids = ProjectSubtree.resolve(@project_entity.id).entity_ids - @created_entity_ids.to_a - [ @project_entity.id ]
-    return result if entity_ids.empty?
+    batch = next_batch
+    return result if batch.empty?
 
-    total = entity_ids.size
-    processed = 0
-
-    MemoryEntity.where(id: entity_ids).find_each do |entity|
+    total = total_entity_count
+    batch.each do |entity|
       validate_entity_observations(entity)
       validate_entity_relations(entity)
-      processed += 1
+      mark_entity_processed(entity.id)
 
-      if (processed % 10).zero? || processed == total
-        report_progress(
-          phase: "validating_subtree",
-          message: "Validated #{processed}/#{total} entities",
-          current: processed,
-          total: total
-        )
-      end
+      report_progress(
+        phase: "validating_subtree",
+        message: "Validated #{processed_entity_ids.size}/#{total} entities",
+        current: processed_entity_ids.size,
+        total: total,
+        details: validation_state
+      ) if (processed_entity_ids.size % 10).zero? || pending_entity_ids.empty?
     end
 
-    result
+    paused = pending_entity_ids.any?
+    save_validation_state!(paused)
+
+    result(paused: paused)
   end
 
   private
 
-  def result
+  def result(paused: false)
     Result.new(
       observations_moved: @observations_moved,
       observations_obsoleted: @observations_obsoleted,
       relations_deleted: @relations_deleted,
       entities_reparented: @entities_reparented,
       scan_review_items: @scan_review_items,
-      errors: @errors
+      errors: @errors,
+      paused: paused,
+      remaining_entity_ids: pending_entity_ids,
+      processed_entity_ids: processed_entity_ids,
+      total_entity_count: total_entity_count
     )
+  end
+
+  def next_batch
+    batch_size = batch_limit
+    ids = pending_entity_ids.first(batch_size)
+    MemoryEntity.where(id: ids).sort_by { |e| ids.index(e.id) }
+  end
+
+  def batch_limit
+    size = AppSettings.project_scan_validation_batch_size.to_i
+    return pending_entity_ids.size if size <= 0 || @operation_progress.blank?
+
+    size
+  end
+
+  def total_entity_count
+    @total_entity_count ||= pending_entity_ids.size + processed_entity_ids.size
+  end
+
+  def load_validation_state!
+    state = @operation_progress&.details&.dig("validation_state")
+
+    if state.is_a?(Hash) &&
+       state["project_entity_id"] == @project_entity.id &&
+       state["project_root"] == @project_root &&
+       state["paused"] == true
+      @pending_entity_ids = Array(state["pending_entity_ids"]).map(&:to_i)
+      @processed_entity_ids = Array(state["processed_entity_ids"]).map(&:to_i)
+    else
+      compute_entity_ids!
+    end
+  end
+
+  def compute_entity_ids!
+    ids = ProjectSubtree.resolve(@project_entity.id).entity_ids - @created_entity_ids.to_a - [ @project_entity.id ]
+    @pending_entity_ids = ids.uniq
+    @processed_entity_ids = []
+  end
+
+  def pending_entity_ids
+    @pending_entity_ids ||= []
+  end
+
+  def processed_entity_ids
+    @processed_entity_ids ||= []
+  end
+
+  def mark_entity_processed(entity_id)
+    pending_entity_ids.delete(entity_id)
+    processed_entity_ids << entity_id unless processed_entity_ids.include?(entity_id)
+  end
+
+  def validation_state
+    {
+      "project_root" => @project_root,
+      "project_entity_id" => @project_entity&.id,
+      "scan_id" => @scan_id,
+      "pending_entity_ids" => pending_entity_ids,
+      "processed_entity_ids" => processed_entity_ids,
+      "paused" => false
+    }
+  end
+
+  def save_validation_state!(paused)
+    state = validation_state.merge("paused" => paused)
+    @operation_progress&.update!(details: (@operation_progress.details || {}).merge("validation_state" => state))
+  rescue StandardError => e
+    @logger.warn "ProjectScanValidator: failed to save validation state: #{e.message}"
   end
 
   def validate_entity_observations(entity)
@@ -371,7 +453,7 @@ class ProjectScanValidator
     @scan_review_items << item
   end
 
-  def report_progress(phase:, message:, current: nil, total: nil)
+  def report_progress(phase:, message:, current: nil, total: nil, details: nil)
     return unless @operation_progress
 
     @operation_progress.update_progress!(
@@ -384,7 +466,8 @@ class ProjectScanValidator
         observations_obsoleted: @observations_obsoleted,
         relations_deleted: @relations_deleted,
         entities_reparented: @entities_reparented
-      }
+      },
+      details: details || @operation_progress.details
     )
 
     OperationProgressBroadcaster.call(@operation_progress)

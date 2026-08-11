@@ -134,6 +134,72 @@ RSpec.describe ProjectScanValidator, type: :service do
     end
   end
 
+  describe "batched validation" do
+    it "pauses after the configured batch size and resumes from the saved state" do
+      allow(AppSettings).to receive(:project_scan_validation_batch_size).and_return(3)
+
+      5.times do |i|
+        entity = MemoryEntity.create!(name: "BatchEntity#{i}", entity_type: "Component")
+        MemoryRelation.create!(from_entity: entity, to_entity: @project, relation_type: "part_of")
+        MemoryObservation.create!(memory_entity: entity, content: "Entity #{i} observation", source: "manual")
+      end
+
+      operation = OperationProgress.start!(
+        operation_type: "project_scan",
+        total_count: 10,
+        details: { "project_root" => "/tmp", "project_name" => "TestProject" }
+      )
+
+      first = ProjectScanValidator.new(
+        project_entity: @project,
+        scan_id: SecureRandom.uuid,
+        created_entity_ids: Set.new,
+        context_text: "",
+        extracted_data: {},
+        project_root: "/tmp",
+        dry_run: false,
+        logger: Logger.new(File::NULL),
+        operation_progress: operation
+      ).call
+
+      expect(first.paused).to be true
+      expect(first.remaining_entity_ids.size).to eq(3)
+      expect(first.processed_entity_ids.size).to eq(3)
+      expect(operation.reload.details["validation_state"]["paused"]).to be true
+
+      second = ProjectScanValidator.new(
+        project_entity: @project,
+        scan_id: SecureRandom.uuid,
+        created_entity_ids: Set.new,
+        context_text: "",
+        extracted_data: {},
+        project_root: "/tmp",
+        dry_run: false,
+        logger: Logger.new(File::NULL),
+        operation_progress: operation
+      ).call
+
+      expect(second.paused).to be false
+      expect(second.remaining_entity_ids).to be_empty
+      expect(second.processed_entity_ids.size).to eq(6)
+    end
+
+    it "does not batch when operation_progress is not provided" do
+      allow(AppSettings).to receive(:project_scan_validation_batch_size).and_return(3)
+
+      5.times do |i|
+        entity = MemoryEntity.create!(name: "NoBatchEntity#{i}", entity_type: "Component")
+        MemoryRelation.create!(from_entity: entity, to_entity: @project, relation_type: "part_of")
+        MemoryObservation.create!(memory_entity: entity, content: "Entity #{i} observation", source: "manual")
+      end
+
+      result = validator.call
+
+      expect(result.paused).to be false
+      expect(result.processed_entity_ids.size).to eq(6)
+    end
+  end
+
   describe "relation validation" do
     it "auto-deletes a part_of relation to the wrong project root" do
       other_project = MemoryEntity.create!(name: "OtherProject", entity_type: "Project")
