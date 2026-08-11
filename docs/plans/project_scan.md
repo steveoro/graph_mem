@@ -119,7 +119,8 @@ wraps the MCP call for convenience.
      - `scan_max_files`
      - `scan_file_globs`
      - `enable_project_scan`
-   - Add an operator settings panel section for scanning.
+     - `project_scan_roots` (defaults to `Rails.root`, `Dir.home`, `Dir.tmpdir`)
+   - Add an operator settings panel section for scanning. Implemented: `project_scan_roots` is editable via **System Settings → Project Scans**.
 
 2. **Models / enums**
    - Add `"scan_review"` to `MaintenanceReport::REPORT_TYPES`.

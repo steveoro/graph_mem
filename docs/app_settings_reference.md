@@ -6,7 +6,7 @@ GraphMem stores operator-tunable runtime settings in the primary MariaDB `settin
 
 - **URL:** `/operator/settings`
 - **Auth:** session login at `/operator/login` (`OPERATOR_USERNAME` / `OPERATOR_PASSWORD`, or `credentials.operator.username` / `credentials.operator.password`)
-- **Tabs:** Feature Flags, Database Backup, Embeddings, Summaries
+- **Tabs:** Feature Flags, Database Backup, Embeddings, Summaries, Imports, Project Scans
 
 ## Feature Flags
 
@@ -68,6 +68,20 @@ Resolution order for runtime summarization config: **AppSettings → ENV → def
 The embedding model and summary model are independent. Retrieval continues to use `EmbeddingConfig`; summarization uses `SummarizationConfig`.
 
 See [summarization guide](summarization.md).
+
+## Imports
+
+| Setting | Default | Effect |
+|---|---|---|
+| `import_observation_duplicate_max_distance` | `0.35` | Maximum semantic distance for treating imported observation text as an existing fact. Range `0.20` (strict) to `0.50` (broad). |
+
+## Project Scans
+
+| Setting | Default | Effect |
+|---|---|---|
+| `project_scan_roots` | `Rails.root, Dir.home, Dir.tmpdir` | Comma- or newline-separated list of filesystem directories the dashboard project-scan trigger is allowed to scan. Each entry is expanded to an absolute path and the requested `project_root` must be a descendant of one of them. |
+
+`ProjectScansController` reads the configured roots via `AppSettings.project_scan_root_paths`, which falls back to `PROJECT_SCAN_ROOTS` ENV and then the default directories. See the [project scan plan](plans/project_scan.md) for the broader scan workflow.
 
 ## Mission Control Jobs
 
