@@ -81,6 +81,8 @@ RSpec.describe "Operator dashboard pages", type: :request do
       get root_path
 
       expect(response.body).to include('data-testid="dashboard-project-scans-card"')
+      expect(response.body).to include('data-testid="dashboard-project-scan-trigger"')
+      expect(response.body).to include(project_scans_path)
       expect(response.body).to include("Project Scans")
       expect(response.body).to include("graph-mem")
       expect(response.body).to include("Completed")

@@ -228,6 +228,41 @@ RSpec.describe "Operator settings", type: :request do
       expect(response.body).to include('data-testid="setting-import_observation_duplicate_max_distance"')
       expect(response.body).to include('data-testid="import-observation-duplicate-distance-value"')
     end
+
+    it "renders the project scans settings tab" do
+      get operator_settings_path(tab: "project_scans")
+
+      expect(response).to have_http_status(:ok)
+      expect(response.body).to include('data-testid="operator-settings-tab-project_scans"')
+      expect(response.body).to include('data-testid="setting-project_scan_roots"')
+    end
+
+    it "updates project scan roots" do
+      patch operator_settings_bulk_update_path,
+            params: {
+              tab: "project_scans",
+              settings: {
+                project_scan_roots: "/opt/repos, /tmp/scans"
+              }
+            }
+
+      expect(response).to redirect_to(operator_settings_path(tab: "project_scans"))
+      expect(AppSettings.project_scan_roots).to eq("/opt/repos, /tmp/scans")
+    end
+
+    it "rejects an empty project scan root list" do
+      patch operator_settings_bulk_update_path,
+            params: {
+              tab: "project_scans",
+              settings: {
+                project_scan_roots: "   "
+              }
+            }
+
+      expect(response).to redirect_to(operator_settings_path(tab: "project_scans"))
+      follow_redirect!
+      expect(response.body).to include("At least one project scan root is required")
+    end
   end
 
   describe "POST /operator/settings/backup/run" do

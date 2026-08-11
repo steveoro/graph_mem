@@ -5,6 +5,11 @@ All notable changes to GraphMem will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.31.0] - 2026-08-11
+- Added dashboard form to trigger project source scans (`ProjectScanJob`) with project root, mode, dry-run, and optional project name/aliases/file globs.
+- Added filesystem-root allow-list validation before enqueuing scans, with the allowed roots configurable by operators via a new **Project Scans** tab in System Settings.
+- `ProjectScansController` now resolves `project_scan_roots` from `AppSettings` (with `PROJECT_SCAN_ROOTS` env fallback) and rejects paths outside the configured roots.
+
 ## [1.30.0] - 2026-08-10
 - Added project scan feature + dedicated skill for manual execution without local LLM support for summarization.
 

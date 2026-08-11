@@ -1,0 +1,26 @@
+- group_key = local_assigns.fetch(:group_key)
+- current_roots = AppSettings.project_scan_roots
+
+= form_with url: operator_settings_bulk_update_path, method: :patch, local: true, class: "dashboard-settings-form" do
+  = hidden_field_tag :tab, group_key
+
+  .dashboard-settings-field
+    %label.dashboard-settings-field__label{ for: "setting_project_scan_roots" }
+      = t("operator.settings.fields.project_scan_roots.label")
+    %p.dashboard-settings-field__hint= t("operator.settings.fields.project_scan_roots.description")
+    = text_area_tag "settings[project_scan_roots]",
+      current_roots,
+      id: "setting_project_scan_roots",
+      rows: 4,
+      class: "dashboard-settings-field__input",
+      data: { testid: "setting-project_scan_roots" }
+    %p.dashboard-settings-field__hint= t("operator.settings.project_scans.roots_hint")
+
+  .dashboard-card__actions
+    = submit_tag t("operator.settings.save_group"),
+      class: "dashboard-btn dashboard-btn--primary",
+      data: { testid: "operator-settings-save-btn-project_scans" }
+    = link_to t("operator.settings.reset"),
+      operator_settings_path(tab: group_key),
+      class: "dashboard-btn dashboard-btn--secondary",
+      data: { testid: "operator-settings-reset-btn-project_scans" }

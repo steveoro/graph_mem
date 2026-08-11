@@ -305,7 +305,7 @@ Returns totals (entities, observations, relations, audit_logs), entity type dist
 
 ### Health Check
 
-`GET /api/v1/status` -- `{ "status": "ok", "version": "1.2.2" }`
+`GET /api/v1/status` -- `{ "status": "ok", "version": "1.31.0" }`
 
 ### Current Time
 

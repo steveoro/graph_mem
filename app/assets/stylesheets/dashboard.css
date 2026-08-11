@@ -883,3 +883,48 @@
   padding-top: 1rem;
   border-top: 1px solid #e2e8f0;
 }
+
+.project-scan-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.project-scan-form__field {
+  display: grid;
+  grid-template-columns: 150px 1fr;
+  gap: 0.5rem 1rem;
+  align-items: center;
+}
+
+.project-scan-form__field--inline {
+  grid-template-columns: 150px auto;
+}
+
+.project-scan-form__field label {
+  font-weight: 500;
+  font-size: 0.85rem;
+}
+
+.project-scan-form__input,
+.project-scan-form__field select {
+  width: 100%;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  box-sizing: border-box;
+}
+
+.project-scan-form__checkbox {
+  width: 1rem;
+  height: 1rem;
+}
+
+@media (max-width: 768px) {
+  .project-scan-form__field,
+  .project-scan-form__field--inline {
+    grid-template-columns: 1fr;
+    align-items: start;
+  }
+}

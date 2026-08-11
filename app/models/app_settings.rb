@@ -37,6 +37,9 @@ class AppSettings < RailsSettings::Base
   field :import_observation_duplicate_max_distance, default: 0.35, type: :float,
         validates: { numericality: { greater_than_or_equal_to: 0.2, less_than_or_equal_to: 0.5 } }
 
+  # Project scan settings
+  field :project_scan_roots, default: [ Dir.pwd, Dir.home, Dir.tmpdir ].join(","), type: :string
+
   # Compaction review row retention (approved/dismissed rows are pruned after N days)
   field :compaction_review_row_retention_days, default: 30, type: :integer,
         validates: { numericality: { greater_than_or_equal_to: 0, less_than_or_equal_to: 365 } }
@@ -58,6 +61,13 @@ class AppSettings < RailsSettings::Base
 
   def self.scheduled_embedding_backfill_enabled?
     read_boolean_setting("enable_scheduled_embedding_backfill")
+  end
+
+  def self.project_scan_root_paths
+    raw = project_scan_roots.to_s.presence || ENV["PROJECT_SCAN_ROOTS"].to_s
+    roots = raw.split(/[\r\n,]+/).map(&:strip).reject(&:blank?)
+    roots = [ Dir.pwd, Dir.home, Dir.tmpdir ] if roots.empty?
+    roots.map { |p| File.expand_path(p) }.uniq
   end
 
   def self.backup_schedule_cron

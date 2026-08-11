@@ -41,6 +41,15 @@ module Operator
         end
       end
 
+      if params[:tab] == "project_scans"
+        validation_error = validate_project_scans_settings(settings)
+        if validation_error
+          flash[:alert] = validation_error
+          redirect_to operator_settings_path(tab: params[:tab])
+          return
+        end
+      end
+
       settings.each do |key, value|
         next unless AppSettings.defined_fields.map(&:key).include?(key)
 
@@ -128,6 +137,10 @@ module Operator
         imports: {
           title: t("operator.settings.groups.imports"),
           settings: %w[import_observation_duplicate_max_distance]
+        },
+        project_scans: {
+          title: t("operator.settings.groups.project_scans"),
+          settings: %w[project_scan_roots]
         }
       }
     end
@@ -185,6 +198,19 @@ module Operator
       return if distance.between?(0.2, 0.5)
 
       t("operator.settings.imports.invalid_observation_duplicate_max_distance")
+    end
+
+    def validate_project_scans_settings(settings)
+      roots = settings["project_scan_roots"].to_s.split(/[\r\n,]+/).map(&:strip).reject(&:blank?)
+      return t("operator.settings.project_scans.roots_required") if roots.empty?
+
+      roots.each do |root|
+        File.expand_path(root)
+      rescue StandardError => e
+        return t("operator.settings.project_scans.invalid_root", error: e.message)
+      end
+
+      nil
     end
 
     def valid_embedding_url?(url)
