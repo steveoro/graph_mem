@@ -659,5 +659,6 @@ class ProjectScanner
         relations_created: @relations_created_count
       }
     )
+    OperationProgressBroadcaster.call(@operation_progress)
   end
 end

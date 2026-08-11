@@ -42,4 +42,20 @@ RSpec.describe ProjectScanJob, type: :job do
     operation = OperationProgress.find_by(operation_type: "project_scan")
     expect(operation.status).to eq("completed")
   end
+
+  it "broadcasts progress snapshots while running and on completion" do
+    allow(OperationProgressBroadcaster).to receive(:call)
+
+    described_class.perform_now(
+      SecureRandom.uuid,
+      @project_root,
+      "JobTestProject",
+      nil,
+      "initial",
+      false,
+      []
+    )
+
+    expect(OperationProgressBroadcaster).to have_received(:call).at_least(:once)
+  end
 end

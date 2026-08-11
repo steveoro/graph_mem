@@ -12,9 +12,9 @@ module DashboardHelper
     "unknown" => "dashboard-badge--idle"
   }.freeze
 
-  def dashboard_status_badge(status)
+  def dashboard_status_badge(status, **html_options)
     css = STATUS_BADGE_CLASSES[status.to_s] || "dashboard-badge--idle"
-    content_tag(:span, status.to_s.humanize, class: "dashboard-badge #{css}")
+    content_tag(:span, status.to_s.humanize, class: "dashboard-badge #{css}", **html_options)
   end
 
   def agent_context_activity_badge(status)
