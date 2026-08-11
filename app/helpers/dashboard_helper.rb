@@ -70,18 +70,51 @@ module DashboardHelper
   end
 
   def scan_review_item_label(row)
-    payload = row.effective_payload
+    payload = row.effective_payload.with_indifferent_access
+    reason = payload[:reason].presence
+
     case row.kind
     when "delete_entity"
-      entity = MemoryEntity.find_by(id: payload["entity_id"])
-      "Delete entity: #{entity&.name || 'Unknown'} (#{payload['reason']})"
+      entity = MemoryEntity.find_by(id: payload[:entity_id])
+      "Delete entity: #{entity&.name || 'Unknown'} (#{reason || 'pending review'})"
     when "delete_relation"
-      relation = MemoryRelation.find_by(id: payload["relation_id"])
-      "Delete relation: #{relation&.relation_type || 'Unknown'} (#{payload['reason']})"
+      relation = MemoryRelation.find_by(id: payload[:relation_id])
+      "Delete relation: #{relation&.relation_type || 'Unknown'} (#{reason || 'pending review'})"
     when "dismiss_compaction_review"
-      "Dismiss compaction review: #{payload['reason']}"
+      "Dismiss compaction review: #{reason || 'pending review'}"
+    when "entity_merge"
+      source = MemoryEntity.find_by(id: payload.dig(:entity_a, :entity_id)) ||
+               MemoryEntity.find_by(id: payload[:source_id])
+      target = MemoryEntity.find_by(id: payload.dig(:entity_b, :entity_id)) ||
+               MemoryEntity.find_by(id: payload[:target_id])
+      "Merge entity: #{source&.name || 'Unknown'} → #{target&.name || 'Unknown'} (#{reason || 'pending review'})"
+    when "relationship_proposal"
+      from = MemoryEntity.find_by(id: payload[:from_entity_id].presence || payload[:from_id])
+      to = MemoryEntity.find_by(id: payload[:to_entity_id].presence || payload[:to_id])
+      type = payload[:relation_type].presence
+      label = "Create relation: #{from&.name || 'Unknown'} → #{to&.name || 'Unknown'}"
+      label += " [#{type}]" if type
+      "#{label} (#{reason || 'pending review'})"
+    when "orphan_parent"
+      entity = MemoryEntity.find_by(id: payload[:entity_id]) ||
+               MemoryEntity.find_by(name: payload[:entity_name])
+      parent = MemoryEntity.find_by(id: payload[:parent_id]) ||
+               MemoryEntity.find_by(id: Array(payload[:suggested_parents]).first&.dig(:project_id))
+      "Set parent: #{entity&.name || payload[:entity_name].presence || 'Unknown'} → #{parent&.name || 'Unknown'} (#{reason || 'pending review'})"
+    when "relation_integrity"
+      issue = payload[:payload].presence || payload
+      keep_id = issue[:keep_id]
+      delete_ids = Array(issue[:delete_ids]).presence || [ issue[:delete_id] ].compact
+      delete_text = delete_ids.map { |id| "##{id}" }.join(", ")
+      "Relation integrity: keep ##{keep_id}, remove #{delete_text} (#{reason || 'pending review'})"
+    when "entity_error"
+      "Entity error: #{payload[:error_class]} — #{payload[:error_message]}"
     else
-      "#{row.kind.humanize}: #{payload['reason'] || 'pending review'}"
+      known_ids = payload.slice(:entity_id, :relation_id, :source_id, :target_id, :from_id, :to_id,
+                                :parent_id, :review_item_id).values.compact
+      label = "#{row.kind.humanize}: #{reason || 'pending review'}"
+      label += " (#{known_ids.join(', ')})" if known_ids.any?
+      label
     end
   end
 
