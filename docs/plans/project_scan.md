@@ -65,8 +65,8 @@ a project directory and keep the graph synchronized with the actual source:
   uses file discovery + LLM extraction, similar to MegaMemory's approach.
 - Automatic deletion of `Project` root entities.
 - Auto-approval of destructive changes; those stay in the review queue.
-- Streaming/real-time UI for scan progress beyond the existing
-  `OperationProgress` / ActionCable infrastructure.
+- Real-time scan progress is now wired into the Project Scans dashboard card via
+  the existing `OperationProgress` / ActionCable channel.
 
 ## Design Alternatives
 
@@ -178,9 +178,12 @@ wraps the MCP call for convenience.
 6. **REST endpoints (optional first pass)**
    - `POST /api/v1/scan` and `GET /api/v1/scan/:id`.
 
-7. **Operator UI (optional)**
-   - Add a "Project Scans" card to the operator dashboard that lists recent
-     `OperationProgress` entries of type `project_scan`.
+7. **Operator UI**
+   - Implemented: a "Project Scans" dashboard card lists recent scans with
+     project name, status, mode, phase, and progress.
+   - Implemented: a trigger form on the card starts a new scan.
+   - Implemented: active scan rows subscribe to `OperationProgressChannel` and
+     update status, phase, percentage, and progress bar live via ActionCable.
 
 8. **Summarization fallback**
    - If `SummarizationConfig.llm_usable?` is false or the LLM call fails,

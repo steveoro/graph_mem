@@ -11,7 +11,11 @@ RSpec.describe "Project scans", type: :request do
       Dir.mktmpdir do |dir|
         expect {
           post project_scans_path, params: { project_root: dir, mode: "initial", dry_run: "1" }
-        }.to have_enqueued_job(ProjectScanJob)
+        }.to have_enqueued_job(ProjectScanJob).and change(OperationProgress, :count).by(1)
+
+        operation = OperationProgress.order(created_at: :desc).first
+        expect(operation.status).to eq("pending")
+        expect(operation.operation_type).to eq("project_scan")
 
         expect(response).to redirect_to(root_path)
         follow_redirect!

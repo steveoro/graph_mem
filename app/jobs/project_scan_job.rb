@@ -5,10 +5,11 @@ class ProjectScanJob < ApplicationJob
   queue_as :default
 
   def perform(scan_id, project_root, project_name, aliases, mode, dry_run, file_globs)
-    operation = OperationProgress.start!(
+    operation = OperationProgress.find_by(operation_id: scan_id)
+    operation ||= OperationProgress.start!(
       operation_type: "project_scan",
       operation_id: scan_id,
-      total_count: 5,
+      total_count: 6,
       message: "Starting project scan",
       details: {
         project_root: project_root,
@@ -17,6 +18,11 @@ class ProjectScanJob < ApplicationJob
         dry_run: dry_run
       }
     )
+
+    unless operation.status == "running"
+      operation.update!(status: "running", started_at: Time.current)
+      OperationProgressBroadcaster.call(operation)
+    end
 
     scanner = ProjectScanner.new(
       project_root: project_root,
@@ -30,6 +36,7 @@ class ProjectScanJob < ApplicationJob
 
     result = scanner.call
     if result.success
+      operation.reload
       operation.complete!(
         message: "Project scan completed",
         counters: result.to_h.slice(:entities_created, :entities_updated, :observations_created, :observations_obsoleted, :relations_created, :dismissed_compaction_items).compact,
@@ -40,14 +47,17 @@ class ProjectScanJob < ApplicationJob
           project_entity_name: result.project_entity&.name
         )&.compact
       )
+      OperationProgressBroadcaster.call(operation)
     else
       operation.fail!(result.errors.join("; "))
+      OperationProgressBroadcaster.call(operation)
     end
 
     result.to_h.merge(scan_id: scan_id, operation_id: operation.operation_id)
   rescue StandardError => e
     Rails.logger.error "ProjectScanJob failed: #{e.message}\n#{e.backtrace.first(5).join("\n")}"
     operation&.fail!(e)
+    OperationProgressBroadcaster.call(operation) if operation
     raise
   end
 end

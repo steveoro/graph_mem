@@ -47,21 +47,23 @@
         %tbody
           - scans.each do |scan|
             - project_entity_id = scan.dig(:details, "project_entity_id")
-            %tr.project-scans-table__row{ data: { testid: "project-scan-row-#{scan[:operation_id]}" } }
+            - row_data = { operation_progress_id: scan[:operation_id], testid: "project-scan-row-#{scan[:operation_id]}" }
+            - if scan[:status].in?(%w[running pending paused])
+              - row_data[:controller] = "operation-progress"
+              - row_data[:operation_progress_operation_id_value] = scan[:operation_id]
+            %tr.project-scans-table__row{ data: row_data }
               %td.project-scans-table__project
                 - if project_entity_id
                   = link_to project_scan_name(scan), graph_path(scoped_entity_id: project_entity_id), class: "dashboard-link", id: "link-project-scan-entity-#{scan[:operation_id]}"
                 - else
                   = project_scan_name(scan)
-              %td= dashboard_status_badge(scan[:status])
+              %td= dashboard_status_badge(scan[:status], data: { progress_status: true })
               %td= scan.dig(:details, "mode").presence || "—"
-              %td= project_scan_phase_label(scan[:phase])
+              %td
+                %span{ data: { progress_phase: true } }= project_scan_phase_label(scan[:phase])
               %td.project-scans-table__progress
-                - if scan[:status].in?(%w[running pending paused])
-                  %progress{ max: 100, value: scan[:percentage] || 0 }
-                  %span= "#{scan[:percentage]}%"
-                - else
-                  %span= "#{scan[:percentage]}%"
+                %progress{ max: 100, value: scan[:percentage] || 0 }
+                %span{ data: { progress_percentage: true } }= "#{scan[:percentage]}%"
               %td.project-scans-table__actions
                 = link_to "Details", api_v1_scan_project_path(scan[:operation_id]), class: "dashboard-btn dashboard-btn--secondary", target: "_blank", id: "link-project-scan-details-#{scan[:operation_id]}"
                 - if scan.dig(:details, "fallback")

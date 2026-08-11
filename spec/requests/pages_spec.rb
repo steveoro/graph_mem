@@ -90,6 +90,27 @@ RSpec.describe "Operator dashboard pages", type: :request do
       expect(response.body).to include(compaction_review_data_exchange_index_path(report_type: "scan_review"))
     end
 
+    it "wires active project scan rows for live progress updates" do
+      OperationProgress.create!(
+        operation_type: "project_scan",
+        operation_id: SecureRandom.uuid,
+        status: "running",
+        total_count: 5,
+        current_count: 1,
+        percentage: 20.0,
+        phase: "discovering_files",
+        message: "Discovering project files",
+        details: { "project_name" => "graph-mem", "mode" => "initial" }
+      )
+
+      get root_path
+
+      expect(response.body).to include('data-controller="operation-progress"')
+      expect(response.body).to include('data-progress-status')
+      expect(response.body).to include('data-progress-phase')
+      expect(response.body).to include('data-progress-percentage')
+    end
+
     it "shows pending scan reviews with approve and dismiss actions" do
       entity = MemoryEntity.create!(name: "StaleTask", entity_type: "Task")
       report = MaintenanceReport.create!(report_type: "scan_review", data: { "source" => "test" })

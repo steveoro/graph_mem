@@ -23,6 +23,23 @@ class ProjectScansController < ApplicationController
     end
 
     scan_id = SecureRandom.uuid
+    OperationProgress.create!(
+      operation_type: "project_scan",
+      operation_id: scan_id,
+      status: "pending",
+      total_count: 6,
+      current_count: 0,
+      percentage: 0,
+      phase: "queued",
+      message: "Queued project scan",
+      details: {
+        project_root: expanded_root,
+        project_name: params[:project_name].to_s.presence,
+        mode: mode,
+        dry_run: params[:dry_run] == "1"
+      }
+    )
+
     ProjectScanJob.perform_later(
       scan_id,
       expanded_root,
