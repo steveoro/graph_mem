@@ -59,5 +59,17 @@ RSpec.describe "Project scans", type: :request do
         expect(ProjectScanJob).to have_been_enqueued
       end
     end
+
+    it "rejects a project root outside the allowed directories" do
+      Dir.mktmpdir do |dir|
+        stub_const("ProjectScansController::ALLOWED_ROOTS", [ "/nonexistent/allowed" ])
+
+        post project_scans_path, params: { project_root: dir, mode: "initial" }
+
+        expect(response).to redirect_to(root_path)
+        follow_redirect!
+        expect(response.body).to include("outside the allowed scan directories")
+      end
+    end
   end
 end

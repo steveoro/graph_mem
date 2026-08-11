@@ -1,6 +1,10 @@
 # frozen_string_literal: true
 
 class ProjectScansController < ApplicationController
+  ALLOWED_ROOTS = ENV.fetch("PROJECT_SCAN_ROOTS") do
+    [ Dir.pwd, Dir.home, Dir.tmpdir ].join(",")
+  end.split(",").map { |p| File.expand_path(p.strip) }.freeze
+
   def create
     project_root = params[:project_root].to_s.strip
     return redirect_to root_path, alert: "Project root is required." if project_root.blank?
@@ -8,6 +12,11 @@ class ProjectScansController < ApplicationController
     expanded_root = File.expand_path(project_root)
     unless File.directory?(expanded_root)
       return redirect_to root_path, alert: "Project root is not a directory: #{project_root}"
+    end
+
+    real_root = Pathname.new(expanded_root).realpath.to_s
+    unless allowed_root?(real_root)
+      return redirect_to root_path, alert: "Project root is outside the allowed scan directories."
     end
 
     mode = params[:mode].to_s.downcase.presence || "initial"
@@ -33,6 +42,12 @@ class ProjectScansController < ApplicationController
   end
 
   private
+
+  def allowed_root?(real_path)
+    ALLOWED_ROOTS.any? do |root|
+      real_path == root || real_path.start_with?("#{root}/")
+    end
+  end
 
   def file_globs_param
     globs = params[:file_globs].to_s.split(/[\r\n,]+/).map(&:strip).reject(&:blank?)
