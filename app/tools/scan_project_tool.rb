@@ -20,9 +20,10 @@ class ScanProjectTool < ApplicationTool
     optional(:mode).filled(:string).description("Scan mode: initial, rescan, or validate. Default: initial.")
     optional(:dry_run).maybe(:bool).description("When true, preview changes without writing to the graph.")
     optional(:file_globs).array(:string).description("Optional file globs to scan, relative to project_root.")
+    optional(:scan_id).maybe(:string).description("Existing scan operation_id to resume a paused validation batch. If omitted, a new scan is started.")
   end
 
-  def call(project_root:, project_name: nil, aliases: nil, mode: "initial", dry_run: false, file_globs: [])
+  def call(project_root:, project_name: nil, aliases: nil, mode: "initial", dry_run: false, file_globs: [], scan_id: nil)
     unless File.directory?(File.expand_path(project_root.to_s))
       raise FastMcp::Tool::InvalidArgumentsError, "Project root does not exist or is not a directory"
     end
@@ -31,7 +32,8 @@ class ScanProjectTool < ApplicationTool
       raise FastMcp::Tool::InvalidArgumentsError, "mode must be one of: #{MODES.join(', ')}"
     end
 
-    scan_id = SecureRandom.uuid
+    resumed = scan_id.to_s.present?
+    scan_id = scan_id.to_s.presence || SecureRandom.uuid
     expanded_root = File.expand_path(project_root.to_s)
 
     ProjectScanJob.perform_later(
@@ -47,6 +49,7 @@ class ScanProjectTool < ApplicationTool
     {
       scan_id: scan_id,
       status: "queued",
+      resumed: resumed,
       project_root: expanded_root,
       mode: mode.to_s.downcase,
       dry_run: dry_run == true

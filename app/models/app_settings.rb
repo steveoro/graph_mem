@@ -39,6 +39,9 @@ class AppSettings < RailsSettings::Base
 
   # Project scan settings
   field :project_scan_roots, default: [ Dir.pwd, Dir.home, Dir.tmpdir ].join(","), type: :string
+  field :enable_project_scan_validation, default: true, type: :boolean
+  field :project_scan_validation_batch_size, default: 5, type: :integer,
+        validates: { numericality: { greater_than_or_equal_to: 0, less_than_or_equal_to: 1000 } }
 
   # Compaction review row retention (approved/dismissed rows are pruned after N days)
   field :compaction_review_row_retention_days, default: 30, type: :integer,
@@ -113,6 +116,21 @@ class AppSettings < RailsSettings::Base
 
   def self.llm_summarization_enabled?
     read_boolean_setting("enable_llm_summarization", default: false)
+  end
+
+  def self.project_scan_validation_enabled?
+    read_boolean_setting("enable_project_scan_validation", default: true)
+  end
+
+  def self.project_scan_validation_batch_size
+    raw = connection.select_value(
+      sanitize_sql([ "SELECT value FROM #{table_name} WHERE var = ?", "project_scan_validation_batch_size" ])
+    )
+    return 5 if raw.nil?
+
+    YAML.safe_load(raw.to_s).to_i.clamp(0, 1000)
+  rescue StandardError
+    5
   end
 
   def self.read_boolean_setting(var_name, default: false)

@@ -140,7 +140,7 @@ module Operator
         },
         project_scans: {
           title: t("operator.settings.groups.project_scans"),
-          settings: %w[project_scan_roots]
+          settings: %w[project_scan_roots enable_project_scan_validation]
         }
       }
     end

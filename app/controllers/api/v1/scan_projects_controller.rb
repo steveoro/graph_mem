@@ -12,7 +12,7 @@ module Api
         mode = params[:mode].to_s.downcase.presence || "initial"
         return render_error("mode must be initial, rescan, or validate") unless ScanProjectTool::MODES.include?(mode)
 
-        scan_id = SecureRandom.uuid
+        scan_id = params[:scan_id].to_s.presence || SecureRandom.uuid
         ProjectScanJob.perform_later(
           scan_id,
           File.expand_path(project_root),
@@ -26,6 +26,7 @@ module Api
         render json: {
           scan_id: scan_id,
           status: "queued",
+          resumed: params[:scan_id].to_s.present?,
           project_root: File.expand_path(project_root),
           mode: mode,
           dry_run: params[:dry_run].to_s.downcase == "true"

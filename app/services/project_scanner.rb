@@ -3,6 +3,11 @@
 # Scans a project root on disk, extracts structured project knowledge via an LLM,
 # and reconciles it with the graph. Destructive changes are queued as
 # `scan_review` maintenance rows rather than applied immediately.
+#
+# A final validation pass checks the existing project subtree (excluding entities
+# created by this scan) for observations and relations that look mis-assigned, and
+# either repairs them automatically when the target is unambiguous or queues a
+# `scan_review` item for operator/agent review.
 class ProjectScanner
   DEFAULT_FILE_GLOBS = %w[
     README*
@@ -24,12 +29,17 @@ class ProjectScanner
 
   Result = Struct.new(
     :success,
+    :status,
+    :message,
     :project_entity,
     :entities_created,
     :entities_updated,
     :observations_created,
     :observations_obsoleted,
+    :observations_moved,
     :relations_created,
+    :relations_deleted,
+    :entities_reparented,
     :scan_review_items,
     :dismissed_compaction_items,
     :errors,
@@ -37,16 +47,25 @@ class ProjectScanner
     :fallback_reason,
     keyword_init: true
   ) do
+    def initialize(success: true, status: "completed", message: nil, **kwargs)
+      super(success: success, status: status, message: message, **kwargs)
+    end
+
     def to_h
       {
         success: success,
+        status: status,
+        message: message,
         project_entity_id: project_entity&.id,
         project_entity_name: project_entity&.name,
         entities_created: entities_created || 0,
         entities_updated: entities_updated || 0,
         observations_created: observations_created || 0,
         observations_obsoleted: observations_obsoleted || 0,
+        observations_moved: observations_moved || 0,
         relations_created: relations_created || 0,
+        relations_deleted: relations_deleted || 0,
+        entities_reparented: entities_reparented || 0,
         scan_review_items: scan_review_items || [],
         dismissed_compaction_items: dismissed_compaction_items || 0,
         errors: errors || [],
@@ -58,7 +77,7 @@ class ProjectScanner
 
   def initialize(project_root:, project_name: nil, aliases: nil, mode: "initial",
                  dry_run: false, file_globs: nil, operation_progress: nil,
-                 max_files: nil, max_total_input_bytes: nil)
+                 max_files: nil, max_total_input_bytes: nil, scan_id: nil)
     @project_root = File.expand_path(project_root.to_s)
     @project_name = project_name.to_s.strip.presence
     @aliases = Array(aliases).flat_map { |a| a.to_s.split(/[,|;]/).map(&:strip) }.reject(&:blank?)
@@ -68,17 +87,25 @@ class ProjectScanner
     @operation_progress = operation_progress
     @max_files = (max_files || MAX_FILES).to_i
     @max_total_input_bytes = (max_total_input_bytes || MAX_TOTAL_INPUT_BYTES).to_i
+    @scan_id = scan_id || SecureRandom.uuid
     @logger = Rails.logger
     @entities_by_path = {}
+    @created_entity_ids = Set.new
     @scan_review_items = []
     @errors = []
     @dismissed_compaction_items = 0
     @project_entity = nil
+    @context_text = ""
+    @extracted_data = {}
     @created_count = 0
     @updated_count = 0
     @observations_created_count = 0
     @observations_obsoleted_count = 0
     @relations_created_count = 0
+    @observations_moved_count = 0
+    @relations_deleted_count = 0
+    @entities_reparented_count = 0
+    @validation_paused = false
   end
 
   def call
@@ -86,22 +113,56 @@ class ProjectScanner
       return failed_result("Project root does not exist: #{@project_root}")
     end
 
+    if @mode == "validate"
+      return run_validation_only
+    end
+
     update_progress!(phase: "discovering_files", message: "Discovering project files")
     @discovered_files = discover_files
     return failed_result("No readable files found in project root") if @discovered_files.empty?
 
     update_progress!(phase: "reading_files", message: "Reading #{@discovered_files.size} project files")
-    context = build_context(@discovered_files)
+    @context_text = build_context(@discovered_files)
 
     update_progress!(phase: "extracting_knowledge", message: "Extracting knowledge")
-    extracted = extract_knowledge(context)
+    extracted = extract_knowledge(@context_text)
     return failed_result("Failed to extract knowledge: #{extracted[:error]}") unless extracted[:ok]
 
+    @extracted_data = extracted[:data] || {}
+
     update_progress!(phase: "reconciling_graph", message: "Reconciling with graph memory")
-    reconcile(extracted[:data])
+    reconcile(@extracted_data)
 
     unless @dry_run
+      validate_project_subtree!
       seed_scan_review_items!
+    end
+
+    if @validation_paused
+      update_progress!(
+        phase: "validation_paused",
+        message: "Project scan validation paused for next batch"
+      )
+
+      return Result.new(
+        success: @errors.empty?,
+        status: "paused",
+        message: "Project scan validation paused for next batch",
+        project_entity: @project_entity,
+        entities_created: @created_count,
+        entities_updated: @updated_count,
+        observations_created: @observations_created_count,
+        observations_obsoleted: @observations_obsoleted_count,
+        observations_moved: @observations_moved_count,
+        relations_created: @relations_created_count,
+        relations_deleted: @relations_deleted_count,
+        entities_reparented: @entities_reparented_count,
+        scan_review_items: @scan_review_items,
+        dismissed_compaction_items: @dismissed_compaction_items,
+        errors: @errors,
+        fallback: extracted[:fallback] == true,
+        fallback_reason: extracted[:fallback_reason] || extracted[:error]
+      )
     end
 
     update_progress!(phase: "completed", message: "Project scan completed")
@@ -113,7 +174,10 @@ class ProjectScanner
       entities_updated: @updated_count,
       observations_created: @observations_created_count,
       observations_obsoleted: @observations_obsoleted_count,
+      observations_moved: @observations_moved_count,
       relations_created: @relations_created_count,
+      relations_deleted: @relations_deleted_count,
+      entities_reparented: @entities_reparented_count,
       scan_review_items: @scan_review_items,
       dismissed_compaction_items: @dismissed_compaction_items,
       errors: @errors,
@@ -126,7 +190,77 @@ class ProjectScanner
 
   def failed_result(message)
     @errors << message
-    Result.new(success: false, errors: @errors, fallback: false)
+    Result.new(success: false, status: "failed", errors: @errors, fallback: false)
+  end
+
+  def scan_source(phase = "reconcile")
+    "project_scan:#{@scan_id}:#{phase}"
+  end
+
+  def run_validation_only
+    unless @project_name.present?
+      return failed_result("project_name is required for validate mode")
+    end
+
+    update_progress!(phase: "resolving_project", message: "Resolving project root for validation")
+    @project_entity = MemoryEntity.find_by(name: @project_name, entity_type: NodeOperationsStrategy::PROJECT_ENTITY_TYPE)
+    @project_entity ||= MemoryEntity.where(entity_type: NodeOperationsStrategy::PROJECT_ENTITY_TYPE).find { |e|
+      (e.aliases.to_s.split(/[,|;]/).map(&:strip).map(&:downcase) & [ @project_name.to_s.downcase ]).any?
+    }
+
+    return failed_result("Project entity not found: #{@project_name}") unless @project_entity
+
+    unless @dry_run
+      validate_project_subtree!
+      seed_scan_review_items!
+    end
+
+    if @validation_paused
+      update_progress!(
+        phase: "validation_paused",
+        message: "Project validation paused for next batch"
+      )
+
+      return Result.new(
+        success: @errors.empty?,
+        status: "paused",
+        message: "Project validation paused for next batch",
+        project_entity: @project_entity,
+        entities_created: 0,
+        entities_updated: 0,
+        observations_created: 0,
+        observations_obsoleted: @observations_obsoleted_count,
+        observations_moved: @observations_moved_count,
+        relations_created: 0,
+        relations_deleted: @relations_deleted_count,
+        entities_reparented: @entities_reparented_count,
+        scan_review_items: @scan_review_items,
+        dismissed_compaction_items: 0,
+        errors: @errors,
+        fallback: false,
+        fallback_reason: nil
+      )
+    end
+
+    update_progress!(phase: "completed", message: "Project validation completed (#{@dry_run ? 'dry run' : 'applied'})")
+
+    Result.new(
+      success: @errors.empty?,
+      project_entity: @project_entity,
+      entities_created: 0,
+      entities_updated: 0,
+      observations_created: 0,
+      observations_obsoleted: @observations_obsoleted_count,
+      observations_moved: @observations_moved_count,
+      relations_created: 0,
+      relations_deleted: @relations_deleted_count,
+      entities_reparented: @entities_reparented_count,
+      scan_review_items: @scan_review_items,
+      dismissed_compaction_items: 0,
+      errors: @errors,
+      fallback: false,
+      fallback_reason: nil
+    )
   end
 
   def discover_files
@@ -472,6 +606,7 @@ class ProjectScanner
       description: entity_data["description"].to_s.strip.presence
     )
     @created_count += 1
+    @created_entity_ids << entity.id
     entity
   rescue StandardError => e
     @errors << "Failed to create/update entity #{name}: #{e.message}"
@@ -489,7 +624,7 @@ class ProjectScanner
       MemoryObservation.create!(
         memory_entity: entity,
         content: text,
-        source: "project_scan:#{@project_root}",
+        source: scan_source("reconcile"),
         confidence: 0.9
       )
       @observations_created_count += 1
@@ -517,7 +652,8 @@ class ProjectScanner
       from_entity_id: from_entity.id,
       to_entity_id: target.id,
       relation_type: relation_type,
-      confidence: rel["confidence"].to_f.clamp(0.0, 1.0).presence
+      confidence: rel["confidence"].to_f.clamp(0.0, 1.0).presence,
+      properties: { source: scan_source("reconcile"), scan_id: @scan_id }
     )
     @relations_created_count += 1
   rescue StandardError => e
@@ -554,9 +690,9 @@ class ProjectScanner
       next unless entity
       next if entity.entity_type == NodeOperationsStrategy::PROJECT_ENTITY_TYPE
 
-      # Obsolete observations sourced from prior scans or without a source.
+      # Obsolete observations sourced from prior project scan runs.
       entity.active_memory_observations.each do |observation|
-        if observation.source.to_s.start_with?("project_scan") || observation.source.blank?
+        if from_prior_scan?(observation.source)
           observation.mark_obsolete!(reason: "not found in project scan")
           @observations_obsoleted_count += 1
         end
@@ -572,6 +708,42 @@ class ProjectScanner
         })
       end
     end
+  end
+
+  def from_prior_scan?(source)
+    source = source.to_s
+    return false if source.include?(@scan_id)
+
+    source.start_with?("project_scan") || source.start_with?("project_scan_skill")
+  end
+
+  def validate_project_subtree!
+    return if @project_entity.nil?
+    return unless AppSettings.project_scan_validation_enabled?
+
+    validator = ProjectScanValidator.new(
+      project_entity: @project_entity,
+      scan_id: @scan_id,
+      created_entity_ids: @created_entity_ids,
+      context_text: @context_text,
+      extracted_data: @extracted_data,
+      project_root: @project_root,
+      dry_run: @dry_run,
+      logger: @logger,
+      operation_progress: @operation_progress
+    )
+
+    merge_validation_result(validator.call)
+  end
+
+  def merge_validation_result(result)
+    @observations_moved_count += result.observations_moved.to_i
+    @observations_obsoleted_count += result.observations_obsoleted.to_i
+    @relations_deleted_count += result.relations_deleted.to_i
+    @entities_reparented_count += result.entities_reparented.to_i
+    @scan_review_items.concat(result.scan_review_items || [])
+    @errors.concat(result.errors || [])
+    @validation_paused = result.paused if result.respond_to?(:paused)
   end
 
   def dismiss_conflicting_compaction_reviews
@@ -602,7 +774,7 @@ class ProjectScanner
 
     scanned_ids = @entities_by_path.values.map(&:id).uniq
     # If the review involves only entities we scanned and proposes a merge/relationship
-    # that the scan did not mention, it is potentially stale. A conservative rule:
+    # that the scan result contains no relation between the two entity names, it is potentially stale. A conservative rule:
     # dismiss merge suggestions for scanned entities when the scan result contains
     # no relation between the two entity names.
     return false unless entity_ids.all? { |id| scanned_ids.include?(id) }
@@ -643,12 +815,14 @@ class ProjectScanner
     )
   end
 
-  def update_progress!(phase:, message:)
+  def update_progress!(phase:, message:, current: nil, total: nil)
     return unless @operation_progress
 
+    current_value = current || @operation_progress.current_count.to_i + 1
+    total_value = total || [ @operation_progress.total_count.to_i, 5 ].max
     @operation_progress.update_progress!(
-      current: @operation_progress.current_count.to_i + 1,
-      total: [ @operation_progress.total_count.to_i, 6 ].max,
+      current: current_value,
+      total: total_value,
       phase: phase,
       message: message,
       counters: {
@@ -656,7 +830,10 @@ class ProjectScanner
         entities_updated: @updated_count,
         observations_created: @observations_created_count,
         observations_obsoleted: @observations_obsoleted_count,
-        relations_created: @relations_created_count
+        observations_moved: @observations_moved_count,
+        relations_created: @relations_created_count,
+        relations_deleted: @relations_deleted_count,
+        entities_reparented: @entities_reparented_count
       }
     )
     OperationProgressBroadcaster.call(@operation_progress)
