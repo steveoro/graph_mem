@@ -1,0 +1,38 @@
+---
+description: Always select the project RVM gemset before running any Ruby command
+globs: 
+alwaysApply: true
+---
+# Run Ruby commands through the project RVM gemset
+
+This project pins its own Ruby **and** its own gemset, which are not the shell default, so a
+bare `bundle`/`rspec` runs against the wrong Ruby.
+
+## The rule
+
+Never run `bundle`, `rails`, `rake`, `rspec`, `rubocop`, `gem` or a generator from a bare
+shell. Select the gemset first, in the same command:
+
+```bash
+source "$HOME/.rvm/scripts/rvm" && rvm use ruby-3.4.1@graph_mem && bundle exec <command>
+```
+
+`source` is required: `rvm` is a shell function, absent from non-interactive shells.
+`.versions.conf` (`ruby=` plus `ruby-gemset=`) is the source of truth if the pin changes.
+
+## Do not rely on the per-directory auto-switch
+
+RVM's project switch is a `cd` hook installed by the *interactive* shell profile. Scripted and
+agent shells are non-interactive, so it may apply to one command and silently not to the next.
+An explicit `rvm use` is mandatory even when a previous command in the same shell happened to
+pick up the right Ruby.
+
+## A wrong-Ruby run looks like a broken bundle
+
+It fails with `Bundler::GemNotFound` and a "Could not find ..." list naming most of the
+lockfile. That means the gemset was not selected, not that the bundle is broken:
+
+- Do **not** run `bundle install` or install gems to make it pass.
+- Re-run with `rvm use`, and add `ruby -v` to confirm the version before trusting a pass or a
+  failure.
+- `Warning! PATH is not properly set up` from `rvm use` is harmless; the gemset is selected.
