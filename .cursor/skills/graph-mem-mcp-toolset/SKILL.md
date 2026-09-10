@@ -87,7 +87,7 @@ Before calling `CallMcpTool` for any `user-graph_mem` tool:
   entities (cosine < 0.10), and dedupes identical observations. Lower-confidence
   cases are queued for review.
 - `dream_state_status` reports whether compaction is running/paused plus stats.
-- `get_maintenance_reports(report_type: "compaction_review")` returns the queued merge/orphan suggestions; action good ones with `merge_entities`.
+- `list_maintenance_review` returns queued merge/orphan rows; action good ones with `apply_maintenance_review` (or `merge_entities` when both entity ids are already known). Use `get_maintenance_reports` for stored report documents, not row pagination.
 - Mutating tools auto-pause compaction, so no coordination is needed — but
   search results may shift slightly mid-run.
 
