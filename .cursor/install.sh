@@ -82,6 +82,13 @@ for _ in $(seq 1 60); do
   if sudo mariadb -e "SELECT 1" >/dev/null 2>&1; then break; fi
   sleep 1
 done
+# On some snapshot-booted VMs /var/run is a real directory rather than the usual
+# symlink to /run, so MariaDB's socket at /run/mysqld/mysqld.sock is not visible
+# at the /var/run/mysqld/mysqld.sock path config/database.yml expects. Bridge it.
+if [ ! -e /var/run/mysqld/mysqld.sock ] && [ -e /run/mysqld/mysqld.sock ]; then
+  sudo mkdir -p /var/run/mysqld
+  sudo ln -sf /run/mysqld/mysqld.sock /var/run/mysqld/mysqld.sock
+fi
 # Allow root to authenticate BOTH via password (used by the app, running as the
 # non-root VM user) AND via the unix socket (so this script's `sudo mariadb`
 # keeps working on reruns). This makes the block idempotent.

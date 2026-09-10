@@ -15,8 +15,19 @@ if ! sudo mariadb -e "SELECT 1" >/dev/null 2>&1; then
   fi
 fi
 
+bridge_socket() {
+  # On some snapshot-booted VMs /var/run is a real directory rather than the
+  # usual symlink to /run, so MariaDB's socket at /run/mysqld/mysqld.sock is not
+  # visible at the /var/run/mysqld/mysqld.sock path config/database.yml expects.
+  if [ ! -e /var/run/mysqld/mysqld.sock ] && [ -e /run/mysqld/mysqld.sock ]; then
+    sudo mkdir -p /var/run/mysqld
+    sudo ln -sf /run/mysqld/mysqld.sock /var/run/mysqld/mysqld.sock
+  fi
+}
+
 for _ in $(seq 1 60); do
   if sudo mariadb -e "SELECT 1" >/dev/null 2>&1; then
+    bridge_socket
     echo "MariaDB is ready"
     exit 0
   fi
