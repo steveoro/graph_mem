@@ -23,8 +23,12 @@ if ! command -v mariadbd >/dev/null 2>&1 || ! dpkg -s libmariadb-dev >/dev/null 
     sudo bash /tmp/mariadb_repo_setup --mariadb-server-version="mariadb-11.8"
   fi
   sudo DEBIAN_FRONTEND=noninteractive apt-get update -qq
+  # mariadb-client-compat provides the `mysql`/`mysqldump` command names, which
+  # Rails shells out to when loading db/structure.sql (schema_format = :sql).
+  # It is only a Recommends of mariadb-client, so it must be listed explicitly
+  # alongside --no-install-recommends.
   sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-    mariadb-server mariadb-client libmariadb-dev \
+    mariadb-server mariadb-client mariadb-client-compat libmariadb-dev \
     build-essential git curl ca-certificates \
     libssl-dev libyaml-dev libreadline-dev zlib1g-dev libffi-dev libgdbm-dev \
     libncurses-dev libvips bzip2 sqlite3 autoconf bison pkg-config
@@ -64,8 +68,17 @@ else
 fi
 
 echo "==> [5/6] MariaDB service + databases"
-sudo service mariadb start || true
-for _ in $(seq 1 30); do
+# Start MariaDB robustly: `service` works on normal agent VMs; fall back to
+# starting the daemon directly for build/container contexts where init is
+# unavailable. Idempotent — returns immediately if already up.
+if ! sudo mariadb -e "SELECT 1" >/dev/null 2>&1; then
+  sudo install -d -o mysql -g mysql /run/mysqld 2>/dev/null || true
+  sudo service mariadb start >/dev/null 2>&1 || true
+  if ! sudo mariadb -e "SELECT 1" >/dev/null 2>&1; then
+    sudo bash -c 'nohup mariadbd-safe --datadir=/var/lib/mysql >/var/log/mariadbd-safe.log 2>&1 &'
+  fi
+fi
+for _ in $(seq 1 60); do
   if sudo mariadb -e "SELECT 1" >/dev/null 2>&1; then break; fi
   sleep 1
 done

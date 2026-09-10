@@ -8,10 +8,14 @@
 set -euo pipefail
 
 if ! sudo mariadb -e "SELECT 1" >/dev/null 2>&1; then
-  sudo service mariadb start || true
+  sudo install -d -o mysql -g mysql /run/mysqld 2>/dev/null || true
+  sudo service mariadb start >/dev/null 2>&1 || true
+  if ! sudo mariadb -e "SELECT 1" >/dev/null 2>&1; then
+    sudo bash -c 'nohup mariadbd-safe --datadir=/var/lib/mysql >/var/log/mariadbd-safe.log 2>&1 &'
+  fi
 fi
 
-for _ in $(seq 1 30); do
+for _ in $(seq 1 60); do
   if sudo mariadb -e "SELECT 1" >/dev/null 2>&1; then
     echo "MariaDB is ready"
     exit 0
