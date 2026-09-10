@@ -32,7 +32,7 @@ gem "solid_cable"
 gem "tailwindcss-rails", "~> 4.3"
 
 gem "fast-mcp" # MCP Server implementation
-gem "haml-rails", "~> 2.1"
+gem "haml-rails", "~> 3.1"
 gem "html2haml"
 gem "kaminari" # Pagination
 gem "kaminari-tailwind"
