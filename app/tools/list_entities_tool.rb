@@ -9,7 +9,12 @@ class ListEntitiesTool < ApplicationTool
     "list_entities"
   end
 
-  description "Retrieves a paginated list of all entities, returning their ID, name, and type, using page/per_page."
+  description "Page the entire entity catalog with no search query, returning id, name, and type only. " \
+    "Pass optional `page` (integer, default 1) and `per_page` (integer, default 20, max 100). " \
+    "Do not use for text or semantic search; use `search_entities` instead. " \
+    "Do not use to search observation text or return relations; use `search_subgraph` instead. " \
+    "Do not use to load one known entity; use `get_entity` instead. " \
+    "Do not use for graph health counts; use `get_graph_stats` instead."
 
   # Defines arguments for fast-mcp validation.
   arguments do

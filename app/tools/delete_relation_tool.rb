@@ -6,7 +6,11 @@ class DeleteRelationTool < ApplicationTool
     "delete_relation"
   end
 
-  description "Delete a specific relation by ID."
+  description "Delete one graph edge by id without deleting either entity. Pass required `relation_id` (integer); " \
+    "optional `reason` (string, audit log). Do not use if you lack a relation_id; use `find_relations` first. " \
+    "Do not use to remove an entity and its relations; use `delete_entity` instead. " \
+    "Do not use for queued duplicate-relation cleanup; use `apply_maintenance_review` instead. " \
+    "Do not use to add an edge; use `create_relation` instead."
 
   arguments do
     required(:relation_id).filled(:integer).description("The ID of the relation to delete.")

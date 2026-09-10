@@ -8,10 +8,13 @@ class GetMaintenanceReportsTool < ApplicationTool
     "get_maintenance_reports"
   end
 
-  description "Retrieve recent maintenance and dream-state compaction reports. " \
-    "Report types: 'orphans' (entities lacking parents/observations), " \
-    "'duplicates' (duplicate observation groups), and 'compaction_review' (merge/orphan suggestions the dream-state " \
-    "job queued for manual review). Omit report_type to get the latest report of each type."
+  description "Read stored maintenance report documents, not paginated review rows. Pass optional `report_type` " \
+    "(orphans, duplicates, compaction_review, embedding_maintenance, contradictions, or scan_review; omit for the " \
+    "latest of each type) and `limit` (integer, default 5, max 30). " \
+    "Do not use for paginated item_id rows; use `list_maintenance_review` instead. " \
+    "Do not use to apply or dismiss a row; use `apply_maintenance_review` or `dismiss_maintenance_review` instead. " \
+    "Do not use for live compaction job status; use `dream_state_status` instead. " \
+    "Do not use for a live duplicate scan; use `suggest_merges` instead."
 
   arguments do
     optional(:report_type).maybe(:string)

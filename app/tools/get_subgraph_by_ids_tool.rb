@@ -5,8 +5,11 @@ class GetSubgraphByIdsTool < ApplicationTool
     "get_subgraph_by_ids"
   end
 
-  description "Retrieves a specific set of entities by their IDs, including their observations, " \
-    "and all relations that exist exclusively between them."
+  description "Load a known id set as a closed subgraph: those entities, their observations, and only relations whose " \
+    "both ends are in the set. Pass required `entity_ids` (array of integers); optional `query` (string), " \
+    "`observation_limit` (integer). Do not use to discover entities by text; use `search_subgraph` or `search_entities` instead. " \
+    "Do not use for one id's complete incident relations; use `get_entity` instead. " \
+    "Do not use to expand unknown neighbors; use `traverse_graph` instead."
 
   # Defines arguments for fast-mcp validation.
   arguments do

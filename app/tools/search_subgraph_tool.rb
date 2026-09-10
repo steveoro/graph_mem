@@ -9,9 +9,15 @@ class SearchSubgraphTool < ApplicationTool
     "search_subgraph"
   end
 
-  description "Searches a query across entity names, types, aliases, and observations. " \
-    "Returns a paginated subgraph of matching entities (with observations) " \
-    "and relations exclusively between them, using page/per_page."
+  description "Search names, types, aliases, and observations and return a paginated subgraph of matches " \
+    "(observations plus relations exclusively among them). Pass required `query` (string); optional " \
+    "`search_in_name`, `search_in_type`, `search_in_aliases`, `search_in_observations` (bool, default true), " \
+    "`page` (integer, default 1), `per_page` (integer, default 20, max 100). Not a BFS from a start node. " \
+    "Do not use for ranked summaries without observations or relations; use `search_entities` instead. " \
+    "Do not use with known ids; use `get_subgraph_by_ids` instead. " \
+    "Do not use for multi-hop expansion; use `traverse_graph` instead. " \
+    "Do not use for a synthesized answer; use `summarize` instead. " \
+    "Do not use as a no-query catalog; use `list_entities` instead."
 
   # Defines arguments for fast-mcp validation.
   arguments do

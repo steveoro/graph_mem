@@ -5,7 +5,12 @@ class ApplyMaintenanceReviewTool < ApplicationTool
     "apply_maintenance_review"
   end
 
-  description "Apply a maintenance review row (merge, relation, or orphan parent). Supports dry-run preview."
+  description "Apply a queued maintenance-review row (merge, relationship proposal, orphan parent, or relation integrity). " \
+    "Pass required `item_id` (string UUID); optional `report_type` (string, default compaction_review), " \
+    "`dry_run` (bool, default false), `action_params` (hash). " \
+    "Do not use without a queue item_id; use `list_maintenance_review` first. " \
+    "Do not use to skip, ignore, or restore without applying; use `dismiss_maintenance_review` instead. " \
+    "Do not use to merge two known entity ids outside the queue; use `merge_entities` instead."
 
   arguments do
     required(:item_id).filled(:string).description("Maintenance report row UUID.")

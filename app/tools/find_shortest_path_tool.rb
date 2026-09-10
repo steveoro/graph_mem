@@ -5,9 +5,13 @@ class FindShortestPathTool < ApplicationTool
     "find_shortest_path"
   end
 
-  description "Finds the shortest path (by hop count) between two entities using bounded " \
-    "breadth-first search. Returns the ordered entities and relations along the path, or " \
-    "found: false when no path exists within max_depth."
+  description "Find the shortest hop-count path between two entities. Pass required `from_entity_id` and " \
+    "`to_entity_id` (integer; also accepts entity name); optional `max_depth` (integer, default 2, max 5), " \
+    "`direction` (both|outgoing|incoming, default both), `relation_types` (array of strings). " \
+    "Returns ordered path entities and relations, or found false when none exists within max_depth. " \
+    "Do not use for a full neighborhood from one start; use `traverse_graph` instead. " \
+    "Do not use for 1-hop filters; use `find_relations` instead. " \
+    "Do not use for keyword lookup; use `search_subgraph` instead."
 
   arguments do
     required(:from_entity_id).filled(:integer).description("The ID of the source entity. Also accepts entity name (string).")

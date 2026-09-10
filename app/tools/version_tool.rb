@@ -6,7 +6,10 @@ class VersionTool < ApplicationTool
     "get_version"
   end
 
-  description "Returns the current Graph-Memory backend implementation version"
+  description "Return the GraphMem server software version as {version: string}. Takes no arguments. " \
+    "Do not use for wall-clock time; use `get_current_time` instead. " \
+    "Do not use for graph health metrics; use `get_graph_stats` instead. " \
+    "Do not use for compaction job status; use `dream_state_status` instead."
 
   # No arguments are needed for this tool.
 

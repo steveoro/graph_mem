@@ -6,8 +6,15 @@ class GetEntityTool < ApplicationTool
     "get_entity"
   end
 
-  description "Retrieve a specific entity by ID, including its active observations and relations. " \
-    "Accepts entity_id (integer) or entity name (string); include_obsolete exposes observation history."
+  description "Retrieve one known entity with its observations and relations. Pass required `entity_id` " \
+    "(integer; also accepts an entity-name string); optional `include_obsolete` (bool, default false), " \
+    "`include_ranked` (bool, default false), `query` (string), `observation_limit` (integer). " \
+    "Do not use for keyword discovery; use `search_entities` or `search_subgraph` instead. " \
+    "Do not use to page the catalog; use `list_entities` instead. " \
+    "Do not use to load many known ids as a closed subgraph; use `get_subgraph_by_ids` instead. " \
+    "Do not use for a multi-hop neighborhood; use `traverse_graph` instead. " \
+    "Do not use to ask what the graph knows about a topic; use `summarize` instead. " \
+    "Do not use when you only need observations sorted by trust; use `rank_observations` instead."
 
   arguments do
     required(:entity_id).filled(:integer).description("The ID of the entity to retrieve.")

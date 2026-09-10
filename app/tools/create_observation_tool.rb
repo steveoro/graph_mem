@@ -5,9 +5,13 @@ class CreateObservationTool < ApplicationTool
     "create_observation"
   end
 
-  description "Creates new observations to existing entities in the knowledge graph. " \
-    "Requires entity_id (integer) and text_content (string). " \
-    "Also accepts entity name (string) instead of entity_id, and content/contents as aliases for text_content."
+  description "Add a new fact to an existing entity and generate an embedding. Pass required `entity_id` " \
+    "(integer; also accepts entity name) and `text_content` (string); optional `confidence` (float 0-1), " \
+    "`source` (string), `valid_from` (ISO 8601 string), `valid_until` (ISO 8601 string), `tags` (array of strings). " \
+    "Aliases `content`/`contents` map to `text_content`. Do not use to edit or supersede an existing observation; " \
+    "use `update_observation` instead. Do not use to mark a fact obsolete; use `delete_observation` instead. " \
+    "Do not use to create a new node; use `create_entity` instead. " \
+    "Do not use for a batch of up to 50 creates; use `bulk_update` instead."
 
   arguments do
     required(:entity_id).filled(:integer).description("The ID of the entity to add the observation to")

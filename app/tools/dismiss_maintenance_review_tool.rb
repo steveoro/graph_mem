@@ -7,7 +7,12 @@ class DismissMaintenanceReviewTool < ApplicationTool
     "dismiss_maintenance_review"
   end
 
-  description "Dismiss, ignore, or restore a maintenance review row by explicit item_id."
+  description "Dismiss, ignore, or restore a maintenance-review queue row without applying the suggestion. " \
+    "Pass required `item_id` (string UUID) and `action` (dismiss, ignore, or restore); optional " \
+    "`report_type` (string, default compaction_review), `reason` (string). " \
+    "Do not use to execute the suggestion; use `apply_maintenance_review` instead. " \
+    "Do not use to look up a row; use `list_maintenance_review` instead. " \
+    "Do not use to merge entities; use `merge_entities` instead."
 
   arguments do
     required(:item_id).filled(:string).description("Maintenance report row UUID.")

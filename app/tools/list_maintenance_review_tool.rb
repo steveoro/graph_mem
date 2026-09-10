@@ -7,7 +7,14 @@ class ListMaintenanceReviewTool < ApplicationTool
     "list_maintenance_review"
   end
 
-  description "List compaction review queue rows with optional status/kind filters and pagination."
+  description "List paginated maintenance-review queue rows (including item_id) for later apply or dismiss. " \
+    "Pass optional `report_type` (string, default compaction_review), " \
+    "`status` (active, dismissed, approved, or ignored; default active), " \
+    "`kind` (string, e.g. entity_merge or orphan_parent), `page` (integer, default 1). per_page is not an input. " \
+    "Do not use for whole report documents; use `get_maintenance_reports` instead. " \
+    "Do not use to apply a row; use `apply_maintenance_review` instead. " \
+    "Do not use to dismiss, ignore, or restore a row; use `dismiss_maintenance_review` instead. " \
+    "Do not use to merge two known entity ids; use `merge_entities` instead."
 
   arguments do
     optional(:report_type).filled(:string).description('Report type. Defaults to "compaction_review".')

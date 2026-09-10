@@ -5,7 +5,11 @@ class ClearContextTool < ApplicationTool
     "clear_context"
   end
 
-  description "Clear the currently active project context. Searches will return results across all projects."
+  description "Remove this MCP client's active project context so searches are unscoped across all projects; " \
+    "does not delete entities. Takes no arguments. " \
+    "Do not use to inspect the current scope; use `get_context` instead. " \
+    "Do not use to switch to a project; use `set_context` instead. " \
+    "Do not use to delete a project or other entity; use `delete_entity` instead."
 
   def call
     context = graph_mem_context

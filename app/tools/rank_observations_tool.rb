@@ -5,7 +5,13 @@ class RankObservationsTool < ApplicationTool
     "rank_observations"
   end
 
-  description "Returns an entity's observations sorted by trust score, with the most reliable observation first."
+  description "Return one known entity's observations sorted by trust_score (most reliable first). Pass required " \
+    "`entity_id` (integer; also accepts entity name); optional `include_obsolete` (bool, default false), " \
+    "`limit` (integer, default all), `query` (string; relevance then trust). " \
+    "Do not use when you also need relations or entity metadata; use `get_entity` instead. " \
+    "Do not use for opposing observation pairs; use `detect_contradictions` instead. " \
+    "Do not use to find observations across entities by keyword; use `search_subgraph` instead. " \
+    "Do not use for a topic answer; use `summarize` instead."
 
   arguments do
     required(:entity_id).filled(:integer).description("The ID of the entity whose observations should be ranked.")
