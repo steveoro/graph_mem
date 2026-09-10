@@ -23,7 +23,9 @@ class ApplicationTool < FastMcp::Tool
     normalized = ParameterNormalizer.normalize(tool_name, args)
     arg_validation = self.class.input_schema.call(normalized)
     if arg_validation.errors.any?
-      raise FastMcp::Tool::InvalidArgumentsError, arg_validation.errors.to_h.to_json
+      details = arg_validation.errors.to_h
+      raise FastMcp::Tool::InvalidArgumentsError,
+            "Invalid arguments: #{details.to_json}. Correct the argument format required by the tool schema and retry."
     end
 
     record_client_activity!

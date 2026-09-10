@@ -101,7 +101,15 @@ RSpec.describe ApplicationTool do
       tool = DslTestTool.new
       expect {
         tool.call_with_schema_validation!(count: 5)
-      }.to raise_error(FastMcp::Tool::InvalidArgumentsError, /name/)
+      }.to raise_error(FastMcp::Tool::InvalidArgumentsError, /name/) do |error|
+        expect(error.message).to include("Invalid arguments:")
+        details = error.message[/{.*}/]
+        expect(JSON.parse(details)).to have_key("name")
+        envelope = ToolError.envelope(error, tool_name: "dsl_test")
+        expect(envelope["category"]).to eq("validation")
+        expect(envelope["retriable"]).to be(false)
+        expect(envelope["next_move"]).to match(/argument format/i)
+      end
     end
 
     it "records MCP client activity after validation succeeds" do
