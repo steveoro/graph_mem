@@ -8,8 +8,12 @@ class SuggestMergesTool < ApplicationTool
     "suggest_merges"
   end
 
-  description "Find entities that are potential duplicates using vector similarity. " \
-    "Returns pairs of entities that may represent the same concept and could be merged."
+  description "Live vector scan of duplicate entities; returns pairs and does not merge. Pass optional `threshold` " \
+    "(float, default 0.3 cosine distance), `limit` (integer, default 20), `entity_type` (string). " \
+    "Do not use to execute a merge; use `merge_entities` instead. " \
+    "Do not use for queued dream-state review rows; use `list_maintenance_review` instead. " \
+    "Do not use for observation polarity conflicts; use `detect_contradictions` instead. " \
+    "Do not use for compaction job status; use `dream_state_status` instead."
 
   arguments do
     optional(:threshold).filled(:float)

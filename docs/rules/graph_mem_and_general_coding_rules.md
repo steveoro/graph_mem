@@ -52,7 +52,7 @@ state management, not as a substitute for inspecting the repository.
 | Recall | `search_entities`, `search_subgraph`, `get_entity`, `get_subgraph_by_ids`, `summarize`, `list_entities` |
 | Traverse | `find_relations`, `traverse_graph`, `find_shortest_path` |
 | Persist | `create_entity`, `update_entity`, `delete_entity`, `create_observation`, `update_observation`, `delete_observation`, `create_relation`, `delete_relation`, `bulk_update` |
-| Maintain | `suggest_merges`, `merge_entities`, `dream_state_status`, `get_maintenance_reports`, `get_graph_stats`, `get_version`, `get_current_time`, `scan_project`, `scan_project_status` |
+| Maintain | `suggest_merges`, `merge_entities`, `dream_state_status`, `get_maintenance_reports`, `list_maintenance_review`, `apply_maintenance_review`, `dismiss_maintenance_review`, `get_graph_stats`, `get_version`, `get_current_time`, `scan_project`, `scan_project_status` |
 
 ### Multi-Agent Context Scoping
 
@@ -115,7 +115,7 @@ state management, not as a substitute for inspecting the repository.
   0.10, same `entity_type` only), and deletes byte-identical duplicate
   observations. Lower-confidence cases are queued for review.
 - Call `dream_state_status` to see whether compaction is `running`/`paused` plus its progress/stats.
-- Call `get_maintenance_reports(report_type: "compaction_review")` to read the queue of merge/orphan suggestions the job flagged for review, then action good ones with `merge_entities`.
+- Call `list_maintenance_review` to read the queue of merge/orphan suggestions the job flagged for review, then action good ones with `apply_maintenance_review` (or `merge_entities` when both entity ids are already known). Use `get_maintenance_reports` for stored report documents.
 - Mutating tools cooperatively pause compaction automatically — no action needed, but search results may shift slightly while a run is in progress.
 - Implication for writes: don't rely on the job to clean up sloppiness. Prefer
   `create_observation` on an existing entity or `update_entity` over creating

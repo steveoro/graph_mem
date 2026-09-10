@@ -7,11 +7,13 @@ class ScanProjectTool < ApplicationTool
     "scan_project"
   end
 
-  description "Scan a project root directory and reconcile the knowledge graph with the source. " \
-    "Returns a scan_id; the scan runs asynchronously via Solid Queue. " \
-    "If LLM summarization is disabled or unreachable, the scan falls back to a " \
-    "deterministic extraction of project metadata, manifest files, and top-level directories. " \
-    "Use scan_project_status to poll for completion."
+  description "Enqueue an asynchronous filesystem scan that reconciles the knowledge graph with a project root; " \
+    "returns a scan_id and does not wait. Pass required `project_root` (string); optional `project_name` (string), " \
+    "`aliases` (comma- or pipe-separated string), `mode` (initial, rescan, or validate; default initial), " \
+    "`dry_run` (bool), `file_globs` (array of strings), `scan_id` (string, resume a paused validation batch). " \
+    "Do not use to poll completion; use `scan_project_status` instead. " \
+    "Do not use to create a single node by hand; use `create_entity` instead. " \
+    "Do not use to scope searches to a project already in the graph; use `set_context` instead."
 
   arguments do
     required(:project_root).filled(:string).description("Absolute or relative path to the project root directory.")

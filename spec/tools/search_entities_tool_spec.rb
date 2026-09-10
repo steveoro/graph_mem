@@ -269,7 +269,15 @@ RSpec.describe SearchEntitiesTool, type: :model do
 
   describe 'tool configuration' do
     it 'has the correct description' do
-      expect(tool.class.description).to eq('Search for graph memory entities by name, entity type, and aliases with relevance ranking.')
+      expect(tool.class.description).to eq(
+        "Search entities by keyword and semantic similarity (hybrid RRF); returns ranked summaries without " \
+        "observation text or relations. Pass required `query` (string); optional `limit` (integer, default 50, max 100). " \
+        "Active context boosts matches (not a hard filter). " \
+        "Do not use to search observation text or return connecting relations; use `search_subgraph` instead. " \
+        "Do not use to load a known id; use `get_entity` instead. " \
+        "Do not use to page every entity with no query; use `list_entities` instead. " \
+        "Do not use to answer what the graph knows about a topic; use `summarize` instead."
+      )
     end
 
     it 'has the correct arguments configuration' do

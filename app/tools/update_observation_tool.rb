@@ -5,8 +5,12 @@ class UpdateObservationTool < ApplicationTool
     "update_observation"
   end
 
-  description "Updates an active observation in place or supersedes it with a new observation version. " \
-    "Superseded observations are retained for history and excluded from reads and search by default."
+  description "Edit an active observation in place or, with supersede true, create a replacement and mark the original " \
+    "superseded. Pass required `observation_id` (integer); optional `text_content`, `confidence`, `source`, " \
+    "`valid_from`, `valid_until`, `tags`, `supersede` (bool, default false), `reason`. Inactive observations cannot be edited. " \
+    "Do not use to add a new fact; use `create_observation` instead. " \
+    "Do not use to obsolete a fact without replacement; use `delete_observation` instead. " \
+    "Do not use to change entity metadata; use `update_entity` instead."
 
   arguments do
     required(:observation_id).filled(:integer).description("The ID of the active observation to update.")

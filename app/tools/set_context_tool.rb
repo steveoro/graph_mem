@@ -5,8 +5,11 @@ class SetContextTool < ApplicationTool
     "set_context"
   end
 
-  description "Set the active project context. Subsequent search operations will prioritize entities related to this project. " \
-    "Accepts entity_id (integer) or entity name (string)."
+  description "Set this MCP client's active project so `search_entities` and `search_subgraph` boost in-context " \
+    "entities without hard-filtering results. Pass required `entity_id` (integer; also accepts an entity-name string). " \
+    "Do not use to read the current project; use `get_context` instead. " \
+    "Do not use to search across all projects; use `clear_context` instead. " \
+    "Do not use to change entity fields or create a project; use `update_entity` or `create_entity` instead."
 
   arguments do
     required(:entity_id).filled(:integer).description("The ID of the entity to set as the active context.")

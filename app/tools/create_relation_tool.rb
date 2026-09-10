@@ -5,9 +5,14 @@ class CreateRelationTool < ApplicationTool
     "create_relation"
   end
 
-  description "Create a relationship between two existing entities. " \
-    "Requires from_entity_id (integer), to_entity_id (integer), and relation_type (string). " \
-    "Also accepts entity names (string) for from/to instead of integer IDs."
+  description "Add one directed edge between two existing entities. Pass required `from_entity_id` " \
+    "(integer or name; aliases `from_entity`, `from`), `to_entity_id` (integer or name; aliases `to_entity`, `to`), " \
+    "and `relation_type` (string, canonicalized); optional `weight` (float >=0), `confidence` (float 0-1), " \
+    "`properties` (hash). Do not use to create nodes; use `create_entity` instead. " \
+    "Do not use to batch-create relations; use `bulk_update` instead. " \
+    "Do not use to query existing 1-hop edges; use `find_relations` instead. " \
+    "Do not use for a multi-hop neighborhood; use `traverse_graph` instead. " \
+    "Do not use to remove an edge; use `delete_relation` instead."
 
   arguments do
     required(:from_entity_id).filled(:integer).description("The ID of the entity where the relation starts.")

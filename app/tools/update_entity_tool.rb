@@ -6,7 +6,11 @@ class UpdateEntityTool < ApplicationTool
     "update_entity"
   end
 
-  description "Updates an existing entity in the graph memory database. Allows modification of name, entity_type, aliases, and description."
+  description "Update metadata of an existing entity (not observations). Pass required `entity_id` (integer); " \
+    "optional `name` (unique string), `entity_type` (canonicalized string), `aliases` (replaces existing; empty string clears), " \
+    "`description` (empty string clears). Do not use to add or edit facts; use `create_observation` or `update_observation` instead. " \
+    "Do not use to create a node; use `create_entity` instead. Do not use to read; use `get_entity` instead. " \
+    "Do not use to delete; use `delete_entity` instead. Do not use to combine two entities; use `merge_entities` instead."
 
   arguments do
     required(:entity_id).filled(:integer).description("The ID of the entity to update.")

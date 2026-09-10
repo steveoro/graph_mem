@@ -5,9 +5,14 @@ class TraverseGraphTool < ApplicationTool
     "traverse_graph"
   end
 
-  description "Performs a bounded, multi-hop breadth-first traversal starting from an entity. " \
-    "Returns the reachable entities (with observations) and the relations connecting them, " \
-    "with configurable depth, direction, relation-type filtering, and an entity cap."
+  description "Perform a bounded multi-hop BFS from one start entity and return reachable entities (with observations) " \
+    "and connecting relations. Pass required `start_entity_id` (integer; also accepts entity name); optional " \
+    "`max_depth` (integer, default 2, max 5), `direction` (both|outgoing|incoming, default both), " \
+    "`relation_types` (array of strings), `max_entities` (integer, default 100, max 1000). " \
+    "Do not use for keyword search; use `search_subgraph` instead. " \
+    "Do not use for the shortest path between two ids; use `find_shortest_path` instead. " \
+    "Do not use for a 1-hop edge list; use `find_relations` instead. " \
+    "Do not use for an explicit id set with no expansion; use `get_subgraph_by_ids` instead."
 
   arguments do
     required(:start_entity_id).filled(:integer).description("The ID of the entity to start traversal from. Also accepts entity name (string).")

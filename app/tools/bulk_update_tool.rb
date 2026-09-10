@@ -7,12 +7,13 @@ class BulkUpdateTool < ApplicationTool
     "bulk_update"
   end
 
-  description "Perform multiple graph memory operations in a single atomic transaction. " \
-    "Supports creating entities, adding observations, and creating relations in one call. " \
-    "Maximum #{MAX_OPERATIONS} total operations per call. " \
-    "Accepts three separate arrays (entities, observations, relations) " \
-    "or an operations array with type-discriminated items. " \
-    "Entity references accept both entity_id (integer) and entity name (string)."
+  description "Atomically batch-create entities, observations, and relations (max #{MAX_OPERATIONS} operations; " \
+    "rolls back on error). Pass optional `entities`, `observations`, `relations` arrays, or `operations` " \
+    "(type-discriminated items with type create_entity, create_observation, or create_relation). " \
+    "At least one operation is required. Create-only. Do not use for a single create; use `create_entity`, " \
+    "`create_observation`, or `create_relation` instead. Do not use to update, delete, or merge; use " \
+    "`update_entity`, `update_observation`, `delete_entity`, `delete_observation`, `delete_relation`, or " \
+    "`merge_entities` instead."
 
   arguments do
     optional(:entities).description("Entities to create.")

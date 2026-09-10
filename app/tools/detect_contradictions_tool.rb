@@ -5,8 +5,13 @@ class DetectContradictionsTool < ApplicationTool
     "detect_contradictions"
   end
 
-  description "Scans an entity's active observations (and observations from 1-hop related entities) for pairs that are semantically similar but have opposite polarity. " \
-    "Candidate contradictions are returned and stored as a MaintenanceReport for operator review."
+  description "Scan an entity's active observations and 1-hop related observations for semantically similar pairs with " \
+    "opposite polarity; returns candidates and stores a contradictions MaintenanceReport. Pass required `entity_id` " \
+    "(integer; also accepts entity name); optional `max_distance` (float, default 0.35), `max_results` (integer, default 20). " \
+    "Does not merge or delete. Do not use for trust ranking; use `rank_observations` instead. " \
+    "Do not use for duplicate entities; use `suggest_merges` instead. " \
+    "Do not use to read stored reports; use `get_maintenance_reports` instead. " \
+    "Do not use to resolve a conflicting fact; use `update_observation` or `delete_observation` instead."
 
   arguments do
     required(:entity_id).filled(:integer).description("The ID of the entity to scan for contradictions.")

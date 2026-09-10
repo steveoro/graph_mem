@@ -7,8 +7,13 @@ class CreateEntityTool < ApplicationTool
     "create_entity"
   end
 
-  description "Create a new entity in the graph memory database. " \
-    "Also accepts entityType (camelCase) as an alias for entity_type."
+  description "Create a single new entity node. Pass required `name` (string) and `entity_type` (string); " \
+    "optional `observations` (array of strings), `aliases` (pipe-separated string), `description` (string). " \
+    "Alias `entityType` maps to `entity_type`. Types are canonicalized; cosine distance < 0.25 returns a warning " \
+    "instead of creating. Do not use until you have searched for an existing node; use `search_entities` first. " \
+    "Do not use to add facts to a known entity; use `create_observation` instead. " \
+    "Do not use to change metadata on an existing node; use `update_entity` instead. " \
+    "Do not use for an atomic batch of up to 50 creates; use `bulk_update` instead."
 
   arguments do
     required(:name).filled(:string).description("The unique name for the new entity.")

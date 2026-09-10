@@ -6,7 +6,12 @@ class DeleteEntityTool < ApplicationTool
     "delete_entity"
   end
 
-  description "Delete a specific entity by ID. This will also delete associated observations and relations."
+  description "Destroy one entity and cascade-delete its observations and relations. Pass required `entity_id` (integer); " \
+    "optional `reason` (string, audit log). Do not use when the entity is a duplicate of another; use `merge_entities` instead. " \
+    "Do not use to obsolete a single fact; use `delete_observation` instead. " \
+    "Do not use to remove a single edge; use `delete_relation` instead. " \
+    "Do not use to change metadata without deleting; use `update_entity` instead. " \
+    "Do not use to leave this client's project scope; use `clear_context` instead."
 
   arguments do
     required(:entity_id).filled(:integer).description("The ID of the entity to delete.")

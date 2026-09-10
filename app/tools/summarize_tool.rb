@@ -5,8 +5,15 @@ class SummarizeTool < ApplicationTool
     "summarize"
   end
 
-  description "Summarize what the knowledge graph knows about a query within the active project context. " \
-    "Returns deterministic source-backed evidence and optionally an LLM-generated synthesis when enabled."
+  description "Summarize what the knowledge graph knows about a topic with deterministic source-backed evidence " \
+    "(optional LLM synthesis). Pass required `query` (string); optional `entity_id` (integer), " \
+    "`max_results` (integer, default 10), `max_observations` (integer, default 20), " \
+    "`observations_per_entity` (integer; 0 disables cap), `max_depth` (integer, default 0), " \
+    "`include_sources` (bool, default true), `scope` (string: context or global), `style` (string: concise or detailed). " \
+    "Do not use for match listings; use `search_entities` or `search_subgraph` instead. " \
+    "Do not use to inspect one known entity; use `get_entity` instead. " \
+    "Do not use for a structural neighborhood; use `traverse_graph` instead. " \
+    "Do not use for numeric health metrics; use `get_graph_stats` instead."
 
   arguments do
     required(:query).filled(:string).description("The topic or question to summarize.")

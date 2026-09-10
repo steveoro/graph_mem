@@ -6,7 +6,12 @@ class FindRelationsTool < ApplicationTool
     "find_relations"
   end
 
-  description "Find relations based on optional filtering criteria (from_entity_id, to_entity_id, relation_type)."
+  description "Find 1-hop edges matching optional AND-combined filters. Pass optional `from_entity_id` (integer), " \
+    "`to_entity_id` (integer), `relation_type` (string, canonicalized). Returns relations only. " \
+    "Do not use for a multi-hop neighborhood; use `traverse_graph` instead. " \
+    "Do not use for the shortest path between two entities; use `find_shortest_path` instead. " \
+    "Do not use for one entity's relations bundled with observations; use `get_entity` instead. " \
+    "Do not use to create or delete edges; use `create_relation` or `delete_relation` instead."
 
   arguments do
     optional(:from_entity_id).filled(:integer).description("Optional: Filter relations starting from this entity ID.")

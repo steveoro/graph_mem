@@ -5,8 +5,11 @@ class MergeEntitiesTool < ApplicationTool
     "merge_entities"
   end
 
-  description "Merge a source entity into a target entity. Transfers observations, re-parents relations, " \
-    "adds the source name to target aliases, and deletes the source entity."
+  description "Merge a source entity into a target: transfer observations, re-parent relations, add the source name " \
+    "to target aliases, then delete the source. Pass required `source_entity_id` and `target_entity_id` (integers). " \
+    "Do not use to find merge candidates; use `suggest_merges` instead. " \
+    "Do not use to apply a queued review by item_id; use `apply_maintenance_review` instead. " \
+    "Do not use to destroy an entity without transferring knowledge; use `delete_entity` instead."
 
   arguments do
     required(:source_entity_id).filled(:integer)

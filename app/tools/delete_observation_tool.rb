@@ -6,7 +6,11 @@ class DeleteObservationTool < ApplicationTool
     "delete_observation"
   end
 
-  description "Marks an observation obsolete by ID. The retained observation is excluded from reads and search by default."
+  description "Mark one observation obsolete so it is excluded from default reads and search; does not delete entities " \
+    "or relations. Pass required `observation_id` (integer); optional `reason` (string). " \
+    "Repeating on an inactive observation is safe. Do not use to replace a fact while retaining history; " \
+    "use `update_observation` with supersede true instead. Do not use to add a fact; use `create_observation` instead. " \
+    "Do not use to destroy an entity; use `delete_entity` instead."
 
   arguments do
     required(:observation_id).filled(:integer).description("The ID of the observation to delete.")

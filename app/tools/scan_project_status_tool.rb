@@ -5,8 +5,11 @@ class ScanProjectStatusTool < ApplicationTool
     "scan_project_status"
   end
 
-  description "Return the status of an asynchronous project scan. " \
-    "Includes progress, counters, fallback flags, and any scan_review items queued for operator approval."
+  description "Poll one asynchronous project scan for status, phase, progress, counters, fallback flags, and " \
+    "scan_review items. Pass required `scan_id` (string from `scan_project`). " \
+    "Do not use to start or resume a scan; use `scan_project` instead. " \
+    "Do not use for compaction-job status; use `dream_state_status` instead. " \
+    "Do not use for stored scan_review documents; use `get_maintenance_reports` instead."
 
   arguments do
     required(:scan_id).filled(:string).description("The scan_id returned by scan_project.")
