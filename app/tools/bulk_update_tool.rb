@@ -107,10 +107,14 @@ class BulkUpdateTool < ApplicationTool
 
     total_ops = entities.length + observations.length + relations.length
     if total_ops == 0
-      raise FastMcp::Tool::InvalidArgumentsError, "At least one operation (entity, observation, or relation) is required."
+      raise FastMcp::Tool::InvalidArgumentsError,
+            "At least one operation (entity, observation, or relation) is required. " \
+            "Provide at least one item in `entities`, `observations`, `relations`, or `operations` and retry."
     end
     if total_ops > MAX_OPERATIONS
-      raise FastMcp::Tool::InvalidArgumentsError, "Maximum #{MAX_OPERATIONS} operations per call (got #{total_ops})."
+      raise FastMcp::Tool::InvalidArgumentsError,
+            "Maximum #{MAX_OPERATIONS} operations per call (got #{total_ops}). " \
+            "Split into multiple `bulk_update` calls of #{MAX_OPERATIONS} or fewer operations."
     end
 
     created_entities = []
@@ -196,7 +200,8 @@ class BulkUpdateTool < ApplicationTool
 
     if errors.any?
       raise FastMcp::Tool::InvalidArgumentsError,
-            "Bulk operation rolled back due to errors: #{errors.map { |e| "#{e[:type]}[#{e[:index]}]: #{e[:error]}" }.join('; ')}"
+            "Bulk operation rolled back due to errors: #{errors.map { |e| "#{e[:type]}[#{e[:index]}]: #{e[:error]}" }.join('; ')}. " \
+            "Fix the listed op errors and retry `bulk_update`."
     end
 
     {
@@ -211,8 +216,10 @@ class BulkUpdateTool < ApplicationTool
     }
   rescue FastMcp::Tool::InvalidArgumentsError
     raise
+  rescue *ToolError::TIMEOUT_CLASSES
+    raise
   rescue StandardError => e
-    logger.error "BulkUpdateTool error: #{e.message} - #{e.backtrace.first(5).join("\n")}"
-    raise McpGraphMemErrors::InternalServerError, "Bulk operation failed: #{e.message}"
+    logger.error "BulkUpdateTool unexpected error: #{e.class}: #{e.message}"
+    raise McpGraphMemErrors::InternalServerError, "An unexpected error occurred."
   end
 end

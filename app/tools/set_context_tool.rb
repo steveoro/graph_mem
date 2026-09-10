@@ -18,7 +18,10 @@ class SetContextTool < ApplicationTool
   def call(entity_id:)
     entity = MemoryEntity.find_by(id: entity_id)
     unless entity
-      raise McpGraphMemErrors::ResourceNotFound, "Entity with ID #{entity_id} not found."
+      raise McpGraphMemErrors::ResourceNotFound.new(
+        "Entity with ID=#{entity_id} not found.",
+        next_move: "Call `search_entities` to find a valid entity id, then retry `set_context`."
+      )
     end
 
     graph_mem_context.current_project_id = entity_id
@@ -31,8 +34,10 @@ class SetContextTool < ApplicationTool
     }
   rescue McpGraphMemErrors::ResourceNotFound
     raise
+  rescue *ToolError::TIMEOUT_CLASSES
+    raise
   rescue StandardError => e
-    logger.error "SetContextTool error: #{e.message}"
-    raise McpGraphMemErrors::InternalServerError, e.message
+    logger.error "SetContextTool unexpected error: #{e.class}: #{e.message}"
+    raise McpGraphMemErrors::InternalServerError, "An unexpected error occurred."
   end
 end

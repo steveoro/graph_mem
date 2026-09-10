@@ -34,8 +34,10 @@ class GetCurrentTimeTool < ApplicationTool
   # @return [Hash] The output of the tool (conforming to tool_output_schema).
   def call
     { timestamp: Time.now.utc.iso8601 }
+  rescue *ToolError::TIMEOUT_CLASSES
+    raise
   rescue StandardError => e
     logger.error "InternalServerError in GetCurrentTimeTool: #{e.message} - #{e.backtrace.join("\n")}"
-    raise McpGraphMemErrors::InternalServerError, "Error in GetCurrentTimeTool: #{e.message}"
+    raise McpGraphMemErrors::InternalServerError, "An unexpected error occurred."
   end
 end

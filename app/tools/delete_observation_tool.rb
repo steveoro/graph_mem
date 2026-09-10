@@ -47,14 +47,24 @@ class DeleteObservationTool < ApplicationTool
     rescue ActiveRecord::RecordNotFound => e
       error_message = "Observation with ID=#{observation_id} not found."
       logger.error "ResourceNotFound in DeleteObservationTool: #{error_message} (was: #{e.message})"
-      raise McpGraphMemErrors::ResourceNotFound, error_message
+      raise McpGraphMemErrors::ResourceNotFound.new(
+        error_message,
+        next_move: "Call `get_entity` with include_obsolete if needed to list observation ids, then retry `delete_observation`."
+      )
     rescue ActiveRecord::RecordInvalid => e
       error_message = "Failed to mark observation with ID=#{observation_id} obsolete: #{e.message}"
       logger.error "OperationFailed in DeleteObservationTool: #{error_message}"
-      raise McpGraphMemErrors::OperationFailed, error_message
+      raise McpGraphMemErrors::OperationFailed.new(
+        error_message,
+        category: "validation",
+        next_move: "Call `get_entity` with include_obsolete if needed to inspect the observation, then retry `delete_observation`."
+      )
     rescue StandardError => e
-      logger.error "InternalServerError in DeleteObservationTool: #{e.message} - #{e.backtrace.join("\n")}"
-      raise McpGraphMemErrors::InternalServerError, "An internal server error occurred in DeleteObservationTool: #{e.message}"
+      raise if ToolError::TIMEOUT_CLASSES.any? { |klass| e.is_a?(klass) }
+      raise if e.is_a?(McpGraphMemErrors::Error)
+
+      logger.error "InternalServerError in DeleteObservationTool: #{e.class}: #{e.message} - #{e.backtrace.join("\n")}"
+      raise McpGraphMemErrors::InternalServerError, "An unexpected error occurred."
     end
   end
 end

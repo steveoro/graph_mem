@@ -207,6 +207,8 @@ class SearchSubgraphTool < ApplicationTool
       vector_results = vector_strategy.search(query_term, limit: effective_per_page * 2)
       vector_ids = vector_results.map { |r| r.entity.id }
       matching_entity_ids = (matching_entity_ids + vector_ids).uniq
+    rescue *ToolError::TIMEOUT_CLASSES
+      raise
     rescue StandardError => e
       logger.debug "SearchSubgraphTool: vector search unavailable, using text only — #{e.message}"
     end
@@ -287,10 +289,12 @@ class SearchSubgraphTool < ApplicationTool
         scope_max_entities: context_scope&.max_entities
       }
     }
-  rescue FastMcp::Tool::InvalidArgumentsError # Re-raise if it's our own validation
+  rescue *ToolError::TIMEOUT_CLASSES
+    raise
+  rescue McpGraphMemErrors::Error, FastMcp::Tool::InvalidArgumentsError
     raise
   rescue StandardError => e
-    logger.error "InternalServerError in SearchSubgraphTool: #{e.message} - #{e.backtrace.join("\n")}"
-    raise McpGraphMemErrors::InternalServerError, "An unexpected error occurred during search: #{e.message}"
+    logger.error "InternalServerError in SearchSubgraphTool: #{e.class}: #{e.message}"
+    raise McpGraphMemErrors::InternalServerError, "An unexpected error occurred."
   end
 end

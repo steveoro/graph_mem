@@ -75,7 +75,11 @@ RSpec.describe DeleteRelationTool, type: :model do
       it 'raises ResourceNotFound for non-existent relation_id' do
         expect {
           tool.call(relation_id: 999_999)
-        }.to raise_error(McpGraphMemErrors::ResourceNotFound, /not found/)
+        }.to raise_error(McpGraphMemErrors::ResourceNotFound, "Relation with ID=999999 not found.") do |error|
+          expect(error.category).to eq("not_found")
+          expect(error.next_move).to include("`find_relations`")
+          expect(error.next_move).to include("`get_entity`")
+        end
       end
     end
 
@@ -90,7 +94,11 @@ RSpec.describe DeleteRelationTool, type: :model do
 
         expect {
           tool.call(relation_id: relation.id)
-        }.to raise_error(McpGraphMemErrors::OperationFailed, /Failed to delete/)
+        }.to raise_error(McpGraphMemErrors::OperationFailed, /Failed to delete/) do |error|
+          expect(error.message).not_to include("Cannot delete")
+          expect(error.category).to eq("system_error")
+          expect(error.next_move).to include("`find_relations`")
+        end
       end
     end
 
@@ -99,11 +107,21 @@ RSpec.describe DeleteRelationTool, type: :model do
         relation = MemoryRelation.create!(
           from_entity_id: entity_a.id, to_entity_id: entity_b.id, relation_type: 'depends_on'
         )
-        allow(MemoryRelation).to receive(:find).and_raise(StandardError.new("unexpected"))
+        allow(MemoryRelation).to receive(:find_by).and_raise(StandardError.new("DB error"))
 
         expect {
           tool.call(relation_id: relation.id)
-        }.to raise_error(McpGraphMemErrors::InternalServerError, /internal server error/)
+        }.to raise_error(McpGraphMemErrors::InternalServerError, "An unexpected error occurred.") do |error|
+          expect(error.message).not_to include("DB error")
+        end
+      end
+
+      it 're-raises Timeout::Error so the envelope can map category timeout' do
+        allow(MemoryRelation).to receive(:find_by).and_raise(Timeout::Error.new("execution expired"))
+
+        expect {
+          tool.call(relation_id: 1)
+        }.to raise_error(Timeout::Error, "execution expired")
       end
     end
   end

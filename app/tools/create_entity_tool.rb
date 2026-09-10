@@ -71,12 +71,15 @@ class CreateEntityTool < ApplicationTool
       memory_observations_count: new_entity.memory_observations.count
     }
   rescue ActiveRecord::RecordInvalid => e
-    error_message = "Validation Failed: #{e.record.errors.full_messages.join(', ')}"
+    error_message = "Validation Failed: #{e.record.errors.full_messages.join(', ')}. " \
+      "Provide a unique non-blank name and entity_type; call `search_entities` if this name may already exist."
     logger.error "InvalidArguments in CreateEntityTool: #{error_message} (was: #{e.message})"
     raise FastMcp::Tool::InvalidArgumentsError, error_message
+  rescue *ToolError::TIMEOUT_CLASSES
+    raise
   rescue StandardError => e
-    logger.error "InternalServerError in CreateEntityTool: #{e.message} - #{e.backtrace.join("\n")}"
-    raise McpGraphMemErrors::InternalServerError, "An internal server error occurred in CreateEntityTool: #{e.message}"
+    logger.error "CreateEntityTool unexpected error: #{e.class}: #{e.message}"
+    raise McpGraphMemErrors::InternalServerError, "An unexpected error occurred."
   end
 
   private
@@ -89,6 +92,8 @@ class CreateEntityTool < ApplicationTool
     return result if result && result.distance < DEDUP_DISTANCE_THRESHOLD
 
     nil
+  rescue *ToolError::TIMEOUT_CLASSES
+    raise
   rescue StandardError => e
     logger.debug "CreateEntityTool: dedup check unavailable — #{e.message}"
     nil

@@ -58,8 +58,10 @@ class ScanProjectTool < ApplicationTool
     }
   rescue FastMcp::Tool::InvalidArgumentsError
     raise
+  rescue *ToolError::TIMEOUT_CLASSES
+    raise
   rescue StandardError => e
     logger.error "ScanProjectTool error: #{e.message}"
-    raise McpGraphMemErrors::InternalServerError, "Failed to enqueue project scan: #{e.message}"
+    raise McpGraphMemErrors::InternalServerError, "An unexpected error occurred."
   end
 end

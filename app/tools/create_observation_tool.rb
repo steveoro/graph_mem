@@ -47,14 +47,20 @@ class CreateObservationTool < ApplicationTool
     rescue ActiveRecord::RecordNotFound => e
       error_message = "Entity with ID=#{entity_id} not found."
       logger.error "ResourceNotFound in CreateObservationTool: #{error_message} (was: #{e.message})"
-      raise McpGraphMemErrors::ResourceNotFound, error_message
+      raise McpGraphMemErrors::ResourceNotFound.new(
+        error_message,
+        next_move: "Call `search_entities` to find the entity, then retry `create_observation`."
+      )
     rescue ActiveRecord::RecordInvalid => e
-      error_message = "Validation Failed: #{e.record.errors.full_messages.join(', ')}"
+      error_message = "Validation Failed: #{e.record.errors.full_messages.join(', ')}. " \
+        "Correct `text_content` and optional fields to match the `create_observation` schema and retry."
       logger.error "InvalidArguments in CreateObservationTool: #{error_message} (was: #{e.message})"
       raise FastMcp::Tool::InvalidArgumentsError, error_message
     rescue StandardError => e
-      logger.error "InternalServerError in CreateObservationTool: #{e.message} - #{e.backtrace.join("\n")}"
-      raise McpGraphMemErrors::InternalServerError, "An internal server error occurred in CreateObservationTool: #{e.message}"
+      raise if ToolError::TIMEOUT_CLASSES.any? { |klass| e.is_a?(klass) }
+
+      logger.error "InternalServerError in CreateObservationTool: #{e.class}: #{e.message} - #{e.backtrace.join("\n")}"
+      raise McpGraphMemErrors::InternalServerError, "An unexpected error occurred."
     end
   end
 end

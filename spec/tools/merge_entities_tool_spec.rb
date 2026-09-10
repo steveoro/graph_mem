@@ -43,7 +43,9 @@ RSpec.describe MergeEntitiesTool, type: :model do
     it "raises when source and target are the same" do
       expect {
         tool.call(source_entity_id: target.id, target_entity_id: target.id)
-      }.to raise_error(FastMcp::Tool::InvalidArgumentsError, /Cannot merge a node into itself/)
+      }.to raise_error(FastMcp::Tool::InvalidArgumentsError, /Cannot merge a node into itself/) do |error|
+        expect(error.message).to include("`delete_entity`")
+      end
     end
 
     it "rejects merging away a Project root entity" do
@@ -51,7 +53,10 @@ RSpec.describe MergeEntitiesTool, type: :model do
 
       expect {
         tool.call(source_entity_id: project_source.id, target_entity_id: target.id)
-      }.to raise_error(FastMcp::Tool::InvalidArgumentsError, /Project root entities cannot be deleted or merged away/)
+      }.to raise_error(FastMcp::Tool::InvalidArgumentsError, /Project root entities cannot be deleted or merged away/) do |error|
+        expect(error.message).to include("`merge_entities`")
+        expect(error.message).to include("`delete_entity`")
+      end
 
       expect(MemoryEntity.find_by(id: project_source.id)).to be_present
     end
@@ -61,7 +66,9 @@ RSpec.describe MergeEntitiesTool, type: :model do
 
       expect {
         tool.call(source_entity_id: source.id, target_entity_id: issue_target.id)
-      }.to raise_error(FastMcp::Tool::InvalidArgumentsError, /Cannot merge entities of different types/)
+      }.to raise_error(FastMcp::Tool::InvalidArgumentsError, /Cannot merge entities of different types/) do |error|
+        expect(error.message).to include("`delete_entity`")
+      end
 
       expect(MemoryEntity.find_by(id: source.id)).to be_present
       expect(MemoryEntity.find_by(id: issue_target.id)).to be_present
@@ -70,13 +77,18 @@ RSpec.describe MergeEntitiesTool, type: :model do
     it "raises when source entity does not exist" do
       expect {
         tool.call(source_entity_id: 999_999, target_entity_id: target.id)
-      }.to raise_error(McpGraphMemErrors::ResourceNotFound, /Source node not found/)
+      }.to raise_error(McpGraphMemErrors::ResourceNotFound, /Source node not found/) do |error|
+        expect(error.next_move).to include("`search_entities`")
+        expect(error.next_move).to include("`merge_entities`")
+      end
     end
 
     it "raises when target entity does not exist" do
       expect {
         tool.call(source_entity_id: source.id, target_entity_id: 999_999)
-      }.to raise_error(McpGraphMemErrors::ResourceNotFound, /Target node not found/)
+      }.to raise_error(McpGraphMemErrors::ResourceNotFound, /Target node not found/) do |error|
+        expect(error.next_move).to include("`search_entities`")
+      end
     end
 
     it "transfers all observations from source to target" do
@@ -157,6 +169,54 @@ RSpec.describe MergeEntitiesTool, type: :model do
 
       count = MemoryRelation.where(from_entity_id: target.id, to_entity_id: third.id, relation_type: "relates_to").count
       expect(count).to eq(1)
+    end
+
+    it "raises InvalidArgumentsError with a concrete next step for cycle errors" do
+      strategy = instance_double(NodeOperationsStrategy)
+      allow(NodeOperationsStrategy).to receive(:new).and_return(strategy)
+      allow(strategy).to receive(:merge_into).and_return(
+        { success: false, error: "Cannot merge: would create a cycle" }
+      )
+
+      expect {
+        tool.call(source_entity_id: source.id, target_entity_id: target.id)
+      }.to raise_error(FastMcp::Tool::InvalidArgumentsError, /cycle/) do |error|
+        expect(error.message).to include("`delete_entity`")
+      end
+    end
+
+    it "raises a generic OperationFailed for unexpected merge failures" do
+      strategy = instance_double(NodeOperationsStrategy)
+      allow(NodeOperationsStrategy).to receive(:new).and_return(strategy)
+      allow(strategy).to receive(:merge_into).and_return(
+        { success: false, error: "Failed to merge nodes: duplicate secret-token" }
+      )
+
+      expect {
+        tool.call(source_entity_id: source.id, target_entity_id: target.id)
+      }.to raise_error(McpGraphMemErrors::OperationFailed, "The merge could not be completed.") do |error|
+        expect(error.message).not_to include("secret-token")
+        expect(error.next_move).to include("`suggest_merges`")
+        expect(error.next_move).to include("`merge_entities`")
+      end
+    end
+
+    it "raises InternalServerError on unexpected errors without leaking the original message" do
+      allow(NodeOperationsStrategy).to receive(:new).and_raise(StandardError.new("secret boom"))
+
+      expect {
+        tool.call(source_entity_id: source.id, target_entity_id: target.id)
+      }.to raise_error(McpGraphMemErrors::InternalServerError, "An unexpected error occurred.") do |error|
+        expect(error.message).not_to include("secret boom")
+      end
+    end
+
+    it "re-raises Timeout::Error so the envelope can map category timeout" do
+      allow(NodeOperationsStrategy).to receive(:new).and_raise(Timeout::Error.new("execution expired"))
+
+      expect {
+        tool.call(source_entity_id: source.id, target_entity_id: target.id)
+      }.to raise_error(Timeout::Error, "execution expired")
     end
   end
 end

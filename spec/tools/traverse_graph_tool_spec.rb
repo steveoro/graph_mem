@@ -68,7 +68,11 @@ RSpec.describe TraverseGraphTool, type: :model do
     it "raises ResourceNotFound for a missing start entity" do
       expect {
         tool.call(start_entity_id: 999_999)
-      }.to raise_error(McpGraphMemErrors::ResourceNotFound)
+      }.to raise_error(McpGraphMemErrors::ResourceNotFound, "Entity with ID=999999 not found.") do |error|
+        expect(error.category).to eq("not_found")
+        expect(error.next_move).to include("`search_entities`")
+        expect(error.next_move).to include("`traverse_graph`")
+      end
     end
 
     it "raises InternalServerError on unexpected errors" do
@@ -76,7 +80,17 @@ RSpec.describe TraverseGraphTool, type: :model do
 
       expect {
         tool.call(start_entity_id: a.id)
-      }.to raise_error(McpGraphMemErrors::InternalServerError, /internal server error/)
+      }.to raise_error(McpGraphMemErrors::InternalServerError, "An unexpected error occurred.") do |error|
+        expect(error.message).not_to include("boom")
+      end
+    end
+
+    it "re-raises Timeout::Error so the envelope can map category timeout" do
+      allow_any_instance_of(GraphTraversalService).to receive(:expand).and_raise(Timeout::Error.new("execution expired"))
+
+      expect {
+        tool.call(start_entity_id: a.id)
+      }.to raise_error(Timeout::Error, "execution expired")
     end
   end
 end

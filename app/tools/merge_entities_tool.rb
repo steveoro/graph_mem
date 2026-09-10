@@ -33,18 +33,53 @@ class MergeEntitiesTool < ApplicationTool
     end
   rescue McpGraphMemErrors::Error, FastMcp::Tool::InvalidArgumentsError
     raise
+  rescue *ToolError::TIMEOUT_CLASSES
+    raise
   rescue StandardError => e
-    logger.error "MergeEntitiesTool error: #{e.message}"
-    raise McpGraphMemErrors::InternalServerError, e.message
+    logger.error "MergeEntitiesTool unexpected error: #{e.class}: #{e.message}"
+    raise McpGraphMemErrors::InternalServerError, "An unexpected error occurred."
   end
 
   private
 
   def map_merge_error(message)
     text = message.to_s
-    return McpGraphMemErrors::ResourceNotFound.new(text) if text.match?(/not found/i)
-    return FastMcp::Tool::InvalidArgumentsError.new(text) if text.match?(/Cannot merge|Project root|protected|different types|into itself|cycle/i)
+    if text.match?(/not found/i)
+      return McpGraphMemErrors::ResourceNotFound.new(
+        text,
+        next_move: "Call `search_entities` to find valid entity ids, then retry `merge_entities`."
+      )
+    end
 
-    McpGraphMemErrors::OperationFailed.new(text)
+    if text.match?(/into itself/i)
+      return FastMcp::Tool::InvalidArgumentsError.new(
+        "#{text}. Pass two different entity ids, or use `delete_entity` if you meant to remove that node."
+      )
+    end
+
+    if text.match?(/Project root|protected/i)
+      return FastMcp::Tool::InvalidArgumentsError.new(
+        "#{text}. Do not call `merge_entities` or `delete_entity` on a Project; " \
+        "use `update_entity` or `create_observation` on the existing Project instead."
+      )
+    end
+
+    if text.match?(/different types/i)
+      return FastMcp::Tool::InvalidArgumentsError.new(
+        "#{text}. Merge only same-type entities, or use `delete_entity` if one should be removed instead of merged."
+      )
+    end
+
+    if text.match?(/Cannot merge|cycle/i)
+      return FastMcp::Tool::InvalidArgumentsError.new(
+        "#{text}. Choose a different source and target, or use `delete_entity` if you meant to remove a node."
+      )
+    end
+
+    logger.error "MergeEntitiesTool operation failed: #{text}"
+    McpGraphMemErrors::OperationFailed.new(
+      "The merge could not be completed.",
+      next_move: "Call `suggest_merges` or `get_entity` to inspect the pair, then retry `merge_entities` or escalate."
+    )
   end
 end

@@ -25,7 +25,28 @@ RSpec.describe DetectContradictionsTool, type: :model do
     it 'raises ResourceNotFound for a missing entity' do
       expect {
         tool.call(entity_id: 999_999)
-      }.to raise_error(McpGraphMemErrors::ResourceNotFound)
+      }.to raise_error(McpGraphMemErrors::ResourceNotFound, /not found/) do |error|
+        expect(error.next_move).to include('`search_entities`')
+        expect(error.next_move).to include('`detect_contradictions`')
+      end
+    end
+
+    it 'raises InternalServerError on unexpected errors without leaking details' do
+      allow(MemoryEntity).to receive(:find).and_raise(StandardError.new("unexpected secret"))
+
+      expect {
+        tool.call(entity_id: entity.id)
+      }.to raise_error(McpGraphMemErrors::InternalServerError, /unexpected error/) do |error|
+        expect(error.message).not_to include('secret')
+      end
+    end
+
+    it 're-raises timeout errors' do
+      allow(MemoryEntity).to receive(:find).and_raise(Timeout::Error.new("execution expired"))
+
+      expect {
+        tool.call(entity_id: entity.id)
+      }.to raise_error(Timeout::Error, /execution expired/)
     end
 
     it 'returns an empty candidate list when no contradictions exist' do

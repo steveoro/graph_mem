@@ -13,8 +13,10 @@ class DreamStateStatusTool < ApplicationTool
 
   def call
     CompactionRunner.status_snapshot
+  rescue *ToolError::TIMEOUT_CLASSES
+    raise
   rescue StandardError => e
-    logger.error "DreamStateStatusTool error: #{e.message}"
-    raise McpGraphMemErrors::InternalServerError, e.message
+    logger.error "DreamStateStatusTool unexpected error: #{e.class}: #{e.message}"
+    raise McpGraphMemErrors::InternalServerError, "An unexpected error occurred."
   end
 end

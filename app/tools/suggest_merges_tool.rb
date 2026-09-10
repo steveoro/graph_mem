@@ -81,8 +81,10 @@ class SuggestMergesTool < ApplicationTool
       total: suggestions.length,
       threshold_used: effective_threshold
     }
+  rescue *ToolError::TIMEOUT_CLASSES
+    raise
   rescue StandardError => e
-    logger.error "SuggestMergesTool error: #{e.message} - #{e.backtrace.first(5).join("\n")}"
-    raise McpGraphMemErrors::InternalServerError, "Failed to generate merge suggestions: #{e.message}"
+    logger.error "SuggestMergesTool unexpected error: #{e.class}: #{e.message}"
+    raise McpGraphMemErrors::InternalServerError, "An unexpected error occurred."
   end
 end

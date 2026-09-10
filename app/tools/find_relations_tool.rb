@@ -38,20 +38,29 @@ class FindRelationsTool < ApplicationTool
   def call(from_entity_id: nil, to_entity_id: nil, relation_type: nil)
     logger.info "Performing FindRelationsTool with filters: from=#{from_entity_id}, to=#{to_entity_id}, type=#{relation_type}"
     begin
-      # Start with all relations
+      if from_entity_id.present? && !MemoryEntity.exists?(id: from_entity_id)
+        raise McpGraphMemErrors::ResourceNotFound.new(
+          "Entity with ID=#{from_entity_id} not found.",
+          next_move: "Call `search_entities`, then retry `find_relations` with a known from_entity_id."
+        )
+      end
+      if to_entity_id.present? && !MemoryEntity.exists?(id: to_entity_id)
+        raise McpGraphMemErrors::ResourceNotFound.new(
+          "Entity with ID=#{to_entity_id} not found.",
+          next_move: "Call `search_entities`, then retry `find_relations` with a known to_entity_id."
+        )
+      end
+
       relations_query = MemoryRelation.all
 
-      # Apply filters if provided
       relations_query = relations_query.where(from_entity_id: from_entity_id) if from_entity_id.present?
       relations_query = relations_query.where(to_entity_id: to_entity_id) if to_entity_id.present?
       if relation_type.present?
         relations_query = relations_query.where(relation_type: MemoryRelation.canonical_relation_type(relation_type))
       end
 
-      # Execute the query and get results
       matching_relations = relations_query.to_a
 
-      # Format output - return array of hashes directly
       matching_relations.map do |relation|
         {
           relation_id: relation.id,
@@ -65,9 +74,13 @@ class FindRelationsTool < ApplicationTool
           updated_at: relation.updated_at.iso8601
         }
       end
+    rescue *ToolError::TIMEOUT_CLASSES
+      raise
+    rescue McpGraphMemErrors::Error, FastMcp::Tool::InvalidArgumentsError
+      raise
     rescue StandardError => e
-      logger.error "InternalServerError in FindRelationsTool: #{e.message} - #{e.backtrace.join("\n")}"
-      raise McpGraphMemErrors::InternalServerError, "An internal server error occurred in FindRelationsTool: #{e.message}"
+      logger.error "InternalServerError in FindRelationsTool: #{e.class}: #{e.message}"
+      raise McpGraphMemErrors::InternalServerError, "An unexpected error occurred."
     end
   end
 end

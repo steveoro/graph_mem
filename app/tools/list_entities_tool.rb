@@ -82,12 +82,14 @@ class ListEntitiesTool < ApplicationTool
 
     # Validate effective_page
     if effective_page < 1
-      raise FastMcp::Tool::InvalidArgumentsError, "Page number must be 1 or greater."
+      raise FastMcp::Tool::InvalidArgumentsError,
+            "page must be an integer >= 1; received #{effective_page}."
     end
 
     # Validate effective_per_page
     if effective_per_page < 1 || effective_per_page > MAX_PER_PAGE
-      raise FastMcp::Tool::InvalidArgumentsError, "Per page count must be between 1 and #{MAX_PER_PAGE}."
+      raise FastMcp::Tool::InvalidArgumentsError,
+            "per_page must be an integer between 1 and #{MAX_PER_PAGE}; received #{effective_per_page}."
     end
 
     # Proceed with logic using effective_page and effective_per_page
@@ -118,8 +120,10 @@ class ListEntitiesTool < ApplicationTool
     }
   rescue FastMcp::Tool::InvalidArgumentsError
     raise
+  rescue *ToolError::TIMEOUT_CLASSES
+    raise
   rescue StandardError => e
-    logger.error "InternalServerError in ListEntitiesTool: #{e.message} - #{e.backtrace.join("\n")}"
-    raise McpGraphMemErrors::InternalServerError, "An unexpected error occurred: #{e.message}"
+    logger.error "ListEntitiesTool unexpected error: #{e.class}: #{e.message}"
+    raise McpGraphMemErrors::InternalServerError, "An unexpected error occurred."
   end
 end

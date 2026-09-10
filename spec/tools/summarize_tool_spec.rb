@@ -47,7 +47,33 @@ RSpec.describe SummarizeTool, type: :model do
     it "raises ResourceNotFound for missing entity_id" do
       expect {
         tool.call(query: "GraphMem", entity_id: 999_999)
-      }.to raise_error(McpGraphMemErrors::ResourceNotFound)
+      }.to raise_error(McpGraphMemErrors::ResourceNotFound, /Entity with ID=999999 not found/) do |error|
+        expect(error.next_move).to match(/search_entities/)
+      end
+    end
+
+    it "raises InvalidArgumentsError for invalid scope" do
+      expect {
+        tool.call(query: "GraphMem", scope: "not-a-scope")
+      }.to raise_error(FastMcp::Tool::InvalidArgumentsError, /scope must be context or global/)
+    end
+
+    it "raises InternalServerError on unexpected errors" do
+      allow(SummarizerService).to receive(:call).and_raise(StandardError.new("secret boom"))
+
+      expect {
+        tool.call(query: "GraphMem")
+      }.to raise_error(McpGraphMemErrors::InternalServerError, "An unexpected error occurred.") do |error|
+        expect(error.message).not_to include("secret boom")
+      end
+    end
+
+    it "re-raises Timeout::Error so the envelope can map category timeout" do
+      allow(SummarizerService).to receive(:call).and_raise(Timeout::Error.new("execution expired"))
+
+      expect {
+        tool.call(query: "GraphMem")
+      }.to raise_error(Timeout::Error, "execution expired")
     end
   end
 end

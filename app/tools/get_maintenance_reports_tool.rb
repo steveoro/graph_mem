@@ -45,7 +45,8 @@ class GetMaintenanceReportsTool < ApplicationTool
     if report_type.present?
       unless MaintenanceReport::REPORT_TYPES.include?(report_type)
         raise FastMcp::Tool::InvalidArgumentsError,
-              "Unknown report_type '#{report_type}'. Valid types: #{MaintenanceReport::REPORT_TYPES.join(', ')}."
+              "Unknown report_type '#{report_type}'. Valid types: #{MaintenanceReport::REPORT_TYPES.join(', ')}. " \
+              "Retry `get_maintenance_reports` with one of those types, or call `list_maintenance_review` for paginated review rows."
       end
 
       reports = MaintenanceReport.by_type(report_type).recent.limit(effective_limit)
@@ -62,9 +63,11 @@ class GetMaintenanceReportsTool < ApplicationTool
     }
   rescue FastMcp::Tool::InvalidArgumentsError
     raise
+  rescue *ToolError::TIMEOUT_CLASSES
+    raise
   rescue StandardError => e
-    logger.error "GetMaintenanceReportsTool error: #{e.message}"
-    raise McpGraphMemErrors::InternalServerError, "Failed to retrieve maintenance reports: #{e.message}"
+    logger.error "GetMaintenanceReportsTool unexpected error: #{e.class}: #{e.message}"
+    raise McpGraphMemErrors::InternalServerError, "An unexpected error occurred."
   end
 
   private

@@ -17,7 +17,12 @@ class ScanProjectStatusTool < ApplicationTool
 
   def call(scan_id:)
     operation = OperationProgress.find_by(operation_id: scan_id.to_s, operation_type: "project_scan")
-    return { scan_id: scan_id, status: "not_found" } unless operation
+    unless operation
+      raise McpGraphMemErrors::ResourceNotFound.new(
+        "Scan with scan_id=#{scan_id} not found.",
+        next_move: "Call `scan_project` to start a scan, then retry `scan_project_status` with that scan_id."
+      )
+    end
 
     report = MaintenanceReport.by_type("scan_review").recent.first
     review_items = if report && operation.status == "completed"
@@ -51,8 +56,12 @@ class ScanProjectStatusTool < ApplicationTool
       finished_at: operation.finished_at&.iso8601,
       error: operation.error_message
     }.compact
+  rescue *ToolError::TIMEOUT_CLASSES
+    raise
+  rescue McpGraphMemErrors::Error
+    raise
   rescue StandardError => e
     logger.error "ScanProjectStatusTool error: #{e.message}"
-    raise McpGraphMemErrors::InternalServerError, "Failed to retrieve scan status: #{e.message}"
+    raise McpGraphMemErrors::InternalServerError, "An unexpected error occurred."
   end
 end

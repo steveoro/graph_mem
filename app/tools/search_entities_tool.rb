@@ -32,9 +32,13 @@ class SearchEntitiesTool < ApplicationTool
         context_scope: context_scope
       )
       payload[:results].map(&:to_h)
+    rescue *ToolError::TIMEOUT_CLASSES
+      raise
+    rescue McpGraphMemErrors::Error, FastMcp::Tool::InvalidArgumentsError
+      raise
     rescue StandardError => e
-      logger.error "InternalServerError in SearchEntitiesTool: #{e.message} - #{e.backtrace.join("\n")}"
-      raise McpGraphMemErrors::InternalServerError, "An internal server error occurred in SearchEntitiesTool: #{e.message}"
+      logger.error "InternalServerError in SearchEntitiesTool: #{e.class}: #{e.message}"
+      raise McpGraphMemErrors::InternalServerError, "An unexpected error occurred."
     end
   end
 end

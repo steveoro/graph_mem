@@ -70,12 +70,20 @@ RSpec.describe ClearContextTool, type: :model do
     end
 
     context 'error handling' do
-      it 'raises InternalServerError on unexpected errors' do
-        allow(tool).to receive(:graph_mem_context).and_raise(StandardError.new("unexpected"))
+      it 'raises InternalServerError on unexpected errors without leaking the original message' do
+        allow(tool).to receive(:graph_mem_context).and_raise(StandardError.new("secret-db-failure"))
 
         expect {
           tool.call
-        }.to raise_error(McpGraphMemErrors::InternalServerError)
+        }.to raise_error(McpGraphMemErrors::InternalServerError, /unexpected error/) do |error|
+          expect(error.message).not_to include("secret-db-failure")
+        end
+      end
+
+      it 're-raises Timeout::Error so ToolError can map it to timeout' do
+        allow(tool).to receive(:graph_mem_context).and_raise(Timeout::Error.new("execution expired"))
+
+        expect { tool.call }.to raise_error(Timeout::Error, /execution expired/)
       end
     end
   end

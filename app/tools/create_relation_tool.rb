@@ -26,11 +26,18 @@ class CreateRelationTool < ApplicationTool
   def call(from_entity_id:, to_entity_id:, relation_type:, weight: nil, confidence: nil, properties: {})
     logger.info "Performing CreateRelationTool with from_id: #{from_entity_id}, to_id: #{to_entity_id}, type: #{relation_type}"
     begin
-      # Explicitly find entities to ensure they exist before creating the relation
-      # This will raise ActiveRecord::RecordNotFound if an entity is not found,
-      # which is then rescued below to raise a McpGraphMemErrors::ResourceNotFound.
-      _from_entity = MemoryEntity.find(from_entity_id)
-      _to_entity = MemoryEntity.find(to_entity_id)
+      unless MemoryEntity.exists?(id: from_entity_id)
+        raise McpGraphMemErrors::ResourceNotFound.new(
+          "Entity with ID=#{from_entity_id} not found.",
+          next_move: "Call `search_entities`, then retry `create_relation` with a known from_entity_id."
+        )
+      end
+      unless MemoryEntity.exists?(id: to_entity_id)
+        raise McpGraphMemErrors::ResourceNotFound.new(
+          "Entity with ID=#{to_entity_id} not found.",
+          next_move: "Call `search_entities`, then retry `create_relation` with a known to_entity_id."
+        )
+      end
 
       new_relation = MemoryRelation.create!(
         from_entity_id: from_entity_id,
@@ -42,7 +49,6 @@ class CreateRelationTool < ApplicationTool
       )
       logger.info "Created relation: #{new_relation.inspect}"
 
-      # Format output - return a single hash directly
       {
         relation_id: new_relation.id,
         from_entity_id: new_relation.from_entity_id,
@@ -54,19 +60,29 @@ class CreateRelationTool < ApplicationTool
         created_at: new_relation.created_at.iso8601,
         updated_at: new_relation.updated_at.iso8601
       }
-    rescue ActiveRecord::RecordNotFound => e
-      # This will catch if MemoryEntity.find fails for from_entity_id or to_entity_id
-      error_message = "One or both entities not found: #{e.message}"
-      logger.error "ResourceNotFound in CreateRelationTool: #{error_message}"
-      raise McpGraphMemErrors::ResourceNotFound, error_message
+    rescue *ToolError::TIMEOUT_CLASSES
+      raise
+    rescue McpGraphMemErrors::Error, FastMcp::Tool::InvalidArgumentsError
+      raise
     rescue ActiveRecord::RecordInvalid => e
-      # This catches other validation errors on MemoryRelation itself (e.g., invalid relation_type if validated)
-      error_message = "Validation Failed for relation: #{e.record.errors.full_messages.join(', ')}"
+      error_message = "Validation Failed: #{e.record.errors.full_messages.join(', ')}. " \
+        "Pass from_entity_id and to_entity_id as integers of existing entities, relation_type as a non-empty string, " \
+        "optional weight as a float >= 0, confidence as a float from 0.0 to 1.0, and properties as an object."
       logger.error "InvalidArguments in CreateRelationTool: #{error_message} (was: #{e.message})"
       raise FastMcp::Tool::InvalidArgumentsError, error_message
+    rescue ActiveRecord::RecordNotUnique
+      canonical_type = MemoryRelation.canonical_relation_type(relation_type)
+      error_message = "A relation of type '#{canonical_type}' already exists from from_entity_id=#{from_entity_id} " \
+        "to to_entity_id=#{to_entity_id}."
+      logger.error "OperationFailed in CreateRelationTool: #{error_message}"
+      raise McpGraphMemErrors::OperationFailed.new(
+        error_message,
+        category: "validation",
+        next_move: "Call `find_relations` to inspect the existing edge, or `delete_relation` before creating a replacement."
+      )
     rescue StandardError => e
-      logger.error "InternalServerError in CreateRelationTool: #{e.message} - #{e.backtrace.join("\n")}"
-      raise McpGraphMemErrors::InternalServerError, "An internal server error occurred in CreateRelationTool: #{e.message}"
+      logger.error "InternalServerError in CreateRelationTool: #{e.class}: #{e.message}"
+      raise McpGraphMemErrors::InternalServerError, "An unexpected error occurred."
     end
   end
 end

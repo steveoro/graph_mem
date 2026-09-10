@@ -208,7 +208,9 @@ RSpec.describe SearchEntitiesTool, type: :model do
 
         expect {
           tool.call(query: 'apple')
-        }.to raise_error(McpGraphMemErrors::InternalServerError, /An internal server error occurred in SearchEntitiesTool/)
+        }.to raise_error(McpGraphMemErrors::InternalServerError, "An unexpected error occurred.") do |error|
+          expect(error.message).not_to include('Database error')
+        end
       end
 
       it 'logs errors appropriately' do
@@ -219,7 +221,15 @@ RSpec.describe SearchEntitiesTool, type: :model do
           tool.call(query: 'apple')
         }.to raise_error(McpGraphMemErrors::InternalServerError)
 
-        expect(Rails.logger).to have_received(:error).with(/InternalServerError in SearchEntitiesTool: Test error/)
+        expect(Rails.logger).to have_received(:error).with(/InternalServerError in SearchEntitiesTool: StandardError: Test error/)
+      end
+
+      it 're-raises Timeout::Error so the envelope can map category timeout' do
+        allow(HybridSearchStrategy).to receive(:new).and_raise(Timeout::Error.new('execution expired'))
+
+        expect {
+          tool.call(query: 'apple')
+        }.to raise_error(Timeout::Error, 'execution expired')
       end
     end
 

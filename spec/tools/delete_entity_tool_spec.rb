@@ -79,7 +79,11 @@ RSpec.describe DeleteEntityTool, type: :model do
 
         expect {
           tool.call(entity_id: entity.id)
-        }.to raise_error(McpGraphMemErrors::OperationFailed, /Project root entities cannot be deleted or merged away/)
+        }.to raise_error(McpGraphMemErrors::OperationFailed, /Project root entities cannot be deleted or merged away/) do |error|
+          expect(error.category).to eq("validation")
+          expect(error.next_move).to include("merge_entities")
+          expect(error.next_move).to match(/non-Project/i)
+        end
 
         expect(MemoryEntity.find_by(id: entity.id)).to be_present
         expect(entity.memory_observations.count).to eq(1)
@@ -107,7 +111,11 @@ RSpec.describe DeleteEntityTool, type: :model do
       it 'raises ResourceNotFound for non-existent entity_id' do
         expect {
           tool.call(entity_id: 999_999)
-        }.to raise_error(McpGraphMemErrors::ResourceNotFound, /not found/)
+        }.to raise_error(McpGraphMemErrors::ResourceNotFound, /not found/) do |error|
+          expect(error.category).to eq("not_found")
+          expect(error.next_move).to include("search_entities")
+          expect(error.next_move).to include("delete_entity")
+        end
       end
     end
 
@@ -120,18 +128,30 @@ RSpec.describe DeleteEntityTool, type: :model do
 
         expect {
           tool.call(entity_id: entity.id)
-        }.to raise_error(McpGraphMemErrors::OperationFailed, /Failed to delete/)
+        }.to raise_error(McpGraphMemErrors::OperationFailed, /Failed to delete/) do |error|
+          expect(error.category).to eq("system_error")
+          expect(error.message).not_to include("Cannot delete")
+        end
       end
     end
 
     context 'error handling' do
-      it 'raises InternalServerError on unexpected errors' do
+      it 'raises InternalServerError on unexpected errors without leaking the original message' do
         entity = MemoryEntity.create!(name: 'Error Test', entity_type: 'Task')
-        allow(MemoryEntity).to receive(:find).and_raise(StandardError.new("unexpected"))
+        allow(MemoryEntity).to receive(:find).and_raise(StandardError.new("secret-db-failure"))
 
         expect {
           tool.call(entity_id: entity.id)
-        }.to raise_error(McpGraphMemErrors::InternalServerError, /internal server error/)
+        }.to raise_error(McpGraphMemErrors::InternalServerError, /unexpected error/) do |error|
+          expect(error.message).not_to include("secret-db-failure")
+        end
+      end
+
+      it 're-raises Timeout::Error so ToolError can map it to timeout' do
+        entity = MemoryEntity.create!(name: 'Timeout Test', entity_type: 'Task')
+        allow(MemoryEntity).to receive(:find).and_raise(Timeout::Error.new("execution expired"))
+
+        expect { tool.call(entity_id: entity.id) }.to raise_error(Timeout::Error, /execution expired/)
       end
     end
   end

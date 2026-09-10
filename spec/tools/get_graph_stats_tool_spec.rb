@@ -159,12 +159,22 @@ RSpec.describe GetGraphStatsTool, type: :model do
     end
 
     describe "error handling" do
-      it "raises InternalServerError on unexpected errors" do
+      it "raises InternalServerError on unexpected errors without leaking the original message" do
         allow(MemoryEntity).to receive(:count).and_raise(StandardError.new("DB error"))
 
         expect {
           tool.call
-        }.to raise_error(McpGraphMemErrors::InternalServerError, /Failed to compute graph stats/)
+        }.to raise_error(McpGraphMemErrors::InternalServerError, "An unexpected error occurred.") do |error|
+          expect(error.message).not_to include("DB error")
+        end
+      end
+
+      it "re-raises Timeout::Error so the envelope can map category timeout" do
+        allow(MemoryEntity).to receive(:count).and_raise(Timeout::Error.new("execution expired"))
+
+        expect {
+          tool.call
+        }.to raise_error(Timeout::Error, "execution expired")
       end
     end
   end

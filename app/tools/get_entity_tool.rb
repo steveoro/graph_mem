@@ -81,10 +81,15 @@ class GetEntityTool < ApplicationTool
     rescue ActiveRecord::RecordNotFound => e
       error_message = "Entity with ID=#{entity_id} not found."
       logger.error "ResourceNotFound in GetEntityTool: #{error_message} (was: #{e.message})"
-      raise McpGraphMemErrors::ResourceNotFound, error_message
+      raise McpGraphMemErrors::ResourceNotFound.new(
+        error_message,
+        next_move: "Call `search_entities` or `list_entities`, then retry `get_entity` with a known id."
+      )
+    rescue *ToolError::TIMEOUT_CLASSES
+      raise
     rescue StandardError => e
-      logger.error "InternalServerError in GetEntityTool: #{e.message} - #{e.backtrace.join("\n")}"
-      raise McpGraphMemErrors::InternalServerError, "An internal server error occurred in GetEntityTool: #{e.message}"
+      logger.error "GetEntityTool unexpected error: #{e.class}: #{e.message}"
+      raise McpGraphMemErrors::InternalServerError, "An unexpected error occurred."
     end
   end
 end

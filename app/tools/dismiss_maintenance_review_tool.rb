@@ -24,7 +24,8 @@ class DismissMaintenanceReviewTool < ApplicationTool
   def call(item_id:, action:, report_type: "compaction_review", reason: nil)
     action = action.to_s
     unless ALLOWED_ACTIONS.include?(action)
-      raise FastMcp::Tool::InvalidArgumentsError, "Invalid action: #{action}"
+      raise FastMcp::Tool::InvalidArgumentsError,
+            "Invalid action '#{action}'. action must be one of: #{ALLOWED_ACTIONS.join(', ')}."
     end
 
     result = case action
@@ -38,6 +39,25 @@ class DismissMaintenanceReviewTool < ApplicationTool
 
     return result if result[:success]
 
-    raise McpGraphMemErrors::ResourceNotFound, result[:error]
+    message = result[:error].to_s
+    if message.match?(/not found/i)
+      raise McpGraphMemErrors::ResourceNotFound.new(
+        message,
+        next_move: "Call `list_maintenance_review` to get a valid item_id, then retry `dismiss_maintenance_review`."
+      )
+    end
+
+    logger.error "DismissMaintenanceReviewTool operation failed: #{message}"
+    raise McpGraphMemErrors::OperationFailed.new(
+      "The maintenance review could not be updated.",
+      next_move: "Call `list_maintenance_review` to inspect the item, then retry `dismiss_maintenance_review`."
+    )
+  rescue McpGraphMemErrors::Error, FastMcp::Tool::InvalidArgumentsError
+    raise
+  rescue *ToolError::TIMEOUT_CLASSES
+    raise
+  rescue StandardError => e
+    logger.error "DismissMaintenanceReviewTool unexpected error: #{e.class}: #{e.message}"
+    raise McpGraphMemErrors::InternalServerError, "An unexpected error occurred."
   end
 end

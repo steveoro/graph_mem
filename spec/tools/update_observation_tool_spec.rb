@@ -72,7 +72,9 @@ RSpec.describe UpdateObservationTool, type: :model do
     it 'rejects calls without mutable attributes' do
       expect {
         tool.call(observation_id: observation.id)
-      }.to raise_error(FastMcp::Tool::InvalidArgumentsError, /At least one/)
+      }.to raise_error(FastMcp::Tool::InvalidArgumentsError, /At least one/) do |error|
+        expect(error.message).to include('`text_content`')
+      end
     end
 
     it 'rejects updates to inactive observations' do
@@ -80,19 +82,46 @@ RSpec.describe UpdateObservationTool, type: :model do
 
       expect {
         tool.call(observation_id: observation.id, text_content: 'Changed')
-      }.to raise_error(FastMcp::Tool::InvalidArgumentsError, /Inactive observations/)
+      }.to raise_error(FastMcp::Tool::InvalidArgumentsError, /Inactive observations/) do |error|
+        expect(error.message).to include('`delete_observation`')
+        expect(error.message).to include('`create_observation`')
+        expect(error.message).to include('`update_observation`')
+      end
     end
 
     it 'maps validation errors to invalid arguments' do
       expect {
         tool.call(observation_id: observation.id, confidence: 1.5)
-      }.to raise_error(FastMcp::Tool::InvalidArgumentsError, /Validation Failed/)
+      }.to raise_error(FastMcp::Tool::InvalidArgumentsError, /Validation Failed/) do |error|
+        expect(error.message).to include('`update_observation`')
+      end
     end
 
     it 'raises ResourceNotFound for a missing observation' do
       expect {
         tool.call(observation_id: 999_999, text_content: 'Changed')
-      }.to raise_error(McpGraphMemErrors::ResourceNotFound, /not found/)
+      }.to raise_error(McpGraphMemErrors::ResourceNotFound, /not found/) do |error|
+        expect(error.next_move).to include('`get_entity`')
+        expect(error.next_move).to include('`update_observation`')
+      end
+    end
+
+    it 'raises InternalServerError on unexpected errors without leaking details' do
+      allow(MemoryObservation).to receive(:find).and_raise(StandardError.new("unexpected secret"))
+
+      expect {
+        tool.call(observation_id: observation.id, text_content: 'Changed')
+        }.to raise_error(McpGraphMemErrors::InternalServerError, /unexpected error/) do |error|
+        expect(error.message).not_to include('secret')
+      end
+    end
+
+    it 're-raises timeout errors' do
+      allow(MemoryObservation).to receive(:find).and_raise(Timeout::Error.new("execution expired"))
+
+      expect {
+        tool.call(observation_id: observation.id, text_content: 'Changed')
+      }.to raise_error(Timeout::Error, /execution expired/)
     end
   end
 end

@@ -92,7 +92,10 @@ RSpec.describe CreateObservationTool, type: :model do
       it 'raises ResourceNotFound for non-existent entity_id' do
         expect {
           tool.call(entity_id: 999_999, text_content: 'orphan')
-        }.to raise_error(McpGraphMemErrors::ResourceNotFound, /not found/)
+        }.to raise_error(McpGraphMemErrors::ResourceNotFound, /not found/) do |error|
+          expect(error.next_move).to include('`search_entities`')
+          expect(error.next_move).to include('`create_observation`')
+        end
       end
     end
 
@@ -100,17 +103,29 @@ RSpec.describe CreateObservationTool, type: :model do
       it 'raises InvalidArgumentsError for blank content' do
         expect {
           tool.call(entity_id: entity.id, text_content: '')
-        }.to raise_error(FastMcp::Tool::InvalidArgumentsError, /Validation Failed/)
+        }.to raise_error(FastMcp::Tool::InvalidArgumentsError, /Validation Failed/) do |error|
+          expect(error.message).to include('`create_observation`')
+        end
       end
     end
 
     context 'error handling' do
       it 'raises InternalServerError on unexpected errors' do
-        allow(MemoryEntity).to receive(:find).and_raise(StandardError.new("unexpected"))
+        allow(MemoryEntity).to receive(:find).and_raise(StandardError.new("unexpected secret"))
 
         expect {
           tool.call(entity_id: entity.id, text_content: 'will fail')
-        }.to raise_error(McpGraphMemErrors::InternalServerError, /internal server error/)
+        }.to raise_error(McpGraphMemErrors::InternalServerError, /unexpected error/) do |error|
+          expect(error.message).not_to include('secret')
+        end
+      end
+
+      it 're-raises timeout errors' do
+        allow(MemoryEntity).to receive(:find).and_raise(Timeout::Error.new("execution expired"))
+
+        expect {
+          tool.call(entity_id: entity.id, text_content: 'will timeout')
+        }.to raise_error(Timeout::Error, /execution expired/)
       end
     end
   end

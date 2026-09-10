@@ -37,8 +37,10 @@ class GetContextTool < ApplicationTool
       scope_truncated: scope.truncated,
       scope_max_entities: scope.max_entities
     }
+  rescue *ToolError::TIMEOUT_CLASSES
+    raise
   rescue StandardError => e
-    logger.error "GetContextTool error: #{e.message}"
-    raise McpGraphMemErrors::InternalServerError, e.message
+    logger.error "GetContextTool unexpected error: #{e.class}: #{e.message}"
+    raise McpGraphMemErrors::InternalServerError, "An unexpected error occurred."
   end
 end

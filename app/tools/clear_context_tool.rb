@@ -20,8 +20,10 @@ class ClearContextTool < ApplicationTool
       status: "context_cleared",
       was_active: was_set
     }
+  rescue *ToolError::TIMEOUT_CLASSES
+    raise
   rescue StandardError => e
-    logger.error "ClearContextTool error: #{e.message}"
-    raise McpGraphMemErrors::InternalServerError, e.message
+    logger.error "ClearContextTool unexpected error: #{e.class}: #{e.message}"
+    raise McpGraphMemErrors::InternalServerError, "An unexpected error occurred."
   end
 end
