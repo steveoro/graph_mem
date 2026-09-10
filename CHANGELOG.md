@@ -5,6 +5,9 @@ All notable changes to GraphMem will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.34.0] - 2026-09-10
+- Improved all tool descriptions.
+
 ## [1.33.0] - 2026-08-11
 - Added the Project Scan Skill Companion: a dashboard UI for the human-guided, multi-stage `project_scan` skill with deterministic, no-LLM depth scanning.
 - New `project_scan_skill` operation type and `ProjectScanSkill` service covering `birds_eye`, `architecture`, `usage`, `ui`, and `tests_and_docs` depths.
