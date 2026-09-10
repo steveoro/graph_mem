@@ -15,7 +15,7 @@ RSpec.describe ToolError do
         "message" => "Entity with ID=9 not found.",
         "tool" => "get_entity"
       )
-      expect(payload["next_move"]).to be_present
+      expect(payload["next_move"]).to include("`search_entities`")
     end
 
     it "maps InvalidArgumentsError to validation" do
@@ -35,13 +35,21 @@ RSpec.describe ToolError do
       expect(payload["retriable"]).to be(false)
     end
 
+    it "maps Net::ReadTimeout to timeout" do
+      error = Net::ReadTimeout.new("execution expired")
+      payload = described_class.envelope(error, tool_name: "search_entities")
+
+      expect(payload["category"]).to eq("timeout")
+      expect(payload["retriable"]).to be(true)
+    end
+
     it "maps Timeout::Error to timeout and marks it retriable" do
       error = Timeout::Error.new("execution expired")
       payload = described_class.envelope(error, tool_name: "summarize")
 
       expect(payload["category"]).to eq("timeout")
       expect(payload["retriable"]).to be(true)
-      expect(payload["next_move"]).to match(/retry once/i)
+      expect(payload["next_move"]).to match(/retry the tool once/i)
       expect(payload["message"]).to eq("execution expired")
     end
 

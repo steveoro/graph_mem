@@ -22,7 +22,7 @@ module McpGraphMemErrors
   # Raised when a resource (e.g., an ActiveRecord model) cannot be found.
   class ResourceNotFound < Error
     CATEGORY = "not_found"
-    NEXT_MOVE = "Verify the identifier with search_entities or list_entities, then retry with a known id."
+    NEXT_MOVE = "Call `search_entities` or `list_entities` to verify the identifier, then retry with a known id."
   end
 
   # Raised when an operation fails for reasons other than missing records or invalid arguments.

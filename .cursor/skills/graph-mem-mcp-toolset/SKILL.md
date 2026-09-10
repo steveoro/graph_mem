@@ -177,6 +177,8 @@ claims supplied by the model.
 ## Quality Guardrails
 
 - Never skip schema checks before tool calls.
+- On MCP `isError`, parse the JSON envelope (`category`, `retriable`, `next_move`)
+  and follow `next_move`. Do not retry `system_error` blindly.
 - Never create duplicate project entities without searching first.
 - Keep entries concise, factual, and reusable.
 - Prefer updating existing entities over creating near-duplicates.

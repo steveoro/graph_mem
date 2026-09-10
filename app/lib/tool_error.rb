@@ -2,6 +2,7 @@
 
 require "json"
 require "timeout"
+require "net/http"
 
 # Maps tool exceptions to the structured MCP error envelope.
 class ToolError
@@ -17,10 +18,10 @@ class ToolError
   NAME_NOT_FOUND = /entity not found by name/i
 
   DEFAULT_NEXT_MOVES = {
-    CATEGORY_NOT_FOUND => "Verify the identifier with search_entities or list_entities, then retry with a known id.",
+    CATEGORY_NOT_FOUND => "Call `search_entities` or `list_entities` to verify the identifier, then retry with a known id.",
     CATEGORY_VALIDATION => "Correct the argument format required by the tool schema and retry.",
     CATEGORY_PERMISSION => "Escalate to a human. This client is not authorized to call this tool.",
-    CATEGORY_TIMEOUT => "Retry once, then inform the user of the delay.",
+    CATEGORY_TIMEOUT => "Retry the tool once, then inform the user of the delay.",
     CATEGORY_RATE_LIMIT => "Wait and retry with backoff.",
     CATEGORY_SYSTEM => "Escalate to a human. Do not retry blindly."
   }.freeze
