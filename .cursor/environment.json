@@ -1,0 +1,20 @@
+{
+  "name": "GraphMem",
+  "user": "ubuntu",
+  "install": "./.cursor/install.sh",
+  "start": "./.cursor/start.sh",
+  "terminals": [
+    {
+      "name": "dev",
+      "command": "source \"$HOME/.rvm/scripts/rvm\" && rvm use ruby-3.4.1@graph_mem && bin/dev",
+      "description": "Runs bin/dev via foreman: Puma web server on http://localhost:3000, the Tailwind CSS watcher, and the SolidQueue jobs worker."
+    }
+  ],
+  "ports": [
+    {
+      "name": "web",
+      "port": 3000
+    }
+  ],
+  "egressMode": "allow_all"
+}

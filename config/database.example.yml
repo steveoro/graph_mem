@@ -12,8 +12,13 @@ default: &default
   password: <%= ENV.fetch("DB_PASSWORD", 'my_password') %>
 
 development:
-  <<: *default
-  database: graph_mem
+  primary:
+    <<: *default
+    database: graph_mem
+  queue:
+    <<: *default_sqlt3
+    database: storage/development_queue.sqlite3
+    migrations_paths: db/queue_migrate
 
 test:
   <<: *default

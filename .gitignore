@@ -46,5 +46,8 @@
 .cursor/*
 !.cursor/rules/
 !.cursor/skills/
+!.cursor/environment.json
+!.cursor/install.sh
+!.cursor/start.sh
 .cursorrules
 .windsurfrules
