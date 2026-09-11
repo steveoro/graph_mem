@@ -41,7 +41,11 @@ class DeleteEntityTool < ApplicationTool
       if entity.entity_type == NodeOperationsStrategy::PROJECT_ENTITY_TYPE
         error_message = NodeOperationsStrategy::PROJECT_ROOT_PROTECTED_ERROR
         logger.error "OperationFailed in DeleteEntityTool: #{error_message}"
-        raise McpGraphMemErrors::OperationFailed, error_message
+        raise McpGraphMemErrors::OperationFailed.new(
+          error_message,
+          category: "validation",
+          next_move: "Call `merge_entities` to combine this Project with another, or retry `delete_entity` with a non-Project entity."
+        )
       end
 
       entity_attributes = entity.attributes # Capture attributes before destroy
@@ -66,16 +70,23 @@ class DeleteEntityTool < ApplicationTool
     rescue ActiveRecord::RecordNotFound => e
       error_message = "Entity with ID=#{entity_id} not found."
       logger.error "ResourceNotFound in DeleteEntityTool: #{error_message} (was: #{e.message})"
-      raise McpGraphMemErrors::ResourceNotFound, error_message
+      raise McpGraphMemErrors::ResourceNotFound.new(
+        error_message,
+        next_move: "Call `search_entities` or `list_entities`, then retry `delete_entity` with a known id."
+      )
     rescue McpGraphMemErrors::OperationFailed
       raise
     rescue ActiveRecord::RecordNotDestroyed => e
-      error_message = "Failed to delete entity with ID=#{entity_id}: #{e.message}"
-      logger.error "OperationFailed in DeleteEntityTool: #{error_message}"
-      raise McpGraphMemErrors::OperationFailed, error_message
+      logger.error "OperationFailed in DeleteEntityTool: Failed to delete entity with ID=#{entity_id}: #{e.message}"
+      raise McpGraphMemErrors::OperationFailed.new(
+        "Failed to delete entity with ID=#{entity_id}.",
+        next_move: "Retry `delete_entity` once, then escalate to a human if it fails again."
+      )
+    rescue *ToolError::TIMEOUT_CLASSES
+      raise
     rescue StandardError => e
-      logger.error "InternalServerError in DeleteEntityTool: #{e.message} - #{e.backtrace.join("\n")}"
-      raise McpGraphMemErrors::InternalServerError, "An internal server error occurred in DeleteEntityTool: #{e.message}"
+      logger.error "DeleteEntityTool unexpected error: #{e.class}: #{e.message}"
+      raise McpGraphMemErrors::InternalServerError, "An unexpected error occurred."
     end
   end
 end

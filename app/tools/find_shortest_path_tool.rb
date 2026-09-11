@@ -48,17 +48,25 @@ class FindShortestPathTool < ApplicationTool
 
       case result
       when :missing_from
-        raise McpGraphMemErrors::ResourceNotFound, "Entity with ID=#{from_entity_id} not found."
+        raise McpGraphMemErrors::ResourceNotFound.new(
+          "Entity with ID=#{from_entity_id} not found.",
+          next_move: "Call `search_entities`, then retry `find_shortest_path` with a known from_entity_id."
+        )
       when :missing_to
-        raise McpGraphMemErrors::ResourceNotFound, "Entity with ID=#{to_entity_id} not found."
+        raise McpGraphMemErrors::ResourceNotFound.new(
+          "Entity with ID=#{to_entity_id} not found.",
+          next_move: "Call `search_entities`, then retry `find_shortest_path` with a known to_entity_id."
+        )
       else
         GraphTraversalSerializer.path(result)
       end
-    rescue McpGraphMemErrors::ResourceNotFound
+    rescue *ToolError::TIMEOUT_CLASSES
+      raise
+    rescue McpGraphMemErrors::Error, FastMcp::Tool::InvalidArgumentsError
       raise
     rescue StandardError => e
-      logger.error "InternalServerError in FindShortestPathTool: #{e.message} - #{e.backtrace.join("\n")}"
-      raise McpGraphMemErrors::InternalServerError, "An internal server error occurred in FindShortestPathTool: #{e.message}"
+      logger.error "InternalServerError in FindShortestPathTool: #{e.class}: #{e.message}"
+      raise McpGraphMemErrors::InternalServerError, "An unexpected error occurred."
     end
   end
 end

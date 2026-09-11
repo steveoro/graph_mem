@@ -84,7 +84,10 @@ RSpec.describe DeleteObservationTool, type: :model do
       it 'raises ResourceNotFound for non-existent observation_id' do
         expect {
           tool.call(observation_id: 999_999)
-        }.to raise_error(McpGraphMemErrors::ResourceNotFound, /not found/)
+        }.to raise_error(McpGraphMemErrors::ResourceNotFound, /not found/) do |error|
+          expect(error.next_move).to include('`get_entity`')
+          expect(error.next_move).to include('`delete_observation`')
+        end
       end
     end
 
@@ -97,18 +100,33 @@ RSpec.describe DeleteObservationTool, type: :model do
 
         expect {
           tool.call(observation_id: observation.id)
-        }.to raise_error(McpGraphMemErrors::OperationFailed, /Failed to mark/)
+        }.to raise_error(McpGraphMemErrors::OperationFailed, /Failed to mark/) do |error|
+          expect(error.category).to eq('validation')
+          expect(error.next_move).to include('`get_entity`')
+          expect(error.next_move).to include('`delete_observation`')
+        end
       end
     end
 
     context 'error handling' do
       it 'raises InternalServerError on unexpected errors' do
         observation = MemoryObservation.create!(memory_entity: entity, content: 'Error test')
-        allow(MemoryObservation).to receive(:find).and_raise(StandardError.new("unexpected"))
+        allow(MemoryObservation).to receive(:find).and_raise(StandardError.new("unexpected secret"))
 
         expect {
           tool.call(observation_id: observation.id)
-        }.to raise_error(McpGraphMemErrors::InternalServerError, /internal server error/)
+        }.to raise_error(McpGraphMemErrors::InternalServerError, /unexpected error/) do |error|
+          expect(error.message).not_to include('secret')
+        end
+      end
+
+      it 're-raises timeout errors' do
+        observation = MemoryObservation.create!(memory_entity: entity, content: 'Timeout test')
+        allow(MemoryObservation).to receive(:find).and_raise(Timeout::Error.new("execution expired"))
+
+        expect {
+          tool.call(observation_id: observation.id)
+        }.to raise_error(Timeout::Error, /execution expired/)
       end
     end
   end

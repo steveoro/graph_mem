@@ -346,11 +346,43 @@ The embedding service is configurable via **System Settings → Embeddings** (Ap
 
 ## Error Handling
 
-Custom error classes:
+MCP `tools/call` failures return `isError: true` with a **single JSON object** as the text content. There is no `Error:` prefix and no Ruby backtrace in the payload. Tools still raise typed exceptions from `call`; FastMCP serializes them at the protocol boundary.
 
-- `McpGraphMemErrors::ResourceNotFound` -- requested entity/relation not found
-- `McpGraphMemErrors::InternalServerError` -- unexpected server error
-- `FastMcp::Tool::InvalidArgumentsError` -- invalid input parameters
+```json
+{
+  "error": true,
+  "category": "not_found",
+  "retriable": false,
+  "next_move": "Call `search_entities` or `list_entities` to verify the identifier, then retry with a known id.",
+  "message": "Entity with ID=123 not found.",
+  "tool": "get_entity"
+}
+```
+
+`next_move` is an imperative instruction for the calling agent. It names a sibling tool in backticks when that tool can produce a valid retry input.
+
+| Category | `retriable` | Typical next move |
+|---|---|---|
+| `not_found` | false | Call `search_entities` or `list_entities`, then retry with a known id |
+| `validation` | false | Correct the argument format required by the tool schema and retry |
+| `permission` | false | Escalate to a human; this client is not authorized |
+| `timeout` | true | Retry the tool once, then inform the user of the delay |
+| `rate_limit` | true | Wait and retry with backoff (reserved until a limiter exists) |
+| `system_error` | false | Escalate to a human; do not retry blindly |
+
+Exception mapping:
+
+- `McpGraphMemErrors::ResourceNotFound` → `not_found`
+- `FastMcp::Tool::InvalidArgumentsError` and Dry-schema failures → `validation`, except entity-name misses (`Entity not found by name`) → `not_found`
+- `McpGraphMemErrors::OperationFailed` → `system_error` unless the call site sets `category: "validation"` for a caller-correctable policy
+- `McpGraphMemErrors::InternalServerError` and unknown `StandardError` → `system_error` (generic message; original exception is logged server-side)
+- `Timeout::Error` / `Net::OpenTimeout` / `Net::ReadTimeout` → `timeout`
+- Unauthorized tool calls → `permission`
+
+Empty states that are **not** errors:
+
+- `get_context` `{ status: "no_context" }` is a successful empty state
+- A missing `scan_project_status` scan **is** an error (`ResourceNotFound`), not `{ status: "not_found" }`
 
 ## Tool Overlap Guide
 

@@ -196,8 +196,10 @@ module ParameterNormalizer
         elsif lenient
           next
         else
-          raise FastMcp::Tool::InvalidArgumentsError,
-                "Entity not found by name: '#{entity_name}'. Use entity_id (integer) or verify the entity name."
+          raise McpGraphMemErrors::ResourceNotFound.new(
+            "Entity not found by name: '#{entity_name}'. Use entity_id (integer) or verify the entity name.",
+            next_move: "Call `search_entities` to find a matching name, then retry with a known id."
+          )
         end
       end
 
@@ -211,8 +213,10 @@ module ParameterNormalizer
         elsif lenient
           next
         else
-          raise FastMcp::Tool::InvalidArgumentsError,
-                "Entity not found by name: '#{val}'. Provide a valid entity name or use an integer entity_id."
+          raise McpGraphMemErrors::ResourceNotFound.new(
+            "Entity not found by name: '#{val}'. Provide a valid entity name or use an integer entity_id.",
+            next_move: "Call `search_entities` to find a matching name, then retry with a known id."
+          )
         end
       end
 

@@ -157,7 +157,10 @@ RSpec.describe BulkUpdateTool, type: :model do
             { name: 'Good Entity', entity_type: 'Project' },
             { name: 'Existing For Rollback', entity_type: 'Project' }
           ])
-        }.to raise_error(FastMcp::Tool::InvalidArgumentsError, /rolled back/)
+        }.to raise_error(FastMcp::Tool::InvalidArgumentsError, /rolled back/) do |error|
+          expect(error.message).to match(/Fix the listed op errors/)
+          expect(error.message).to include('`bulk_update`')
+        end
 
         expect(MemoryEntity.count).to eq(initial_entity_count)
       end
@@ -171,7 +174,9 @@ RSpec.describe BulkUpdateTool, type: :model do
             entities: [ { name: 'Will Rollback', entity_type: 'Task' } ],
             observations: [ { entity_id: 999_999, text_content: 'Invalid entity' } ]
           )
-        }.to raise_error(FastMcp::Tool::InvalidArgumentsError, /rolled back/)
+        }.to raise_error(FastMcp::Tool::InvalidArgumentsError, /rolled back/) do |error|
+          expect(error.message).to match(/Fix the listed op errors/)
+        end
 
         expect(MemoryEntity.count).to eq(initial_entity_count)
         expect(MemoryObservation.count).to eq(initial_obs_count)
@@ -182,13 +187,17 @@ RSpec.describe BulkUpdateTool, type: :model do
       it 'raises InvalidArgumentsError when no operations are provided' do
         expect {
           tool.call(entities: [], observations: [], relations: [])
-        }.to raise_error(FastMcp::Tool::InvalidArgumentsError, /At least one operation/)
+        }.to raise_error(FastMcp::Tool::InvalidArgumentsError, /At least one operation/) do |error|
+          expect(error.message).to match(/Provide at least one item/)
+        end
       end
 
       it 'raises InvalidArgumentsError when all arrays are nil/empty' do
         expect {
           tool.call
-        }.to raise_error(FastMcp::Tool::InvalidArgumentsError, /At least one operation/)
+        }.to raise_error(FastMcp::Tool::InvalidArgumentsError, /At least one operation/) do |error|
+          expect(error.message).to include('`operations`')
+        end
       end
     end
 
@@ -198,7 +207,11 @@ RSpec.describe BulkUpdateTool, type: :model do
 
         expect {
           tool.call(entities: entities)
-        }.to raise_error(FastMcp::Tool::InvalidArgumentsError, /Maximum #{BulkUpdateTool::MAX_OPERATIONS}/)
+        }.to raise_error(FastMcp::Tool::InvalidArgumentsError, /Maximum #{BulkUpdateTool::MAX_OPERATIONS}/) do |error|
+          expect(error.message).to include("got 51")
+          expect(error.message).to match(/Split into multiple/)
+          expect(error.message).to include('`bulk_update`')
+        end
       end
 
       it 'counts operations across all arrays' do
@@ -223,12 +236,22 @@ RSpec.describe BulkUpdateTool, type: :model do
     end
 
     context 'error handling' do
-      it 'raises InternalServerError on unexpected errors' do
+      it 'raises InternalServerError on unexpected errors without leaking the original message' do
         allow(ActiveRecord::Base).to receive(:transaction).and_raise(StandardError.new("DB failure"))
 
         expect {
           tool.call(entities: [ { name: 'Fail', entity_type: 'Task' } ])
-        }.to raise_error(McpGraphMemErrors::InternalServerError, /Bulk operation failed/)
+        }.to raise_error(McpGraphMemErrors::InternalServerError, "An unexpected error occurred.") do |error|
+          expect(error.message).not_to include("DB failure")
+        end
+      end
+
+      it 're-raises Timeout::Error so the envelope can map category timeout' do
+        allow(ActiveRecord::Base).to receive(:transaction).and_raise(Timeout::Error.new("execution expired"))
+
+        expect {
+          tool.call(entities: [ { name: 'Fail', entity_type: 'Task' } ])
+        }.to raise_error(Timeout::Error, "execution expired")
       end
     end
   end

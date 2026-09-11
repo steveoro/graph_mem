@@ -141,20 +141,26 @@ RSpec.describe ParameterNormalizer do
         expect(result[:entity_id]).to eq(999)
       end
 
-      it "raises InvalidArgumentsError when entity name is not found" do
+      it "raises ResourceNotFound when entity name is not found" do
         expect {
           described_class.normalize("set_context", {
             entity_name: "NonExistent"
           })
-        }.to raise_error(FastMcp::Tool::InvalidArgumentsError, /Entity not found by name/)
+        }.to raise_error(McpGraphMemErrors::ResourceNotFound, /Entity not found by name/) do |error|
+          expect(error.next_move).to match(/search_entities/)
+          expect(error.next_move).to match(/known id/)
+        end
       end
 
-      it "raises InvalidArgumentsError when string entity_id is not found" do
+      it "raises ResourceNotFound when string entity_id is not found" do
         expect {
           described_class.normalize("set_context", {
             entity_id: "NonExistent"
           })
-        }.to raise_error(FastMcp::Tool::InvalidArgumentsError, /Entity not found by name/)
+        }.to raise_error(McpGraphMemErrors::ResourceNotFound, /Entity not found by name/) do |error|
+          expect(error.next_move).to match(/search_entities/)
+          expect(error.next_move).to match(/known id/)
+        end
       end
 
       it "passes through integer entity_id unchanged" do
@@ -281,6 +287,14 @@ RSpec.describe ParameterNormalizer do
             operations: [ { type: "unknown_op", name: "X" } ]
           })
         }.to raise_error(FastMcp::Tool::InvalidArgumentsError, /Unknown bulk_update operation type/)
+      end
+
+      it "rejects operations missing type" do
+        expect {
+          described_class.normalize("bulk_update", {
+            operations: [ { name: "X" } ]
+          })
+        }.to raise_error(FastMcp::Tool::InvalidArgumentsError, /missing type/)
       end
 
       it "does not process operations for non-bulk_update tools" do

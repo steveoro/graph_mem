@@ -56,15 +56,20 @@ class TraverseGraphTool < ApplicationTool
       )
 
       if result.nil?
-        raise McpGraphMemErrors::ResourceNotFound, "Entity with ID=#{start_entity_id} not found."
+        raise McpGraphMemErrors::ResourceNotFound.new(
+          "Entity with ID=#{start_entity_id} not found.",
+          next_move: "Call `search_entities`, then retry `traverse_graph` with a known start_entity_id."
+        )
       end
 
       GraphTraversalSerializer.traversal(result)
-    rescue McpGraphMemErrors::ResourceNotFound
+    rescue *ToolError::TIMEOUT_CLASSES
+      raise
+    rescue McpGraphMemErrors::Error, FastMcp::Tool::InvalidArgumentsError
       raise
     rescue StandardError => e
-      logger.error "InternalServerError in TraverseGraphTool: #{e.message} - #{e.backtrace.join("\n")}"
-      raise McpGraphMemErrors::InternalServerError, "An internal server error occurred in TraverseGraphTool: #{e.message}"
+      logger.error "InternalServerError in TraverseGraphTool: #{e.class}: #{e.message}"
+      raise McpGraphMemErrors::InternalServerError, "An unexpected error occurred."
     end
   end
 end

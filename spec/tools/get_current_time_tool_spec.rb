@@ -60,7 +60,17 @@ RSpec.describe GetCurrentTimeTool, type: :model do
 
         expect {
           tool.call
-        }.to raise_error(McpGraphMemErrors::InternalServerError, /Error in GetCurrentTimeTool/)
+        }.to raise_error(McpGraphMemErrors::InternalServerError, /unexpected error/) do |error|
+          expect(error.message).not_to include("clock failure")
+        end
+      end
+
+      it 're-raises Timeout::Error' do
+        allow(Time).to receive(:now).and_raise(Timeout::Error.new("execution expired"))
+
+        expect {
+          tool.call
+        }.to raise_error(Timeout::Error)
       end
     end
   end

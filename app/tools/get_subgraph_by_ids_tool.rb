@@ -150,13 +150,18 @@ class GetSubgraphByIdsTool < ApplicationTool
       relations: relations_data,
       missing_entity_ids: missing_entity_ids
     }
-  rescue FastMcp::Tool::InvalidArgumentsError
+  rescue *ToolError::TIMEOUT_CLASSES
+    raise
+  rescue McpGraphMemErrors::Error, FastMcp::Tool::InvalidArgumentsError
     raise
   rescue ActiveRecord::RecordNotFound => e
-    logger.error "ResourceNotFound in GetSubgraphByIDsTool: #{e.message} - #{e.backtrace.join("\n")}"
-    raise McpGraphMemErrors::ResourceNotFound, "Error finding records: #{e.message}"
+    logger.error "ResourceNotFound in GetSubgraphByIDsTool: #{e.class}: #{e.message}"
+    raise McpGraphMemErrors::ResourceNotFound.new(
+      "One or more requested entities were not found.",
+      next_move: "Call `search_entities` to find matching entities, then retry `get_subgraph_by_ids` with known ids."
+    )
   rescue StandardError => e
-    logger.error "InternalServerError in GetSubgraphByIDsTool: #{e.message} - #{e.backtrace.join("\n")}"
-    raise McpGraphMemErrors::InternalServerError, "An unexpected error occurred: #{e.message}"
+    logger.error "InternalServerError in GetSubgraphByIDsTool: #{e.class}: #{e.message}"
+    raise McpGraphMemErrors::InternalServerError, "An unexpected error occurred."
   end
 end

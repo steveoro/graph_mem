@@ -57,12 +57,24 @@ RSpec.describe VersionTool, type: :model do
     context 'error handling' do
       it 'raises InternalServerError on unexpected errors' do
         version_mod = Module.new
-        version_mod.const_set(:VERSION, Class.new { def to_s; raise StandardError, "unexpected"; end }.new)
+        version_mod.const_set(:VERSION, Class.new { def to_s; raise StandardError, "version-secret-failure"; end }.new)
         stub_const("GraphMem", version_mod)
 
         expect {
           tool.call
-        }.to raise_error(McpGraphMemErrors::InternalServerError, /Internal Server Error/)
+        }.to raise_error(McpGraphMemErrors::InternalServerError, /unexpected error/) do |error|
+          expect(error.message).not_to include("version-secret-failure")
+        end
+      end
+
+      it 're-raises Timeout::Error' do
+        version_mod = Module.new
+        version_mod.const_set(:VERSION, Class.new { def to_s; raise Timeout::Error, "execution expired"; end }.new)
+        stub_const("GraphMem", version_mod)
+
+        expect {
+          tool.call
+        }.to raise_error(Timeout::Error)
       end
     end
   end

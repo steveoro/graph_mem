@@ -28,5 +28,23 @@ RSpec.describe DreamStateStatusTool, type: :model do
       expect(result[:phase]).to eq("orphans")
       expect(result[:cursor_entity_id]).to eq(7)
     end
+
+    it "raises InternalServerError on unexpected errors without leaking the original message" do
+      allow(CompactionRunner).to receive(:status_snapshot).and_raise(StandardError.new("secret boom"))
+
+      expect {
+        tool.call
+      }.to raise_error(McpGraphMemErrors::InternalServerError, "An unexpected error occurred.") do |error|
+        expect(error.message).not_to include("secret boom")
+      end
+    end
+
+    it "re-raises Timeout::Error so the envelope can map category timeout" do
+      allow(CompactionRunner).to receive(:status_snapshot).and_raise(Timeout::Error.new("execution expired"))
+
+      expect {
+        tool.call
+      }.to raise_error(Timeout::Error, "execution expired")
+    end
   end
 end

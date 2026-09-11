@@ -35,8 +35,14 @@ class DeleteRelationTool < ApplicationTool
   def call(relation_id:, reason: nil)
     logger.info "Performing DeleteRelationTool with relation_id: #{relation_id}, reason: #{reason}"
     begin
-      # Find and destroy the relation
-      relation = MemoryRelation.find(relation_id)
+      relation = MemoryRelation.find_by(id: relation_id)
+      unless relation
+        raise McpGraphMemErrors::ResourceNotFound.new(
+          "Relation with ID=#{relation_id} not found.",
+          next_move: "Call `find_relations` or `get_entity` to obtain a relation_id, then retry `delete_relation`."
+        )
+      end
+
       relation_attributes = relation.attributes # Capture attributes before destroy
       begin
         Current.deletion_reason = reason
@@ -58,17 +64,20 @@ class DeleteRelationTool < ApplicationTool
         updated_at: relation_attributes["updated_at"].iso8601(3),
         message: "Relation with ID=#{relation_id} deleted successfully."
       }
-    rescue ActiveRecord::RecordNotFound => e
-      error_message = "Relation with ID=#{relation_id} not found."
-      logger.error "ResourceNotFound in DeleteRelationTool: #{error_message} (was: #{e.message})"
-      raise McpGraphMemErrors::ResourceNotFound, error_message
+    rescue *ToolError::TIMEOUT_CLASSES
+      raise
+    rescue McpGraphMemErrors::Error, FastMcp::Tool::InvalidArgumentsError
+      raise
     rescue ActiveRecord::RecordNotDestroyed => e
-      error_message = "Failed to delete relation with ID=#{relation_id}: #{e.message}"
-      logger.error "OperationFailed in DeleteRelationTool: #{error_message}"
-      raise McpGraphMemErrors::OperationFailed, error_message
+      error_message = "Failed to delete relation with ID=#{relation_id}."
+      logger.error "OperationFailed in DeleteRelationTool: #{error_message} (#{e.class}: #{e.message})"
+      raise McpGraphMemErrors::OperationFailed.new(
+        error_message,
+        next_move: "Call `find_relations` or `get_entity` to confirm the relation, then retry `delete_relation`."
+      )
     rescue StandardError => e
-      logger.error "InternalServerError in DeleteRelationTool: #{e.message} - #{e.backtrace.join("\n")}"
-      raise McpGraphMemErrors::InternalServerError, "An internal server error occurred in DeleteRelationTool: #{e.message}"
+      logger.error "InternalServerError in DeleteRelationTool: #{e.class}: #{e.message}"
+      raise McpGraphMemErrors::InternalServerError, "An unexpected error occurred."
     end
   end
 end

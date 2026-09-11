@@ -270,6 +270,14 @@ RSpec.describe SearchSubgraphTool, type: :model do
         result = tool.call(query: 'Rails')
         expect(result[:entities]).not_to be_empty
       end
+
+      it 're-raises Timeout::Error from vector search' do
+        allow(VectorSearchStrategy).to receive(:new).and_raise(Timeout::Error.new("execution expired"))
+
+        expect {
+          tool.call(query: 'Rails')
+        }.to raise_error(Timeout::Error, "execution expired")
+      end
     end
 
     context 'error handling' do
@@ -278,7 +286,17 @@ RSpec.describe SearchSubgraphTool, type: :model do
 
         expect {
           tool.call(query: 'test')
-        }.to raise_error(McpGraphMemErrors::InternalServerError)
+        }.to raise_error(McpGraphMemErrors::InternalServerError, "An unexpected error occurred.") do |error|
+          expect(error.message).not_to include("DB error")
+        end
+      end
+
+      it 're-raises Timeout::Error so the envelope can map category timeout' do
+        allow(MemoryEntity).to receive(:distinct).and_raise(Timeout::Error.new("execution expired"))
+
+        expect {
+          tool.call(query: 'test')
+        }.to raise_error(Timeout::Error, "execution expired")
       end
     end
   end

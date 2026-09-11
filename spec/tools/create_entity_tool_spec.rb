@@ -177,13 +177,34 @@ RSpec.describe CreateEntityTool, type: :model do
     end
 
     context 'error handling' do
-      it 'raises InternalServerError on unexpected errors' do
-        allow(MemoryEntity).to receive(:create!).and_raise(StandardError.new("DB down"))
+      it 'raises InternalServerError on unexpected errors without leaking the original message' do
+        allow(MemoryEntity).to receive(:create!).and_raise(StandardError.new("secret-db-failure"))
         allow_any_instance_of(CreateEntityTool).to receive(:find_similar_entity).and_return(nil)
 
         expect {
           tool.call(name: 'Fail', entity_type: 'Project')
-        }.to raise_error(McpGraphMemErrors::InternalServerError, /internal server error/)
+        }.to raise_error(McpGraphMemErrors::InternalServerError, /unexpected error/) do |error|
+          expect(error.message).not_to include("secret-db-failure")
+        end
+      end
+
+      it 're-raises Timeout::Error so ToolError can map it to timeout' do
+        allow(MemoryEntity).to receive(:create!).and_raise(Timeout::Error.new("execution expired"))
+        allow_any_instance_of(CreateEntityTool).to receive(:find_similar_entity).and_return(nil)
+
+        expect {
+          tool.call(name: 'Fail', entity_type: 'Project')
+        }.to raise_error(Timeout::Error, /execution expired/)
+      end
+
+      it 're-raises Timeout::Error from the dedup check so ToolError can map it to timeout' do
+        allow_any_instance_of(CreateEntityTool).to receive(:find_similar_entity).and_call_original
+        allow_any_instance_of(VectorSearchStrategy).to receive(:search)
+          .and_raise(Timeout::Error.new("execution expired"))
+
+        expect {
+          tool.call(name: 'Timeout Dedup', entity_type: 'Project')
+        }.to raise_error(Timeout::Error, /execution expired/)
       end
     end
   end

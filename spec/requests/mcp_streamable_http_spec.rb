@@ -142,6 +142,60 @@ RSpec.describe "MCP Streamable HTTP endpoint", type: :request do
       expect(AgentContext.find_by(client_id: "streamable-test-client")).to be_present
     end
 
+    it "returns a structured JSON error envelope for a missing entity" do
+      host! "localhost"
+
+      post "/mcp",
+        params: {
+          jsonrpc: "2.0",
+          id: 1,
+          method: "initialize",
+          params: {
+            protocolVersion: "2025-03-26",
+            capabilities: {},
+            clientInfo: { name: "rspec", version: "1.0.0" }
+          }
+        }.to_json,
+        headers: {
+          "CONTENT_TYPE" => "application/json",
+          "HTTP_ACCEPT" => "application/json"
+        }
+
+      session_id = response.headers["Mcp-Session-Id"]
+
+      post "/mcp",
+        params: {
+          jsonrpc: "2.0",
+          id: 3,
+          method: "tools/call",
+          params: {
+            name: "get_entity",
+            arguments: { entity_id: 9_999_999 }
+          }
+        }.to_json,
+        headers: {
+          "CONTENT_TYPE" => "application/json",
+          "HTTP_ACCEPT" => "application/json",
+          "Mcp-Session-Id" => session_id
+        }
+
+      expect(response).to have_http_status(:ok)
+      result = response.parsed_body["result"]
+      expect(result["isError"]).to eq(true)
+      text = result["content"].first["text"]
+      expect(text).not_to include("Error:")
+      expect(text).not_to include("app/tools")
+      payload = JSON.parse(text)
+      expect(payload).to include(
+        "error" => true,
+        "category" => "not_found",
+        "retriable" => false,
+        "tool" => "get_entity"
+      )
+      expect(payload["message"]).to match(/not found/i)
+      expect(payload["next_move"]).to include("search_entities")
+    end
+
     it "falls back to the default client id when X-MCP-Client is absent" do
       host! "localhost"
 

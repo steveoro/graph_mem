@@ -97,23 +97,35 @@ RSpec.describe CreateRelationTool, type: :model do
       it 'raises ResourceNotFound when from_entity does not exist' do
         expect {
           tool.call(from_entity_id: 999_999, to_entity_id: entity_b.id, relation_type: 'depends_on')
-        }.to raise_error(McpGraphMemErrors::ResourceNotFound, /not found/)
+        }.to raise_error(McpGraphMemErrors::ResourceNotFound, "Entity with ID=999999 not found.") do |error|
+          expect(error.category).to eq("not_found")
+          expect(error.next_move).to include("`search_entities`")
+          expect(error.next_move).to include("`create_relation`")
+        end
       end
 
       it 'raises ResourceNotFound when to_entity does not exist' do
         expect {
           tool.call(from_entity_id: entity_a.id, to_entity_id: 999_999, relation_type: 'depends_on')
-        }.to raise_error(McpGraphMemErrors::ResourceNotFound, /not found/)
+        }.to raise_error(McpGraphMemErrors::ResourceNotFound, "Entity with ID=999999 not found.") do |error|
+          expect(error.category).to eq("not_found")
+          expect(error.next_move).to include("`search_entities`")
+          expect(error.next_move).to include("`create_relation`")
+        end
       end
     end
 
     context 'duplicate relation' do
-      it 'raises an error for duplicate from/to/type combination' do
+      it 'raises OperationFailed with validation category for duplicate from/to/type combination' do
         tool.call(from_entity_id: entity_a.id, to_entity_id: entity_b.id, relation_type: 'depends_on')
 
         expect {
           tool.call(from_entity_id: entity_a.id, to_entity_id: entity_b.id, relation_type: 'depends_on')
-        }.to raise_error(McpGraphMemErrors::InternalServerError)
+        }.to raise_error(McpGraphMemErrors::OperationFailed, /already exists/) do |error|
+          expect(error.category).to eq("validation")
+          expect(error.next_move).to include("`find_relations`")
+          expect(error.next_move).to include("`delete_relation`")
+        end
       end
 
       it 'allows same entities with different relation_type' do
@@ -125,13 +137,38 @@ RSpec.describe CreateRelationTool, type: :model do
       end
     end
 
+    context 'invalid arguments' do
+      it 'raises InvalidArgumentsError with a concrete format for invalid metadata' do
+        expect {
+          tool.call(
+            from_entity_id: entity_a.id,
+            to_entity_id: entity_b.id,
+            relation_type: 'depends_on',
+            weight: -1.0
+          )
+        }.to raise_error(FastMcp::Tool::InvalidArgumentsError, /Validation Failed/) do |error|
+          expect(error.message).to include("weight as a float >= 0")
+        end
+      end
+    end
+
     context 'error handling' do
       it 'raises InternalServerError on unexpected errors' do
-        allow(MemoryEntity).to receive(:find).and_raise(StandardError.new("unexpected"))
+        allow(MemoryEntity).to receive(:exists?).and_raise(StandardError.new("DB error"))
 
         expect {
           tool.call(from_entity_id: entity_a.id, to_entity_id: entity_b.id, relation_type: 'depends_on')
-        }.to raise_error(McpGraphMemErrors::InternalServerError, /internal server error/)
+        }.to raise_error(McpGraphMemErrors::InternalServerError, "An unexpected error occurred.") do |error|
+          expect(error.message).not_to include("DB error")
+        end
+      end
+
+      it 're-raises Timeout::Error so the envelope can map category timeout' do
+        allow(MemoryEntity).to receive(:exists?).and_raise(Timeout::Error.new("execution expired"))
+
+        expect {
+          tool.call(from_entity_id: entity_a.id, to_entity_id: entity_b.id, relation_type: 'depends_on')
+        }.to raise_error(Timeout::Error, "execution expired")
       end
     end
   end

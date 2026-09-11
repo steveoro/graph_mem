@@ -52,7 +52,12 @@ RSpec.describe GetMaintenanceReportsTool, type: :model do
       it "raises on an unknown report_type" do
         expect {
           tool.call(report_type: "bogus")
-        }.to raise_error(FastMcp::Tool::InvalidArgumentsError, /Unknown report_type/)
+        }.to raise_error(FastMcp::Tool::InvalidArgumentsError, /Unknown report_type/) do |error|
+          expect(error.message).to include("Valid types:")
+          MaintenanceReport::REPORT_TYPES.each { |type| expect(error.message).to include(type) }
+          expect(error.message).to include("`get_maintenance_reports`")
+          expect(error.message).to include("`list_maintenance_review`")
+        end
       end
     end
 
@@ -70,6 +75,26 @@ RSpec.describe GetMaintenanceReportsTool, type: :model do
         result = tool.call(report_type: "orphans", limit: 3)
         created_ats = result[:reports].map { |r| r[:created_at] }
         expect(created_ats).to eq(created_ats.sort.reverse)
+      end
+    end
+
+    context "error handling" do
+      it "raises InternalServerError on unexpected errors without leaking the original message" do
+        allow(MaintenanceReport).to receive(:by_type).and_raise(StandardError.new("secret boom"))
+
+        expect {
+          tool.call(report_type: "orphans")
+        }.to raise_error(McpGraphMemErrors::InternalServerError, "An unexpected error occurred.") do |error|
+          expect(error.message).not_to include("secret boom")
+        end
+      end
+
+      it "re-raises Timeout::Error so the envelope can map category timeout" do
+        allow(MaintenanceReport).to receive(:by_type).and_raise(Timeout::Error.new("execution expired"))
+
+        expect {
+          tool.call(report_type: "orphans")
+        }.to raise_error(Timeout::Error, "execution expired")
       end
     end
   end

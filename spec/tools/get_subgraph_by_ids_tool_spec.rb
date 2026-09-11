@@ -148,7 +148,28 @@ RSpec.describe GetSubgraphByIdsTool, type: :model do
 
         expect {
           tool.call(entity_ids: [ entity_a.id ])
-        }.to raise_error(McpGraphMemErrors::InternalServerError)
+        }.to raise_error(McpGraphMemErrors::InternalServerError, "An unexpected error occurred.") do |error|
+          expect(error.message).not_to include("DB error")
+        end
+      end
+
+      it 'raises ResourceNotFound when ActiveRecord reports a missing record' do
+        allow(MemoryEntity).to receive(:where).and_raise(ActiveRecord::RecordNotFound.new("Couldn't find MemoryEntity"))
+
+        expect {
+          tool.call(entity_ids: [ entity_a.id ])
+        }.to raise_error(McpGraphMemErrors::ResourceNotFound, /not found/) do |error|
+          expect(error.next_move).to match(/search_entities/)
+          expect(error.message).not_to include("Couldn't find MemoryEntity")
+        end
+      end
+
+      it 're-raises Timeout::Error so the envelope can map category timeout' do
+        allow(MemoryEntity).to receive(:where).and_raise(Timeout::Error.new("execution expired"))
+
+        expect {
+          tool.call(entity_ids: [ entity_a.id ])
+        }.to raise_error(Timeout::Error, "execution expired")
       end
     end
   end

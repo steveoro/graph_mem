@@ -39,12 +39,16 @@ class UpdateEntityTool < ApplicationTool
 
     # Check if at least one updatable attribute is provided
     unless name.present? || entity_type.present? || !aliases.nil? || !description.nil?
-      raise FastMcp::Tool::InvalidArgumentsError, "At least one attribute (name, entity_type, aliases, or description) must be provided for update."
+      raise FastMcp::Tool::InvalidArgumentsError,
+            "At least one attribute (name, entity_type, aliases, or description) must be provided for update."
     end
 
     entity = MemoryEntity.find_by(id: entity_id)
     unless entity
-      raise McpGraphMemErrors::ResourceNotFound, "Entity with ID #{entity_id} not found."
+      raise McpGraphMemErrors::ResourceNotFound.new(
+        "Entity with ID=#{entity_id} not found.",
+        next_move: "Call `search_entities` or `list_entities`, then retry `update_entity` with a known id."
+      )
     end
 
     ActiveRecord::Base.transaction do
@@ -71,13 +75,16 @@ class UpdateEntityTool < ApplicationTool
   rescue FastMcp::Tool::InvalidArgumentsError
     raise
   rescue ActiveRecord::RecordInvalid => e
-    error_message = "Validation Failed: #{e.record.errors.full_messages.join(', ')}"
+    error_message = "Validation Failed: #{e.record.errors.full_messages.join(', ')}. " \
+      "Provide a unique name and valid entity_type, then retry `update_entity`."
     logger.error "InvalidArguments in UpdateEntityTool: #{error_message} (was: #{e.message})"
     raise FastMcp::Tool::InvalidArgumentsError, error_message
-  rescue McpGraphMemErrors::ResourceNotFound => e
-    raise e
+  rescue McpGraphMemErrors::ResourceNotFound
+    raise
+  rescue *ToolError::TIMEOUT_CLASSES
+    raise
   rescue StandardError => e
-    logger.error "InternalServerError in UpdateEntityTool: #{e.message} - #{e.backtrace.join("\n")}"
-    raise McpGraphMemErrors::InternalServerError, "An internal server error occurred in UpdateEntityTool: #{e.message}"
+    logger.error "UpdateEntityTool unexpected error: #{e.class}: #{e.message}"
+    raise McpGraphMemErrors::InternalServerError, "An unexpected error occurred."
   end
 end

@@ -54,6 +54,12 @@ state management, not as a substitute for inspecting the repository.
 | Persist | `create_entity`, `update_entity`, `delete_entity`, `create_observation`, `update_observation`, `delete_observation`, `create_relation`, `delete_relation`, `bulk_update` |
 | Maintain | `suggest_merges`, `merge_entities`, `dream_state_status`, `get_maintenance_reports`, `list_maintenance_review`, `apply_maintenance_review`, `dismiss_maintenance_review`, `get_graph_stats`, `get_version`, `get_current_time`, `scan_project`, `scan_project_status` |
 
+### MCP Tool Errors
+
+Tool `isError` content is a JSON envelope with `category`, `retriable`, `next_move`,
+and `message`. Follow `next_move`. Do not retry `system_error` blindly.
+See `docs/mcp_tools.md` Error Handling for the category table.
+
 ### Multi-Agent Context Scoping
 
 - Context is **per-agent**, keyed by the `X-MCP-Client` header, and persisted in the DB (survives restarts).

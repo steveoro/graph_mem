@@ -77,13 +77,22 @@ RSpec.describe GetContextTool, type: :model do
     end
 
     context 'error handling' do
-      it 'raises InternalServerError on unexpected errors' do
+      it 'raises InternalServerError on unexpected errors without leaking the original message' do
         GraphMemContext.current_project_id = project.id
-        allow(MemoryEntity).to receive(:find_by).and_raise(StandardError.new("unexpected"))
+        allow(MemoryEntity).to receive(:find_by).and_raise(StandardError.new("secret-db-failure"))
 
         expect {
           tool.call
-        }.to raise_error(McpGraphMemErrors::InternalServerError)
+        }.to raise_error(McpGraphMemErrors::InternalServerError, /unexpected error/) do |error|
+          expect(error.message).not_to include("secret-db-failure")
+        end
+      end
+
+      it 're-raises Timeout::Error so ToolError can map it to timeout' do
+        GraphMemContext.current_project_id = project.id
+        allow(MemoryEntity).to receive(:find_by).and_raise(Timeout::Error.new("execution expired"))
+
+        expect { tool.call }.to raise_error(Timeout::Error, /execution expired/)
       end
     end
   end

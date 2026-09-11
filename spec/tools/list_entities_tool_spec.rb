@@ -106,19 +106,19 @@ RSpec.describe ListEntitiesTool, type: :model do
       it 'raises InvalidArgumentsError for page < 1' do
         expect {
           tool.call(page: 0)
-        }.to raise_error(FastMcp::Tool::InvalidArgumentsError, /Page number must be 1 or greater/)
+        }.to raise_error(FastMcp::Tool::InvalidArgumentsError, /page must be an integer >= 1/)
       end
 
       it 'raises InvalidArgumentsError for per_page < 1' do
         expect {
           tool.call(per_page: 0)
-        }.to raise_error(FastMcp::Tool::InvalidArgumentsError, /Per page count must be between/)
+        }.to raise_error(FastMcp::Tool::InvalidArgumentsError, /per_page must be an integer between 1 and 100/)
       end
 
       it 'raises InvalidArgumentsError for per_page > 100' do
         expect {
           tool.call(per_page: 101)
-        }.to raise_error(FastMcp::Tool::InvalidArgumentsError, /Per page count must be between/)
+        }.to raise_error(FastMcp::Tool::InvalidArgumentsError, /per_page must be an integer between 1 and 100/)
       end
 
       it 'accepts per_page = 1' do
@@ -133,12 +133,20 @@ RSpec.describe ListEntitiesTool, type: :model do
     end
 
     context 'error handling' do
-      it 'raises InternalServerError on unexpected errors' do
-        allow(MemoryEntity).to receive(:count).and_raise(StandardError.new("DB error"))
+      it 'raises InternalServerError on unexpected errors without leaking the original message' do
+        allow(MemoryEntity).to receive(:count).and_raise(StandardError.new("secret-db-failure"))
 
         expect {
           tool.call
-        }.to raise_error(McpGraphMemErrors::InternalServerError)
+        }.to raise_error(McpGraphMemErrors::InternalServerError, /unexpected error/) do |error|
+          expect(error.message).not_to include("secret-db-failure")
+        end
+      end
+
+      it 're-raises Timeout::Error so ToolError can map it to timeout' do
+        allow(MemoryEntity).to receive(:count).and_raise(Timeout::Error.new("execution expired"))
+
+        expect { tool.call }.to raise_error(Timeout::Error, /execution expired/)
       end
     end
   end

@@ -22,9 +22,11 @@ class GetGraphStatsTool < ApplicationTool
       recently_updated: recently_updated,
       latest_maintenance: latest_maintenance
     }
-  rescue => e
-    logger.error "GetGraphStatsTool error: #{e.message}"
-    raise McpGraphMemErrors::InternalServerError, "Failed to compute graph stats: #{e.message}"
+  rescue *ToolError::TIMEOUT_CLASSES
+    raise
+  rescue StandardError => e
+    logger.error "GetGraphStatsTool unexpected error: #{e.class}: #{e.message}"
+    raise McpGraphMemErrors::InternalServerError, "An unexpected error occurred."
   end
 
   private

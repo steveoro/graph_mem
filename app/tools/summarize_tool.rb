@@ -48,13 +48,20 @@ class SummarizeTool < ApplicationTool
     rescue ActiveRecord::RecordNotFound => e
       error_message = "Entity with ID=#{entity_id} not found."
       logger.error "ResourceNotFound in SummarizeTool: #{error_message} (was: #{e.message})"
-      raise McpGraphMemErrors::ResourceNotFound, error_message
+      raise McpGraphMemErrors::ResourceNotFound.new(
+        error_message,
+        next_move: "Call `search_entities` to find the entity, then retry `summarize` with a known id."
+      )
     rescue ArgumentError => e
       logger.error "InvalidArguments in SummarizeTool: #{e.message}"
       raise FastMcp::Tool::InvalidArgumentsError, e.message
+    rescue *ToolError::TIMEOUT_CLASSES
+      raise
+    rescue McpGraphMemErrors::Error, FastMcp::Tool::InvalidArgumentsError
+      raise
     rescue StandardError => e
-      logger.error "InternalServerError in SummarizeTool: #{e.message} - #{e.backtrace.join("\n")}"
-      raise McpGraphMemErrors::InternalServerError, "An internal server error occurred in SummarizeTool: #{e.message}"
+      logger.error "InternalServerError in SummarizeTool: #{e.class}: #{e.message}"
+      raise McpGraphMemErrors::InternalServerError, "An unexpected error occurred."
     end
   end
 end

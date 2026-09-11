@@ -27,7 +27,9 @@ class UpdateObservationTool < ApplicationTool
   def call(observation_id:, supersede: false, reason: nil, **attributes)
     update_attributes = normalize_attributes(attributes)
     if update_attributes.empty?
-      raise FastMcp::Tool::InvalidArgumentsError, "At least one observation attribute must be provided for update."
+      raise FastMcp::Tool::InvalidArgumentsError,
+            "At least one observation attribute must be provided for update. " \
+            "Provide `text_content`, `confidence`, `source`, `valid_from`, `valid_until`, or `tags` and retry."
     end
 
     observation = MemoryObservation.find(observation_id)
@@ -44,18 +46,28 @@ class UpdateObservationTool < ApplicationTool
     ).merge(superseded_observation_id: supersede ? observation.id : nil)
   rescue FastMcp::Tool::InvalidArgumentsError
     raise
-  rescue ActiveRecord::RecordNotFound
-    raise McpGraphMemErrors::ResourceNotFound, "Observation with ID=#{observation_id} not found."
+  rescue ActiveRecord::RecordNotFound => e
+    error_message = "Observation with ID=#{observation_id} not found."
+    logger.error "ResourceNotFound in UpdateObservationTool: #{error_message} (was: #{e.message})"
+    raise McpGraphMemErrors::ResourceNotFound.new(
+      error_message,
+      next_move: "Call `get_entity` with include_obsolete if needed to list observation ids, then retry `update_observation`."
+    )
   rescue MemoryObservation::InactiveObservationError => e
-    raise FastMcp::Tool::InvalidArgumentsError, e.message
+    logger.error "InvalidArguments in UpdateObservationTool: #{e.message}"
+    raise FastMcp::Tool::InvalidArgumentsError,
+          "#{e.message} Call `delete_observation` or `create_observation` instead of `update_observation`."
   rescue ActiveRecord::RecordInvalid => e
-    message = "Validation Failed: #{e.record.errors.full_messages.join(', ')}"
+    message = "Validation Failed: #{e.record.errors.full_messages.join(', ')}. " \
+      "Correct the observation fields to match the `update_observation` schema and retry."
+    logger.error "InvalidArguments in UpdateObservationTool: #{message} (was: #{e.message})"
     raise FastMcp::Tool::InvalidArgumentsError, message
-  rescue McpGraphMemErrors::ResourceNotFound
-    raise
   rescue StandardError => e
-    logger.error "InternalServerError in UpdateObservationTool: #{e.message} - #{e.backtrace.join("\n")}"
-    raise McpGraphMemErrors::InternalServerError, "An internal server error occurred in UpdateObservationTool: #{e.message}"
+    raise if ToolError::TIMEOUT_CLASSES.any? { |klass| e.is_a?(klass) }
+    raise if e.is_a?(McpGraphMemErrors::Error)
+
+    logger.error "InternalServerError in UpdateObservationTool: #{e.class}: #{e.message} - #{e.backtrace.join("\n")}"
+    raise McpGraphMemErrors::InternalServerError, "An unexpected error occurred."
   end
 
   private
