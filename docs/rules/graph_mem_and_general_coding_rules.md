@@ -4,19 +4,21 @@ globs:
 alwaysApply: true
 ---
 
-### Graph Memory — 4-Phase Session Workflow
+# Graph Memory — 4-Phase Session Workflow
 
 Use the `graph_mem` MCP tools every session. "Knowledge graph", "graph mem", and
 "memory graph" all refer to the same toolset. Treat this workflow as session
 state management, not as a substitute for inspecting the repository.
 
-**Phase 1 — Orient** (start of every conversation)
+## Phase 1 — Orient (start of every conversation)
+
 1. Say "Remembering..." then call `get_context` to check for an active project. Context is per-agent and persisted, so you may already have one from a prior session.
 2. If no context: `search_entities` for the relevant project name → `set_context(<ID or entity name from search result>)`.
 3. If no project entity exists yet: `create_entity` (type `Project`) → `set_context(<new entity ID or name>)`.
 4. Optionally call `dream_state_status` for a cheap health check (whether background compaction is running/paused).
 
-**Phase 2 — Recall** (before doing work)
+## Phase 2 — Recall (before doing work)
+
 - `search_entities` or `search_subgraph` with keywords from the user's request.
 - Drill into hits: `get_entity` for details, `get_subgraph_by_ids` for a cluster of related entities.
 - After locating a root entity, use `traverse_graph` for a bounded multi-hop neighborhood or `find_shortest_path` to explain how two entities connect.
@@ -25,11 +27,13 @@ state management, not as a substitute for inspecting the repository.
   X?”; use search and traversal directly when exact records or relationships
   are required.
 
-**Phase 3 — Work**
+## Phase 3 — Work
+
 - Execute the user's request using recalled context.
 - Consult the graph mid-task if you encounter related issues or need prior solutions.
 
-**Phase 4 — Persist** (before ending)
+## Phase 4 — Persist
+
 - `create_observation` for new facts on existing entities. Write dedupe-aware: search/get the entity first and append only new facts rather than re-stating existing ones.
 - `update_observation` for corrections. Use `supersede: true` when preserving
   the prior fact/version matters; use `delete_observation` to mark a fact
@@ -44,30 +48,30 @@ state management, not as a substitute for inspecting the repository.
 
 ---
 
-### Tool Quick-Reference
+## Tool Quick-Reference
 
 | Phase | Tools |
-|-------|-------|
+| ------- | ------- |
 | Orient | `get_context`, `set_context`, `clear_context`, `search_entities` |
 | Recall | `search_entities`, `search_subgraph`, `get_entity`, `get_subgraph_by_ids`, `summarize`, `list_entities` |
 | Traverse | `find_relations`, `traverse_graph`, `find_shortest_path` |
 | Persist | `create_entity`, `update_entity`, `delete_entity`, `create_observation`, `update_observation`, `delete_observation`, `create_relation`, `delete_relation`, `bulk_update` |
 | Maintain | `suggest_merges`, `merge_entities`, `dream_state_status`, `get_maintenance_reports`, `list_maintenance_review`, `apply_maintenance_review`, `dismiss_maintenance_review`, `get_graph_stats`, `get_version`, `get_current_time`, `scan_project`, `scan_project_status` |
 
-### MCP Tool Errors
+## MCP Tool Errors
 
 Tool `isError` content is a JSON envelope with `category`, `retriable`, `next_move`,
 and `message`. Follow `next_move`. Do not retry `system_error` blindly.
 See `docs/mcp_tools.md` Error Handling for the category table.
 
-### Multi-Agent Context Scoping
+## Multi-Agent Context Scoping
 
 - Context is **per-agent**, keyed by the `X-MCP-Client` header, and persisted in the DB (survives restarts).
 - `set_context` / `clear_context` affect ONLY your own client bucket — they never disturb other agents sharing the graph.
 - Agents without the header share the `"default"` bucket. Set a stable `X-MCP-Client` in your MCP config when multiple agents use one instance.
 - Because context persists, on Orient you may already have an active context from a prior session — always `get_context` first before assuming none.
 
-### Project Scan Validation
+## Project Scan Validation
 
 - `scan_project(project_root, project_name, aliases, mode, dry_run, file_globs)` starts an
   asynchronous source-scan of a project root. It treats the files as the source of truth,
@@ -114,7 +118,7 @@ See `docs/mcp_tools.md` Error Handling for the category table.
   "scan_review")` and apply `move_observation`, `reparent_entity`, `delete_relation`,
   `delete_observation`, or `delete_entity` actions just like compaction reviews.
 
-### Dream-State Compaction Awareness
+## Dream-State Compaction Awareness
 
 - A background "dream-state" job periodically compacts the graph: it
   auto-parents orphans, auto-merges near-identical entities (cosine distance <
@@ -128,10 +132,11 @@ See `docs/mcp_tools.md` Error Handling for the category table.
   near-duplicates. Mutating tools may pause compaction, so do not assume that
   maintenance state is unchanged during a session.
 
-### Standard Compatibility
+## Standard Compatibility
 
 graph_mem accepts both its native snake_case/ID-based parameters and the
 `@modelcontextprotocol/server-memory` camelCase/name-based conventions:
+
 - Entity references accept either `entity_id` (integer) or entity name (string).
 - Traversal references (`start_entity_id`, `from_entity_id`, `to_entity_id`) also accept entity IDs or names.
 - Field names accept camelCase (e.g. `entityType`) or snake_case (`entity_type`).
@@ -141,7 +146,8 @@ graph_mem accepts both its native snake_case/ID-based parameters and the
 - Use native snake_case keys by default. Compatibility aliases are for
   interoperating clients, not a reason to mix naming styles in one request.
 
-### Query Strategy
+## Query Strategy
+
 - **Search before create** to avoid duplicates (vector dedup catches some, not all).
 - **Start broad, then narrow** using entity IDs from search results.
 - **Prioritize root nodes**: find the `Project` first, then traverse its relations.
@@ -155,13 +161,16 @@ graph_mem accepts both its native snake_case/ID-based parameters and the
   search as a hard project filter unless the API explicitly guarantees that.
 - **Navigate by graph structure** (`find_relations`, `traverse_graph`, `find_shortest_path`, `get_entity`) instead of repeated searches after locating the relevant entities.
 
-### Entity Types
+## Entity Types
+
 `Project`, `Framework`, `ApplicationStack`, `Workflow`, `BestPractice`, `Task`, `Step`, `Issue`, `Error`, `PossibleSolution`, `Model`, `DatabaseTable`, `Class`, `APIEndpoint`, `Route`, `Component`, `Service`, `Configuration`, `Migration`, `TestCase`, `Permission`, `User`, `Preference`.
 
-### Relation Types (use the most specific)
+## Relation Types (use the most specific)
+
 `depends_on`, `part_of`, `relates_to`, `implements`, `extends`, `solves`, `configured_by`, `tested_by`, `migrated_by`, `authorizes`, `integrates_with`, `replaces`.
 
-### Observations
+## Observations
+
 - Keep observations **crisp and factual**; include timestamps and code paths where relevant.
 - For longform content, write to `/docs` and store the file path as an observation.
 - Keep generated summaries ephemeral unless persistence is explicitly requested.
@@ -173,7 +182,8 @@ graph_mem accepts both its native snake_case/ID-based parameters and the
   disabled feature must degrade to deterministic output without exposing
   credentials or internal exception details.
 
-### Conflict Handling
+## Conflict Handling
+
 1. Note the conflict as an observation on the relevant entity.
 2. Research (graph history / web / user) to resolve.
 3. Update the graph: new observations, mark outdated ones, edit entity if needed.
@@ -181,7 +191,7 @@ graph_mem accepts both its native snake_case/ID-based parameters and the
 
 ---
 
-### Core Coding Rules
+## Core Coding Rules
 
 - **Schema first**: DB schema is the primary source of truth for data structure.
 - **Know your context**: Verify project folder and development environment, runtime target, and containers before running commands.
