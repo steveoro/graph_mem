@@ -56,10 +56,20 @@ Authentication and multi-tenant isolation are out of scope for now; the header i
 
 ### Rules & Skills
 
-GraphMem includes installable user rules and a skill inside this repo:
+GraphMem ships agent-facing rules and a vendor-neutral skill:
 
-- rules: docs/global_and_knowledge_graph_management_rules.md
-- skill: .cursor/skills/graph-mem-mcp-toolset/SKILL.md
+**Using GraphMem as an MCP toolset** (your agent talks to a running server):
+
+- `docs/rules/graph_mem_mcp_rules.md` — always-on rules to copy into your
+  agent's rule set (per-agent install targets: `docs/rules/README.md`)
+- `docs/rules/general_coding_rules.md` — optional, project-agnostic coding rules
+- `skills/graph-mem-mcp-toolset/SKILL.md` — vendor-neutral operational skill
+  (works in Cursor, Claude Code, Devin, ...; the `.cursor/skills/` copy is a
+  thin adapter)
+
+**Developing GraphMem itself** (editing this repo): see `AGENTS.md`,
+`docs/development.md`, and the repo-scoped rules under `.cursor/rules/` and
+`.devin/rules/`.
 
 ### MCP Tools
 
