@@ -39,7 +39,16 @@ if Rails.env.development?
   end
 end
 
+# Who may reach /mcp, and whether they must present a token. Configured via
+# GRAPH_MEM_MCP_TOKEN and GRAPH_MEM_MCP_ALLOWED_IPS; see docs/mcp_access_control.md.
+mcp_access_policy = GraphMem::McpAccessPolicy.from_env(logger: fast_mcp_logger)
+fast_mcp_logger.info("[McpAccessPolicy] /mcp access: #{mcp_access_policy.describe}")
+
 # Mount the combined Streamable HTTP + legacy SSE transport.
+#
+# `localhost_only: false` is intentional: it disables the inner legacy transport's
+# own IP check, which can only compare exact strings. McpStreamableHttpTransport
+# applies mcp_access_policy to both endpoints before delegating.
 Rails.application.config.middleware.use(
   GraphMem::McpStreamableHttpTransport,
   server,
@@ -48,7 +57,7 @@ Rails.application.config.middleware.use(
   sse_route: "sse",
   allowed_origins: [ "localhost", "127.0.0.1", "::1", /\A192\.168\.\d{1,3}\.\d{1,3}\z/, /\A10\.\d{1,3}\.\d{1,3}\.\d{1,3}\z/ ],
   localhost_only: false,
-  allowed_ips: [ "127.0.0.1", "::1", "::ffff:127.0.0.1" ]
+  access_policy: mcp_access_policy
 )
 
 FastMcp.server = server

@@ -102,6 +102,56 @@ RSpec.describe SetContextTool, type: :model do
       end
     end
 
+    context 'when the client id looks shared' do
+      let!(:other_project) { MemoryEntity.create!(name: 'Other Project', entity_type: 'Project') }
+
+      it 'warns when it overwrites a project set moments ago' do
+        tool.call(entity_id: project.id)
+
+        result = tool.call(entity_id: other_project.id)
+
+        expect(result[:warning]).to include('shared by more than one agent')
+        expect(result[:warning]).to include('My Project')
+        expect(result[:next_move]).to include('X-MCP-Client')
+      end
+
+      it 'does not warn on a first set' do
+        result = tool.call(entity_id: project.id)
+
+        expect(result).not_to have_key(:warning)
+      end
+
+      it 'does not warn when re-setting the same project' do
+        tool.call(entity_id: project.id)
+
+        expect(tool.call(entity_id: project.id)).not_to have_key(:warning)
+      end
+
+      it 'does not warn once the conflict window has passed' do
+        tool.call(entity_id: project.id)
+        AgentContext.find_by!(client_id: 'default')
+                    .update!(context_set_at: (AgentContext::CONFLICT_WINDOW + 1.minute).ago)
+
+        expect(tool.call(entity_id: other_project.id)).not_to have_key(:warning)
+      end
+
+      it 'does not warn across different client ids' do
+        described_class.new(headers: { 'HTTP_X_MCP_CLIENT' => 'cursor-A' }).call(entity_id: project.id)
+
+        result = described_class.new(headers: { 'HTTP_X_MCP_CLIENT' => 'cursor-B' })
+                                .call(entity_id: other_project.id)
+
+        expect(result).not_to have_key(:warning)
+      end
+
+      it 'still sets the context when it warns' do
+        tool.call(entity_id: project.id)
+        tool.call(entity_id: other_project.id)
+
+        expect(GraphMemContext.current_project_id).to eq(other_project.id)
+      end
+    end
+
     context 'error handling' do
       it 'raises InternalServerError on unexpected errors without leaking the original message' do
         allow(MemoryEntity).to receive(:find_by).and_raise(StandardError.new("secret-db-failure"))

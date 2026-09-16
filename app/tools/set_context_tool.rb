@@ -24,14 +24,14 @@ class SetContextTool < ApplicationTool
       )
     end
 
-    graph_mem_context.current_project_id = entity_id
+    displaced = graph_mem_context.set_project!(entity_id)
 
     {
       status: "context_set",
       entity_id: entity.id,
       entity_name: entity.name,
       entity_type: entity.entity_type
-    }
+    }.merge(shared_client_id_warning(displaced_project: displaced) || {})
   rescue McpGraphMemErrors::ResourceNotFound
     raise
   rescue *ToolError::TIMEOUT_CLASSES

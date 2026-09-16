@@ -59,11 +59,27 @@ class GraphMemContext
   end
 
   def current_project_id=(id)
-    record.update!(current_project_id: id, last_seen_at: Time.current)
+    set_project!(id)
+  end
+
+  def context_set_at
+    record.context_set_at
+  end
+
+  # Activates a project and reports what it displaced.
+  #
+  # Returns the previously active MemoryEntity when this change overwrote a
+  # different project that was set moments ago under the same client_id — the
+  # signature of two agents sharing one X-MCP-Client. Returns nil otherwise.
+  def set_project!(id)
+    ctx = record
+    displaced = ctx.context_conflict_with?(id) ? ctx.current_project : nil
+    ctx.update!(current_project_id: id, last_seen_at: Time.current, context_set_at: Time.current)
+    displaced
   end
 
   def clear!
-    record.update!(current_project_id: nil, last_seen_at: Time.current)
+    record.update!(current_project_id: nil, last_seen_at: Time.current, context_set_at: Time.current)
   end
 
   def active?

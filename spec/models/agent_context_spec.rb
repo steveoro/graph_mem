@@ -62,5 +62,110 @@ RSpec.describe AgentContext, type: :model do
       expect(ctx.last_tool_name).to eq("create_entity")
       expect(ctx.last_seen_at).to be_within(2.seconds).of(Time.current)
     end
+
+    it "records the session id when one is supplied" do
+      described_class.record_activity!(client_id: "cursor-A", tool_name: "get_context", session_id: "sess-1")
+
+      expect(described_class.find_by!(client_id: "cursor-A").last_session_id).to eq("sess-1")
+    end
+
+    it "keeps the previous session id when none is supplied" do
+      described_class.record_activity!(client_id: "cursor-A", tool_name: "get_context", session_id: "sess-1")
+      described_class.record_activity!(client_id: "cursor-A", tool_name: "get_context")
+
+      expect(described_class.find_by!(client_id: "cursor-A").last_session_id).to eq("sess-1")
+    end
+
+    it "flags a concurrent session on the returned record" do
+      described_class.record_activity!(client_id: "cursor-A", tool_name: "get_context", session_id: "sess-1")
+
+      record = described_class.record_activity!(client_id: "cursor-A", tool_name: "get_context", session_id: "sess-2")
+
+      expect(record.concurrent_session).to be(true)
+    end
+
+    it "does not flag the same session calling twice" do
+      described_class.record_activity!(client_id: "cursor-A", tool_name: "get_context", session_id: "sess-1")
+
+      record = described_class.record_activity!(client_id: "cursor-A", tool_name: "get_context", session_id: "sess-1")
+
+      expect(record.concurrent_session).to be(false)
+    end
+
+    it "does not flag a first-ever call" do
+      record = described_class.record_activity!(client_id: "fresh", tool_name: "get_context", session_id: "sess-1")
+
+      expect(record.concurrent_session).to be(false)
+    end
+  end
+
+  describe "#concurrent_session?" do
+    let(:ctx) do
+      described_class.create!(client_id: "cursor-A", last_session_id: "sess-1", last_seen_at: 1.minute.ago)
+    end
+
+    it "is true for a different session inside the conflict window" do
+      expect(ctx.concurrent_session?("sess-2")).to be(true)
+    end
+
+    it "is false for the same session" do
+      expect(ctx.concurrent_session?("sess-1")).to be(false)
+    end
+
+    it "is false once the window has passed" do
+      ctx.update!(last_seen_at: (described_class::CONFLICT_WINDOW + 1.minute).ago)
+
+      expect(ctx.concurrent_session?("sess-2")).to be(false)
+    end
+
+    it "is false when no session id is available, as on the legacy endpoint" do
+      expect(ctx.concurrent_session?(nil)).to be(false)
+      expect(ctx.concurrent_session?("")).to be(false)
+    end
+
+    it "is false when nothing was recorded before" do
+      fresh = described_class.create!(client_id: "fresh", last_seen_at: 1.minute.ago)
+
+      expect(fresh.concurrent_session?("sess-2")).to be(false)
+    end
+  end
+
+  describe "#context_conflict_with?" do
+    let(:project_a) { MemoryEntity.create!(name: "Project A", entity_type: "Project") }
+    let(:project_b) { MemoryEntity.create!(name: "Project B", entity_type: "Project") }
+
+    def context_for(project, set_at:)
+      described_class.create!(client_id: "cursor-A", current_project: project, context_set_at: set_at)
+    end
+
+    it "is true when switching away from a project set moments ago" do
+      ctx = context_for(project_a, set_at: 1.minute.ago)
+
+      expect(ctx.context_conflict_with?(project_b.id)).to be(true)
+    end
+
+    it "is false when re-setting the same project" do
+      ctx = context_for(project_a, set_at: 1.minute.ago)
+
+      expect(ctx.context_conflict_with?(project_a.id)).to be(false)
+    end
+
+    it "is false once the window has passed" do
+      ctx = context_for(project_a, set_at: (described_class::CONFLICT_WINDOW + 1.minute).ago)
+
+      expect(ctx.context_conflict_with?(project_b.id)).to be(false)
+    end
+
+    it "is false when no project was active" do
+      ctx = described_class.create!(client_id: "cursor-A", context_set_at: 1.minute.ago)
+
+      expect(ctx.context_conflict_with?(project_b.id)).to be(false)
+    end
+
+    it "is false when the context was never explicitly set" do
+      ctx = described_class.create!(client_id: "cursor-A", current_project: project_a)
+
+      expect(ctx.context_conflict_with?(project_b.id)).to be(false)
+    end
   end
 end

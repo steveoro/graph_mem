@@ -34,12 +34,28 @@ Context is stored per MCP client in the `agent_contexts` table, keyed by the `X-
 - **Description:** Set this MCP client's active project so `search_entities` and `search_subgraph` boost in-context entities without hard-filtering results. Pass required `entity_id` (integer; also accepts an entity-name string). Do not use to read the current project; use `get_context` instead. Do not use to search across all projects; use `clear_context` instead. Do not use to change entity fields or create a project; use `update_entity` or `create_entity` instead.
 - **Parameters:**
   - `entity_id` (integer, required): The ID of the entity to set as context. Also accepts entity name (string).
-- **Response:** `{ status, entity_id, entity_name, entity_type }`
+- **Response:** `{ status, entity_id, entity_name, entity_type }`, plus `warning` and `next_move` when this client id appears to be shared by more than one agent (see [Shared client ids](#shared-client-ids))
 
 #### `get_context`
 - **Description:** Read this MCP client's active project context (entity and scope fields, or status no_context); auto-clears if the project entity is gone. Takes no arguments. Do not use to activate or switch projects; use `set_context` instead. Do not use to wipe context so searches span all projects; use `clear_context` instead. Do not use to load an entity's observations or relations; use `get_entity` instead.
 - **Parameters:** None
-- **Response:** `{ status, entity_id, entity_name, entity_type, description, scope_entity_count, scope_truncated, scope_max_entities }` or `{ status: "no_context" }`
+- **Response:** `{ status, entity_id, entity_name, entity_type, description, context_set_at, scope_entity_count, scope_truncated, scope_max_entities }` or `{ status: "no_context" }`, plus `warning` and `next_move` when this client id appears to be shared (see [Shared client ids](#shared-client-ids))
+
+#### Shared client ids
+
+Context is stored per `X-MCP-Client` value, so two agents sending the same value share one
+`agent_contexts` row and silently rescope each other whenever either calls `set_context`.
+
+GraphMem detects this two ways and adds `warning` plus `next_move` to the `set_context` and
+`get_context` responses:
+
+- **Context change conflict** — `set_context` overwrites a *different* project that was set under
+  the same client id within the last 5 minutes. Works on every transport.
+- **Concurrent session** — a different `Mcp-Session-Id` called a tool under the same client id
+  within the same window. Only available on the Streamable HTTP endpoint; the legacy `/mcp/sse`
+  endpoint has no per-connection id.
+
+The fix is always the same: give each agent its own `X-MCP-Client` header value.
 
 #### `clear_context`
 - **Description:** Remove this MCP client's active project context so searches are unscoped across all projects; does not delete entities. Takes no arguments. Do not use to inspect the current scope; use `get_context` instead. Do not use to switch to a project; use `set_context` instead. Do not use to delete a project or other entity; use `delete_entity` instead.

@@ -33,10 +33,11 @@ class GetContextTool < ApplicationTool
       entity_name: entity.name,
       entity_type: entity.entity_type,
       description: entity.description,
+      context_set_at: context.context_set_at&.iso8601,
       scope_entity_count: scope.entity_ids.size,
       scope_truncated: scope.truncated,
       scope_max_entities: scope.max_entities
-    }
+    }.merge(shared_client_id_warning || {})
   rescue *ToolError::TIMEOUT_CLASSES
     raise
   rescue StandardError => e

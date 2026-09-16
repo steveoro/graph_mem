@@ -272,4 +272,140 @@ RSpec.describe GraphMem::McpStreamableHttpTransport do
       transport.send(:close_session, session)
     end
   end
+
+  describe "access control" do
+    let(:token) { SecureRandom.hex(16) }
+    let(:allowed_origins) { [ "localhost", "127.0.0.1", "::1", /\A192\.168\.\d{1,3}\.\d{1,3}\z/ ] }
+    let(:policy) { GraphMem::McpAccessPolicy.new(token: token, logger: logger) }
+    let(:guarded_transport) { build_transport(policy) }
+    let(:open_transport) { build_transport(GraphMem::McpAccessPolicy.new(logger: logger)) }
+
+    def build_transport(access_policy)
+      described_class.new(
+        app, server,
+        access_policy: access_policy,
+        allowed_origins: allowed_origins,
+        reaper_interval: 0
+      )
+    end
+
+    # Every MCP path funnels through handle_mcp_request, so both the streamable
+    # endpoint and the legacy SSE/messages endpoints must be covered.
+    #
+    # HTTP_HOST must be set: Rack::MockRequest defaults it to example.org, which
+    # fails origin validation with a 403 before the token check is ever reached.
+    def request_env(path, method: "POST", headers: {})
+      env = Rack::MockRequest.env_for(
+        path,
+        method: method,
+        input: "{}",
+        "CONTENT_TYPE" => "application/json",
+        "REMOTE_ADDR" => "127.0.0.1",
+        "HTTP_HOST" => "localhost"
+      )
+      headers.each { |key, value| env[key] = value }
+      env
+    end
+
+    def status_for(path, method: "POST", headers: {}, on: guarded_transport)
+      on.call(request_env(path, method: method, headers: headers)).first
+    end
+
+    it "rejects a request with no bearer token" do
+      expect(status_for("/mcp")).to eq(401)
+    end
+
+    it "rejects a request with the wrong bearer token" do
+      expect(status_for("/mcp", headers: { "HTTP_AUTHORIZATION" => "Bearer #{SecureRandom.hex(16)}" })).to eq(401)
+    end
+
+    it "advertises the Bearer scheme when rejecting" do
+      _status, headers, = guarded_transport.call(request_env("/mcp"))
+
+      expect(headers["WWW-Authenticate"]).to eq('Bearer realm="graph_mem"')
+    end
+
+    it "names the environment variable in the error body so the fix is discoverable" do
+      _status, _headers, body = guarded_transport.call(request_env("/mcp"))
+      payload = JSON.parse(body.first)
+
+      expect(payload.dig("error", "message")).to include(GraphMem::McpAccessPolicy::TOKEN_ENV)
+    end
+
+    it "guards the legacy SSE endpoint" do
+      expect(status_for("/mcp/sse", method: "GET")).to eq(401)
+    end
+
+    it "guards the legacy messages endpoint" do
+      expect(status_for("/mcp/messages")).to eq(401)
+    end
+
+    it "does not reach the tool layer when unauthenticated" do
+      allow(server).to receive(:handle_request)
+
+      guarded_transport.call(request_env("/mcp"))
+
+      expect(server).not_to have_received(:handle_request)
+    end
+
+    it "answers CORS preflight without a token" do
+      expect(status_for("/mcp", method: "OPTIONS")).to eq(200)
+    end
+
+    it "permits Authorization in the CORS allow-headers" do
+      _status, headers, = guarded_transport.call(request_env("/mcp", method: "OPTIONS"))
+
+      expect(headers["access-control-allow-headers"]).to include("Authorization")
+    end
+
+    it "delegates to the streamable handler once authenticated" do
+      allow(guarded_transport).to receive(:handle_streamable_request).and_return([ 200, {}, [] ])
+
+      status = status_for("/mcp", headers: { "HTTP_AUTHORIZATION" => "Bearer #{token}" })
+
+      expect(status).to eq(200)
+      expect(guarded_transport).to have_received(:handle_streamable_request)
+    end
+
+    it "does not delegate to the streamable handler when unauthenticated" do
+      allow(guarded_transport).to receive(:handle_streamable_request).and_return([ 200, {}, [] ])
+
+      guarded_transport.call(request_env("/mcp"))
+
+      expect(guarded_transport).not_to have_received(:handle_streamable_request)
+    end
+
+    it "rejects a disallowed client IP even with a valid token" do
+      status = status_for(
+        "/mcp",
+        headers: {
+          "REMOTE_ADDR" => "8.8.8.8",
+          "HTTP_AUTHORIZATION" => "Bearer #{token}"
+        }
+      )
+
+      expect(status).to eq(403)
+    end
+
+    it "allows a private-range client when no token is configured" do
+      status = status_for(
+        "/mcp",
+        headers: { "REMOTE_ADDR" => "192.168.0.18", "HTTP_HOST" => "192.168.0.18" },
+        on: open_transport
+      )
+
+      expect(status).not_to eq(403)
+      expect(status).not_to eq(401)
+    end
+
+    it "still blocks a public client when no token is configured" do
+      expect(status_for("/mcp", headers: { "REMOTE_ADDR" => "8.8.8.8" }, on: open_transport)).to eq(403)
+    end
+
+    it "leaves non-MCP paths untouched regardless of origin IP" do
+      env = Rack::MockRequest.env_for("/", "REMOTE_ADDR" => "8.8.8.8")
+
+      expect(guarded_transport.call(env).first).to eq(404)
+    end
+  end
 end

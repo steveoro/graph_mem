@@ -32,6 +32,9 @@ services:
       EMBEDDING_DIMS: ${EMBEDDING_DIMS:-768}
       SOLID_QUEUE_IN_PUMA: "true"
       RAILS_FORCE_SSL: "false"
+      # MCP access control; see docs/mcp_access_control.md
+      GRAPH_MEM_MCP_TOKEN: ${GRAPH_MEM_MCP_TOKEN:-}
+      GRAPH_MEM_MCP_ALLOWED_IPS: ${GRAPH_MEM_MCP_ALLOWED_IPS:-}
     volumes:
       - ${DB_BACKUP_HOST_PATH:-./db/backup}:/rails/db/backup
       - graph_mem_storage:/rails/storage

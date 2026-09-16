@@ -78,6 +78,38 @@ class ApplicationTool < FastMcp::Tool
     GraphMemContext.for(current_client_id)
   end
 
+  # Mcp-Session-Id of the current Streamable HTTP request, or nil on the legacy
+  # /mcp/sse endpoint and over stdio.
+  def current_session_id
+    Thread.current[:graph_mem_mcp_session_id]
+  end
+
+  # True when another MCP session was seen under this same client_id during the
+  # current call's conflict window, so both are sharing one context row.
+  def concurrent_session?
+    @concurrent_session.present?
+  end
+
+  # Advice to merge into a response when this client id is being shared.
+  # Returns nil when there is nothing to report.
+  def shared_client_id_warning(displaced_project: nil)
+    return nil unless concurrent_session? || displaced_project
+
+    detail =
+      if displaced_project
+        "Active project was changed from #{displaced_project.name.inspect} " \
+          "(ID #{displaced_project.id}) moments ago."
+      else
+        "Another MCP session is calling tools under this same client id."
+      end
+
+    {
+      warning: "Client id #{current_client_id.inspect} appears to be shared by more than one agent. " \
+        "#{detail} Context is stored per client id, so these agents overwrite each other's scope.",
+      next_move: "Give each agent its own `X-MCP-Client` header value, then call `set_context` again."
+    }
+  end
+
   def tool_name
     self.class.tool_name
   end
@@ -114,7 +146,12 @@ class ApplicationTool < FastMcp::Tool
   end
 
   def record_client_activity!
-    AgentContext.record_activity!(client_id: current_client_id, tool_name: tool_name)
+    context = AgentContext.record_activity!(
+      client_id: current_client_id,
+      tool_name: tool_name,
+      session_id: current_session_id
+    )
+    @concurrent_session = context.concurrent_session
   rescue StandardError => e
     logger.warn "AgentContext activity record failed for #{current_client_id}: #{e.message}"
   end

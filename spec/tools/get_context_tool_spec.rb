@@ -76,6 +76,40 @@ RSpec.describe GetContextTool, type: :model do
       end
     end
 
+    context 'session tracking' do
+      it 'reports when the context was set' do
+        GraphMemContext.for('cursor-A').set_project!(project.id)
+        agent_tool = described_class.new(headers: { 'HTTP_X_MCP_CLIENT' => 'cursor-A' })
+
+        expect(agent_tool.call[:context_set_at]).to be_present
+      end
+
+      it 'warns when another session is active under the same client id' do
+        GraphMemContext.for('cursor-A').set_project!(project.id)
+        AgentContext.record_activity!(client_id: 'cursor-A', tool_name: 'get_context', session_id: 'sess-1')
+
+        agent_tool = described_class.new(headers: { 'HTTP_X_MCP_CLIENT' => 'cursor-A' })
+        agent_tool.send(:record_client_activity!)
+        allow(agent_tool).to receive(:current_session_id).and_return('sess-2')
+        agent_tool.send(:record_client_activity!)
+
+        result = agent_tool.call
+
+        expect(result[:warning]).to include('shared by more than one agent')
+        expect(result[:next_move]).to include('X-MCP-Client')
+      end
+
+      it 'does not warn for a single session' do
+        GraphMemContext.for('cursor-A').set_project!(project.id)
+        agent_tool = described_class.new(headers: { 'HTTP_X_MCP_CLIENT' => 'cursor-A' })
+        allow(agent_tool).to receive(:current_session_id).and_return('sess-1')
+        agent_tool.send(:record_client_activity!)
+        agent_tool.send(:record_client_activity!)
+
+        expect(agent_tool.call).not_to have_key(:warning)
+      end
+    end
+
     context 'error handling' do
       it 'raises InternalServerError on unexpected errors without leaking the original message' do
         GraphMemContext.current_project_id = project.id

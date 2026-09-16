@@ -5,6 +5,7 @@ require "json"
 require "timeout"
 require "concurrent"
 require "rack"
+require_relative "mcp_access_policy"
 
 module GraphMem
   # Rack transport for FastMcp that supports the 2025-03-26 Streamable HTTP
@@ -42,7 +43,7 @@ module GraphMem
       "X-Accel-Buffering" => "no",
       "Access-Control-Allow-Origin" => "*",
       "Access-Control-Allow-Methods" => "GET, POST, DELETE, OPTIONS",
-      "Access-Control-Allow-Headers" => "Content-Type, Mcp-Session-Id, X-MCP-Client",
+      "Access-Control-Allow-Headers" => "Authorization, Content-Type, Mcp-Session-Id, X-MCP-Client",
       "Access-Control-Expose-Headers" => "Mcp-Session-Id",
       "Access-Control-Max-Age" => "86400",
       "Keep-Alive" => "timeout=600",
@@ -53,7 +54,7 @@ module GraphMem
     CORS_HEADERS = {
       "access-control-allow-origin" => "*",
       "access-control-allow-methods" => "GET, POST, DELETE, OPTIONS",
-      "access-control-allow-headers" => "Content-Type, Mcp-Session-Id, X-MCP-Client",
+      "access-control-allow-headers" => "Authorization, Content-Type, Mcp-Session-Id, X-MCP-Client",
       "access-control-expose-headers" => "Mcp-Session-Id",
       "access-control-max-age" => "86400",
       "Content-Type" => "text/plain"
@@ -62,7 +63,7 @@ module GraphMem
     RESPONSE_TIMEOUT = 30
 
     attr_reader :app, :path_prefix, :messages_route, :sse_route, :allowed_origins,
-                :allowed_ips, :localhost_only, :legacy_transport, :sessions
+                :allowed_ips, :localhost_only, :legacy_transport, :sessions, :access_policy
 
     def initialize(app, server, options = {})
       super(server, logger: options[:logger])
@@ -74,6 +75,10 @@ module GraphMem
       @allowed_origins = options[:allowed_origins] || DEFAULT_ALLOWED_ORIGINS.dup
       @allowed_ips = options[:allowed_ips] || DEFAULT_ALLOWED_IPS.dup
       @localhost_only = options.fetch(:localhost_only, true)
+      # Governs both the streamable and the legacy endpoints: handle_mcp_request
+      # consults it before delegating, so @legacy_transport's own (string-equality
+      # only) IP check is left inert rather than duplicated here.
+      @access_policy = options[:access_policy] || GraphMem::McpAccessPolicy.from_env(logger: @logger)
       @session_timeout = options.fetch(:session_timeout, SESSION_TIMEOUT).to_f
       @reaper_interval = options.fetch(:reaper_interval, REAPER_INTERVAL).to_f
       @stream_queue_size = [ options.fetch(:stream_queue_size, STREAM_QUEUE_SIZE).to_i, 1 ].max
@@ -160,6 +165,11 @@ module GraphMem
     def handle_mcp_request(request, env)
       return forbidden_response("Forbidden: Remote IP not allowed") unless valid_client_ip?(request)
       return forbidden_response("Forbidden: Origin validation failed") unless validate_origin(request, env)
+
+      # CORS preflight carries no Authorization header, so it must be answered
+      # before the token check or browser clients can never send credentials.
+      return [ 200, CORS_HEADERS.dup, [] ] if request.env["REQUEST_METHOD"] == "OPTIONS"
+      return unauthorized_response unless @access_policy.authenticated?(request)
 
       subpath = request.path[@path_prefix.length..]
 
@@ -663,17 +673,17 @@ module GraphMem
         !accept.include?("*/*")
     end
 
-    # Re-implementing the simple DNS-rebinding / IP validation from FastMcp
-    # keeps this transport self-contained and avoids relying on private methods.
+    # Network reach is decided by McpAccessPolicy, which understands CIDR ranges
+    # and guarantees the allowlist stays narrow while no token is configured.
+    #
+    # Note for proxied deployments: Rack derives request.ip from X-Forwarded-For,
+    # which a client can set. Behind a reverse proxy the token, not this check,
+    # is the real control.
     def valid_client_ip?(request)
-      client_ip = request.ip
+      return true if @access_policy.network_allowed?(request.ip)
 
-      if @localhost_only && !@allowed_ips.include?(client_ip)
-        @logger.warn("Blocked connection from non-localhost IP: #{client_ip}")
-        return false
-      end
-
-      true
+      @logger.warn("Blocked connection from disallowed IP: #{request.ip}")
+      false
     end
 
     def validate_origin(request, env)
@@ -717,6 +727,15 @@ module GraphMem
 
     def forbidden_response(message)
       json_rpc_error_response(403, -32_600, message)
+    end
+
+    def unauthorized_response
+      @logger.warn("Rejected MCP request without a valid bearer token")
+      status, headers, body = json_rpc_error_response(
+        401, -32_600,
+        "Unauthorized: send `Authorization: Bearer <#{GraphMem::McpAccessPolicy::TOKEN_ENV}>`"
+      )
+      [ status, headers.merge("WWW-Authenticate" => 'Bearer realm="graph_mem"'), body ]
     end
 
     def endpoint_not_found_response

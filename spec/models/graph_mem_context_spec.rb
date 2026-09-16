@@ -40,6 +40,60 @@ RSpec.describe GraphMemContext do
     end
   end
 
+  describe "#set_project!" do
+    let!(:project_a) { MemoryEntity.create!(name: "Project A", entity_type: "Project") }
+    let!(:project_b) { MemoryEntity.create!(name: "Project B", entity_type: "Project") }
+
+    it "activates the project and stamps context_set_at" do
+      ctx = described_class.for("cursor-A")
+      ctx.set_project!(project_a.id)
+
+      expect(ctx.current_project_id).to eq(project_a.id)
+      expect(ctx.context_set_at).to be_within(2.seconds).of(Time.current)
+    end
+
+    it "returns nil on a first set" do
+      expect(described_class.for("cursor-A").set_project!(project_a.id)).to be_nil
+    end
+
+    it "returns the displaced project when overwriting a recent different one" do
+      ctx = described_class.for("cursor-A")
+      ctx.set_project!(project_a.id)
+
+      expect(ctx.set_project!(project_b.id)).to eq(project_a)
+    end
+
+    it "returns nil when re-setting the same project" do
+      ctx = described_class.for("cursor-A")
+      ctx.set_project!(project_a.id)
+
+      expect(ctx.set_project!(project_a.id)).to be_nil
+    end
+
+    it "returns nil once the conflict window has passed" do
+      ctx = described_class.for("cursor-A")
+      ctx.set_project!(project_a.id)
+      AgentContext.find_by!(client_id: "cursor-A")
+                  .update!(context_set_at: (AgentContext::CONFLICT_WINDOW + 1.minute).ago)
+
+      expect(ctx.set_project!(project_b.id)).to be_nil
+    end
+
+    it "does not report a conflict across different client ids" do
+      described_class.for("cursor-A").set_project!(project_a.id)
+
+      expect(described_class.for("cursor-B").set_project!(project_b.id)).to be_nil
+    end
+
+    it "is still reachable through the current_project_id= writer" do
+      ctx = described_class.for("cursor-A")
+      ctx.current_project_id = project_a.id
+
+      expect(ctx.current_project_id).to eq(project_a.id)
+      expect(ctx.context_set_at).to be_present
+    end
+  end
+
   describe "#clear!" do
     it "resets the project ID to nil" do
       ctx = described_class.for("cursor-A")

@@ -13,6 +13,16 @@ Before starting, ensure you have the following installed:
 * [Bundler](https://bundler.io/)
 * Git
 
+> **MariaDB 11.8+ is a hard requirement, not a recommendation.** On an older server
+> (10.x) the `memory_entities.embedding vector(768)` column cannot be created, so the
+> database comes up with an incomplete schema. Two consequences: anything touching
+> embeddings or vector search fails, and **`rails db:migrate` will dump a
+> `db/structure.sql` with the vector columns and indexes silently missing.** Never commit
+> a `structure.sql` generated on an older server -- check `git diff db/structure.sql` for
+> disappearing `vector(768)` lines and MariaDB pragma churn (`@OLD_NOTE_VERBOSITY`
+> becoming `@OLD_SQL_NOTES` indicates the wrong dump client) before committing a
+> migration.
+
 ### Step 1: Clone the Repository
 
 ```bash
@@ -144,6 +154,37 @@ GraphMem uses RSpec for testing. To run all tests:
 ```bash
 bundle exec rspec
 ```
+
+The suite needs a MariaDB 11.8+ server (see [Prerequisites](#prerequisites)). On an older
+server the boot succeeds but any spec touching embeddings or vector search fails.
+
+## MCP Access Control in Development
+
+The MCP endpoint is governed by `GRAPH_MEM_MCP_TOKEN` and `GRAPH_MEM_MCP_ALLOWED_IPS`; see
+[mcp_access_control.md](mcp_access_control.md). Neither is needed for local work -- the
+defaults allow unauthenticated access from loopback and private ranges. The active posture is
+logged once at boot:
+
+```
+[McpAccessPolicy] /mcp access: no token (unauthenticated), 7 allowed range(s)
+```
+
+To exercise the authenticated path locally, export a token and send it as a bearer header:
+
+```bash
+GRAPH_MEM_MCP_TOKEN=dev-token bin/rails server -p 3030
+
+curl -s -X POST http://localhost:3030/mcp \
+  -H "Authorization: Bearer dev-token" \
+  -H "Content-Type: application/json" \
+  -H "X-MCP-Client: curl-dev" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26"}}'
+```
+
+Without the header the same request returns `401` with `WWW-Authenticate: Bearer`. A `403`
+means the client IP fell outside the allowlist, or `Origin` validation failed -- note that
+`Origin` falls back to `request.host`, so requests must target `localhost` or an allowed
+hostname.
 
 
 ## Pull Request Workflow

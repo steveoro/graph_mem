@@ -12,9 +12,11 @@ GraphMem provides persistent, structured storage for knowledge entities, their r
 
 ### Single-User Design
 
-GraphMem is designed as a **single-user, local-network server**. There is no authentication layer -- the server trusts all incoming requests.
+GraphMem is designed as a **single-user, local-network server**: one graph for one implicit owner, shared by a handful of that owner's agents. There is no per-user authorization model, deliberately -- the shared graph is the point.
 
-**Per-agent project context:** Multiple MCP clients can connect concurrently without clobbering each other's scope. Each agent identifies itself with an `X-MCP-Client` header in its MCP configuration:
+Access is controlled by network reach plus an optional shared bearer token. By default the MCP endpoint accepts unauthenticated requests **only** from loopback and private (RFC1918) ranges, and it can never be simultaneously unauthenticated and reachable from a public address. See [docs/mcp_access_control.md](docs/mcp_access_control.md) for configuration, and set `GRAPH_MEM_MCP_TOKEN` before exposing the server beyond a trusted LAN.
+
+**Per-agent project context:** Several MCP clients can connect concurrently, **provided each sends a distinct `X-MCP-Client` value** -- context is stored per client id, so two agents sharing one value will overwrite each other's scope. GraphMem detects that case and adds a `warning` to `set_context` and `get_context` responses. Each agent identifies itself in its MCP configuration:
 
 ```json
 {
@@ -31,9 +33,9 @@ The example above assumes using the container setup, which is hardcoded to port 
 
 Use `/mcp` for the 2025-03-26 **Streamable HTTP** transport; the legacy 2024-11-05 SSE endpoint remains available at `/mcp/sse`.
 
-Context set via `set_context` is stored per `client_id` in the database and survives server restarts. Agents without the header share the `"default"` client bucket (backward-compatible single-agent behavior).
+Context set via `set_context` is stored per `client_id` in the database and survives server restarts. Agents without the header share the `"default"` client bucket (backward-compatible single-agent behavior), so give every agent its own value once you run more than one.
 
-Authentication and multi-tenant isolation are out of scope for now; the header is a cooperative scope key, not a security boundary.
+The header is a cooperative scope key, **not** a credential: an agent can claim any client id, and the shared token grants identical full read/write access to everyone holding it. Multi-tenant isolation remains out of scope -- if two people need separate memories, run two instances against two databases.
 
 **Key capabilities:**
 - **Vector semantic search** via MariaDB 11.8 native VECTOR support + Ollama embeddings
@@ -197,6 +199,31 @@ sudo ufw allow from 192.168.0.0/24 to any port 11434 proto tcp comment "Ollama f
 ```
 
 This way, the graph_mem UI will be accessible on `http://<graph_mem_server_ip>:3030/` while the MCP server will be at `http://<graph_mem_server_ip>:3030/mcp/sse`.
+
+### Access control on a shared LAN
+
+The MCP endpoint accepts unauthenticated requests from private ranges by default, so every device
+on the LAN has full read/write access to the graph. Once the network is not fully trusted, set a
+shared token on the server:
+
+```bash
+# in .env on the GraphMem host
+GRAPH_MEM_MCP_TOKEN=$(openssl rand -hex 32)
+GRAPH_MEM_MCP_ALLOWED_IPS=192.168.0.0/24
+```
+
+and add it to every client config alongside the `X-MCP-Client` header:
+
+```json
+"headers": {
+  "Authorization": "Bearer <GRAPH_MEM_MCP_TOKEN>",
+  "X-MCP-Client": "cursor-1"
+}
+```
+
+Clients may be updated before the server: while no token is configured the header is ignored, so
+you can roll it out without downtime. Full reference in
+[docs/mcp_access_control.md](docs/mcp_access_control.md).
 
 
 ## Native Development Setup
