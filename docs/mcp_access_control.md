@@ -147,8 +147,10 @@ rely on the token.
 **No transport encryption by itself.** The token crosses the network in a header. On a LAN that is
 usually acceptable; over a VPN the tunnel protects it; on a public VM put TLS in front.
 
-**No rate limiting or audit of MCP calls.** `ToolTelemetry` logs a line per call but nothing is
-queryable. See Phase 0 of [`mcp_toolset_consolidation.md`](mcp_toolset_consolidation.md).
+**No rate limiting or per-user audit.** `ToolTelemetry` records queryable per-call operational
+metrics, but `X-MCP-Client` remains self-asserted and is not an authenticated identity. Argument
+values are never persisted. See Phase 0 of
+[`mcp_toolset_consolidation.md`](mcp_toolset_consolidation.md).
 
 ## Note on a fixed misconfiguration
 

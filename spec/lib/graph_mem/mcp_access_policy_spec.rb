@@ -75,7 +75,7 @@ RSpec.describe GraphMem::McpAccessPolicy do
 
   describe "network allowlist configuration" do
     it "accepts a comma-separated list of addresses and CIDR ranges" do
-      policy = described_class.new(allowed_ips: "127.0.0.1, 198.51.100.0/24", logger: logger)
+      policy = described_class.new(token: token, allowed_ips: "127.0.0.1, 198.51.100.0/24", logger: logger)
 
       expect(policy.network_allowed?("127.0.0.1")).to be(true)
       expect(policy.network_allowed?("198.51.100.42")).to be(true)

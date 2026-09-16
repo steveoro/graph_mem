@@ -68,8 +68,6 @@ class ToolError
       nil
     end
 
-    private
-
     def category_for(error)
       return error.category if error.respond_to?(:category) && error.category.present?
       return CATEGORY_TIMEOUT if timeout?(error)
@@ -78,6 +76,8 @@ class ToolError
 
       CATEGORY_SYSTEM
     end
+
+    private
 
     def retriable_for(error, category)
       return error.retriable if error.is_a?(McpGraphMemErrors::Error)

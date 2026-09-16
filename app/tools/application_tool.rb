@@ -13,7 +13,12 @@ class ApplicationTool < FastMcp::Tool
   end
 
   def call_with_schema_validation!(**args)
-    started_at = nil
+    started_at = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+    client_id = current_client_id
+    argument_keys = args.keys.map(&:to_s).uniq.sort
+    normalized = nil
+    result = nil
+    error = nil
 
     if ToolMutationPolicy.compaction_valve?(tool_name)
       paused = CompactionValve.request_pause_if_running!
@@ -29,31 +34,23 @@ class ApplicationTool < FastMcp::Tool
     end
 
     record_client_activity!
-    started_at = Process.clock_gettime(Process::CLOCK_MONOTONIC)
     result = call(**normalized)
-    duration_ms = ((Process.clock_gettime(Process::CLOCK_MONOTONIC) - started_at) * 1000).round
-    ToolTelemetry.record(
-      tool_name: tool_name,
-      client_id: current_client_id,
-      duration_ms: duration_ms,
-      result_size: result_size_for(result),
-      scope: normalized[:scope]
-    )
     [ result, _meta ]
   rescue StandardError => e
-    duration_ms = if started_at
-                    ((Process.clock_gettime(Process::CLOCK_MONOTONIC) - started_at) * 1000).round
-    else
-                    0
-    end
-    ToolTelemetry.record(
-      tool_name: tool_name,
-      client_id: current_client_id,
-      duration_ms: duration_ms,
-      error_class: e.class.name
-    )
+    error = e
     raise
   ensure
+    ToolTelemetry.record(
+      tool_name: tool_name,
+      client_id: client_id,
+      outcome: error ? "error" : "ok",
+      error_class: error&.class&.name,
+      error_category: telemetry_error_category(error),
+      duration_ms: elapsed_ms_since(started_at),
+      result_size: error ? nil : result_size_for(result),
+      scope: normalized&.[](:scope),
+      argument_keys: argument_keys
+    )
     Current.actor = nil
   end
 
@@ -123,6 +120,16 @@ class ApplicationTool < FastMcp::Tool
   end
 
   private
+
+  def elapsed_ms_since(started_at)
+    ((Process.clock_gettime(Process::CLOCK_MONOTONIC) - started_at) * 1000).round
+  end
+
+  def telemetry_error_category(error)
+    ToolError.category_for(error) if error
+  rescue StandardError
+    ToolError::CATEGORY_SYSTEM
+  end
 
   def result_size_for(result)
     case result

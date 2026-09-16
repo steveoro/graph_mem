@@ -35,6 +35,7 @@ RSpec.describe ApplicationTool do
   after do
     Current.reset
     AgentContext.delete_all
+    ToolInvocation.delete_all
   end
 
   describe ".input_schema" do
@@ -90,6 +91,23 @@ RSpec.describe ApplicationTool do
       expect(result).to eq({ name: "test", count: 5 })
     end
 
+    it "records successful calls with incoming argument keys only" do
+      tool = DslTestTool.new(headers: { "x-mcp-client" => "cursor-telemetry" })
+
+      tool.call_with_schema_validation!(name: "private value", count: 5)
+
+      invocation = ToolInvocation.find_by!(client_id: "cursor-telemetry")
+      expect(invocation).to have_attributes(
+        tool_name: "dsl_test",
+        outcome: "ok",
+        error_class: nil,
+        error_category: nil,
+        result_size: 2,
+        argument_keys: %w[count name]
+      )
+      expect(invocation.attributes.to_json).not_to include("private value")
+    end
+
     it "converts camelCase parameters to snake_case" do
       tool = DslTestTool.new
       # DslTestTool has no camelCase fields, but the normalizer should not break
@@ -110,6 +128,50 @@ RSpec.describe ApplicationTool do
         expect(envelope["retriable"]).to be(false)
         expect(envelope["next_move"]).to match(/argument format/i)
       end
+    end
+
+    it "records validation failures and re-raises the original error" do
+      tool = DslTestTool.new(headers: { "x-mcp-client" => "cursor-validation" })
+
+      expect {
+        tool.call_with_schema_validation!(count: 5)
+      }.to raise_error(FastMcp::Tool::InvalidArgumentsError)
+
+      invocation = ToolInvocation.find_by!(client_id: "cursor-validation")
+      expect(invocation).to have_attributes(
+        tool_name: "dsl_test",
+        outcome: "error",
+        error_class: "FastMcp::Tool::InvalidArgumentsError",
+        error_category: "validation",
+        result_size: nil,
+        argument_keys: [ "count" ]
+      )
+    end
+
+    it "records runtime failures without replacing the original exception" do
+      failing_tool_class = Class.new(ApplicationTool) do
+        def self.tool_name
+          "failing_test"
+        end
+
+        def call
+          raise "original failure"
+        end
+      end
+      tool = failing_tool_class.new(headers: { "x-mcp-client" => "cursor-failure" })
+
+      expect {
+        tool.call_with_schema_validation!
+      }.to raise_error(RuntimeError, "original failure")
+
+      invocation = ToolInvocation.find_by!(client_id: "cursor-failure")
+      expect(invocation).to have_attributes(
+        tool_name: "failing_test",
+        outcome: "error",
+        error_class: "RuntimeError",
+        error_category: "system_error",
+        argument_keys: []
+      )
     end
 
     it "records MCP client activity after validation succeeds" do

@@ -5,6 +5,12 @@ All notable changes to GraphMem will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.35.0] - 2026-09-16
+- Added privacy-safe, queryable MCP tool telemetry in `tool_invocations`; only top-level argument keys are stored, never argument values.
+- Added `graph_mem:tool_usage` reporting for per-tool traffic share, error categories, p50/p95 latency, and never-called tools.
+- Hardened telemetry so database write failures cannot affect MCP tool results.
+- Fixed the MCP access-policy CIDR spec to preserve the no-public-unauthenticated invariant.
+
 ## [1.34.0] - 2026-09-10
 - Improved all tool descriptions.
 

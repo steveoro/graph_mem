@@ -113,7 +113,7 @@ The GraphMem project follows a standard Rails application structure with a few a
 │   └── ...
 ├── db/
 │   ├── migrate/          # Database migrations
-│   └── schema.rb         # Current schema definition
+│   └── structure.sql     # Current MariaDB schema definition
 ├── docs/                 # Documentation files
 ├── lib/
 │   └── graph_mem/        # Core library code
@@ -185,6 +185,24 @@ Without the header the same request returns `401` with `WWW-Authenticate: Bearer
 means the client IP fell outside the allowlist, or `Origin` validation failed -- note that
 `Origin` falls back to `request.host`, so requests must target `localhost` or an allowed
 hostname.
+
+## MCP Tool Usage Telemetry
+
+Every validated MCP tool attempt records one row in `tool_invocations`, including the tool and
+client names, outcome, error category, duration, result size, scope, and the incoming top-level
+argument **keys**. Argument values are never stored. Telemetry persistence is fail-open: a
+database write failure is logged but never changes the tool result or replaces the original
+exception.
+
+Report the last 30 days:
+
+```bash
+bundle exec rake graph_mem:tool_usage
+```
+
+Use `DAYS=7` for a shorter window or `DAYS=all` for all recorded history. The report includes
+every currently registered tool, so tools with zero calls are visible alongside call share,
+error rate and categories, and p50/p95 duration.
 
 
 ## Pull Request Workflow

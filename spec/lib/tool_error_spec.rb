@@ -3,6 +3,16 @@
 require "rails_helper"
 
 RSpec.describe ToolError do
+  describe ".category_for" do
+    it "exposes the same classifier used by error envelopes" do
+      error = FastMcp::Tool::InvalidArgumentsError.new("Invalid arguments")
+
+      expect(described_class.category_for(error)).to eq("validation")
+      expect(described_class.category_for(Timeout::Error.new)).to eq("timeout")
+      expect(described_class.category_for(RuntimeError.new)).to eq("system_error")
+    end
+  end
+
   describe ".envelope" do
     it "maps ResourceNotFound to not_found" do
       error = McpGraphMemErrors::ResourceNotFound.new("Entity with ID=9 not found.")

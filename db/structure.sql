@@ -21,6 +21,8 @@ CREATE TABLE `agent_contexts` (
   `created_at` datetime(6) NOT NULL,
   `updated_at` datetime(6) NOT NULL,
   `last_tool_name` varchar(255) DEFAULT NULL,
+  `context_set_at` datetime(6) DEFAULT NULL,
+  `last_session_id` varchar(255) DEFAULT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `index_agent_contexts_on_client_id` (`client_id`),
   KEY `index_agent_contexts_on_current_project_id` (`current_project_id`)
@@ -285,6 +287,27 @@ CREATE TABLE `settings` (
   UNIQUE KEY `index_settings_on_var` (`var`)
 ) ENGINE=InnoDB AUTO_INCREMENT=1129 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `tool_invocations`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `tool_invocations` (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT,
+  `tool_name` varchar(255) NOT NULL,
+  `client_id` varchar(255) NOT NULL,
+  `outcome` varchar(255) NOT NULL,
+  `error_class` varchar(255) DEFAULT NULL,
+  `error_category` varchar(255) DEFAULT NULL,
+  `duration_ms` int(11) NOT NULL,
+  `result_size` int(11) DEFAULT NULL,
+  `scope` varchar(255) DEFAULT NULL,
+  `argument_keys` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL CHECK (json_valid(`argument_keys`)),
+  `created_at` datetime(6) NOT NULL,
+  PRIMARY KEY (`id`),
+  KEY `index_tool_invocations_on_created_at` (`created_at`),
+  KEY `index_tool_invocations_on_tool_name_and_created_at` (`tool_name`,`created_at`),
+  KEY `index_tool_invocations_on_client_id_and_created_at` (`client_id`,`created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 
 /*!40101 SET SQL_MODE=@OLD_SQL_MODE */;
@@ -296,6 +319,8 @@ CREATE TABLE `settings` (
 /*M!100616 SET NOTE_VERBOSITY=@OLD_NOTE_VERBOSITY */;
 
 INSERT INTO `schema_migrations` (version) VALUES
+('20260916173000'),
+('20260916120000'),
 ('20260718180001'),
 ('20260718180000'),
 ('20260715160000'),

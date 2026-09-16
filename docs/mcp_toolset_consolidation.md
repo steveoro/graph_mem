@@ -58,21 +58,10 @@ The fix is to expose the parameters and delete the cells.
 
 ## Phase 0 — Make telemetry queryable
 
-`ToolTelemetry` currently writes a single log line and nothing else:
+**Implementation status (2026-09-16): shipped; the 2–4 week measurement window is in progress.**
 
-```ruby
-# app/services/tool_telemetry.rb
-Rails.logger.info(
-  "[ToolTelemetry] tool=#{tool_name} client=#{client_id} duration_ms=#{duration_ms} " \
-  "result_size=#{result_size} scope=#{scope} error_class=#{error_class}"
-)
-```
-
-So there is no way to answer the questions that should drive every later phase: which tools are
-actually called, which are never called, and which fail most often.
-
-Add a `tool_invocations` table written from the same call site in
-`ApplicationTool#call_with_schema_validation!`:
+`ToolTelemetry` now keeps its log line and persists a `tool_invocations` row from
+`ApplicationTool#call_with_schema_validation!` for both successful and failed attempts:
 
 | Column | Notes |
 |---|---|
@@ -86,12 +75,14 @@ Recording argument *keys* rather than values preserves the existing "without log
 payloads" contract while still revealing parameterization patterns — which is precisely the signal
 needed to judge whether a merged tool is being called correctly.
 
-Add a `graph_mem:tool_usage` rake report: per-tool call count, share of total, error rate by
-category, p50/p95 duration.
+`bundle exec rake graph_mem:tool_usage` reports per-tool call count, share of total, error rate by
+category, p50/p95 duration, and currently registered tools with no calls. It defaults to 30 days;
+set `DAYS=<n>` or `DAYS=all` to change the window. Telemetry write failures are isolated from tool
+execution.
 
-**Exit criteria:** two to four weeks of real sessions. The report should immediately identify
-tools that are never called at all — those need no design work, just removal from the default
-profile.
+**Exit criteria (pending):** complete two to four weeks of real sessions. The report should
+identify tools that are never called at all — those need no design work, just removal from the
+default profile.
 
 
 ## Phase 1 — Annotations and profiles (non-breaking)
