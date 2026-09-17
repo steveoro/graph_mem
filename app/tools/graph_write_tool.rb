@@ -29,6 +29,51 @@ class GraphWriteTool < ApplicationTool
     optional(:relations).array(:hash).description("Compatibility array of relations to create.")
   end
 
+  # Publishes soft type vocabularies without rejecting custom values.
+  #
+  # @return [Hash] JSON Schema for canonical and compatibility inputs
+  def self.input_schema_to_json
+    schema = super.deep_dup
+    operation_properties = {
+      type: {
+        type: "string",
+        examples: GraphWriteService::TYPES,
+        description: "Operation discriminator."
+      },
+      name: { type: "string" },
+      entity_type: { type: "string", examples: GraphVocabulary::ENTITY_TYPES },
+      entity_id: { oneOf: [ { type: "integer" }, { type: "string" } ] },
+      text_content: { type: "string" },
+      from_entity_id: { oneOf: [ { type: "integer" }, { type: "string" } ] },
+      to_entity_id: { oneOf: [ { type: "integer" }, { type: "string" } ] },
+      relation_type: { type: "string", examples: GraphVocabulary::RELATION_TYPES }
+    }
+    schema[:properties][:operations][:items] = {
+      type: "object",
+      properties: operation_properties,
+      required: [ "type" ],
+      additionalProperties: true
+    }
+    schema[:properties][:entities][:items] = {
+      type: "object",
+      properties: {
+        name: { type: "string" },
+        entity_type: { type: "string", examples: GraphVocabulary::ENTITY_TYPES }
+      },
+      additionalProperties: true
+    }
+    schema[:properties][:relations][:items] = {
+      type: "object",
+      properties: {
+        from_entity_id: operation_properties[:from_entity_id],
+        to_entity_id: operation_properties[:to_entity_id],
+        relation_type: operation_properties[:relation_type]
+      },
+      additionalProperties: true
+    }
+    schema
+  end
+
   def call(operations: [], entities: [], observations: [], relations: [])
     bucket_operations = GraphWriteService.operations_from_buckets(
       entities: entities,

@@ -46,7 +46,7 @@ class CreateEntityTool < ApplicationTool
       logger: logger
     )
     if service_result[:status] == "possible_duplicate"
-      candidate = service_result[:candidate]
+      candidate = service_result[:candidates].first
       return {
         warning: "A similar entity already exists. Use update_entity or create_observation to add information to it instead of creating a duplicate.",
         existing_entity: {

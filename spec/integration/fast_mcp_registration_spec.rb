@@ -104,8 +104,8 @@ RSpec.describe "FastMcp tool registration", type: :integration do
 
       expect(hidden_names).to match_array(
         %w[
-          bulk_update create_entity create_observation create_relation delete_entity delete_observation
-          delete_relation find_relations get_entity get_subgraph_by_ids list_entities merge_entities
+          bulk_update clear_context create_entity create_observation create_relation delete_entity
+          delete_observation delete_relation find_relations get_entity get_subgraph_by_ids get_version list_entities merge_entities
           search_entities search_subgraph update_entity update_observation
         ]
       )
@@ -126,7 +126,7 @@ RSpec.describe "FastMcp tool registration", type: :integration do
         end
       end
 
-      expect(advertised_counts).to eq(default: 14, readonly: 11, maintenance: 24)
+      expect(advertised_counts).to eq(default: 12, readonly: 9, maintenance: 22)
     end
 
     it "describes the non-obvious side effects accurately" do

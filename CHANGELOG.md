@@ -5,6 +5,12 @@ All notable changes to GraphMem will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.39.0] - 2026-09-17
+- Pinned GraphMem to the tested `steveoro/fast-mcp` fork with native MCP prompts and truthful tool-list notifications.
+- Added `orient`, `recall`, and `persist` prompts plus additive version, context, `_meta`, and success `next_move` guidance.
+- Folded context clearing into nullable `set_context`; `clear_context` and `get_version` remain hidden callable aliases.
+- Standardized entity/relation possible-duplicate responses and added soft type examples with non-blocking typo hints.
+
 ## [1.38.0] - 2026-09-17
 - Consolidated ten mutation tools into atomic `graph_write`, `graph_edit`, and `graph_delete` operation batches.
 - Added shared mutation services with indexed errors, full rollback, Project protection, audit-reason preservation, and merge delegation.

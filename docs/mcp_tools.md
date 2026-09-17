@@ -1,6 +1,6 @@
 # MCP Tools Documentation
 
-Detailed reference for GraphMem's 24 advertised Model Context Protocol (MCP) tools and sixteen
+Detailed reference for GraphMem's 22 advertised Model Context Protocol (MCP) tools and eighteen
 hidden compatibility aliases.
 
 ## Overview
@@ -12,13 +12,13 @@ MCP tools in GraphMem are Ruby classes that implement operations on the knowledg
 GraphMem currently registers 40 callable tool classes and filters the advertised catalog by
 connection URL:
 
-- `/mcp` — 14 canonical context, read, and mutation tools
-- `/mcp/readonly` — 11 canonical context and read tools
-- `/mcp/maintenance` — all 24 canonical tools
+- `/mcp` — 12 canonical context, read, and mutation tools
+- `/mcp/readonly` — 9 canonical context and read tools
+- `/mcp/maintenance` — all 22 canonical tools
 - `/mcp/sse` and `/mcp/messages` — legacy transport using the default profile
 
 Profiles govern call eligibility; calling a tool outside the selected profile returns `Tool not
-found`. The sixteen read and mutation aliases remain callable in their profiles but are omitted from
+found`. The eighteen compatibility aliases remain callable in their profiles but are omitted from
 `tools/list`, allowing old clients to migrate without imposing their schemas on new sessions.
 Profiles are selected when connecting and are not authorization boundaries.
 Every tool also publishes the standard MCP `readOnlyHint`, `destructiveHint`,
@@ -31,7 +31,7 @@ All tools accept both graph_mem's native snake_case/ID-based parameters and the 
 - **camelCase keys** are converted to snake_case (e.g. `entityType` becomes `entity_type`)
 - **Entity names** (strings) are resolved to integer entity IDs where an ID is expected
 - **Field aliases** are normalized (`content` to `text_content`, `from`/`to` to `from_entity_id`/`to_entity_id`)
-- **`operations` array** is supported by `bulk_update` as an alternative to three separate arrays
+- **`operations` arrays** drive `graph_write`, `graph_edit`, and `graph_delete`
 
 ## Recommended Session Workflow
 
@@ -40,22 +40,32 @@ Tools are designed to be used in four phases per session:
 1. **Orient** -- `get_context` / `search` / `set_context`
 2. **Recall** -- `search` / `get_entities` / `traverse_graph`
 3. **Work** -- Execute the task, consulting the graph as needed
-4. **Persist** -- `create_observation` / `create_entity` / `create_relation` / `bulk_update`
+4. **Persist** -- `graph_write` / `graph_edit` / `graph_delete`
 
-## Context Scoping (3 tools)
+The same workflow is available through MCP prompts: `orient`, `recall` (with a
+required `topic`), and `persist`.
+
+## Successful Tool Metadata
+
+Every successful tool result includes `version` and, where useful,
+`next_move`. Calls made without an active project also include a compact
+`context: { status: "none", next_move: ... }` banner. FastMCP `_meta` mirrors
+`graphMemVersion` and `contextStatus`.
+
+## Context Scoping (2 advertised tools)
 
 Context scoping allows search tools to **boost** entities related to the active project. The recursive `part_of` subtree is bounded; when the cap is reached, context-aware responses expose `scope_truncated: true` and continue with the partial scope. When a context is set via `set_context`, `search` prioritizes in-context query matches (cross-project results still appear, but ranked lower).
 
 Context is stored per MCP client in the `agent_contexts` table, keyed by the `X-MCP-Client` request header. Agents without the header share the `"default"` bucket.
 
 #### `set_context`
-- **Description:** Set this MCP client's active project so `search` boosts in-context matches without hard-filtering results. Pass required `entity_id` (integer; also accepts an entity-name string). Do not use to read the current project; use `get_context` instead. Do not use to search across all projects; use `clear_context` instead. Do not use to change entity fields or create a project; use `update_entity` or `create_entity` instead.
+- **Description:** Set this MCP client's active project so `search` boosts in-context matches without hard-filtering results. Pass required `entity_id` as an integer/name, or null to clear context.
 - **Parameters:**
-  - `entity_id` (integer, required): The ID of the entity to set as context. Also accepts entity name (string).
+  - `entity_id` (integer, string, or null; required): Project ID/name, or null for global scope.
 - **Response:** `{ status, entity_id, entity_name, entity_type }`, plus `warning` and `next_move` when this client id appears to be shared by more than one agent (see [Shared client ids](#shared-client-ids))
 
 #### `get_context`
-- **Description:** Read this MCP client's active project context (entity and scope fields, or status no_context); auto-clears if the project entity is gone. Takes no arguments. Do not use to activate or switch projects; use `set_context` instead. Do not use to wipe context so searches span all projects; use `clear_context` instead. Do not use to load entity details; use `get_entities` instead.
+- **Description:** Read this MCP client's active project context (entity and scope fields, or status no_context); auto-clears if the project entity is gone. Use `set_context` with null to clear it.
 - **Parameters:** None
 - **Response:** `{ status, entity_id, entity_name, entity_type, description, context_set_at, scope_entity_count, scope_truncated, scope_max_entities }` or `{ status: "no_context" }`, plus `warning` and `next_move` when this client id appears to be shared (see [Shared client ids](#shared-client-ids))
 
@@ -75,8 +85,8 @@ GraphMem detects this two ways and adds `warning` plus `next_move` to the `set_c
 
 The fix is always the same: give each agent its own `X-MCP-Client` header value.
 
-#### `clear_context`
-- **Description:** Remove this MCP client's active project context so searches are unscoped across all projects; does not delete entities. Takes no arguments. Do not use to inspect the current scope; use `get_context` instead. Do not use to switch to a project; use `set_context` instead. Do not use to delete a project or other entity; use `delete_entity` instead.
+#### `clear_context` (compatibility alias)
+- **Description:** Hidden alias for `set_context(entity_id: null)`.
 - **Parameters:** None
 
 ## Graph Mutation (3 tools)
@@ -84,7 +94,12 @@ The fix is always the same: give each agent its own `X-MCP-Client` header value.
 #### `graph_write`
 - **Description:** Atomically create up to 50 entities, observations, and relations through type-discriminated `operations`; the former three-array bulk format is also accepted.
 - **Operation types:** `create_entity`, `create_observation`, `create_relation`.
-- **Duplicate policy:** Any possible entity duplicate prevents the entire batch and returns `status: "possible_duplicate"` with the operation index and candidate.
+- **Duplicate policy:** Any possible entity or relation duplicate prevents the
+  entire batch and returns `{ status: "possible_duplicate", kind,
+  operation_index, submitted, candidates, next_move }`.
+- **Soft vocabularies:** `entity_type` and `relation_type` schemas publish
+  canonical `examples`. Novel values remain valid; likely misspellings add a
+  non-blocking `type_hint` to the created result.
 
 #### `graph_edit`
 - **Description:** Atomically update entities and observations, including observation supersession.
@@ -223,7 +238,8 @@ See [Entity Management](#entity-management-4-tools).
 `search_entities`, `search_subgraph`, `list_entities`, `get_entity`,
 `get_subgraph_by_ids`, `find_relations`, `create_entity`, `create_observation`,
 `create_relation`, `bulk_update`, `update_entity`, `update_observation`,
-`delete_entity`, `delete_observation`, `delete_relation`, and `merge_entities`
+`delete_entity`, `delete_observation`, `delete_relation`, `merge_entities`,
+`clear_context`, and `get_version`
 remain callable with their prior schemas and response shapes. They are
 deprecated and omitted from `tools/list`; new clients should not discover or
 select them.

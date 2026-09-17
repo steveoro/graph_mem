@@ -274,16 +274,16 @@ and safety decision, not an annotation one.
 
 ## Phase 4 — Move the workflow into the server
 
-The current rule file carries the four-phase workflow, a tool quick-reference, 23 entity types, 12
-relation types and a query strategy section — rent paid in every session, whether or not the
-session touches the graph. Most of it can move server-side, where it costs nothing until needed and
-cannot be skipped.
+**Implementation status (2026-09-17): shipped in version 1.39.0.**
+
+GraphMem now pins the `steveoro/fast-mcp` fork at an immutable commit. Fork
+version `1.7.0.pre.1` adds native MCP prompts and truthful tool-list change
+notifications with its own RVM-isolated test suite.
 
 ### Extend `next_move` to success responses
 
-`ToolError` already defines the field and `DEFAULT_NEXT_MOVES` supplies per-category values. It is
-only wired into the *error* envelope. Adding it to successful responses turns the workflow from
-advice into mechanism:
+`ToolSuccessResponse` adds version and concise `next_move` guidance at the same
+wrapper boundary used by telemetry, preserving any hint supplied by the tool:
 
 ```ruby
 { entity_id: 712, name: "...", next_move: "Link it: graph_write with a create_relation op to 283 (part_of)." }
@@ -293,31 +293,28 @@ That single field replaces the Persist-phase instruction in the rule file.
 
 ### Emit a context banner
 
-Any tool called with no active context returns a compact banner alongside its result:
+Any non-context tool called with no active context returns a compact banner alongside its result:
 
 ```ruby
 { ..., context: { status: "none", next_move: "Call set_context(<project>) to scope this session." } }
 ```
 
-This replaces the Orient-phase instruction. Fold `get_version` output into the same metadata and
-drop it as a standalone tool.
+`get_version` is now a hidden callable alias; version and context status are
+also mirrored through MCP `_meta`. `set_context(entity_id: null)` replaces the
+hidden `clear_context` alias.
 
 ### Standardize the dedup response that already exists
 
-`CreateEntityTool` already performs the check the rule asks agents to perform manually — a vector
-similarity lookup with `DEDUP_DISTANCE_THRESHOLD`, returning `warning` plus `existing_entity`
-instead of creating. It does **not** use the envelope shape, so the guidance is prose in a
-`warning` string rather than a machine-readable `next_move`.
-
-Normalize it to `{ status: "possible_duplicate", candidates: [...], next_move: "..." }` and apply
-the same pattern to relation creation. "Search before create" then stops being a rule the model
-can skip.
+Entity and relation preflight now use
+`{ status: "possible_duplicate", kind, operation_index, submitted, candidates, next_move }`.
+Any candidate prevents the whole batch from writing. Hidden single-create
+adapters preserve their warning/existing-record shapes.
 
 ### MCP Prompts for the phases
 
-GraphMem registers tools and resources (`ApplicationResource < ActionResource::Base`) but **no MCP
-prompts**. Expose `/orient`, `/recall <topic>` and `/persist` as prompts: invoked on demand rather
-than loaded into every context. This is the natural home for what is currently rule prose.
+GraphMem registers `orient`, `recall` (required `topic`), and `persist` through
+the fork's native `FastMcp::Prompt` API. They are invoked on demand rather than
+loaded into every context.
 
 ### Move the vocabularies into the schema — as soft enums
 
@@ -326,9 +323,9 @@ that list** — `Feature`, `Implementation`, `File`, `DatabaseConstraint` and `R
 live. The rule is being violated in practice, so a hard schema `enum` would reject existing
 patterns and break `EntityTypeMapping` canonicalization.
 
-Use a soft enum instead: schema `examples` listing the canonical set, plus a suggest-on-mismatch
-response when a submitted type is close to a canonical one. The vocabulary then arrives through
-`tools/list`, where the model already looks, and roughly 200 tokens leave the rule file.
+`GraphVocabulary` now owns mappings/examples. `graph_write` publishes soft
+schema `examples` and successful writes add non-blocking `type_hint` data for
+close misspellings while accepting novel types.
 
 ### What the rule file keeps
 
@@ -364,8 +361,9 @@ tool schema.
 An agent running Orient → Recall → Work → Persist should never need these, and Phase 0 telemetry
 will confirm how often they are actually reached.
 
-**Net effect:** 35 registered tools become 22, of which 12 are visible in a normal session. The
-cross-reference prose largely disappears because there is little left to disambiguate against.
+**Net effect:** 40 classes remain callable during migration, with 18 hidden
+aliases. The maintenance profile advertises 22 canonical tools, 12 of which
+are visible in a normal default session.
 
 
 ## Migration

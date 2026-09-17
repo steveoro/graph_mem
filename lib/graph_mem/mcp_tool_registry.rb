@@ -3,7 +3,7 @@
 require_relative "mcp_profile"
 
 module GraphMem
-  # Ensures all MCP tool/resource classes are loaded before FastMcp registration.
+  # Ensures all MCP tool/resource/prompt classes are loaded before registration.
   #
   # In development, ApplicationTool.descendants only includes classes already
   # autoloaded at registration time. New files under app/tools/ are not picked
@@ -11,13 +11,15 @@ module GraphMem
   module McpToolRegistry
     TOOL_GLOB = "app/tools/**/*_tool.rb"
     RESOURCE_GLOB = "app/resources/**/*_resource.rb"
-    TEST_TOOL_PATTERN = /TestTool$/
+    PROMPT_GLOB = "app/prompts/**/*_prompt.rb"
+    TEST_CLASS_PATTERN = /Test(?:Tool|Prompt)$/
 
     module_function
 
     def load_all!
       load_glob(TOOL_GLOB)
       load_glob(RESOURCE_GLOB)
+      load_glob(PROMPT_GLOB)
     end
 
     def register_with!(server, profile: nil)
@@ -25,6 +27,7 @@ module GraphMem
       classes = profile ? tool_classes_for(profile) : tool_classes
       server.register_tools(*classes)
       server.register_resources(*resource_classes)
+      server.register_prompts(*prompt_classes)
       server
     end
 
@@ -42,6 +45,12 @@ module GraphMem
       ApplicationResource.descendants.reject { |klass| skip_class?(klass) }
     end
 
+    def prompt_classes
+      return [] unless defined?(ApplicationPrompt)
+
+      ApplicationPrompt.descendants.reject { |klass| skip_class?(klass) }
+    end
+
     def load_glob(pattern)
       Rails.root.glob(pattern).sort.each { |path| constantize_path(path) }
     end
@@ -52,7 +61,7 @@ module GraphMem
     end
 
     def skip_class?(klass)
-      klass.name.nil? || klass.name.match?(TEST_TOOL_PATTERN)
+      klass.name.nil? || klass.name.match?(TEST_CLASS_PATTERN)
     end
   end
 end

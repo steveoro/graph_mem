@@ -17,6 +17,14 @@ RSpec.describe GraphWriteTool, type: :model do
       :observations,
       :relations
     )
+    operation_properties = described_class.input_schema_to_json.dig(
+      :properties,
+      :operations,
+      :items,
+      :properties
+    )
+    expect(operation_properties.dig(:entity_type, :examples)).to include("Project", "Task")
+    expect(operation_properties.dig(:relation_type, :examples)).to include("part_of", "depends_on")
   end
 
   it "accepts one operation and returns a batch envelope" do

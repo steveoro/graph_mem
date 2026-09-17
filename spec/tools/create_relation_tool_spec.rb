@@ -116,16 +116,22 @@ RSpec.describe CreateRelationTool, type: :model do
     end
 
     context 'duplicate relation' do
-      it 'raises OperationFailed with validation category for duplicate from/to/type combination' do
-        tool.call(from_entity_id: entity_a.id, to_entity_id: entity_b.id, relation_type: 'depends_on')
+      it 'returns a warning with the existing relation' do
+        existing = tool.call(
+          from_entity_id: entity_a.id,
+          to_entity_id: entity_b.id,
+          relation_type: 'depends_on'
+        )
 
-        expect {
-          tool.call(from_entity_id: entity_a.id, to_entity_id: entity_b.id, relation_type: 'depends_on')
-        }.to raise_error(McpGraphMemErrors::OperationFailed, /already exists/) do |error|
-          expect(error.category).to eq("validation")
-          expect(error.next_move).to include("`traverse_graph`")
-          expect(error.next_move).to include("`graph_delete`")
-        end
+        result = tool.call(
+          from_entity_id: entity_a.id,
+          to_entity_id: entity_b.id,
+          relation_type: 'depends_on'
+        )
+
+        expect(result[:warning]).to include("already exists")
+        expect(result.dig(:existing_relation, :relation_id)).to eq(existing[:relation_id])
+        expect(result[:next_move]).to include("graph_delete")
       end
 
       it 'allows same entities with different relation_type' do

@@ -16,55 +16,17 @@ The default `/mcp` connection omits maintenance tools. Use a separate
 `/mcp/maintenance` connection only when maintenance work is required; the
 `/mcp/readonly` profile exposes context and read tools only.
 
-## Phase 1 — Orient (start of every conversation)
+## Workflow Prompts
 
-1. Say "Remembering..." then call `get_context` to check for an active project. Context is per-agent and persisted, so you may already have one from a prior session.
-2. If no context: `search` for the relevant project name → `set_context(<ID or entity name from search result>)`.
-3. If no project entity exists yet: `graph_write` (type `Project`) → `set_context(<new entity ID or name>)`.
-4. On a maintenance-profile connection, optionally call `dream_state_status` for a cheap health check (whether background compaction is running/paused).
+Use the server's MCP prompts instead of carrying the full procedure in every
+client context:
 
-## Phase 2 — Recall (before doing work)
+- `orient` at session start
+- `recall(topic)` before work
+- `persist` before ending
 
-- `search` with keywords from the user's request.
-- Drill into one hit or a related cluster with `get_entities`.
-- After locating a root entity, use `traverse_graph` for a bounded multi-hop neighborhood or `find_shortest_path` to explain how two entities connect.
-- Look for prior `Issue`/`PossibleSolution` pairs, `BestPractice`, and `Preference` entities.
-- Use `summarize` when the goal is to answer “what does the graph know about
-  X?”; use search and traversal directly when exact records or relationships
-  are required.
-
-## Phase 3 — Work
-
-- Execute the user's request using recalled context.
-- Consult the graph mid-task if you encounter related issues or need prior solutions.
-
-## Phase 4 — Persist
-
-- Use `graph_write` with a `create_observation` operation for new facts on
-  existing entities. Write dedupe-aware: search/get the entity first.
-- Use `graph_edit` with `update_observation` for corrections. Set
-  `supersede: true` when preserving the prior fact/version matters; use
-  `graph_delete` with `delete_observation` to mark a fact obsolete.
-- Treat active observations as the default truth surface. Request
-  `include_obsolete: true` only when historical or superseded versions are
-  relevant.
-- Use one `graph_write` batch with `create_entity` and `create_relation`
-  operations for new concepts discovered.
-- Use `graph_write` to batch multiple writes in one call (max 50 ops).
-- `clear_context` if the project scope is no longer relevant (safe: affects only your own client bucket).
-- Routine duplicate compaction is handled by the background dream-state job. On a maintenance-profile connection, confirm spotted duplicates with `suggest_merges`; execute a confirmed merge with a `graph_delete` `merge_entities` operation.
-
----
-
-## Tool Quick-Reference
-
-| Phase | Tools |
-| ------- | ------- |
-| Orient | `get_context`, `set_context`, `clear_context`, `search` |
-| Recall | `search`, `get_entities`, `summarize` |
-| Traverse | `traverse_graph`, `find_shortest_path` |
-| Persist | `graph_write`, `graph_edit`, `graph_delete` |
-| Maintain (`/mcp/maintenance`) | `suggest_merges`, `graph_delete`, `dream_state_status`, `get_maintenance_reports`, `list_maintenance_review`, `apply_maintenance_review`, `dismiss_maintenance_review`, `get_graph_stats`, `get_version`, `get_current_time`, `scan_project`, `scan_project_status` |
+Successful tool responses also provide concise `next_move` guidance and a
+no-context banner when orientation is required.
 
 ## MCP Tool Errors
 
@@ -75,7 +37,7 @@ See `docs/mcp_tools.md` Error Handling for the category table.
 ## Multi-Agent Context Scoping
 
 - Context is **per-agent**, keyed by the `X-MCP-Client` header, and persisted in the DB (survives restarts).
-- `set_context` / `clear_context` affect ONLY your own client bucket — they never disturb other agents sharing the graph.
+- `set_context` affects ONLY your own client bucket; pass `entity_id: null` to clear it.
 - Agents without the header share the `"default"` bucket. Set a stable `X-MCP-Client` in your MCP config when multiple agents use one instance.
 - Because context persists, on Orient you may already have an active context from a prior session — always `get_context` first before assuming none.
 
@@ -154,28 +116,10 @@ graph_mem accepts both its native snake_case/ID-based parameters and the
 - Use native snake_case keys by default. Compatibility aliases are for
   interoperating clients, not a reason to mix naming styles in one request.
 
-## Query Strategy
+## Query and Type Guidance
 
-- **Search before create** to avoid duplicates (vector dedup catches some, not all).
-- **Start broad, then narrow** using entity IDs from search results.
-- **Prioritize root nodes**: find the `Project` first, then traverse its relations.
-- **Use `traverse_graph` for one hop** when you need the immediate incoming or outgoing edges of an entity.
-- **Use `traverse_graph` for bounded exploration** instead of chaining repeated
-  one-hop calls. Keep `max_depth` and `max_entities` as small as the task
-  permits; narrow with `direction` and canonical `relation_types`.
-- **Use `find_shortest_path` for connectivity questions**. It returns the shortest unweighted path by hop count within `max_depth`; `found: false` means no matching path was found inside that bound.
-- Context scoping boosts entities related to the active project; it does not
-  make unrelated entities impossible to return. Do not describe a context-aware
-  search as a hard project filter unless the API explicitly guarantees that.
-- **Navigate by graph structure** (`traverse_graph`, `find_shortest_path`, `get_entities`) instead of repeated searches after locating the relevant entities.
-
-## Entity Types
-
-`Project`, `Framework`, `ApplicationStack`, `Workflow`, `BestPractice`, `Task`, `Step`, `Issue`, `Error`, `PossibleSolution`, `Model`, `DatabaseTable`, `Class`, `APIEndpoint`, `Route`, `Component`, `Service`, `Configuration`, `Migration`, `TestCase`, `Permission`, `User`, `Preference`.
-
-## Relation Types (use the most specific)
-
-`depends_on`, `part_of`, `relates_to`, `implements`, `extends`, `solves`, `configured_by`, `tested_by`, `migrated_by`, `authorizes`, `integrates_with`, `replaces`.
+Use the `recall` prompt for query strategy. Canonical type examples are
+published as soft `graph_write` schema examples; novel types remain valid.
 
 ## Observations
 

@@ -32,6 +32,7 @@ RSpec.describe SetContextTool, type: :model do
       expect(schema[:type]).to eq("object")
       expect(schema[:required]).to eq([ "entity_id" ])
       expect(schema[:properties]).to have_key(:entity_id)
+      expect(Array(schema[:properties][:entity_id][:type])).to include("integer", "null")
     end
   end
 
@@ -99,6 +100,21 @@ RSpec.describe SetContextTool, type: :model do
         end
 
         expect(GraphMemContext.current_project_id).to eq(project.id)
+      end
+    end
+
+    context 'with a null entity_id' do
+      it 'clears the active context through set_context' do
+        tool.call(entity_id: project.id)
+
+        result = tool.call(entity_id: nil)
+
+        expect(result).to eq(status: "context_cleared", was_active: true)
+        expect(tool.graph_mem_context.current_project_id).to be_nil
+      end
+
+      it 'reports when no context was active' do
+        expect(tool.call(entity_id: nil)).to eq(status: "context_cleared", was_active: false)
       end
     end
 

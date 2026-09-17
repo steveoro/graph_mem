@@ -46,55 +46,19 @@ Before calling any `graph_mem` tool for the first time in a session:
    MCP auth flow once, then list the tools again.
 4. Only then invoke the tool.
 
-## 4-Phase Session Workflow
+## Workflow Prompts
 
-## Phase 1 - Orient (start of session)
+Use the server-provided prompts for procedural guidance:
 
-1. Say `Remembering...`.
-2. Call `get_context`. Context is per-agent and persisted, so you may already have one from a prior session.
-3. If no context:
-   - Run `search` for the project name.
-   - If found, call `set_context(<id or name>)`.
-   - If not found, call `create_entity(name:, entity_type: "Project")`, then `set_context`.
+- `orient` at session start
+- `recall(topic)` before implementation
+- `persist` before the final response
 
-## Phase 2 - Recall (before implementation)
-
-1. Run `search` with task keywords.
-2. Inspect one or more known matches with `get_entities`.
-3. Use `traverse_graph` for bounded multi-hop exploration or
-   `find_shortest_path` to explain how two entities connect.
-4. Use `summarize` for a source-backed answer to a knowledge question; use
-   direct search/traversal when exact graph structure is needed.
-5. Prioritize `Issue` + `PossibleSolution`, `BestPractice`, and `Preference`
-   entities.
-
-## Phase 3 - Work
-
-1. Execute the requested task using recalled knowledge.
-2. If blocked or uncertain, query graph_mem again mid-task:
-   - `search` for new clues.
-   - `traverse_graph` for immediate edges or a bounded neighborhood.
-   - `find_shortest_path` for connectivity between known entities.
-
-## Phase 4 - Persist (before final response)
-
-1. Write newly learned facts with a `graph_write` `create_observation`
-   operation.
-   - Use a `graph_edit` `update_observation` operation for corrections.
-   - Set `supersede: true` when retaining the prior version matters.
-   - Use a `graph_delete` `delete_observation` operation to mark a fact
-     obsolete rather than hard-delete it.
-   - Search or load the entity first and do not restate an existing fact.
-2. For new concepts:
-   - Add `create_entity` operations to `graph_write`.
-   - Add `create_relation` operations with a specific relation type.
-3. For batch updates, prefer `graph_write` (max 50 operations).
-4. Routine duplicate compaction is handled by the background dream-state job. On a maintenance-profile connection, confirm spotted duplicates with `suggest_merges`, then execute a `graph_delete` `merge_entities` operation.
-5. Call `clear_context` only when project scope is no longer relevant (safe: affects only your own client bucket).
+Successful tool results provide a concise `next_move`; follow it when relevant.
 
 ## Multi-Agent & Dream-State Awareness
 
-- Context is per-agent, keyed by the `X-MCP-Client` header and persisted in the DB. `set_context`/`clear_context` affect only your own bucket; agents without the header share `"default"`.
+- Context is per-agent, keyed by the `X-MCP-Client` header and persisted in the DB. `set_context` affects only your own bucket; pass `entity_id: null` to clear it. Agents without the header share `"default"`.
 - A background dream-state job auto-parents orphans, auto-merges near-identical
   entities (cosine < 0.10), and dedupes identical observations. Lower-confidence
   cases are queued for review.
@@ -119,61 +83,10 @@ graph_mem accepts both native and MCP-memory-style forms:
 
 Default recommendation: use native snake_case keys unless compatibility with external payloads is needed.
 
-## Query Strategy
+## Query and Type Guidance
 
-1. Start broad (`search`) then narrow by IDs.
-2. Find the root `Project`, then traverse relations.
-3. Use `traverse_graph` with direct filters for edge lookup or a start entity for bounded multi-hop exploration.
-4. Use `find_shortest_path` for the shortest unweighted connection within `max_depth`.
-5. Keep traversal bounds small and narrow with `direction` and canonical `relation_types`.
-6. Prefer graph traversal over repeated fuzzy searches after locating the relevant entities.
-7. Remember that context-aware search boosts in-context entities; it is not
-   necessarily a hard filter.
-8. Keep observations factual and timestamped when possible.
-
-## Preferred Entity And Relation Types
-
-Common entity types:
-`Project`, `Task`, `Issue`, `PossibleSolution`, `BestPractice`, `Preference`, `Workflow`, `Configuration`, `Model`, `Service`, `APIEndpoint`, `TestCase`.
-
-Common relation types:
-`part_of`, `relates_to`, `depends_on`, `implements`, `solves`, `tested_by`, `configured_by`, `integrates_with`, `replaces`.
-
-Use the most specific valid relation type available.
-
-## Execution Templates
-
-Each template names the tool and its `arguments` payload. Dispatch the call
-through your host's own MCP mechanism (direct call, namespaced tool name, or
-call-tool wrapper).
-
-### Orient template
-
-`get_context` — `{}`
-
-If no context:
-
-`search` — `{"query":"<project name>"}`
-
-`set_context` — `{"entity_id":123}`
-
-### Recall template
-
-`search` — `{"query":"<task keywords>"}`
-
-`get_entities` — `{"entity_ids":[456]}`
-
-### Summarize template
-
-`summarize` — `{"query":"<topic>","max_results":10,"max_observations":20,"max_depth":0,"include_sources":true,"style":"concise"}`
-
-Use the returned deterministic evidence and `sources` as the authority. An
-LLM summary is optional synthesis; do not accept source IDs or unsupported
-claims supplied by the model.
-
-### Persist template
-
-`graph_write` — `{"operations":[{"type":"create_observation","entity_id":456,"text_content":"<fact>"}]}`
+Use the `recall` prompt for query strategy. `graph_write` publishes canonical
+entity and relation type examples in its schema while accepting novel types.
 
 ## Quality Guardrails
 

@@ -55,9 +55,72 @@ RSpec.describe GraphWriteService do
         ]
       )
 
-      expect(result).to include(status: "possible_duplicate", operation_index: 0)
-      expect(result.dig(:candidate, :entity_id)).to eq(existing.id)
+      expect(result).to include(
+        status: "possible_duplicate",
+        kind: "entity",
+        operation_index: 0
+      )
+      expect(result.dig(:candidates, 0, :entity_id)).to eq(existing.id)
       expect(MemoryEntity.find_by(name: "Must not persist")).to be_nil
+    end
+
+    it "preflights canonicalized duplicate relations before writing" do
+      from = MemoryEntity.create!(name: "Relation source", entity_type: "Task")
+      to = MemoryEntity.create!(name: "Relation target", entity_type: "Task")
+      existing = MemoryRelation.create!(from_entity: from, to_entity: to, relation_type: "depends_on")
+      RelationTypeMapping.create!(canonical_type: "depends_on", variant: "requires")
+
+      result = described_class.call(
+        operations: [
+          { type: "create_entity", name: "Must also not persist", entity_type: "Task" },
+          {
+            type: "create_relation",
+            from_entity_id: from.id,
+            to_entity_id: to.id,
+            relation_type: "REQUIRES"
+          }
+        ]
+      )
+
+      expect(result).to include(
+        status: "possible_duplicate",
+        kind: "relation",
+        operation_index: 1
+      )
+      expect(result.dig(:candidates, 0, :relation_id)).to eq(existing.id)
+      expect(MemoryEntity.find_by(name: "Must also not persist")).to be_nil
+    end
+
+    it "canonicalizes entity types before duplicate probing" do
+      existing = MemoryEntity.create!(name: "Mapped project", entity_type: "Project")
+      EntityTypeMapping.create!(canonical_type: "Project", variant: "workspace")
+      candidate = Struct.new(:entity, :distance).new(existing, 0.1)
+
+      expect(vector_strategy).to receive(:search)
+        .with("Project: Mapped workspace", limit: 1, entity_type: "Project")
+        .and_return([ candidate ])
+
+      result = described_class.call(
+        operations: [
+          { type: "create_entity", name: "Mapped workspace", entity_type: "workspace" }
+        ]
+      )
+
+      expect(result[:status]).to eq("possible_duplicate")
+    end
+
+    it "returns non-blocking close-match type hints" do
+      result = described_class.call(
+        operations: [
+          { type: "create_entity", name: "Misspelled type", entity_type: "Projct" }
+        ]
+      )
+
+      expect(result.dig(:results, 0, :result, :type_hint)).to eq(
+        submitted: "Projct",
+        suggested: "Project"
+      )
+      expect(MemoryEntity.find_by!(name: "Misspelled type").entity_type).to eq("Projct")
     end
 
     it "validates operation type and batch size" do

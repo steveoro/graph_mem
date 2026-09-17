@@ -20,7 +20,7 @@ class DeleteEntityTool < ApplicationTool
     "Do not use to obsolete a single fact; use `graph_delete` instead. " \
     "Do not use to remove a single edge; use `graph_delete` instead. " \
     "Do not use to change metadata without deleting; use `graph_edit` instead. " \
-    "Do not use to leave this client's project scope; use `clear_context` instead."
+    "Do not use to leave this client's project scope; use `set_context` with entity_id null instead."
 
   arguments do
     required(:entity_id).filled(:integer).description("The ID of the entity to delete.")

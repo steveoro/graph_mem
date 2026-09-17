@@ -69,6 +69,7 @@ RSpec.describe "MCP Streamable HTTP endpoint", type: :request do
       body = response.parsed_body
       expect(body["result"]["protocolVersion"]).to eq("2025-03-26")
       expect(body["result"]["serverInfo"]["name"]).to eq("graph-mem")
+      expect(body.dig("result", "capabilities", "prompts")).to eq("listChanged" => false)
     end
 
     it "negotiates 2024-11-05 for older clients" do
@@ -130,9 +131,8 @@ RSpec.describe "MCP Streamable HTTP endpoint", type: :request do
       expect(response).to have_http_status(:ok)
       expect(response.headers["Mcp-Session-Id"]).to eq(session_id)
       tools = response.parsed_body["result"]["tools"]
-      expect(tools.size).to eq(14)
+      expect(tools.size).to eq(12)
       expect(tools.map { |tool| tool["name"] }).to include(
-        "get_version",
         "search",
         "get_entities",
         "graph_write",
@@ -146,7 +146,9 @@ RSpec.describe "MCP Streamable HTTP endpoint", type: :request do
         "find_relations",
         "create_entity",
         "update_entity",
-        "delete_entity"
+        "delete_entity",
+        "get_version",
+        "clear_context"
       )
 
       search_tool = tools.find { |tool| tool["name"] == "search" }
@@ -396,9 +398,9 @@ RSpec.describe "MCP Streamable HTTP endpoint", type: :request do
   describe "connection profiles" do
     it "advertises the expected catalog for each profile" do
       {
-        "/mcp" => [ 14, false ],
-        "/mcp/readonly" => [ 11, false ],
-        "/mcp/maintenance" => [ 24, true ]
+        "/mcp" => [ 12, false ],
+        "/mcp/readonly" => [ 9, false ],
+        "/mcp/maintenance" => [ 22, true ]
       }.each do |path, (expected_count, includes_maintenance)|
         session_id = initialize_session(path)
         post_rpc(path, session_id, "tools/list")
@@ -479,10 +481,10 @@ RSpec.describe "MCP Streamable HTTP endpoint", type: :request do
       session_id = initialize_session("/mcp")
 
       post_rpc("/mcp", session_id, "tools/list")
-      expect(response.parsed_body.dig("result", "tools").size).to eq(14)
+      expect(response.parsed_body.dig("result", "tools").size).to eq(12)
 
       post_rpc("/mcp/maintenance", session_id, "tools/list", id: 3)
-      expect(response.parsed_body.dig("result", "tools").size).to eq(24)
+      expect(response.parsed_body.dig("result", "tools").size).to eq(22)
     end
 
     it "supports deleting a session through a profile path" do
@@ -491,6 +493,53 @@ RSpec.describe "MCP Streamable HTTP endpoint", type: :request do
       delete "/mcp/readonly", headers: { "Mcp-Session-Id" => session_id }
 
       expect(response).to have_http_status(:ok)
+    end
+  end
+
+  describe "workflow prompts" do
+    it "lists and renders native prompts" do
+      session_id = initialize_session("/mcp")
+      post_rpc("/mcp", session_id, "prompts/list")
+
+      prompts = response.parsed_body.dig("result", "prompts")
+      expect(prompts.pluck("name")).to contain_exactly("orient", "recall", "persist")
+      recall = prompts.find { |prompt| prompt["name"] == "recall" }
+      expect(recall["arguments"]).to include(
+        "name" => "topic",
+        "description" => "Keywords or subject to recall",
+        "required" => true
+      )
+
+      post_rpc(
+        "/mcp",
+        session_id,
+        "prompts/get",
+        params: { name: "recall", arguments: { topic: "GraphMem" } },
+        id: 10
+      )
+
+      text = response.parsed_body.dig("result", "messages", 0, "content", "text")
+      expect(text).to include("GraphMem", "search", "get_entities")
+    end
+  end
+
+  describe "success workflow metadata" do
+    it "adds version, next_move, context banner, and MCP _meta" do
+      session_id = initialize_session("/mcp")
+      post_rpc(
+        "/mcp",
+        session_id,
+        "tools/call",
+        params: { name: "get_current_time", arguments: {} }
+      )
+
+      result = response.parsed_body["result"]
+      text = result.dig("content", 0, "text")
+      expect(text).to include("version:", "next_move:", "context:")
+      expect(result["_meta"]).to eq(
+        "graphMemVersion" => GraphMem::VERSION,
+        "contextStatus" => "none"
+      )
     end
   end
 

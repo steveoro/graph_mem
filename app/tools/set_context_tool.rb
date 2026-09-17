@@ -13,17 +13,24 @@ class SetContextTool < ApplicationTool
     open_world_hint: false
   )
 
-  description "Set this MCP client's active project so `search` and `search` boost in-context " \
-    "entities without hard-filtering results. Pass required `entity_id` (integer; also accepts an entity-name string). " \
+  description "Set this MCP client's active project so `search` boosts in-context entities without hard-filtering. " \
+    "Pass required `entity_id` as an integer/name, or null to clear the active context. " \
     "Do not use to read the current project; use `get_context` instead. " \
-    "Do not use to search across all projects; use `clear_context` instead. " \
+    "Do not omit entity_id; use null to search globally. " \
     "Do not use to change entity fields or create a project; use `graph_edit` or `graph_write` instead."
 
   arguments do
-    required(:entity_id).filled(:integer).description("The ID of the entity to set as the active context.")
+    required(:entity_id).maybe(:integer).description("Project entity ID, or null to clear context.")
   end
 
   def call(entity_id:)
+    if entity_id.nil?
+      context = graph_mem_context
+      was_active = context.active?
+      context.clear!
+      return { status: "context_cleared", was_active: was_active }
+    end
+
     entity = MemoryEntity.find_by(id: entity_id)
     unless entity
       raise McpGraphMemErrors::ResourceNotFound.new(

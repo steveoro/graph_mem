@@ -4,7 +4,14 @@ require "rails_helper"
 
 RSpec.describe GraphMem::McpToolRegistry do
   describe ".register_with!" do
-    let(:server) { instance_double(FastMcp::Server, register_tools: nil, register_resources: nil) }
+    let(:server) do
+      instance_double(
+        FastMcp::Server,
+        register_tools: nil,
+        register_resources: nil,
+        register_prompts: nil
+      )
+    end
 
     it "loads all *_tool.rb classes before registering" do
       expect(described_class).to receive(:load_all!).and_call_original
@@ -25,6 +32,16 @@ RSpec.describe GraphMem::McpToolRegistry do
       end
 
       described_class.register_with!(server, profile: :default)
+    end
+  end
+
+  describe ".prompt_classes" do
+    it "loads the three GraphMem workflow prompts" do
+      described_class.load_all!
+
+      expect(described_class.prompt_classes.map(&:prompt_name)).to match_array(
+        %w[orient recall persist]
+      )
     end
   end
 

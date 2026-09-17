@@ -180,8 +180,18 @@ RSpec.describe ApplicationTool do
 
     it "normalizes parameters before validation and dispatch" do
       tool = DslTestTool.new
-      result, _meta = tool.call_with_schema_validation!(name: "test", count: 5)
-      expect(result).to eq({ name: "test", count: 5 })
+      result, metadata = tool.call_with_schema_validation!(name: "test", count: 5)
+
+      expect(result).to include(
+        name: "test",
+        count: 5,
+        version: GraphMem::VERSION,
+        context: include(status: "none")
+      )
+      expect(metadata).to include(
+        graphMemVersion: GraphMem::VERSION,
+        contextStatus: "none"
+      )
     end
 
     it "records successful calls with incoming argument keys only" do

@@ -129,6 +129,7 @@ class GraphWriteService
   end
 
   def create_entity(attributes)
+    submitted_type = attributes[:entity_type]
     entity = MemoryEntity.create!(
       name: attributes[:name],
       entity_type: attributes[:entity_type],
@@ -139,7 +140,7 @@ class GraphWriteService
       MemoryObservation.create!(memory_entity: entity, content: content)
     end
 
-    {
+    payload = {
       entity_id: entity.id,
       name: entity.name,
       entity_type: entity.entity_type,
@@ -149,6 +150,9 @@ class GraphWriteService
       updated_at: entity.updated_at.iso8601,
       memory_observations_count: entity.memory_observations.count
     }
+    type_hint = type_hint_for(submitted_type, GraphVocabulary::ENTITY_TYPES, EntityTypeMapping)
+    payload[:type_hint] = type_hint if type_hint
+    payload
   end
 
   def create_observation(attributes)
@@ -210,7 +214,14 @@ class GraphWriteService
       confidence: attributes[:confidence],
       properties: attributes[:properties] || {}
     )
-    GraphTraversalSerializer.relation_json(relation)
+    payload = GraphTraversalSerializer.relation_json(relation)
+    type_hint = type_hint_for(
+      attributes[:relation_type],
+      GraphVocabulary::RELATION_TYPES,
+      RelationTypeMapping
+    )
+    payload[:type_hint] = type_hint if type_hint
+    payload
   end
 
   def resolve_entity_id(value)
@@ -221,37 +232,94 @@ class GraphWriteService
 
   def duplicate_response
     @operations.each do |operation|
-      next unless operation[:type] == "create_entity"
-
-      attributes = operation[:attributes]
-      similar = find_similar_entity(attributes[:name], attributes[:entity_type])
-      next unless similar
-
-      return {
-        mode: "batch",
-        status: "possible_duplicate",
-        operation_index: operation[:index],
-        candidate: {
-          entity_id: similar.entity.id,
-          name: similar.entity.name,
-          entity_type: similar.entity.entity_type,
-          description: similar.entity.description,
-          aliases: similar.entity.aliases,
-          similarity_distance: similar.distance.round(4)
-        },
-        next_move: "Use `graph_edit` or add an observation with `graph_write`; retry only if this is a distinct entity."
-      }
+      duplicate =
+        case operation[:type]
+        when "create_entity" then duplicate_entity_response(operation)
+        when "create_relation" then duplicate_relation_response(operation)
+        end
+      return duplicate if duplicate
     end
     nil
   end
 
   def find_similar_entity(name, entity_type)
-    result = VectorSearchStrategy.new.search("#{entity_type}: #{name}", limit: 1, entity_type: entity_type).first
+    canonical_type = EntityTypeMapping.canonicalize(entity_type) || entity_type.to_s.strip
+    result = VectorSearchStrategy.new.search(
+      "#{canonical_type}: #{name}",
+      limit: 1,
+      entity_type: canonical_type
+    ).first
     result if result && result.distance < DEDUP_DISTANCE_THRESHOLD
   rescue *ToolError::TIMEOUT_CLASSES
     raise
   rescue StandardError => e
     @logger.debug "GraphWriteService: dedup check unavailable — #{e.message}"
     nil
+  end
+
+  def duplicate_entity_response(operation)
+    attributes = operation[:attributes]
+    similar = find_similar_entity(attributes[:name], attributes[:entity_type])
+    return unless similar
+
+    possible_duplicate(
+      operation,
+      kind: "entity",
+      submitted: attributes.slice(:name, :entity_type, :aliases, :description),
+      candidates: [
+        {
+          entity_id: similar.entity.id,
+          name: similar.entity.name,
+          entity_type: similar.entity.entity_type,
+          description: similar.entity.description,
+          aliases: similar.entity.aliases,
+          similarity_distance: similar.distance.round(4)
+        }
+      ],
+      next_move: "Use `graph_edit` or add an observation with `graph_write`; retry only if distinct."
+    )
+  end
+
+  def duplicate_relation_response(operation)
+    attributes = operation[:attributes]
+    from_id = resolve_entity_id(attributes[:from_entity_id] || attributes[:from_entity])
+    to_id = resolve_entity_id(attributes[:to_entity_id] || attributes[:to_entity])
+    canonical_type = MemoryRelation.canonical_relation_type(attributes[:relation_type])
+    relation = MemoryRelation.find_by(
+      from_entity_id: from_id,
+      to_entity_id: to_id,
+      relation_type: canonical_type
+    )
+    return unless relation
+
+    possible_duplicate(
+      operation,
+      kind: "relation",
+      submitted: {
+        from_entity_id: from_id,
+        to_entity_id: to_id,
+        relation_type: canonical_type
+      },
+      candidates: [ GraphTraversalSerializer.relation_json(relation) ],
+      next_move: "Use the existing relation, or remove it with `graph_delete` before replacing it."
+    )
+  end
+
+  def possible_duplicate(operation, kind:, submitted:, candidates:, next_move:)
+    {
+      mode: "batch",
+      status: "possible_duplicate",
+      kind: kind,
+      operation_index: operation[:index],
+      submitted: submitted,
+      candidates: candidates,
+      next_move: next_move
+    }
+  end
+
+  def type_hint_for(value, examples, mapping_class)
+    return if mapping_class.canonicalize(value)
+
+    GraphVocabulary.suggestion(value, examples)
   end
 end

@@ -1,3 +1,16 @@
+GIT
+  remote: https://github.com/steveoro/fast-mcp.git
+  revision: 43f5aa18afccaf406002a995b3cef84e6c789845
+  ref: 43f5aa18afccaf406002a995b3cef84e6c789845
+  specs:
+    fast-mcp (1.7.0.pre.1)
+      addressable (~> 2.8)
+      base64
+      dry-schema (~> 1.14)
+      json (~> 2.0)
+      mime-types (~> 3.4)
+      rack (>= 2.0, < 4.0)
+
 GEM
   remote: https://rubygems.org/
   specs:
@@ -142,13 +155,6 @@ GEM
     erubis (2.7.0)
     et-orbi (1.4.2)
       tzinfo
-    fast-mcp (1.6.0)
-      addressable (~> 2.8)
-      base64
-      dry-schema (~> 1.14)
-      json (~> 2.0)
-      mime-types (~> 3.4)
-      rack (>= 2.0, < 4.0)
     fugit (1.14.0)
       et-orbi (~> 1.4)
       raabro (~> 1.4)
@@ -518,7 +524,7 @@ DEPENDENCIES
   brakeman
   capybara
   debug
-  fast-mcp
+  fast-mcp!
   haml-rails
   html2haml
   importmap-rails

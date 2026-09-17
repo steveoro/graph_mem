@@ -7,6 +7,7 @@ class ClearContextTool < ApplicationTool
 
   mcp_metadata(
     profiles: %i[default readonly maintenance],
+    advertised: false,
     read_only_hint: false,
     destructive_hint: false,
     idempotent_hint: true,

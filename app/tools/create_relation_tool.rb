@@ -35,7 +35,7 @@ class CreateRelationTool < ApplicationTool
   def call(from_entity_id:, to_entity_id:, relation_type:, weight: nil, confidence: nil, properties: {})
     logger.info "Performing CreateRelationTool with from_id: #{from_entity_id}, to_id: #{to_entity_id}, type: #{relation_type}"
     begin
-      GraphWriteService.execute_one(
+      result = GraphWriteService.execute_one(
         "create_relation",
         {
           from_entity_id: from_entity_id,
@@ -47,6 +47,14 @@ class CreateRelationTool < ApplicationTool
         },
         logger: logger
       )
+      if result[:status] == "possible_duplicate"
+        return {
+          warning: "An equivalent relation already exists.",
+          existing_relation: result[:candidates].first,
+          next_move: result[:next_move]
+        }
+      end
+      result
     rescue *ToolError::TIMEOUT_CLASSES
       raise
     rescue McpGraphMemErrors::Error, FastMcp::Tool::InvalidArgumentsError

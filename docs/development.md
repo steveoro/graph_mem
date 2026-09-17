@@ -74,15 +74,17 @@ bin/mcp
 
 The server exposes three 2025-03-26 Streamable HTTP profiles:
 
-- `/mcp` — 14 advertised context, read, and mutation tools
-- `/mcp/readonly` — 11 advertised context and read tools
-- `/mcp/maintenance` — all 24 canonical tools
+- `/mcp` — 12 advertised context, read, and mutation tools
+- `/mcp/readonly` — 9 advertised context and read tools
+- `/mcp/maintenance` — all 22 canonical tools
 
-Sixteen deprecated read and mutation aliases remain registered and callable,
+Eighteen deprecated read, mutation, context, and version aliases remain callable,
 bringing the transitional registry to 40 classes, but are omitted from
 `tools/list`.
 
 The 2024-11-05 SSE endpoint remains at `/mcp/sse` and uses the default profile.
+Workflow guidance is available on demand through the `orient`, `recall`, and
+`persist` MCP prompts.
 
 For the STDIO interface (useful for Windsurf integration):
 
@@ -283,7 +285,7 @@ The current version is stored in `lib/graph_mem/version.rb`.
 ## Additional Resources
 
 * [Ruby on Rails Guides](https://guides.rubyonrails.org/)
-* [Fast-MCP Documentation](https://github.com/yjacquin/fast-mcp)
+* [GraphMem FastMCP fork](https://github.com/steveoro/fast-mcp)
 * [MCP Specification](https://spec.modelcontextprotocol.io/specification/2025-03-26/basic/transports/)
 
 

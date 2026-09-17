@@ -19,7 +19,7 @@ class GetGraphStatsTool < ApplicationTool
     "Do not use to page actual entities; use `search` instead. " \
     "Do not use for a topic summary; use `summarize` instead. " \
     "Do not use for compaction job status; use `dream_state_status` instead. " \
-    "Do not use for software version; use `get_version` instead."
+    "Software version is included in every successful response."
 
   def call
     {

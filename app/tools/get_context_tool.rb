@@ -16,7 +16,7 @@ class GetContextTool < ApplicationTool
   description "Read this MCP client's active project context (entity and scope fields, or status no_context); " \
     "auto-clears if the project entity is gone. Takes no arguments. " \
     "Do not use to activate or switch projects; use `set_context` instead. " \
-    "Do not use to wipe context so searches span all projects; use `clear_context` instead. " \
+    "Do not use to wipe context so searches span all projects; use `set_context` with entity_id null instead. " \
     "Do not use to load an entity's observations or relations; use `get_entities` instead."
 
   def call

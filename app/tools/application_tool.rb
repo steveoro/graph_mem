@@ -47,6 +47,7 @@ class ApplicationTool < FastMcp::Tool
     client_id = current_client_id
     argument_keys = args.keys.map(&:to_s).uniq.sort
     normalized = nil
+    raw_result = nil
     result = nil
     error = nil
 
@@ -64,7 +65,13 @@ class ApplicationTool < FastMcp::Tool
     end
 
     record_client_activity!
-    result = call(**normalized)
+    raw_result = call(**normalized)
+    result, success_metadata = ToolSuccessResponse.call(
+      tool_name: tool_name,
+      result: raw_result,
+      context: graph_mem_context
+    )
+    _meta.merge!(success_metadata)
     [ result, _meta ]
   rescue StandardError => e
     error = e
@@ -77,7 +84,7 @@ class ApplicationTool < FastMcp::Tool
       error_class: error&.class&.name,
       error_category: telemetry_error_category(error),
       duration_ms: elapsed_ms_since(started_at),
-      result_size: error ? nil : result_size_for(result),
+      result_size: error ? nil : result_size_for(raw_result),
       scope: normalized&.[](:scope),
       argument_keys: argument_keys
     )
