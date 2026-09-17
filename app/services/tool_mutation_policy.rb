@@ -3,6 +3,7 @@
 # Central policy for compaction valve coverage and heavy read tools.
 class ToolMutationPolicy
     COMPACTION_VALVE_TOOLS = %w[
+    graph_write graph_edit graph_delete
     bulk_update create_entity create_observation create_relation
     delete_entity delete_observation delete_relation update_entity update_observation
     merge_entities search_entities search_subgraph suggest_merges summarize

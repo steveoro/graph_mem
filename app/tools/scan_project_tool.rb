@@ -20,7 +20,7 @@ class ScanProjectTool < ApplicationTool
     "`aliases` (comma- or pipe-separated string), `mode` (initial, rescan, or validate; default initial), " \
     "`dry_run` (bool), `file_globs` (array of strings), `scan_id` (string, resume a paused validation batch). " \
     "Do not use to poll completion; use `scan_project_status` instead. " \
-    "Do not use to create a single node by hand; use `create_entity` instead. " \
+    "Do not use to create a single node by hand; use `graph_write` instead. " \
     "Do not use to scope searches to a project already in the graph; use `set_context` instead."
 
   arguments do

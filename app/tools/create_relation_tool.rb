@@ -7,6 +7,7 @@ class CreateRelationTool < ApplicationTool
 
   mcp_metadata(
     profiles: %i[default maintenance],
+    advertised: false,
     read_only_hint: false,
     destructive_hint: false,
     idempotent_hint: false,
@@ -16,11 +17,11 @@ class CreateRelationTool < ApplicationTool
   description "Add one directed edge between two existing entities. Pass required `from_entity_id` " \
     "(integer or name; aliases `from_entity`, `from`), `to_entity_id` (integer or name; aliases `to_entity`, `to`), " \
     "and `relation_type` (string, canonicalized); optional `weight` (float >=0), `confidence` (float 0-1), " \
-    "`properties` (hash). Do not use to create nodes; use `create_entity` instead. " \
-    "Do not use to batch-create relations; use `bulk_update` instead. " \
+    "`properties` (hash). Do not use to create nodes; use `graph_write` instead. " \
+    "Do not use to batch-create relations; use `graph_write` instead. " \
     "Do not use to query existing 1-hop edges; use `traverse_graph` instead. " \
     "Do not use for a multi-hop neighborhood; use `traverse_graph` instead. " \
-    "Do not use to remove an edge; use `delete_relation` instead."
+    "Do not use to remove an edge; use `graph_delete` instead."
 
   arguments do
     required(:from_entity_id).filled(:integer).description("The ID of the entity where the relation starts.")
@@ -34,40 +35,18 @@ class CreateRelationTool < ApplicationTool
   def call(from_entity_id:, to_entity_id:, relation_type:, weight: nil, confidence: nil, properties: {})
     logger.info "Performing CreateRelationTool with from_id: #{from_entity_id}, to_id: #{to_entity_id}, type: #{relation_type}"
     begin
-      unless MemoryEntity.exists?(id: from_entity_id)
-        raise McpGraphMemErrors::ResourceNotFound.new(
-          "Entity with ID=#{from_entity_id} not found.",
-          next_move: "Call `search`, then retry `create_relation` with a known from_entity_id."
-        )
-      end
-      unless MemoryEntity.exists?(id: to_entity_id)
-        raise McpGraphMemErrors::ResourceNotFound.new(
-          "Entity with ID=#{to_entity_id} not found.",
-          next_move: "Call `search`, then retry `create_relation` with a known to_entity_id."
-        )
-      end
-
-      new_relation = MemoryRelation.create!(
-        from_entity_id: from_entity_id,
-        to_entity_id: to_entity_id,
-        relation_type: MemoryRelation.canonical_relation_type(relation_type),
-        weight: weight,
-        confidence: confidence,
-        properties: properties
+      GraphWriteService.execute_one(
+        "create_relation",
+        {
+          from_entity_id: from_entity_id,
+          to_entity_id: to_entity_id,
+          relation_type: relation_type,
+          weight: weight,
+          confidence: confidence,
+          properties: properties
+        },
+        logger: logger
       )
-      logger.info "Created relation: #{new_relation.inspect}"
-
-      {
-        relation_id: new_relation.id,
-        from_entity_id: new_relation.from_entity_id,
-        to_entity_id: new_relation.to_entity_id,
-        relation_type: new_relation.relation_type,
-        weight: new_relation.weight,
-        confidence: new_relation.confidence,
-        properties: new_relation.properties,
-        created_at: new_relation.created_at.iso8601,
-        updated_at: new_relation.updated_at.iso8601
-      }
     rescue *ToolError::TIMEOUT_CLASSES
       raise
     rescue McpGraphMemErrors::Error, FastMcp::Tool::InvalidArgumentsError
@@ -86,7 +65,7 @@ class CreateRelationTool < ApplicationTool
       raise McpGraphMemErrors::OperationFailed.new(
         error_message,
         category: "validation",
-        next_move: "Call `traverse_graph` to inspect the existing edge, or `delete_relation` before creating a replacement."
+        next_move: "Call `traverse_graph` to inspect the existing edge, or `graph_delete` before creating a replacement."
       )
     rescue StandardError => e
       logger.error "InternalServerError in CreateRelationTool: #{e.class}: #{e.message}"

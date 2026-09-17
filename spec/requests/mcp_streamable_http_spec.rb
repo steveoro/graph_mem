@@ -130,13 +130,23 @@ RSpec.describe "MCP Streamable HTTP endpoint", type: :request do
       expect(response).to have_http_status(:ok)
       expect(response.headers["Mcp-Session-Id"]).to eq(session_id)
       tools = response.parsed_body["result"]["tools"]
-      expect(tools.size).to eq(21)
-      expect(tools.map { |tool| tool["name"] }).to include("get_version", "search", "get_entities")
+      expect(tools.size).to eq(14)
+      expect(tools.map { |tool| tool["name"] }).to include(
+        "get_version",
+        "search",
+        "get_entities",
+        "graph_write",
+        "graph_edit",
+        "graph_delete"
+      )
       expect(tools.map { |tool| tool["name"] }).not_to include(
         "dream_state_status",
         "search_entities",
         "get_entity",
-        "find_relations"
+        "find_relations",
+        "create_entity",
+        "update_entity",
+        "delete_entity"
       )
 
       search_tool = tools.find { |tool| tool["name"] == "search" }
@@ -386,9 +396,9 @@ RSpec.describe "MCP Streamable HTTP endpoint", type: :request do
   describe "connection profiles" do
     it "advertises the expected catalog for each profile" do
       {
-        "/mcp" => [ 21, false ],
+        "/mcp" => [ 14, false ],
         "/mcp/readonly" => [ 11, false ],
-        "/mcp/maintenance" => [ 31, true ]
+        "/mcp/maintenance" => [ 24, true ]
       }.each do |path, (expected_count, includes_maintenance)|
         session_id = initialize_session(path)
         post_rpc(path, session_id, "tools/list")
@@ -411,6 +421,23 @@ RSpec.describe "MCP Streamable HTTP endpoint", type: :request do
       expect(response).to have_http_status(:ok)
       expect(response.parsed_body).not_to have_key("error")
       expect(response.parsed_body.dig("result", "isError")).to be(false)
+    end
+
+    it "keeps hidden mutation adapters callable" do
+      entity = MemoryEntity.create!(name: "Hidden mutation adapter", entity_type: "Task")
+      session_id = initialize_session("/mcp")
+      post_rpc(
+        "/mcp",
+        session_id,
+        "tools/call",
+        params: {
+          name: "update_entity",
+          arguments: { entity_id: entity.id, description: "Updated through alias" }
+        }
+      )
+
+      expect(response.parsed_body.dig("result", "isError")).to be(false)
+      expect(entity.reload.description).to eq("Updated through alias")
     end
 
     it "rejects tools hidden from the selected profile" do
@@ -452,10 +479,10 @@ RSpec.describe "MCP Streamable HTTP endpoint", type: :request do
       session_id = initialize_session("/mcp")
 
       post_rpc("/mcp", session_id, "tools/list")
-      expect(response.parsed_body.dig("result", "tools").size).to eq(21)
+      expect(response.parsed_body.dig("result", "tools").size).to eq(14)
 
       post_rpc("/mcp/maintenance", session_id, "tools/list", id: 3)
-      expect(response.parsed_body.dig("result", "tools").size).to eq(31)
+      expect(response.parsed_body.dig("result", "tools").size).to eq(24)
     end
 
     it "supports deleting a session through a profile path" do

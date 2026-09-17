@@ -83,9 +83,8 @@ RSpec.describe UpdateObservationTool, type: :model do
       expect {
         tool.call(observation_id: observation.id, text_content: 'Changed')
       }.to raise_error(FastMcp::Tool::InvalidArgumentsError, /Inactive observations/) do |error|
-        expect(error.message).to include('`delete_observation`')
-        expect(error.message).to include('`create_observation`')
-        expect(error.message).to include('`update_observation`')
+        expect(error.message).to include('`graph_delete`')
+        expect(error.message).to include('`graph_write`')
       end
     end
 
@@ -93,7 +92,7 @@ RSpec.describe UpdateObservationTool, type: :model do
       expect {
         tool.call(observation_id: observation.id, confidence: 1.5)
       }.to raise_error(FastMcp::Tool::InvalidArgumentsError, /Validation Failed/) do |error|
-        expect(error.message).to include('`update_observation`')
+        expect(error.message).to include('`graph_edit`')
       end
     end
 
@@ -102,7 +101,7 @@ RSpec.describe UpdateObservationTool, type: :model do
         tool.call(observation_id: 999_999, text_content: 'Changed')
       }.to raise_error(McpGraphMemErrors::ResourceNotFound, /not found/) do |error|
         expect(error.next_move).to include('`get_entities`')
-        expect(error.next_move).to include('`update_observation`')
+        expect(error.next_move).to include('`graph_edit`')
       end
     end
 

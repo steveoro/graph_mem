@@ -120,7 +120,7 @@ RSpec.describe UpdateEntityTool, type: :model do
         }.to raise_error(McpGraphMemErrors::ResourceNotFound, /not found/) do |error|
           expect(error.category).to eq("not_found")
           expect(error.next_move).to include("search")
-          expect(error.next_move).to include("update_entity")
+          expect(error.next_move).to include("graph_edit")
         end
       end
     end

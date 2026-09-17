@@ -22,7 +22,7 @@ class ListMaintenanceReviewTool < ApplicationTool
     "Do not use for whole report documents; use `get_maintenance_reports` instead. " \
     "Do not use to apply a row; use `apply_maintenance_review` instead. " \
     "Do not use to dismiss, ignore, or restore a row; use `dismiss_maintenance_review` instead. " \
-    "Do not use to merge two known entity ids; use `merge_entities` instead."
+    "Do not use to merge two known entity ids; use `graph_delete` instead."
 
   arguments do
     optional(:report_type).filled(:string).description('Report type. Defaults to "compaction_review".')

@@ -7,6 +7,7 @@ class CreateObservationTool < ApplicationTool
 
   mcp_metadata(
     profiles: %i[default maintenance],
+    advertised: false,
     read_only_hint: false,
     destructive_hint: false,
     idempotent_hint: false,
@@ -17,9 +18,9 @@ class CreateObservationTool < ApplicationTool
     "(integer; also accepts entity name) and `text_content` (string); optional `confidence` (float 0-1), " \
     "`source` (string), `valid_from` (ISO 8601 string), `valid_until` (ISO 8601 string), `tags` (array of strings). " \
     "Aliases `content`/`contents` map to `text_content`. Do not use to edit or supersede an existing observation; " \
-    "use `update_observation` instead. Do not use to mark a fact obsolete; use `delete_observation` instead. " \
-    "Do not use to create a new node; use `create_entity` instead. " \
-    "Do not use for a batch of up to 50 creates; use `bulk_update` instead."
+    "use `graph_edit` instead. Do not use to mark a fact obsolete; use `graph_delete` instead. " \
+    "Do not use to create a new node; use `graph_write` instead. " \
+    "Do not use for a batch of up to 50 creates; use `graph_write` instead."
 
   arguments do
     required(:entity_id).filled(:integer).description("The ID of the entity to add the observation to")
@@ -34,36 +35,36 @@ class CreateObservationTool < ApplicationTool
   def call(entity_id:, text_content:, confidence: nil, source: nil, valid_from: nil, valid_until: nil, tags: [])
     logger.info "Performing CreateObservationTool with entity_id: #{entity_id}, text_content: '#{text_content}'"
     begin
-      entity = MemoryEntity.find(entity_id)
-
-      new_observation = MemoryObservation.create!(
-        memory_entity: entity,
-        content: text_content,
-        confidence: confidence,
-        source: source,
-        valid_from: valid_from,
-        valid_until: valid_until,
-        tags: tags
-      )
-      logger.info "Created observation: #{new_observation.inspect}"
-
-      MemoryObservationSerializer.call(
-        new_observation,
-        content_key: :observation_content,
-        include_entity_id: true
+      GraphWriteService.execute_one(
+        "create_observation",
+        {
+          entity_id: entity_id,
+          text_content: text_content,
+          confidence: confidence,
+          source: source,
+          valid_from: valid_from,
+          valid_until: valid_until,
+          tags: tags
+        },
+        logger: logger
       )
     rescue ActiveRecord::RecordNotFound => e
       error_message = "Entity with ID=#{entity_id} not found."
       logger.error "ResourceNotFound in CreateObservationTool: #{error_message} (was: #{e.message})"
       raise McpGraphMemErrors::ResourceNotFound.new(
         error_message,
-        next_move: "Call `search` to find the entity, then retry `create_observation`."
+        next_move: "Call `search` to find the entity, then retry `graph_write`."
       )
     rescue ActiveRecord::RecordInvalid => e
       error_message = "Validation Failed: #{e.record.errors.full_messages.join(', ')}. " \
-        "Correct `text_content` and optional fields to match the `create_observation` schema and retry."
+        "Correct `text_content` and optional fields to match the `graph_write` schema and retry."
       logger.error "InvalidArguments in CreateObservationTool: #{error_message} (was: #{e.message})"
       raise FastMcp::Tool::InvalidArgumentsError, error_message
+    rescue FastMcp::Tool::InvalidArgumentsError => e
+      raise FastMcp::Tool::InvalidArgumentsError,
+            "Validation Failed: #{e.message}. Correct fields and retry `graph_write`."
+    rescue McpGraphMemErrors::Error
+      raise
     rescue StandardError => e
       raise if ToolError::TIMEOUT_CLASSES.any? { |klass| e.is_a?(klass) }
 

@@ -8,6 +8,7 @@ class DeleteObservationTool < ApplicationTool
 
   mcp_metadata(
     profiles: %i[default maintenance],
+    advertised: false,
     read_only_hint: false,
     destructive_hint: true,
     idempotent_hint: true,
@@ -17,8 +18,8 @@ class DeleteObservationTool < ApplicationTool
   description "Mark one observation obsolete so it is excluded from default reads and search; does not delete entities " \
     "or relations. Pass required `observation_id` (integer); optional `reason` (string). " \
     "Repeating on an inactive observation is safe. Do not use to replace a fact while retaining history; " \
-    "use `update_observation` with supersede true instead. Do not use to add a fact; use `create_observation` instead. " \
-    "Do not use to destroy an entity; use `delete_entity` instead."
+    "use `graph_edit` with supersede true instead. Do not use to add a fact; use `graph_write` instead. " \
+    "Do not use to destroy an entity; use `graph_delete` instead."
 
   arguments do
     required(:observation_id).filled(:integer).description("The ID of the observation to delete.")
@@ -43,21 +44,17 @@ class DeleteObservationTool < ApplicationTool
     logger.info "Performing DeleteObservationTool with observation_id: #{observation_id}, reason: #{reason}"
 
     begin
-      observation = MemoryObservation.find(observation_id)
-      observation.mark_obsolete!(reason: reason)
-      logger.info "Marked observation with ID #{observation.id} obsolete"
-
-      MemoryObservationSerializer.call(
-        observation,
-        content_key: :observation_content,
-        include_entity_id: true
-      ).merge(message: "Observation with ID=#{observation_id} marked obsolete successfully.")
+      GraphDeleteService.execute_one(
+        "delete_observation",
+        observation_id: observation_id,
+        reason: reason
+      )
     rescue ActiveRecord::RecordNotFound => e
       error_message = "Observation with ID=#{observation_id} not found."
       logger.error "ResourceNotFound in DeleteObservationTool: #{error_message} (was: #{e.message})"
       raise McpGraphMemErrors::ResourceNotFound.new(
         error_message,
-        next_move: "Call `get_entities` with include_obsolete if needed to list observation ids, then retry `delete_observation`."
+        next_move: "Call `get_entities` with include_obsolete if needed to list observation ids, then retry `graph_delete`."
       )
     rescue ActiveRecord::RecordInvalid => e
       error_message = "Failed to mark observation with ID=#{observation_id} obsolete: #{e.message}"
@@ -65,7 +62,7 @@ class DeleteObservationTool < ApplicationTool
       raise McpGraphMemErrors::OperationFailed.new(
         error_message,
         category: "validation",
-        next_move: "Call `get_entities` with include_obsolete if needed to inspect the observation, then retry `delete_observation`."
+        next_move: "Call `get_entities` with include_obsolete if needed to inspect the observation, then retry `graph_delete`."
       )
     rescue StandardError => e
       raise if ToolError::TIMEOUT_CLASSES.any? { |klass| e.is_a?(klass) }

@@ -4,6 +4,7 @@ require 'rails_helper'
 
 RSpec.describe CreateEntityTool, type: :model do
   let(:tool) { described_class.new }
+  let(:vector_strategy) { instance_double(VectorSearchStrategy, search: []) }
 
   describe 'class methods' do
     describe '.tool_name' do
@@ -35,7 +36,7 @@ RSpec.describe CreateEntityTool, type: :model do
 
   describe '#call' do
     before do
-      allow_any_instance_of(CreateEntityTool).to receive(:find_similar_entity).and_return(nil)
+      allow(VectorSearchStrategy).to receive(:new).and_return(vector_strategy)
     end
 
     context 'with required parameters only' do
@@ -105,7 +106,7 @@ RSpec.describe CreateEntityTool, type: :model do
         similar_result = VectorSearchStrategy::SearchResult.new(
           entity: existing, distance: 0.1
         )
-        allow_any_instance_of(CreateEntityTool).to receive(:find_similar_entity).and_return(similar_result)
+        allow(vector_strategy).to receive(:search).and_return([ similar_result ])
 
         result = tool.call(name: 'Existing Project Copy', entity_type: 'Project')
 
@@ -115,7 +116,7 @@ RSpec.describe CreateEntityTool, type: :model do
       end
 
       it 'creates entity when no similar entity is found' do
-        allow_any_instance_of(CreateEntityTool).to receive(:find_similar_entity).and_return(nil)
+        allow(vector_strategy).to receive(:search).and_return([])
 
         result = tool.call(name: 'Unique Entity', entity_type: 'Project')
         expect(result[:entity_id]).to be_a(Integer)
@@ -127,9 +128,9 @@ RSpec.describe CreateEntityTool, type: :model do
       it 'does not block creation when a similar entity exists with a different entity_type' do
         _existing = MemoryEntity.create!(name: 'Database Migration', entity_type: 'Project')
 
-        allow_any_instance_of(CreateEntityTool).to receive(:find_similar_entity)
-          .with('Database Migration Plan', 'Task')
-          .and_return(nil)
+        allow(vector_strategy).to receive(:search)
+          .with("Task: Database Migration Plan", limit: 1, entity_type: "Task")
+          .and_return([])
 
         result = tool.call(name: 'Database Migration Plan', entity_type: 'Task')
 
@@ -144,8 +145,7 @@ RSpec.describe CreateEntityTool, type: :model do
         similar_result = VectorSearchStrategy::SearchResult.new(
           entity: existing, distance: 0.15
         )
-        allow_any_instance_of(CreateEntityTool).to receive(:find_similar_entity)
-          .and_return(similar_result)
+        allow(vector_strategy).to receive(:search).and_return([ similar_result ])
 
         result = tool.call(name: 'Database Migration Copy', entity_type: 'Task')
 
@@ -157,6 +157,7 @@ RSpec.describe CreateEntityTool, type: :model do
     context 'validation errors' do
       it 'raises InvalidArgumentsError for duplicate name' do
         MemoryEntity.create!(name: 'Duplicate', entity_type: 'Project')
+        allow(vector_strategy).to receive(:search).and_return([])
 
         expect {
           tool.call(name: 'Duplicate', entity_type: 'Project')
@@ -179,7 +180,6 @@ RSpec.describe CreateEntityTool, type: :model do
     context 'error handling' do
       it 'raises InternalServerError on unexpected errors without leaking the original message' do
         allow(MemoryEntity).to receive(:create!).and_raise(StandardError.new("secret-db-failure"))
-        allow_any_instance_of(CreateEntityTool).to receive(:find_similar_entity).and_return(nil)
 
         expect {
           tool.call(name: 'Fail', entity_type: 'Project')
@@ -190,7 +190,6 @@ RSpec.describe CreateEntityTool, type: :model do
 
       it 're-raises Timeout::Error so ToolError can map it to timeout' do
         allow(MemoryEntity).to receive(:create!).and_raise(Timeout::Error.new("execution expired"))
-        allow_any_instance_of(CreateEntityTool).to receive(:find_similar_entity).and_return(nil)
 
         expect {
           tool.call(name: 'Fail', entity_type: 'Project')
@@ -198,9 +197,7 @@ RSpec.describe CreateEntityTool, type: :model do
       end
 
       it 're-raises Timeout::Error from the dedup check so ToolError can map it to timeout' do
-        allow_any_instance_of(CreateEntityTool).to receive(:find_similar_entity).and_call_original
-        allow_any_instance_of(VectorSearchStrategy).to receive(:search)
-          .and_raise(Timeout::Error.new("execution expired"))
+        allow(vector_strategy).to receive(:search).and_raise(Timeout::Error.new("execution expired"))
 
         expect {
           tool.call(name: 'Timeout Dedup', entity_type: 'Project')

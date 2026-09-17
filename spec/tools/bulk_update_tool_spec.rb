@@ -159,7 +159,7 @@ RSpec.describe BulkUpdateTool, type: :model do
           ])
         }.to raise_error(FastMcp::Tool::InvalidArgumentsError, /rolled back/) do |error|
           expect(error.message).to match(/Fix the listed op errors/)
-          expect(error.message).to include('`bulk_update`')
+          expect(error.message).to include('`graph_write`')
         end
 
         expect(MemoryEntity.count).to eq(initial_entity_count)
@@ -210,7 +210,7 @@ RSpec.describe BulkUpdateTool, type: :model do
         }.to raise_error(FastMcp::Tool::InvalidArgumentsError, /Maximum #{BulkUpdateTool::MAX_OPERATIONS}/) do |error|
           expect(error.message).to include("got 51")
           expect(error.message).to match(/Split into multiple/)
-          expect(error.message).to include('`bulk_update`')
+          expect(error.message).to include('`graph_write`')
         end
       end
 

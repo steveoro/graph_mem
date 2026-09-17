@@ -100,7 +100,7 @@ RSpec.describe CreateRelationTool, type: :model do
         }.to raise_error(McpGraphMemErrors::ResourceNotFound, "Entity with ID=999999 not found.") do |error|
           expect(error.category).to eq("not_found")
           expect(error.next_move).to include("`search`")
-          expect(error.next_move).to include("`create_relation`")
+          expect(error.next_move).to include("`graph_write`")
         end
       end
 
@@ -110,7 +110,7 @@ RSpec.describe CreateRelationTool, type: :model do
         }.to raise_error(McpGraphMemErrors::ResourceNotFound, "Entity with ID=999999 not found.") do |error|
           expect(error.category).to eq("not_found")
           expect(error.next_move).to include("`search`")
-          expect(error.next_move).to include("`create_relation`")
+          expect(error.next_move).to include("`graph_write`")
         end
       end
     end
@@ -124,7 +124,7 @@ RSpec.describe CreateRelationTool, type: :model do
         }.to raise_error(McpGraphMemErrors::OperationFailed, /already exists/) do |error|
           expect(error.category).to eq("validation")
           expect(error.next_move).to include("`traverse_graph`")
-          expect(error.next_move).to include("`delete_relation`")
+          expect(error.next_move).to include("`graph_delete`")
         end
       end
 

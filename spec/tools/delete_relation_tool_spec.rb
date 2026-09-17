@@ -78,7 +78,7 @@ RSpec.describe DeleteRelationTool, type: :model do
         }.to raise_error(McpGraphMemErrors::ResourceNotFound, "Relation with ID=999999 not found.") do |error|
           expect(error.category).to eq("not_found")
           expect(error.next_move).to include("`traverse_graph`")
-          expect(error.next_move).to include("`get_entities`")
+          expect(error.next_move).to include("`graph_delete`")
         end
       end
     end
@@ -107,7 +107,7 @@ RSpec.describe DeleteRelationTool, type: :model do
         relation = MemoryRelation.create!(
           from_entity_id: entity_a.id, to_entity_id: entity_b.id, relation_type: 'depends_on'
         )
-        allow(MemoryRelation).to receive(:find_by).and_raise(StandardError.new("DB error"))
+        allow(MemoryRelation).to receive(:find).and_raise(StandardError.new("DB error"))
 
         expect {
           tool.call(relation_id: relation.id)
@@ -117,7 +117,7 @@ RSpec.describe DeleteRelationTool, type: :model do
       end
 
       it 're-raises Timeout::Error so the envelope can map category timeout' do
-        allow(MemoryRelation).to receive(:find_by).and_raise(Timeout::Error.new("execution expired"))
+        allow(MemoryRelation).to receive(:find).and_raise(Timeout::Error.new("execution expired"))
 
         expect {
           tool.call(relation_id: 1)

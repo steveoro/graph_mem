@@ -18,3 +18,6 @@ rules for convenience, but apply whether or not the session uses GraphMem.
 - **Refactor early**: Split files >500 lines or functions >60 lines.
 - **Evolve, don't fork**: Fix within current patterns before introducing new tech; remove old impls if replaced.
 - **Document**: Record critical changes; remove one-off helpers once used.
+- **Document public APIs**: When adding or editing classes, describe basic
+  usage and the expected parameter/return types on public methods. Prefer
+  concise YARD-style comments for Ruby.

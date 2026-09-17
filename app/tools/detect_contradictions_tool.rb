@@ -19,7 +19,7 @@ class DetectContradictionsTool < ApplicationTool
     "Does not merge or delete. Do not use for trust ranking; use `rank_observations` instead. " \
     "Do not use for duplicate entities; use `suggest_merges` instead. " \
     "Do not use to read stored reports; use `get_maintenance_reports` instead. " \
-    "Do not use to resolve a conflicting fact; use `update_observation` or `delete_observation` instead."
+    "Do not use to resolve a conflicting fact; use `graph_edit` or `graph_delete` instead."
 
   arguments do
     required(:entity_id).filled(:integer).description("The ID of the entity to scan for contradictions.")

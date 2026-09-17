@@ -5,6 +5,12 @@ All notable changes to GraphMem will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.38.0] - 2026-09-17
+- Consolidated ten mutation tools into atomic `graph_write`, `graph_edit`, and `graph_delete` operation batches.
+- Added shared mutation services with indexed errors, full rollback, Project protection, audit-reason preservation, and merge delegation.
+- Added batch-wide entity duplicate preflight: a possible duplicate prevents every write and returns candidate details.
+- Kept all prior mutation names callable but hidden from `tools/list`, with compaction-valve and telemetry coverage retained.
+
 ## [1.37.0] - 2026-09-17
 - Consolidated entity discovery into `search`, with uniform summary, subgraph, and catalog response envelopes.
 - Added `get_entities` for one-or-many entity loads with explicit all/internal relation projections.

@@ -17,7 +17,7 @@ class GetCurrentTimeTool < ApplicationTool
   description "Return the current server time as an ISO 8601 string. Takes no arguments. " \
     "Do not use for software version; use `get_version` instead. " \
     "Do not use for graph health metrics; use `get_graph_stats` instead. " \
-    "Do not use to set observation validity windows; use `create_observation` or `update_observation` instead."
+    "Do not use to set observation validity windows; use `graph_write` or `graph_edit` instead."
 
   # No arguments are needed for this tool.
 

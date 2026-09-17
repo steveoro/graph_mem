@@ -72,5 +72,28 @@ RSpec.describe "MCP messages endpoint", type: :request do
       expect(response).to have_http_status(:ok)
       expect(AgentContext.find_by!(client_id: "legacy-hidden-alias").last_tool_name).to eq("search_entities")
     end
+
+    it "keeps hidden mutation adapters callable" do
+      entity = MemoryEntity.create!(name: "Legacy mutation adapter", entity_type: "Task")
+      host! "localhost"
+
+      post "/mcp/messages",
+        params: {
+          jsonrpc: "2.0",
+          method: "tools/call",
+          params: {
+            name: "update_entity",
+            arguments: { entity_id: entity.id, description: "Legacy updated" }
+          },
+          id: 4
+        }.to_json,
+        headers: {
+          "CONTENT_TYPE" => "application/json",
+          "X-MCP-Client" => "legacy-hidden-mutation"
+        }
+
+      expect(response).to have_http_status(:ok)
+      expect(entity.reload.description).to eq("Legacy updated")
+    end
   end
 end

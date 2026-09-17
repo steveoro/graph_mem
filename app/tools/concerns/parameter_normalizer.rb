@@ -31,6 +31,12 @@ module ParameterNormalizer
     "create_relation"    => :relations,
     "relation"           => :relations
   }.freeze
+  GRAPH_WRITE_TYPE_ALIASES = {
+    "entity" => "create_entity",
+    "observation" => "create_observation",
+    "add_observation" => "create_observation",
+    "relation" => "create_relation"
+  }.freeze
 
   class << self
     def normalize(tool_name, params)
@@ -40,6 +46,8 @@ module ParameterNormalizer
       if tool_name == "bulk_update"
         params = normalize_bulk_update(params)
       end
+      params = normalize_graph_write(params) if tool_name == "graph_write"
+      params = normalize_typed_operations(params) if tool_name.in?(%w[graph_edit graph_delete])
       params = normalize_search(params) if tool_name == "search"
       params = normalize_get_entities(params) if tool_name == "get_entities"
 
@@ -123,6 +131,32 @@ module ParameterNormalizer
       result = params.dup
       result[:per_page] = result[:limit] if result[:per_page].blank? && result[:limit].present?
       result.delete(:limit)
+      result
+    end
+
+    def normalize_graph_write(params)
+      result = normalize_typed_operations(params, type_aliases: GRAPH_WRITE_TYPE_ALIASES)
+      result[:observations] = Array(result[:observations]).map { |item| apply_field_aliases(item) } if result.key?(:observations)
+      result
+    end
+
+    def normalize_typed_operations(params, type_aliases: {})
+      result = params.dup
+      return result unless result[:operations].is_a?(Array)
+
+      result[:operations] = result[:operations].flat_map do |raw_operation|
+        operation = apply_field_aliases(raw_operation.to_h)
+        operation[:from_entity_id] ||= operation.delete(:from) if operation.key?(:from)
+        operation[:to_entity_id] ||= operation.delete(:to) if operation.key?(:to)
+        type = operation[:type].to_s.strip.downcase
+        operation[:type] = type_aliases.fetch(type, type)
+
+        if operation[:type] == "create_observation" && operation[:contents].is_a?(Array)
+          operation.delete(:contents).map { |content| operation.merge(text_content: content) }
+        else
+          operation
+        end
+      end
       result
     end
 

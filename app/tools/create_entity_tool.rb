@@ -9,6 +9,7 @@ class CreateEntityTool < ApplicationTool
 
   mcp_metadata(
     profiles: %i[default maintenance],
+    advertised: false,
     read_only_hint: false,
     destructive_hint: false,
     idempotent_hint: false,
@@ -19,9 +20,9 @@ class CreateEntityTool < ApplicationTool
     "optional `observations` (array of strings), `aliases` (pipe-separated string), `description` (string). " \
     "Alias `entityType` maps to `entity_type`. Types are canonicalized; cosine distance < 0.25 returns a warning " \
     "instead of creating. Do not use until you have searched for an existing node; use `search` first. " \
-    "Do not use to add facts to a known entity; use `create_observation` instead. " \
-    "Do not use to change metadata on an existing node; use `update_entity` instead. " \
-    "Do not use for an atomic batch of up to 50 creates; use `bulk_update` instead."
+    "Do not use to add facts to a known entity; use `graph_write` instead. " \
+    "Do not use to change metadata on an existing node; use `graph_edit` instead. " \
+    "Do not use for an atomic batch of up to 50 creates; use `graph_write` instead."
 
   arguments do
     required(:name).filled(:string).description("The unique name for the new entity.")
@@ -33,51 +34,33 @@ class CreateEntityTool < ApplicationTool
 
   def call(name:, entity_type:, observations: [], aliases: nil, description: nil)
     logger.info "Performing CreateEntityTool with name: #{name}, type: #{entity_type}"
-
-    similar = find_similar_entity(name, entity_type)
-    if similar
+    service_result = GraphWriteService.execute_one(
+      "create_entity",
+      {
+        name: name,
+        entity_type: entity_type,
+        observations: observations,
+        aliases: aliases,
+        description: description
+      },
+      logger: logger
+    )
+    if service_result[:status] == "possible_duplicate"
+      candidate = service_result[:candidate]
       return {
         warning: "A similar entity already exists. Use update_entity or create_observation to add information to it instead of creating a duplicate.",
         existing_entity: {
-          entity_id: similar.entity.id,
-          name: similar.entity.name,
-          entity_type: similar.entity.entity_type,
-          description: similar.entity.description,
-          aliases: similar.entity.aliases,
-          similarity_distance: similar.distance.round(4)
+          entity_id: candidate[:entity_id],
+          name: candidate[:name],
+          entity_type: candidate[:entity_type],
+          description: candidate[:description],
+          aliases: candidate[:aliases],
+          similarity_distance: candidate[:similarity_distance]
         }
       }
     end
 
-    new_entity = ActiveRecord::Base.transaction do
-      entity = MemoryEntity.create!(
-        name: name,
-        entity_type: entity_type,
-        aliases: aliases,
-        description: description
-      )
-
-      observations.each do |obs_content|
-        MemoryObservation.create!(
-          memory_entity: entity,
-          content: obs_content
-        )
-      end
-
-      entity
-    end
-    logger.info "Created entity: #{new_entity.inspect}"
-
-    {
-      entity_id: new_entity.id,
-      name: new_entity.name,
-      entity_type: new_entity.entity_type,
-      description: new_entity.description,
-      created_at: new_entity.created_at.iso8601,
-      updated_at: new_entity.updated_at.iso8601,
-      aliases: new_entity.aliases,
-      memory_observations_count: new_entity.memory_observations.count
-    }
+    service_result
   rescue ActiveRecord::RecordInvalid => e
     error_message = "Validation Failed: #{e.record.errors.full_messages.join(', ')}. " \
       "Provide a unique non-blank name and entity_type; call `search` if this name may already exist."
@@ -85,25 +68,12 @@ class CreateEntityTool < ApplicationTool
     raise FastMcp::Tool::InvalidArgumentsError, error_message
   rescue *ToolError::TIMEOUT_CLASSES
     raise
+  rescue FastMcp::Tool::InvalidArgumentsError => e
+    raise FastMcp::Tool::InvalidArgumentsError, "Validation Failed: #{e.message}"
+  rescue McpGraphMemErrors::Error
+    raise
   rescue StandardError => e
     logger.error "CreateEntityTool unexpected error: #{e.class}: #{e.message}"
     raise McpGraphMemErrors::InternalServerError, "An unexpected error occurred."
-  end
-
-  private
-
-  def find_similar_entity(name, entity_type)
-    composite = "#{entity_type}: #{name}"
-    vector_strategy = VectorSearchStrategy.new
-    results = vector_strategy.search(composite, limit: 1, entity_type: entity_type)
-    result = results.first
-    return result if result && result.distance < DEDUP_DISTANCE_THRESHOLD
-
-    nil
-  rescue *ToolError::TIMEOUT_CLASSES
-    raise
-  rescue StandardError => e
-    logger.debug "CreateEntityTool: dedup check unavailable — #{e.message}"
-    nil
   end
 end

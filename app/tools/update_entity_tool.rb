@@ -8,6 +8,7 @@ class UpdateEntityTool < ApplicationTool
 
   mcp_metadata(
     profiles: %i[default maintenance],
+    advertised: false,
     read_only_hint: false,
     destructive_hint: true,
     idempotent_hint: true,
@@ -16,9 +17,9 @@ class UpdateEntityTool < ApplicationTool
 
   description "Update metadata of an existing entity (not observations). Pass required `entity_id` (integer); " \
     "optional `name` (unique string), `entity_type` (canonicalized string), `aliases` (replaces existing; empty string clears), " \
-    "`description` (empty string clears). Do not use to add or edit facts; use `create_observation` or `update_observation` instead. " \
-    "Do not use to create a node; use `create_entity` instead. Do not use to read; use `get_entities` instead. " \
-    "Do not use to delete; use `delete_entity` instead. Do not use to combine two entities; use `merge_entities` instead."
+    "`description` (empty string clears). Do not use to add or edit facts; use `graph_write` or `graph_edit` instead. " \
+    "Do not use to create a node; use `graph_write` instead. Do not use to read; use `get_entities` instead. " \
+    "Do not use to delete; use `graph_delete` instead. Do not use to combine two entities; use `graph_delete` instead."
 
   arguments do
     required(:entity_id).filled(:integer).description("The ID of the entity to update.")
@@ -44,47 +45,21 @@ class UpdateEntityTool < ApplicationTool
 
   def call(entity_id:, name: nil, entity_type: nil, aliases: nil, description: nil)
     logger.info "Performing UpdateEntityTool for entity_id: #{entity_id}"
-
-    # Check if at least one updatable attribute is provided
-    unless name.present? || entity_type.present? || !aliases.nil? || !description.nil?
-      raise FastMcp::Tool::InvalidArgumentsError,
-            "At least one attribute (name, entity_type, aliases, or description) must be provided for update."
-    end
-
-    entity = MemoryEntity.find_by(id: entity_id)
-    unless entity
-      raise McpGraphMemErrors::ResourceNotFound.new(
-        "Entity with ID=#{entity_id} not found.",
-        next_move: "Call `search`, then retry `update_entity` with a known id."
-      )
-    end
-
-    ActiveRecord::Base.transaction do
-      entity.name = name if name.present?
-      entity.entity_type = entity_type if entity_type.present?
-      entity.aliases = aliases unless aliases.nil?
-      entity.description = description unless description.nil?
-
-      entity.save!
-    end
-
-    logger.info "Updated entity: #{entity.inspect}"
-
-    {
-      entity_id: entity.id,
-      name: entity.name,
-      entity_type: entity.entity_type,
-      description: entity.description,
-      aliases: entity.aliases,
-      created_at: entity.created_at.iso8601,
-      updated_at: entity.updated_at.iso8601,
-      memory_observations_count: entity.memory_observations_count
-    }
+    GraphEditService.execute_one(
+      "update_entity",
+      {
+        entity_id: entity_id,
+        name: name,
+        entity_type: entity_type,
+        aliases: aliases,
+        description: description
+      }.compact
+    )
   rescue FastMcp::Tool::InvalidArgumentsError
     raise
   rescue ActiveRecord::RecordInvalid => e
     error_message = "Validation Failed: #{e.record.errors.full_messages.join(', ')}. " \
-      "Provide a unique name and valid entity_type, then retry `update_entity`."
+      "Provide a unique name and valid entity_type, then retry `graph_edit`."
     logger.error "InvalidArguments in UpdateEntityTool: #{error_message} (was: #{e.message})"
     raise FastMcp::Tool::InvalidArgumentsError, error_message
   rescue McpGraphMemErrors::ResourceNotFound

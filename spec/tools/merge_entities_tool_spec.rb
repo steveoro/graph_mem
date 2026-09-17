@@ -44,7 +44,7 @@ RSpec.describe MergeEntitiesTool, type: :model do
       expect {
         tool.call(source_entity_id: target.id, target_entity_id: target.id)
       }.to raise_error(FastMcp::Tool::InvalidArgumentsError, /Cannot merge a node into itself/) do |error|
-        expect(error.message).to include("`delete_entity`")
+        expect(error.message).to include("`graph_delete`")
       end
     end
 
@@ -54,8 +54,8 @@ RSpec.describe MergeEntitiesTool, type: :model do
       expect {
         tool.call(source_entity_id: project_source.id, target_entity_id: target.id)
       }.to raise_error(FastMcp::Tool::InvalidArgumentsError, /Project root entities cannot be deleted or merged away/) do |error|
-        expect(error.message).to include("`merge_entities`")
-        expect(error.message).to include("`delete_entity`")
+        expect(error.message).to include("`graph_edit`")
+        expect(error.message).to include("`graph_write`")
       end
 
       expect(MemoryEntity.find_by(id: project_source.id)).to be_present
@@ -67,7 +67,7 @@ RSpec.describe MergeEntitiesTool, type: :model do
       expect {
         tool.call(source_entity_id: source.id, target_entity_id: issue_target.id)
       }.to raise_error(FastMcp::Tool::InvalidArgumentsError, /Cannot merge entities of different types/) do |error|
-        expect(error.message).to include("`delete_entity`")
+        expect(error.message).to include("`graph_delete`")
       end
 
       expect(MemoryEntity.find_by(id: source.id)).to be_present
@@ -79,7 +79,7 @@ RSpec.describe MergeEntitiesTool, type: :model do
         tool.call(source_entity_id: 999_999, target_entity_id: target.id)
       }.to raise_error(McpGraphMemErrors::ResourceNotFound, /Source node not found/) do |error|
         expect(error.next_move).to include("`search`")
-        expect(error.next_move).to include("`merge_entities`")
+        expect(error.next_move).to include("`graph_delete`")
       end
     end
 
@@ -181,7 +181,7 @@ RSpec.describe MergeEntitiesTool, type: :model do
       expect {
         tool.call(source_entity_id: source.id, target_entity_id: target.id)
       }.to raise_error(FastMcp::Tool::InvalidArgumentsError, /cycle/) do |error|
-        expect(error.message).to include("`delete_entity`")
+        expect(error.message).to include("`graph_delete`")
       end
     end
 
@@ -197,7 +197,7 @@ RSpec.describe MergeEntitiesTool, type: :model do
       }.to raise_error(McpGraphMemErrors::OperationFailed, "The merge could not be completed.") do |error|
         expect(error.message).not_to include("secret-token")
         expect(error.next_move).to include("`suggest_merges`")
-        expect(error.next_move).to include("`merge_entities`")
+        expect(error.next_move).to include("`graph_delete`")
       end
     end
 

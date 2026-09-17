@@ -28,7 +28,7 @@ client-side label, not part of the tool contract.
    - Orient -> Recall -> Work -> Persist.
 
 3. **Search before create**
-   - Always run `search` before `create_entity` to avoid duplicates.
+   - Always run `search` before `graph_write` to avoid duplicates.
 
 4. **Choose the smallest connection profile**
    - `/mcp` exposes ordinary context, read, and graph-write tools.
@@ -78,17 +78,18 @@ Before calling any `graph_mem` tool for the first time in a session:
 
 ## Phase 4 - Persist (before final response)
 
-1. Write newly learned facts with `create_observation` on existing entities.
-   - Use `update_observation` for corrections.
+1. Write newly learned facts with a `graph_write` `create_observation`
+   operation.
+   - Use a `graph_edit` `update_observation` operation for corrections.
    - Set `supersede: true` when retaining the prior version matters.
-   - Use `delete_observation` to mark a fact obsolete rather than hard-delete
-     it.
+   - Use a `graph_delete` `delete_observation` operation to mark a fact
+     obsolete rather than hard-delete it.
    - Search or load the entity first and do not restate an existing fact.
 2. For new concepts:
-   - `create_entity`
-   - `create_relation` with a specific relation type.
-3. For batch updates, prefer `bulk_update` (max 50 operations).
-4. Routine duplicate compaction is handled by the background dream-state job. On a maintenance-profile connection, confirm spotted duplicates with `suggest_merges`, then execute with `merge_entities(source_entity_id, target_entity_id)`.
+   - Add `create_entity` operations to `graph_write`.
+   - Add `create_relation` operations with a specific relation type.
+3. For batch updates, prefer `graph_write` (max 50 operations).
+4. Routine duplicate compaction is handled by the background dream-state job. On a maintenance-profile connection, confirm spotted duplicates with `suggest_merges`, then execute a `graph_delete` `merge_entities` operation.
 5. Call `clear_context` only when project scope is no longer relevant (safe: affects only your own client bucket).
 
 ## Multi-Agent & Dream-State Awareness
@@ -99,7 +100,7 @@ Before calling any `graph_mem` tool for the first time in a session:
   cases are queued for review.
 - Maintenance tools are available on `/mcp/maintenance`, not the default connection.
 - `dream_state_status` reports whether compaction is running/paused plus stats.
-- `list_maintenance_review` returns queued merge/orphan rows; action good ones with `apply_maintenance_review` (or `merge_entities` when both entity ids are already known). Use `get_maintenance_reports` for stored report documents, not row pagination.
+- `list_maintenance_review` returns queued merge/orphan rows; action good ones with `apply_maintenance_review` (or a `graph_delete` `merge_entities` operation when both entity ids are known). Use `get_maintenance_reports` for stored report documents, not row pagination.
 - Mutating tools auto-pause compaction, so no coordination is needed — but
   search results may shift slightly mid-run.
 
@@ -110,9 +111,11 @@ graph_mem accepts both native and MCP-memory-style forms:
 - `entity_type` and `entityType`
 - ID or name references for entities
 - `text_content`, `content`, or `contents` for observations
-- `bulk_update` via:
+- `graph_write` via:
   - native arrays (`entities`, `observations`, `relations`), or
   - `operations` array (type-discriminated items)
+- `graph_edit` and `graph_delete` accept type-discriminated `operations`
+  arrays.
 
 Default recommendation: use native snake_case keys unless compatibility with external payloads is needed.
 
@@ -170,9 +173,7 @@ claims supplied by the model.
 
 ### Persist template
 
-`create_observation` — `{"entity_id":456,"text_content":"[YYYY-MM-DD] <fact>"}`
-
-`bulk_update` — `{"operations":[{"type":"create_observation","entity_id":456,"text_content":"<fact>"}]}`
+`graph_write` — `{"operations":[{"type":"create_observation","entity_id":456,"text_content":"<fact>"}]}`
 
 ## Quality Guardrails
 

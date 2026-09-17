@@ -17,7 +17,7 @@ class SetContextTool < ApplicationTool
     "entities without hard-filtering results. Pass required `entity_id` (integer; also accepts an entity-name string). " \
     "Do not use to read the current project; use `get_context` instead. " \
     "Do not use to search across all projects; use `clear_context` instead. " \
-    "Do not use to change entity fields or create a project; use `update_entity` or `create_entity` instead."
+    "Do not use to change entity fields or create a project; use `graph_edit` or `graph_write` instead."
 
   arguments do
     required(:entity_id).filled(:integer).description("The ID of the entity to set as the active context.")

@@ -404,6 +404,55 @@ RSpec.describe ParameterNormalizer do
       end
     end
 
+    describe "canonical graph mutation operations" do
+      it "normalizes graph_write type and field aliases" do
+        result = described_class.normalize(
+          "graph_write",
+          {
+            operations: [
+              { type: "observation", entityId: 7, content: "Fact" },
+              { type: "relation", from: "A", to: "B", relationType: "part_of" }
+            ]
+          }
+        )
+
+        expect(result[:operations]).to eq(
+          [
+            { type: "create_observation", entity_id: 7, text_content: "Fact" },
+            { type: "create_relation", from_entity_id: "A", to_entity_id: "B", relation_type: "part_of" }
+          ]
+        )
+      end
+
+      it "expands graph_write observation contents" do
+        result = described_class.normalize(
+          "graph_write",
+          { operations: [ { type: "create_observation", entity_id: 7, contents: %w[One Two] } ] }
+        )
+
+        expect(result[:operations]).to eq(
+          [
+            { type: "create_observation", entity_id: 7, text_content: "One" },
+            { type: "create_observation", entity_id: 7, text_content: "Two" }
+          ]
+        )
+      end
+
+      it "normalizes graph_edit and graph_delete camelCase fields" do
+        edit = described_class.normalize(
+          "graph_edit",
+          { operations: [ { type: "update_observation", observationId: 4, content: "Changed" } ] }
+        )
+        delete = described_class.normalize(
+          "graph_delete",
+          { operations: [ { type: "merge_entities", sourceEntityId: 2, targetEntityId: 3 } ] }
+        )
+
+        expect(edit[:operations].first).to include(observation_id: 4, text_content: "Changed")
+        expect(delete[:operations].first).to include(source_entity_id: 2, target_entity_id: 3)
+      end
+    end
+
     describe "edge cases" do
       it "handles empty params" do
         result = described_class.normalize("get_context", {})

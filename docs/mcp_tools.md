@@ -1,6 +1,6 @@
 # MCP Tools Documentation
 
-Detailed reference for GraphMem's 31 advertised Model Context Protocol (MCP) tools and six
+Detailed reference for GraphMem's 24 advertised Model Context Protocol (MCP) tools and sixteen
 hidden compatibility aliases.
 
 ## Overview
@@ -9,16 +9,16 @@ MCP tools in GraphMem are Ruby classes that implement operations on the knowledg
 
 ## Connection Profiles
 
-GraphMem currently registers 37 callable tool classes and filters the advertised catalog by
+GraphMem currently registers 40 callable tool classes and filters the advertised catalog by
 connection URL:
 
-- `/mcp` — 21 canonical context, read, and graph-write tools
+- `/mcp` — 14 canonical context, read, and mutation tools
 - `/mcp/readonly` — 11 canonical context and read tools
-- `/mcp/maintenance` — all 31 canonical tools
+- `/mcp/maintenance` — all 24 canonical tools
 - `/mcp/sse` and `/mcp/messages` — legacy transport using the default profile
 
 Profiles govern call eligibility; calling a tool outside the selected profile returns `Tool not
-found`. The six Phase 2 read aliases remain callable in their profiles but are omitted from
+found`. The sixteen read and mutation aliases remain callable in their profiles but are omitted from
 `tools/list`, allowing old clients to migrate without imposing their schemas on new sessions.
 Profiles are selected when connecting and are not authorization boundaries.
 Every tool also publishes the standard MCP `readOnlyHint`, `destructiveHint`,
@@ -79,7 +79,25 @@ The fix is always the same: give each agent its own `X-MCP-Client` header value.
 - **Description:** Remove this MCP client's active project context so searches are unscoped across all projects; does not delete entities. Takes no arguments. Do not use to inspect the current scope; use `get_context` instead. Do not use to switch to a project; use `set_context` instead. Do not use to delete a project or other entity; use `delete_entity` instead.
 - **Parameters:** None
 
-## Entity Management (4 tools)
+## Graph Mutation (3 tools)
+
+#### `graph_write`
+- **Description:** Atomically create up to 50 entities, observations, and relations through type-discriminated `operations`; the former three-array bulk format is also accepted.
+- **Operation types:** `create_entity`, `create_observation`, `create_relation`.
+- **Duplicate policy:** Any possible entity duplicate prevents the entire batch and returns `status: "possible_duplicate"` with the operation index and candidate.
+
+#### `graph_edit`
+- **Description:** Atomically update entities and observations, including observation supersession.
+- **Operation types:** `update_entity`, `update_observation`.
+
+#### `graph_delete`
+- **Description:** Atomically delete entities/relations, obsolete observations, or merge entities. Project-root protection and per-operation audit reasons remain enforced.
+- **Operation types:** `delete_entity`, `delete_observation`, `delete_relation`, `merge_entities`.
+
+All three tools accept at most 50 logical operations and return `{ mode: "batch", status,
+results, summary }`. Any failed operation rolls back the full batch.
+
+## Legacy Entity Mutation Aliases
 
 #### `create_entity`
 - **Description:** Create a single new entity node. Pass required `name` (string) and `entity_type` (string); optional `observations` (array of strings), `aliases` (pipe-separated string), `description` (string). Alias `entityType` maps to `entity_type`. Types are canonicalized; cosine distance < 0.25 returns a warning instead of creating. Do not use until you have searched for an existing node; use `search` first. Do not use to add facts to a known entity; use `create_observation` instead. Do not use to change metadata on an existing node; use `update_entity` instead. Do not use for an atomic batch of up to 50 creates; use `bulk_update` instead.
@@ -203,9 +221,12 @@ See [Entity Management](#entity-management-4-tools).
 #### Compatibility aliases
 
 `search_entities`, `search_subgraph`, `list_entities`, `get_entity`,
-`get_subgraph_by_ids`, and `find_relations` remain callable with their prior
-schemas and response shapes. They are deprecated and omitted from `tools/list`;
-new clients should not discover or select them.
+`get_subgraph_by_ids`, `find_relations`, `create_entity`, `create_observation`,
+`create_relation`, `bulk_update`, `update_entity`, `update_observation`,
+`delete_entity`, `delete_observation`, `delete_relation`, and `merge_entities`
+remain callable with their prior schemas and response shapes. They are
+deprecated and omitted from `tools/list`; new clients should not discover or
+select them.
 
 #### `summarize`
 - **Description:** Summarize what the knowledge graph knows about a topic with deterministic source-backed evidence (optional LLM synthesis). Pass required `query` (string); optional `entity_id` (integer), `max_results` (integer, default 10), `max_observations` (integer, default 20), `observations_per_entity` (integer; 0 disables cap), `max_depth` (integer, default 0), `include_sources` (bool, default true), `scope` (string: context or global), `style` (string: concise or detailed). Do not use for match listings; use `search` instead. Do not use to inspect one known entity; use `get_entities` instead. Do not use for a structural neighborhood; use `traverse_graph` instead. Do not use for numeric health metrics; use `get_graph_stats` instead.

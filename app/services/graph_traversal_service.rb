@@ -19,6 +19,15 @@ class GraphTraversalService
     keyword_init: true
   )
 
+  # Performs bounded breadth-first expansion from one entity.
+  #
+  # @param start_entity_id [Integer, #to_i] traversal root
+  # @param max_depth [Integer] hop limit, clamped to 1..MAX_DEPTH
+  # @param direction [String, Symbol] `both`, `outgoing`, or `incoming`
+  # @param relation_types [Array<String>, nil] optional canonicalized edge types
+  # @param max_entities [Integer] result cap, clamped to MAX_ENTITIES
+  # @return [TraversalResult, nil] traversal metadata and ordered IDs, or nil
+  #   when the start entity does not exist
   def expand(start_entity_id:, max_depth: DEFAULT_MAX_DEPTH, direction: DEFAULT_DIRECTION,
              relation_types: nil, max_entities: DEFAULT_MAX_ENTITIES)
     start_id = start_entity_id.to_i
@@ -73,6 +82,15 @@ class GraphTraversalService
     )
   end
 
+  # Finds the shortest unweighted path between two entities within a hop limit.
+  #
+  # @param from_entity_id [Integer, #to_i] source entity
+  # @param to_entity_id [Integer, #to_i] destination entity
+  # @param max_depth [Integer] maximum hops, clamped to 1..MAX_DEPTH
+  # @param direction [String, Symbol] `both`, `outgoing`, or `incoming`
+  # @param relation_types [Array<String>, nil] optional canonicalized edge types
+  # @return [PathResult, Symbol] ordered shortest path, `:missing_from`, or
+  #   `:missing_to`
   def shortest_path(from_entity_id:, to_entity_id:, max_depth: DEFAULT_MAX_DEPTH,
                     direction: DEFAULT_DIRECTION, relation_types: nil)
     from_id = from_entity_id.to_i

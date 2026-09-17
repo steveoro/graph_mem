@@ -20,7 +20,7 @@ class DismissMaintenanceReviewTool < ApplicationTool
     "`report_type` (string, default compaction_review), `reason` (string). " \
     "Do not use to execute the suggestion; use `apply_maintenance_review` instead. " \
     "Do not use to look up a row; use `list_maintenance_review` instead. " \
-    "Do not use to merge entities; use `merge_entities` instead."
+    "Do not use to merge entities; use `graph_delete` instead."
 
   arguments do
     required(:item_id).filled(:string).description("Maintenance report row UUID.")

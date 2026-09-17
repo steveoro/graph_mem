@@ -172,6 +172,12 @@ RSpec.describe ApplicationTool do
       tool.call_with_schema_validation!(name: "test")
     end
 
+    it "keeps all canonical mutation tools behind the compaction valve" do
+      expect(%w[graph_write graph_edit graph_delete]).to all(
+        satisfy { |tool_name| ToolMutationPolicy.compaction_valve?(tool_name) }
+      )
+    end
+
     it "normalizes parameters before validation and dispatch" do
       tool = DslTestTool.new
       result, _meta = tool.call_with_schema_validation!(name: "test", count: 5)

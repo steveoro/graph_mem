@@ -224,6 +224,13 @@ too small to remove `summarize` or retire compatibility aliases.
 
 ## Phase 3 — Write consolidation (10 tools to 3)
 
+**Implementation status (2026-09-17): shipped in version 1.38.0.**
+
+`graph_write`, `graph_edit`, and `graph_delete` accept at most 50 logical
+operations and execute each batch inside one outer transaction. Shared services
+also power the ten hidden compatibility adapters, preserving legacy response
+shapes and telemetry names without nested MCP calls.
+
 `bulk_update` **already has the right shape**: a type-discriminated `operations` array accepting
 `create_entity`, `create_observation` and `create_relation` items. It is create-only, and its
 description currently steers single writes away from it ("Do not use for a single create; use
@@ -240,6 +247,15 @@ Extend the `operations` array to updates and deletes, then split by blast radius
 
 Keep `bulk_update`'s existing three-array form (`entities`, `observations`, `relations`) as an
 accepted alias on `graph_write`, since it is already documented and in use.
+
+Entity deduplication now applies before every `graph_write` batch. A candidate
+within distance 0.25 returns `status: "possible_duplicate"` with its operation
+index and writes nothing. `dry_run` remains deferred because forward references
+require simulated identifiers.
+
+The transitional registry now contains 40 callable classes with 16 hidden
+aliases. Advertised counts are 14 default, 11 readonly, and 24 maintenance;
+Phase 4 removes `clear_context` and `get_version` from default to reach 12.
 
 ### Why three and not one
 

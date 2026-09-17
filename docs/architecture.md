@@ -38,7 +38,7 @@ This document provides an overview of GraphMem's architecture, explaining how th
 
 GraphMem follows a layered architecture that separates concerns between:
 
-1. **MCP Interface Layer** - 30 tools accessed via JSON-RPC/SSE
+1. **MCP Interface Layer** - 24 advertised tools accessed via JSON-RPC/SSE
 2. **REST API Layer** - Traditional RESTful endpoints mirroring MCP capabilities
 3. **Application Logic Layer** - Search strategies, context scoping, embedding service
 4. **Data Access Layer** - ActiveRecord models with vector extensions
@@ -46,18 +46,19 @@ GraphMem follows a layered architecture that separates concerns between:
 
 ## Component Breakdown
 
-### 1. MCP Interface Layer (30 tools)
+### 1. MCP Interface Layer (24 advertised tools)
 
-Tools are Ruby classes in `app/tools/` that inherit from `ApplicationTool` (which inherits from `FastMcp::Tool`). They auto-register via `ApplicationTool.descendants` in `config/initializers/fast_mcp.rb`.
+Tools are Ruby classes in `app/tools/` that inherit from `ApplicationTool`
+(which inherits from `FastMcp::Tool`). `McpToolRegistry` registers 40 callable
+classes; `McpServerPatch` omits 16 compatibility aliases from `tools/list`.
 
 Tool categories:
 - **Context** (3): `set_context`, `get_context`, `clear_context`
-- **Entity CRUD** (4): `create_entity`, `get_entity`, `update_entity`, `delete_entity`
-- **Observation** (3): `create_observation`, `update_observation`, `delete_observation`
-- **Relation** (3): `create_relation`, `delete_relation`, `find_relations`
-- **Graph Traversal** (2): `traverse_graph`, `find_shortest_path`
-- **Search** (5): `search_entities`, `search_subgraph`, `list_entities`, `get_subgraph_by_ids`, `summarize`
-- **Batch/Maintenance** (6): `bulk_update`, `suggest_merges`, `merge_entities`, `dream_state_status`, `get_maintenance_reports`, `get_graph_stats`
+- **Read/query** (6): `search`, `get_entities`, `traverse_graph`,
+  `find_shortest_path`, `summarize`, `rank_observations`
+- **Mutation** (3): `graph_write`, `graph_edit`, `graph_delete`
+- **Maintenance** (10): merge suggestions, review queue, compaction status,
+  contradiction detection, graph statistics, and project scans
 - **Utility** (2): `get_version`, `get_current_time`
 
 ### 2. REST API Layer
@@ -147,7 +148,7 @@ A typical MCP request flows through:
 1. MCP client sends JSON-RPC request via SSE or STDIO transport
 2. `FastMcp::Server` routes to the appropriate tool class
 3. `ApplicationTool` resolves the caller's MCP client ID from request headers and records activity in `agent_contexts`
-4. `ApplicationTool#call_with_schema_validation!` normalizes incoming parameters via `ParameterNormalizer` (camelCase to snake_case, entity name to ID resolution, `operations` array parsing for `bulk_update`)
+4. `ApplicationTool#call_with_schema_validation!` normalizes incoming parameters via `ParameterNormalizer` (camelCase to snake_case, entity name to ID resolution, and canonical graph mutation operations)
 5. Tool validates normalized parameters (via Dry::Schema `arguments` block)
 6. Tool executes business logic using ActiveRecord models and search strategies
 7. Results are returned as a Ruby hash, serialized to JSON by FastMcp
@@ -160,7 +161,9 @@ A typical MCP request flows through:
 - **camelCase to snake_case key conversion** (recursive, for nested hashes in arrays)
 - **Standard field aliases** (`content` to `text_content`, `entity_name` to `entity_id` via DB lookup)
 - **Entity name resolution** (string entity names resolved to integer IDs via `MemoryEntity.find_by`)
-- **`operations` array parsing** (for `bulk_update` only: type-discriminated items split into three arrays)
+- **Mutation operation parsing** (`graph_write`, `graph_edit`, and
+  `graph_delete` type discriminators; `graph_write` also accepts the legacy
+  three-array form)
 
 REST API requests follow a similar path through Rails controllers instead of MCP tools, sharing the same models, strategies, and services.
 

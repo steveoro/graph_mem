@@ -24,6 +24,9 @@ RSpec.describe "FastMcp tool registration", type: :integration do
     get_maintenance_reports
     get_subgraph_by_ids
     get_version
+    graph_delete
+    graph_edit
+    graph_write
     list_entities
     list_maintenance_review
     merge_entities
@@ -96,20 +99,24 @@ RSpec.describe "FastMcp tool registration", type: :integration do
       end
     end
 
-    it "marks only the Phase 2 compatibility aliases as hidden" do
+    it "marks compatibility aliases as hidden" do
       hidden_names = real_tool_classes.reject(&:mcp_advertised?).map(&:tool_name)
 
       expect(hidden_names).to match_array(
-        %w[find_relations get_entity get_subgraph_by_ids list_entities search_entities search_subgraph]
+        %w[
+          bulk_update create_entity create_observation create_relation delete_entity delete_observation
+          delete_relation find_relations get_entity get_subgraph_by_ids list_entities merge_entities
+          search_entities search_subgraph update_entity update_observation
+        ]
       )
     end
 
-    it "assigns the expected number of tools to each Phase 1 profile" do
+    it "assigns the expected number of tools to each profile" do
       profile_counts = ApplicationTool::MCP_PROFILE_NAMES.index_with do |profile|
         real_tool_classes.count { |tool_class| profile.in?(tool_class.mcp_profiles) }
       end
 
-      expect(profile_counts).to eq(default: 27, readonly: 17, maintenance: 37)
+      expect(profile_counts).to eq(default: 30, readonly: 17, maintenance: 40)
     end
 
     it "advertises only canonical tools in each profile" do
@@ -119,7 +126,7 @@ RSpec.describe "FastMcp tool registration", type: :integration do
         end
       end
 
-      expect(advertised_counts).to eq(default: 21, readonly: 11, maintenance: 31)
+      expect(advertised_counts).to eq(default: 14, readonly: 11, maintenance: 24)
     end
 
     it "describes the non-obvious side effects accurately" do

@@ -74,12 +74,13 @@ bin/mcp
 
 The server exposes three 2025-03-26 Streamable HTTP profiles:
 
-- `/mcp` — 21 advertised context, read, and write tools
+- `/mcp` — 14 advertised context, read, and mutation tools
 - `/mcp/readonly` — 11 advertised context and read tools
-- `/mcp/maintenance` — all 31 canonical tools
+- `/mcp/maintenance` — all 24 canonical tools
 
-Six deprecated read aliases remain registered and callable, bringing the
-transitional registry to 37 classes, but are omitted from `tools/list`.
+Sixteen deprecated read and mutation aliases remain registered and callable,
+bringing the transitional registry to 40 classes, but are omitted from
+`tools/list`.
 
 The 2024-11-05 SSE endpoint remains at `/mcp/sse` and uses the default profile.
 

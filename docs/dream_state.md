@@ -133,7 +133,12 @@ Live MCP traffic takes priority over background compaction.
 
 Before executing, these MCP tools call `CompactionValve.request_pause_if_running!`:
 
-`bulk_update`, `create_entity`, `create_observation`, `create_relation`, `delete_entity`, `delete_observation`, `delete_relation`, `update_entity`, `merge_entities`, `search_entities`, `search_subgraph`, `suggest_merges`
+Canonical mutation tools `graph_write`, `graph_edit`, and `graph_delete`, plus
+maintenance/heavy-read tools `summarize`, `suggest_merges`,
+`detect_contradictions`, `apply_maintenance_review`, and
+`dismiss_maintenance_review`. Hidden legacy mutation and search aliases remain
+covered until they are retired; `ToolMutationPolicy::COMPACTION_VALVE_TOOLS` is
+the source of truth.
 
 When a compaction run is `running`:
 
@@ -162,9 +167,11 @@ Reports are flushed at the end of each batch and when advancing phases. Read the
 - **MCP:** `get_maintenance_reports(report_type: "compaction_review")`
 - **Dashboard:** Dream State card → "Compaction review queue" details
 
-To action a queued merge: inspect the report, then call `merge_entities(source_entity_id:, target_entity_id:)`.
+To action a queued merge: inspect the report, then call `graph_delete` with a
+`merge_entities` operation.
 
-To action a queued relationship proposal: inspect the evidence, then call `create_relation(from_entity_id:, to_entity_id:, relation_type:)`.
+To action a queued relationship proposal: inspect the evidence, then call
+`graph_write` with a `create_relation` operation.
 
 ## Run stats
 
@@ -230,7 +237,7 @@ Manual start enqueues `DreamStateCompactionJob` via `CompactionRunner.start_or_r
 | ------------------------- | ---------------------------------------------------------------------------------------------------- |
 | `dream_state_status`      | Returns `dream_state`, `run_id`, `phase`, `cursor_entity_id`, `pause_requested`, `stats`, timestamps |
 | `get_maintenance_reports` | Read `compaction_review` queue and other maintenance reports                                         |
-| `merge_entities`          | Apply a queued merge suggestion (also triggers cooperative pause if compaction is running)           |
+| `graph_delete`            | Apply a known merge as a `merge_entities` operation (also triggers cooperative pause)                 |
 | `suggest_merges`          | On-demand duplicate search (separate from dream-state auto-merge thresholds)                         |
 
 
@@ -314,6 +321,6 @@ bundle exec rspec spec/integration/dream_state_usefulness_spec.rb
 1. At session start, call `dream_state_status` to see if compaction is `running` or `paused`.
 2. During work, mutating tools automatically pause an active run if needed.
 3. Periodically call `get_maintenance_reports(report_type: "compaction_review")`.
-4. Apply clear merge suggestions with `merge_entities`; parent orphans manually when scores are ambiguous.
-5. Prefer `search_entities` before `create_entity` to avoid creating duplicates the compactor must later merge.
+4. Apply clear merge suggestions with a `graph_delete` `merge_entities` operation; parent orphans manually when scores are ambiguous.
+5. Prefer `search` before `graph_write` to avoid creating duplicates the compactor must later merge.
 

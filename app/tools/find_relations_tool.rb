@@ -20,7 +20,7 @@ class FindRelationsTool < ApplicationTool
     "Do not use for a multi-hop neighborhood; use `traverse_graph` instead. " \
     "Do not use for the shortest path between two entities; use `find_shortest_path` instead. " \
     "Do not use for one entity's relations bundled with observations; use `get_entities` instead. " \
-    "Do not use to create or delete edges; use `create_relation` or `delete_relation` instead."
+    "Do not use to create or delete edges; use `graph_write` or `graph_delete` instead."
 
   arguments do
     optional(:from_entity_id).filled(:integer).description("Optional: Filter relations starting from this entity ID.")

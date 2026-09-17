@@ -20,7 +20,7 @@ The default `/mcp` connection omits maintenance tools. Use a separate
 
 1. Say "Remembering..." then call `get_context` to check for an active project. Context is per-agent and persisted, so you may already have one from a prior session.
 2. If no context: `search` for the relevant project name → `set_context(<ID or entity name from search result>)`.
-3. If no project entity exists yet: `create_entity` (type `Project`) → `set_context(<new entity ID or name>)`.
+3. If no project entity exists yet: `graph_write` (type `Project`) → `set_context(<new entity ID or name>)`.
 4. On a maintenance-profile connection, optionally call `dream_state_status` for a cheap health check (whether background compaction is running/paused).
 
 ## Phase 2 — Recall (before doing work)
@@ -40,17 +40,19 @@ The default `/mcp` connection omits maintenance tools. Use a separate
 
 ## Phase 4 — Persist
 
-- `create_observation` for new facts on existing entities. Write dedupe-aware: search/get the entity first and append only new facts rather than re-stating existing ones.
-- `update_observation` for corrections. Use `supersede: true` when preserving
-  the prior fact/version matters; use `delete_observation` to mark a fact
-  obsolete rather than hard-delete it.
+- Use `graph_write` with a `create_observation` operation for new facts on
+  existing entities. Write dedupe-aware: search/get the entity first.
+- Use `graph_edit` with `update_observation` for corrections. Set
+  `supersede: true` when preserving the prior fact/version matters; use
+  `graph_delete` with `delete_observation` to mark a fact obsolete.
 - Treat active observations as the default truth surface. Request
   `include_obsolete: true` only when historical or superseded versions are
   relevant.
-- `create_entity` + `create_relation` for new concepts discovered.
-- Use `bulk_update` to batch multiple writes in one call (max 50 ops).
+- Use one `graph_write` batch with `create_entity` and `create_relation`
+  operations for new concepts discovered.
+- Use `graph_write` to batch multiple writes in one call (max 50 ops).
 - `clear_context` if the project scope is no longer relevant (safe: affects only your own client bucket).
-- Routine duplicate compaction is handled by the background dream-state job. On a maintenance-profile connection, confirm spotted duplicates with `suggest_merges`; execute a confirmed merge with `merge_entities(source_entity_id, target_entity_id)`.
+- Routine duplicate compaction is handled by the background dream-state job. On a maintenance-profile connection, confirm spotted duplicates with `suggest_merges`; execute a confirmed merge with a `graph_delete` `merge_entities` operation.
 
 ---
 
@@ -61,8 +63,8 @@ The default `/mcp` connection omits maintenance tools. Use a separate
 | Orient | `get_context`, `set_context`, `clear_context`, `search` |
 | Recall | `search`, `get_entities`, `summarize` |
 | Traverse | `traverse_graph`, `find_shortest_path` |
-| Persist | `create_entity`, `update_entity`, `delete_entity`, `create_observation`, `update_observation`, `delete_observation`, `create_relation`, `delete_relation`, `bulk_update` |
-| Maintain (`/mcp/maintenance`) | `suggest_merges`, `merge_entities`, `dream_state_status`, `get_maintenance_reports`, `list_maintenance_review`, `apply_maintenance_review`, `dismiss_maintenance_review`, `get_graph_stats`, `get_version`, `get_current_time`, `scan_project`, `scan_project_status` |
+| Persist | `graph_write`, `graph_edit`, `graph_delete` |
+| Maintain (`/mcp/maintenance`) | `suggest_merges`, `graph_delete`, `dream_state_status`, `get_maintenance_reports`, `list_maintenance_review`, `apply_maintenance_review`, `dismiss_maintenance_review`, `get_graph_stats`, `get_version`, `get_current_time`, `scan_project`, `scan_project_status` |
 
 ## MCP Tool Errors
 
@@ -122,7 +124,7 @@ See `docs/mcp_tools.md` Error Handling for the category table.
   without re-reading files.
 - Agents can consume `scan_review` rows via `get_maintenance_reports(report_type:
   "scan_review")` and apply `move_observation`, `reparent_entity`, `delete_relation`,
-  `delete_observation`, or `delete_entity` actions just like compaction reviews.
+  `delete_entity`, or `delete_observation` actions just like compaction reviews.
 
 ## Dream-State Compaction Awareness
 
@@ -131,10 +133,10 @@ See `docs/mcp_tools.md` Error Handling for the category table.
   0.10, same `entity_type` only), and deletes byte-identical duplicate
   observations. Lower-confidence cases are queued for review.
 - Call `dream_state_status` to see whether compaction is `running`/`paused` plus its progress/stats.
-- Call `list_maintenance_review` to read the queue of merge/orphan suggestions the job flagged for review, then action good ones with `apply_maintenance_review` (or `merge_entities` when both entity ids are already known). Use `get_maintenance_reports` for stored report documents.
+- Call `list_maintenance_review` to read the queue of merge/orphan suggestions the job flagged for review, then action good ones with `apply_maintenance_review` (or a `graph_delete` `merge_entities` operation when both ids are known). Use `get_maintenance_reports` for stored report documents.
 - Mutating tools cooperatively pause compaction automatically — no action needed, but search results may shift slightly while a run is in progress.
 - Implication for writes: don't rely on the job to clean up sloppiness. Prefer
-  `create_observation` on an existing entity or `update_entity` over creating
+  `graph_write` on an existing entity or `graph_edit` over creating
   near-duplicates. Mutating tools may pause compaction, so do not assume that
   maintenance state is unchanged during a session.
 
@@ -146,7 +148,7 @@ graph_mem accepts both its native snake_case/ID-based parameters and the
 - Entity references accept either `entity_id` (integer) or entity name (string).
 - Traversal references (`start_entity_id`, `from_entity_id`, `to_entity_id`) also accept entity IDs or names.
 - Field names accept camelCase (e.g. `entityType`) or snake_case (`entity_type`).
-- `bulk_update` accepts either three arrays (`entities`, `observations`, `relations`) or a single `operations` array with `type`-discriminated items.
+- `graph_write` accepts either three arrays (`entities`, `observations`, `relations`) or a single `operations` array with `type`-discriminated items.
 - Observation text accepts `text_content`, `content`, or `contents` (array).
 - Relation endpoints accept `from_entity_id`/`to_entity_id` (int), `from`/`to` (name), or `from_entity`/`to_entity` (name).
 - Use native snake_case keys by default. Compatibility aliases are for

@@ -7,6 +7,7 @@ class UpdateObservationTool < ApplicationTool
 
   mcp_metadata(
     profiles: %i[default maintenance],
+    advertised: false,
     read_only_hint: false,
     destructive_hint: true,
     idempotent_hint: false,
@@ -16,9 +17,9 @@ class UpdateObservationTool < ApplicationTool
   description "Edit an active observation in place or, with supersede true, create a replacement and mark the original " \
     "superseded. Pass required `observation_id` (integer); optional `text_content`, `confidence`, `source`, " \
     "`valid_from`, `valid_until`, `tags`, `supersede` (bool, default false), `reason`. Inactive observations cannot be edited. " \
-    "Do not use to add a new fact; use `create_observation` instead. " \
-    "Do not use to obsolete a fact without replacement; use `delete_observation` instead. " \
-    "Do not use to change entity metadata; use `update_entity` instead."
+    "Do not use to add a new fact; use `graph_write` instead. " \
+    "Do not use to obsolete a fact without replacement; use `graph_delete` instead. " \
+    "Do not use to change entity metadata; use `graph_edit` instead."
 
   arguments do
     required(:observation_id).filled(:integer).description("The ID of the active observation to update.")
@@ -33,25 +34,14 @@ class UpdateObservationTool < ApplicationTool
   end
 
   def call(observation_id:, supersede: false, reason: nil, **attributes)
-    update_attributes = normalize_attributes(attributes)
-    if update_attributes.empty?
-      raise FastMcp::Tool::InvalidArgumentsError,
-            "At least one observation attribute must be provided for update. " \
-            "Provide `text_content`, `confidence`, `source`, `valid_from`, `valid_until`, or `tags` and retry."
-    end
-
-    observation = MemoryObservation.find(observation_id)
-    result = if supersede
-      observation.supersede!(update_attributes, reason: reason)
-    else
-      observation.update_active!(update_attributes)
-    end
-
-    MemoryObservationSerializer.call(
-      result,
-      content_key: :observation_content,
-      include_entity_id: true
-    ).merge(superseded_observation_id: supersede ? observation.id : nil)
+    GraphEditService.execute_one(
+      "update_observation",
+      attributes.merge(
+        observation_id: observation_id,
+        supersede: supersede,
+        reason: reason
+      )
+    )
   rescue FastMcp::Tool::InvalidArgumentsError
     raise
   rescue ActiveRecord::RecordNotFound => e
@@ -59,15 +49,15 @@ class UpdateObservationTool < ApplicationTool
     logger.error "ResourceNotFound in UpdateObservationTool: #{error_message} (was: #{e.message})"
     raise McpGraphMemErrors::ResourceNotFound.new(
       error_message,
-      next_move: "Call `get_entities` with include_obsolete if needed to list observation ids, then retry `update_observation`."
+      next_move: "Call `get_entities` with include_obsolete if needed to list observation ids, then retry `graph_edit`."
     )
   rescue MemoryObservation::InactiveObservationError => e
     logger.error "InvalidArguments in UpdateObservationTool: #{e.message}"
     raise FastMcp::Tool::InvalidArgumentsError,
-          "#{e.message} Call `delete_observation` or `create_observation` instead of `update_observation`."
+          "#{e.message} Call `graph_delete` or `graph_write` instead of `graph_edit`."
   rescue ActiveRecord::RecordInvalid => e
     message = "Validation Failed: #{e.record.errors.full_messages.join(', ')}. " \
-      "Correct the observation fields to match the `update_observation` schema and retry."
+      "Correct the observation fields to match the `graph_edit` schema and retry."
     logger.error "InvalidArguments in UpdateObservationTool: #{message} (was: #{e.message})"
     raise FastMcp::Tool::InvalidArgumentsError, message
   rescue StandardError => e
@@ -76,13 +66,5 @@ class UpdateObservationTool < ApplicationTool
 
     logger.error "InternalServerError in UpdateObservationTool: #{e.class}: #{e.message} - #{e.backtrace.join("\n")}"
     raise McpGraphMemErrors::InternalServerError, "An unexpected error occurred."
-  end
-
-  private
-
-  def normalize_attributes(attributes)
-    attributes = attributes.slice(:text_content, :confidence, :source, :valid_from, :valid_until, :tags)
-    attributes[:content] = attributes.delete(:text_content) if attributes.key?(:text_content)
-    attributes
   end
 end
