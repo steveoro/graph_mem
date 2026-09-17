@@ -47,6 +47,10 @@ class AppSettings < RailsSettings::Base
   field :compaction_review_row_retention_days, default: 30, type: :integer,
         validates: { numericality: { greater_than_or_equal_to: 0, less_than_or_equal_to: 365 } }
 
+  # MCP tool invocation retention (zero disables automatic pruning)
+  field :tool_invocation_retention_days, default: 90, type: :integer,
+        validates: { numericality: { greater_than_or_equal_to: 0, less_than_or_equal_to: 3650 } }
+
   def self.embedding_backfill_schedule_cron
     yaml = YAML.safe_load_file(
       Rails.root.join("config", "recurring.yml"),

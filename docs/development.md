@@ -226,6 +226,12 @@ Use `DAYS=7` for a shorter window or `DAYS=all` for all recorded history. The re
 every currently registered tool, so tools with zero calls are visible alongside call share,
 error rate and categories, and p50/p95 duration.
 
+Signed-in operators can inspect the same data at `/operator/telemetry`, with
+time-series, client/error/signature breakdowns, filters, and paginated raw
+invocations. The default retention is 90 days and is configurable under
+**System Settings → Telemetry**; daily garbage collection prunes expired rows.
+See [`docs/operator/telemetry.md`](operator/telemetry.md).
+
 
 ## Pull Request Workflow
 

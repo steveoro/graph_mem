@@ -31,10 +31,32 @@ RSpec.describe "Operator settings", type: :request do
       expect(response.body).to include("System Settings")
       expect(response.body).to include("Dream state / compactor")
     end
+
+    it "renders the telemetry retention settings tab" do
+      sign_in_operator
+      get operator_settings_path(tab: "telemetry")
+
+      expect(response).to have_http_status(:ok)
+      expect(response.body).to include('data-testid="operator-settings-tab-telemetry"')
+      expect(response.body).to include('data-testid="setting-tool_invocation_retention_days"')
+    end
   end
 
   describe "PATCH /operator/settings" do
     before { sign_in_operator }
+
+    it "updates telemetry retention" do
+      patch operator_settings_bulk_update_path,
+            params: {
+              tab: "telemetry",
+              settings: { tool_invocation_retention_days: "120" }
+            }
+
+      expect(response).to redirect_to(operator_settings_path(tab: "telemetry"))
+      expect(AppSettings.tool_invocation_retention_days).to eq(120)
+    ensure
+      AppSettings.tool_invocation_retention_days = 90
+    end
 
     it "updates feature flags" do
       patch operator_settings_bulk_update_path,

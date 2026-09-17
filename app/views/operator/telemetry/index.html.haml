@@ -1,0 +1,224 @@
+.dashboard-page{ data: { testid: "operator-telemetry-dashboard" } }
+  %header.dashboard-header
+    %div
+      %h1.dashboard-header__title= t("operator.telemetry.title")
+      %p.dashboard-header__subtitle= t("operator.telemetry.subtitle")
+    = link_to t("operator.telemetry.back_to_dashboard"), root_path,
+      class: "dashboard-btn dashboard-btn--secondary",
+      id: "btn-telemetry-back"
+
+  %section.dashboard-stat-chips{ aria: { label: t("operator.telemetry.summary.aria_label") } }
+    = dashboard_stat_chip(t("operator.telemetry.summary.total_calls"), number_with_delimiter(@snapshot.dig(:summary, :total_calls)))
+    = dashboard_stat_chip(t("operator.telemetry.summary.error_rate"), telemetry_percentage(@snapshot.dig(:summary, :error_rate_percent)))
+    = dashboard_stat_chip(t("operator.telemetry.summary.active_clients"), number_with_delimiter(@snapshot.dig(:summary, :active_clients)))
+    = dashboard_stat_chip(t("operator.telemetry.summary.p95"), telemetry_duration(@snapshot.dig(:summary, :p95_ms)))
+    = dashboard_stat_chip(t("operator.telemetry.summary.average"), telemetry_duration(@snapshot.dig(:summary, :average_ms)))
+
+  .dashboard-card
+    = form_with url: operator_telemetry_path, method: :get, local: true, class: "telemetry-filters" do
+      .telemetry-filters__row
+        .telemetry-filters__field
+          %label.telemetry-filters__label{ for: "telemetry_filter_since_days" }= t("operator.telemetry.filters.period")
+          = select_tag :since_days,
+            options_for_select([[t("operator.telemetry.periods.day"), "1"], [t("operator.telemetry.periods.week"), "7"], [t("operator.telemetry.periods.month"), "30"], [t("operator.telemetry.periods.quarter"), "90"]], @filters[:since_days]),
+            id: "telemetry_filter_since_days",
+            class: "telemetry-filters__input"
+        .telemetry-filters__field
+          %label.telemetry-filters__label{ for: "telemetry_filter_tool_name" }= t("operator.telemetry.filters.tool")
+          = select_tag :tool_name,
+            options_for_select([[t("operator.telemetry.filters.all_tools"), ""]] + @filter_options[:tool_names].map { |name| [name, name] }, @filters[:tool_name]),
+            id: "telemetry_filter_tool_name",
+            class: "telemetry-filters__input"
+        .telemetry-filters__field
+          %label.telemetry-filters__label{ for: "telemetry_filter_client_id" }= t("operator.telemetry.filters.client")
+          = select_tag :client_id,
+            options_for_select([[t("operator.telemetry.filters.all_clients"), ""]] + @filter_options[:client_ids].map { |name| [name, name] }, @filters[:client_id]),
+            id: "telemetry_filter_client_id",
+            class: "telemetry-filters__input"
+        .telemetry-filters__field
+          %label.telemetry-filters__label{ for: "telemetry_filter_outcome" }= t("operator.telemetry.filters.outcome")
+          = select_tag :outcome,
+            options_for_select([[t("operator.telemetry.filters.all_outcomes"), ""], [t("operator.telemetry.outcomes.ok"), "ok"], [t("operator.telemetry.outcomes.error"), "error"]], @filters[:outcome]),
+            id: "telemetry_filter_outcome",
+            class: "telemetry-filters__input"
+        .telemetry-filters__field
+          %label.telemetry-filters__label{ for: "telemetry_filter_error_category" }= t("operator.telemetry.filters.error_category")
+          = select_tag :error_category,
+            options_for_select([[t("operator.telemetry.filters.all_error_categories"), ""]] + @filter_options[:error_categories].map { |category| [category.humanize, category] }, @filters[:error_category]),
+            id: "telemetry_filter_error_category",
+            class: "telemetry-filters__input"
+      .telemetry-filters__actions
+        = submit_tag t("operator.telemetry.filters.submit"), class: "dashboard-btn dashboard-btn--primary", id: "btn-telemetry-filter"
+        = link_to t("operator.telemetry.filters.reset"), operator_telemetry_path, class: "dashboard-btn dashboard-btn--secondary", id: "btn-telemetry-reset"
+
+  .telemetry-grid
+    %section.dashboard-card.telemetry-card--wide{ aria: { labelledby: "telemetry-trend-title" } }
+      %h2#telemetry-trend-title.dashboard-card__title= t("operator.telemetry.trend.title")
+      - if @snapshot[:series].any?
+        - chart_max = telemetry_chart_max(@snapshot[:series])
+        %svg.telemetry-chart{ viewBox: "0 0 720 180", role: "img", aria: { labelledby: "telemetry-trend-title telemetry-trend-description" } }
+          %desc#telemetry-trend-description= t("operator.telemetry.trend.description")
+          %polyline.telemetry-chart__line.telemetry-chart__line--calls{ points: telemetry_svg_points(@snapshot[:series], :calls, max_value: chart_max) }
+          %polyline.telemetry-chart__line.telemetry-chart__line--errors{ points: telemetry_svg_points(@snapshot[:series], :errors, max_value: chart_max) }
+        .telemetry-chart__legend
+          %span.telemetry-chart__legend-item.telemetry-chart__legend-item--calls= t("operator.telemetry.trend.calls")
+          %span.telemetry-chart__legend-item.telemetry-chart__legend-item--errors= t("operator.telemetry.trend.errors")
+        .telemetry-chart__axis
+          %span= @snapshot[:series].first[:label]
+          %span= @snapshot[:series][@snapshot[:series].length / 2][:label]
+          %span= @snapshot[:series].last[:label]
+      - else
+        %p.dashboard-card__empty= t("operator.telemetry.empty")
+
+    %section.dashboard-card{ aria: { labelledby: "telemetry-retention-title" } }
+      %h2#telemetry-retention-title.dashboard-card__title= t("operator.telemetry.retention.title")
+      %dl.dashboard-kv
+        %div
+          %dt= t("operator.telemetry.retention.days")
+          %dd= @snapshot.dig(:retention, :days).zero? ? t("operator.telemetry.retention.disabled") : @snapshot.dig(:retention, :days)
+        %div
+          %dt= t("operator.telemetry.retention.expired")
+          %dd= number_with_delimiter(@snapshot.dig(:retention, :expired_count))
+        %div
+          %dt= t("operator.telemetry.retention.oldest")
+          %dd= @snapshot.dig(:retention, :oldest_at) ? l(@snapshot.dig(:retention, :oldest_at), format: :short) : "—"
+      .dashboard-card__actions
+        = link_to t("operator.telemetry.retention.settings"), operator_settings_path(tab: "telemetry"), class: "dashboard-btn dashboard-btn--secondary", id: "btn-telemetry-retention-settings"
+        - if @snapshot.dig(:retention, :expired_count).positive?
+          = button_to t("operator.telemetry.prune.button"),
+            operator_prune_telemetry_path(request.query_parameters),
+            method: :post,
+            class: "dashboard-btn dashboard-btn--secondary",
+            id: "btn-telemetry-prune",
+            data: { turbo_confirm: t("operator.telemetry.prune.confirm", count: @snapshot.dig(:retention, :expired_count)) }
+
+  %section.dashboard-card
+    %h2.dashboard-card__title= t("operator.telemetry.tools.title")
+    - if @snapshot[:duration_sample_limited]
+      %p.dashboard-callout= t("operator.telemetry.tools.sample_notice", count: ToolUsageReport::PERCENTILE_SAMPLE_LIMIT)
+    - if @snapshot[:tools].any?
+      .telemetry-table-wrap
+        %table.telemetry-table{ id: "telemetry-tools-table" }
+          %thead
+            %tr
+              %th= t("operator.telemetry.tools.columns.tool")
+              %th= t("operator.telemetry.tools.columns.calls")
+              %th= t("operator.telemetry.tools.columns.share")
+              %th= t("operator.telemetry.tools.columns.errors")
+              %th= t("operator.telemetry.tools.columns.error_rate")
+              %th= t("operator.telemetry.tools.columns.p50")
+              %th= t("operator.telemetry.tools.columns.p95")
+          %tbody
+            - @snapshot[:tools].each do |row|
+              %tr{ id: "telemetry-tool-#{row[:tool_name].parameterize}" }
+                %td
+                  %code= row[:tool_name]
+                %td= number_with_delimiter(row[:call_count])
+                %td= telemetry_percentage(row[:share_percent])
+                %td= number_with_delimiter(row[:error_count])
+                %td= telemetry_percentage(row[:error_rate_percent])
+                %td= telemetry_duration(row[:p50_ms])
+                %td= telemetry_duration(row[:p95_ms])
+    - else
+      %p.dashboard-card__empty= t("operator.telemetry.empty")
+
+  .telemetry-grid.telemetry-grid--three
+    %section.dashboard-card
+      %h2.dashboard-card__title= t("operator.telemetry.clients.title")
+      - if @snapshot[:clients].any?
+        .telemetry-table-wrap
+          %table.telemetry-table{ id: "telemetry-clients-table" }
+            %thead
+              %tr
+                %th= t("operator.telemetry.clients.columns.client")
+                %th= t("operator.telemetry.clients.columns.calls")
+                %th= t("operator.telemetry.clients.columns.error_rate")
+            %tbody
+              - @snapshot[:clients].each do |row|
+                %tr
+                  %td
+                    %code= row[:client_id]
+                  %td= number_with_delimiter(row[:call_count])
+                  %td= telemetry_percentage(row[:error_rate_percent])
+      - else
+        %p.dashboard-card__empty= t("operator.telemetry.empty")
+
+    %section.dashboard-card
+      %h2.dashboard-card__title= t("operator.telemetry.errors.title")
+      - if @snapshot[:errors].any?
+        .telemetry-table-wrap
+          %table.telemetry-table{ id: "telemetry-errors-table" }
+            %thead
+              %tr
+                %th= t("operator.telemetry.errors.columns.category")
+                %th= t("operator.telemetry.errors.columns.class")
+                %th= t("operator.telemetry.errors.columns.count")
+            %tbody
+              - @snapshot[:errors].each do |row|
+                %tr
+                  %td= row[:category].humanize
+                  %td
+                    %code= row[:error_class]
+                  %td= number_with_delimiter(row[:count])
+      - else
+        %p.dashboard-card__empty= t("operator.telemetry.errors.empty")
+
+    %section.dashboard-card
+      %h2.dashboard-card__title= t("operator.telemetry.argument_signatures.title")
+      %p.dashboard-card__subtitle= t("operator.telemetry.argument_signatures.privacy")
+      - if @snapshot[:argument_signatures].any?
+        .telemetry-table-wrap
+          %table.telemetry-table{ id: "telemetry-argument-signatures-table" }
+            %thead
+              %tr
+                %th= t("operator.telemetry.argument_signatures.columns.keys")
+                %th= t("operator.telemetry.argument_signatures.columns.count")
+            %tbody
+              - @snapshot[:argument_signatures].each do |row|
+                %tr
+                  %td
+                    %code= telemetry_argument_signature(row[:argument_keys])
+                  %td= number_with_delimiter(row[:count])
+      - else
+        %p.dashboard-card__empty= t("operator.telemetry.empty")
+
+  %section.dashboard-card
+    %h2.dashboard-card__title= t("operator.telemetry.invocations.title")
+    %p.dashboard-card__subtitle= t("operator.telemetry.invocations.coverage_notice")
+    - if @tool_invocations.any?
+      .telemetry-table-wrap
+        %table.telemetry-table{ id: "telemetry-invocations-table" }
+          %thead
+            %tr
+              %th= t("operator.telemetry.invocations.columns.time")
+              %th= t("operator.telemetry.invocations.columns.tool")
+              %th= t("operator.telemetry.invocations.columns.client")
+              %th= t("operator.telemetry.invocations.columns.outcome")
+              %th= t("operator.telemetry.invocations.columns.duration")
+              %th= t("operator.telemetry.invocations.columns.result_size")
+              %th= t("operator.telemetry.invocations.columns.scope")
+              %th= t("operator.telemetry.invocations.columns.arguments")
+              %th= t("operator.telemetry.invocations.columns.error")
+          %tbody
+            - @tool_invocations.each do |invocation|
+              %tr{ id: "tool-invocation-#{invocation.id}" }
+                %td.telemetry-table__time= l(invocation.created_at, format: :short)
+                %td
+                  %code= invocation.tool_name
+                %td
+                  %code= invocation.client_id
+                %td= telemetry_outcome_badge(invocation.outcome)
+                %td= telemetry_duration(invocation.duration_ms)
+                %td= invocation.result_size.nil? ? "—" : number_with_delimiter(invocation.result_size)
+                %td= invocation.scope.presence || "—"
+                %td
+                  %code= telemetry_argument_signature(invocation.argument_keys)
+                %td
+                  - if invocation.error_class.present?
+                    %span= [invocation.error_category.presence || t("operator.telemetry.errors.uncategorized"), invocation.error_class].join(": ")
+                  - else
+                    = "—"
+      .telemetry-pagination
+        = paginate @tool_invocations
+    - else
+      %p.dashboard-card__empty= t("operator.telemetry.empty")

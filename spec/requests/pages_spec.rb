@@ -26,6 +26,7 @@ RSpec.describe "Operator dashboard pages", type: :request do
       expect(response.body).to include("Review suggestions")
       expect(response.body).to include('data-testid="topnav-search"')
       expect(response.body).to include('data-testid="topnav-maintenance"')
+      expect(response.body).to include('data-testid="topnav-telemetry"')
       expect(response.body).to include('data-testid="topnav-settings"')
       expect(response.body).to include('class="dashboard-topnav__link dashboard-topnav__link--icon"')
       expect(response.body).to include('aria-label="Search"')

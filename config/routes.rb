@@ -122,6 +122,9 @@ Rails.application.routes.draw do
     get "audit_logs", to: "audit_logs#index", as: :audit_logs
     post "audit_logs/prune", to: "audit_logs#prune", as: :prune_audit_logs
 
+    get "telemetry", to: "telemetry#index", as: :telemetry
+    post "telemetry/prune", to: "telemetry#prune", as: :prune_telemetry
+
     get "embeddings", to: "embeddings#index", as: :embeddings
     post "embeddings/test_connection", to: "embeddings#test_connection", as: :test_embeddings_connection
     post "embeddings/backfill", to: "embeddings#backfill", as: :backfill_embeddings

@@ -18,11 +18,13 @@ class GarbageCollectionRunner
     report_orphans
     cleanup_duplicates
     prune_audit_logs
+    prune_tool_invocations
     complete_progress
 
     {
       reports: latest_reports,
-      audit_logs_pruned: @audit_logs_pruned
+      audit_logs_pruned: @audit_logs_pruned,
+      tool_invocations_pruned: @tool_invocations_pruned
     }
   rescue StandardError => e
     @operation_progress&.fail!(e)
@@ -118,6 +120,20 @@ class GarbageCollectionRunner
     Rails.logger.info "[GC] Pruned #{@audit_logs_pruned} audit logs older than #{AuditLog::MAX_AGE_DAYS} days"
   end
 
+  def prune_tool_invocations
+    retention_days = AppSettings.tool_invocation_retention_days.to_i
+    @tool_invocations_pruned = ToolInvocation.prune!
+    update_progress(
+      [ @tool_invocations_pruned.to_i, 1 ].max,
+      phase: "tool_invocations",
+      message: "Pruned tool invocation telemetry"
+    )
+    Rails.logger.info(
+      "[GC] Pruned #{@tool_invocations_pruned} tool invocations " \
+      "(retention: #{retention_days.zero? ? 'disabled' : "#{retention_days} days"})"
+    )
+  end
+
   def progress_total
     orphan_total = MemoryEntity
       .left_joins(:memory_observations)
@@ -132,7 +148,8 @@ class GarbageCollectionRunner
       .to_a
       .size
     audit_total = AuditLog.where("created_at < ?", AuditLog::MAX_AGE_DAYS.days.ago).count
-    orphan_total + duplicate_total + [ audit_total, 1 ].max
+    telemetry_total = ToolInvocation.expired.count
+    orphan_total + duplicate_total + [ audit_total, 1 ].max + [ telemetry_total, 1 ].max
   end
 
   def update_progress(by, phase:, message:)
@@ -141,7 +158,7 @@ class GarbageCollectionRunner
       total: @operation_progress.total_count,
       phase: phase,
       message: message,
-      counters: { audit_logs_pruned: @audit_logs_pruned.to_i }
+      counters: progress_counters
     )
     OperationProgressBroadcaster.call(@operation_progress)
   end
@@ -150,7 +167,7 @@ class GarbageCollectionRunner
     @operation_progress.complete!(
       current: @operation_progress.total_count,
       message: "Garbage collection completed",
-      counters: { audit_logs_pruned: @audit_logs_pruned.to_i }
+      counters: progress_counters
     )
     OperationProgressBroadcaster.call(@operation_progress)
   end
@@ -164,5 +181,12 @@ class GarbageCollectionRunner
         created_at: report.created_at
       }
     end
+  end
+
+  def progress_counters
+    {
+      audit_logs_pruned: @audit_logs_pruned.to_i,
+      tool_invocations_pruned: @tool_invocations_pruned.to_i
+    }
   end
 end

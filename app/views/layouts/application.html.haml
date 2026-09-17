@@ -27,6 +27,7 @@
             = dashboard_topnav_icon_link search_path, icon: :search, label: t("dashboard.topnav.search"), testid: "topnav-search"
             = link_to "Graph", graph_path, class: "dashboard-topnav__link"
             = dashboard_topnav_icon_link maintenance_path, icon: :maintenance, label: t("dashboard.topnav.maintenance"), testid: "topnav-maintenance"
+            = link_to t("operator.telemetry.title"), operator_telemetry_path, class: "dashboard-topnav__link", data: { testid: "topnav-telemetry" }
             = dashboard_topnav_icon_link operator_settings_path, icon: :settings, label: t("dashboard.topnav.settings"), testid: "topnav-settings"
             = link_to "Jobs", "/operator/jobs", class: "dashboard-topnav__link"
             = button_to "Sign out",

@@ -141,6 +141,10 @@ module Operator
         project_scans: {
           title: t("operator.settings.groups.project_scans"),
           settings: %w[project_scan_roots enable_project_scan_validation]
+        },
+        telemetry: {
+          title: t("operator.settings.groups.telemetry"),
+          settings: %w[tool_invocation_retention_days]
         }
       }
     end

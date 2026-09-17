@@ -31,6 +31,26 @@ RSpec.describe GarbageCollectionRunner do
       expect(result[:audit_logs_pruned]).to be >= 1
     end
 
+    it "prunes tool invocation telemetry using the configured retention" do
+      previous = AppSettings.tool_invocation_retention_days
+      AppSettings.tool_invocation_retention_days = 90
+      old = ToolInvocation.create!(
+        tool_name: "search",
+        client_id: "gc-spec",
+        outcome: "ok",
+        duration_ms: 1,
+        argument_keys: [],
+        created_at: 91.days.ago
+      )
+
+      result = described_class.call
+
+      expect(ToolInvocation.find_by(id: old.id)).to be_nil
+      expect(result[:tool_invocations_pruned]).to be >= 1
+    ensure
+      AppSettings.tool_invocation_retention_days = previous
+    end
+
     it "deletes duplicate observations and keeps the lowest id" do
       entity = MemoryEntity.create!(name: "DupEntity", entity_type: "Task")
       first = MemoryObservation.create!(memory_entity: entity, content: "dup note")

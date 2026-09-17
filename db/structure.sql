@@ -305,7 +305,9 @@ CREATE TABLE `tool_invocations` (
   PRIMARY KEY (`id`),
   KEY `index_tool_invocations_on_created_at` (`created_at`),
   KEY `index_tool_invocations_on_tool_name_and_created_at` (`tool_name`,`created_at`),
-  KEY `index_tool_invocations_on_client_id_and_created_at` (`client_id`,`created_at`)
+  KEY `index_tool_invocations_on_client_id_and_created_at` (`client_id`,`created_at`),
+  KEY `index_tool_invocations_on_outcome_and_created_at` (`outcome`,`created_at`),
+  KEY `index_tool_invocations_on_error_category_and_created_at` (`error_category`,`created_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
@@ -319,6 +321,7 @@ CREATE TABLE `tool_invocations` (
 /*M!100616 SET NOTE_VERBOSITY=@OLD_NOTE_VERBOSITY */;
 
 INSERT INTO `schema_migrations` (version) VALUES
+('20260917190000'),
 ('20260916173000'),
 ('20260916120000'),
 ('20260718180001'),

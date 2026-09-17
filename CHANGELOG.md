@@ -5,6 +5,10 @@ All notable changes to GraphMem will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.41.0] - 2026-09-17
+- Added an authenticated operator tool-telemetry dashboard with bounded trends, per-tool latency/error metrics, client/error/signature breakdowns, filters, and paginated invocation details.
+- Added configurable 90-day telemetry retention, manual pruning, daily garbage-collector integration, and dashboard query indexes.
+
 ## [1.40.0] - 2026-09-17
 - Pinned FastMCP `1.7.0.pre.2` with opt-in `outputSchema` and dual `structuredContent`/JSON text results.
 - Added post-envelope output schemas for all 12 default GraphMem tools.

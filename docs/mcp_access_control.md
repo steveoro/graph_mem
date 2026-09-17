@@ -162,7 +162,9 @@ usually acceptable; over a VPN the tunnel protects it; on a public VM put TLS in
 
 **No rate limiting or per-user audit.** `ToolTelemetry` records queryable per-call operational
 metrics, but `X-MCP-Client` remains self-asserted and is not an authenticated identity. Argument
-values are never persisted. See Phase 0 of
+values are never persisted. Calls rejected by access control before tool dispatch are not included
+in these metrics. Signed-in operators can inspect execution telemetry at `/operator/telemetry`;
+see [`operator/telemetry.md`](operator/telemetry.md) and Phase 0 of
 [`mcp_toolset_consolidation.md`](mcp_toolset_consolidation.md).
 
 ## Note on a fixed misconfiguration

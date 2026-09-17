@@ -2,31 +2,51 @@
 
 class ToolUsageReport
   DEFAULT_WINDOW_DAYS = 30
+  PERCENTILE_SAMPLE_LIMIT = 100_000
   PERCENTILES = {
     p50_ms: 0.50,
     p95_ms: 0.95
   }.freeze
 
-  def self.call(since: DEFAULT_WINDOW_DAYS.days.ago, tool_names: nil)
-    new(since: since, tool_names: tool_names).call
+  # Builds per-tool count, error-rate, and latency metrics.
+  #
+  # @param since [Time, nil] optional lower time boundary
+  # @param tool_names [Array<String>, nil] names to include even with zero calls
+  # @param relation [ActiveRecord::Relation<ToolInvocation>, nil] pre-filtered scope
+  # @return [Hash] aggregate report and percentile sampling metadata
+  def self.call(since: DEFAULT_WINDOW_DAYS.days.ago, tool_names: nil, relation: nil)
+    new(since: since, tool_names: tool_names, relation: relation).call
   end
 
-  def initialize(since:, tool_names:)
+  # @param since [Time, nil]
+  # @param tool_names [Array<String>, nil]
+  # @param relation [ActiveRecord::Relation<ToolInvocation>, nil]
+  def initialize(since:, tool_names:, relation: nil)
     @since = since
     @tool_names = tool_names
+    @relation = relation
   end
 
+  # Executes SQL-backed counts and bounded percentile sampling.
+  #
+  # @return [Hash]
   def call
-    relation = @since ? ToolInvocation.since(@since) : ToolInvocation.all
+    relation = @relation || ToolInvocation.all
+    relation = relation.since(@since) if @since
     counts = relation.group(:tool_name).count
     error_counts = relation.errors.group(:tool_name, :error_category).count
-    durations = relation.order(:tool_name, :duration_ms).pluck(:tool_name, :duration_ms).group_by(&:first)
+    duration_rows = relation.reorder(created_at: :desc)
+                            .limit(PERCENTILE_SAMPLE_LIMIT)
+                            .pluck(:tool_name, :duration_ms)
+    durations = duration_rows.group_by(&:first)
     total_calls = counts.values.sum
 
     {
       generated_at: Time.current,
       since: @since,
       total_calls: total_calls,
+      duration_sample_size: duration_rows.size,
+      duration_sample_limited: total_calls > duration_rows.size,
       tools: all_tool_names(counts).map do |tool_name|
         tool_row(
           tool_name,
@@ -79,6 +99,6 @@ class ToolUsageReport
   def percentile(values, fraction)
     return nil if values.empty?
 
-    values.fetch((fraction * values.length).ceil - 1)
+    values.sort.fetch((fraction * values.length).ceil - 1)
   end
 end

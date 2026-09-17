@@ -1,0 +1,95 @@
+en:
+  operator:
+    telemetry:
+      title: "Tool Telemetry"
+      subtitle: "Inspect MCP tool volume, reliability, latency, clients, and privacy-safe argument signatures."
+      back_to_dashboard: "Back to dashboard"
+      empty: "No tool invocation telemetry matches these filters."
+      summary:
+        aria_label: "Tool telemetry summary"
+        total_calls: "Calls"
+        error_rate: "Error rate"
+        active_clients: "Active clients"
+        p95: "Overall p95"
+        average: "Average latency"
+      filters:
+        period: "Period"
+        tool: "Tool"
+        client: "Client"
+        outcome: "Outcome"
+        error_category: "Error category"
+        all_tools: "All tools"
+        all_clients: "All clients"
+        all_outcomes: "All outcomes"
+        all_error_categories: "All error categories"
+        submit: "Apply filters"
+        reset: "Reset"
+      periods:
+        day: "Last 24 hours"
+        week: "Last 7 days"
+        month: "Last 30 days"
+        quarter: "Last 90 days"
+      outcomes:
+        ok: "OK"
+        error: "Error"
+      trend:
+        title: "Call and error trend"
+        description: "Calls and errors over the selected period. Calls use the primary line and errors use the secondary line."
+        calls: "Calls"
+        errors: "Errors"
+      retention:
+        title: "Retention"
+        days: "Retention days"
+        expired: "Expired rows"
+        oldest: "Oldest row"
+        disabled: "Disabled"
+        settings: "Retention settings"
+      prune:
+        button: "Prune expired telemetry"
+        confirm: "Delete %{count} expired telemetry row(s)? This cannot be undone."
+        notice: "Pruned %{count} expired telemetry row(s)."
+      tools:
+        title: "Tool performance"
+        sample_notice: "Latency percentiles use the most recent %{count} calls in the selected result set."
+        columns:
+          tool: "Tool"
+          calls: "Calls"
+          share: "Share"
+          errors: "Errors"
+          error_rate: "Error rate"
+          p50: "p50"
+          p95: "p95"
+      clients:
+        title: "Top clients"
+        columns:
+          client: "Client"
+          calls: "Calls"
+          error_rate: "Error rate"
+      errors:
+        title: "Error breakdown"
+        empty: "No errors match these filters."
+        uncategorized: "Uncategorized"
+        columns:
+          category: "Category"
+          class: "Class"
+          count: "Count"
+      argument_signatures:
+        title: "Argument signatures"
+        privacy: "Only argument names are recorded; values are never stored."
+        none: "No arguments"
+        columns:
+          keys: "Argument keys"
+          count: "Count"
+      invocations:
+        title: "Invocation details"
+        coverage_notice: "Successful and failed tool execution attempts are recorded. Requests rejected before tool dispatch, including unauthorized calls, are not included."
+        columns:
+          time: "Time"
+          tool: "Tool"
+          client: "Client"
+          outcome: "Outcome"
+          duration: "Duration"
+          result_size: "Result size"
+          scope: "Scope"
+          arguments: "Argument keys"
+          error: "Error"
