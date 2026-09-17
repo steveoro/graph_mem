@@ -13,11 +13,12 @@ class ApplicationTool < FastMcp::Tool
       super || { type: "object", properties: {}, required: [] }
     end
 
-    def mcp_metadata(profiles:, **hints)
+    def mcp_metadata(profiles:, advertised: true, **hints)
       normalized_profiles = Array(profiles).map(&:to_sym).uniq
       unknown_profiles = normalized_profiles - MCP_PROFILE_NAMES
       raise ArgumentError, "Unknown MCP profiles: #{unknown_profiles.join(', ')}" if unknown_profiles.any?
       raise ArgumentError, "At least one MCP profile is required" if normalized_profiles.empty?
+      raise ArgumentError, "MCP advertised flag must be boolean" unless advertised.in?([ true, false ])
 
       missing_hints = MCP_ANNOTATION_KEYS - hints.keys
       unknown_hints = hints.keys - MCP_ANNOTATION_KEYS
@@ -28,11 +29,16 @@ class ApplicationTool < FastMcp::Tool
       raise ArgumentError, "MCP annotation values must be boolean" unless hints.values.all? { |value| value.in?([ true, false ]) }
 
       @mcp_profiles = normalized_profiles.freeze
+      @mcp_advertised = advertised
       annotations(hints.freeze)
     end
 
     def mcp_profiles
       @mcp_profiles || []
+    end
+
+    def mcp_advertised?
+      @mcp_advertised != false
     end
   end
 

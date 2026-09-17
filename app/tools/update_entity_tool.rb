@@ -17,7 +17,7 @@ class UpdateEntityTool < ApplicationTool
   description "Update metadata of an existing entity (not observations). Pass required `entity_id` (integer); " \
     "optional `name` (unique string), `entity_type` (canonicalized string), `aliases` (replaces existing; empty string clears), " \
     "`description` (empty string clears). Do not use to add or edit facts; use `create_observation` or `update_observation` instead. " \
-    "Do not use to create a node; use `create_entity` instead. Do not use to read; use `get_entity` instead. " \
+    "Do not use to create a node; use `create_entity` instead. Do not use to read; use `get_entities` instead. " \
     "Do not use to delete; use `delete_entity` instead. Do not use to combine two entities; use `merge_entities` instead."
 
   arguments do
@@ -55,7 +55,7 @@ class UpdateEntityTool < ApplicationTool
     unless entity
       raise McpGraphMemErrors::ResourceNotFound.new(
         "Entity with ID=#{entity_id} not found.",
-        next_move: "Call `search_entities` or `list_entities`, then retry `update_entity` with a known id."
+        next_move: "Call `search`, then retry `update_entity` with a known id."
       )
     end
 

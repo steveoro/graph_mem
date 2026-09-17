@@ -2,7 +2,7 @@
 
 GraphMem is a Ruby on Rails application implementing a Model Context Protocol (MCP) server for graph-based memory management. It enables AI assistants and other clients to create, retrieve, search, and manage knowledge entities and their relationships through a standardized interface.
 
-[![Version](https://img.shields.io/badge/version-1.36.0-blue.svg)](lib/graph_mem/version.rb)
+[![Version](https://img.shields.io/badge/version-1.37.0-blue.svg)](lib/graph_mem/version.rb)
 [![Rails](https://img.shields.io/badge/rails-8.1.2-orange.svg)](Gemfile)
 [![Ruby](https://img.shields.io/badge/ruby-3.4.1-red.svg)](Gemfile)
 
@@ -82,27 +82,26 @@ GraphMem exposes the following MCP tools:
 
 #### Entity Management
 * `create_entity` -- Create new entities with auto-dedup check
-* `get_entity` -- Retrieve entities by ID with observations and relations
+* `get_entities` -- Retrieve one or more entities with observations and all/internal relation projections
 * `update_entity` -- Modify entity name, type, aliases, description
 * `delete_entity` -- Remove entities and all associated data
-* `search_entities` -- Hybrid text + vector semantic search with relevance ranking
-* `list_entities` -- Paginated listing of all entities
+* `search` -- Ranked summary search, projected subgraph search, or paginated catalog listing
 
 #### Observation Management
 * `create_observation` -- Add observations to existing entities
 * `update_observation` -- Update an active observation or supersede it with a retained replacement
 * `delete_observation` -- Mark observations obsolete while retaining their history
 
-Observations use an `active`, `obsolete`, or `superseded` lifecycle. Normal entity reads, graph traversal, relationship discovery, and search expose active observations only. Use `get_entity(include_obsolete: true)` or `include_obsolete=true` on observation REST/resource listings to inspect retained history. Explicit duplicate-cleanup maintenance operations still hard-delete redundant active rows.
+Observations use an `active`, `obsolete`, or `superseded` lifecycle. Normal entity reads, graph traversal, relationship discovery, and search expose active observations only. Use `get_entities(include_obsolete: true)` or `include_obsolete=true` on observation REST/resource listings to inspect retained history. Explicit duplicate-cleanup maintenance operations still hard-delete redundant active rows.
 
 #### Relationship Management
 * `create_relation` -- Create typed relationships between entities
 * `delete_relation` -- Remove relationships
-* `find_relations` -- Find relationships by entity or type
-* `traverse_graph` -- Bounded multi-hop breadth-first traversal from an entity
+* `traverse_graph` -- Bounded multi-hop traversal or direct endpoint/type relation query
 * `find_shortest_path` -- Shortest path (by hop count) between two entities
-* `get_subgraph_by_ids` -- Get connected subgraph of specified entities
-* `search_subgraph` -- Search across entities and observations with pagination
+
+The prior read names remain callable compatibility aliases but are hidden from
+`tools/list` while telemetry measures remaining use.
 
 #### Context and Workflow
 * `set_context` -- Scope subsequent operations to a project (per `X-MCP-Client`)

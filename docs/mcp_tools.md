@@ -1,6 +1,7 @@
 # MCP Tools Documentation
 
-Detailed reference for the 35 Model Context Protocol (MCP) tools available in GraphMem.
+Detailed reference for GraphMem's 31 advertised Model Context Protocol (MCP) tools and six
+hidden compatibility aliases.
 
 ## Overview
 
@@ -8,15 +9,18 @@ MCP tools in GraphMem are Ruby classes that implement operations on the knowledg
 
 ## Connection Profiles
 
-GraphMem registers all 35 tools and filters the advertised/callable catalog by connection URL:
+GraphMem currently registers 37 callable tool classes and filters the advertised catalog by
+connection URL:
 
-- `/mcp` — 25 context, read, and graph-write tools; maintenance tools are hidden
-- `/mcp/readonly` — 15 context and read tools
-- `/mcp/maintenance` — all 35 tools
+- `/mcp` — 21 canonical context, read, and graph-write tools
+- `/mcp/readonly` — 11 canonical context and read tools
+- `/mcp/maintenance` — all 31 canonical tools
 - `/mcp/sse` and `/mcp/messages` — legacy transport using the default profile
 
-Filtering applies equally to `tools/list` and `tools/call`; calling a hidden tool returns
-`Tool not found`. Profiles are selected when connecting and are not authorization boundaries.
+Profiles govern call eligibility; calling a tool outside the selected profile returns `Tool not
+found`. The six Phase 2 read aliases remain callable in their profiles but are omitted from
+`tools/list`, allowing old clients to migrate without imposing their schemas on new sessions.
+Profiles are selected when connecting and are not authorization boundaries.
 Every tool also publishes the standard MCP `readOnlyHint`, `destructiveHint`,
 `idempotentHint`, and `openWorldHint` annotations.
 
@@ -33,25 +37,25 @@ All tools accept both graph_mem's native snake_case/ID-based parameters and the 
 
 Tools are designed to be used in four phases per session:
 
-1. **Orient** -- `get_context` / `search_entities` / `set_context`
-2. **Recall** -- `search_entities` / `search_subgraph` / `get_entity` / `get_subgraph_by_ids`
+1. **Orient** -- `get_context` / `search` / `set_context`
+2. **Recall** -- `search` / `get_entities` / `traverse_graph`
 3. **Work** -- Execute the task, consulting the graph as needed
 4. **Persist** -- `create_observation` / `create_entity` / `create_relation` / `bulk_update`
 
 ## Context Scoping (3 tools)
 
-Context scoping allows search tools to **boost** entities related to the active project. The recursive `part_of` subtree is bounded; when the cap is reached, context-aware responses expose `scope_truncated: true` and continue with the partial scope. When a context is set via `set_context`, both `search_entities` and `search_subgraph` prioritize in-context entities in their results (cross-project results still appear, but ranked lower).
+Context scoping allows search tools to **boost** entities related to the active project. The recursive `part_of` subtree is bounded; when the cap is reached, context-aware responses expose `scope_truncated: true` and continue with the partial scope. When a context is set via `set_context`, `search` prioritizes in-context query matches (cross-project results still appear, but ranked lower).
 
 Context is stored per MCP client in the `agent_contexts` table, keyed by the `X-MCP-Client` request header. Agents without the header share the `"default"` bucket.
 
 #### `set_context`
-- **Description:** Set this MCP client's active project so `search_entities` and `search_subgraph` boost in-context entities without hard-filtering results. Pass required `entity_id` (integer; also accepts an entity-name string). Do not use to read the current project; use `get_context` instead. Do not use to search across all projects; use `clear_context` instead. Do not use to change entity fields or create a project; use `update_entity` or `create_entity` instead.
+- **Description:** Set this MCP client's active project so `search` boosts in-context matches without hard-filtering results. Pass required `entity_id` (integer; also accepts an entity-name string). Do not use to read the current project; use `get_context` instead. Do not use to search across all projects; use `clear_context` instead. Do not use to change entity fields or create a project; use `update_entity` or `create_entity` instead.
 - **Parameters:**
   - `entity_id` (integer, required): The ID of the entity to set as context. Also accepts entity name (string).
 - **Response:** `{ status, entity_id, entity_name, entity_type }`, plus `warning` and `next_move` when this client id appears to be shared by more than one agent (see [Shared client ids](#shared-client-ids))
 
 #### `get_context`
-- **Description:** Read this MCP client's active project context (entity and scope fields, or status no_context); auto-clears if the project entity is gone. Takes no arguments. Do not use to activate or switch projects; use `set_context` instead. Do not use to wipe context so searches span all projects; use `clear_context` instead. Do not use to load an entity's observations or relations; use `get_entity` instead.
+- **Description:** Read this MCP client's active project context (entity and scope fields, or status no_context); auto-clears if the project entity is gone. Takes no arguments. Do not use to activate or switch projects; use `set_context` instead. Do not use to wipe context so searches span all projects; use `clear_context` instead. Do not use to load entity details; use `get_entities` instead.
 - **Parameters:** None
 - **Response:** `{ status, entity_id, entity_name, entity_type, description, context_set_at, scope_entity_count, scope_truncated, scope_max_entities }` or `{ status: "no_context" }`, plus `warning` and `next_move` when this client id appears to be shared (see [Shared client ids](#shared-client-ids))
 
@@ -78,7 +82,7 @@ The fix is always the same: give each agent its own `X-MCP-Client` header value.
 ## Entity Management (4 tools)
 
 #### `create_entity`
-- **Description:** Create a single new entity node. Pass required `name` (string) and `entity_type` (string); optional `observations` (array of strings), `aliases` (pipe-separated string), `description` (string). Alias `entityType` maps to `entity_type`. Types are canonicalized; cosine distance < 0.25 returns a warning instead of creating. Do not use until you have searched for an existing node; use `search_entities` first. Do not use to add facts to a known entity; use `create_observation` instead. Do not use to change metadata on an existing node; use `update_entity` instead. Do not use for an atomic batch of up to 50 creates; use `bulk_update` instead.
+- **Description:** Create a single new entity node. Pass required `name` (string) and `entity_type` (string); optional `observations` (array of strings), `aliases` (pipe-separated string), `description` (string). Alias `entityType` maps to `entity_type`. Types are canonicalized; cosine distance < 0.25 returns a warning instead of creating. Do not use until you have searched for an existing node; use `search` first. Do not use to add facts to a known entity; use `create_observation` instead. Do not use to change metadata on an existing node; use `update_entity` instead. Do not use for an atomic batch of up to 50 creates; use `bulk_update` instead.
 - **Parameters:**
   - `name` (string, required): The unique name for the new entity.
   - `entity_type` (string, required): The type classification (auto-canonicalized, e.g., "workspace" becomes "Project").
@@ -87,17 +91,19 @@ The fix is always the same: give each agent its own `X-MCP-Client` header value.
   - `observations` (array of strings, optional): Initial observations.
 - **Notes:** Entity types are automatically mapped to canonical forms via `EntityTypeMapping`. For example, "project", "workspace", "context", and "repo" all map to "Project".
 
-#### `get_entity`
-- **Description:** Retrieve one known entity with its observations and relations. Pass required `entity_id` (integer; also accepts an entity-name string); optional `include_obsolete` (bool, default false), `include_ranked` (bool, default false), `query` (string), `observation_limit` (integer). Do not use for keyword discovery; use `search_entities` or `search_subgraph` instead. Do not use to page the catalog; use `list_entities` instead. Do not use to load many known ids as a closed subgraph; use `get_subgraph_by_ids` instead. Do not use for a multi-hop neighborhood; use `traverse_graph` instead. Do not use to ask what the graph knows about a topic; use `summarize` instead. Do not use when you only need observations sorted by trust; use `rank_observations` instead.
+#### `get_entities`
+- **Description:** Retrieve one or more known entities with observations and an explicit relation projection. One unique ID defaults `relations` to `all`; multiple IDs default to `internal`.
 - **Parameters:**
-  - `entity_id` (integer, required): The ID of the entity. Also accepts entity name (string).
+  - `entity_ids` (array, required): Entity IDs or resolvable names, returned in input order.
+  - `relations` (string, optional): `all` incident edges or only `internal` edges.
   - `include_obsolete` (boolean, optional, default: false): Include obsolete and superseded observations.
   - `include_ranked` (boolean, optional, default: false): Sort observations by trust score descending.
   - `query` (string, optional): Rank observations by query relevance before trust.
-  - `observation_limit` (integer, optional): Return at most this many observations. Limits always apply after relevance ranking, or trust ranking when no query is supplied; `observations_truncated` reports omitted active observations.
+  - `observation_limit` (integer, optional): Return at most this many observations per entity.
+- **Response:** `{ entities, relations, missing_entity_ids, relation_scope }`.
 
 #### `update_entity`
-- **Description:** Update metadata of an existing entity (not observations). Pass required `entity_id` (integer); optional `name` (unique string), `entity_type` (canonicalized string), `aliases` (replaces existing; empty string clears), `description` (empty string clears). Do not use to add or edit facts; use `create_observation` or `update_observation` instead. Do not use to create a node; use `create_entity` instead. Do not use to read; use `get_entity` instead. Do not use to delete; use `delete_entity` instead. Do not use to combine two entities; use `merge_entities` instead.
+- **Description:** Update metadata of an existing entity (not observations). Pass required `entity_id` (integer); optional `name` (unique string), `entity_type` (canonicalized string), `aliases` (replaces existing; empty string clears), `description` (empty string clears). Do not use to add or edit facts; use `create_observation` or `update_observation` instead. Do not use to create a node; use `create_entity` instead. Do not use to read; use `get_entities` instead. Do not use to delete; use `delete_entity` instead. Do not use to combine two entities; use `merge_entities` instead.
 - **Parameters:**
   - `entity_id` (integer, required): The ID of the entity.
   - `name` (string, optional): New name (must be unique).
@@ -132,7 +138,7 @@ The fix is always the same: give each agent its own `X-MCP-Client` header value.
   - `confidence`, `source`, `valid_from`, `valid_until`, `tags` (optional): Structured metadata updates.
   - `supersede` (boolean, optional, default: false): Create a new active observation and link the original to it with status `superseded`.
   - `reason` (string, optional): Reason for supersession.
-- **Lifecycle:** Active observations appear in reads, traversal, relationship discovery, and observation search by default. `get_entity(include_obsolete: true)` and REST/resource `include_obsolete=true` expose retained history.
+- **Lifecycle:** Active observations appear in reads, traversal, relationship discovery, and observation search by default. `get_entities(entity_ids: [...], include_obsolete: true)` and REST/resource `include_obsolete=true` expose retained history.
 
 #### `delete_observation`
 - **Description:** Mark one observation obsolete so it is excluded from default reads and search; does not delete entities or relations. Pass required `observation_id` (integer); optional `reason` (string). Repeating on an inactive observation is safe. Do not use to replace a fact while retaining history; use `update_observation` with supersede true instead. Do not use to add a fact; use `create_observation` instead. Do not use to destroy an entity; use `delete_entity` instead.
@@ -141,7 +147,7 @@ The fix is always the same: give each agent its own `X-MCP-Client` header value.
   - `reason` (string, optional): Reason for obsolescence.
 
 #### `rank_observations`
-- **Description:** Return one known entity's observations sorted by trust_score (most reliable first). Pass required `entity_id` (integer; also accepts entity name); optional `include_obsolete` (bool, default false), `limit` (integer, default all), `query` (string; relevance then trust). Do not use when you also need relations or entity metadata; use `get_entity` instead. Do not use for opposing observation pairs; use `detect_contradictions` instead. Do not use to find observations across entities by keyword; use `search_subgraph` instead. Do not use for a topic answer; use `summarize` instead.
+- **Description:** Return one known entity's observations sorted by trust_score (most reliable first). Pass required `entity_id` (integer; also accepts entity name); optional `include_obsolete` (bool, default false), `limit` (integer, default all), `query` (string; relevance then trust). Do not use when you also need relations or entity metadata; use `get_entities` instead. Do not use for opposing observation pairs; use `detect_contradictions` instead. Do not use to find observations across entities by keyword; use `search` instead. Do not use for a topic answer; use `summarize` instead.
 - **Parameters:**
   - `entity_id` (integer, required): The ID of the entity. Also accepts entity name (string).
   - `include_obsolete` (boolean, optional, default: false): Include obsolete and superseded observations in the ranking.
@@ -155,10 +161,10 @@ The fix is always the same: give each agent its own `X-MCP-Client` header value.
   - `max_distance` (number, optional, default: 0.35): Maximum cosine distance threshold (smaller = stricter).
   - `max_results` (integer, optional, default: 20): Maximum candidate pairs to return.
 
-## Relation Management (3 tools)
+## Relation Management (2 tools)
 
 #### `create_relation`
-- **Description:** Add one directed edge between two existing entities. Pass required `from_entity_id` (integer or name; aliases `from_entity`, `from`), `to_entity_id` (integer or name; aliases `to_entity`, `to`), and `relation_type` (string, canonicalized); optional `weight` (float >=0), `confidence` (float 0-1), `properties` (hash). Do not use to create nodes; use `create_entity` instead. Do not use to batch-create relations; use `bulk_update` instead. Do not use to query existing 1-hop edges; use `find_relations` instead. Do not use for a multi-hop neighborhood; use `traverse_graph` instead. Do not use to remove an edge; use `delete_relation` instead.
+- **Description:** Add one directed edge between two existing entities. Pass required `from_entity_id` (integer or name; aliases `from_entity`, `from`), `to_entity_id` (integer or name; aliases `to_entity`, `to`), and `relation_type` (string, canonicalized); optional `weight` (float >=0), `confidence` (float 0-1), `properties` (hash). Do not use to create nodes; use `create_entity` instead. Do not use to batch-create relations; use `bulk_update` instead. Do not use to query existing 1-hop edges; use `traverse_graph` instead. Do not use for a multi-hop neighborhood; use `traverse_graph` instead. Do not use to remove an edge; use `delete_relation` instead.
 - **Parameters:**
   - `from_entity_id` (integer, required): Source entity ID. Also accepts entity name (string) via `from_entity_id`, `from_entity`, or `from`.
   - `to_entity_id` (integer, required): Target entity ID. Also accepts entity name (string) via `to_entity_id`, `to_entity`, or `to`.
@@ -169,50 +175,40 @@ The fix is always the same: give each agent its own `X-MCP-Client` header value.
 - **Notes:** Known relation-type variants are mapped to canonical values via `RelationTypeMapping`.
 
 #### `delete_relation`
-- **Description:** Delete one graph edge by id without deleting either entity. Pass required `relation_id` (integer); optional `reason` (string, audit log). Do not use if you lack a relation_id; use `find_relations` first. Do not use to remove an entity and its relations; use `delete_entity` instead. Do not use for queued duplicate-relation cleanup; use `apply_maintenance_review` instead. Do not use to add an edge; use `create_relation` instead.
+- **Description:** Delete one graph edge by id without deleting either entity. Pass required `relation_id` (integer); optional `reason` (string, audit log). Do not use if you lack a relation_id; use `traverse_graph` first. Do not use to remove an entity and its relations; use `delete_entity` instead. Do not use for queued duplicate-relation cleanup; use `apply_maintenance_review` instead. Do not use to add an edge; use `create_relation` instead.
 - **Parameters:**
   - `relation_id` (integer, required): The ID of the relation.
   - `reason` (string, optional): Reason for the deletion. Recorded in the audit log.
 
-#### `find_relations`
-- **Description:** Find 1-hop edges matching optional AND-combined filters. Pass optional `from_entity_id` (integer), `to_entity_id` (integer), `relation_type` (string, canonicalized). Returns relations only. Do not use for a multi-hop neighborhood; use `traverse_graph` instead. Do not use for the shortest path between two entities; use `find_shortest_path` instead. Do not use for one entity's relations bundled with observations; use `get_entity` instead. Do not use to create or delete edges; use `create_relation` or `delete_relation` instead.
-- **Parameters:**
-  - `from_entity_id` (integer, optional): Filter by source entity.
-  - `to_entity_id` (integer, optional): Filter by target entity.
-  - `relation_type` (string, optional): Filter by relation type; known variants are canonicalized.
+## Search & Query Tools (3 tools)
 
-## Search & Query Tools (5 tools)
-
-#### `search_entities`
-- **Description:** Search entities by keyword and semantic similarity (hybrid RRF); returns ranked summaries without observation text or relations. Pass required `query` (string); optional `limit` (integer, default 50, max 100). Active context boosts matches (not a hard filter). Do not use to search observation text or return connecting relations; use `search_subgraph` instead. Do not use to load a known id; use `get_entity` instead. Do not use to page every entity with no query; use `list_entities` instead. Do not use to answer what the graph knows about a topic; use `summarize` instead.
+#### `search`
+- **Description:** Select summary, projected subgraph, or catalog mode from the presence of `query` and `include`, always returning a hash with `mode`.
 - **Parameters:**
-  - `query` (string, required): The search term. Multiple words are tokenized for matching.
-- **Response fields:** `entity_id`, `name`, `entity_type`, `description`, `aliases`, `memory_observations_count`, `relevance_score`, `matched_fields`
-
-#### `list_entities`
-- **Description:** Page the entire entity catalog with no search query, returning id, name, and type only. Pass optional `page` (integer, default 1) and `per_page` (integer, default 20, max 100). Do not use for text or semantic search; use `search_entities` instead. Do not use to search observation text or return relations; use `search_subgraph` instead. Do not use to load one known entity; use `get_entity` instead. Do not use for graph health counts; use `get_graph_stats` instead.
-- **Parameters:**
+  - `query` (string, optional): Omit for catalog mode; provide for summary or subgraph mode.
+  - `include` (array, optional): `observations` and/or `relations`; either selects subgraph mode.
   - `page` (integer, optional, default: 1): Page number.
-  - `per_page` (integer, optional, default: 20, max: 100): Entities per page.
+  - `per_page` (integer, optional, default: 20, max: 100): Results per page.
+  - `limit` (integer, optional): Legacy alias for `per_page`; ignored when `per_page` is present.
+  - `search_in_name`, `search_in_type`, `search_in_aliases`, `search_in_observations` (boolean, optional): Subgraph search fields.
+- **Responses:**
+  - Summary: `{ mode: "summary", results, pagination, retrieval }`
+  - Subgraph: `{ mode: "subgraph", entities, pagination, retrieval, relations? }`; observations are included on entities only when requested.
+  - Catalog: `{ mode: "catalog", entities, pagination }`
 
-#### `search_subgraph`
-- **Description:** Search names, types, aliases, and observations and return a paginated subgraph of matches (observations plus relations exclusively among them). Pass required `query` (string); optional `search_in_name`, `search_in_type`, `search_in_aliases`, `search_in_observations` (bool, default true), `page` (integer, default 1), `per_page` (integer, default 20, max 100). Not a BFS from a start node. Do not use for ranked summaries without observations or relations; use `search_entities` instead. Do not use with known ids; use `get_subgraph_by_ids` instead. Do not use for multi-hop expansion; use `traverse_graph` instead. Do not use for a synthesized answer; use `summarize` instead. Do not use as a no-query catalog; use `list_entities` instead.
-- **Parameters:**
-  - `query` (string, required): Search term.
-  - `search_in_name` (boolean, optional, default: true)
-  - `search_in_type` (boolean, optional, default: true)
-  - `search_in_aliases` (boolean, optional, default: true)
-  - `search_in_observations` (boolean, optional, default: true)
-  - `page` (integer, optional, default: 1)
-  - `per_page` (integer, optional, default: 20, max: 100)
+#### `get_entities`
 
-#### `get_subgraph_by_ids`
-- **Description:** Load a known id set as a closed subgraph: those entities, their observations, and only relations whose both ends are in the set. Pass required `entity_ids` (array of integers); optional `query` (string), `observation_limit` (integer). Do not use to discover entities by text; use `search_subgraph` or `search_entities` instead. Do not use for one id's complete incident relations; use `get_entity` instead. Do not use to expand unknown neighbors; use `traverse_graph` instead.
-- **Parameters:**
-  - `entity_ids` (array of integers, required): Entity IDs to include.
+See [Entity Management](#entity-management-4-tools).
+
+#### Compatibility aliases
+
+`search_entities`, `search_subgraph`, `list_entities`, `get_entity`,
+`get_subgraph_by_ids`, and `find_relations` remain callable with their prior
+schemas and response shapes. They are deprecated and omitted from `tools/list`;
+new clients should not discover or select them.
 
 #### `summarize`
-- **Description:** Summarize what the knowledge graph knows about a topic with deterministic source-backed evidence (optional LLM synthesis). Pass required `query` (string); optional `entity_id` (integer), `max_results` (integer, default 10), `max_observations` (integer, default 20), `observations_per_entity` (integer; 0 disables cap), `max_depth` (integer, default 0), `include_sources` (bool, default true), `scope` (string: context or global), `style` (string: concise or detailed). Do not use for match listings; use `search_entities` or `search_subgraph` instead. Do not use to inspect one known entity; use `get_entity` instead. Do not use for a structural neighborhood; use `traverse_graph` instead. Do not use for numeric health metrics; use `get_graph_stats` instead.
+- **Description:** Summarize what the knowledge graph knows about a topic with deterministic source-backed evidence (optional LLM synthesis). Pass required `query` (string); optional `entity_id` (integer), `max_results` (integer, default 10), `max_observations` (integer, default 20), `observations_per_entity` (integer; 0 disables cap), `max_depth` (integer, default 0), `include_sources` (bool, default true), `scope` (string: context or global), `style` (string: concise or detailed). Do not use for match listings; use `search` instead. Do not use to inspect one known entity; use `get_entities` instead. Do not use for a structural neighborhood; use `traverse_graph` instead. Do not use for numeric health metrics; use `get_graph_stats` instead.
 - **Parameters:**
   - `query` (string, required): The topic or question to summarize.
   - `entity_id` (integer, optional): Scope summarization to a single entity.
@@ -227,20 +223,24 @@ The fix is always the same: give each agent its own `X-MCP-Client` header value.
 
 ## Graph Traversal (2 tools)
 
-These tools perform multi-hop graph traversal. Unlike `find_relations` (which is single-hop), they walk the graph breadth-first from a starting entity. `direction` is one of `outgoing` (source -> target), `incoming` (target <- source), or `both` (default).
+These tools perform structural graph queries. `direction` is one of `outgoing`
+(source -> target), `incoming` (target <- source), or `both` (default).
 
 #### `traverse_graph`
-- **Description:** Perform a bounded multi-hop BFS from one start entity and return reachable entities (with observations) and connecting relations. Pass required `start_entity_id` (integer; also accepts entity name); optional `max_depth` (integer, default 2, max 5), `direction` (both|outgoing|incoming, default both), `relation_types` (array of strings), `max_entities` (integer, default 100, max 1000). Do not use for keyword search; use `search_subgraph` instead. Do not use for the shortest path between two ids; use `find_shortest_path` instead. Do not use for a 1-hop edge list; use `find_relations` instead. Do not use for an explicit id set with no expansion; use `get_subgraph_by_ids` instead.
+- **Description:** Perform bounded BFS when `start_entity_id` is supplied, or query edges directly using endpoint/type filters. With no start or filters, returns all relations.
 - **Parameters:**
-  - `start_entity_id` (integer, required): The entity to start from. Also accepts entity name (string).
+  - `start_entity_id` (integer, optional): The entity to start BFS from. Also accepts entity name.
+  - `from_entity_id`, `to_entity_id` (integer, optional): Direct edge filters.
+  - `relation_type` (string, optional): Singular relation-type filter.
   - `max_depth` (integer, optional, default: 2, max: 5): Maximum number of hops to expand.
   - `direction` (string, optional, default: `both`): One of `both`, `outgoing`, `incoming`.
   - `relation_types` (array of strings, optional): Restrict traversal to these relation types (canonicalized).
   - `max_entities` (integer, optional, default: 100, max: 1000): Maximum number of entities to return.
-- **Response:** `{ entities: [...], relations: [...], traversal: { start_entity_id, max_depth, direction, visited_depth, truncated } }`. `truncated` is `true` when the `max_entities` cap stopped expansion.
+  - `include` (array, optional): Any of `entities`, `relations`, and `traversal`.
+- **Response:** BFS defaults to `{ entities, relations, traversal }`; relation-query mode defaults to `{ relations }`.
 
 #### `find_shortest_path`
-- **Description:** Find the shortest hop-count path between two entities. Pass required `from_entity_id` and `to_entity_id` (integer; also accepts entity name); optional `max_depth` (integer, default 2, max 5), `direction` (both|outgoing|incoming, default both), `relation_types` (array of strings). Returns ordered path entities and relations, or found false when none exists within max_depth. Do not use for a full neighborhood from one start; use `traverse_graph` instead. Do not use for 1-hop filters; use `find_relations` instead. Do not use for keyword lookup; use `search_subgraph` instead.
+- **Description:** Find the shortest hop-count path between two entities. Pass required `from_entity_id` and `to_entity_id` (integer; also accepts entity name); optional `max_depth` (integer, default 2, max 5), `direction` (both|outgoing|incoming, default both), `relation_types` (array of strings). Returns ordered path entities and relations, or found false when none exists within max_depth. Do not use for a full neighborhood from one start; use `traverse_graph` instead. Do not use for 1-hop filters; use `traverse_graph` instead. Do not use for keyword lookup; use `search` instead.
 - **Parameters:**
   - `from_entity_id` (integer, required): Source entity. Also accepts entity name (string).
   - `to_entity_id` (integer, required): Target entity. Also accepts entity name (string).
@@ -313,7 +313,7 @@ These tools perform multi-hop graph traversal. Unlike `find_relations` (which is
 - **Response:** Updated review-row status payload.
 
 #### `get_graph_stats`
-- **Description:** Return live knowledge-graph health metrics (totals, entity_type_distribution, orphan_count, most_connected, recent updates). Takes no arguments. Do not use for stored report documents; use `get_maintenance_reports` instead. Do not use to page actual entities; use `list_entities` instead. Do not use for a topic summary; use `summarize` instead. Do not use for compaction job status; use `dream_state_status` instead. Do not use for software version; use `get_version` instead.
+- **Description:** Return live knowledge-graph health metrics (totals, entity_type_distribution, orphan_count, most_connected, recent updates). Takes no arguments. Do not use for stored report documents; use `get_maintenance_reports` instead. Do not use to page actual entities; use `search` instead. Do not use for a topic summary; use `summarize` instead. Do not use for compaction job status; use `dream_state_status` instead. Do not use for software version; use `get_version` instead.
 - **Parameters:** None
 
 ## Utility Tools (2 tools)
@@ -383,9 +383,9 @@ MCP `tools/call` failures return `isError: true` with a **single JSON object** a
   "error": true,
   "category": "not_found",
   "retriable": false,
-  "next_move": "Call `search_entities` or `list_entities` to verify the identifier, then retry with a known id.",
+  "next_move": "Call `search` to verify the identifier, then retry with a known id.",
   "message": "Entity with ID=123 not found.",
-  "tool": "get_entity"
+  "tool": "get_entities"
 }
 ```
 
@@ -393,7 +393,7 @@ MCP `tools/call` failures return `isError: true` with a **single JSON object** a
 
 | Category | `retriable` | Typical next move |
 |---|---|---|
-| `not_found` | false | Call `search_entities` or `list_entities`, then retry with a known id |
+| `not_found` | false | Call `search`, then retry with a known id |
 | `validation` | false | Correct the argument format required by the tool schema and retry |
 | `permission` | false | Escalate to a human; this client is not authorized |
 | `timeout` | true | Retry the tool once, then inform the user of the delay |
@@ -420,10 +420,10 @@ Some tools overlap by design; pick by intent:
 
 | Goal | Prefer | Alternative |
 |---|---|---|
-| Find entities by keyword/semantic match | `search_entities` | `search_subgraph` (when you also need observation text and relations in one payload) |
-| Page every entity with no query | `list_entities` | `search_entities` (when you have a query) |
-| Load known entities by ID | `get_subgraph_by_ids` | `get_entity` (single entity with full detail) |
-| Explore multi-hop neighborhoods | `traverse_graph` | `find_relations` (single-hop edges only) |
+| Find entities by keyword/semantic match | `search` | `search` (when you also need observation text and relations in one payload) |
+| Page every entity with no query | `search` | `search` (when you have a query) |
+| Load known entities by ID | `get_entities` | `get_entities` (single entity with full detail) |
+| Explore multi-hop neighborhoods | `traverse_graph` | `traverse_graph` (single-hop edges only) |
 | Find how two entities connect | `find_shortest_path` | `traverse_graph` (full neighborhood) |
 | Review duplicate entities (live scan) | `suggest_merges` | `list_maintenance_review` (dream-state queue rows) |
 | Inspect stored maintenance reports | `get_maintenance_reports` | `list_maintenance_review` (paginated item_id rows) |
@@ -431,7 +431,7 @@ Some tools overlap by design; pick by intent:
 | Apply a queued review | `apply_maintenance_review` | `merge_entities` (known source/target ids) |
 | Skip a queued review | `dismiss_maintenance_review` | `apply_maintenance_review` (to execute it) |
 | Execute a merge of known ids | `merge_entities` | `apply_maintenance_review` (queued merge) |
-| Summarize what the graph knows about a topic | `summarize` | `search_subgraph` + manual reading |
+| Summarize what the graph knows about a topic | `summarize` | `search` + manual reading |
 | Poll a project filesystem scan | `scan_project_status` | `scan_project` (to start or resume) |
 
 ## Dream-State Background Compaction

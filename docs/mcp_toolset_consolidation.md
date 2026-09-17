@@ -155,9 +155,16 @@ Profiles chosen at connect time work today. Runtime toggling needs a gem change 
 
 ## Phase 2 — Read consolidation (10 tools to 6)
 
+**Implementation status (2026-09-17): shipped in version 1.37.0.**
+
+The six replaced names remain registered and callable but are omitted from `tools/list`.
+`ApplicationTool.mcp_metadata(advertised: false)` separates catalog visibility from profile call
+eligibility, and Phase 0 telemetry continues recording calls under each alias's own name.
+
 ### `search` — absorbs `search_entities`, `search_subgraph`, `list_entities`
 
-One selection-by-query tool with an explicit projection.
+One selection-by-query tool with an explicit projection and a uniform hash envelope carrying
+`mode: "summary" | "subgraph" | "catalog"`.
 
 | Was | Becomes |
 |---|---|
@@ -168,6 +175,8 @@ One selection-by-query tool with an explicit projection.
 **Paging conventions must be unified.** `search_entities` uses `limit` (default 50, max 100) while
 `search_subgraph` and `list_entities` use `page`/`per_page` (default 20, max 100). Standardize on
 `page`/`per_page` and add `limit` as a `ParameterNormalizer` alias so existing callers keep working.
+Canonical calls default to 20 per page; the hidden `search_entities` adapter retains its legacy
+default of 50.
 
 ### `get_entities` — absorbs `get_entity`, `get_subgraph_by_ids`
 
@@ -197,11 +206,20 @@ Handle the second case by adding an optional `to_entity_id` to `traverse_graph`,
 returned edges to those reaching that entity. With `max_depth: 1` it reproduces `find_relations`
 exactly. Add an `include:` projection so the relations-only response shape survives.
 
+The implementation also preserves two undocumented but reachable `find_relations` modes:
+relation-type-only and unfiltered global edge listing. When no start entity is supplied,
+`traverse_graph` delegates to `RelationQueryService` and defaults to a `{ relations: [...] }`
+response; `start_entity_id` without direct endpoint filters retains the existing BFS response.
+
 ### Unchanged
 
 `summarize`, `find_shortest_path` and `rank_observations` stay separate. These are genuinely
 distinct intents — synthesis, connectivity between two named nodes, and trust-ordered observation
 retrieval — not projections of a shared query.
+
+The transitional registry contains 37 callable classes and advertises 31 canonical tools:
+21 on the default profile, 11 on readonly, and 31 on maintenance. The current telemetry sample is
+too small to remove `summarize` or retire compatibility aliases.
 
 
 ## Phase 3 — Write consolidation (10 tools to 3)

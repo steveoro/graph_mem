@@ -9,7 +9,7 @@ Use this skill to operate `graph_mem` reliably and consistently. The repository
 documentation under `docs/` is the detailed reference; this skill is the
 short operational checklist for an agent.
 
-Tool names below (`get_context`, `search_entities`, ...) are graph_mem's
+Tool names below (`get_context`, `search`, ...) are graph_mem's
 server-side tool names. Invoke them through whatever mechanism your host uses
 for MCP tools — direct tool calls, `mcp__graph_mem__<tool>`-style names, or a
 generic wrapper such as `CallMcpTool` or `mcp_call_tool`. The server name in
@@ -28,7 +28,7 @@ client-side label, not part of the tool contract.
    - Orient -> Recall -> Work -> Persist.
 
 3. **Search before create**
-   - Always run `search_entities` before `create_entity` to avoid duplicates.
+   - Always run `search` before `create_entity` to avoid duplicates.
 
 4. **Choose the smallest connection profile**
    - `/mcp` exposes ordinary context, read, and graph-write tools.
@@ -53,29 +53,27 @@ Before calling any `graph_mem` tool for the first time in a session:
 1. Say `Remembering...`.
 2. Call `get_context`. Context is per-agent and persisted, so you may already have one from a prior session.
 3. If no context:
-   - Run `search_entities` for the project name.
+   - Run `search` for the project name.
    - If found, call `set_context(<id or name>)`.
    - If not found, call `create_entity(name:, entity_type: "Project")`, then `set_context`.
 
 ## Phase 2 - Recall (before implementation)
 
-1. Run `search_entities` or `search_subgraph` with task keywords.
-2. Inspect top matches with `get_entity`.
-3. For related clusters, run `get_subgraph_by_ids`.
-4. Use `traverse_graph` for bounded multi-hop exploration or
+1. Run `search` with task keywords.
+2. Inspect one or more known matches with `get_entities`.
+3. Use `traverse_graph` for bounded multi-hop exploration or
    `find_shortest_path` to explain how two entities connect.
-5. Use `summarize` for a source-backed answer to a knowledge question; use
+4. Use `summarize` for a source-backed answer to a knowledge question; use
    direct search/traversal when exact graph structure is needed.
-6. Prioritize `Issue` + `PossibleSolution`, `BestPractice`, and `Preference`
+5. Prioritize `Issue` + `PossibleSolution`, `BestPractice`, and `Preference`
    entities.
 
 ## Phase 3 - Work
 
 1. Execute the requested task using recalled knowledge.
 2. If blocked or uncertain, query graph_mem again mid-task:
-   - `search_entities` for new clues.
-   - `find_relations` for immediate edges.
-   - `traverse_graph` for a bounded neighborhood.
+   - `search` for new clues.
+   - `traverse_graph` for immediate edges or a bounded neighborhood.
    - `find_shortest_path` for connectivity between known entities.
 
 ## Phase 4 - Persist (before final response)
@@ -120,9 +118,9 @@ Default recommendation: use native snake_case keys unless compatibility with ext
 
 ## Query Strategy
 
-1. Start broad (`search_entities`) then narrow by IDs.
+1. Start broad (`search`) then narrow by IDs.
 2. Find the root `Project`, then traverse relations.
-3. Use `find_relations` for one hop and `traverse_graph` for bounded multi-hop exploration.
+3. Use `traverse_graph` with direct filters for edge lookup or a start entity for bounded multi-hop exploration.
 4. Use `find_shortest_path` for the shortest unweighted connection within `max_depth`.
 5. Keep traversal bounds small and narrow with `direction` and canonical `relation_types`.
 6. Prefer graph traversal over repeated fuzzy searches after locating the relevant entities.
@@ -152,15 +150,15 @@ call-tool wrapper).
 
 If no context:
 
-`search_entities` — `{"query":"<project name>"}`
+`search` — `{"query":"<project name>"}`
 
 `set_context` — `{"entity_id":123}`
 
 ### Recall template
 
-`search_entities` — `{"query":"<task keywords>"}`
+`search` — `{"query":"<task keywords>"}`
 
-`get_entity` — `{"entity_id":456}`
+`get_entities` — `{"entity_ids":[456]}`
 
 ### Summarize template
 

@@ -16,7 +16,7 @@ class GetGraphStatsTool < ApplicationTool
   description "Return live knowledge-graph health metrics (totals, entity_type_distribution, orphan_count, " \
     "most_connected, recent updates). Takes no arguments. " \
     "Do not use for stored report documents; use `get_maintenance_reports` instead. " \
-    "Do not use to page actual entities; use `list_entities` instead. " \
+    "Do not use to page actual entities; use `search` instead. " \
     "Do not use for a topic summary; use `summarize` instead. " \
     "Do not use for compaction job status; use `dream_state_status` instead. " \
     "Do not use for software version; use `get_version` instead."

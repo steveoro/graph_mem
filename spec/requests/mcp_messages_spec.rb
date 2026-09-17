@@ -50,5 +50,27 @@ RSpec.describe "MCP messages endpoint", type: :request do
       expect(response).to have_http_status(:ok)
       expect(AgentContext.find_by(client_id: "legacy-hidden-maintenance")).to be_nil
     end
+
+    it "keeps list-hidden compatibility aliases callable" do
+      host! "localhost"
+
+      post "/mcp/messages",
+        params: {
+          jsonrpc: "2.0",
+          method: "tools/call",
+          params: {
+            name: "search_entities",
+            arguments: { query: "legacy-alias-probe" }
+          },
+          id: 3
+        }.to_json,
+        headers: {
+          "CONTENT_TYPE" => "application/json",
+          "X-MCP-Client" => "legacy-hidden-alias"
+        }
+
+      expect(response).to have_http_status(:ok)
+      expect(AgentContext.find_by!(client_id: "legacy-hidden-alias").last_tool_name).to eq("search_entities")
+    end
   end
 end

@@ -56,7 +56,7 @@ class DetectContradictionsTool < ApplicationTool
       logger.error "ResourceNotFound in DetectContradictionsTool: #{error_message} (was: #{e.message})"
       raise McpGraphMemErrors::ResourceNotFound.new(
         error_message,
-        next_move: "Call `search_entities` to find the entity, then retry `detect_contradictions`."
+        next_move: "Call `search` to find the entity, then retry `detect_contradictions`."
       )
     rescue StandardError => e
       raise if ToolError::TIMEOUT_CLASSES.any? { |klass| e.is_a?(klass) }

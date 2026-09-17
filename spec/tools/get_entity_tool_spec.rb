@@ -170,15 +170,15 @@ RSpec.describe GetEntityTool, type: :model do
           tool.call(entity_id: 999_999)
         }.to raise_error(McpGraphMemErrors::ResourceNotFound, /not found/) do |error|
           expect(error.category).to eq("not_found")
-          expect(error.next_move).to include("search_entities")
-          expect(error.next_move).to include("get_entity")
+          expect(error.next_move).to include("search")
+          expect(error.next_move).to include("get_entities")
         end
       end
     end
 
     context 'error handling' do
       it 'raises InternalServerError on unexpected errors without leaking the original message' do
-        allow(MemoryEntity).to receive(:includes).and_raise(StandardError.new("secret-db-failure"))
+        allow(MemoryEntity).to receive(:where).and_raise(StandardError.new("secret-db-failure"))
 
         expect {
           tool.call(entity_id: entity.id)
@@ -188,7 +188,7 @@ RSpec.describe GetEntityTool, type: :model do
       end
 
       it 're-raises Timeout::Error so ToolError can map it to timeout' do
-        allow(MemoryEntity).to receive(:includes).and_raise(Timeout::Error.new("execution expired"))
+        allow(MemoryEntity).to receive(:where).and_raise(Timeout::Error.new("execution expired"))
 
         expect { tool.call(entity_id: entity.id) }.to raise_error(Timeout::Error, /execution expired/)
       end

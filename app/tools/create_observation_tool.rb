@@ -57,7 +57,7 @@ class CreateObservationTool < ApplicationTool
       logger.error "ResourceNotFound in CreateObservationTool: #{error_message} (was: #{e.message})"
       raise McpGraphMemErrors::ResourceNotFound.new(
         error_message,
-        next_move: "Call `search_entities` to find the entity, then retry `create_observation`."
+        next_move: "Call `search` to find the entity, then retry `create_observation`."
       )
     rescue ActiveRecord::RecordInvalid => e
       error_message = "Validation Failed: #{e.record.errors.full_messages.join(', ')}. " \

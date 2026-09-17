@@ -13,7 +13,7 @@ class SetContextTool < ApplicationTool
     open_world_hint: false
   )
 
-  description "Set this MCP client's active project so `search_entities` and `search_subgraph` boost in-context " \
+  description "Set this MCP client's active project so `search` and `search` boost in-context " \
     "entities without hard-filtering results. Pass required `entity_id` (integer; also accepts an entity-name string). " \
     "Do not use to read the current project; use `get_context` instead. " \
     "Do not use to search across all projects; use `clear_context` instead. " \
@@ -28,7 +28,7 @@ class SetContextTool < ApplicationTool
     unless entity
       raise McpGraphMemErrors::ResourceNotFound.new(
         "Entity with ID=#{entity_id} not found.",
-        next_move: "Call `search_entities` to find a valid entity id, then retry `set_context`."
+        next_move: "Call `search` to find a valid entity id, then retry `set_context`."
       )
     end
 

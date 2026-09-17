@@ -71,6 +71,22 @@ RSpec.describe ApplicationTool do
       )
       expect(tool_class.mcp_profiles).to be_frozen
       expect(tool_class.annotations).to be_frozen
+      expect(tool_class.mcp_advertised?).to be(true)
+    end
+
+    it "supports hidden-but-callable compatibility metadata" do
+      tool_class = Class.new(described_class)
+
+      tool_class.mcp_metadata(
+        profiles: [ :default ],
+        advertised: false,
+        read_only_hint: true,
+        destructive_hint: false,
+        idempotent_hint: true,
+        open_world_hint: false
+      )
+
+      expect(tool_class.mcp_advertised?).to be(false)
     end
 
     it "rejects unknown or empty profiles" do
@@ -107,6 +123,17 @@ RSpec.describe ApplicationTool do
           open_world_hint: nil
         )
       }.to raise_error(ArgumentError, /boolean/)
+
+      expect {
+        tool_class.mcp_metadata(
+          profiles: [ :default ],
+          advertised: nil,
+          read_only_hint: true,
+          destructive_hint: false,
+          idempotent_hint: true,
+          open_world_hint: false
+        )
+      }.to raise_error(ArgumentError, /advertised flag/)
     end
   end
 

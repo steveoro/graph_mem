@@ -99,7 +99,7 @@ RSpec.describe CreateRelationTool, type: :model do
           tool.call(from_entity_id: 999_999, to_entity_id: entity_b.id, relation_type: 'depends_on')
         }.to raise_error(McpGraphMemErrors::ResourceNotFound, "Entity with ID=999999 not found.") do |error|
           expect(error.category).to eq("not_found")
-          expect(error.next_move).to include("`search_entities`")
+          expect(error.next_move).to include("`search`")
           expect(error.next_move).to include("`create_relation`")
         end
       end
@@ -109,7 +109,7 @@ RSpec.describe CreateRelationTool, type: :model do
           tool.call(from_entity_id: entity_a.id, to_entity_id: 999_999, relation_type: 'depends_on')
         }.to raise_error(McpGraphMemErrors::ResourceNotFound, "Entity with ID=999999 not found.") do |error|
           expect(error.category).to eq("not_found")
-          expect(error.next_move).to include("`search_entities`")
+          expect(error.next_move).to include("`search`")
           expect(error.next_move).to include("`create_relation`")
         end
       end
@@ -123,7 +123,7 @@ RSpec.describe CreateRelationTool, type: :model do
           tool.call(from_entity_id: entity_a.id, to_entity_id: entity_b.id, relation_type: 'depends_on')
         }.to raise_error(McpGraphMemErrors::OperationFailed, /already exists/) do |error|
           expect(error.category).to eq("validation")
-          expect(error.next_move).to include("`find_relations`")
+          expect(error.next_move).to include("`traverse_graph`")
           expect(error.next_move).to include("`delete_relation`")
         end
       end

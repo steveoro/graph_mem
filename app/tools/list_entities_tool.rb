@@ -1,9 +1,9 @@
 # frozen_string_literal: true
 
 class ListEntitiesTool < ApplicationTool
-  DEFAULT_PER_PAGE = 20 # Renamed from DEFAULT_LIMIT
-  MAX_PER_PAGE = 100    # Renamed from MAX_LIMIT
-  DEFAULT_PAGE = 1
+  DEFAULT_PER_PAGE = EntityCatalogService::DEFAULT_PER_PAGE
+  MAX_PER_PAGE = EntityCatalogService::MAX_PER_PAGE
+  DEFAULT_PAGE = EntityCatalogService::DEFAULT_PAGE
 
   def self.tool_name
     "list_entities"
@@ -11,6 +11,7 @@ class ListEntitiesTool < ApplicationTool
 
   mcp_metadata(
     profiles: %i[default readonly maintenance],
+    advertised: false,
     read_only_hint: true,
     destructive_hint: false,
     idempotent_hint: true,
@@ -19,9 +20,9 @@ class ListEntitiesTool < ApplicationTool
 
   description "Page the entire entity catalog with no search query, returning id, name, and type only. " \
     "Pass optional `page` (integer, default 1) and `per_page` (integer, default 20, max 100). " \
-    "Do not use for text or semantic search; use `search_entities` instead. " \
-    "Do not use to search observation text or return relations; use `search_subgraph` instead. " \
-    "Do not use to load one known entity; use `get_entity` instead. " \
+    "Do not use for text or semantic search; use `search` instead. " \
+    "Do not use to search observation text or return relations; use `search` instead. " \
+    "Do not use to load one known entity; use `get_entities` instead. " \
     "Do not use for graph health counts; use `get_graph_stats` instead."
 
   # Defines arguments for fast-mcp validation.
@@ -84,48 +85,7 @@ class ListEntitiesTool < ApplicationTool
   end
 
   def call(page: nil, per_page: nil)
-    # Determine effective values, using defaults if parameters were not provided
-    effective_page = page.nil? ? DEFAULT_PAGE : page.to_i
-    effective_per_page = per_page.nil? ? DEFAULT_PER_PAGE : per_page.to_i
-
-    # Validate effective_page
-    if effective_page < 1
-      raise FastMcp::Tool::InvalidArgumentsError,
-            "page must be an integer >= 1; received #{effective_page}."
-    end
-
-    # Validate effective_per_page
-    if effective_per_page < 1 || effective_per_page > MAX_PER_PAGE
-      raise FastMcp::Tool::InvalidArgumentsError,
-            "per_page must be an integer between 1 and #{MAX_PER_PAGE}; received #{effective_per_page}."
-    end
-
-    # Proceed with logic using effective_page and effective_per_page
-    offset = (effective_page - 1) * effective_per_page
-
-    total_entities_count = MemoryEntity.count
-    fetched_entities = MemoryEntity.order(:id).limit(effective_per_page).offset(offset).to_a
-
-    output_entities = fetched_entities.map do |entity|
-      {
-        entity_id: entity.id,
-        name: entity.name,
-        entity_type: entity.entity_type
-      }
-    end
-
-    total_pages_count = (total_entities_count.to_f / effective_per_page).ceil
-    total_pages_count = [ total_pages_count, 1 ].max
-
-    {
-      entities: output_entities,
-      pagination: {
-        total_entities: total_entities_count,
-        per_page: effective_per_page,
-        current_page: effective_page,
-        total_pages: total_pages_count
-      }
-    }
+    EntityCatalogService.call(page: page, per_page: per_page)
   rescue FastMcp::Tool::InvalidArgumentsError
     raise
   rescue *ToolError::TIMEOUT_CLASSES

@@ -19,6 +19,7 @@ RSpec.describe "FastMcp tool registration", type: :integration do
     get_context
     get_current_time
     get_entity
+    get_entities
     get_graph_stats
     get_maintenance_reports
     get_subgraph_by_ids
@@ -39,6 +40,7 @@ RSpec.describe "FastMcp tool registration", type: :integration do
     dismiss_maintenance_review
     scan_project
     scan_project_status
+    search
   ].freeze
 
   # Filter out test-only tool subclasses defined in other spec files
@@ -88,9 +90,18 @@ RSpec.describe "FastMcp tool registration", type: :integration do
       real_tool_classes.each do |tool_class|
         expect(tool_class.mcp_profiles).not_to be_empty, "#{tool_class.name} has no MCP profiles"
         expect(tool_class.mcp_profiles).to all(be_in(ApplicationTool::MCP_PROFILE_NAMES))
+        expect(tool_class.mcp_advertised?).to be_in([ true, false ])
         expect(tool_class.annotations.keys).to match_array(ApplicationTool::MCP_ANNOTATION_KEYS)
         expect(tool_class.annotations.values).to all(be_in([ true, false ]))
       end
+    end
+
+    it "marks only the Phase 2 compatibility aliases as hidden" do
+      hidden_names = real_tool_classes.reject(&:mcp_advertised?).map(&:tool_name)
+
+      expect(hidden_names).to match_array(
+        %w[find_relations get_entity get_subgraph_by_ids list_entities search_entities search_subgraph]
+      )
     end
 
     it "assigns the expected number of tools to each Phase 1 profile" do
@@ -98,7 +109,17 @@ RSpec.describe "FastMcp tool registration", type: :integration do
         real_tool_classes.count { |tool_class| profile.in?(tool_class.mcp_profiles) }
       end
 
-      expect(profile_counts).to eq(default: 25, readonly: 15, maintenance: 35)
+      expect(profile_counts).to eq(default: 27, readonly: 17, maintenance: 37)
+    end
+
+    it "advertises only canonical tools in each profile" do
+      advertised_counts = ApplicationTool::MCP_PROFILE_NAMES.index_with do |profile|
+        real_tool_classes.count do |tool_class|
+          tool_class.mcp_advertised? && profile.in?(tool_class.mcp_profiles)
+        end
+      end
+
+      expect(advertised_counts).to eq(default: 21, readonly: 11, maintenance: 31)
     end
 
     it "describes the non-obvious side effects accurately" do

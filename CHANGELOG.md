@@ -5,6 +5,12 @@ All notable changes to GraphMem will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.37.0] - 2026-09-17
+- Consolidated entity discovery into `search`, with uniform summary, subgraph, and catalog response envelopes.
+- Added `get_entities` for one-or-many entity loads with explicit all/internal relation projections.
+- Extended `traverse_graph` to cover direct endpoint, type, and global relation queries.
+- Kept six legacy read-tool names callable but hidden from `tools/list` so existing clients continue working while telemetry measures alias traffic.
+
 ## [1.36.0] - 2026-09-17
 - Added explicit MCP annotations and profile membership to all 35 registered tools.
 - Added `/mcp/readonly` and `/mcp/maintenance` Streamable HTTP profiles; `/mcp` now hides the 10 maintenance tools.

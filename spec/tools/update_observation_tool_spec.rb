@@ -101,7 +101,7 @@ RSpec.describe UpdateObservationTool, type: :model do
       expect {
         tool.call(observation_id: 999_999, text_content: 'Changed')
       }.to raise_error(McpGraphMemErrors::ResourceNotFound, /not found/) do |error|
-        expect(error.next_move).to include('`get_entity`')
+        expect(error.next_move).to include('`get_entities`')
         expect(error.next_move).to include('`update_observation`')
       end
     end

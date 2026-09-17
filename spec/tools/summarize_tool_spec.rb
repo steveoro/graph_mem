@@ -48,7 +48,7 @@ RSpec.describe SummarizeTool, type: :model do
       expect {
         tool.call(query: "GraphMem", entity_id: 999_999)
       }.to raise_error(McpGraphMemErrors::ResourceNotFound, /Entity with ID=999999 not found/) do |error|
-        expect(error.next_move).to match(/search_entities/)
+        expect(error.next_move).to match(/search/)
       end
     end
 

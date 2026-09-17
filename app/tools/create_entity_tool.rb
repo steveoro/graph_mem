@@ -18,7 +18,7 @@ class CreateEntityTool < ApplicationTool
   description "Create a single new entity node. Pass required `name` (string) and `entity_type` (string); " \
     "optional `observations` (array of strings), `aliases` (pipe-separated string), `description` (string). " \
     "Alias `entityType` maps to `entity_type`. Types are canonicalized; cosine distance < 0.25 returns a warning " \
-    "instead of creating. Do not use until you have searched for an existing node; use `search_entities` first. " \
+    "instead of creating. Do not use until you have searched for an existing node; use `search` first. " \
     "Do not use to add facts to a known entity; use `create_observation` instead. " \
     "Do not use to change metadata on an existing node; use `update_entity` instead. " \
     "Do not use for an atomic batch of up to 50 creates; use `bulk_update` instead."
@@ -80,7 +80,7 @@ class CreateEntityTool < ApplicationTool
     }
   rescue ActiveRecord::RecordInvalid => e
     error_message = "Validation Failed: #{e.record.errors.full_messages.join(', ')}. " \
-      "Provide a unique non-blank name and entity_type; call `search_entities` if this name may already exist."
+      "Provide a unique non-blank name and entity_type; call `search` if this name may already exist."
     logger.error "InvalidArguments in CreateEntityTool: #{error_message} (was: #{e.message})"
     raise FastMcp::Tool::InvalidArgumentsError, error_message
   rescue *ToolError::TIMEOUT_CLASSES

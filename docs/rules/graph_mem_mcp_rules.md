@@ -19,14 +19,14 @@ The default `/mcp` connection omits maintenance tools. Use a separate
 ## Phase 1 — Orient (start of every conversation)
 
 1. Say "Remembering..." then call `get_context` to check for an active project. Context is per-agent and persisted, so you may already have one from a prior session.
-2. If no context: `search_entities` for the relevant project name → `set_context(<ID or entity name from search result>)`.
+2. If no context: `search` for the relevant project name → `set_context(<ID or entity name from search result>)`.
 3. If no project entity exists yet: `create_entity` (type `Project`) → `set_context(<new entity ID or name>)`.
 4. On a maintenance-profile connection, optionally call `dream_state_status` for a cheap health check (whether background compaction is running/paused).
 
 ## Phase 2 — Recall (before doing work)
 
-- `search_entities` or `search_subgraph` with keywords from the user's request.
-- Drill into hits: `get_entity` for details, `get_subgraph_by_ids` for a cluster of related entities.
+- `search` with keywords from the user's request.
+- Drill into one hit or a related cluster with `get_entities`.
 - After locating a root entity, use `traverse_graph` for a bounded multi-hop neighborhood or `find_shortest_path` to explain how two entities connect.
 - Look for prior `Issue`/`PossibleSolution` pairs, `BestPractice`, and `Preference` entities.
 - Use `summarize` when the goal is to answer “what does the graph know about
@@ -58,9 +58,9 @@ The default `/mcp` connection omits maintenance tools. Use a separate
 
 | Phase | Tools |
 | ------- | ------- |
-| Orient | `get_context`, `set_context`, `clear_context`, `search_entities` |
-| Recall | `search_entities`, `search_subgraph`, `get_entity`, `get_subgraph_by_ids`, `summarize`, `list_entities` |
-| Traverse | `find_relations`, `traverse_graph`, `find_shortest_path` |
+| Orient | `get_context`, `set_context`, `clear_context`, `search` |
+| Recall | `search`, `get_entities`, `summarize` |
+| Traverse | `traverse_graph`, `find_shortest_path` |
 | Persist | `create_entity`, `update_entity`, `delete_entity`, `create_observation`, `update_observation`, `delete_observation`, `create_relation`, `delete_relation`, `bulk_update` |
 | Maintain (`/mcp/maintenance`) | `suggest_merges`, `merge_entities`, `dream_state_status`, `get_maintenance_reports`, `list_maintenance_review`, `apply_maintenance_review`, `dismiss_maintenance_review`, `get_graph_stats`, `get_version`, `get_current_time`, `scan_project`, `scan_project_status` |
 
@@ -157,7 +157,7 @@ graph_mem accepts both its native snake_case/ID-based parameters and the
 - **Search before create** to avoid duplicates (vector dedup catches some, not all).
 - **Start broad, then narrow** using entity IDs from search results.
 - **Prioritize root nodes**: find the `Project` first, then traverse its relations.
-- **Use `find_relations` for one hop** when you need the immediate incoming or outgoing edges of an entity.
+- **Use `traverse_graph` for one hop** when you need the immediate incoming or outgoing edges of an entity.
 - **Use `traverse_graph` for bounded exploration** instead of chaining repeated
   one-hop calls. Keep `max_depth` and `max_entities` as small as the task
   permits; narrow with `direction` and canonical `relation_types`.
@@ -165,7 +165,7 @@ graph_mem accepts both its native snake_case/ID-based parameters and the
 - Context scoping boosts entities related to the active project; it does not
   make unrelated entities impossible to return. Do not describe a context-aware
   search as a hard project filter unless the API explicitly guarantees that.
-- **Navigate by graph structure** (`find_relations`, `traverse_graph`, `find_shortest_path`, `get_entity`) instead of repeated searches after locating the relevant entities.
+- **Navigate by graph structure** (`traverse_graph`, `find_shortest_path`, `get_entities`) instead of repeated searches after locating the relevant entities.
 
 ## Entity Types
 

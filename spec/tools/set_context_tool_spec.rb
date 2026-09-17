@@ -84,7 +84,7 @@ RSpec.describe SetContextTool, type: :model do
           tool.call(entity_id: 999_999)
         }.to raise_error(McpGraphMemErrors::ResourceNotFound, /not found/) do |error|
           expect(error.category).to eq("not_found")
-          expect(error.next_move).to include("search_entities")
+          expect(error.next_move).to include("search")
           expect(error.next_move).to include("set_context")
         end
       end

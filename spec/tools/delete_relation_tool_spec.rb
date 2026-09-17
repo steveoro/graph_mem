@@ -77,8 +77,8 @@ RSpec.describe DeleteRelationTool, type: :model do
           tool.call(relation_id: 999_999)
         }.to raise_error(McpGraphMemErrors::ResourceNotFound, "Relation with ID=999999 not found.") do |error|
           expect(error.category).to eq("not_found")
-          expect(error.next_move).to include("`find_relations`")
-          expect(error.next_move).to include("`get_entity`")
+          expect(error.next_move).to include("`traverse_graph`")
+          expect(error.next_move).to include("`get_entities`")
         end
       end
     end
@@ -97,7 +97,7 @@ RSpec.describe DeleteRelationTool, type: :model do
         }.to raise_error(McpGraphMemErrors::OperationFailed, /Failed to delete/) do |error|
           expect(error.message).not_to include("Cannot delete")
           expect(error.category).to eq("system_error")
-          expect(error.next_move).to include("`find_relations`")
+          expect(error.next_move).to include("`traverse_graph`")
         end
       end
     end

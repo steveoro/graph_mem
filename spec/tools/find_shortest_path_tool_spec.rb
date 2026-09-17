@@ -59,7 +59,7 @@ RSpec.describe FindShortestPathTool, type: :model do
         tool.call(from_entity_id: 999_999, to_entity_id: a.id)
       }.to raise_error(McpGraphMemErrors::ResourceNotFound, "Entity with ID=999999 not found.") do |error|
         expect(error.category).to eq("not_found")
-        expect(error.next_move).to include("`search_entities`")
+        expect(error.next_move).to include("`search`")
         expect(error.next_move).to include("`find_shortest_path`")
       end
     end
@@ -69,7 +69,7 @@ RSpec.describe FindShortestPathTool, type: :model do
         tool.call(from_entity_id: a.id, to_entity_id: 999_999)
       }.to raise_error(McpGraphMemErrors::ResourceNotFound, "Entity with ID=999999 not found.") do |error|
         expect(error.category).to eq("not_found")
-        expect(error.next_move).to include("`search_entities`")
+        expect(error.next_move).to include("`search`")
         expect(error.next_move).to include("`find_shortest_path`")
       end
     end

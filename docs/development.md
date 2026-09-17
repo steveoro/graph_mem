@@ -74,9 +74,12 @@ bin/mcp
 
 The server exposes three 2025-03-26 Streamable HTTP profiles:
 
-- `/mcp` — 25 ordinary context, read, and write tools
-- `/mcp/readonly` — 15 context and read tools
-- `/mcp/maintenance` — all 35 registered tools
+- `/mcp` — 21 advertised context, read, and write tools
+- `/mcp/readonly` — 11 advertised context and read tools
+- `/mcp/maintenance` — all 31 canonical tools
+
+Six deprecated read aliases remain registered and callable, bringing the
+transitional registry to 37 classes, but are omitted from `tools/list`.
 
 The 2024-11-05 SSE endpoint remains at `/mcp/sse` and uses the default profile.
 
@@ -93,7 +96,7 @@ different catalog.
 ## Adding MCP Tools
 
 1. Create `app/tools/my_feature_tool.rb` inheriting from `ApplicationTool` with a `tool_name` class method.
-2. Declare `mcp_metadata` with profile membership and all four boolean MCP annotation hints.
+2. Declare `mcp_metadata` with profile membership, the `advertised:` flag, and all four boolean MCP annotation hints.
 3. Add the tool name to `spec/integration/fast_mcp_registration_spec.rb` (`EXPECTED_TOOL_NAMES`).
 4. Add a request/tool spec under `spec/tools/`.
 

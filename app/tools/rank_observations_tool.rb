@@ -16,9 +16,9 @@ class RankObservationsTool < ApplicationTool
   description "Return one known entity's observations sorted by trust_score (most reliable first). Pass required " \
     "`entity_id` (integer; also accepts entity name); optional `include_obsolete` (bool, default false), " \
     "`limit` (integer, default all), `query` (string; relevance then trust). " \
-    "Do not use when you also need relations or entity metadata; use `get_entity` instead. " \
+    "Do not use when you also need relations or entity metadata; use `get_entities` instead. " \
     "Do not use for opposing observation pairs; use `detect_contradictions` instead. " \
-    "Do not use to find observations across entities by keyword; use `search_subgraph` instead. " \
+    "Do not use to find observations across entities by keyword; use `search` instead. " \
     "Do not use for a topic answer; use `summarize` instead."
 
   arguments do
@@ -47,7 +47,7 @@ class RankObservationsTool < ApplicationTool
       logger.error "ResourceNotFound in RankObservationsTool: #{error_message} (was: #{e.message})"
       raise McpGraphMemErrors::ResourceNotFound.new(
         error_message,
-        next_move: "Call `search_entities` to find the entity, then retry `rank_observations`."
+        next_move: "Call `search` to find the entity, then retry `rank_observations`."
       )
     rescue StandardError => e
       raise if ToolError::TIMEOUT_CLASSES.any? { |klass| e.is_a?(klass) }

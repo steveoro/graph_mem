@@ -55,7 +55,7 @@ class MergeEntitiesTool < ApplicationTool
     if text.match?(/not found/i)
       return McpGraphMemErrors::ResourceNotFound.new(
         text,
-        next_move: "Call `search_entities` to find valid entity ids, then retry `merge_entities`."
+        next_move: "Call `search` to find valid entity ids, then retry `merge_entities`."
       )
     end
 
@@ -87,7 +87,7 @@ class MergeEntitiesTool < ApplicationTool
     logger.error "MergeEntitiesTool operation failed: #{text}"
     McpGraphMemErrors::OperationFailed.new(
       "The merge could not be completed.",
-      next_move: "Call `suggest_merges` or `get_entity` to inspect the pair, then retry `merge_entities` or escalate."
+      next_move: "Call `suggest_merges` or `get_entities` to inspect the pair, then retry `merge_entities` or escalate."
     )
   end
 end

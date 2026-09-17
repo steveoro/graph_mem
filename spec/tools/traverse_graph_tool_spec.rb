@@ -26,8 +26,18 @@ RSpec.describe TraverseGraphTool, type: :model do
     it "exposes the traversal parameters" do
       schema = described_class.input_schema_to_json
       expect(schema[:type]).to eq("object")
-      expect(schema[:required]).to eq([ "start_entity_id" ])
-      expect(schema[:properties].keys).to include(:start_entity_id, :max_depth, :direction, :relation_types, :max_entities)
+      expect(schema[:required]).to eq([])
+      expect(schema[:properties].keys).to include(
+        :start_entity_id,
+        :from_entity_id,
+        :to_entity_id,
+        :relation_type,
+        :relation_types,
+        :include,
+        :max_depth,
+        :direction,
+        :max_entities
+      )
     end
   end
 
@@ -65,12 +75,46 @@ RSpec.describe TraverseGraphTool, type: :model do
       expect(relation).to have_key(:properties)
     end
 
+    it "supports direct endpoint and global relation queries" do
+      endpoint_result = tool.call(from_entity_id: a.id, to_entity_id: b.id)
+      global_result = tool.call
+
+      expect(endpoint_result.keys).to eq([ :relations ])
+      expect(endpoint_result[:relations].pluck(:relation_id)).to eq([ r_ab.id ])
+      expect(global_result[:relations].pluck(:relation_id)).to contain_exactly(r_ab.id, r_bc.id)
+    end
+
+    it "uses start and destination IDs as a direct edge filter" do
+      result = tool.call(start_entity_id: a.id, to_entity_id: b.id)
+
+      expect(result[:relations].pluck(:relation_id)).to eq([ r_ab.id ])
+    end
+
+    it "returns only requested traversal projections" do
+      result = tool.call(
+        start_entity_id: a.id,
+        max_depth: 1,
+        direction: "outgoing",
+        include: [ "relations" ]
+      )
+
+      expect(result.keys).to eq([ :relations ])
+      expect(result[:relations].pluck(:relation_id)).to eq([ r_ab.id ])
+    end
+
+    it "can include endpoint entities in relation-query mode" do
+      result = tool.call(from_entity_id: a.id, include: %w[entities relations])
+
+      expect(result[:entities].pluck(:entity_id)).to include(a.id, b.id)
+      expect(result[:relations].pluck(:relation_id)).to eq([ r_ab.id ])
+    end
+
     it "raises ResourceNotFound for a missing start entity" do
       expect {
         tool.call(start_entity_id: 999_999)
       }.to raise_error(McpGraphMemErrors::ResourceNotFound, "Entity with ID=999999 not found.") do |error|
         expect(error.category).to eq("not_found")
-        expect(error.next_move).to include("`search_entities`")
+        expect(error.next_move).to include("`search`")
         expect(error.next_move).to include("`traverse_graph`")
       end
     end

@@ -80,7 +80,7 @@ class DeleteEntityTool < ApplicationTool
       logger.error "ResourceNotFound in DeleteEntityTool: #{error_message} (was: #{e.message})"
       raise McpGraphMemErrors::ResourceNotFound.new(
         error_message,
-        next_move: "Call `search_entities` or `list_entities`, then retry `delete_entity` with a known id."
+        next_move: "Call `search`, then retry `delete_entity` with a known id."
       )
     rescue McpGraphMemErrors::OperationFailed
       raise

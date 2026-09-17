@@ -15,7 +15,7 @@ class DeleteRelationTool < ApplicationTool
   )
 
   description "Delete one graph edge by id without deleting either entity. Pass required `relation_id` (integer); " \
-    "optional `reason` (string, audit log). Do not use if you lack a relation_id; use `find_relations` first. " \
+    "optional `reason` (string, audit log). Do not use if you lack a relation_id; use `traverse_graph` first. " \
     "Do not use to remove an entity and its relations; use `delete_entity` instead. " \
     "Do not use for queued duplicate-relation cleanup; use `apply_maintenance_review` instead. " \
     "Do not use to add an edge; use `create_relation` instead."
@@ -47,7 +47,7 @@ class DeleteRelationTool < ApplicationTool
       unless relation
         raise McpGraphMemErrors::ResourceNotFound.new(
           "Relation with ID=#{relation_id} not found.",
-          next_move: "Call `find_relations` or `get_entity` to obtain a relation_id, then retry `delete_relation`."
+          next_move: "Call `traverse_graph` or `get_entities` to obtain a relation_id, then retry `delete_relation`."
         )
       end
 
@@ -81,7 +81,7 @@ class DeleteRelationTool < ApplicationTool
       logger.error "OperationFailed in DeleteRelationTool: #{error_message} (#{e.class}: #{e.message})"
       raise McpGraphMemErrors::OperationFailed.new(
         error_message,
-        next_move: "Call `find_relations` or `get_entity` to confirm the relation, then retry `delete_relation`."
+        next_move: "Call `traverse_graph` or `get_entities` to confirm the relation, then retry `delete_relation`."
       )
     rescue StandardError => e
       logger.error "InternalServerError in DeleteRelationTool: #{e.class}: #{e.message}"

@@ -24,6 +24,27 @@ RSpec.describe GraphMem::McpServerPatch do
     end
   end
 
+  class HiddenAliasTestTool < ApplicationTool
+    def self.tool_name
+      "hidden_alias"
+    end
+
+    mcp_metadata(
+      profiles: %i[default readonly maintenance],
+      advertised: false,
+      read_only_hint: true,
+      destructive_hint: false,
+      idempotent_hint: true,
+      open_world_hint: false
+    )
+
+    description "Hidden compatibility alias"
+
+    def call
+      { hidden_alias_called: true }
+    end
+  end
+
   class RecordingTransport
     attr_reader :messages
 
@@ -43,6 +64,7 @@ RSpec.describe GraphMem::McpServerPatch do
   before do
     server.transport = transport
     server.register_tool(EnvelopeProbeTestTool)
+    server.register_tool(HiddenAliasTestTool)
   end
 
   def last_result
@@ -83,5 +105,18 @@ RSpec.describe GraphMem::McpServerPatch do
     expect(payload["message"]).to eq("An unexpected error occurred.")
     expect(payload["message"]).not_to include("secret")
     expect(last_result[:content].first[:text]).not_to include("secret boom")
+  end
+
+  it "omits hidden aliases from tools/list while keeping them callable" do
+    server.handle_tools_list(4)
+
+    names = last_result.fetch(:tools).map { |tool| tool.fetch(:name) }
+    expect(names).to include("envelope_probe")
+    expect(names).not_to include("hidden_alias")
+
+    server.handle_tools_call({ "name" => "hidden_alias", "arguments" => {} }, {}, 5)
+
+    expect(last_result[:isError]).to be(false)
+    expect(last_result.dig(:content, 0, :text)).to include("hidden_alias_called")
   end
 end

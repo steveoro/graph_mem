@@ -25,7 +25,7 @@ RSpec.describe ToolError do
         "message" => "Entity with ID=9 not found.",
         "tool" => "get_entity"
       )
-      expect(payload["next_move"]).to include("`search_entities`")
+      expect(payload["next_move"]).to include("`search`")
     end
 
     it "maps InvalidArgumentsError to validation" do

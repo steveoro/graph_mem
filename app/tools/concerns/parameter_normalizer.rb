@@ -40,6 +40,8 @@ module ParameterNormalizer
       if tool_name == "bulk_update"
         params = normalize_bulk_update(params)
       end
+      params = normalize_search(params) if tool_name == "search"
+      params = normalize_get_entities(params) if tool_name == "get_entities"
 
       params = resolve_entity_names(params)
       params
@@ -115,6 +117,35 @@ module ParameterNormalizer
       end
 
       params.merge(entities: entities, observations: observations, relations: relations)
+    end
+
+    def normalize_search(params)
+      result = params.dup
+      result[:per_page] = result[:limit] if result[:per_page].blank? && result[:limit].present?
+      result.delete(:limit)
+      result
+    end
+
+    def normalize_get_entities(params)
+      result = params.dup
+      if result[:entity_ids].blank? && result[:entity_id].present?
+        result[:entity_ids] = [ result[:entity_id] ]
+      end
+      result.delete(:entity_id)
+      return result unless result[:entity_ids].is_a?(Array)
+
+      result[:entity_ids] = result[:entity_ids].map do |value|
+        next value unless value.is_a?(String) && value.present?
+
+        entity = MemoryEntity.find_by(name: value)
+        next entity.id if entity
+
+        raise McpGraphMemErrors::ResourceNotFound.new(
+          "Entity not found by name: '#{value}'. Provide a valid entity name or use an integer entity_id.",
+          next_move: "Call `search` to find a matching name, then retry `get_entities` with known ids."
+        )
+      end
+      result
     end
 
     def normalize_entity_op(op)
@@ -198,7 +229,7 @@ module ParameterNormalizer
         else
           raise McpGraphMemErrors::ResourceNotFound.new(
             "Entity not found by name: '#{entity_name}'. Use entity_id (integer) or verify the entity name.",
-            next_move: "Call `search_entities` to find a matching name, then retry with a known id."
+            next_move: "Call `search` to find a matching name, then retry with a known id."
           )
         end
       end
@@ -215,7 +246,7 @@ module ParameterNormalizer
         else
           raise McpGraphMemErrors::ResourceNotFound.new(
             "Entity not found by name: '#{val}'. Provide a valid entity name or use an integer entity_id.",
-            next_move: "Call `search_entities` to find a matching name, then retry with a known id."
+            next_move: "Call `search` to find a matching name, then retry with a known id."
           )
         end
       end

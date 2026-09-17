@@ -18,8 +18,8 @@ class SummarizeTool < ApplicationTool
     "`max_results` (integer, default 10), `max_observations` (integer, default 20), " \
     "`observations_per_entity` (integer; 0 disables cap), `max_depth` (integer, default 0), " \
     "`include_sources` (bool, default true), `scope` (string: context or global), `style` (string: concise or detailed). " \
-    "Do not use for match listings; use `search_entities` or `search_subgraph` instead. " \
-    "Do not use to inspect one known entity; use `get_entity` instead. " \
+    "Do not use for match listings; use `search` instead. " \
+    "Do not use to inspect one known entity; use `get_entities` instead. " \
     "Do not use for a structural neighborhood; use `traverse_graph` instead. " \
     "Do not use for numeric health metrics; use `get_graph_stats` instead."
 
@@ -58,7 +58,7 @@ class SummarizeTool < ApplicationTool
       logger.error "ResourceNotFound in SummarizeTool: #{error_message} (was: #{e.message})"
       raise McpGraphMemErrors::ResourceNotFound.new(
         error_message,
-        next_move: "Call `search_entities` to find the entity, then retry `summarize` with a known id."
+        next_move: "Call `search` to find the entity, then retry `summarize` with a known id."
       )
     rescue ArgumentError => e
       logger.error "InvalidArguments in SummarizeTool: #{e.message}"

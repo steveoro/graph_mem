@@ -85,7 +85,7 @@ RSpec.describe DeleteObservationTool, type: :model do
         expect {
           tool.call(observation_id: 999_999)
         }.to raise_error(McpGraphMemErrors::ResourceNotFound, /not found/) do |error|
-          expect(error.next_move).to include('`get_entity`')
+          expect(error.next_move).to include('`get_entities`')
           expect(error.next_move).to include('`delete_observation`')
         end
       end
@@ -102,7 +102,7 @@ RSpec.describe DeleteObservationTool, type: :model do
           tool.call(observation_id: observation.id)
         }.to raise_error(McpGraphMemErrors::OperationFailed, /Failed to mark/) do |error|
           expect(error.category).to eq('validation')
-          expect(error.next_move).to include('`get_entity`')
+          expect(error.next_move).to include('`get_entities`')
           expect(error.next_move).to include('`delete_observation`')
         end
       end

@@ -7,6 +7,7 @@ class SearchEntitiesTool < ApplicationTool
 
   mcp_metadata(
     profiles: %i[default readonly maintenance],
+    advertised: false,
     read_only_hint: true,
     destructive_hint: false,
     idempotent_hint: true,
@@ -16,9 +17,9 @@ class SearchEntitiesTool < ApplicationTool
   description "Search entities by keyword and semantic similarity (hybrid RRF); returns ranked summaries without " \
     "observation text or relations. Pass required `query` (string); optional `limit` (integer, default 50, max 100). " \
     "Active context boosts matches (not a hard filter). " \
-    "Do not use to search observation text or return connecting relations; use `search_subgraph` instead. " \
-    "Do not use to load a known id; use `get_entity` instead. " \
-    "Do not use to page every entity with no query; use `list_entities` instead. " \
+    "Do not use to search observation text or return connecting relations; use `search` instead. " \
+    "Do not use to load a known id; use `get_entities` instead. " \
+    "Do not use to page every entity with no query; use `search` instead. " \
     "Do not use to answer what the graph knows about a topic; use `summarize` instead."
 
   arguments do

@@ -18,7 +18,7 @@ class CreateRelationTool < ApplicationTool
     "and `relation_type` (string, canonicalized); optional `weight` (float >=0), `confidence` (float 0-1), " \
     "`properties` (hash). Do not use to create nodes; use `create_entity` instead. " \
     "Do not use to batch-create relations; use `bulk_update` instead. " \
-    "Do not use to query existing 1-hop edges; use `find_relations` instead. " \
+    "Do not use to query existing 1-hop edges; use `traverse_graph` instead. " \
     "Do not use for a multi-hop neighborhood; use `traverse_graph` instead. " \
     "Do not use to remove an edge; use `delete_relation` instead."
 
@@ -37,13 +37,13 @@ class CreateRelationTool < ApplicationTool
       unless MemoryEntity.exists?(id: from_entity_id)
         raise McpGraphMemErrors::ResourceNotFound.new(
           "Entity with ID=#{from_entity_id} not found.",
-          next_move: "Call `search_entities`, then retry `create_relation` with a known from_entity_id."
+          next_move: "Call `search`, then retry `create_relation` with a known from_entity_id."
         )
       end
       unless MemoryEntity.exists?(id: to_entity_id)
         raise McpGraphMemErrors::ResourceNotFound.new(
           "Entity with ID=#{to_entity_id} not found.",
-          next_move: "Call `search_entities`, then retry `create_relation` with a known to_entity_id."
+          next_move: "Call `search`, then retry `create_relation` with a known to_entity_id."
         )
       end
 
@@ -86,7 +86,7 @@ class CreateRelationTool < ApplicationTool
       raise McpGraphMemErrors::OperationFailed.new(
         error_message,
         category: "validation",
-        next_move: "Call `find_relations` to inspect the existing edge, or `delete_relation` before creating a replacement."
+        next_move: "Call `traverse_graph` to inspect the existing edge, or `delete_relation` before creating a replacement."
       )
     rescue StandardError => e
       logger.error "InternalServerError in CreateRelationTool: #{e.class}: #{e.message}"

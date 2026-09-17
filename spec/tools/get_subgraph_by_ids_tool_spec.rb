@@ -159,7 +159,7 @@ RSpec.describe GetSubgraphByIdsTool, type: :model do
         expect {
           tool.call(entity_ids: [ entity_a.id ])
         }.to raise_error(McpGraphMemErrors::ResourceNotFound, /not found/) do |error|
-          expect(error.next_move).to match(/search_entities/)
+          expect(error.next_move).to match(/search/)
           expect(error.message).not_to include("Couldn't find MemoryEntity")
         end
       end

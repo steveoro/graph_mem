@@ -10,8 +10,8 @@ RSpec.describe McpGraphMemErrors do
       expect(error.message).to eq("Entity with ID=1 not found.")
       expect(error.category).to eq("not_found")
       expect(error.retriable).to be(false)
-      expect(error.next_move).to include("`search_entities`")
-      expect(error.next_move).to include("`list_entities`")
+      expect(error.next_move).to include("`search`")
+      expect(error.next_move).to include("`search`")
     end
 
     it "accepts next_move overrides" do

@@ -1,9 +1,9 @@
 # frozen_string_literal: true
 
 class SearchSubgraphTool < ApplicationTool
-  DEFAULT_PER_PAGE = 20 # Renamed from DEFAULT_LIMIT
-  MAX_PER_PAGE = 100    # Renamed from MAX_LIMIT
-  DEFAULT_PAGE = 1
+  DEFAULT_PER_PAGE = SubgraphSearchService::DEFAULT_PER_PAGE
+  MAX_PER_PAGE = SubgraphSearchService::MAX_PER_PAGE
+  DEFAULT_PAGE = SubgraphSearchService::DEFAULT_PAGE
 
   def self.tool_name
     "search_subgraph"
@@ -11,6 +11,7 @@ class SearchSubgraphTool < ApplicationTool
 
   mcp_metadata(
     profiles: %i[default readonly maintenance],
+    advertised: false,
     read_only_hint: true,
     destructive_hint: false,
     idempotent_hint: true,
@@ -21,11 +22,11 @@ class SearchSubgraphTool < ApplicationTool
     "(observations plus relations exclusively among them). Pass required `query` (string); optional " \
     "`search_in_name`, `search_in_type`, `search_in_aliases`, `search_in_observations` (bool, default true), " \
     "`page` (integer, default 1), `per_page` (integer, default 20, max 100). Not a BFS from a start node. " \
-    "Do not use for ranked summaries without observations or relations; use `search_entities` instead. " \
-    "Do not use with known ids; use `get_subgraph_by_ids` instead. " \
+    "Do not use for ranked summaries without observations or relations; use `search` instead. " \
+    "Do not use with known ids; use `get_entities` instead. " \
     "Do not use for multi-hop expansion; use `traverse_graph` instead. " \
     "Do not use for a synthesized answer; use `summarize` instead. " \
-    "Do not use as a no-query catalog; use `list_entities` instead."
+    "Do not use as a no-query catalog; use `search` instead."
 
   # Defines arguments for fast-mcp validation.
   arguments do
@@ -159,144 +160,17 @@ class SearchSubgraphTool < ApplicationTool
   end
 
   def call(query:, search_in_name: true, search_in_type: true, search_in_observations: true, search_in_aliases: true, page: nil, per_page: nil)
-    query_term = query
-    if query_term.blank?
-      raise FastMcp::Tool::InvalidArgumentsError, "Query term cannot be blank."
-    end
-
-    unless search_in_name || search_in_type || search_in_observations || search_in_aliases
-      raise FastMcp::Tool::InvalidArgumentsError, "At least one search field (name, type, aliases, observations) must be enabled."
-    end
-
-    effective_page = page.nil? ? DEFAULT_PAGE : page.to_i
-    effective_per_page = per_page.nil? ? DEFAULT_PER_PAGE : per_page.to_i
-
-    if effective_page < 1
-      raise FastMcp::Tool::InvalidArgumentsError, "Page number must be 1 or greater."
-    end
-    if effective_per_page < 1 || effective_per_page > MAX_PER_PAGE
-      raise FastMcp::Tool::InvalidArgumentsError, "Per page count must be between 1 and #{MAX_PER_PAGE}."
-    end
-
-    # Build query to find all matching entity IDs
-    base_query = MemoryEntity.distinct
-    like_query_term = "%#{query_term.downcase}%"
-
-    # Build conditions for WHERE clause
-    sql_conditions = []
-    sql_params = {}
-
-    if search_in_name
-      sql_conditions << "LOWER(memory_entities.name) LIKE :like_query_term"
-    end
-    if search_in_type
-      sql_conditions << "LOWER(memory_entities.entity_type) LIKE :like_query_term"
-    end
-    if search_in_aliases
-      sql_conditions << "LOWER(memory_entities.aliases) LIKE :like_query_term"
-    end
-    sql_params[:like_query_term] = like_query_term
-
-    if search_in_observations
-      base_query = base_query.left_joins(:memory_observations)
-      sql_conditions << "(memory_observations.status = :active_status AND LOWER(memory_observations.content) LIKE :like_query_term)"
-      sql_params[:active_status] = MemoryObservation::ACTIVE_STATUS
-    end
-
-    # Combine conditions with OR
-    combined_sql_conditions = sql_conditions.join(" OR ")
-
-    # Text-based matching
-    matching_entity_ids = base_query.where(combined_sql_conditions, sql_params).pluck(:id).uniq
-
-    # Merge in vector search results when embeddings are available
-    begin
-      vector_strategy = VectorSearchStrategy.new
-      vector_results = vector_strategy.search(query_term, limit: effective_per_page * 2)
-      vector_ids = vector_results.map { |r| r.entity.id }
-      matching_entity_ids = (matching_entity_ids + vector_ids).uniq
-    rescue *ToolError::TIMEOUT_CLASSES
-      raise
-    rescue StandardError => e
-      logger.debug "SearchSubgraphTool: vector search unavailable, using text only — #{e.message}"
-    end
-
-    # Rank results using shared relevance boosts (name match, type priority,
-    # structural importance, graduated context boost).
-    context_scope = graph_mem_context.scoped_entity_scope
-    context_ids = context_scope&.entity_ids
-    matching_entity_ids = SearchRelevanceBooster.rank_entity_ids(
-      matching_entity_ids,
-      query: query_term,
-      context_entity_ids: context_ids
+    SubgraphSearchService.call(
+      query: query,
+      search_in_name: search_in_name,
+      search_in_type: search_in_type,
+      search_in_observations: search_in_observations,
+      search_in_aliases: search_in_aliases,
+      page: page,
+      per_page: per_page,
+      context_scope: graph_mem_context.scoped_entity_scope,
+      logger: logger
     )
-
-    total_matching_entities = matching_entity_ids.length
-
-    # Apply pagination to the IDs
-    offset = (effective_page - 1) * effective_per_page
-    paginated_entity_ids = matching_entity_ids.slice(offset, effective_per_page) || []
-
-    entities_to_return = []
-    relations_to_return = []
-
-    if paginated_entity_ids.any?
-      # Fetch the entities for the current page, including their observations
-      # Order them by the paginated_entity_ids to maintain the slice order
-      db_entities = MemoryEntity.where(id: paginated_entity_ids)
-                                .includes(:active_memory_observations)
-                                .order(Arel.sql("CASE id #{paginated_entity_ids.map.with_index { |id, index| "WHEN #{id} THEN #{index}" }.join(' ')} END"))
-                                .to_a
-
-      entities_to_return = db_entities.map do |entity|
-        {
-          entity_id: entity.id,
-          name: entity.name,
-          entity_type: entity.entity_type,
-          aliases: entity.aliases,
-          observations: entity.active_memory_observations.map do |observation|
-            MemoryObservationSerializer.call(observation)
-          end,
-          created_at: entity.created_at.iso8601,
-          updated_at: entity.updated_at.iso8601
-        }
-      end
-
-      # Fetch relations *only* between the entities on the current page
-      db_relations = MemoryRelation.where(from_entity_id: paginated_entity_ids, to_entity_id: paginated_entity_ids).to_a
-      relations_to_return = db_relations.map do |relation|
-        {
-          relation_id: relation.id,
-          from_entity_id: relation.from_entity_id,
-          to_entity_id: relation.to_entity_id,
-          relation_type: relation.relation_type,
-          weight: relation.weight,
-          confidence: relation.confidence,
-          properties: relation.properties,
-          created_at: relation.created_at.iso8601,
-          updated_at: relation.updated_at.iso8601
-        }
-      end
-    end
-
-    total_pages_count = (total_matching_entities.to_f / effective_per_page).ceil
-    total_pages_count = [ total_pages_count, 1 ].max # Ensure at least 1 page
-
-    {
-      entities: entities_to_return,
-      relations: relations_to_return,
-      pagination: {
-        total_entities: total_matching_entities,
-        per_page: effective_per_page,
-        current_page: effective_page,
-        total_pages: total_pages_count
-      },
-      retrieval: {
-        scope_entity_count: context_ids&.size,
-        scope_truncated: context_scope&.truncated == true,
-        scope_max_entities: context_scope&.max_entities
-      }
-    }
   rescue *ToolError::TIMEOUT_CLASSES
     raise
   rescue McpGraphMemErrors::Error, FastMcp::Tool::InvalidArgumentsError

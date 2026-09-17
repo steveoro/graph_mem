@@ -16,6 +16,28 @@ module GraphMem
       end
     end
 
+    def handle_tools_list(id)
+      tools = @tools.values.filter_map do |tool|
+        next if tool.respond_to?(:mcp_advertised?) && !tool.mcp_advertised?
+
+        tool_info = {
+          name: tool.tool_name,
+          description: tool.description || "",
+          inputSchema: tool.input_schema_to_json || { type: "object", properties: {}, required: [] }
+        }
+        annotations = tool.annotations
+        if annotations.any?
+          tool_info[:annotations] = annotations.to_h do |key, value|
+            camel_key = key.to_s.gsub(/_([a-z])/) { ::Regexp.last_match(1).upcase }.to_sym
+            [ camel_key, value ]
+          end
+        end
+        tool_info
+      end
+
+      send_result({ tools: tools }, id)
+    end
+
     def handle_tools_call(params, headers, id)
       tool_name = params["name"] || params[:name]
       arguments = params["arguments"] || params[:arguments] || {}

@@ -8,6 +8,7 @@ class GetEntityTool < ApplicationTool
 
   mcp_metadata(
     profiles: %i[default readonly maintenance],
+    advertised: false,
     read_only_hint: true,
     destructive_hint: false,
     idempotent_hint: true,
@@ -17,9 +18,9 @@ class GetEntityTool < ApplicationTool
   description "Retrieve one known entity with its observations and relations. Pass required `entity_id` " \
     "(integer; also accepts an entity-name string); optional `include_obsolete` (bool, default false), " \
     "`include_ranked` (bool, default false), `query` (string), `observation_limit` (integer). " \
-    "Do not use for keyword discovery; use `search_entities` or `search_subgraph` instead. " \
-    "Do not use to page the catalog; use `list_entities` instead. " \
-    "Do not use to load many known ids as a closed subgraph; use `get_subgraph_by_ids` instead. " \
+    "Do not use for keyword discovery; use `search` instead. " \
+    "Do not use to page the catalog; use `search` instead. " \
+    "Do not use to load many known ids as a closed subgraph; use `get_entities` instead. " \
     "Do not use for a multi-hop neighborhood; use `traverse_graph` instead. " \
     "Do not use to ask what the graph knows about a topic; use `summarize` instead. " \
     "Do not use when you only need observations sorted by trust; use `rank_observations` instead."
@@ -35,55 +36,43 @@ class GetEntityTool < ApplicationTool
   def call(entity_id:, include_obsolete: false, include_ranked: false, query: nil, observation_limit: nil)
     logger.info "Performing GetEntityTool with entity_id: #{entity_id}"
     begin
-      # Find the entity and pre-load associations for efficiency
-      entity = MemoryEntity.includes(:memory_observations, :active_memory_observations, :relations_from, :relations_to)
-                           .find(entity_id)
-      observations = include_obsolete ? entity.memory_observations : entity.active_memory_observations
-      if query.present?
-        observations = ObservationRankingService.rank(observations, query: query, limit: observation_limit)
-      elsif include_ranked
-        observations = ObservationRankingService.rank(observations, mode: "trust", limit: observation_limit)
-      elsif observation_limit.present?
-        observations = ObservationRankingService.rank(observations, mode: "trust", limit: observation_limit)
-      end
+      result = EntitiesFetchService.call(
+        entity_ids: [ entity_id ],
+        relations: "all",
+        include_obsolete: include_obsolete,
+        include_ranked: include_ranked,
+        query: query,
+        observation_limit: observation_limit
+      )
+      entity = result[:entities].first
+      relations = result[:relations]
 
-      # Format the output hash - return hash directly
       {
-        entity_id: entity.id,
-        name: entity.name,
-        entity_type: entity.entity_type,
-        description: entity.description,
-        created_at: entity.created_at.iso8601,
-        updated_at: entity.updated_at.iso8601,
-        observations_truncated: observation_limit.present? && observations.size < (include_obsolete ? entity.memory_observations.size : entity.active_memory_observations.size),
-        observations: observations.map do |observation|
-          MemoryObservationSerializer.call(observation, content_key: :observation_content)
+        entity_id: entity[:entity_id],
+        name: entity[:name],
+        entity_type: entity[:entity_type],
+        description: entity[:description],
+        created_at: entity[:created_at],
+        updated_at: entity[:updated_at],
+        observations_truncated: entity[:observations_truncated],
+        observations: entity[:observations].map do |observation|
+          observation.except(:content).merge(observation_content: observation[:content])
         end,
-        relations_from: entity.relations_from.map do |rel|
-          {
-            relation_id: rel.id,
-            to_entity_id: rel.to_entity_id,
-            relation_type: rel.relation_type,
-            weight: rel.weight,
-            confidence: rel.confidence,
-            properties: rel.properties,
-            created_at: rel.created_at.iso8601,
-            updated_at: rel.updated_at.iso8601
-            # Include to_entity details here if desired
-          }
+        relations_from: relations.filter_map do |relation|
+          next unless relation[:from_entity_id] == entity_id
+
+          relation.slice(
+            :relation_id, :to_entity_id, :relation_type, :weight, :confidence,
+            :properties, :created_at, :updated_at
+          )
         end,
-        relations_to: entity.relations_to.map do |rel|
-          {
-            relation_id: rel.id,
-            from_entity_id: rel.from_entity_id,
-            relation_type: rel.relation_type,
-            weight: rel.weight,
-            confidence: rel.confidence,
-            properties: rel.properties,
-            created_at: rel.created_at.iso8601,
-            updated_at: rel.updated_at.iso8601
-            # Include from_entity details here if desired
-          }
+        relations_to: relations.filter_map do |relation|
+          next unless relation[:to_entity_id] == entity_id
+
+          relation.slice(
+            :relation_id, :from_entity_id, :relation_type, :weight, :confidence,
+            :properties, :created_at, :updated_at
+          )
         end
       }
     rescue ActiveRecord::RecordNotFound => e
@@ -91,7 +80,7 @@ class GetEntityTool < ApplicationTool
       logger.error "ResourceNotFound in GetEntityTool: #{error_message} (was: #{e.message})"
       raise McpGraphMemErrors::ResourceNotFound.new(
         error_message,
-        next_move: "Call `search_entities` or `list_entities`, then retry `get_entity` with a known id."
+        next_move: "Call `search`, then retry `get_entities` with a known id."
       )
     rescue *ToolError::TIMEOUT_CLASSES
       raise

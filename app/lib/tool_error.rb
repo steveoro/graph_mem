@@ -18,7 +18,7 @@ class ToolError
   NAME_NOT_FOUND = /entity not found by name/i
 
   DEFAULT_NEXT_MOVES = {
-    CATEGORY_NOT_FOUND => "Call `search_entities` or `list_entities` to verify the identifier, then retry with a known id.",
+    CATEGORY_NOT_FOUND => "Call `search` to verify the identifier, then retry with a known id.",
     CATEGORY_VALIDATION => "Correct the argument format required by the tool schema and retry.",
     CATEGORY_PERMISSION => "Escalate to a human. This client is not authorized to call this tool.",
     CATEGORY_TIMEOUT => "Retry the tool once, then inform the user of the delay.",

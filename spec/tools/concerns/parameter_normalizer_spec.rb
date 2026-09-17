@@ -75,6 +75,28 @@ RSpec.describe ParameterNormalizer do
       end
     end
 
+    describe "search paging aliases" do
+      it "maps limit to per_page for the canonical search tool" do
+        result = described_class.normalize("search", { query: "test", limit: 12 })
+
+        expect(result).to include(query: "test", per_page: 12)
+        expect(result).not_to have_key(:limit)
+      end
+
+      it "prefers per_page when both paging names are present" do
+        result = described_class.normalize("search", { query: "test", limit: 12, perPage: 7 })
+
+        expect(result[:per_page]).to eq(7)
+        expect(result).not_to have_key(:limit)
+      end
+
+      it "does not rewrite limit on the legacy search_entities tool" do
+        result = described_class.normalize("search_entities", { query: "test", limit: 12 })
+
+        expect(result[:limit]).to eq(12)
+      end
+    end
+
     describe "entity name resolution" do
       let!(:project) { MemoryEntity.create!(name: "MyProject", entity_type: "Project") }
       let!(:task) { MemoryEntity.create!(name: "MyTask", entity_type: "Task") }
@@ -132,6 +154,26 @@ RSpec.describe ParameterNormalizer do
         expect(result[:start_entity_id]).to eq(project.id)
       end
 
+      it "wraps the get_entities entity_id alias and resolves names in arrays" do
+        single = described_class.normalize("get_entities", { entity_id: "MyProject" })
+        multiple = described_class.normalize(
+          "get_entities",
+          { entity_ids: [ "MyTask", project.id ] }
+        )
+
+        expect(single).to eq(entity_ids: [ project.id ])
+        expect(multiple[:entity_ids]).to eq([ task.id, project.id ])
+      end
+
+      it "raises a canonical not-found error for unresolved get_entities names" do
+        expect {
+          described_class.normalize("get_entities", { entity_ids: [ "Missing" ] })
+        }.to raise_error(McpGraphMemErrors::ResourceNotFound) do |error|
+          expect(error.next_move).to include("search")
+          expect(error.next_move).to include("get_entities")
+        end
+      end
+
       it "does not resolve entity_name when entity_id is already set" do
         result = described_class.normalize("create_observation", {
           entity_id: 999,
@@ -147,7 +189,7 @@ RSpec.describe ParameterNormalizer do
             entity_name: "NonExistent"
           })
         }.to raise_error(McpGraphMemErrors::ResourceNotFound, /Entity not found by name/) do |error|
-          expect(error.next_move).to match(/search_entities/)
+          expect(error.next_move).to match(/search/)
           expect(error.next_move).to match(/known id/)
         end
       end
@@ -158,7 +200,7 @@ RSpec.describe ParameterNormalizer do
             entity_id: "NonExistent"
           })
         }.to raise_error(McpGraphMemErrors::ResourceNotFound, /Entity not found by name/) do |error|
-          expect(error.next_move).to match(/search_entities/)
+          expect(error.next_move).to match(/search/)
           expect(error.next_move).to match(/known id/)
         end
       end

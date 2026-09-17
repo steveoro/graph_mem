@@ -18,8 +18,8 @@ class FindShortestPathTool < ApplicationTool
     "`direction` (both|outgoing|incoming, default both), `relation_types` (array of strings). " \
     "Returns ordered path entities and relations, or found false when none exists within max_depth. " \
     "Do not use for a full neighborhood from one start; use `traverse_graph` instead. " \
-    "Do not use for 1-hop filters; use `find_relations` instead. " \
-    "Do not use for keyword lookup; use `search_subgraph` instead."
+    "Do not use for 1-hop filters; use `traverse_graph` instead. " \
+    "Do not use for keyword lookup; use `search` instead."
 
   arguments do
     required(:from_entity_id).filled(:integer).description("The ID of the source entity. Also accepts entity name (string).")
@@ -58,12 +58,12 @@ class FindShortestPathTool < ApplicationTool
       when :missing_from
         raise McpGraphMemErrors::ResourceNotFound.new(
           "Entity with ID=#{from_entity_id} not found.",
-          next_move: "Call `search_entities`, then retry `find_shortest_path` with a known from_entity_id."
+          next_move: "Call `search`, then retry `find_shortest_path` with a known from_entity_id."
         )
       when :missing_to
         raise McpGraphMemErrors::ResourceNotFound.new(
           "Entity with ID=#{to_entity_id} not found.",
-          next_move: "Call `search_entities`, then retry `find_shortest_path` with a known to_entity_id."
+          next_move: "Call `search`, then retry `find_shortest_path` with a known to_entity_id."
         )
       else
         GraphTraversalSerializer.path(result)

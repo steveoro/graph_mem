@@ -17,7 +17,7 @@ class GetContextTool < ApplicationTool
     "auto-clears if the project entity is gone. Takes no arguments. " \
     "Do not use to activate or switch projects; use `set_context` instead. " \
     "Do not use to wipe context so searches span all projects; use `clear_context` instead. " \
-    "Do not use to load an entity's observations or relations; use `get_entity` instead."
+    "Do not use to load an entity's observations or relations; use `get_entities` instead."
 
   def call
     context = graph_mem_context

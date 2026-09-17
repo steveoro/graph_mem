@@ -57,7 +57,7 @@ class DeleteObservationTool < ApplicationTool
       logger.error "ResourceNotFound in DeleteObservationTool: #{error_message} (was: #{e.message})"
       raise McpGraphMemErrors::ResourceNotFound.new(
         error_message,
-        next_move: "Call `get_entity` with include_obsolete if needed to list observation ids, then retry `delete_observation`."
+        next_move: "Call `get_entities` with include_obsolete if needed to list observation ids, then retry `delete_observation`."
       )
     rescue ActiveRecord::RecordInvalid => e
       error_message = "Failed to mark observation with ID=#{observation_id} obsolete: #{e.message}"
@@ -65,7 +65,7 @@ class DeleteObservationTool < ApplicationTool
       raise McpGraphMemErrors::OperationFailed.new(
         error_message,
         category: "validation",
-        next_move: "Call `get_entity` with include_obsolete if needed to inspect the observation, then retry `delete_observation`."
+        next_move: "Call `get_entities` with include_obsolete if needed to inspect the observation, then retry `delete_observation`."
       )
     rescue StandardError => e
       raise if ToolError::TIMEOUT_CLASSES.any? { |klass| e.is_a?(klass) }

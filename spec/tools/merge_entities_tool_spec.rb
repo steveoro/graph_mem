@@ -78,7 +78,7 @@ RSpec.describe MergeEntitiesTool, type: :model do
       expect {
         tool.call(source_entity_id: 999_999, target_entity_id: target.id)
       }.to raise_error(McpGraphMemErrors::ResourceNotFound, /Source node not found/) do |error|
-        expect(error.next_move).to include("`search_entities`")
+        expect(error.next_move).to include("`search`")
         expect(error.next_move).to include("`merge_entities`")
       end
     end
@@ -87,7 +87,7 @@ RSpec.describe MergeEntitiesTool, type: :model do
       expect {
         tool.call(source_entity_id: source.id, target_entity_id: 999_999)
       }.to raise_error(McpGraphMemErrors::ResourceNotFound, /Target node not found/) do |error|
-        expect(error.next_move).to include("`search_entities`")
+        expect(error.next_move).to include("`search`")
       end
     end
 

@@ -59,7 +59,7 @@ class UpdateObservationTool < ApplicationTool
     logger.error "ResourceNotFound in UpdateObservationTool: #{error_message} (was: #{e.message})"
     raise McpGraphMemErrors::ResourceNotFound.new(
       error_message,
-      next_move: "Call `get_entity` with include_obsolete if needed to list observation ids, then retry `update_observation`."
+      next_move: "Call `get_entities` with include_obsolete if needed to list observation ids, then retry `update_observation`."
     )
   rescue MemoryObservation::InactiveObservationError => e
     logger.error "InvalidArguments in UpdateObservationTool: #{e.message}"

@@ -9,9 +9,8 @@
   "manual_retrieval": {
     "active_context_entity_id": 283,
     "tools": [
-      "search_entities",
-      "get_entity",
-      "get_subgraph_by_ids",
+      "search",
+      "get_entities",
       "traverse_graph",
       "rank_observations"
     ],

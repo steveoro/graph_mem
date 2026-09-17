@@ -7,6 +7,7 @@ class GetSubgraphByIdsTool < ApplicationTool
 
   mcp_metadata(
     profiles: %i[default readonly maintenance],
+    advertised: false,
     read_only_hint: true,
     destructive_hint: false,
     idempotent_hint: true,
@@ -15,8 +16,8 @@ class GetSubgraphByIdsTool < ApplicationTool
 
   description "Load a known id set as a closed subgraph: those entities, their observations, and only relations whose " \
     "both ends are in the set. Pass required `entity_ids` (array of integers); optional `query` (string), " \
-    "`observation_limit` (integer). Do not use to discover entities by text; use `search_subgraph` or `search_entities` instead. " \
-    "Do not use for one id's complete incident relations; use `get_entity` instead. " \
+    "`observation_limit` (integer). Do not use to discover entities by text; use `search` instead. " \
+    "Do not use for one id's complete incident relations; use `get_entities` instead. " \
     "Do not use to expand unknown neighbors; use `traverse_graph` instead."
 
   # Defines arguments for fast-mcp validation.
@@ -105,58 +106,21 @@ class GetSubgraphByIdsTool < ApplicationTool
   end
 
   def call(entity_ids:, query: nil, observation_limit: nil)
-    # super # Validate input -> This is handled by fast-mcp's arguments DSL now
-    entity_ids = entity_ids.uniq
-
-    if entity_ids.empty?
-      # This is an invalid argument scenario
-      error_message = "entity_ids array cannot be empty."
-      logger.error "InvalidArgumentsError in GetSubgraphByIDsTool: #{error_message}"
-      raise FastMcp::Tool::InvalidArgumentsError, error_message
-    end
-
-    # Fetch entities with their observations
-    entities_data = MemoryEntity.where(id: entity_ids).includes(:active_memory_observations).map do |entity|
-      observations = ObservationRankingService.rank(
-        entity.active_memory_observations,
-        query: query,
-        limit: observation_limit
-      )
-      {
-        entity_id: entity.id,
-        name: entity.name,
-        entity_type: entity.entity_type,
-        observations: observations.map do |observation|
-          MemoryObservationSerializer.call(observation)
-        end,
-        created_at: entity.created_at.iso8601,
-        updated_at: entity.updated_at.iso8601
-      }
-    end
-
-    missing_entity_ids = entity_ids - entities_data.map { |entity| entity[:entity_id] }
-
-    # Fetch relations that are exclusively between the given entity_ids
-    relations_data = MemoryRelation
-      .where(from_entity_id: entity_ids, to_entity_id: entity_ids)
-      .map do |relation|
-      {
-        relation_id: relation.id,
-        from_entity_id: relation.from_entity_id,
-        to_entity_id: relation.to_entity_id,
-        relation_type: relation.relation_type,
-        weight: relation.weight,
-        confidence: relation.confidence,
-        properties: relation.properties,
-        created_at: relation.created_at.iso8601,
-        updated_at: relation.updated_at.iso8601
-      }
-    end
+    result = EntitiesFetchService.call(
+      entity_ids: entity_ids,
+      relations: "internal",
+      query: query,
+      observation_limit: observation_limit,
+      strict_single: false,
+      always_rank_observations: true
+    )
 
     {
-      entities: entities_data,
-      relations: relations_data,
-      missing_entity_ids: missing_entity_ids
+      entities: result[:entities].map do |entity|
+        entity.slice(:entity_id, :name, :entity_type, :observations, :created_at, :updated_at)
+      end,
+      relations: result[:relations],
+      missing_entity_ids: result[:missing_entity_ids]
     }
   rescue *ToolError::TIMEOUT_CLASSES
     raise
@@ -166,7 +130,7 @@ class GetSubgraphByIdsTool < ApplicationTool
     logger.error "ResourceNotFound in GetSubgraphByIDsTool: #{e.class}: #{e.message}"
     raise McpGraphMemErrors::ResourceNotFound.new(
       "One or more requested entities were not found.",
-      next_move: "Call `search_entities` to find matching entities, then retry `get_subgraph_by_ids` with known ids."
+      next_move: "Call `search` to find matching entities, then retry `get_entities` with known ids."
     )
   rescue StandardError => e
     logger.error "InternalServerError in GetSubgraphByIDsTool: #{e.class}: #{e.message}"
