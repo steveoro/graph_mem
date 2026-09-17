@@ -5,6 +5,12 @@ All notable changes to GraphMem will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.36.0] - 2026-09-17
+- Added explicit MCP annotations and profile membership to all 35 registered tools.
+- Added `/mcp/readonly` and `/mcp/maintenance` Streamable HTTP profiles; `/mcp` now hides the 10 maintenance tools.
+- Applied profile filtering consistently to `tools/list` and `tools/call`, including the legacy SSE endpoint and stdio runner.
+- Added `GRAPH_MEM_MCP_PROFILE` for selecting the stdio catalog.
+
 ## [1.35.0] - 2026-09-16
 - Added privacy-safe, queryable MCP tool telemetry in `tool_invocations`; only top-level argument keys are stored, never argument values.
 - Added `graph_mem:tool_usage` reporting for per-tool traffic share, error categories, p50/p95 latency, and never-called tools.

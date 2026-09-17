@@ -9,6 +9,14 @@ class ListEntitiesTool < ApplicationTool
     "list_entities"
   end
 
+  mcp_metadata(
+    profiles: %i[default readonly maintenance],
+    read_only_hint: true,
+    destructive_hint: false,
+    idempotent_hint: true,
+    open_world_hint: false
+  )
+
   description "Page the entire entity catalog with no search query, returning id, name, and type only. " \
     "Pass optional `page` (integer, default 1) and `per_page` (integer, default 20, max 100). " \
     "Do not use for text or semantic search; use `search_entities` instead. " \

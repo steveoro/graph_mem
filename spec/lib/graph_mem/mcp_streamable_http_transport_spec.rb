@@ -49,6 +49,10 @@ RSpec.describe GraphMem::McpStreamableHttpTransport do
         result: { ok: true, headers_present: headers.any? }
       )
     end
+
+    def contains_filters?
+      false
+    end
   end
 
   class BlockingMcpIO
@@ -136,7 +140,8 @@ RSpec.describe GraphMem::McpStreamableHttpTransport do
         response_queue,
         session[:id],
         "{}",
-        request
+        request,
+        server
       )
 
       expect(result).to eq([ -1, {}, [] ])
@@ -273,6 +278,18 @@ RSpec.describe GraphMem::McpStreamableHttpTransport do
     end
   end
 
+  describe "profile cache invalidation" do
+    it "clears fast-mcp's legacy filtered copies after tool re-registration" do
+      legacy_cache = transport.legacy_transport.instance_variable_get(:@filtered_servers_cache)
+      legacy_cache[:stale] = Object.new
+
+      GraphMem::McpProfile.clear_cache!(server)
+      transport.send(:refresh_profile_caches!)
+
+      expect(legacy_cache).to be_empty
+    end
+  end
+
   describe "access control" do
     let(:token) { SecureRandom.hex(16) }
     let(:allowed_origins) { [ "localhost", "127.0.0.1", "::1", /\A192\.168\.\d{1,3}\.\d{1,3}\z/ ] }
@@ -313,6 +330,8 @@ RSpec.describe GraphMem::McpStreamableHttpTransport do
 
     it "rejects a request with no bearer token" do
       expect(status_for("/mcp")).to eq(401)
+      expect(status_for("/mcp/readonly")).to eq(401)
+      expect(status_for("/mcp/maintenance")).to eq(401)
     end
 
     it "rejects a request with the wrong bearer token" do
@@ -350,6 +369,8 @@ RSpec.describe GraphMem::McpStreamableHttpTransport do
 
     it "answers CORS preflight without a token" do
       expect(status_for("/mcp", method: "OPTIONS")).to eq(200)
+      expect(status_for("/mcp/readonly", method: "OPTIONS")).to eq(200)
+      expect(status_for("/mcp/maintenance", method: "OPTIONS")).to eq(200)
     end
 
     it "permits Authorization in the CORS allow-headers" do
@@ -361,10 +382,21 @@ RSpec.describe GraphMem::McpStreamableHttpTransport do
     it "delegates to the streamable handler once authenticated" do
       allow(guarded_transport).to receive(:handle_streamable_request).and_return([ 200, {}, [] ])
 
-      status = status_for("/mcp", headers: { "HTTP_AUTHORIZATION" => "Bearer #{token}" })
+      headers = { "HTTP_AUTHORIZATION" => "Bearer #{token}" }
 
-      expect(status).to eq(200)
-      expect(guarded_transport).to have_received(:handle_streamable_request)
+      expect(status_for("/mcp", headers: headers)).to eq(200)
+      expect(status_for("/mcp/readonly", headers: headers)).to eq(200)
+      expect(status_for("/mcp/maintenance", headers: headers)).to eq(200)
+      expect(guarded_transport).to have_received(:handle_streamable_request).exactly(3).times
+    end
+
+    it "returns not found for an unknown authenticated profile path" do
+      status = status_for(
+        "/mcp/unknown",
+        headers: { "HTTP_AUTHORIZATION" => "Bearer #{token}" }
+      )
+
+      expect(status).to eq(404)
     end
 
     it "does not delegate to the streamable handler when unauthenticated" do

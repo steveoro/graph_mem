@@ -5,6 +5,14 @@ class ScanProjectStatusTool < ApplicationTool
     "scan_project_status"
   end
 
+  mcp_metadata(
+    profiles: %i[maintenance],
+    read_only_hint: true,
+    destructive_hint: false,
+    idempotent_hint: true,
+    open_world_hint: false
+  )
+
   description "Poll one asynchronous project scan for status, phase, progress, counters, fallback flags, and " \
     "scan_review items. Pass required `scan_id` (string from `scan_project`). " \
     "Do not use to start or resume a scan; use `scan_project` instead. " \

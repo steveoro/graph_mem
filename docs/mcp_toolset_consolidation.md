@@ -85,25 +85,34 @@ identify tools that are never called at all — those need no design work, just 
 default profile.
 
 
-## Phase 1 — Annotations and profiles (non-breaking)
+## Phase 1 — Annotations and profiles
 
-Both mechanisms already exist in `fast-mcp` 1.6.0 and are unused. Neither renames a tool, so this
-phase is safe to ship independently.
+**Implementation status (2026-09-17): shipped.**
+
+Neither mechanism renames a tool, but the selected rollout intentionally removes maintenance
+tools from the default connection catalog. All 35 classes remain registered and reachable through
+the maintenance profile.
 
 ### Annotations
 
 `FastMcp::Tool.annotations` accepts `read_only_hint`, `destructive_hint`, `idempotent_hint` and
-`open_world_hint`, and `FastMcp::Server` forwards them camelCased in `tools/list`. GraphMem sets
-none of them.
+`open_world_hint`, and `FastMcp::Server` forwards them camelCased in `tools/list`. Every GraphMem
+tool declares all four through `ApplicationTool.mcp_metadata`.
 
 ```ruby
 class SearchEntitiesTool < ApplicationTool
-  annotations(read_only_hint: true, open_world_hint: false)
+  mcp_metadata(
+    profiles: %i[default readonly maintenance],
+    read_only_hint: true,
+    destructive_hint: false,
+    idempotent_hint: true,
+    open_world_hint: false
+  )
 end
 ```
 
 This is the machine-readable form of clustering: clients use it to group tools, to auto-approve
-reads, and to prompt for confirmation on destructive calls. Set it on all 35 tools as they stand.
+reads, and to prompt for confirmation on destructive calls.
 
 ### Connection profiles via `filter_tools`
 
@@ -113,7 +122,7 @@ subset to register, building a filtered server copy per request:
 ```ruby
 # config/initializers/fast_mcp.rb
 server.filter_tools do |request, tools|
-  McpProfile.for(request).select_from(tools)
+  GraphMem::McpProfile.select_tools(tools, GraphMem::McpProfile.from_request(request))
 end
 ```
 
@@ -121,12 +130,18 @@ Select the profile from the request path so each client config is explicit and i
 
 | Profile | Path | Contents |
 |---|---|---|
-| `default` | `/mcp` | Context, read, write — the 12-tool catalog |
-| `readonly` | `/mcp/readonly` | Context and read only |
-| `maintenance` | `/mcp/maintenance` | Everything, including the 10 maintenance tools |
+| `default` | `/mcp` | 25 current context, read, and graph-write tools |
+| `readonly` | `/mcp/readonly` | 15 context and read tools |
+| `maintenance` | `/mcp/maintenance` | All 35 current tools |
 
 Each tool declares its profile membership as class metadata, so `McpProfile` stays a lookup rather
-than a hardcoded name list.
+than a hardcoded name list. The legacy `/mcp/sse` and `/mcp/messages` paths use the default
+profile. Because GraphMem's Streamable HTTP transport bypasses fast-mcp's Rack transport,
+`McpStreamableHttpTransport` explicitly resolves the filtered server before every JSON-RPC
+dispatch.
+
+The default profile reaches the planned 12-tool catalog only after the read and write
+consolidations in Phases 2 and 3.
 
 ### Why not a runtime `enable_toolset` meta-tool
 
@@ -333,11 +348,11 @@ pausing for those operations — a correctness bug, not just a stale constant.
 Also requiring updates:
 
 - `EXPECTED_TOOL_NAMES` in `spec/integration/fast_mcp_registration_spec.rb`
-- `docs/mcp_tools.md` — currently subtitled "the 35 Model Context Protocol tools"
+- `docs/mcp_tools.md` — update the 35-tool detailed reference when aliases are retired
 - `docs/rules/graph_mem_mcp_rules.md` and `skills/graph-mem-mcp-toolset/SKILL.md`
 - `ToolError::DEFAULT_NEXT_MOVES`, which references `search_entities` and `list_entities` by name
-- `bin/mcp_stdio_runner.rb`, which registers `ApplicationTool.descendants` directly and so bypasses
-  `McpToolRegistry` — it needs the profile filter applied too, or stdio clients will see all 22
+- `bin/mcp_stdio_runner.rb` already uses `McpToolRegistry` and `GRAPH_MEM_MCP_PROFILE`; keep its
+  profile membership aligned as aliases and consolidated tools are introduced
 
 
 ## Risks

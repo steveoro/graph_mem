@@ -83,6 +83,33 @@ RSpec.describe "FastMcp tool registration", type: :integration do
       end
   end
 
+  describe "profile and annotation metadata" do
+    it "declares complete metadata on every production tool" do
+      real_tool_classes.each do |tool_class|
+        expect(tool_class.mcp_profiles).not_to be_empty, "#{tool_class.name} has no MCP profiles"
+        expect(tool_class.mcp_profiles).to all(be_in(ApplicationTool::MCP_PROFILE_NAMES))
+        expect(tool_class.annotations.keys).to match_array(ApplicationTool::MCP_ANNOTATION_KEYS)
+        expect(tool_class.annotations.values).to all(be_in([ true, false ]))
+      end
+    end
+
+    it "assigns the expected number of tools to each Phase 1 profile" do
+      profile_counts = ApplicationTool::MCP_PROFILE_NAMES.index_with do |profile|
+        real_tool_classes.count { |tool_class| profile.in?(tool_class.mcp_profiles) }
+      end
+
+      expect(profile_counts).to eq(default: 25, readonly: 15, maintenance: 35)
+    end
+
+    it "describes the non-obvious side effects accurately" do
+      expect(GetContextTool.annotations).to include(read_only_hint: false, destructive_hint: false)
+      expect(SummarizeTool.annotations).to include(read_only_hint: true, open_world_hint: true)
+      expect(DetectContradictionsTool.annotations).to include(read_only_hint: false, destructive_hint: false)
+      expect(ScanProjectTool.annotations).to include(destructive_hint: true, open_world_hint: true)
+      expect(ApplyMaintenanceReviewTool.annotations).to include(destructive_hint: true)
+    end
+  end
+
   describe "BulkUpdateTool schema override" do
     it "exposes entities, observations, and relations via class-level input_schema_to_json" do
       schema = BulkUpdateTool.input_schema_to_json

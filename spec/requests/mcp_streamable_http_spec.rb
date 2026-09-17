@@ -5,6 +5,39 @@ require "rails_helper"
 RSpec.describe "MCP Streamable HTTP endpoint", type: :request do
   after { AgentContext.delete_all }
 
+  def initialize_session(path)
+    host! "localhost"
+    post path,
+      params: {
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: {
+          protocolVersion: "2025-03-26",
+          capabilities: {},
+          clientInfo: { name: "profile-rspec", version: "1.0.0" }
+        }
+      }.to_json,
+      headers: {
+        "CONTENT_TYPE" => "application/json",
+        "HTTP_ACCEPT" => "application/json"
+      }
+    expect(response).to have_http_status(:ok)
+    response.headers["Mcp-Session-Id"]
+  end
+
+  def post_rpc(path, session_id, method, params: nil, id: 2)
+    payload = { jsonrpc: "2.0", id: id, method: method }
+    payload[:params] = params if params
+    post path,
+      params: payload.to_json,
+      headers: {
+        "CONTENT_TYPE" => "application/json",
+        "HTTP_ACCEPT" => "application/json",
+        "Mcp-Session-Id" => session_id
+      }
+  end
+
   describe "POST /mcp" do
     it "initializes a 2025-03-26 session and returns a Mcp-Session-Id header" do
       host! "localhost"
@@ -96,8 +129,18 @@ RSpec.describe "MCP Streamable HTTP endpoint", type: :request do
 
       expect(response).to have_http_status(:ok)
       expect(response.headers["Mcp-Session-Id"]).to eq(session_id)
-      expect(response.parsed_body["result"]["tools"]).to be_an(Array)
-      expect(response.parsed_body["result"]["tools"].map { |t| t["name"] }).to include("get_version")
+      tools = response.parsed_body["result"]["tools"]
+      expect(tools.size).to eq(25)
+      expect(tools.map { |tool| tool["name"] }).to include("get_version")
+      expect(tools.map { |tool| tool["name"] }).not_to include("dream_state_status")
+
+      search_tool = tools.find { |tool| tool["name"] == "search_entities" }
+      expect(search_tool["annotations"]).to eq(
+        "readOnlyHint" => true,
+        "destructiveHint" => false,
+        "idempotentHint" => true,
+        "openWorldHint" => false
+      )
     end
 
     it "calls a tool and preserves the X-MCP-Client context" do
@@ -335,6 +378,76 @@ RSpec.describe "MCP Streamable HTTP endpoint", type: :request do
     end
   end
 
+  describe "connection profiles" do
+    it "advertises the expected catalog for each profile" do
+      {
+        "/mcp" => [ 25, false ],
+        "/mcp/readonly" => [ 15, false ],
+        "/mcp/maintenance" => [ 35, true ]
+      }.each do |path, (expected_count, includes_maintenance)|
+        session_id = initialize_session(path)
+        post_rpc(path, session_id, "tools/list")
+
+        names = response.parsed_body.dig("result", "tools").map { |tool| tool["name"] }
+        expect(names.size).to eq(expected_count)
+        expect(names.include?("dream_state_status")).to eq(includes_maintenance)
+      end
+    end
+
+    it "rejects tools hidden from the selected profile" do
+      default_session = initialize_session("/mcp")
+      post_rpc(
+        "/mcp",
+        default_session,
+        "tools/call",
+        params: { name: "dream_state_status", arguments: {} }
+      )
+
+      expect(response.parsed_body.dig("error", "message")).to include("Tool not found")
+
+      readonly_session = initialize_session("/mcp/readonly")
+      post_rpc(
+        "/mcp/readonly",
+        readonly_session,
+        "tools/call",
+        params: { name: "create_entity", arguments: { name: "Hidden", entity_type: "Project" } }
+      )
+
+      expect(response.parsed_body.dig("error", "message")).to include("Tool not found")
+    end
+
+    it "allows the maintenance profile to call a maintenance tool" do
+      session_id = initialize_session("/mcp/maintenance")
+      post_rpc(
+        "/mcp/maintenance",
+        session_id,
+        "tools/call",
+        params: { name: "dream_state_status", arguments: {} }
+      )
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body.dig("result", "isError")).not_to be(true)
+    end
+
+    it "selects tools from each request path even when a session id is reused" do
+      session_id = initialize_session("/mcp")
+
+      post_rpc("/mcp", session_id, "tools/list")
+      expect(response.parsed_body.dig("result", "tools").size).to eq(25)
+
+      post_rpc("/mcp/maintenance", session_id, "tools/list", id: 3)
+      expect(response.parsed_body.dig("result", "tools").size).to eq(35)
+    end
+
+    it "supports deleting a session through a profile path" do
+      session_id = initialize_session("/mcp/readonly")
+
+      delete "/mcp/readonly", headers: { "Mcp-Session-Id" => session_id }
+
+      expect(response).to have_http_status(:ok)
+    end
+  end
+
   describe "OPTIONS /mcp" do
     it "responds to CORS preflight" do
       host! "localhost"
@@ -351,6 +464,20 @@ RSpec.describe "MCP Streamable HTTP endpoint", type: :request do
       expect(response.headers["access-control-allow-methods"]).to include("DELETE")
       expect(response.headers["access-control-allow-headers"]).to match(/content-type.*mcp-session-id.*x-mcp-client/i)
       expect(response.headers["access-control-expose-headers"]).to include("Mcp-Session-Id")
+    end
+
+    it "answers preflight on each explicit profile path" do
+      host! "localhost"
+
+      %w[/mcp/readonly /mcp/maintenance].each do |path|
+        options path,
+          headers: {
+            "HTTP_ORIGIN" => "http://localhost:3001",
+            "HTTP_ACCESS_CONTROL_REQUEST_METHOD" => "POST"
+          }
+
+        expect(response).to have_http_status(:ok)
+      end
     end
   end
 end

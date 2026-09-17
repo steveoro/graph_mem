@@ -5,6 +5,14 @@ class CreateObservationTool < ApplicationTool
     "create_observation"
   end
 
+  mcp_metadata(
+    profiles: %i[default maintenance],
+    read_only_hint: false,
+    destructive_hint: false,
+    idempotent_hint: false,
+    open_world_hint: false
+  )
+
   description "Add a new fact to an existing entity and generate an embedding. Pass required `entity_id` " \
     "(integer; also accepts entity name) and `text_content` (string); optional `confidence` (float 0-1), " \
     "`source` (string), `valid_from` (ISO 8601 string), `valid_until` (ISO 8601 string), `tags` (array of strings). " \

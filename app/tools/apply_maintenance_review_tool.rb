@@ -5,6 +5,14 @@ class ApplyMaintenanceReviewTool < ApplicationTool
     "apply_maintenance_review"
   end
 
+  mcp_metadata(
+    profiles: %i[maintenance],
+    read_only_hint: false,
+    destructive_hint: true,
+    idempotent_hint: false,
+    open_world_hint: false
+  )
+
   description "Apply a queued maintenance-review row (merge, relationship proposal, orphan parent, or relation integrity). " \
     "Pass required `item_id` (string UUID); optional `report_type` (string, default compaction_review), " \
     "`dry_run` (bool, default false), `action_params` (hash). " \

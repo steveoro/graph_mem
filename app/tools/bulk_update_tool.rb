@@ -7,6 +7,14 @@ class BulkUpdateTool < ApplicationTool
     "bulk_update"
   end
 
+  mcp_metadata(
+    profiles: %i[default maintenance],
+    read_only_hint: false,
+    destructive_hint: false,
+    idempotent_hint: false,
+    open_world_hint: false
+  )
+
   description "Atomically batch-create entities, observations, and relations (max #{MAX_OPERATIONS} operations; " \
     "rolls back on error). Pass optional `entities`, `observations`, `relations` arrays, or `operations` " \
     "(type-discriminated items with type create_entity, create_observation, or create_relation). " \

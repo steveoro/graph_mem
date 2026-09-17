@@ -8,6 +8,14 @@ class GetMaintenanceReportsTool < ApplicationTool
     "get_maintenance_reports"
   end
 
+  mcp_metadata(
+    profiles: %i[maintenance],
+    read_only_hint: true,
+    destructive_hint: false,
+    idempotent_hint: true,
+    open_world_hint: false
+  )
+
   description "Read stored maintenance report documents, not paginated review rows. Pass optional `report_type` " \
     "(orphans, duplicates, compaction_review, embedding_maintenance, contradictions, or scan_review; omit for the " \
     "latest of each type) and `limit` (integer, default 5, max 30). " \

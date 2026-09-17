@@ -28,5 +28,27 @@ RSpec.describe "MCP messages endpoint", type: :request do
       expect(AgentContext.find_by!(client_id: "cursor-http").last_tool_name).to eq("get_version")
       expect(AgentContext.find_by(client_id: GraphMemContext::DEFAULT_CLIENT_ID)).to be_nil
     end
+
+    it "uses the default profile and does not call hidden maintenance tools" do
+      host! "localhost"
+
+      post "/mcp/messages",
+        params: {
+          jsonrpc: "2.0",
+          method: "tools/call",
+          params: {
+            name: "dream_state_status",
+            arguments: {}
+          },
+          id: 2
+        }.to_json,
+        headers: {
+          "CONTENT_TYPE" => "application/json",
+          "X-MCP-Client" => "legacy-hidden-maintenance"
+        }
+
+      expect(response).to have_http_status(:ok)
+      expect(AgentContext.find_by(client_id: "legacy-hidden-maintenance")).to be_nil
+    end
   end
 end

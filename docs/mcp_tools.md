@@ -6,6 +6,20 @@ Detailed reference for the 35 Model Context Protocol (MCP) tools available in Gr
 
 MCP tools in GraphMem are Ruby classes that implement operations on the knowledge graph. Each tool is accessed via JSON-RPC calls from an MCP client. Tools auto-register via `ApplicationTool` inheritance.
 
+## Connection Profiles
+
+GraphMem registers all 35 tools and filters the advertised/callable catalog by connection URL:
+
+- `/mcp` — 25 context, read, and graph-write tools; maintenance tools are hidden
+- `/mcp/readonly` — 15 context and read tools
+- `/mcp/maintenance` — all 35 tools
+- `/mcp/sse` and `/mcp/messages` — legacy transport using the default profile
+
+Filtering applies equally to `tools/list` and `tools/call`; calling a hidden tool returns
+`Tool not found`. Profiles are selected when connecting and are not authorization boundaries.
+Every tool also publishes the standard MCP `readOnlyHint`, `destructiveHint`,
+`idempotentHint`, and `openWorldHint` annotations.
+
 ## Standard Compatibility
 
 All tools accept both graph_mem's native snake_case/ID-based parameters and the `@modelcontextprotocol/server-memory` camelCase/name-based conventions. A `ParameterNormalizer` layer automatically converts incoming parameters before validation:

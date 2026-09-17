@@ -5,6 +5,14 @@ class SummarizeTool < ApplicationTool
     "summarize"
   end
 
+  mcp_metadata(
+    profiles: %i[default readonly maintenance],
+    read_only_hint: true,
+    destructive_hint: false,
+    idempotent_hint: true,
+    open_world_hint: true
+  )
+
   description "Summarize what the knowledge graph knows about a topic with deterministic source-backed evidence " \
     "(optional LLM synthesis). Pass required `query` (string); optional `entity_id` (integer), " \
     "`max_results` (integer, default 10), `max_observations` (integer, default 20), " \

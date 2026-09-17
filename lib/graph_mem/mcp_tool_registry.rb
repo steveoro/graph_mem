@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative "mcp_profile"
+
 module GraphMem
   # Ensures all MCP tool/resource classes are loaded before FastMcp registration.
   #
@@ -18,15 +20,20 @@ module GraphMem
       load_glob(RESOURCE_GLOB)
     end
 
-    def register_with!(server)
+    def register_with!(server, profile: nil)
       load_all!
-      server.register_tools(*tool_classes)
+      classes = profile ? tool_classes_for(profile) : tool_classes
+      server.register_tools(*classes)
       server.register_resources(*resource_classes)
       server
     end
 
     def tool_classes
       ApplicationTool.descendants.reject { |klass| skip_class?(klass) }
+    end
+
+    def tool_classes_for(profile)
+      GraphMem::McpProfile.select_tools(tool_classes, profile)
     end
 
     def resource_classes

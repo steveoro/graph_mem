@@ -72,7 +72,13 @@ Alternatively, use the provided MCP server script:
 bin/mcp
 ```
 
-The server now exposes the 2025-03-26 Streamable HTTP endpoint at `/mcp` while keeping the 2024-11-05 SSE endpoint at `/mcp/sse`.
+The server exposes three 2025-03-26 Streamable HTTP profiles:
+
+- `/mcp` — 25 ordinary context, read, and write tools
+- `/mcp/readonly` — 15 context and read tools
+- `/mcp/maintenance` — all 35 registered tools
+
+The 2024-11-05 SSE endpoint remains at `/mcp/sse` and uses the default profile.
 
 For the STDIO interface (useful for Windsurf integration):
 
@@ -80,18 +86,23 @@ For the STDIO interface (useful for Windsurf integration):
 bin/windsurf_mcp_graph_mem_runner.sh
 ```
 
+STDIO defaults to the `default` profile. Set `GRAPH_MEM_MCP_PROFILE=readonly` or
+`GRAPH_MEM_MCP_PROFILE=maintenance` in the launcher environment to select a
+different catalog.
+
 ## Adding MCP Tools
 
 1. Create `app/tools/my_feature_tool.rb` inheriting from `ApplicationTool` with a `tool_name` class method.
-2. Add the tool name to `spec/integration/fast_mcp_registration_spec.rb` (`EXPECTED_TOOL_NAMES`).
-3. Add a request/tool spec under `spec/tools/`.
+2. Declare `mcp_metadata` with profile membership and all four boolean MCP annotation hints.
+3. Add the tool name to `spec/integration/fast_mcp_registration_spec.rb` (`EXPECTED_TOOL_NAMES`).
+4. Add a request/tool spec under `spec/tools/`.
 
 Tool files are **not** registered by filename alone. `GraphMem::McpToolRegistry` eager-loads every `*_tool.rb` before calling `server.register_tools`, so new classes are picked up even in development lazy-load mode.
 
 After adding a tool:
 
 1. Restart `bin/dev` (or touch a file to trigger `to_prepare` re-registration in development).
-2. **Reconnect the MCP server in Cursor** (disable/re-enable `graph_mem_development` in MCP settings) so the client refreshes its cached `tools/list`.
+2. **Reconnect the MCP server in Cursor** (disable/re-enable it in MCP settings) so the client refreshes its cached `tools/list`. Choose `/mcp/maintenance` explicitly when the client needs maintenance tools.
 
 ## Project Structure
 
@@ -160,10 +171,11 @@ server the boot succeeds but any spec touching embeddings or vector search fails
 
 ## MCP Access Control in Development
 
-The MCP endpoint is governed by `GRAPH_MEM_MCP_TOKEN` and `GRAPH_MEM_MCP_ALLOWED_IPS`; see
-[mcp_access_control.md](mcp_access_control.md). Neither is needed for local work -- the
-defaults allow unauthenticated access from loopback and private ranges. The active posture is
-logged once at boot:
+All MCP profile paths are governed by the same `GRAPH_MEM_MCP_TOKEN` and
+`GRAPH_MEM_MCP_ALLOWED_IPS`; see [mcp_access_control.md](mcp_access_control.md).
+Profiles reduce tool visibility but are not authorization boundaries. Neither access-control
+variable is needed for local work -- the defaults allow unauthenticated access from loopback
+and private ranges. The active posture is logged once at boot:
 
 ```
 [McpAccessPolicy] /mcp access: no token (unauthenticated), 7 allowed range(s)

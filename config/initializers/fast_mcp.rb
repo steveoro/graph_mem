@@ -2,6 +2,7 @@
 
 require_relative "../../lib/graph_mem/version"
 require "fast_mcp"
+require_relative "../../lib/graph_mem/mcp_profile"
 require_relative "../../lib/graph_mem/mcp_tool_registry"
 require_relative "../../lib/graph_mem/mcp_server_patch"
 require_relative "../../lib/graph_mem/mcp_streamable_http_transport"
@@ -28,14 +29,23 @@ server = FastMcp::Server.new(
   logger: fast_mcp_logger
 )
 
+server.filter_tools do |request, tools|
+  profile = GraphMem::McpProfile.from_request(request)
+  GraphMem::McpProfile.select_tools(tools, profile)
+end
+
 Rails.application.config.after_initialize do
   GraphMem::McpToolRegistry.register_with!(server)
+  GraphMem::McpProfile.clear_cache!(server)
 end
 
 # Re-register after code reload so new tool files appear without a full restart.
 if Rails.env.development?
   Rails.application.config.to_prepare do
-    GraphMem::McpToolRegistry.register_with!(FastMcp.server) if FastMcp.server
+    if FastMcp.server
+      GraphMem::McpToolRegistry.register_with!(FastMcp.server)
+      GraphMem::McpProfile.clear_cache!(FastMcp.server)
+    end
   end
 end
 

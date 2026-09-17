@@ -6,6 +6,14 @@ class UpdateEntityTool < ApplicationTool
     "update_entity"
   end
 
+  mcp_metadata(
+    profiles: %i[default maintenance],
+    read_only_hint: false,
+    destructive_hint: true,
+    idempotent_hint: true,
+    open_world_hint: false
+  )
+
   description "Update metadata of an existing entity (not observations). Pass required `entity_id` (integer); " \
     "optional `name` (unique string), `entity_type` (canonicalized string), `aliases` (replaces existing; empty string clears), " \
     "`description` (empty string clears). Do not use to add or edit facts; use `create_observation` or `update_observation` instead. " \

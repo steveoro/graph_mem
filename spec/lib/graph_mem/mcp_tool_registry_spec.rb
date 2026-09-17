@@ -15,6 +15,17 @@ RSpec.describe GraphMem::McpToolRegistry do
 
       described_class.register_with!(server)
     end
+
+    it "registers only the selected profile when requested" do
+      expect(server).to receive(:register_tools) do |*tools|
+        names = tools.map(&:tool_name)
+        expect(names.size).to eq(25)
+        expect(names).to include("get_context", "create_entity")
+        expect(names).not_to include("dream_state_status")
+      end
+
+      described_class.register_with!(server, profile: :default)
+    end
   end
 
   describe ".tool_classes" do
@@ -24,6 +35,17 @@ RSpec.describe GraphMem::McpToolRegistry do
 
       expect(names).to include("merge_entities", "dream_state_status", "get_maintenance_reports")
       expect(names.size).to eq(35)
+    end
+  end
+
+  describe ".tool_classes_for" do
+    it "selects each profile without changing the full registry" do
+      described_class.load_all!
+
+      expect(described_class.tool_classes_for(:default).size).to eq(25)
+      expect(described_class.tool_classes_for(:readonly).size).to eq(15)
+      expect(described_class.tool_classes_for(:maintenance).size).to eq(35)
+      expect(described_class.tool_classes.size).to eq(35)
     end
   end
 

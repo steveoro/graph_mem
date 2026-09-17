@@ -12,12 +12,16 @@ Use the `graph_mem` MCP tools every session. "Knowledge graph", "graph mem", and
 "memory graph" all refer to the same toolset. Treat this workflow as session
 state management, not as a substitute for inspecting the repository.
 
+The default `/mcp` connection omits maintenance tools. Use a separate
+`/mcp/maintenance` connection only when maintenance work is required; the
+`/mcp/readonly` profile exposes context and read tools only.
+
 ## Phase 1 — Orient (start of every conversation)
 
 1. Say "Remembering..." then call `get_context` to check for an active project. Context is per-agent and persisted, so you may already have one from a prior session.
 2. If no context: `search_entities` for the relevant project name → `set_context(<ID or entity name from search result>)`.
 3. If no project entity exists yet: `create_entity` (type `Project`) → `set_context(<new entity ID or name>)`.
-4. Optionally call `dream_state_status` for a cheap health check (whether background compaction is running/paused).
+4. On a maintenance-profile connection, optionally call `dream_state_status` for a cheap health check (whether background compaction is running/paused).
 
 ## Phase 2 — Recall (before doing work)
 
@@ -46,7 +50,7 @@ state management, not as a substitute for inspecting the repository.
 - `create_entity` + `create_relation` for new concepts discovered.
 - Use `bulk_update` to batch multiple writes in one call (max 50 ops).
 - `clear_context` if the project scope is no longer relevant (safe: affects only your own client bucket).
-- Routine duplicate compaction is handled by the background dream-state job. When you *spot* duplicates during work, confirm with `suggest_merges`, then execute with `merge_entities(source_entity_id, target_entity_id)`.
+- Routine duplicate compaction is handled by the background dream-state job. On a maintenance-profile connection, confirm spotted duplicates with `suggest_merges`; execute a confirmed merge with `merge_entities(source_entity_id, target_entity_id)`.
 
 ---
 
@@ -58,7 +62,7 @@ state management, not as a substitute for inspecting the repository.
 | Recall | `search_entities`, `search_subgraph`, `get_entity`, `get_subgraph_by_ids`, `summarize`, `list_entities` |
 | Traverse | `find_relations`, `traverse_graph`, `find_shortest_path` |
 | Persist | `create_entity`, `update_entity`, `delete_entity`, `create_observation`, `update_observation`, `delete_observation`, `create_relation`, `delete_relation`, `bulk_update` |
-| Maintain | `suggest_merges`, `merge_entities`, `dream_state_status`, `get_maintenance_reports`, `list_maintenance_review`, `apply_maintenance_review`, `dismiss_maintenance_review`, `get_graph_stats`, `get_version`, `get_current_time`, `scan_project`, `scan_project_status` |
+| Maintain (`/mcp/maintenance`) | `suggest_merges`, `merge_entities`, `dream_state_status`, `get_maintenance_reports`, `list_maintenance_review`, `apply_maintenance_review`, `dismiss_maintenance_review`, `get_graph_stats`, `get_version`, `get_current_time`, `scan_project`, `scan_project_status` |
 
 ## MCP Tool Errors
 

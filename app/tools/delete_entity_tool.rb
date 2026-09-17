@@ -6,6 +6,14 @@ class DeleteEntityTool < ApplicationTool
     "delete_entity"
   end
 
+  mcp_metadata(
+    profiles: %i[default maintenance],
+    read_only_hint: false,
+    destructive_hint: true,
+    idempotent_hint: true,
+    open_world_hint: false
+  )
+
   description "Destroy one entity and cascade-delete its observations and relations. Pass required `entity_id` (integer); " \
     "optional `reason` (string, audit log). Do not use when the entity is a duplicate of another; use `merge_entities` instead. " \
     "Do not use to obsolete a single fact; use `delete_observation` instead. " \

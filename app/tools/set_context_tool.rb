@@ -5,6 +5,14 @@ class SetContextTool < ApplicationTool
     "set_context"
   end
 
+  mcp_metadata(
+    profiles: %i[default readonly maintenance],
+    read_only_hint: false,
+    destructive_hint: false,
+    idempotent_hint: true,
+    open_world_hint: false
+  )
+
   description "Set this MCP client's active project so `search_entities` and `search_subgraph` boost in-context " \
     "entities without hard-filtering results. Pass required `entity_id` (integer; also accepts an entity-name string). " \
     "Do not use to read the current project; use `get_context` instead. " \

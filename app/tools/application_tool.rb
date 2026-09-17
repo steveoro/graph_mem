@@ -3,12 +3,36 @@
 class ApplicationTool < FastMcp::Tool
   COMPACTION_VALVE_TOOLS = ToolMutationPolicy::COMPACTION_VALVE_TOOLS
   MCP_CLIENT_HEADER = "x-mcp-client"
+  MCP_PROFILE_NAMES = %i[default readonly maintenance].freeze
+  MCP_ANNOTATION_KEYS = %i[read_only_hint destructive_hint idempotent_hint open_world_hint].freeze
 
   attr_accessor :server
 
   class << self
     def input_schema_to_json
       super || { type: "object", properties: {}, required: [] }
+    end
+
+    def mcp_metadata(profiles:, **hints)
+      normalized_profiles = Array(profiles).map(&:to_sym).uniq
+      unknown_profiles = normalized_profiles - MCP_PROFILE_NAMES
+      raise ArgumentError, "Unknown MCP profiles: #{unknown_profiles.join(', ')}" if unknown_profiles.any?
+      raise ArgumentError, "At least one MCP profile is required" if normalized_profiles.empty?
+
+      missing_hints = MCP_ANNOTATION_KEYS - hints.keys
+      unknown_hints = hints.keys - MCP_ANNOTATION_KEYS
+      if missing_hints.any? || unknown_hints.any?
+        raise ArgumentError,
+              "MCP annotations must contain exactly #{MCP_ANNOTATION_KEYS.join(', ')}"
+      end
+      raise ArgumentError, "MCP annotation values must be boolean" unless hints.values.all? { |value| value.in?([ true, false ]) }
+
+      @mcp_profiles = normalized_profiles.freeze
+      annotations(hints.freeze)
+    end
+
+    def mcp_profiles
+      @mcp_profiles || []
     end
   end
 

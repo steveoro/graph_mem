@@ -8,6 +8,14 @@ class SuggestMergesTool < ApplicationTool
     "suggest_merges"
   end
 
+  mcp_metadata(
+    profiles: %i[maintenance],
+    read_only_hint: true,
+    destructive_hint: false,
+    idempotent_hint: true,
+    open_world_hint: false
+  )
+
   description "Live vector scan of duplicate entities; returns pairs and does not merge. Pass optional `threshold` " \
     "(float, default 0.3 cosine distance), `limit` (integer, default 20), `entity_type` (string). " \
     "Do not use to execute a merge; use `merge_entities` instead. " \

@@ -5,6 +5,14 @@ class GetGraphStatsTool < ApplicationTool
     "get_graph_stats"
   end
 
+  mcp_metadata(
+    profiles: %i[maintenance],
+    read_only_hint: true,
+    destructive_hint: false,
+    idempotent_hint: true,
+    open_world_hint: false
+  )
+
   description "Return live knowledge-graph health metrics (totals, entity_type_distribution, orphan_count, " \
     "most_connected, recent updates). Takes no arguments. " \
     "Do not use for stored report documents; use `get_maintenance_reports` instead. " \

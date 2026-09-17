@@ -6,6 +6,14 @@ class DeleteRelationTool < ApplicationTool
     "delete_relation"
   end
 
+  mcp_metadata(
+    profiles: %i[default maintenance],
+    read_only_hint: false,
+    destructive_hint: true,
+    idempotent_hint: true,
+    open_world_hint: false
+  )
+
   description "Delete one graph edge by id without deleting either entity. Pass required `relation_id` (integer); " \
     "optional `reason` (string, audit log). Do not use if you lack a relation_id; use `find_relations` first. " \
     "Do not use to remove an entity and its relations; use `delete_entity` instead. " \

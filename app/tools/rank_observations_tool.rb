@@ -5,6 +5,14 @@ class RankObservationsTool < ApplicationTool
     "rank_observations"
   end
 
+  mcp_metadata(
+    profiles: %i[default readonly maintenance],
+    read_only_hint: true,
+    destructive_hint: false,
+    idempotent_hint: true,
+    open_world_hint: false
+  )
+
   description "Return one known entity's observations sorted by trust_score (most reliable first). Pass required " \
     "`entity_id` (integer; also accepts entity name); optional `include_obsolete` (bool, default false), " \
     "`limit` (integer, default all), `query` (string; relevance then trust). " \

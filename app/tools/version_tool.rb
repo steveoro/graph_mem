@@ -6,6 +6,14 @@ class VersionTool < ApplicationTool
     "get_version"
   end
 
+  mcp_metadata(
+    profiles: %i[default readonly maintenance],
+    read_only_hint: true,
+    destructive_hint: false,
+    idempotent_hint: true,
+    open_world_hint: false
+  )
+
   description "Return the GraphMem server software version as {version: string}. Takes no arguments. " \
     "Do not use for wall-clock time; use `get_current_time` instead. " \
     "Do not use for graph health metrics; use `get_graph_stats` instead. " \

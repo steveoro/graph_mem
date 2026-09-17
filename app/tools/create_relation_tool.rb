@@ -5,6 +5,14 @@ class CreateRelationTool < ApplicationTool
     "create_relation"
   end
 
+  mcp_metadata(
+    profiles: %i[default maintenance],
+    read_only_hint: false,
+    destructive_hint: false,
+    idempotent_hint: false,
+    open_world_hint: false
+  )
+
   description "Add one directed edge between two existing entities. Pass required `from_entity_id` " \
     "(integer or name; aliases `from_entity`, `from`), `to_entity_id` (integer or name; aliases `to_entity`, `to`), " \
     "and `relation_type` (string, canonicalized); optional `weight` (float >=0), `confidence` (float 0-1), " \

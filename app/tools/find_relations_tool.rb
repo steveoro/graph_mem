@@ -6,6 +6,14 @@ class FindRelationsTool < ApplicationTool
     "find_relations"
   end
 
+  mcp_metadata(
+    profiles: %i[default readonly maintenance],
+    read_only_hint: true,
+    destructive_hint: false,
+    idempotent_hint: true,
+    open_world_hint: false
+  )
+
   description "Find 1-hop edges matching optional AND-combined filters. Pass optional `from_entity_id` (integer), " \
     "`to_entity_id` (integer), `relation_type` (string, canonicalized). Returns relations only. " \
     "Do not use for a multi-hop neighborhood; use `traverse_graph` instead. " \

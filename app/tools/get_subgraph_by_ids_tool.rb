@@ -5,6 +5,14 @@ class GetSubgraphByIdsTool < ApplicationTool
     "get_subgraph_by_ids"
   end
 
+  mcp_metadata(
+    profiles: %i[default readonly maintenance],
+    read_only_hint: true,
+    destructive_hint: false,
+    idempotent_hint: true,
+    open_world_hint: false
+  )
+
   description "Load a known id set as a closed subgraph: those entities, their observations, and only relations whose " \
     "both ends are in the set. Pass required `entity_ids` (array of integers); optional `query` (string), " \
     "`observation_limit` (integer). Do not use to discover entities by text; use `search_subgraph` or `search_entities` instead. " \

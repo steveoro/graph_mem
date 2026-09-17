@@ -9,6 +9,14 @@ class SearchSubgraphTool < ApplicationTool
     "search_subgraph"
   end
 
+  mcp_metadata(
+    profiles: %i[default readonly maintenance],
+    read_only_hint: true,
+    destructive_hint: false,
+    idempotent_hint: true,
+    open_world_hint: false
+  )
+
   description "Search names, types, aliases, and observations and return a paginated subgraph of matches " \
     "(observations plus relations exclusively among them). Pass required `query` (string); optional " \
     "`search_in_name`, `search_in_type`, `search_in_aliases`, `search_in_observations` (bool, default true), " \

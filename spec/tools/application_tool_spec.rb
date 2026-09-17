@@ -50,6 +50,66 @@ RSpec.describe ApplicationTool do
     end
   end
 
+  describe ".mcp_metadata" do
+    it "stores profile membership and forwards all FastMcp annotations" do
+      tool_class = Class.new(described_class)
+
+      tool_class.mcp_metadata(
+        profiles: %i[default readonly],
+        read_only_hint: true,
+        destructive_hint: false,
+        idempotent_hint: true,
+        open_world_hint: false
+      )
+
+      expect(tool_class.mcp_profiles).to eq(%i[default readonly])
+      expect(tool_class.annotations).to eq(
+        read_only_hint: true,
+        destructive_hint: false,
+        idempotent_hint: true,
+        open_world_hint: false
+      )
+      expect(tool_class.mcp_profiles).to be_frozen
+      expect(tool_class.annotations).to be_frozen
+    end
+
+    it "rejects unknown or empty profiles" do
+      tool_class = Class.new(described_class)
+      hints = {
+        read_only_hint: true,
+        destructive_hint: false,
+        idempotent_hint: true,
+        open_world_hint: false
+      }
+
+      expect { tool_class.mcp_metadata(profiles: [], **hints) }.to raise_error(ArgumentError, /At least one/)
+      expect { tool_class.mcp_metadata(profiles: [ :unknown ], **hints) }.to raise_error(ArgumentError, /Unknown/)
+    end
+
+    it "requires every annotation with boolean values" do
+      tool_class = Class.new(described_class)
+
+      expect {
+        tool_class.mcp_metadata(
+          profiles: [ :default ],
+          read_only_hint: true,
+          destructive_hint: false,
+          idempotent_hint: true
+        )
+      }.to raise_error(ArgumentError, /exactly/)
+
+      expect {
+        tool_class.mcp_metadata(
+          profiles: [ :default ],
+          read_only_hint: true,
+          destructive_hint: false,
+          idempotent_hint: true,
+          open_world_hint: nil
+        )
+      }.to raise_error(ArgumentError, /boolean/)
+    end
+  end
+
   describe "#description" do
     it "returns the FastMcp class-level description when set" do
       tool = DslTestTool.new

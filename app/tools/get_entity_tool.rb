@@ -6,6 +6,14 @@ class GetEntityTool < ApplicationTool
     "get_entity"
   end
 
+  mcp_metadata(
+    profiles: %i[default readonly maintenance],
+    read_only_hint: true,
+    destructive_hint: false,
+    idempotent_hint: true,
+    open_world_hint: false
+  )
+
   description "Retrieve one known entity with its observations and relations. Pass required `entity_id` " \
     "(integer; also accepts an entity-name string); optional `include_obsolete` (bool, default false), " \
     "`include_ranked` (bool, default false), `query` (string), `observation_limit` (integer). " \

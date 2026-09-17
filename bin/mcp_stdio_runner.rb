@@ -40,17 +40,18 @@ server = FastMcp::Server.new(
 )
 RunnerLogger.info("GraphMem Stdio Runner: FastMcp::Server instance created.")
 
-# Register tools with the server
-server.register_tools(*ApplicationTool.descendants)
-RunnerLogger.info("GraphMem Stdio Runner: Registered #{server.tools.count} tools.")
-
-# Register resources with the server
-server.register_resources(*ApplicationResource.descendants)
-if server.resources.any?
-  RunnerLogger.info("GraphMem Stdio Runner: Registered #{server.resources.count} resources.")
-else
-  RunnerLogger.info("GraphMem Stdio Runner: No resources were registered.")
+begin
+  profile = GraphMem::McpProfile.from_env
+rescue GraphMem::McpProfile::InvalidProfile => e
+  abort "GraphMem Stdio Runner: #{e.message}"
 end
+
+# Register the selected tool profile and all resources through the shared registry.
+GraphMem::McpToolRegistry.register_with!(server, profile: profile)
+RunnerLogger.info(
+  "GraphMem Stdio Runner: Registered #{server.tools.count} tools and #{server.resources.count} resources " \
+  "for the #{profile} profile."
+)
 
 # Start the server. For v1.4.0, server.start() should handle StdioTransport creation.
 RunnerLogger.info("GraphMem Stdio Runner: Calling server.start() to initialize StdioTransport and run...")

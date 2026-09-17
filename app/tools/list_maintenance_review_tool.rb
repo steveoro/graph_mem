@@ -7,6 +7,14 @@ class ListMaintenanceReviewTool < ApplicationTool
     "list_maintenance_review"
   end
 
+  mcp_metadata(
+    profiles: %i[maintenance],
+    read_only_hint: true,
+    destructive_hint: false,
+    idempotent_hint: true,
+    open_world_hint: false
+  )
+
   description "List paginated maintenance-review queue rows (including item_id) for later apply or dismiss. " \
     "Pass optional `report_type` (string, default compaction_review), " \
     "`status` (active, dismissed, approved, or ignored; default active), " \

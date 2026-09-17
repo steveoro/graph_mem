@@ -30,6 +30,12 @@ client-side label, not part of the tool contract.
 3. **Search before create**
    - Always run `search_entities` before `create_entity` to avoid duplicates.
 
+4. **Choose the smallest connection profile**
+   - `/mcp` exposes ordinary context, read, and graph-write tools.
+   - `/mcp/readonly` exposes context and read tools.
+   - `/mcp/maintenance` exposes the full catalog. Use it only for explicit
+     maintenance work.
+
 ## Tool Discovery And Schema Rule
 
 Before calling any `graph_mem` tool for the first time in a session:
@@ -84,7 +90,7 @@ Before calling any `graph_mem` tool for the first time in a session:
    - `create_entity`
    - `create_relation` with a specific relation type.
 3. For batch updates, prefer `bulk_update` (max 50 operations).
-4. Routine duplicate compaction is handled by the background dream-state job. When you spot duplicates, confirm with `suggest_merges`, then execute with `merge_entities(source_entity_id, target_entity_id)`.
+4. Routine duplicate compaction is handled by the background dream-state job. On a maintenance-profile connection, confirm spotted duplicates with `suggest_merges`, then execute with `merge_entities(source_entity_id, target_entity_id)`.
 5. Call `clear_context` only when project scope is no longer relevant (safe: affects only your own client bucket).
 
 ## Multi-Agent & Dream-State Awareness
@@ -93,6 +99,7 @@ Before calling any `graph_mem` tool for the first time in a session:
 - A background dream-state job auto-parents orphans, auto-merges near-identical
   entities (cosine < 0.10), and dedupes identical observations. Lower-confidence
   cases are queued for review.
+- Maintenance tools are available on `/mcp/maintenance`, not the default connection.
 - `dream_state_status` reports whether compaction is running/paused plus stats.
 - `list_maintenance_review` returns queued merge/orphan rows; action good ones with `apply_maintenance_review` (or `merge_entities` when both entity ids are already known). Use `get_maintenance_reports` for stored report documents, not row pagination.
 - Mutating tools auto-pause compaction, so no coordination is needed — but

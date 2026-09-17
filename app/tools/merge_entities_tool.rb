@@ -5,6 +5,14 @@ class MergeEntitiesTool < ApplicationTool
     "merge_entities"
   end
 
+  mcp_metadata(
+    profiles: %i[default maintenance],
+    read_only_hint: false,
+    destructive_hint: true,
+    idempotent_hint: true,
+    open_world_hint: false
+  )
+
   description "Merge a source entity into a target: transfer observations, re-parent relations, add the source name " \
     "to target aliases, then delete the source. Pass required `source_entity_id` and `target_entity_id` (integers). " \
     "Do not use to find merge candidates; use `suggest_merges` instead. " \

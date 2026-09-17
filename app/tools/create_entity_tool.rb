@@ -7,6 +7,14 @@ class CreateEntityTool < ApplicationTool
     "create_entity"
   end
 
+  mcp_metadata(
+    profiles: %i[default maintenance],
+    read_only_hint: false,
+    destructive_hint: false,
+    idempotent_hint: false,
+    open_world_hint: false
+  )
+
   description "Create a single new entity node. Pass required `name` (string) and `entity_type` (string); " \
     "optional `observations` (array of strings), `aliases` (pipe-separated string), `description` (string). " \
     "Alias `entityType` maps to `entity_type`. Types are canonicalized; cosine distance < 0.25 returns a warning " \

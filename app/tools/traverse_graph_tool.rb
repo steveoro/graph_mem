@@ -5,6 +5,14 @@ class TraverseGraphTool < ApplicationTool
     "traverse_graph"
   end
 
+  mcp_metadata(
+    profiles: %i[default readonly maintenance],
+    read_only_hint: true,
+    destructive_hint: false,
+    idempotent_hint: true,
+    open_world_hint: false
+  )
+
   description "Perform a bounded multi-hop BFS from one start entity and return reachable entities (with observations) " \
     "and connecting relations. Pass required `start_entity_id` (integer; also accepts entity name); optional " \
     "`max_depth` (integer, default 2, max 5), `direction` (both|outgoing|incoming, default both), " \

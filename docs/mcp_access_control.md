@@ -44,6 +44,9 @@ Both variables are optional. The defaults are safe for a laptop or a home/office
 Default ranges: `127.0.0.0/8`, `::1`, `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`,
 `fc00::/7`, `fe80::/10`.
 
+An explicit allowlist replaces these defaults rather than extending them. Include
+`127.0.0.0/8` and `::1` when clients on the server host use `localhost`.
+
 The active posture is logged once at boot:
 
 ```
@@ -76,7 +79,7 @@ GRAPH_MEM_MCP_TOKEN=$(openssl rand -hex 32)
 To restrict to one subnet:
 
 ```bash
-GRAPH_MEM_MCP_ALLOWED_IPS=192.168.0.0/24
+GRAPH_MEM_MCP_ALLOWED_IPS=127.0.0.0/8,::1,192.168.0.0/24
 ```
 
 ### Reachable over VPN, or on a VM
@@ -117,6 +120,16 @@ support custom headers on a URL-based server:
 
 Keep setting `X-MCP-Client`: it is what isolates each agent's project context (`agent_contexts`),
 and it is unrelated to authentication.
+
+Choose the URL for the required tool profile:
+
+- `/mcp` — default context, read, and graph-write tools
+- `/mcp/readonly` — context and read tools only
+- `/mcp/maintenance` — the full catalog, including maintenance tools
+- `/mcp/sse` — legacy transport using the default profile
+
+Every profile uses the same token and network policy. Profiles reduce accidental tool selection;
+they do not grant different permissions to different token holders.
 
 A rejected request is explicit about the fix:
 

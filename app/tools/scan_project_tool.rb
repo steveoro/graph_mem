@@ -7,6 +7,14 @@ class ScanProjectTool < ApplicationTool
     "scan_project"
   end
 
+  mcp_metadata(
+    profiles: %i[maintenance],
+    read_only_hint: false,
+    destructive_hint: true,
+    idempotent_hint: false,
+    open_world_hint: true
+  )
+
   description "Enqueue an asynchronous filesystem scan that reconciles the knowledge graph with a project root; " \
     "returns a scan_id and does not wait. Pass required `project_root` (string); optional `project_name` (string), " \
     "`aliases` (comma- or pipe-separated string), `mode` (initial, rescan, or validate; default initial), " \

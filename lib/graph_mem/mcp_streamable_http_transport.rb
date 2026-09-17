@@ -6,17 +6,18 @@ require "timeout"
 require "concurrent"
 require "rack"
 require_relative "mcp_access_policy"
+require_relative "mcp_profile"
 
 module GraphMem
   # Rack transport for FastMcp that supports the 2025-03-26 Streamable HTTP
   # transport while preserving the legacy 2024-11-05 SSE transport.
   #
   # Endpoints:
-  #   POST /mcp          - Streamable HTTP JSON-RPC request/response
-  #   GET  /mcp          - Streamable HTTP SSE stream (server -> client)
-  #   DELETE /mcp        - terminate a Streamable HTTP session
-  #   GET  /mcp/sse      - legacy 2024-11-05 SSE endpoint
-  #   POST /mcp/messages - legacy 2024-11-05 message endpoint
+  #   /mcp              - Streamable HTTP, default profile
+  #   /mcp/readonly     - Streamable HTTP, context and read tools
+  #   /mcp/maintenance  - Streamable HTTP, full catalog
+  #   /mcp/sse          - legacy 2024-11-05 SSE, default profile
+  #   /mcp/messages     - legacy 2024-11-05 messages, default profile
   #
   # The legacy endpoints are delegated to an inner FastMcp::Transports::RackTransport
   # so the existing SSE behaviour and client configs keep working without a rewrite.
@@ -83,6 +84,8 @@ module GraphMem
       @reaper_interval = options.fetch(:reaper_interval, REAPER_INTERVAL).to_f
       @stream_queue_size = [ options.fetch(:stream_queue_size, STREAM_QUEUE_SIZE).to_i, 1 ].max
       @legacy_transport = FastMcp::Transports::RackTransport.new(app, server, options)
+      @profile_cache_generation = GraphMem::McpProfile.cache_generation(server)
+      @profile_cache_mutex = Mutex.new
       @sessions = Concurrent::Hash.new
       @sessions_mutex = Mutex.new
       @reaper_mutex = Mutex.new
@@ -163,6 +166,7 @@ module GraphMem
     end
 
     def handle_mcp_request(request, env)
+      refresh_profile_caches!
       return forbidden_response("Forbidden: Remote IP not allowed") unless valid_client_ip?(request)
       return forbidden_response("Forbidden: Origin validation failed") unless validate_origin(request, env)
 
@@ -178,7 +182,7 @@ module GraphMem
         # Legacy 2024-11-05 endpoints are handled entirely by FastMcp's transport.
         Thread.current[:graph_mem_mcp_transport] = @legacy_transport
         @legacy_transport.call(env)
-      when "", "/"
+      when "", "/", "/readonly", "/readonly/", "/maintenance", "/maintenance/"
         handle_streamable_request(request, env)
       else
         endpoint_not_found_response
@@ -197,6 +201,22 @@ module GraphMem
         handle_streamable_delete(request, env)
       else
         method_not_allowed_response
+      end
+    end
+
+    def refresh_profile_caches!
+      current_generation = GraphMem::McpProfile.cache_generation(@server)
+      return if current_generation == @profile_cache_generation
+
+      @profile_cache_mutex.synchronize do
+        current_generation = GraphMem::McpProfile.cache_generation(@server)
+        next if current_generation == @profile_cache_generation
+
+        # fast-mcp 1.6.0 has no public invalidation API for RackTransport's
+        # filtered server cache, so clear its private cache when Rails reloads
+        # and re-registers tool classes.
+        @legacy_transport.instance_variable_get(:@filtered_servers_cache)&.clear
+        @profile_cache_generation = current_generation
       end
     end
 
@@ -224,9 +244,11 @@ module GraphMem
       session_id, session = resolve_session(request, parsed, method)
       return session if session.is_a?(Array) # error response
 
+      request_server = GraphMem::McpProfile.filtered_server(@server, request)
+
       # Notifications (no id) get a 202 Accepted and do not return a body.
       if request_id.nil?
-        @server.handle_request(body, headers: extract_headers(request))
+        request_server.handle_request(body, headers: extract_headers(request))
         return [ 202, CORS_HEADERS.dup, [] ]
       end
 
@@ -241,17 +263,19 @@ module GraphMem
       Thread.current[:graph_mem_mcp_response_queue] = response_queue
 
       if wants_sse
-        return streamable_post_sse_response(env, session, response_queue, session_id, body, request)
+        return streamable_post_sse_response(
+          env, session, response_queue, session_id, body, request, request_server
+        )
       end
 
-      handle_streamable_post_json(session, response_queue, session_id, body, request)
+      handle_streamable_post_json(session, response_queue, session_id, body, request, request_server)
     ensure
       release_session(session) if session.is_a?(Hash)
       Thread.current[:graph_mem_mcp_session_id] = nil
       Thread.current[:graph_mem_mcp_response_queue] = nil
     end
 
-    def streamable_post_sse_response(env, session, response_queue, session_id, body, request)
+    def streamable_post_sse_response(env, session, response_queue, session_id, body, request, request_server)
       env["rack.hijack"].call
       io = env["rack.hijack_io"]
       raise IOError, "MCP hijack did not provide an IO" unless io
@@ -260,7 +284,7 @@ module GraphMem
       raise IOError, "MCP session was closed before the SSE stream opened" unless stream
 
       stream[:thread] = Thread.new { streamable_get_loop(session, stream, session_id) }
-      @server.handle_request(body, headers: extract_headers(request))
+      request_server.handle_request(body, headers: extract_headers(request))
 
       [ -1, {}, [] ]
     rescue StandardError
@@ -269,10 +293,10 @@ module GraphMem
       raise
     end
 
-    def handle_streamable_post_json(session, queue, session_id, body, request)
+    def handle_streamable_post_json(session, queue, session_id, body, request, request_server)
       response = nil
       begin
-        @server.handle_request(body, headers: extract_headers(request))
+        request_server.handle_request(body, headers: extract_headers(request))
         response = Timeout.timeout(RESPONSE_TIMEOUT) { queue.pop }
       rescue Timeout::Error
         return json_rpc_error_response(504, -32_600, "Gateway Timeout: no response from MCP server")

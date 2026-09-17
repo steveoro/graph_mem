@@ -6,6 +6,14 @@ class DeleteObservationTool < ApplicationTool
     "delete_observation"
   end
 
+  mcp_metadata(
+    profiles: %i[default maintenance],
+    read_only_hint: false,
+    destructive_hint: true,
+    idempotent_hint: true,
+    open_world_hint: false
+  )
+
   description "Mark one observation obsolete so it is excluded from default reads and search; does not delete entities " \
     "or relations. Pass required `observation_id` (integer); optional `reason` (string). " \
     "Repeating on an inactive observation is safe. Do not use to replace a fact while retaining history; " \

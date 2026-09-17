@@ -5,6 +5,14 @@ class UpdateObservationTool < ApplicationTool
     "update_observation"
   end
 
+  mcp_metadata(
+    profiles: %i[default maintenance],
+    read_only_hint: false,
+    destructive_hint: true,
+    idempotent_hint: false,
+    open_world_hint: false
+  )
+
   description "Edit an active observation in place or, with supersede true, create a replacement and mark the original " \
     "superseded. Pass required `observation_id` (integer); optional `text_content`, `confidence`, `source`, " \
     "`valid_from`, `valid_until`, `tags`, `supersede` (bool, default false), `reason`. Inactive observations cannot be edited. " \
