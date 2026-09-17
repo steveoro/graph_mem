@@ -26,11 +26,11 @@ RSpec.describe FindShortestPathTool, type: :model do
     end
   end
 
-  describe "#tool_output_schema" do
-    it "describes the ordered path response" do
-      schema = tool.tool_output_schema
-      expect(schema[:properties].keys).to contain_exactly(
-        :found, :hop_count, :direction, :entities, :relations
+  describe ".output_schema_to_json" do
+    it "describes the post-envelope ordered path response" do
+      schema = described_class.output_schema_to_json
+      expect(schema[:properties].keys).to include(
+        :found, :hop_count, :direction, :entities, :relations, :version, :next_move, :context
       )
     end
   end

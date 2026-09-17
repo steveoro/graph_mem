@@ -34,28 +34,6 @@ class TraverseGraphTool < ApplicationTool
     optional(:include).array(:string).description("Response projections: entities, relations, traversal.")
   end
 
-  def tool_output_schema
-    {
-      type: :object,
-      properties: {
-        entities: { type: :array, items: GraphTraversalToolSchema.entity },
-        relations: { type: :array, items: GraphTraversalToolSchema.relation },
-        traversal: {
-          type: :object,
-          properties: {
-            start_entity_id: { type: :integer },
-            max_depth: { type: :integer },
-            direction: { type: :string },
-            visited_depth: { type: :integer },
-            truncated: { type: :boolean }
-          },
-          required: [ :start_entity_id, :max_depth, :direction, :visited_depth, :truncated ]
-        }
-      },
-      required: []
-    }
-  end
-
   def call(start_entity_id: nil, from_entity_id: nil, to_entity_id: nil, relation_type: nil,
            max_depth: nil, direction: nil, relation_types: nil, max_entities: nil, include: nil)
     logger.info "Performing TraverseGraphTool from #{start_entity_id} (depth=#{max_depth}, direction=#{direction})"

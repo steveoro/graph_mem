@@ -86,6 +86,10 @@ The 2024-11-05 SSE endpoint remains at `/mcp/sse` and uses the default profile.
 Workflow guidance is available on demand through the `orient`, `recall`, and
 `persist` MCP prompts.
 
+The default 12 tools advertise `outputSchema` and emit matching
+`structuredContent` plus mirrored JSON text. Maintenance-only and hidden tools
+remain text-only until their schemas are migrated.
+
 For the STDIO interface (useful for Windsurf integration):
 
 ```bash

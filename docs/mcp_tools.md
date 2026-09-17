@@ -52,6 +52,12 @@ Every successful tool result includes `version` and, where useful,
 `context: { status: "none", next_move: ... }` banner. FastMCP `_meta` mirrors
 `graphMemVersion` and `contextStatus`.
 
+All 12 default-profile tools advertise a post-envelope `outputSchema` and
+return the same JSON object in both `structuredContent` and
+`content[0].text`. Maintenance-only and hidden compatibility tools remain
+text-only during the staged rollout. Tool errors remain `isError: true` JSON
+text and do not claim conformance to success output schemas.
+
 ## Context Scoping (2 advertised tools)
 
 Context scoping allows search tools to **boost** entities related to the active project. The recursive `part_of` subtree is bounded; when the cap is reached, context-aware responses expose `scope_truncated: true` and continue with the partial scope. When a context is set via `set_context`, `search` prioritizes in-context query matches (cross-project results still appear, but ranked lower).

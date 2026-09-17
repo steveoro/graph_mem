@@ -1,21 +1,10 @@
 # frozen_string_literal: true
 
 # Patches FastMcp::Server:
-# - route per-request responses through the transport handling the request
+# - hide compatibility tools from tools/list
 # - emit structured ToolError JSON on tools/call failures (no Ruby backtraces)
 module GraphMem
   module McpServerPatch
-    def send_response(response)
-      transport = Thread.current[:graph_mem_mcp_transport] || @transport
-
-      if transport
-        @logger.debug("Sending response: #{response.inspect}")
-        transport.send_message(response)
-      else
-        @logger.warn("No transport available to send response: #{response.inspect}")
-      end
-    end
-
     def handle_tools_list(id)
       tools = @tools.values.filter_map do |tool|
         next if tool.respond_to?(:mcp_advertised?) && !tool.mcp_advertised?
@@ -25,6 +14,8 @@ module GraphMem
           description: tool.description || "",
           inputSchema: tool.input_schema_to_json || { type: "object", properties: {}, required: [] }
         }
+        output_schema = tool.output_schema_to_json
+        tool_info[:outputSchema] = output_schema if output_schema
         annotations = tool.annotations
         if annotations.any?
           tool_info[:annotations] = annotations.to_h do |key, value|
@@ -59,7 +50,7 @@ module GraphMem
         end
 
         result, metadata = tool_instance.call_with_schema_validation!(**symbolized_args)
-        send_formatted_result(result, id, metadata)
+        send_formatted_result(result, id, metadata, tool: tool)
       rescue StandardError => e
         @logger.error("Error calling tool #{tool_name}: #{e.class}: #{e.message}")
         @logger.error(e.backtrace.join("\n")) if e.backtrace

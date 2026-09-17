@@ -29,20 +29,6 @@ class FindShortestPathTool < ApplicationTool
     optional(:relation_types).array(:string).description("Optional: restrict traversal to these relation types (canonicalized).")
   end
 
-  def tool_output_schema
-    {
-      type: :object,
-      properties: {
-        found: { type: :boolean },
-        hop_count: { type: [ :integer, :null ] },
-        direction: { type: :string },
-        entities: { type: :array, items: GraphTraversalToolSchema.entity },
-        relations: { type: :array, items: GraphTraversalToolSchema.relation }
-      },
-      required: [ :found, :hop_count, :direction, :entities, :relations ]
-    }
-  end
-
   def call(from_entity_id:, to_entity_id:, max_depth: nil, direction: nil, relation_types: nil)
     logger.info "Performing FindShortestPathTool from #{from_entity_id} to #{to_entity_id}"
     begin

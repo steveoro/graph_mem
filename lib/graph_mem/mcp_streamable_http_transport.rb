@@ -212,11 +212,14 @@ module GraphMem
         current_generation = GraphMem::McpProfile.cache_generation(@server)
         next if current_generation == @profile_cache_generation
 
-        # fast-mcp 1.6.0 has no public invalidation API for RackTransport's
-        # filtered server cache, so clear its private cache when Rails reloads
-        # and re-registers tool classes.
-        @legacy_transport.instance_variable_get(:@filtered_servers_cache)&.clear
+        @legacy_transport.clear_filtered_servers_cache
         @profile_cache_generation = current_generation
+      end
+    end
+
+    def dispatch_server_request(request_server, body, request, session_id: nil)
+      request_server.with_request_context(transport: self, session_id: session_id) do
+        request_server.handle_request(body, headers: extract_headers(request))
       end
     end
 
@@ -248,7 +251,7 @@ module GraphMem
 
       # Notifications (no id) get a 202 Accepted and do not return a body.
       if request_id.nil?
-        request_server.handle_request(body, headers: extract_headers(request))
+        dispatch_server_request(request_server, body, request, session_id: session_id)
         return [ 202, CORS_HEADERS.dup, [] ]
       end
 
@@ -284,7 +287,7 @@ module GraphMem
       raise IOError, "MCP session was closed before the SSE stream opened" unless stream
 
       stream[:thread] = Thread.new { streamable_get_loop(session, stream, session_id) }
-      request_server.handle_request(body, headers: extract_headers(request))
+      dispatch_server_request(request_server, body, request, session_id: session_id)
 
       [ -1, {}, [] ]
     rescue StandardError
@@ -296,7 +299,7 @@ module GraphMem
     def handle_streamable_post_json(session, queue, session_id, body, request, request_server)
       response = nil
       begin
-        request_server.handle_request(body, headers: extract_headers(request))
+        dispatch_server_request(request_server, body, request, session_id: session_id)
         response = Timeout.timeout(RESPONSE_TIMEOUT) { queue.pop }
       rescue Timeout::Error
         return json_rpc_error_response(504, -32_600, "Gateway Timeout: no response from MCP server")

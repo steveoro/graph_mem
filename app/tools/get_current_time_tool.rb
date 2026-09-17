@@ -21,25 +21,8 @@ class GetCurrentTimeTool < ApplicationTool
 
   # No arguments are needed for this tool.
 
-  # Defines the output schema for this tool as an instance method.
-  # While not always strictly required by FastMcp for execution,
-  # it's good practice for documentation and potential future use.
-  def tool_output_schema
-    {
-      type: "object",
-      properties: {
-        timestamp: {
-          type: "string",
-          format: "date-time",
-          description: "The current server time in ISO 8601 format."
-        }
-      },
-      required: [ "timestamp" ]
-    }
-  end
-
   # Execute the tool's logic
-  # @return [Hash] The output of the tool (conforming to tool_output_schema).
+  # @return [Hash] The output of the tool.
   def call
     { timestamp: Time.now.utc.iso8601 }
   rescue *ToolError::TIMEOUT_CLASSES

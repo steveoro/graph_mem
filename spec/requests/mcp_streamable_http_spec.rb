@@ -150,6 +150,7 @@ RSpec.describe "MCP Streamable HTTP endpoint", type: :request do
         "get_version",
         "clear_context"
       )
+      expect(tools).to all(include("outputSchema"))
 
       search_tool = tools.find { |tool| tool["name"] == "search" }
       expect(search_tool["annotations"]).to eq(
@@ -242,6 +243,7 @@ RSpec.describe "MCP Streamable HTTP endpoint", type: :request do
       expect(response).to have_http_status(:ok)
       result = response.parsed_body["result"]
       expect(result["isError"]).to eq(true)
+      expect(result).not_to have_key("structuredContent")
       text = result["content"].first["text"]
       expect(text).not_to include("Error:")
       expect(text).not_to include("app/tools")
@@ -475,6 +477,7 @@ RSpec.describe "MCP Streamable HTTP endpoint", type: :request do
 
       expect(response).to have_http_status(:ok)
       expect(response.parsed_body.dig("result", "isError")).not_to be(true)
+      expect(response.parsed_body["result"]).not_to have_key("structuredContent")
     end
 
     it "selects tools from each request path even when a session id is reused" do
@@ -535,7 +538,12 @@ RSpec.describe "MCP Streamable HTTP endpoint", type: :request do
 
       result = response.parsed_body["result"]
       text = result.dig("content", 0, "text")
-      expect(text).to include("version:", "next_move:", "context:")
+      expect(JSON.parse(text)).to eq(result["structuredContent"])
+      expect(result["structuredContent"]).to include(
+        "version" => GraphMem::VERSION,
+        "next_move" => include("timestamp"),
+        "context" => include("status" => "none")
+      )
       expect(result["_meta"]).to eq(
         "graphMemVersion" => GraphMem::VERSION,
         "contextStatus" => "none"

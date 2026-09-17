@@ -414,5 +414,7 @@ than one that exceeds its permissions. Keep `/mcp/maintenance` documented in
    effects, but it would make dedup preview explicit rather than implicit in the response.
 3. **Per-client profile defaults.** `X-MCP-Client` is already parsed; a client could be pinned to a
    profile server-side instead of relying on each config using the right path.
-4. **`outputSchema` / `structuredContent`.** Not supported in `fast-mcp` 1.6.0. Worth a gem bump
-   to return typed results instead of JSON inside a text block?
+
+Resolved in GraphMem 1.40.0: the pinned FastMCP fork 1.7.0.pre.2 adds opt-in
+`outputSchema` and dual `structuredContent`/JSON text. GraphMem enables it for
+the default 12 tools first; maintenance and hidden aliases remain staged.

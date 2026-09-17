@@ -129,6 +129,15 @@ RSpec.describe "FastMcp tool registration", type: :integration do
       expect(advertised_counts).to eq(default: 12, readonly: 9, maintenance: 22)
     end
 
+    it "publishes output schemas for every default advertised tool" do
+      default_tools = real_tool_classes.select do |tool_class|
+        tool_class.mcp_advertised? && :default.in?(tool_class.mcp_profiles)
+      end
+
+      expect(default_tools.size).to eq(12)
+      expect(default_tools).to all(satisfy { |tool_class| tool_class.output_schema_to_json.present? })
+    end
+
     it "describes the non-obvious side effects accurately" do
       expect(GetContextTool.annotations).to include(read_only_hint: false, destructive_hint: false)
       expect(SummarizeTool.annotations).to include(read_only_hint: true, open_world_hint: true)

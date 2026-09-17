@@ -154,7 +154,8 @@ A typical MCP request flows through:
 5. Tool validates normalized parameters (via Dry::Schema `arguments` block)
 6. Tool executes business logic using ActiveRecord models and search strategies
 7. `ToolSuccessResponse` adds version, `next_move`, context, and `_meta`
-8. Response delivered to client via the transport
+8. Schema-enabled tools emit matching `structuredContent` and JSON text
+9. FastMCP request context routes the response to the active transport
 
 ### Parameter Normalization
 

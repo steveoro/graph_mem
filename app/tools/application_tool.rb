@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative "../../lib/graph_mem/mcp_output_schemas"
+
 class ApplicationTool < FastMcp::Tool
   COMPACTION_VALVE_TOOLS = ToolMutationPolicy::COMPACTION_VALVE_TOOLS
   MCP_CLIENT_HEADER = "x-mcp-client"
@@ -11,6 +13,10 @@ class ApplicationTool < FastMcp::Tool
   class << self
     def input_schema_to_json
       super || { type: "object", properties: {}, required: [] }
+    end
+
+    def output_schema_to_json
+      super || GraphMem::McpOutputSchemas.for(tool_name)
     end
 
     def mcp_metadata(profiles:, advertised: true, **hints)

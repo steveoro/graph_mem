@@ -53,6 +53,10 @@ RSpec.describe GraphMem::McpStreamableHttpTransport do
     def contains_filters?
       false
     end
+
+    def with_request_context(**)
+      yield
+    end
   end
 
   class BlockingMcpIO

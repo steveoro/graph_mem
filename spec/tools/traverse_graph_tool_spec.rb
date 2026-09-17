@@ -41,10 +41,12 @@ RSpec.describe TraverseGraphTool, type: :model do
     end
   end
 
-  describe "#tool_output_schema" do
-    it "describes traversal entities, relations, and metadata" do
-      schema = tool.tool_output_schema
-      expect(schema[:properties].keys).to contain_exactly(:entities, :relations, :traversal)
+  describe ".output_schema_to_json" do
+    it "describes traversal entities, relations, metadata, and workflow fields" do
+      schema = described_class.output_schema_to_json
+      expect(schema[:properties].keys).to include(
+        :entities, :relations, :traversal, :version, :next_move, :context
+      )
     end
   end
 
