@@ -4,6 +4,7 @@ require_relative "../../lib/graph_mem/version"
 require "fast_mcp"
 require_relative "../../lib/graph_mem/mcp_profile"
 require_relative "../../lib/graph_mem/mcp_tool_registry"
+require_relative "../../lib/graph_mem/mcp_error_formatter"
 require_relative "../../lib/graph_mem/mcp_server_patch"
 require_relative "../../lib/graph_mem/mcp_streamable_http_transport"
 
@@ -28,6 +29,8 @@ server = FastMcp::Server.new(
   version: GraphMem::VERSION.to_s,
   logger: fast_mcp_logger
 )
+
+GraphMem::McpErrorFormatter.install(server)
 
 server.filter_tools do |request, tools|
   profile = GraphMem::McpProfile.from_request(request)
