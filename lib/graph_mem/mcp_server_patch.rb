@@ -3,16 +3,12 @@
 # Hides compatibility tools from tools/list.
 #
 # FastMCP now owns tool dispatch, JSON-safe results, and configurable error
-# formatting. These filtering shims remain until filtering can hide tools
-# without creating server copies that mutate each tool class's server pointer.
+# formatting. This override only preserves GraphMem's hidden-but-callable
+# compatibility aliases after FastMCP applies the request profile filter.
 module GraphMem
   module McpServerPatch
-    def create_filtered_copy(request)
-      super.tap { |filtered_server| GraphMem::McpErrorFormatter.install(filtered_server) }
-    end
-
     def handle_tools_list(id)
-      tools = @tools.values.filter_map do |tool|
+      tools = visible_tools(current_request).filter_map do |tool|
         next if tool.respond_to?(:mcp_advertised?) && !tool.mcp_advertised?
 
         tool_info = {

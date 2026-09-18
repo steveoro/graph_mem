@@ -144,24 +144,19 @@ RSpec.describe GraphMem::McpServerPatch do
     )
   end
 
-  it "preserves structured errors on request-filtered server copies" do
-    server.filter_tools { |_request, tools| tools }
-    filtered_server = server.create_filtered_copy(instance_double(Rack::Request))
-    filtered_server.transport = transport
+  it "applies in-place request filters before hiding compatibility aliases" do
+    request = instance_double(Rack::Request)
+    server.filter_tools do |_request, tools|
+      tools.reject { |tool| tool == DeniedProbeTestTool }
+    end
 
-    filtered_server.handle_request(
-      {
-        jsonrpc: "2.0",
-        method: "tools/call",
-        params: { name: "envelope_probe", arguments: { mode: "validation" } },
-        id: 5
-      }.to_json
-    )
+    server.with_request_context(transport: transport, request: request) do
+      server.handle_request({ jsonrpc: "2.0", method: "tools/list", id: 5 }.to_json)
+    end
 
-    expect(last_error_payload).to include(
-      "category" => "validation",
-      "tool" => "envelope_probe"
-    )
+    names = last_result.fetch(:tools).map { |tool| tool.fetch(:name) }
+    expect(names).to include("envelope_probe")
+    expect(names).not_to include("denied_probe", "hidden_alias")
   end
 
   it "omits hidden aliases from tools/list while keeping them callable" do

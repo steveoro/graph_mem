@@ -36,7 +36,7 @@ RSpec.describe GraphMem::McpStreamableHttpTransport do
 
   class McpTransportTestServer
     attr_accessor :transport
-    attr_reader :logger
+    attr_reader :logger, :request_context
 
     def initialize(logger)
       @logger = logger
@@ -54,7 +54,8 @@ RSpec.describe GraphMem::McpStreamableHttpTransport do
       false
     end
 
-    def with_request_context(**)
+    def with_request_context(**context)
+      @request_context = context
       yield
     end
   end
@@ -144,8 +145,7 @@ RSpec.describe GraphMem::McpStreamableHttpTransport do
         response_queue,
         session[:id],
         "{}",
-        request,
-        server
+        request
       )
 
       expect(result).to eq([ -1, {}, [] ])
@@ -282,15 +282,18 @@ RSpec.describe GraphMem::McpStreamableHttpTransport do
     end
   end
 
-  describe "profile cache invalidation" do
-    it "clears fast-mcp's legacy filtered copies after tool re-registration" do
-      legacy_cache = transport.legacy_transport.instance_variable_get(:@filtered_servers_cache)
-      legacy_cache[:stale] = Object.new
+  describe "request context" do
+    it "passes the Rack request to FastMCP for in-place filtering" do
+      env = Rack::MockRequest.env_for("/mcp/readonly", method: "POST")
+      request = Rack::Request.new(env)
 
-      GraphMem::McpProfile.clear_cache!(server)
-      transport.send(:refresh_profile_caches!)
+      transport.send(:dispatch_server_request, "{}", request, session_id: "session-1")
 
-      expect(legacy_cache).to be_empty
+      expect(server.request_context).to include(
+        transport: transport,
+        request: request,
+        session_id: "session-1"
+      )
     end
   end
 

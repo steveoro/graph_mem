@@ -84,8 +84,6 @@ module GraphMem
       @reaper_interval = options.fetch(:reaper_interval, REAPER_INTERVAL).to_f
       @stream_queue_size = [ options.fetch(:stream_queue_size, STREAM_QUEUE_SIZE).to_i, 1 ].max
       @legacy_transport = FastMcp::Transports::RackTransport.new(app, server, options)
-      @profile_cache_generation = GraphMem::McpProfile.cache_generation(server)
-      @profile_cache_mutex = Mutex.new
       @sessions = Concurrent::Hash.new
       @sessions_mutex = Mutex.new
       @reaper_mutex = Mutex.new
@@ -166,7 +164,6 @@ module GraphMem
     end
 
     def handle_mcp_request(request, env)
-      refresh_profile_caches!
       return forbidden_response("Forbidden: Remote IP not allowed") unless valid_client_ip?(request)
       return forbidden_response("Forbidden: Origin validation failed") unless validate_origin(request, env)
 
@@ -204,22 +201,9 @@ module GraphMem
       end
     end
 
-    def refresh_profile_caches!
-      current_generation = GraphMem::McpProfile.cache_generation(@server)
-      return if current_generation == @profile_cache_generation
-
-      @profile_cache_mutex.synchronize do
-        current_generation = GraphMem::McpProfile.cache_generation(@server)
-        next if current_generation == @profile_cache_generation
-
-        @legacy_transport.clear_filtered_servers_cache
-        @profile_cache_generation = current_generation
-      end
-    end
-
-    def dispatch_server_request(request_server, body, request, session_id: nil)
-      request_server.with_request_context(transport: self, session_id: session_id) do
-        request_server.handle_request(body, headers: extract_headers(request))
+    def dispatch_server_request(body, request, session_id: nil)
+      @server.with_request_context(transport: self, session_id: session_id, request: request) do
+        @server.handle_request(body, headers: extract_headers(request))
       end
     end
 
@@ -247,11 +231,9 @@ module GraphMem
       session_id, session = resolve_session(request, parsed, method)
       return session if session.is_a?(Array) # error response
 
-      request_server = GraphMem::McpProfile.filtered_server(@server, request)
-
       # Notifications (no id) get a 202 Accepted and do not return a body.
       if request_id.nil?
-        dispatch_server_request(request_server, body, request, session_id: session_id)
+        dispatch_server_request(body, request, session_id: session_id)
         return [ 202, CORS_HEADERS.dup, [] ]
       end
 
@@ -266,19 +248,17 @@ module GraphMem
       Thread.current[:graph_mem_mcp_response_queue] = response_queue
 
       if wants_sse
-        return streamable_post_sse_response(
-          env, session, response_queue, session_id, body, request, request_server
-        )
+        return streamable_post_sse_response(env, session, response_queue, session_id, body, request)
       end
 
-      handle_streamable_post_json(session, response_queue, session_id, body, request, request_server)
+      handle_streamable_post_json(session, response_queue, session_id, body, request)
     ensure
       release_session(session) if session.is_a?(Hash)
       Thread.current[:graph_mem_mcp_session_id] = nil
       Thread.current[:graph_mem_mcp_response_queue] = nil
     end
 
-    def streamable_post_sse_response(env, session, response_queue, session_id, body, request, request_server)
+    def streamable_post_sse_response(env, session, response_queue, session_id, body, request)
       env["rack.hijack"].call
       io = env["rack.hijack_io"]
       raise IOError, "MCP hijack did not provide an IO" unless io
@@ -287,7 +267,7 @@ module GraphMem
       raise IOError, "MCP session was closed before the SSE stream opened" unless stream
 
       stream[:thread] = Thread.new { streamable_get_loop(session, stream, session_id) }
-      dispatch_server_request(request_server, body, request, session_id: session_id)
+      dispatch_server_request(body, request, session_id: session_id)
 
       [ -1, {}, [] ]
     rescue StandardError
@@ -296,10 +276,10 @@ module GraphMem
       raise
     end
 
-    def handle_streamable_post_json(session, queue, session_id, body, request, request_server)
+    def handle_streamable_post_json(session, queue, session_id, body, request)
       response = nil
       begin
-        dispatch_server_request(request_server, body, request, session_id: session_id)
+        dispatch_server_request(body, request, session_id: session_id)
         response = Timeout.timeout(RESPONSE_TIMEOUT) { queue.pop }
       rescue Timeout::Error
         return json_rpc_error_response(504, -32_600, "Gateway Timeout: no response from MCP server")

@@ -137,8 +137,9 @@ Select the profile from the request path so each client config is explicit and i
 Each tool declares its profile membership as class metadata, so `McpProfile` stays a lookup rather
 than a hardcoded name list. The legacy `/mcp/sse` and `/mcp/messages` paths use the default
 profile. Because GraphMem's Streamable HTTP transport bypasses fast-mcp's Rack transport,
-`McpStreamableHttpTransport` explicitly resolves the filtered server before every JSON-RPC
-dispatch.
+`McpStreamableHttpTransport` passes the Rack request into FastMCP's request context. FastMCP
+applies profile filters in place to both `tools/list` and `tools/call`, avoiding the class-level
+server-pointer race caused by the former filtered-server copies.
 
 The default profile reaches the planned 12-tool catalog only after the read and write
 consolidations in Phases 2 and 3.

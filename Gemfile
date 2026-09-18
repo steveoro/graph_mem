@@ -33,7 +33,7 @@ gem "tailwindcss-rails", "~> 4.3"
 
 gem "fast-mcp",
     git: "https://github.com/steveoro/fast-mcp.git",
-    ref: "bbbb0196e927bfec7ee7206f7957b0cfc1bc8f5b" # MCP Server implementation
+    ref: "a18f1f3f0c0fd8e1699c190e427b781370dff68f" # MCP Server implementation
 gem "haml-rails"
 gem "html2haml"
 gem "kaminari" # Pagination

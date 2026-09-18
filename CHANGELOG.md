@@ -5,6 +5,11 @@ All notable changes to GraphMem will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.43.0] - 2026-09-18
+- Pinned merged FastMCP `1.7.0.pre.4` with request-scoped in-place tool/resource filtering.
+- Removed profile server cloning, filtered-server caches, and the formatter propagation shim; the Streamable HTTP transport now passes its Rack request through FastMCP context.
+- Kept compatibility aliases hidden-but-callable while enforcing connection-profile eligibility at `tools/call`.
+
 ## [1.42.0]
 - Pinned merged FastMCP `1.7.0.pre.3` with JSON-safe legacy results, safe error formatting, and pluggable request authentication.
 - Replaced GraphMem's custom tool dispatch/error methods with FastMCP's `error_formatter`; only list visibility and filtered-copy formatter propagation remain patched.

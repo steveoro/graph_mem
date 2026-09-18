@@ -82,6 +82,8 @@ Eighteen deprecated read, mutation, context, and version aliases remain callable
 bringing the transitional registry to 40 classes, but are omitted from
 `tools/list`.
 
+HTTP profiles are applied in place from the Rack request in FastMCP's
+per-request context; no filtered server copies or profile caches are created.
 The 2024-11-05 SSE endpoint remains at `/mcp/sse` and uses the default profile.
 Workflow guidance is available on demand through the `orient`, `recall`, and
 `persist` MCP prompts.

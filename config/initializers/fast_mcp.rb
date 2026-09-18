@@ -39,7 +39,6 @@ end
 
 Rails.application.config.after_initialize do
   GraphMem::McpToolRegistry.register_with!(server)
-  GraphMem::McpProfile.clear_cache!(server)
 end
 
 # Re-register after code reload so new tool files appear without a full restart.
@@ -47,7 +46,6 @@ if Rails.env.development?
   Rails.application.config.to_prepare do
     if FastMcp.server
       GraphMem::McpToolRegistry.register_with!(FastMcp.server)
-      GraphMem::McpProfile.clear_cache!(FastMcp.server)
     end
   end
 end
