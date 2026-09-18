@@ -2,7 +2,7 @@
 
 GraphMem is a Ruby on Rails application implementing a Model Context Protocol (MCP) server for graph-based memory management. It enables AI assistants and other clients to create, retrieve, search, and manage knowledge entities and their relationships through a standardized interface.
 
-[![Version](https://img.shields.io/badge/version-1.43.0-blue.svg)](lib/graph_mem/version.rb)
+[![Version](https://img.shields.io/badge/version-1.44.0-blue.svg)](lib/graph_mem/version.rb)
 [![Rails](https://img.shields.io/badge/rails-8.1.2-orange.svg)](Gemfile)
 [![Ruby](https://img.shields.io/badge/ruby-3.4.1-red.svg)](Gemfile)
 

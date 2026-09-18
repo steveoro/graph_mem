@@ -5,6 +5,9 @@ All notable changes to GraphMem will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.44.0] - 2026-09-18
+- Pinned the GitHub-only FastMCP `v1.7.0` release at immutable commit `55bdc57fb2bca88a7c99a0423eee083e912f7519`.
+
 ## [1.43.0] - 2026-09-18
 - Pinned merged FastMCP `1.7.0.pre.4` with request-scoped in-place tool/resource filtering.
 - Removed profile server cloning, filtered-server caches, and the formatter propagation shim; the Streamable HTTP transport now passes its Rack request through FastMCP context.

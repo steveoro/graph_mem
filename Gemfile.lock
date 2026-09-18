@@ -1,11 +1,11 @@
 GIT
   remote: https://github.com/steveoro/fast-mcp.git
-  revision: a18f1f3f0c0fd8e1699c190e427b781370dff68f
-  ref: a18f1f3f0c0fd8e1699c190e427b781370dff68f
+  revision: 55bdc57fb2bca88a7c99a0423eee083e912f7519
+  ref: 55bdc57fb2bca88a7c99a0423eee083e912f7519
   specs:
-    fast-mcp (1.7.0.pre.4)
+    fast-mcp (1.7.0)
       addressable (~> 2.8)
-      base64
+      base64 (>= 0.2, < 1.0)
       dry-schema (~> 1.14)
       json (~> 2.0)
       mime-types (~> 3.4)
