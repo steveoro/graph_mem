@@ -439,7 +439,7 @@ GEM
       rubyzip (>= 1.2.2, < 4.0)
       websocket (~> 1.0)
     sexp_processor (4.17.5)
-    solid_cable (4.0.2)
+    solid_cable (4.1.0)
       actioncable (>= 7.2)
       activejob (>= 7.2)
       activerecord (>= 7.2)
