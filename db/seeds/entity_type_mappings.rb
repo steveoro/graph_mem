@@ -6,9 +6,8 @@ count = 0
 GraphVocabulary::ENTITY_TYPE_MAPPINGS.each do |canonical, variants|
   # The canonical type itself is also a variant (for exact matches)
   ([ canonical ] + variants).uniq(&:downcase).each do |variant|
-    EntityTypeMapping.find_or_create_by!(variant: variant.downcase) do |m|
-      m.canonical_type = canonical
-    end
+    mapping = EntityTypeMapping.find_or_initialize_by(variant: variant.downcase)
+    mapping.update!(canonical_type: canonical)
     count += 1
   end
 end

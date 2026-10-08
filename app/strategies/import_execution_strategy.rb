@@ -18,6 +18,7 @@ class ImportExecutionStrategy
     :entities_skipped,
     :observations_created,
     :relations_created,
+    :relations_unresolved,
     :errors,
     keyword_init: true
   ) do
@@ -29,6 +30,7 @@ class ImportExecutionStrategy
         entities_skipped: entities_skipped,
         observations_created: observations_created,
         relations_created: relations_created,
+        relations_unresolved: relations_unresolved,
         errors: errors
       }
     end
@@ -43,6 +45,7 @@ class ImportExecutionStrategy
     @entities_skipped = 0
     @observations_created = 0
     @relations_created = 0
+    @relations_unresolved = 0
     @errors = []
     @entity_mapping = {} # Maps import node paths to created/matched entity IDs
   end
@@ -70,6 +73,11 @@ class ImportExecutionStrategy
         process_node_recursive(root_node, path, decision_map, parent_id, nil)
       end
 
+      # Non-tree edges (e.g. code-structure `calls`/`inherits` imported from
+      # Graphify) apply after every entity exists: endpoints are addressed by
+      # name+type and resolved through the same canonicalization as nodes.
+      apply_relations(import_data["relations"] || import_data[:relations])
+
       raise ActiveRecord::Rollback if @errors.any?
     end
 
@@ -82,6 +90,7 @@ class ImportExecutionStrategy
       entities_skipped: @entities_skipped,
       observations_created: @observations_created,
       relations_created: @relations_created,
+      relations_unresolved: @relations_unresolved,
       errors: @errors
     )
   rescue ImportObservationDuplicateDetector::UnavailableError => e
@@ -195,6 +204,7 @@ class ImportExecutionStrategy
       entities_skipped: @entities_skipped,
       observations_created: @observations_created,
       relations_created: @relations_created,
+      relations_unresolved: @relations_unresolved,
       errors: @errors.length
     }
   end
@@ -358,6 +368,40 @@ class ImportExecutionStrategy
     end
   end
 
+  # Apply name+type-addressed relations after the entity tree exists.
+  # Edges whose endpoints cannot be resolved are skipped and counted — never
+  # fatal — so a partially-resolvable graph still imports cleanly.
+  # @param relations [Array<Hash>, nil] {from_name, from_type, to_name, to_type,
+  #   relation_type, weight, confidence, properties}
+  def apply_relations(relations)
+    return if relations.blank?
+
+    Array(relations).each do |relation|
+      from = ImportEntityResolver.find_by_name_and_type(
+        relation["from_name"] || relation[:from_name],
+        relation["from_type"] || relation[:from_type]
+      )
+      to = ImportEntityResolver.find_by_name_and_type(
+        relation["to_name"] || relation[:to_name],
+        relation["to_type"] || relation[:to_type]
+      )
+
+      unless from && to
+        @relations_unresolved += 1
+        next
+      end
+
+      create_relation_safe(
+        from.id,
+        to.id,
+        relation["relation_type"] || relation[:relation_type],
+        weight: relation["weight"] || relation[:weight],
+        confidence: relation["confidence"] || relation[:confidence],
+        properties: relation["properties"] || relation[:properties] || {}
+      )
+    end
+  end
+
   # Create a relation safely (handling duplicates)
   # @param from_entity_id [Integer] Child/source entity ID
   # @param to_entity_id [Integer] Parent/target entity ID
@@ -418,6 +462,7 @@ class ImportExecutionStrategy
       entities_skipped: 0,
       observations_created: 0,
       relations_created: 0,
+      relations_unresolved: 0,
       errors: @errors
     )
   end

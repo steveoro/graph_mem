@@ -5,6 +5,13 @@ All notable changes to GraphMem will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.47.0] - 2026-10-08
+- Added `GraphifyImporter` service: translates a Graphify `graph.json` (node-link format) into graph_mem's import-tree payload — Project → File → Class/Module → Method/Constant containment via `part_of`, one provenance observation per entity (`"Defined at <file><line>"`, `source: "graphify"`), and non-tree code edges (`calls`, `inherits`, `mixes_in`, `imports_from`→`depends_on`) emitted as name+type-addressed relations with `EXTRACTED`/`INFERRED` provenance in `properties`. `AMBIGUOUS` edges are withheld for review, never auto-applied.
+- Import payloads now accept a top-level `relations` array: `ImportExecutionStrategy` applies them as a second pass inside the same transaction, resolving endpoints via `ImportEntityResolver` (name+canonical type); unresolved endpoints are counted (`relations_unresolved` in `ImportReport`) instead of failing.
+- New canonical vocabulary: entity types `Method`, `Module`, `File`; relation types `calls`, `inherits`, `mixes_in` (+ `contains`, `imports`/`imports_from` mapped onto `part_of`/`depends_on`). `RelationshipDiscoveryStrategy::ALLOWED_RELATION_TYPES` accepts the new code relations so review proposals can apply them.
+- Type-mapping seeds are now upsert-capable (`find_or_initialize_by` + update) so the moved `module` variant (Class → Module) and new variants land on existing databases.
+- Added rake tasks: `graphify:translate PATH=… PROJECT=… [OUT=…]` writes a reviewable import file; `graphify:import PATH=… PROJECT=…` runs the headless flow (match → auto-accept decisions → execute with progress tracking) and queues ambiguous edges as `relationship_proposal` items in `scan_review`.
+
 ## [1.46.0] - 2026-10-08
 - Added temporal recall to read tools: `occurred_after`/`occurred_before`/`as_of` ISO 8601 params on `search`, `search_subgraph`, `get_entity`, `get_entities`, `get_subgraph_by_ids`, `summarize`, and the REST entity-search and summarize endpoints.
 - Added `TemporalQueryParser`: temporal phrases inside `query` itself ("in October 2026", "during 2024", "Q3 2026", "last week", "past 6 months", "last spring", "since 2025", "as of …") derive a window automatically; explicit params win.

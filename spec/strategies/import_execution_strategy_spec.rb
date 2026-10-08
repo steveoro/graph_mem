@@ -693,6 +693,7 @@ RSpec.describe ImportExecutionStrategy, type: :model do
         entities_skipped: 1,
         observations_created: 10,
         relations_created: 3,
+        relations_unresolved: 1,
         errors: []
       )
 
@@ -705,8 +706,120 @@ RSpec.describe ImportExecutionStrategy, type: :model do
         entities_skipped: 1,
         observations_created: 10,
         relations_created: 3,
+        relations_unresolved: 1,
         errors: []
       })
+    end
+  end
+
+  describe 'non-tree relations' do
+    let(:import_data) do
+      {
+        'root_nodes' => [
+          {
+            'name' => 'Sample App',
+            'entity_type' => 'Project',
+            'children' => [
+              {
+                'name' => 'app/models/swimmer.rb',
+                'entity_type' => 'File',
+                'relation_type' => 'part_of',
+                'children' => [
+                  {
+                    'name' => 'Swimmer',
+                    'entity_type' => 'Class',
+                    'relation_type' => 'part_of',
+                    'children' => [
+                      {
+                        'name' => 'Swimmer#name',
+                        'entity_type' => 'Method',
+                        'relation_type' => 'part_of',
+                        'children' => []
+                      },
+                      {
+                        'name' => 'Swimmer#find',
+                        'entity_type' => 'Method',
+                        'relation_type' => 'part_of',
+                        'children' => []
+                      }
+                    ]
+                  },
+                  {
+                    'name' => 'ApplicationRecord',
+                    'entity_type' => 'Class',
+                    'relation_type' => 'part_of',
+                    'children' => []
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        'relations' => [
+          {
+            'from_name' => 'Swimmer#name', 'from_type' => 'Method',
+            'to_name' => 'Swimmer#find', 'to_type' => 'Method',
+            'relation_type' => 'calls', 'confidence' => 1.0,
+            'properties' => { 'source' => 'graphify', 'provenance' => 'EXTRACTED' }
+          },
+          {
+            'from_name' => 'Swimmer', 'from_type' => 'Class',
+            'to_name' => 'ApplicationRecord', 'to_type' => 'Class',
+            'relation_type' => 'inherits', 'confidence' => 1.0
+          },
+          {
+            'from_name' => 'Swimmer#name', 'from_type' => 'Method',
+            'to_name' => 'Missing#thing', 'to_type' => 'Method',
+            'relation_type' => 'calls', 'confidence' => 0.5
+          }
+        ]
+      }
+    end
+
+    let(:decisions) { [ { node_path: '0', action: 'create' } ] }
+
+    it 'creates name+type-addressed relations after the tree exists' do
+      report = strategy.execute(import_data, decisions)
+
+      swimmer = MemoryEntity.find_by(name: 'Swimmer')
+      record = MemoryEntity.find_by(name: 'ApplicationRecord')
+      name_m = MemoryEntity.find_by(name: 'Swimmer#name')
+      find_m = MemoryEntity.find_by(name: 'Swimmer#find')
+
+      expect(report.success).to be(true)
+      expect(
+        MemoryRelation.exists?(from_entity: name_m, to_entity: find_m, relation_type: 'calls')
+      ).to be(true)
+      expect(
+        MemoryRelation.exists?(from_entity: swimmer, to_entity: record, relation_type: 'inherits')
+      ).to be(true)
+      # 5 containment edges in the tree + 2 emitted code relations
+      expect(report.relations_created).to eq(7)
+    end
+
+    it 'counts unresolved endpoints without failing' do
+      report = strategy.execute(import_data, decisions)
+
+      expect(report.success).to be(true)
+      expect(report.relations_unresolved).to eq(1)
+      expect(report.errors).to eq([])
+    end
+
+    it 'is idempotent on a second run' do
+      strategy.execute(import_data, decisions)
+      report = described_class.new(observation_duplicate_detector: observation_duplicate_detector)
+                          .execute(import_data, decisions)
+
+      expect(report.relations_created).to eq(0)
+      expect(MemoryRelation.where(relation_type: 'calls').count).to eq(1)
+    end
+
+    it 'omits the pass entirely when relations is absent' do
+      data = { 'root_nodes' => [ { 'name' => 'Solo', 'entity_type' => 'Project', 'children' => [] } ] }
+      report = strategy.execute(data, [ { node_path: '0', action: 'create' } ])
+
+      expect(report.success).to be(true)
+      expect(report.relations_unresolved).to eq(0)
     end
   end
 end

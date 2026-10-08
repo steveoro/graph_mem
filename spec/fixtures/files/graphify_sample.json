@@ -1,0 +1,256 @@
+{
+  "directed": true,
+  "multigraph": false,
+  "graph": { "schema_version": 1, "graphify_version": "0.9.80" },
+  "nodes": [
+    {
+      "id": "app_models_swimmer",
+      "label": "swimmer.rb",
+      "_origin": "ast",
+      "file_type": "code",
+      "source_file": "app/models/swimmer.rb",
+      "source_location": "L1"
+    },
+    {
+      "id": "app_models_swimmer_swimmer",
+      "label": "Swimmer",
+      "_callable": true,
+      "_callable_class": true,
+      "_origin": "ast",
+      "file_type": "code",
+      "source_file": "app/models/swimmer.rb",
+      "source_location": "L3"
+    },
+    {
+      "id": "app_models_swimmer_swimmer_name",
+      "label": ".name()",
+      "_callable": true,
+      "_origin": "ast",
+      "file_type": "code",
+      "source_file": "app/models/swimmer.rb",
+      "source_location": "L5"
+    },
+    {
+      "id": "app_models_swimmer_swimmer_find",
+      "label": ".find()",
+      "_callable": true,
+      "_origin": "ast",
+      "file_type": "code",
+      "source_file": "app/models/swimmer.rb",
+      "source_location": "L9"
+    },
+    {
+      "id": "app_models_application_record",
+      "label": "application_record.rb",
+      "_origin": "ast",
+      "file_type": "code",
+      "source_file": "app/models/application_record.rb",
+      "source_location": "L1"
+    },
+    {
+      "id": "app_models_application_record_applicationrecord",
+      "label": "ApplicationRecord",
+      "_callable": true,
+      "_callable_class": true,
+      "_origin": "ast",
+      "file_type": "code",
+      "source_file": "app/models/application_record.rb",
+      "source_location": "L2"
+    },
+    {
+      "id": "app_models_swimmer_default_scope",
+      "label": "DEFAULT_SCOPE",
+      "_origin": "ast",
+      "file_type": "code",
+      "source_file": "app/models/swimmer.rb",
+      "source_location": "L4"
+    },
+    {
+      "id": "app_models_concerns_auditable",
+      "label": "auditable.rb",
+      "_origin": "ast",
+      "file_type": "code",
+      "source_file": "app/models/concerns/auditable.rb",
+      "source_location": "L1"
+    },
+    {
+      "id": "app_models_concerns_auditable_auditable",
+      "label": "Auditable",
+      "_callable": true,
+      "_callable_class": true,
+      "_origin": "ast",
+      "file_type": "code",
+      "source_file": "app/models/concerns/auditable.rb",
+      "source_location": "L2"
+    },
+    {
+      "id": "ref_external_gem",
+      "label": "ref_external_gem",
+      "type": "external",
+      "external": true,
+      "file_type": "concept",
+      "source_file": ""
+    },
+    {
+      "id": "stdlib_standarderror",
+      "label": "StandardError",
+      "_origin": "ast",
+      "file_type": "code",
+      "source_file": "",
+      "source_location": ""
+    }
+  ],
+  "links": [
+    {
+      "source": "app_models_swimmer",
+      "target": "app_models_swimmer_swimmer",
+      "relation": "contains",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "app/models/swimmer.rb",
+      "source_location": "L3",
+      "weight": 1.0
+    },
+    {
+      "source": "app_models_swimmer",
+      "target": "app_models_swimmer_default_scope",
+      "relation": "contains",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "app/models/swimmer.rb",
+      "source_location": "L4",
+      "weight": 1.0
+    },
+    {
+      "source": "app_models_swimmer_swimmer",
+      "target": "app_models_swimmer_swimmer_name",
+      "relation": "method",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "app/models/swimmer.rb",
+      "source_location": "L5",
+      "weight": 1.0
+    },
+    {
+      "source": "app_models_swimmer_swimmer",
+      "target": "app_models_swimmer_swimmer_find",
+      "relation": "method",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "app/models/swimmer.rb",
+      "source_location": "L9",
+      "weight": 1.0
+    },
+    {
+      "source": "app_models_application_record",
+      "target": "app_models_application_record_applicationrecord",
+      "relation": "contains",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "app/models/application_record.rb",
+      "source_location": "L2",
+      "weight": 1.0
+    },
+    {
+      "source": "app_models_concerns_auditable",
+      "target": "app_models_concerns_auditable_auditable",
+      "relation": "contains",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "app/models/concerns/auditable.rb",
+      "source_location": "L2",
+      "weight": 1.0
+    },
+    {
+      "source": "app_models_swimmer_swimmer",
+      "target": "app_models_application_record_applicationrecord",
+      "relation": "inherits",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "superclass",
+      "source_file": "app/models/swimmer.rb",
+      "source_location": "L3",
+      "weight": 1.0
+    },
+    {
+      "source": "app_models_swimmer_swimmer",
+      "target": "app_models_concerns_auditable_auditable",
+      "relation": "mixes_in",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "mixin",
+      "source_file": "app/models/swimmer.rb",
+      "source_location": "L6",
+      "weight": 1.0
+    },
+    {
+      "source": "app_models_swimmer_swimmer_name",
+      "target": "app_models_swimmer_swimmer_find",
+      "relation": "calls",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "call",
+      "source_file": "app/models/swimmer.rb",
+      "source_location": "L7",
+      "weight": 1.0
+    },
+    {
+      "source": "app_models_swimmer_swimmer_find",
+      "target": "app_models_swimmer_swimmer_name",
+      "relation": "calls",
+      "_origin": "ast",
+      "confidence": "INFERRED",
+      "confidence_score": 0.6,
+      "context": "call",
+      "source_file": "app/models/swimmer.rb",
+      "source_location": "L11",
+      "weight": 1.0
+    },
+    {
+      "source": "app_models_swimmer_swimmer",
+      "target": "stdlib_standarderror",
+      "relation": "calls",
+      "_origin": "ast",
+      "confidence": "AMBIGUOUS",
+      "confidence_score": 0.4,
+      "context": "call",
+      "source_file": "app/models/swimmer.rb",
+      "source_location": "L12",
+      "weight": 1.0
+    },
+    {
+      "source": "app_models_swimmer",
+      "target": "ref_external_gem",
+      "relation": "imports_from",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "import",
+      "source_file": "app/models/swimmer.rb",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "app_models_swimmer",
+      "target": "app_models_concerns_auditable",
+      "relation": "imports_from",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "import",
+      "source_file": "app/models/swimmer.rb",
+      "source_location": "L2",
+      "weight": 1.0
+    }
+  ],
+  "built_at_commit": "abc1234"
+}

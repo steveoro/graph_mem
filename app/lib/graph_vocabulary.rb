@@ -15,7 +15,10 @@ module GraphVocabulary
     "Model" => %w[model models activerecord_model],
     "DatabaseTable" => %w[databasetable database_table table db_table],
     "DatabaseSchema" => %w[databaseschema database_schema schema db_schema],
-    "Class" => %w[class classes module],
+    "Class" => %w[class classes],
+    "Module" => %w[module modules namespace namespaces],
+    "File" => %w[file files source_file sourcefile codefile code_file],
+    "Method" => %w[method methods function functions procedure],
     "APIEndpoint" => %w[apiendpoint api_endpoint endpoint api],
     "Route" => %w[route routes],
     "Component" => %w[component components widget],
@@ -35,11 +38,14 @@ module GraphVocabulary
     "Documentation" => %w[documentation docs doc readme]
   }.freeze
   RELATION_TYPE_MAPPINGS = {
-    "part_of" => %w[partof belongs_to child_of contained_in],
-    "depends_on" => %w[dependson requires prerequisite_of],
+    "part_of" => %w[partof belongs_to child_of contained_in contains],
+    "depends_on" => %w[dependson requires prerequisite_of imports imports_from],
     "relates_to" => %w[related_to relatedto associated_with connected_to connects_to],
     "implements" => %w[implementation_of provides],
-    "solves" => %w[resolves fixes solution_for]
+    "solves" => %w[resolves fixes solution_for],
+    "calls" => %w[call invokes invokes_method calls_method indirect_call],
+    "inherits" => %w[subclass_of extends_class inherits_from],
+    "mixes_in" => %w[includes extends_module prepends mixin]
   }.freeze
   EXTRA_RELATION_TYPES = %w[
     extends configured_by tested_by migrated_by authorizes integrates_with replaces
