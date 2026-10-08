@@ -5,6 +5,11 @@ All notable changes to GraphMem will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.45.0] - 2026-10-08
+- Pinned the GitHub-only FastMCP `v1.7.1` release at immutable commit `b10243c218c3d8a1a9f20e033314b647595938ca`, which adds `filter_prompts`.
+- MCP prompts now follow connection profiles: prompts declare profiles via `mcp_metadata(profiles: ...)` (undeclared prompts stay on every profile) and a `filter_prompts` block applies them to `prompts/list` and `prompts/get`.
+- **Behaviour change on `/mcp/readonly`:** `persist` is no longer listed there, and `prompts/get` for `persist` now returns JSON-RPC error `-32602` "Prompt not found: persist". `orient` and `recall` are unchanged; `/mcp` and `/mcp/maintenance` still serve all three prompts.
+
 ## [1.44.0] - 2026-09-18
 - Pinned the GitHub-only FastMCP `v1.7.0` release at immutable commit `55bdc57fb2bca88a7c99a0423eee083e912f7519`.
 

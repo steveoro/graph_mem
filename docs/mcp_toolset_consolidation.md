@@ -315,7 +315,9 @@ adapters preserve their warning/existing-record shapes.
 
 GraphMem registers `orient`, `recall` (required `topic`), and `persist` through
 the fork's native `FastMcp::Prompt` API. They are invoked on demand rather than
-loaded into every context.
+loaded into every context. Since 1.45.0 (FastMCP v1.7.1 `filter_prompts`),
+`persist` is limited to the default and maintenance profiles and is not
+available on `/mcp/readonly`.
 
 ### Move the vocabularies into the schema — as soft enums
 

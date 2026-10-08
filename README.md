@@ -2,7 +2,7 @@
 
 GraphMem is a Ruby on Rails application implementing a Model Context Protocol (MCP) server for graph-based memory management. It enables AI assistants and other clients to create, retrieve, search, and manage knowledge entities and their relationships through a standardized interface.
 
-[![Version](https://img.shields.io/badge/version-1.44.0-blue.svg)](lib/graph_mem/version.rb)
+[![Version](https://img.shields.io/badge/version-1.45.0-blue.svg)](lib/graph_mem/version.rb)
 [![Rails](https://img.shields.io/badge/rails-8.1.2-orange.svg)](Gemfile)
 [![Ruby](https://img.shields.io/badge/ruby-3.4.1-red.svg)](Gemfile)
 
@@ -36,7 +36,8 @@ Use `/mcp` for the default 2025-03-26 **Streamable HTTP** profile. Use
 full catalog including maintenance operations. The legacy 2024-11-05 SSE
 endpoint remains available at `/mcp/sse` and uses the default profile.
 
-The server also publishes `orient`, `recall`, and `persist` MCP prompts. Every
+The server also publishes `orient`, `recall`, and `persist` MCP prompts
+(`persist` is not available on `/mcp/readonly`, which has no write tools). Every
 successful tool call includes the GraphMem version, a concise `next_move`, and
 a context banner when the client has not selected a project.
 
@@ -60,7 +61,7 @@ The header is a cooperative scope key, **not** a credential: an agent can claim 
 
 * **Ruby**: 3.4.1+
 * **Rails**: 8.1.2+
-* **MCP Implementation**: [fast-mcp](https://github.com/yjacquin/fast-mcp) gem with a custom `GraphMem::McpStreamableHttpTransport` that adds 2025-03-26 Streamable HTTP support while keeping the 2024-11-05 SSE transport
+* **MCP Implementation**: [fast-mcp](https://github.com/steveoro/fast-mcp) gem (Steve's fork of yjacquin/fast-mcp, pinned to v1.7.1) with a custom `GraphMem::McpStreamableHttpTransport` that adds 2025-03-26 Streamable HTTP support while keeping the 2024-11-05 SSE transport
 * **Database**: MariaDB 11.8+ (VECTOR support required)
 * **Embeddings**: Ollama with nomic-embed-text (768 dimensions)
 

@@ -52,7 +52,9 @@ Tools are Ruby classes in `app/tools/` that inherit from `ApplicationTool`
 (which inherits from `FastMcp::Tool`). `McpToolRegistry` registers 40 callable
 classes; `McpServerPatch` omits 18 compatibility aliases from `tools/list`.
 The pinned `steveoro/fast-mcp` fork also registers `orient`, `recall`, and
-`persist` prompts. GraphMem installs its `ToolError` envelope through FastMCP's
+`persist` prompts; a `filter_prompts` block applies the same connection profiles
+to prompts (`persist` declares only the default and maintenance profiles, so
+`/mcp/readonly` neither lists nor renders it). GraphMem installs its `ToolError` envelope through FastMCP's
 `error_formatter`. FastMCP applies connection profiles in place from the Rack
 request carried in per-request context, so tool classes remain bound to one
 server under concurrent requests.

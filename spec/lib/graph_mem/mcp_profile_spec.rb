@@ -35,6 +35,15 @@ RSpec.describe GraphMem::McpProfile do
     end
   end
 
+  describe ".select_prompts" do
+    it "filters prompts by declared profiles and keeps undeclared prompts everywhere" do
+      expect(described_class.select_prompts([ OrientPrompt, RecallPrompt, PersistPrompt ], :readonly))
+        .to contain_exactly(OrientPrompt, RecallPrompt)
+      expect(described_class.select_prompts([ OrientPrompt, RecallPrompt, PersistPrompt ], :maintenance))
+        .to contain_exactly(OrientPrompt, RecallPrompt, PersistPrompt)
+    end
+  end
+
   describe ".select_tools" do
     it "uses class metadata instead of tool-name lists" do
       default_tool = Class.new do
