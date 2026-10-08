@@ -111,15 +111,20 @@ class EntitiesFetchService
     return if @max_tokens.blank?
 
     budget = @max_tokens.to_i
+    fetched_ids = result[:entities].map { |entity| entity[:entity_id] }.to_set
+    relations_before = result[:relations].size
     entities_fit = TokenBudget.fit(result[:entities], max_tokens: budget)
     result[:entities] = entities_fit.items
 
     used = entities_fit.estimated_tokens
     truncated = entities_fit.truncated
 
-    kept_ids = entities_fit.items.map { |entity| entity[:entity_id] }.to_set
-    scoped_relations = result[:relations].select do |relation|
-      kept_ids.include?(relation[:from_entity_id]) && kept_ids.include?(relation[:to_entity_id])
+    # Drop relations that touch a budget-dropped entity, but keep incident
+    # edges whose far endpoint was never part of the fetched set — those
+    # relations still resolve to real entities and never dangle.
+    dropped_ids = fetched_ids - entities_fit.items.map { |entity| entity[:entity_id] }
+    scoped_relations = result[:relations].reject do |relation|
+      dropped_ids.include?(relation[:from_entity_id]) || dropped_ids.include?(relation[:to_entity_id])
     end
     relations_fit = TokenBudget.fit(scoped_relations, max_tokens: [ budget - used, 0 ].max)
     result[:relations] = relations_fit.items
@@ -128,8 +133,8 @@ class EntitiesFetchService
 
     result[:token_budget] = TokenBudget.diagnostics(
       max_tokens: budget, estimated_tokens: used, truncated: truncated,
-      items_before: entities_fit.items_before + (result[:relations]&.size || 0),
-      items_after: result[:entities].size + (result[:relations]&.size || 0)
+      items_before: entities_fit.items_before + relations_before,
+      items_after: result[:entities].size + result[:relations].size
     )
   end
 end

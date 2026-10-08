@@ -119,6 +119,7 @@ class GetSubgraphByIdsTool < ApplicationTool
       missing_entity_ids: result[:missing_entity_ids]
     }
     response[:token_budget] = result[:token_budget] if result[:token_budget]
+    response[:temporal] = result[:temporal] if result[:temporal]
     response
   rescue *ToolError::TIMEOUT_CLASSES
     raise

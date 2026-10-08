@@ -8,7 +8,8 @@
 # Ruby-side checks cannot drift apart.
 class TemporalSearchStrategy
   # @param window [TemporalWindow]
-  # @param limit [Integer]
+  # @param limit [Integer, nil] max entities returned; nil = no LIMIT (callers
+  #   that need the complete candidate list, e.g. temporal-only pagination)
   # @param entity_ids [Array<Integer>, nil] optional scope — when given the SQL
   #   only counts observations of these entities (scope applied inside the query,
   #   not after the global top-N)
@@ -18,10 +19,10 @@ class TemporalSearchStrategy
     scope = MemoryObservation.active.where(sql, **binds)
     scope = scope.where(memory_entity_id: entity_ids) if entity_ids.present?
 
-    scope
+    scope = scope
       .group(:memory_entity_id)
       .order(Arel.sql("COUNT(*) DESC, memory_entity_id ASC"))
-      .limit(limit)
-      .pluck(:memory_entity_id)
+    scope = scope.limit(limit) if limit
+    scope.pluck(:memory_entity_id)
   end
 end

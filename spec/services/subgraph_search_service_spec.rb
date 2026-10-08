@@ -93,4 +93,39 @@ RSpec.describe SubgraphSearchService do
       }.to raise_error(FastMcp::Tool::InvalidArgumentsError, /Page number/)
     end
   end
+
+  describe "purely temporal queries" do
+    let!(:busy) { MemoryEntity.create!(name: "Busy", entity_type: "Project") }
+    let!(:quiet) { MemoryEntity.create!(name: "Quiet", entity_type: "Project") }
+
+    before do
+      3.times do |i|
+        MemoryObservation.create!(
+          memory_entity: busy, content: "fact #{i}",
+          created_at: Time.zone.parse("2026-08-10")
+        )
+      end
+      MemoryObservation.create!(
+        memory_entity: quiet, content: "fact",
+        created_at: Time.zone.parse("2026-08-10")
+      )
+    end
+
+    it "orders by in-window observation count without relevance re-ranking" do
+      expect(SearchRelevanceBooster).not_to receive(:rank_entity_ids)
+
+      result = described_class.call(query: "in 2026-08")
+
+      ids = result[:entities].map { |e| e[:entity_id] }
+      expect(ids.first).to eq(busy.id)
+      expect(ids).to include(quiet.id)
+    end
+
+    it "does not cap the temporal candidate list" do
+      expect_any_instance_of(TemporalSearchStrategy)
+        .to receive(:search).with(anything, limit: nil, entity_ids: nil).and_call_original
+
+      described_class.call(query: "in 2026-08")
+    end
+  end
 end

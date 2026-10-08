@@ -47,7 +47,15 @@ class TemporalQueryParser
     def apply(query, temporal_window: nil)
       result = extract(query)
       window = temporal_window || result&.window
-      effective = result ? query.to_s.sub(result.matched, "").squish : query.to_s
+      # `matched` is the span found in the downcased text; strip the
+      # corresponding span from the original query case-insensitively so
+      # "In October 2026" still leaves a clean effective query.
+      effective =
+        if result
+          query.to_s.sub(Regexp.new(Regexp.escape(result.matched), Regexp::IGNORECASE), "").squish
+        else
+          query.to_s
+        end
 
       Extraction.new(window: window, matched: result&.matched, effective_query: effective)
     end

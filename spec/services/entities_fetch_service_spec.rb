@@ -102,4 +102,25 @@ RSpec.describe EntitiesFetchService do
       end
     end
   end
+
+  describe "budget + incident relations" do
+    it "keeps incident relations to external endpoints under max_tokens" do
+      result = described_class.call(entity_ids: [ first.id ], max_tokens: 100_000)
+
+      expect(result[:relations].pluck(:relation_id)).to contain_exactly(
+        internal_relation.id,
+        outside_relation.id
+      )
+    end
+
+    it "counts dropped entities and relations in items_before" do
+      result = described_class.call(
+        entity_ids: [ first.id, second.id ], relations: "internal", max_tokens: 200
+      )
+
+      budget = result[:token_budget]
+      expect(budget[:items_before]).to be >= budget[:items_after]
+      expect(budget[:items_before]).to be >= 3
+    end
+  end
 end

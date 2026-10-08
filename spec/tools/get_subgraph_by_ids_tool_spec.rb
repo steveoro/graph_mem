@@ -173,4 +173,12 @@ RSpec.describe GetSubgraphByIdsTool, type: :model do
       end
     end
   end
+
+  describe "temporal diagnostics" do
+    it "echoes the resolved temporal window" do
+      result = tool.call(entity_ids: [ entity_a.id ], occurred_after: "2026-01-01")
+
+      expect(result[:temporal]).to include(:occurred_after)
+    end
+  end
 end

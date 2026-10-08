@@ -38,11 +38,13 @@ class SubgraphSearchService
 
     context_ids = @context_scope&.entity_ids
     matching_ids = candidate_ids(context_ids)
+    # A purely temporal query's ordering IS the in-window observation count;
+    # re-ranking it by type/structure would discard the only relevance signal.
     matching_ids = SearchRelevanceBooster.rank_entity_ids(
       matching_ids,
       query: @effective_query,
       context_entity_ids: context_ids
-    )
+    ) unless @extraction.temporal_only?
     page_ids = matching_ids.slice((@page - 1) * @per_page, @per_page) || []
 
     entities = entities_for(page_ids)
@@ -78,9 +80,11 @@ class SubgraphSearchService
   # in-window observation count; otherwise text+vector matches are boosted by
   # the window — temporally-matching ids come first, no unrelated injections.
   def candidate_ids(context_ids)
+    # Temporal-only needs the full id list: it is the result set and drives
+    # pagination totals, so an artificial cap would make entities unreachable.
     if @extraction.temporal_only?
       return TemporalSearchStrategy.new.search(
-        @temporal_window, limit: MAX_TEMPORAL_CANDIDATES, entity_ids: context_ids
+        @temporal_window, limit: nil, entity_ids: context_ids
       )
     end
 
@@ -157,6 +161,7 @@ class SubgraphSearchService
     return if @max_tokens.blank?
 
     budget = @max_tokens.to_i
+    fetched_ids = response[:entities].map { |entity| entity[:entity_id] }.to_set
     entities_fit = TokenBudget.fit(response[:entities], max_tokens: budget)
     response[:entities] = entities_fit.items
 
@@ -164,10 +169,14 @@ class SubgraphSearchService
     truncated = entities_fit.truncated
     dropped = entities_fit.dropped_count
 
+    relations_before = response[:relations].is_a?(Array) ? response[:relations].size : 0
+
     if response[:relations].is_a?(Array)
-      kept_ids = entities_fit.items.map { |entity| entity[:entity_id] }.to_set
-      scoped_relations = response[:relations].select do |relation|
-        kept_ids.include?(relation[:from_entity_id]) && kept_ids.include?(relation[:to_entity_id])
+      # Drop relations that touch a budget-dropped entity; relations between
+      # kept entities and outside the fetched set stay (they never dangle).
+      dropped_ids = fetched_ids - entities_fit.items.map { |entity| entity[:entity_id] }
+      scoped_relations = response[:relations].reject do |relation|
+        dropped_ids.include?(relation[:from_entity_id]) || dropped_ids.include?(relation[:to_entity_id])
       end
       relations_fit = TokenBudget.fit(scoped_relations, max_tokens: [ budget - used, 0 ].max)
       response[:relations] = relations_fit.items
@@ -178,7 +187,8 @@ class SubgraphSearchService
 
     response[:retrieval][:token_budget] = TokenBudget.diagnostics(
       max_tokens: budget, estimated_tokens: used, truncated: truncated,
-      items_before: entities_fit.items_before, items_after: entities_fit.items_after
+      items_before: entities_fit.items_before + relations_before,
+      items_after: entities_fit.items_after + (response[:relations]&.size || 0)
     )
   end
 

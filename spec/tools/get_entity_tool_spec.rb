@@ -194,4 +194,12 @@ RSpec.describe GetEntityTool, type: :model do
       end
     end
   end
+
+  describe "temporal diagnostics" do
+    it "echoes the resolved temporal window" do
+      result = described_class.new.call(entity_id: entity.id, occurred_after: "2026-01-01")
+
+      expect(result[:temporal]).to include(:occurred_after)
+    end
+  end
 end

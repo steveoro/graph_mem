@@ -90,6 +90,7 @@ class GetEntityTool < ApplicationTool
         end
       }
       response[:token_budget] = result[:token_budget] if result[:token_budget]
+      response[:temporal] = result[:temporal] if result[:temporal]
       response
     rescue ActiveRecord::RecordNotFound => e
       error_message = "Entity with ID=#{entity_id} not found."

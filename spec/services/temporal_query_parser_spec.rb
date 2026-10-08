@@ -124,4 +124,20 @@ RSpec.describe TemporalQueryParser do
       expect(result.window.occurred_after).to be_within(1.day).of(100.years.ago)
     end
   end
+
+  describe ".apply capitalization" do
+    it "strips capitalized temporal phrases from the effective query" do
+      extraction = described_class.apply("Alpha in October 2026")
+
+      expect(extraction.effective_query).to eq("Alpha")
+      expect(extraction.window).to be_present
+    end
+
+    it "treats a capitalized temporal-only query as temporal-only" do
+      extraction = described_class.apply("In October 2026")
+
+      expect(extraction.effective_query).to eq("")
+      expect(extraction).to be_temporal_only
+    end
+  end
 end
