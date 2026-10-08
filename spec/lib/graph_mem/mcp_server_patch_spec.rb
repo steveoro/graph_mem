@@ -159,6 +159,50 @@ RSpec.describe GraphMem::McpServerPatch do
     expect(names).not_to include("denied_probe", "hidden_alias")
   end
 
+  describe "fork drift guard" do
+    it "is pinned to the current FastMcp version" do
+      expect(FastMcp::VERSION).to eq(GraphMem::McpServerPatch::EXPECTED_FORK_VERSION),
+        "FastMcp version changed to #{FastMcp::VERSION} — " \
+        "re-diff McpServerPatch#handle_tools_list against the fork"
+    end
+
+    it "produces the same tool entries as the fork minus hidden aliases" do
+      fork_method = FastMcp::Server.instance_method(:handle_tools_list).super_method
+      expect(fork_method.owner).to eq(FastMcp::Server),
+        "super_method owner is not FastMcp::Server — ancestry changed"
+
+      request = instance_double(Rack::Request)
+
+      fork_transport = RecordingTransport.new
+      server.transport = fork_transport
+      server.with_request_context(transport: fork_transport, request: request) do
+        fork_method.bind_call(server, 200)
+      end
+      fork_tools = fork_transport.messages.last.fetch(:result).fetch(:tools)
+
+      expect(fork_tools.map { |t| t[:name] }).to include("hidden_alias"),
+        "fork output must include hidden_alias to prove it ran unpatched"
+
+      server.transport = transport
+      server.with_request_context(transport: transport, request: request) do
+        server.handle_request({ jsonrpc: "2.0", method: "tools/list", id: 201 }.to_json)
+      end
+      patched_tools = last_result.fetch(:tools)
+
+      expect(patched_tools).to eq(fork_tools.reject { |t| t[:name] == "hidden_alias" })
+    end
+  end
+
+  it "does not raise or double-prepend when the patch file is re-evaluated" do
+    count_before = FastMcp::Server.ancestors.count { |m| m.name == "GraphMem::McpServerPatch" }
+    expect(count_before).to eq(1)
+
+    silence_warnings { load Rails.root.join("lib/graph_mem/mcp_server_patch.rb") }
+
+    count_after = FastMcp::Server.ancestors.count { |m| m.name == "GraphMem::McpServerPatch" }
+    expect(count_after).to eq(1)
+  end
+
   it "omits hidden aliases from tools/list while keeping them callable" do
     server.handle_request({ jsonrpc: "2.0", method: "tools/list", id: 6 }.to_json)
 

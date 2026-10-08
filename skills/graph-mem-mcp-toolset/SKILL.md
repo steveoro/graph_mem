@@ -52,7 +52,7 @@ Use the server-provided prompts for procedural guidance:
 
 - `orient` at session start
 - `recall(topic)` before implementation
-- `persist` before the final response
+- `persist` before the final response (not available on the readonly profile)
 
 Successful tool results provide a concise `next_move`; follow it when relevant.
 

@@ -25,9 +25,11 @@ module GraphMem
     def register_with!(server, profile: nil)
       load_all!
       classes = profile ? tool_classes_for(profile) : tool_classes
+      prompts = profile ? prompt_classes_for(profile) : prompt_classes
       server.register_tools(*classes)
+      clear_resources!(server)
       server.register_resources(*resource_classes)
-      server.register_prompts(*prompt_classes)
+      server.register_prompts(*prompts)
       server
     end
 
@@ -37,6 +39,10 @@ module GraphMem
 
     def tool_classes_for(profile)
       GraphMem::McpProfile.select_tools(tool_classes, profile)
+    end
+
+    def prompt_classes_for(profile)
+      GraphMem::McpProfile.select_prompts(prompt_classes, profile)
     end
 
     def resource_classes
@@ -58,6 +64,10 @@ module GraphMem
     def constantize_path(path)
       # app/tools/*.rb map to top-level constants (e.g. BulkUpdateTool), not Tools::*
       File.basename(path, ".rb").camelize.constantize
+    end
+
+    def clear_resources!(server)
+      server.resources.clear
     end
 
     def skip_class?(klass)

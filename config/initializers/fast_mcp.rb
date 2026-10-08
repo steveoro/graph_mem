@@ -37,6 +37,11 @@ server.filter_tools do |request, tools|
   GraphMem::McpProfile.select_tools(tools, profile)
 end
 
+server.filter_prompts do |request, prompts|
+  profile = GraphMem::McpProfile.from_request(request)
+  GraphMem::McpProfile.select_prompts(prompts, profile)
+end
+
 Rails.application.config.after_initialize do
   GraphMem::McpToolRegistry.register_with!(server)
 end

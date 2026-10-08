@@ -3,6 +3,8 @@
 class PersistPrompt < ApplicationPrompt
   prompt_name "persist"
   description "Persist newly learned facts safely before ending work."
+  # Its workflow needs graph_write/graph_edit, which the readonly profile does not expose.
+  mcp_metadata(profiles: %i[default maintenance])
 
   # Renders the end-of-task persistence workflow.
   #

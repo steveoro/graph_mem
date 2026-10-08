@@ -126,9 +126,9 @@ module GraphMem
       Thread.current[:graph_mem_mcp_response_queue] = nil
     end
 
-    # Called by FastMcp::Server#send_response (via GraphMem::McpServerPatch).
-    # Routes per-request responses to the active request queue (if one is
-    # registered for this thread) and broadcasts notifications to every
+    # Called by FastMcp::Server#send_response through the request context's
+    # transport. Routes per-request responses to the active request queue (if
+    # one is registered for this thread) and broadcasts notifications to every
     # connected SSE stream.
     def send_message(message)
       # If this is a response to a request with an id and a per-request queue
