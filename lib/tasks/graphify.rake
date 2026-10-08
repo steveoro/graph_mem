@@ -1,9 +1,9 @@
 # frozen_string_literal: true
 
 namespace :graphify do
-  desc "Translate a Graphify graph.json into a graph_mem import file (PATH=..., PROJECT=..., OUT=...)"
+  desc "Translate a Graphify graph.json into a graph_mem import file (GRAPH=…, PROJECT=..., OUT=...)"
   task translate: :environment do
-    path = ENV["PATH"].presence || abort("PATH is required (location of graph.json)")
+    path = ENV["GRAPH"].presence || abort("GRAPH is required (location of graph.json)")
     project = ENV["PROJECT"].presence || File.basename(File.dirname(File.expand_path(path))).presence ||
               abort("PROJECT is required (name of the root Project entity)")
     out = ENV["OUT"].presence || "graph_mem_import.json"
@@ -17,9 +17,9 @@ namespace :graphify do
     puts "Upload #{out} via Data Exchange → Import to review and apply."
   end
 
-  desc "Headless Graphify import: match, auto-accept, execute (PATH=..., PROJECT=...)"
+  desc "Headless Graphify import: match, auto-accept, execute (GRAPH=…, PROJECT=...)"
   task import: :environment do
-    path = ENV["PATH"].presence || abort("PATH is required (location of graph.json)")
+    path = ENV["GRAPH"].presence || abort("GRAPH is required (location of graph.json)")
     project = ENV["PROJECT"].presence || File.basename(File.dirname(File.expand_path(path))).presence ||
               abort("PROJECT is required (name of the root Project entity)")
 
