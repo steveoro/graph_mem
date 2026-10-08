@@ -17,7 +17,9 @@ class SummarizeTool < ApplicationTool
     "(optional LLM synthesis). Pass required `query` (string); optional `entity_id` (integer), " \
     "`max_results` (integer, default 10), `max_observations` (integer, default 20), " \
     "`observations_per_entity` (integer; 0 disables cap), `max_depth` (integer, default 0), " \
-    "`include_sources` (bool, default true), `scope` (string: context or global), `style` (string: concise or detailed). " \
+    "`include_sources` (bool, default true), `scope` (string: context or global), `style` (string: concise or detailed), " \
+    "`occurred_after`/`occurred_before`/`as_of` (ISO 8601) to restrict evidence to a temporal window (temporal " \
+    "phrases in the query are also understood), and `max_tokens` to cap the evidence payload. " \
     "Do not use for match listings; use `search` instead. " \
     "Do not use to inspect one known entity; use `get_entities` instead. " \
     "Do not use for a structural neighborhood; use `traverse_graph` instead. " \
@@ -33,10 +35,15 @@ class SummarizeTool < ApplicationTool
     optional(:include_sources).filled(:bool).description("Include source entity and observation IDs. Defaults to true.")
     optional(:scope).filled(:string).description('Retrieval scope: "context" (default when a project context is active) or "global".')
     optional(:style).filled(:string).description('Summary style: "concise" (default) or "detailed".')
+    optional(:occurred_after).maybe(:string).description("ISO 8601 lower bound for evidence occurred time.")
+    optional(:occurred_before).maybe(:string).description("ISO 8601 upper bound for evidence occurred time.")
+    optional(:as_of).maybe(:string).description("ISO 8601 instant evidence must cover (exclusive with after/before).")
+    optional(:max_tokens).filled(:integer).description("Estimated token budget (chars/4) for the evidence payload.")
   end
 
   def call(query:, entity_id: nil, max_results: 10, max_observations: 20, observations_per_entity: nil,
-           max_depth: 0, include_sources: true, scope: nil, style: "concise")
+           max_depth: 0, include_sources: true, scope: nil, style: "concise",
+           occurred_after: nil, occurred_before: nil, as_of: nil, max_tokens: nil)
     logger.info "Performing SummarizeTool with query: #{query}"
     begin
       context_scope = graph_mem_context.scoped_entity_scope
@@ -51,7 +58,13 @@ class SummarizeTool < ApplicationTool
         scope: scope,
         style: style,
         context_entity_ids: context_scope&.entity_ids,
-        context_scope: context_scope
+        context_scope: context_scope,
+        temporal_window: TemporalWindow.from_params(
+          occurred_after: occurred_after,
+          occurred_before: occurred_before,
+          as_of: as_of
+        ),
+        max_tokens: max_tokens
       )
     rescue ActiveRecord::RecordNotFound => e
       error_message = "Entity with ID=#{entity_id} not found."

@@ -20,8 +20,11 @@ class SearchTool < ApplicationTool
 
   description "Search or page graph entities through one uniform response envelope. Omit `query` for catalog mode; " \
     "pass `query` alone for ranked summary mode; add `include` values observations and/or relations for subgraph mode. " \
-    "Pass optional `page` (default 1), `per_page` (default 20, max 100), legacy alias `limit`, and subgraph " \
-    "`search_in_name`, `search_in_type`, `search_in_aliases`, `search_in_observations` flags. " \
+    "Pass optional `page` (default 1), `per_page` (default 20, max 100), legacy alias `limit`, subgraph " \
+    "`search_in_name`, `search_in_type`, `search_in_aliases`, `search_in_observations` flags, and `max_tokens` " \
+    "(integer) to pack ranked results under an estimated token budget. Temporal recall: pass `occurred_after`, " \
+    "`occurred_before`, and/or `as_of` (ISO 8601) to weight and filter facts by occurred time; temporal phrases in " \
+    "the query itself (\"in October 2026\", \"during 2024\", \"last week\") are also understood. " \
     "Active context boosts query matches rather than filtering them. " \
     "Do not use to load known entity IDs; use `get_entities` instead. " \
     "Do not use for multi-hop expansion; use `traverse_graph` instead. " \
@@ -37,16 +40,24 @@ class SearchTool < ApplicationTool
     optional(:page).filled(:integer).description("Page number. Defaults to 1.")
     optional(:per_page).filled(:integer).description("Results per page (1-100). Defaults to 20.")
     optional(:limit).filled(:integer).description("Legacy alias for per_page; per_page wins when both are supplied.")
+    optional(:occurred_after).maybe(:string).description("ISO 8601 lower bound for occurred-time recall (valid_from/valid_until, or retention time for undated facts).")
+    optional(:occurred_before).maybe(:string).description("ISO 8601 upper bound for occurred-time recall.")
+    optional(:as_of).maybe(:string).description("ISO 8601 instant: facts whose validity contains it (or already retained by it) — cannot be combined with occurred_after/occurred_before.")
+    optional(:max_tokens).filled(:integer).description("Estimated token budget (chars/4 heuristic): ranked results are packed until the next item would exceed it.")
   end
 
   def call(query: nil, include: [], page: nil, per_page: nil, limit: nil,
            search_in_name: true, search_in_type: true, search_in_aliases: true,
-           search_in_observations: true)
+           search_in_observations: true, occurred_after: nil, occurred_before: nil,
+           as_of: nil, max_tokens: nil)
     effective_page, effective_per_page = normalized_paging(page, per_page || limit)
     projections = normalize_projections(include)
+    temporal_window = build_temporal_window(occurred_after, occurred_before, as_of)
 
     if query.nil?
-      raise FastMcp::Tool::InvalidArgumentsError, "include requires a query." if projections.any?
+      if projections.any? || temporal_window.present? || max_tokens.present?
+        raise FastMcp::Tool::InvalidArgumentsError, "include, temporal bounds and max_tokens require a query."
+      end
 
       return { mode: "catalog" }.merge(
         EntityCatalogService.call(page: effective_page, per_page: effective_per_page)
@@ -63,10 +74,18 @@ class SearchTool < ApplicationTool
         search_in_name: search_in_name,
         search_in_type: search_in_type,
         search_in_aliases: search_in_aliases,
-        search_in_observations: search_in_observations
+        search_in_observations: search_in_observations,
+        temporal_window: temporal_window,
+        max_tokens: max_tokens
       )
     else
-      summary_result(query, page: effective_page, per_page: effective_per_page)
+      summary_result(
+        query,
+        page: effective_page,
+        per_page: effective_per_page,
+        temporal_window: temporal_window,
+        max_tokens: max_tokens
+      )
     end
   rescue *ToolError::TIMEOUT_CLASSES
     raise
@@ -102,7 +121,7 @@ class SearchTool < ApplicationTool
     normalized
   end
 
-  def summary_result(query, page:, per_page:)
+  def summary_result(query, page:, per_page:, temporal_window: nil, max_tokens: nil)
     context_scope = graph_mem_context.scoped_entity_scope
     offset = (page - 1) * per_page
     payload = EntityRetrievalService.search(
@@ -111,10 +130,20 @@ class SearchTool < ApplicationTool
       semantic: true,
       context_entity_ids: context_scope&.entity_ids,
       scope_entity_ids: context_scope&.entity_ids,
-      context_scope: context_scope
+      context_scope: context_scope,
+      temporal_window: temporal_window
     )
     results = payload[:results].drop(offset).first(per_page).map(&:to_h)
     retrieval = payload[:retrieval].merge(result_count: results.size)
+
+    if max_tokens.present?
+      fit = TokenBudget.fit(results, max_tokens: max_tokens)
+      results = fit.items
+      retrieval[:result_count] = results.size
+      retrieval[:token_budget] = TokenBudget.diagnostics(
+        max_tokens: max_tokens, estimated_tokens: fit.estimated_tokens, truncated: fit.truncated
+      )
+    end
 
     {
       mode: "summary",
@@ -135,5 +164,15 @@ class SearchTool < ApplicationTool
     )
 
     { mode: "subgraph" }.merge(payload)
+  end
+
+  def build_temporal_window(occurred_after, occurred_before, as_of)
+    TemporalWindow.from_params(
+      occurred_after: occurred_after,
+      occurred_before: occurred_before,
+      as_of: as_of
+    )
+  rescue ArgumentError => e
+    raise FastMcp::Tool::InvalidArgumentsError, e.message
   end
 end

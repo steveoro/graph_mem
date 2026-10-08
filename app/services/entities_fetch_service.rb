@@ -9,7 +9,7 @@ class EntitiesFetchService
 
   def initialize(entity_ids:, relations: nil, include_obsolete: false, include_ranked: false,
                  query: nil, observation_limit: nil, strict_single: true,
-                 always_rank_observations: false)
+                 always_rank_observations: false, temporal_window: nil, max_tokens: nil)
     @entity_ids = Array(entity_ids).map(&:to_i).uniq
     @relations_mode = relations.presence || default_relations_mode
     @include_obsolete = include_obsolete
@@ -18,6 +18,8 @@ class EntitiesFetchService
     @observation_limit = observation_limit
     @strict_single = strict_single
     @always_rank_observations = always_rank_observations
+    @temporal_window = temporal_window
+    @max_tokens = max_tokens
   end
 
   def call
@@ -32,12 +34,17 @@ class EntitiesFetchService
       raise ActiveRecord::RecordNotFound, "Entity with ID=#{@entity_ids.first} not found."
     end
 
-    {
-      entities: @entity_ids.filter_map { |id| entities_by_id[id] }.map { |entity| entity_payload(entity) },
-      relations: relation_payloads,
+    entities = @entity_ids.filter_map { |id| entities_by_id[id] }.map { |entity| entity_payload(entity) }
+    relations = relation_payloads
+
+    result = {
+      entities: entities,
+      relations: relations,
       missing_entity_ids: missing_ids,
       relation_scope: @relations_mode
     }
+    apply_token_budget!(result)
+    result
   end
 
   private
@@ -58,6 +65,7 @@ class EntitiesFetchService
 
   def entity_payload(entity)
     pool = @include_obsolete ? entity.memory_observations : entity.active_memory_observations
+    pool = pool.select { |observation| @temporal_window.covers?(observation) } if @temporal_window
     observations = ranked_observations(pool)
 
     {
@@ -92,5 +100,27 @@ class EntitiesFetchService
       end
 
     scope.distinct.order(:id).map { |relation| GraphTraversalSerializer.relation_json(relation) }
+  end
+
+  # Packs entities (then relations for whatever budget remains) under the
+  # optional token budget and records the result for the caller.
+  def apply_token_budget!(result)
+    return if @max_tokens.blank?
+
+    budget = @max_tokens.to_i
+    entities_fit = TokenBudget.fit(result[:entities], max_tokens: budget)
+    result[:entities] = entities_fit.items
+
+    used = entities_fit.estimated_tokens
+    truncated = entities_fit.truncated
+
+    relations_fit = TokenBudget.fit(result[:relations], max_tokens: [ budget - used, 0 ].max)
+    result[:relations] = relations_fit.items
+    used += relations_fit.estimated_tokens
+    truncated ||= relations_fit.truncated
+
+    result[:token_budget] = TokenBudget.diagnostics(
+      max_tokens: budget, estimated_tokens: used, truncated: truncated
+    )
   end
 end

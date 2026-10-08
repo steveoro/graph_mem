@@ -27,6 +27,7 @@ class HybridSearchStrategy
   def initialize
     @text_strategy = EntitySearchStrategy.new
     @vector_strategy = VectorSearchStrategy.new
+    @temporal_strategy = TemporalSearchStrategy.new
     @logger = Rails.logger
   end
 
@@ -35,8 +36,9 @@ class HybridSearchStrategy
   # @param semantic [Boolean] When false, skip vector search entirely
   # @param context_entity_ids [Array<Integer>, nil] Entity IDs to boost (from GraphMemContext)
   # @param scope_entity_ids [Array<Integer>, nil] Hard scope for observation-vector channel
+  # @param temporal_window [TemporalWindow, nil] Optional occurred-time window for the temporal channel
   # @return [Array<SearchResult>]
-  def search(query, limit: 50, semantic: true, context_entity_ids: nil, scope_entity_ids: nil)
+  def search(query, limit: 50, semantic: true, context_entity_ids: nil, scope_entity_ids: nil, temporal_window: nil)
     @query = query.to_s.strip
 
     text_results = @text_strategy.search(query, limit: limit * 2)
@@ -47,15 +49,23 @@ class HybridSearchStrategy
       []
     end
 
+    scoped_ids = scope_entity_ids || context_entity_ids
+
     observation_entity_ids = if semantic
       ids = @vector_strategy.search_observations(query, limit: limit * 2)
-      scoped_ids = scope_entity_ids || context_entity_ids
       scoped_ids.present? ? ids & scoped_ids : ids
     else
       []
     end
 
-    scores, entities, matched = build_score_maps(text_results, vector_results, observation_entity_ids)
+    temporal_entity_ids = if temporal_window.present?
+      ids = @temporal_strategy.search(temporal_window, limit: limit * 2)
+      scoped_ids.present? ? ids & scoped_ids : ids
+    else
+      []
+    end
+
+    scores, entities, matched = build_score_maps(text_results, vector_results, observation_entity_ids, temporal_entity_ids)
     apply_relevance_boosts(scores, entities, context_entity_ids)
 
     scores
@@ -75,7 +85,7 @@ class HybridSearchStrategy
   # Build initial score maps from text and vector results using weighted RRF.
   # Text scores are preserved as weights on the RRF contribution so that
   # well-differentiated text rankings survive the fusion.
-  def build_score_maps(text_results, vector_results, observation_entity_ids = [])
+  def build_score_maps(text_results, vector_results, observation_entity_ids = [], temporal_entity_ids = [])
     scores = Hash.new(0.0)
     entities = {}
     matched = Hash.new { |h, k| h[k] = [] }
@@ -105,6 +115,15 @@ class HybridSearchStrategy
       scores[entity_id] += 1.0 / (RRF_K + rank + 1)
       entities[entity_id] = entity
       matched[entity_id] |= [ "observation_semantic" ]
+    end
+
+    temporal_entity_ids.each_with_index do |entity_id, rank|
+      entity = entities[entity_id] || MemoryEntity.find_by(id: entity_id)
+      next unless entity
+
+      scores[entity_id] += 1.0 / (RRF_K + rank + 1)
+      entities[entity_id] = entity
+      matched[entity_id] |= [ "temporal" ]
     end
 
     [ scores, entities, matched ]

@@ -11,7 +11,8 @@ class SubgraphSearchService
 
   def initialize(query:, context_scope: nil, logger: Rails.logger, page: nil, per_page: nil,
                  search_in_name: true, search_in_type: true, search_in_observations: true,
-                 search_in_aliases: true, include_observations: true, include_relations: true)
+                 search_in_aliases: true, include_observations: true, include_relations: true,
+                 temporal_window: nil, max_tokens: nil)
     @query = query
     @context_scope = context_scope
     @logger = logger
@@ -25,6 +26,8 @@ class SubgraphSearchService
     }
     @include_observations = include_observations
     @include_relations = include_relations
+    @temporal_window = temporal_window || TemporalQueryParser.extract(query)&.window
+    @max_tokens = max_tokens
   end
 
   def call
@@ -40,12 +43,16 @@ class SubgraphSearchService
     )
     page_ids = matching_ids.slice((@page - 1) * @per_page, @per_page) || []
 
+    entities = entities_for(page_ids)
+    relations = @include_relations ? relations_for(page_ids) : nil
+
     response = {
-      entities: entities_for(page_ids),
+      entities: entities,
       pagination: pagination_for(matching_ids.size),
       retrieval: retrieval_for(context_ids)
     }
-    response[:relations] = relations_for(page_ids) if @include_relations
+    response[:relations] = relations if relations
+    apply_token_budget!(response)
     response
   end
 
@@ -112,11 +119,37 @@ class SubgraphSearchService
       updated_at: entity.updated_at.iso8601
     }
     if @include_observations
-      payload[:observations] = entity.active_memory_observations.map do |observation|
+      observations = entity.active_memory_observations
+      observations = observations.select { |observation| @temporal_window.covers?(observation) } if @temporal_window
+      payload[:observations] = observations.map do |observation|
         MemoryObservationSerializer.call(observation)
       end
     end
     payload
+  end
+
+  # Packs entities (then relations for whatever budget remains) under the
+  # optional token budget and records the result in retrieval diagnostics.
+  def apply_token_budget!(response)
+    return if @max_tokens.blank?
+
+    budget = @max_tokens.to_i
+    entities_fit = TokenBudget.fit(response[:entities], max_tokens: budget)
+    response[:entities] = entities_fit.items
+
+    used = entities_fit.estimated_tokens
+    truncated = entities_fit.truncated
+
+    if response[:relations].is_a?(Array)
+      relations_fit = TokenBudget.fit(response[:relations], max_tokens: [ budget - used, 0 ].max)
+      response[:relations] = relations_fit.items
+      used += relations_fit.estimated_tokens
+      truncated ||= relations_fit.truncated
+    end
+
+    response[:retrieval][:token_budget] = TokenBudget.diagnostics(
+      max_tokens: budget, estimated_tokens: used, truncated: truncated
+    )
   end
 
   def relations_for(entity_ids)
@@ -140,6 +173,6 @@ class SubgraphSearchService
       scope_entity_count: context_ids&.size,
       scope_truncated: @context_scope&.truncated == true,
       scope_max_entities: @context_scope&.max_entities
-    }
+    }.merge(@temporal_window.present? ? { temporal: @temporal_window.to_h } : {})
   end
 end

@@ -5,6 +5,14 @@ All notable changes to GraphMem will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.45.0] - 2026-10-08
+- Added temporal recall to read tools: `occurred_after`/`occurred_before`/`as_of` ISO 8601 params on `search`, `search_subgraph`, `get_entity`, `get_entities`, `get_subgraph_by_ids`, `summarize`, and the REST entity-search and summarize endpoints.
+- Added `TemporalQueryParser`: temporal phrases inside `query` itself ("in October 2026", "during 2024", "Q3 2026", "last week", "past 6 months", "last spring", "since 2025", "as of …") derive a window automatically; explicit params win.
+- Added `TemporalWindow` semantics: dated observations match when `[valid_from, valid_until]` intersects the window (open bounds infinite); undated observations fall back to retention time (`created_at`); `as_of` is a point-in-time snapshot.
+- Added a deterministic temporal channel to `HybridSearchStrategy` (entities ranked by in-window observation count, fused via the existing RRF combiner) plus observation-level window filtering in subgraph, fetch, and summarize payloads.
+- Added `max_tokens` token-budget packing to the same read tools: ranked items are packed whole under an estimated budget (~4 chars/token, no tokenizer), with `retrieval.token_budget` / `token_budget` diagnostics (`max_tokens`, `estimated_tokens`, `truncated`).
+- Resolved windows are echoed as `retrieval.temporal`; documented the feature in `docs/mcp_tools.md`.
+
 ## [1.44.0] - 2026-09-18
 - Pinned the GitHub-only FastMCP `v1.7.0` release at immutable commit `55bdc57fb2bca88a7c99a0423eee083e912f7519`.
 

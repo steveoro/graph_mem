@@ -20,7 +20,8 @@ class SummarizerService
                  max_observations: DEFAULT_MAX_OBSERVATIONS,
                  observations_per_entity: nil, max_depth: DEFAULT_MAX_DEPTH,
                  include_sources: true, style: DEFAULT_STYLE, scope: nil,
-                 context_entity_ids: nil, context_scope: nil)
+                 context_entity_ids: nil, context_scope: nil,
+                 temporal_window: nil, max_tokens: nil)
     @query = query.to_s.strip
     @entity_id = entity_id
     @max_results = normalize_positive(max_results, DEFAULT_MAX_RESULTS, max: 50)
@@ -36,6 +37,8 @@ class SummarizerService
     @context_scope = context_scope
     @allowed_entity_ids = entity_scope? ? nil : @context_entity_ids.presence
     @scope = normalize_scope(scope)
+    @temporal_window = temporal_window || TemporalQueryParser.extract(@query)&.window
+    @max_tokens = max_tokens
     @candidate_entity_count = 0
     @excluded_out_of_scope_count = 0
     @logger = Rails.logger
@@ -85,7 +88,8 @@ class SummarizerService
       limit: search_limit,
       semantic: true,
       context_entity_ids: @context_entity_ids.presence,
-      scope_entity_ids: (@scope == "context" ? @allowed_entity_ids : nil)
+      scope_entity_ids: (@scope == "context" ? @allowed_entity_ids : nil),
+      temporal_window: @temporal_window
     )
 
     @candidate_entity_count = results.size
@@ -140,7 +144,9 @@ class SummarizerService
   def build_evidence(entities, entity_scores)
     ranker = ObservationRelevanceRanker.new(@query)
     observations = entities.flat_map do |entity|
-      entity.active_memory_observations.map do |observation|
+      pool = entity.active_memory_observations
+      pool = pool.select { |observation| @temporal_window.covers?(observation) } if @temporal_window
+      pool.map do |observation|
         {
           observation: observation,
           entity: entity,
@@ -231,7 +237,7 @@ class SummarizerService
       payload
     end
 
-    {
+    response = {
       query: @query,
       summary: build_deterministic_summary(evidence),
       generation_mode: "deterministic",
@@ -244,6 +250,8 @@ class SummarizerService
       sources: build_sources(evidence),
       retrieval: build_retrieval_diagnostics(entities, evidence)
     }
+    apply_token_budget!(response)
+    response
   end
 
   def build_deterministic_summary(evidence)
@@ -292,7 +300,24 @@ class SummarizerService
       selected_entity_count: entities.map(&:id).uniq.size,
       excluded_out_of_scope_count: @excluded_out_of_scope_count,
       selected_observation_count: evidence.size
-    }
+    }.merge(@temporal_window.present? ? { temporal: @temporal_window.to_h } : {})
+  end
+
+  # Trims the serialized observations under the optional token budget. The
+  # evidence-based `summary` text is left untouched — it is rebuilt from the
+  # kept observations' ids by the caller's LLM pass anyway.
+  def apply_token_budget!(response)
+    return if @max_tokens.blank?
+
+    budget = @max_tokens.to_i
+    fit = TokenBudget.fit(response[:observations], max_tokens: budget)
+    kept_ids = fit.items.map { |payload| payload[:id] }.to_set
+    response[:observations] = fit.items
+    response[:observation_count] = fit.items.size
+    response[:sources] = Array(response[:sources]).select { |source| kept_ids.include?(source[:observation_id]) }
+    response[:retrieval][:token_budget] = TokenBudget.diagnostics(
+      max_tokens: budget, estimated_tokens: fit.estimated_tokens, truncated: fit.truncated
+    )
   end
 
   def attempt_llm_synthesis(response, evidence)
