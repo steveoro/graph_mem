@@ -23,8 +23,8 @@ class TemporalWindow
 
   def initialize(occurred_after: nil, occurred_before: nil, as_of: nil)
     @occurred_after = self.class.coerce_time(occurred_after)
-    @occurred_before = self.class.coerce_time(occurred_before)
-    @as_of = self.class.coerce_time(as_of)
+    @occurred_before = self.class.coerce_time(occurred_before, end_of_day: true)
+    @as_of = self.class.coerce_time(as_of, end_of_day: true)
 
     if @as_of.present? && (@occurred_after.present? || @occurred_before.present?)
       raise ArgumentError, "as_of cannot be combined with occurred_after/occurred_before"
@@ -35,15 +35,20 @@ class TemporalWindow
     end
   end
 
-  def self.coerce_time(value)
+  def self.coerce_time(value, end_of_day: false)
     return nil if value.nil?
     return value if value.is_a?(Time) || value.is_a?(DateTime)
-    return Time.zone.local(value.year, value.month, value.day) if value.is_a?(Date)
+    return day_bound(Time.zone.local(value.year, value.month, value.day), end_of_day) if value.is_a?(Date)
 
     text = value.to_s.strip
     return nil if text.blank?
 
-    Time.zone.parse(text) || raise(ArgumentError, "invalid temporal bound: #{value.inspect}")
+    parsed = Time.zone.parse(text) || raise(ArgumentError, "invalid temporal bound: #{value.inspect}")
+    end_of_day && text.match?(/\A\d{4}-\d{2}-\d{2}\z/) ? parsed.end_of_day : parsed
+  end
+
+  def self.day_bound(time, end_of_day)
+    end_of_day ? time.end_of_day : time
   end
 
   # Build a window from explicit tool params. Returns nil when no bound is given.

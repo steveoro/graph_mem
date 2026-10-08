@@ -290,6 +290,9 @@ using the existing observation columns — no new fields required:
   mentioned.
 - `as_of` is a point window: dated observations must contain the instant;
   undated ones must have been retained by it.
+- A date-only bound (`"2026-01-31"`) is read as the start of that day for
+  `occurred_after` and the end of that day for `occurred_before`/`as_of`, so a
+  month boundary pair covers the whole month like the equivalent phrase.
 
 Two ways to apply a window:
 

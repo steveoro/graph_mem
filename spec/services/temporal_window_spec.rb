@@ -37,6 +37,26 @@ RSpec.describe TemporalWindow do
       built = described_class.from_params(as_of: "2026-01-15T10:00:00Z")
       expect(built.as_of).to eq(Time.zone.parse("2026-01-15T10:00:00Z"))
     end
+
+    it "reads a bare occurred_after date as the start of that day" do
+      built = described_class.from_params(occurred_after: "2026-01-15")
+      expect(built.occurred_after).to eq(Time.zone.parse("2026-01-15").beginning_of_day)
+    end
+
+    it "reads a bare occurred_before date as the end of that day" do
+      built = described_class.from_params(occurred_before: "2026-01-31")
+      expect(built.occurred_before).to eq(Time.zone.parse("2026-01-31").end_of_day)
+    end
+
+    it "reads a bare as_of date as the end of that day" do
+      built = described_class.from_params(as_of: "2026-01-15")
+      expect(built.as_of).to eq(Time.zone.parse("2026-01-15").end_of_day)
+    end
+
+    it "keeps full datetimes unchanged on occurred_before" do
+      built = described_class.from_params(occurred_before: "2026-01-31T12:30:00Z")
+      expect(built.occurred_before).to eq(Time.zone.parse("2026-01-31T12:30:00Z"))
+    end
   end
 
   describe "#covers?" do
