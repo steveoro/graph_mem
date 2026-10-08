@@ -7,8 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.45.0] - 2026-10-08
 - Pinned the GitHub-only FastMCP `v1.7.1` release at immutable commit `b10243c218c3d8a1a9f20e033314b647595938ca`, which adds `filter_prompts`.
-- MCP prompts now follow connection profiles: prompts declare profiles via `mcp_metadata(profiles: ...)` and a `filter_prompts` block applies them to `prompts/list` and `prompts/get`. All prompts explicitly declare their profiles; `mcp_profiles` inherits from the superclass when unset.
+- MCP prompts now follow connection profiles: prompts declare profiles via `mcp_metadata(profiles: ...)` and a `filter_prompts` block applies them to `prompts/list` and `prompts/get`. All concrete prompts explicitly declare their profiles; `mcp_profiles` inherits from the superclass when unset. The `MCP_PROFILE_NAMES` constant in both base classes now references `GraphMem::McpProfile::NAMES`.
 - **Behaviour change on the readonly profile (HTTP and stdio):** `persist` is no longer listed there, and `prompts/get` for `persist` now returns JSON-RPC error `-32602` "Prompt not found: persist". `orient` and `recall` are unchanged; `/mcp` and `/mcp/maintenance` still serve all three prompts. The stdio runner (`GRAPH_MEM_MCP_PROFILE=readonly`) now correctly excludes `persist` at registration time.
+- `McpServerPatch` boot-time guard: raises at startup if the fork's `handle_tools_list` signature changes (parameter check + version pin spec).
+- Resource registration is now idempotent: `McpToolRegistry.register_with!` clears existing resources before re-registering, preventing duplicates from development code-reload.
 
 ## [1.44.0] - 2026-09-18
 - Pinned the GitHub-only FastMCP `v1.7.0` release at immutable commit `55bdc57fb2bca88a7c99a0423eee083e912f7519`.

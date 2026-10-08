@@ -27,6 +27,7 @@ module GraphMem
       classes = profile ? tool_classes_for(profile) : tool_classes
       prompts = profile ? prompt_classes_for(profile) : prompt_classes
       server.register_tools(*classes)
+      clear_resources!(server)
       server.register_resources(*resource_classes)
       server.register_prompts(*prompts)
       server
@@ -63,6 +64,10 @@ module GraphMem
     def constantize_path(path)
       # app/tools/*.rb map to top-level constants (e.g. BulkUpdateTool), not Tools::*
       File.basename(path, ".rb").camelize.constantize
+    end
+
+    def clear_resources!(server)
+      server.resources.map(&:uri).each { |uri| server.remove_resource(uri) }
     end
 
     def skip_class?(klass)

@@ -1,7 +1,9 @@
 # frozen_string_literal: true
 
+require_relative "../../lib/graph_mem/mcp_profile"
+
 class ApplicationPrompt < FastMcp::Prompt
-  MCP_PROFILE_NAMES = %i[default readonly maintenance].freeze
+  MCP_PROFILE_NAMES = GraphMem::McpProfile::NAMES
 
   class << self
     # Declares which MCP connection profiles advertise and serve this prompt.

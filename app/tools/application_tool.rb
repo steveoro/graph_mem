@@ -1,11 +1,12 @@
 # frozen_string_literal: true
 
+require_relative "../../lib/graph_mem/mcp_profile"
 require_relative "../../lib/graph_mem/mcp_output_schemas"
 
 class ApplicationTool < FastMcp::Tool
   COMPACTION_VALVE_TOOLS = ToolMutationPolicy::COMPACTION_VALVE_TOOLS
   MCP_CLIENT_HEADER = "x-mcp-client"
-  MCP_PROFILE_NAMES = %i[default readonly maintenance].freeze
+  MCP_PROFILE_NAMES = GraphMem::McpProfile::NAMES
   MCP_ANNOTATION_KEYS = %i[read_only_hint destructive_hint idempotent_hint open_world_hint].freeze
 
   attr_accessor :server

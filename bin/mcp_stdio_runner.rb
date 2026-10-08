@@ -46,11 +46,12 @@ rescue GraphMem::McpProfile::InvalidProfile => e
   abort "GraphMem Stdio Runner: #{e.message}"
 end
 
-# Register the selected tool profile and all resources through the shared registry.
+# Register the selected tool/prompt profile and all resources through the shared registry.
 GraphMem::McpToolRegistry.register_with!(server, profile: profile)
 RunnerLogger.info(
-  "GraphMem Stdio Runner: Registered #{server.tools.count} tools and #{server.resources.count} resources " \
-  "for the #{profile} profile."
+  "GraphMem Stdio Runner: Registered #{server.tools.count} tools, " \
+  "#{server.instance_variable_get(:@prompts).count} prompts, and " \
+  "#{server.resources.count} resources for the #{profile} profile."
 )
 
 # Start the server. For v1.4.0, server.start() should handle StdioTransport creation.

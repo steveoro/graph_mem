@@ -44,5 +44,10 @@ RSpec.describe "GraphMem workflow prompts" do
 
       expect(child.mcp_profiles).to eq(%i[default maintenance])
     end
+
+    it "defaults an undeclared subclass to all profiles via ApplicationPrompt" do
+      undeclared = Class.new(ApplicationPrompt)
+      expect(undeclared.mcp_profiles).to eq(GraphMem::McpProfile::NAMES)
+    end
   end
 end

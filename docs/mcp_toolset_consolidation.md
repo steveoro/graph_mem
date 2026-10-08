@@ -128,11 +128,11 @@ end
 
 Select the profile from the request path so each client config is explicit and independent:
 
-| Profile | Path | Contents |
+| Profile | Path | Contents (Phase-1 snapshot; see current counts in `McpToolRegistry` specs) |
 |---|---|---|
-| `default` | `/mcp` | 25 current context, read, and graph-write tools |
+| `default` | `/mcp` | 25 context, read, and graph-write tools |
 | `readonly` | `/mcp/readonly` | 15 context and read tools |
-| `maintenance` | `/mcp/maintenance` | All 35 current tools |
+| `maintenance` | `/mcp/maintenance` | All 35 tools |
 
 Each tool declares its profile membership as class metadata, so `McpProfile` stays a lookup rather
 than a hardcoded name list. The legacy `/mcp/sse` and `/mcp/messages` paths use the default
@@ -317,7 +317,8 @@ GraphMem registers `orient`, `recall` (required `topic`), and `persist` through
 the fork's native `FastMcp::Prompt` API. They are invoked on demand rather than
 loaded into every context. Since 1.45.0 (FastMCP v1.7.1 `filter_prompts`),
 `persist` is limited to the default and maintenance profiles and is not
-available on `/mcp/readonly`.
+available on the readonly profile (`/mcp/readonly`, or stdio with
+`GRAPH_MEM_MCP_PROFILE=readonly`).
 
 ### Move the vocabularies into the schema — as soft enums
 

@@ -9,7 +9,9 @@ RSpec.describe GraphMem::McpToolRegistry do
         FastMcp::Server,
         register_tools: nil,
         register_resources: nil,
-        register_prompts: nil
+        register_prompts: nil,
+        resources: [],
+        remove_resource: true
       )
     end
 
@@ -50,7 +52,9 @@ RSpec.describe GraphMem::McpToolRegistry do
           FastMcp::Server,
           register_tools: nil,
           register_resources: nil,
-          register_prompts: nil
+          register_prompts: nil,
+          resources: [],
+          remove_resource: true
         )
         expect(local_server).to receive(:register_prompts) do |*prompts|
           names = prompts.map(&:prompt_name)
@@ -69,6 +73,18 @@ RSpec.describe GraphMem::McpToolRegistry do
       end
 
       described_class.register_with!(server)
+    end
+  end
+
+  describe ".register_with! resource idempotency" do
+    it "does not duplicate resources on repeated registration" do
+      real_server = FastMcp::Server.new(name: "dup-test", version: "0", logger: Logger.new(File::NULL))
+      described_class.register_with!(real_server)
+      first_count = real_server.resources.size
+      expect(first_count).to be > 0
+
+      described_class.register_with!(real_server)
+      expect(real_server.resources.size).to eq(first_count)
     end
   end
 

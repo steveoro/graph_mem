@@ -86,9 +86,10 @@ HTTP profiles are applied in place from the Rack request in FastMCP's
 per-request context; no filtered server copies or profile caches are created.
 The 2024-11-05 SSE endpoint remains at `/mcp/sse` and uses the default profile.
 Workflow guidance is available on demand through the `orient`, `recall`, and
-`persist` MCP prompts (`persist` is not available on `/mcp/readonly`). Prompts
-declare their profiles with `mcp_metadata(profiles: ...)` in `app/prompts/`;
-undeclared prompts are served on every profile.
+`persist` MCP prompts (`persist` is not available on the readonly profile).
+Each concrete prompt declares its profiles explicitly with
+`mcp_metadata(profiles: ...)` in `app/prompts/`; the `ApplicationPrompt` base
+class defaults to all three profiles as a safety net for undeclared subclasses.
 
 The default 12 tools advertise `outputSchema` and emit matching
 `structuredContent` plus mirrored JSON text. Maintenance-only and hidden tools
@@ -102,7 +103,7 @@ bin/windsurf_mcp_graph_mem_runner.sh
 
 STDIO defaults to the `default` profile. Set `GRAPH_MEM_MCP_PROFILE=readonly` or
 `GRAPH_MEM_MCP_PROFILE=maintenance` in the launcher environment to select a
-different catalog.
+different catalog. The readonly stdio catalog also omits the `persist` prompt.
 
 ## Adding MCP Tools
 

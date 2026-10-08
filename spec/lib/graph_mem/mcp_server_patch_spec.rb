@@ -159,6 +159,44 @@ RSpec.describe GraphMem::McpServerPatch do
     expect(names).not_to include("denied_probe", "hidden_alias")
   end
 
+  describe "fork drift guard" do
+    it "is pinned to the current FastMcp version" do
+      expect(FastMcp::VERSION).to eq(GraphMem::McpServerPatch::EXPECTED_FORK_VERSION),
+        "FastMcp version changed to #{FastMcp::VERSION} — " \
+        "re-diff McpServerPatch#handle_tools_list against the fork"
+    end
+
+    it "produces the same tool entries as the fork minus hidden aliases" do
+      request = instance_double(Rack::Request)
+
+      patched_tools = nil
+      server.with_request_context(transport: transport, request: request) do
+        server.handle_request({ jsonrpc: "2.0", method: "tools/list", id: 100 }.to_json)
+        patched_tools = last_result.fetch(:tools)
+      end
+
+      fork_tools = server.visible_tools(request).map do |tool|
+        tool_info = {
+          name: tool.tool_name,
+          description: tool.description || "",
+          inputSchema: tool.input_schema_to_json || { type: "object", properties: {}, required: [] }
+        }
+        output_schema = tool.output_schema_to_json
+        tool_info[:outputSchema] = output_schema if output_schema
+        annotations = tool.annotations
+        if annotations.any?
+          tool_info[:annotations] = annotations.to_h do |key, value|
+            camel_key = key.to_s.gsub(/_([a-z])/) { ::Regexp.last_match(1).upcase }.to_sym
+            [ camel_key, value ]
+          end
+        end
+        tool_info
+      end
+
+      expect(patched_tools).to eq(fork_tools.reject { |t| t[:name] == "hidden_alias" })
+    end
+  end
+
   it "omits hidden aliases from tools/list while keeping them callable" do
     server.handle_request({ jsonrpc: "2.0", method: "tools/list", id: 6 }.to_json)
 
