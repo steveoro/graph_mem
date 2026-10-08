@@ -1,7 +1,5 @@
 # frozen_string_literal: true
 
-require_relative "../../lib/graph_mem/mcp_profile"
-
 class ApplicationPrompt < FastMcp::Prompt
   MCP_PROFILE_NAMES = GraphMem::McpProfile::NAMES
 

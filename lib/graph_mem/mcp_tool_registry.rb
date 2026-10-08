@@ -67,7 +67,7 @@ module GraphMem
     end
 
     def clear_resources!(server)
-      server.resources.map(&:uri).each { |uri| server.remove_resource(uri) }
+      server.resources.clear
     end
 
     def skip_class?(klass)

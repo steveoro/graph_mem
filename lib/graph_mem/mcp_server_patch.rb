@@ -9,6 +9,8 @@ module GraphMem
   module McpServerPatch
     EXPECTED_FORK_VERSION = "1.7.1"
 
+    private
+
     def handle_tools_list(id)
       tools = visible_tools(current_request).filter_map do |tool|
         next if tool.respond_to?(:mcp_advertised?) && !tool.mcp_advertised?
@@ -35,7 +37,8 @@ module GraphMem
   end
 end
 
-if defined?(FastMcp::Server)
+if defined?(FastMcp::Server) &&
+   FastMcp::Server.ancestors.none? { |m| m.name == "GraphMem::McpServerPatch" }
   unless FastMcp::Server.private_method_defined?(:handle_tools_list) &&
          FastMcp::Server.instance_method(:handle_tools_list).parameters == [ [ :req, :id ] ]
     raise "FastMcp::Server#handle_tools_list signature changed — " \

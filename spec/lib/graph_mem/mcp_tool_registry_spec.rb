@@ -77,6 +77,10 @@ RSpec.describe GraphMem::McpToolRegistry do
   end
 
   describe ".register_with! resource idempotency" do
+    after do
+      described_class.register_with!(FastMcp.server) if FastMcp.server
+    end
+
     it "does not duplicate resources on repeated registration" do
       real_server = FastMcp::Server.new(name: "dup-test", version: "0", logger: Logger.new(File::NULL))
       described_class.register_with!(real_server)

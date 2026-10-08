@@ -167,34 +167,40 @@ RSpec.describe GraphMem::McpServerPatch do
     end
 
     it "produces the same tool entries as the fork minus hidden aliases" do
+      fork_method = FastMcp::Server.instance_method(:handle_tools_list).super_method
+      expect(fork_method.owner).to eq(FastMcp::Server),
+        "super_method owner is not FastMcp::Server — ancestry changed"
+
       request = instance_double(Rack::Request)
 
-      patched_tools = nil
-      server.with_request_context(transport: transport, request: request) do
-        server.handle_request({ jsonrpc: "2.0", method: "tools/list", id: 100 }.to_json)
-        patched_tools = last_result.fetch(:tools)
+      fork_transport = RecordingTransport.new
+      server.transport = fork_transport
+      server.with_request_context(transport: fork_transport, request: request) do
+        fork_method.bind_call(server, 200)
       end
+      fork_tools = fork_transport.messages.last.fetch(:result).fetch(:tools)
 
-      fork_tools = server.visible_tools(request).map do |tool|
-        tool_info = {
-          name: tool.tool_name,
-          description: tool.description || "",
-          inputSchema: tool.input_schema_to_json || { type: "object", properties: {}, required: [] }
-        }
-        output_schema = tool.output_schema_to_json
-        tool_info[:outputSchema] = output_schema if output_schema
-        annotations = tool.annotations
-        if annotations.any?
-          tool_info[:annotations] = annotations.to_h do |key, value|
-            camel_key = key.to_s.gsub(/_([a-z])/) { ::Regexp.last_match(1).upcase }.to_sym
-            [ camel_key, value ]
-          end
-        end
-        tool_info
+      expect(fork_tools.map { |t| t[:name] }).to include("hidden_alias"),
+        "fork output must include hidden_alias to prove it ran unpatched"
+
+      server.transport = transport
+      server.with_request_context(transport: transport, request: request) do
+        server.handle_request({ jsonrpc: "2.0", method: "tools/list", id: 201 }.to_json)
       end
+      patched_tools = last_result.fetch(:tools)
 
       expect(patched_tools).to eq(fork_tools.reject { |t| t[:name] == "hidden_alias" })
     end
+  end
+
+  it "does not raise or double-prepend when the patch file is re-evaluated" do
+    count_before = FastMcp::Server.ancestors.count { |m| m.name == "GraphMem::McpServerPatch" }
+    expect(count_before).to eq(1)
+
+    load Rails.root.join("lib/graph_mem/mcp_server_patch.rb")
+
+    count_after = FastMcp::Server.ancestors.count { |m| m.name == "GraphMem::McpServerPatch" }
+    expect(count_after).to eq(1)
   end
 
   it "omits hidden aliases from tools/list while keeping them callable" do

@@ -1,6 +1,5 @@
 # frozen_string_literal: true
 
-require_relative "../../lib/graph_mem/mcp_profile"
 require_relative "../../lib/graph_mem/mcp_output_schemas"
 
 class ApplicationTool < FastMcp::Tool

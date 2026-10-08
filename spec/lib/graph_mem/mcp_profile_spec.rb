@@ -53,7 +53,10 @@ RSpec.describe GraphMem::McpProfile do
       expect(classes).not_to be_empty
     end
 
-    it "every registered prompt explicitly declares its profiles" do
+    # Convention: every concrete prompt must call mcp_metadata(profiles:)
+    # explicitly. Inheritance from ApplicationPrompt is a safety net for
+    # ad-hoc subclasses, not a substitute for a declaration.
+    it "every concrete prompt explicitly declares its profiles" do
       classes.each do |klass|
         expect(klass.instance_variable_defined?(:@mcp_profiles)).to be(true),
           "#{klass.name} does not explicitly declare mcp_metadata(profiles:)"

@@ -50,7 +50,7 @@ end
 GraphMem::McpToolRegistry.register_with!(server, profile: profile)
 RunnerLogger.info(
   "GraphMem Stdio Runner: Registered #{server.tools.count} tools, " \
-  "#{server.instance_variable_get(:@prompts).count} prompts, and " \
+  "#{server.prompts.count} prompts, and " \
   "#{server.resources.count} resources for the #{profile} profile."
 )
 
