@@ -3,6 +3,7 @@
 class RecallPrompt < ApplicationPrompt
   prompt_name "recall"
   description "Recall source-backed GraphMem knowledge for a topic before work."
+  mcp_metadata(profiles: %i[default readonly maintenance])
   argument :topic, description: "Keywords or subject to recall", required: true
 
   # Renders the topic-specific recall workflow.

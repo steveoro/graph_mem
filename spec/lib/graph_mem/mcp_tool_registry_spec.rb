@@ -33,6 +33,43 @@ RSpec.describe GraphMem::McpToolRegistry do
 
       described_class.register_with!(server, profile: :default)
     end
+
+    it "excludes PersistPrompt when registering the readonly profile" do
+      expect(server).to receive(:register_prompts) do |*prompts|
+        names = prompts.map(&:prompt_name)
+        expect(names).to contain_exactly("orient", "recall")
+        expect(names).not_to include("persist")
+      end
+
+      described_class.register_with!(server, profile: :readonly)
+    end
+
+    it "keeps all prompts for the default and maintenance profiles" do
+      %i[default maintenance].each do |prof|
+        local_server = instance_double(
+          FastMcp::Server,
+          register_tools: nil,
+          register_resources: nil,
+          register_prompts: nil
+        )
+        expect(local_server).to receive(:register_prompts) do |*prompts|
+          names = prompts.map(&:prompt_name)
+          expect(names).to contain_exactly("orient", "recall", "persist"),
+            "expected all three prompts for #{prof}"
+        end
+
+        described_class.register_with!(local_server, profile: prof)
+      end
+    end
+
+    it "registers all prompts when no profile is given (HTTP shared server)" do
+      expect(server).to receive(:register_prompts) do |*prompts|
+        names = prompts.map(&:prompt_name)
+        expect(names).to contain_exactly("orient", "recall", "persist")
+      end
+
+      described_class.register_with!(server)
+    end
   end
 
   describe ".prompt_classes" do
@@ -63,6 +100,23 @@ RSpec.describe GraphMem::McpToolRegistry do
       expect(described_class.tool_classes_for(:readonly).size).to eq(17)
       expect(described_class.tool_classes_for(:maintenance).size).to eq(40)
       expect(described_class.tool_classes.size).to eq(40)
+    end
+  end
+
+  describe ".prompt_classes_for" do
+    before { described_class.load_all! }
+
+    it "excludes persist from the readonly profile" do
+      names = described_class.prompt_classes_for(:readonly).map(&:prompt_name)
+      expect(names).to contain_exactly("orient", "recall")
+    end
+
+    it "keeps all prompts for default and maintenance profiles" do
+      %i[default maintenance].each do |profile|
+        names = described_class.prompt_classes_for(profile).map(&:prompt_name)
+        expect(names).to contain_exactly("orient", "recall", "persist"),
+          "expected all three prompts for #{profile}"
+      end
     end
   end
 

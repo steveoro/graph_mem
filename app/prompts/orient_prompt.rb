@@ -3,6 +3,7 @@
 class OrientPrompt < ApplicationPrompt
   prompt_name "orient"
   description "Start a GraphMem session with the correct project context."
+  mcp_metadata(profiles: %i[default readonly maintenance])
 
   # Renders the session-orientation workflow.
   #

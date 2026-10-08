@@ -42,6 +42,16 @@ RSpec.describe GraphMem::McpProfile do
       expect(described_class.select_prompts([ OrientPrompt, RecallPrompt, PersistPrompt ], :maintenance))
         .to contain_exactly(OrientPrompt, RecallPrompt, PersistPrompt)
     end
+
+    it "every registered prompt explicitly declares its profiles" do
+      GraphMem::McpToolRegistry.load_all!
+      GraphMem::McpToolRegistry.prompt_classes.each do |klass|
+        expect(klass.instance_variable_defined?(:@mcp_profiles)).to be(true),
+          "#{klass.name} does not explicitly declare mcp_metadata(profiles:)"
+        expect(klass.mcp_profiles).to be_present,
+          "#{klass.name} has empty mcp_profiles"
+      end
+    end
   end
 
   describe ".select_tools" do
