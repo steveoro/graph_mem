@@ -78,4 +78,49 @@ RSpec.describe EntitiesFetchService do
       expect(historical.dig(:entities, 0, :observations).pluck(:observation_id)).to include(obsolete.id)
     end
   end
+  describe "temporal + token budget" do
+    let!(:entity_a) { MemoryEntity.create!(name: "EA", entity_type: "Project") }
+    let!(:entity_b) { MemoryEntity.create!(name: "EB", entity_type: "Project") }
+    let!(:entity_c) { MemoryEntity.create!(name: "EC", entity_type: "Project") }
+
+    before do
+      MemoryRelation.create!(from_entity: entity_a, to_entity: entity_b, relation_type: "relates_to")
+      MemoryRelation.create!(from_entity: entity_b, to_entity: entity_c, relation_type: "relates_to")
+      MemoryObservation.create!(memory_entity: entity_a, content: "fact a", valid_from: "2026-10-10")
+    end
+
+    it "echoes the resolved temporal window" do
+      result = described_class.call(entity_ids: [ entity_a.id ], temporal_window: TemporalWindow.new(occurred_after: "2026-10-01"))
+      expect(result[:temporal]).to include(:occurred_after)
+    end
+
+    it "filters relations to kept entity endpoints under max_tokens" do
+      result = described_class.call(entity_ids: [ entity_a.id, entity_b.id, entity_c.id ], relations: "internal", max_tokens: 60)
+      kept = result[:entities].map { |e| e[:entity_id] }
+      result[:relations].each do |rel|
+        expect(kept).to include(rel[:from_entity_id], rel[:to_entity_id])
+      end
+    end
+  end
+
+  describe "budget + incident relations" do
+    it "keeps incident relations to external endpoints under max_tokens" do
+      result = described_class.call(entity_ids: [ first.id ], max_tokens: 100_000)
+
+      expect(result[:relations].pluck(:relation_id)).to contain_exactly(
+        internal_relation.id,
+        outside_relation.id
+      )
+    end
+
+    it "counts dropped entities and relations in items_before" do
+      result = described_class.call(
+        entity_ids: [ first.id, second.id ], relations: "internal", max_tokens: 200
+      )
+
+      budget = result[:token_budget]
+      expect(budget[:items_before]).to be >= budget[:items_after]
+      expect(budget[:items_before]).to be >= 3
+    end
+  end
 end

@@ -35,6 +35,46 @@ RSpec.describe SubgraphSearchService do
       expect(result[:entities].first).not_to have_key(:observations)
     end
 
+    it "filters observations to an explicit temporal window" do
+      entity = MemoryEntity.create!(name: "Temporal scope", entity_type: "Project")
+      inside = MemoryObservation.create!(
+        memory_entity: entity, content: "in range", created_at: Time.zone.parse("2026-08-10")
+      )
+      MemoryObservation.create!(
+        memory_entity: entity, content: "out of range", created_at: Time.zone.parse("2026-03-01")
+      )
+
+      result = described_class.call(
+        query: "Temporal",
+        temporal_window: TemporalWindow.from_params(
+          occurred_after: "2026-08-01", occurred_before: "2026-08-31"
+        )
+      )
+
+      payload = result[:entities].find { |item| item[:entity_id] == entity.id }
+      expect(payload[:observations].pluck(:observation_id)).to eq([ inside.id ])
+      expect(result[:retrieval][:temporal]).to include(:occurred_after, :occurred_before)
+    end
+
+    it "derives the temporal window from the query text" do
+      result = described_class.call(query: "deploys in 2026-08")
+
+      expect(result[:retrieval][:temporal]).to include(
+        occurred_after: Time.zone.parse("2026-08-01").iso8601,
+        occurred_before: Time.zone.parse("2026-08-31").end_of_day.iso8601
+      )
+    end
+
+    it "packs entities under max_tokens and reports diagnostics" do
+      MemoryEntity.create!(name: "Packed alpha", entity_type: "Project")
+      MemoryEntity.create!(name: "Packed beta", entity_type: "Project")
+
+      result = described_class.call(query: "Packed", max_tokens: 1)
+
+      expect(result[:entities]).to eq([])
+      expect(result[:retrieval][:token_budget]).to include(truncated: true)
+    end
+
     it "preserves field and paging validations" do
       expect {
         described_class.call(query: "")
@@ -51,6 +91,41 @@ RSpec.describe SubgraphSearchService do
       expect {
         described_class.call(query: "x", page: 0)
       }.to raise_error(FastMcp::Tool::InvalidArgumentsError, /Page number/)
+    end
+  end
+
+  describe "purely temporal queries" do
+    let!(:busy) { MemoryEntity.create!(name: "Busy", entity_type: "Project") }
+    let!(:quiet) { MemoryEntity.create!(name: "Quiet", entity_type: "Project") }
+
+    before do
+      3.times do |i|
+        MemoryObservation.create!(
+          memory_entity: busy, content: "fact #{i}",
+          created_at: Time.zone.parse("2026-08-10")
+        )
+      end
+      MemoryObservation.create!(
+        memory_entity: quiet, content: "fact",
+        created_at: Time.zone.parse("2026-08-10")
+      )
+    end
+
+    it "orders by in-window observation count without relevance re-ranking" do
+      expect(SearchRelevanceBooster).not_to receive(:rank_entity_ids)
+
+      result = described_class.call(query: "in 2026-08")
+
+      ids = result[:entities].map { |e| e[:entity_id] }
+      expect(ids.first).to eq(busy.id)
+      expect(ids).to include(quiet.id)
+    end
+
+    it "does not cap the temporal candidate list" do
+      expect_any_instance_of(TemporalSearchStrategy)
+        .to receive(:search).with(anything, limit: nil, entity_ids: nil).and_call_original
+
+      described_class.call(query: "in 2026-08")
     end
   end
 end

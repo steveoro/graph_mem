@@ -102,10 +102,22 @@ module Api
             semantic: params[:semantic] != "false",
             context_entity_ids: context_scope&.entity_ids,
             scope_entity_ids: context_scope&.entity_ids,
-            context_scope: context_scope
+            context_scope: context_scope,
+            temporal_window: temporal_window_from_params
           )
           results = payload[:results].map(&:to_h)
-          if params[:include_retrieval].to_s == "true"
+          TokenBudget.validate_max_tokens!(params[:max_tokens]) if params.key?(:max_tokens)
+          if params[:max_tokens].present?
+            fit = TokenBudget.fit(results, max_tokens: params[:max_tokens].to_i)
+            results = fit.items
+            payload[:retrieval][:result_count] = results.size
+            payload[:retrieval][:token_budget] = TokenBudget.diagnostics(
+              max_tokens: params[:max_tokens].to_i,
+              estimated_tokens: fit.estimated_tokens,
+              truncated: fit.truncated
+            )
+          end
+          if params[:include_retrieval].to_s == "true" || payload[:retrieval][:temporal].present? || payload[:retrieval][:token_budget].present?
             render json: { results: results, retrieval: payload[:retrieval] }
           else
             render json: results
@@ -113,6 +125,8 @@ module Api
         else
           render json: []
         end
+      rescue ArgumentError => e
+        render_error(e.message)
       end
 
       # PATCH/PUT /api/v1/memory_entities/:id
@@ -160,6 +174,14 @@ module Api
       end
 
       private
+
+      def temporal_window_from_params
+        TemporalWindow.from_params(
+          occurred_after: params[:occurred_after],
+          occurred_before: params[:occurred_before],
+          as_of: params[:as_of]
+        )
+      end
 
       def set_entity
         @memory_entity = ::MemoryEntity.includes(:active_memory_observations, :relations_from, :relations_to).find(params[:id])

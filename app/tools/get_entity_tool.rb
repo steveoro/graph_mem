@@ -31,9 +31,15 @@ class GetEntityTool < ApplicationTool
     optional(:include_ranked).filled(:bool).description("Sort observations by trust score descending. Defaults to false.")
     optional(:query).filled(:string).description("Optional query for relevance-ranked observations.")
     optional(:observation_limit).filled(:integer).description("Maximum observations to return per entity.")
+    optional(:occurred_after).maybe(:string).description("ISO 8601 lower bound for observation occurred time.")
+    optional(:occurred_before).maybe(:string).description("ISO 8601 upper bound for observation occurred time.")
+    optional(:as_of).maybe(:string).description("ISO 8601 instant observations must cover (exclusive with after/before).")
+    optional(:max_tokens).filled(:integer).description("Estimated token budget (chars/4) for packing the response.")
   end
 
-  def call(entity_id:, include_obsolete: false, include_ranked: false, query: nil, observation_limit: nil)
+  def call(entity_id:, include_obsolete: false, include_ranked: false, query: nil, observation_limit: nil,
+           occurred_after: nil, occurred_before: nil, as_of: nil, max_tokens: nil)
+    TokenBudget.validate_max_tokens!(max_tokens, error_class: FastMcp::Tool::InvalidArgumentsError)
     logger.info "Performing GetEntityTool with entity_id: #{entity_id}"
     begin
       result = EntitiesFetchService.call(
@@ -42,12 +48,20 @@ class GetEntityTool < ApplicationTool
         include_obsolete: include_obsolete,
         include_ranked: include_ranked,
         query: query,
-        observation_limit: observation_limit
+        observation_limit: observation_limit,
+        temporal_window: temporal_window_for(occurred_after, occurred_before, as_of),
+        max_tokens: max_tokens
       )
       entity = result[:entities].first
       relations = result[:relations]
+      if entity.nil?
+        # Only reachable when max_tokens could not fit even the first entity
+        # (a truly missing ID raises RecordNotFound inside the service).
+        raise FastMcp::Tool::InvalidArgumentsError,
+              "Entity payload exceeds the max_tokens budget; raise max_tokens or omit it."
+      end
 
-      {
+      response = {
         entity_id: entity[:entity_id],
         name: entity[:name],
         entity_type: entity[:entity_type],
@@ -75,6 +89,9 @@ class GetEntityTool < ApplicationTool
           )
         end
       }
+      response[:token_budget] = result[:token_budget] if result[:token_budget]
+      response[:temporal] = result[:temporal] if result[:temporal]
+      response
     rescue ActiveRecord::RecordNotFound => e
       error_message = "Entity with ID=#{entity_id} not found."
       logger.error "ResourceNotFound in GetEntityTool: #{error_message} (was: #{e.message})"
@@ -88,5 +105,17 @@ class GetEntityTool < ApplicationTool
       logger.error "GetEntityTool unexpected error: #{e.class}: #{e.message}"
       raise McpGraphMemErrors::InternalServerError, "An unexpected error occurred."
     end
+  end
+
+  private
+
+  def temporal_window_for(occurred_after, occurred_before, as_of)
+    TemporalWindow.from_params(
+      occurred_after: occurred_after,
+      occurred_before: occurred_before,
+      as_of: as_of
+    )
+  rescue ArgumentError => e
+    raise FastMcp::Tool::InvalidArgumentsError, e.message
   end
 end

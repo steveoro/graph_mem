@@ -16,7 +16,9 @@ class GetSubgraphByIdsTool < ApplicationTool
 
   description "Load a known id set as a closed subgraph: those entities, their observations, and only relations whose " \
     "both ends are in the set. Pass required `entity_ids` (array of integers); optional `query` (string), " \
-    "`observation_limit` (integer). Do not use to discover entities by text; use `search` instead. " \
+    "`observation_limit` (integer), `occurred_after`/`occurred_before`/`as_of` (ISO 8601) to restrict observations " \
+    "to a temporal window, and `max_tokens` to pack the response under an estimated token budget. " \
+    "Do not use to discover entities by text; use `search` instead. " \
     "Do not use for one id's complete incident relations; use `get_entities` instead. " \
     "Do not use to expand unknown neighbors; use `traverse_graph` instead."
 
@@ -25,22 +27,12 @@ class GetSubgraphByIdsTool < ApplicationTool
     required(:entity_ids).array(:integer).description("An array of entity IDs to include in the subgraph.")
     optional(:query).filled(:string).description("Optional query for relevance-ranked observations.")
     optional(:observation_limit).filled(:integer).description("Maximum observations per entity.")
+    optional(:occurred_after).maybe(:string).description("ISO 8601 lower bound for observation occurred time.")
+    optional(:occurred_before).maybe(:string).description("ISO 8601 upper bound for observation occurred time.")
+    optional(:as_of).maybe(:string).description("ISO 8601 instant observations must cover (exclusive with after/before).")
+    optional(:max_tokens).filled(:integer).description("Estimated token budget (chars/4) for packing the response.")
   end
 
-  def tool_input_schema
-    {
-      type: :object,
-      properties: {
-        entity_ids: {
-          type: :array,
-          items: { type: :integer },
-          minItems: 1,
-          description: "An array of entity IDs to retrieve."
-        }
-      },
-      required: [ :entity_ids ]
-    }.freeze
-  end
 
   def tool_output_schema
     {
@@ -105,23 +97,30 @@ class GetSubgraphByIdsTool < ApplicationTool
     }.freeze
   end
 
-  def call(entity_ids:, query: nil, observation_limit: nil)
+  def call(entity_ids:, query: nil, observation_limit: nil,
+           occurred_after: nil, occurred_before: nil, as_of: nil, max_tokens: nil)
+    TokenBudget.validate_max_tokens!(max_tokens, error_class: FastMcp::Tool::InvalidArgumentsError)
     result = EntitiesFetchService.call(
       entity_ids: entity_ids,
       relations: "internal",
       query: query,
       observation_limit: observation_limit,
       strict_single: false,
-      always_rank_observations: true
+      always_rank_observations: true,
+      temporal_window: temporal_window_for(occurred_after, occurred_before, as_of),
+      max_tokens: max_tokens
     )
 
-    {
+    response = {
       entities: result[:entities].map do |entity|
         entity.slice(:entity_id, :name, :entity_type, :observations, :created_at, :updated_at)
       end,
       relations: result[:relations],
       missing_entity_ids: result[:missing_entity_ids]
     }
+    response[:token_budget] = result[:token_budget] if result[:token_budget]
+    response[:temporal] = result[:temporal] if result[:temporal]
+    response
   rescue *ToolError::TIMEOUT_CLASSES
     raise
   rescue McpGraphMemErrors::Error, FastMcp::Tool::InvalidArgumentsError
@@ -135,5 +134,17 @@ class GetSubgraphByIdsTool < ApplicationTool
   rescue StandardError => e
     logger.error "InternalServerError in GetSubgraphByIDsTool: #{e.class}: #{e.message}"
     raise McpGraphMemErrors::InternalServerError, "An unexpected error occurred."
+  end
+
+  private
+
+  def temporal_window_for(occurred_after, occurred_before, as_of)
+    TemporalWindow.from_params(
+      occurred_after: occurred_after,
+      occurred_before: occurred_before,
+      as_of: as_of
+    )
+  rescue ArgumentError => e
+    raise FastMcp::Tool::InvalidArgumentsError, e.message
   end
 end

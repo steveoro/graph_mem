@@ -21,7 +21,10 @@ class SearchSubgraphTool < ApplicationTool
   description "Search names, types, aliases, and observations and return a paginated subgraph of matches " \
     "(observations plus relations exclusively among them). Pass required `query` (string); optional " \
     "`search_in_name`, `search_in_type`, `search_in_aliases`, `search_in_observations` (bool, default true), " \
-    "`page` (integer, default 1), `per_page` (integer, default 20, max 100). Not a BFS from a start node. " \
+    "`page` (integer, default 1), `per_page` (integer, default 20, max 100), `occurred_after`/`occurred_before`/" \
+    "`as_of` (ISO 8601) to restrict returned observations to a temporal window (temporal phrases in the query " \
+    "itself are also understood), and `max_tokens` (integer) to pack the response under an estimated token " \
+    "budget. Not a BFS from a start node. " \
     "Do not use for ranked summaries without observations or relations; use `search` instead. " \
     "Do not use with known ids; use `get_entities` instead. " \
     "Do not use for multi-hop expansion; use `traverse_graph` instead. " \
@@ -39,51 +42,12 @@ class SearchSubgraphTool < ApplicationTool
                    .description("The page number to retrieve. Defaults to #{DEFAULT_PAGE}. Must be 1 or greater.")
     optional(:per_page).filled(:integer)
                        .description("The maximum number of entities to return per page. Defaults to #{DEFAULT_PER_PAGE}, Max: #{MAX_PER_PAGE}. Must be between 1 and #{MAX_PER_PAGE}.")
+    optional(:occurred_after).maybe(:string).description("ISO 8601 lower bound for observation occurred time.")
+    optional(:occurred_before).maybe(:string).description("ISO 8601 upper bound for observation occurred time.")
+    optional(:as_of).maybe(:string).description("ISO 8601 instant the observations must cover (exclusive with after/before).")
+    optional(:max_tokens).filled(:integer).description("Estimated token budget (chars/4) for packing the response.")
   end
 
-  def tool_input_schema
-    {
-      type: :object,
-      properties: {
-        query: {
-          type: :string,
-          description: "The search term."
-        },
-        search_in_name: {
-          type: :boolean,
-          default: true,
-          description: "Whether to search in entity names."
-        },
-        search_in_type: {
-          type: :boolean,
-          default: true,
-          description: "Whether to search in entity types."
-        },
-        search_in_observations: {
-          type: :boolean,
-          default: true,
-          description: "Whether to search in entity observations."
-        },
-        search_in_aliases: {
-          type: :boolean,
-          default: true,
-          description: "Whether to search in entity aliases."
-        },
-        page: {
-          type: [ :integer, :null ],
-          description: "Optional. The page number to retrieve. Defaults to #{DEFAULT_PAGE}.",
-          minimum: 1 # Informational, enforced in call
-        },
-        per_page: {
-          type: [ :integer, :null ],
-          description: "Optional. Maximum number of entities to return per page. Defaults to #{DEFAULT_PER_PAGE}, max #{MAX_PER_PAGE}.",
-          minimum: 1, # Informational
-          maximum: MAX_PER_PAGE # Informational
-        }
-      },
-      required: [ :query ]
-    }.freeze
-  end
 
   def tool_output_schema
     {
@@ -159,7 +123,10 @@ class SearchSubgraphTool < ApplicationTool
     }.freeze
   end
 
-  def call(query:, search_in_name: true, search_in_type: true, search_in_observations: true, search_in_aliases: true, page: nil, per_page: nil)
+  def call(query:, search_in_name: true, search_in_type: true, search_in_observations: true,
+           search_in_aliases: true, page: nil, per_page: nil,
+           occurred_after: nil, occurred_before: nil, as_of: nil, max_tokens: nil)
+    TokenBudget.validate_max_tokens!(max_tokens, error_class: FastMcp::Tool::InvalidArgumentsError)
     SubgraphSearchService.call(
       query: query,
       search_in_name: search_in_name,
@@ -169,7 +136,9 @@ class SearchSubgraphTool < ApplicationTool
       page: page,
       per_page: per_page,
       context_scope: graph_mem_context.scoped_entity_scope,
-      logger: logger
+      logger: logger,
+      temporal_window: temporal_window_for(occurred_after, occurred_before, as_of),
+      max_tokens: max_tokens
     )
   rescue *ToolError::TIMEOUT_CLASSES
     raise
@@ -178,5 +147,17 @@ class SearchSubgraphTool < ApplicationTool
   rescue StandardError => e
     logger.error "InternalServerError in SearchSubgraphTool: #{e.class}: #{e.message}"
     raise McpGraphMemErrors::InternalServerError, "An unexpected error occurred."
+  end
+
+  private
+
+  def temporal_window_for(occurred_after, occurred_before, as_of)
+    TemporalWindow.from_params(
+      occurred_after: occurred_after,
+      occurred_before: occurred_before,
+      as_of: as_of
+    )
+  rescue ArgumentError => e
+    raise FastMcp::Tool::InvalidArgumentsError, e.message
   end
 end

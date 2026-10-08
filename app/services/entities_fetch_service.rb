@@ -9,7 +9,7 @@ class EntitiesFetchService
 
   def initialize(entity_ids:, relations: nil, include_obsolete: false, include_ranked: false,
                  query: nil, observation_limit: nil, strict_single: true,
-                 always_rank_observations: false)
+                 always_rank_observations: false, temporal_window: nil, max_tokens: nil)
     @entity_ids = Array(entity_ids).map(&:to_i).uniq
     @relations_mode = relations.presence || default_relations_mode
     @include_obsolete = include_obsolete
@@ -18,6 +18,10 @@ class EntitiesFetchService
     @observation_limit = observation_limit
     @strict_single = strict_single
     @always_rank_observations = always_rank_observations
+    @extraction = TemporalQueryParser.apply(query, temporal_window: temporal_window)
+    @temporal_window = @extraction.window
+    @effective_query = @extraction.effective_query
+    @max_tokens = max_tokens
   end
 
   def call
@@ -32,12 +36,18 @@ class EntitiesFetchService
       raise ActiveRecord::RecordNotFound, "Entity with ID=#{@entity_ids.first} not found."
     end
 
-    {
-      entities: @entity_ids.filter_map { |id| entities_by_id[id] }.map { |entity| entity_payload(entity) },
-      relations: relation_payloads,
+    entities = @entity_ids.filter_map { |id| entities_by_id[id] }.map { |entity| entity_payload(entity) }
+    relations = relation_payloads
+
+    result = {
+      entities: entities,
+      relations: relations,
       missing_entity_ids: missing_ids,
       relation_scope: @relations_mode
     }
+    result[:temporal] = @extraction.diagnostic if @temporal_window
+    apply_token_budget!(result)
+    result
   end
 
   private
@@ -58,6 +68,7 @@ class EntitiesFetchService
 
   def entity_payload(entity)
     pool = @include_obsolete ? entity.memory_observations : entity.active_memory_observations
+    pool = pool.select { |observation| @temporal_window.covers?(observation) } if @temporal_window
     observations = ranked_observations(pool)
 
     {
@@ -73,8 +84,8 @@ class EntitiesFetchService
   end
 
   def ranked_observations(observations)
-    if @query.present?
-      ObservationRankingService.rank(observations, query: @query, limit: @observation_limit)
+    if @effective_query.present?
+      ObservationRankingService.rank(observations, query: @effective_query, limit: @observation_limit)
     elsif @include_ranked || @always_rank_observations || @observation_limit.present?
       ObservationRankingService.rank(observations, mode: "trust", limit: @observation_limit)
     else
@@ -92,5 +103,38 @@ class EntitiesFetchService
       end
 
     scope.distinct.order(:id).map { |relation| GraphTraversalSerializer.relation_json(relation) }
+  end
+
+  # Packs entities (then relations for whatever budget remains) under the
+  # optional token budget and records the result for the caller.
+  def apply_token_budget!(result)
+    return if @max_tokens.blank?
+
+    budget = @max_tokens.to_i
+    fetched_ids = result[:entities].map { |entity| entity[:entity_id] }.to_set
+    relations_before = result[:relations].size
+    entities_fit = TokenBudget.fit(result[:entities], max_tokens: budget)
+    result[:entities] = entities_fit.items
+
+    used = entities_fit.estimated_tokens
+    truncated = entities_fit.truncated
+
+    # Drop relations that touch a budget-dropped entity, but keep incident
+    # edges whose far endpoint was never part of the fetched set — those
+    # relations still resolve to real entities and never dangle.
+    dropped_ids = fetched_ids - entities_fit.items.map { |entity| entity[:entity_id] }
+    scoped_relations = result[:relations].reject do |relation|
+      dropped_ids.include?(relation[:from_entity_id]) || dropped_ids.include?(relation[:to_entity_id])
+    end
+    relations_fit = TokenBudget.fit(scoped_relations, max_tokens: [ budget - used, 0 ].max)
+    result[:relations] = relations_fit.items
+    used += relations_fit.estimated_tokens
+    truncated ||= relations_fit.truncated
+
+    result[:token_budget] = TokenBudget.diagnostics(
+      max_tokens: budget, estimated_tokens: used, truncated: truncated,
+      items_before: entities_fit.items_before + relations_before,
+      items_after: result[:entities].size + result[:relations].size
+    )
   end
 end

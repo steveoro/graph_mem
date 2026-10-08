@@ -1,4 +1,4 @@
-class ChangeActionMCPSessionCapabilitiesToJsonText < ActiveRecord::Migration[8.0]
+class ChangeActionMcpSessionCapabilitiesToJsonText < ActiveRecord::Migration[8.0]
   def change
     if table_exists?(:action_mcp_sessions)
       if column_exists?(:action_mcp_sessions, :server_capabilities)

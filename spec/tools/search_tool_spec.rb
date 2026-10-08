@@ -72,7 +72,7 @@ RSpec.describe SearchTool, type: :model do
       expect { tool.call(query: "") }.to raise_error(FastMcp::Tool::InvalidArgumentsError, /blank/)
       expect {
         tool.call(include: [ "relations" ])
-      }.to raise_error(FastMcp::Tool::InvalidArgumentsError, /requires a query/)
+      }.to raise_error(FastMcp::Tool::InvalidArgumentsError, /require a query/)
       expect {
         tool.call(query: "x", include: [ "unknown" ])
       }.to raise_error(FastMcp::Tool::InvalidArgumentsError, /include values/)
@@ -81,6 +81,80 @@ RSpec.describe SearchTool, type: :model do
     it "validates canonical paging" do
       expect { tool.call(page: 0) }.to raise_error(FastMcp::Tool::InvalidArgumentsError, /Page number/)
       expect { tool.call(per_page: 101) }.to raise_error(FastMcp::Tool::InvalidArgumentsError, /Per page/)
+    end
+
+    it "passes explicit temporal bounds through as a TemporalWindow" do
+      allow(EntityRetrievalService).to receive(:search).and_return(results: [], retrieval: {})
+
+      tool.call(query: "deploys", occurred_after: "2026-08-01", occurred_before: "2026-08-31")
+
+      expect(EntityRetrievalService).to have_received(:search).with(
+        "deploys",
+        hash_including(temporal_window: an_instance_of(TemporalWindow))
+      )
+    end
+
+    it "rejects temporal bounds and max_tokens without a query" do
+      expect {
+        tool.call(occurred_after: "2026-08-01")
+      }.to raise_error(FastMcp::Tool::InvalidArgumentsError, /require a query/)
+      expect {
+        tool.call(max_tokens: 100)
+      }.to raise_error(FastMcp::Tool::InvalidArgumentsError, /require a query/)
+    end
+
+    it "rejects as_of combined with occurred bounds" do
+      expect {
+        tool.call(query: "deploys", as_of: "2026-08-15", occurred_after: "2026-08-01")
+      }.to raise_error(FastMcp::Tool::InvalidArgumentsError, /cannot be combined/)
+    end
+
+    it "packs summary results under max_tokens with diagnostics" do
+      big = { entity_id: 1, name: "x" * 400 }
+      small = { entity_id: 2, name: "y" }
+      result_objects = [ small, big ].map do |payload|
+        instance_double(HybridSearchStrategy::SearchResult, to_h: payload)
+      end
+      allow(EntityRetrievalService).to receive(:search).and_return(
+        results: result_objects,
+        retrieval: { result_count: 2 }
+      )
+
+      budget = TokenBudget.estimate(small)
+      result = tool.call(query: "result", max_tokens: budget)
+
+      expect(result[:results]).to eq([ small ])
+      expect(result[:retrieval][:token_budget]).to include(truncated: true)
+    end
+  end
+  describe "temporal phrase stripping + validation" do
+    let!(:entity) { MemoryEntity.create!(name: "Alpha Service", entity_type: "Service") }
+
+    before do
+      MemoryObservation.create!(memory_entity: entity, content: "alpha details", valid_from: "2026-08-15")
+    end
+
+    it "strips the matched temporal phrase before text matching" do
+      result = described_class.new.call(query: "alpha in august 2026")
+      expect(result[:results].map { |r| r[:name] }).to include("Alpha Service")
+      expect(result[:retrieval][:temporal][:matched_phrase]).to include("august 2026")
+    end
+
+    it "does not crash on \"as of\" phrases" do
+      result = described_class.new.call(query: "state as of 2026-10-01")
+      expect(result).to include(:mode)
+    end
+
+    it "lists temporally-matching entities for purely temporal queries" do
+      result = described_class.new.call(query: "in august 2026")
+      expect(result[:results].map { |r| r[:name] }).to include("Alpha Service")
+    end
+
+    it "rejects non-positive or out-of-range max_tokens" do
+      [ 0, -5, 100_001 ].each do |bad|
+        expect { described_class.new.call(query: "alpha", max_tokens: bad) }
+          .to raise_error(FastMcp::Tool::InvalidArgumentsError)
+      end
     end
   end
 end

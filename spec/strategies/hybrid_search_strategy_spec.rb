@@ -258,4 +258,29 @@ RSpec.describe HybridSearchStrategy do
       expect(h).to have_key(:updated_at)
     end
   end
+  describe "temporal channel" do
+    let(:window) { TemporalWindow.new(occurred_after: "2026-10-01", occurred_before: "2026-10-31") }
+    let!(:matched) { MemoryEntity.create!(name: "Alpha Service", entity_type: "Project") }
+    let!(:unrelated) { MemoryEntity.create!(name: "Beta Unrelated", entity_type: "Project") }
+
+    before do
+      MemoryObservation.create!(memory_entity: matched, content: "alpha facts", valid_from: "2026-10-10")
+      MemoryObservation.create!(memory_entity: unrelated, content: "in-window only", valid_from: "2026-10-10")
+      allow(VectorSearchStrategy).to receive(:new).and_return(
+        instance_double(VectorSearchStrategy, search: [], search_observations: [])
+      )
+    end
+
+    it "does not inject entities that matched no other channel" do
+      results = described_class.new.search("alpha", temporal_window: window)
+      expect(results.map { |r| r.entity.name }).to include("Alpha Service")
+      expect(results.map { |r| r.entity.name }).not_to include("Beta Unrelated")
+      expect(results.find { |r| r.entity.name == "Alpha Service" }.matched_fields).to include("temporal")
+    end
+
+    it "seeds results from the temporal channel for purely temporal queries" do
+      results = described_class.new.search("", temporal_window: window, temporal_only: true)
+      expect(results.map { |r| r.entity.name }).to include("Beta Unrelated")
+    end
+  end
 end

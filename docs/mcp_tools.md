@@ -141,7 +141,10 @@ results, summary }`. Any failed operation rolls back the full batch.
   - `include_ranked` (boolean, optional, default: false): Sort observations by trust score descending.
   - `query` (string, optional): Rank observations by query relevance before trust.
   - `observation_limit` (integer, optional): Return at most this many observations per entity.
-- **Response:** `{ entities, relations, missing_entity_ids, relation_scope }`.
+  - `occurred_after` / `occurred_before` (string, optional): ISO 8601 bounds restricting returned observations to a temporal window (see [Temporal recall](#temporal-recall)).
+  - `as_of` (string, optional): ISO 8601 instant observations must cover; cannot be combined with `occurred_after`/`occurred_before`.
+  - `max_tokens` (integer, optional): Pack entities then relations under an estimated token budget (~4 chars/token); adds `token_budget` diagnostics to the response.
+- **Response:** `{ entities, relations, missing_entity_ids, relation_scope, token_budget? }`.
 
 #### `update_entity`
 - **Description:** Update metadata of an existing entity (not observations). Pass required `entity_id` (integer); optional `name` (unique string), `entity_type` (canonicalized string), `aliases` (replaces existing; empty string clears), `description` (empty string clears). Do not use to add or edit facts; use `create_observation` or `update_observation` instead. Do not use to create a node; use `create_entity` instead. Do not use to read; use `get_entities` instead. Do not use to delete; use `delete_entity` instead. Do not use to combine two entities; use `merge_entities` instead.
@@ -232,10 +235,14 @@ results, summary }`. Any failed operation rolls back the full batch.
   - `per_page` (integer, optional, default: 20, max: 100): Results per page.
   - `limit` (integer, optional): Legacy alias for `per_page`; ignored when `per_page` is present.
   - `search_in_name`, `search_in_type`, `search_in_aliases`, `search_in_observations` (boolean, optional): Subgraph search fields.
+  - `occurred_after` / `occurred_before` (string, optional): ISO 8601 bounds enabling the temporal recall channel (see [Temporal recall](#temporal-recall)).
+  - `as_of` (string, optional): ISO 8601 point-in-time window; cannot be combined with `occurred_after`/`occurred_before`.
+  - `max_tokens` (integer, optional): Pack ranked results under an estimated token budget (~4 chars/token); adds `retrieval.token_budget` diagnostics.
 - **Responses:**
   - Summary: `{ mode: "summary", results, pagination, retrieval }`
   - Subgraph: `{ mode: "subgraph", entities, pagination, retrieval, relations? }`; observations are included on entities only when requested.
   - Catalog: `{ mode: "catalog", entities, pagination }`
+- **Temporal diagnostics:** when a temporal window applies (explicit params or parsed from `query`), `retrieval.temporal` reports the resolved `occurred_after`/`occurred_before`/`as_of`; `retrieval.token_budget` reports `{ max_tokens, estimated_tokens, truncated }` when `max_tokens` is passed.
 
 #### `get_entities`
 
@@ -250,7 +257,10 @@ See [Entity Management](#entity-management-4-tools).
 `clear_context`, and `get_version`
 remain callable with their prior schemas and response shapes. They are
 deprecated and omitted from `tools/list`; new clients should not discover or
-select them.
+select them. The read-path aliases (`search_subgraph`, `get_entity`,
+`get_entities`, `get_subgraph_by_ids`) additionally accept the same
+`occurred_after`/`occurred_before`/`as_of` temporal bounds and `max_tokens`
+budget as `search`.
 
 #### `summarize`
 - **Description:** Summarize what the knowledge graph knows about a topic with deterministic source-backed evidence (optional LLM synthesis). Pass required `query` (string); optional `entity_id` (integer), `max_results` (integer, default 10), `max_observations` (integer, default 20), `observations_per_entity` (integer; 0 disables cap), `max_depth` (integer, default 0), `include_sources` (bool, default true), `scope` (string: context or global), `style` (string: concise or detailed). Do not use for match listings; use `search` instead. Do not use to inspect one known entity; use `get_entities` instead. Do not use for a structural neighborhood; use `traverse_graph` instead. Do not use for numeric health metrics; use `get_graph_stats` instead.
@@ -263,8 +273,84 @@ select them.
   - `include_sources` (boolean, optional, default: true): Include source entity and observation IDs.
   - `scope` (string, optional, default: `context` when a project context is active, otherwise `global`): `context` hard-filters retrieval to the active project's recursive `part_of` subtree; `global` searches the full graph.
   - `style` (string, optional, default: `concise`): `concise` or `detailed`.
+  - `occurred_after` / `occurred_before` (string, optional): ISO 8601 bounds restricting evidence to a temporal window (see [Temporal recall](#temporal-recall)).
+  - `as_of` (string, optional): ISO 8601 instant evidence must cover; cannot be combined with `occurred_after`/`occurred_before`.
+  - `max_tokens` (integer, optional): Cap the serialized evidence payload under an estimated token budget (~4 chars/token); adds `retrieval.token_budget` diagnostics.
 - **Response fields:** `query`, `summary`, `generation_mode`, `generated_by`, `fallback_reason`, `scope`, `entity_count`, `observation_count`, `observations`, `sources`, `retrieval`
-- **Retrieval diagnostics:** `scope_truncated` and `scope_max_entities` signal that an active-project subtree is partial rather than complete.
+- **Retrieval diagnostics:** `scope_truncated` and `scope_max_entities` signal that an active-project subtree is partial rather than complete; `temporal` echoes the resolved window; `token_budget` reports packing when `max_tokens` is passed.
+
+## Temporal recall
+
+Read tools accept an optional temporal window that operates on *occurred time*,
+using the existing observation columns — no new fields required:
+
+- **Dated observations** (with `valid_from` and/or `valid_until`) match when
+  their validity span intersects the window; open bounds count as infinite.
+- **Undated observations** fall back to their retention time (`created_at`) —
+  when the fact was learned. This mirrors the occurred-vs-mentioned split used
+  by memory systems like Hindsight: `valid_*` = occurred, `created_at` =
+  mentioned.
+- `as_of` is a point window: dated observations must contain the instant;
+  undated ones must have been retained by it. Note `as_of` only sees
+  **currently active** observations — it is not a historical snapshot of the
+  graph (obsoleted/superseded observations stay excluded).
+- All temporal bounds are strict ISO 8601: `YYYY`, `YYYY-MM`, `YYYY-MM-DD`, or
+  `YYYY-MM-DDTHH:MM[:SS][Z|±HH:MM]` — anything else is a validation error
+  (`"invalid temporal bound (expected ISO 8601)"`). Bare year/month fragments
+  widen to their covered period (`occurred_before: "2026-02"` means the end of
+  February; `as_of: "2026"` means the end of 2026).
+- A date-only bound (`"2026-01-31"`) is read as the start of that day for
+  `occurred_after` and the end of that day for `occurred_before`/`as_of`, so a
+  month boundary pair covers the whole month like the equivalent phrase.
+  Date-only bounds are interpreted in the server's time zone (UTC) — pass a
+  full ISO datetime with an offset for zone-exact bounds.
+
+Two ways to apply a window:
+
+1. **Explicit params** — `occurred_after`, `occurred_before`, `as_of` (ISO 8601)
+   on `search`, `search_subgraph`, `get_entity`, `get_entities`,
+   `get_subgraph_by_ids`, `summarize`, and the REST
+   `GET /api/v1/memory_entities/search` and `POST /api/v1/summarize` endpoints.
+2. **Query phrases** — `TemporalQueryParser` understands temporal expressions
+   inside `query` itself: `"in October 2026"`, `"during 2024"`, `"2026-08"`,
+   `"Q3 2026"`, `"last week"`, `"past 6 months"`, `"last spring"`,
+   `"since 2025"`, `"since yesterday"`, `"between 2024 and 2025"`,
+   `"as of 2026-06-01"`, etc. A bare year alone (e.g. just `"2024"`) is
+   ignored — too likely an entity name. Month names come from a closed list,
+   cue words need word boundaries, and seasons require a qualifier or a year —
+   `"market"`, `"login 2024"`, `"2048-bit"` and `"spring boot config"` do not
+   parse. Seasons map to northern-hemisphere quarters
+   (spring = Mar–May, summer = Jun–Aug, autumn/fall = Sep–Nov, winter = Dec–Feb).
+   Explicit params win over parsed phrases.
+
+When a window applies it does two things: adds a **temporal channel** to hybrid
+search and **filters the observation payloads** in subgraph/fetch responses.
+The channel re-weights entities that already matched the text/vector channels —
+a window never injects unrelated entities next to a text hit; a query that is
+*nothing but* a temporal phrase (`"what changed in October 2026"`) searches by
+time alone, with the temporal channel as the base result set. The matched
+phrase is stripped from the text used for lexical/vector matching, so
+`"alpha in August 2026"` searches for "alpha" plus the window. The resolved
+window (and any matched phrase) is echoed back as `retrieval.temporal`.
+Entities whose observations all fall outside the window still appear in
+subgraph/fetch responses — with an empty `observations` list when nothing
+matches the window.
+
+### Token budget
+
+All the same read tools accept `max_tokens` (integer 1–100_000): ranked payload
+items are packed in order until the next item would exceed the estimate
+(~4 chars/token over the serialized items, deterministic — no tokenizer
+dependency). Whole items only: an item that cannot fit is dropped, never cut
+mid-item. The budget covers the packed items themselves — the surrounding
+response envelope (pagination, retrieval diagnostics) is not counted. On
+`search` summary mode the budget trims the full ranked result list before
+pagination, so trimmed items are never reachable on later pages;
+`retrieval.token_budget` reports `{ max_tokens, estimated_tokens, truncated,
+items_before, items_after }` so callers can see the cut. Relations are only
+returned when both endpoint entities survived the budget — no dangling
+references. On `summarize` the budget is applied to the evidence *before* the
+summary text, sources and LLM prompt are built.
 
 ## Graph Traversal (2 tools)
 
