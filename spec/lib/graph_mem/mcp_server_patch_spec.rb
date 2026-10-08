@@ -197,7 +197,7 @@ RSpec.describe GraphMem::McpServerPatch do
     count_before = FastMcp::Server.ancestors.count { |m| m.name == "GraphMem::McpServerPatch" }
     expect(count_before).to eq(1)
 
-    load Rails.root.join("lib/graph_mem/mcp_server_patch.rb")
+    silence_warnings { load Rails.root.join("lib/graph_mem/mcp_server_patch.rb") }
 
     count_after = FastMcp::Server.ancestors.count { |m| m.name == "GraphMem::McpServerPatch" }
     expect(count_after).to eq(1)
