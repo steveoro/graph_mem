@@ -1,0 +1,274 @@
+{
+  "version": "1.0",
+  "exported_at": "2026-10-08T21:53:58Z",
+  "root_nodes": [
+    {
+      "name": "sample_app",
+      "entity_type": "Project",
+      "observations": [
+        {
+          "content": "Imported from graph.json, graphify 0.9.80, schema 1, commit abc1234",
+          "source": "graphify",
+          "confidence": 1.0,
+          "tags": [
+            "graphify",
+            "provenance"
+          ]
+        }
+      ],
+      "children": [
+        {
+          "name": "app/models/application_record.rb",
+          "entity_type": "File",
+          "relation_type": "part_of",
+          "observations": [
+            {
+              "content": "Defined at app/models/application_record.rbL1",
+              "source": "graphify",
+              "confidence": 1.0,
+              "tags": [
+                "graphify",
+                "provenance"
+              ]
+            }
+          ],
+          "children": [
+            {
+              "name": "ApplicationRecord",
+              "entity_type": "Class",
+              "relation_type": "part_of",
+              "observations": [
+                {
+                  "content": "Defined at app/models/application_record.rbL2",
+                  "source": "graphify",
+                  "confidence": 1.0,
+                  "tags": [
+                    "graphify",
+                    "provenance"
+                  ]
+                }
+              ],
+              "children": []
+            }
+          ]
+        },
+        {
+          "name": "app/models/concerns/auditable.rb",
+          "entity_type": "File",
+          "relation_type": "part_of",
+          "observations": [
+            {
+              "content": "Defined at app/models/concerns/auditable.rbL1",
+              "source": "graphify",
+              "confidence": 1.0,
+              "tags": [
+                "graphify",
+                "provenance"
+              ]
+            }
+          ],
+          "children": [
+            {
+              "name": "Auditable",
+              "entity_type": "Class",
+              "relation_type": "part_of",
+              "observations": [
+                {
+                  "content": "Defined at app/models/concerns/auditable.rbL2",
+                  "source": "graphify",
+                  "confidence": 1.0,
+                  "tags": [
+                    "graphify",
+                    "provenance"
+                  ]
+                }
+              ],
+              "children": []
+            }
+          ]
+        },
+        {
+          "name": "app/models/swimmer.rb",
+          "entity_type": "File",
+          "relation_type": "part_of",
+          "observations": [
+            {
+              "content": "Defined at app/models/swimmer.rbL1",
+              "source": "graphify",
+              "confidence": 1.0,
+              "tags": [
+                "graphify",
+                "provenance"
+              ]
+            }
+          ],
+          "children": [
+            {
+              "name": "DEFAULT_SCOPE",
+              "entity_type": "Constant",
+              "relation_type": "part_of",
+              "observations": [
+                {
+                  "content": "Defined at app/models/swimmer.rbL4",
+                  "source": "graphify",
+                  "confidence": 1.0,
+                  "tags": [
+                    "graphify",
+                    "provenance"
+                  ]
+                }
+              ],
+              "children": []
+            },
+            {
+              "name": "Swimmer",
+              "entity_type": "Class",
+              "relation_type": "part_of",
+              "observations": [
+                {
+                  "content": "Defined at app/models/swimmer.rbL3",
+                  "source": "graphify",
+                  "confidence": 1.0,
+                  "tags": [
+                    "graphify",
+                    "provenance"
+                  ]
+                }
+              ],
+              "children": [
+                {
+                  "name": "Swimmer#find",
+                  "entity_type": "Method",
+                  "relation_type": "part_of",
+                  "observations": [
+                    {
+                      "content": "Defined at app/models/swimmer.rbL9",
+                      "source": "graphify",
+                      "confidence": 1.0,
+                      "tags": [
+                        "graphify",
+                        "provenance"
+                      ]
+                    }
+                  ],
+                  "children": []
+                },
+                {
+                  "name": "Swimmer#name",
+                  "entity_type": "Method",
+                  "relation_type": "part_of",
+                  "observations": [
+                    {
+                      "content": "Defined at app/models/swimmer.rbL5",
+                      "source": "graphify",
+                      "confidence": 1.0,
+                      "tags": [
+                        "graphify",
+                        "provenance"
+                      ]
+                    }
+                  ],
+                  "children": []
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "StandardError",
+          "entity_type": "Class",
+          "relation_type": "part_of",
+          "observations": [],
+          "children": []
+        }
+      ]
+    }
+  ],
+  "relations": [
+    {
+      "from_name": "Swimmer",
+      "from_type": "Class",
+      "to_name": "ApplicationRecord",
+      "to_type": "Class",
+      "relation_type": "inherits",
+      "weight": 1.0,
+      "confidence": 1.0,
+      "properties": {
+        "source": "graphify",
+        "provenance": "EXTRACTED",
+        "source_file": "app/models/swimmer.rb",
+        "source_location": "L3",
+        "context": "superclass",
+        "graphify_relation": "inherits"
+      }
+    },
+    {
+      "from_name": "Swimmer",
+      "from_type": "Class",
+      "to_name": "Auditable",
+      "to_type": "Class",
+      "relation_type": "mixes_in",
+      "weight": 1.0,
+      "confidence": 1.0,
+      "properties": {
+        "source": "graphify",
+        "provenance": "EXTRACTED",
+        "source_file": "app/models/swimmer.rb",
+        "source_location": "L6",
+        "context": "mixin",
+        "graphify_relation": "mixes_in"
+      }
+    },
+    {
+      "from_name": "Swimmer#name",
+      "from_type": "Method",
+      "to_name": "Swimmer#find",
+      "to_type": "Method",
+      "relation_type": "calls",
+      "weight": 1.0,
+      "confidence": 1.0,
+      "properties": {
+        "source": "graphify",
+        "provenance": "EXTRACTED",
+        "source_file": "app/models/swimmer.rb",
+        "source_location": "L7",
+        "context": "call",
+        "graphify_relation": "calls"
+      }
+    },
+    {
+      "from_name": "Swimmer#find",
+      "from_type": "Method",
+      "to_name": "Swimmer#name",
+      "to_type": "Method",
+      "relation_type": "calls",
+      "weight": 1.0,
+      "confidence": 0.6,
+      "properties": {
+        "source": "graphify",
+        "provenance": "INFERRED",
+        "source_file": "app/models/swimmer.rb",
+        "source_location": "L11",
+        "context": "call",
+        "graphify_relation": "calls"
+      }
+    },
+    {
+      "from_name": "app/models/swimmer.rb",
+      "from_type": "File",
+      "to_name": "app/models/concerns/auditable.rb",
+      "to_type": "File",
+      "relation_type": "depends_on",
+      "weight": 1.0,
+      "confidence": 1.0,
+      "properties": {
+        "source": "graphify",
+        "provenance": "EXTRACTED",
+        "source_file": "app/models/swimmer.rb",
+        "source_location": "L2",
+        "context": "import",
+        "graphify_relation": "imports_from"
+      }
+    }
+  ]
+}

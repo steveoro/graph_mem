@@ -65,16 +65,26 @@ def seed_ambiguous_relations(ambiguous, project)
     from = ImportEntityResolver.find_by_name_and_type(relation["from_name"], relation["from_type"])
     to = ImportEntityResolver.find_by_name_and_type(relation["to_name"], relation["to_type"])
     next unless from && to
+    next if from.id == to.id
+    next if MemoryRelation.exists?(from_entity_id: from.id, to_entity_id: to.id,
+                                   relation_type: relation["relation_type"])
 
+    props = relation["properties"] || {}
     {
       id: SecureRandom.uuid,
       kind: "relationship_proposal",
       from_entity_id: from.id,
+      from_name: from.name,
+      from_entity_type: from.entity_type,
       to_entity_id: to.id,
+      to_name: to.name,
+      to_entity_type: to.entity_type,
       relation_type: relation["relation_type"],
-      confidence: relation["confidence"],
-      source: "graphify",
-      evidence: relation["properties"]
+      confidence_band: "low",
+      score: (relation["confidence"].to_f * 10).round,
+      supporting_observation_ids: [],
+      explanation: "Graphify AMBIGUOUS edge in #{props['source_file']}#{props['source_location']}",
+      evidence_terms: [ props["context"] ].compact
     }
   end
   return if items.empty?
