@@ -43,7 +43,9 @@ Tools are designed to be used in four phases per session:
 4. **Persist** -- `graph_write` / `graph_edit` / `graph_delete`
 
 The same workflow is available through MCP prompts: `orient`, `recall` (with a
-required `topic`), and `persist`.
+required `topic`), and `persist`. `persist` is not served on the readonly
+profile (`/mcp/readonly`, or stdio with `GRAPH_MEM_MCP_PROFILE=readonly`); it
+is omitted from `prompts/list` and `prompts/get` answers "Prompt not found".
 
 ## Successful Tool Metadata
 

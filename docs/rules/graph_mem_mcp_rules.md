@@ -23,7 +23,7 @@ client context:
 
 - `orient` at session start
 - `recall(topic)` before work
-- `persist` before ending
+- `persist` before ending (not available on the readonly profile)
 
 Successful tool responses also provide concise `next_move` guidance and a
 no-context banner when orientation is required.

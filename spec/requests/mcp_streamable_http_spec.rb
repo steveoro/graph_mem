@@ -526,6 +526,44 @@ RSpec.describe "MCP Streamable HTTP endpoint", type: :request do
     end
   end
 
+  describe "workflow prompts per profile" do
+    it "omits persist from the readonly profile and refuses to render it there" do
+      session_id = initialize_session("/mcp/readonly")
+      post_rpc("/mcp/readonly", session_id, "prompts/list")
+      expect(response.parsed_body.dig("result", "prompts").pluck("name")).to contain_exactly("orient", "recall")
+
+      post_rpc("/mcp/readonly", session_id, "prompts/get", params: { name: "persist", arguments: {} }, id: 11)
+      expect(response.parsed_body["error"]).to include("code" => -32_602, "message" => "Prompt not found: persist")
+    end
+
+    it "keeps every prompt on the maintenance profile and renders persist" do
+      session_id = initialize_session("/mcp/maintenance")
+      post_rpc("/mcp/maintenance", session_id, "prompts/list")
+      expect(response.parsed_body.dig("result", "prompts").pluck("name")).to contain_exactly("orient", "recall", "persist")
+
+      post_rpc("/mcp/maintenance", session_id, "prompts/get", params: { name: "persist", arguments: {} }, id: 14)
+      expect(response.parsed_body.dig("result", "messages", 0, "content", "text")).to include("graph_write")
+    end
+
+    it "serves persist on the default profile and renders it" do
+      session_id = initialize_session("/mcp")
+      post_rpc("/mcp", session_id, "prompts/list")
+      expect(response.parsed_body.dig("result", "prompts").pluck("name")).to contain_exactly("orient", "recall", "persist")
+
+      post_rpc("/mcp", session_id, "prompts/get", params: { name: "persist", arguments: {} }, id: 15)
+      expect(response.parsed_body.dig("result", "messages", 0, "content", "text")).to include("graph_write")
+    end
+
+    it "selects prompts from each request path even when a session id is reused" do
+      session_id = initialize_session("/mcp")
+      post_rpc("/mcp/readonly", session_id, "prompts/list", id: 12)
+      expect(response.parsed_body.dig("result", "prompts").pluck("name")).not_to include("persist")
+
+      post_rpc("/mcp", session_id, "prompts/list", id: 13)
+      expect(response.parsed_body.dig("result", "prompts").pluck("name")).to include("persist")
+    end
+  end
+
   describe "success workflow metadata" do
     it "adds version, next_move, context banner, and MCP _meta" do
       session_id = initialize_session("/mcp")

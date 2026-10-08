@@ -35,6 +35,47 @@ RSpec.describe GraphMem::McpProfile do
     end
   end
 
+  describe ".select_prompts" do
+    it "filters prompts by their declared profiles" do
+      expect(described_class.select_prompts([ OrientPrompt, RecallPrompt, PersistPrompt ], :readonly))
+        .to contain_exactly(OrientPrompt, RecallPrompt)
+      expect(described_class.select_prompts([ OrientPrompt, RecallPrompt, PersistPrompt ], :maintenance))
+        .to contain_exactly(OrientPrompt, RecallPrompt, PersistPrompt)
+    end
+  end
+
+  describe "prompt profile contract" do
+    before { GraphMem::McpToolRegistry.load_all! }
+
+    let(:classes) { GraphMem::McpToolRegistry.prompt_classes }
+
+    it "has at least one registered prompt" do
+      expect(classes).not_to be_empty
+    end
+
+    # Convention: every concrete prompt must call mcp_metadata(profiles:)
+    # explicitly. Inheritance from ApplicationPrompt is a safety net for
+    # ad-hoc subclasses, not a substitute for a declaration.
+    it "every concrete prompt explicitly declares its profiles" do
+      classes.each do |klass|
+        expect(klass.instance_variable_defined?(:@mcp_profiles)).to be(true),
+          "#{klass.name} does not explicitly declare mcp_metadata(profiles:)"
+        expect(klass.mcp_profiles).to be_present,
+          "#{klass.name} has empty mcp_profiles"
+      end
+    end
+
+    it "readonly shows orient and recall; default and maintenance show all three" do
+      expect(described_class.select_prompts(classes, :readonly).map(&:prompt_name))
+        .to contain_exactly("orient", "recall")
+      %i[default maintenance].each do |profile|
+        expect(described_class.select_prompts(classes, profile).map(&:prompt_name))
+          .to contain_exactly("orient", "recall", "persist"),
+          "expected all three prompts for #{profile}"
+      end
+    end
+  end
+
   describe ".select_tools" do
     it "uses class metadata instead of tool-name lists" do
       default_tool = Class.new do

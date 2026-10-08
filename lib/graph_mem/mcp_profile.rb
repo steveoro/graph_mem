@@ -42,6 +42,11 @@ module GraphMem
         tools.select { |tool_class| normalized_profile.in?(tool_class.mcp_profiles) }
       end
 
+      def select_prompts(prompts, profile)
+        normalized_profile = normalize(profile)
+        prompts.select { |prompt_class| normalized_profile.in?(prompt_class.mcp_profiles) }
+      end
+
       def normalize(profile)
         normalized = profile.to_s.strip.downcase.to_sym
         return normalized if normalized.in?(NAMES)
