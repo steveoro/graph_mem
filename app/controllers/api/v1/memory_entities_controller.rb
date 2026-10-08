@@ -106,6 +106,7 @@ module Api
             temporal_window: temporal_window_from_params
           )
           results = payload[:results].map(&:to_h)
+          TokenBudget.validate_max_tokens!(params[:max_tokens]) if params.key?(:max_tokens)
           if params[:max_tokens].present?
             fit = TokenBudget.fit(results, max_tokens: params[:max_tokens].to_i)
             results = fit.items

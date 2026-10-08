@@ -289,10 +289,19 @@ using the existing observation columns — no new fields required:
   by memory systems like Hindsight: `valid_*` = occurred, `created_at` =
   mentioned.
 - `as_of` is a point window: dated observations must contain the instant;
-  undated ones must have been retained by it.
+  undated ones must have been retained by it. Note `as_of` only sees
+  **currently active** observations — it is not a historical snapshot of the
+  graph (obsoleted/superseded observations stay excluded).
+- All temporal bounds are strict ISO 8601: `YYYY`, `YYYY-MM`, `YYYY-MM-DD`, or
+  `YYYY-MM-DDTHH:MM[:SS][Z|±HH:MM]` — anything else is a validation error
+  (`"invalid temporal bound (expected ISO 8601)"`). Bare year/month fragments
+  widen to their covered period (`occurred_before: "2026-02"` means the end of
+  February; `as_of: "2026"` means the end of 2026).
 - A date-only bound (`"2026-01-31"`) is read as the start of that day for
   `occurred_after` and the end of that day for `occurred_before`/`as_of`, so a
   month boundary pair covers the whole month like the equivalent phrase.
+  Date-only bounds are interpreted in the server's time zone (UTC) — pass a
+  full ISO datetime with an offset for zone-exact bounds.
 
 Two ways to apply a window:
 
@@ -303,24 +312,43 @@ Two ways to apply a window:
 2. **Query phrases** — `TemporalQueryParser` understands temporal expressions
    inside `query` itself: `"in October 2026"`, `"during 2024"`, `"2026-08"`,
    `"Q3 2026"`, `"last week"`, `"past 6 months"`, `"last spring"`,
-   `"since 2025"`, `"between 2024 and 2025"`, `"as of 2026-06-01"`, etc.
-   A bare year alone (e.g. just `"2024"`) is ignored — too likely an entity
-   name. Explicit params win over parsed phrases.
+   `"since 2025"`, `"since yesterday"`, `"between 2024 and 2025"`,
+   `"as of 2026-06-01"`, etc. A bare year alone (e.g. just `"2024"`) is
+   ignored — too likely an entity name. Month names come from a closed list,
+   cue words need word boundaries, and seasons require a qualifier or a year —
+   `"market"`, `"login 2024"`, `"2048-bit"` and `"spring boot config"` do not
+   parse. Seasons map to northern-hemisphere quarters
+   (spring = Mar–May, summer = Jun–Aug, autumn/fall = Sep–Nov, winter = Dec–Feb).
+   Explicit params win over parsed phrases.
 
 When a window applies it does two things: adds a **temporal channel** to hybrid
-search (entities ranked by how many in-window observations they carry, fused
-via the existing RRF combiner) and **filters the observation payloads** in
-subgraph/fetch responses. The resolved window is echoed back as
-`retrieval.temporal`.
+search and **filters the observation payloads** in subgraph/fetch responses.
+The channel re-weights entities that already matched the text/vector channels —
+a window never injects unrelated entities next to a text hit; a query that is
+*nothing but* a temporal phrase (`"what changed in October 2026"`) searches by
+time alone, with the temporal channel as the base result set. The matched
+phrase is stripped from the text used for lexical/vector matching, so
+`"alpha in August 2026"` searches for "alpha" plus the window. The resolved
+window (and any matched phrase) is echoed back as `retrieval.temporal`.
+Entities whose observations all fall outside the window still appear in
+subgraph/fetch responses — with an empty `observations` list when nothing
+matches the window.
 
 ### Token budget
 
-All the same read tools accept `max_tokens` (integer): ranked payload items are
-packed in order until the next item would exceed the estimate (~4 chars/token,
-deterministic — no tokenizer dependency). Whole items only: an item that cannot
-fit is dropped, never cut mid-item. Diagnostics land in
-`retrieval.token_budget` / `token_budget` as
-`{ max_tokens, estimated_tokens, truncated }`.
+All the same read tools accept `max_tokens` (integer 1–100_000): ranked payload
+items are packed in order until the next item would exceed the estimate
+(~4 chars/token over the serialized items, deterministic — no tokenizer
+dependency). Whole items only: an item that cannot fit is dropped, never cut
+mid-item. The budget covers the packed items themselves — the surrounding
+response envelope (pagination, retrieval diagnostics) is not counted. On
+`search` summary mode the budget trims the full ranked result list before
+pagination, so trimmed items are never reachable on later pages;
+`retrieval.token_budget` reports `{ max_tokens, estimated_tokens, truncated,
+items_before, items_after }` so callers can see the cut. Relations are only
+returned when both endpoint entities survived the budget — no dangling
+references. On `summarize` the budget is applied to the evidence *before* the
+summary text, sources and LLM prompt are built.
 
 ## Graph Traversal (2 tools)
 

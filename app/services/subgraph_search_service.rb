@@ -4,6 +4,7 @@ class SubgraphSearchService
   DEFAULT_PAGE = 1
   DEFAULT_PER_PAGE = 20
   MAX_PER_PAGE = 100
+  MAX_TEMPORAL_CANDIDATES = 500
 
   def self.call(**args)
     new(**args).call
@@ -26,19 +27,20 @@ class SubgraphSearchService
     }
     @include_observations = include_observations
     @include_relations = include_relations
-    @temporal_window = temporal_window || TemporalQueryParser.extract(query)&.window
+    @extraction = TemporalQueryParser.apply(query, temporal_window: temporal_window)
+    @temporal_window = @extraction.window
+    @effective_query = @extraction.effective_query
     @max_tokens = max_tokens
   end
 
   def call
     validate!
 
-    matching_ids = text_matching_ids
-    matching_ids = merge_vector_ids(matching_ids)
     context_ids = @context_scope&.entity_ids
+    matching_ids = candidate_ids(context_ids)
     matching_ids = SearchRelevanceBooster.rank_entity_ids(
       matching_ids,
-      query: @query,
+      query: @effective_query,
       context_entity_ids: context_ids
     )
     page_ids = matching_ids.slice((@page - 1) * @per_page, @per_page) || []
@@ -72,10 +74,29 @@ class SubgraphSearchService
           "Per page count must be between 1 and #{MAX_PER_PAGE}."
   end
 
+  # Purely temporal queries (phrase stripped to nothing) list entities by
+  # in-window observation count; otherwise text+vector matches are boosted by
+  # the window — temporally-matching ids come first, no unrelated injections.
+  def candidate_ids(context_ids)
+    if @extraction.temporal_only?
+      return TemporalSearchStrategy.new.search(
+        @temporal_window, limit: MAX_TEMPORAL_CANDIDATES, entity_ids: context_ids
+      )
+    end
+
+    matching_ids = merge_vector_ids(text_matching_ids)
+    return matching_ids unless @temporal_window
+
+    temporal_ids = TemporalSearchStrategy.new.search(
+      @temporal_window, limit: MAX_TEMPORAL_CANDIDATES, entity_ids: context_ids
+    ).to_set
+    matching_ids.partition { |id| temporal_ids.include?(id) }.flatten
+  end
+
   def text_matching_ids
     base_query = MemoryEntity.distinct
     conditions = []
-    params = { like_query_term: "%#{@query.downcase}%" }
+    params = { like_query_term: "%#{@effective_query.downcase}%" }
 
     conditions << "LOWER(memory_entities.name) LIKE :like_query_term" if @search_fields[:name]
     conditions << "LOWER(memory_entities.entity_type) LIKE :like_query_term" if @search_fields[:type]
@@ -90,7 +111,7 @@ class SubgraphSearchService
   end
 
   def merge_vector_ids(matching_ids)
-    vector_results = VectorSearchStrategy.new.search(@query, limit: @per_page * 2)
+    vector_results = VectorSearchStrategy.new.search(@effective_query, limit: @per_page * 2)
     (matching_ids + vector_results.map { |result| result.entity.id }).uniq
   rescue *ToolError::TIMEOUT_CLASSES
     raise
@@ -130,6 +151,8 @@ class SubgraphSearchService
 
   # Packs entities (then relations for whatever budget remains) under the
   # optional token budget and records the result in retrieval diagnostics.
+  # Relations are scoped to the kept entity endpoints first — a relation whose
+  # entities were dropped by the budget is never returned dangling.
   def apply_token_budget!(response)
     return if @max_tokens.blank?
 
@@ -139,16 +162,23 @@ class SubgraphSearchService
 
     used = entities_fit.estimated_tokens
     truncated = entities_fit.truncated
+    dropped = entities_fit.dropped_count
 
     if response[:relations].is_a?(Array)
-      relations_fit = TokenBudget.fit(response[:relations], max_tokens: [ budget - used, 0 ].max)
+      kept_ids = entities_fit.items.map { |entity| entity[:entity_id] }.to_set
+      scoped_relations = response[:relations].select do |relation|
+        kept_ids.include?(relation[:from_entity_id]) && kept_ids.include?(relation[:to_entity_id])
+      end
+      relations_fit = TokenBudget.fit(scoped_relations, max_tokens: [ budget - used, 0 ].max)
       response[:relations] = relations_fit.items
       used += relations_fit.estimated_tokens
       truncated ||= relations_fit.truncated
+      dropped += relations_fit.dropped_count
     end
 
     response[:retrieval][:token_budget] = TokenBudget.diagnostics(
-      max_tokens: budget, estimated_tokens: used, truncated: truncated
+      max_tokens: budget, estimated_tokens: used, truncated: truncated,
+      items_before: entities_fit.items_before, items_after: entities_fit.items_after
     )
   end
 
@@ -173,6 +203,6 @@ class SubgraphSearchService
       scope_entity_count: context_ids&.size,
       scope_truncated: @context_scope&.truncated == true,
       scope_max_entities: @context_scope&.max_entities
-    }.merge(@temporal_window.present? ? { temporal: @temporal_window.to_h } : {})
+    }.merge(@temporal_window.present? ? { temporal: @extraction.diagnostic } : {})
   end
 end

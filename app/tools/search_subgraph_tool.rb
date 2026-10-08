@@ -48,69 +48,6 @@ class SearchSubgraphTool < ApplicationTool
     optional(:max_tokens).filled(:integer).description("Estimated token budget (chars/4) for packing the response.")
   end
 
-  def tool_input_schema
-    {
-      type: :object,
-      properties: {
-        query: {
-          type: :string,
-          description: "The search term."
-        },
-        search_in_name: {
-          type: :boolean,
-          default: true,
-          description: "Whether to search in entity names."
-        },
-        search_in_type: {
-          type: :boolean,
-          default: true,
-          description: "Whether to search in entity types."
-        },
-        search_in_observations: {
-          type: :boolean,
-          default: true,
-          description: "Whether to search in entity observations."
-        },
-        search_in_aliases: {
-          type: :boolean,
-          default: true,
-          description: "Whether to search in entity aliases."
-        },
-        page: {
-          type: [ :integer, :null ],
-          description: "Optional. The page number to retrieve. Defaults to #{DEFAULT_PAGE}.",
-          minimum: 1 # Informational, enforced in call
-        },
-        per_page: {
-          type: [ :integer, :null ],
-          description: "Optional. Maximum number of entities to return per page. Defaults to #{DEFAULT_PER_PAGE}, max #{MAX_PER_PAGE}.",
-          minimum: 1, # Informational
-          maximum: MAX_PER_PAGE # Informational
-        },
-        occurred_after: {
-          type: [ :string, :null ],
-          format: "date-time",
-          description: "Optional. ISO 8601 lower bound for observation occurred time."
-        },
-        occurred_before: {
-          type: [ :string, :null ],
-          format: "date-time",
-          description: "Optional. ISO 8601 upper bound for observation occurred time."
-        },
-        as_of: {
-          type: [ :string, :null ],
-          format: "date-time",
-          description: "Optional. ISO 8601 instant the observations must cover (exclusive with after/before)."
-        },
-        max_tokens: {
-          type: [ :integer, :null ],
-          description: "Optional. Estimated token budget (chars/4) for packing the response.",
-          minimum: 1 # Informational
-        }
-      },
-      required: [ :query ]
-    }.freeze
-  end
 
   def tool_output_schema
     {
@@ -189,6 +126,7 @@ class SearchSubgraphTool < ApplicationTool
   def call(query:, search_in_name: true, search_in_type: true, search_in_observations: true,
            search_in_aliases: true, page: nil, per_page: nil,
            occurred_after: nil, occurred_before: nil, as_of: nil, max_tokens: nil)
+    TokenBudget.validate_max_tokens!(max_tokens, error_class: FastMcp::Tool::InvalidArgumentsError)
     SubgraphSearchService.call(
       query: query,
       search_in_name: search_in_name,

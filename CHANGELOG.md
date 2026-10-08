@@ -5,7 +5,7 @@ All notable changes to GraphMem will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.45.0] - 2026-10-08
+## [1.46.0] - 2026-10-08
 - Added temporal recall to read tools: `occurred_after`/`occurred_before`/`as_of` ISO 8601 params on `search`, `search_subgraph`, `get_entity`, `get_entities`, `get_subgraph_by_ids`, `summarize`, and the REST entity-search and summarize endpoints.
 - Added `TemporalQueryParser`: temporal phrases inside `query` itself ("in October 2026", "during 2024", "Q3 2026", "last week", "past 6 months", "last spring", "since 2025", "as of …") derive a window automatically; explicit params win.
 - Added `TemporalWindow` semantics: dated observations match when `[valid_from, valid_until]` intersects the window (open bounds infinite); undated observations fall back to retention time (`created_at`); `as_of` is a point-in-time snapshot.

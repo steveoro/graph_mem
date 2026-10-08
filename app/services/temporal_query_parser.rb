@@ -8,20 +8,61 @@
 #   "Q3 2026"
 #   "last/this/next week|month|year", "today", "yesterday", "tomorrow"
 #   "last 3 days|weeks|months|years", "past 6 months"
-#   "spring", "last summer", "autumn 2025", "next winter" (season names)
-#   "since <expr>", "after <expr>", "before <expr>", "until <expr>", "as of <expr>"
-#   "from <expr> to <expr>", "between <expr> and <expr>"
+#   "last spring", "winter 2025", "next summer" (seasons need a qualifier or year)
+#   "since <atom>", "after <atom>", "before <atom>", "until <atom>", "as of <atom>"
+#   "from <atom> to <atom>", "between <atom> and <atom>"
+#   (<atom> = unit above, or a relative atom like "yesterday"/"last week")
 #
 # A bare year ("2024") is ignored without a temporal cue — too likely to be a
 # name. Month+year, quarters, ISO dates and relative phrases are accepted both
-# with and without a cue.
+# with and without a cue. Months come from a closed list ("market", "maybe" and
+# "novel" are not months), cue words and seasons require word boundaries
+# ("login 2024", "spring boot config", "in 2048-bit keys" do not parse).
 class TemporalQueryParser
   Result = Struct.new(:window, :matched, keyword_init: true)
 
-  YEAR = /(?:19|20)\d{2}/
-  MONTH_NAME = /(?:jan|feb|mar|apr|may|june?|july?|aug|sep|sept|oct|nov|dec)[a-z]*/
-  ISO_DATE = /\d{4}-\d{2}(?:-\d{2})?/
-  QUARTER = /q[1-4]/
+  # Resolution of a query + optional explicit window params into the effective
+  # pieces callers need: the window (explicit wins), the phrase that was matched
+  # (for diagnostics) and the query text to use for text/vector matching with
+  # the temporal phrase stripped out.
+  Extraction = Struct.new(:window, :matched, :effective_query, keyword_init: true) do
+    # A query that is nothing but the temporal phrase searches by time alone:
+    # the temporal channel becomes the base result set.
+    def temporal_only?
+      window.present? && effective_query.blank?
+    end
+
+    # retrieval.temporal diagnostics: resolved window + the matched phrase, so
+    # callers can see which text was consumed as the temporal expression.
+    def diagnostic
+      window.to_h.merge(matched_phrase: matched).compact
+    end
+  end
+
+  class << self
+    # @param query [String]
+    # @param temporal_window [TemporalWindow, nil] explicit params win over a
+    #   parsed phrase; the phrase is still stripped from the effective query
+    # @return [Extraction]
+    def apply(query, temporal_window: nil)
+      result = extract(query)
+      window = temporal_window || result&.window
+      effective = result ? query.to_s.sub(result.matched, "").squish : query.to_s
+
+      Extraction.new(window: window, matched: result&.matched, effective_query: effective)
+    end
+  end
+
+  # Year with explicit boundaries: not inside a longer digit run, not part of a
+  # hyphenated word ("2048-bit"), not a resolution ("1920x1080").
+  YEAR = /(?<!\d)(?:19|20)\d{2}(?!\d|-[a-z]|x\d)/.freeze
+  # Closed month list: full names + common abbreviations only.
+  MONTH_NAME = %r{(?:
+    january|february|march|april|may|june|july|august|september|october|november|december|
+    jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec
+  )}x.freeze
+  ISO_DATE = /(?<!\d)\d{4}-\d{2}(?:-\d{2})?(?!\d)/.freeze
+  QUARTER = /\bq[1-4]/.freeze
   UNIT_PATTERN = Regexp.union(
     /#{MONTH_NAME}\s+#{YEAR}/,
     /#{ISO_DATE}/,
@@ -29,11 +70,19 @@ class TemporalQueryParser
     /#{YEAR}/
   ).freeze
 
-  RELATIVE_UNIT = /weeks?|months?|years?|days?/
-  SEASON_NAME = /spring|summer|autumn|fall|winter/
+  RELATIVE_UNIT = /weeks?|months?|years?|days?/.freeze
+  RELATIVE_ATOM = /(?:last|this|next)\s+(?:week|month|year)|yesterday|today|tomorrow/.freeze
+  # Connector atoms: a unit ("october 2026") or a relative atom ("yesterday",
+  # "last week") — so "since yesterday" and "before last week" parse.
+  ATOM_PATTERN = Regexp.union(UNIT_PATTERN, RELATIVE_ATOM).freeze
+  SEASON_NAME = /spring|summer|autumn|fall|winter/.freeze
+
+  # Cap for "last|past N units" — roughly a century per unit, so
+  # "last 99999999 years" cannot produce absurd bounds.
+  MAX_RELATIVE_COUNTS = { "day" => 36_500, "week" => 5_200, "month" => 1_200, "year" => 100 }.freeze
 
   # Astronomical seasons keyed to the year they begin in (winter spans into the
-  # next calendar year). Dates are the common UTC approximations.
+  # next calendar year). Northern-hemisphere dates, common UTC approximations.
   SEASON_SPANS = {
     "spring" => [ [ 3, 20 ], [ 6, 20 ] ],
     "summer" => [ [ 6, 21 ], [ 9, 22 ] ],
@@ -63,7 +112,7 @@ class TemporalQueryParser
 
     private
 
-    def build(after:, before:, matched:, as_of: nil)
+    def build(after: nil, before: nil, matched:, as_of: nil)
       Result.new(
         window: TemporalWindow.new(occurred_after: after, occurred_before: before, as_of: as_of),
         matched: matched
@@ -75,33 +124,33 @@ class TemporalQueryParser
     # --- connector forms -------------------------------------------------
 
     def extract_as_of(text)
-      m = text.match(/\bas\s+of\s+(#{UNIT_PATTERN})/)
+      m = text.match(/\bas\s+of\s+(#{ATOM_PATTERN})\b/)
       return nil unless m
 
-      span = parse_unit(m[1])
+      span = parse_atom(m[1])
       span && build(as_of: span.last, matched: m[0])
     end
 
     def extract_range(text)
-      m = text.match(/(?:between\s+(#{UNIT_PATTERN})\s+and|from\s+(#{UNIT_PATTERN})\s+(?:to|until|through|-))\s+(#{UNIT_PATTERN})/)
+      m = text.match(/\b(?:between\s+(#{ATOM_PATTERN})\s+and|from\s+(#{ATOM_PATTERN})\s+(?:to|until|through|-))\s+(#{ATOM_PATTERN})\b/)
       return nil unless m
 
       first = m[1] || m[2]
       second = m[3]
-      a = parse_unit(first)
-      b = parse_unit(second)
+      a = parse_atom(first)
+      b = parse_atom(second)
       return nil unless a && b
 
       build(after: a.first, before: b.last, matched: m[0])
     end
 
     def extract_bounded(text)
-      if (m = text.match(/(?:since|after)\s+(#{UNIT_PATTERN})/))
-        span = parse_unit(m[1])
+      if (m = text.match(/\b(?:since|after)\s+(#{ATOM_PATTERN})\b/))
+        span = parse_atom(m[1])
         return build(after: m[0].start_with?("after") ? span.last : span.first, before: nil, matched: m[0]) if span
       end
-      if (m = text.match(/(?:before|until|prior\s+to)\s+(#{UNIT_PATTERN})/))
-        span = parse_unit(m[1])
+      if (m = text.match(/\b(?:before|until|prior\s+to)\s+(#{ATOM_PATTERN})\b/))
+        span = parse_atom(m[1])
         return build(after: nil, before: span.first, matched: m[0]) if span
       end
       nil
@@ -112,7 +161,9 @@ class TemporalQueryParser
         return build_relative(m[1], m[2], 1, m[0])
       end
       if (m = text.match(/\b(?:last|past)\s+(\d+)\s+(#{RELATIVE_UNIT})\b/))
-        return build_relative("last", m[2].sub(/s\z/, ""), m[1].to_i, m[0])
+        unit = m[2].sub(/s\z/, "")
+        count = [ m[1].to_i, MAX_RELATIVE_COUNTS.fetch(unit) ].min
+        return build_relative("last", unit, count, m[0])
       end
       if (m = text.match(/\b(yesterday|today|tomorrow)\b/))
         day = { "yesterday" => 1.day.ago, "today" => Time.current, "tomorrow" => 1.day.from_now }[m[1]]
@@ -145,21 +196,25 @@ class TemporalQueryParser
       build(after: period.first, before: period.last, matched: matched)
     end
 
-    # "last spring", "in autumn", "winter 2025", "next summer".
+    # Seasons require a qualifier ("last spring", "next winter") or an explicit
+    # year ("winter 2025", "spring of 2026") — bare season words are too common
+    # in code ("spring boot config", "fall back logic").
     def extract_season(text)
-      m = text.match(/\b(?:(last|this|next)\s+)?(#{SEASON_NAME})(?:\s+(#{YEAR}))?\b/)
+      m = text.match(/\b(?:((?:last|this|next)\s+#{SEASON_NAME})\b|\b(#{SEASON_NAME})\s+(?:of\s+)?(#{YEAR}))/)
       return nil unless m
 
-      qualifier, season, year = m[1], m[2], m[3]&.to_i
+      qualifier = m[1]&.split&.first
+      season = m[2] || m[1]&.split&.last
+      year = m[3]&.to_i
       span = season_span(season, year, qualifier)
       span && build(after: span.first, before: span.last, matched: m[0])
     end
 
     # Resolve a season mention to a concrete year span. Without an explicit
     # year: "last" = the most recently finished occurrence (the current year's
-    # if it already ended, else the previous year's); "this"/bare = the
-    # occurrence containing today, or this year's upcoming one if it hasn't
-    # started; "next" = the upcoming occurrence strictly after today's season.
+    # if it already ended, else the previous year's); "this" = the occurrence
+    # containing today, or this year's upcoming one if it hasn't started;
+    # "next" = the upcoming occurrence strictly after today's season.
     def season_span(season, explicit_year, qualifier)
       (start_md, end_md), crosses_year = season_bounds(season)
       now = Time.current
@@ -181,7 +236,7 @@ class TemporalQueryParser
       when "next"
         now < current_start ? now.year : now.year + 1
       else
-        # "this" or bare: this year's occurrence (current, past, or upcoming).
+        # "this": this year's occurrence (current, past, or upcoming).
         now.year
       end
     end
@@ -197,8 +252,11 @@ class TemporalQueryParser
     # --- single unit forms -------------------------------------------------
 
     # "in 2024", "during October 2026", "on 2026-10-05" — explicit cue required.
+    # `on`/`at` demand a fuller unit (no bare year): "screen at 1920" and
+    # "on 2024" are not temporal phrases.
     def extract_cued_unit(text)
-      m = text.match(/(?:in|during|throughout|on|at)\s+(#{UNIT_PATTERN})/)
+      m = text.match(/\b(?:in|during|throughout)\s+(#{UNIT_PATTERN})\b/) ||
+          text.match(/\b(?:on|at)\s+(?:#{MONTH_NAME}\s+#{YEAR}|#{ISO_DATE}|#{QUARTER}\s*#{YEAR})\b/)
       return nil unless m
 
       span = parse_unit(m[1])
@@ -218,6 +276,23 @@ class TemporalQueryParser
     end
 
     # --- date-expression atoms --------------------------------------------
+
+    # @param fragment [String] connector atom — a unit or a relative atom
+    # @return [Range, nil] [start..end] of the period described
+    def parse_atom(fragment)
+      text = fragment.to_s.strip.downcase
+
+      if (m = text.match(/\A(last|this|next)\s+(week|month|year)\z/))
+        return relative_span(m[1], m[2], 1)
+      end
+
+      case text
+      when "yesterday" then 1.day.ago.beginning_of_day..1.day.ago.end_of_day
+      when "today"     then Time.current.beginning_of_day..Time.current.end_of_day
+      when "tomorrow"  then 1.day.from_now.beginning_of_day..1.day.from_now.end_of_day
+      else parse_unit(text)
+      end
+    end
 
     # @param fragment [String] e.g. "october 2026", "2026-10-05", "q3 2026", "2026"
     # @return [Range, nil] [start..end] of the period described
@@ -241,8 +316,22 @@ class TemporalQueryParser
       end
     end
 
+    def relative_span(qualifier, unit, count)
+      now = Time.current
+      case qualifier
+      when "last"
+        t = now.public_send("prev_#{unit}")
+        t.public_send("beginning_of_#{unit}")..t.public_send("end_of_#{unit}")
+      when "this"
+        now.public_send("beginning_of_#{unit}")..now.public_send("end_of_#{unit}")
+      when "next"
+        t = now.public_send("next_#{unit}")
+        t.public_send("beginning_of_#{unit}")..t.public_send("end_of_#{unit}")
+      end
+    end
+
     def month_number(name)
-      MONTH_NAMES.find { |n, _i| name.start_with?(n[0, 3]) && n.start_with?(name[0, 3]) }&.last
+      MONTH_NAMES.find { |n, _i| n == name || n.start_with?(name) }&.last
     end
 
     def month_span(year, month)

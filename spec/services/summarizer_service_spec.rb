@@ -266,4 +266,19 @@ RSpec.describe SummarizerService do
       expect(result[:summary]).to include("observation_id=#{active_observation.id}")
     end
   end
+  describe "token budget ordering" do
+    let!(:entity) { MemoryEntity.create!(name: "Budgeted", entity_type: "Project") }
+
+    before do
+      6.times { |i| MemoryObservation.create!(memory_entity: entity, content: "budget fact #{i} " + "x" * 400) }
+    end
+
+    it "builds the summary only from evidence that survived the budget" do
+      result = described_class.call(query: "Budgeted", max_tokens: 40)
+      expect(result[:retrieval][:token_budget][:items_after]).to be < result[:retrieval][:token_budget][:items_before]
+      result[:summary].scan(/observation_id=(\d+)/).flatten.each do |id|
+        expect(result[:observations].map { |o| o[:id] }).to include(id.to_i)
+      end
+    end
+  end
 end

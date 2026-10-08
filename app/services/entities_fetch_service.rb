@@ -18,7 +18,9 @@ class EntitiesFetchService
     @observation_limit = observation_limit
     @strict_single = strict_single
     @always_rank_observations = always_rank_observations
-    @temporal_window = temporal_window
+    @extraction = TemporalQueryParser.apply(query, temporal_window: temporal_window)
+    @temporal_window = @extraction.window
+    @effective_query = @extraction.effective_query
     @max_tokens = max_tokens
   end
 
@@ -43,6 +45,7 @@ class EntitiesFetchService
       missing_entity_ids: missing_ids,
       relation_scope: @relations_mode
     }
+    result[:temporal] = @extraction.diagnostic if @temporal_window
     apply_token_budget!(result)
     result
   end
@@ -81,8 +84,8 @@ class EntitiesFetchService
   end
 
   def ranked_observations(observations)
-    if @query.present?
-      ObservationRankingService.rank(observations, query: @query, limit: @observation_limit)
+    if @effective_query.present?
+      ObservationRankingService.rank(observations, query: @effective_query, limit: @observation_limit)
     elsif @include_ranked || @always_rank_observations || @observation_limit.present?
       ObservationRankingService.rank(observations, mode: "trust", limit: @observation_limit)
     else
@@ -114,13 +117,19 @@ class EntitiesFetchService
     used = entities_fit.estimated_tokens
     truncated = entities_fit.truncated
 
-    relations_fit = TokenBudget.fit(result[:relations], max_tokens: [ budget - used, 0 ].max)
+    kept_ids = entities_fit.items.map { |entity| entity[:entity_id] }.to_set
+    scoped_relations = result[:relations].select do |relation|
+      kept_ids.include?(relation[:from_entity_id]) && kept_ids.include?(relation[:to_entity_id])
+    end
+    relations_fit = TokenBudget.fit(scoped_relations, max_tokens: [ budget - used, 0 ].max)
     result[:relations] = relations_fit.items
     used += relations_fit.estimated_tokens
     truncated ||= relations_fit.truncated
 
     result[:token_budget] = TokenBudget.diagnostics(
-      max_tokens: budget, estimated_tokens: used, truncated: truncated
+      max_tokens: budget, estimated_tokens: used, truncated: truncated,
+      items_before: entities_fit.items_before + (result[:relations]&.size || 0),
+      items_after: result[:entities].size + (result[:relations]&.size || 0)
     )
   end
 end

@@ -127,4 +127,34 @@ RSpec.describe SearchTool, type: :model do
       expect(result[:retrieval][:token_budget]).to include(truncated: true)
     end
   end
+  describe "temporal phrase stripping + validation" do
+    let!(:entity) { MemoryEntity.create!(name: "Alpha Service", entity_type: "Service") }
+
+    before do
+      MemoryObservation.create!(memory_entity: entity, content: "alpha details", valid_from: "2026-08-15")
+    end
+
+    it "strips the matched temporal phrase before text matching" do
+      result = described_class.new.call(query: "alpha in august 2026")
+      expect(result[:results].map { |r| r[:name] }).to include("Alpha Service")
+      expect(result[:retrieval][:temporal][:matched_phrase]).to include("august 2026")
+    end
+
+    it "does not crash on \"as of\" phrases" do
+      result = described_class.new.call(query: "state as of 2026-10-01")
+      expect(result).to include(:mode)
+    end
+
+    it "lists temporally-matching entities for purely temporal queries" do
+      result = described_class.new.call(query: "in august 2026")
+      expect(result[:results].map { |r| r[:name] }).to include("Alpha Service")
+    end
+
+    it "rejects non-positive or out-of-range max_tokens" do
+      [ 0, -5, 100_001 ].each do |bad|
+        expect { described_class.new.call(query: "alpha", max_tokens: bad) }
+          .to raise_error(FastMcp::Tool::InvalidArgumentsError)
+      end
+    end
+  end
 end

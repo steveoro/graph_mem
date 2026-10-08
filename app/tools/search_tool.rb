@@ -53,6 +53,7 @@ class SearchTool < ApplicationTool
     effective_page, effective_per_page = normalized_paging(page, per_page || limit)
     projections = normalize_projections(include)
     temporal_window = build_temporal_window(occurred_after, occurred_before, as_of)
+    TokenBudget.validate_max_tokens!(max_tokens, error_class: FastMcp::Tool::InvalidArgumentsError)
 
     if query.nil?
       if projections.any? || temporal_window.present? || max_tokens.present?
@@ -133,15 +134,18 @@ class SearchTool < ApplicationTool
       context_scope: context_scope,
       temporal_window: temporal_window
     )
-    results = payload[:results].drop(offset).first(per_page).map(&:to_h)
+    all_results = payload[:results].map(&:to_h)
+    budget_fit = max_tokens.present? ? TokenBudget.fit(all_results, max_tokens: max_tokens) : nil
+    all_results = budget_fit.items if budget_fit
+
+    results = all_results.drop(offset).first(per_page)
     retrieval = payload[:retrieval].merge(result_count: results.size)
 
-    if max_tokens.present?
-      fit = TokenBudget.fit(results, max_tokens: max_tokens)
-      results = fit.items
-      retrieval[:result_count] = results.size
+    if budget_fit
       retrieval[:token_budget] = TokenBudget.diagnostics(
-        max_tokens: max_tokens, estimated_tokens: fit.estimated_tokens, truncated: fit.truncated
+        max_tokens: max_tokens, estimated_tokens: budget_fit.estimated_tokens,
+        truncated: budget_fit.truncated,
+        items_before: budget_fit.items_before, items_after: budget_fit.items_after
       )
     end
 

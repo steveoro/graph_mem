@@ -35,37 +35,48 @@ class HybridSearchStrategy
   # @param limit [Integer]
   # @param semantic [Boolean] When false, skip vector search entirely
   # @param context_entity_ids [Array<Integer>, nil] Entity IDs to boost (from GraphMemContext)
-  # @param scope_entity_ids [Array<Integer>, nil] Hard scope for observation-vector channel
-  # @param temporal_window [TemporalWindow, nil] Optional occurred-time window for the temporal channel
+  # @param scope_entity_ids [Array<Integer>, nil] Hard scope for observation-vector and temporal channels
+  # @param temporal_window [TemporalWindow, nil] Optional occurred-time window: re-weights entities that
+  #   already matched another channel — the window never injects unrelated entities on its own
+  # @param temporal_only [Boolean] When true (the query is nothing but a temporal phrase), the temporal
+  #   channel IS the base result set and text/vector channels are skipped
   # @return [Array<SearchResult>]
-  def search(query, limit: 50, semantic: true, context_entity_ids: nil, scope_entity_ids: nil, temporal_window: nil)
+  def search(query, limit: 50, semantic: true, context_entity_ids: nil, scope_entity_ids: nil, temporal_window: nil, temporal_only: false)
     @query = query.to_s.strip
-
-    text_results = @text_strategy.search(query, limit: limit * 2)
-
-    vector_results = if semantic
-      @vector_strategy.search(query, limit: limit * 2)
-    else
-      []
-    end
 
     scoped_ids = scope_entity_ids || context_entity_ids
 
-    observation_entity_ids = if semantic
-      ids = @vector_strategy.search_observations(query, limit: limit * 2)
-      scoped_ids.present? ? ids & scoped_ids : ids
+    if temporal_only && temporal_window.present?
+      text_results = []
+      vector_results = []
+      observation_entity_ids = []
     else
-      []
+      text_results = @text_strategy.search(query, limit: limit * 2)
+
+      vector_results = if semantic
+        @vector_strategy.search(query, limit: limit * 2)
+      else
+        []
+      end
+
+      observation_entity_ids = if semantic
+        ids = @vector_strategy.search_observations(query, limit: limit * 2)
+        scoped_ids.present? ? ids & scoped_ids : ids
+      else
+        []
+      end
     end
 
     temporal_entity_ids = if temporal_window.present?
-      ids = @temporal_strategy.search(temporal_window, limit: limit * 2)
-      scoped_ids.present? ? ids & scoped_ids : ids
+      @temporal_strategy.search(temporal_window, limit: limit * 2, entity_ids: scoped_ids)
     else
       []
     end
 
-    scores, entities, matched = build_score_maps(text_results, vector_results, observation_entity_ids, temporal_entity_ids)
+    scores, entities, matched = build_score_maps(
+      text_results, vector_results, observation_entity_ids, temporal_entity_ids,
+      temporal_only: temporal_only && temporal_window.present?
+    )
     apply_relevance_boosts(scores, entities, context_entity_ids)
 
     scores
@@ -85,7 +96,7 @@ class HybridSearchStrategy
   # Build initial score maps from text and vector results using weighted RRF.
   # Text scores are preserved as weights on the RRF contribution so that
   # well-differentiated text rankings survive the fusion.
-  def build_score_maps(text_results, vector_results, observation_entity_ids = [], temporal_entity_ids = [])
+  def build_score_maps(text_results, vector_results, observation_entity_ids = [], temporal_entity_ids = [], temporal_only: false)
     scores = Hash.new(0.0)
     entities = {}
     matched = Hash.new { |h, k| h[k] = [] }
@@ -108,8 +119,12 @@ class HybridSearchStrategy
       matched[id] |= [ "semantic" ]
     end
 
+    # One batch lookup for every id the id-only channels may surface — no
+    # per-id find_by on the observation/temporal hot paths.
+    hydrated = batch_entities(observation_entity_ids + temporal_entity_ids - entities.keys)
+
     observation_entity_ids.each_with_index do |entity_id, rank|
-      entity = entities[entity_id] || MemoryEntity.find_by(id: entity_id)
+      entity = entities[entity_id] || hydrated[entity_id]
       next unless entity
 
       scores[entity_id] += 1.0 / (RRF_K + rank + 1)
@@ -117,9 +132,13 @@ class HybridSearchStrategy
       matched[entity_id] |= [ "observation_semantic" ]
     end
 
+    # The temporal channel re-weights entities already matched by other
+    # channels; it only seeds candidates on its own for purely temporal
+    # queries (temporal_only), never next to an unrelated text hit.
     temporal_entity_ids.each_with_index do |entity_id, rank|
-      entity = entities[entity_id] || MemoryEntity.find_by(id: entity_id)
+      entity = entities[entity_id] || hydrated[entity_id]
       next unless entity
+      next unless temporal_only || entities.key?(entity_id)
 
       scores[entity_id] += 1.0 / (RRF_K + rank + 1)
       entities[entity_id] = entity
@@ -127,6 +146,13 @@ class HybridSearchStrategy
     end
 
     [ scores, entities, matched ]
+  end
+
+  def batch_entities(entity_ids)
+    ids = entity_ids.uniq - [ nil ]
+    return {} if ids.empty?
+
+    MemoryEntity.where(id: ids).index_by(&:id)
   end
 
   def apply_relevance_boosts(scores, entities, context_entity_ids)

@@ -50,12 +50,6 @@ RSpec.describe TemporalQueryParser do
       expect(result.window.occurred_before).to eq(Time.zone.parse("2026-06-20").end_of_day)
     end
 
-    it "resolves a bare season to the current year's occurrence" do
-      result = described_class.extract("events in autumn")
-      expect(result.window.occurred_after).to eq(Time.zone.parse("2026-09-23").beginning_of_day)
-      expect(result.window.occurred_before).to eq(Time.zone.parse("2026-12-21").end_of_day)
-    end
-
     it "parses yesterday as a day window" do
       result = described_class.extract("what happened yesterday")
       expect(result.window.occurred_after).to eq(1.day.ago.beginning_of_day)
@@ -64,6 +58,70 @@ RSpec.describe TemporalQueryParser do
 
     it "labels the matched phrase" do
       expect(described_class.extract("events during 2025").matched).to include("2025")
+    end
+  end
+  describe "false-positive guards" do
+    around { |e| travel_to(Time.zone.parse("2026-10-07 12:00:00")) { e.run } }
+
+    %w[market maybe novel junk].each do |word|
+      it "does not treat \"#{word}\" as a month" do
+        expect(described_class.extract("updates in #{word}")).to be_nil
+      end
+    end
+
+    [ "login 2024", "migration 2025", "format 2024", "plugin 2023", "chat 2024" ].each do |phrase|
+      it "does not parse \"#{phrase}\" (cue word inside a longer word)" do
+        expect(described_class.extract(phrase)).to be_nil
+      end
+    end
+
+    it "rejects years glued to suffixes" do
+      expect(described_class.extract("in 2048-bit keys")).to be_nil
+      expect(described_class.extract("1920x1080 screens")).to be_nil
+      expect(described_class.extract("screen at 1920")).to be_nil
+      expect(described_class.extract("on 2024")).to be_nil
+    end
+
+    it "rejects bare seasons" do
+      expect(described_class.extract("spring boot config")).to be_nil
+      expect(described_class.extract("fall back logic")).to be_nil
+      expect(described_class.extract("events in autumn")).to be_nil
+    end
+  end
+
+  describe "qualified seasons" do
+    around { |e| travel_to(Time.zone.parse("2026-10-07 12:00:00")) { e.run } }
+
+    it "parses a season with a year" do
+      result = described_class.extract("events in autumn 2026")
+      expect(result.window.occurred_after).to eq(Time.zone.parse("2026-09-23").beginning_of_day)
+      expect(result.window.occurred_before).to eq(Time.zone.parse("2026-12-21").end_of_day)
+    end
+
+    it "parses a qualified season" do
+      result = described_class.extract("work done last spring")
+      expect(result.window.occurred_after).to eq(Time.zone.parse("2026-03-20").beginning_of_day)
+    end
+  end
+
+  describe "additional forms" do
+    around { |e| travel_to(Time.zone.parse("2026-10-07 12:00:00")) { e.run } }
+
+    it "parses an \"as of\" phrase into a point window" do
+      result = described_class.extract("state as of 2026-06-01")
+      expect(result.window.as_of).to eq(Time.zone.parse("2026-06-01").end_of_day)
+    end
+
+    it "parses relative atoms after connectors" do
+      result = described_class.extract("changes since yesterday")
+      expect(result.window.occurred_after).to eq(1.day.ago.beginning_of_day)
+      expect(result.window.occurred_before).to be_nil
+    end
+
+    it "caps absurd \"last N units\" counts" do
+      result = described_class.extract("last 99999999 years")
+      expect(result.window.occurred_after).to be > Time.zone.parse("1800-01-01")
+      expect(result.window.occurred_after).to be_within(1.day).of(100.years.ago)
     end
   end
 end

@@ -35,6 +35,13 @@ class TemporalWindow
     end
   end
 
+  # Strict ISO 8601 inputs only: "YYYY", "YYYY-MM", "YYYY-MM-DD", or full
+  # datetimes "YYYY-MM-DDTHH:MM[:SS[.fff]][Z|±HH[:]MM]". Bare year/month
+  # fragments widen to their covered period (upper bounds and `as_of` get the
+  # period's end). Results are clamped to [FAR_PAST, FAR_FUTURE].
+  ISO_PERIOD = /\A(\d{4})(?:-(\d{2})(?:-(\d{2}))?)?\z/.freeze
+  ISO_DATETIME = /\A\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.freeze
+
   def self.coerce_time(value, end_of_day: false)
     return nil if value.nil?
     return value if value.is_a?(Time) || value.is_a?(DateTime)
@@ -43,12 +50,40 @@ class TemporalWindow
     text = value.to_s.strip
     return nil if text.blank?
 
-    parsed = Time.zone.parse(text) || raise(ArgumentError, "invalid temporal bound: #{value.inspect}")
-    end_of_day && text.match?(/\A\d{4}-\d{2}-\d{2}\z/) ? parsed.end_of_day : parsed
+    parsed = coerce_string(text, end_of_day)
+    raise ArgumentError, "invalid temporal bound (expected ISO 8601): #{value.inspect}" unless parsed
+
+    clamp(parsed)
+  end
+
+  def self.coerce_string(text, end_of_day)
+    if (m = text.match(ISO_PERIOD))
+      year, month, day = m[1].to_i, (m[2]&.to_i || 1), (m[3]&.to_i || 1)
+      return nil unless (1..12).cover?(month) && (m[3].nil? || Date.valid_date?(year, month, day))
+
+      point = begin
+        Time.zone.local(year, month, day)
+      rescue ArgumentError, RangeError
+        return nil
+      end
+      return point unless end_of_day
+
+      m[3] ? point.end_of_day : (m[2] ? point.end_of_month : point.end_of_year)
+    elsif text.match?(ISO_DATETIME)
+      begin
+        Time.zone.iso8601(text)
+      rescue ArgumentError
+        nil
+      end
+    end
   end
 
   def self.day_bound(time, end_of_day)
     end_of_day ? time.end_of_day : time
+  end
+
+  def self.clamp(time)
+    [ [ time, FAR_PAST ].max, FAR_FUTURE ].min
   end
 
   # Build a window from explicit tool params. Returns nil when no bound is given.

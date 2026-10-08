@@ -123,4 +123,29 @@ RSpec.describe TemporalWindow do
       expect { rows.load }.not_to raise_error
     end
   end
+  describe "strict ISO 8601 parsing" do
+    it "rejects non-ISO input" do
+      [ "10", "October", "next tuesday" ].each do |bad|
+        expect { described_class.new(occurred_after: bad) }
+          .to raise_error(ArgumentError, /expected ISO 8601/)
+      end
+    end
+
+    it "rejects invalid calendar dates instead of rolling over" do
+      [ "2026-02-30", "2026-13-45" ].each do |bad|
+        expect { described_class.new(occurred_after: bad) }.to raise_error(ArgumentError)
+      end
+    end
+
+    it "widens a bare year-month for the upper bound" do
+      w = described_class.new(occurred_before: "2026-02")
+      expect(w.occurred_before).to eq(Time.zone.parse("2026-02-28").end_of_day)
+    end
+
+    it "widens a bare year for both bounds" do
+      w = described_class.new(occurred_after: "2026", occurred_before: "2026")
+      expect(w.occurred_after).to eq(Time.zone.parse("2026-01-01").beginning_of_day)
+      expect(w.occurred_before).to eq(Time.zone.parse("2026-12-31").end_of_day)
+    end
+  end
 end

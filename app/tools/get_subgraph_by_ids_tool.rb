@@ -33,20 +33,6 @@ class GetSubgraphByIdsTool < ApplicationTool
     optional(:max_tokens).filled(:integer).description("Estimated token budget (chars/4) for packing the response.")
   end
 
-  def tool_input_schema
-    {
-      type: :object,
-      properties: {
-        entity_ids: {
-          type: :array,
-          items: { type: :integer },
-          minItems: 1,
-          description: "An array of entity IDs to retrieve."
-        }
-      },
-      required: [ :entity_ids ]
-    }.freeze
-  end
 
   def tool_output_schema
     {
@@ -113,6 +99,7 @@ class GetSubgraphByIdsTool < ApplicationTool
 
   def call(entity_ids:, query: nil, observation_limit: nil,
            occurred_after: nil, occurred_before: nil, as_of: nil, max_tokens: nil)
+    TokenBudget.validate_max_tokens!(max_tokens, error_class: FastMcp::Tool::InvalidArgumentsError)
     result = EntitiesFetchService.call(
       entity_ids: entity_ids,
       relations: "internal",
