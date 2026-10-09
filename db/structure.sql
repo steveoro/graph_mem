@@ -180,8 +180,7 @@ CREATE TABLE `memory_entities` (
 /*!50003 SET @saved_sql_mode       = @@sql_mode */ ;
 /*!50003 SET sql_mode              = 'NO_AUTO_VALUE_ON_ZERO,STRICT_TRANS_TABLES,STRICT_ALL_TABLES,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION' */ ;
 DELIMITER ;;
-/*!50003 CREATE*/ /*!50017 DEFINER=`root`@`localhost`*/ /*!50003 TRIGGER trg_memory_entities_embedding_bi BEFORE INSERT ON memory_entities FOR EACH ROW SET NEW.embedding = IFNULL(NEW.embedding, VEC_FromText(CONCAT('[', REPEAT('0,', 767), '0]')))
-*/;;
+/*!50003 CREATE*/ /*!50017 DEFINER=`root`@`localhost`*/ /*!50003 TRIGGER trg_memory_entities_embedding_bi BEFORE INSERT ON memory_entities FOR EACH ROW SET NEW.embedding = IFNULL(NEW.embedding, VEC_FromText(CONCAT('[', REPEAT('0,', 767), '0]'))) */;;
 DELIMITER ;
 /*!50003 SET sql_mode              = @saved_sql_mode */ ;
 /*!50003 SET character_set_client  = @saved_cs_client */ ;
@@ -231,8 +230,7 @@ CREATE TABLE `memory_observations` (
 /*!50003 SET @saved_sql_mode       = @@sql_mode */ ;
 /*!50003 SET sql_mode              = 'NO_AUTO_VALUE_ON_ZERO,STRICT_TRANS_TABLES,STRICT_ALL_TABLES,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION' */ ;
 DELIMITER ;;
-/*!50003 CREATE*/ /*!50017 DEFINER=`root`@`localhost`*/ /*!50003 TRIGGER trg_memory_observations_embedding_bi BEFORE INSERT ON memory_observations FOR EACH ROW SET NEW.embedding = IFNULL(NEW.embedding, VEC_FromText(CONCAT('[', REPEAT('0,', 767), '0]')))
-*/;;
+/*!50003 CREATE*/ /*!50017 DEFINER=`root`@`localhost`*/ /*!50003 TRIGGER trg_memory_observations_embedding_bi BEFORE INSERT ON memory_observations FOR EACH ROW SET NEW.embedding = IFNULL(NEW.embedding, VEC_FromText(CONCAT('[', REPEAT('0,', 767), '0]'))) */;;
 DELIMITER ;
 /*!50003 SET sql_mode              = @saved_sql_mode */ ;
 /*!50003 SET character_set_client  = @saved_cs_client */ ;

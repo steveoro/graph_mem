@@ -91,6 +91,12 @@ class GetEntityTool < ApplicationTool
       }
       response[:token_budget] = result[:token_budget] if result[:token_budget]
       response[:temporal] = result[:temporal] if result[:temporal]
+      # The service fits the pre-reshape payload; the reshaped response can
+      # still exceed the budget — a single entity can't be split further.
+      if max_tokens.present? && TokenBudget.estimate(response) > max_tokens
+        raise FastMcp::Tool::InvalidArgumentsError,
+              "Entity payload exceeds the max_tokens budget; raise max_tokens or omit it."
+      end
       response
     rescue ActiveRecord::RecordNotFound => e
       error_message = "Entity with ID=#{entity_id} not found."
@@ -100,6 +106,8 @@ class GetEntityTool < ApplicationTool
         next_move: "Call `search`, then retry `get_entities` with a known id."
       )
     rescue *ToolError::TIMEOUT_CLASSES
+      raise
+    rescue McpGraphMemErrors::Error, FastMcp::Tool::InvalidArgumentsError
       raise
     rescue StandardError => e
       logger.error "GetEntityTool unexpected error: #{e.class}: #{e.message}"

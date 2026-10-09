@@ -110,8 +110,13 @@ class EntitiesFetchService
   def apply_token_budget!(result)
     return if @max_tokens.blank?
 
-    # The item-less response envelope is counted once; entities and relations
-    # pack into what is left of the budget.
+    # Seed the diagnostics with worst-case digits so the item-less envelope
+    # counted below over-covers them — real values written after the fit are
+    # always narrower, so the final response stays under budget (S6).
+    result[:token_budget] = TokenBudget.diagnostics(
+      max_tokens: @max_tokens, estimated_tokens: 9_999_999_999, truncated: false,
+      envelope_tokens: 9_999_999_999, items_before: 9_999_999_999, items_after: 9_999_999_999
+    )
     envelope = result.merge(entities: [], relations: [])
     fetched_ids = result[:entities].map { |entity| entity[:entity_id] }.to_set
     relations_before = result[:relations].size

@@ -107,9 +107,18 @@ class SubgraphSearchService
 
     # Fallback: a windowed query whose residual terms match nothing behaves
     # like a temporal-only query instead of returning an empty subgraph.
+    # Residual terms are matched individually: filler words that survive
+    # ("changes") would otherwise empty the whole-phrase match and the
+    # fallback would inject unrelated in-window entities — "alpha changes
+    # in august 2026" must still find Alpha.
     if @temporal_window && ids.empty?
-      @temporal_fallback = true
-      return [ temporal_candidate_ids(context_ids), nil ]
+      term_ids = TemporalQueryParser.residual_terms(@effective_query)
+                                    .flat_map { |term| text_matching_ids(term) }.uniq
+      if term_ids.empty?
+        @temporal_fallback = true
+        return [ temporal_candidate_ids(context_ids), nil ]
+      end
+      ids = term_ids
     end
     return [ ids, nil ] unless @temporal_window
 
@@ -133,10 +142,10 @@ class SubgraphSearchService
     ids.first(MAX_TEMPORAL_CANDIDATES)
   end
 
-  def text_matching_ids
+  def text_matching_ids(term = nil)
     base_query = MemoryEntity.distinct
     conditions = []
-    params = { like_query_term: "%#{@effective_query.downcase}%" }
+    params = { like_query_term: "%#{(term || @effective_query).downcase}%" }
 
     conditions << "LOWER(memory_entities.name) LIKE :like_query_term" if @search_fields[:name]
     conditions << "LOWER(memory_entities.entity_type) LIKE :like_query_term" if @search_fields[:type]
@@ -196,8 +205,13 @@ class SubgraphSearchService
   def apply_token_budget!(response)
     return if @max_tokens.blank?
 
-    # The item-less response envelope (pagination, retrieval diagnostics) is
-    # counted once; entities and relations pack into what is left.
+    # Seed the diagnostics with worst-case digits so the item-less envelope
+    # counted below over-covers them — real values written after the fit are
+    # always narrower, so the final response stays under budget (S6).
+    response[:retrieval][:token_budget] = TokenBudget.diagnostics(
+      max_tokens: @max_tokens, estimated_tokens: 9_999_999_999, truncated: false,
+      envelope_tokens: 9_999_999_999, items_before: 9_999_999_999, items_after: 9_999_999_999
+    )
     envelope = response.merge(entities: [], relations: [])
     entities_fit = TokenBudget.fit_with_envelope(response[:entities], envelope: envelope, max_tokens: @max_tokens)
     budget_left = @max_tokens - entities_fit.envelope_tokens - entities_fit.estimated_tokens

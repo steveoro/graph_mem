@@ -156,6 +156,23 @@ RSpec.describe SubgraphSearchService do
       expect(result[:entities].map { |e| e[:entity_id] }).to include(hot_entity.id)
       expect(result[:retrieval][:temporal][:fallback]).to eq("temporal_only")
     end
+
+    it "matches residual terms instead of injecting unrelated in-window entities" do
+      alpha = MemoryEntity.create!(name: "Alpha Service", entity_type: "Service")
+      beta = MemoryEntity.create!(name: "Beta Unrelated", entity_type: "Service")
+      alpha.memory_observations.create!(content: "alpha fact", valid_from: Time.utc(2026, 8, 10))
+      beta.memory_observations.create!(content: "beta fact", valid_from: Time.utc(2026, 8, 11))
+      # Vector neighbours would mask the fallback decision — keep this spec on
+      # the text channel only.
+      allow_any_instance_of(VectorSearchStrategy).to receive(:search).and_return([])
+
+      result = described_class.call(query: "alpha changes in august 2026")
+
+      names = result[:entities].map { |e| e[:name] }
+      expect(names).to include("Alpha Service")
+      expect(names).not_to include("Beta Unrelated")
+      expect(result[:retrieval][:temporal][:fallback]).to be_nil
+    end
   end
 
   describe "text+window ordering" do
@@ -183,6 +200,21 @@ RSpec.describe SubgraphSearchService do
       result = described_class.call(query: "service")
 
       expect(result[:entities].map { |e| e[:name] }).to include("Delta Service Hub", "Echo Service")
+    end
+  end
+
+  describe "max_tokens response envelope" do
+    it "keeps the whole response under max_tokens whenever items are kept" do
+      3.times do |i|
+        e = MemoryEntity.create!(name: "Budget Seed #{i}", entity_type: "Service")
+        e.memory_observations.create!(content: "budget fact")
+      end
+
+      result = described_class.call(query: "budget seed", include_observations: true,
+                                    max_tokens: 400, per_page: 10)
+
+      expect(result[:entities]).not_to be_empty
+      expect(TokenBudget.estimate(result)).to be <= 400
     end
   end
 end

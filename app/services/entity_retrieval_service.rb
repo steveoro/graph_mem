@@ -10,11 +10,16 @@ class EntityRetrievalService
       strategy = HybridSearchStrategy.new
       context_scope ||= GraphMemContext.scoped_entity_scope if scope_entity_ids.blank? && context_entity_ids.blank?
       scoped_ids = scope_entity_ids || context_entity_ids || context_scope&.entity_ids
+      # Context ids (argument or ambient GraphMemContext) go to the strategy as
+      # the boost channel; only an explicitly-requested scope_entity_ids may
+      # hard-filter the temporal paths — see HybridSearchStrategy.
+      boost_ids = context_entity_ids || context_scope&.entity_ids
       results = strategy.search(
         extraction.effective_query,
         limit: limit,
         semantic: semantic,
-        context_entity_ids: scoped_ids,
+        context_entity_ids: boost_ids,
+        scope_entity_ids: scope_entity_ids,
         temporal_window: window,
         temporal_only: extraction.temporal_only?
       )
@@ -27,7 +32,8 @@ class EntityRetrievalService
           "",
           limit: limit,
           semantic: semantic,
-          context_entity_ids: scoped_ids,
+          context_entity_ids: boost_ids,
+          scope_entity_ids: scope_entity_ids,
           temporal_window: window,
           temporal_only: true
         )

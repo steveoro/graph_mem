@@ -321,8 +321,16 @@ Two ways to apply a window:
    `"market"`, `"login 2024"`, `"2048-bit"` and `"spring boot config"` do not
    parse. Seasons map to northern-hemisphere astronomical spans
    (spring ≈ Mar 20–Jun 20, summer ≈ Jun 21–Sep 22, autumn/fall ≈ Sep 23–Dec 21,
-   winter ≈ Dec 22–Mar 19; unqualified seasons use the current year).
+   winter ≈ Dec 22–Mar 19; `this <season>` and `last <season>` without a year
+   use the current or most recent span).
    Explicit params win over parsed phrases.
+
+   Question filler words ("what", "changed", "tell me about", "show", …) are
+   ignored when judging whether a date-windowed query is time-only, so
+   `"what changed in august 2026"` searches by time alone. A few content-bearing
+   words are filler too — `new`, `update`, `list`, `all`, `recent` — so
+   `"update in august 2026"` is treated as a time-only query; search for the
+   term itself without a date phrase to match on it.
 
 When a window applies it does two things: adds a **temporal channel** to hybrid
 search and **filters the observation payloads** in subgraph/fetch responses.

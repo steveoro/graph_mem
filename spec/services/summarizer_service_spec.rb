@@ -301,4 +301,41 @@ RSpec.describe SummarizerService do
       expect(budget[:truncated]).to be(true)
     end
   end
+
+  describe "temporal fallback with an active context" do
+    let!(:project_a) { MemoryEntity.create!(name: "Project Alpha", entity_type: "Project") }
+    let!(:alpha) { MemoryEntity.create!(name: "Aurora Component", entity_type: "Component") }
+    let!(:borealis) { MemoryEntity.create!(name: "Borealis Widget", entity_type: "Component") }
+
+    before do
+      alpha.memory_observations.create!(content: "alpha august fact", valid_from: Time.utc(2026, 8, 10))
+      borealis.memory_observations.create!(content: "borealis august fact", valid_from: Time.utc(2026, 8, 12))
+    end
+
+    it "scope global returns other projects' in-window facts (context is boost-only)" do
+      result = described_class.new(
+        query: "nonexistentthing in august 2026",
+        scope: "global",
+        context_entity_ids: [ project_a.id ]
+      ).call
+
+      contents = result[:observations].map { |o| o[:content] }
+      expect(contents).to include("alpha august fact", "borealis august fact")
+    end
+
+    it "scope context stays limited to the scoped subtree" do
+      MemoryRelation.create!(from_entity: alpha, to_entity: project_a, relation_type: "part_of")
+      # The tool layer resolves the active context to its subtree ids; the
+      # service treats the list itself as the allowlist.
+      result = described_class.new(
+        query: "nonexistentthing in august 2026",
+        scope: "context",
+        context_entity_ids: [ project_a.id, alpha.id ]
+      ).call
+
+      contents = result[:observations].map { |o| o[:content] }
+      expect(contents).to include("alpha august fact")
+      expect(contents).not_to include("borealis august fact")
+    end
+  end
 end

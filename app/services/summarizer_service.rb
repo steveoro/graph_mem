@@ -376,12 +376,16 @@ class SummarizerService
 
       dropped = true
       kept = fit.items
-      break if response[:generation_mode] != "deterministic"
-
       kept_ids = kept.map { |payload| payload[:id] }.to_set
       kept_evidence = evidence.select { |entry| kept_ids.include?(entry[:observation].id) }
-      response[:summary] = build_deterministic_summary(kept_evidence)
+      # Sources are rebuilt in both modes so they always match the kept
+      # observations; only the deterministic summary text can be re-derived —
+      # LLM text may still cite dropped evidence and overflow is reported via
+      # truncated.
       response[:sources] = build_sources(kept_evidence)
+      break if response[:generation_mode] != "deterministic"
+
+      response[:summary] = build_deterministic_summary(kept_evidence)
     end
 
     response[:observations] = kept

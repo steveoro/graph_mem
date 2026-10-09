@@ -122,5 +122,14 @@ RSpec.describe EntitiesFetchService do
       expect(budget[:items_before]).to be >= budget[:items_after]
       expect(budget[:items_before]).to be >= 3
     end
+
+    it "keeps the whole response under max_tokens whenever items are kept" do
+      # Diagnostics are seeded into the envelope estimate at full width, so
+      # estimate(final response) must not exceed the budget.
+      result = described_class.call(entity_ids: [ first.id, second.id ], max_tokens: 400)
+
+      expect(result[:entities]).not_to be_empty
+      expect(TokenBudget.estimate(result)).to be <= 400
+    end
   end
 end

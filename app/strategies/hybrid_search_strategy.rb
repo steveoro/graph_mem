@@ -76,12 +76,12 @@ class HybridSearchStrategy
       if temporal_window.blank?
         []
       elsif temporal_only
-        @temporal_strategy.search(temporal_window, limit: limit * 2, entity_ids: scoped_ids)
+        @temporal_strategy.search(temporal_window, limit: limit * 2, entity_ids: scope_entity_ids)
       else
         candidates = (text_results.map { |result| result.entity.id } +
                       vector_results.map { |result| result.entity.id } +
                       observation_entity_ids).uniq
-        candidates &= scoped_ids if scoped_ids.present?
+        candidates &= scope_entity_ids if scope_entity_ids.present?
         candidates.empty? ? [] : @temporal_strategy.search(temporal_window, limit: nil, entity_ids: candidates)
       end
 

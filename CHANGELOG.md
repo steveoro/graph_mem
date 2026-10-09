@@ -14,6 +14,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added covering index `index_memory_observations_temporal_cover` on `memory_observations(status, memory_entity_id, valid_from, valid_until, created_at)` for the temporal channel.
 - Resolved windows are echoed as `retrieval.temporal`; documented the feature in `docs/mcp_tools.md`.
 - Fixed: migration class name for `change_action_mcp_session_capabilities_to_json_text` so fresh `db:migrate` works under Zeitwerk.
+- Fixed: `db/structure.sql` trigger bodies no longer carry `/*application='GraphMem'*/` marginalia — fresh `db:schema:load` on MariaDB 11.8 works again; `db:schema:dump` post-processing strips the tag on future dumps.
+- Note: the new covering index requires `db:migrate` on existing databases.
+- Changed: temporal-only retrieval and the temporal fallback now treat an active project context as a ranking boost only — `scope: "global"` searches/summaries no longer drop other projects' in-window facts; a hard scope applies only when explicitly requested (`scope_entity_ids` or `scope: "context"`).
 
 ## [1.45.0] - 2026-10-08
 - Pinned the GitHub-only FastMCP `v1.7.1` release at immutable commit `b10243c218c3d8a1a9f20e033314b647595938ca`, which adds `filter_prompts`.
