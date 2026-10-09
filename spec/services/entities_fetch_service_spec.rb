@@ -123,13 +123,15 @@ RSpec.describe EntitiesFetchService do
       expect(budget[:items_before]).to be >= 3
     end
 
-    it "keeps the whole response under max_tokens whenever items are kept" do
-      # Diagnostics are seeded into the envelope estimate at full width, so
-      # estimate(final response) must not exceed the budget.
+    it "keeps the whole structuredContent under max_tokens whenever items are kept" do
+      # Diagnostics + the ToolSuccessResponse wrapper are counted in the
+      # envelope estimate, so the delivered payload fits the budget.
       result = described_class.call(entity_ids: [ first.id, second.id ], max_tokens: 400)
+      wrapped, = ToolSuccessResponse.call(tool_name: "get_entities", result: result,
+                                          context: double(active?: false))
 
       expect(result[:entities]).not_to be_empty
-      expect(TokenBudget.estimate(result)).to be <= 400
+      expect(TokenBudget.estimate(wrapped)).to be <= 400
     end
   end
 end

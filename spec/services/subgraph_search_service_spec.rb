@@ -212,9 +212,31 @@ RSpec.describe SubgraphSearchService do
 
       result = described_class.call(query: "budget seed", include_observations: true,
                                     max_tokens: 400, per_page: 10)
+      wrapped, = ToolSuccessResponse.call(tool_name: "search", result: result,
+                                          context: double(active?: false))
 
       expect(result[:entities]).not_to be_empty
-      expect(TokenBudget.estimate(result)).to be <= 400
+      expect(TokenBudget.estimate(wrapped)).to be <= 400
+    end
+  end
+
+  describe "context boost on temporal-only queries" do
+    let!(:context_project) { MemoryEntity.create!(name: "Context Project", entity_type: "Project") }
+    let!(:aurora) { MemoryEntity.create!(name: "Aurora Component", entity_type: "Component") }
+    let!(:borealis) { MemoryEntity.create!(name: "Borealis Widget", entity_type: "Component") }
+
+    before do
+      aurora.memory_observations.create!(content: "alpha fact", valid_from: Time.utc(2026, 8, 10))
+      borealis.memory_observations.create!(content: "beta fact", valid_from: Time.utc(2026, 8, 11))
+    end
+
+    it "returns other projects' in-window entities, context members first" do
+      scope = ProjectSubtree::Result.new(entity_ids: [ aurora.id ], truncated: false, max_entities: 1_000)
+      result = described_class.call(query: "in august 2026", context_scope: scope)
+
+      names = result[:entities].map { |e| e[:name] }
+      expect(names).to include("Aurora Component", "Borealis Widget")
+      expect(names.first).to eq("Aurora Component")
     end
   end
 end

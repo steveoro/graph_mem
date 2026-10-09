@@ -370,7 +370,9 @@ class SummarizerService
     kept = response[:observations]
     dropped = false
     loop do
-      envelope = response.merge(observations: [])
+      # WRAPPER_RESERVE covers the fields ToolSuccessResponse appends after
+      # the tool returns — they count toward the delivered size.
+      envelope = response.merge(observations: []).merge(TokenBudget::WRAPPER_RESERVE)
       fit = TokenBudget.fit_with_envelope(kept, envelope: envelope, max_tokens: @max_tokens)
       break if fit.items.size == kept.size
 
@@ -390,7 +392,7 @@ class SummarizerService
 
     response[:observations] = kept
     response[:observation_count] = kept.size
-    envelope = response.merge(observations: [])
+    envelope = response.merge(observations: []).merge(TokenBudget::WRAPPER_RESERVE)
     response[:retrieval][:token_budget].merge!(
       estimated_tokens: TokenBudget.estimate(kept),
       envelope_tokens: TokenBudget.estimate(envelope),

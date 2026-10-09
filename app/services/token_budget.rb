@@ -19,6 +19,22 @@ class TokenBudget
     end
   end
 
+  # Worst-case digit width for diagnostics seeds — real values written
+  # after a fit are always narrower, so envelopes counted with the seed
+  # over-cover the final diagnostics.
+  PLACEHOLDER_NUMBER = 9_999_999_999
+
+  # Top-level fields ToolSuccessResponse appends around every tool payload
+  # AFTER the services fit their items (version, a next_move hint, and a
+  # context block when no project context is active). Padded generously —
+  # the real wrapper is ~50 tokens — so envelopes counted before the
+  # wrapper lands stay conservative.
+  WRAPPER_RESERVE = {
+    version: "9.9.9.9",
+    next_move: "x" * 120,
+    context: { status: "none", next_move: "x" * 120 }
+  }.freeze
+
   class << self
     # @param payload [Object] anything JSON-serializable
     # @return [Integer] estimated token count
@@ -95,6 +111,21 @@ class TokenBudget
         items_after: items_after,
         dropped_on_page: dropped_on_page
       }.compact
+    end
+
+    # A diagnostics hash seeded at worst-case width, to be merged into a
+    # response BEFORE its envelope is estimated and overwritten with real
+    # values after the fit.
+    def diagnostics_placeholder(max_tokens:, dropped_on_page: false)
+      diagnostics(
+        max_tokens: max_tokens,
+        estimated_tokens: PLACEHOLDER_NUMBER,
+        truncated: false,
+        envelope_tokens: PLACEHOLDER_NUMBER,
+        items_before: PLACEHOLDER_NUMBER,
+        items_after: PLACEHOLDER_NUMBER,
+        dropped_on_page: (PLACEHOLDER_NUMBER if dropped_on_page)
+      )
     end
   end
 end

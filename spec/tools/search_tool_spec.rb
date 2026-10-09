@@ -120,7 +120,9 @@ RSpec.describe SearchTool, type: :model do
         retrieval: { result_count: 2 }
       )
 
-      budget = TokenBudget.estimate(small) + 120 # small item + response envelope
+      # small item + response envelope (diagnostics seed + next_move hint +
+      # the ToolSuccessResponse wrapper reserve, ~160 tokens total)
+      budget = TokenBudget.estimate(small) + 200
       result = tool.call(query: "result", max_tokens: budget)
 
       expect(result[:results]).to eq([ small ])
@@ -208,13 +210,15 @@ RSpec.describe SearchTool, type: :model do
       expect(TokenBudget.estimate(result)).to be <= 110 # 10% slack
     end
 
-    it "keeps the whole response under max_tokens whenever items are kept" do
-      # Diagnostics + next_move are seeded into the envelope estimate at full
-      # width, so estimate(final response) must not exceed the budget.
+    it "keeps the whole structuredContent under max_tokens whenever items are kept" do
+      # Diagnostics + next_move + the ToolSuccessResponse wrapper are counted
+      # in the envelope estimate, so the delivered payload fits the budget.
       result = described_class.new.call(query: "service",
                                     page: 1, per_page: 2, max_tokens: 300)
+      wrapped, = ToolSuccessResponse.call(tool_name: "search", result: result,
+                                          context: double(active?: false))
       expect(result[:results]).not_to be_empty
-      expect(TokenBudget.estimate(result)).to be <= 300
+      expect(TokenBudget.estimate(wrapped)).to be <= 300
     end
   end
 end

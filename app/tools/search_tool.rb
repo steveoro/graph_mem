@@ -129,8 +129,9 @@ class SearchTool < ApplicationTool
       query,
       limit: offset + per_page,
       semantic: true,
+      # The ambient context is a ranking boost only — passing it as
+      # scope_entity_ids would hard-filter temporal-only queries.
       context_entity_ids: context_scope&.entity_ids,
-      scope_entity_ids: context_scope&.entity_ids,
       context_scope: context_scope,
       temporal_window: temporal_window
     )
@@ -146,20 +147,21 @@ class SearchTool < ApplicationTool
       # Diagnostics and a next_move slot are seeded BEFORE the envelope is
       # estimated — fields written after the fit would push the real
       # response over the budget.
-      retrieval[:token_budget] = TokenBudget.diagnostics(
-        max_tokens: max_tokens, estimated_tokens: 9_999_999_999, truncated: false,
-        envelope_tokens: 9_999_999_999, items_before: 9_999_999_999,
-        items_after: 9_999_999_999, dropped_on_page: 9_999_999_999
+      retrieval[:token_budget] = TokenBudget.diagnostics_placeholder(
+        max_tokens: max_tokens, dropped_on_page: true
       )
       # The hint text is seeded at full length so a truncated page never
       # pushes the final response over budget; removed when nothing dropped.
       retrieval[:next_move] = "lower per_page or raise max_tokens to see the dropped ranks"
+      # WRAPPER_RESERVE covers the fields ToolSuccessResponse appends after
+      # the tool returns (version, next_move, context) — they are part of the
+      # delivered structuredContent and must be inside the counted envelope.
       envelope = {
         mode: "summary",
         results: [],
         pagination: { per_page: per_page, current_page: page },
         retrieval: retrieval
-      }
+      }.merge(TokenBudget::WRAPPER_RESERVE)
       budget_fit = TokenBudget.fit_with_envelope(page_results, envelope: envelope, max_tokens: max_tokens)
       results = budget_fit.items
       retrieval[:result_count] = results.size

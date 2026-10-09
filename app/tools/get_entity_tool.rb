@@ -91,9 +91,10 @@ class GetEntityTool < ApplicationTool
       }
       response[:token_budget] = result[:token_budget] if result[:token_budget]
       response[:temporal] = result[:temporal] if result[:temporal]
-      # The service fits the pre-reshape payload; the reshaped response can
-      # still exceed the budget — a single entity can't be split further.
-      if max_tokens.present? && TokenBudget.estimate(response) > max_tokens
+      # The service fits the pre-reshape payload; the reshaped response plus
+      # the ToolSuccessResponse wrapper can still exceed the budget — a single
+      # entity can't be split further.
+      if max_tokens.present? && TokenBudget.estimate(response.merge(TokenBudget::WRAPPER_RESERVE)) > max_tokens
         raise FastMcp::Tool::InvalidArgumentsError,
               "Entity payload exceeds the max_tokens budget; raise max_tokens or omit it."
       end

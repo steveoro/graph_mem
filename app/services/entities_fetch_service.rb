@@ -113,11 +113,10 @@ class EntitiesFetchService
     # Seed the diagnostics with worst-case digits so the item-less envelope
     # counted below over-covers them — real values written after the fit are
     # always narrower, so the final response stays under budget (S6).
-    result[:token_budget] = TokenBudget.diagnostics(
-      max_tokens: @max_tokens, estimated_tokens: 9_999_999_999, truncated: false,
-      envelope_tokens: 9_999_999_999, items_before: 9_999_999_999, items_after: 9_999_999_999
-    )
-    envelope = result.merge(entities: [], relations: [])
+    result[:token_budget] = TokenBudget.diagnostics_placeholder(max_tokens: @max_tokens)
+    # WRAPPER_RESERVE covers the fields ToolSuccessResponse appends after the
+    # tool returns — they are part of the delivered structuredContent.
+    envelope = result.merge(entities: [], relations: []).merge(TokenBudget::WRAPPER_RESERVE)
     fetched_ids = result[:entities].map { |entity| entity[:entity_id] }.to_set
     relations_before = result[:relations].size
     entities_fit = TokenBudget.fit_with_envelope(result[:entities], envelope: envelope, max_tokens: @max_tokens)
