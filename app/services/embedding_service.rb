@@ -193,17 +193,21 @@ class EmbeddingService
   # run when an import holds it; imports acquire it with a short wait so a
   # scheduled backfill does not interleave (the compare-and-set in
   # store_vector is the real safety net — this just avoids the collision).
-  EMBEDDING_LOCK_NAME = "graph_mem:embeddings"
+  # GET_LOCK names are server-global — namespace by database so a test DB and
+  # a dev DB (or two graph_mem instances sharing one MariaDB server) don't
+  # serialize against each other.
+  EMBEDDING_LOCK_PREFIX = "graph_mem"
 
   # @yieldparam acquired [Boolean] whether the lock was obtained
   def self.with_embedding_lock(timeout_seconds)
     conn = ActiveRecord::Base.connection
+    lock_name = "#{EMBEDDING_LOCK_PREFIX}:#{conn.current_database}:embeddings"
     acquired = conn.select_value(
-      "SELECT GET_LOCK(#{conn.quote(EMBEDDING_LOCK_NAME)}, #{timeout_seconds.to_i})"
+      "SELECT GET_LOCK(#{conn.quote(lock_name)}, #{timeout_seconds.to_i})"
     ).to_i == 1
     yield(acquired)
   ensure
-    conn.select_value("SELECT RELEASE_LOCK(#{conn.quote(EMBEDDING_LOCK_NAME)})") if acquired
+    conn.select_value("SELECT RELEASE_LOCK(#{conn.quote(lock_name)})") if acquired
   end
 
   # Backfill embeddings for all entities and observations missing them.
@@ -212,15 +216,17 @@ class EmbeddingService
   def backfill_all(batch_size: 100)
     unless self.class.vector_enabled?
       @logger.warn "EmbeddingService: vector columns not present, skipping backfill"
-      return { entities: 0, observations: 0 }
+      return { entities: 0, observations: 0, deferred: false }
     end
 
     total_entities = 0
     total_observations = 0
 
+    deferred = false
     self.class.with_embedding_lock(0) do |acquired|
       unless acquired
         @logger.info "EmbeddingService: embeddings lock held by another writer; backfill deferred to next run"
+        deferred = true
         next
       end
 
@@ -238,7 +244,7 @@ class EmbeddingService
     end
 
     @logger.info "EmbeddingService: backfilled #{total_entities} entities, #{total_observations} observations"
-    { entities: total_entities, observations: total_observations }
+    { entities: total_entities, observations: total_observations, deferred: deferred }
   end
 
   private
@@ -333,9 +339,9 @@ class EmbeddingService
     text = "[#{vector.join(',')}]"
     table = record.class.table_name
     quoted = ActiveRecord::Base.connection.quote(text)
-    stamped = ActiveRecord::Base.connection.quote(record.updated_at.strftime("%Y-%m-%d %H:%M:%S.%6N"))
+    stamped = ActiveRecord::Base.connection.quote(record.updated_at.utc.strftime("%Y-%m-%d %H:%M:%S.%6N"))
     ActiveRecord::Base.connection.update(
-      "UPDATE #{table} SET embedding = VEC_FromText(#{quoted}), embedded_at = NOW(6) WHERE id = #{record.id} AND updated_at = #{stamped}"
+      "UPDATE #{table} SET embedding = VEC_FromText(#{quoted}), embedded_at = UTC_TIMESTAMP(6) WHERE id = #{record.id} AND updated_at = #{stamped}"
     ) == 1
   end
 end

@@ -383,27 +383,46 @@ RSpec.describe EmbeddingService do
     it "returns zeros when vector is disabled" do
       allow(described_class).to receive(:vector_enabled?).and_return(false)
       result = service.backfill_all
-      expect(result).to eq({ entities: 0, observations: 0 })
+      expect(result).to eq({ entities: 0, observations: 0, deferred: false })
     end
 
-    it "defers the run while another writer holds the embeddings lock" do
-      conn = ActiveRecord::Base.connection_pool.checkout
+    it "defers the run while another writer holds the embeddings lock", :with_test_embeddings do
+      conn = ActiveRecord::Base.connection
+      lock_name = "graph_mem:#{conn.current_database}:embeddings"
+      # A raw client guarantees a genuinely separate DB session: inside
+      # transactional specs every pool.checkout returns the same pinned
+      # connection (same session), and GET_LOCK is re-entrant per session.
+      cfg = conn.pool.db_config.configuration_hash
+      raw = Mysql2::Client.new(
+        host: cfg[:host], port: cfg[:port],
+        username: cfg[:username], password: cfg[:password], database: cfg[:database]
+      )
       begin
-        conn.execute("SELECT GET_LOCK('graph_mem:embeddings', 0)")
-        entity = MemoryEntity.create!(name: "LockedPending", entity_type: "Project")
+        raw.query("SELECT GET_LOCK(#{conn.quote(lock_name)}, 0)")
+        # Probe: the main session must fail to grab the held lock.
+        probe = conn.select_value("SELECT GET_LOCK(#{conn.quote(lock_name)}, 0)")
+        conn.select_value("SELECT RELEASE_LOCK(#{conn.quote(lock_name)})") if probe.to_i == 1
+        expect(probe.to_i).to eq(0)
+        entity = EmbeddingService.suppress_inline_embeddings {
+          MemoryEntity.create!(name: "LockedPending", entity_type: "Project")
+        }
         result = service.backfill_all
-        expect(result).to eq({ entities: 0, observations: 0 })
+        expect(result).to eq({ entities: 0, observations: 0, deferred: true })
         expect(entity.reload.embedded_at).to be_nil
       ensure
-        conn.execute("SELECT RELEASE_LOCK('graph_mem:embeddings')")
-        ActiveRecord::Base.connection_pool.checkin(conn)
+        raw.query("SELECT RELEASE_LOCK(#{conn.quote(lock_name)})")
+        raw.close
       end
     end
 
     it "counts only successful CAS writes and leaves failed rows pending" do
       allow(described_class).to receive(:vector_enabled?).and_return(true)
-      ok_entity = MemoryEntity.create!(name: "BackfillOk", entity_type: "Project")
-      stale_entity = MemoryEntity.create!(name: "BackfillStale", entity_type: "Project")
+      ok_entity, stale_entity = EmbeddingService.suppress_inline_embeddings do
+        [
+          MemoryEntity.create!(name: "BackfillOk", entity_type: "Project"),
+          MemoryEntity.create!(name: "BackfillStale", entity_type: "Project")
+        ]
+      end
       stale_loaded = MemoryEntity.find(stale_entity.id)
 
       allow(service).to receive(:embed).and_return([ 0.25 ] * 768)
@@ -424,6 +443,7 @@ RSpec.describe EmbeddingService do
 
       result = service.backfill_all
       expect(result[:entities]).to eq(1)
+      expect(result[:deferred]).to be false
       expect(ok_entity.reload.embedded_at).to be_present
       expect(stale_loaded.reload.embedded_at).to be_nil
     end
@@ -432,7 +452,9 @@ RSpec.describe EmbeddingService do
   describe "#store_vector" do
     it "stamps embedded_at with the vector write" do
       allow(described_class).to receive(:vector_enabled?).and_return(true)
-      entity = MemoryEntity.create!(name: "StampMe", entity_type: "Project")
+      entity = EmbeddingService.suppress_inline_embeddings do
+        MemoryEntity.create!(name: "StampMe", entity_type: "Project")
+      end
       MemoryEntity.where(id: entity.id).update_all(embedded_at: nil)
 
       expect(service.send(:store_vector, entity, [ 0.5 ] * 768)).to be true
@@ -441,7 +463,9 @@ RSpec.describe EmbeddingService do
 
     it "refuses to overwrite a row edited after it was loaded (compare-and-set)" do
       allow(described_class).to receive(:vector_enabled?).and_return(true)
-      entity = MemoryEntity.create!(name: "CasRace", entity_type: "Project")
+      entity = EmbeddingService.suppress_inline_embeddings do
+        MemoryEntity.create!(name: "CasRace", entity_type: "Project")
+      end
       loaded = MemoryEntity.find(entity.id)
       MemoryEntity.where(id: entity.id).update_all(updated_at: Time.current + 60)
 

@@ -18,6 +18,8 @@ class MemoryEntity < ApplicationRecord
   before_validation :canonicalize_entity_type
   after_create :set_initial_embedding
   after_commit :refresh_embedding, on: [ :update ], if: :embedding_fields_changed?
+  before_update :invalidate_stale_embedding,
+                if: -> { (changes_to_save.keys & EMBEDDING_FIELDS).any? }
 
   EMBEDDING_FIELDS = %w[name entity_type aliases description].freeze
 
@@ -57,13 +59,19 @@ class MemoryEntity < ApplicationRecord
     (previous_changes.keys & EMBEDDING_FIELDS).any?
   end
 
+  # Any write to embedded text invalidates the stored vector. Clear the stamp
+  # inside the same UPDATE — even when the in-memory copy is already nil — so a
+  # stamp written between our load and this save cannot survive it. Only
+  # EmbeddingService#store_vector sets embedded_at (via compare-and-set).
+  def invalidate_stale_embedding
+    self.embedded_at = nil
+    attribute_will_change!("embedded_at")
+  end
+
   def refresh_embedding
-    # Suppressed (bulk imports): the stored vector is stale now — mark it
-    # missing so the deferred backfill re-embeds this row.
-    if EmbeddingService.inline_embeddings_suppressed?
-      update_column(:embedded_at, nil) if embedded_at.present?
-      return
-    end
+    # Suppressed (bulk imports): the stamp was already cleared by
+    # invalidate_stale_embedding — the deferred backfill re-embeds this row.
+    return if EmbeddingService.inline_embeddings_suppressed?
 
     EmbeddingService.embed_entity(self)
   rescue StandardError => e
