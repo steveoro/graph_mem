@@ -196,6 +196,9 @@ RSpec.describe MemoryEntity, type: :model do
 
       # The tag's stubbed embed returns nil, so the inline refresh runs and
       # fails to store a vector: the row must remain classified as missing.
+      # The expectation also fails loudly if the tag is ever dropped and the
+      # spec falls back to the vector_enabled? early return.
+      expect(EmbeddingService.instance).to receive(:embed).and_return(nil)
       entity.update!(name: "StaleAfterFail Edited")
 
       expect(entity.reload.embedded_at).to be_nil
