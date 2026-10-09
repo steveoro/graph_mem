@@ -33,6 +33,16 @@ class GraphifyImporter
   AMBIGUOUS_CONFIDENCE = "AMBIGUOUS"
   SOURCE_NAME = "graphify"
 
+  # memory_entities.name is varchar(255): over-long labels cannot be stored,
+  # so those nodes are dropped from the payload instead of blowing up the
+  # execution transaction with ActiveRecord::ValueTooLong.
+  NAME_MAX_LENGTH = 255
+
+  # Real graphify trees are shallow (Project → File → Class → Method ≈ 4);
+  # the cap bounds matcher/executor recursion depth and breaks containment
+  # cycles. Capped nodes re-attach under the project root.
+  MAX_TREE_DEPTH = 64
+
   Result = Struct.new(
     :import_data,           # Hash: {version, exported_at, root_nodes: [...], relations: [...]}
     :ambiguous_relations,   # Array<Hash>: edges withheld for review
@@ -59,6 +69,7 @@ class GraphifyImporter
                                      relation_type: relation["relation_type"])
 
       props = relation["properties"] || {}
+      location = [ props["source_file"], props["source_location"] ].compact_blank.join(":")
       {
         id: SecureRandom.uuid,
         kind: "relationship_proposal",
@@ -72,7 +83,7 @@ class GraphifyImporter
         confidence_band: "low",
         score: (relation["confidence"].to_f * 10).round,
         supporting_observation_ids: [],
-        explanation: "Graphify AMBIGUOUS edge in #{props['source_file']}#{props['source_location']}",
+        explanation: "Graphify AMBIGUOUS edge in #{location}",
         evidence_terms: [ props["context"] ].compact
       }
     end
@@ -87,12 +98,15 @@ class GraphifyImporter
   end
 
   # Auto-accept decision map for headless imports. Mirrors operator review:
-  # root nodes merge into their selected match (or create), children take the
-  # matcher-suggested action — except `add_relation` on a child that already
-  # has a `part_of` parent, which would silently steal the entity from another
-  # project's tree. Unattended imports never re-parent: downgrade to `skip`
-  # (entity stays put; its observations still import). Operators keep full
-  # re-parent rights through explicit Import Review decisions.
+  # children take the matcher-suggested action — except `add_relation` on a
+  # child that already has a `part_of` parent, which would silently steal the
+  # entity from another project's tree — and roots merge ONLY on an exact
+  # name+type match: the matcher's `selected_match_id` comes from a fuzzy
+  # text search on "<name> <type>" and routinely resolves to an unrelated
+  # Project (the type word alone matches any project named "… Project"),
+  # so it is never trusted unattended.
+  # Unattended imports never re-parent. Operators keep full re-parent rights
+  # through explicit Import Review decisions.
   # @param match_results [Array<ImportMatchingStrategy::MatchResult>]
   # @return [Array<Hash>] decisions for ImportExecutionStrategy#execute
   def self.headless_decisions(match_results)
@@ -106,18 +120,32 @@ class GraphifyImporter
           child_action = "skip"
         end
         # A child parented under a DIFFERENT entity than this import's parent
-        # node belongs to another project's tree: skip it AND its whole
-        # subtree, otherwise new descendants would attach under the foreign
-        # entity and contaminate that project's structure.
-        child_action = "skip" if inside_any?(match.node_path, foreign_paths)
+        # node belongs to another project's tree: exclude it AND its whole
+        # subtree. `exclude` is a counted no-op — `skip` would still create
+        # the entity when it is missing (handle_skip_action's create
+        # fallback), leaving orphans with no `part_of` parent.
+        child_action = "exclude" if inside_any?(match.node_path, foreign_paths)
         { node_path: match.node_path, child_action: child_action }
-      elsif match.selected_match_id
-        { node_path: match.node_path, action: "merge", target_id: match.selected_match_id }
       else
-        { node_path: match.node_path, action: "create" }
+        exact = exact_root_match(match)
+        if exact
+          { node_path: match.node_path, action: "merge", target_id: exact.id }
+        else
+          { node_path: match.node_path, action: "create" }
+        end
       end
     end
   end
+
+  # The entity a root node would merge into, if it exists: exact name +
+  # canonical type lookup (case-insensitive under the utf8mb4 collation).
+  # @return [MemoryEntity, nil]
+  def self.exact_root_match(match)
+    node = match.import_node || {}
+    ImportEntityResolver.find_by_name_and_type(node[:name] || node["name"],
+                                               node[:entity_type] || node["entity_type"])
+  end
+  private_class_method :exact_root_match
 
   def self.already_parented?(entity)
     entity.present? && MemoryRelation.exists?(from_entity_id: entity.id, relation_type: "part_of")
@@ -134,7 +162,16 @@ class GraphifyImporter
 
       parent_path = match.node_path.sub(/\.children\.\d+\z/, "")
       parent_match = by_path[parent_path]
-      expected_id = parent_match&.exact_match&.id || parent_match&.selected_match_id
+      # The entity this import would attach the child under: the parent's own
+      # exact match when the parent is a child node, or the root's exact
+      # name+type match (never the fuzzy selected_match_id) for root-level
+      # children. A root that will be created fresh has no entity yet — every
+      # already-parented child of it is foreign.
+      expected_id = if parent_match&.is_child
+                      parent_match&.exact_match&.id
+      elsif parent_match
+                      exact_root_match(parent_match)&.id
+      end
       actual_id = MemoryRelation.where(from_entity_id: match.exact_match.id,
                                        relation_type: "part_of").pick(:to_entity_id)
       foreign << match.node_path unless expected_id.present? && expected_id == actual_id
@@ -160,9 +197,36 @@ class GraphifyImporter
   # @param project_name [String] name of the root Project entity
   def initialize(graph_data, project_name:)
     @data = graph_data.is_a?(String) ? JSON.parse(graph_data) : graph_data
+    validate_shape!
     @project_name = project_name
     @nodes = {}
     @edges = []
+    @nodes_duplicate_ids = 0
+    @nodes_skipped_overlong = 0
+    @nodes_promoted_to_root = 0
+  end
+
+  # graph.json must be a JSON object whose `nodes` and `links`/`edges` are
+  # arrays of objects; anything else is rejected up front instead of
+  # surfacing as a raw NoMethodError/TypeError mid-translation.
+  def validate_shape!
+    raise ArgumentError, "graph.json must be a JSON object" unless @data.is_a?(Hash)
+
+    nodes = @data["nodes"]
+    links = @data.key?("links") ? @data["links"] : @data["edges"]
+    raise ArgumentError, "graph.json 'nodes' must be an array" if nodes.present? && !nodes.is_a?(Array)
+    raise ArgumentError, "graph.json 'links' must be an array" if links.present? && !links.is_a?(Array)
+
+    Array(nodes).each do |node|
+      unless node.is_a?(Hash) && node["id"].present?
+        raise ArgumentError, "graph.json nodes must be objects with an 'id'"
+      end
+    end
+    Array(links).each do |edge|
+      unless edge.is_a?(Hash)
+        raise ArgumentError, "graph.json links must be objects"
+      end
+    end
   end
 
   # @return [Result]
@@ -188,7 +252,17 @@ class GraphifyImporter
 
   def index_nodes
     (@data["nodes"] || []).each do |node|
-      @nodes[node["id"]] = node unless external_node?(node)
+      next if external_node?(node)
+
+      # Duplicate ids are a malformed input detail: keep the first
+      # occurrence deterministically and count the rest instead of silently
+      # overwriting them.
+      if @nodes.key?(node["id"])
+        @nodes_duplicate_ids += 1
+        next
+      end
+
+      @nodes[node["id"]] = node
     end
     @edges = (@data["links"] || @data["edges"] || [])
   end
@@ -218,6 +292,18 @@ class GraphifyImporter
       owner = parents[id] && @entity_info[parents[id]]
       info[:name] = "#{owner ? owner[:name] : file_base_name(node_file(id))}##{info[:unqualified]}"
       info.delete(:unqualified)
+    end
+
+    # Labels longer than the entity name column would abort the whole import
+    # with ActiveRecord::ValueTooLong — drop them up front (counted in stats)
+    # so a pathological node cannot take the graph down with it.
+    @entity_info.delete_if do |_id, info|
+      if info[:name].to_s.length > NAME_MAX_LENGTH
+        @nodes_skipped_overlong += 1
+        true
+      else
+        false
+      end
     end
   end
 
@@ -298,7 +384,10 @@ class GraphifyImporter
 
   # Builds Project → File → Class/Module → Method/Constant tree.
   # Nodes without a classified containment parent hang off the project root
-  # so nothing referenced by an edge is lost.
+  # so nothing referenced by an edge is lost. Containment cycles and nodes
+  # deeper than MAX_TREE_DEPTH are likewise re-attached under the root
+  # (counted as nodes_promoted_to_root) instead of disappearing or
+  # recursing forever.
   def build_tree
     parents = containment_parents
     children_of = Hash.new { |hash, key| hash[key] = [] }
@@ -306,7 +395,7 @@ class GraphifyImporter
 
     @entity_info.each_key do |id|
       parent_id = parents[id]
-      if parent_id && @entity_info.key?(parent_id)
+      if parent_id && parent_id != id && @entity_info.key?(parent_id)
         children_of[parent_id] << id
       else
         roots << id
@@ -317,18 +406,43 @@ class GraphifyImporter
                     .sort_by { |id| @entity_info[id][:name] }
     other_roots = (roots - file_roots).sort_by { |id| @entity_info[id][:name] }
 
+    emitted = Set.new
+    children = (file_roots + other_roots).filter_map do |id|
+      import_subtree(id, children_of, emitted, 1)
+    end
+
+    # Nodes still un-emitted were unreachable: part of a containment cycle
+    # (a→b→c→a has no root) or below the depth cap. Promote them to the
+    # project root so the import stays complete and the executor never sees
+    # a tree deeper than MAX_TREE_DEPTH.
+    leftovers = @entity_info.keys - emitted.to_a
+    if leftovers.any?
+      @nodes_promoted_to_root = leftovers.size
+      children.concat(
+        leftovers.sort_by { |id| @entity_info[id][:name] }
+                 .filter_map { |id| import_subtree(id, children_of, emitted, 1) }
+      )
+    end
+
     {
       "name" => @project_name,
       "entity_type" => "Project",
       "observations" => [ provenance_observation(graph_meta_line) ],
-      "children" => (file_roots + other_roots).map { |id| import_subtree(id, children_of) }
+      "children" => children
     }
   end
 
-  def import_subtree(id, children_of)
+  # @return [Hash, nil] nil when `id` was already emitted (cycle back-edge)
+  def import_subtree(id, children_of, emitted, depth)
+    return nil if emitted.include?(id)
+
+    emitted << id
     node = import_node(id)
+    return node if depth >= MAX_TREE_DEPTH
+
     children_of[id].sort_by { |child_id| @entity_info[child_id][:name] }.each do |child_id|
-      node["children"] << import_subtree(child_id, children_of)
+      child = import_subtree(child_id, children_of, emitted, depth + 1)
+      node["children"] << child if child
     end
     node
   end
@@ -350,7 +464,7 @@ class GraphifyImporter
     line = node["source_location"].to_s
     return [] if file.blank?
 
-    [ provenance_observation("Defined at #{file}#{line}") ]
+    [ provenance_observation("Defined at #{[ file, line.presence ].compact.join(':')}") ]
   end
 
   def provenance_observation(content)
@@ -428,8 +542,11 @@ class GraphifyImporter
     {
       nodes_total: (@data["nodes"] || []).size,
       nodes_imported: @entity_info.size,
-      nodes_skipped_external: (@data["nodes"] || []).size - @nodes.size,
-      nodes_unclassified: @nodes.size - @entity_info.size,
+      nodes_skipped_external: (@data["nodes"] || []).size - @nodes.size - @nodes_duplicate_ids,
+      nodes_unclassified: @nodes.size - @entity_info.size - @nodes_skipped_overlong,
+      nodes_skipped_duplicate_ids: @nodes_duplicate_ids,
+      nodes_skipped_overlong: @nodes_skipped_overlong,
+      nodes_promoted_to_root: @nodes_promoted_to_root,
       edges_total: @edges.size,
       edges_containment: @edges.count { |edge| CONTAINMENT_RELATIONS.include?(edge["relation"].to_s) },
       relations_emitted: relations.size,

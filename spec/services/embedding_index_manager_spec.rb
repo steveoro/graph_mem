@@ -31,8 +31,8 @@ RSpec.describe EmbeddingIndexManager do
 
     it "raises when NULL embeddings remain" do
       allow(conn).to receive(:column_exists?).with(:memory_entities, :embedding).and_return(true)
-      allow(MemoryEntity).to receive_message_chain(:where, :count).and_return(2)
-      allow(MemoryObservation).to receive_message_chain(:where, :count).and_return(0)
+      allow(MemoryEntity).to receive_message_chain(:unembedded, :count).and_return(2)
+      allow(MemoryObservation).to receive_message_chain(:unembedded, :count).and_return(0)
 
       expect {
         described_class.add_indexes!
@@ -41,8 +41,8 @@ RSpec.describe EmbeddingIndexManager do
 
     it "creates indexes when prechecks pass" do
       allow(conn).to receive(:column_exists?).with(:memory_entities, :embedding).and_return(true)
-      allow(MemoryEntity).to receive_message_chain(:where, :count).and_return(0)
-      allow(MemoryObservation).to receive_message_chain(:where, :count).and_return(0)
+      allow(MemoryEntity).to receive_message_chain(:unembedded, :count).and_return(0)
+      allow(MemoryObservation).to receive_message_chain(:unembedded, :count).and_return(0)
       expect(conn).to receive(:execute).at_least(:once)
       expect(EmbeddingVectorTriggerManager).to receive(:install!)
       expect(EmbeddingService).to receive(:reset_vector_cache!)

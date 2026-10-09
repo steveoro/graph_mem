@@ -21,6 +21,18 @@ class MemoryEntity < ApplicationRecord
 
   EMBEDDING_FIELDS = %w[name entity_type aliases description].freeze
 
+  # `unembedded`: rows with no computed embedding — NULL on nullable
+  # columns, or the all-zero vector the BEFORE INSERT trigger substitutes
+  # for NULL on the NOT NULL schema. `embedded` is the strict complement.
+  scope :unembedded, lambda {
+    where(embedding: nil)
+      .or(where(EmbeddingService.zero_vector_predicate("#{quoted_table_name}.embedding")))
+  }
+  scope :embedded, lambda {
+    where.not(embedding: nil)
+         .where.not(EmbeddingService.zero_vector_predicate("#{quoted_table_name}.embedding"))
+  }
+
   def as_json(options = {})
     super(options.merge(except: Array(options[:except]) | [ :embedding ]))
   end
@@ -39,6 +51,8 @@ class MemoryEntity < ApplicationRecord
   end
 
   def set_initial_embedding
+    return if EmbeddingService.inline_embeddings_suppressed?
+
     EmbeddingService.embed_entity(self)
   rescue StandardError => e
     Rails.logger.warn "MemoryEntity#set_initial_embedding failed: #{e.message}"
@@ -49,6 +63,8 @@ class MemoryEntity < ApplicationRecord
   end
 
   def refresh_embedding
+    return if EmbeddingService.inline_embeddings_suppressed?
+
     EmbeddingService.embed_entity(self)
   rescue StandardError => e
     Rails.logger.warn "MemoryEntity#refresh_embedding failed for id=#{id}: #{e.message}"

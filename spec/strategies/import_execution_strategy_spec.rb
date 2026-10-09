@@ -707,6 +707,7 @@ RSpec.describe ImportExecutionStrategy, type: :model do
         observations_created: 10,
         relations_created: 3,
         relations_unresolved: 1,
+        relations_skipped: nil,
         errors: []
       })
     end
@@ -820,6 +821,130 @@ RSpec.describe ImportExecutionStrategy, type: :model do
 
       expect(report.success).to be(true)
       expect(report.relations_unresolved).to eq(0)
+    end
+
+    it 'rejects hierarchical relation types instead of re-parenting' do
+      report = strategy.execute(
+        import_data.merge(
+          'relations' => [
+            { 'from_name' => 'Swimmer', 'from_type' => 'Class',
+              'to_name' => 'Existing Project', 'to_type' => 'Project',
+              'relation_type' => 'part_of' }
+          ]
+        ),
+        decisions
+      )
+
+      swimmer = MemoryEntity.find_by(name: 'Swimmer')
+      expect(report.success).to be(true)
+      expect(report.relations_skipped).to eq(1)
+      expect(
+        MemoryRelation.where(from_entity_id: swimmer.id, relation_type: 'part_of').count
+      ).to eq(1) # still parented under its import file, not re-parented
+    end
+
+    it 'skips an invalid edge instead of rolling back the import' do
+      report = strategy.execute(
+        import_data.merge(
+          'relations' => import_data['relations'] + [
+            { 'from_name' => 'Swimmer', 'from_type' => 'Class',
+              'to_name' => 'ApplicationRecord', 'to_type' => 'Class',
+              'relation_type' => 'calls', 'confidence' => 5.0 }
+          ]
+        ),
+        decisions
+      )
+
+      expect(report.success).to be(true)
+      expect(report.errors).to eq([])
+      expect(report.relations_skipped).to eq(1)
+      expect(report.relations_created).to eq(7) # the valid edges still applied
+    end
+  end
+
+  describe 'exclude action (foreign subtrees)' do
+    let(:import_data) do
+      {
+        'root_nodes' => [
+          {
+            'name' => 'RepoB',
+            'entity_type' => 'Project',
+            'children' => [
+              {
+                'name' => 'app/controllers/application_controller.rb',
+                'entity_type' => 'File',
+                'children' => [
+                  { 'name' => 'ApplicationController', 'entity_type' => 'Class',
+                    'children' => [
+                      { 'name' => 'ApplicationController#beta_only', 'entity_type' => 'Method',
+                        'children' => [] }
+                    ] }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    end
+
+    let(:decisions) do
+      [
+        { node_path: '0', action: 'create' },
+        { node_path: '0.children.0', child_action: 'exclude' },
+        { node_path: '0.children.0.children.0', child_action: 'exclude' },
+        { node_path: '0.children.0.children.0.children.0', child_action: 'exclude' }
+      ]
+    end
+
+    it 'creates nothing under an excluded node — no orphans, counted as skipped' do
+      report = strategy.execute(import_data, decisions)
+
+      expect(report.success).to be(true)
+      expect(MemoryEntity.find_by(name: 'RepoB')).to be_present
+      expect(MemoryEntity.find_by(name: 'ApplicationController#beta_only')).to be_nil
+      expect(MemoryEntity.find_by(name: 'ApplicationController')).to be_nil
+      # the subtree root counts; its descendants are never reached
+      expect(report.entities_skipped).to eq(1)
+      # RepoB's root has no children attached
+      repo_b = MemoryEntity.find_by(name: 'RepoB')
+      expect(MemoryRelation.where(to_entity_id: repo_b.id, relation_type: 'part_of')).to be_empty
+    end
+  end
+
+  describe 'bulk-import callback suppression' do
+    let(:import_data) do
+      {
+        'root_nodes' => [
+          { 'name' => 'Bulk Project', 'entity_type' => 'Project',
+            'observations' => [ { 'content' => 'some fact' } ], 'children' => [] }
+        ]
+      }
+    end
+    let(:decisions) { [ { node_path: '0', action: 'create' } ] }
+
+    it 'suppresses inline embeddings and enqueues a maintenance backfill' do
+      entity_embedder = instance_double(EmbeddingService)
+      allow(EmbeddingService).to receive(:embed_entity).and_raise('should not be called')
+      allow(EmbeddingService).to receive(:embed_observation).and_raise('should not be called')
+      expect(EmbeddingsMaintenanceEnqueuer).to receive(:enqueue!).with('backfill')
+
+      report = strategy.execute(import_data, decisions)
+      expect(report.success).to be(true)
+    end
+
+    it 'degrades observation de-duplication to exact matching while suppressed' do
+      entity = MemoryEntity.create!(name: 'Existing', entity_type: 'Project', aliases: '')
+      MemoryObservation.create!(memory_entity: entity, content: 'verbatim fact')
+
+      flagged = nil
+      EmbeddingService.suppress_inline_embeddings do
+        flagged = EmbeddingService.inline_embeddings_suppressed?
+        result = ImportObservationDuplicateDetector.new.find_duplicate(
+          entity: entity, content: 'a semantically similar but different fact'
+        )
+        expect(result.duplicate).to be(false) # no embedding call possible
+      end
+      expect(flagged).to be(true)
     end
   end
 end

@@ -10,6 +10,7 @@ class EmbeddingService
   MAX_RETRIES = 3
   RETRY_BASE_DELAY = 0.5
 
+
   class EmbeddingError < StandardError; end
 
   class << self
@@ -42,6 +43,34 @@ class EmbeddingService
 
     def reset_vector_cache!
       remove_instance_variable(:@vector_enabled) if defined?(@vector_enabled)
+    end
+
+    # While true, model callbacks skip synchronous inline embedding. Bulk
+    # imports create thousands of rows and cannot afford one API call per
+    # row; the caller enqueues an embedding backfill afterwards (the
+    # `unembedded` scope matches both NULL and zero-vector rows).
+    def suppress_inline_embeddings
+      previous = Thread.current[:gmem_inline_embeddings_suppressed]
+      Thread.current[:gmem_inline_embeddings_suppressed] = true
+      yield
+    ensure
+      Thread.current[:gmem_inline_embeddings_suppressed] = previous
+    end
+
+    def inline_embeddings_suppressed?
+      Thread.current[:gmem_inline_embeddings_suppressed] == true
+    end
+
+    # SQL predicate matching rows whose embedding is the all-zero vector the
+    # schema's own column default provides: on the NOT NULL production
+    # schema the DEFAULT clause is the zero-vector literal the BEFORE INSERT
+    # trigger also writes (a real embedder output is never all-zero, so the
+    # default doubles as the "not embedded" marker). The IS NOT NULL guard
+    # matters: on nullable schemas (the test DB) DEFAULT is NULL and
+    # `embedding = NULL` evaluates NULL — without the guard `embedded`
+    # would wrongly exclude every real vector.
+    def zero_vector_predicate(column)
+      "(DEFAULT(#{column}) IS NOT NULL AND #{column} = DEFAULT(#{column}))"
     end
   end
 
@@ -181,12 +210,12 @@ class EmbeddingService
     total_entities = 0
     total_observations = 0
 
-    MemoryEntity.where(embedding: nil).find_each(batch_size: batch_size) do |entity|
+    MemoryEntity.unembedded.find_each(batch_size: batch_size) do |entity|
       embed_entity(entity)
       total_entities += 1
     end
 
-    MemoryObservation.where(embedding: nil).find_each(batch_size: batch_size) do |obs|
+    MemoryObservation.unembedded.find_each(batch_size: batch_size) do |obs|
       embed_observation(obs)
       total_observations += 1
     end

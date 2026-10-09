@@ -28,6 +28,18 @@ class MemoryObservation < ApplicationRecord
   scope :active, -> { where(status: ACTIVE_STATUS) }
   scope :inactive, -> { where.not(status: ACTIVE_STATUS) }
 
+  # `unembedded`: rows with no computed embedding — NULL on nullable
+  # columns, or the all-zero vector the BEFORE INSERT trigger substitutes
+  # for NULL on the NOT NULL schema. `embedded` is the strict complement.
+  scope :unembedded, lambda {
+    where(embedding: nil)
+      .or(where(EmbeddingService.zero_vector_predicate("#{quoted_table_name}.embedding")))
+  }
+  scope :embedded, lambda {
+    where.not(embedding: nil)
+         .where.not(EmbeddingService.zero_vector_predicate("#{quoted_table_name}.embedding"))
+  }
+
   validates :content, presence: true
   validates :confidence, numericality: { greater_than_or_equal_to: 0, less_than_or_equal_to: 1 }, allow_nil: true
   validates :trust_score, numericality: { greater_than_or_equal_to: 0, less_than_or_equal_to: 1 }, allow_nil: true
@@ -159,12 +171,16 @@ class MemoryObservation < ApplicationRecord
   end
 
   def set_initial_embedding
+    return if EmbeddingService.inline_embeddings_suppressed?
+
     EmbeddingService.embed_observation(self)
   rescue StandardError => e
     Rails.logger.warn "MemoryObservation#set_initial_embedding failed: #{e.message}"
   end
 
   def refresh_embedding
+    return if EmbeddingService.inline_embeddings_suppressed?
+
     EmbeddingService.embed_observation(self)
   rescue StandardError => e
     Rails.logger.warn "MemoryObservation#refresh_embedding failed for id=#{id}: #{e.message}"

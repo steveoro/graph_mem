@@ -126,6 +126,11 @@ RSpec.describe "Graph export import fixtures", :with_test_embeddings, type: :req
     upload_fixture!(baseline_fixture, "graph_mem_test_export.json")
     execute_import!
     delete import_cancel_data_exchange_index_path
+    # Imports defer embeddings to the maintenance backfill (inline embedding
+    # is suppressed during execute). Run the backfill now — the deterministic
+    # test embeddings make it instant — so subsequent imports can run
+    # semantic observation de-duplication instead of failing on unembedded rows.
+    EmbeddingService.backfill_all
   end
 
   def upload_fixture!(data, filename)

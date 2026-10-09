@@ -22,6 +22,21 @@ class MemoryRelation < ApplicationRecord
     RelationTypeMapping.canonicalize(raw_type) || raw_type
   end
 
+  # While true, the after_commit trust-score recompute is skipped (bulk
+  # imports create too many relations for a recompute per edge); the caller
+  # recomputes once per touched entity afterwards.
+  def self.suppress_trust_recompute
+    previous = Thread.current[:gmem_trust_recompute_suppressed]
+    Thread.current[:gmem_trust_recompute_suppressed] = true
+    yield
+  ensure
+    Thread.current[:gmem_trust_recompute_suppressed] = previous
+  end
+
+  def self.trust_recompute_suppressed?
+    Thread.current[:gmem_trust_recompute_suppressed] == true
+  end
+
   private
 
   def canonicalize_relation_type
@@ -48,6 +63,8 @@ class MemoryRelation < ApplicationRecord
   end
 
   def recompute_observation_trust_scores
+    return if self.class.trust_recompute_suppressed?
+
     [ from_entity_id, to_entity_id ].compact.uniq.each do |entity_id|
       MemoryObservation
         .where(memory_entity_id: entity_id, status: MemoryObservation::ACTIVE_STATUS)

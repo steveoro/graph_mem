@@ -10,7 +10,10 @@ namespace :graphify do
 
     result = GraphifyImporter.new(File.read(path), project_name: project).translate
     payload = result.import_data.merge("ambiguous_relations" => result.ambiguous_relations)
-    File.write(out, JSON.pretty_generate(payload))
+    # max_nesting: false — pretty_generate's 100-level default raises
+    # JSON::NestingError on trees deeper than ~49 levels (2 JSON levels per
+    # tree level); the translator itself caps depth at MAX_TREE_DEPTH.
+    File.write(out, JSON.pretty_generate(payload, max_nesting: false))
 
     puts "Wrote #{out}"
     puts "Stats: #{result.stats.to_json}"

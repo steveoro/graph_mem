@@ -34,6 +34,16 @@ class ImportObservationDuplicateDetector
     return Result.new(duplicate: true, observation: exact_match, distance: 0.0, exact_match: true) if exact_match
     return Result.new(duplicate: false) unless observations.exists?
 
+    # Under suppressed inline embeddings (bulk imports), observations created
+    # moments ago in the same transaction are not embedded yet — comparing
+    # against them is meaningless, so degrade to the exact-content match.
+    # Stored observations that ARE embedded still get full semantic
+    # de-duplication: the detector embeds the incoming text through its own
+    # service, which the callback suppression does not affect.
+    if EmbeddingService.inline_embeddings_suppressed? && observations.unembedded.exists?
+      return Result.new(duplicate: false)
+    end
+
     ensure_embeddings_available!(observations, entity)
     incoming_vector = embed!(normalized_content)
     closest = nearest_observation(observations, incoming_vector)
@@ -55,7 +65,7 @@ class ImportObservationDuplicateDetector
       raise UnavailableError, "Embedding vectors are unavailable; semantic observation de-duplication cannot run."
     end
 
-    return unless observations.where(embedding: nil).exists?
+    return unless observations.unembedded.exists?
 
     raise UnavailableError,
           "Entity '#{entity.name}' has observations without embeddings; run embedding backfill before importing."
@@ -76,7 +86,7 @@ class ImportObservationDuplicateDetector
     )
 
     observations
-      .where.not(embedding: nil)
+      .embedded
       .select(:id, Arel.sql(distance_sql))
       .order(Arel.sql("vec_distance ASC"))
       .first
