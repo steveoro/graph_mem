@@ -34,7 +34,18 @@ class ImportObservationDuplicateDetector
     return Result.new(duplicate: true, observation: exact_match, distance: 0.0, exact_match: true) if exact_match
     return Result.new(duplicate: false) unless observations.exists?
 
-    ensure_embeddings_available!(observations, entity)
+    # The service being down is still fatal to semantic de-duplication.
+    ensure_embeddings_available!
+
+    # Stored rows left unembedded — e.g. observations created by an import
+    # whose deferred backfill has not run yet — cannot be compared
+    # semantically. Degrade to the exact-content match above rather than
+    # hard-failing the (re-)import; the backfill restores full dedup.
+    if observations.missing_embedding.exists?
+      Rails.logger.warn "ImportObservationDuplicateDetector: Entity '#{entity.name}' has " \
+                        "unembedded observations; semantic de-duplication skipped (exact match only)"
+      return Result.new(duplicate: false)
+    end
     incoming_vector = embed!(normalized_content)
     closest = nearest_observation(observations, incoming_vector)
     return Result.new(duplicate: false) unless closest
@@ -50,15 +61,10 @@ class ImportObservationDuplicateDetector
 
   private
 
-  def ensure_embeddings_available!(observations, entity)
-    unless EmbeddingService.vector_enabled?
-      raise UnavailableError, "Embedding vectors are unavailable; semantic observation de-duplication cannot run."
-    end
+  def ensure_embeddings_available!
+    return if EmbeddingService.vector_enabled?
 
-    return unless observations.where(embedding: nil).exists?
-
-    raise UnavailableError,
-          "Entity '#{entity.name}' has observations without embeddings; run embedding backfill before importing."
+    raise UnavailableError, "Embedding vectors are unavailable; semantic observation de-duplication cannot run."
   end
 
   def embed!(content)
@@ -75,10 +81,18 @@ class ImportObservationDuplicateDetector
       [ "VEC_DISTANCE_COSINE(embedding, VEC_FromText(?)) AS vec_distance", vector_sql ]
     )
 
+    # `(vec_distance + 0)` deliberately breaks the `ORDER BY VEC_DISTANCE_*(col,
+    # const) LIMIT n` pattern that triggers MariaDB's ANN index scan. The ANN
+    # path returns the globally nearest rows BEFORE applying the WHERE clause —
+    # unembedded zero-vector placeholders rank as distance 0.0, consume the
+    # LIMIT, and get filtered out by `with_embedding`, so the query can return
+    # no row at all on a relation that has embedded observations. Ordering on
+    # the computed expression keeps exact, filtered ordering (the entity-scoped
+    # set is small, so the ANN index buys nothing here).
     observations
-      .where.not(embedding: nil)
+      .with_embedding
       .select(:id, Arel.sql(distance_sql))
-      .order(Arel.sql("vec_distance ASC"))
+      .order(Arel.sql("(vec_distance + 0) ASC"))
       .first
   rescue ActiveRecord::StatementInvalid => e
     raise UnavailableError, "Embedding vector comparison failed: #{e.message}"

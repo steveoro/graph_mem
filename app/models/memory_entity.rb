@@ -18,8 +18,17 @@ class MemoryEntity < ApplicationRecord
   before_validation :canonicalize_entity_type
   after_create :set_initial_embedding
   after_commit :refresh_embedding, on: [ :update ], if: :embedding_fields_changed?
+  before_update :invalidate_stale_embedding,
+                if: -> { (changes_to_save.keys & EMBEDDING_FIELDS).any? }
 
   EMBEDDING_FIELDS = %w[name entity_type aliases description].freeze
+
+  # `with_embedding`/`missing_embedding` track the `embedded_at` stamp
+  # EmbeddingService#store_vector sets when a real vector is written —
+  # NOT the vector itself (the BEFORE INSERT trigger fills placeholder
+  # zero-vectors on this NOT NULL column).
+  scope :with_embedding, -> { where.not(embedded_at: nil) }
+  scope :missing_embedding, -> { where(embedded_at: nil) }
 
   def as_json(options = {})
     super(options.merge(except: Array(options[:except]) | [ :embedding ]))
@@ -39,6 +48,8 @@ class MemoryEntity < ApplicationRecord
   end
 
   def set_initial_embedding
+    return if EmbeddingService.inline_embeddings_suppressed?
+
     EmbeddingService.embed_entity(self)
   rescue StandardError => e
     Rails.logger.warn "MemoryEntity#set_initial_embedding failed: #{e.message}"
@@ -48,7 +59,20 @@ class MemoryEntity < ApplicationRecord
     (previous_changes.keys & EMBEDDING_FIELDS).any?
   end
 
+  # Any write to embedded text invalidates the stored vector. Clear the stamp
+  # inside the same UPDATE — even when the in-memory copy is already nil — so a
+  # stamp written between our load and this save cannot survive it. Only
+  # EmbeddingService#store_vector sets embedded_at (via compare-and-set).
+  def invalidate_stale_embedding
+    self.embedded_at = nil
+    attribute_will_change!("embedded_at")
+  end
+
   def refresh_embedding
+    # Suppressed (bulk imports): the stamp was already cleared by
+    # invalidate_stale_embedding — the deferred backfill re-embeds this row.
+    return if EmbeddingService.inline_embeddings_suppressed?
+
     EmbeddingService.embed_entity(self)
   rescue StandardError => e
     Rails.logger.warn "MemoryEntity#refresh_embedding failed for id=#{id}: #{e.message}"

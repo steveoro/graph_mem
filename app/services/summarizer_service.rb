@@ -211,7 +211,7 @@ class SummarizerService
       .active
       .where(id: candidate_ids)
       .where.not(id: observation.id)
-      .where.not(embedding: nil)
+      .with_embedding
       .select(
         :id,
         :content,

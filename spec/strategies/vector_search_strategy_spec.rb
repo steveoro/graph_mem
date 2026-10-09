@@ -47,12 +47,11 @@ RSpec.describe VectorSearchStrategy do
 
       it "builds SQL with VEC_DISTANCE_COSINE and VEC_FromText" do
         relation = double("relation")
-        allow(MemoryEntity).to receive(:where).and_return(relation)
-        allow(relation).to receive(:not).and_return(relation)
+        allow(MemoryEntity).to receive(:with_embedding).and_return(relation)
         allow(relation).to receive(:where).and_return(relation)
-        allow(relation).to receive(:select) do |sql_str|
-          expect(sql_str).to include("VEC_DISTANCE_COSINE")
-          expect(sql_str).to include("VEC_FromText")
+        allow(relation).to receive(:select) do |*cols|
+          expect(cols.map(&:to_s).join).to include("VEC_DISTANCE_COSINE")
+          expect(cols.map(&:to_s).join).to include("VEC_FromText")
           relation
         end
         allow(relation).to receive(:having).and_return(relation)
@@ -64,8 +63,7 @@ RSpec.describe VectorSearchStrategy do
 
       it "applies a cosine distance quality gate via HAVING clause" do
         relation = double("relation")
-        allow(MemoryEntity).to receive(:where).and_return(relation)
-        allow(relation).to receive(:not).and_return(relation)
+        allow(MemoryEntity).to receive(:with_embedding).and_return(relation)
         allow(relation).to receive(:where).and_return(relation)
         allow(relation).to receive(:select).and_return(relation)
         allow(relation).to receive(:having) do |clause, threshold|
@@ -81,8 +79,7 @@ RSpec.describe VectorSearchStrategy do
 
       it "filters by entity_type when provided" do
         relation = double("relation")
-        allow(MemoryEntity).to receive(:where).and_return(relation)
-        allow(relation).to receive(:not).and_return(relation)
+        allow(MemoryEntity).to receive(:with_embedding).and_return(relation)
         allow(relation).to receive(:where).with(entity_type: "Task").and_return(relation)
         allow(relation).to receive(:select).and_return(relation)
         allow(relation).to receive(:having).and_return(relation)
@@ -136,8 +133,7 @@ RSpec.describe VectorSearchStrategy do
       it "searches active observations only" do
         relation = double("relation")
         allow(MemoryObservation).to receive(:active).and_return(relation)
-        allow(relation).to receive(:where).and_return(relation)
-        allow(relation).to receive(:not).and_return(relation)
+        allow(relation).to receive(:with_embedding).and_return(relation)
         allow(relation).to receive(:select).and_return(relation)
         allow(relation).to receive(:group).and_return(relation)
         allow(relation).to receive(:order).and_return(relation)
@@ -156,6 +152,78 @@ RSpec.describe VectorSearchStrategy do
       result = described_class::SearchResult.new(entity: entity, distance: 0.123)
       expect(result.entity).to eq(entity)
       expect(result.distance).to eq(0.123)
+    end
+  end
+
+  # Real-column regression specs (ported from cursor/fix-vector-search-ffd6,
+  # store_embedding! adapted to stamp embedded_at): these exercise the
+  # actual VEC_DISTANCE_COSINE query so a revert of the untyped-search or
+  # ORDER BY fixes fails loudly instead of passing on stubs.
+  describe "MariaDB vector columns", :with_test_embeddings do
+    let(:query_vector) { Array.new(768, 0.0).tap { |vector| vector[0] = 1.0 } }
+    let(:near_vector) do
+      Array.new(768, 0.0).tap do |vector|
+        vector[0] = 0.9
+        vector[1] = Math.sqrt(1 - 0.81)
+      end
+    end
+    let(:orthogonal_vector) { Array.new(768, 0.0).tap { |vector| vector[1] = 1.0 } }
+    let(:embedding_service) { instance_double(EmbeddingService, embed: query_vector) }
+    let(:strategy) { described_class.new(embedding_service: embedding_service) }
+
+    def store_embedding!(record, vector)
+      literal = "[#{vector.join(',')}]"
+      quoted = ActiveRecord::Base.connection.quote(literal)
+      ActiveRecord::Base.connection.execute(
+        "UPDATE #{record.class.table_name} SET embedding = VEC_FromText(#{quoted}), " \
+        "embedded_at = UTC_TIMESTAMP(6) WHERE id = #{record.id}"
+      )
+    end
+
+    describe "#search" do
+      let!(:identical) { MemoryEntity.create!(name: "VecIdenticalTask", entity_type: "Task") }
+      let!(:near) { MemoryEntity.create!(name: "VecNearProject", entity_type: "Project") }
+      let!(:far) { MemoryEntity.create!(name: "VecFarIssue", entity_type: "Issue") }
+
+      before do
+        store_embedding!(identical, query_vector)
+        store_embedding!(near, near_vector)
+        store_embedding!(far, orthogonal_vector)
+      end
+
+      it "returns every typed entity under the distance gate when entity_type is omitted" do
+        results = strategy.search("semantic query")
+
+        expect(results.map { |result| result.entity.id }).to eq([ identical.id, near.id ])
+        expect(results.first.distance).to be < results.last.distance
+        expect(results.map(&:distance)).to all(be < described_class::MAX_COSINE_DISTANCE)
+      end
+
+      it "still restricts results to the requested entity_type" do
+        results = strategy.search("semantic query", entity_type: "Task")
+
+        expect(results.map { |result| result.entity.id }).to eq([ identical.id ])
+      end
+    end
+
+    describe "#search_observations" do
+      let!(:close_entity) { MemoryEntity.create!(name: "VecObsClose", entity_type: "Task") }
+      let!(:far_entity) { MemoryEntity.create!(name: "VecObsFar", entity_type: "Project") }
+      let!(:obsolete_entity) { MemoryEntity.create!(name: "VecObsObsolete", entity_type: "Issue") }
+
+      before do
+        close_obs = MemoryObservation.create!(memory_entity: close_entity, content: "close fact")
+        far_obs = MemoryObservation.create!(memory_entity: far_entity, content: "far fact")
+        obsolete_obs = MemoryObservation.create!(memory_entity: obsolete_entity, content: "obsolete fact")
+        store_embedding!(close_obs, query_vector)
+        store_embedding!(far_obs, orthogonal_vector)
+        store_embedding!(obsolete_obs, query_vector)
+        obsolete_obs.mark_obsolete!(reason: "stale")
+      end
+
+      it "returns active entity ids ordered by observation distance" do
+        expect(strategy.search_observations("semantic query")).to eq([ close_entity.id, far_entity.id ])
+      end
     end
   end
 end

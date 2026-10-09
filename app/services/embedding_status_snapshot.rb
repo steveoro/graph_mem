@@ -10,8 +10,8 @@ class EmbeddingStatusSnapshot
     vector_enabled = EmbeddingService.vector_enabled?
     entities_total = MemoryEntity.count
     observations_total = MemoryObservation.count
-    entities_missing = vector_enabled ? MemoryEntity.where(embedding: nil).count : entities_total
-    observations_missing = vector_enabled ? MemoryObservation.where(embedding: nil).count : observations_total
+    entities_missing = vector_enabled ? MemoryEntity.missing_embedding.count : entities_total
+    observations_missing = vector_enabled ? MemoryObservation.missing_embedding.count : observations_total
     entities_embedded = entities_total - entities_missing
     observations_embedded = observations_total - observations_missing
     indexes = EmbeddingIndexStatus.indexes

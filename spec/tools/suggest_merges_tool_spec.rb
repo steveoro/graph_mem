@@ -83,7 +83,7 @@ RSpec.describe SuggestMergesTool, type: :model do
 
     context 'error handling' do
       it 'raises InternalServerError on unexpected errors without leaking the original message' do
-        allow(MemoryEntity).to receive(:where).and_raise(StandardError.new("DB error"))
+        allow(MemoryEntity).to receive(:with_embedding).and_raise(StandardError.new("DB error"))
 
         expect {
           tool.call
@@ -93,7 +93,7 @@ RSpec.describe SuggestMergesTool, type: :model do
       end
 
       it 're-raises Timeout::Error so the envelope can map category timeout' do
-        allow(MemoryEntity).to receive(:where).and_raise(Timeout::Error.new("execution expired"))
+        allow(MemoryEntity).to receive(:with_embedding).and_raise(Timeout::Error.new("execution expired"))
 
         expect {
           tool.call

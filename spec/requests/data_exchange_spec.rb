@@ -294,6 +294,47 @@ RSpec.describe 'DataExchange', type: :request do
         }.to change(MemoryObservation, :count).by(1)
       end
 
+      it 'seeds ambiguous_relations into scan_review after a successful import' do
+        graphify_json = {
+          version: '1.0',
+          ambiguous_relations: [
+            {
+              from_name: 'Caller', from_type: 'Class',
+              to_name: 'Callee', to_type: 'Class',
+              relation_type: 'calls', confidence: 0.5,
+              properties: { source_file: 'app/caller.rb', source_location: '12', context: 'call site' }
+            }
+          ],
+          root_nodes: [
+            {
+              name: 'Graphify Project', entity_type: 'Project', aliases: '',
+              children: [
+                { name: 'Caller', entity_type: 'Class', relation_type: 'part_of', children: [] },
+                { name: 'Callee', entity_type: 'Class', relation_type: 'part_of', children: [] }
+              ]
+            }
+          ]
+        }.to_json
+
+        post import_upload_data_exchange_index_path, params: {
+          file: Rack::Test::UploadedFile.new(
+            StringIO.new(graphify_json), 'application/json', original_filename: 'graphify.json'
+          )
+        }
+
+        expect {
+          post import_execute_data_exchange_index_path, params: {
+            decisions: {
+              '0' => { node_path: '0', action: 'create', target_id: '', parent_id: '' }
+            }
+          }
+        }.to change(MaintenanceReportRow.by_report_type('scan_review'), :count).by(1)
+
+        row = MaintenanceReportRow.by_report_type('scan_review').last
+        expect(row.payload['kind']).to eq('relationship_proposal')
+        expect(row.payload['relation_type']).to eq('calls')
+      end
+
       it 'can merge into existing entity' do
         post import_execute_data_exchange_index_path, params: {
           decisions: {

@@ -349,5 +349,18 @@ RSpec.describe MemoryObservation, type: :model do
         described_class.create!(memory_entity: entity, content: "fail gracefully")
       }.not_to raise_error
     end
+
+    it "clears embedded_at in the same UPDATE even when the in-memory copy is stale", :with_test_embeddings do
+      obs = EmbeddingService.suppress_inline_embeddings do
+        described_class.create!(memory_entity: entity, content: "embedded obs")
+      end
+      stale_copy = described_class.find(obs.id) # embedded_at nil in memory
+      described_class.where(id: obs.id).update_all(embedded_at: Time.current)
+
+      stale_copy.update!(tags: [ "edited" ])
+
+      expect(obs.reload.embedded_at).to be_nil
+      expect(described_class.missing_embedding).to include(obs)
+    end
   end
 end

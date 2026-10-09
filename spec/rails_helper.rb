@@ -43,6 +43,14 @@ RSpec.configure do |config|
   # You can uncomment this line to turn off ActiveRecord support entirely.
   # config.use_active_record = false
 
+  # The type-mapping canonicalize memos are class-level and survive the
+  # transactional rollback (and can even hold future timestamps from
+  # time-travel specs); reset them per example for determinism.
+  config.before(:each) do
+    EntityTypeMapping.reset_canonicalize_cache!
+    RelationTypeMapping.reset_canonicalize_cache!
+  end
+
   # RSpec Rails can automatically mix in different behaviours to your tests
   # based on their file location, for example enabling you to call `get` and
   # `post` in specs under `spec/controllers`.

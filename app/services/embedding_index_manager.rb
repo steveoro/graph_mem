@@ -23,8 +23,8 @@ class EmbeddingIndexManager
       raise PrecheckError, "embedding columns don't exist. Run migrations first."
     end
 
-    entity_nulls = MemoryEntity.where(embedding: nil).count
-    obs_nulls = MemoryObservation.where(embedding: nil).count
+    entity_nulls = MemoryEntity.missing_embedding.count
+    obs_nulls = MemoryObservation.missing_embedding.count
 
     if entity_nulls.positive? || obs_nulls.positive?
       raise PrecheckError,

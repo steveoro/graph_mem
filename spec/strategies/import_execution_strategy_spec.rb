@@ -169,6 +169,29 @@ RSpec.describe ImportExecutionStrategy, type: :model do
         expect(report.entities_created).to eq(0)
       end
 
+      it 'enqueues an embedding backfill on a merge-only import' do
+        # An alias-only merge creates nothing but clears embedded_at via
+        # before_update — the backfill must be queued or the entity silently
+        # drops out of vector search.
+        merge_only_data = {
+          'root_nodes' => [
+            {
+              'name' => 'Project to Merge',
+              'entity_type' => 'Project',
+              'aliases' => 'merge-alias',
+              'observations' => [],
+              'children' => []
+            }
+          ]
+        }
+        expect(EmbeddingsMaintenanceEnqueuer).to receive(:enqueue!).with('backfill')
+
+        report = strategy.execute(merge_only_data, decisions)
+        expect(report.success).to be true
+        expect(report.entities_merged).to eq(1)
+        expect(report.observations_created).to eq(0)
+      end
+
       it 'skips duplicate observations' do
         # Create an observation that already exists
         import_data_with_dup = {
@@ -693,6 +716,7 @@ RSpec.describe ImportExecutionStrategy, type: :model do
         entities_skipped: 1,
         observations_created: 10,
         relations_created: 3,
+        relations_unresolved: 1,
         errors: []
       )
 
@@ -705,8 +729,296 @@ RSpec.describe ImportExecutionStrategy, type: :model do
         entities_skipped: 1,
         observations_created: 10,
         relations_created: 3,
+        relations_unresolved: 1,
+        relations_skipped: nil,
         errors: []
       })
+    end
+  end
+
+  describe 'non-tree relations' do
+    let(:import_data) do
+      {
+        'root_nodes' => [
+          {
+            'name' => 'Sample App',
+            'entity_type' => 'Project',
+            'children' => [
+              {
+                'name' => 'app/models/swimmer.rb',
+                'entity_type' => 'File',
+                'relation_type' => 'part_of',
+                'children' => [
+                  {
+                    'name' => 'Swimmer',
+                    'entity_type' => 'Class',
+                    'relation_type' => 'part_of',
+                    'children' => [
+                      {
+                        'name' => 'Swimmer#name',
+                        'entity_type' => 'Method',
+                        'relation_type' => 'part_of',
+                        'children' => []
+                      },
+                      {
+                        'name' => 'Swimmer#find',
+                        'entity_type' => 'Method',
+                        'relation_type' => 'part_of',
+                        'children' => []
+                      }
+                    ]
+                  },
+                  {
+                    'name' => 'ApplicationRecord',
+                    'entity_type' => 'Class',
+                    'relation_type' => 'part_of',
+                    'children' => []
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        'relations' => [
+          {
+            'from_name' => 'Swimmer#name', 'from_type' => 'Method',
+            'to_name' => 'Swimmer#find', 'to_type' => 'Method',
+            'relation_type' => 'calls', 'confidence' => 1.0,
+            'properties' => { 'source' => 'graphify', 'provenance' => 'EXTRACTED' }
+          },
+          {
+            'from_name' => 'Swimmer', 'from_type' => 'Class',
+            'to_name' => 'ApplicationRecord', 'to_type' => 'Class',
+            'relation_type' => 'inherits', 'confidence' => 1.0
+          },
+          {
+            'from_name' => 'Swimmer#name', 'from_type' => 'Method',
+            'to_name' => 'Missing#thing', 'to_type' => 'Method',
+            'relation_type' => 'calls', 'confidence' => 0.5
+          }
+        ]
+      }
+    end
+
+    let(:decisions) { [ { node_path: '0', action: 'create' } ] }
+
+    it 'creates name+type-addressed relations after the tree exists' do
+      report = strategy.execute(import_data, decisions)
+
+      swimmer = MemoryEntity.find_by(name: 'Swimmer')
+      record = MemoryEntity.find_by(name: 'ApplicationRecord')
+      name_m = MemoryEntity.find_by(name: 'Swimmer#name')
+      find_m = MemoryEntity.find_by(name: 'Swimmer#find')
+
+      expect(report.success).to be(true)
+      expect(
+        MemoryRelation.exists?(from_entity: name_m, to_entity: find_m, relation_type: 'calls')
+      ).to be(true)
+      expect(
+        MemoryRelation.exists?(from_entity: swimmer, to_entity: record, relation_type: 'inherits')
+      ).to be(true)
+      # 5 containment edges in the tree + 2 emitted code relations
+      expect(report.relations_created).to eq(7)
+    end
+
+    it 'counts unresolved endpoints without failing' do
+      report = strategy.execute(import_data, decisions)
+
+      expect(report.success).to be(true)
+      expect(report.relations_unresolved).to eq(1)
+      expect(report.errors).to eq([])
+    end
+
+    it 'resolves endpoint names case-insensitively like the old find_by did' do
+      report = strategy.execute(
+        import_data.merge(
+          'relations' => [
+            { 'from_name' => 'swimmer#name', 'from_type' => 'Method',
+              'to_name' => 'SWIMMER#FIND', 'to_type' => 'Method',
+              'relation_type' => 'calls', 'confidence' => 1.0 }
+          ]
+        ),
+        decisions
+      )
+
+      expect(report.relations_unresolved).to eq(0)
+      expect(
+        MemoryRelation.exists?(
+          from_entity: MemoryEntity.find_by(name: 'Swimmer#name'),
+          to_entity: MemoryEntity.find_by(name: 'Swimmer#find'),
+          relation_type: 'calls'
+        )
+      ).to be(true)
+    end
+
+    it 'is idempotent on a second run' do
+      strategy.execute(import_data, decisions)
+      report = described_class.new(observation_duplicate_detector: observation_duplicate_detector)
+                          .execute(import_data, decisions)
+
+      expect(report.relations_created).to eq(0)
+      expect(MemoryRelation.where(relation_type: 'calls').count).to eq(1)
+    end
+
+    it 'omits the pass entirely when relations is absent' do
+      data = { 'root_nodes' => [ { 'name' => 'Solo', 'entity_type' => 'Project', 'children' => [] } ] }
+      report = strategy.execute(data, [ { node_path: '0', action: 'create' } ])
+
+      expect(report.success).to be(true)
+      expect(report.relations_unresolved).to eq(0)
+    end
+
+    it 'rejects hierarchical relation types instead of re-parenting' do
+      report = strategy.execute(
+        import_data.merge(
+          'relations' => [
+            { 'from_name' => 'Swimmer', 'from_type' => 'Class',
+              'to_name' => 'Existing Project', 'to_type' => 'Project',
+              'relation_type' => 'part_of' }
+          ]
+        ),
+        decisions
+      )
+
+      swimmer = MemoryEntity.find_by(name: 'Swimmer')
+      expect(report.success).to be(true)
+      expect(report.relations_skipped).to eq(1)
+      expect(
+        MemoryRelation.where(from_entity_id: swimmer.id, relation_type: 'part_of').count
+      ).to eq(1) # still parented under its import file, not re-parented
+    end
+
+    it 'skips an invalid edge instead of rolling back the import' do
+      report = strategy.execute(
+        import_data.merge(
+          'relations' => import_data['relations'] + [
+            { 'from_name' => 'Swimmer', 'from_type' => 'Class',
+              'to_name' => 'ApplicationRecord', 'to_type' => 'Class',
+              'relation_type' => 'calls', 'confidence' => 5.0 }
+          ]
+        ),
+        decisions
+      )
+
+      expect(report.success).to be(true)
+      expect(report.errors).to eq([])
+      expect(report.relations_skipped).to eq(1)
+      expect(report.relations_created).to eq(7) # the valid edges still applied
+    end
+  end
+
+  describe 'exclude action (foreign subtrees)' do
+    let(:import_data) do
+      {
+        'root_nodes' => [
+          {
+            'name' => 'RepoB',
+            'entity_type' => 'Project',
+            'children' => [
+              {
+                'name' => 'app/controllers/application_controller.rb',
+                'entity_type' => 'File',
+                'children' => [
+                  { 'name' => 'ApplicationController', 'entity_type' => 'Class',
+                    'children' => [
+                      { 'name' => 'ApplicationController#beta_only', 'entity_type' => 'Method',
+                        'children' => [] }
+                    ] }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    end
+
+    let(:decisions) do
+      [
+        { node_path: '0', action: 'create' },
+        { node_path: '0.children.0', child_action: 'exclude' },
+        { node_path: '0.children.0.children.0', child_action: 'exclude' },
+        { node_path: '0.children.0.children.0.children.0', child_action: 'exclude' }
+      ]
+    end
+
+    it 'creates nothing under an excluded node — no orphans, counted as skipped' do
+      report = strategy.execute(import_data, decisions)
+
+      expect(report.success).to be(true)
+      expect(MemoryEntity.find_by(name: 'RepoB')).to be_present
+      expect(MemoryEntity.find_by(name: 'ApplicationController#beta_only')).to be_nil
+      expect(MemoryEntity.find_by(name: 'ApplicationController')).to be_nil
+      # the subtree root counts; its descendants are never reached
+      expect(report.entities_skipped).to eq(1)
+      # RepoB's root has no children attached
+      repo_b = MemoryEntity.find_by(name: 'RepoB')
+      expect(MemoryRelation.where(to_entity_id: repo_b.id, relation_type: 'part_of')).to be_empty
+    end
+
+    it 'skips relations whose endpoints live inside an excluded foreign subtree' do
+      # RepoA's tree already exists; RepoB's import excludes the shared file
+      # subtree but its relations payload still references entities in it.
+      foreign_file = MemoryEntity.create!(name: 'app/controllers/application_controller.rb', entity_type: 'File')
+      foreign_class = MemoryEntity.create!(name: 'ApplicationController', entity_type: 'Class')
+      MemoryRelation.create!(from_entity_id: foreign_class.id, to_entity_id: foreign_file.id,
+                             relation_type: 'part_of')
+
+      data_with_relations = import_data.deep_dup
+      data_with_relations['relations'] = [
+        { 'from_name' => 'RepoB', 'from_type' => 'Project',
+          'to_name' => 'ApplicationController', 'to_type' => 'Class',
+          'relation_type' => 'depends_on' },
+        { 'from_name' => 'RepoB', 'from_type' => 'Project',
+          'to_name' => 'app/controllers/application_controller.rb', 'to_type' => 'File',
+          'relation_type' => 'depends_on' }
+      ]
+
+      report = strategy.execute(data_with_relations, decisions)
+
+      expect(report.success).to be(true)
+      expect(report.relations_created).to eq(0)
+      expect(report.relations_skipped).to eq(2)
+      expect(MemoryRelation.where(relation_type: 'depends_on')).to be_empty
+    end
+  end
+
+  describe 'bulk-import callback suppression' do
+    let(:import_data) do
+      {
+        'root_nodes' => [
+          { 'name' => 'Bulk Project', 'entity_type' => 'Project',
+            'observations' => [ { 'content' => 'some fact' } ], 'children' => [] }
+        ]
+      }
+    end
+    let(:decisions) { [ { node_path: '0', action: 'create' } ] }
+
+    it 'suppresses inline embeddings and enqueues a maintenance backfill' do
+      entity_embedder = instance_double(EmbeddingService)
+      allow(EmbeddingService).to receive(:embed_entity).and_raise('should not be called')
+      allow(EmbeddingService).to receive(:embed_observation).and_raise('should not be called')
+      expect(EmbeddingsMaintenanceEnqueuer).to receive(:enqueue!).with('backfill')
+
+      report = strategy.execute(import_data, decisions)
+      expect(report.success).to be(true)
+    end
+
+    it 'degrades observation de-duplication to exact matching while suppressed' do
+      entity = MemoryEntity.create!(name: 'Existing', entity_type: 'Project', aliases: '')
+      MemoryObservation.create!(memory_entity: entity, content: 'verbatim fact')
+
+      flagged = nil
+      EmbeddingService.suppress_inline_embeddings do
+        flagged = EmbeddingService.inline_embeddings_suppressed?
+        # Stored rows are unembedded inside a suppressed import — semantic
+        # dedup degrades to exact matching rather than raising.
+        allow(EmbeddingService).to receive(:vector_enabled?).and_return(true)
+        result = ImportObservationDuplicateDetector.new.find_duplicate(
+          entity: entity, content: 'a semantically similar but different fact'
+        )
+        expect(result.duplicate).to be(false)
+      end
+      expect(flagged).to be(true)
     end
   end
 end

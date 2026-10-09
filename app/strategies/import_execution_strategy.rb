@@ -18,6 +18,8 @@ class ImportExecutionStrategy
     :entities_skipped,
     :observations_created,
     :relations_created,
+    :relations_unresolved,
+    :relations_skipped,
     :errors,
     keyword_init: true
   ) do
@@ -29,6 +31,8 @@ class ImportExecutionStrategy
         entities_skipped: entities_skipped,
         observations_created: observations_created,
         relations_created: relations_created,
+        relations_unresolved: relations_unresolved,
+        relations_skipped: relations_skipped,
         errors: errors
       }
     end
@@ -43,8 +47,12 @@ class ImportExecutionStrategy
     @entities_skipped = 0
     @observations_created = 0
     @relations_created = 0
+    @relations_unresolved = 0
+    @relations_skipped = 0
     @errors = []
     @entity_mapping = {} # Maps import node paths to created/matched entity IDs
+    @relation_endpoint_ids = Set.new # endpoints of every relation created
+    @excluded_entity_ids = Set.new # entities inside excluded foreign subtrees
   end
 
   # Execute the import based on operator decisions
@@ -59,44 +67,99 @@ class ImportExecutionStrategy
     decision_map = decisions.index_by { |d| d[:node_path] || d["node_path"] }
     initialize_progress!(import_data)
 
-    ActiveRecord::Base.transaction do
-      root_nodes = import_data["root_nodes"] || import_data[:root_nodes] || []
+    # Bulk imports cannot afford a synchronous embedding call and a
+    # per-endpoint trust-score recompute per row/edge (measured: ~1.5M
+    # queries and 20k embed calls on a 50k-edge graph). Both callbacks are
+    # suppressed for the transaction; after it, embeddings are delegated to
+    # the maintenance backfill and trust scores are recomputed once per
+    # touched entity.
+    MemoryRelation.suppress_trust_recompute do
+      EmbeddingService.suppress_inline_embeddings do
+        # The named embeddings lock serializes this transaction with a running
+        # EmbeddingService.backfill_all (which skips its run while the lock is
+        # held). Acquired best-effort: if a backfill already holds it we still
+        # proceed — store_vector's compare-and-set prevents stale overwrites.
+        EmbeddingService.with_embedding_lock(5) do |acquired|
+          unless acquired
+            @logger.warn "ImportExecutionStrategy: embeddings lock busy; " \
+                         "proceeding (store_vector compare-and-set keeps vectors consistent)"
+          end
 
-      root_nodes.each_with_index do |root_node, index|
-        path = index.to_s
-        decision = decision_map[path]
-        parent_id = resolve_parent_id(decision, path)
+          ActiveRecord::Base.transaction do
+            root_nodes = import_data["root_nodes"] || import_data[:root_nodes] || []
 
-        process_node_recursive(root_node, path, decision_map, parent_id, nil)
+            root_nodes.each_with_index do |root_node, index|
+              path = index.to_s
+              decision = decision_map[path]
+              parent_id = resolve_parent_id(decision, path)
+
+              process_node_recursive(root_node, path, decision_map, parent_id, nil)
+            end
+
+            # Non-tree edges (e.g. code-structure `calls`/`inherits` imported from
+            # Graphify) apply after every entity exists: endpoints are addressed by
+            # name+type and resolved through the same canonicalization as nodes.
+            apply_relations(import_data["relations"] || import_data[:relations])
+
+            raise ActiveRecord::Rollback if @errors.any?
+          end
+        end
       end
-
-      raise ActiveRecord::Rollback if @errors.any?
     end
+
+    recompute_trust_for_touched_entities
 
     @progress_tracker&.complete!(message: "Import completed", counters: progress_counters)
 
-    ImportReport.new(
+    report = ImportReport.new(
       success: @errors.empty?,
       entities_created: @entities_created,
       entities_merged: @entities_merged,
       entities_skipped: @entities_skipped,
       observations_created: @observations_created,
       relations_created: @relations_created,
+      relations_unresolved: @relations_unresolved,
+      relations_skipped: @relations_skipped,
       errors: @errors
     )
+    enqueue_embedding_backfill if report.success
+    report
   rescue ImportObservationDuplicateDetector::UnavailableError => e
     @logger.error "ImportExecutionStrategy: Semantic observation de-duplication unavailable: #{e.message}"
     @errors << "Semantic observation de-duplication unavailable: #{e.message}"
     @progress_tracker&.fail!(e)
 
     failed_report
-  rescue ActiveRecord::RecordInvalid => e
+  rescue ActiveRecord::RecordInvalid, ActiveRecord::StatementInvalid => e
     @logger.error "ImportExecutionStrategy: Transaction failed: #{e.message}"
     @errors << "Transaction failed: #{e.message}"
 
     @progress_tracker&.fail!(e)
 
     failed_report
+  end
+
+  # Deferred counterparts of the suppressed callbacks.
+  def recompute_trust_for_touched_entities
+    @relation_endpoint_ids.each do |entity_id|
+      MemoryObservation
+        .where(memory_entity_id: entity_id, status: MemoryObservation::ACTIVE_STATUS)
+        .find_each do |observation|
+          observation.update_column(:trust_score, ObservationTrustRanker.rank(observation))
+        end
+    end
+  end
+
+  def enqueue_embedding_backfill
+    # Merges count too: an alias-only merge clears embedded_at via
+    # before_update but creates nothing, so without this the entity silently
+    # drops out of vector search until an unrelated backfill runs.
+    return unless @entities_created.positive? || @observations_created.positive? ||
+                  @entities_merged.positive?
+
+    EmbeddingsMaintenanceEnqueuer.enqueue!("backfill")
+  rescue StandardError => e
+    @logger.warn "ImportExecutionStrategy: Could not enqueue embedding backfill: #{e.message}"
   end
 
   private
@@ -122,6 +185,8 @@ class ImportExecutionStrategy
     entity_id = case effective_action
     when "skip"
       handle_skip_action(node)
+    when "exclude"
+      handle_exclude_action(node)
     when "add_relation"
       handle_add_relation_action(node, tree_parent_id)
     when "merge"
@@ -195,6 +260,8 @@ class ImportExecutionStrategy
       entities_skipped: @entities_skipped,
       observations_created: @observations_created,
       relations_created: @relations_created,
+      relations_unresolved: @relations_unresolved,
+      relations_skipped: @relations_skipped,
       errors: @errors.length
     }
   end
@@ -224,6 +291,34 @@ class ImportExecutionStrategy
       @logger.warn "ImportExecutionStrategy: Skip action but entity '#{name}' not found, creating instead"
       create_new_entity(node)
     end
+  end
+
+  # Handle exclude action - the node belongs to another project's subtree
+  # (headless Graphify imports mark foreign subtrees this way). Unlike
+  # `skip`, this is a true no-op: nothing is created, attached, or observed,
+  # and the nil return stops the descent so the whole subtree is excluded.
+  # @param node [Hash] Import node data
+  # @return [nil]
+  def handle_exclude_action(node)
+    name = node[:name] || node["name"]
+    @logger.info "ImportExecutionStrategy: Excluding '#{name}' (foreign subtree, left untouched)"
+    @entities_skipped += 1
+    record_excluded_subtree(node)
+    nil
+  end
+
+  # Left untouched means untouched by the relations pass too: endpoints
+  # resolve DB-wide, so without this an edge in the payload could still be
+  # written between entities of the excluded project. Remember the matched
+  # entity and its whole part_of subtree.
+  def record_excluded_subtree(node)
+    entity = ImportEntityResolver.find_by_name_and_type(
+      node[:name] || node["name"], node[:entity_type] || node["entity_type"]
+    )
+    return unless entity
+
+    @excluded_entity_ids.add(entity.id)
+    @excluded_entity_ids.merge(RelationSemantics.descendant_ids(entity.id))
   end
 
   # Handle add_relation action - entity exists but needs relation to new parent
@@ -358,20 +453,153 @@ class ImportExecutionStrategy
     end
   end
 
+  # Apply name+type-addressed relations after the entity tree exists.
+  # Edges whose endpoints cannot be resolved are skipped and counted — never
+  # fatal — so a partially-resolvable graph still imports cleanly.
+  #
+  # Design decisions (PR #96 review):
+  # - Endpoints resolve against the WHOLE database, not just this import's
+  #   accepted tree nodes. Name+type-addressed edges are meant to cross
+  #   import boundaries: a file imported today must link onto entities
+  #   imported in earlier runs, so "not in this payload" is not "missing".
+  #   Only genuinely absent endpoints count as unresolved.
+  # - A skipped tree node still receives its imported edges: `skip` means
+  #   "entity already exists with this parent" — the entity stays part of
+  #   the processed tree, so upserting its relations is the intended
+  #   rescan behaviour, not an operator exclusion.
+  # @param relations [Array<Hash>, nil] {from_name, from_type, to_name, to_type,
+  #   relation_type, weight, confidence, properties}
+  def apply_relations(relations)
+    return if relations.blank?
+
+    # One (name, canonical_type) -> id map for every endpoint and one
+    # preloaded set of existing triples: a 50k-edge payload cannot afford
+    # two find_by + canonicalize + exists? lookups per edge.
+    endpoint_ids = resolve_relation_endpoints(relations)
+    existing = preload_existing_relations(relations, endpoint_ids)
+
+    Array(relations).each do |relation|
+      raw_type = relation["relation_type"] || relation[:relation_type]
+
+      # Relations are cross-cutting edges only: a hierarchical (part_of)
+      # entry would silently re-parent an existing entity, since single
+      # -parent relations replace the current parent. Tree shape is
+      # accepted exclusively through node children — never this pass.
+      if RelationSemantics.hierarchical?(raw_type)
+        @logger.warn "ImportExecutionStrategy: Rejected hierarchical relation " \
+                     "'#{raw_type}' in relations payload"
+        @relations_skipped += 1
+        next
+      end
+
+      from_id = endpoint_ids[endpoint_key(relation["from_name"] || relation[:from_name],
+                                          relation["from_type"] || relation[:from_type])]
+      to_id = endpoint_ids[endpoint_key(relation["to_name"] || relation[:to_name],
+                                        relation["to_type"] || relation[:to_type])]
+
+      unless from_id && to_id
+        @relations_unresolved += 1
+        next
+      end
+
+      # Excluded foreign subtrees are left untouched — including their
+      # edges: an endpoint inside one means this edge belongs to the other
+      # project's graph, not this import's.
+      if @excluded_entity_ids.include?(from_id) || @excluded_entity_ids.include?(to_id)
+        @relations_skipped += 1
+        next
+      end
+
+      # fatal: false — an invalid edge (e.g. out-of-range confidence) is
+      # skipped and counted, never allowed to roll back the whole import.
+      create_relation_safe(
+        from_id,
+        to_id,
+        raw_type,
+        weight: relation["weight"] || relation[:weight],
+        confidence: relation["confidence"] || relation[:confidence],
+        properties: relation["properties"] || relation[:properties] || {},
+        fatal: false,
+        seen: existing
+      )
+    end
+  end
+
+  # Maps each distinct (name, canonical entity_type) endpoint pair in the
+  # payload to a MemoryEntity id with a single query.
+  def resolve_relation_endpoints(relations)
+    names = []
+    types = []
+    Array(relations).each do |relation|
+      names << (relation["from_name"] || relation[:from_name])
+      names << (relation["to_name"] || relation[:to_name])
+      types << (relation["from_type"] || relation[:from_type])
+      types << (relation["to_type"] || relation[:to_type])
+    end
+    canonical_types = types.uniq.map { |type| ImportEntityResolver.canonical_type(type) }.uniq
+
+    MemoryEntity.where(name: names.uniq, entity_type: canonical_types)
+                .pluck(:name, :entity_type, :id)
+                .each_with_object({}) do |(name, entity_type, id), map|
+      map[[ name.to_s.downcase, entity_type.to_s.downcase ]] ||= id
+    end
+  end
+
+  # Downcased name AND type: memory_entities.name uses a case-insensitive
+  # collation, and the old per-edge find_by_name_and_type matched
+  # "FooService"/"Service" for "fooservice"/"service" — the bulk map must
+  # keep that behavior for types missing from the mapping table too.
+  def endpoint_key(name, raw_type)
+    [ name.to_s.downcase, ImportEntityResolver.canonical_type(raw_type).to_s.downcase ]
+  end
+
+  # All (from_id, to_id, canonical_type) triples the resolvable relations
+  # already have in the DB — one query instead of an exists? per edge. The
+  # set doubles as the intra-payload dedupe: create_relation_safe adds each
+  # created triple to it.
+  def preload_existing_relations(relations, endpoint_ids)
+    triples = Array(relations).filter_map do |relation|
+      raw_type = relation["relation_type"] || relation[:relation_type]
+      next if RelationSemantics.hierarchical?(raw_type)
+
+      from_id = endpoint_ids[endpoint_key(relation["from_name"] || relation[:from_name],
+                                          relation["from_type"] || relation[:from_type])]
+      to_id = endpoint_ids[endpoint_key(relation["to_name"] || relation[:to_name],
+                                        relation["to_type"] || relation[:to_type])]
+      [ from_id, to_id, MemoryRelation.canonical_relation_type(raw_type) ] if from_id && to_id
+    end
+    return Set.new if triples.empty?
+
+    MemoryRelation
+      .where(from_entity_id: triples.map(&:first).uniq,
+             to_entity_id: triples.map(&:second).uniq,
+             relation_type: triples.map(&:third).uniq)
+      .pluck(:from_entity_id, :to_entity_id, :relation_type)
+      .each_with_object(Set.new) { |(from_id, to_id, type), set| set << [ from_id, to_id, type ] }
+  end
+
   # Create a relation safely (handling duplicates)
   # @param from_entity_id [Integer] Child/source entity ID
   # @param to_entity_id [Integer] Parent/target entity ID
   # @param relation_type [String] Type of relation
-  def create_relation_safe(from_entity_id, to_entity_id, relation_type, weight: nil, confidence: nil, properties: {})
+  # @param fatal [Boolean] true (tree pass): failures abort the import via
+  #   @errors; false (relations pass): failures are counted and skipped so a
+  #   single bad edge cannot roll back an otherwise healthy import
+  # @param seen [Set, nil] preloaded (from,to,type) triples — membership
+  #   replaces the per-edge exists? query and gains the created triples
+  def create_relation_safe(from_entity_id, to_entity_id, relation_type, weight: nil, confidence: nil,
+                           properties: {}, fatal: true, seen: nil)
     return if from_entity_id == to_entity_id # No self-loops
 
     canonical_type = MemoryRelation.canonical_relation_type(relation_type)
-    existing = MemoryRelation.exists?(
-      from_entity_id: from_entity_id,
-      to_entity_id: to_entity_id,
-      relation_type: canonical_type
-    )
-    return if existing
+    triple = [ from_entity_id, to_entity_id, canonical_type ]
+    if seen
+      return if seen.include?(triple)
+    else
+      return if MemoryRelation.exists?(from_entity_id: from_entity_id,
+                                       to_entity_id: to_entity_id,
+                                       relation_type: canonical_type)
+    end
 
     # Hierarchy is single-parent: replace any existing part_of parent before attaching.
     if RelationSemantics.single_parent?(canonical_type)
@@ -393,11 +621,21 @@ class ImportExecutionStrategy
       properties: properties
     )
     @relations_created += 1
+    seen&.add(triple)
+    @relation_endpoint_ids << from_entity_id << to_entity_id
     @logger.debug "ImportExecutionStrategy: Created relation #{from_entity_id} -[#{canonical_type}]-> #{to_entity_id}"
-  rescue RelationSemantics::ValidationError => e
-    @errors << "Failed to create relation (#{from_entity_id} -> #{to_entity_id}): #{e.message}"
-  rescue ActiveRecord::RecordInvalid => e
-    @errors << "Failed to create relation (#{from_entity_id} -> #{to_entity_id}): #{e.message}"
+  rescue RelationSemantics::ValidationError, ActiveRecord::RecordInvalid => e
+    record_relation_failure(from_entity_id, to_entity_id, e, fatal: fatal)
+  end
+
+  def record_relation_failure(from_entity_id, to_entity_id, error, fatal:)
+    message = "Failed to create relation (#{from_entity_id} -> #{to_entity_id}): #{error.message}"
+    if fatal
+      @errors << message
+    else
+      @logger.warn "ImportExecutionStrategy: #{message} — edge skipped"
+      @relations_skipped += 1
+    end
   end
 
   def find_entity_by_name_and_type(name, entity_type)
@@ -418,6 +656,8 @@ class ImportExecutionStrategy
       entities_skipped: 0,
       observations_created: 0,
       relations_created: 0,
+      relations_unresolved: 0,
+      relations_skipped: 0,
       errors: @errors
     )
   end

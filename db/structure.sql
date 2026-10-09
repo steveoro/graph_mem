@@ -164,9 +164,11 @@ CREATE TABLE `memory_entities` (
   `aliases` text DEFAULT NULL,
   `description` text DEFAULT NULL,
   `embedding` vector(768) NOT NULL,
+  `embedded_at` datetime(6) DEFAULT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `index_memory_entities_on_name` (`name`),
   KEY `index_memory_entities_on_entity_type` (`entity_type`),
+  KEY `idx_memory_entities_embedded_at` (`embedded_at`),
   FULLTEXT KEY `index_memory_entities_fulltext` (`name`,`aliases`),
   VECTOR KEY `idx_memory_entities_embedding` (`embedding`) `DISTANCE`='cosine'
 ) ENGINE=InnoDB AUTO_INCREMENT=655 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
@@ -206,6 +208,7 @@ CREATE TABLE `memory_observations` (
   `obsolescence_reason` varchar(255) DEFAULT NULL,
   `superseded_by_id` bigint(20) DEFAULT NULL,
   `trust_score` float NOT NULL DEFAULT 0,
+  `embedded_at` datetime(6) DEFAULT NULL,
   PRIMARY KEY (`id`),
   KEY `index_memory_observations_on_memory_entity_id` (`memory_entity_id`),
   KEY `index_memory_observations_on_source` (`source`),
@@ -216,6 +219,7 @@ CREATE TABLE `memory_observations` (
   KEY `index_memory_observations_on_superseded_by_id` (`superseded_by_id`),
   KEY `index_memory_observations_on_trust_score` (`trust_score`),
   KEY `index_memory_observations_temporal_cover` (`status`,`memory_entity_id`,`valid_from`,`valid_until`,`created_at`),
+  KEY `idx_memory_observations_embedded_at` (`embedded_at`),
   VECTOR KEY `idx_memory_observations_embedding` (`embedding`) `DISTANCE`='cosine',
   CONSTRAINT `fk_rails_59348732bc` FOREIGN KEY (`superseded_by_id`) REFERENCES `memory_observations` (`id`) ON DELETE SET NULL,
   CONSTRAINT `fk_rails_675e0d9a7a` FOREIGN KEY (`memory_entity_id`) REFERENCES `memory_entities` (`id`)
@@ -354,6 +358,7 @@ CREATE TABLE `tool_invocations` (
 /*M!100616 SET NOTE_VERBOSITY=@OLD_NOTE_VERBOSITY */;
 
 INSERT INTO `schema_migrations` (version) VALUES
+('20261009180000'),
 ('20261009000000'),
 ('20260917190000'),
 ('20260916173000'),

@@ -117,7 +117,7 @@ module DreamStateAcceptanceHelper
     literal = "[#{vector.join(',')}]"
     quoted = ActiveRecord::Base.connection.quote(literal)
     ActiveRecord::Base.connection.execute(
-      "UPDATE memory_entities SET embedding = VEC_FromText(#{quoted}) WHERE id = #{entity.id}"
+      "UPDATE memory_entities SET embedding = VEC_FromText(#{quoted}), embedded_at = NOW(6) WHERE id = #{entity.id}"
     )
     entity.reload
   end

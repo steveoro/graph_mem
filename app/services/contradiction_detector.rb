@@ -50,7 +50,7 @@ class ContradictionDetector
       MemoryObservation
         .active
         .where(memory_entity_id: entity_ids)
-        .where.not(embedding: nil)
+        .with_embedding
         .to_a
     end
 
@@ -68,7 +68,7 @@ class ContradictionDetector
           .active
           .where(memory_entity_id: entity_ids)
           .where.not(id: anchor.id)
-          .where.not(embedding: nil)
+          .with_embedding
           .select(
             :id,
             :memory_entity_id,

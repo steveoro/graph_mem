@@ -28,6 +28,13 @@ class MemoryObservation < ApplicationRecord
   scope :active, -> { where(status: ACTIVE_STATUS) }
   scope :inactive, -> { where.not(status: ACTIVE_STATUS) }
 
+  # `with_embedding`/`missing_embedding` track the `embedded_at` stamp
+  # EmbeddingService#store_vector sets when a real vector is written —
+  # NOT the vector itself (the BEFORE INSERT trigger fills placeholder
+  # zero-vectors on this NOT NULL column).
+  scope :with_embedding, -> { where.not(embedded_at: nil) }
+  scope :missing_embedding, -> { where(embedded_at: nil) }
+
   validates :content, presence: true
   validates :confidence, numericality: { greater_than_or_equal_to: 0, less_than_or_equal_to: 1 }, allow_nil: true
   validates :trust_score, numericality: { greater_than_or_equal_to: 0, less_than_or_equal_to: 1 }, allow_nil: true
@@ -39,6 +46,8 @@ class MemoryObservation < ApplicationRecord
   before_save :assign_trust_score
   after_create :set_initial_embedding
   after_commit :refresh_embedding, on: [ :update ], if: :embedding_fields_changed?
+  before_update :invalidate_stale_embedding,
+                if: -> { (changes_to_save.keys & EMBEDDING_FIELDS).any? }
 
   def as_json(options = {})
     super(options.merge(except: Array(options[:except]) | [ :embedding ]))
@@ -159,12 +168,27 @@ class MemoryObservation < ApplicationRecord
   end
 
   def set_initial_embedding
+    return if EmbeddingService.inline_embeddings_suppressed?
+
     EmbeddingService.embed_observation(self)
   rescue StandardError => e
     Rails.logger.warn "MemoryObservation#set_initial_embedding failed: #{e.message}"
   end
 
+  # Any write to embedded text invalidates the stored vector. Clear the stamp
+  # inside the same UPDATE — even when the in-memory copy is already nil — so a
+  # stamp written between our load and this save cannot survive it. Only
+  # EmbeddingService#store_vector sets embedded_at (via compare-and-set).
+  def invalidate_stale_embedding
+    self.embedded_at = nil
+    attribute_will_change!("embedded_at")
+  end
+
   def refresh_embedding
+    # Suppressed (bulk imports): the stamp was already cleared by
+    # invalidate_stale_embedding — the deferred backfill re-embeds this row.
+    return if EmbeddingService.inline_embeddings_suppressed?
+
     EmbeddingService.embed_observation(self)
   rescue StandardError => e
     Rails.logger.warn "MemoryObservation#refresh_embedding failed for id=#{id}: #{e.message}"

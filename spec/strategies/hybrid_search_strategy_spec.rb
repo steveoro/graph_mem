@@ -306,4 +306,46 @@ RSpec.describe HybridSearchStrategy do
       expect(scoped.matched_fields).to include("temporal")
     end
   end
+
+  # Real-column regression spec (ported from cursor/fix-vector-search-ffd6,
+  # store_embedding! adapted to stamp embedded_at): a query that matches no
+  # name or type must still fuse entity and observation vector hits.
+  describe "real vector channels", :with_test_embeddings do
+    let(:query) { "qxsemanticprobe" }
+    let(:query_vector) { Array.new(768, 0.0).tap { |vector| vector[0] = 1.0 } }
+    let(:orthogonal_vector) { Array.new(768, 0.0).tap { |vector| vector[1] = 1.0 } }
+
+    def store_embedding!(record, vector)
+      literal = "[#{vector.join(',')}]"
+      quoted = ActiveRecord::Base.connection.quote(literal)
+      ActiveRecord::Base.connection.execute(
+        "UPDATE #{record.class.table_name} SET embedding = VEC_FromText(#{quoted}), " \
+        "embedded_at = UTC_TIMESTAMP(6) WHERE id = #{record.id}"
+      )
+    end
+
+    before do
+      allow_any_instance_of(VectorSearchStrategy).to receive(:search).and_call_original
+    end
+
+    it "fuses entity and observation vector hits that text search does not see" do
+      near = MemoryEntity.create!(name: "AaNearEntity", entity_type: "Task")
+      obs_only = MemoryEntity.create!(name: "BbObsEntity", entity_type: "Project")
+      store_embedding!(near, query_vector)
+      store_embedding!(obs_only, orthogonal_vector)
+
+      observation = MemoryObservation.create!(memory_entity: obs_only, content: "semantic fact")
+      store_embedding!(observation, query_vector)
+      allow(EmbeddingService.instance).to receive(:embed).and_return(query_vector)
+
+      results = described_class.new.search(query, semantic: true)
+      by_id = results.index_by { |result| result.entity.id }
+
+      expect(by_id.keys).to include(near.id, obs_only.id)
+      expect(by_id[near.id].matched_fields).to include("semantic")
+      expect(by_id[near.id].matched_fields).not_to include("name")
+      expect(by_id[obs_only.id].matched_fields).to include("observation_semantic")
+      expect(by_id[obs_only.id].matched_fields).not_to include("semantic")
+    end
+  end
 end

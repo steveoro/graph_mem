@@ -3,7 +3,7 @@
 # Deterministic, review-only relationship proposals for dream-state discovery.
 # Uses observation text and entity metadata only (no embeddings / LLM).
 class RelationshipDiscoveryStrategy
-  ALLOWED_RELATION_TYPES = %w[relates_to solves depends_on part_of].freeze
+  ALLOWED_RELATION_TYPES = %w[relates_to solves depends_on part_of calls inherits mixes_in].freeze
   MAX_PROPOSALS_PER_ENTITY = 3
   MIN_SHARED_CONTENT_LENGTH = 15
 

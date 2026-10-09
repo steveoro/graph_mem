@@ -61,14 +61,15 @@ RSpec.describe ImportObservationDuplicateDetector, :with_test_embeddings do
       }.to raise_error(described_class::UnavailableError, /Embedding vectors are unavailable/)
     end
 
-    it "rejects semantic comparison when stored observations are not embedded" do
+    it "degrades to exact matching when stored observations are not embedded" do
       allow(EmbeddingService).to receive(:vector_enabled?).and_return(false)
       MemoryObservation.create!(memory_entity: entity, content: "Existing imported fact")
       allow(EmbeddingService).to receive(:vector_enabled?).and_return(true)
 
-      expect {
-        detector.find_duplicate(entity: entity, content: "Reworded imported fact")
-      }.to raise_error(described_class::UnavailableError, /without embeddings/)
+      # A deferred backfill (e.g. not yet run after a suppressed import) leaves
+      # stored rows unembedded; matching degrades rather than failing.
+      result = detector.find_duplicate(entity: entity, content: "Reworded imported fact")
+      expect(result.duplicate).to be(false)
     end
   end
 end

@@ -154,4 +154,55 @@ RSpec.describe MemoryEntity, type: :model do
       }.not_to raise_error
     end
   end
+
+  describe "embedding scopes" do
+    # Runs against the committed schema: the BEFORE INSERT trigger fills the
+    # NOT NULL column with a zero vector, so `embedded_at` — never the
+    # vector — is what distinguishes a real embedding from a placeholder.
+    it "classifies rows by embedded_at, not by the stored vector" do
+      pending_row, embedded_row = EmbeddingService.suppress_inline_embeddings do
+        [
+          described_class.create!(name: "PendingEmb", entity_type: "Project"),
+          described_class.create!(name: "RealEmb", entity_type: "Project")
+        ]
+      end
+      described_class.where(id: embedded_row.id).update_all(embedded_at: Time.current)
+
+      expect(described_class.missing_embedding).to include(pending_row)
+      expect(described_class.missing_embedding).not_to include(embedded_row)
+      expect(described_class.with_embedding).to include(embedded_row)
+      expect(described_class.with_embedding).not_to include(pending_row)
+    end
+
+    it "clears embedded_at in the same UPDATE even when the in-memory copy is stale", :with_test_embeddings do
+      # Simulates a writer that loaded the row before the backfill stamped it:
+      # the save must still NULL the stamp the other writer landed in between.
+      entity = EmbeddingService.suppress_inline_embeddings do
+        described_class.create!(name: "StampRace", entity_type: "Project")
+      end
+      stale_copy = described_class.find(entity.id) # embedded_at nil in memory
+      described_class.where(id: entity.id).update_all(embedded_at: Time.current)
+
+      stale_copy.update!(name: "StampRace Edited")
+
+      expect(entity.reload.embedded_at).to be_nil
+    end
+
+    it "clears embedded_at when embedded text changes, so a failed inline re-embed stays pending", :with_test_embeddings do
+      entity = EmbeddingService.suppress_inline_embeddings do
+        described_class.create!(name: "StaleAfterFail", entity_type: "Project")
+      end
+      described_class.where(id: entity.id).update_all(embedded_at: Time.current)
+
+      # The tag's stubbed embed returns nil, so the inline refresh runs and
+      # fails to store a vector: the row must remain classified as missing.
+      # The expectation also fails loudly if the tag is ever dropped and the
+      # spec falls back to the vector_enabled? early return.
+      expect(EmbeddingService.instance).to receive(:embed).and_return(nil)
+      entity.update!(name: "StaleAfterFail Edited")
+
+      expect(entity.reload.embedded_at).to be_nil
+      expect(described_class.missing_embedding).to include(entity)
+    end
+  end
 end

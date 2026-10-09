@@ -51,3 +51,5 @@
 !.cursor/start.sh
 .cursorrules
 .windsurfrules
+graphify-out/
+graph_mem_import*.json
