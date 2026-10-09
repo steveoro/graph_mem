@@ -97,6 +97,175 @@ class GraphifyImporter
     )
   end
 
+  # Parses `provenance_observation` content ("Defined at <file>:<line>",
+  # line optional) — the marker every rescan diff keys on.
+  PROVENANCE_PATTERN = /\ADefined at (.+?)(?::(\d+))?\z/
+
+  # --- A3 incremental rescan -------------------------------------------
+  # Design decisions (reviewed with the maintainer — do not "fix" as
+  # false positives):
+  # - A Graphify graph.json is the FULL repository scan by contract.
+  #   Absence of a previously imported entity or edge means the code was
+  #   removed, not that it went unscanned — so there is deliberately no
+  #   coverage heuristic (one would let partial scans nuke whole subtrees).
+  #   Rescan safety comes from scoping the diff to the root's own `part_of`
+  #   subtree, never from guessing coverage.
+  # - Entities and relations are never auto-deleted. Vanished entities only
+  #   lose their graphify provenance observations (trust decays through the
+  #   existing machinery) and are queued as `delete_entity` scan_review
+  #   items; vanished edges become `delete_relation` items (relations have
+  #   no status column). The operator always decides.
+  # - Provenance drift supersedes (keeps the `superseded_by` chain) rather
+  #   than obsolete+re-add.
+
+  # Entities under `root` carrying ≥1 graphify provenance observation — the
+  # stored set a rescan diffs against. Empty ⇒ first import, not a rescan.
+  def self.rescan_stored_entities(root)
+    return MemoryEntity.none unless root
+
+    MemoryEntity
+      .where(id: RelationSemantics.descendant_ids(root.id).to_a)
+      .joins(:memory_observations)
+      .where(memory_observations: { source: SOURCE_NAME })
+      .where("memory_observations.content LIKE ?", "Defined at %")
+      .distinct
+  end
+
+  # Indexes a translated payload for diffing:
+  #   keys: Set of [entity_type.downcase, name.downcase] for every tree node
+  #   obs:  {key => Set["Defined at …"]} provenance contents per node
+  def self.payload_index(import_data)
+    index = { keys: Set.new, obs: Hash.new { |hash, key| hash[key] = Set.new } }
+    walk = lambda do |nodes|
+      Array(nodes).each do |node|
+        next unless node.is_a?(Hash)
+
+        key = [ (node["entity_type"] || node[:entity_type]).to_s.downcase,
+                (node["name"] || node[:name]).to_s.downcase ]
+        index[:keys] << key
+        Array(node["observations"] || node[:observations]).each do |obs|
+          next unless (obs["source"] || obs[:source]) == SOURCE_NAME
+
+          content = (obs["content"] || obs[:content]).to_s
+          index[:obs][key] << content if content.match?(PROVENANCE_PATTERN)
+        end
+        walk.call(node["children"] || node[:children])
+      end
+    end
+    walk.call(import_data["root_nodes"] || import_data[:root_nodes])
+    index
+  end
+
+  # First rescan phase, run INSIDE the import transaction before the tree
+  # applies: reconcile stored graphify provenance against the new payload.
+  #   absent entity  → every provenance obs obsoleted + entity collected
+  #   present entity → obs absent from the payload obsoleted, unless the
+  #                    same file has a replacement (then `supersede!`, so
+  #                    merge de-dup sees the new content and stays quiet)
+  # Returns nil when the subtree holds no graphify entities (first import).
+  def self.rescan_observation_diff!(root, import_data)
+    stored = rescan_stored_entities(root)
+    return nil unless stored.exists?
+
+    index = payload_index(import_data)
+    result = { vanished: [], obsoleted: 0, superseded: 0 }
+
+    stored.find_each do |entity|
+      key = [ entity.entity_type.to_s.downcase, entity.name.to_s.downcase ]
+      present = index[:keys].include?(key)
+      new_contents = index[:obs][key]
+      replacement_by_file = new_contents.index_by { |c| PROVENANCE_PATTERN.match(c)[1] }
+
+      entity.memory_observations
+          .where(status: MemoryObservation::ACTIVE_STATUS, source: SOURCE_NAME)
+          .where("content LIKE ?", "Defined at %")
+          .find_each do |obs|
+        if !present
+          obs.mark_obsolete!(reason: "removed in graphify rescan")
+          result[:obsoleted] += 1
+        elsif !new_contents.include?(obs.content)
+          replacement = replacement_by_file[PROVENANCE_PATTERN.match(obs.content)[1]]
+          if replacement
+            obs.supersede!(content: replacement, reason: "moved in graphify rescan")
+            result[:superseded] += 1
+          else
+            obs.mark_obsolete!(reason: "removed in graphify rescan")
+            result[:obsoleted] += 1
+          end
+        end
+      end
+
+      result[:vanished] << entity unless present
+    end
+    result
+  end
+
+  # Second rescan phase, run after `relations` applied: stored graphify-
+  # sourced edges absent from the new payload are collected for review.
+  # An edge is only flagged when BOTH endpoints still exist in the new
+  # scan — a vanished endpoint's edges are covered by the entity flag.
+  def self.rescan_relation_diff(import_data, stored_ids)
+    return [] if stored_ids.blank?
+
+    index = payload_index(import_data)
+    new_edges = rescan_edge_keys(import_data["relations"] || import_data[:relations])
+
+    MemoryRelation
+      .where(from_entity_id: stored_ids)
+      .where("JSON_UNQUOTE(JSON_EXTRACT(properties, '$.source')) = ?", SOURCE_NAME)
+      .includes(:from_entity, :to_entity)
+      .filter_map do |relation|
+        from_key = [ relation.from_entity.entity_type.to_s.downcase, relation.from_entity.name.to_s.downcase ]
+        to_key = [ relation.to_entity.entity_type.to_s.downcase, relation.to_entity.name.to_s.downcase ]
+        next unless index[:keys].include?(from_key) && index[:keys].include?(to_key)
+        next if new_edges.include?([ from_key, to_key, relation.relation_type.to_s.downcase ])
+
+        relation
+      end
+  end
+
+  def self.rescan_edge_keys(relations)
+    Array(relations).each_with_object(Set.new) do |rel, set|
+      from_key = [ (rel["from_type"] || rel[:from_type]).to_s.downcase,
+                   (rel["from_name"] || rel[:from_name]).to_s.downcase ]
+      to_key = [ (rel["to_type"] || rel[:to_type]).to_s.downcase,
+                 (rel["to_name"] || rel[:to_name]).to_s.downcase ]
+      set << [ from_key, to_key,
+               MemoryRelation.canonical_relation_type(rel["relation_type"] || rel[:relation_type]).to_s.downcase ]
+    end
+  end
+
+  # Queues vanished entities/edges as one-click delete proposals under
+  # scan_review — auto-detection means this runs for headless and UI-path
+  # imports alike.
+  def self.seed_rescan_review(entities:, relations:, source_ref:)
+    items = entities.map do |entity|
+      {
+        id: SecureRandom.uuid,
+        kind: "delete_entity",
+        entity_id: entity.id,
+        entity_name: entity.name,
+        entity_type: entity.entity_type,
+        reason: "removed in graphify rescan"
+      }
+    end + relations.map do |relation|
+      {
+        id: SecureRandom.uuid,
+        kind: "delete_relation",
+        relation_id: relation.id,
+        reason: "removed in graphify rescan"
+      }
+    end
+    return [] if items.empty?
+
+    CompactionReviewService.seed_report(
+      report_type: "scan_review",
+      source: SOURCE_NAME,
+      source_ref: source_ref,
+      items: items
+    )
+  end
+
   # Auto-accept decision map for headless imports. Mirrors operator review:
   # children take the matcher-suggested action — except `add_relation` on a
   # child that already has a `part_of` parent, which would silently steal the
@@ -244,6 +413,9 @@ class GraphifyImporter
       import_data: {
         "version" => "1.0",
         "exported_at" => Time.current.iso8601,
+        # Marks the payload as rescan-capable: on a re-import the executor
+        # reconciles stored graphify provenance instead of only merging.
+        "rescan" => true,
         "root_nodes" => [ tree ],
         "relations" => relations
       },

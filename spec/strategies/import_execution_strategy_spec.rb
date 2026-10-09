@@ -728,9 +728,14 @@ RSpec.describe ImportExecutionStrategy, type: :model do
         entities_merged: 2,
         entities_skipped: 1,
         observations_created: 10,
+        observations_obsoleted: nil,
+        observations_superseded: nil,
         relations_created: 3,
         relations_unresolved: 1,
         relations_skipped: nil,
+        rescan: nil,
+        rescan_entities_flagged: nil,
+        rescan_relations_flagged: nil,
         errors: []
       })
     end
@@ -1019,6 +1024,155 @@ RSpec.describe ImportExecutionStrategy, type: :model do
         expect(result.duplicate).to be(false)
       end
       expect(flagged).to be(true)
+    end
+  end
+
+  describe '#execute rescan (A3)' do
+    let!(:project) { MemoryEntity.create!(name: 'Scan Project', entity_type: 'Project') }
+    let!(:file_entity) { MemoryEntity.create!(name: 'foo.rb', entity_type: 'File') }
+    let!(:class_entity) { MemoryEntity.create!(name: 'Foo', entity_type: 'Class') }
+    let!(:part1) do
+      MemoryRelation.create!(from_entity: file_entity, to_entity: project, relation_type: 'part_of')
+    end
+    let!(:part2) do
+      MemoryRelation.create!(from_entity: class_entity, to_entity: file_entity, relation_type: 'part_of')
+    end
+    let!(:file_obs) do
+      MemoryObservation.create!(memory_entity: file_entity, content: 'Defined at lib/foo.rb', source: 'graphify')
+    end
+    let!(:class_obs) do
+      MemoryObservation.create!(memory_entity: class_entity, content: 'Defined at lib/foo.rb:10', source: 'graphify')
+    end
+    let!(:edge) do
+      MemoryRelation.create!(from_entity: class_entity, to_entity: file_entity,
+                             relation_type: 'calls', properties: { 'source' => 'graphify' })
+    end
+
+    def provenance(content)
+      { 'content' => content, 'source' => 'graphify', 'confidence' => 1.0 }
+    end
+
+    let(:same_payload) do
+      {
+        'rescan' => true,
+        'root_nodes' => [
+          {
+            'name' => 'Scan Project', 'entity_type' => 'Project',
+            'children' => [
+              {
+                'name' => 'foo.rb', 'entity_type' => 'File', 'relation_type' => 'part_of',
+                'observations' => [ provenance('Defined at lib/foo.rb') ],
+                'children' => [
+                  {
+                    'name' => 'Foo', 'entity_type' => 'Class', 'relation_type' => 'part_of',
+                    'observations' => [ provenance('Defined at lib/foo.rb:10') ],
+                    'children' => []
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        'relations' => [
+          { 'from_name' => 'Foo', 'from_type' => 'Class',
+            'to_name' => 'foo.rb', 'to_type' => 'File', 'relation_type' => 'calls' }
+        ]
+      }
+    end
+
+    let(:removed_class_payload) do
+      payload = Marshal.load(Marshal.dump(same_payload))
+      file_node = payload['root_nodes'][0]['children'][0]
+      file_node['children'] = []
+      payload['relations'] = []
+      payload
+    end
+
+    let(:merge_decisions) do
+      [ { node_path: '0', action: 'merge', target_id: project.id } ]
+    end
+
+    it 'runs a clean rescan: no obsoletion, no review items, idempotent' do
+      report = strategy.execute(same_payload, merge_decisions)
+
+      expect(report.rescan).to be(true)
+      expect(report.observations_obsoleted).to eq(0)
+      expect(report.observations_superseded).to eq(0)
+      expect(report.rescan_entities_flagged).to eq(0)
+      expect(report.rescan_relations_flagged).to eq(0)
+      expect(file_obs.reload).to be_active
+      expect(class_obs.reload).to be_active
+      expect(MaintenanceReportRow.by_report_type('scan_review')).to be_empty
+    end
+
+    it 'obsoletes provenance of a vanished entity and queues a delete_entity review item' do
+      report = strategy.execute(removed_class_payload, merge_decisions)
+
+      expect(report.rescan).to be(true)
+      expect(report.observations_obsoleted).to eq(1)
+      expect(report.rescan_entities_flagged).to eq(1)
+      expect(class_obs.reload).to be_obsolete
+      expect(class_obs.obsolescence_reason).to include('graphify rescan')
+      expect(class_entity.reload).to be_present # never auto-deleted
+
+      row = MaintenanceReportRow.by_report_type('scan_review').pending.find_by(kind: 'delete_entity')
+      expect(row).to be_present
+      expect(row.effective_payload['entity_id']).to eq(class_entity.id)
+    end
+
+    it 'flags a removed graphify edge as a delete_relation review item' do
+      payload = Marshal.load(Marshal.dump(same_payload))
+      payload['relations'] = []
+
+      report = strategy.execute(payload, merge_decisions)
+
+      expect(report.rescan_relations_flagged).to eq(1)
+      expect(edge.reload).to be_present # review-only, never auto-deleted
+
+      row = MaintenanceReportRow.by_report_type('scan_review').pending.find_by(kind: 'delete_relation')
+      expect(row).to be_present
+      expect(row.effective_payload['relation_id']).to eq(edge.id)
+    end
+
+    it 'supersedes drifted provenance and lets merge dedup stay quiet' do
+      payload = Marshal.load(Marshal.dump(same_payload))
+      class_node = payload['root_nodes'][0]['children'][0]['children'][0]
+      class_node['observations'] = [ provenance('Defined at lib/foo.rb:20') ]
+
+      report = strategy.execute(payload, merge_decisions)
+
+      expect(report.observations_superseded).to eq(1)
+      expect(report.observations_obsoleted).to eq(0)
+
+      class_obs.reload
+      expect(class_obs.status).to eq(MemoryObservation::SUPERSEDED_STATUS)
+      replacement = class_obs.superseded_by
+      expect(replacement).to be_present
+      expect(replacement.content).to eq('Defined at lib/foo.rb:20')
+      expect(replacement).to be_active
+
+      # The supersede replacement satisfies merge dedup — no duplicate row.
+      active_contents = class_entity.memory_observations.active.where(source: 'graphify').pluck(:content)
+      expect(active_contents).to eq([ 'Defined at lib/foo.rb:20' ])
+    end
+
+    it 'does not rescan when the payload lacks the rescan marker' do
+      payload = removed_class_payload.except('rescan')
+      report = strategy.execute(payload, merge_decisions)
+
+      expect(report.rescan).to be(false)
+      expect(report.observations_obsoleted).to eq(0)
+      expect(class_obs.reload).to be_active
+    end
+
+    it 'does not rescan on a first import (no stored graphify entities)' do
+      file_obs.destroy!
+      class_obs.destroy!
+      class_entity.destroy!
+      part2.destroy!
+
+      report = strategy.execute(same_payload, merge_decisions)
+      expect(report.rescan).to be(false)
     end
   end
 end
