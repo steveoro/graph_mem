@@ -40,6 +40,82 @@ class GraphifyImporter
     keyword_init: true
   )
 
+  # Queues withheld AMBIGUOUS edges as `relationship_proposal` items in the
+  # scan_review queue. Edges whose endpoints did not materialize (or that
+  # already exist as relations) are skipped. Shared by the headless rake
+  # import and the Data Exchange execute path.
+  # @param ambiguous [Array<Hash>] edge hashes from Result#ambiguous_relations
+  # @param source_ref [String] report source_ref (project name)
+  # @return [Array] seeded review rows
+  def self.seed_ambiguous_relations(ambiguous, source_ref)
+    return [] if ambiguous.blank?
+
+    items = ambiguous.filter_map do |relation|
+      from = ImportEntityResolver.find_by_name_and_type(relation["from_name"], relation["from_type"])
+      to = ImportEntityResolver.find_by_name_and_type(relation["to_name"], relation["to_type"])
+      next unless from && to
+      next if from.id == to.id
+      next if MemoryRelation.exists?(from_entity_id: from.id, to_entity_id: to.id,
+                                     relation_type: relation["relation_type"])
+
+      props = relation["properties"] || {}
+      {
+        id: SecureRandom.uuid,
+        kind: "relationship_proposal",
+        from_entity_id: from.id,
+        from_name: from.name,
+        from_entity_type: from.entity_type,
+        to_entity_id: to.id,
+        to_name: to.name,
+        to_entity_type: to.entity_type,
+        relation_type: relation["relation_type"],
+        confidence_band: "low",
+        score: (relation["confidence"].to_f * 10).round,
+        supporting_observation_ids: [],
+        explanation: "Graphify AMBIGUOUS edge in #{props['source_file']}#{props['source_location']}",
+        evidence_terms: [ props["context"] ].compact
+      }
+    end
+    return [] if items.empty?
+
+    CompactionReviewService.seed_report(
+      report_type: "scan_review",
+      source: SOURCE_NAME,
+      source_ref: source_ref,
+      items: items
+    )
+  end
+
+  # Auto-accept decision map for headless imports. Mirrors operator review:
+  # root nodes merge into their selected match (or create), children take the
+  # matcher-suggested action — except `add_relation` on a child that already
+  # has a `part_of` parent, which would silently steal the entity from another
+  # project's tree. Unattended imports never re-parent: downgrade to `skip`
+  # (entity stays put; its observations still import). Operators keep full
+  # re-parent rights through explicit Import Review decisions.
+  # @param match_results [Array<ImportMatchingStrategy::MatchResult>]
+  # @return [Array<Hash>] decisions for ImportExecutionStrategy#execute
+  def self.headless_decisions(match_results)
+    match_results.map do |match|
+      if match.is_child
+        child_action = match.child_action
+        if child_action == "add_relation" && already_parented?(match.exact_match)
+          child_action = "skip"
+        end
+        { node_path: match.node_path, child_action: child_action }
+      elsif match.selected_match_id
+        { node_path: match.node_path, action: "merge", target_id: match.selected_match_id }
+      else
+        { node_path: match.node_path, action: "create" }
+      end
+    end
+  end
+
+  def self.already_parented?(entity)
+    entity.present? && MemoryRelation.exists?(from_entity_id: entity.id, relation_type: "part_of")
+  end
+  private_class_method :already_parented?
+
   # @param graph_data [Hash, String] parsed graph.json or raw JSON string
   # @param project_name [String] name of the root Project entity
   def initialize(graph_data, project_name:)

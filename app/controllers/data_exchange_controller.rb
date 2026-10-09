@@ -184,6 +184,15 @@ class DataExchangeController < ApplicationController
     strategy = ImportExecutionStrategy.new(progress_tracker: tracker)
     report = strategy.execute(import_data, decisions)
 
+    # Graphify payloads carry withheld AMBIGUOUS edges; queue them for review
+    # only after the import succeeded so endpoints resolve to real entities.
+    if report.success && import_data[:ambiguous_relations].present?
+      GraphifyImporter.seed_ambiguous_relations(
+        import_data[:ambiguous_relations].map { |r| r.deep_stringify_keys },
+        project_name_for(import_data)
+      )
+    end
+
     # Store report in temp file and clear import data files
     ImportSession.store_report(import_session_id, report.to_h.merge(operation_id: operation.operation_id))
 
@@ -565,6 +574,14 @@ class DataExchangeController < ApplicationController
   end
 
   private
+
+  # Source reference for review rows seeded from an import payload — the first
+  # root node's name (the imported project) when present. ImportSession data
+  # is loaded symbolized, so probe both key styles.
+  def project_name_for(import_data)
+    roots = import_data["root_nodes"] || import_data[:root_nodes]
+    (roots.is_a?(Array) ? roots.first&.dig("name") || roots.first&.dig(:name) : nil).presence || "import"
+  end
 
   def review_report_type
     report_type = params[:report_type].presence || "compaction_review"

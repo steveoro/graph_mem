@@ -109,4 +109,81 @@ RSpec.describe GraphifyImporter do
     parsed = JSON.parse(graph_json)
     expect(described_class.new(parsed, project_name: "x").translate.stats[:nodes_imported]).to eq(10)
   end
+
+  describe ".seed_ambiguous_relations" do
+    let!(:caller_e) { MemoryEntity.create!(name: "Caller", entity_type: "Class", aliases: "") }
+    let!(:callee_e) { MemoryEntity.create!(name: "Callee", entity_type: "Class", aliases: "") }
+
+    let(:edge) do
+      {
+        "from_name" => "Caller", "from_type" => "Class",
+        "to_name" => "Callee", "to_type" => "Class",
+        "relation_type" => "calls", "confidence" => 0.4,
+        "properties" => { "source_file" => "app/caller.rb", "source_location" => "9", "context" => "x" }
+      }
+    end
+
+    it "seeds a relationship_proposal row with the full payload" do
+      rows = described_class.seed_ambiguous_relations([ edge ], "proj")
+      expect(rows.size).to eq(1)
+      payload = rows.first.payload
+      expect(payload["kind"]).to eq("relationship_proposal")
+      expect(payload["relation_type"]).to eq("calls")
+      expect(payload["score"]).to eq(4)
+      expect(payload["from_entity_id"]).to eq(caller_e.id)
+      expect(payload["to_entity_id"]).to eq(callee_e.id)
+      expect(payload["confidence_band"]).to eq("low")
+    end
+
+    it "is idempotent and skips edges that already exist as relations" do
+      MemoryRelation.create!(from_entity_id: caller_e.id, to_entity_id: callee_e.id,
+                             relation_type: "calls")
+      expect(described_class.seed_ambiguous_relations([ edge ], "proj")).to eq([])
+    end
+
+    it "skips edges with unresolvable endpoints" do
+      ghost = edge.merge("to_name" => "Ghost")
+      expect(described_class.seed_ambiguous_relations([ ghost ], "proj")).to eq([])
+    end
+  end
+
+  describe ".headless_decisions" do
+    let!(:existing_file) { MemoryEntity.create!(name: "old.rb", entity_type: "File", aliases: "") }
+    let!(:moved_class) { MemoryEntity.create!(name: "User", entity_type: "Class", aliases: "") }
+    let!(:orphan_class) { MemoryEntity.create!(name: "Visitor", entity_type: "Class", aliases: "") }
+
+    before do
+      MemoryRelation.create!(from_entity_id: moved_class.id, to_entity_id: existing_file.id,
+                             relation_type: "part_of")
+    end
+
+    it "downgrades child add_relation to skip when the entity already has a part_of parent" do
+      match = ImportMatchingStrategy::MatchResult.new(is_child: true, node_path: "0.children.0",
+                              child_action: "add_relation", exact_match: moved_class)
+      expect(described_class.headless_decisions([ match ]))
+        .to eq([ { node_path: "0.children.0", child_action: "skip" } ])
+    end
+
+    it "keeps child add_relation when the matched entity has no part_of parent" do
+      match = ImportMatchingStrategy::MatchResult.new(is_child: true, node_path: "0.children.0",
+                              child_action: "add_relation", exact_match: orphan_class)
+      expect(described_class.headless_decisions([ match ]))
+        .to eq([ { node_path: "0.children.0", child_action: "add_relation" } ])
+    end
+
+    it "passes through other child actions and merges/creates roots" do
+      matches = [
+        ImportMatchingStrategy::MatchResult.new(is_child: false, node_path: "0", selected_match_id: existing_file.id),
+        ImportMatchingStrategy::MatchResult.new(is_child: false, node_path: "1", selected_match_id: nil),
+        ImportMatchingStrategy::MatchResult.new(is_child: true, node_path: "0.children.0", child_action: "create"),
+        ImportMatchingStrategy::MatchResult.new(is_child: true, node_path: "0.children.1", child_action: "skip")
+      ]
+      expect(described_class.headless_decisions(matches)).to eq([
+        { node_path: "0", action: "merge", target_id: existing_file.id },
+        { node_path: "1", action: "create" },
+        { node_path: "0.children.0", child_action: "create" },
+        { node_path: "0.children.1", child_action: "skip" }
+      ])
+    end
+  end
 end
