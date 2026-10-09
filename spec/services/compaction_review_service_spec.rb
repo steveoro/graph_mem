@@ -208,6 +208,16 @@ RSpec.describe CompactionReviewService, type: :service do
       stale_row.save!
       expect(described_class.apply("integrity-stale")[:success]).to be true
     end
+
+    it "refuses to apply a dismissed or approved row" do
+      row = described_class.find_item("relation-1")
+
+      row.update!(status: "dismissed", dismissed_at: Time.current)
+      expect(described_class.apply("relation-1", { "from_id" => from_entity.id, "to_id" => to_entity.id, "relation_type" => "solves" })[:success]).to be false
+
+      row.update!(status: "approved", applied_at: Time.current)
+      expect(described_class.apply("relation-1", { "from_id" => from_entity.id, "to_id" => to_entity.id, "relation_type" => "solves" })[:success]).to be false
+    end
   end
 
   describe "relation integrity review rows" do

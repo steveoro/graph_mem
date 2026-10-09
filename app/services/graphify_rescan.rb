@@ -198,8 +198,12 @@ module GraphifyRescan
   # @param reparents [Array<Hash>] {entity_id, parent_id} → reparent_entity
   # @return [Array<MaintenanceReportRow>] the rows actually created
   def self.seed_review(entities:, relations:, reparents: [], source_ref:)
+    operator_counts = MemoryObservation.active
+                                       .where(memory_entity_id: entities.map(&:id))
+                                       .where.not(source: SOURCE_NAME)
+                                       .group(:memory_entity_id).count
     items = entities.map do |entity|
-      operator_obs = entity.memory_observations.active.where.not(source: SOURCE_NAME).count
+      operator_obs = operator_counts[entity.id].to_i
       reason = "removed in graphify rescan"
       reason += " — still has #{operator_obs} active non-graphify observation#{'s' if operator_obs != 1}" if operator_obs.positive?
       {
@@ -232,17 +236,6 @@ module GraphifyRescan
       }
     end
 
-    # A new reparent proposal retires older pending ones for the same
-    # entity — the latest scan wins.
-    new_parent_ids = reparents.map { |r| r[:entity_id] }
-    graphify_review_rows.each do |row|
-      next unless row.kind == "reparent_entity"
-      next unless new_parent_ids.include?(item_field(row, "entity_id").to_i)
-
-      row.update!(status: "dismissed", dismissed_at: Time.current,
-                  resolution_reason: "superseded by a newer graphify rescan proposal")
-    end
-
     # Skip items whose signature already sits pending or suppressed —
     # identical to seed_report's dedupe, but BEFORE an empty report exists.
     signatures = items.index_with do |item|
@@ -255,6 +248,22 @@ module GraphifyRescan
       signature = signatures[item]
       signature.blank? || pending_signatures.include?(signature) ||
         MaintenanceReportSuppression.suppressed?("scan_review", signature)
+    end
+
+    # A FRESH reparent proposal retires older ACTIVE reparent rows for the
+    # same entity — the latest scan wins. Runs after dedupe so an identical
+    # re-scan neither dismisses nor re-seeds (it re-reported forever and
+    # clobbered an operator's "ignored" decision in Graphy's probe).
+    fresh_reparent_ids = fresh_items.select { |i| i[:kind] == "reparent_entity" }
+                                    .map { |i| i[:payload][:entity_id] }
+    if fresh_reparent_ids.any?
+      graphify_review_rows.each do |row|
+        next unless row.kind == "reparent_entity" && row.status == "active"
+        next unless fresh_reparent_ids.include?(item_field(row, "entity_id").to_i)
+
+        row.update!(status: "dismissed", dismissed_at: Time.current,
+                    resolution_reason: "superseded by a newer graphify rescan proposal")
+      end
     end
     return [] if fresh_items.empty?
 

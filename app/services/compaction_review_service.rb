@@ -49,6 +49,11 @@ class CompactionReviewService
     def apply(item_id, action_params = {}, report_type: "compaction_review")
       row = find_item(item_id, report_type: report_type)
       return { success: false, error: "Suggestion not found" } unless row
+      # Dismissed/approved rows must never apply: rescan review relies on
+      # "dismissed = no longer actionable" to retire stale proposals safely.
+      unless row.status.in?(%w[active ignored])
+        return { success: false, error: "Suggestion is not actionable (status: #{row.status})" }
+      end
 
       result = apply_action(row, action_params)
       if result[:success]

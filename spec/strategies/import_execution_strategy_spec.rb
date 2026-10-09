@@ -1283,6 +1283,55 @@ RSpec.describe ImportExecutionStrategy, type: :model do
         .to eq(1)
     end
 
+    # Foo moved from foo.rb to a stored bar.rb — same helpers as the
+    # reparent spec above: skip decisions keep Foo in place so reparent_diff
+    # flags the move.
+    def moved_foo_setup
+      other_file = MemoryEntity.create!(name: 'bar.rb', entity_type: 'File')
+      MemoryRelation.create!(from_entity: other_file, to_entity: project, relation_type: 'part_of')
+      MemoryObservation.create!(memory_entity: other_file, content: 'Defined at lib/bar.rb',
+                                source: 'graphify')
+
+      payload = Marshal.load(Marshal.dump(same_payload))
+      project_node = payload['root_nodes'][0]
+      foo_node = project_node['children'][0]
+      class_node = foo_node['children'].delete_at(0)
+      project_node['children'] << {
+        'name' => 'bar.rb', 'entity_type' => 'File', 'relation_type' => 'part_of',
+        'observations' => [ provenance('Defined at lib/bar.rb') ],
+        'children' => [ class_node ]
+      }
+      decisions = merge_decisions + [
+        { node_path: '0.children.0', action: 'skip' },
+        { node_path: '0.children.1', action: 'skip' },
+        { node_path: '0.children.1.children.0', action: 'skip' }
+      ]
+      [ payload, decisions ]
+    end
+
+    it 'leaves an unapplied identical move proposal alone on a re-run' do
+      payload, decisions = moved_foo_setup
+      first = strategy.execute(payload, decisions)
+      expect(first.rescan_reparents_flagged).to eq(1)
+
+      expect do
+        second = strategy.execute(payload, decisions)
+        expect(second.rescan_reparents_flagged).to eq(0)
+      end.not_to change(MaintenanceReport, :count)
+      expect(MaintenanceReportRow.by_report_type('scan_review').pending.where(kind: 'reparent_entity').count).to eq(1)
+    end
+
+    it 'keeps an operator-ignored reparent proposal ignored on a re-run' do
+      payload, decisions = moved_foo_setup
+      strategy.execute(payload, decisions)
+      row = MaintenanceReportRow.by_report_type('scan_review').find_by(kind: 'reparent_entity')
+      row.update!(status: 'ignored')
+
+      expect { strategy.execute(payload, decisions) }.not_to change(MaintenanceReport, :count)
+      expect(row.reload.status).to eq('ignored')
+      expect(MaintenanceReportRow.by_report_type('scan_review').where(kind: 'reparent_entity').count).to eq(1)
+    end
+
     it 'keeps a pending delete proposal when the target is still absent' do
       stale = stale_scan_row(
         kind: 'delete_entity',
