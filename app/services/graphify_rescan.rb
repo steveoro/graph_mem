@@ -189,18 +189,26 @@ module GraphifyRescan
 
   # Queues vanished entities/edges (and same-tree moves) as one-click
   # proposals under scan_review — operator applies, nothing auto-deletes.
+  # Items already pending (same signature) are skipped BEFORE creating the
+  # MaintenanceReport, so a re-run with no new findings leaves no empty
+  # report behind. Newer reparent proposals retire older pending ones for
+  # the same entity, so conflicting moves never coexist.
   # @param entities  [Array<MemoryEntity>] → delete_entity items
   # @param relations [Array<MemoryRelation>] → delete_relation items
   # @param reparents [Array<Hash>] {entity_id, parent_id} → reparent_entity
+  # @return [Array<MaintenanceReportRow>] the rows actually created
   def self.seed_review(entities:, relations:, reparents: [], source_ref:)
     items = entities.map do |entity|
+      operator_obs = entity.memory_observations.active.where.not(source: SOURCE_NAME).count
+      reason = "removed in graphify rescan"
+      reason += " — still has #{operator_obs} active non-graphify observation#{'s' if operator_obs != 1}" if operator_obs.positive?
       {
         kind: "delete_entity",
         payload: {
           entity_id: entity.id,
           entity_name: entity.name,
           entity_type: entity.entity_type,
-          reason: "removed in graphify rescan"
+          reason: reason
         }
       }
     end
@@ -223,54 +231,132 @@ module GraphifyRescan
         }
       }
     end
-    return [] if items.empty?
+
+    # A new reparent proposal retires older pending ones for the same
+    # entity — the latest scan wins.
+    new_parent_ids = reparents.map { |r| r[:entity_id] }
+    graphify_review_rows.each do |row|
+      next unless row.kind == "reparent_entity"
+      next unless new_parent_ids.include?(item_field(row, "entity_id").to_i)
+
+      row.update!(status: "dismissed", dismissed_at: Time.current,
+                  resolution_reason: "superseded by a newer graphify rescan proposal")
+    end
+
+    # Skip items whose signature already sits pending or suppressed —
+    # identical to seed_report's dedupe, but BEFORE an empty report exists.
+    signatures = items.index_with do |item|
+      CompactionReviewService.signature_for(item[:kind], { "kind" => item[:kind], "payload" => item[:payload] })
+    end
+    pending_signatures = MaintenanceReportRow.by_report_type("scan_review").pending
+                                           .where(signature: signatures.values.compact)
+                                           .pluck(:signature).to_set
+    fresh_items = items.reject do |item|
+      signature = signatures[item]
+      signature.blank? || pending_signatures.include?(signature) ||
+        MaintenanceReportSuppression.suppressed?("scan_review", signature)
+    end
+    return [] if fresh_items.empty?
 
     CompactionReviewService.seed_report(
       report_type: "scan_review",
       source: SOURCE_NAME,
       source_ref: source_ref,
-      items: items
+      items: fresh_items
     )
   end
 
-  # Retires stale proposals: a pending delete_entity/delete_relation item
-  # whose target is PRESENT in the new payload (removed in scan N, back in
-  # scan N+1) must not stay apply-able — one click would delete live data.
+  # Retires stale proposals. A pending item is stale when the current scan
+  # contradicts it — the invariant: no proposal may stay apply-able to live
+  # data the latest graph.json does not support. Only rows from
+  # graphify-seeded reports are touched (another scanner's queue is its own).
+  #   delete_entity/delete_relation — target is PRESENT again (restored)
+  #   reparent_entity              — entity gone from the payload, the
+  #                                  payload now assigns a different parent
+  #                                  than the proposal, or the stored parent
+  #                                  already matches (move already satisfied)
   def self.dismiss_restored_items(stored_ids:, import_data:)
     return if stored_ids.blank?
 
     index = payload_index(import_data)
+    tree_parents = index[:tree_parents]
     new_edges = edge_keys(import_data["relations"] || import_data[:relations])
-    present_ids = MemoryEntity.where(id: stored_ids).filter_map do |entity|
-      key = [ entity.entity_type.to_s.downcase, entity.name.to_s.downcase ]
-      entity.id if index[:keys].include?(key)
-    end
+    stored = MemoryEntity.where(id: stored_ids).to_a
+    present_ids = stored.filter_map { |e| e.id if index[:keys].include?(entity_key(e)) }.to_set
 
-    MaintenanceReportRow.by_report_type("scan_review").pending.find_each do |row|
-      case row.kind
+    rows = graphify_review_rows.to_a
+    relation_rows = rows.select { |r| r.kind == "delete_relation" }
+    reparent_rows = rows.select { |r| r.kind == "reparent_entity" }
+
+    # Batch loads (one query each instead of per-row lookups).
+    relations = MemoryRelation.where(id: relation_rows.map { |r| item_field(r, "relation_id") })
+                              .includes(:from_entity, :to_entity)
+                              .index_by(&:id)
+    rep_entity_ids = (reparent_rows.map { |r| item_field(r, "entity_id") } +
+                      reparent_rows.map { |r| item_field(r, "parent_id") }).compact.uniq
+    rep_entities = MemoryEntity.where(id: rep_entity_ids).index_by(&:id)
+    rep_stored_parents = MemoryRelation.where(from_entity_id: reparent_rows.map { |r| item_field(r, "entity_id") },
+                                              relation_type: "part_of")
+                                       .includes(:to_entity)
+                                       .group_by(&:from_entity_id)
+
+    rows.each do |row|
+      stale = case row.kind
       when "delete_entity"
-        # Seeded rows nest ids under "payload"; hand-seeded ones keep them flat.
-        entity_id = row.effective_payload.dig("payload", "entity_id") ||
-                    row.effective_payload["entity_id"]
-        next unless present_ids.include?(entity_id.to_i)
+                present_ids.include?(item_field(row, "entity_id").to_i)
       when "delete_relation"
-        relation_id = row.effective_payload.dig("payload", "relation_id") ||
-                      row.effective_payload["relation_id"]
-        relation = MemoryRelation.find_by(id: relation_id.to_i)
-        next unless relation
-        next unless stored_ids.include?(relation.from_entity_id)
-
-        from_key = [ relation.from_entity.entity_type.to_s.downcase, relation.from_entity.name.to_s.downcase ]
-        to_key = [ relation.to_entity.entity_type.to_s.downcase, relation.to_entity.name.to_s.downcase ]
-        next unless new_edges.include?([ from_key, to_key, relation.relation_type.to_s.downcase ])
-      else
-        next
+                relation = relations[item_field(row, "relation_id").to_i]
+                if relation && stored_ids.include?(relation.from_entity_id)
+                  triple = [ entity_key(relation.from_entity), entity_key(relation.to_entity),
+                             relation.relation_type.to_s.downcase ]
+                  new_edges.include?(triple)
+                end
+      when "reparent_entity"
+                entity = rep_entities[item_field(row, "entity_id").to_i]
+                parent = rep_entities[item_field(row, "parent_id").to_i]
+                reparent_row_stale?(row, entity, parent, present_ids, tree_parents, rep_stored_parents)
       end
+      next unless stale
 
       row.update!(status: "dismissed", dismissed_at: Time.current,
-                  resolution_reason: "restored in graphify rescan")
+                  resolution_reason: "stale in graphify rescan")
     end
   end
+
+  # The pending review rows this scanner owns — scoped by the report's
+  # `data.source` so proposals seeded by other scanners stay untouched.
+  def self.graphify_review_rows
+    MaintenanceReportRow.by_report_type("scan_review").pending
+                        .joins(:maintenance_report)
+                        .where("JSON_UNQUOTE(JSON_EXTRACT(maintenance_reports.data, '$.source')) = ?", SOURCE_NAME)
+  end
+  private_class_method :graphify_review_rows
+
+  # A reparent proposal stays valid only while all of these hold:
+  # the entity is still in the payload, the payload still asks for this
+  # exact parent, and the stored parent edge has not caught up yet.
+  def self.reparent_row_stale?(row, entity, parent, present_ids, tree_parents, rep_stored_parents)
+    return true unless entity && parent
+    return true unless present_ids.include?(entity.id)
+
+    payload_parent_key = tree_parents[entity_key(entity)]
+    return true if payload_parent_key.nil? || payload_parent_key != entity_key(parent)
+
+    stored_parent_keys = Array(rep_stored_parents[entity.id]).map { |rel| entity_key(rel.to_entity) }
+    stored_parent_keys.include?(payload_parent_key)
+  end
+  private_class_method :reparent_row_stale?
+
+  def self.entity_key(entity)
+    [ entity.entity_type.to_s.downcase, entity.name.to_s.downcase ]
+  end
+  private_class_method :entity_key
+
+  # Seeded rows nest ids under "payload"; hand-seeded ones keep them flat.
+  def self.item_field(row, field)
+    row.effective_payload.dig("payload", field) || row.effective_payload[field]
+  end
+  private_class_method :item_field
 
   # (from_key, to_key, canonical_type) triples the payload asserts — used
   # both to diff stored edges and to recognize restored ones.

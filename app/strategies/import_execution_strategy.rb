@@ -67,6 +67,9 @@ class ImportExecutionStrategy
     @rescan_vanished_entities = []
     @rescan_vanished_relations = []
     @rescan_reparents = []
+    @rescan_entities_flagged = 0
+    @rescan_relations_flagged = 0
+    @rescan_reparents_flagged = 0
     @errors = []
     @entity_mapping = {} # Maps import node paths to created/matched entity IDs
     @relation_endpoint_ids = Set.new # endpoints of every relation created
@@ -167,12 +170,18 @@ class ImportExecutionStrategy
     # be applied to live data.
     if @errors.empty? && @rescan_active
       if @rescan_vanished_entities.any? || @rescan_vanished_relations.any? || @rescan_reparents.any?
-        GraphifyRescan.seed_review(
+        # Flagged counts cover NEW proposals only: re-runs whose items are
+        # already pending dedupe to zero instead of re-reporting the same
+        # flags forever.
+        seeded_rows = GraphifyRescan.seed_review(
           entities: @rescan_vanished_entities,
           relations: @rescan_vanished_relations,
           reparents: @rescan_reparents,
           source_ref: rescan_source_ref(import_data)
         )
+        @rescan_entities_flagged = seeded_rows.count { |row| row.kind == "delete_entity" }
+        @rescan_relations_flagged = seeded_rows.count { |row| row.kind == "delete_relation" }
+        @rescan_reparents_flagged = seeded_rows.count { |row| row.kind == "reparent_entity" }
       end
       GraphifyRescan.dismiss_restored_items(stored_ids: @rescan_stored_ids, import_data: import_data)
     end
@@ -183,15 +192,18 @@ class ImportExecutionStrategy
       entities_merged: @entities_merged,
       entities_skipped: @entities_skipped,
       observations_created: @observations_created,
-      observations_obsoleted: @observations_obsoleted,
-      observations_superseded: @observations_superseded,
+      # Rescan fields are gated on success: on the ActiveRecord::Rollback
+      # path the diff mutations rolled back with the transaction and no
+      # review items were seeded — a failed import reports none of it.
+      observations_obsoleted: @errors.empty? ? @observations_obsoleted : 0,
+      observations_superseded: @errors.empty? ? @observations_superseded : 0,
       relations_created: @relations_created,
       relations_unresolved: @relations_unresolved,
       relations_skipped: @relations_skipped,
-      rescan: @rescan_active,
-      rescan_entities_flagged: @rescan_vanished_entities.size,
-      rescan_relations_flagged: @rescan_vanished_relations.size,
-      rescan_reparents_flagged: @rescan_reparents.size,
+      rescan: @errors.empty? && @rescan_active,
+      rescan_entities_flagged: @rescan_entities_flagged,
+      rescan_relations_flagged: @rescan_relations_flagged,
+      rescan_reparents_flagged: @rescan_reparents_flagged,
       errors: @errors
     )
     enqueue_embedding_backfill if report.success

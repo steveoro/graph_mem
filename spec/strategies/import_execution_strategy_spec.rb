@@ -1243,7 +1243,7 @@ RSpec.describe ImportExecutionStrategy, type: :model do
       strategy.execute(same_payload, merge_decisions)
 
       expect(stale.reload.status).to eq('dismissed')
-      expect(stale.resolution_reason).to include('restored')
+      expect(stale.resolution_reason).to include('stale')
     end
 
     it 'dismisses a pending delete_relation proposal when the edge returns' do
@@ -1256,6 +1256,31 @@ RSpec.describe ImportExecutionStrategy, type: :model do
       strategy.execute(same_payload, merge_decisions)
 
       expect(stale.reload.status).to eq('dismissed')
+    end
+
+    it 'retires a reparent proposal the payload no longer asks for' do
+      stale = stale_scan_row(
+        kind: 'reparent_entity',
+        payload: { 'entity_id' => class_entity.id, 'parent_id' => file_entity.id },
+        signature_payload: { entity_id: class_entity.id, parent_id: file_entity.id }
+      )
+
+      strategy.execute(same_payload, merge_decisions) # stored parent already matches
+
+      expect(stale.reload.status).to eq('dismissed')
+    end
+
+    it 'counts only newly seeded flags on a re-run and skips the empty report' do
+      first = strategy.execute(removed_class_payload, merge_decisions)
+      expect(first.rescan_entities_flagged).to eq(1)
+
+      expect do
+        second = strategy.execute(removed_class_payload, merge_decisions)
+        expect(second.rescan_entities_flagged).to eq(0)
+      end.not_to change(MaintenanceReport, :count)
+
+      expect(MaintenanceReportRow.by_report_type('scan_review').pending.where(kind: 'delete_entity').count)
+        .to eq(1)
     end
 
     it 'keeps a pending delete proposal when the target is still absent' do
