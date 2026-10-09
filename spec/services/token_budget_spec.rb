@@ -37,4 +37,40 @@ RSpec.describe TokenBudget do
       expect(result.truncated).to be(true)
     end
   end
+
+  describe ".validate_max_tokens!" do
+    it "rejects hex strings, floats, scientific notation and signed strings" do
+      [ "0x10", 5.7, "1e3", "+5" ].each do |bad|
+        expect { described_class.validate_max_tokens!(bad) }.to raise_error(ArgumentError)
+      end
+    end
+
+    it "accepts Integers and base-10 digit strings (with surrounding space)" do
+      expect(described_class.validate_max_tokens!(" 7 ")).to eq(7)
+      expect(described_class.validate_max_tokens!(7)).to eq(7)
+      expect(described_class.validate_max_tokens!(nil)).to be_nil
+    end
+  end
+
+  describe ".fit_with_envelope" do
+    it "packs items into the budget left after the envelope" do
+      items = [ { "a" => "x" * 40 }, { "b" => "y" * 40 } ]
+      envelope = { "mode" => "summary", "results" => [], "retrieval" => { "scope" => "x" * 60 } }
+      envelope_cost = described_class.estimate(envelope)
+
+      result = described_class.fit_with_envelope(items, envelope: envelope, max_tokens: envelope_cost + 12)
+
+      expect(result.envelope_tokens).to eq(envelope_cost)
+      expect(result.items.size).to be <= 1
+      expect(result.estimated_tokens + result.envelope_tokens).to be <= envelope_cost + 12
+    end
+
+    it "returns an empty truncated result when the envelope alone exceeds the budget" do
+      result = described_class.fit_with_envelope(
+        [ { "a" => 1 } ], envelope: { "pad" => "x" * 400 }, max_tokens: 5
+      )
+      expect(result.items).to eq([])
+      expect(result.truncated).to be(true)
+    end
+  end
 end

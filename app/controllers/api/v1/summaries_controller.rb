@@ -7,7 +7,7 @@ module Api
       def create
         query = params[:query].to_s.strip
         return render_error("query is required") if query.blank?
-        TokenBudget.validate_max_tokens!(params[:max_tokens]) if params.key?(:max_tokens)
+        max_tokens = TokenBudget.validate_max_tokens!(params[:max_tokens]) if params.key?(:max_tokens)
 
         context_scope = GraphMemContext.scoped_entity_scope
         result = SummarizerService.call(
@@ -27,7 +27,7 @@ module Api
             occurred_before: params[:occurred_before],
             as_of: params[:as_of]
           ),
-          max_tokens: params[:max_tokens]
+          max_tokens: max_tokens
         )
 
         render json: result

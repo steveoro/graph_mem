@@ -53,7 +53,7 @@ class SearchTool < ApplicationTool
     effective_page, effective_per_page = normalized_paging(page, per_page || limit)
     projections = normalize_projections(include)
     temporal_window = build_temporal_window(occurred_after, occurred_before, as_of)
-    TokenBudget.validate_max_tokens!(max_tokens, error_class: FastMcp::Tool::InvalidArgumentsError)
+    max_tokens = TokenBudget.validate_max_tokens!(max_tokens, error_class: FastMcp::Tool::InvalidArgumentsError)
 
     if query.nil?
       if projections.any? || temporal_window.present? || max_tokens.present?
@@ -129,24 +129,55 @@ class SearchTool < ApplicationTool
       query,
       limit: offset + per_page,
       semantic: true,
+      # The ambient context is a ranking boost only — passing it as
+      # scope_entity_ids would hard-filter temporal-only queries.
       context_entity_ids: context_scope&.entity_ids,
-      scope_entity_ids: context_scope&.entity_ids,
       context_scope: context_scope,
       temporal_window: temporal_window
     )
-    all_results = payload[:results].map(&:to_h)
-    budget_fit = max_tokens.present? ? TokenBudget.fit(all_results, max_tokens: max_tokens) : nil
-    all_results = budget_fit.items if budget_fit
+    page_results = payload[:results].map(&:to_h).drop(offset).first(per_page)
+    retrieval = payload[:retrieval].merge(result_count: page_results.size)
 
-    results = all_results.drop(offset).first(per_page)
-    retrieval = payload[:retrieval].merge(result_count: results.size)
-
-    if budget_fit
+    results = page_results
+    if max_tokens.present?
+      # The budget applies per page: the page is sliced first, then packed,
+      # so page N's budget is never spent on pages 1..N-1. The item-less
+      # response envelope is counted once; cut items are reported via
+      # token_budget.dropped_on_page and never reappear on later pages.
+      # Diagnostics and a next_move slot are seeded BEFORE the envelope is
+      # estimated — fields written after the fit would push the real
+      # response over the budget.
+      retrieval[:token_budget] = TokenBudget.diagnostics_placeholder(
+        max_tokens: max_tokens, dropped_on_page: true
+      )
+      # The hint text is seeded at full length so a truncated page never
+      # pushes the final response over budget; removed when nothing dropped.
+      retrieval[:next_move] = "lower per_page or raise max_tokens to see the dropped ranks"
+      # The reserve covers the fields ToolSuccessResponse appends after
+      # the tool returns (version, next_move, and the context block only
+      # when no context is active) — all part of the delivered
+      # structuredContent, so they must be inside the counted envelope.
+      envelope = {
+        mode: "summary",
+        results: [],
+        pagination: { per_page: per_page, current_page: page },
+        retrieval: retrieval
+      }.merge(TokenBudget.wrapper_reserve(context_active: context_scope.present?))
+      budget_fit = TokenBudget.fit_with_envelope(page_results, envelope: envelope, max_tokens: max_tokens)
+      results = budget_fit.items
+      retrieval[:result_count] = results.size
       retrieval[:token_budget] = TokenBudget.diagnostics(
         max_tokens: max_tokens, estimated_tokens: budget_fit.estimated_tokens,
         truncated: budget_fit.truncated,
-        items_before: budget_fit.items_before, items_after: budget_fit.items_after
+        envelope_tokens: budget_fit.envelope_tokens,
+        items_before: budget_fit.items_before, items_after: budget_fit.items_after,
+        dropped_on_page: budget_fit.dropped_count
       )
+      if budget_fit.truncated
+        retrieval[:next_move] = "lower per_page or raise max_tokens to see the dropped ranks"
+      else
+        retrieval.delete(:next_move)
+      end
     end
 
     {

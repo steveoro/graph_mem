@@ -126,7 +126,7 @@ class SearchSubgraphTool < ApplicationTool
   def call(query:, search_in_name: true, search_in_type: true, search_in_observations: true,
            search_in_aliases: true, page: nil, per_page: nil,
            occurred_after: nil, occurred_before: nil, as_of: nil, max_tokens: nil)
-    TokenBudget.validate_max_tokens!(max_tokens, error_class: FastMcp::Tool::InvalidArgumentsError)
+    max_tokens = TokenBudget.validate_max_tokens!(max_tokens, error_class: FastMcp::Tool::InvalidArgumentsError)
     SubgraphSearchService.call(
       query: query,
       search_in_name: search_in_name,

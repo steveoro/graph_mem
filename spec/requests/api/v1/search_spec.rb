@@ -121,4 +121,16 @@ RSpec.describe "API V1 Search", type: :request do
       expect(data["relations"]).to eq([])
     end
   end
+
+  describe "GET /api/v1/memory_entities/search max_tokens validation" do
+    it "returns 422 for a hex-style max_tokens" do
+      get "/api/v1/memory_entities/search", params: { q: "Xqz", max_tokens: "0x10" }
+      expect(response).to have_http_status(:unprocessable_content)
+    end
+
+    it "accepts a plain digit-string max_tokens" do
+      get "/api/v1/memory_entities/search", params: { q: "Xqz", max_tokens: "100" }
+      expect(response).to have_http_status(:ok)
+    end
+  end
 end

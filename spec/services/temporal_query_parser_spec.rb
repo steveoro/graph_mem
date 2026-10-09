@@ -140,4 +140,37 @@ RSpec.describe TemporalQueryParser do
       expect(extraction).to be_temporal_only
     end
   end
+
+  describe "filler-word residuals" do
+    it "treats 'what changed in august 2026' as time-only" do
+      expect(described_class.apply("what changed in august 2026")).to be_temporal_only
+      expect(described_class.apply("What changed In August 2026")).to be_temporal_only
+    end
+
+    it "treats 'what happened in Q3 2026' and 'changes last month' as time-only" do
+      expect(described_class.apply("what happened in Q3 2026")).to be_temporal_only
+      expect(described_class.apply("changes last month")).to be_temporal_only
+    end
+
+    it "keeps real residual terms in the effective query" do
+      extraction = described_class.apply("alpha changes in august 2026")
+      expect(extraction.effective_query).to eq("alpha changes")
+      expect(extraction).not_to be_temporal_only
+    end
+
+    it "never strips filler when no date phrase matched" do
+      extraction = described_class.apply("what changed")
+      expect(extraction.effective_query).to eq("what changed")
+      expect(extraction.window).to be_nil
+    end
+  end
+
+  describe "invalid calendar days" do
+    it "rejects non-existent dates and keeps leap day only on leap years" do
+      expect(described_class.extract("2026-02-30")).to be_nil
+      expect(described_class.extract("2026-04-31")).to be_nil
+      expect(described_class.extract("2025-02-29")).to be_nil
+      expect(described_class.extract("2028-02-29")).not_to be_nil
+    end
+  end
 end

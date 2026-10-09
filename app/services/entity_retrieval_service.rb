@@ -10,14 +10,37 @@ class EntityRetrievalService
       strategy = HybridSearchStrategy.new
       context_scope ||= GraphMemContext.scoped_entity_scope if scope_entity_ids.blank? && context_entity_ids.blank?
       scoped_ids = scope_entity_ids || context_entity_ids || context_scope&.entity_ids
+      # Context ids (argument or ambient GraphMemContext) go to the strategy as
+      # the boost channel; only an explicitly-requested scope_entity_ids may
+      # hard-filter the temporal paths — see HybridSearchStrategy.
+      boost_ids = context_entity_ids || context_scope&.entity_ids
       results = strategy.search(
         extraction.effective_query,
         limit: limit,
         semantic: semantic,
-        context_entity_ids: scoped_ids,
+        context_entity_ids: boost_ids,
+        scope_entity_ids: scope_entity_ids,
         temporal_window: window,
         temporal_only: extraction.temporal_only?
       )
+
+      # A windowed query whose residual terms match nothing falls back to a
+      # pure temporal listing instead of returning an empty result set.
+      fallback = false
+      if window.present? && !extraction.temporal_only? && results.empty?
+        results = strategy.search(
+          "",
+          limit: limit,
+          semantic: semantic,
+          context_entity_ids: boost_ids,
+          scope_entity_ids: scope_entity_ids,
+          temporal_window: window,
+          temporal_only: true
+        )
+        fallback = true
+      end
+
+      temporal_diagnostic = window.present? ? extraction.diagnostic.merge(fallback: (fallback ? "temporal_only" : nil)).compact : nil
 
       {
         results: results,
@@ -27,7 +50,7 @@ class EntityRetrievalService
           scope_max_entities: context_scope&.max_entities,
           result_count: results.size,
           semantic: semantic
-        }.merge(window.present? ? { temporal: extraction.diagnostic } : {})
+        }.merge(temporal_diagnostic.present? ? { temporal: temporal_diagnostic } : {})
       }
     end
   end

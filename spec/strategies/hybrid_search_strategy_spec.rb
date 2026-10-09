@@ -283,4 +283,27 @@ RSpec.describe HybridSearchStrategy do
       expect(results.map { |r| r.entity.name }).to include("Beta Unrelated")
     end
   end
+
+  describe "temporal boost scoping" do
+    let!(:scoped_thing) { MemoryEntity.create!(name: "Scoped Thing", entity_type: "Service") }
+
+    before do
+      scoped_thing.memory_observations.create!(content: "in-window fact",
+                                               valid_from: Time.utc(2026, 8, 10))
+      60.times do |i|
+        noise = MemoryEntity.create!(name: "Noise #{i}", entity_type: "Service")
+        2.times { noise.memory_observations.create!(content: "n", valid_from: Time.utc(2026, 8, 10)) }
+      end
+    end
+
+    let(:august_window) do
+      TemporalWindow.new(occurred_after: "2026-08-01", occurred_before: "2026-08-31")
+    end
+
+    it "tags a text-matched in-window entity even outside the global temporal top-N" do
+      results = strategy.search("scoped", limit: 10, semantic: false, temporal_window: august_window)
+      scoped = results.find { |r| r.entity.name == "Scoped Thing" }
+      expect(scoped.matched_fields).to include("temporal")
+    end
+  end
 end

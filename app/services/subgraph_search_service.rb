@@ -37,14 +37,29 @@ class SubgraphSearchService
     validate!
 
     context_ids = @context_scope&.entity_ids
-    matching_ids = candidate_ids(context_ids)
+    ids, in_window = candidate_ids(context_ids)
     # A purely temporal query's ordering IS the in-window observation count;
     # re-ranking it by type/structure would discard the only relevance signal.
-    matching_ids = SearchRelevanceBooster.rank_entity_ids(
-      matching_ids,
-      query: @effective_query,
-      context_entity_ids: context_ids
-    ) unless @extraction.temporal_only?
+    # With text plus a window, rank the in-window and out-of-window partitions
+    # separately so every in-window candidate outranks every out-of-window one
+    # (the partition would otherwise be lost inside the relevance booster).
+    rank = ->(list) {
+      SearchRelevanceBooster.rank_entity_ids(
+        list,
+        query: @effective_query,
+        context_entity_ids: context_ids
+      )
+    }
+    matching_ids =
+      if @extraction.temporal_only? || @temporal_fallback
+        # Context boosts order only: in-context candidates rank first.
+        context_ids.present? ? ids.partition { |id| context_ids.include?(id) }.flatten : ids
+      elsif in_window
+        hot, cold = ids.partition { |id| in_window.include?(id) }
+        rank.call(hot) + rank.call(cold)
+      else
+        rank.call(ids)
+      end
     page_ids = matching_ids.slice((@page - 1) * @per_page, @per_page) || []
 
     entities = entities_for(page_ids)
@@ -76,31 +91,66 @@ class SubgraphSearchService
           "Per page count must be between 1 and #{MAX_PER_PAGE}."
   end
 
-  # Purely temporal queries (phrase stripped to nothing) list entities by
-  # in-window observation count; otherwise text+vector matches are boosted by
-  # the window — temporally-matching ids come first, no unrelated injections.
+  # Returns [candidate_ids, in_window_set_or_nil]. Purely temporal queries
+  # (phrase stripped to nothing) list entities by in-window observation
+  # count — capped at MAX_TEMPORAL_CANDIDATES with a diagnostic flag — and
+  # date-windowed queries whose residual terms match nothing fall back to the
+  # same listing. Otherwise text+vector matches are ordered with the window
+  # partition: the temporal lookup only ranks the candidates the other
+  # channels already produced, never the whole graph.
   def candidate_ids(context_ids)
-    # Temporal-only needs the full id list: it is the result set and drives
-    # pagination totals, so an artificial cap would make entities unreachable.
     if @extraction.temporal_only?
-      return TemporalSearchStrategy.new.search(
-        @temporal_window, limit: nil, entity_ids: context_ids
-      )
+      # Context is a ranking boost only — never a candidate filter.
+      ids = temporal_candidate_ids(nil)
+      return [ ids, nil ]
     end
 
-    matching_ids = merge_vector_ids(text_matching_ids)
-    return matching_ids unless @temporal_window
+    ids = merge_vector_ids(text_matching_ids)
 
-    temporal_ids = TemporalSearchStrategy.new.search(
-      @temporal_window, limit: MAX_TEMPORAL_CANDIDATES, entity_ids: context_ids
-    ).to_set
-    matching_ids.partition { |id| temporal_ids.include?(id) }.flatten
+    # Fallback: a windowed query whose residual terms match nothing behaves
+    # like a temporal-only query instead of returning an empty subgraph.
+    # Residual terms are matched individually: filler words that survive
+    # ("changes") would otherwise empty the whole-phrase match and the
+    # fallback would inject unrelated in-window entities — "alpha changes
+    # in august 2026" must still find Alpha.
+    if @temporal_window && ids.empty?
+      # Terms under 3 chars are skipped: one-letter leftovers would LIKE-match
+      # nearly every entity and mask the fallback decision.
+      term_ids = TemporalQueryParser.residual_terms(@effective_query)
+                                    .select { |term| term.length >= 3 }
+                                    .flat_map { |term| text_matching_ids(term) }.uniq
+      if term_ids.empty?
+        @temporal_fallback = true
+        return [ temporal_candidate_ids(nil), nil ]
+      end
+      ids = term_ids
+    end
+    return [ ids, nil ] unless @temporal_window
+
+    scoped = context_ids.present? ? ids & context_ids : ids
+    in_window = if scoped.empty?
+      Set.new
+    else
+      TemporalSearchStrategy.new.search(@temporal_window, limit: nil, entity_ids: scoped).to_set
+    end
+    [ ids, in_window ]
   end
 
-  def text_matching_ids
+  # In-window entity ids ordered by observation count, capped so a broad
+  # window cannot pluck every entity id before paging. The cap is reported
+  # via retrieval.temporal.candidates_truncated.
+  def temporal_candidate_ids(context_ids)
+    ids = TemporalSearchStrategy.new.search(
+      @temporal_window, limit: MAX_TEMPORAL_CANDIDATES + 1, entity_ids: context_ids
+    )
+    @temporal_candidates_truncated = ids.size > MAX_TEMPORAL_CANDIDATES
+    ids.first(MAX_TEMPORAL_CANDIDATES)
+  end
+
+  def text_matching_ids(term = nil)
     base_query = MemoryEntity.distinct
     conditions = []
-    params = { like_query_term: "%#{@effective_query.downcase}%" }
+    params = { like_query_term: "%#{(term || @effective_query).downcase}%" }
 
     conditions << "LOWER(memory_entities.name) LIKE :like_query_term" if @search_fields[:name]
     conditions << "LOWER(memory_entities.entity_type) LIKE :like_query_term" if @search_fields[:type]
@@ -160,14 +210,21 @@ class SubgraphSearchService
   def apply_token_budget!(response)
     return if @max_tokens.blank?
 
-    budget = @max_tokens.to_i
+    # Seed the diagnostics with worst-case digits so the item-less envelope
+    # counted below over-covers them — real values written after the fit are
+    # always narrower, so the final response stays under budget (S6).
+    response[:retrieval][:token_budget] = TokenBudget.diagnostics_placeholder(max_tokens: @max_tokens)
+    # The reserve covers the fields ToolSuccessResponse appends after the
+    # tool returns — the `context` block only when no context is active.
+    envelope = response.merge(entities: [], relations: [])
+                       .merge(TokenBudget.wrapper_reserve(context_active: @context_scope.present?))
+    entities_fit = TokenBudget.fit_with_envelope(response[:entities], envelope: envelope, max_tokens: @max_tokens)
+    budget_left = @max_tokens - entities_fit.envelope_tokens - entities_fit.estimated_tokens
     fetched_ids = response[:entities].map { |entity| entity[:entity_id] }.to_set
-    entities_fit = TokenBudget.fit(response[:entities], max_tokens: budget)
     response[:entities] = entities_fit.items
 
     used = entities_fit.estimated_tokens
     truncated = entities_fit.truncated
-    dropped = entities_fit.dropped_count
 
     relations_before = response[:relations].is_a?(Array) ? response[:relations].size : 0
 
@@ -178,15 +235,15 @@ class SubgraphSearchService
       scoped_relations = response[:relations].reject do |relation|
         dropped_ids.include?(relation[:from_entity_id]) || dropped_ids.include?(relation[:to_entity_id])
       end
-      relations_fit = TokenBudget.fit(scoped_relations, max_tokens: [ budget - used, 0 ].max)
+      relations_fit = TokenBudget.fit(scoped_relations, max_tokens: [ budget_left, 0 ].max)
       response[:relations] = relations_fit.items
       used += relations_fit.estimated_tokens
       truncated ||= relations_fit.truncated
-      dropped += relations_fit.dropped_count
     end
 
     response[:retrieval][:token_budget] = TokenBudget.diagnostics(
-      max_tokens: budget, estimated_tokens: used, truncated: truncated,
+      max_tokens: @max_tokens, estimated_tokens: used, truncated: truncated,
+      envelope_tokens: entities_fit.envelope_tokens,
       items_before: entities_fit.items_before + relations_before,
       items_after: entities_fit.items_after + (response[:relations]&.size || 0)
     )
@@ -213,6 +270,13 @@ class SubgraphSearchService
       scope_entity_count: context_ids&.size,
       scope_truncated: @context_scope&.truncated == true,
       scope_max_entities: @context_scope&.max_entities
-    }.merge(@temporal_window.present? ? { temporal: @extraction.diagnostic } : {})
+    }.merge(@temporal_window.present? ? { temporal: temporal_diagnostic } : {})
+  end
+
+  def temporal_diagnostic
+    @extraction.diagnostic.merge(
+      fallback: (@temporal_fallback ? "temporal_only" : nil),
+      candidates_truncated: (@temporal_candidates_truncated ? true : nil)
+    ).compact
   end
 end
