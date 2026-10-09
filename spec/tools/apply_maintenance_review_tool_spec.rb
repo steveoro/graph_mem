@@ -70,6 +70,17 @@ RSpec.describe ApplyMaintenanceReviewTool, type: :model do
       end
     end
 
+    it "raises InvalidArgumentsError for a dismissed (non-actionable) suggestion" do
+      merge_row.update!(status: "dismissed", dismissed_at: Time.current)
+
+      expect {
+        tool.call(item_id: merge_row.row_uuid, action_params: { "source_id" => source.id, "target_id" => target.id })
+      }.to raise_error(FastMcp::Tool::InvalidArgumentsError, /not actionable/) do |error|
+        expect(error.message).to include("`list_maintenance_review`")
+      end
+      expect(MemoryEntity.find_by(id: source.id)).to be_present
+    end
+
     it "raises a generic OperationFailed for unexpected apply failures" do
       allow(CompactionReviewService).to receive(:apply).and_return(
         { success: false, error: "Failed to create relation: secret boom" }

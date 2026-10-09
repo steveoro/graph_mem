@@ -1037,6 +1037,21 @@ RSpec.describe 'DataExchange', type: :request do
       expect(merge_row.reload.status).to eq('approved')
       expect(MemoryEntity.find_by(id: task1.id)).to be_nil
     end
+
+    it 'refuses to apply a dismissed suggestion' do
+      merge_row.update!(status: 'dismissed', dismissed_at: Time.current)
+
+      post compaction_review_action_data_exchange_index_path, params: {
+        item_id: 'review-1',
+        review_action: 'apply',
+        source_id: task1.id,
+        target_id: task2.id
+      }
+
+      expect(response).to redirect_to(compaction_review_data_exchange_index_path)
+      expect(merge_row.reload.status).to eq('dismissed')
+      expect(MemoryEntity.find_by(id: task1.id)).to be_present
+    end
   end
 
   describe 'GET /data_exchange/compaction_review report_type=scan_review' do
