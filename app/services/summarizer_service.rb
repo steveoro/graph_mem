@@ -367,39 +367,53 @@ class SummarizerService
   def enforce_token_budget!(response, budget_fit, evidence)
     return response if budget_fit.nil?
 
-    kept = response[:observations]
-    dropped = false
-    loop do
-      # The reserve covers the fields ToolSuccessResponse appends after the
-      # tool returns — the `context` block only when no context is active.
-      envelope = response.merge(observations: [])
-                         .merge(TokenBudget.wrapper_reserve(context_active: @context_entity_ids.present?))
-      fit = TokenBudget.fit_with_envelope(kept, envelope: envelope, max_tokens: @max_tokens)
-      break if fit.items.size == kept.size
+    all_obs = response[:observations]
+    reserve = TokenBudget.wrapper_reserve(context_active: @context_entity_ids.present?)
+    deterministic = response[:generation_mode] == "deterministic"
 
-      dropped = true
-      kept = fit.items
+    # Rebuilds the FINAL response for a kept prefix of `count` observations —
+    # sources always track the kept evidence; the deterministic summary is
+    # re-derived so dropped facts can't leak through it (an LLM summary can't
+    # be re-derived and stays as generated). The diagnostics seed inside the
+    # estimate copy is padded to worst-case width like the other services.
+    rebuild = lambda do |count|
+      kept = all_obs.first(count)
       kept_ids = kept.map { |payload| payload[:id] }.to_set
       kept_evidence = evidence.select { |entry| kept_ids.include?(entry[:observation].id) }
-      # Sources are rebuilt in both modes so they always match the kept
-      # observations; only the deterministic summary text can be re-derived —
-      # LLM text may still cite dropped evidence and overflow is reported via
-      # truncated.
-      response[:sources] = build_sources(kept_evidence)
-      break if response[:generation_mode] != "deterministic"
-
-      response[:summary] = build_deterministic_summary(kept_evidence)
+      rebuilt = response.merge(observations: kept, observation_count: count,
+                               sources: build_sources(kept_evidence))
+      rebuilt[:retrieval] = response[:retrieval].merge(
+        token_budget: TokenBudget.diagnostics_placeholder(max_tokens: @max_tokens)
+      )
+      rebuilt[:summary] = build_deterministic_summary(kept_evidence) if deterministic
+      rebuilt
     end
 
-    response[:observations] = kept
-    response[:observation_count] = kept.size
-    envelope = response.merge(observations: [])
-                       .merge(TokenBudget.wrapper_reserve(context_active: @context_entity_ids.present?))
+    # The fully-rebuilt response grows monotonically in the kept prefix —
+    # each added observation grows the payload, the sources, and a
+    # deterministic summary — so binary search finds the largest prefix that
+    # still fits. A greedy shrink-only pass under-packs: after a drop the
+    # summary shrinks too, leaving budget unused (e.g. keeping 0 where a
+    # rebuilt 1-observation response would fit).
+    lo, hi = 0, all_obs.size
+    while lo < hi
+      mid = (lo + hi + 1) / 2
+      if TokenBudget.estimate(rebuild.call(mid).merge(reserve)) <= @max_tokens
+        lo = mid
+      else
+        hi = mid - 1
+      end
+    end
+
+    response.merge!(rebuild.call(lo))
+    dropped = lo < all_obs.size
+    envelope = response.merge(observations: []).merge(reserve)
     response[:retrieval][:token_budget].merge!(
-      estimated_tokens: TokenBudget.estimate(kept),
+      estimated_tokens: TokenBudget.estimate(response[:observations]),
       envelope_tokens: TokenBudget.estimate(envelope),
       truncated: (dropped || budget_fit.truncated),
-      items_after: kept.size
+      items_before: budget_fit.items_before,
+      items_after: lo
     )
     response
   end

@@ -300,6 +300,28 @@ RSpec.describe SummarizerService do
       expect(budget[:envelope_tokens]).to be > 0
       expect(budget[:truncated]).to be(true)
     end
+
+    it "keeps the largest prefix whose rebuilt response fits the budget" do
+      # A shrink-only pass under-packs: after a drop the deterministic
+      # summary shrinks too, freeing budget that could re-fit evidence.
+      unbounded = described_class.new(query: "budget", max_results: 5, max_tokens: 100_000).call
+
+      # Find the smallest budget that keeps anything — one step below it the
+      # rebuilt 1-observation response still overflowed.
+      budget = (100..1_000).step(10).find do |b|
+        described_class.new(query: "budget", max_results: 5, max_tokens: b)
+                     .call[:observations].any?
+      end
+      expect(budget).not_to be_nil
+
+      response = described_class.new(query: "budget", max_results: 5, max_tokens: budget).call
+      expect(response[:observations].size).to eq(1)
+      expect(TokenBudget.estimate(response)).to be <= budget
+
+      # The dropped observation genuinely could not fit alongside the first.
+      candidate = response.merge(observations: unbounded[:observations].first(2))
+      expect(TokenBudget.estimate(candidate)).to be > budget
+    end
   end
 
   describe "temporal fallback with an active context" do
