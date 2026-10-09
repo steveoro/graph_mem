@@ -176,6 +176,31 @@ RSpec.describe SearchTool, type: :model do
     end
   end
 
+  describe "context boost on temporal-only queries" do
+    let!(:project_a) { MemoryEntity.create!(name: "Project A", entity_type: "Project") }
+    let!(:project_b) { MemoryEntity.create!(name: "Project B", entity_type: "Project") }
+    let!(:aurora) { MemoryEntity.create!(name: "Aurora Component", entity_type: "Component") }
+    let!(:borealis) { MemoryEntity.create!(name: "Borealis Widget", entity_type: "Component") }
+    let(:scope) { ProjectSubtree::Result.new(entity_ids: [ aurora.id ], truncated: false, max_entities: 1_000) }
+    let(:tool) do
+      described_class.new.tap do |instance|
+        allow(instance).to receive(:graph_mem_context)
+          .and_return(double(scoped_entity_scope: scope, active?: true))
+      end
+    end
+
+    before do
+      aurora.memory_observations.create!(content: "alpha fact", valid_from: Time.utc(2026, 8, 10))
+      borealis.memory_observations.create!(content: "beta fact", valid_from: Time.utc(2026, 8, 11))
+    end
+
+    it "returns other projects' in-window entities, context members first" do
+      names = tool.call(query: "in august 2026")[:results].map { |r| r[:name] }
+      expect(names).to include("Aurora Component", "Borealis Widget")
+      expect(names.first).to eq("Aurora Component")
+    end
+  end
+
   describe "per-page max_tokens" do
     let!(:svc_a) { MemoryEntity.create!(name: "Alpha Service", entity_type: "Service") }
     let!(:svc_b) { MemoryEntity.create!(name: "Beta Service", entity_type: "Service") }
