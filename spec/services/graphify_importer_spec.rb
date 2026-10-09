@@ -171,6 +171,40 @@ RSpec.describe GraphifyImporter do
         .to eq([ { node_path: "0.children.0", child_action: "add_relation" } ])
     end
 
+    it "skips the whole subtree when the matched child is parented under a different entity" do
+      # moved_class lives under existing_file; the import's root "0" creates a
+      # brand-new parent, so moved_class is foreign to this import.
+      matches = [
+        ImportMatchingStrategy::MatchResult.new(is_child: false, node_path: "0", selected_match_id: nil),
+        ImportMatchingStrategy::MatchResult.new(is_child: true, node_path: "0.children.0",
+                                                child_action: "add_relation", exact_match: moved_class),
+        ImportMatchingStrategy::MatchResult.new(is_child: true, node_path: "0.children.0.children.0",
+                                                child_action: "create", exact_match: nil)
+      ]
+      expect(described_class.headless_decisions(matches)).to eq([
+        { node_path: "0", action: "create" },
+        { node_path: "0.children.0", child_action: "skip" },
+        { node_path: "0.children.0.children.0", child_action: "skip" }
+      ])
+    end
+
+    it "does not flag a child parented under the entity this import attaches to" do
+      # moved_class's real parent IS the root's selected match — a rescan,
+      # not a foreign tree: descendants keep their own actions.
+      matches = [
+        ImportMatchingStrategy::MatchResult.new(is_child: false, node_path: "0", selected_match_id: existing_file.id),
+        ImportMatchingStrategy::MatchResult.new(is_child: true, node_path: "0.children.0",
+                                                child_action: "add_relation", exact_match: moved_class),
+        ImportMatchingStrategy::MatchResult.new(is_child: true, node_path: "0.children.0.children.0",
+                                                child_action: "create", exact_match: nil)
+      ]
+      expect(described_class.headless_decisions(matches)).to eq([
+        { node_path: "0", action: "merge", target_id: existing_file.id },
+        { node_path: "0.children.0", child_action: "skip" },
+        { node_path: "0.children.0.children.0", child_action: "create" }
+      ])
+    end
+
     it "passes through other child actions and merges/creates roots" do
       matches = [
         ImportMatchingStrategy::MatchResult.new(is_child: false, node_path: "0", selected_match_id: existing_file.id),
