@@ -9,7 +9,8 @@ class EntitiesFetchService
 
   def initialize(entity_ids:, relations: nil, include_obsolete: false, include_ranked: false,
                  query: nil, observation_limit: nil, strict_single: true,
-                 always_rank_observations: false, temporal_window: nil, max_tokens: nil)
+                 always_rank_observations: false, temporal_window: nil, max_tokens: nil,
+                 context_active: false)
     @entity_ids = Array(entity_ids).map(&:to_i).uniq
     @relations_mode = relations.presence || default_relations_mode
     @include_obsolete = include_obsolete
@@ -22,6 +23,7 @@ class EntitiesFetchService
     @temporal_window = @extraction.window
     @effective_query = @extraction.effective_query
     @max_tokens = max_tokens
+    @context_active = context_active
   end
 
   def call
@@ -110,11 +112,19 @@ class EntitiesFetchService
   def apply_token_budget!(result)
     return if @max_tokens.blank?
 
-    budget = @max_tokens.to_i
+    # Seed the diagnostics with worst-case digits so the item-less envelope
+    # counted below over-covers them — real values written after the fit are
+    # always narrower, so the final response stays under budget (S6).
+    result[:token_budget] = TokenBudget.diagnostics_placeholder(max_tokens: @max_tokens)
+    # The reserve covers the fields ToolSuccessResponse appends after the
+    # tool returns — the `context` block only when no context is active.
+    envelope = result.merge(entities: [], relations: [])
+                     .merge(TokenBudget.wrapper_reserve(context_active: @context_active))
     fetched_ids = result[:entities].map { |entity| entity[:entity_id] }.to_set
     relations_before = result[:relations].size
-    entities_fit = TokenBudget.fit(result[:entities], max_tokens: budget)
+    entities_fit = TokenBudget.fit_with_envelope(result[:entities], envelope: envelope, max_tokens: @max_tokens)
     result[:entities] = entities_fit.items
+    budget_left = @max_tokens - entities_fit.envelope_tokens - entities_fit.estimated_tokens
 
     used = entities_fit.estimated_tokens
     truncated = entities_fit.truncated
@@ -126,13 +136,14 @@ class EntitiesFetchService
     scoped_relations = result[:relations].reject do |relation|
       dropped_ids.include?(relation[:from_entity_id]) || dropped_ids.include?(relation[:to_entity_id])
     end
-    relations_fit = TokenBudget.fit(scoped_relations, max_tokens: [ budget - used, 0 ].max)
+    relations_fit = TokenBudget.fit(scoped_relations, max_tokens: [ budget_left, 0 ].max)
     result[:relations] = relations_fit.items
     used += relations_fit.estimated_tokens
     truncated ||= relations_fit.truncated
 
     result[:token_budget] = TokenBudget.diagnostics(
-      max_tokens: budget, estimated_tokens: used, truncated: truncated,
+      max_tokens: @max_tokens, estimated_tokens: used, truncated: truncated,
+      envelope_tokens: entities_fit.envelope_tokens,
       items_before: entities_fit.items_before + relations_before,
       items_after: result[:entities].size + result[:relations].size
     )

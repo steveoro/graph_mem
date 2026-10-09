@@ -56,7 +56,7 @@ class SummarizerService
     evidence = build_evidence(entities, entity_scores)
     evidence, kept_payloads, budget_fit = budget_evidence(evidence)
     response = build_deterministic_response(entities, evidence, observations_payload: kept_payloads, budget_fit: budget_fit)
-    attempt_llm_synthesis(response, evidence)
+    enforce_token_budget!(attempt_llm_synthesis(response, evidence), budget_fit, evidence)
   end
 
   private
@@ -95,6 +95,21 @@ class SummarizerService
       temporal_window: @temporal_window,
       temporal_only: @extraction.temporal_only?
     )
+
+    # A windowed query whose residual terms match nothing falls back to a
+    # pure temporal listing instead of producing an empty summary.
+    if results.empty? && @temporal_window.present? && !@extraction.temporal_only?
+      @temporal_fallback = true
+      results = HybridSearchStrategy.new.search(
+        "",
+        limit: search_limit,
+        semantic: true,
+        context_entity_ids: @context_entity_ids.presence,
+        scope_entity_ids: (@scope == "context" ? @allowed_entity_ids : nil),
+        temporal_window: @temporal_window,
+        temporal_only: true
+      )
+    end
 
     @candidate_entity_count = results.size
     results = apply_scope_filter(results)
@@ -306,7 +321,7 @@ class SummarizerService
       selected_entity_count: entities.map(&:id).uniq.size,
       excluded_out_of_scope_count: @excluded_out_of_scope_count,
       selected_observation_count: evidence.size
-    }.merge(@temporal_window.present? ? { temporal: @extraction.diagnostic } : {})
+    }.merge(@temporal_window.present? ? { temporal: @extraction.diagnostic.merge(fallback: (@temporal_fallback ? "temporal_only" : nil)).compact } : {})
   end
 
   # Applies the optional token budget to the evidence BEFORE the summary,
@@ -315,8 +330,15 @@ class SummarizerService
   def budget_evidence(evidence)
     return [ evidence, nil, nil ] if @max_tokens.blank?
 
+    # The response envelope (everything except the observations themselves)
+    # is counted once so the packed payload stays under budget end-to-end.
+    envelope = {
+      query: @query, summary: "", generation_mode: "", generated_by: "",
+      fallback_reason: nil, scope: @scope, entity_count: 0, observation_count: 0,
+      observations: [], sources: [], retrieval: {}
+    }
     payloads = evidence.map { |entry| observation_payload(entry) }
-    fit = TokenBudget.fit(payloads, max_tokens: @max_tokens.to_i)
+    fit = TokenBudget.fit_with_envelope(payloads, envelope: envelope, max_tokens: @max_tokens)
     kept_ids = fit.items.map { |payload| payload[:id] }.to_set
 
     kept_evidence = evidence.select { |entry| kept_ids.include?(entry[:observation].id) }
@@ -329,8 +351,71 @@ class SummarizerService
     response[:retrieval][:token_budget] = TokenBudget.diagnostics(
       max_tokens: @max_tokens, estimated_tokens: budget_fit.estimated_tokens,
       truncated: budget_fit.truncated,
+      envelope_tokens: budget_fit.envelope_tokens,
       items_before: budget_fit.items_before, items_after: budget_fit.items_after
     )
+  end
+
+  # Re-fits observations against the FINAL response — the summary text,
+  # sources and diagnostics only exist after generation (deterministic
+  # summaries repeat the evidence; LLM text is arbitrary length). Extra
+  # items are dropped whole; for deterministic summaries the text and
+  # sources are rebuilt from the surviving evidence so dropped facts can't
+  # leak through the summary and the payload honours max_tokens. An LLM
+  # summary can't be re-derived — any overflow there is reported via
+  # truncated instead of silently editing the generated text.
+  def enforce_token_budget!(response, budget_fit, evidence)
+    return response if budget_fit.nil?
+
+    all_obs = response[:observations]
+    reserve = TokenBudget.wrapper_reserve(context_active: @context_entity_ids.present?)
+    deterministic = response[:generation_mode] == "deterministic"
+
+    # Rebuilds the FINAL response for a kept prefix of `count` observations —
+    # sources always track the kept evidence; the deterministic summary is
+    # re-derived so dropped facts can't leak through it (an LLM summary can't
+    # be re-derived and stays as generated). The diagnostics seed inside the
+    # estimate copy is padded to worst-case width like the other services.
+    rebuild = lambda do |count|
+      kept = all_obs.first(count)
+      kept_ids = kept.map { |payload| payload[:id] }.to_set
+      kept_evidence = evidence.select { |entry| kept_ids.include?(entry[:observation].id) }
+      rebuilt = response.merge(observations: kept, observation_count: count,
+                               sources: build_sources(kept_evidence))
+      rebuilt[:retrieval] = response[:retrieval].merge(
+        token_budget: TokenBudget.diagnostics_placeholder(max_tokens: @max_tokens)
+      )
+      rebuilt[:summary] = build_deterministic_summary(kept_evidence) if deterministic
+      rebuilt
+    end
+
+    # The fully-rebuilt response grows monotonically in the kept prefix —
+    # each added observation grows the payload, the sources, and a
+    # deterministic summary — so binary search finds the largest prefix that
+    # still fits. A greedy shrink-only pass under-packs: after a drop the
+    # summary shrinks too, leaving budget unused (e.g. keeping 0 where a
+    # rebuilt 1-observation response would fit).
+    lo, hi = 0, all_obs.size
+    while lo < hi
+      mid = (lo + hi + 1) / 2
+      if TokenBudget.estimate(rebuild.call(mid).merge(reserve)) <= @max_tokens
+        lo = mid
+      else
+        hi = mid - 1
+      end
+    end
+
+    response.merge!(rebuild.call(lo))
+    dropped = lo < all_obs.size
+    envelope = response.merge(observations: []).merge(reserve)
+    response[:retrieval][:token_budget].merge!(
+      estimated_tokens: TokenBudget.estimate(response[:observations]),
+      envelope_tokens: TokenBudget.estimate(envelope),
+      truncated: (dropped || budget_fit.truncated),
+      items_before: budget_fit.items_before,
+      items_after: lo
+    )
+    response
   end
 
   def attempt_llm_synthesis(response, evidence)

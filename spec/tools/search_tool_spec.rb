@@ -120,7 +120,9 @@ RSpec.describe SearchTool, type: :model do
         retrieval: { result_count: 2 }
       )
 
-      budget = TokenBudget.estimate(small)
+      # small item + response envelope (diagnostics seed + next_move hint +
+      # the ToolSuccessResponse wrapper reserve, ~160 tokens total)
+      budget = TokenBudget.estimate(small) + 200
       result = tool.call(query: "result", max_tokens: budget)
 
       expect(result[:results]).to eq([ small ])
@@ -155,6 +157,93 @@ RSpec.describe SearchTool, type: :model do
         expect { described_class.new.call(query: "alpha", max_tokens: bad) }
           .to raise_error(FastMcp::Tool::InvalidArgumentsError)
       end
+    end
+  end
+
+  describe "temporal filler queries" do
+    let!(:alpha) { MemoryEntity.create!(name: "Alpha Service", entity_type: "Service") }
+
+    before do
+      alpha.memory_observations.create!(content: "Alpha deployed v2 in August",
+                                        valid_from: Time.utc(2026, 8, 10),
+                                        valid_until: Time.utc(2026, 8, 20))
+    end
+
+    it "returns in-window entities for 'what changed in august 2026'" do
+      result = described_class.new.call(query: "what changed in august 2026")
+      names = result[:results].map { |r| r[:name] }
+      expect(names).to include("Alpha Service")
+    end
+  end
+
+  describe "context boost on temporal-only queries" do
+    let!(:project_a) { MemoryEntity.create!(name: "Project A", entity_type: "Project") }
+    let!(:project_b) { MemoryEntity.create!(name: "Project B", entity_type: "Project") }
+    let!(:aurora) { MemoryEntity.create!(name: "Aurora Component", entity_type: "Component") }
+    let!(:borealis) { MemoryEntity.create!(name: "Borealis Widget", entity_type: "Component") }
+    let(:scope) { ProjectSubtree::Result.new(entity_ids: [ aurora.id ], truncated: false, max_entities: 1_000) }
+    let(:tool) do
+      described_class.new.tap do |instance|
+        allow(instance).to receive(:graph_mem_context)
+          .and_return(double(scoped_entity_scope: scope, active?: true))
+      end
+    end
+
+    before do
+      aurora.memory_observations.create!(content: "alpha fact", valid_from: Time.utc(2026, 8, 10))
+      borealis.memory_observations.create!(content: "beta fact", valid_from: Time.utc(2026, 8, 11))
+    end
+
+    it "returns other projects' in-window entities, context members first" do
+      names = tool.call(query: "in august 2026")[:results].map { |r| r[:name] }
+      expect(names).to include("Aurora Component", "Borealis Widget")
+      expect(names.first).to eq("Aurora Component")
+    end
+  end
+
+  describe "per-page max_tokens" do
+    let!(:svc_a) { MemoryEntity.create!(name: "Alpha Service", entity_type: "Service") }
+    let!(:svc_b) { MemoryEntity.create!(name: "Beta Service", entity_type: "Service") }
+
+    before do
+      svc_a.memory_observations.create!(content: "alpha fact")
+      svc_b.memory_observations.create!(content: "beta fact")
+    end
+
+    it "fits each page independently instead of accumulating" do
+      page2 = described_class.new.call(query: "service",
+                                   page: 2, per_page: 1, max_tokens: 400)
+      expect(page2[:results].size).to eq(1)
+      expect(page2[:retrieval][:token_budget][:estimated_tokens]).to be <= 400
+    end
+
+    it "reports dropped_on_page and a next_move hint when the page overflows" do
+      result = described_class.new.call(query: "service",
+                                    page: 1, per_page: 2, max_tokens: 1)
+      budget = result[:retrieval][:token_budget]
+      expect(result[:results]).to eq([])
+      expect(budget[:truncated]).to be(true)
+      expect(budget[:dropped_on_page]).to be > 0
+      expect(result[:retrieval][:next_move]).to include("per_page")
+    end
+
+    it "counts the envelope once and reports envelope_tokens" do
+      result = described_class.new.call(query: "service",
+                                    page: 1, per_page: 2, max_tokens: 100)
+      budget = result[:retrieval][:token_budget]
+      expect(budget[:envelope_tokens]).to be > 0
+      expect(TokenBudget.estimate(result)).to be <= 110 # 10% slack
+    end
+
+    it "keeps the whole structuredContent under max_tokens whenever items are kept" do
+      # Diagnostics + next_move + the ToolSuccessResponse wrapper are counted
+      # in the envelope estimate, so the delivered payload fits the budget.
+      result = described_class.new.call(query: "service",
+                                    page: 1, per_page: 2, max_tokens: 300)
+      wrapped, = ToolSuccessResponse.call(tool_name: "search", result: result,
+                                          context: double(active?: false))
+      expect(result[:results]).not_to be_empty
+      expect(TokenBudget.estimate(wrapped)).to be <= 300
     end
   end
 end

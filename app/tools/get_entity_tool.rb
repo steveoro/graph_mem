@@ -39,7 +39,7 @@ class GetEntityTool < ApplicationTool
 
   def call(entity_id:, include_obsolete: false, include_ranked: false, query: nil, observation_limit: nil,
            occurred_after: nil, occurred_before: nil, as_of: nil, max_tokens: nil)
-    TokenBudget.validate_max_tokens!(max_tokens, error_class: FastMcp::Tool::InvalidArgumentsError)
+    max_tokens = TokenBudget.validate_max_tokens!(max_tokens, error_class: FastMcp::Tool::InvalidArgumentsError)
     logger.info "Performing GetEntityTool with entity_id: #{entity_id}"
     begin
       result = EntitiesFetchService.call(
@@ -50,7 +50,8 @@ class GetEntityTool < ApplicationTool
         query: query,
         observation_limit: observation_limit,
         temporal_window: temporal_window_for(occurred_after, occurred_before, as_of),
-        max_tokens: max_tokens
+        max_tokens: max_tokens,
+        context_active: graph_mem_context.active?
       )
       entity = result[:entities].first
       relations = result[:relations]
@@ -91,6 +92,14 @@ class GetEntityTool < ApplicationTool
       }
       response[:token_budget] = result[:token_budget] if result[:token_budget]
       response[:temporal] = result[:temporal] if result[:temporal]
+      # The service fits the pre-reshape payload; the reshaped response plus
+      # the ToolSuccessResponse wrapper can still exceed the budget — a single
+      # entity can't be split further.
+      if max_tokens.present? &&
+         TokenBudget.estimate(response.merge(TokenBudget.wrapper_reserve(context_active: graph_mem_context.active?))) > max_tokens
+        raise FastMcp::Tool::InvalidArgumentsError,
+              "Entity payload exceeds the max_tokens budget; raise max_tokens or omit it."
+      end
       response
     rescue ActiveRecord::RecordNotFound => e
       error_message = "Entity with ID=#{entity_id} not found."
@@ -100,6 +109,8 @@ class GetEntityTool < ApplicationTool
         next_move: "Call `search`, then retry `get_entities` with a known id."
       )
     rescue *ToolError::TIMEOUT_CLASSES
+      raise
+    rescue McpGraphMemErrors::Error, FastMcp::Tool::InvalidArgumentsError
       raise
     rescue StandardError => e
       logger.error "GetEntityTool unexpected error: #{e.class}: #{e.message}"

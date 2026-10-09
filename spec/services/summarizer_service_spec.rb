@@ -281,4 +281,83 @@ RSpec.describe SummarizerService do
       end
     end
   end
+
+  describe "post-generation token budget" do
+    let!(:entity) { MemoryEntity.create!(name: "Budget Entity", entity_type: "Service") }
+
+    before do
+      entity.memory_observations.create!(content: "fact #{('x' * 60)} one")
+      entity.memory_observations.create!(content: "fact #{('y' * 60)} two")
+    end
+
+    it "drops observations when the generated summary pushes the response over budget" do
+      unbounded = described_class.new(query: "budget", max_results: 5).call
+      response = described_class.new(query: "budget", max_results: 5, max_tokens: 120).call
+
+      expect(response[:observations].size).to be < unbounded[:observations].size
+      expect(TokenBudget.estimate(response)).to be < TokenBudget.estimate(unbounded)
+      budget = response[:retrieval][:token_budget]
+      expect(budget[:envelope_tokens]).to be > 0
+      expect(budget[:truncated]).to be(true)
+    end
+
+    it "keeps the largest prefix whose rebuilt response fits the budget" do
+      # A shrink-only pass under-packs: after a drop the deterministic
+      # summary shrinks too, freeing budget that could re-fit evidence.
+      unbounded = described_class.new(query: "budget", max_results: 5, max_tokens: 100_000).call
+
+      # Find the smallest budget that keeps anything — one step below it the
+      # rebuilt 1-observation response still overflowed.
+      budget = (100..1_000).step(10).find do |b|
+        described_class.new(query: "budget", max_results: 5, max_tokens: b)
+                     .call[:observations].any?
+      end
+      expect(budget).not_to be_nil
+
+      response = described_class.new(query: "budget", max_results: 5, max_tokens: budget).call
+      expect(response[:observations].size).to eq(1)
+      expect(TokenBudget.estimate(response)).to be <= budget
+
+      # The dropped observation genuinely could not fit alongside the first.
+      candidate = response.merge(observations: unbounded[:observations].first(2))
+      expect(TokenBudget.estimate(candidate)).to be > budget
+    end
+  end
+
+  describe "temporal fallback with an active context" do
+    let!(:project_a) { MemoryEntity.create!(name: "Project Alpha", entity_type: "Project") }
+    let!(:alpha) { MemoryEntity.create!(name: "Aurora Component", entity_type: "Component") }
+    let!(:borealis) { MemoryEntity.create!(name: "Borealis Widget", entity_type: "Component") }
+
+    before do
+      alpha.memory_observations.create!(content: "alpha august fact", valid_from: Time.utc(2026, 8, 10))
+      borealis.memory_observations.create!(content: "borealis august fact", valid_from: Time.utc(2026, 8, 12))
+    end
+
+    it "scope global returns other projects' in-window facts (context is boost-only)" do
+      result = described_class.new(
+        query: "nonexistentthing in august 2026",
+        scope: "global",
+        context_entity_ids: [ project_a.id ]
+      ).call
+
+      contents = result[:observations].map { |o| o[:content] }
+      expect(contents).to include("alpha august fact", "borealis august fact")
+    end
+
+    it "scope context stays limited to the scoped subtree" do
+      MemoryRelation.create!(from_entity: alpha, to_entity: project_a, relation_type: "part_of")
+      # The tool layer resolves the active context to its subtree ids; the
+      # service treats the list itself as the allowlist.
+      result = described_class.new(
+        query: "nonexistentthing in august 2026",
+        scope: "context",
+        context_entity_ids: [ project_a.id, alpha.id ]
+      ).call
+
+      contents = result[:observations].map { |o| o[:content] }
+      expect(contents).to include("alpha august fact")
+      expect(contents).not_to include("borealis august fact")
+    end
+  end
 end

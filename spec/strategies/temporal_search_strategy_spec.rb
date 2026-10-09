@@ -59,4 +59,11 @@ RSpec.describe TemporalSearchStrategy do
       expect(ids).to eq(ids.sort_by { |id| [ -MemoryObservation.where(memory_entity_id: id).count, id ] })
     end
   end
+
+  it "returns [] for an explicitly empty scope and stays global for nil" do
+    add_observation(entity_a, content: "in window")
+
+    expect(described_class.new.search(window, entity_ids: [])).to eq([])
+    expect(described_class.new.search(window, entity_ids: nil)).to include(entity_a.id)
+  end
 end

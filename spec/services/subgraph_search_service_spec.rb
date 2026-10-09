@@ -121,11 +121,122 @@ RSpec.describe SubgraphSearchService do
       expect(ids).to include(quiet.id)
     end
 
-    it "does not cap the temporal candidate list" do
+    it "caps the temporal candidate list at MAX_TEMPORAL_CANDIDATES (fetching one extra to detect overflow)" do
       expect_any_instance_of(TemporalSearchStrategy)
-        .to receive(:search).with(anything, limit: nil, entity_ids: nil).and_call_original
+        .to receive(:search).with(anything, limit: 501, entity_ids: nil).and_call_original
 
       described_class.call(query: "in 2026-08")
+    end
+
+    it "flags candidates_truncated when the cap bites and keeps totals honest" do
+      stub_const("SubgraphSearchService::MAX_TEMPORAL_CANDIDATES", 3)
+      5.times do |i|
+        e = MemoryEntity.create!(name: "Extra #{i}", entity_type: "Project")
+        MemoryObservation.create!(memory_entity: e, content: "f", created_at: Time.zone.parse("2026-08-10"))
+      end
+
+      result = described_class.call(query: "in 2026-08")
+
+      expect(result[:pagination][:total_entities]).to eq(3)
+      expect(result[:retrieval][:temporal][:candidates_truncated]).to be(true)
+    end
+  end
+
+  describe "date-only fallback (residual terms match nothing)" do
+    let!(:hot_entity) { MemoryEntity.create!(name: "Hot Service", entity_type: "Service") }
+
+    before do
+      MemoryObservation.create!(memory_entity: hot_entity, content: "august fact",
+                                created_at: Time.zone.parse("2026-08-10"))
+    end
+
+    it "falls back to temporal listing when residual terms match nothing" do
+      result = described_class.call(query: "zzz-nothing-matches in august 2026")
+
+      expect(result[:entities].map { |e| e[:entity_id] }).to include(hot_entity.id)
+      expect(result[:retrieval][:temporal][:fallback]).to eq("temporal_only")
+    end
+
+    it "matches residual terms instead of injecting unrelated in-window entities" do
+      alpha = MemoryEntity.create!(name: "Alpha Service", entity_type: "Service")
+      beta = MemoryEntity.create!(name: "Beta Unrelated", entity_type: "Service")
+      alpha.memory_observations.create!(content: "alpha fact", valid_from: Time.utc(2026, 8, 10))
+      beta.memory_observations.create!(content: "beta fact", valid_from: Time.utc(2026, 8, 11))
+      # Vector neighbours would mask the fallback decision — keep this spec on
+      # the text channel only.
+      allow_any_instance_of(VectorSearchStrategy).to receive(:search).and_return([])
+
+      result = described_class.call(query: "alpha changes in august 2026")
+
+      names = result[:entities].map { |e| e[:name] }
+      expect(names).to include("Alpha Service")
+      expect(names).not_to include("Beta Unrelated")
+      expect(result[:retrieval][:temporal][:fallback]).to be_nil
+    end
+  end
+
+  describe "text+window ordering" do
+    let!(:hub) { MemoryEntity.create!(name: "Delta Service Hub", entity_type: "Service") }
+    let!(:hot) { MemoryEntity.create!(name: "Echo Service", entity_type: "Service") }
+
+    before do
+      hub.memory_observations.create!(content: "old hub fact", valid_from: Time.utc(2024, 1, 1),
+                                      valid_until: Time.utc(2024, 2, 1))
+      hot.memory_observations.create!(content: "echo august fact", valid_from: Time.utc(2026, 8, 12))
+      6.times do |i|
+        leaf = MemoryEntity.create!(name: "Leaf #{i}", entity_type: "Note")
+        MemoryRelation.create!(from_entity_id: hub.id, to_entity_id: leaf.id, relation_type: "has")
+      end
+    end
+
+    it "ranks in-window candidates above out-of-window ones" do
+      result = described_class.call(query: "service in august 2026")
+
+      names = result[:entities].map { |e| e[:name] }
+      expect(names.index("Echo Service")).to be < names.index("Delta Service Hub")
+    end
+
+    it "keeps today's booster order when no window applies" do
+      result = described_class.call(query: "service")
+
+      expect(result[:entities].map { |e| e[:name] }).to include("Delta Service Hub", "Echo Service")
+    end
+  end
+
+  describe "max_tokens response envelope" do
+    it "keeps the whole response under max_tokens whenever items are kept" do
+      3.times do |i|
+        e = MemoryEntity.create!(name: "Budget Seed #{i}", entity_type: "Service")
+        e.memory_observations.create!(content: "budget fact")
+      end
+
+      result = described_class.call(query: "budget seed", include_observations: true,
+                                    max_tokens: 400, per_page: 10)
+      wrapped, = ToolSuccessResponse.call(tool_name: "search", result: result,
+                                          context: double(active?: false))
+
+      expect(result[:entities]).not_to be_empty
+      expect(TokenBudget.estimate(wrapped)).to be <= 400
+    end
+  end
+
+  describe "context boost on temporal-only queries" do
+    let!(:context_project) { MemoryEntity.create!(name: "Context Project", entity_type: "Project") }
+    let!(:aurora) { MemoryEntity.create!(name: "Aurora Component", entity_type: "Component") }
+    let!(:borealis) { MemoryEntity.create!(name: "Borealis Widget", entity_type: "Component") }
+
+    before do
+      aurora.memory_observations.create!(content: "alpha fact", valid_from: Time.utc(2026, 8, 10))
+      borealis.memory_observations.create!(content: "beta fact", valid_from: Time.utc(2026, 8, 11))
+    end
+
+    it "returns other projects' in-window entities, context members first" do
+      scope = ProjectSubtree::Result.new(entity_ids: [ aurora.id ], truncated: false, max_entities: 1_000)
+      result = described_class.call(query: "in august 2026", context_scope: scope)
+
+      names = result[:entities].map { |e| e[:name] }
+      expect(names).to include("Aurora Component", "Borealis Widget")
+      expect(names.first).to eq("Aurora Component")
     end
   end
 end

@@ -180,8 +180,7 @@ CREATE TABLE `memory_entities` (
 /*!50003 SET @saved_sql_mode       = @@sql_mode */ ;
 /*!50003 SET sql_mode              = 'NO_AUTO_VALUE_ON_ZERO,STRICT_TRANS_TABLES,STRICT_ALL_TABLES,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION' */ ;
 DELIMITER ;;
-/*!50003 CREATE*/ /*!50017 DEFINER=`root`@`localhost`*/ /*!50003 TRIGGER trg_memory_entities_embedding_bi BEFORE INSERT ON memory_entities FOR EACH ROW SET NEW.embedding = IFNULL(NEW.embedding, VEC_FromText(CONCAT('[', REPEAT('0,', 767), '0]'))) /*application='GraphMem'*/ 
-*/;;
+/*!50003 CREATE*/ /*!50017 DEFINER=`root`@`localhost`*/ /*!50003 TRIGGER trg_memory_entities_embedding_bi BEFORE INSERT ON memory_entities FOR EACH ROW SET NEW.embedding = IFNULL(NEW.embedding, VEC_FromText(CONCAT('[', REPEAT('0,', 767), '0]'))) */;;
 DELIMITER ;
 /*!50003 SET sql_mode              = @saved_sql_mode */ ;
 /*!50003 SET character_set_client  = @saved_cs_client */ ;
@@ -216,6 +215,7 @@ CREATE TABLE `memory_observations` (
   KEY `index_memory_observations_on_memory_entity_id_and_status` (`memory_entity_id`,`status`),
   KEY `index_memory_observations_on_superseded_by_id` (`superseded_by_id`),
   KEY `index_memory_observations_on_trust_score` (`trust_score`),
+  KEY `index_memory_observations_temporal_cover` (`status`,`memory_entity_id`,`valid_from`,`valid_until`,`created_at`),
   VECTOR KEY `idx_memory_observations_embedding` (`embedding`) `DISTANCE`='cosine',
   CONSTRAINT `fk_rails_59348732bc` FOREIGN KEY (`superseded_by_id`) REFERENCES `memory_observations` (`id`) ON DELETE SET NULL,
   CONSTRAINT `fk_rails_675e0d9a7a` FOREIGN KEY (`memory_entity_id`) REFERENCES `memory_entities` (`id`)
@@ -230,8 +230,7 @@ CREATE TABLE `memory_observations` (
 /*!50003 SET @saved_sql_mode       = @@sql_mode */ ;
 /*!50003 SET sql_mode              = 'NO_AUTO_VALUE_ON_ZERO,STRICT_TRANS_TABLES,STRICT_ALL_TABLES,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION' */ ;
 DELIMITER ;;
-/*!50003 CREATE*/ /*!50017 DEFINER=`root`@`localhost`*/ /*!50003 TRIGGER trg_memory_observations_embedding_bi BEFORE INSERT ON memory_observations FOR EACH ROW SET NEW.embedding = IFNULL(NEW.embedding, VEC_FromText(CONCAT('[', REPEAT('0,', 767), '0]'))) /*application='GraphMem'*/ 
-*/;;
+/*!50003 CREATE*/ /*!50017 DEFINER=`root`@`localhost`*/ /*!50003 TRIGGER trg_memory_observations_embedding_bi BEFORE INSERT ON memory_observations FOR EACH ROW SET NEW.embedding = IFNULL(NEW.embedding, VEC_FromText(CONCAT('[', REPEAT('0,', 767), '0]'))) */;;
 DELIMITER ;
 /*!50003 SET sql_mode              = @saved_sql_mode */ ;
 /*!50003 SET character_set_client  = @saved_cs_client */ ;
@@ -355,6 +354,7 @@ CREATE TABLE `tool_invocations` (
 /*M!100616 SET NOTE_VERBOSITY=@OLD_NOTE_VERBOSITY */;
 
 INSERT INTO `schema_migrations` (version) VALUES
+('20261009000000'),
 ('20260917190000'),
 ('20260916173000'),
 ('20260916120000'),

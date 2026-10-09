@@ -192,6 +192,16 @@ RSpec.describe GetEntityTool, type: :model do
 
         expect { tool.call(entity_id: entity.id) }.to raise_error(Timeout::Error, /execution expired/)
       end
+
+      it 'surfaces caller errors as InvalidArgumentsError, not system_error' do
+        expect {
+          tool.call(entity_id: entity.id, max_tokens: 1)
+        }.to raise_error(FastMcp::Tool::InvalidArgumentsError, /max_tokens/)
+
+        expect {
+          tool.call(entity_id: entity.id, occurred_after: "garbage")
+        }.to raise_error(FastMcp::Tool::InvalidArgumentsError)
+      end
     end
   end
 
