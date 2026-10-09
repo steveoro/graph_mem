@@ -32,12 +32,13 @@ class VectorSearchStrategy
       [ "VEC_DISTANCE_COSINE(embedding, VEC_FromText(?)) AS vec_distance", vector_sql ]
     )
 
-    entities = MemoryEntity
-      .embedded
-      .where(entity_type: entity_type)
+    # Untyped searches must not filter `entity_type IS NULL` (matches nothing).
+    entities = MemoryEntity.with_embedding
+    entities = entities.where(entity_type: entity_type) if entity_type.present?
+    entities = entities
       .select("memory_entities.*", Arel.sql(distance_sql))
       .having("vec_distance < ?", MAX_COSINE_DISTANCE)
-      .order(Arel.sql("vec_distance ASC"))
+      .order(Arel.sql("(vec_distance + 0) ASC"))
       .limit(limit)
 
     entities.map { |e| SearchResult.new(entity: e, distance: e[:vec_distance].to_f) }
@@ -59,12 +60,18 @@ class VectorSearchStrategy
       [ "MIN(VEC_DISTANCE_COSINE(embedding, VEC_FromText(?))) AS vec_distance", vector_sql ]
     )
 
+    # ORDER BY must repeat the distance expression: pluck rewrites SELECT,
+    # so ordering on the `vec_distance` alias raises "Unknown column".
+    order_sql = MemoryObservation.sanitize_sql_array(
+      [ "MIN(VEC_DISTANCE_COSINE(embedding, VEC_FromText(?))) ASC", vector_sql ]
+    )
+
     MemoryObservation
       .active
-      .embedded
+      .with_embedding
       .select(:memory_entity_id, Arel.sql(distance_sql))
       .group(:memory_entity_id)
-      .order(Arel.sql("vec_distance ASC"))
+      .order(Arel.sql(order_sql))
       .limit(limit)
       .pluck(:memory_entity_id)
   rescue StandardError => e

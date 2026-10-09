@@ -385,6 +385,80 @@ RSpec.describe EmbeddingService do
       result = service.backfill_all
       expect(result).to eq({ entities: 0, observations: 0 })
     end
+
+    it "defers the run while another writer holds the embeddings lock" do
+      conn = ActiveRecord::Base.connection_pool.checkout
+      begin
+        conn.execute("SELECT GET_LOCK('graph_mem:embeddings', 0)")
+        entity = MemoryEntity.create!(name: "LockedPending", entity_type: "Project")
+        result = service.backfill_all
+        expect(result).to eq({ entities: 0, observations: 0 })
+        expect(entity.reload.embedded_at).to be_nil
+      ensure
+        conn.execute("SELECT RELEASE_LOCK('graph_mem:embeddings')")
+        ActiveRecord::Base.connection_pool.checkin(conn)
+      end
+    end
+
+    it "counts only successful CAS writes and leaves failed rows pending" do
+      allow(described_class).to receive(:vector_enabled?).and_return(true)
+      ok_entity = MemoryEntity.create!(name: "BackfillOk", entity_type: "Project")
+      stale_entity = MemoryEntity.create!(name: "BackfillStale", entity_type: "Project")
+      stale_loaded = MemoryEntity.find(stale_entity.id)
+
+      allow(service).to receive(:embed).and_return([ 0.25 ] * 768)
+      allow(MemoryEntity).to receive(:missing_embedding)
+        .and_return(MemoryEntity.where(id: [ ok_entity.id, stale_entity.id ]))
+      allow(MemoryObservation).to receive(:missing_embedding).and_return(MemoryObservation.none)
+
+      # Simulate a concurrent edit landing between load and store: the CAS
+      # write for stale_loaded misses and the row stays pending.
+      allow(service).to receive(:embed_entity).and_wrap_original do |original, entity|
+        if entity.name == "BackfillStale"
+          MemoryEntity.where(id: entity.id).update_all(updated_at: Time.current + 60)
+          false
+        else
+          original.call(entity)
+        end
+      end
+
+      result = service.backfill_all
+      expect(result[:entities]).to eq(1)
+      expect(ok_entity.reload.embedded_at).to be_present
+      expect(stale_loaded.reload.embedded_at).to be_nil
+    end
+  end
+
+  describe "#store_vector" do
+    it "stamps embedded_at with the vector write" do
+      allow(described_class).to receive(:vector_enabled?).and_return(true)
+      entity = MemoryEntity.create!(name: "StampMe", entity_type: "Project")
+      MemoryEntity.where(id: entity.id).update_all(embedded_at: nil)
+
+      expect(service.send(:store_vector, entity, [ 0.5 ] * 768)).to be true
+      expect(entity.reload.embedded_at).to be_present
+    end
+
+    it "refuses to overwrite a row edited after it was loaded (compare-and-set)" do
+      allow(described_class).to receive(:vector_enabled?).and_return(true)
+      entity = MemoryEntity.create!(name: "CasRace", entity_type: "Project")
+      loaded = MemoryEntity.find(entity.id)
+      MemoryEntity.where(id: entity.id).update_all(updated_at: Time.current + 60)
+
+      expect(service.send(:store_vector, loaded, [ 0.5 ] * 768)).to be false
+      expect(loaded.reload.embedded_at).to be_nil
+    end
+  end
+
+  describe ".with_embedding_lock" do
+    it "yields acquired=true and releases the lock" do
+      seen = nil
+      described_class.with_embedding_lock(0) { |acquired| seen = acquired }
+      expect(seen).to be true
+      # Re-acquiring immediately must still succeed (released in ensure).
+      expect(ActiveRecord::Base.connection.select_value("SELECT GET_LOCK('graph_mem:embeddings', 0)").to_i).to eq(1)
+      ActiveRecord::Base.connection.select_value("SELECT RELEASE_LOCK('graph_mem:embeddings')")
+    end
   end
 
   describe ".reset_instance!" do

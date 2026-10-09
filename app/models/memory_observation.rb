@@ -28,17 +28,12 @@ class MemoryObservation < ApplicationRecord
   scope :active, -> { where(status: ACTIVE_STATUS) }
   scope :inactive, -> { where.not(status: ACTIVE_STATUS) }
 
-  # `unembedded`: rows with no computed embedding — NULL on nullable
-  # columns, or the all-zero vector the BEFORE INSERT trigger substitutes
-  # for NULL on the NOT NULL schema. `embedded` is the strict complement.
-  scope :unembedded, lambda {
-    where(embedding: nil)
-      .or(where(EmbeddingService.zero_vector_predicate("#{quoted_table_name}.embedding")))
-  }
-  scope :embedded, lambda {
-    where.not(embedding: nil)
-         .where.not(EmbeddingService.zero_vector_predicate("#{quoted_table_name}.embedding"))
-  }
+  # `with_embedding`/`missing_embedding` track the `embedded_at` stamp
+  # EmbeddingService#store_vector sets when a real vector is written —
+  # NOT the vector itself (the BEFORE INSERT trigger fills placeholder
+  # zero-vectors on this NOT NULL column).
+  scope :with_embedding, -> { where.not(embedded_at: nil) }
+  scope :missing_embedding, -> { where(embedded_at: nil) }
 
   validates :content, presence: true
   validates :confidence, numericality: { greater_than_or_equal_to: 0, less_than_or_equal_to: 1 }, allow_nil: true
@@ -179,7 +174,12 @@ class MemoryObservation < ApplicationRecord
   end
 
   def refresh_embedding
-    return if EmbeddingService.inline_embeddings_suppressed?
+    # Suppressed (bulk imports): the stored vector is stale now — mark it
+    # missing so the deferred backfill re-embeds this row.
+    if EmbeddingService.inline_embeddings_suppressed?
+      update_column(:embedded_at, nil) if embedded_at.present?
+      return
+    end
 
     EmbeddingService.embed_observation(self)
   rescue StandardError => e

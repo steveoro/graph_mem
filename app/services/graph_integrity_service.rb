@@ -83,7 +83,7 @@ class GraphIntegrityService
     backfilled = 0
     failed = []
 
-    MemoryEntity.unembedded.find_each do |entity|
+    MemoryEntity.missing_embedding.find_each do |entity|
       if EmbeddingService.embed_entity(entity)
         backfilled += 1
       else
@@ -91,7 +91,7 @@ class GraphIntegrityService
       end
     end
 
-    MemoryObservation.unembedded.find_each do |obs|
+    MemoryObservation.missing_embedding.find_each do |obs|
       EmbeddingService.embed_observation(obs)
     end
 

@@ -48,7 +48,7 @@ class EmbeddingService
     # While true, model callbacks skip synchronous inline embedding. Bulk
     # imports create thousands of rows and cannot afford one API call per
     # row; the caller enqueues an embedding backfill afterwards (the
-    # `unembedded` scope matches both NULL and zero-vector rows).
+    # `missing_embedding` scope — `embedded_at` NULL — finds those rows).
     def suppress_inline_embeddings
       previous = Thread.current[:gmem_inline_embeddings_suppressed]
       Thread.current[:gmem_inline_embeddings_suppressed] = true
@@ -59,17 +59,6 @@ class EmbeddingService
 
     def inline_embeddings_suppressed?
       Thread.current[:gmem_inline_embeddings_suppressed] == true
-    end
-
-    # SQL predicate matching rows whose embedding is the all-zero vector the
-    # BEFORE INSERT trigger writes for NULL on the NOT NULL production schema
-    # (a real embedder output is never all-zero, so it doubles as the
-    # "not embedded" marker). Built from the configured dims — NOT DEFAULT(),
-    # which raises `Field doesn't have a default value` on the committed
-    # structure.sql schema (NOT NULL, no DEFAULT clause).
-    def zero_vector_predicate(column)
-      dims = EmbeddingConfig.resolved_config[:dims].to_i
-      "#{column} = VEC_FromText(CONCAT('[', REPEAT('0,', #{dims - 1}), '0]'))"
     end
   end
 
@@ -199,7 +188,27 @@ class EmbeddingService
     { entities: total_entities, observations: total_observations }
   end
 
+  # Named lock serializing bulk embedding writes with import transactions.
+  # The maintenance backfill acquires it non-blocking and defers to the next
+  # run when an import holds it; imports acquire it with a short wait so a
+  # scheduled backfill does not interleave (the compare-and-set in
+  # store_vector is the real safety net — this just avoids the collision).
+  EMBEDDING_LOCK_NAME = "graph_mem:embeddings"
+
+  # @yieldparam acquired [Boolean] whether the lock was obtained
+  def self.with_embedding_lock(timeout_seconds)
+    conn = ActiveRecord::Base.connection
+    acquired = conn.select_value(
+      "SELECT GET_LOCK(#{conn.quote(EMBEDDING_LOCK_NAME)}, #{timeout_seconds.to_i})"
+    ).to_i == 1
+    yield(acquired)
+  ensure
+    conn.select_value("SELECT RELEASE_LOCK(#{conn.quote(EMBEDDING_LOCK_NAME)})") if acquired
+  end
+
   # Backfill embeddings for all entities and observations missing them.
+  # Counts only rows actually written (CAS misses and per-row failures are
+  # left with embedded_at NULL so the next run retries them).
   def backfill_all(batch_size: 100)
     unless self.class.vector_enabled?
       @logger.warn "EmbeddingService: vector columns not present, skipping backfill"
@@ -209,14 +218,23 @@ class EmbeddingService
     total_entities = 0
     total_observations = 0
 
-    MemoryEntity.unembedded.find_each(batch_size: batch_size) do |entity|
-      embed_entity(entity)
-      total_entities += 1
-    end
+    self.class.with_embedding_lock(0) do |acquired|
+      unless acquired
+        @logger.info "EmbeddingService: embeddings lock held by another writer; backfill deferred to next run"
+        next
+      end
 
-    MemoryObservation.unembedded.find_each(batch_size: batch_size) do |obs|
-      embed_observation(obs)
-      total_observations += 1
+      MemoryEntity.missing_embedding.find_each(batch_size: batch_size) do |entity|
+        total_entities += 1 if embed_entity(entity)
+      rescue StandardError => e
+        @logger.warn "EmbeddingService: backfill left entity #{entity.id} pending (#{e.class}: #{e.message})"
+      end
+
+      MemoryObservation.missing_embedding.find_each(batch_size: batch_size) do |obs|
+        total_observations += 1 if embed_observation(obs)
+      rescue StandardError => e
+        @logger.warn "EmbeddingService: backfill left observation #{obs.id} pending (#{e.class}: #{e.message})"
+      end
     end
 
     @logger.info "EmbeddingService: backfilled #{total_entities} entities, #{total_observations} observations"
@@ -306,12 +324,18 @@ class EmbeddingService
           "Dimension mismatch: expected #{@dims}, got #{vector.length}"
   end
 
+  # Write the embedding vector and stamp embedded_at atomically.
+  # The UPDATE is a compare-and-set on the updated_at value loaded with the
+  # record: an edit that lands between the (slow) embed call and this write
+  # bumps updated_at, so an older vector can never overwrite a fresher row.
+  # Returns true when the row was actually written.
   def store_vector(record, vector)
     text = "[#{vector.join(',')}]"
     table = record.class.table_name
     quoted = ActiveRecord::Base.connection.quote(text)
-    ActiveRecord::Base.connection.execute(
-      "UPDATE #{table} SET embedding = VEC_FromText(#{quoted}) WHERE id = #{record.id}"
-    )
+    stamped = ActiveRecord::Base.connection.quote(record.updated_at.strftime("%Y-%m-%d %H:%M:%S.%6N"))
+    ActiveRecord::Base.connection.update(
+      "UPDATE #{table} SET embedding = VEC_FromText(#{quoted}), embedded_at = NOW(6) WHERE id = #{record.id} AND updated_at = #{stamped}"
+    ) == 1
   end
 end

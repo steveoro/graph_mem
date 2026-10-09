@@ -74,23 +74,34 @@ class ImportExecutionStrategy
     # touched entity.
     MemoryRelation.suppress_trust_recompute do
       EmbeddingService.suppress_inline_embeddings do
-        ActiveRecord::Base.transaction do
-          root_nodes = import_data["root_nodes"] || import_data[:root_nodes] || []
-
-          root_nodes.each_with_index do |root_node, index|
-            path = index.to_s
-            decision = decision_map[path]
-            parent_id = resolve_parent_id(decision, path)
-
-            process_node_recursive(root_node, path, decision_map, parent_id, nil)
+        # The named embeddings lock serializes this transaction with a running
+        # EmbeddingService.backfill_all (which skips its run while the lock is
+        # held). Acquired best-effort: if a backfill already holds it we still
+        # proceed — store_vector's compare-and-set prevents stale overwrites.
+        EmbeddingService.with_embedding_lock(5) do |acquired|
+          unless acquired
+            @logger.warn "ImportExecutionStrategy: embeddings lock busy; " \
+                         "proceeding (store_vector compare-and-set keeps vectors consistent)"
           end
 
-          # Non-tree edges (e.g. code-structure `calls`/`inherits` imported from
-          # Graphify) apply after every entity exists: endpoints are addressed by
-          # name+type and resolved through the same canonicalization as nodes.
-          apply_relations(import_data["relations"] || import_data[:relations])
+          ActiveRecord::Base.transaction do
+            root_nodes = import_data["root_nodes"] || import_data[:root_nodes] || []
 
-          raise ActiveRecord::Rollback if @errors.any?
+            root_nodes.each_with_index do |root_node, index|
+              path = index.to_s
+              decision = decision_map[path]
+              parent_id = resolve_parent_id(decision, path)
+
+              process_node_recursive(root_node, path, decision_map, parent_id, nil)
+            end
+
+            # Non-tree edges (e.g. code-structure `calls`/`inherits` imported from
+            # Graphify) apply after every entity exists: endpoints are addressed by
+            # name+type and resolved through the same canonicalization as nodes.
+            apply_relations(import_data["relations"] || import_data[:relations])
+
+            raise ActiveRecord::Rollback if @errors.any?
+          end
         end
       end
     end
@@ -502,15 +513,16 @@ class ImportExecutionStrategy
     MemoryEntity.where(name: names.uniq, entity_type: canonical_types)
                 .pluck(:name, :entity_type, :id)
                 .each_with_object({}) do |(name, entity_type, id), map|
-      map[[ name.to_s.downcase, entity_type ]] ||= id
+      map[[ name.to_s.downcase, entity_type.to_s.downcase ]] ||= id
     end
   end
 
-  # Downcased name: memory_entities.name uses a case-insensitive collation,
-  # and the old per-edge find_by_name_and_type matched "FooService" for
-  # "fooservice" — the bulk map must keep that behavior.
+  # Downcased name AND type: memory_entities.name uses a case-insensitive
+  # collation, and the old per-edge find_by_name_and_type matched
+  # "FooService"/"Service" for "fooservice"/"service" — the bulk map must
+  # keep that behavior for types missing from the mapping table too.
   def endpoint_key(name, raw_type)
-    [ name.to_s.downcase, ImportEntityResolver.canonical_type(raw_type) ]
+    [ name.to_s.downcase, ImportEntityResolver.canonical_type(raw_type).to_s.downcase ]
   end
 
   # All (from_id, to_id, canonical_type) triples the resolvable relations

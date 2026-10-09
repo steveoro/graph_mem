@@ -41,7 +41,7 @@ class ImportObservationDuplicateDetector
     # whose deferred backfill has not run yet — cannot be compared
     # semantically. Degrade to the exact-content match above rather than
     # hard-failing the (re-)import; the backfill restores full dedup.
-    if observations.unembedded.exists?
+    if observations.missing_embedding.exists?
       Rails.logger.warn "ImportObservationDuplicateDetector: Entity '#{entity.name}' has " \
                         "unembedded observations; semantic de-duplication skipped (exact match only)"
       return Result.new(duplicate: false)
@@ -81,10 +81,18 @@ class ImportObservationDuplicateDetector
       [ "VEC_DISTANCE_COSINE(embedding, VEC_FromText(?)) AS vec_distance", vector_sql ]
     )
 
+    # `(vec_distance + 0)` deliberately breaks the `ORDER BY VEC_DISTANCE_*(col,
+    # const) LIMIT n` pattern that triggers MariaDB's ANN index scan. The ANN
+    # path returns the globally nearest rows BEFORE applying the WHERE clause —
+    # unembedded zero-vector placeholders rank as distance 0.0, consume the
+    # LIMIT, and get filtered out by `with_embedding`, so the query can return
+    # no row at all on a relation that has embedded observations. Ordering on
+    # the computed expression keeps exact, filtered ordering (the entity-scoped
+    # set is small, so the ANN index buys nothing here).
     observations
-      .embedded
+      .with_embedding
       .select(:id, Arel.sql(distance_sql))
-      .order(Arel.sql("vec_distance ASC"))
+      .order(Arel.sql("(vec_distance + 0) ASC"))
       .first
   rescue ActiveRecord::StatementInvalid => e
     raise UnavailableError, "Embedding vector comparison failed: #{e.message}"
