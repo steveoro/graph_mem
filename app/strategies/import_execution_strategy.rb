@@ -52,6 +52,7 @@ class ImportExecutionStrategy
     @errors = []
     @entity_mapping = {} # Maps import node paths to created/matched entity IDs
     @relation_endpoint_ids = Set.new # endpoints of every relation created
+    @excluded_entity_ids = Set.new # entities inside excluded foreign subtrees
   end
 
   # Execute the import based on operator decisions
@@ -302,7 +303,22 @@ class ImportExecutionStrategy
     name = node[:name] || node["name"]
     @logger.info "ImportExecutionStrategy: Excluding '#{name}' (foreign subtree, left untouched)"
     @entities_skipped += 1
+    record_excluded_subtree(node)
     nil
+  end
+
+  # Left untouched means untouched by the relations pass too: endpoints
+  # resolve DB-wide, so without this an edge in the payload could still be
+  # written between entities of the excluded project. Remember the matched
+  # entity and its whole part_of subtree.
+  def record_excluded_subtree(node)
+    entity = ImportEntityResolver.find_by_name_and_type(
+      node[:name] || node["name"], node[:entity_type] || node["entity_type"]
+    )
+    return unless entity
+
+    @excluded_entity_ids.add(entity.id)
+    @excluded_entity_ids.merge(RelationSemantics.descendant_ids(entity.id))
   end
 
   # Handle add_relation action - entity exists but needs relation to new parent
@@ -483,6 +499,14 @@ class ImportExecutionStrategy
 
       unless from_id && to_id
         @relations_unresolved += 1
+        next
+      end
+
+      # Excluded foreign subtrees are left untouched — including their
+      # edges: an endpoint inside one means this edge belongs to the other
+      # project's graph, not this import's.
+      if @excluded_entity_ids.include?(from_id) || @excluded_entity_ids.include?(to_id)
+        @relations_skipped += 1
         next
       end
 

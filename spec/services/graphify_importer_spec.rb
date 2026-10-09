@@ -128,6 +128,14 @@ RSpec.describe GraphifyImporter do
       expect do
         described_class.new({ "nodes" => [], "links" => nil, "edges" => "x" }, project_name: "p")
       end.to raise_error(ArgumentError, /'links' must be an array/)
+
+      # Blank strings sneak past `present?` — reject them as non-arrays too.
+      expect do
+        described_class.new({ "nodes" => "", "links" => [] }, project_name: "x")
+      end.to raise_error(ArgumentError, /'nodes' must be an array/)
+      expect do
+        described_class.new({ "nodes" => [], "links" => "" }, project_name: "x")
+      end.to raise_error(ArgumentError, /'links' must be an array/)
     end
 
     it "rejects nodes without an id" do

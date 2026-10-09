@@ -954,6 +954,32 @@ RSpec.describe ImportExecutionStrategy, type: :model do
       repo_b = MemoryEntity.find_by(name: 'RepoB')
       expect(MemoryRelation.where(to_entity_id: repo_b.id, relation_type: 'part_of')).to be_empty
     end
+
+    it 'skips relations whose endpoints live inside an excluded foreign subtree' do
+      # RepoA's tree already exists; RepoB's import excludes the shared file
+      # subtree but its relations payload still references entities in it.
+      foreign_file = MemoryEntity.create!(name: 'app/controllers/application_controller.rb', entity_type: 'File')
+      foreign_class = MemoryEntity.create!(name: 'ApplicationController', entity_type: 'Class')
+      MemoryRelation.create!(from_entity_id: foreign_class.id, to_entity_id: foreign_file.id,
+                             relation_type: 'part_of')
+
+      data_with_relations = import_data.deep_dup
+      data_with_relations['relations'] = [
+        { 'from_name' => 'RepoB', 'from_type' => 'Project',
+          'to_name' => 'ApplicationController', 'to_type' => 'Class',
+          'relation_type' => 'depends_on' },
+        { 'from_name' => 'RepoB', 'from_type' => 'Project',
+          'to_name' => 'app/controllers/application_controller.rb', 'to_type' => 'File',
+          'relation_type' => 'depends_on' }
+      ]
+
+      report = strategy.execute(data_with_relations, decisions)
+
+      expect(report.success).to be(true)
+      expect(report.relations_created).to eq(0)
+      expect(report.relations_skipped).to eq(2)
+      expect(MemoryRelation.where(relation_type: 'depends_on')).to be_empty
+    end
   end
 
   describe 'bulk-import callback suppression' do

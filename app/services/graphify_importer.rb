@@ -216,8 +216,10 @@ class GraphifyImporter
     # Same fallback `index_nodes` uses: a null `links` must not hide a
     # malformed `edges`.
     links = @data["links"] || @data["edges"]
-    raise ArgumentError, "graph.json 'nodes' must be an array" if nodes.present? && !nodes.is_a?(Array)
-    raise ArgumentError, "graph.json 'links' must be an array" if links.present? && !links.is_a?(Array)
+    # `nil` (absent) is allowed; anything present must be an Array — an
+    # empty string sneaks past `present?` and would crash mid-translation.
+    raise ArgumentError, "graph.json 'nodes' must be an array" unless nodes.nil? || nodes.is_a?(Array)
+    raise ArgumentError, "graph.json 'links' must be an array" unless links.nil? || links.is_a?(Array)
 
     Array(nodes).each do |node|
       unless node.is_a?(Hash) && node["id"].present?
