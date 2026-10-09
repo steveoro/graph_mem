@@ -25,15 +25,19 @@ class TokenBudget
   PLACEHOLDER_NUMBER = 9_999_999_999
 
   # Top-level fields ToolSuccessResponse appends around every tool payload
-  # AFTER the services fit their items (version, a next_move hint, and a
-  # context block when no project context is active). Padded generously —
-  # the real wrapper is ~50 tokens — so envelopes counted before the
-  # wrapper lands stay conservative.
+  # AFTER the services fit their items. With an active project context the
+  # wrapper is just version + a next_move hint (~26 tokens); inactive it also
+  # adds the `context` block (~54 total). Sized from the real fields — the
+  # longest DEFAULT_HINTS entry is 91 chars, the context block ~110 chars —
+  # with a small pad, so the reserve covers the wrapper without dropping
+  # items that would fit.
   WRAPPER_RESERVE = {
     version: "9.9.9.9",
-    next_move: "x" * 120,
-    context: { status: "none", next_move: "x" * 120 }
+    next_move: "x" * 96
   }.freeze
+  WRAPPER_RESERVE_WITH_CONTEXT = WRAPPER_RESERVE.merge(
+    context: { status: "none", next_move: "x" * 76 }
+  ).freeze
 
   class << self
     # @param payload [Object] anything JSON-serializable
@@ -111,6 +115,12 @@ class TokenBudget
         items_after: items_after,
         dropped_on_page: dropped_on_page
       }.compact
+    end
+
+    # The reserve matching the caller's context state: the `context` block
+    # only lands when no project context is active.
+    def wrapper_reserve(context_active:)
+      context_active ? WRAPPER_RESERVE : WRAPPER_RESERVE_WITH_CONTEXT
     end
 
     # A diagnostics hash seeded at worst-case width, to be merged into a

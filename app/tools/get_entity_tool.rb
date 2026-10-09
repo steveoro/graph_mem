@@ -50,7 +50,8 @@ class GetEntityTool < ApplicationTool
         query: query,
         observation_limit: observation_limit,
         temporal_window: temporal_window_for(occurred_after, occurred_before, as_of),
-        max_tokens: max_tokens
+        max_tokens: max_tokens,
+        context_active: graph_mem_context.active?
       )
       entity = result[:entities].first
       relations = result[:relations]
@@ -94,7 +95,8 @@ class GetEntityTool < ApplicationTool
       # The service fits the pre-reshape payload; the reshaped response plus
       # the ToolSuccessResponse wrapper can still exceed the budget — a single
       # entity can't be split further.
-      if max_tokens.present? && TokenBudget.estimate(response.merge(TokenBudget::WRAPPER_RESERVE)) > max_tokens
+      if max_tokens.present? &&
+         TokenBudget.estimate(response.merge(TokenBudget.wrapper_reserve(context_active: graph_mem_context.active?))) > max_tokens
         raise FastMcp::Tool::InvalidArgumentsError,
               "Entity payload exceeds the max_tokens budget; raise max_tokens or omit it."
       end

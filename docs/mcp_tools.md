@@ -376,6 +376,12 @@ entities outside the fetched set stay (the far endpoint still exists). On
 `summarize` the budget is applied to the evidence *before* the summary text,
 sources and LLM prompt are built.
 
+The budget estimate also reserves room for the MCP response wrapper
+(`version`, `next_move`, and a `context` block when no project context is
+active). Budgets below roughly 200 tokens can be smaller than the envelope
+alone — the response is then flagged `truncated` with zero items even though
+it exceeds the estimate; treat ~200 as the minimum useful `max_tokens`.
+
 ## Graph Traversal (2 tools)
 
 These tools perform structural graph queries. `direction` is one of `outgoing`

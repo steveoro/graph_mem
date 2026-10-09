@@ -153,15 +153,16 @@ class SearchTool < ApplicationTool
       # The hint text is seeded at full length so a truncated page never
       # pushes the final response over budget; removed when nothing dropped.
       retrieval[:next_move] = "lower per_page or raise max_tokens to see the dropped ranks"
-      # WRAPPER_RESERVE covers the fields ToolSuccessResponse appends after
-      # the tool returns (version, next_move, context) — they are part of the
-      # delivered structuredContent and must be inside the counted envelope.
+      # The reserve covers the fields ToolSuccessResponse appends after
+      # the tool returns (version, next_move, and the context block only
+      # when no context is active) — all part of the delivered
+      # structuredContent, so they must be inside the counted envelope.
       envelope = {
         mode: "summary",
         results: [],
         pagination: { per_page: per_page, current_page: page },
         retrieval: retrieval
-      }.merge(TokenBudget::WRAPPER_RESERVE)
+      }.merge(TokenBudget.wrapper_reserve(context_active: context_scope.present?))
       budget_fit = TokenBudget.fit_with_envelope(page_results, envelope: envelope, max_tokens: max_tokens)
       results = budget_fit.items
       retrieval[:result_count] = results.size

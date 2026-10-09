@@ -9,7 +9,8 @@ class EntitiesFetchService
 
   def initialize(entity_ids:, relations: nil, include_obsolete: false, include_ranked: false,
                  query: nil, observation_limit: nil, strict_single: true,
-                 always_rank_observations: false, temporal_window: nil, max_tokens: nil)
+                 always_rank_observations: false, temporal_window: nil, max_tokens: nil,
+                 context_active: false)
     @entity_ids = Array(entity_ids).map(&:to_i).uniq
     @relations_mode = relations.presence || default_relations_mode
     @include_obsolete = include_obsolete
@@ -22,6 +23,7 @@ class EntitiesFetchService
     @temporal_window = @extraction.window
     @effective_query = @extraction.effective_query
     @max_tokens = max_tokens
+    @context_active = context_active
   end
 
   def call
@@ -114,9 +116,10 @@ class EntitiesFetchService
     # counted below over-covers them — real values written after the fit are
     # always narrower, so the final response stays under budget (S6).
     result[:token_budget] = TokenBudget.diagnostics_placeholder(max_tokens: @max_tokens)
-    # WRAPPER_RESERVE covers the fields ToolSuccessResponse appends after the
-    # tool returns — they are part of the delivered structuredContent.
-    envelope = result.merge(entities: [], relations: []).merge(TokenBudget::WRAPPER_RESERVE)
+    # The reserve covers the fields ToolSuccessResponse appends after the
+    # tool returns — the `context` block only when no context is active.
+    envelope = result.merge(entities: [], relations: [])
+                     .merge(TokenBudget.wrapper_reserve(context_active: @context_active))
     fetched_ids = result[:entities].map { |entity| entity[:entity_id] }.to_set
     relations_before = result[:relations].size
     entities_fit = TokenBudget.fit_with_envelope(result[:entities], envelope: envelope, max_tokens: @max_tokens)

@@ -214,9 +214,10 @@ class SubgraphSearchService
     # counted below over-covers them — real values written after the fit are
     # always narrower, so the final response stays under budget (S6).
     response[:retrieval][:token_budget] = TokenBudget.diagnostics_placeholder(max_tokens: @max_tokens)
-    # WRAPPER_RESERVE covers the fields ToolSuccessResponse appends after the
-    # tool returns — they are part of the delivered structuredContent.
-    envelope = response.merge(entities: [], relations: []).merge(TokenBudget::WRAPPER_RESERVE)
+    # The reserve covers the fields ToolSuccessResponse appends after the
+    # tool returns — the `context` block only when no context is active.
+    envelope = response.merge(entities: [], relations: [])
+                       .merge(TokenBudget.wrapper_reserve(context_active: @context_scope.present?))
     entities_fit = TokenBudget.fit_with_envelope(response[:entities], envelope: envelope, max_tokens: @max_tokens)
     budget_left = @max_tokens - entities_fit.envelope_tokens - entities_fit.estimated_tokens
     fetched_ids = response[:entities].map { |entity| entity[:entity_id] }.to_set

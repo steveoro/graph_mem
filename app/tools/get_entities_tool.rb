@@ -48,7 +48,8 @@ class GetEntitiesTool < ApplicationTool
       query: query,
       observation_limit: observation_limit,
       temporal_window: temporal_window_for(occurred_after, occurred_before, as_of),
-      max_tokens: max_tokens
+      max_tokens: max_tokens,
+      context_active: graph_mem_context.active?
     )
   rescue ActiveRecord::RecordNotFound
     missing_id = Array(entity_ids).first

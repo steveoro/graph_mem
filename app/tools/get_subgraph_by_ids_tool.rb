@@ -108,7 +108,8 @@ class GetSubgraphByIdsTool < ApplicationTool
       strict_single: false,
       always_rank_observations: true,
       temporal_window: temporal_window_for(occurred_after, occurred_before, as_of),
-      max_tokens: max_tokens
+      max_tokens: max_tokens,
+      context_active: graph_mem_context.active?
     )
 
     response = {
