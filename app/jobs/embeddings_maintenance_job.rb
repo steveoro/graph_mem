@@ -32,6 +32,7 @@ class EmbeddingsMaintenanceJob < ApplicationJob
         mode: mode,
         entities: result[:entities],
         observations: result[:observations],
+        deferred: result[:deferred] == true,
         started_at: started_at.iso8601,
         finished_at: finished_at.iso8601,
         duration_ms: duration_ms

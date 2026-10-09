@@ -150,7 +150,11 @@ class ImportExecutionStrategy
   end
 
   def enqueue_embedding_backfill
-    return unless @entities_created.positive? || @observations_created.positive?
+    # Merges count too: an alias-only merge clears embedded_at via
+    # before_update but creates nothing, so without this the entity silently
+    # drops out of vector search until an unrelated backfill runs.
+    return unless @entities_created.positive? || @observations_created.positive? ||
+                  @entities_merged.positive?
 
     EmbeddingsMaintenanceEnqueuer.enqueue!("backfill")
   rescue StandardError => e

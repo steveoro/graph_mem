@@ -174,7 +174,7 @@ RSpec.describe MemoryEntity, type: :model do
       expect(described_class.with_embedding).not_to include(pending_row)
     end
 
-    it "clears embedded_at in the same UPDATE even when the in-memory copy is stale" do
+    it "clears embedded_at in the same UPDATE even when the in-memory copy is stale", :with_test_embeddings do
       # Simulates a writer that loaded the row before the backfill stamped it:
       # the save must still NULL the stamp the other writer landed in between.
       entity = EmbeddingService.suppress_inline_embeddings do
@@ -183,19 +183,19 @@ RSpec.describe MemoryEntity, type: :model do
       stale_copy = described_class.find(entity.id) # embedded_at nil in memory
       described_class.where(id: entity.id).update_all(embedded_at: Time.current)
 
-      allow_any_instance_of(EmbeddingService).to receive(:embed).and_return(nil)
       stale_copy.update!(name: "StampRace Edited")
 
       expect(entity.reload.embedded_at).to be_nil
     end
 
-    it "clears embedded_at when embedded text changes, so a failed inline re-embed stays pending" do
+    it "clears embedded_at when embedded text changes, so a failed inline re-embed stays pending", :with_test_embeddings do
       entity = EmbeddingService.suppress_inline_embeddings do
         described_class.create!(name: "StaleAfterFail", entity_type: "Project")
       end
       described_class.where(id: entity.id).update_all(embedded_at: Time.current)
 
-      allow_any_instance_of(EmbeddingService).to receive(:embed).and_return(nil)
+      # The tag's stubbed embed returns nil, so the inline refresh runs and
+      # fails to store a vector: the row must remain classified as missing.
       entity.update!(name: "StaleAfterFail Edited")
 
       expect(entity.reload.embedded_at).to be_nil

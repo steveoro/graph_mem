@@ -169,6 +169,29 @@ RSpec.describe ImportExecutionStrategy, type: :model do
         expect(report.entities_created).to eq(0)
       end
 
+      it 'enqueues an embedding backfill on a merge-only import' do
+        # An alias-only merge creates nothing but clears embedded_at via
+        # before_update — the backfill must be queued or the entity silently
+        # drops out of vector search.
+        merge_only_data = {
+          'root_nodes' => [
+            {
+              'name' => 'Project to Merge',
+              'entity_type' => 'Project',
+              'aliases' => 'merge-alias',
+              'observations' => [],
+              'children' => []
+            }
+          ]
+        }
+        expect(EmbeddingsMaintenanceEnqueuer).to receive(:enqueue!).with('backfill')
+
+        report = strategy.execute(merge_only_data, decisions)
+        expect(report.success).to be true
+        expect(report.entities_merged).to eq(1)
+        expect(report.observations_created).to eq(0)
+      end
+
       it 'skips duplicate observations' do
         # Create an observation that already exists
         import_data_with_dup = {
