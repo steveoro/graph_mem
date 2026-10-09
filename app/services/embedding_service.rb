@@ -62,15 +62,14 @@ class EmbeddingService
     end
 
     # SQL predicate matching rows whose embedding is the all-zero vector the
-    # schema's own column default provides: on the NOT NULL production
-    # schema the DEFAULT clause is the zero-vector literal the BEFORE INSERT
-    # trigger also writes (a real embedder output is never all-zero, so the
-    # default doubles as the "not embedded" marker). The IS NOT NULL guard
-    # matters: on nullable schemas (the test DB) DEFAULT is NULL and
-    # `embedding = NULL` evaluates NULL — without the guard `embedded`
-    # would wrongly exclude every real vector.
+    # BEFORE INSERT trigger writes for NULL on the NOT NULL production schema
+    # (a real embedder output is never all-zero, so it doubles as the
+    # "not embedded" marker). Built from the configured dims — NOT DEFAULT(),
+    # which raises `Field doesn't have a default value` on the committed
+    # structure.sql schema (NOT NULL, no DEFAULT clause).
     def zero_vector_predicate(column)
-      "(DEFAULT(#{column}) IS NOT NULL AND #{column} = DEFAULT(#{column}))"
+      dims = EmbeddingConfig.resolved_config[:dims].to_i
+      "#{column} = VEC_FromText(CONCAT('[', REPEAT('0,', #{dims - 1}), '0]'))"
     end
   end
 

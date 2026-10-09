@@ -28,11 +28,14 @@ class VectorSearchStrategy
     return [] unless query_vector
 
     vector_sql = "[#{query_vector.join(',')}]"
+    distance_sql = MemoryEntity.sanitize_sql_array(
+      [ "VEC_DISTANCE_COSINE(embedding, VEC_FromText(?)) AS vec_distance", vector_sql ]
+    )
 
     entities = MemoryEntity
-      .where.not(embedding: nil)
+      .embedded
       .where(entity_type: entity_type)
-      .select("memory_entities.*, VEC_DISTANCE_COSINE(embedding, VEC_FromText('#{vector_sql}')) AS vec_distance")
+      .select("memory_entities.*", Arel.sql(distance_sql))
       .having("vec_distance < ?", MAX_COSINE_DISTANCE)
       .order(Arel.sql("vec_distance ASC"))
       .limit(limit)
@@ -58,7 +61,7 @@ class VectorSearchStrategy
 
     MemoryObservation
       .active
-      .where.not(embedding: nil)
+      .embedded
       .select(:memory_entity_id, Arel.sql(distance_sql))
       .group(:memory_entity_id)
       .order(Arel.sql("vec_distance ASC"))

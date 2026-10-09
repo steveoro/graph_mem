@@ -9,7 +9,7 @@ module Api
         limit = (params[:limit] || 20).to_i
         entity_type = params[:entity_type]
 
-        scope = MemoryEntity.where.not(embedding: nil)
+        scope = MemoryEntity.embedded
         scope = scope.where(entity_type: entity_type) if entity_type.present?
 
         entities = scope.to_a
@@ -22,7 +22,7 @@ module Api
 
           candidates = MemoryEntity
             .where.not(id: entity.id)
-            .where.not(embedding: nil)
+            .embedded
             .where("id > ?", entity.id)
             .select("memory_entities.*, VEC_DISTANCE_COSINE(embedding, (SELECT embedding FROM memory_entities WHERE id = #{entity.id})) AS vec_distance")
             .having("vec_distance < ?", threshold)

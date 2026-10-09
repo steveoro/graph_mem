@@ -806,6 +806,28 @@ RSpec.describe ImportExecutionStrategy, type: :model do
       expect(report.errors).to eq([])
     end
 
+    it 'resolves endpoint names case-insensitively like the old find_by did' do
+      report = strategy.execute(
+        import_data.merge(
+          'relations' => [
+            { 'from_name' => 'swimmer#name', 'from_type' => 'Method',
+              'to_name' => 'SWIMMER#FIND', 'to_type' => 'Method',
+              'relation_type' => 'calls', 'confidence' => 1.0 }
+          ]
+        ),
+        decisions
+      )
+
+      expect(report.relations_unresolved).to eq(0)
+      expect(
+        MemoryRelation.exists?(
+          from_entity: MemoryEntity.find_by(name: 'Swimmer#name'),
+          to_entity: MemoryEntity.find_by(name: 'Swimmer#find'),
+          relation_type: 'calls'
+        )
+      ).to be(true)
+    end
+
     it 'is idempotent on a second run' do
       strategy.execute(import_data, decisions)
       report = described_class.new(observation_duplicate_detector: observation_duplicate_detector)
@@ -939,10 +961,13 @@ RSpec.describe ImportExecutionStrategy, type: :model do
       flagged = nil
       EmbeddingService.suppress_inline_embeddings do
         flagged = EmbeddingService.inline_embeddings_suppressed?
+        # Stored rows are unembedded inside a suppressed import — semantic
+        # dedup degrades to exact matching rather than raising.
+        allow(EmbeddingService).to receive(:vector_enabled?).and_return(true)
         result = ImportObservationDuplicateDetector.new.find_duplicate(
           entity: entity, content: 'a semantically similar but different fact'
         )
-        expect(result.duplicate).to be(false) # no embedding call possible
+        expect(result.duplicate).to be(false)
       end
       expect(flagged).to be(true)
     end

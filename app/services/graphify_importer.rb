@@ -213,7 +213,9 @@ class GraphifyImporter
     raise ArgumentError, "graph.json must be a JSON object" unless @data.is_a?(Hash)
 
     nodes = @data["nodes"]
-    links = @data.key?("links") ? @data["links"] : @data["edges"]
+    # Same fallback `index_nodes` uses: a null `links` must not hide a
+    # malformed `edges`.
+    links = @data["links"] || @data["edges"]
     raise ArgumentError, "graph.json 'nodes' must be an array" if nodes.present? && !nodes.is_a?(Array)
     raise ArgumentError, "graph.json 'links' must be an array" if links.present? && !links.is_a?(Array)
 
@@ -417,11 +419,12 @@ class GraphifyImporter
     # a tree deeper than MAX_TREE_DEPTH.
     leftovers = @entity_info.keys - emitted.to_a
     if leftovers.any?
-      @nodes_promoted_to_root = leftovers.size
-      children.concat(
-        leftovers.sort_by { |id| @entity_info[id][:name] }
-                 .filter_map { |id| import_subtree(id, children_of, emitted, 1) }
-      )
+      # Leftovers nested under an earlier leftover attach inside its subtree —
+      # only the ones actually re-attached to the root are counted.
+      promoted = leftovers.sort_by { |id| @entity_info[id][:name] }
+                          .filter_map { |id| import_subtree(id, children_of, emitted, 1) }
+      @nodes_promoted_to_root = promoted.size
+      children.concat(promoted)
     end
 
     {

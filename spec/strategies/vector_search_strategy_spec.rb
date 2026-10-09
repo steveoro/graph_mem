@@ -47,12 +47,11 @@ RSpec.describe VectorSearchStrategy do
 
       it "builds SQL with VEC_DISTANCE_COSINE and VEC_FromText" do
         relation = double("relation")
-        allow(MemoryEntity).to receive(:where).and_return(relation)
-        allow(relation).to receive(:not).and_return(relation)
+        allow(MemoryEntity).to receive(:embedded).and_return(relation)
         allow(relation).to receive(:where).and_return(relation)
-        allow(relation).to receive(:select) do |sql_str|
-          expect(sql_str).to include("VEC_DISTANCE_COSINE")
-          expect(sql_str).to include("VEC_FromText")
+        allow(relation).to receive(:select) do |*cols|
+          expect(cols.map(&:to_s).join).to include("VEC_DISTANCE_COSINE")
+          expect(cols.map(&:to_s).join).to include("VEC_FromText")
           relation
         end
         allow(relation).to receive(:having).and_return(relation)
@@ -64,8 +63,7 @@ RSpec.describe VectorSearchStrategy do
 
       it "applies a cosine distance quality gate via HAVING clause" do
         relation = double("relation")
-        allow(MemoryEntity).to receive(:where).and_return(relation)
-        allow(relation).to receive(:not).and_return(relation)
+        allow(MemoryEntity).to receive(:embedded).and_return(relation)
         allow(relation).to receive(:where).and_return(relation)
         allow(relation).to receive(:select).and_return(relation)
         allow(relation).to receive(:having) do |clause, threshold|
@@ -81,8 +79,7 @@ RSpec.describe VectorSearchStrategy do
 
       it "filters by entity_type when provided" do
         relation = double("relation")
-        allow(MemoryEntity).to receive(:where).and_return(relation)
-        allow(relation).to receive(:not).and_return(relation)
+        allow(MemoryEntity).to receive(:embedded).and_return(relation)
         allow(relation).to receive(:where).with(entity_type: "Task").and_return(relation)
         allow(relation).to receive(:select).and_return(relation)
         allow(relation).to receive(:having).and_return(relation)
@@ -136,8 +133,7 @@ RSpec.describe VectorSearchStrategy do
       it "searches active observations only" do
         relation = double("relation")
         allow(MemoryObservation).to receive(:active).and_return(relation)
-        allow(relation).to receive(:where).and_return(relation)
-        allow(relation).to receive(:not).and_return(relation)
+        allow(relation).to receive(:embedded).and_return(relation)
         allow(relation).to receive(:select).and_return(relation)
         allow(relation).to receive(:group).and_return(relation)
         allow(relation).to receive(:order).and_return(relation)

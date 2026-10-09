@@ -48,7 +48,7 @@ class SuggestMergesTool < ApplicationTool
     effective_threshold = threshold || DEFAULT_THRESHOLD
     effective_limit = limit || DEFAULT_LIMIT
 
-    scope = MemoryEntity.where.not(embedding: nil)
+    scope = MemoryEntity.embedded
     scope = scope.where(entity_type: entity_type) if entity_type.present?
 
     entities = scope.to_a
@@ -62,7 +62,7 @@ class SuggestMergesTool < ApplicationTool
 
       candidates = MemoryEntity
         .where.not(id: entity.id)
-        .where.not(embedding: nil)
+        .embedded
         .where(entity_type: entity.entity_type)
         .where("id > ?", entity.id)
         .select("memory_entities.*, VEC_DISTANCE_COSINE(embedding, (SELECT embedding FROM memory_entities WHERE id = #{entity.id})) AS vec_distance")

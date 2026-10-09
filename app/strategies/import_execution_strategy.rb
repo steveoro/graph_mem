@@ -502,12 +502,15 @@ class ImportExecutionStrategy
     MemoryEntity.where(name: names.uniq, entity_type: canonical_types)
                 .pluck(:name, :entity_type, :id)
                 .each_with_object({}) do |(name, entity_type, id), map|
-      map[[ name, entity_type ]] ||= id
+      map[[ name.to_s.downcase, entity_type ]] ||= id
     end
   end
 
+  # Downcased name: memory_entities.name uses a case-insensitive collation,
+  # and the old per-edge find_by_name_and_type matched "FooService" for
+  # "fooservice" — the bulk map must keep that behavior.
   def endpoint_key(name, raw_type)
-    [ name, ImportEntityResolver.canonical_type(raw_type) ]
+    [ name.to_s.downcase, ImportEntityResolver.canonical_type(raw_type) ]
   end
 
   # All (from_id, to_id, canonical_type) triples the resolvable relations

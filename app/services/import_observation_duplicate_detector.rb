@@ -34,17 +34,18 @@ class ImportObservationDuplicateDetector
     return Result.new(duplicate: true, observation: exact_match, distance: 0.0, exact_match: true) if exact_match
     return Result.new(duplicate: false) unless observations.exists?
 
-    # Under suppressed inline embeddings (bulk imports), observations created
-    # moments ago in the same transaction are not embedded yet — comparing
-    # against them is meaningless, so degrade to the exact-content match.
-    # Stored observations that ARE embedded still get full semantic
-    # de-duplication: the detector embeds the incoming text through its own
-    # service, which the callback suppression does not affect.
-    if EmbeddingService.inline_embeddings_suppressed? && observations.unembedded.exists?
+    # The service being down is still fatal to semantic de-duplication.
+    ensure_embeddings_available!
+
+    # Stored rows left unembedded — e.g. observations created by an import
+    # whose deferred backfill has not run yet — cannot be compared
+    # semantically. Degrade to the exact-content match above rather than
+    # hard-failing the (re-)import; the backfill restores full dedup.
+    if observations.unembedded.exists?
+      Rails.logger.warn "ImportObservationDuplicateDetector: Entity '#{entity.name}' has " \
+                        "unembedded observations; semantic de-duplication skipped (exact match only)"
       return Result.new(duplicate: false)
     end
-
-    ensure_embeddings_available!(observations, entity)
     incoming_vector = embed!(normalized_content)
     closest = nearest_observation(observations, incoming_vector)
     return Result.new(duplicate: false) unless closest
@@ -60,15 +61,10 @@ class ImportObservationDuplicateDetector
 
   private
 
-  def ensure_embeddings_available!(observations, entity)
-    unless EmbeddingService.vector_enabled?
-      raise UnavailableError, "Embedding vectors are unavailable; semantic observation de-duplication cannot run."
-    end
+  def ensure_embeddings_available!
+    return if EmbeddingService.vector_enabled?
 
-    return unless observations.unembedded.exists?
-
-    raise UnavailableError,
-          "Entity '#{entity.name}' has observations without embeddings; run embedding backfill before importing."
+    raise UnavailableError, "Embedding vectors are unavailable; semantic observation de-duplication cannot run."
   end
 
   def embed!(content)

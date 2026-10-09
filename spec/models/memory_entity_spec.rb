@@ -154,4 +154,32 @@ RSpec.describe MemoryEntity, type: :model do
       }.not_to raise_error
     end
   end
+
+  describe "embedding scopes" do
+    def write_vector!(entity, vector)
+      described_class.connection.execute(
+        described_class.sanitize_sql_array(
+          [ "UPDATE memory_entities SET embedding = VEC_FromText(?) WHERE id = ?",
+            "[#{vector.join(',')}]", entity.id ]
+        )
+      )
+    end
+
+    # Runs against the real column (no embedding helper): NULL and the
+    # zero-vector the production trigger writes both mean "not embedded".
+    it "classifies NULL, zero-vector and real-vector rows" do
+      dims = EmbeddingConfig.resolved_config[:dims].to_i
+      null_entity = described_class.create!(name: "NullEmb", entity_type: "Project")
+      zero_entity = described_class.create!(name: "ZeroEmb", entity_type: "Project")
+      real_entity = described_class.create!(name: "RealEmb", entity_type: "Project")
+
+      write_vector!(zero_entity, Array.new(dims, 0.0))
+      write_vector!(real_entity, Array.new(dims, 0.0).tap { |v| v[0] = 1.0 })
+
+      expect(described_class.unembedded).to include(null_entity, zero_entity)
+      expect(described_class.unembedded).not_to include(real_entity)
+      expect(described_class.embedded).to include(real_entity)
+      expect(described_class.embedded).not_to include(null_entity, zero_entity)
+    end
+  end
 end

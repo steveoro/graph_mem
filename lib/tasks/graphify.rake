@@ -49,6 +49,16 @@ namespace :graphify do
     puts "Errors: #{report.errors.to_json}" if report.errors.any?
     abort "Import failed" unless report.success
 
+    # The import deferred row embeddings — backfill synchronously now so the
+    # next import's matching step (and every vector read) sees real vectors
+    # even when the maintenance job worker is not running.
+    begin
+      backfilled = EmbeddingService.backfill_all
+      puts "Embedding backfill: #{backfilled.to_json}"
+    rescue StandardError => e
+      warn "Embedding backfill skipped (#{e.class}: #{e.message}) — run rake embeddings:backfill"
+    end
+
     rows = GraphifyImporter.seed_ambiguous_relations(result.ambiguous_relations, project)
     puts "Queued #{rows.size} ambiguous relation(s) for review (scan_review)." if rows.any?
   end

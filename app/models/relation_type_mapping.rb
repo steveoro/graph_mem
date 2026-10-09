@@ -15,4 +15,10 @@ class RelationTypeMapping < ApplicationRecord
 
     @canonical_cache[key] = find_by("LOWER(variant) = ?", key)&.canonical_type
   end
+
+  # Clears the process cache — call after re-seeding/upserting mappings so
+  # new or changed variants take effect without a restart.
+  def self.reset_canonicalize_cache!
+    @canonical_cache = {}
+  end
 end

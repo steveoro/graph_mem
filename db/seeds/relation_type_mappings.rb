@@ -12,3 +12,7 @@ GraphVocabulary::RELATION_TYPE_MAPPINGS.each do |canonical, variants|
 end
 
 puts "Seeded #{count} relation type mappings."
+
+# Invalidate the process cache: an in-process re-seed must take effect
+# without a restart.
+RelationTypeMapping.reset_canonicalize_cache!

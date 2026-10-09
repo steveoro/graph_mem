@@ -123,6 +123,11 @@ RSpec.describe GraphifyImporter do
       expect do
         described_class.new({ "nodes" => [], "links" => "x" }, project_name: "x")
       end.to raise_error(ArgumentError, /'links' must be an array/)
+
+      # A null `links` must not hide a malformed `edges` fallback.
+      expect do
+        described_class.new({ "nodes" => [], "links" => nil, "edges" => "x" }, project_name: "p")
+      end.to raise_error(ArgumentError, /'links' must be an array/)
     end
 
     it "rejects nodes without an id" do
@@ -176,7 +181,7 @@ RSpec.describe GraphifyImporter do
       result = described_class.new(cycle, project_name: "p").translate
       names = flatten(result.import_data["root_nodes"].first).map { |node| node["name"] }
       expect(names).to include("A", "B", "C") # all emitted, nested under one promoted head
-      expect(result.stats[:nodes_promoted_to_root]).to eq(3)
+      expect(result.stats[:nodes_promoted_to_root]).to eq(1)
     end
 
     it "treats a self-containment loop as a root" do
@@ -197,7 +202,9 @@ RSpec.describe GraphifyImporter do
       emitted_names = flatten(result.import_data["root_nodes"].first).map { |node| node["name"] }
       expect(emitted_names).to include("N0", "N74") # nothing lost
       expect(emitted_names.size).to eq(nodes.size + 1) # + project root
-      expect(result.stats[:nodes_promoted_to_root]).to eq(11)
+      # Only the tail head is re-attached at root level — the other 10
+      # leftovers emit nested inside its subtree.
+      expect(result.stats[:nodes_promoted_to_root]).to eq(1)
       # 2 root children: the original chain head and the promoted tail head
       expect(result.import_data["root_nodes"].first["children"].size).to eq(2)
     end
