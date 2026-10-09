@@ -96,6 +96,21 @@ class SummarizerService
       temporal_only: @extraction.temporal_only?
     )
 
+    # A windowed query whose residual terms match nothing falls back to a
+    # pure temporal listing instead of producing an empty summary.
+    if results.empty? && @temporal_window.present? && !@extraction.temporal_only?
+      @temporal_fallback = true
+      results = HybridSearchStrategy.new.search(
+        "",
+        limit: search_limit,
+        semantic: true,
+        context_entity_ids: @context_entity_ids.presence,
+        scope_entity_ids: (@scope == "context" ? @allowed_entity_ids : nil),
+        temporal_window: @temporal_window,
+        temporal_only: true
+      )
+    end
+
     @candidate_entity_count = results.size
     results = apply_scope_filter(results)
 
@@ -306,7 +321,7 @@ class SummarizerService
       selected_entity_count: entities.map(&:id).uniq.size,
       excluded_out_of_scope_count: @excluded_out_of_scope_count,
       selected_observation_count: evidence.size
-    }.merge(@temporal_window.present? ? { temporal: @extraction.diagnostic } : {})
+    }.merge(@temporal_window.present? ? { temporal: @extraction.diagnostic.merge(fallback: (@temporal_fallback ? "temporal_only" : nil)).compact } : {})
   end
 
   # Applies the optional token budget to the evidence BEFORE the summary,
@@ -315,8 +330,15 @@ class SummarizerService
   def budget_evidence(evidence)
     return [ evidence, nil, nil ] if @max_tokens.blank?
 
+    # The response envelope (everything except the observations themselves)
+    # is counted once so the packed payload stays under budget end-to-end.
+    envelope = {
+      query: @query, summary: "", generation_mode: "", generated_by: "",
+      fallback_reason: nil, scope: @scope, entity_count: 0, observation_count: 0,
+      observations: [], sources: [], retrieval: {}
+    }
     payloads = evidence.map { |entry| observation_payload(entry) }
-    fit = TokenBudget.fit(payloads, max_tokens: @max_tokens.to_i)
+    fit = TokenBudget.fit_with_envelope(payloads, envelope: envelope, max_tokens: @max_tokens)
     kept_ids = fit.items.map { |payload| payload[:id] }.to_set
 
     kept_evidence = evidence.select { |entry| kept_ids.include?(entry[:observation].id) }
@@ -329,6 +351,7 @@ class SummarizerService
     response[:retrieval][:token_budget] = TokenBudget.diagnostics(
       max_tokens: @max_tokens, estimated_tokens: budget_fit.estimated_tokens,
       truncated: budget_fit.truncated,
+      envelope_tokens: budget_fit.envelope_tokens,
       items_before: budget_fit.items_before, items_after: budget_fit.items_after
     )
   end

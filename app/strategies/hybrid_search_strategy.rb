@@ -67,11 +67,23 @@ class HybridSearchStrategy
       end
     end
 
-    temporal_entity_ids = if temporal_window.present?
-      @temporal_strategy.search(temporal_window, limit: limit * 2, entity_ids: scoped_ids)
-    else
-      []
-    end
+    # The temporal channel only ranks candidates the other channels already
+    # produced — a global top-N by in-window count would make the boost
+    # arbitrary on large graphs (a text hit with one in-window observation
+    # loses to hundreds of unsearched entities). Temporal-only queries keep
+    # the full in-window listing: it IS the result set.
+    temporal_entity_ids =
+      if temporal_window.blank?
+        []
+      elsif temporal_only
+        @temporal_strategy.search(temporal_window, limit: limit * 2, entity_ids: scoped_ids)
+      else
+        candidates = (text_results.map { |result| result.entity.id } +
+                      vector_results.map { |result| result.entity.id } +
+                      observation_entity_ids).uniq
+        candidates &= scoped_ids if scoped_ids.present?
+        candidates.empty? ? [] : @temporal_strategy.search(temporal_window, limit: nil, entity_ids: candidates)
+      end
 
     scores, entities, matched = build_score_maps(
       text_results, vector_results, observation_entity_ids, temporal_entity_ids,

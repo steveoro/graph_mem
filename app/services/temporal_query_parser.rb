@@ -21,6 +21,8 @@
 class TemporalQueryParser
   Result = Struct.new(:window, :matched, keyword_init: true)
 
+  require "set"
+
   # Resolution of a query + optional explicit window params into the effective
   # pieces callers need: the window (explicit wins), the phrase that was matched
   # (for diagnostics) and the query text to use for text/vector matching with
@@ -57,7 +59,29 @@ class TemporalQueryParser
           query.to_s
         end
 
+      # A date phrase followed only by question/filler words ("what changed in
+      # august 2026") is still a time-only query: no residual terms means there
+      # is nothing for the text/vector channels to match. Filler is only
+      # stripped when a date phrase was found — plain queries are untouched.
+      effective = "" if result && residual_terms(effective).empty?
+
       Extraction.new(window: window, matched: result&.matched, effective_query: effective)
+    end
+
+    # Everyday verbs/question words that carry no lexical signal once the date
+    # phrase is gone.
+    FILLER_WORDS = %w[
+      what which who whom when where how why
+      did do does done was were is are be been has have had
+      change changed changes changing happen happened happening update updated updates
+      new recent recently latest anything something everything stuff
+      the a an any all about of on for to from with me my we our us show tell list give
+      recall remember know learned noted
+    ].to_set.freeze
+
+    # Lexically meaningful tokens left in a stripped query.
+    def residual_terms(text)
+      text.to_s.downcase.scan(/[[:alnum:]][[:alnum:]_.-]*/).reject { |t| FILLER_WORDS.include?(t) }
     end
   end
 
@@ -348,6 +372,10 @@ class TemporalQueryParser
     end
 
     def day_span(year, month, day)
+      # Time.zone.local silently rolls invalid days over (2026-02-30 → Mar 2)
+      # instead of raising — validate the calendar date first.
+      return nil unless Date.valid_date?(year, month, day)
+
       start = Time.zone.local(year, month, day)
       start..start.end_of_day
     rescue ArgumentError

@@ -12,12 +12,15 @@ class TemporalSearchStrategy
   #   that need the complete candidate list, e.g. temporal-only pagination)
   # @param entity_ids [Array<Integer>, nil] optional scope — when given the SQL
   #   only counts observations of these entities (scope applied inside the query,
-  #   not after the global top-N)
+  #   not after the global top-N). `nil` means unscoped; an empty array is an
+  #   explicit "no candidates" and returns nothing (never the whole graph).
   # @return [Array<Integer>] entity ids ordered by in-window observation count
   def search(window, limit: 50, entity_ids: nil)
+    return [] if entity_ids && entity_ids.empty?
+
     sql, binds = window.observation_predicate
     scope = MemoryObservation.active.where(sql, **binds)
-    scope = scope.where(memory_entity_id: entity_ids) if entity_ids.present?
+    scope = scope.where(memory_entity_id: entity_ids) if entity_ids
 
     scope = scope
       .group(:memory_entity_id)
