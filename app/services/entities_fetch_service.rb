@@ -110,11 +110,14 @@ class EntitiesFetchService
   def apply_token_budget!(result)
     return if @max_tokens.blank?
 
-    budget = @max_tokens.to_i
+    # The item-less response envelope is counted once; entities and relations
+    # pack into what is left of the budget.
+    envelope = result.merge(entities: [], relations: [])
     fetched_ids = result[:entities].map { |entity| entity[:entity_id] }.to_set
     relations_before = result[:relations].size
-    entities_fit = TokenBudget.fit(result[:entities], max_tokens: budget)
+    entities_fit = TokenBudget.fit_with_envelope(result[:entities], envelope: envelope, max_tokens: @max_tokens)
     result[:entities] = entities_fit.items
+    budget_left = @max_tokens - entities_fit.envelope_tokens - entities_fit.estimated_tokens
 
     used = entities_fit.estimated_tokens
     truncated = entities_fit.truncated
@@ -126,13 +129,14 @@ class EntitiesFetchService
     scoped_relations = result[:relations].reject do |relation|
       dropped_ids.include?(relation[:from_entity_id]) || dropped_ids.include?(relation[:to_entity_id])
     end
-    relations_fit = TokenBudget.fit(scoped_relations, max_tokens: [ budget - used, 0 ].max)
+    relations_fit = TokenBudget.fit(scoped_relations, max_tokens: [ budget_left, 0 ].max)
     result[:relations] = relations_fit.items
     used += relations_fit.estimated_tokens
     truncated ||= relations_fit.truncated
 
     result[:token_budget] = TokenBudget.diagnostics(
-      max_tokens: budget, estimated_tokens: used, truncated: truncated,
+      max_tokens: @max_tokens, estimated_tokens: used, truncated: truncated,
+      envelope_tokens: entities_fit.envelope_tokens,
       items_before: entities_fit.items_before + relations_before,
       items_after: result[:entities].size + result[:relations].size
     )

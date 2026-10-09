@@ -39,7 +39,7 @@ class GetEntitiesTool < ApplicationTool
   def call(entity_ids:, relations: nil, include_obsolete: false, include_ranked: false,
            query: nil, observation_limit: nil, occurred_after: nil, occurred_before: nil,
            as_of: nil, max_tokens: nil)
-    TokenBudget.validate_max_tokens!(max_tokens, error_class: FastMcp::Tool::InvalidArgumentsError)
+    max_tokens = TokenBudget.validate_max_tokens!(max_tokens, error_class: FastMcp::Tool::InvalidArgumentsError)
     EntitiesFetchService.call(
       entity_ids: entity_ids,
       relations: relations,

@@ -106,15 +106,17 @@ module Api
             temporal_window: temporal_window_from_params
           )
           results = payload[:results].map(&:to_h)
-          TokenBudget.validate_max_tokens!(params[:max_tokens]) if params.key?(:max_tokens)
-          if params[:max_tokens].present?
-            fit = TokenBudget.fit(results, max_tokens: params[:max_tokens].to_i)
+          max_tokens = TokenBudget.validate_max_tokens!(params[:max_tokens]) if params.key?(:max_tokens)
+          if max_tokens.present?
+            envelope = { results: [], retrieval: payload[:retrieval] }
+            fit = TokenBudget.fit_with_envelope(results, envelope: envelope, max_tokens: max_tokens)
             results = fit.items
             payload[:retrieval][:result_count] = results.size
             payload[:retrieval][:token_budget] = TokenBudget.diagnostics(
-              max_tokens: params[:max_tokens].to_i,
+              max_tokens: max_tokens,
               estimated_tokens: fit.estimated_tokens,
-              truncated: fit.truncated
+              truncated: fit.truncated,
+              envelope_tokens: fit.envelope_tokens
             )
           end
           if params[:include_retrieval].to_s == "true" || payload[:retrieval][:temporal].present? || payload[:retrieval][:token_budget].present?
