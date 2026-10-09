@@ -736,6 +736,7 @@ RSpec.describe ImportExecutionStrategy, type: :model do
         rescan: nil,
         rescan_entities_flagged: nil,
         rescan_relations_flagged: nil,
+        rescan_reparents_flagged: nil,
         errors: []
       })
     end
@@ -1117,7 +1118,7 @@ RSpec.describe ImportExecutionStrategy, type: :model do
 
       row = MaintenanceReportRow.by_report_type('scan_review').pending.find_by(kind: 'delete_entity')
       expect(row).to be_present
-      expect(row.effective_payload['entity_id']).to eq(class_entity.id)
+      expect(row.effective_payload.dig('payload', 'entity_id')).to eq(class_entity.id)
     end
 
     it 'flags a removed graphify edge as a delete_relation review item' do
@@ -1131,7 +1132,7 @@ RSpec.describe ImportExecutionStrategy, type: :model do
 
       row = MaintenanceReportRow.by_report_type('scan_review').pending.find_by(kind: 'delete_relation')
       expect(row).to be_present
-      expect(row.effective_payload['relation_id']).to eq(edge.id)
+      expect(row.effective_payload.dig('payload', 'relation_id')).to eq(edge.id)
     end
 
     it 'supersedes drifted provenance and lets merge dedup stay quiet' do
@@ -1173,6 +1174,135 @@ RSpec.describe ImportExecutionStrategy, type: :model do
 
       report = strategy.execute(same_payload, merge_decisions)
       expect(report.rescan).to be(false)
+    end
+
+    it 'supersedes L-prefixed line drift as a same-file change' do
+      class_obs.update!(content: 'Defined at lib/foo.rb:L10')
+      payload = Marshal.load(Marshal.dump(same_payload))
+      class_node = payload['root_nodes'][0]['children'][0]['children'][0]
+      class_node['observations'] = [ provenance('Defined at lib/foo.rb:L20') ]
+
+      report = strategy.execute(payload, merge_decisions)
+
+      expect(report.observations_superseded).to eq(1)
+      expect(report.observations_obsoleted).to eq(0)
+      expect(class_obs.reload.superseded_by.content).to eq('Defined at lib/foo.rb:L20')
+    end
+
+    it 'queues a reparent_entity item for a same-tree move and applies new provenance' do
+      other_file = MemoryEntity.create!(name: 'bar.rb', entity_type: 'File')
+      MemoryRelation.create!(from_entity: other_file, to_entity: project, relation_type: 'part_of')
+      MemoryObservation.create!(memory_entity: other_file, content: 'Defined at lib/bar.rb',
+                                source: 'graphify')
+
+      payload = Marshal.load(Marshal.dump(same_payload))
+      project_node = payload['root_nodes'][0]
+      foo_node = project_node['children'][0]
+      class_node = foo_node['children'].delete_at(0)
+      project_node['children'] << {
+        'name' => 'bar.rb', 'entity_type' => 'File', 'relation_type' => 'part_of',
+        'observations' => [ provenance('Defined at lib/bar.rb') ],
+        'children' => [ class_node ]
+      }
+
+      decisions = merge_decisions + [
+        { node_path: '0.children.0', action: 'skip' },
+        { node_path: '0.children.1', action: 'skip' },
+        { node_path: '0.children.1.children.0', action: 'skip' }
+      ]
+      report = strategy.execute(payload, decisions)
+
+      expect(report.rescan_reparents_flagged).to eq(1)
+      row = MaintenanceReportRow.by_report_type('scan_review').pending.find_by(kind: 'reparent_entity')
+      expect(row).to be_present
+      expect(row.effective_payload.dig('payload', 'entity_id')).to eq(class_entity.id)
+      expect(row.effective_payload.dig('payload', 'parent_id')).to eq(other_file.id)
+      expect(part2.reload).to be_present # unattended imports never re-parent
+    end
+
+    def stale_scan_row(kind:, payload:, signature_payload:)
+      report = MaintenanceReport.create!(report_type: 'scan_review', data: { 'source' => 'graphify' })
+      MaintenanceReportRow.create!(
+        maintenance_report: report,
+        report_type: 'scan_review',
+        row_uuid: "stale-#{kind}-#{payload.values.first}",
+        kind: kind,
+        status: 'active',
+        signature: CompactionReviewService.signature_for(kind, signature_payload),
+        payload: payload
+      )
+    end
+
+    it 'dismisses a pending delete proposal when the target returns' do
+      stale = stale_scan_row(
+        kind: 'delete_entity',
+        payload: { 'entity_id' => class_entity.id, 'entity_name' => 'Foo' },
+        signature_payload: { entity_id: class_entity.id }
+      )
+
+      strategy.execute(same_payload, merge_decisions)
+
+      expect(stale.reload.status).to eq('dismissed')
+      expect(stale.resolution_reason).to include('restored')
+    end
+
+    it 'dismisses a pending delete_relation proposal when the edge returns' do
+      stale = stale_scan_row(
+        kind: 'delete_relation',
+        payload: { 'relation_id' => edge.id },
+        signature_payload: { relation_id: edge.id }
+      )
+
+      strategy.execute(same_payload, merge_decisions)
+
+      expect(stale.reload.status).to eq('dismissed')
+    end
+
+    it 'keeps a pending delete proposal when the target is still absent' do
+      stale = stale_scan_row(
+        kind: 'delete_entity',
+        payload: { 'entity_id' => class_entity.id, 'entity_name' => 'Foo' },
+        signature_payload: { entity_id: class_entity.id }
+      )
+
+      strategy.execute(removed_class_payload, merge_decisions)
+
+      expect(stale.reload.status).to eq('active')
+    end
+
+    it 'diffs the operator merge target, not the payload namesake' do
+      other_root = MemoryEntity.create!(name: 'Other Project', entity_type: 'Project')
+      other_file = MemoryEntity.create!(name: 'ghost.rb', entity_type: 'File')
+      MemoryRelation.create!(from_entity: other_file, to_entity: other_root, relation_type: 'part_of')
+      ghost_obs = MemoryObservation.create!(memory_entity: other_file, content: 'Defined at ghost.rb',
+                                            source: 'graphify')
+      other_decisions = [ { node_path: '0', action: 'merge', target_id: other_root.id } ]
+
+      report = strategy.execute(same_payload, other_decisions)
+
+      # Diffed Other Project's subtree: ghost.rb vanished from the payload.
+      expect(report.rescan).to be(true)
+      expect(ghost_obs.reload).to be_obsolete
+      # And the payload namesake's subtree stayed untouched.
+      expect(class_obs.reload).to be_active
+    end
+
+    it 'reports no rescan activity when the import fails mid-tree' do
+      payload = Marshal.load(Marshal.dump(removed_class_payload))
+      # Force a failure inside the transaction: a relation row that raises.
+      allow_any_instance_of(described_class).to receive(:process_node_recursive)
+        .and_wrap_original do |method, node, path, decision_map, parent_entity_id, tree_parent_id|
+          raise ActiveRecord::StatementInvalid, 'boom' if path == '0'
+          method.call(node, path, decision_map, parent_entity_id, tree_parent_id)
+        end
+
+      report = strategy.execute(payload, merge_decisions)
+
+      expect(report.success).to be(false)
+      expect(report.rescan).to be(false)
+      expect(report.rescan_entities_flagged).to eq(0)
+      expect(report.observations_obsoleted).to eq(0)
+      expect(class_obs.reload).to be_active # rolled back
     end
   end
 end
