@@ -5,6 +5,11 @@ All notable changes to GraphMem will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.46.1] - 2026-10-09
+- Fixed untyped `VectorSearchStrategy#search` always returning no rows. Omitting `entity_type` was compiled as `WHERE entity_type IS NULL` (introduced in 1.11.0 / `62a46ca`), so every typed entity was excluded. The type predicate is applied only when a type is given.
+- Fixed `VectorSearchStrategy#search_observations` raising `Unknown column 'vec_distance' in 'ORDER BY'` and returning `[]`. `pluck` replaced the SELECT list and dropped the distance alias that `ORDER BY` still referenced. The query now keeps that select and reads `memory_entity_id` from the loaded rows. The alias/`pluck` combination dates from the original vector search; it is not from `62a46ca`.
+- Hybrid search (and the operator vector search, the REST vector search, and subgraph vector search) calls both methods without an entity type. Both failures are rescued to `[]`, so semantic ranking had silently fallen back to text search. Restoring the two channels brings `semantic` and `observation_semantic` hits back into reciprocal rank fusion.
+
 ## [1.46.0] - 2026-10-08
 - Added temporal recall to read tools: `occurred_after`/`occurred_before`/`as_of` strict ISO 8601 params on `search`, `search_subgraph`, `get_entity`, `get_entities`, `get_subgraph_by_ids`, `summarize`, and the REST entity-search and summarize endpoints.
 - Added `TemporalQueryParser`: temporal phrases inside `query` itself ("in October 2026", "during 2024", "Q3 2026", "last week", "past 6 months", "last spring", "since 2025", "as of …") derive a window automatically; explicit params win. Question filler words ("what", "changed", "tell me about", …) are ignored when judging whether a query is time-only, and invalid calendar dates are rejected.

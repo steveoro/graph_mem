@@ -29,9 +29,12 @@ class VectorSearchStrategy
 
     vector_sql = "[#{query_vector.join(',')}]"
 
-    entities = MemoryEntity
-      .where.not(embedding: nil)
-      .where(entity_type: entity_type)
+    # where(entity_type: nil) is `entity_type IS NULL`, which drops every typed
+    # row. Apply the filter only when a type was actually requested.
+    scope = MemoryEntity.where.not(embedding: nil)
+    scope = scope.where(entity_type: entity_type) if entity_type.present?
+
+    entities = scope
       .select("memory_entities.*, VEC_DISTANCE_COSINE(embedding, VEC_FromText('#{vector_sql}')) AS vec_distance")
       .having("vec_distance < ?", MAX_COSINE_DISTANCE)
       .order(Arel.sql("vec_distance ASC"))
@@ -56,6 +59,8 @@ class VectorSearchStrategy
       [ "MIN(VEC_DISTANCE_COSINE(embedding, VEC_FromText(?))) AS vec_distance", vector_sql ]
     )
 
+    # pluck replaces the SELECT list, which drops the vec_distance alias.
+    # MariaDB then rejects ORDER BY vec_distance as an unknown column.
     MemoryObservation
       .active
       .where.not(embedding: nil)
@@ -63,7 +68,7 @@ class VectorSearchStrategy
       .group(:memory_entity_id)
       .order(Arel.sql("vec_distance ASC"))
       .limit(limit)
-      .pluck(:memory_entity_id)
+      .map(&:memory_entity_id)
   rescue StandardError => e
     @logger.error "VectorSearchStrategy#search_observations: #{e.message}"
     []
