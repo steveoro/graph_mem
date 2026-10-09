@@ -281,4 +281,24 @@ RSpec.describe SummarizerService do
       end
     end
   end
+
+  describe "post-generation token budget" do
+    let!(:entity) { MemoryEntity.create!(name: "Budget Entity", entity_type: "Service") }
+
+    before do
+      entity.memory_observations.create!(content: "fact #{('x' * 60)} one")
+      entity.memory_observations.create!(content: "fact #{('y' * 60)} two")
+    end
+
+    it "drops observations when the generated summary pushes the response over budget" do
+      unbounded = described_class.new(query: "budget", max_results: 5).call
+      response = described_class.new(query: "budget", max_results: 5, max_tokens: 120).call
+
+      expect(response[:observations].size).to be < unbounded[:observations].size
+      expect(TokenBudget.estimate(response)).to be < TokenBudget.estimate(unbounded)
+      budget = response[:retrieval][:token_budget]
+      expect(budget[:envelope_tokens]).to be > 0
+      expect(budget[:truncated]).to be(true)
+    end
+  end
 end

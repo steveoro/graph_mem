@@ -121,9 +121,9 @@ RSpec.describe SubgraphSearchService do
       expect(ids).to include(quiet.id)
     end
 
-    it "caps the temporal candidate list at MAX_TEMPORAL_CANDIDATES" do
+    it "caps the temporal candidate list at MAX_TEMPORAL_CANDIDATES (fetching one extra to detect overflow)" do
       expect_any_instance_of(TemporalSearchStrategy)
-        .to receive(:search).with(anything, limit: 500, entity_ids: nil).and_call_original
+        .to receive(:search).with(anything, limit: 501, entity_ids: nil).and_call_original
 
       described_class.call(query: "in 2026-08")
     end

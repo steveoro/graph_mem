@@ -127,10 +127,10 @@ class SubgraphSearchService
   # via retrieval.temporal.candidates_truncated.
   def temporal_candidate_ids(context_ids)
     ids = TemporalSearchStrategy.new.search(
-      @temporal_window, limit: MAX_TEMPORAL_CANDIDATES, entity_ids: context_ids
+      @temporal_window, limit: MAX_TEMPORAL_CANDIDATES + 1, entity_ids: context_ids
     )
-    @temporal_candidates_truncated = ids.size >= MAX_TEMPORAL_CANDIDATES
-    ids
+    @temporal_candidates_truncated = ids.size > MAX_TEMPORAL_CANDIDATES
+    ids.first(MAX_TEMPORAL_CANDIDATES)
   end
 
   def text_matching_ids

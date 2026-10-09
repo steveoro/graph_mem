@@ -56,7 +56,7 @@ class SummarizerService
     evidence = build_evidence(entities, entity_scores)
     evidence, kept_payloads, budget_fit = budget_evidence(evidence)
     response = build_deterministic_response(entities, evidence, observations_payload: kept_payloads, budget_fit: budget_fit)
-    attempt_llm_synthesis(response, evidence)
+    enforce_token_budget!(attempt_llm_synthesis(response, evidence), budget_fit, evidence)
   end
 
   private
@@ -354,6 +354,46 @@ class SummarizerService
       envelope_tokens: budget_fit.envelope_tokens,
       items_before: budget_fit.items_before, items_after: budget_fit.items_after
     )
+  end
+
+  # Re-fits observations against the FINAL response — the summary text,
+  # sources and diagnostics only exist after generation (deterministic
+  # summaries repeat the evidence; LLM text is arbitrary length). Extra
+  # items are dropped whole; for deterministic summaries the text and
+  # sources are rebuilt from the surviving evidence so dropped facts can't
+  # leak through the summary and the payload honours max_tokens. An LLM
+  # summary can't be re-derived — any overflow there is reported via
+  # truncated instead of silently editing the generated text.
+  def enforce_token_budget!(response, budget_fit, evidence)
+    return response if budget_fit.nil?
+
+    kept = response[:observations]
+    dropped = false
+    loop do
+      envelope = response.merge(observations: [])
+      fit = TokenBudget.fit_with_envelope(kept, envelope: envelope, max_tokens: @max_tokens)
+      break if fit.items.size == kept.size
+
+      dropped = true
+      kept = fit.items
+      break if response[:generation_mode] != "deterministic"
+
+      kept_ids = kept.map { |payload| payload[:id] }.to_set
+      kept_evidence = evidence.select { |entry| kept_ids.include?(entry[:observation].id) }
+      response[:summary] = build_deterministic_summary(kept_evidence)
+      response[:sources] = build_sources(kept_evidence)
+    end
+
+    response[:observations] = kept
+    response[:observation_count] = kept.size
+    envelope = response.merge(observations: [])
+    response[:retrieval][:token_budget].merge!(
+      estimated_tokens: TokenBudget.estimate(kept),
+      envelope_tokens: TokenBudget.estimate(envelope),
+      truncated: (dropped || budget_fit.truncated),
+      items_after: kept.size
+    )
+    response
   end
 
   def attempt_llm_synthesis(response, evidence)
