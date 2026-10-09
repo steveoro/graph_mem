@@ -319,8 +319,9 @@ Two ways to apply a window:
    ignored — too likely an entity name. Month names come from a closed list,
    cue words need word boundaries, and seasons require a qualifier or a year —
    `"market"`, `"login 2024"`, `"2048-bit"` and `"spring boot config"` do not
-   parse. Seasons map to northern-hemisphere quarters
-   (spring = Mar–May, summer = Jun–Aug, autumn/fall = Sep–Nov, winter = Dec–Feb).
+   parse. Seasons map to northern-hemisphere astronomical spans
+   (spring ≈ Mar 20–Jun 20, summer ≈ Jun 21–Sep 22, autumn/fall ≈ Sep 23–Dec 21,
+   winter ≈ Dec 22–Mar 19; unqualified seasons use the current year).
    Explicit params win over parsed phrases.
 
 When a window applies it does two things: adds a **temporal channel** to hybrid
@@ -330,7 +331,14 @@ a window never injects unrelated entities next to a text hit; a query that is
 *nothing but* a temporal phrase (`"what changed in October 2026"`) searches by
 time alone, with the temporal channel as the base result set. The matched
 phrase is stripped from the text used for lexical/vector matching, so
-`"alpha in August 2026"` searches for "alpha" plus the window. The resolved
+`"alpha in August 2026"` searches for "alpha" plus the window — and a
+closed set of question filler words (`what`, `changed`, `happened`, `tell`,
+`me`, `the`, `any`, `recent`, `stuff`, `learned`, …) is also ignored when
+what remains would otherwise be meaningless: `"what changed in October 2026"`
+leaves only filler, so it counts as time-only too. When a window is present
+and residual terms match nothing at all, retrieval falls back to the time-only
+listing instead of returning an empty page — reported as
+`retrieval.temporal.fallback: "temporal_only"`. The resolved
 window (and any matched phrase) is echoed back as `retrieval.temporal`.
 Entities whose observations all fall outside the window still appear in
 subgraph/fetch responses — with an empty `observations` list when nothing
@@ -338,19 +346,27 @@ matches the window.
 
 ### Token budget
 
-All the same read tools accept `max_tokens` (integer 1–100_000): ranked payload
-items are packed in order until the next item would exceed the estimate
-(~4 chars/token over the serialized items, deterministic — no tokenizer
-dependency). Whole items only: an item that cannot fit is dropped, never cut
-mid-item. The budget covers the packed items themselves — the surrounding
-response envelope (pagination, retrieval diagnostics) is not counted. On
-`search` summary mode the budget trims the full ranked result list before
-pagination, so trimmed items are never reachable on later pages;
-`retrieval.token_budget` reports `{ max_tokens, estimated_tokens, truncated,
-items_before, items_after }` so callers can see the cut. Relations are only
-returned when both endpoint entities survived the budget — no dangling
-references. On `summarize` the budget is applied to the evidence *before* the
-summary text, sources and LLM prompt are built.
+All the same read tools accept `max_tokens` (integer 1–100_000, validated
+strictly — digit strings like `"100"` coerce, anything else such as `"0x10"`,
+`5.7`, `"1e3"` or `"+5"` is rejected): ranked payload items are packed in
+order until the next item would exceed the estimate (~4 chars/token over the
+serialized items, deterministic — no tokenizer dependency). Whole items only:
+an item that cannot fit is dropped, never cut mid-item.
+
+The budget applies to the page you asked for, not the whole ranked list —
+the page slice is taken first, then packed. Items that don't fit on this
+page do not move to the next one: next page, next pack. The surrounding
+response envelope (mode, pagination, retrieval diagnostics) is estimated
+once and counted against the budget as `envelope_tokens`, so a response
+can't overrun because its own skeleton was free. When items were dropped
+from the requested page, `retrieval.token_budget` reports
+`{ max_tokens, estimated_tokens, truncated, dropped_on_page, ... }` and
+`retrieval.next_move` suggests how to see the dropped ranks
+("lower per_page or raise max_tokens"). Relations are only
+dropped when an endpoint entity was removed by the budget itself — edges to
+entities outside the fetched set stay (the far endpoint still exists). On
+`summarize` the budget is applied to the evidence *before* the summary text,
+sources and LLM prompt are built.
 
 ## Graph Traversal (2 tools)
 

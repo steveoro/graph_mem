@@ -121,11 +121,68 @@ RSpec.describe SubgraphSearchService do
       expect(ids).to include(quiet.id)
     end
 
-    it "does not cap the temporal candidate list" do
+    it "caps the temporal candidate list at MAX_TEMPORAL_CANDIDATES" do
       expect_any_instance_of(TemporalSearchStrategy)
-        .to receive(:search).with(anything, limit: nil, entity_ids: nil).and_call_original
+        .to receive(:search).with(anything, limit: 500, entity_ids: nil).and_call_original
 
       described_class.call(query: "in 2026-08")
+    end
+
+    it "flags candidates_truncated when the cap bites and keeps totals honest" do
+      stub_const("SubgraphSearchService::MAX_TEMPORAL_CANDIDATES", 3)
+      5.times do |i|
+        e = MemoryEntity.create!(name: "Extra #{i}", entity_type: "Project")
+        MemoryObservation.create!(memory_entity: e, content: "f", created_at: Time.zone.parse("2026-08-10"))
+      end
+
+      result = described_class.call(query: "in 2026-08")
+
+      expect(result[:pagination][:total_entities]).to eq(3)
+      expect(result[:retrieval][:temporal][:candidates_truncated]).to be(true)
+    end
+  end
+
+  describe "date-only fallback (residual terms match nothing)" do
+    let!(:hot_entity) { MemoryEntity.create!(name: "Hot Service", entity_type: "Service") }
+
+    before do
+      MemoryObservation.create!(memory_entity: hot_entity, content: "august fact",
+                                created_at: Time.zone.parse("2026-08-10"))
+    end
+
+    it "falls back to temporal listing when residual terms match nothing" do
+      result = described_class.call(query: "zzz-nothing-matches in august 2026")
+
+      expect(result[:entities].map { |e| e[:entity_id] }).to include(hot_entity.id)
+      expect(result[:retrieval][:temporal][:fallback]).to eq("temporal_only")
+    end
+  end
+
+  describe "text+window ordering" do
+    let!(:hub) { MemoryEntity.create!(name: "Delta Service Hub", entity_type: "Service") }
+    let!(:hot) { MemoryEntity.create!(name: "Echo Service", entity_type: "Service") }
+
+    before do
+      hub.memory_observations.create!(content: "old hub fact", valid_from: Time.utc(2024, 1, 1),
+                                      valid_until: Time.utc(2024, 2, 1))
+      hot.memory_observations.create!(content: "echo august fact", valid_from: Time.utc(2026, 8, 12))
+      6.times do |i|
+        leaf = MemoryEntity.create!(name: "Leaf #{i}", entity_type: "Note")
+        MemoryRelation.create!(from_entity_id: hub.id, to_entity_id: leaf.id, relation_type: "has")
+      end
+    end
+
+    it "ranks in-window candidates above out-of-window ones" do
+      result = described_class.call(query: "service in august 2026")
+
+      names = result[:entities].map { |e| e[:name] }
+      expect(names.index("Echo Service")).to be < names.index("Delta Service Hub")
+    end
+
+    it "keeps today's booster order when no window applies" do
+      result = described_class.call(query: "service")
+
+      expect(result[:entities].map { |e| e[:name] }).to include("Delta Service Hub", "Echo Service")
     end
   end
 end

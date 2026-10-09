@@ -120,7 +120,7 @@ RSpec.describe SearchTool, type: :model do
         retrieval: { result_count: 2 }
       )
 
-      budget = TokenBudget.estimate(small)
+      budget = TokenBudget.estimate(small) + 120 # small item + response envelope
       result = tool.call(query: "result", max_tokens: budget)
 
       expect(result[:results]).to eq([ small ])
@@ -155,6 +155,57 @@ RSpec.describe SearchTool, type: :model do
         expect { described_class.new.call(query: "alpha", max_tokens: bad) }
           .to raise_error(FastMcp::Tool::InvalidArgumentsError)
       end
+    end
+  end
+
+  describe "temporal filler queries" do
+    let!(:alpha) { MemoryEntity.create!(name: "Alpha Service", entity_type: "Service") }
+
+    before do
+      alpha.memory_observations.create!(content: "Alpha deployed v2 in August",
+                                        valid_from: Time.utc(2026, 8, 10),
+                                        valid_until: Time.utc(2026, 8, 20))
+    end
+
+    it "returns in-window entities for 'what changed in august 2026'" do
+      result = described_class.new.call(query: "what changed in august 2026")
+      names = result[:results].map { |r| r[:name] }
+      expect(names).to include("Alpha Service")
+    end
+  end
+
+  describe "per-page max_tokens" do
+    let!(:svc_a) { MemoryEntity.create!(name: "Alpha Service", entity_type: "Service") }
+    let!(:svc_b) { MemoryEntity.create!(name: "Beta Service", entity_type: "Service") }
+
+    before do
+      svc_a.memory_observations.create!(content: "alpha fact")
+      svc_b.memory_observations.create!(content: "beta fact")
+    end
+
+    it "fits each page independently instead of accumulating" do
+      page2 = described_class.new.call(query: "service",
+                                   page: 2, per_page: 1, max_tokens: 400)
+      expect(page2[:results].size).to eq(1)
+      expect(page2[:retrieval][:token_budget][:estimated_tokens]).to be <= 400
+    end
+
+    it "reports dropped_on_page and a next_move hint when the page overflows" do
+      result = described_class.new.call(query: "service",
+                                    page: 1, per_page: 2, max_tokens: 1)
+      budget = result[:retrieval][:token_budget]
+      expect(result[:results]).to eq([])
+      expect(budget[:truncated]).to be(true)
+      expect(budget[:dropped_on_page]).to be > 0
+      expect(result[:retrieval][:next_move]).to include("per_page")
+    end
+
+    it "counts the envelope once and reports envelope_tokens" do
+      result = described_class.new.call(query: "service",
+                                    page: 1, per_page: 2, max_tokens: 100)
+      budget = result[:retrieval][:token_budget]
+      expect(budget[:envelope_tokens]).to be > 0
+      expect(TokenBudget.estimate(result)).to be <= 110 # 10% slack
     end
   end
 end

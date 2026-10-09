@@ -35,4 +35,23 @@ RSpec.describe EntityRetrievalService do
       scope_max_entities: 1_000
     )
   end
+
+  describe "time-only fallback" do
+    let!(:august_entity) { MemoryEntity.create!(name: "August Thing", entity_type: "Service") }
+
+    before do
+      august_entity.memory_observations.create!(content: "august fact",
+                                                valid_from: Time.utc(2026, 8, 10))
+    end
+
+    it "falls back to the temporal channel when residual terms match nothing" do
+      payload = described_class.search(
+        "zzz-no-match in august 2026", semantic: false,
+        temporal_window: TemporalWindow.new(occurred_after: "2026-08-01", occurred_before: "2026-08-31")
+      )
+
+      expect(payload[:results].map { |r| r.entity.id }).to include(august_entity.id)
+      expect(payload[:retrieval][:temporal][:fallback]).to eq("temporal_only")
+    end
+  end
 end
