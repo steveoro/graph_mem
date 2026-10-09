@@ -371,6 +371,17 @@ class ImportExecutionStrategy
   # Apply name+type-addressed relations after the entity tree exists.
   # Edges whose endpoints cannot be resolved are skipped and counted — never
   # fatal — so a partially-resolvable graph still imports cleanly.
+  #
+  # Design decisions (PR #96 review):
+  # - Endpoints resolve against the WHOLE database, not just this import's
+  #   accepted tree nodes. Name+type-addressed edges are meant to cross
+  #   import boundaries: a file imported today must link onto entities
+  #   imported in earlier runs, so "not in this payload" is not "missing".
+  #   Only genuinely absent endpoints count as unresolved.
+  # - A skipped tree node still receives its imported edges: `skip` means
+  #   "entity already exists with this parent" — the entity stays part of
+  #   the processed tree, so upserting its relations is the intended
+  #   rescan behaviour, not an operator exclusion.
   # @param relations [Array<Hash>, nil] {from_name, from_type, to_name, to_type,
   #   relation_type, weight, confidence, properties}
   def apply_relations(relations)
