@@ -38,13 +38,13 @@ module GraphifyRescan
   # stored set a rescan diffs against. Empty ⇒ first import, not a rescan.
   # Obsolete/superseded rows intentionally still count: a vanished entity
   # stays in the stored set so a later scan can recognize its return.
-  def self.stored_entities(root)
+  def self.stored_entities(root, source: SOURCE_NAME)
     return MemoryEntity.none unless root
 
     MemoryEntity
       .where(id: RelationSemantics.descendant_ids(root.id).to_a)
       .joins(:memory_observations)
-      .where(memory_observations: { source: SOURCE_NAME })
+      .where(memory_observations: { source: source })
       .where("memory_observations.content LIKE ?", "Defined at %")
       .distinct
   end
@@ -58,7 +58,7 @@ module GraphifyRescan
   #                      parent through the import's own entity mapping so
   #                      a move proposal never targets a same-named entity
   #                      in another project.
-  def self.payload_index(import_data)
+  def self.payload_index(import_data, source: SOURCE_NAME)
     index = { keys: Set.new,
               obs: Hash.new { |hash, key| hash[key] = Set.new },
               tree_parents: {},
@@ -76,7 +76,7 @@ module GraphifyRescan
           index[:tree_parent_paths][key] ||= parent_path
         end
         Array(node["observations"] || node[:observations]).each do |obs|
-          next unless (obs["source"] || obs[:source]) == SOURCE_NAME
+          next if source.present? && (obs["source"] || obs[:source]) != source
 
           content = (obs["content"] || obs[:content]).to_s
           index[:obs][key] << content if content.match?(PROVENANCE_PATTERN)
@@ -95,11 +95,11 @@ module GraphifyRescan
   #                    same file has a replacement (then `supersede!`, so
   #                    merge de-dup sees the new content and stays quiet)
   # Returns nil when the subtree holds no graphify entities (first import).
-  def self.observation_diff!(root, import_data)
-    stored = stored_entities(root)
+  def self.observation_diff!(root, import_data, source: SOURCE_NAME)
+    stored = stored_entities(root, source: source)
     return nil unless stored.exists?
 
-    index = payload_index(import_data)
+    index = payload_index(import_data, source: source)
     result = { vanished: [], obsoleted: 0, superseded: 0 }
 
     stored.find_each do |entity|
@@ -109,19 +109,19 @@ module GraphifyRescan
       replacement_by_file = new_contents.index_by { |c| PROVENANCE_PATTERN.match(c)[1] }
 
       entity.memory_observations
-          .where(status: MemoryObservation::ACTIVE_STATUS, source: SOURCE_NAME)
+          .where(status: MemoryObservation::ACTIVE_STATUS, source: source)
           .where("content LIKE ?", "Defined at %")
           .find_each do |obs|
         if !present
-          obs.mark_obsolete!(reason: "removed in graphify rescan")
+          obs.mark_obsolete!(reason: "removed in #{source} rescan")
           result[:obsoleted] += 1
         elsif !new_contents.include?(obs.content)
           replacement = replacement_by_file[PROVENANCE_PATTERN.match(obs.content)[1]]
           if replacement
-            obs.supersede!(content: replacement, reason: "moved in graphify rescan")
+            obs.supersede!(content: replacement, reason: "moved in #{source} rescan")
             result[:superseded] += 1
           else
-            obs.mark_obsolete!(reason: "removed in graphify rescan")
+            obs.mark_obsolete!(reason: "removed in #{source} rescan")
             result[:obsoleted] += 1
           end
         end
@@ -136,15 +136,15 @@ module GraphifyRescan
   # graphify-sourced edges absent from the new payload — but ONLY when
   # both endpoints are still present (a vanished endpoint is already
   # covered by its delete_entity item). Never auto-deletes.
-  def self.relation_diff(import_data, stored_ids)
+  def self.relation_diff(import_data, stored_ids, source: SOURCE_NAME)
     return [] if stored_ids.blank?
 
-    index = payload_index(import_data)
+    index = payload_index(import_data, source: source)
     new_edges = edge_keys(import_data["relations"] || import_data[:relations])
 
     MemoryRelation
       .where(from_entity_id: stored_ids)
-      .where("JSON_UNQUOTE(JSON_EXTRACT(properties, '$.source')) = ?", SOURCE_NAME)
+      .where("JSON_UNQUOTE(JSON_EXTRACT(properties, '$.source')) = ?", source)
       .includes(:from_entity, :to_entity)
       .filter_map do |relation|
         from_key = [ relation.from_entity.entity_type.to_s.downcase, relation.from_entity.name.to_s.downcase ]
@@ -211,15 +211,16 @@ module GraphifyRescan
   # @param relations [Array<MemoryRelation>] → delete_relation items
   # @param reparents [Array<Hash>] {entity_id, parent_id} → reparent_entity
   # @return [Array<MaintenanceReportRow>] the rows actually created
-  def self.seed_review(entities:, relations:, reparents: [], source_ref:)
-    items = build_review_items(entities: entities, relations: relations, reparents: reparents)
+  def self.seed_review(entities:, relations:, reparents: [], source_ref:, source: SOURCE_NAME)
+    items = build_review_items(entities: entities, relations: relations, reparents: reparents,
+                               source: source)
     fresh_items = fresh_review_items(items)
     retire_superseded_reparents(fresh_items)
     return [] if fresh_items.empty?
 
     CompactionReviewService.seed_report(
       report_type: "scan_review",
-      source: SOURCE_NAME,
+      source: source,
       source_ref: source_ref,
       items: fresh_items
     )
@@ -229,14 +230,14 @@ module GraphifyRescan
   # keys (`payload["entity_id"]` etc.), so nesting under "payload" would
   # render blank targets. `signature_for` digs flat-then-nested, so the
   # signatures match either shape.
-  def self.build_review_items(entities:, relations:, reparents:)
+  def self.build_review_items(entities:, relations:, reparents:, source: SOURCE_NAME)
     operator_counts = MemoryObservation.active
                                        .where(memory_entity_id: entities.map(&:id))
-                                       .where.not(source: SOURCE_NAME)
+                                       .where.not(source: source)
                                        .group(:memory_entity_id).count
     items = entities.map do |entity|
       operator_obs = operator_counts[entity.id].to_i
-      reason = "removed in graphify rescan"
+      reason = "removed in #{source} rescan"
       reason += " — still has #{operator_obs} active non-graphify observation#{'s' if operator_obs != 1}" if operator_obs.positive?
       {
         kind: "delete_entity",
@@ -301,16 +302,16 @@ module GraphifyRescan
   #                                  payload now assigns a different parent
   #                                  than the proposal, or the stored parent
   #                                  already matches (move already satisfied)
-  def self.dismiss_restored_items(stored_ids:, import_data:, entity_mapping: {})
+  def self.dismiss_restored_items(stored_ids:, import_data:, entity_mapping: {}, source: SOURCE_NAME)
     return if stored_ids.blank?
 
-    index = payload_index(import_data)
+    index = payload_index(import_data, source: source)
     tree_parent_paths = index[:tree_parent_paths]
     new_edges = edge_keys(import_data["relations"] || import_data[:relations])
     stored = MemoryEntity.where(id: stored_ids).to_a
     present_ids = stored.filter_map { |e| e.id if index[:keys].include?(entity_key(e)) }.to_set
 
-    rows = graphify_review_rows.to_a
+    rows = graphify_review_rows(source: source).to_a
     relation_rows = rows.select { |r| r.kind == "delete_relation" }
     reparent_rows = rows.select { |r| r.kind == "reparent_entity" }
 
@@ -354,16 +355,16 @@ module GraphifyRescan
       next unless stale
 
       row.update!(status: "dismissed", dismissed_at: Time.current,
-                  resolution_reason: "stale in graphify rescan")
+                  resolution_reason: "stale in #{source} rescan")
     end
   end
 
   # The pending review rows this scanner owns — scoped by the report's
   # `data.source` so proposals seeded by other scanners stay untouched.
-  def self.graphify_review_rows
+  def self.graphify_review_rows(source: SOURCE_NAME)
     MaintenanceReportRow.by_report_type("scan_review").pending
                         .joins(:maintenance_report)
-                        .where("JSON_UNQUOTE(JSON_EXTRACT(maintenance_reports.data, '$.source')) = ?", SOURCE_NAME)
+                        .where("JSON_UNQUOTE(JSON_EXTRACT(maintenance_reports.data, '$.source')) = ?", source)
   end
   private_class_method :graphify_review_rows
 

@@ -21,13 +21,22 @@ class GraphifyImporter
   # Graphify link relations that define the containment tree.
   CONTAINMENT_RELATIONS = %w[contains method defines].freeze
 
-  # Graphify link relations mapped to canonical code edges.
+  # Graphify link relations mapped to canonical code edges. Producers are
+  # pluggable — the Rails AST extractor emits the same node-link shape plus
+  # Rails-DSL relation names, which map onto the vocabulary's canonical types.
   EDGE_RELATION_MAPPINGS = {
     "calls" => "calls",
     "indirect_call" => "calls",
     "inherits" => "inherits",
     "mixes_in" => "mixes_in",
-    "imports_from" => "depends_on"
+    "imports_from" => "depends_on",
+    "belongs_to" => "belongs_to",
+    "has_many" => "has_many",
+    "has_one" => "has_one",
+    "has_and_belongs_to_many" => "has_many",
+    "delegates_to" => "delegates_to",
+    "routes_to" => "routes_to",
+    "same_type_as" => "relates_to"
   }.freeze
 
   AMBIGUOUS_CONFIDENCE = "AMBIGUOUS"
@@ -263,14 +272,24 @@ class GraphifyImporter
         "version" => "1.0",
         "exported_at" => Time.current.iso8601,
         # Marks the payload as rescan-capable: on a re-import the executor
-        # reconciles stored graphify provenance instead of only merging.
-        "rescan" => true,
+        # reconciles stored provenance owned by THIS producer instead of
+        # only merging (string marker = the producer's diff bucket).
+        "rescan" => producer_name,
         "root_nodes" => [ tree ],
         "relations" => relations
       },
       ambiguous_relations: ambiguous,
       stats: build_stats(relations, ambiguous)
     )
+  end
+
+  # The producer name stamped on provenance observations, relation
+  # `properties.source`, and the rescan marker. Producers declare
+  # themselves via top-level "producer" in graph.json (the Rails AST
+  # extractor emits "rails_ast_extractor"); anything else stays
+  # "graphify" so A3 semantics are unchanged for real graphify output.
+  def producer_name
+    @producer_name ||= @data["producer"].presence || SOURCE_NAME
   end
 
   private
@@ -335,6 +354,15 @@ class GraphifyImporter
   def classify(node)
     label = node["label"].to_s
     return nil if label.blank?
+
+    # Producer-provided type hint (e.g. the Rails extractor marks `Route`
+    # nodes — a label like "GET /swimmers/:id" would otherwise classify as
+    # Class). Only known vocabulary types are honored; unknown hints fall
+    # through to the label heuristics.
+    hinted = node["entity_type"].to_s
+    if hinted.present? && GraphVocabulary::ENTITY_TYPES.include?(hinted)
+      return { name: label, entity_type: hinted }
+    end
 
     source_file = node["source_file"].to_s
 
@@ -496,9 +524,9 @@ class GraphifyImporter
   def provenance_observation(content)
     {
       "content" => content,
-      "source" => SOURCE_NAME,
+      "source" => producer_name,
       "confidence" => 1.0,
-      "tags" => [ "graphify", "provenance" ]
+      "tags" => [ producer_name, "provenance" ]
     }
   end
 
@@ -540,7 +568,7 @@ class GraphifyImporter
         "weight" => edge["weight"],
         "confidence" => edge["confidence_score"],
         "properties" => {
-          "source" => SOURCE_NAME,
+          "source" => producer_name,
           "provenance" => edge["confidence"],
           "source_file" => edge["source_file"],
           "source_location" => edge["source_location"],
