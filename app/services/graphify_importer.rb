@@ -97,6 +97,7 @@ class GraphifyImporter
     )
   end
 
+
   # Auto-accept decision map for headless imports. Mirrors operator review:
   # children take the matcher-suggested action — except `add_relation` on a
   # child that already has a `part_of` parent, which would silently steal the
@@ -157,6 +158,10 @@ class GraphifyImporter
   # parent resolves to a different entity — or creates a fresh one — the
   # match's real parent belongs to another tree).
   def self.foreign_subtree_paths(match_results, by_path)
+    root_match = match_results.find { |m| !m.is_child }
+    root_id = (exact_root_match(root_match)&.id if root_match)
+    same_tree_ids = nil
+
     match_results.each_with_object(Set.new) do |match, foreign|
       next unless match.is_child && already_parented?(match.exact_match)
 
@@ -174,7 +179,20 @@ class GraphifyImporter
       end
       actual_id = MemoryRelation.where(from_entity_id: match.exact_match.id,
                                        relation_type: "part_of").pick(:to_entity_id)
-      foreign << match.node_path unless expected_id.present? && expected_id == actual_id
+      next if expected_id.present? && expected_id == actual_id
+
+      # The child MOVED inside the same project tree when its real parent is
+      # still under this root's part_of subtree — not a foreign subtree.
+      # Excluding it would drop its new provenance (A3 rescan just obsoleted
+      # the old one); `skip` keeps it importable and the rescan diff queues
+      # a `reparent_entity` item so the operator can apply the move.
+      same_tree_ids ||=
+        if root_id
+          Set.new([ root_id ]).merge(RelationSemantics.descendant_ids(root_id).to_a)
+        else
+          Set.new
+        end
+      foreign << match.node_path unless same_tree_ids.include?(actual_id)
     end
   end
   private_class_method :foreign_subtree_paths
@@ -244,6 +262,9 @@ class GraphifyImporter
       import_data: {
         "version" => "1.0",
         "exported_at" => Time.current.iso8601,
+        # Marks the payload as rescan-capable: on a re-import the executor
+        # reconciles stored graphify provenance instead of only merging.
+        "rescan" => true,
         "root_nodes" => [ tree ],
         "relations" => relations
       },

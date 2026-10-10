@@ -68,6 +68,11 @@ class ApplyMaintenanceReviewTool < ApplicationTool
         message,
         next_move: "Call `list_maintenance_review` to get a valid item_id, then retry `apply_maintenance_review`."
       )
+    elsif message.match?(/not actionable/i)
+      raise FastMcp::Tool::InvalidArgumentsError,
+            "#{message}. Dismissed or approved suggestions are not actionable — " \
+            "call `list_maintenance_review` to inspect the queue; restore a dismissed " \
+            "suggestion only if it is still valid (a stale or approved row must not be re-applied)."
     elsif message.match?(/required|invalid|cannot|protected|different types|into itself|cycle/i)
       raise FastMcp::Tool::InvalidArgumentsError,
             "#{message}. Correct the review payload or `action_params` and retry `apply_maintenance_review`, " \

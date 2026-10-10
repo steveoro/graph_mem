@@ -17,9 +17,15 @@ class ImportExecutionStrategy
     :entities_merged,
     :entities_skipped,
     :observations_created,
+    :observations_obsoleted,
+    :observations_superseded,
     :relations_created,
     :relations_unresolved,
     :relations_skipped,
+    :rescan,
+    :rescan_entities_flagged,
+    :rescan_relations_flagged,
+    :rescan_reparents_flagged,
     :errors,
     keyword_init: true
   ) do
@@ -30,9 +36,15 @@ class ImportExecutionStrategy
         entities_merged: entities_merged,
         entities_skipped: entities_skipped,
         observations_created: observations_created,
+        observations_obsoleted: observations_obsoleted,
+        observations_superseded: observations_superseded,
         relations_created: relations_created,
         relations_unresolved: relations_unresolved,
         relations_skipped: relations_skipped,
+        rescan: rescan,
+        rescan_entities_flagged: rescan_entities_flagged,
+        rescan_relations_flagged: rescan_relations_flagged,
+        rescan_reparents_flagged: rescan_reparents_flagged,
         errors: errors
       }
     end
@@ -46,9 +58,18 @@ class ImportExecutionStrategy
     @entities_merged = 0
     @entities_skipped = 0
     @observations_created = 0
+    @observations_obsoleted = 0
+    @observations_superseded = 0
     @relations_created = 0
     @relations_unresolved = 0
     @relations_skipped = 0
+    @rescan_active = false
+    @rescan_vanished_entities = []
+    @rescan_vanished_relations = []
+    @rescan_reparents = []
+    @rescan_entities_flagged = 0
+    @rescan_relations_flagged = 0
+    @rescan_reparents_flagged = 0
     @errors = []
     @entity_mapping = {} # Maps import node paths to created/matched entity IDs
     @relation_endpoint_ids = Set.new # endpoints of every relation created
@@ -88,6 +109,23 @@ class ImportExecutionStrategy
           ActiveRecord::Base.transaction do
             root_nodes = import_data["root_nodes"] || import_data[:root_nodes] || []
 
+            # A3 rescan: Graphify payloads carry "rescan" — when the root's
+            # subtree already holds graphify-sourced entities this run is a
+            # re-scan, so reconcile stored provenance BEFORE the merge adds
+            # new observations (keeps supersede/dedup clean), inside the same
+            # transaction. See GraphifyRescan's design-decision comment.
+            rescan_root = rescan_root_entity(import_data, decision_map) if import_data["rescan"] || import_data[:rescan]
+            if rescan_root
+              diff = GraphifyRescan.observation_diff!(rescan_root, import_data)
+              if diff
+                @rescan_active = true
+                @observations_obsoleted = diff[:obsoleted]
+                @observations_superseded = diff[:superseded]
+                @rescan_vanished_entities = diff[:vanished]
+                @rescan_stored_ids = GraphifyRescan.stored_entities(rescan_root).pluck(:id)
+              end
+            end
+
             root_nodes.each_with_index do |root_node, index|
               path = index.to_s
               decision = decision_map[path]
@@ -101,6 +139,20 @@ class ImportExecutionStrategy
             # name+type and resolved through the same canonicalization as nodes.
             apply_relations(import_data["relations"] || import_data[:relations])
 
+            # Rescan phase 2: with all edges applied, stored graphify edges
+            # absent from the payload are collected for review — never
+            # auto-deleted (relations have no status column) — along with
+            # same-tree moves (reparent_entity proposals: unattended imports
+            # never re-parent, so the operator applies the move).
+            if @rescan_active
+              @rescan_vanished_relations = GraphifyRescan.relation_diff(
+                import_data, @rescan_stored_ids
+              )
+              @rescan_reparents = GraphifyRescan.reparent_diff(
+                import_data, @rescan_stored_ids, @entity_mapping
+              )
+            end
+
             raise ActiveRecord::Rollback if @errors.any?
           end
         end
@@ -111,15 +163,48 @@ class ImportExecutionStrategy
 
     @progress_tracker&.complete!(message: "Import completed", counters: progress_counters)
 
+    # Vanished entities/edges (and same-tree moves) become one-click
+    # scan_review proposals only after the import succeeded — same rule as
+    # ambiguous-edge seeding. A proposal whose target this scan brought
+    # BACK is retired at the same time, so a stale delete item can never
+    # be applied to live data.
+    if @errors.empty? && @rescan_active
+      if @rescan_vanished_entities.any? || @rescan_vanished_relations.any? || @rescan_reparents.any?
+        # Flagged counts cover NEW proposals only: re-runs whose items are
+        # already pending dedupe to zero instead of re-reporting the same
+        # flags forever.
+        seeded_rows = GraphifyRescan.seed_review(
+          entities: @rescan_vanished_entities,
+          relations: @rescan_vanished_relations,
+          reparents: @rescan_reparents,
+          source_ref: rescan_source_ref(import_data)
+        )
+        @rescan_entities_flagged = seeded_rows.count { |row| row.kind == "delete_entity" }
+        @rescan_relations_flagged = seeded_rows.count { |row| row.kind == "delete_relation" }
+        @rescan_reparents_flagged = seeded_rows.count { |row| row.kind == "reparent_entity" }
+      end
+      GraphifyRescan.dismiss_restored_items(stored_ids: @rescan_stored_ids, import_data: import_data,
+                                            entity_mapping: @entity_mapping)
+    end
+
     report = ImportReport.new(
       success: @errors.empty?,
       entities_created: @entities_created,
       entities_merged: @entities_merged,
       entities_skipped: @entities_skipped,
       observations_created: @observations_created,
+      # Rescan fields are gated on success: on the ActiveRecord::Rollback
+      # path the diff mutations rolled back with the transaction and no
+      # review items were seeded — a failed import reports none of it.
+      observations_obsoleted: @errors.empty? ? @observations_obsoleted : 0,
+      observations_superseded: @errors.empty? ? @observations_superseded : 0,
       relations_created: @relations_created,
       relations_unresolved: @relations_unresolved,
       relations_skipped: @relations_skipped,
+      rescan: @errors.empty? && @rescan_active,
+      rescan_entities_flagged: @rescan_entities_flagged,
+      rescan_relations_flagged: @rescan_relations_flagged,
+      rescan_reparents_flagged: @rescan_reparents_flagged,
       errors: @errors
     )
     enqueue_embedding_backfill if report.success
@@ -655,11 +740,46 @@ class ImportExecutionStrategy
       entities_merged: 0,
       entities_skipped: 0,
       observations_created: 0,
+      observations_obsoleted: 0,
+      observations_superseded: 0,
       relations_created: 0,
       relations_unresolved: 0,
       relations_skipped: 0,
+      # A rolled-back import never committed rescan mutations (the phase-1
+      # diff runs inside the same transaction) and never seeded review
+      # items — the failure report must not claim them.
+      rescan: false,
+      rescan_entities_flagged: 0,
+      rescan_relations_flagged: 0,
+      rescan_reparents_flagged: 0,
       errors: @errors
     )
+  end
+
+  # Resolves the entity the import's root node would merge into. The rescan
+  # diff only runs when the root already exists AND has graphify-sourced
+  # descendants — i.e. this is genuinely a second scan of the same project.
+  # When the operator picked a merge target, THAT entity is the root to
+  # diff — its subtree is the one being re-scanned, not the payload
+  # namesake's (which could be a different project entirely).
+  def rescan_root_entity(import_data, decision_map)
+    root_decision = decision_map["0"] || {}
+    if %w[merge add_relation].include?(root_decision[:action] || root_decision["action"]) &&
+       (root_decision[:target_id] || root_decision["target_id"]).present?
+      target = MemoryEntity.find_by(id: root_decision[:target_id] || root_decision["target_id"])
+      return target if target
+    end
+
+    root_payload = Array(import_data["root_nodes"] || import_data[:root_nodes]).first
+    return nil unless root_payload.is_a?(Hash)
+
+    find_entity_by_name_and_type(root_payload["name"] || root_payload[:name],
+                                 root_payload["entity_type"] || root_payload[:entity_type])
+  end
+
+  def rescan_source_ref(import_data)
+    root_payload = Array(import_data["root_nodes"] || import_data[:root_nodes]).first || {}
+    root_payload["name"] || root_payload[:name]
   end
 
   def resolve_parent_id(decision, path)

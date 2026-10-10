@@ -31,6 +31,13 @@ namespace :graphify do
     result = GraphifyImporter.new(File.read(path), project_name: project).translate
     puts "Translated: #{result.stats.to_json}"
 
+    # RESCAN=0 opts out of the incremental-rescan pass: the import stays
+    # purely additive (no provenance obsoletion, no vanished-item review).
+    if ENV["RESCAN"] == "0"
+      result.import_data.delete("rescan")
+      puts "RESCAN=0: rescan pass disabled for this run."
+    end
+
     match_result = ImportMatchingStrategy.new.match(result.import_data)
     abort "Matching failed: #{match_result[:error]}" unless match_result[:success]
 
