@@ -340,8 +340,11 @@ module GraphifyRescan
       when "reparent_entity"
                 entity = rep_entities[item_field(row, "entity_id").to_i]
                 # Rows about entities outside this scan's subtree belong
-                # to another project's queue. A missing entity (deleted)
-                # can never apply anywhere → retire it.
+                # to another project's queue and are left alone. A missing
+                # entity (deleted) can never apply anywhere, so ANY
+                # project's rescan retires the row — that is intentional:
+                # the proposal is permanently unapplyable regardless of
+                # which subtree it once belonged to.
                 next if entity && !stored_ids.include?(entity.id)
 
                 parent = rep_entities[item_field(row, "parent_id").to_i]
