@@ -183,7 +183,8 @@ class ImportExecutionStrategy
         @rescan_relations_flagged = seeded_rows.count { |row| row.kind == "delete_relation" }
         @rescan_reparents_flagged = seeded_rows.count { |row| row.kind == "reparent_entity" }
       end
-      GraphifyRescan.dismiss_restored_items(stored_ids: @rescan_stored_ids, import_data: import_data)
+      GraphifyRescan.dismiss_restored_items(stored_ids: @rescan_stored_ids, import_data: import_data,
+                                            entity_mapping: @entity_mapping)
     end
 
     report = ImportReport.new(

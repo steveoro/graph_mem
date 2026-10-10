@@ -301,11 +301,11 @@ module GraphifyRescan
   #                                  payload now assigns a different parent
   #                                  than the proposal, or the stored parent
   #                                  already matches (move already satisfied)
-  def self.dismiss_restored_items(stored_ids:, import_data:)
+  def self.dismiss_restored_items(stored_ids:, import_data:, entity_mapping: {})
     return if stored_ids.blank?
 
     index = payload_index(import_data)
-    tree_parents = index[:tree_parents]
+    tree_parent_paths = index[:tree_parent_paths]
     new_edges = edge_keys(import_data["relations"] || import_data[:relations])
     stored = MemoryEntity.where(id: stored_ids).to_a
     present_ids = stored.filter_map { |e| e.id if index[:keys].include?(entity_key(e)) }.to_set
@@ -339,8 +339,14 @@ module GraphifyRescan
                 end
       when "reparent_entity"
                 entity = rep_entities[item_field(row, "entity_id").to_i]
+                # Rows about entities outside this scan's subtree belong
+                # to another project's queue. A missing entity (deleted)
+                # can never apply anywhere → retire it.
+                next if entity && !stored_ids.include?(entity.id)
+
                 parent = rep_entities[item_field(row, "parent_id").to_i]
-                reparent_row_stale?(entity, parent, present_ids, stored_ids, tree_parents, rep_stored_parents)
+                reparent_row_stale?(entity, parent, present_ids, tree_parent_paths,
+                                    rep_stored_parents, entity_mapping)
       end
       next unless stale
 
@@ -360,19 +366,21 @@ module GraphifyRescan
 
   # A reparent proposal stays valid only while all of these hold:
   # the entity is still in the payload, the payload still asks for this
-  # exact parent, and the stored parent edge has not caught up yet.
-  # Rows about entities OUTSIDE this scan's subtree are never touched —
-  # they belong to another project's pending queue.
-  def self.reparent_row_stale?(entity, parent, present_ids, stored_ids, tree_parents, rep_stored_parents)
-    return false unless entity && stored_ids.include?(entity.id)
-    return true unless parent
+  # exact parent (compared by resolved entity id — the parent node may
+  # merge onto a differently-named entity, so name keys are not enough),
+  # and the stored parent edge has not caught up yet.
+  # The caller scopes rows to this scan's subtree first; a missing entity
+  # here means it was deleted → the proposal can never apply → stale.
+  def self.reparent_row_stale?(entity, parent, present_ids, tree_parent_paths,
+                               rep_stored_parents, entity_mapping)
+    return true unless entity && parent
     return true unless present_ids.include?(entity.id)
 
-    payload_parent_key = tree_parents[entity_key(entity)]
-    return true if payload_parent_key.nil? || payload_parent_key != entity_key(parent)
+    resolved_parent_id = entity_mapping[tree_parent_paths[entity_key(entity)]]
+    return true if resolved_parent_id && resolved_parent_id != parent.id
+    return false if resolved_parent_id.nil? # payload parent unresolved → cannot verify → keep
 
-    stored_parent_keys = Array(rep_stored_parents[entity.id]).map { |rel| entity_key(rel.to_entity) }
-    stored_parent_keys.include?(payload_parent_key)
+    Array(rep_stored_parents[entity.id]).map(&:to_entity_id).include?(resolved_parent_id)
   end
   private_class_method :reparent_row_stale?
 

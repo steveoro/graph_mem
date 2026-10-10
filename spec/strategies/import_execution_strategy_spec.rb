@@ -1332,6 +1332,54 @@ RSpec.describe ImportExecutionStrategy, type: :model do
       expect(MaintenanceReportRow.by_report_type('scan_review').where(kind: 'reparent_entity').count).to eq(1)
     end
 
+    it "leaves another project's pending reparent proposal alone" do
+      foreign = MemoryEntity.create!(name: 'Alien', entity_type: 'Class')
+      foreign_parent = MemoryEntity.create!(name: 'elsewhere.rb', entity_type: 'File')
+      stale = stale_scan_row(
+        kind: 'reparent_entity',
+        payload: { 'entity_id' => foreign.id, 'parent_id' => foreign_parent.id },
+        signature_payload: { entity_id: foreign.id, parent_id: foreign_parent.id }
+      )
+
+      strategy.execute(same_payload, merge_decisions)
+
+      expect(stale.reload.status).to eq('active')
+    end
+
+    it 'retires a reparent proposal whose entity was deleted' do
+      ghost = MemoryEntity.create!(name: 'Ghost', entity_type: 'Class')
+      MemoryRelation.create!(from_entity: ghost, to_entity: project, relation_type: 'part_of')
+      MemoryObservation.create!(memory_entity: ghost, content: 'Defined at lib/ghost.rb', source: 'graphify')
+      stale = stale_scan_row(
+        kind: 'reparent_entity',
+        payload: { 'entity_id' => ghost.id, 'parent_id' => file_entity.id },
+        signature_payload: { entity_id: ghost.id, parent_id: file_entity.id }
+      )
+      ghost.destroy!
+
+      strategy.execute(same_payload, merge_decisions)
+
+      expect(stale.reload.status).to eq('dismissed')
+    end
+
+    it 'resolves the reparent target through the import mapping, not the namesake' do
+      payload, decisions = moved_foo_setup
+      bar_namesake = MemoryEntity.find_by!(name: 'bar.rb', entity_type: 'File') # moved_foo_setup's
+      # The bar.rb payload node merges onto a DIFFERENTLY-named entity:
+      # a global name+type lookup would point the proposal at bar_namesake.
+      moved_here = MemoryEntity.create!(name: 'moved_here.rb', entity_type: 'File')
+      decisions = decisions.map do |d|
+        d[:node_path] == '0.children.1' ? d.merge(action: 'merge', target_id: moved_here.id) : d
+      end
+
+      report = strategy.execute(payload, decisions)
+
+      row = MaintenanceReportRow.by_report_type('scan_review').pending.find_by(kind: 'reparent_entity')
+      expect(report.rescan_reparents_flagged).to eq(1)
+      expect(row.effective_payload['parent_id']).to eq(moved_here.id)
+      expect(row.effective_payload['parent_id']).not_to eq(bar_namesake.id)
+    end
+
     it 'keeps a pending delete proposal when the target is still absent' do
       stale = stale_scan_row(
         kind: 'delete_entity',

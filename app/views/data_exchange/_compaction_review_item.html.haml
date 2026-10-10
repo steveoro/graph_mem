@@ -67,16 +67,16 @@
               Candidates: #{payload["candidate_ids"].first(5).map { |id| "##{id}" }.join(', ')}
           = render "entity_search_select", row: row, field_name: "target_entity_id", label_text: "Target entity", current_id: target_id, current_name: target_name, select_id: "target-entity-select-#{row.row_uuid}", search_id: "target-entity-search-#{row.row_uuid}"
         - when "reparent_entity"
-          - entity_id = payload["entity_id"] || payload["node_id"]
-          - entity_name = payload["entity_name"] || MemoryEntity.find_by(id: entity_id)&.name
-          - parent_id = payload["parent_id"]
+          - entity_id = payload["entity_id"] || payload["node_id"] || payload.dig("payload", "entity_id") || payload.dig("payload", "node_id")
+          - entity_name = payload["entity_name"] || payload.dig("payload", "entity_name") || MemoryEntity.find_by(id: entity_id)&.name
+          - parent_id = payload["parent_id"] || payload.dig("payload", "parent_id")
           - parent_name = MemoryEntity.find_by(id: parent_id)&.name || payload["parent_name"]
           %p.text-sm.mb-2
             %strong= entity_name
             %span.text-gray-500= " (#{payload['entity_type']} ##{entity_id})"
           = render "entity_search_select", row: row, field_name: "parent_id", label_text: "Parent project", current_id: parent_id, current_name: parent_name, select_id: "parent-select-#{row.row_uuid}", search_id: "parent-search-#{row.row_uuid}"
         - when "delete_relation"
-          - relation_id = payload["relation_id"]
+          - relation_id = payload["relation_id"] || payload.dig("payload", "relation_id")
           - relation = MemoryRelation.find_by(id: relation_id)
           %p.text-sm.mb-2
             %strong Delete relation
@@ -85,8 +85,8 @@
             %p.text-xs.text-gray-600
               #{relation.from_entity&.name} → #{relation.to_entity&.name} (#{relation.relation_type})
         - when "delete_entity"
-          - entity_id = payload["entity_id"]
-          - entity_name = payload["entity_name"] || MemoryEntity.find_by(id: entity_id)&.name
+          - entity_id = payload["entity_id"] || payload.dig("payload", "entity_id")
+          - entity_name = payload["entity_name"] || payload.dig("payload", "entity_name") || MemoryEntity.find_by(id: entity_id)&.name
           %p.text-sm.mb-2
             %strong Delete entity
             %span.text-gray-500= " ##{entity_id}"
