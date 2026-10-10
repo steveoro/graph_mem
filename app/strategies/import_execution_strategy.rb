@@ -149,7 +149,7 @@ class ImportExecutionStrategy
                 import_data, @rescan_stored_ids
               )
               @rescan_reparents = GraphifyRescan.reparent_diff(
-                import_data, @rescan_stored_ids
+                import_data, @rescan_stored_ids, @entity_mapping
               )
             end
 

@@ -1118,7 +1118,7 @@ RSpec.describe ImportExecutionStrategy, type: :model do
 
       row = MaintenanceReportRow.by_report_type('scan_review').pending.find_by(kind: 'delete_entity')
       expect(row).to be_present
-      expect(row.effective_payload.dig('payload', 'entity_id')).to eq(class_entity.id)
+      expect(row.effective_payload['entity_id']).to eq(class_entity.id)
     end
 
     it 'flags a removed graphify edge as a delete_relation review item' do
@@ -1132,7 +1132,7 @@ RSpec.describe ImportExecutionStrategy, type: :model do
 
       row = MaintenanceReportRow.by_report_type('scan_review').pending.find_by(kind: 'delete_relation')
       expect(row).to be_present
-      expect(row.effective_payload.dig('payload', 'relation_id')).to eq(edge.id)
+      expect(row.effective_payload['relation_id']).to eq(edge.id)
     end
 
     it 'supersedes drifted provenance and lets merge dedup stay quiet' do
@@ -1215,8 +1215,8 @@ RSpec.describe ImportExecutionStrategy, type: :model do
       expect(report.rescan_reparents_flagged).to eq(1)
       row = MaintenanceReportRow.by_report_type('scan_review').pending.find_by(kind: 'reparent_entity')
       expect(row).to be_present
-      expect(row.effective_payload.dig('payload', 'entity_id')).to eq(class_entity.id)
-      expect(row.effective_payload.dig('payload', 'parent_id')).to eq(other_file.id)
+      expect(row.effective_payload['entity_id']).to eq(class_entity.id)
+      expect(row.effective_payload['parent_id']).to eq(other_file.id)
       expect(part2.reload).to be_present # unattended imports never re-parent
     end
 

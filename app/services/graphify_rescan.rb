@@ -52,30 +52,39 @@ module GraphifyRescan
   # Indexes a translated payload for diffing:
   #   keys:         Set of [entity_type.downcase, name.downcase] per node
   #   obs:          {key => Set["Defined at …"]} provenance contents
-  #   tree_parents: {child_key => parent_key} containment map (roots have
-  #                 no entry)
+  #   tree_parents:      {child_key => parent_key} containment map (roots
+  #                      have no entry)
+  #   tree_parent_paths: {child_key => parent node_path} — resolves the
+  #                      parent through the import's own entity mapping so
+  #                      a move proposal never targets a same-named entity
+  #                      in another project.
   def self.payload_index(import_data)
     index = { keys: Set.new,
               obs: Hash.new { |hash, key| hash[key] = Set.new },
-              tree_parents: {} }
-    walk = lambda do |nodes, parent_key|
-      Array(nodes).each do |node|
+              tree_parents: {},
+              tree_parent_paths: {} }
+    walk = lambda do |nodes, parent_key, parent_path|
+      Array(nodes).each_with_index do |node, node_index|
         next unless node.is_a?(Hash)
 
+        path = parent_path ? "#{parent_path}.children.#{node_index}" : node_index.to_s
         key = [ (node["entity_type"] || node[:entity_type]).to_s.downcase,
                 (node["name"] || node[:name]).to_s.downcase ]
         index[:keys] << key
-        index[:tree_parents][key] ||= parent_key if parent_key
+        if parent_key
+          index[:tree_parents][key] ||= parent_key
+          index[:tree_parent_paths][key] ||= parent_path
+        end
         Array(node["observations"] || node[:observations]).each do |obs|
           next unless (obs["source"] || obs[:source]) == SOURCE_NAME
 
           content = (obs["content"] || obs[:content]).to_s
           index[:obs][key] << content if content.match?(PROVENANCE_PATTERN)
         end
-        walk.call(node["children"] || node[:children], key)
+        walk.call(node["children"] || node[:children], key, path)
       end
     end
-    walk.call(import_data["root_nodes"] || import_data[:root_nodes], nil)
+    walk.call(import_data["root_nodes"] || import_data[:root_nodes], nil, nil)
     index
   end
 
@@ -153,7 +162,7 @@ module GraphifyRescan
   # `reparent_entity` review item (its apply swaps the parent edge in one
   # transaction). Cross-tree cases stay excluded by the import itself.
   # @return [Array<Hash>] reparent items {entity_id, parent_id, entity_name}
-  def self.reparent_diff(import_data, stored_ids)
+  def self.reparent_diff(import_data, stored_ids, entity_mapping)
     return [] if stored_ids.blank?
 
     index = payload_index(import_data)
@@ -180,10 +189,15 @@ module GraphifyRescan
       # only a genuinely different stored parent counts as a move.
       next if stored_parent_keys.empty? || stored_parent_keys.include?(parent_key)
 
-      new_parent = ImportEntityResolver.find_by_name_and_type(parent_key[1], parent_key[0])
-      next unless new_parent
+      # Resolve the new parent through the import's own node_path →
+      # entity mapping: the payload parent may have merged onto a
+      # different entity than a global name+type lookup would find, and a
+      # same-named entity in another project is never a valid target.
+      parent_path = index[:tree_parent_paths][child_key]
+      new_parent_id = entity_mapping[parent_path]
+      next unless new_parent_id
 
-      { entity_id: entity.id, parent_id: new_parent.id, entity_name: entity.name }
+      { entity_id: entity.id, parent_id: new_parent_id, entity_name: entity.name }
     end
   end
 
@@ -198,6 +212,24 @@ module GraphifyRescan
   # @param reparents [Array<Hash>] {entity_id, parent_id} → reparent_entity
   # @return [Array<MaintenanceReportRow>] the rows actually created
   def self.seed_review(entities:, relations:, reparents: [], source_ref:)
+    items = build_review_items(entities: entities, relations: relations, reparents: reparents)
+    fresh_items = fresh_review_items(items)
+    retire_superseded_reparents(fresh_items)
+    return [] if fresh_items.empty?
+
+    CompactionReviewService.seed_report(
+      report_type: "scan_review",
+      source: SOURCE_NAME,
+      source_ref: source_ref,
+      items: fresh_items
+    )
+  end
+
+  # Proposal items in FLAT shape — the review form reads top-level payload
+  # keys (`payload["entity_id"]` etc.), so nesting under "payload" would
+  # render blank targets. `signature_for` digs flat-then-nested, so the
+  # signatures match either shape.
+  def self.build_review_items(entities:, relations:, reparents:)
     operator_counts = MemoryObservation.active
                                        .where(memory_entity_id: entities.map(&:id))
                                        .where.not(source: SOURCE_NAME)
@@ -208,72 +240,57 @@ module GraphifyRescan
       reason += " — still has #{operator_obs} active non-graphify observation#{'s' if operator_obs != 1}" if operator_obs.positive?
       {
         kind: "delete_entity",
-        payload: {
-          entity_id: entity.id,
-          entity_name: entity.name,
-          entity_type: entity.entity_type,
-          reason: reason
-        }
+        entity_id: entity.id,
+        entity_name: entity.name,
+        entity_type: entity.entity_type,
+        reason: reason
       }
     end
     items += relations.map do |relation|
-      {
-        kind: "delete_relation",
-        payload: {
-          relation_id: relation.id,
-          reason: "removed in graphify rescan"
-        }
-      }
+      { kind: "delete_relation", relation_id: relation.id, reason: "removed in graphify rescan" }
     end
-    items += reparents.map do |reparent|
-      {
-        kind: "reparent_entity",
-        payload: {
-          entity_id: reparent[:entity_id],
-          parent_id: reparent[:parent_id],
-          reason: "moved in graphify rescan"
-        }
-      }
+    items + reparents.map do |reparent|
+      { kind: "reparent_entity", entity_id: reparent[:entity_id],
+        parent_id: reparent[:parent_id], reason: "moved in graphify rescan" }
     end
+  end
+  private_class_method :build_review_items
 
-    # Skip items whose signature already sits pending or suppressed —
-    # identical to seed_report's dedupe, but BEFORE an empty report exists.
+  # Skip items whose signature already sits pending or suppressed —
+  # identical to seed_report's dedupe, but BEFORE an empty report exists.
+  def self.fresh_review_items(items)
     signatures = items.index_with do |item|
-      CompactionReviewService.signature_for(item[:kind], { "kind" => item[:kind], "payload" => item[:payload] })
+      CompactionReviewService.signature_for(item[:kind], item.except(:id))
     end
     pending_signatures = MaintenanceReportRow.by_report_type("scan_review").pending
                                            .where(signature: signatures.values.compact)
                                            .pluck(:signature).to_set
-    fresh_items = items.reject do |item|
+    items.reject do |item|
       signature = signatures[item]
       signature.blank? || pending_signatures.include?(signature) ||
         MaintenanceReportSuppression.suppressed?("scan_review", signature)
     end
-
-    # A FRESH reparent proposal retires older ACTIVE reparent rows for the
-    # same entity — the latest scan wins. Runs after dedupe so an identical
-    # re-scan neither dismisses nor re-seeds (it re-reported forever and
-    # clobbered an operator's "ignored" decision in Graphy's probe).
-    fresh_reparent_ids = fresh_items.select { |i| i[:kind] == "reparent_entity" }
-                                    .map { |i| i[:payload][:entity_id] }
-    if fresh_reparent_ids.any?
-      graphify_review_rows.each do |row|
-        next unless row.kind == "reparent_entity" && row.status == "active"
-        next unless fresh_reparent_ids.include?(item_field(row, "entity_id").to_i)
-
-        row.update!(status: "dismissed", dismissed_at: Time.current,
-                    resolution_reason: "superseded by a newer graphify rescan proposal")
-      end
-    end
-    return [] if fresh_items.empty?
-
-    CompactionReviewService.seed_report(
-      report_type: "scan_review",
-      source: SOURCE_NAME,
-      source_ref: source_ref,
-      items: fresh_items
-    )
   end
+  private_class_method :fresh_review_items
+
+  # A FRESH reparent proposal retires older ACTIVE reparent rows for the
+  # same entity — the latest scan wins. Runs after dedupe so an identical
+  # re-scan neither dismisses nor re-seeds (it re-reported forever and
+  # clobbered an operator's "ignored" decision in Graphy's probe).
+  def self.retire_superseded_reparents(fresh_items)
+    fresh_reparent_ids = fresh_items.select { |i| i[:kind] == "reparent_entity" }
+                                    .map { |i| i[:entity_id] }
+    return if fresh_reparent_ids.empty?
+
+    graphify_review_rows.each do |row|
+      next unless row.kind == "reparent_entity" && row.status == "active"
+      next unless fresh_reparent_ids.include?(item_field(row, "entity_id").to_i)
+
+      row.update!(status: "dismissed", dismissed_at: Time.current,
+                  resolution_reason: "superseded by a newer graphify rescan proposal")
+    end
+  end
+  private_class_method :retire_superseded_reparents
 
   # Retires stale proposals. A pending item is stale when the current scan
   # contradicts it — the invariant: no proposal may stay apply-able to live
@@ -323,7 +340,7 @@ module GraphifyRescan
       when "reparent_entity"
                 entity = rep_entities[item_field(row, "entity_id").to_i]
                 parent = rep_entities[item_field(row, "parent_id").to_i]
-                reparent_row_stale?(row, entity, parent, present_ids, tree_parents, rep_stored_parents)
+                reparent_row_stale?(entity, parent, present_ids, stored_ids, tree_parents, rep_stored_parents)
       end
       next unless stale
 
@@ -344,8 +361,11 @@ module GraphifyRescan
   # A reparent proposal stays valid only while all of these hold:
   # the entity is still in the payload, the payload still asks for this
   # exact parent, and the stored parent edge has not caught up yet.
-  def self.reparent_row_stale?(row, entity, parent, present_ids, tree_parents, rep_stored_parents)
-    return true unless entity && parent
+  # Rows about entities OUTSIDE this scan's subtree are never touched —
+  # they belong to another project's pending queue.
+  def self.reparent_row_stale?(entity, parent, present_ids, stored_ids, tree_parents, rep_stored_parents)
+    return false unless entity && stored_ids.include?(entity.id)
+    return true unless parent
     return true unless present_ids.include?(entity.id)
 
     payload_parent_key = tree_parents[entity_key(entity)]
