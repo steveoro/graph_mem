@@ -433,8 +433,18 @@ class ImportExecutionStrategy
     root_id = @entity_mapping["0"]
     return false unless root_id
 
-    entity.id == root_id ||
-      RelationSemantics.descendant_ids(root_id).to_a.include?(entity.id)
+    # @entity_mapping covers entities created by THIS import — the cached
+    # stored set can't see them.
+    entity.id == root_id || @entity_mapping.value?(entity.id) ||
+      import_subtree_ids(root_id).include?(entity.id)
+  end
+
+  # Once per import per root: a v1.49 upgrade hits a Class↔Module collision
+  # for every module, and recomputing descendant_ids per collision made the
+  # re-import quadratic (400 modules → ~10x slower than steady-state).
+  def import_subtree_ids(root_id)
+    (@import_subtree_ids ||= {})[root_id] ||=
+      RelationSemantics.descendant_ids(root_id).to_set
   end
 
   def reference_stub_entity?(entity)

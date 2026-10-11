@@ -24,7 +24,7 @@ RSpec.describe "Rails AST extractor import" do
                                 Shared::Base Post Article Thing ExternalBase
                                 OtherBase Vendor Admin Admin::Admin Admin::Admin#inner
                                 Billing Notifiable admin.rb billing.rb notifiable.rb
-                                post.rb Foo Foo#a foo.rb]).find_each do |e|
+                                post.rb Foo Foo#a Foo#b foo.rb foo_ext.rb]).find_each do |e|
       MemoryRelation.where(from_entity_id: e.id).or(
         MemoryRelation.where(to_entity_id: e.id)
       ).delete_all
@@ -353,7 +353,10 @@ RSpec.describe "Rails AST extractor import" do
 
       Dir.mktmpdir do |dir_b|
         FileUtils.mkdir_p(File.join(dir_b, "app/models"))
-        File.write(File.join(dir_b, "app/models/foo.rb"), "module Foo\n  def b; end\nend\n")
+        # Distinct basename on purpose: with `foo.rb` on both sides the
+        # same-file collision rule would pre-empt the Class↔Module check and
+        # this spec couldn't go red with `retype_allowed?` forced to true.
+        File.write(File.join(dir_b, "app/models/foo_ext.rb"), "module Foo\n  def b; end\nend\n")
         report = import_fixture(dir_b, project: "RepoB")
         expect(report.success).to be true
         expect(foo.reload.entity_type).to eq("Class")
@@ -363,6 +366,32 @@ RSpec.describe "Rails AST extractor import" do
 
       expect(import_fixture(dir_a, project: "RepoA").success).to be true
       expect(foo.reload.entity_type).to eq("Class")
+    end
+  end
+
+  it "a Class declaration claims a same-named Module reference stub (stub retype branch)" do
+    # RepoB only references Foo via `include` → Module-typed reference stub.
+    # RepoA then declares `class Foo` — the Class↔Module collision is allowed
+    # to retype precisely because the stored entity is an unclaimed stub.
+    Dir.mktmpdir do |dir_b|
+      FileUtils.mkdir_p(File.join(dir_b, "app/models"))
+      File.write(File.join(dir_b, "app/models/post.rb"), "class Post\n  include Foo\nend\n")
+      expect(import_fixture(dir_b, project: "RepoB").success).to be true
+      stub = MemoryEntity.find_by(name: "Foo")
+      expect(stub&.entity_type).to eq("Module")
+
+      Dir.mktmpdir do |dir_a|
+        FileUtils.mkdir_p(File.join(dir_a, "app/models"))
+        File.write(File.join(dir_a, "app/models/foo.rb"), "class Foo\n  def a; end\nend\n")
+        expect(import_fixture(dir_a, project: "RepoA").success).to be true
+        expect(stub.reload.entity_type).to eq("Class")
+        expect(MemoryEntity.where(name: "Foo").count).to eq(1)
+        # Claimed by the declaring repo: Foo#a materialized under RepoA's Foo.
+        expect(MemoryEntity.find_by(name: "Foo#a")).to be_present
+      end
+
+      expect(MemoryRelation.exists?(from_entity: MemoryEntity.find_by(name: "Post"),
+                                    to_entity_id: stub.id, relation_type: "mixes_in")).to be true
     end
   end
 

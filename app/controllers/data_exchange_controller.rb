@@ -338,7 +338,10 @@ class DataExchangeController < ApplicationController
     @q = params[:q].presence
     @stats = CompactionReviewService.status_counts(report_type: @report_type, kind: @kind_filter)
     @kind_counts = CompactionReviewService.kind_counts(report_type: @report_type, status: @status_filter)
-    streams << turbo_stream.replace("review-tabs", partial: "data_exchange/compaction_review_tabs")
+    # `update` keeps the #review-tabs wrapper (replace would swap it out for
+    # the partial's un-wrapped content — the next action then has no target,
+    # so counts refreshed exactly once and went stale).
+    streams << turbo_stream.update("review-tabs", partial: "data_exchange/compaction_review_tabs")
 
     row = item_id.present? ? CompactionReviewService.find_item(item_id, report_type: @report_type) : nil
     return streams unless row

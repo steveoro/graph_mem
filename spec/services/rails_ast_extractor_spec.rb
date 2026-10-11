@@ -548,4 +548,53 @@ RSpec.describe RailsAstExtractor do
       expect(labels).to include("Post.recent", "Post.self.popular")
     end
   end
+
+  it "class_name: 'Admin::User' does not fall back to a top-level User basename" do
+    # A qualified class_name must never resolve by basename: with only a
+    # top-level User present, `Admin::User` stays an unresolved reference —
+    # a basename fallback would silently wire the edge to the wrong class.
+    Dir.mktmpdir do |dir|
+      result = write_and_extract(dir,
+        "app/models/user.rb" => "class User; end\n",
+        "app/models/post.rb" => "class Post\n  belongs_to :user, class_name: \"Admin::User\"\nend\n")
+      edges = edge_labels(result)
+      expect(edges).to include([ "Post", "belongs_to", "Admin::User", anything ])
+      expect(edges).not_to include([ "Post", "belongs_to", "User", anything ])
+    end
+  end
+
+  it "enclosing namespace beats a same-named top-level constant (lexical order)" do
+    # `belongs_to :user` inside module Admin must resolve to Admin::User even
+    # though a top-level User exists — looking up top-level first flips this.
+    Dir.mktmpdir do |dir|
+      result = write_and_extract(dir,
+        "app/models/user.rb" => "class User; end\n",
+        "app/models/admin/user.rb" => "module Admin\n  class User; end\nend\n",
+        "app/models/admin/post.rb" => <<~RUBY)
+          module Admin
+            class Post
+              belongs_to :user
+            end
+          end
+        RUBY
+      edges = edge_labels(result)
+      expect(edges).to include([ "Admin::Post", "belongs_to", "Admin::User", "EXTRACTED" ])
+      expect(edges).not_to include([ "Admin::Post", "belongs_to", "User", anything ])
+    end
+  end
+
+  it "a class reopened across files merges into one node" do
+    # `class Post` in two files is ONE entity carrying both declarations'
+    # methods/edges — splitting per file would duplicate the node.
+    Dir.mktmpdir do |dir|
+      result = write_and_extract(dir,
+        "app/models/post.rb" => "class Post\n  def title; end\nend\n",
+        "app/models/post_ext.rb" => "class Post\n  def summary; end\n  belongs_to :user\nend\n",
+        "app/models/user.rb" => "class User; end\n")
+      labels = result["nodes"].map { |n| n["label"] }
+      expect(labels.count("Post")).to eq(1)
+      expect(labels).to include("Post#title", "Post#summary")
+      expect(edge_labels(result)).to include([ "Post", "belongs_to", "User", "EXTRACTED" ])
+    end
+  end
 end

@@ -1419,7 +1419,9 @@ RSpec.describe 'DataExchange', type: :request do
 
       dom = ActionView::RecordIdentifier.dom_id(merge_row)
       expect(response.body).to include("action=\"remove\" target=\"#{dom}\"")
-      expect(response.body).to include('target="review-tabs"')
+      # `update` keeps the #review-tabs wrapper — a `replace` would remove it
+      # and the NEXT row action would find no target (refresh-once bug).
+      expect(response.body).to include('action="update" target="review-tabs"')
       expect(merge_row.reload.status).to eq('dismissed')
     end
 
