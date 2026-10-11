@@ -117,12 +117,13 @@
           - if payload["recommendation"].present?
             %p.text-xs.mt-1= payload["recommendation"]
         - when "relationship_proposal"
+          - rel = payload["payload"].is_a?(Hash) ? payload["payload"].merge(payload.except("payload")) : payload
           %p
-            %span.font-medium= payload["relation_type"]
-            %span.text-gray-400 — #{payload["confidence_band"]}
-            %span.text-gray-400 (score #{payload["score"]})
-          - if payload["explanation"].present?
-            %p.text-xs.mt-1= payload["explanation"]
+            %span.font-medium= rel["relation_type"]
+            %span.text-gray-400 — #{rel["confidence_band"]}
+            %span.text-gray-400 (score #{rel["score"]})
+          - if rel["explanation"].present?
+            %p.text-xs.mt-1= rel["explanation"]
         - when "orphan_parent"
           - if payload["suggested_parents"].present?
             - Array(payload["suggested_parents"]).first(3).each do |parent|

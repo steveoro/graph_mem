@@ -970,6 +970,39 @@ RSpec.describe 'DataExchange', type: :request do
       expect(response).to have_http_status(:ok)
       expect(response.body).to include('No active compaction review suggestions')
     end
+
+    it 'shows every status when the All tab sends an explicit empty status' do
+      MaintenanceReportRow.create!(
+        maintenance_report: compaction_report,
+        report_type: 'compaction_review',
+        row_uuid: 'review-dismissed',
+        kind: 'entity_merge',
+        status: 'dismissed',
+        signature: CompactionReviewService.signature_for('entity_merge', {
+          'entity_a' => { 'entity_id' => task1.id },
+          'entity_b' => { 'entity_id' => project2.id }
+        }),
+        payload: {
+          'entity_a' => { 'entity_id' => task1.id, 'name' => task1.name, 'entity_type' => 'Task' },
+          'entity_b' => { 'entity_id' => project2.id, 'name' => project2.name, 'entity_type' => 'Project' },
+          'cosine_distance' => 0.45
+        }
+      )
+
+      # The All tab emits `status=` (explicit empty) — it must list every
+      # row, not silently fall back to "active" (the old `.presence ||`
+      # collapsed both cases and showed Active under an "All (0)" label).
+      get compaction_review_data_exchange_index_path, params: { status: '' }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.body).to include('review-1', 'review-dismissed')
+      expect(response.body).to include('All (2)')
+
+      # Absent param still defaults to active only.
+      get compaction_review_data_exchange_index_path
+      expect(response.body).to include('review-1')
+      expect(response.body).not_to include('review-dismissed')
+    end
   end
 
   describe 'POST /data_exchange/compaction_review_action' do

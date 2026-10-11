@@ -28,9 +28,9 @@
   - if @stats
     .flex.flex-wrap.gap-2.mb-4
       - { "" => "All", "active" => "Active", "ignored" => "Ignored", "dismissed" => "Dismissed", "approved" => "Approved" }.each do |status, label|
-        - count = @stats[status] || 0
+        - count = status == "" ? @stats.values.sum : (@stats[status] || 0)
         - active_class = (@status_filter == status) ? "bg-blue-600 text-white" : "bg-gray-200 text-gray-700 hover:bg-gray-300"
-        = link_to "#{label} (#{count})", compaction_review_data_exchange_index_path(status: status.presence, report_type: (@report_type unless @report_type == "compaction_review")), class: "rounded px-3 py-1 text-sm #{active_class}"
+        = link_to "#{label} (#{count})", compaction_review_data_exchange_index_path(status: status, report_type: (@report_type unless @report_type == "compaction_review")), class: "rounded px-3 py-1 text-sm #{active_class}"
 
   = form_with url: compaction_review_action_data_exchange_index_path, method: :post, local: true, html: { id: "bulk-form" } do
     = hidden_field_tag :review_action, "bulk_dismiss"
@@ -47,7 +47,7 @@
     .mt-4
       = paginate @items, theme: 'tailwind'
   - else
-    %p.text-gray-500 No #{@status_filter.presence || "active"} #{@report_type.tr("_", " ")} suggestions.
+    %p.text-gray-500 No #{@status_filter.presence || "all"} #{@report_type.tr("_", " ")} suggestions.
 
   .mt-6
     = link_to "Back to dashboard", root_path, class: "text-sm text-blue-600 hover:underline"

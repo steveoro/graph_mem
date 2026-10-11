@@ -235,7 +235,9 @@ class DataExchangeController < ApplicationController
     @report_type = review_report_type
     @report = CompactionReviewService.latest_report(report_type: @report_type)
 
-    @status_filter = params[:status].presence || "active"
+    # An explicit `status=` (empty) means "All" — only an ABSENT param
+    # defaults to "active". `.presence ||` collapsed both.
+    @status_filter = params.key?(:status) ? params[:status].to_s : "active"
     @kind_filter = params[:kind].presence
     @items = CompactionReviewService.items(
       report_type: @report_type,
@@ -276,7 +278,7 @@ class DataExchangeController < ApplicationController
                @report = CompactionReviewService.latest_report(report_type: @report_type)
                @current_item = CompactionReviewService.find_item(item_id, report_type: @report_type)
                @confirm_action = true
-               @status_filter = params[:status].presence || "active"
+               @status_filter = params.key?(:status) ? params[:status].to_s : "active"
                @items = CompactionReviewService.items(report_type: @report_type, status: @status_filter, page: params[:page])
                @active_count = CompactionReviewService.active_count(report_type: @report_type)
                @stats = CompactionReviewService.status_counts(report_type: @report_type)
