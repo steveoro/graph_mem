@@ -58,6 +58,16 @@ class RailsAstExtractor
   def resolve_const(name, const_prefix)
     return { status: :unresolved, guess: name } if name.blank?
 
+    absolute = name.start_with?("::")
+    name = name.delete_prefix("::")
+
+    if absolute
+      # `::User` names the top-level constant only — no lexical prefix walk.
+      return { status: :resolved, name: name } if @const_decls.key?(name)
+
+      return { status: :unresolved, guess: name }
+    end
+
     candidates = []
     prefix = const_prefix.dup
     until prefix.empty?
@@ -97,7 +107,7 @@ class RailsAstExtractor
   # treats them as claimable placeholders so the repo that actually
   # declares the constant can merge real provenance in later, regardless
   # of import order.
-  def target_id_for(target, rel)
+  def target_id_for(target, rel, stub_type: "Class")
     name = target[:status] == :ambiguous ? target[:candidates].first : target[:name] || target[:guess]
     if target[:status] == :resolved || target[:status] == :inferred
       decl = @const_decls[name].first
@@ -105,7 +115,7 @@ class RailsAstExtractor
              source_location: decl ? decl[:line] : nil,
              entity_type: decl ? decl[:type] : "Class")
     else
-      add_node(name, source_file: nil, entity_type: "Class",
+      add_node(name, source_file: nil, entity_type: stub_type,
                extra_obs: [], reference: true)
     end
   end
@@ -119,8 +129,15 @@ class RailsAstExtractor
     return name.delete_prefix("::") if name.start_with?("::")
 
     parts = name.split("::")
-    if const_prefix.any? && parts.first == const_prefix.last
-      return (const_prefix[0..-2] + parts).join("::")
+    # Restated PATHS only (`class Admin::User` inside `module Admin` →
+    # `Admin::User`, not `Admin::Admin::User`): a multi-segment head matching
+    # ANY enclosing segment splices there, so `module A; module B; class A::X`
+    # → `A::X`. A single-segment name is always nested (`class Admin` inside
+    # `module Admin` IS `Admin::Admin`), otherwise `Module:Admin` and
+    # `Class:Admin` collide on the globally-unique entity name.
+    if parts.size > 1 && const_prefix.any?
+      idx = const_prefix.rindex(parts.first)
+      return (const_prefix[0..idx] + parts[1..]).join("::") if idx
     end
 
     (const_prefix + parts).join("::")
@@ -140,6 +157,10 @@ class RailsAstExtractor
       node.name.to_s
     when Prism::ConstantPathNode
       parent = node.parent ? collect_const_path(node.parent) : nil
+      # `::Top` parses as a path node with a nil parent — keep the leading
+      # `::` so qualified_name/resolve_const see the absolute marker.
+      return "::#{node.name}" if node.parent.nil?
+
       [ parent, node.name.to_s ].compact.join("::")
     else
       node.to_s

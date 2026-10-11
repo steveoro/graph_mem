@@ -436,4 +436,116 @@ RSpec.describe RailsAstExtractor do
       end
     end
   end
+
+  def write_and_extract(dir, files)
+    files.each do |path, content|
+      full = File.join(dir, path)
+      FileUtils.mkdir_p(File.dirname(full))
+      File.write(full, content)
+    end
+    extract(dir)
+  end
+
+  it "module + same-named nested class: Admin::Admin, not a Class/Module name collision" do
+    Dir.mktmpdir do |dir|
+      result = write_and_extract(dir, "app/models/admin.rb" => <<~RUBY)
+        module Admin
+          class Admin
+            def inner; end
+          end
+        end
+      RUBY
+      by_label = result["nodes"].group_by { |n| n["label"] }
+      expect(by_label["Admin"].map { |n| n["entity_type"] }).to eq([ "Module" ])
+      expect(by_label["Admin::Admin"].map { |n| n["entity_type"] }).to eq([ "Class" ])
+      expect(by_label.keys).to include("Admin::Admin#inner")
+      expect(by_label.keys).not_to include("Admin#inner")
+    end
+  end
+
+  it "class_name: '::User' resolves the top-level constant, not a ::User stub" do
+    Dir.mktmpdir do |dir|
+      result = write_and_extract(dir,
+        "app/models/user.rb" => "class User; end\n",
+        "app/models/admin.rb" => <<~RUBY)
+          module Admin
+            class User; end
+            class Team
+              has_many :members, class_name: "::User"
+              belongs_to :owner, class_name: "::User"
+              delegate :email, to: :owner
+            end
+          end
+        RUBY
+      edges = edge_labels(result)
+      expect(edges).to include([ "Admin::Team", "has_many", "User", "EXTRACTED" ])
+      expect(edges).to include([ "Admin::Team", "belongs_to", "User", "EXTRACTED" ])
+      expect(edges).to include([ "Admin::Team", "delegates_to", "User", "EXTRACTED" ])
+      labels = result["nodes"].map { |n| n["label"] }
+      expect(labels).not_to include("::User")
+      expect(edges.map { |e| e[2] }).not_to include("Admin::User")
+    end
+  end
+
+  it "class ::TopLevel inside module M is absolute, not M::TopLevel" do
+    Dir.mktmpdir do |dir|
+      result = write_and_extract(dir, "app/models/m.rb" => <<~RUBY)
+        module M
+          class ::TopLevel
+            def t; end
+          end
+        end
+      RUBY
+      labels = result["nodes"].map { |n| n["label"] }
+      expect(labels).to include("TopLevel", "TopLevel#t")
+      expect(labels).not_to include("M::TopLevel")
+    end
+  end
+
+  it "module A; module B; class A::X restates the namespace → A::X" do
+    Dir.mktmpdir do |dir|
+      result = write_and_extract(dir, "app/models/x.rb" => <<~RUBY)
+        module A
+          module B
+            class A::X; end
+          end
+        end
+      RUBY
+      labels = result["nodes"].map { |n| n["label"] }
+      expect(labels).to include("A::X")
+      expect(labels).not_to include("A::B::A::X")
+    end
+  end
+
+  it "through+source+source_type targets the source_type class" do
+    Dir.mktmpdir do |dir|
+      result = write_and_extract(dir,
+        "app/models/post.rb" => "class Post; end\n",
+        "app/models/tagging.rb" => "class Tagging\n  belongs_to :taggable, polymorphic: true\nend\n",
+        "app/models/tag.rb" => <<~RUBY)
+          class Tag
+            has_many :taggings
+            has_many :tags, through: :taggings, source: :taggable, source_type: "Post"
+          end
+        RUBY
+      edges = edge_labels(result)
+      expect(edges).to include([ "Tag", "has_many", "Post", "EXTRACTED" ])
+      expect(result["nodes"].map { |n| n["label"] }).not_to include("Taggable")
+    end
+  end
+
+  it "class << self emits Owner.self.name labels" do
+    Dir.mktmpdir do |dir|
+      result = write_and_extract(dir, "app/models/post.rb" => <<~RUBY)
+        class Post
+          def self.recent; end
+          class << self
+            def popular; end
+          end
+        end
+      RUBY
+      labels = result["nodes"].map { |n| n["label"] }
+      expect(labels).to include("Post.recent", "Post.self.popular")
+    end
+  end
 end

@@ -395,7 +395,9 @@ class GraphifyImporter
     obs = Array(node["observations"]).filter_map do |o|
       next unless o.is_a?(Hash) && o["content"].present?
 
-      o.merge("source" => producer_name)
+      # Confidence clamps to [0,1] — payload must not stamp out-of-range trust.
+      o.merge("source" => producer_name,
+              "confidence" => o["confidence"].to_f.clamp(0.0, 1.0))
     end
     file = node["source_file"].to_s
     line = node["source_location"].to_s

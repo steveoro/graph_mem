@@ -4,9 +4,12 @@
 - form_id = "row-form-#{row.row_uuid}"
 -# The caller wraps each card in turbo_frame_tag dom_id(row) (no duplicate
 -# id here): submitting a per-row form re-renders only this frame, so a long
--# queue keeps its scroll position instead of a full reload.
+-# queue keeps its scroll position instead of a full reload. NOT `local: true`
+-# — Turbo must intercept the submit so the controller can answer with
+-# turbo_stream (a plain local submit navigates the frame alone →
+-# "Content missing" after redirects).
 .border.rounded.p-4.bg-white.shadow-sm
-  = form_with url: compaction_review_action_data_exchange_index_path, method: :post, local: true, html: { id: form_id } do
+  = form_with url: compaction_review_action_data_exchange_index_path, method: :post, html: { id: form_id } do
     = hidden_field_tag :item_id, row.row_uuid
     = hidden_field_tag :report_type, @report_type unless @report_type == "compaction_review"
     = hidden_field_tag :status, @status_filter

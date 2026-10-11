@@ -67,8 +67,7 @@
   - if @items && @items.any?
     .space-y-4
       - @items.each do |row|
-        = turbo_frame_tag dom_id(row) do
-          = render "compaction_review_item", row: row
+        = render "compaction_review_item_frame", row: row
     .mt-4
       = paginate @items, theme: 'tailwind'
   - else

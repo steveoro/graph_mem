@@ -1305,4 +1305,68 @@ RSpec.describe 'DataExchange', type: :request do
       expect(MaintenanceReportRow.find_by(row_uuid: ghost_uuid).status).to eq('active')
     end
   end
+
+  describe 'POST /data_exchange/compaction_review_action turbo_stream' do
+    let!(:scan_report) do
+      MaintenanceReport.create!(report_type: 'scan_review', data: { 'source' => 'test' })
+    end
+
+    let!(:delete_row) do
+      MaintenanceReportRow.create!(
+        maintenance_report: scan_report,
+        report_type: 'scan_review',
+        row_uuid: 'ts-delete',
+        kind: 'delete_entity',
+        status: 'active',
+        signature: CompactionReviewService.signature_for('delete_entity', { 'entity_id' => task1.id }),
+        payload: { 'entity_id' => task1.id, 'entity_name' => task1.name }
+      )
+    end
+
+    let!(:merge_row) do
+      MaintenanceReportRow.create!(
+        maintenance_report: scan_report,
+        report_type: 'scan_review',
+        row_uuid: 'ts-merge',
+        kind: 'entity_merge',
+        status: 'active',
+        signature: CompactionReviewService.signature_for('entity_merge', {
+          'entity_a' => { 'entity_id' => task1.id },
+          'entity_b' => { 'entity_id' => project1.id }
+        }),
+        payload: {
+          'entity_a' => { 'entity_id' => task1.id, 'name' => task1.name, 'entity_type' => 'Task' },
+          'entity_b' => { 'entity_id' => project1.id, 'name' => project1.name, 'entity_type' => 'Project' },
+          'cosine_distance' => 0.12
+        }
+      )
+    end
+
+    it 'removes an applied row frame and updates the flash (no Content missing)' do
+      post compaction_review_action_data_exchange_index_path,
+           params: { review_action: 'apply', report_type: 'scan_review',
+                     item_id: 'ts-delete', status: 'active' },
+           headers: { 'Accept' => 'text/vnd.turbo-stream.html' }
+
+      expect(response.media_type).to eq('text/vnd.turbo-stream.html')
+      dom = ActionView::RecordIdentifier.dom_id(delete_row)
+      expect(response.body).to include("action=\"remove\" target=\"#{dom}\"")
+      expect(response.body).to include('target="flash-messages"')
+      expect(delete_row.reload.status).to eq('approved')
+      expect(MemoryEntity.find_by(id: task1.id)).to be_nil
+    end
+
+    it 'replaces the frame when the row still matches the filter (All tab edit)' do
+      post compaction_review_action_data_exchange_index_path,
+           params: { review_action: 'edit', report_type: 'scan_review',
+                     item_id: 'ts-merge', status: '',
+                     relationship_type: 'part_of' },
+           headers: { 'Accept' => 'text/vnd.turbo-stream.html' }
+
+      expect(response.media_type).to eq('text/vnd.turbo-stream.html')
+      dom = ActionView::RecordIdentifier.dom_id(merge_row)
+      expect(response.body).to include("action=\"replace\" target=\"#{dom}\"")
+      expect(response.body).not_to include('Content missing')
+    end
+  end
 end

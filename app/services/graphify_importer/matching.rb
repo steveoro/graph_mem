@@ -6,7 +6,7 @@ class GraphifyImporter
   # into the class, so GraphifyImporter.seed_ambiguous_relations,
   # GraphifyImporter.headless_decisions & friends keep their call sites.
   module Matching
-  def seed_ambiguous_relations(ambiguous, source_ref)
+  def seed_ambiguous_relations(ambiguous, source_ref, source: SOURCE_NAME)
     return [] if ambiguous.blank?
 
     items = ambiguous.filter_map do |relation|
@@ -32,7 +32,7 @@ class GraphifyImporter
         confidence_band: "low",
         score: (relation["confidence"].to_f * 10).round,
         supporting_observation_ids: [],
-        explanation: "Graphify AMBIGUOUS edge in #{location}",
+        explanation: "#{source.to_s.humanize} AMBIGUOUS edge in #{location}",
         evidence_terms: [ props["context"] ].compact
       }
     end
@@ -40,7 +40,7 @@ class GraphifyImporter
 
     CompactionReviewService.seed_report(
       report_type: "scan_review",
-      source: SOURCE_NAME,
+      source: source,
       source_ref: source_ref,
       items: items
     )

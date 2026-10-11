@@ -262,7 +262,7 @@ module GraphifyRescan
     items = entities.map do |entity|
       operator_obs = operator_counts[entity.id].to_i
       reason = "removed in #{source} rescan"
-      reason += " — still has #{operator_obs} active non-graphify observation#{'s' if operator_obs != 1}" if operator_obs.positive?
+      reason += " — still has #{operator_obs} active non-#{source} observation#{'s' if operator_obs != 1}" if operator_obs.positive?
       {
         kind: "delete_entity",
         entity_id: entity.id,

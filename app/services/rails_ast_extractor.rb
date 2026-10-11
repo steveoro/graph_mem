@@ -168,13 +168,19 @@ class RailsAstExtractor
         walk_emit(Array(stmt.body&.body), file_id: file_id, rel: rel,
                   const_prefix: const_prefix + [ "self" ])
       when Prism::DefNode
-        # Inside `class << self` a receiver-less def is a singleton method:
-        # `Owner.self.name`. A trailing "self" marker is NOT a real constant,
-        # so the method parents under the enclosing class/module.
-        sep = stmt.receiver || const_prefix.last == "self" ? "." : "#"
+        # Inside `class << self` a receiver-less def is a singleton method,
+        # labelled `Owner.self.name` (design choice Steve approved — it stays
+        # distinct from the `def self.name` receiver form, which emits
+        # `Owner.name`). The trailing "self" marker is NOT a real constant,
+        # so the method still parents under the enclosing class/module.
         real_prefix = const_prefix.last == "self" ? const_prefix[0..-2] : const_prefix
-        node_id = add_node("#{const_prefix.join('::')}#{sep}#{stmt.name}",
-                           source_file: rel, source_location: line(stmt),
+        label = if const_prefix.last == "self" && stmt.receiver.nil?
+                  "#{real_prefix.join('::')}.self.#{stmt.name}"
+        else
+                  sep = stmt.receiver ? "." : "#"
+                  "#{real_prefix.join('::')}#{sep}#{stmt.name}"
+        end
+        node_id = add_node(label, source_file: rel, source_location: line(stmt),
                            entity_type: "Method")
         add_containment(parent_for(file_id, real_prefix), node_id)
       when Prism::CallNode

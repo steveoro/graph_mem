@@ -201,7 +201,9 @@ class DataExchangeController < ApplicationController
     if report.success && import_data[:ambiguous_relations].present?
       GraphifyImporter.seed_ambiguous_relations(
         import_data[:ambiguous_relations].map { |r| r.deep_stringify_keys },
-        project_name_for(import_data)
+        project_name_for(import_data),
+        source: GraphifyImporter::KNOWN_PRODUCERS.include?(import_data["producer"].to_s) ?
+                import_data["producer"].to_s : "graphify"
       )
     end
 
@@ -260,8 +262,8 @@ class DataExchangeController < ApplicationController
       q: @q
     )
     @active_count = CompactionReviewService.active_count(report_type: @report_type)
-    @stats = CompactionReviewService.status_counts(report_type: @report_type)
-    @kind_counts = CompactionReviewService.kind_counts(report_type: @report_type)
+    @stats = CompactionReviewService.status_counts(report_type: @report_type, kind: @kind_filter)
+    @kind_counts = CompactionReviewService.kind_counts(report_type: @report_type, status: @status_filter)
     @children_info = CompactionReviewService.delete_children_info(report_type: @report_type, items: @items)
     @current_item = CompactionReviewService.find_item(params[:item_id], report_type: @report_type) if params[:item_id].present?
   end
@@ -309,8 +311,41 @@ class DataExchangeController < ApplicationController
       return render json: result
     end
 
+    # Per-row forms submit inside turbo frames: answer with turbo streams —
+    # replace the row's frame when it still matches the filter, remove it
+    # when the action changed its status, and always update the flash
+    # container. A plain redirect here would navigate the frame alone and
+    # surface "Content missing" (bulk actions keep the html redirect path —
+    # their form submits full-page).
+    if request.format.turbo_stream?
+      flash.now[result[:success] ? :notice : :alert] =
+        result[:success] ? (result[:message] || "Done.") : (result[:message] || result[:error] || "Action failed.")
+      return render turbo_stream: review_action_turbo_streams(action, item_id)
+    end
+
     flash[result[:success] ? :notice : :alert] = result[:success] ? (result[:message] || "Done.") : (result[:message] || result[:error] || "Action failed.")
     redirect_to review_action_redirect_path
+  end
+
+  def review_action_turbo_streams(action, item_id)
+    streams = [ turbo_stream.update("flash-messages", partial: "layouts/flash_messages") ]
+    row = item_id.present? ? CompactionReviewService.find_item(item_id, report_type: @report_type) : nil
+    return streams unless row
+
+    # The row form echoes the active filter: "" = All tab, absent = Active.
+    filter = params.key?(:status) ? params[:status].to_s : "active"
+    stays = filter.empty? || filter == "all" || row.status == filter
+    frame_id = ActionView::RecordIdentifier.dom_id(row)
+    if stays
+      streams << turbo_stream.replace(
+        frame_id,
+        partial: "data_exchange/compaction_review_item_frame",
+        locals: { row: row }
+      )
+    else
+      streams << turbo_stream.remove(frame_id)
+    end
+    streams
   end
 
   # POST /data_exchange/compaction_review/import_suggest_merges

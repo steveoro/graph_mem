@@ -30,7 +30,7 @@ class RailsAstExtractor
     when *MIXIN_MACROS
       args_const(call).each do |const_name|
         target = resolve_const(const_name, const_prefix)
-        add_edge(owner, target_id_for(target, rel), "mixes_in",
+        add_edge(owner, target_id_for(target, rel, stub_type: "Module"), "mixes_in",
                  confidence: confidence_for(target), rel: rel,
                  context: "#{call.name} #{const_name}", call_line: line(call))
       end
@@ -65,7 +65,17 @@ class RailsAstExtractor
     # `:y` association — the source name wins over the association name.
     base_name = options["through"].present? && options["source"].present? ? options["source"].to_s : assoc.to_s
     base = relation == "has_many" ? base_name.singularize : base_name
-    class_name = options["class_name"].is_a?(String) ? options["class_name"] : camelize(base)
+    # Target class ordering matches Rails: explicit `class_name:` wins, then
+    # `source_type:` on a through association (`source: :taggable,
+    # source_type: "Post"` targets Post, not a Taggable stub), then the
+    # source/association name camelized.
+    class_name = if options["class_name"].is_a?(String)
+                   options["class_name"]
+    elsif options["through"].present? && options["source_type"].is_a?(String)
+                   options["source_type"]
+    else
+                   camelize(base)
+    end
     @assoc_targets[owner_qualified][assoc.to_s] = class_name
     target = resolve_const(class_name, const_prefix)
     props = { "provenance" => "RAILS_DSL", "association" => assoc.to_s }

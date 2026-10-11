@@ -27,12 +27,19 @@ class CompactionReviewService
       MaintenanceReportRow.by_report_type(report_type).active.count
     end
 
-    def status_counts(report_type: "compaction_review")
-      MaintenanceReportRow.by_report_type(report_type).group(:status).count
+    # Tab counts mirror what the list shows: status counts respect the kind
+    # filter, kind counts respect the status filter (otherwise the badge on
+    # a tab disagrees with the list it opens).
+    def status_counts(report_type: "compaction_review", kind: nil)
+      scope = MaintenanceReportRow.by_report_type(report_type)
+      scope = scope.by_kind(kind) if kind.present?
+      scope.group(:status).count
     end
 
-    def kind_counts(report_type: "compaction_review")
-      MaintenanceReportRow.by_report_type(report_type).group(:kind).count
+    def kind_counts(report_type: "compaction_review", status: nil)
+      scope = MaintenanceReportRow.by_report_type(report_type)
+      scope = scope.by_status(status) if status.present?
+      scope.group(:kind).count
     end
 
     # For `delete_entity` rows on the page: how many children are queued
@@ -314,15 +321,24 @@ class CompactionReviewService
       end
     end
 
-    # `q` matches the serialized payload (names, ids, explanation, kind) —
-    # case-insensitive substring on the JSON body. Payload shapes vary per
-    # kind, so a column-per-field query would miss fields; the JSON string
-    # is the honest "find anything mentioning this" search.
+    # `q` hits payload VALUES (names, ids, explanations), not JSON keys —
+    # a raw `payload.to_json` haystack makes 'entity' or '_' match every
+    # row. The human-readable kind label is searchable too ("relationship
+    # proposal").
     def filter_by_query(rows, q)
-      needle = q.to_s.downcase
+      needle = q.to_s.downcase.strip
       rows.select do |row|
-        haystack = "#{row.kind} #{row.payload.to_json} #{row.edited_payload.to_json}".downcase
-        haystack.include?(needle)
+        values = [ row.kind, row.kind.tr("_", " ") ] +
+                 payload_values(row.payload) + payload_values(row.edited_payload)
+        values.compact.join(" ").downcase.include?(needle)
+      end
+    end
+
+    def payload_values(obj)
+      case obj
+      when Hash then obj.flat_map { |_k, v| payload_values(v) }
+      when Array then obj.flat_map { |v| payload_values(v) }
+      else [ obj.to_s ]
       end
     end
 

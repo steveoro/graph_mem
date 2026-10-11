@@ -54,7 +54,8 @@ namespace :rails_ast do
 
     # Withheld AMBIGUOUS edges land in scan_review so the operator can pick
     # the intended endpoint — same contract as graphify:import.
-    rows = GraphifyImporter.seed_ambiguous_relations(result.ambiguous_relations, project)
+    rows = GraphifyImporter.seed_ambiguous_relations(result.ambiguous_relations, project,
+                                                     source: "rails_ast_extractor")
     puts "Queued #{rows.size} ambiguous relation(s) for review (scan_review)." if rows.any?
   end
 end

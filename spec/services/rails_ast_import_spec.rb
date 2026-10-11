@@ -22,7 +22,9 @@ RSpec.describe "Rails AST extractor import" do
     MemoryEntity.where(name: %w[OtherApp Fixture Team Swimmer Order GogglesDb
                                 GogglesDb::User RepoA RepoB ApplicationRecord
                                 Shared::Base Post Article Thing ExternalBase
-                                OtherBase Vendor]).find_each do |e|
+                                OtherBase Vendor Admin Admin::Admin Admin::Admin#inner
+                                Billing Notifiable admin.rb billing.rb notifiable.rb
+                                post.rb]).find_each do |e|
       MemoryRelation.where(from_entity_id: e.id).or(
         MemoryRelation.where(to_entity_id: e.id)
       ).delete_all
@@ -281,6 +283,65 @@ RSpec.describe "Rails AST extractor import" do
       second = import_fixture(dir)
       expect(second.success).to be true
       expect(second.rescan_relations_flagged).to be >= 2
+    end
+  end
+
+  it "module + same-named nested class imports without a NameTaken collision" do
+    Dir.mktmpdir do |dir|
+      FileUtils.mkdir_p(File.join(dir, "app/models"))
+      File.write(File.join(dir, "app/models/admin.rb"), <<~RUBY)
+        module Admin
+          class Admin
+            def inner; end
+          end
+        end
+      RUBY
+      report = import_fixture(dir)
+      expect(report.success).to be true
+      expect(MemoryEntity.find_by(name: "Admin", entity_type: "Module")).to be_present
+      expect(MemoryEntity.find_by(name: "Admin::Admin", entity_type: "Class")).to be_present
+      expect(MemoryEntity.find_by(name: "Admin", entity_type: "Class")).to be_nil
+    end
+  end
+
+  it "v1.49 upgrade: a stored Class entity retypes to Module on re-import" do
+    # v1.49 emitted every declaration as Class. Databases holding such an
+    # import hit 'Name has already been taken' on the next rails_ast:import —
+    # the resolver now retypes Class↔Module pairs by unique name instead.
+    legacy = MemoryEntity.create!(name: "Billing", entity_type: "Class")
+    Dir.mktmpdir do |dir|
+      FileUtils.mkdir_p(File.join(dir, "app/models"))
+      File.write(File.join(dir, "app/models/billing.rb"), "module Billing; end\n")
+      report = import_fixture(dir)
+      expect(report.success).to be true
+      expect(legacy.reload.entity_type).to eq("Module")
+      expect(MemoryEntity.where(name: "Billing").count).to eq(1)
+    end
+  end
+
+  it "cross-repo mixin stub claims the Module in both import orders" do
+    # repo2 only references Notifiable → Module-typed reference stub; repo1
+    # declares it → claims the stub (declared nodes may claim, references not).
+    Dir.mktmpdir do |dir2|
+      FileUtils.mkdir_p(File.join(dir2, "app/models"))
+      File.write(File.join(dir2, "app/models/post.rb"), "class Post\n  include Notifiable\nend\n")
+      expect(import_fixture(dir2, project: "RepoB").success).to be true
+      stub = MemoryEntity.find_by(name: "Notifiable")
+      expect(stub&.entity_type).to eq("Module")
+      stub_edge = MemoryRelation.find_by(from_entity_id: stub.id, relation_type: "part_of")
+      repo_b_parent = stub_edge&.to_entity_id
+
+      Dir.mktmpdir do |dir1|
+        FileUtils.mkdir_p(File.join(dir1, "app/models"))
+        File.write(File.join(dir1, "app/models/notifiable.rb"), "module Notifiable\n  def notify; end\nend\n")
+        expect(import_fixture(dir1, project: "RepoA").success).to be true
+        expect(MemoryEntity.where(name: "Notifiable").count).to eq(1)
+        # Claimed: the stub edge is replaced by the declaring tree's parent.
+        expect(MemoryRelation.find_by(from_entity_id: stub.id, relation_type: "part_of").to_entity_id)
+          .not_to eq(repo_b_parent)
+      end
+      expect(MemoryRelation.exists?(from_entity: MemoryEntity.find_by(name: "Post"),
+                                    to_entity_id: stub.id, relation_type: "mixes_in")).to be true
     end
   end
 end
