@@ -1029,8 +1029,11 @@ RSpec.describe 'DataExchange', type: :request do
       expect(response).to have_http_status(:ok)
       expect(response.body).to include('proposal-scored', 'proposal-noscore', 'proposal-nested')
       expect(response.body).to include('(score 5)', '(score 7)')
-      # The no-score row must not render the bare "(score )" fragment next to has_one.
-      expect(response.body).not_to match(/has_one[^<]*\(score \)/)
+      # The no-score row must not render bare "(score )" or "— " fragments —
+      # scope to the row's own text (spans break a flat-body regex).
+      noscore_text = Nokogiri::HTML(response.body).at_css('#row-form-proposal-noscore').text
+      expect(noscore_text).to include('has_one')
+      expect(noscore_text).not_to include('(score', '—')
       # Nested row fields reach both the summary and the editable controls:
       # belongs_to is outside ALLOWED_RELATION_TYPES but must be offered and
       # preselected (seeded canonical types are applyable, not just the
