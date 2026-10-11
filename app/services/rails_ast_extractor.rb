@@ -174,8 +174,9 @@ class RailsAstExtractor
 
         qualified = (const_prefix + name.split("::")).join("::")
         node_id = add_node(qualified, source_file: rel, source_location: line(stmt),
-                           entity_type: "Class", extra_obs: class_observations(stmt))
+                           entity_type: "Class")
         add_containment(parent_for(file_id, const_prefix), node_id)
+        emit_inherits(stmt, node_id, const_prefix, rel)
         walk_emit(Array(stmt.body&.body), file_id: node_id, rel: rel,
                   const_prefix: const_prefix + name.split("::"))
       when Prism::DefNode
@@ -198,7 +199,8 @@ class RailsAstExtractor
 
   def container_like?(node)
     node.is_a?(Prism::BeginNode) || node.is_a?(Prism::IfNode) ||
-      node.is_a?(Prism::UnlessNode) || node.is_a?(Prism::CaseNode)
+      node.is_a?(Prism::UnlessNode) || node.is_a?(Prism::CaseNode) ||
+      node.is_a?(Prism::StatementsNode)
   end
 
   def parent_for(file_id, const_prefix)
@@ -274,31 +276,64 @@ class RailsAstExtractor
     args = Array(call.arguments&.arguments)
     kw = args.find { |a| a.is_a?(Prism::KeywordHashNode) }
 
+    enum_name = nil
     definitions = []
-    if kw
-      kw.elements.each do |assoc|
-        next unless assoc.is_a?(Prism::AssocNode)
+    options = {}
 
-        # `enum status: {draft:0}` nests the mapping (the values ARE the
-        # inner keys); bare `enum :status, draft: 0` puts the value keys
-        # directly in the kwargs.
-        case assoc.value
-        when Prism::KeywordHashNode, Prism::HashNode, Prism::ArrayNode
-          definitions.concat(enum_value_names(assoc.value))
-        else
-          definitions << assoc.key.unescaped.to_s if assoc.key.respond_to?(:unescaped)
-        end
+    Array(kw&.elements).each do |assoc|
+      next unless assoc.is_a?(Prism::AssocNode)
+
+      key = assoc.key.respond_to?(:unescaped) ? assoc.key.unescaped.to_s : nil
+      next if key.blank?
+
+      if ENUM_OPTION_KEYS.include?(key)
+        options[key] = assoc.value
+      elsif assoc.value.is_a?(Prism::KeywordHashNode) ||
+            assoc.value.is_a?(Prism::HashNode) ||
+            assoc.value.is_a?(Prism::ArrayNode)
+        enum_name ||= key # `enum status: {…}` — the mapping key IS the name
+        definitions.concat(enum_value_names(assoc.value))
+      else
+        definitions << key # `enum :state, free: 0` — bare value kwarg
       end
-    else
-      definitions.concat(enum_value_names(args.second)) if args.second
     end
+    if definitions.empty? && args.second
+      # Positional form `enum :state, %i[free paid]` (options live in kw).
+      enum_name ||= args.first.respond_to?(:unescaped) ? args.first.unescaped.to_s : nil
+      definitions.concat(enum_value_names(args.second))
+    end
+    enum_name ||= args.first.respond_to?(:unescaped) ? args.first.unescaped.to_s : nil
 
+    prefix = enum_affix(options, "prefix", "_prefix", enum_name)
+    suffix = enum_affix(options, "suffix", "_suffix", enum_name)
     definitions.uniq.each do |value|
-      mid = add_node("#{const_prefix.join('::')}##{value}?",
+      accessor = [ prefix, value, suffix ].compact_blank.join("_")
+      mid = add_node("#{const_prefix.join('::')}##{accessor}?",
                      source_file: rel, source_location: line(call), entity_type: "Method")
       add_containment(owner, mid)
     end
   end
+
+  # `prefix: true` → the enum name; `prefix: :on` → the literal; absent → nil.
+  def enum_affix(options, *keys, enum_name)
+    keys.each do |k|
+      v = options[k]
+      next if v.nil?
+
+      return enum_name.presence if v.is_a?(Prism::TrueNode)
+      return nil if v.is_a?(Prism::FalseNode)
+      return v.unescaped.to_s if v.respond_to?(:unescaped)
+
+      return nil
+    end
+    nil
+  end
+
+  # enum's option kwargs — options are never value accessors.
+  ENUM_OPTION_KEYS = %w[
+    prefix suffix _prefix _suffix default _default scopes _scopes
+    validate instance_methods
+  ].freeze
 
   def enum_value_names(node)
     case node
@@ -342,7 +377,10 @@ class RailsAstExtractor
   # ------------------------------------------------------------------
   def scan_routes
     path = @repo.join(ROUTES_FILE)
-    return unless path.file?
+    # Same escape guard as ruby_files: a symlinked routes.rb pointing
+    # outside the repo must not inject phantom routes/controllers.
+    return unless path.file? &&
+                  File.realpath(path).start_with?("#{File.realpath(@repo.to_s)}/")
 
     program = parse_ok(path.to_s)
     return unless program
@@ -411,10 +449,10 @@ class RailsAstExtractor
     end
 
     emit_member_blocks(stmt, file_id: file_id, rel: rel, ctrl_const: ctrl_const,
-                       base_path: base_path)
+                       base_path: base_path, base: base, ns_prefix: ns_prefix)
   end
 
-  def emit_member_blocks(stmt, file_id:, rel:, ctrl_const:, base_path:)
+  def emit_member_blocks(stmt, file_id:, rel:, ctrl_const:, base_path:, base:, ns_prefix:)
     Array(stmt.block&.body&.body).each do |sub|
       next unless sub.is_a?(Prism::CallNode)
 
@@ -422,7 +460,8 @@ class RailsAstExtractor
       # /parents/:id/children.
       if %w[resources resource].include?(sub.name.to_s)
         emit_resource_routes(sub, file_id: file_id, rel: rel,
-                             ns_prefix: [], path_prefix: "#{base_path}/:id")
+                             ns_prefix: ns_prefix,
+                             path_prefix: "#{base_path}/:#{base.singularize}_id")
         next
       end
       next unless %w[member collection].include?(sub.name.to_s)
@@ -664,12 +703,21 @@ class RailsAstExtractor
     end
   end
 
-  def class_observations(stmt)
-    return [] unless stmt.is_a?(Prism::ClassNode) && stmt.superclass
+  # STI knowledge rides an `inherits` EDGE, not an observation: the
+  # rescan's relation_diff retires stale edges, while observations are
+  # only diffed on `Defined at` — a changed/dropped superclass would
+  # leave contradictory permanent facts as text.
+  def emit_inherits(stmt, owner, const_prefix, rel)
+    return unless stmt.is_a?(Prism::ClassNode) && stmt.superclass
 
-    [ { "content" => "Superclass: #{collect_const_path(stmt.superclass)}",
-        "source" => PRODUCER, "confidence" => 0.9,
-        "tags" => [ PRODUCER, "superclass" ] } ]
+    superclass = collect_const_path(stmt.superclass)
+    return if superclass.blank?
+
+    target = resolve_const(superclass, const_prefix)
+    add_edge(owner, target_id_for(target, rel), "inherits",
+             confidence: confidence_for(target), rel: rel,
+             context: "< #{superclass}", call_line: line(stmt),
+             properties: { "provenance" => "RAILS_DSL" })
   end
 
   def camelize(str)

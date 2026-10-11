@@ -19,7 +19,8 @@ RSpec.describe "Rails AST extractor import" do
   end
 
   def purge_fixture_names
-    MemoryEntity.where(name: %w[OtherApp Fixture Team Swimmer]).find_each do |e|
+    MemoryEntity.where(name: %w[OtherApp Fixture Team Swimmer Order GogglesDb
+                                GogglesDb::User RepoA RepoB ApplicationRecord]).find_each do |e|
       MemoryRelation.where(from_entity_id: e.id).or(
         MemoryRelation.where(to_entity_id: e.id)
       ).delete_all
@@ -151,6 +152,78 @@ RSpec.describe "Rails AST extractor import" do
       rows = MaintenanceReportRow.by_report_type("scan_review")
                                  .where("JSON_EXTRACT(payload, '$.entity_id') = ?", swimmer.id)
       expect(rows.where("JSON_EXTRACT(payload, '$.kind') = 'delete_entity'")).to be_empty
+    end
+  end
+
+  it "moves a claimed stub into the declaring tree so the referencer's rescan does not flap" do
+    # RepoB references GogglesDb::User (reference stub under RepoB's tree).
+    # RepoA then declares it: the claim must REPLACE RepoB's stub edge with
+    # RepoA's real parent — otherwise RepoB's unchanged rescan diffs RepoA's
+    # provenance as its own and queues delete_entity (the A→B→A flap).
+    Dir.mktmpdir do |dir_b|
+      FileUtils.mkdir_p(File.join(dir_b, "app/models"))
+      File.write(File.join(dir_b, "app/models/order.rb"), <<~RUBY)
+        class Order < ApplicationRecord
+          belongs_to :user, class_name: "GogglesDb::User"
+        end
+      RUBY
+      import_fixture(dir_b, project: "RepoB")
+
+      stub = MemoryEntity.find_by!(name: "GogglesDb::User", entity_type: "Class")
+      stub_edge = MemoryRelation.find_by(from_entity_id: stub.id, relation_type: "part_of")
+      expect(stub_edge.properties["reference_stub"]).to eq(true)
+
+      Dir.mktmpdir do |dir_a|
+        FileUtils.mkdir_p(File.join(dir_a, "app/models"))
+        File.write(File.join(dir_a, "app/models/user.rb"), <<~RUBY)
+          module GogglesDb
+            class User < ApplicationRecord
+              def full_name; end
+            end
+          end
+        RUBY
+        import_fixture(dir_a, project: "RepoA")
+
+        # Claimed: RepoA's parent edge replaced the stub edge, and the
+        # declaring producer's provenance landed.
+        new_edge = MemoryRelation.find_by(from_entity_id: stub.id, relation_type: "part_of")
+        expect(new_edge.to_entity_id).not_to eq(stub_edge.to_entity_id)
+        expect(new_edge.properties["reference_stub"]).to be_nil
+        expect(stub.memory_observations.where(source: "rails_ast_extractor")
+                .where(status: MemoryObservation::ACTIVE_STATUS).count).to be >= 1
+
+        # RepoB rescan WITHOUT the reference: User lives under RepoA's
+        # subtree now → not diffed → no delete flap; RepoA's obs survive.
+        File.write(File.join(dir_b, "app/models/order.rb"),
+                   "class Order < ApplicationRecord; end\n")
+        second = import_fixture(dir_b, project: "RepoB")
+        expect(second.success).to be true
+
+        rows = MaintenanceReportRow.by_report_type("scan_review")
+                                   .where("JSON_EXTRACT(payload, '$.entity_id') = ?", stub.id)
+        expect(rows.where("JSON_EXTRACT(payload, '$.kind') = 'delete_entity'")).to be_empty
+        expect(stub.memory_observations.where(source: "rails_ast_extractor")
+                .where(status: MemoryObservation::ACTIVE_STATUS).count).to be >= 1
+      end
+    end
+  end
+
+  it "retires a dropped superclass through relation diffing (no contradictory facts)" do
+    Dir.mktmpdir do |dir|
+      write_fixture(dir)
+      first = import_fixture(dir)
+      expect(first.success).to be true
+      expect(MemoryRelation.where(relation_type: "inherits").count).to be >= 1
+
+      File.write(File.join(dir, "app/models/swimmer.rb"), "class Swimmer; end\n")
+      second = import_fixture(dir)
+      expect(second.success).to be true
+
+      # The dropped superclass surfaces as a vanished relation — reviewable,
+      # and free of the "Superclass: …" text contradiction an observation
+      # would leave behind forever.
+      expect(second.rescan_relations_flagged).to be >= 1
+      expect(MemoryObservation.where("content LIKE ?", "Superclass:%").count).to eq(0)
     end
   end
 end

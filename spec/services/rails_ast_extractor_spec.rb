@@ -193,6 +193,59 @@ RSpec.describe RailsAstExtractor do
     end
   end
 
+  it "ignores enum option kwargs and composes prefixed/suffixed accessor names" do
+    Dir.mktmpdir do |dir|
+      build_fixture(dir)
+      File.write(File.join(dir, "app/models/post.rb"), <<~RUBY)
+        class Post < ApplicationRecord
+          enum :state, { free: 0, paid: 1 }, prefix: true, default: :free
+          enum :kind, %i[gold silver], _suffix: :tier
+          enum level: { low: 0, high: 1 }, scopes: false
+        end
+      RUBY
+      result = extract(dir)
+      labels = result["nodes"].select { |n| n["entity_type"] == "Method" }.map { |n| n["label"] }
+      # Rails composes the accessor: `prefix: true` => `state_free?`, never `prefix?`.
+      expect(labels).to include("Post#state_free?", "Post#state_paid?",
+                                "Post#gold_tier?", "Post#silver_tier?",
+                                "Post#low?", "Post#high?")
+      expect(labels).not_to include("Post#prefix?", "Post#default?", "Post#_suffix?",
+                                    "Post#scopes?", "Post#free?", "Post#gold?")
+    end
+  end
+
+  it "keeps the enclosing namespace on nested resources and uses :post_id" do
+    Dir.mktmpdir do |dir|
+      build_fixture(dir)
+      File.write(File.join(dir, "config/routes.rb"), <<~RUBY)
+        Rails.application.routes.draw do
+          namespace :admin do
+            resources :posts do
+              resources :comments
+            end
+          end
+        end
+      RUBY
+      result = extract(dir)
+      edges = edge_labels(result)
+      expect(edges).to include([ "GET /admin/posts/:post_id/comments",
+                                 "routes_to", "Admin::CommentsController#index", "EXTRACTED" ])
+      expect(edges).not_to include([ "GET /admin/posts/:id/comments",
+                                     "routes_to", "CommentsController#index", "EXTRACTED" ])
+      expect(result["nodes"].map { |n| n["label"] }).not_to include("CommentsController")
+    end
+  end
+
+  it "emits an inherits edge for the superclass (retires via rescan, unlike an observation)" do
+    Dir.mktmpdir do |dir|
+      build_fixture(dir)
+      result = extract(dir)
+      expect(edge_labels(result)).to include([ "Swimmer", "inherits", "ApplicationRecord", "INFERRED" ])
+      obs = result["nodes"].flat_map { |n| Array(n["observations"]).map { |o| o["content"] } }
+      expect(obs.grep(/Superclass/)).to be_empty
+    end
+  end
+
   it "skips delegate targets that are not associations" do
     Dir.mktmpdir do |dir|
       build_fixture(dir)
@@ -239,6 +292,20 @@ RSpec.describe RailsAstExtractor do
         FileUtils.ln_s(File.join(outside, "evil.rb"), File.join(dir, "app/models/evil.rb"))
         result = extract(dir)
         expect(result["nodes"].map { |n| n["label"] }).not_to include("Escaped")
+      end
+    end
+  end
+
+  it "ignores a symlinked config/routes.rb escaping the repo root" do
+    Dir.mktmpdir do |dir|
+      build_fixture(dir)
+      FileUtils.rm(File.join(dir, "config/routes.rb"))
+      Dir.mktmpdir do |outside|
+        File.write(File.join(outside, "routes.rb"),
+                   "Rails.application.routes.draw do\n  resources :evil\nend\n")
+        FileUtils.ln_s(File.join(outside, "routes.rb"), File.join(dir, "config/routes.rb"))
+        result = extract(dir)
+        expect(result["nodes"].map { |n| n["label"] }).not_to include("EvilController")
       end
     end
   end

@@ -126,7 +126,14 @@ class GraphifyImporter
     match_results.map do |match|
       if match.is_child
         child_action = match.child_action
-        if child_action == "add_relation" && already_parented?(match.exact_match)
+        if already_parented?(match.exact_match) && reference_stub?(match.exact_match)
+          # Claiming an unclaimed stub: `add_relation` replaces the
+          # stub-tagged part_of edge with the declaring tree's parent
+          # (part_of is single-parent) — the entity moves to the repo
+          # that actually declares it, so the referencing repo's rescan
+          # can no longer diff the declaring repo's facts as its own.
+          child_action = "add_relation"
+        elsif child_action == "add_relation" && already_parented?(match.exact_match)
           child_action = "skip"
         end
         # A child parented under a DIFFERENT entity than this import's parent
@@ -233,13 +240,15 @@ class GraphifyImporter
   # subtree must keep the old exclusion behavior).
   def self.reference_stub?(entity)
     return false if entity.blank?
-    return false if entity.memory_observations
-      .where(status: MemoryObservation::ACTIVE_STATUS)
-      .where("content LIKE ?", "Defined at %").exists?
+    # Stub edge first: almost every entity lacks one, so the common case
+    # costs a single EXISTS instead of two.
+    return false unless MemoryRelation.where(from_entity_id: entity.id, relation_type: "part_of")
+      .where("JSON_UNQUOTE(JSON_EXTRACT(properties, '$.reference_stub')) = 'true'")
+      .exists?
 
-    MemoryRelation.where(from_entity_id: entity.id, relation_type: "part_of")
-                  .where("JSON_UNQUOTE(JSON_EXTRACT(properties, '$.reference_stub')) = 'true'")
-                  .exists?
+    entity.memory_observations
+          .where(status: MemoryObservation::ACTIVE_STATUS)
+          .where("content LIKE ?", "Defined at %").none?
   end
   private_class_method :reference_stub?
 
@@ -551,7 +560,14 @@ class GraphifyImporter
   # then provenance when the node declares a source file. Reference-only
   # nodes carry no file → no provenance — a stub never claims a class.
   def entity_observations(node)
-    obs = Array(node["observations"]).map { |o| o.is_a?(Hash) ? o : {} }
+    # Passthrough observations keep their content but NEVER their own
+    # source/confidence — otherwise an uploaded graph.json could stamp
+    # "official verified" trust onto arbitrary claims.
+    obs = Array(node["observations"]).filter_map do |o|
+      next unless o.is_a?(Hash) && o["content"].present?
+
+      o.merge("source" => producer_name)
+    end
     file = node["source_file"].to_s
     line = node["source_location"].to_s
     return obs if file.blank?
