@@ -1,4 +1,6 @@
 - payload = row.effective_payload
+-# relationship_proposal rows may nest their fields under "payload" (legacy seeding); merge nested-then-flat.
+- rel = payload["payload"].is_a?(Hash) ? payload["payload"].merge(payload.except("payload")) : payload
 - form_id = "row-form-#{row.row_uuid}"
 .border.rounded.p-4.bg-white.shadow-sm{ id: dom_id(row) }
   = form_with url: compaction_review_action_data_exchange_index_path, method: :post, local: true, html: { id: form_id } do
@@ -21,15 +23,15 @@
           = render "entity_search_select", row: row, field_name: "source_id", label_text: "Source", current_id: source_id, current_name: source_name, select_id: "source-select-#{row.row_uuid}", search_id: "source-search-#{row.row_uuid}"
           = render "entity_search_select", row: row, field_name: "target_id", label_text: "Target", current_id: target_id, current_name: target_name, select_id: "target-select-#{row.row_uuid}", search_id: "target-search-#{row.row_uuid}"
         - when "relationship_proposal"
-          - from_id = payload["from_id"] || payload["from_entity_id"]
-          - to_id = payload["to_id"] || payload["to_entity_id"]
-          - from_name = MemoryEntity.find_by(id: from_id)&.name || payload["from_name"]
-          - to_name = MemoryEntity.find_by(id: to_id)&.name || payload["to_name"]
+          - from_id = rel["from_id"] || rel["from_entity_id"]
+          - to_id = rel["to_id"] || rel["to_entity_id"]
+          - from_name = MemoryEntity.find_by(id: from_id)&.name || rel["from_name"]
+          - to_name = MemoryEntity.find_by(id: to_id)&.name || rel["to_name"]
           = render "entity_search_select", row: row, field_name: "from_id", label_text: "From", current_id: from_id, current_name: from_name, select_id: "from-select-#{row.row_uuid}", search_id: "from-search-#{row.row_uuid}"
           = render "entity_search_select", row: row, field_name: "to_id", label_text: "To", current_id: to_id, current_name: to_name, select_id: "to-select-#{row.row_uuid}", search_id: "to-search-#{row.row_uuid}"
           .field.mb-3
             = label_tag "relation-type-#{row.row_uuid}", "Relation type", class: "block text-xs font-medium text-gray-600"
-            = select_tag "relation_type", options_for_select(RelationshipDiscoveryStrategy::ALLOWED_RELATION_TYPES, payload["relation_type"]), id: "relation-type-#{row.row_uuid}", class: "mt-1 block w-full rounded border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500"
+            = select_tag "relation_type", options_for_select(RelationshipDiscoveryStrategy::ALLOWED_RELATION_TYPES | [rel["relation_type"].to_s].reject(&:blank?), rel["relation_type"]), id: "relation-type-#{row.row_uuid}", class: "mt-1 block w-full rounded border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500"
         - when "orphan_parent"
           - entity_id = payload["entity_id"]
           - entity_name = payload["entity_name"]
@@ -117,11 +119,12 @@
           - if payload["recommendation"].present?
             %p.text-xs.mt-1= payload["recommendation"]
         - when "relationship_proposal"
-          - rel = payload["payload"].is_a?(Hash) ? payload["payload"].merge(payload.except("payload")) : payload
           %p
             %span.font-medium= rel["relation_type"]
-            %span.text-gray-400 — #{rel["confidence_band"]}
-            %span.text-gray-400 (score #{rel["score"]})
+            - if rel["confidence_band"].present?
+              %span.text-gray-400 — #{rel["confidence_band"]}
+            - if rel["score"].present?
+              %span.text-gray-400 (score #{rel["score"]})
           - if rel["explanation"].present?
             %p.text-xs.mt-1= rel["explanation"]
         - when "orphan_parent"

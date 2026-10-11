@@ -1003,6 +1003,48 @@ RSpec.describe 'DataExchange', type: :request do
       expect(response.body).to include('review-1')
       expect(response.body).not_to include('review-dismissed')
     end
+
+    it 'renders relationship_proposal rows flat and nested, omitting absent score/band' do
+      [
+        [ 'proposal-scored', 'has_many', 5, { 'relation_type' => 'has_many', 'confidence_band' => 'high', 'score' => 5 } ],
+        [ 'proposal-noscore', 'has_one', nil, { 'relation_type' => 'has_one' } ],
+        [ 'proposal-nested', 'belongs_to', 7,
+          { 'payload' => { 'relation_type' => 'belongs_to', 'confidence_band' => 'low', 'score' => 7,
+                           'from_entity_id' => task1.id, 'to_entity_id' => project1.id } } ]
+      ].each do |uuid, _rtype, _score, payload|
+        payload = { 'from_entity_id' => task1.id, 'to_entity_id' => project1.id }.merge(payload)
+        MaintenanceReportRow.create!(
+          maintenance_report: compaction_report,
+          report_type: 'compaction_review',
+          row_uuid: uuid,
+          kind: 'relationship_proposal',
+          status: 'active',
+          signature: "relationship_proposal|#{uuid}",
+          payload: payload
+        )
+      end
+
+      get compaction_review_data_exchange_index_path
+
+      expect(response).to have_http_status(:ok)
+      expect(response.body).to include('proposal-scored', 'proposal-noscore', 'proposal-nested')
+      expect(response.body).to include('(score 5)', '(score 7)')
+      # The no-score row must not render the bare "(score )" fragment next to has_one.
+      expect(response.body).not_to match(/has_one[^<]*\(score \)/)
+      # Nested row fields reach both the summary and the editable controls:
+      # belongs_to is outside ALLOWED_RELATION_TYPES but must be offered and
+      # preselected (seeded canonical types are applyable, not just the
+      # discovery allowlist).
+      expect(response.body).to include('belongs_to')
+      expect(response.body).to match(/<option selected="selected" value="belongs_to">|<option value="belongs_to" selected="selected">/)
+
+      post compaction_review_action_data_exchange_index_path, params: {
+        review_action: 'apply', item_id: 'proposal-nested', relation_type: 'belongs_to',
+        from_id: task1.id, to_id: project1.id
+      }
+
+      expect(MemoryRelation.find_by(from_entity: task1, to_entity: project1, relation_type: 'belongs_to')).to be_present
+    end
   end
 
   describe 'POST /data_exchange/compaction_review_action' do
