@@ -154,6 +154,7 @@ module GraphifyRescan
 
     index = payload_index(import_data, source: source)
     new_edges = edge_keys(import_data["relations"] || import_data[:relations])
+    subtree = stored_ids.to_set
 
     MemoryRelation
       .where(from_entity_id: stored_ids)
@@ -162,7 +163,17 @@ module GraphifyRescan
       .filter_map do |relation|
         from_key = [ relation.from_entity.entity_type.to_s.downcase, relation.from_entity.name.to_s.downcase ]
         to_key = [ relation.to_entity.entity_type.to_s.downcase, relation.to_entity.name.to_s.downcase ]
-        next unless index[:keys].include?(from_key) && index[:keys].include?(to_key)
+        # An endpoint is "vanished" only if it belongs to THIS subtree's
+        # stored set AND dropped out of the payload — its delete_entity
+        # item already covers the edge. Anything else (payload-present
+        # nodes, reference stubs with no provenance, entities another
+        # repo's import claims) is a live endpoint: if the producer edge
+        # is gone from the payload it must be flagged. Without this,
+        # edges to stubs — the common extractor case (inherits/belongs_to
+        # to undeclared constants) — could never retire.
+        next unless index[:keys].include?(from_key)
+        next if subtree.include?(relation.to_entity_id) &&
+                !index[:keys].include?(to_key)
         next if new_edges.include?([ from_key, to_key, relation.relation_type.to_s.downcase ])
 
         relation

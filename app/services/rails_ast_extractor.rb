@@ -407,11 +407,16 @@ class RailsAstExtractor
         walk_routes(Array(stmt.block&.body&.body), file_id: file_id, rel: rel,
                     ns_prefix: ns_prefix + ns, path_prefix: path_prefix + pfx)
       when "root"
-        arg = stmt.arguments&.arguments&.first
-        to = arg.respond_to?(:unescaped) ? arg.unescaped.to_s : ""
+        # `root "pages#home"` (positional) and `root to: "pages#home"`
+        # (keyword) are both legal; a namespaced root maps to /admin.
+        to = options_hash(stmt)["to"].to_s
+        if to.blank?
+          arg = stmt.arguments&.arguments&.first
+          to = arg.respond_to?(:unescaped) ? arg.unescaped.to_s : ""
+        end
         ctrl, action = to.split("#", 2)
-        rid = add_node("GET /", source_file: rel, source_location: line(stmt),
-                       entity_type: "Route")
+        rid = add_node("GET #{path_prefix.presence || '/'}", source_file: rel,
+                       source_location: line(stmt), entity_type: "Route")
         add_containment(file_id, rid)
         emit_routes_to(rid, controller_const(ctrl, ns_prefix), action, rel, stmt)
       when *HTTP_VERBS

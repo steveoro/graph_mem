@@ -126,12 +126,16 @@ class GraphifyImporter
     match_results.map do |match|
       if match.is_child
         child_action = match.child_action
-        if already_parented?(match.exact_match) && reference_stub?(match.exact_match)
-          # Claiming an unclaimed stub: `add_relation` replaces the
-          # stub-tagged part_of edge with the declaring tree's parent
-          # (part_of is single-parent) — the entity moves to the repo
-          # that actually declares it, so the referencing repo's rescan
-          # can no longer diff the declaring repo's facts as its own.
+        if already_parented?(match.exact_match) && reference_stub?(match.exact_match) &&
+           match.import_node[:reference] != true
+          # Claiming an unclaimed stub — but ONLY when this payload actually
+          # declares the node. `add_relation` replaces the stub-tagged
+          # part_of edge with the declaring tree's parent (part_of is
+          # single-parent), so the referencing repo's rescan can no longer
+          # diff the declaring repo's facts as its own. A payload that only
+          # *references* the stub too keeps the stored parent (skip):
+          # otherwise two referencing repos would ping-pong the edge on
+          # every alternating import.
           child_action = "add_relation"
         elsif child_action == "add_relation" && already_parented?(match.exact_match)
           child_action = "skip"
@@ -551,8 +555,13 @@ class GraphifyImporter
     }
     # Reference-only nodes (extractor stubs for unresolved edge targets)
     # tag their tree edge so a later import can tell "unclaimed stub"
-    # apart from "operator-created entity" when checking foreign subtrees.
-    child["relation_properties"] = { "reference_stub" => true } if node["reference"] == true
+    # apart from "operator-created entity" when checking foreign subtrees —
+    # and mark the node itself so headless decisions know a *reference*
+    # payload must not claim a stored stub (only declarations may).
+    if node["reference"] == true
+      child["reference"] = true
+      child["relation_properties"] = { "reference_stub" => true }
+    end
     child
   end
 

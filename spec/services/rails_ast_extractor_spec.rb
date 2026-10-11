@@ -284,6 +284,25 @@ RSpec.describe RailsAstExtractor do
     end
   end
 
+  it "maps root to: keyword form and namespaced roots to their mount path" do
+    Dir.mktmpdir do |dir|
+      build_fixture(dir)
+      File.write(File.join(dir, "config/routes.rb"), <<~RUBY)
+        Rails.application.routes.draw do
+          root to: "pages#home"
+          namespace :admin do
+            root "dash#show"
+          end
+        end
+      RUBY
+      result = extract(dir)
+      edges = edge_labels(result)
+      expect(edges).to include([ "GET /", "routes_to", "PagesController#home", "EXTRACTED" ])
+      expect(edges).to include([ "GET /admin", "routes_to", "Admin::DashController#show", "EXTRACTED" ])
+      expect(edges).not_to include([ "GET /", "routes_to", "Admin::DashController#show", "EXTRACTED" ])
+    end
+  end
+
   it "ignores symlinked files escaping the repo root" do
     Dir.mktmpdir do |dir|
       build_fixture(dir)

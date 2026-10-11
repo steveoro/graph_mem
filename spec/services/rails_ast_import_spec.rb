@@ -20,7 +20,9 @@ RSpec.describe "Rails AST extractor import" do
 
   def purge_fixture_names
     MemoryEntity.where(name: %w[OtherApp Fixture Team Swimmer Order GogglesDb
-                                GogglesDb::User RepoA RepoB ApplicationRecord]).find_each do |e|
+                                GogglesDb::User RepoA RepoB ApplicationRecord
+                                Shared::Base Post Article Thing ExternalBase
+                                OtherBase Vendor]).find_each do |e|
       MemoryRelation.where(from_entity_id: e.id).or(
         MemoryRelation.where(to_entity_id: e.id)
       ).delete_all
@@ -224,6 +226,61 @@ RSpec.describe "Rails AST extractor import" do
       # would leave behind forever.
       expect(second.rescan_relations_flagged).to be >= 1
       expect(MemoryObservation.where("content LIKE ?", "Superclass:%").count).to eq(0)
+    end
+  end
+
+  it "does not ping-pong a shared reference stub between two referencing repos" do
+    # RepoA and RepoB both reference Shared::Base but neither declares it:
+    # a reference-only payload must NOT claim the stub — otherwise the edge
+    # flips between repos on every alternating import and each unchanged
+    # re-import writes 1–2 relations (#100's idempotency contract).
+    Dir.mktmpdir do |dir_a|
+      FileUtils.mkdir_p(File.join(dir_a, "app/models"))
+      File.write(File.join(dir_a, "app/models/post.rb"),
+                 "class Post < Shared::Base; end\n")
+      Dir.mktmpdir do |dir_b|
+        FileUtils.mkdir_p(File.join(dir_b, "app/models"))
+        File.write(File.join(dir_b, "app/models/article.rb"),
+                   "class Article < Shared::Base; end\n")
+
+        import_fixture(dir_a, project: "RepoA")
+        stub = MemoryEntity.find_by!(name: "Shared::Base", entity_type: "Class")
+        parent_id = MemoryRelation
+                    .find_by(from_entity_id: stub.id, relation_type: "part_of").to_entity_id
+
+        # RepoB only references the stub too: no claim, parent unchanged.
+        import_fixture(dir_b, project: "RepoB")
+        expect(MemoryRelation.find_by(from_entity_id: stub.id, relation_type: "part_of").to_entity_id)
+          .to eq(parent_id)
+
+        # Alternating unchanged re-imports write nothing and keep the parent.
+        expect(import_fixture(dir_a, project: "RepoA").relations_created).to eq(0)
+        expect(import_fixture(dir_b, project: "RepoB").relations_created).to eq(0)
+        expect(MemoryRelation.find_by(from_entity_id: stub.id, relation_type: "part_of").to_entity_id)
+          .to eq(parent_id)
+      end
+    end
+  end
+
+  it "retires producer edges to reference stubs when the reference drops out of the payload" do
+    # Edges to undeclared constants are the common case for the extractor:
+    # `Thing inherits ExternalBase` and `Thing belongs_to Vendor` both end
+    # at stubs with no provenance. Dropping the references must flag the
+    # stored edges for review (never auto-delete).
+    Dir.mktmpdir do |dir|
+      FileUtils.mkdir_p(File.join(dir, "app/models"))
+      File.write(File.join(dir, "app/models/thing.rb"), <<~RUBY)
+        class Thing < ExternalBase
+          belongs_to :vendor
+        end
+      RUBY
+      first = import_fixture(dir)
+      expect(first.success).to be true
+
+      File.write(File.join(dir, "app/models/thing.rb"), "class Thing < OtherBase; end\n")
+      second = import_fixture(dir)
+      expect(second.success).to be true
+      expect(second.rescan_relations_flagged).to be >= 2
     end
   end
 end
