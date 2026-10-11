@@ -93,9 +93,21 @@ class DataExchangeController < ApplicationController
 
   # POST /data_exchange/import_upload
   # Receives JSON file, runs matching, stores in temp files, redirects to review
+  # Uploaded graph JSON is parsed + matched entirely in memory; a hard cap
+  # keeps a stray huge export from ballooning the request. 64 MB covers
+  # ~50k-node graphs with headroom — anything bigger should go through the
+  # headless rake import instead (by design choice, not a hard limit).
+  MAX_UPLOAD_BYTES = 64.megabytes
+
   def import_upload
     unless params[:file].present?
       flash[:error] = "Please select a file to import"
+      return redirect_to root_path
+    end
+
+    if params[:file].size > MAX_UPLOAD_BYTES
+      flash[:error] = "File too large (#{(params[:file].size / 1.megabyte.to_f).round(1)} MB > " \
+                      "#{MAX_UPLOAD_BYTES / 1.megabyte} MB). Use `rails graphify:import` or `rails_ast:import` instead."
       return redirect_to root_path
     end
 
@@ -239,14 +251,18 @@ class DataExchangeController < ApplicationController
     # defaults to "active". `.presence ||` collapsed both.
     @status_filter = params.key?(:status) ? params[:status].to_s : "active"
     @kind_filter = params[:kind].presence
+    @q = params[:q].presence
     @items = CompactionReviewService.items(
       report_type: @report_type,
       status: @status_filter,
       kind: @kind_filter,
-      page: params[:page]
+      page: params[:page],
+      q: @q
     )
     @active_count = CompactionReviewService.active_count(report_type: @report_type)
     @stats = CompactionReviewService.status_counts(report_type: @report_type)
+    @kind_counts = CompactionReviewService.kind_counts(report_type: @report_type)
+    @children_info = CompactionReviewService.delete_children_info(report_type: @report_type, items: @items)
     @current_item = CompactionReviewService.find_item(params[:item_id], report_type: @report_type) if params[:item_id].present?
   end
 
@@ -270,6 +286,8 @@ class DataExchangeController < ApplicationController
                CompactionReviewService.dismiss(item_id, reason: params[:reason], report_type: @report_type)
     when "bulk_dismiss"
                CompactionReviewService.bulk_dismiss(params[:item_ids] || [], report_type: @report_type)
+    when "bulk_apply"
+               CompactionReviewService.bulk_apply(params[:item_ids] || [], report_type: @report_type)
     when "restore"
                CompactionReviewService.restore(item_id, report_type: @report_type)
     when "ignore"
@@ -291,7 +309,7 @@ class DataExchangeController < ApplicationController
       return render json: result
     end
 
-    flash[result[:success] ? :notice : :alert] = result[:success] ? (result[:message] || "Done.") : (result[:error] || "Action failed.")
+    flash[result[:success] ? :notice : :alert] = result[:success] ? (result[:message] || "Done.") : (result[:message] || result[:error] || "Action failed.")
     redirect_to review_action_redirect_path
   end
 
@@ -598,7 +616,8 @@ class DataExchangeController < ApplicationController
     if params[:return_to] == "dashboard"
       root_path
     else
-      compaction_review_data_exchange_index_path(report_type: review_report_type_param, status: params[:status], page: params[:page])
+      compaction_review_data_exchange_index_path(report_type: review_report_type_param, status: params[:status],
+                                                 kind: params[:kind], q: params[:q], page: params[:page])
     end
   end
 

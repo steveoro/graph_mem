@@ -319,4 +319,110 @@ RSpec.describe CompactionReviewService, type: :service do
       expect(result[:success]).to be false
     end
   end
+
+  describe ".items with q" do
+    it "matches names and ids inside the payload, case-insensitively" do
+      expect(described_class.items(q: "source task").map(&:row_uuid)).to include("merge-1")
+      expect(described_class.items(q: "SOURCE TASK").map(&:row_uuid)).to include("merge-1")
+    end
+
+    it "matches the kind string and returns nothing on a miss" do
+      expect(described_class.items(q: "orphan_parent").map(&:row_uuid)).to eq([ "orphan-1" ])
+      expect(described_class.items(q: "zzz-no-such-text")).to be_empty
+    end
+  end
+
+  describe ".kind_counts" do
+    it "groups active queue rows by kind" do
+      counts = described_class.kind_counts
+      expect(counts["entity_merge"]).to eq(1)
+      expect(counts["orphan_parent"]).to eq(1)
+      expect(counts["relationship_proposal"]).to eq(1)
+    end
+  end
+
+  describe ".bulk_apply" do
+    let!(:proposable_target) { MemoryEntity.create!(name: "Other B", entity_type: "PossibleSolution") }
+
+    it "applies selected actionable rows and skips non-actionable ones" do
+      described_class.dismiss("orphan-1")
+
+      result = described_class.bulk_apply([ "merge-1", "orphan-1", "rel-1" ])
+
+      expect(result[:success]).to be true
+      expect(result[:message]).to include("skipped")
+      expect(described_class.find_item("orphan-1").status).to eq("dismissed")
+    end
+
+    it "reports per-row failures without aborting the batch" do
+      MaintenanceReportRow.create!(
+        maintenance_report: report,
+        report_type: "compaction_review",
+        row_uuid: "ghost-1",
+        kind: "delete_entity",
+        status: "active",
+        signature: "delete_entity|999999",
+        payload: { "entity_id" => 999_999, "entity_name" => "Ghost" }
+      )
+
+      result = described_class.bulk_apply([ "merge-1", "ghost-1" ])
+
+      expect(result[:success]).to be false
+      expect(result[:message]).to include("failed")
+      expect(result[:message]).to include("Entity not found")
+    end
+
+    it "refuses an empty selection" do
+      expect(described_class.bulk_apply([])[:success]).to be false
+    end
+  end
+
+  describe ".delete_children_info" do
+    let!(:parent_entity) { MemoryEntity.create!(name: "Parent C", entity_type: "Class") }
+    let!(:queued_child) { MemoryEntity.create!(name: "Queued Child", entity_type: "Method") }
+    let!(:lone_child) { MemoryEntity.create!(name: "Lone Child", entity_type: "Method") }
+    let!(:delete_row) do
+      MaintenanceReportRow.create!(
+        maintenance_report: report,
+        report_type: "compaction_review",
+        row_uuid: "del-1",
+        kind: "delete_entity",
+        status: "active",
+        signature: "delete_entity|#{parent_entity.id}",
+        payload: { "entity_id" => parent_entity.id, "entity_name" => parent_entity.name }
+      )
+    end
+
+    before do
+      MemoryRelation.create!(from_entity: queued_child, to_entity: parent_entity, relation_type: "part_of")
+      MemoryRelation.create!(from_entity: lone_child, to_entity: parent_entity, relation_type: "part_of")
+      MaintenanceReportRow.create!(
+        maintenance_report: report,
+        report_type: "compaction_review",
+        row_uuid: "del-child",
+        kind: "delete_entity",
+        status: "active",
+        signature: "delete_entity|#{queued_child.id}",
+        payload: { "entity_id" => queued_child.id, "entity_name" => queued_child.name }
+      )
+    end
+
+    it "splits children into queued-for-deletion vs parentless" do
+      info = described_class.delete_children_info(report_type: "compaction_review", items: [ delete_row ])
+
+      expect(info[parent_entity.id]).to eq(queued: 1, parentless: 1)
+    end
+
+    it "ignores dismissed delete rows when counting queued children" do
+      described_class.dismiss("del-child")
+
+      info = described_class.delete_children_info(report_type: "compaction_review", items: [ delete_row ])
+
+      expect(info[parent_entity.id]).to eq(queued: 0, parentless: 2)
+    end
+
+    it "returns empty for pages without delete_entity rows" do
+      expect(described_class.delete_children_info(report_type: "compaction_review", items: [ merge_row ])).to eq({})
+    end
+  end
 end

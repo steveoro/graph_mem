@@ -41,7 +41,7 @@ module GraphVocabulary
     # NOTE: `contains` is NOT a `part_of` variant — the direction is inverted
     # (`File -[contains]-> Class` would wrongly canonicalize to the file being
     # part of the class). It stays a literal relation type of its own.
-    "part_of" => %w[partof child_of contained_in],
+    "part_of" => %w[partof child_of contained_in is_part_of member_of component_of],
     "depends_on" => %w[dependson requires prerequisite_of imports imports_from],
     "relates_to" => %w[related_to relatedto associated_with connected_to connects_to],
     "implements" => %w[implementation_of provides],

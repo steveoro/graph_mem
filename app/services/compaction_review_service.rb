@@ -11,13 +11,14 @@ class CompactionReviewService
       MaintenanceReport.by_type(report_type).recent.first
     end
 
-    def items(report: nil, report_type: "compaction_review", status: "active", kind: nil, page: 1)
+    def items(report: nil, report_type: "compaction_review", status: "active", kind: nil, page: 1, q: nil)
       scope = MaintenanceReportRow.by_report_type(report_type)
       scope = scope.where(maintenance_report_id: report.id) if report
       scope = scope.by_status(status) if status.present?
       scope = scope.by_kind(kind) if kind.present?
 
       rows = scope.to_a
+      rows = filter_by_query(rows, q) if q.present?
       sorted = sort_rows(rows)
       Kaminari.paginate_array(sorted).page(page).per(PER_PAGE)
     end
@@ -28,6 +29,32 @@ class CompactionReviewService
 
     def status_counts(report_type: "compaction_review")
       MaintenanceReportRow.by_report_type(report_type).group(:status).count
+    end
+
+    def kind_counts(report_type: "compaction_review")
+      MaintenanceReportRow.by_report_type(report_type).group(:kind).count
+    end
+
+    # For `delete_entity` rows on the page: how many children are queued
+    # for deletion themselves vs would be left parentless. entity.destroy!
+    # removes observations + relations via dependent: :destroy, but child
+    # ENTITIES keep living without a parent — applying one row NEVER
+    # cascades, by (possibly temporary) design choice: the operator
+    # approved one deletion, not a subtree wipe. If lone-seeded subtree
+    # deletions turn out common, revisit with a separate "apply with
+    # children" action rather than a default cascade.
+    def delete_children_info(report_type:, items:)
+      ids = items.filter_map { |row| row.kind == "delete_entity" ? delete_entity_target(row) : nil }.uniq
+      return {} if ids.empty?
+
+      queued = delete_entity_targets(report_type: report_type)
+      info = {}
+      MemoryRelation.where(relation_type: "part_of", to_entity_id: ids)
+                    .pluck(:to_entity_id, :from_entity_id).each do |parent_id, child_id|
+        slot = (info[parent_id] ||= { queued: 0, parentless: 0 })
+        queued.include?(child_id) ? slot[:queued] += 1 : slot[:parentless] += 1
+      end
+      info
     end
 
     def find_item(item_id, report_type: "compaction_review")
@@ -80,6 +107,36 @@ class CompactionReviewService
         row.update!(status: "dismissed", dismissed_at: Time.current, resolution_reason: reason)
       end
       { success: true, message: "#{rows.size} suggestion(s) dismissed" }
+    end
+
+    # Bulk-apply iterates `apply` per row: non-actionable rows (already
+    # dismissed/approved) are skipped rather than failing the batch, and the
+    # summary keeps per-row failures visible for the operator.
+    def bulk_apply(item_ids, report_type: "compaction_review")
+      rows = MaintenanceReportRow.by_report_type(report_type).where(row_uuid: item_ids)
+      return { success: false, error: "No suggestions selected" } if rows.empty?
+
+      applied = 0
+      skipped = 0
+      failed = []
+      rows.each do |row|
+        unless row.status.in?(%w[active ignored])
+          skipped += 1
+          next
+        end
+
+        result = apply(row.row_uuid, {}, report_type: report_type)
+        if result[:success]
+          applied += 1
+        else
+          failed << "#{row.kind} #{row.row_uuid.to_s.first(8)}: #{result[:error]}"
+        end
+      end
+
+      message = "#{applied} suggestion(s) applied"
+      message += ", #{skipped} skipped (not actionable)" if skipped.positive?
+      message += "; #{failed.size} failed: #{failed.first(3).join('; ')}" if failed.any?
+      { success: failed.empty?, message: message }
     end
 
     def restore(item_id, report_type: "compaction_review")
@@ -255,6 +312,31 @@ class CompactionReviewService
       rows.sort_by.with_index do |row, idx|
         [ root_first?(row) ? 0 : 1, -item_score(row), idx ]
       end
+    end
+
+    # `q` matches the serialized payload (names, ids, explanation, kind) —
+    # case-insensitive substring on the JSON body. Payload shapes vary per
+    # kind, so a column-per-field query would miss fields; the JSON string
+    # is the honest "find anything mentioning this" search.
+    def filter_by_query(rows, q)
+      needle = q.to_s.downcase
+      rows.select do |row|
+        haystack = "#{row.kind} #{row.payload.to_json} #{row.edited_payload.to_json}".downcase
+        haystack.include?(needle)
+      end
+    end
+
+    # All entity ids targeted by ACTIVE delete_entity rows in this queue —
+    # the "queued for deletion" set the children warning compares against.
+    def delete_entity_targets(report_type:)
+      MaintenanceReportRow.by_report_type(report_type).active.where(kind: "delete_entity")
+                          .filter_map { |row| delete_entity_target(row) }
+    end
+
+    def delete_entity_target(row)
+      payload = row.effective_payload.with_indifferent_access
+      target = payload[:entity_id] || payload.dig("payload", "entity_id")
+      target.to_i.positive? ? target.to_i : nil
     end
 
     def entity_types(row)

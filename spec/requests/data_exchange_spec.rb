@@ -1233,4 +1233,76 @@ RSpec.describe 'DataExchange', type: :request do
       expect(MemoryEntity.find_by(id: task1.id)).to be_present
     end
   end
+
+  describe 'GET /data_exchange/compaction_review — kind filter + search' do
+    let!(:compaction_report) do
+      MaintenanceReport.create!(report_type: 'compaction_review', data: { 'source' => 'test' })
+    end
+    let!(:scan_report) do
+      MaintenanceReport.create!(report_type: 'scan_review', data: { 'source' => 'graphify' })
+    end
+
+    before do
+      MaintenanceReportRow.create!(
+        maintenance_report: compaction_report, report_type: 'compaction_review',
+        row_uuid: 'kf-merge', kind: 'entity_merge', status: 'active',
+        signature: CompactionReviewService.signature_for('entity_merge', {
+          'entity_a' => { 'entity_id' => task1.id }, 'entity_b' => { 'entity_id' => project1.id } }),
+        payload: { 'entity_a' => { 'entity_id' => task1.id, 'name' => 'Alfa Pair A' },
+                   'entity_b' => { 'entity_id' => project1.id, 'name' => 'Alfa Pair B' } }
+      )
+      MaintenanceReportRow.create!(
+        maintenance_report: scan_report, report_type: 'scan_review',
+        row_uuid: 'kf-delete', kind: 'delete_entity', status: 'active',
+        signature: "delete_entity|#{task1.id}",
+        payload: { 'entity_id' => task1.id, 'entity_name' => 'Zeta Gone' }
+      )
+    end
+
+    it 'filters scan_review rows by kind with counts' do
+      MaintenanceReportRow.create!(
+        maintenance_report: scan_report, report_type: 'scan_review',
+        row_uuid: 'kf-reparent', kind: 'reparent_entity', status: 'active',
+        signature: "reparent_entity|#{task1.id}",
+        payload: { 'entity_id' => task1.id, 'parent_id' => project1.id }
+      )
+
+      get compaction_review_data_exchange_index_path, params: { report_type: 'scan_review', kind: 'delete_entity' }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.body).to include('kf-delete')
+      expect(response.body).not_to include('kf-reparent')
+      expect(response.body).to include('delete entity (1)')
+    end
+
+    it 'searches payloads via q' do
+      get compaction_review_data_exchange_index_path, params: { q: 'alfa pair' }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.body).to include('kf-merge')
+      expect(response.body).not_to include('kf-delete')
+    end
+
+    it 'bulk-applies selected actionable rows and reports the summary' do
+      ghost_uuid = 'kf-ghost'
+      MaintenanceReportRow.create!(
+        maintenance_report: scan_report, report_type: 'scan_review',
+        row_uuid: ghost_uuid, kind: 'delete_relation', status: 'active',
+        signature: 'delete_relation|999998',
+        payload: { 'relation_id' => 999_998 }
+      )
+
+      post compaction_review_action_data_exchange_index_path,
+           params: { review_action: 'bulk_apply', report_type: 'scan_review',
+                     item_ids: [ 'kf-delete', ghost_uuid ] }
+
+      expect(response).to redirect_to(compaction_review_data_exchange_index_path(report_type: 'scan_review'))
+      follow_redirect!
+      expect(response.body).to include('applied')
+      expect(MemoryEntity.find_by(id: task1.id)).to be_nil
+      expect(MaintenanceReportRow.find_by(row_uuid: 'kf-delete').status).to eq('approved')
+      # Failed row stays actionable with the error recorded.
+      expect(MaintenanceReportRow.find_by(row_uuid: ghost_uuid).status).to eq('active')
+    end
+  end
 end
