@@ -41,14 +41,23 @@ module GraphVocabulary
     # NOTE: `contains` is NOT a `part_of` variant — the direction is inverted
     # (`File -[contains]-> Class` would wrongly canonicalize to the file being
     # part of the class). It stays a literal relation type of its own.
-    "part_of" => %w[partof belongs_to child_of contained_in],
+    "part_of" => %w[partof child_of contained_in],
     "depends_on" => %w[dependson requires prerequisite_of imports imports_from],
     "relates_to" => %w[related_to relatedto associated_with connected_to connects_to],
     "implements" => %w[implementation_of provides],
     "solves" => %w[resolves fixes solution_for],
     "calls" => %w[call invokes invokes_method calls_method indirect_call],
     "inherits" => %w[subclass_of extends_class inherits_from],
-    "mixes_in" => %w[includes extends_module prepends mixin]
+    "mixes_in" => %w[includes extends_module prepends mixin],
+    # Rails DSL associations (phase B extractor). `belongs_to` was previously a
+    # `part_of` variant; it is now its own canonical type — association edges
+    # are cross-cutting (never hierarchical), and keeping it under `part_of`
+    # made them silently re-parent or be rejected by the relations pass.
+    "belongs_to" => %w[belong_to],
+    "has_many" => %w[has_and_belongs_to_many habtm hasmany],
+    "has_one" => %w[hasone],
+    "delegates_to" => %w[delegate delegates delegate_to],
+    "routes_to" => %w[routes routed_to routed_by]
   }.freeze
   EXTRA_RELATION_TYPES = %w[
     extends configured_by tested_by migrated_by authorizes integrates_with replaces

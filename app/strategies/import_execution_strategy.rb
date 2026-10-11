@@ -22,6 +22,7 @@ class ImportExecutionStrategy
     :relations_created,
     :relations_unresolved,
     :relations_skipped,
+    :relations_cross_repo,
     :rescan,
     :rescan_entities_flagged,
     :rescan_relations_flagged,
@@ -41,6 +42,7 @@ class ImportExecutionStrategy
         relations_created: relations_created,
         relations_unresolved: relations_unresolved,
         relations_skipped: relations_skipped,
+        relations_cross_repo: relations_cross_repo,
         rescan: rescan,
         rescan_entities_flagged: rescan_entities_flagged,
         rescan_relations_flagged: rescan_relations_flagged,
@@ -63,6 +65,7 @@ class ImportExecutionStrategy
     @relations_created = 0
     @relations_unresolved = 0
     @relations_skipped = 0
+    @relations_cross_repo = 0
     @rescan_active = false
     @rescan_vanished_entities = []
     @rescan_vanished_relations = []
@@ -116,13 +119,17 @@ class ImportExecutionStrategy
             # transaction. See GraphifyRescan's design-decision comment.
             rescan_root = rescan_root_entity(import_data, decision_map) if import_data["rescan"] || import_data[:rescan]
             if rescan_root
-              diff = GraphifyRescan.observation_diff!(rescan_root, import_data)
+              # The producer that owns the stored facts this rescan diffs:
+              # "rescan" => "rails_ast_extractor" diffs only that producer's
+              # provenance/edges (graphify's buckets stay untouched).
+              @rescan_source = rescan_source(import_data)
+              diff = GraphifyRescan.observation_diff!(rescan_root, import_data, source: @rescan_source)
               if diff
                 @rescan_active = true
                 @observations_obsoleted = diff[:obsoleted]
                 @observations_superseded = diff[:superseded]
                 @rescan_vanished_entities = diff[:vanished]
-                @rescan_stored_ids = GraphifyRescan.stored_entities(rescan_root).pluck(:id)
+                @rescan_stored_ids = GraphifyRescan.stored_entities(rescan_root, source: @rescan_source).pluck(:id)
               end
             end
 
@@ -146,7 +153,7 @@ class ImportExecutionStrategy
             # never re-parent, so the operator applies the move).
             if @rescan_active
               @rescan_vanished_relations = GraphifyRescan.relation_diff(
-                import_data, @rescan_stored_ids
+                import_data, @rescan_stored_ids, source: @rescan_source
               )
               @rescan_reparents = GraphifyRescan.reparent_diff(
                 import_data, @rescan_stored_ids, @entity_mapping
@@ -177,14 +184,15 @@ class ImportExecutionStrategy
           entities: @rescan_vanished_entities,
           relations: @rescan_vanished_relations,
           reparents: @rescan_reparents,
-          source_ref: rescan_source_ref(import_data)
+          source_ref: rescan_source_ref(import_data),
+          source: @rescan_source
         )
         @rescan_entities_flagged = seeded_rows.count { |row| row.kind == "delete_entity" }
         @rescan_relations_flagged = seeded_rows.count { |row| row.kind == "delete_relation" }
         @rescan_reparents_flagged = seeded_rows.count { |row| row.kind == "reparent_entity" }
       end
       GraphifyRescan.dismiss_restored_items(stored_ids: @rescan_stored_ids, import_data: import_data,
-                                            entity_mapping: @entity_mapping)
+                                            entity_mapping: @entity_mapping, source: @rescan_source)
     end
 
     report = ImportReport.new(
@@ -201,6 +209,7 @@ class ImportExecutionStrategy
       relations_created: @relations_created,
       relations_unresolved: @relations_unresolved,
       relations_skipped: @relations_skipped,
+      relations_cross_repo: @relations_cross_repo,
       rescan: @errors.empty? && @rescan_active,
       rescan_entities_flagged: @rescan_entities_flagged,
       rescan_relations_flagged: @rescan_relations_flagged,
@@ -587,12 +596,32 @@ class ImportExecutionStrategy
         next
       end
 
-      # Excluded foreign subtrees are left untouched — including their
-      # edges: an endpoint inside one means this edge belongs to the other
-      # project's graph, not this import's.
-      if @excluded_entity_ids.include?(from_id) || @excluded_entity_ids.include?(to_id)
+      # Excluded foreign subtrees are left untouched — but only edges
+      # whose SOURCE lives inside one: an edge authored by the foreign
+      # project's graph. An edge from an in-subtree source TO a foreign
+      # endpoint is a legitimate cross-repo bridge (a `belongs_to` from
+      # our model to goggles_db's class): it is allowed and tagged so the
+      # operator can tell local structure from bridging.
+      if @excluded_entity_ids.include?(from_id)
         @relations_skipped += 1
         next
+      end
+
+      # Cross-repo bridging applies ONLY when the far endpoint was
+      # reference-only in this payload (a dangling stub awaiting its
+      # declaring repo). A payload that DECLARES the endpoint but matched
+      # a foreign entity is a plain name collision — that is not a
+      # bridge, and the old skip behavior stays.
+      properties = relation["properties"] || relation[:properties] || {}
+      cross_repo = @excluded_entity_ids.include?(to_id) && properties["endpoint_reference"] == true
+      if @excluded_entity_ids.include?(to_id) && !cross_repo
+        @relations_skipped += 1
+        next
+      end
+      if cross_repo
+        @relations_cross_repo += 1
+        relation["properties"] = properties.merge("cross_repo" => true)
+        relation.delete(:properties)
       end
 
       # fatal: false — an invalid edge (e.g. out-of-range confidence) is
@@ -780,6 +809,15 @@ class ImportExecutionStrategy
   def rescan_source_ref(import_data)
     root_payload = Array(import_data["root_nodes"] || import_data[:root_nodes]).first || {}
     root_payload["name"] || root_payload[:name]
+  end
+
+  # The producer whose stored facts this rescan reconciles. "rescan" => true
+  # means the graphify bucket (A3 default); a producer may pass its own name
+  # (e.g. "rails_ast_extractor") so a re-scan diffs only the facts that
+  # producer owns and never flags another producer's observations/edges.
+  def rescan_source(import_data)
+    marker = import_data["rescan"] || import_data[:rescan]
+    marker.is_a?(String) ? marker : GraphifyImporter::SOURCE_NAME
   end
 
   def resolve_parent_id(decision, path)

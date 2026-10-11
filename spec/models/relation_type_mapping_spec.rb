@@ -34,6 +34,13 @@ RSpec.describe RelationTypeMapping, type: :model do
     end
   end
 
+  it "always maps a canonical type to itself, ignoring stale variant rows" do
+    # Upgraded databases may carry `belongs_to` under `part_of` from the
+    # pre-split vocabulary — the canonical name still self-maps.
+    described_class.create!(canonical_type: "part_of", variant: "belongs_to")
+    expect(described_class.canonicalize("belongs_to")).to eq("belongs_to")
+  end
+
   it "enforces case-insensitive variant uniqueness" do
     described_class.create!(canonical_type: "part_of", variant: "belongs_to")
     duplicate = described_class.new(canonical_type: "part_of", variant: "BELONGS_TO")

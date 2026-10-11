@@ -305,7 +305,11 @@ class CompactionReviewService
     end
 
     def validate_relation_type!(relation_type)
-      return if RelationshipDiscoveryStrategy::ALLOWED_RELATION_TYPES.include?(relation_type.to_s)
+      # Gate on the canonical vocabulary, not the discovery proposal
+      # allowlist: seeded rows legitimately carry types like `belongs_to`
+      # or `routes_to` that RelationshipDiscoveryStrategy never proposes
+      # itself.
+      return if GraphVocabulary::RELATION_TYPES.include?(relation_type.to_s)
 
       record = MaintenanceReportRow.new
       record.errors.add(:base, "Invalid relation type: #{relation_type}")
@@ -365,7 +369,7 @@ class CompactionReviewService
       relation_type = action_params[:relation_type].presence || effective[:relation_type]
 
       return { success: false, error: "Invalid relation" } if from_id.zero? || to_id.zero? || relation_type.blank?
-      return { success: false, error: "Invalid relation type" } unless RelationshipDiscoveryStrategy::ALLOWED_RELATION_TYPES.include?(relation_type.to_s)
+      return { success: false, error: "Invalid relation type" } unless GraphVocabulary::RELATION_TYPES.include?(relation_type.to_s)
 
       MemoryRelation.create!(
         from_entity_id: from_id,

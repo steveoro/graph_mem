@@ -13,6 +13,12 @@ class RelationTypeMapping < ApplicationRecord
     return nil if raw_type.blank?
 
     key = raw_type.to_s.strip.downcase
+    # A canonical name always maps to itself — upgraded databases may
+    # carry a stale variant row for it (e.g. `belongs_to` seeded under
+    # `part_of` before it became its own canonical type), and the
+    # vocabulary owns that identity.
+    return key if GraphVocabulary::RELATION_TYPES.include?(key)
+
     @canonical_cache ||= {}
     entry = @canonical_cache[key]
     return entry[:value] if entry && entry[:at] > CANONICALIZE_TTL.ago

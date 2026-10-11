@@ -21,13 +21,22 @@ class GraphifyImporter
   # Graphify link relations that define the containment tree.
   CONTAINMENT_RELATIONS = %w[contains method defines].freeze
 
-  # Graphify link relations mapped to canonical code edges.
+  # Graphify link relations mapped to canonical code edges. Producers are
+  # pluggable — the Rails AST extractor emits the same node-link shape plus
+  # Rails-DSL relation names, which map onto the vocabulary's canonical types.
   EDGE_RELATION_MAPPINGS = {
     "calls" => "calls",
     "indirect_call" => "calls",
     "inherits" => "inherits",
     "mixes_in" => "mixes_in",
-    "imports_from" => "depends_on"
+    "imports_from" => "depends_on",
+    "belongs_to" => "belongs_to",
+    "has_many" => "has_many",
+    "has_one" => "has_one",
+    "has_and_belongs_to_many" => "has_many",
+    "delegates_to" => "delegates_to",
+    "routes_to" => "routes_to",
+    "same_type_as" => "relates_to"
   }.freeze
 
   AMBIGUOUS_CONFIDENCE = "AMBIGUOUS"
@@ -117,7 +126,18 @@ class GraphifyImporter
     match_results.map do |match|
       if match.is_child
         child_action = match.child_action
-        if child_action == "add_relation" && already_parented?(match.exact_match)
+        if already_parented?(match.exact_match) && reference_stub?(match.exact_match) &&
+           match.import_node[:reference] != true
+          # Claiming an unclaimed stub — but ONLY when this payload actually
+          # declares the node. `add_relation` replaces the stub-tagged
+          # part_of edge with the declaring tree's parent (part_of is
+          # single-parent), so the referencing repo's rescan can no longer
+          # diff the declaring repo's facts as its own. A payload that only
+          # *references* the stub too keeps the stored parent (skip):
+          # otherwise two referencing repos would ping-pong the edge on
+          # every alternating import.
+          child_action = "add_relation"
+        elsif child_action == "add_relation" && already_parented?(match.exact_match)
           child_action = "skip"
         end
         # A child parented under a DIFFERENT entity than this import's parent
@@ -165,6 +185,12 @@ class GraphifyImporter
     match_results.each_with_object(Set.new) do |match, foreign|
       next unless match.is_child && already_parented?(match.exact_match)
 
+      # An entity with NO active producer provenance is an unclaimed
+      # reference stub (an earlier import emitted it as a dangling edge
+      # target): whichever repo actually declares it gets to claim it —
+      # cross-repo order must not decide ownership.
+      next if reference_stub?(match.exact_match)
+
       parent_path = match.node_path.sub(/\.children\.\d+\z/, "")
       parent_match = by_path[parent_path]
       # The entity this import would attach the child under: the parent's own
@@ -210,6 +236,25 @@ class GraphifyImporter
     ancestors.include?(current)
   end
   private_class_method :inside_any?
+
+  # A stored entity is an unclaimed reference stub when it carries no
+  # active producer provenance observation (`Defined at …`) AND the
+  # `part_of` edge attaching it was stub-tagged by an earlier import —
+  # an operator-created entity with no obs is NOT a stub (its foreign
+  # subtree must keep the old exclusion behavior).
+  def self.reference_stub?(entity)
+    return false if entity.blank?
+    # Stub edge first: almost every entity lacks one, so the common case
+    # costs a single EXISTS instead of two.
+    return false unless MemoryRelation.where(from_entity_id: entity.id, relation_type: "part_of")
+      .where("JSON_UNQUOTE(JSON_EXTRACT(properties, '$.reference_stub')) = 'true'")
+      .exists?
+
+    entity.memory_observations
+          .where(status: MemoryObservation::ACTIVE_STATUS)
+          .where("content LIKE ?", "Defined at %").none?
+  end
+  private_class_method :reference_stub?
 
   # @param graph_data [Hash, String] parsed graph.json or raw JSON string
   # @param project_name [String] name of the root Project entity
@@ -263,14 +308,37 @@ class GraphifyImporter
         "version" => "1.0",
         "exported_at" => Time.current.iso8601,
         # Marks the payload as rescan-capable: on a re-import the executor
-        # reconciles stored graphify provenance instead of only merging.
-        "rescan" => true,
+        # reconciles stored provenance owned by THIS producer instead of
+        # only merging (string marker = the producer's diff bucket).
+        "rescan" => producer_name,
         "root_nodes" => [ tree ],
         "relations" => relations
       },
       ambiguous_relations: ambiguous,
       stats: build_stats(relations, ambiguous)
     )
+  end
+
+  # The producer name stamped on provenance observations, relation
+  # `properties.source`, and the rescan marker. Producers declare
+  # themselves via top-level "producer" in graph.json (the Rails AST
+  # extractor emits "rails_ast_extractor"). The value is sanitized:
+  # it lands verbatim in observation `source` (trust scoring) and the
+  # rescan bucket, so anything outside a plain identifier falls back
+  # to "graphify" — an uploaded file must not spoof a trust source.
+  PRODUCER_PATTERN = /\A[a-z0-9_]+\z/
+  # Only producers this codebase actually emits may be claimed: the name
+  # is stamped verbatim on observation `source` (trust ranking boosts
+  # sources like "official") and chooses the rescan-diff bucket, so an
+  # arbitrary payload must not mint new ones. A foreign graphify-family
+  # file (e.g. a C++ variant) sharing the "graphify" name is correct —
+  # same producer semantics, same rescan bucket.
+  KNOWN_PRODUCERS = %w[graphify rails_ast_extractor].freeze
+  def producer_name
+    @producer_name ||= begin
+      raw = @data["producer"].to_s
+      raw.match?(PRODUCER_PATTERN) && KNOWN_PRODUCERS.include?(raw) ? raw : SOURCE_NAME
+    end
   end
 
   private
@@ -335,6 +403,15 @@ class GraphifyImporter
   def classify(node)
     label = node["label"].to_s
     return nil if label.blank?
+
+    # Producer-provided type hint (e.g. the Rails extractor marks `Route`
+    # nodes — a label like "GET /swimmers/:id" would otherwise classify as
+    # Class). Only known vocabulary types are honored; unknown hints fall
+    # through to the label heuristics.
+    hinted = node["entity_type"].to_s
+    if hinted.present? && GraphVocabulary::ENTITY_TYPES.include?(hinted)
+      return { name: label, entity_type: hinted }
+    end
 
     source_file = node["source_file"].to_s
 
@@ -476,29 +553,50 @@ class GraphifyImporter
   def import_node(id)
     info = @entity_info[id]
     node = @nodes[id]
-    {
+    child = {
       "name" => info[:name],
       "entity_type" => info[:entity_type],
       "relation_type" => "part_of",
       "observations" => entity_observations(node),
       "children" => []
     }
+    # Reference-only nodes (extractor stubs for unresolved edge targets)
+    # tag their tree edge so a later import can tell "unclaimed stub"
+    # apart from "operator-created entity" when checking foreign subtrees —
+    # and mark the node itself so headless decisions know a *reference*
+    # payload must not claim a stored stub (only declarations may).
+    if node["reference"] == true
+      child["reference"] = true
+      child["relation_properties"] = { "reference_stub" => true }
+    end
+    child
   end
 
+  # Node observations pass through (e.g. extractor "Superclass:" lines),
+  # then provenance when the node declares a source file. Reference-only
+  # nodes carry no file → no provenance — a stub never claims a class.
   def entity_observations(node)
+    # Passthrough observations keep their content but NEVER their own
+    # source/confidence — otherwise an uploaded graph.json could stamp
+    # "official verified" trust onto arbitrary claims.
+    obs = Array(node["observations"]).filter_map do |o|
+      next unless o.is_a?(Hash) && o["content"].present?
+
+      o.merge("source" => producer_name)
+    end
     file = node["source_file"].to_s
     line = node["source_location"].to_s
-    return [] if file.blank?
+    return obs if file.blank?
 
-    [ provenance_observation("Defined at #{[ file, line.presence ].compact.join(':')}") ]
+    obs + [ provenance_observation("Defined at #{[ file, line.presence ].compact.join(':')}") ]
   end
 
   def provenance_observation(content)
     {
       "content" => content,
-      "source" => SOURCE_NAME,
+      "source" => producer_name,
       "confidence" => 1.0,
-      "tags" => [ "graphify", "provenance" ]
+      "tags" => [ producer_name, "provenance" ]
     }
   end
 
@@ -540,7 +638,8 @@ class GraphifyImporter
         "weight" => edge["weight"],
         "confidence" => edge["confidence_score"],
         "properties" => {
-          "source" => SOURCE_NAME,
+          "source" => producer_name,
+          "endpoint_reference" => (@nodes[edge["target"]] || {})["reference"] == true || nil,
           "provenance" => edge["confidence"],
           "source_file" => edge["source_file"],
           "source_location" => edge["source_location"],
