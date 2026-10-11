@@ -303,6 +303,27 @@ RSpec.describe RailsAstExtractor do
     end
   end
 
+  it "normalizes leading-slash scopes and honors path: on namespace" do
+    Dir.mktmpdir do |dir|
+      build_fixture(dir)
+      File.write(File.join(dir, "config/routes.rb"), <<~RUBY)
+        Rails.application.routes.draw do
+          scope "/api" do
+            root "status#ping"
+          end
+          namespace :v1, path: "v" do
+            root "dash#show"
+          end
+        end
+      RUBY
+      result = extract(dir)
+      edges = edge_labels(result)
+      expect(edges).to include([ "GET /api", "routes_to", "StatusController#ping", "EXTRACTED" ])
+      expect(edges).to include([ "GET /v", "routes_to", "V1::DashController#show", "EXTRACTED" ])
+      expect(result["nodes"].map { |n| n["label"] }).not_to include("GET //api", "GET /v1")
+    end
+  end
+
   it "ignores symlinked files escaping the repo root" do
     Dir.mktmpdir do |dir|
       build_fixture(dir)

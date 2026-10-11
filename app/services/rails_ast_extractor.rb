@@ -541,14 +541,18 @@ class RailsAstExtractor
   end
 
   def scope_parts(stmt)
+    options = options_hash(stmt)
     arg = stmt.arguments&.arguments&.first
     name = arg.respond_to?(:unescaped) ? arg.unescaped.to_s : ""
+    # `scope "/api"` arrives with a leading slash — join once or the label
+    # becomes `GET //api`. `path:` (on namespace AND scope) overrides the
+    # URL prefix while the module name still drives controllers.
+    path = options["path"].to_s.presence || name
+    pfx = path.present? ? "/#{path.delete_prefix('/')}" : ""
     if stmt.name.to_s == "namespace"
-      [ [ camelize(name) ], "/#{name}" ]
+      [ [ camelize(name) ], pfx ]
     else
-      options = options_hash(stmt)
       ns = options["module"].to_s.presence&.split("/")&.map { |s| camelize(s) } || []
-      pfx = options["path"].to_s.presence || (name.present? ? "/#{name}" : "")
       [ ns, pfx ]
     end
   end
