@@ -733,6 +733,7 @@ RSpec.describe ImportExecutionStrategy, type: :model do
         relations_created: 3,
         relations_unresolved: 1,
         relations_skipped: nil,
+        relations_cross_repo: nil,
         rescan: nil,
         rescan_entities_flagged: nil,
         rescan_relations_flagged: nil,
@@ -961,30 +962,44 @@ RSpec.describe ImportExecutionStrategy, type: :model do
       expect(MemoryRelation.where(to_entity_id: repo_b.id, relation_type: 'part_of')).to be_empty
     end
 
-    it 'skips relations whose endpoints live inside an excluded foreign subtree' do
+    it 'allows in-subtree edges to excluded foreign endpoints, tagged cross_repo' do
       # RepoA's tree already exists; RepoB's import excludes the shared file
       # subtree but its relations payload still references entities in it.
+      # A source inside the imported subtree bridging OUT is a legitimate
+      # cross-repo edge: it lands, tagged, counted — only edges whose SOURCE
+      # lives inside the excluded subtree are skipped (folded-A4 rule).
       foreign_file = MemoryEntity.create!(name: 'app/controllers/application_controller.rb', entity_type: 'File')
       foreign_class = MemoryEntity.create!(name: 'ApplicationController', entity_type: 'Class')
       MemoryRelation.create!(from_entity_id: foreign_class.id, to_entity_id: foreign_file.id,
                              relation_type: 'part_of')
 
       data_with_relations = import_data.deep_dup
+      # Only endpoints flagged reference-only in the payload may bridge;
+      # a declared endpoint matching a foreign entity is a name
+      # collision, not a bridge — it skips and counts like before.
       data_with_relations['relations'] = [
         { 'from_name' => 'RepoB', 'from_type' => 'Project',
           'to_name' => 'ApplicationController', 'to_type' => 'Class',
-          'relation_type' => 'depends_on' },
+          'relation_type' => 'depends_on',
+          'properties' => { 'endpoint_reference' => true } },
         { 'from_name' => 'RepoB', 'from_type' => 'Project',
           'to_name' => 'app/controllers/application_controller.rb', 'to_type' => 'File',
-          'relation_type' => 'depends_on' }
+          'relation_type' => 'depends_on',
+          'properties' => { 'endpoint_reference' => true } },
+        { 'from_name' => 'RepoB', 'from_type' => 'Project',
+          'to_name' => 'ApplicationController', 'to_type' => 'Class',
+          'relation_type' => 'belongs_to' }
       ]
 
       report = strategy.execute(data_with_relations, decisions)
 
       expect(report.success).to be(true)
-      expect(report.relations_created).to eq(0)
-      expect(report.relations_skipped).to eq(2)
-      expect(MemoryRelation.where(relation_type: 'depends_on')).to be_empty
+      expect(report.relations_created).to eq(2)
+      expect(report.relations_cross_repo).to eq(2)
+      expect(report.relations_skipped).to eq(1)
+      expect(MemoryRelation.where(relation_type: 'depends_on').count).to eq(2)
+      expect(MemoryRelation.where(relation_type: 'depends_on')
+              .map { |r| r.properties['cross_repo'] }.uniq).to eq([ true ])
     end
   end
 

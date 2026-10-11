@@ -532,6 +532,7 @@ DEPENDENCIES
   kaminari-tailwind
   mission_control-jobs
   mysql2
+  prism
   propshaft
   pry
   pry-rails
