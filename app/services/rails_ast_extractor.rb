@@ -59,7 +59,11 @@ class RailsAstExtractor
     @links = []
     @node_ids = {} # "Type:label" => node id
     @const_decls = Hash.new { |h, k| h[k] = [] }   # qualified name => [{file:, line:}]
+    @basename_index = Hash.new { |h, k| h[k] = [] } # short name => qualified names
     @method_decls = {}                             # "C#m"/"C.m" => {file:, line:}
+    @assoc_targets = Hash.new { |h, k| h[k] = {} } # owner qualified => {assoc => class_name}
+    @nodes_by_id = {}                              # id => node (O(1) upgrade lookups)
+    @parse_cache = {}                              # path => ProgramNode|nil
     @stats = Hash.new(0)
   end
 
@@ -83,19 +87,37 @@ class RailsAstExtractor
   private
 
   def ruby_files
+    repo_root = File.realpath(@repo.to_s)
     SCANNED_DIRS.flat_map do |dir|
       base = @repo.join(dir)
-      base.directory? ? Dir[base.join("**/*#{RUBY_EXT}")].sort : []
+      next [] unless base.directory?
+
+      Dir[base.join("**/*#{RUBY_EXT}")].sort.select do |file|
+        # Only real files inside the repo root: a symlinked file (or a
+        # symlinked directory) pointing outside must not leak another
+        # tree's class/method names into the graph.
+        File.file?(file) && File.realpath(file).start_with?("#{repo_root}/")
+      end
     end
   end
 
+  MAX_FILE_BYTES = 2 * 1024 * 1024 # skip pathological files
+
+  # Memoized per path: pass 1 and pass 2 share the parse, so failures are
+  # counted once and each file is parsed once.
   def parse_ok(path)
-    parsed = Prism.parse_file(path)
-    unless parsed.success?
-      @stats[:files_parse_failed] += 1
-      return nil
-    end
-    parsed.value
+    return @parse_cache[path] if @parse_cache.key?(path)
+
+    @parse_cache[path] =
+      if File.size(path) > MAX_FILE_BYTES
+        @stats[:files_too_large] += 1
+        nil
+      elsif (parsed = Prism.parse_file(path)).success?
+        parsed.value
+      else
+        @stats[:files_parse_failed] += 1
+        nil
+      end
   end
 
   # ------------------------------------------------------------------
@@ -117,6 +139,7 @@ class RailsAstExtractor
 
         qualified = (const_prefix + name.split("::")).join("::")
         @const_decls[qualified] << { file: rel, line: line(stmt) }
+        @basename_index[qualified.split("::").last] |= [ qualified ]
         walk_index(Array(stmt.body&.body), const_prefix: const_prefix + name.split("::"), rel: rel)
       when Prism::DefNode
         sep = stmt.receiver ? "." : "#"
@@ -124,6 +147,8 @@ class RailsAstExtractor
           { file: rel, line: line(stmt) }
       when Prism::CallNode
         walk_index(Array(stmt.block&.body&.body), const_prefix: const_prefix, rel: rel) if stmt.block
+      else
+        walk_index(Array(stmt.compact_child_nodes), const_prefix: const_prefix, rel: rel) if container_like?(stmt)
       end
     end
   end
@@ -188,11 +213,12 @@ class RailsAstExtractor
   def handle_dsl_call(call, const_prefix:, rel:)
     return if const_prefix.empty?
 
-    owner = add_node(const_prefix.join("::"), source_file: nil, entity_type: "Class")
+    owner_qualified = const_prefix.join("::")
+    owner = add_node(owner_qualified, source_file: nil, entity_type: "Class")
 
     case call.name.to_s
     when *ASSOCIATION_RELATIONS.keys
-      emit_association(call, owner, const_prefix, rel)
+      emit_association(call, owner, owner_qualified, const_prefix, rel)
     when *MIXIN_MACROS
       args_const(call).each do |const_name|
         target = resolve_const(const_name, const_prefix)
@@ -215,7 +241,7 @@ class RailsAstExtractor
     end
   end
 
-  def emit_association(call, owner, const_prefix, rel)
+  def emit_association(call, owner, owner_qualified, const_prefix, rel)
     sym = call.arguments&.arguments&.first
     return unless sym.is_a?(Prism::SymbolNode)
 
@@ -229,6 +255,7 @@ class RailsAstExtractor
     # singularize+camelize (has_many :badges => Badge).
     base = relation == "has_many" ? assoc.to_s.singularize : assoc.to_s
     class_name = options["class_name"].is_a?(String) ? options["class_name"] : camelize(base)
+    @assoc_targets[owner_qualified][assoc.to_s] = class_name
     target = resolve_const(class_name, const_prefix)
     props = { "provenance" => "RAILS_DSL", "association" => assoc.to_s }
     props["through"] = options["through"].to_s if options["through"]
@@ -239,29 +266,70 @@ class RailsAstExtractor
              context: "#{call.name} :#{assoc}", call_line: line(call), properties: props)
   end
 
+  # `enum :status, { draft: 0, published: 1 }` and `enum :kind, %i[a b]`
+  # (positional form) plus legacy `enum status: { draft: 0 }` (keyword
+  # form): the value keys become the predicate accessors (`draft?`), not
+  # the enum name itself.
   def emit_enum_accessor(call, owner, const_prefix, rel)
-    arg = call.arguments&.arguments&.first
-    names = case arg
-    when Prism::SymbolNode then [ arg.unescaped ]
-    when Prism::ArrayNode
-              arg.elements.filter_map { |e| e.unescaped if e.is_a?(Prism::SymbolNode) }
+    args = Array(call.arguments&.arguments)
+    kw = args.find { |a| a.is_a?(Prism::KeywordHashNode) }
+
+    definitions = []
+    if kw
+      kw.elements.each do |assoc|
+        next unless assoc.is_a?(Prism::AssocNode)
+
+        # `enum status: {draft:0}` nests the mapping (the values ARE the
+        # inner keys); bare `enum :status, draft: 0` puts the value keys
+        # directly in the kwargs.
+        case assoc.value
+        when Prism::KeywordHashNode, Prism::HashNode, Prism::ArrayNode
+          definitions.concat(enum_value_names(assoc.value))
+        else
+          definitions << assoc.key.unescaped.to_s if assoc.key.respond_to?(:unescaped)
+        end
+      end
+    else
+      definitions.concat(enum_value_names(args.second)) if args.second
     end
-    Array(names).each do |name|
-      mid = add_node("#{const_prefix.join('::')}##{name}?",
+
+    definitions.uniq.each do |value|
+      mid = add_node("#{const_prefix.join('::')}##{value}?",
                      source_file: rel, source_location: line(call), entity_type: "Method")
       add_containment(owner, mid)
     end
   end
 
+  def enum_value_names(node)
+    case node
+    when Prism::KeywordHashNode, Prism::HashNode
+      node.elements.filter_map do |e|
+        e.key.unescaped.to_s if e.is_a?(Prism::AssocNode) && e.key.respond_to?(:unescaped)
+      end
+    when Prism::ArrayNode
+      node.elements.filter_map { |e| e.unescaped.to_s if e.respond_to?(:unescaped) }
+    else
+      []
+    end
+  end
+
+  # `to:` is an association/method name, not a class name: resolve it
+  # through this class's own association map (`belongs_to :owner,
+  # class_name: "User"` => delegate reaches User). Non-association
+  # targets (`:class`, `:@ivar`, undefined methods) are skipped — a
+  # missing fact beats a false one.
   def emit_delegate(call, owner, const_prefix, rel)
     options = options_hash(call)
     target_sym = options["to"]
     return unless target_sym.is_a?(String) && target_sym.present?
 
+    class_name = @assoc_targets[const_prefix.join("::")][target_sym]
+    return unless class_name
+
     fields = Array(call.arguments&.arguments).filter_map do |a|
       a.unescaped if a.is_a?(Prism::SymbolNode)
     end
-    target = resolve_const(camelize(target_sym), const_prefix)
+    target = resolve_const(class_name, const_prefix)
     add_edge(owner, target_id_for(target, rel), "delegates_to",
              confidence: confidence_for(target), rel: rel,
              context: "delegate #{fields.join(', ')}, to: :#{target_sym}",
@@ -300,6 +368,14 @@ class RailsAstExtractor
         ns, pfx = scope_parts(stmt)
         walk_routes(Array(stmt.block&.body&.body), file_id: file_id, rel: rel,
                     ns_prefix: ns_prefix + ns, path_prefix: path_prefix + pfx)
+      when "root"
+        arg = stmt.arguments&.arguments&.first
+        to = arg.respond_to?(:unescaped) ? arg.unescaped.to_s : ""
+        ctrl, action = to.split("#", 2)
+        rid = add_node("GET /", source_file: rel, source_location: line(stmt),
+                       entity_type: "Route")
+        add_containment(file_id, rid)
+        emit_routes_to(rid, controller_const(ctrl, ns_prefix), action, rel, stmt)
       when *HTTP_VERBS
         emit_verb_route(stmt, file_id: file_id, rel: rel,
                         ns_prefix: ns_prefix, path_prefix: path_prefix)
@@ -340,11 +416,21 @@ class RailsAstExtractor
 
   def emit_member_blocks(stmt, file_id:, rel:, ctrl_const:, base_path:)
     Array(stmt.block&.body&.body).each do |sub|
-      next unless sub.is_a?(Prism::CallNode) && %w[member collection].include?(sub.name.to_s)
+      next unless sub.is_a?(Prism::CallNode)
+
+      # Nested `resources` sit inside the resources block itself:
+      # /parents/:id/children.
+      if %w[resources resource].include?(sub.name.to_s)
+        emit_resource_routes(sub, file_id: file_id, rel: rel,
+                             ns_prefix: [], path_prefix: "#{base_path}/:id")
+        next
+      end
+      next unless %w[member collection].include?(sub.name.to_s)
 
       member = sub.name.to_s == "member"
       Array(sub.block&.body&.body).each do |verb_call|
-        next unless verb_call.is_a?(Prism::CallNode) && HTTP_VERBS.include?(verb_call.name.to_s)
+        next unless verb_call.is_a?(Prism::CallNode)
+        next unless HTTP_VERBS.include?(verb_call.name.to_s)
 
         arg = verb_call.arguments&.arguments&.first
         act = arg.respond_to?(:unescaped) ? arg.unescaped.to_s : nil
@@ -370,9 +456,17 @@ class RailsAstExtractor
     ctrl, action =
       if to.include?("#")
         to.split("#", 2)
+      elsif options["controller"].present? || options["action"].present?
+        segs = path_segments(path)
+        [ options["controller"].to_s.presence || segs.first.to_s,
+          options["action"].to_s.presence || segs.last.to_s ]
       else
-        leaf = path.split("/").last.to_s.sub(/\A:/, "")
-        [ options["controller"].to_s.presence || leaf, options["action"].to_s.presence || infer_action(stmt.name.to_s) ]
+        # Rails convention for a bare verb route: leading segments are the
+        # controller path, the LAST segment is the action; a lone segment
+        # defaults its action to `index` (`get 'health'` => `health#index`).
+        segs = path_segments(path)
+        [ segs[0..-2].presence&.join("/") || segs.first.to_s,
+          segs.size > 1 ? segs.last.to_s : "index" ]
       end
     ctrl_const = controller_const(ctrl, ns_prefix)
     verb = stmt.name.to_s == "match" ? "MATCH" : stmt.name.to_s.upcase
@@ -385,9 +479,12 @@ class RailsAstExtractor
   def emit_routes_to(rid, ctrl_const, action, rel, stmt)
     return if ctrl_const.blank? || action.blank?
 
+    # Undeclared actions are route-stub Method nodes: no source_file →
+    # no provenance (a route mentioning `#stats` doesn't "define" it).
+    decl = @method_decls["#{ctrl_const}##{action}"]
     mid = add_node("#{ctrl_const}##{action}",
-                   source_file: @method_decls.dig("#{ctrl_const}##{action}", :file) || rel,
-                   source_location: @method_decls.dig("#{ctrl_const}##{action}", :line) || line(stmt),
+                   source_file: decl ? decl[:file] : nil,
+                   source_location: decl ? decl[:line] : nil,
                    entity_type: "Method")
     add_containment(add_node(ctrl_const, source_file: nil, entity_type: "Class"), mid)
     add_edge(rid, mid, "routes_to", confidence: "EXTRACTED", rel: rel,
@@ -438,7 +535,7 @@ class RailsAstExtractor
     end
 
     short = name.split("::").last
-    basename_hits = @const_decls.keys.select { |decl| decl == short || decl.end_with?("::#{short}") }
+    basename_hits = @basename_index[short]
     return { status: :inferred, name: basename_hits.first } if basename_hits.size == 1
     return { status: :ambiguous, candidates: basename_hits } if basename_hits.size > 1
 
@@ -453,19 +550,28 @@ class RailsAstExtractor
     end
   end
 
+  # Resolved/inferred targets point at their real declaration. UNRESOLVED
+  # targets are reference-only stubs: no source_file (the importer writes
+  # no provenance obs for them) and a "reference" marker — the importer
+  # treats them as claimable placeholders so the repo that actually
+  # declares the constant can merge real provenance in later, regardless
+  # of import order.
   def target_id_for(target, rel)
     name = target[:status] == :ambiguous ? target[:candidates].first : target[:name] || target[:guess]
-    # Resolved targets get their real declaration file; guesses keep the
-    # referencing file so the dangling node is visibly reference-only.
-    decl = target[:status] == :resolved || target[:status] == :inferred ? @const_decls[name].first : nil
-    add_node(name, source_file: decl ? decl[:file] : rel,
+    if target[:status] == :resolved || target[:status] == :inferred
+      decl = @const_decls[name].first
+      add_node(name, source_file: decl ? decl[:file] : rel,
              source_location: decl ? decl[:line] : nil, entity_type: "Class")
+    else
+      add_node(name, source_file: nil, entity_type: "Class",
+               extra_obs: [], reference: true)
+    end
   end
 
-  def add_node(label, source_file:, source_location: nil, entity_type: nil, extra_obs: [])
+  def add_node(label, source_file:, source_location: nil, entity_type: nil, extra_obs: [], reference: false)
     key = "#{entity_type}:#{label}"
     if (existing = @node_ids[key])
-      node = @nodes.find { |n| n["id"] == existing }
+      node = @nodes_by_id[existing]
       node["source_file"] ||= source_file
       node["source_location"] ||= source_location
       (node["observations"] ||= []).concat(extra_obs) if extra_obs.any?
@@ -476,9 +582,11 @@ class RailsAstExtractor
     node = { "id" => id, "label" => label, "source_file" => source_file,
              "source_location" => source_location }.compact
     node["entity_type"] = entity_type if entity_type
+    node["reference"] = true if reference
     node["observations"] = extra_obs if extra_obs.any?
     @nodes << node
     @node_ids[key] = id
+    @nodes_by_id[id] = node
     id
   end
 
@@ -582,8 +690,7 @@ class RailsAstExtractor
     path.gsub(%r{/+}, "/")
   end
 
-  def infer_action(verb)
-    { "get" => "show", "post" => "create", "put" => "update",
-      "patch" => "update", "delete" => "destroy" }[verb] || verb
+  def path_segments(path)
+    path.split("/").reject { |s| s.blank? || s.start_with?(":", "(") }
   end
 end

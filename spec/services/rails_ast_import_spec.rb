@@ -75,9 +75,17 @@ RSpec.describe "Rails AST extractor import" do
     # part_of points child → parent (Team part_of OtherApp).
     MemoryRelation.create!(from_entity: foreign_team, to_entity: foreign_root,
                            relation_type: "part_of")
+    # OtherApp OWNS Team — active provenance makes it a claimed entity,
+    # so this payload's reference-only Team node bridges (not merges).
+    MemoryObservation.create!(memory_entity: foreign_team,
+                              content: "Defined at app/models/team.rb",
+                              source: "graphify")
 
     Dir.mktmpdir do |dir|
       write_fixture(dir)
+      # No team.rb in this repo: Swimmer's belongs_to :team resolves to a
+      # reference-only stub — the only endpoint kind allowed to bridge.
+      FileUtils.rm(File.join(dir, "app/models/team.rb"))
       report = import_fixture(dir)
 
       expect(report.errors).to be_empty
@@ -110,7 +118,39 @@ RSpec.describe "Rails AST extractor import" do
       second = import_fixture(dir)
       expect(second.success).to be true
       expect(foreign_obs.reload.status).to eq(MemoryObservation::ACTIVE_STATUS)
-      expect(second.observations_obsoleted + second.observations_superseded).to be >= 0
+      # The extractor's own provenance is obsoleted; the entity itself is
+      # still present in the payload so nothing is flagged for deletion.
+      # The removed `belongs_to` edge is flagged for review — the rescan
+      # diff really ran — while neither producer's provenance is touched.
+      expect(second.rescan_relations_flagged).to be >= 1
+      expect(swimmer.memory_observations.where(source: "rails_ast_extractor")
+              .pluck(:status).uniq).to eq([ MemoryObservation::ACTIVE_STATUS ])
+    end
+  end
+
+  it "does not propose delete_entity for an entity another producer still owns" do
+    Dir.mktmpdir do |dir|
+      write_fixture(dir)
+      first = import_fixture(dir)
+      expect(first.success).to be true
+
+      swimmer = MemoryEntity.find_by(name: "Swimmer", entity_type: "Class")
+      # A different producer owns this entity too — removing the file must
+      # obsolete OUR provenance but never queue a delete_entity (the other
+      # producer's rescan owns that decision).
+      MemoryObservation.create!(memory_entity: swimmer,
+                                content: "Defined at lib/swimmer.rb:L1",
+                                source: "graphify")
+      FileUtils.rm(File.join(dir, "app/models/swimmer.rb"))
+
+      second = import_fixture(dir)
+      expect(second.success).to be true
+      # Only the File entity is flagged — Swimmer itself is protected by
+      # the graphify provenance the other producer still owns.
+      expect(second.rescan_entities_flagged).to eq(1)
+      rows = MaintenanceReportRow.by_report_type("scan_review")
+                                 .where("JSON_EXTRACT(payload, '$.entity_id') = ?", swimmer.id)
+      expect(rows.where("JSON_EXTRACT(payload, '$.kind') = 'delete_entity'")).to be_empty
     end
   end
 end

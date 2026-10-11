@@ -174,6 +174,12 @@ class GraphifyImporter
     match_results.each_with_object(Set.new) do |match, foreign|
       next unless match.is_child && already_parented?(match.exact_match)
 
+      # An entity with NO active producer provenance is an unclaimed
+      # reference stub (an earlier import emitted it as a dangling edge
+      # target): whichever repo actually declares it gets to claim it —
+      # cross-repo order must not decide ownership.
+      next if reference_stub?(match.exact_match)
+
       parent_path = match.node_path.sub(/\.children\.\d+\z/, "")
       parent_match = by_path[parent_path]
       # The entity this import would attach the child under: the parent's own
@@ -219,6 +225,23 @@ class GraphifyImporter
     ancestors.include?(current)
   end
   private_class_method :inside_any?
+
+  # A stored entity is an unclaimed reference stub when it carries no
+  # active producer provenance observation (`Defined at …`) AND the
+  # `part_of` edge attaching it was stub-tagged by an earlier import —
+  # an operator-created entity with no obs is NOT a stub (its foreign
+  # subtree must keep the old exclusion behavior).
+  def self.reference_stub?(entity)
+    return false if entity.blank?
+    return false if entity.memory_observations
+      .where(status: MemoryObservation::ACTIVE_STATUS)
+      .where("content LIKE ?", "Defined at %").exists?
+
+    MemoryRelation.where(from_entity_id: entity.id, relation_type: "part_of")
+                  .where("JSON_UNQUOTE(JSON_EXTRACT(properties, '$.reference_stub')) = 'true'")
+                  .exists?
+  end
+  private_class_method :reference_stub?
 
   # @param graph_data [Hash, String] parsed graph.json or raw JSON string
   # @param project_name [String] name of the root Project entity
@@ -286,10 +309,16 @@ class GraphifyImporter
   # The producer name stamped on provenance observations, relation
   # `properties.source`, and the rescan marker. Producers declare
   # themselves via top-level "producer" in graph.json (the Rails AST
-  # extractor emits "rails_ast_extractor"); anything else stays
-  # "graphify" so A3 semantics are unchanged for real graphify output.
+  # extractor emits "rails_ast_extractor"). The value is sanitized:
+  # it lands verbatim in observation `source` (trust scoring) and the
+  # rescan bucket, so anything outside a plain identifier falls back
+  # to "graphify" — an uploaded file must not spoof a trust source.
+  PRODUCER_PATTERN = /\A[a-z0-9_]+\z/
   def producer_name
-    @producer_name ||= @data["producer"].presence || SOURCE_NAME
+    @producer_name ||= begin
+      raw = @data["producer"].to_s
+      raw.match?(PRODUCER_PATTERN) && raw.present? ? raw : SOURCE_NAME
+    end
   end
 
   private
@@ -504,21 +533,30 @@ class GraphifyImporter
   def import_node(id)
     info = @entity_info[id]
     node = @nodes[id]
-    {
+    child = {
       "name" => info[:name],
       "entity_type" => info[:entity_type],
       "relation_type" => "part_of",
       "observations" => entity_observations(node),
       "children" => []
     }
+    # Reference-only nodes (extractor stubs for unresolved edge targets)
+    # tag their tree edge so a later import can tell "unclaimed stub"
+    # apart from "operator-created entity" when checking foreign subtrees.
+    child["relation_properties"] = { "reference_stub" => true } if node["reference"] == true
+    child
   end
 
+  # Node observations pass through (e.g. extractor "Superclass:" lines),
+  # then provenance when the node declares a source file. Reference-only
+  # nodes carry no file → no provenance — a stub never claims a class.
   def entity_observations(node)
+    obs = Array(node["observations"]).map { |o| o.is_a?(Hash) ? o : {} }
     file = node["source_file"].to_s
     line = node["source_location"].to_s
-    return [] if file.blank?
+    return obs if file.blank?
 
-    [ provenance_observation("Defined at #{[ file, line.presence ].compact.join(':')}") ]
+    obs + [ provenance_observation("Defined at #{[ file, line.presence ].compact.join(':')}") ]
   end
 
   def provenance_observation(content)
@@ -569,6 +607,7 @@ class GraphifyImporter
         "confidence" => edge["confidence_score"],
         "properties" => {
           "source" => producer_name,
+          "endpoint_reference" => (@nodes[edge["target"]] || {})["reference"] == true || nil,
           "provenance" => edge["confidence"],
           "source_file" => edge["source_file"],
           "source_location" => edge["source_location"],

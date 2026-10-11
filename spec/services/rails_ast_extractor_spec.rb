@@ -173,4 +173,73 @@ RSpec.describe RailsAstExtractor do
       expect(result.stats[:relations_emitted]).to be > 5
     end
   end
+
+  it "emits value accessors for enum positional and keyword forms" do
+    Dir.mktmpdir do |dir|
+      build_fixture(dir)
+      File.write(File.join(dir, "app/models/badge.rb"), <<~RUBY)
+        class Badge < ApplicationRecord
+          enum :status, { draft: 0, published: 1 }
+          enum :kind, %i[gold silver]
+          enum level: { low: 0, high: 1 }
+        end
+      RUBY
+      result = extract(dir)
+      labels = result["nodes"].select { |n| n["entity_type"] == "Method" }.map { |n| n["label"] }
+      %w[Badge#draft? Badge#published? Badge#gold? Badge#silver? Badge#low? Badge#high?].each do |m|
+        expect(labels).to include(m)
+      end
+      expect(labels).not_to include("Badge#status?", "Badge#kind?", "Badge#level?")
+    end
+  end
+
+  it "skips delegate targets that are not associations" do
+    Dir.mktmpdir do |dir|
+      build_fixture(dir)
+      File.write(File.join(dir, "app/models/camera.rb"), "class Camera < ApplicationRecord; end\n")
+      File.write(File.join(dir, "app/models/lens.rb"), <<~RUBY)
+        class Lens < ApplicationRecord
+          belongs_to :camera
+          delegate :zoom, to: :camera
+          delegate :label, to: :class
+          delegate :serial, to: :@thing
+        end
+      RUBY
+      result = extract(dir)
+      edges = edge_labels(result)
+      expect(edges).to include([ "Lens", "delegates_to", "Camera", "EXTRACTED" ])
+      expect(result["nodes"].map { |n| n["label"] }).not_to include("Class", "@thing", "Thing")
+    end
+  end
+
+  it "maps bare verb routes by Rails convention (last segment is the action)" do
+    Dir.mktmpdir do |dir|
+      build_fixture(dir)
+      File.write(File.join(dir, "config/routes.rb"), <<~RUBY)
+        Rails.application.routes.draw do
+          get "photos/search"
+          get "health"
+          root "pages#home"
+        end
+      RUBY
+      result = extract(dir)
+      edges = edge_labels(result)
+      expect(edges).to include([ "GET /photos/search", "routes_to", "PhotosController#search", "EXTRACTED" ])
+      expect(edges).to include([ "GET /health", "routes_to", "HealthController#index", "EXTRACTED" ])
+      expect(edges).to include([ "GET /", "routes_to", "PagesController#home", "EXTRACTED" ])
+      expect(result["nodes"].map { |n| n["label"] }).not_to include("SearchController#show")
+    end
+  end
+
+  it "ignores symlinked files escaping the repo root" do
+    Dir.mktmpdir do |dir|
+      build_fixture(dir)
+      Dir.mktmpdir do |outside|
+        File.write(File.join(outside, "evil.rb"), "class Escaped < ApplicationRecord; end\n")
+        FileUtils.ln_s(File.join(outside, "evil.rb"), File.join(dir, "app/models/evil.rb"))
+        result = extract(dir)
+        expect(result["nodes"].map { |n| n["label"] }).not_to include("Escaped")
+      end
+    end
+  end
 end

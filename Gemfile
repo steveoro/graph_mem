@@ -2,6 +2,7 @@ source "https://rubygems.org"
 
 # Bundle edge Rails instead: gem "rails", github: "rails/rails", branch: "main"
 gem "rails", "~> 8"
+gem "prism" # Prism parser for the Rails AST extractor
 
 gem "propshaft" # The modern asset pipeline for Rails [https://github.com/rails/propshaft]
 

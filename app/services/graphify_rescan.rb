@@ -127,10 +127,23 @@ module GraphifyRescan
         end
       end
 
-      result[:vanished] << entity unless present
+      # An entity another producer still owns (active provenance from a
+      # different source) is NOT deleted on our say-so: our own facts are
+      # obsoleted above, but the delete_entity proposal is skipped — the
+      # other producer's rescan owns that decision.
+      result[:vanished] << entity unless present || other_producer_provenance?(entity, source)
     end
     result
   end
+
+  def self.other_producer_provenance?(entity, source)
+    entity.memory_observations
+          .where(status: MemoryObservation::ACTIVE_STATUS)
+          .where.not(source: source)
+          .where("content LIKE ?", "Defined at %")
+          .exists?
+  end
+  private_class_method :other_producer_provenance?
 
   # Second rescan phase, run AFTER `apply_relations`: stored
   # graphify-sourced edges absent from the new payload — but ONLY when
@@ -248,11 +261,11 @@ module GraphifyRescan
       }
     end
     items += relations.map do |relation|
-      { kind: "delete_relation", relation_id: relation.id, reason: "removed in graphify rescan" }
+      { kind: "delete_relation", relation_id: relation.id, reason: "removed in #{source} rescan" }
     end
     items + reparents.map do |reparent|
       { kind: "reparent_entity", entity_id: reparent[:entity_id],
-        parent_id: reparent[:parent_id], reason: "moved in graphify rescan" }
+        parent_id: reparent[:parent_id], reason: "moved in #{source} rescan" }
     end
   end
   private_class_method :build_review_items
@@ -288,7 +301,7 @@ module GraphifyRescan
       next unless fresh_reparent_ids.include?(item_field(row, "entity_id").to_i)
 
       row.update!(status: "dismissed", dismissed_at: Time.current,
-                  resolution_reason: "superseded by a newer graphify rescan proposal")
+                  resolution_reason: "superseded by a newer rescan proposal")
     end
   end
   private_class_method :retire_superseded_reparents

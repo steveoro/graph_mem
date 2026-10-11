@@ -607,11 +607,20 @@ class ImportExecutionStrategy
         next
       end
 
-      cross_repo = @excluded_entity_ids.include?(to_id)
+      # Cross-repo bridging applies ONLY when the far endpoint was
+      # reference-only in this payload (a dangling stub awaiting its
+      # declaring repo). A payload that DECLARES the endpoint but matched
+      # a foreign entity is a plain name collision — that is not a
+      # bridge, and the old skip behavior stays.
+      properties = relation["properties"] || relation[:properties] || {}
+      cross_repo = @excluded_entity_ids.include?(to_id) && properties["endpoint_reference"] == true
+      if @excluded_entity_ids.include?(to_id) && !cross_repo
+        @relations_skipped += 1
+        next
+      end
       if cross_repo
         @relations_cross_repo += 1
-        properties = (relation["properties"] || relation[:properties] || {}).merge("cross_repo" => true)
-        relation["properties"] = properties
+        relation["properties"] = properties.merge("cross_repo" => true)
         relation.delete(:properties)
       end
 
