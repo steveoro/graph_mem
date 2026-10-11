@@ -336,6 +336,93 @@ RSpec.describe RailsAstExtractor do
     end
   end
 
+  it "does not re-prefix a class path that re-states its module" do
+    Dir.mktmpdir do |dir|
+      build_fixture(dir)
+      File.write(File.join(dir, "app/models/admin/role.rb"), <<~RUBY)
+        module Admin
+          class Admin::Role < ApplicationRecord
+          end
+        end
+      RUBY
+      labels = extract(dir)["nodes"].map { |n| n["label"] }
+      expect(labels).to include("Admin::Role")
+      expect(labels).not_to include("Admin::Admin::Role")
+    end
+  end
+
+  it "targets the `source:` association for has_many through" do
+    Dir.mktmpdir do |dir|
+      build_fixture(dir)
+      File.write(File.join(dir, "app/models/book.rb"), <<~RUBY)
+        class Book < ApplicationRecord
+          has_many :taggings
+          has_many :tags, through: :taggings, source: :label
+        end
+      RUBY
+      File.write(File.join(dir, "app/models/tagging.rb"), <<~RUBY)
+        class Tagging < ApplicationRecord
+          belongs_to :book
+          belongs_to :label
+        end
+      RUBY
+      File.write(File.join(dir, "app/models/label.rb"), <<~RUBY)
+        class Label < ApplicationRecord
+        end
+      RUBY
+      edges = edge_labels(extract(dir))
+      expect(edges).to include([ "Book", "has_many", "Label", "EXTRACTED" ])
+      expect(edges).not_to include([ "Book", "has_many", "Tag", anything ])
+    end
+  end
+
+  it "emits delegates whose `to:` association is declared later" do
+    Dir.mktmpdir do |dir|
+      build_fixture(dir)
+      File.write(File.join(dir, "app/models/preface.rb"), <<~RUBY)
+        class Preface < ApplicationRecord
+          delegate :name, to: :team
+          belongs_to :team
+        end
+      RUBY
+      edges = edge_labels(extract(dir))
+      expect(edges).to include([ "Preface", "delegates_to", "Team", "EXTRACTED" ])
+    end
+  end
+
+  it "expands singular `resource` without :id and pluralizes the controller" do
+    Dir.mktmpdir do |dir|
+      build_fixture(dir)
+      File.write(File.join(dir, "config/routes.rb"), <<~RUBY)
+        Rails.application.routes.draw do
+          resource :profile
+        end
+      RUBY
+      edges = edge_labels(extract(dir))
+      labels = extract(dir)["nodes"].map { |n| n["label"] }
+      expect(labels).to include("GET /profile", "PATCH /profile", "DELETE /profile", "GET /profile/new")
+      expect(labels).not_to include("GET /profile/:id", "GET /profiles")
+      expect(edges).to include([ "GET /profile", "routes_to", "ProfilesController#show", "EXTRACTED" ])
+      expect(edges).not_to include([ "GET /profile", "routes_to", "ProfileController#show", anything ])
+    end
+  end
+
+  it "does not basename-match a qualified class_name onto an unrelated constant" do
+    Dir.mktmpdir do |dir|
+      build_fixture(dir)
+      File.write(File.join(dir, "app/models/badge.rb"), <<~RUBY)
+        class Badge < ApplicationRecord
+          belongs_to :owner, class_name: "Vendor::User"
+        end
+      RUBY
+      edges = edge_labels(extract(dir))
+      # Only Admin::User exists — Vendor::User must stay an unresolved stub,
+      # not snap to Admin::User by basename.
+      expect(edges).not_to include([ "Badge", "belongs_to", "Admin::User", anything ])
+      expect(edges).to include([ "Badge", "belongs_to", "Vendor::User", anything ])
+    end
+  end
+
   it "ignores a symlinked config/routes.rb escaping the repo root" do
     Dir.mktmpdir do |dir|
       build_fixture(dir)

@@ -51,5 +51,10 @@ namespace :rails_ast do
     puts "Import report: #{report.to_h.except(:errors).to_json}"
     puts "Errors: #{report.errors.to_json}" if report.errors.any?
     abort "Import failed" unless report.success
+
+    # Withheld AMBIGUOUS edges land in scan_review so the operator can pick
+    # the intended endpoint — same contract as graphify:import.
+    rows = GraphifyImporter.seed_ambiguous_relations(result.ambiguous_relations, project)
+    puts "Queued #{rows.size} ambiguous relation(s) for review (scan_review)." if rows.any?
   end
 end

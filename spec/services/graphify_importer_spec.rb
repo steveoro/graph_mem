@@ -21,6 +21,14 @@ RSpec.describe GraphifyImporter do
     expect(root["observations"].first["source"]).to eq("graphify")
   end
 
+  it "ignores producer names outside the known set (no trust-source spoofing)" do
+    data = JSON.parse(graph_json)
+    data["producer"] = "official"
+    spoofed = described_class.new(JSON.generate(data), project_name: "sample_app").translate
+    expect(spoofed.import_data["root_nodes"].first["observations"].first["source"]).to eq("graphify")
+    expect(spoofed.import_data["rescan"]).to eq("graphify")
+  end
+
   it "places File entities under the project" do
     files = root["children"].select { |child| child["entity_type"] == "File" }
     expect(files.map { |f| f["name"] }).to include(

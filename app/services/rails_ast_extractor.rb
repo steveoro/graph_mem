@@ -64,6 +64,7 @@ class RailsAstExtractor
     @assoc_targets = Hash.new { |h, k| h[k] = {} } # owner qualified => {assoc => class_name}
     @nodes_by_id = {}                              # id => node (O(1) upgrade lookups)
     @parse_cache = {}                              # path => ProgramNode|nil
+    @pending_delegates = []                        # delegates awaiting a later-declared `to:` assoc
     @stats = Hash.new(0)
   end
 
@@ -137,10 +138,10 @@ class RailsAstExtractor
         name = const_full_name(stmt.constant_path)
         next if name.blank?
 
-        qualified = (const_prefix + name.split("::")).join("::")
+        qualified = qualified_name(const_prefix, name)
         @const_decls[qualified] << { file: rel, line: line(stmt) }
         @basename_index[qualified.split("::").last] |= [ qualified ]
-        walk_index(Array(stmt.body&.body), const_prefix: const_prefix + name.split("::"), rel: rel)
+        walk_index(Array(stmt.body&.body), const_prefix: qualified.split("::"), rel: rel)
       when Prism::DefNode
         sep = stmt.receiver ? "." : "#"
         @method_decls["#{const_prefix.join('::')}#{sep}#{stmt.name}"] =
@@ -172,13 +173,14 @@ class RailsAstExtractor
         name = const_full_name(stmt.constant_path)
         next if name.blank?
 
-        qualified = (const_prefix + name.split("::")).join("::")
+        qualified = qualified_name(const_prefix, name)
         node_id = add_node(qualified, source_file: rel, source_location: line(stmt),
                            entity_type: "Class")
         add_containment(parent_for(file_id, const_prefix), node_id)
         emit_inherits(stmt, node_id, const_prefix, rel)
         walk_emit(Array(stmt.body&.body), file_id: node_id, rel: rel,
-                  const_prefix: const_prefix + name.split("::"))
+                  const_prefix: qualified.split("::"))
+        drain_delegates(qualified, rel)
       when Prism::DefNode
         sep = stmt.receiver ? "." : "#"
         node_id = add_node("#{const_prefix.join('::')}#{sep}#{stmt.name}",
@@ -254,13 +256,17 @@ class RailsAstExtractor
 
     relation = ASSOCIATION_RELATIONS[call.name.to_s]
     # has_many/habtm names are plural: Rails derives the class via
-    # singularize+camelize (has_many :badges => Badge).
-    base = relation == "has_many" ? assoc.to_s.singularize : assoc.to_s
+    # singularize+camelize (has_many :badges => Badge). With
+    # `through: :x, source: :y` the real target is the through model's
+    # `:y` association — the source name wins over the association name.
+    base_name = options["through"].present? && options["source"].present? ? options["source"].to_s : assoc.to_s
+    base = relation == "has_many" ? base_name.singularize : base_name
     class_name = options["class_name"].is_a?(String) ? options["class_name"] : camelize(base)
     @assoc_targets[owner_qualified][assoc.to_s] = class_name
     target = resolve_const(class_name, const_prefix)
     props = { "provenance" => "RAILS_DSL", "association" => assoc.to_s }
     props["through"] = options["through"].to_s if options["through"]
+    props["source"] = options["source"].to_s if options["source"]
     props["foreign_key"] = options["foreign_key"].to_s if options["foreign_key"]
     props["through_relation"] = options["source_type"].to_s if options["source_type"]
     add_edge(owner, target_id_for(target, rel), relation,
@@ -359,8 +365,29 @@ class RailsAstExtractor
     return unless target_sym.is_a?(String) && target_sym.present?
 
     class_name = @assoc_targets[const_prefix.join("::")][target_sym]
-    return unless class_name
+    unless class_name
+      # `to:` may name an association declared LATER in the same class
+      # body — queue it and retry when the body closes (drain_delegates).
+      @pending_delegates << { call: call, owner: owner, owner_qualified: const_prefix.join("::"),
+                              target_sym: target_sym, const_prefix: const_prefix, rel: rel }
+      return
+    end
+    emit_delegate_edge(call, owner, class_name, target_sym, const_prefix, rel)
+  end
 
+  # Retries delegates queued by emit_delegate when their `to:` assoc was
+  # not yet declared — an assoc defined later in the body resolves them;
+  # anything still unresolved is dropped (missing fact beats false fact).
+  def drain_delegates(owner_qualified, rel)
+    pending, rest = @pending_delegates.partition { |d| d[:owner_qualified] == owner_qualified }
+    @pending_delegates = rest
+    pending.each do |d|
+      class_name = @assoc_targets[owner_qualified][d[:target_sym]]
+      emit_delegate_edge(d[:call], d[:owner], class_name, d[:target_sym], d[:const_prefix], rel) if class_name
+    end
+  end
+
+  def emit_delegate_edge(call, owner, class_name, target_sym, const_prefix, rel)
     fields = Array(call.arguments&.arguments).filter_map do |a|
       a.unescaped if a.is_a?(Prism::SymbolNode)
     end
@@ -435,9 +462,12 @@ class RailsAstExtractor
     return if base.blank?
 
     options = options_hash(stmt)
-    ctrl_const = controller_const(options["controller"].presence || base, ns_prefix)
-    base_path = "#{path_prefix}/#{options['path'].presence || base}"
     singular = stmt.name.to_s == "resource"
+    # Singular `resource :profile` routes to ProfilesController (Rails
+    # pluralizes) and emits no `/:id` segment in any path.
+    ctrl_name = options["controller"].presence || (singular ? base.pluralize : base)
+    ctrl_const = controller_const(ctrl_name, ns_prefix)
+    base_path = "#{path_prefix}/#{options['path'].presence || base}"
     actions = REST_ACTIONS.reject { |a, _| singular && a == "index" }
     actions = actions.slice(*Array(options["only"]).map(&:to_s)) if options["only"]
     excepts = Array(options["except"]).map(&:to_s)
@@ -445,6 +475,7 @@ class RailsAstExtractor
 
     actions.each do |action, defs|
       defs.each do |(verb, suffix)|
+        suffix = suffix.sub(":base/:id", ":base") if singular
         route_label = "#{verb} #{normalize_path(suffix.gsub(':base', base_path))}"
         rid = add_node(route_label, source_file: rel, source_location: line(stmt),
                        entity_type: "Route")
@@ -454,19 +485,20 @@ class RailsAstExtractor
     end
 
     emit_member_blocks(stmt, file_id: file_id, rel: rel, ctrl_const: ctrl_const,
-                       base_path: base_path, base: base, ns_prefix: ns_prefix)
+                       base_path: base_path, base: base, ns_prefix: ns_prefix,
+                       singular: singular)
   end
 
-  def emit_member_blocks(stmt, file_id:, rel:, ctrl_const:, base_path:, base:, ns_prefix:)
+  def emit_member_blocks(stmt, file_id:, rel:, ctrl_const:, base_path:, base:, ns_prefix:, singular: false)
     Array(stmt.block&.body&.body).each do |sub|
       next unless sub.is_a?(Prism::CallNode)
 
       # Nested `resources` sit inside the resources block itself:
-      # /parents/:id/children.
+      # /parents/:id/children — a singular parent contributes no :id.
       if %w[resources resource].include?(sub.name.to_s)
         emit_resource_routes(sub, file_id: file_id, rel: rel,
                              ns_prefix: ns_prefix,
-                             path_prefix: "#{base_path}/:#{base.singularize}_id")
+                             path_prefix: singular ? base_path : "#{base_path}/:#{base.singularize}_id")
         next
       end
       next unless %w[member collection].include?(sub.name.to_s)
@@ -480,7 +512,7 @@ class RailsAstExtractor
         act = arg.respond_to?(:unescaped) ? arg.unescaped.to_s : nil
         next if act.blank?
 
-        segment = member ? "#{base_path}/:id/#{act}" : "#{base_path}/#{act}"
+        segment = member && !singular ? "#{base_path}/:id/#{act}" : "#{base_path}/#{act}"
         rid = add_node("#{verb_call.name.to_s.upcase} #{normalize_path(segment)}",
                        source_file: rel, source_location: line(verb_call), entity_type: "Route")
         add_containment(file_id, rid)
@@ -582,6 +614,10 @@ class RailsAstExtractor
       return { status: :resolved, name: lexical }
     end
 
+    # A qualified name is an explicit namespace claim: `Vendor::User`
+    # must not basename-match `Admin::User`. Unresolved → reference stub.
+    return { status: :unresolved, guess: name } if name.include?("::")
+
     short = name.split("::").last
     basename_hits = @basename_index[short]
     return { status: :inferred, name: basename_hits.first } if basename_hits.size == 1
@@ -661,6 +697,22 @@ class RailsAstExtractor
   # ------------------------------------------------------------------
   # Small helpers
   # ------------------------------------------------------------------
+  # Joins a declared constant path onto the enclosing namespace.
+  # Inside `module Admin`, `class Admin::User` re-states the namespace —
+  # Ruby resolves the leading segment to `::Admin`, not `Admin::Admin` —
+  # so a head segment equal to the current prefix's last element is NOT
+  # re-prefixed. Absolute paths (`::Foo`) ignore the prefix entirely.
+  def qualified_name(const_prefix, name)
+    return name.delete_prefix("::") if name.start_with?("::")
+
+    parts = name.split("::")
+    if const_prefix.any? && parts.first == const_prefix.last
+      return (const_prefix[0..-2] + parts).join("::")
+    end
+
+    (const_prefix + parts).join("::")
+  end
+
   def const_full_name(node)
     case node
     when Prism::ConstantReadNode then node.name.to_s

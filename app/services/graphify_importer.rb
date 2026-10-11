@@ -327,10 +327,17 @@ class GraphifyImporter
   # rescan bucket, so anything outside a plain identifier falls back
   # to "graphify" — an uploaded file must not spoof a trust source.
   PRODUCER_PATTERN = /\A[a-z0-9_]+\z/
+  # Only producers this codebase actually emits may be claimed: the name
+  # is stamped verbatim on observation `source` (trust ranking boosts
+  # sources like "official") and chooses the rescan-diff bucket, so an
+  # arbitrary payload must not mint new ones. A foreign graphify-family
+  # file (e.g. a C++ variant) sharing the "graphify" name is correct —
+  # same producer semantics, same rescan bucket.
+  KNOWN_PRODUCERS = %w[graphify rails_ast_extractor].freeze
   def producer_name
     @producer_name ||= begin
       raw = @data["producer"].to_s
-      raw.match?(PRODUCER_PATTERN) && raw.present? ? raw : SOURCE_NAME
+      raw.match?(PRODUCER_PATTERN) && KNOWN_PRODUCERS.include?(raw) ? raw : SOURCE_NAME
     end
   end
 
