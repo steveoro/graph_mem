@@ -83,7 +83,7 @@ RSpec.describe ImportMatchingStrategy, type: :model do
         parent = MemoryEntity.create!(name: "Canonical Parent", entity_type: "Project")
         MemoryRelation.create!(from_entity: child, to_entity: parent, relation_type: "part_of")
 
-        result = strategy.send(:match_child_node, { "name" => child.name, "entity_type" => "workspace" }, "root/child", parent.name)
+        result = strategy.send(:match_child_node, { "name" => child.name, "entity_type" => "workspace" }, "root/child", parent.name, parent.id)
 
         expect(result.exact_match).to eq(child)
         expect(result.status).to eq(described_class::STATUS_SKIP)

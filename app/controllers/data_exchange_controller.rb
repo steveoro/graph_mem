@@ -204,7 +204,8 @@ class DataExchangeController < ApplicationController
         project_name_for(import_data),
         # load_data parses with symbolize_names — the producer tag is :producer.
         source: GraphifyImporter::KNOWN_PRODUCERS.include?(import_data[:producer].to_s) ?
-                import_data[:producer].to_s : "graphify"
+                import_data[:producer].to_s : "graphify",
+        project_id: import_project_entity_id(import_data)
       )
     end
 
@@ -650,6 +651,20 @@ class DataExchangeController < ApplicationController
   def project_name_for(import_data)
     roots = import_data["root_nodes"] || import_data[:root_nodes]
     (roots.is_a?(Array) ? roots.first&.dig("name") || roots.first&.dig(:name) : nil).presence || "import"
+  end
+
+  # The Project entity the import's root merged into — endpoint names in
+  # AMBIGUOUS payloads resolve inside that scope (nil = global only).
+  def import_project_entity_id(import_data)
+    roots = import_data["root_nodes"] || import_data[:root_nodes]
+    root = roots.is_a?(Array) ? roots.first : nil
+    return nil unless root
+
+    MemoryEntity.find_by(
+      name: root["name"] || root[:name],
+      entity_type: NodeOperationsStrategy::PROJECT_ENTITY_TYPE,
+      project_id: nil
+    )&.id
   end
 
   def review_report_type

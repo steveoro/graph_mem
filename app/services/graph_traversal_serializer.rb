@@ -75,6 +75,7 @@ module GraphTraversalSerializer
       entity_id: entity.id,
       name: entity.name,
       entity_type: entity.entity_type,
+      project_id: entity.project_id,
       aliases: entity.aliases,
       observations: observations.map { |observation| observation_json(observation) },
       created_at: entity.created_at.iso8601,

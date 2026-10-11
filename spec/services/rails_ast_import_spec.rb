@@ -28,6 +28,7 @@ RSpec.describe "Rails AST extractor import" do
       MemoryRelation.where(from_entity_id: e.id).or(
         MemoryRelation.where(to_entity_id: e.id)
       ).delete_all
+      MemoryEntity.where(project_id: e.id).update_all(project_id: nil)
       e.destroy!
     end
   end
@@ -76,7 +77,7 @@ RSpec.describe "Rails AST extractor import" do
     # Swimmer's belongs_to :team is then an in-subtree → foreign-endpoint
     # edge: allowed, tagged cross_repo, counted.
     foreign_root = MemoryEntity.create!(name: "OtherApp", entity_type: "Project")
-    foreign_team = MemoryEntity.create!(name: "Team", entity_type: "Class")
+    foreign_team = MemoryEntity.create!(name: "Team", entity_type: "Class", project_id: foreign_root.id)
     # part_of points child → parent (Team part_of OtherApp).
     MemoryRelation.create!(from_entity: foreign_team, to_entity: foreign_root,
                            relation_type: "part_of")
@@ -99,7 +100,9 @@ RSpec.describe "Rails AST extractor import" do
       edge = belongs.first
       expect(edge.to_entity_id).to eq(foreign_team.id)
       expect(edge.properties["cross_repo"]).to eq(true)
-      expect(report.relations_cross_repo).to eq(1)
+      # 2: belongs_to → foreign-owned Team AND inherits → the global
+      # ApplicationRecord stub — both leave this project's namespace.
+      expect(report.relations_cross_repo).to eq(2)
     end
   end
 
@@ -304,13 +307,13 @@ RSpec.describe "Rails AST extractor import" do
     end
   end
 
-  it "v1.49 upgrade: a stored Class entity inside this project subtree retypes to Module on re-import" do
+  it "v1.49 upgrade: a stored Class entity inside this project subtree retypes to Module on re-import", :with_test_embeddings do
     # v1.49 emitted every declaration as Class. Databases holding such an
     # import hit 'Name has already been taken' on the next rails_ast:import —
     # the executor retypes a Class↔Module collision ONLY when the stored
     # entity already lives inside THIS import's subtree (same-repo leftover).
     project = MemoryEntity.create!(name: "Fixture", entity_type: "Project")
-    legacy = MemoryEntity.create!(name: "Billing", entity_type: "Class")
+    legacy = MemoryEntity.create!(name: "Billing", entity_type: "Class", project_id: project.id)
     MemoryRelation.create!(from_entity: legacy, to_entity: project, relation_type: "part_of")
     MemoryObservation.create!(memory_entity: legacy,
                               content: "Defined at app/models/billing.rb",
@@ -359,9 +362,15 @@ RSpec.describe "Rails AST extractor import" do
         File.write(File.join(dir_b, "app/models/foo_ext.rb"), "module Foo\n  def b; end\nend\n")
         report = import_fixture(dir_b, project: "RepoB")
         expect(report.success).to be true
+        # Scoped names let both declarations coexist: RepoA's Class stays
+        # Class, RepoB gets its own Module Foo with its own subtree.
         expect(foo.reload.entity_type).to eq("Class")
-        expect(MemoryEntity.find_by(name: "Foo#b")).to be_nil
-        expect(MemoryEntity.where(name: "Foo").count).to eq(1)
+        foo_b = MemoryEntity.find_by(name: "Foo#b")
+        expect(foo_b).to be_present
+        expect(foo_b.project_id).to eq(MemoryEntity.find_by(name: "RepoB").id)
+        foos = MemoryEntity.where(name: "Foo", entity_type: %w[Class Module])
+        expect(foos.count).to eq(2)
+        expect(foos.find_by(entity_type: "Module").project_id).to eq(foo_b.project_id)
       end
 
       expect(import_fixture(dir_a, project: "RepoA").success).to be true

@@ -36,4 +36,18 @@ module McpGraphMemErrors
     CATEGORY = "system_error"
     NEXT_MOVE = "Escalate to a human. Do not retry blindly."
   end
+
+  # Raised when a name resolves to entities in several projects and no
+  # project context disambiguates it. The message lists every candidate
+  # (entity_id, name, entity_type, project_id) so the caller can retry
+  # with an explicit entity_id — resolution never guesses.
+  class AmbiguousReference < Error
+    CATEGORY = "ambiguous_name"
+    NEXT_MOVE = "Call `set_context` with the intended project, or retry with the numeric entity_id of the candidate you meant."
+
+    def initialize(name, candidates)
+      list = candidates.map { |c| "{entity_id: #{c.id}, name: #{c.name.inspect}, entity_type: #{c.entity_type.inspect}, project_id: #{c.project_id.inspect}}" }
+      super("Name '#{name}' is ambiguous — declared in #{candidates.size} projects: #{list.join(', ')}")
+    end
+  end
 end

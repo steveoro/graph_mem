@@ -82,10 +82,14 @@ class GraphDeleteService
     entity_id = attributes[:entity_id]
     entity = MemoryEntity.find(entity_id)
     if entity.entity_type == NodeOperationsStrategy::PROJECT_ENTITY_TYPE
+      # Members carry project_id = this root (FK ON DELETE RESTRICT) — a
+      # project can't be deleted while members point at it; report the
+      # count explicitly instead of surfacing a raw FK error.
+      members = MemoryEntity.where(project_id: entity.id).count
       raise McpGraphMemErrors::OperationFailed.new(
-        NodeOperationsStrategy::PROJECT_ROOT_PROTECTED_ERROR,
+        "#{NodeOperationsStrategy::PROJECT_ROOT_PROTECTED_ERROR} (#{members} member entities are scoped to it)",
         category: "validation",
-        next_move: "Use `graph_edit` or `graph_write` on a Project root instead."
+        next_move: "Move members out of this project first (graph_edit move_to_parent, or graph_write update_entity), then retry."
       )
     end
 
@@ -128,7 +132,11 @@ class GraphDeleteService
     relation_id = attributes[:relation_id]
     relation = MemoryRelation.find(relation_id)
     snapshot = relation.attributes
+    from_entity = relation.from_entity
     with_deletion_reason(attributes[:reason]) { relation.destroy! }
+    # Removing a part_of edge un-roots the child: membership follows its
+    # (now absent) parent — typically back to the global namespace.
+    ProjectMembership.sync!(from_entity) if snapshot["relation_type"] == "part_of" && from_entity
     {
       relation_id: snapshot["id"],
       from_entity_id: snapshot["from_entity_id"],

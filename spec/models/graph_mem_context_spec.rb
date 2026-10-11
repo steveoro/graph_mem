@@ -125,7 +125,7 @@ RSpec.describe GraphMemContext do
 
     it "includes entities related via part_of to the project" do
       project = MemoryEntity.create!(name: "ParentProject", entity_type: "Project")
-      child = MemoryEntity.create!(name: "ChildTask", entity_type: "Task")
+      child = MemoryEntity.create!(name: "ChildTask", entity_type: "Task", project_id: project.id)
       MemoryRelation.create!(from_entity: child, to_entity: project, relation_type: "part_of")
       described_class.for("cursor-A").current_project_id = project.id
 
@@ -133,10 +133,10 @@ RSpec.describe GraphMemContext do
       expect(ids).to contain_exactly(project.id, child.id)
     end
 
-    it "includes nested part_of descendants recursively" do
+    it "includes nested part_of descendants (members carry project_id)" do
       project = MemoryEntity.create!(name: "RootProject", entity_type: "Project")
-      child = MemoryEntity.create!(name: "ChildTask", entity_type: "Task")
-      grandchild = MemoryEntity.create!(name: "GrandchildStep", entity_type: "Step")
+      child = MemoryEntity.create!(name: "ChildTask", entity_type: "Task", project_id: project.id)
+      grandchild = MemoryEntity.create!(name: "GrandchildStep", entity_type: "Step", project_id: project.id)
       MemoryRelation.create!(from_entity: child, to_entity: project, relation_type: "part_of")
       MemoryRelation.create!(from_entity: grandchild, to_entity: child, relation_type: "part_of")
       described_class.for("cursor-A").current_project_id = project.id
@@ -163,20 +163,22 @@ RSpec.describe GraphMemContext do
       expect(ids).to eq(ids.uniq)
     end
 
-    it "reports truncation metadata when the configured scope cap is reached" do
-      stub_const("#{described_class}::MAX_SCOPED_ENTITIES", 2)
-      project = MemoryEntity.create!(name: "CappedProject", entity_type: "Project")
-      first_child = MemoryEntity.create!(name: "CappedChildOne", entity_type: "Task")
-      second_child = MemoryEntity.create!(name: "CappedChildTwo", entity_type: "Task")
-      MemoryRelation.create!(from_entity: first_child, to_entity: project, relation_type: "part_of")
-      MemoryRelation.create!(from_entity: second_child, to_entity: project, relation_type: "part_of")
+    it "returns every member with no truncation (scope is an indexed project_id filter)" do
+      project = MemoryEntity.create!(name: "UncappedProject", entity_type: "Project")
+      members = Array.new(3) do |i|
+        MemoryEntity.create!(name: "UncappedChild#{i}", entity_type: "Task", project_id: project.id)
+      end
+      # A same-named entity in ANOTHER project is outside this scope.
+      other = MemoryEntity.create!(name: "OtherProject", entity_type: "Project")
+      foreign = MemoryEntity.create!(name: "UncappedChild0", entity_type: "Task", project_id: other.id)
       described_class.for("cursor-A").current_project_id = project.id
 
       scope = described_class.for("cursor-A").scoped_entity_scope
 
-      expect(scope.entity_ids).to contain_exactly(project.id, first_child.id)
-      expect(scope).to be_truncated
-      expect(scope.max_entities).to eq(2)
+      expect(scope.entity_ids).to contain_exactly(project.id, *members.map(&:id))
+      expect(scope.entity_ids).not_to include(foreign.id)
+      expect(scope).not_to be_truncated
+      expect(scope.max_entities).to be_nil
     end
   end
 

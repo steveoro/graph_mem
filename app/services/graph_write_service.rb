@@ -13,8 +13,11 @@ class GraphWriteService
   # @return [Hash] batch result, or `status: "possible_duplicate"` with no writes
   # @raise [FastMcp::Tool::InvalidArgumentsError] for invalid create data
   # @raise [McpGraphMemErrors::Error] when a dependency cannot be created
-  def self.call(operations:, logger: Rails.logger)
-    new(operations: operations, logger: logger).call
+  # @param project_id [Integer, nil] `set_context` project — name→entity
+  #   resolution prefers it, then the global namespace; created entities
+  #   join it (nil = a global entity).
+  def self.call(operations:, logger: Rails.logger, project_id: nil)
+    new(operations: operations, logger: logger, project_id: project_id).call
   end
 
   # Executes one legacy create operation without the batch envelope.
@@ -23,10 +26,11 @@ class GraphWriteService
   # @param attributes [Hash] operation-specific create fields
   # @param logger [#debug] logger used by duplicate probing
   # @return [Hash] the created record payload or possible-duplicate response
-  def self.execute_one(type, attributes, logger: Rails.logger)
+  def self.execute_one(type, attributes, logger: Rails.logger, project_id: nil)
     service = new(
       operations: [ attributes.to_h.merge(type: type.to_s) ],
-      logger: logger
+      logger: logger,
+      project_id: project_id
     )
     service.send(:execute_one)
   end
@@ -45,9 +49,10 @@ class GraphWriteService
 
   # @param operations [Array<Hash>] raw type-discriminated create operations
   # @param logger [#debug] logger used by duplicate probing
-  def initialize(operations:, logger:)
+  def initialize(operations:, logger:, project_id: nil)
     @operations = GraphMutationBatch.normalize_operations(operations)
     @logger = logger
+    @project_id = project_id
   end
 
   # Runs duplicate preflight, then executes the batch in one transaction.
@@ -134,7 +139,10 @@ class GraphWriteService
       name: attributes[:name],
       entity_type: attributes[:entity_type],
       aliases: attributes[:aliases],
-      description: attributes[:description]
+      description: attributes[:description],
+      # Members join the context project; Project roots and context-less
+      # creates stay in the global namespace.
+      project_id: ImportEntityResolver.canonical_type(attributes[:entity_type]) == "Project" ? nil : @project_id
     )
     Array(attributes[:observations]).each do |content|
       MemoryObservation.create!(memory_entity: entity, content: content)
@@ -227,7 +235,7 @@ class GraphWriteService
   def resolve_entity_id(value)
     return value unless value.is_a?(String)
 
-    MemoryEntity.find_by(name: value)&.id || value
+    ImportEntityResolver.find_by_name(value, project_id: @project_id)&.id || value
   end
 
   def duplicate_response

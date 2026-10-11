@@ -82,7 +82,8 @@ class GraphWriteTool < ApplicationTool
     )
     GraphWriteService.call(
       operations: Array(operations) + bucket_operations,
-      logger: logger
+      logger: logger,
+      project_id: graph_mem_context.current_project_id
     )
   rescue *ToolError::TIMEOUT_CLASSES
     raise

@@ -46,7 +46,8 @@ class CreateObservationTool < ApplicationTool
           valid_until: valid_until,
           tags: tags
         },
-        logger: logger
+        logger: logger,
+          project_id: graph_mem_context.current_project_id
       )
     rescue ActiveRecord::RecordNotFound => e
       error_message = "Entity with ID=#{entity_id} not found."

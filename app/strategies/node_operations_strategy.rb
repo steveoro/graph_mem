@@ -65,11 +65,16 @@ class NodeOperationsStrategy
         relation_type: "part_of"
       )
 
+      # Moving under a new parent moves the node (and its subtree) into the
+      # new parent's project scope; ProjectMembership refuses the move on a
+      # same-name collision in the target project.
+      ProjectMembership.sync!(node)
+
       @logger.info "NodeOperationsStrategy: Moved node #{node.name} (#{node_id}) to parent #{parent.name} (#{parent_id})"
     end
 
     success_result("Successfully moved '#{node.name}' under '#{parent.name}'")
-  rescue ActiveRecord::RecordInvalid => e
+  rescue ActiveRecord::RecordInvalid, ProjectMembership::Collision => e
     error_result("Failed to move node: #{e.message}")
   end
 

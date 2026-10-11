@@ -3,6 +3,13 @@
 class MemoryEntity < ApplicationRecord
   include Auditable
 
+  belongs_to :project, class_name: "MemoryEntity", optional: true
+  # Members scoped to this Project root. RESTRICT (both the association and
+  # the DB FK) means a project with members cannot be destroyed — the delete
+  # paths surface that as an explicit refusal with the member count.
+  has_many :members, class_name: "MemoryEntity", foreign_key: "project_id",
+           dependent: :restrict_with_error, inverse_of: :project
+
   has_many :memory_observations, dependent: :destroy
   has_many :active_memory_observations,
            -> { active },
@@ -11,8 +18,14 @@ class MemoryEntity < ApplicationRecord
   has_many :relations_from, class_name: "MemoryRelation", foreign_key: "from_entity_id", dependent: :destroy, inverse_of: :from_entity
   has_many :relations_to, class_name: "MemoryRelation", foreign_key: "to_entity_id", dependent: :destroy, inverse_of: :to_entity
 
-  validates :name, presence: true, uniqueness: true
+  # Names are unique per project scope: project_id NULL (Project roots,
+  # unclaimed reference stubs, operator-created globals) shares one global
+  # namespace; project members repeat names freely across projects.
+  validates :name, presence: true, uniqueness: { scope: :project_id, case_sensitive: false }
   validates :entity_type, presence: true
+  # project_id may only point at a Project-typed entity — anything else would
+  # detach the uniqueness scope from the part_of tree it mirrors.
+  validate :project_is_project_type, if: -> { project_id.present? }
 
   after_initialize :set_default_counter_cache
   before_validation :canonicalize_entity_type
@@ -35,6 +48,12 @@ class MemoryEntity < ApplicationRecord
   end
 
   private
+
+  def project_is_project_type
+    return if project&.entity_type == NodeOperationsStrategy::PROJECT_ENTITY_TYPE
+
+    errors.add(:project_id, "must reference a Project entity")
+  end
 
   def set_default_counter_cache
     self.memory_observations_count ||= 0

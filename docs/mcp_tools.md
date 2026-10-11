@@ -125,7 +125,7 @@ results, summary }`. Any failed operation rolls back the full batch.
 #### `create_entity`
 - **Description:** Create a single new entity node. Pass required `name` (string) and `entity_type` (string); optional `observations` (array of strings), `aliases` (pipe-separated string), `description` (string). Alias `entityType` maps to `entity_type`. Types are canonicalized; cosine distance < 0.25 returns a warning instead of creating. Do not use until you have searched for an existing node; use `search` first. Do not use to add facts to a known entity; use `create_observation` instead. Do not use to change metadata on an existing node; use `update_entity` instead. Do not use for an atomic batch of up to 50 creates; use `bulk_update` instead.
 - **Parameters:**
-  - `name` (string, required): The unique name for the new entity.
+  - `name` (string, required): The unique name for the new entity — unique within the client's context-project scope (or the shared global scope when no project is set).
   - `entity_type` (string, required): The type classification (auto-canonicalized, e.g., "workspace" becomes "Project").
   - `aliases` (string, optional): Pipe-separated alternative names.
   - `description` (string, optional): Short description of the entity.
@@ -150,7 +150,7 @@ results, summary }`. Any failed operation rolls back the full batch.
 - **Description:** Update metadata of an existing entity (not observations). Pass required `entity_id` (integer); optional `name` (unique string), `entity_type` (canonicalized string), `aliases` (replaces existing; empty string clears), `description` (empty string clears). Do not use to add or edit facts; use `create_observation` or `update_observation` instead. Do not use to create a node; use `create_entity` instead. Do not use to read; use `get_entities` instead. Do not use to delete; use `delete_entity` instead. Do not use to combine two entities; use `merge_entities` instead.
 - **Parameters:**
   - `entity_id` (integer, required): The ID of the entity.
-  - `name` (string, optional): New name (must be unique).
+  - `name` (string, optional): New name (must stay unique within the entity's project scope).
   - `entity_type` (string, optional): New type (auto-canonicalized).
   - `aliases` (string, optional): New aliases (replaces existing). Empty string clears.
   - `description` (string, optional): New description. Empty string clears.

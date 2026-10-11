@@ -579,7 +579,7 @@ class ProjectScanner
   end
 
   def find_or_create_entity(name, type, entity_data)
-    existing = MemoryEntity.find_by(name: name, entity_type: type)
+    existing = MemoryEntity.find_by(name: name, entity_type: type, project_id: @project_entity&.id)
     if existing
       unless @dry_run
         updates = {}
@@ -602,6 +602,7 @@ class ProjectScanner
     entity = MemoryEntity.create!(
       name: name,
       entity_type: type,
+      project_id: @project_entity&.id,
       aliases: Array(entity_data["aliases"]).map(&:to_s).map(&:strip).reject(&:blank?).join(",").presence,
       description: entity_data["description"].to_s.strip.presence
     )
@@ -655,6 +656,13 @@ class ProjectScanner
       confidence: rel["confidence"].to_f.clamp(0.0, 1.0).presence,
       properties: { source: scan_source("reconcile"), scan_id: @scan_id }
     )
+    if relation_type == "part_of"
+      begin
+        ProjectMembership.sync!(from_entity)
+      rescue ProjectMembership::Collision => e
+        @errors << "Project scope conflict for #{from_entity.name}: #{e.message}"
+      end
+    end
     @relations_created_count += 1
   rescue StandardError => e
     @errors << "Failed to create relation #{from_entity.name} -> #{target_name}: #{e.message}"
@@ -664,8 +672,9 @@ class ProjectScanner
     return @project_entity if @project_entity && (name.casecmp?(@project_entity.name) || @project_entity.aliases.to_s.split(/[,|;]/).any? { |a| a.strip.casecmp?(name) })
 
     @entities_by_path[name.downcase] ||
-      MemoryEntity.find_by(name: name) ||
-      MemoryEntity.where("aliases LIKE ?", "%#{name}%").first
+      MemoryEntity.find_by(name: name, project_id: @project_entity&.id) ||
+      MemoryEntity.find_by(name: name, project_id: nil) ||
+      MemoryEntity.where(project_id: @project_entity&.id).where("aliases LIKE ?", "%#{name}%").first
   end
 
   def relation_exists?(from, to, relation_type)
@@ -793,8 +802,11 @@ class ProjectScanner
   def relation_mentioned_in_scan?(from_name, to_name)
     # We do not retain the raw scan relation list in memory after reconciliation,
     # but all successfully reconciled relations are in the database.
-    from = MemoryEntity.find_by(name: from_name)
-    to = MemoryEntity.find_by(name: to_name)
+    scope_ids = [ @project_entity&.id ]
+    from = MemoryEntity.find_by(name: from_name, project_id: scope_ids) ||
+           MemoryEntity.find_by(name: from_name, project_id: nil)
+    to = MemoryEntity.find_by(name: to_name, project_id: scope_ids) ||
+         MemoryEntity.find_by(name: to_name, project_id: nil)
     return false unless from && to
 
     MemoryRelation.exists?(from_entity_id: from.id, to_entity_id: to.id) ||

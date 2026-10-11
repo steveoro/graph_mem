@@ -6,16 +6,30 @@ class GraphifyImporter
   # into the class, so GraphifyImporter.seed_ambiguous_relations,
   # GraphifyImporter.headless_decisions & friends keep their call sites.
   module Matching
-  def seed_ambiguous_relations(ambiguous, source_ref, source: SOURCE_NAME)
+  # @param project_id [Integer, nil] importing project's scope — endpoint
+  #   names resolve inside it before the global namespace (nil = global only)
+  def seed_ambiguous_relations(ambiguous, source_ref, source: SOURCE_NAME, project_id: nil)
     return [] if ambiguous.blank?
 
     items = ambiguous.filter_map do |relation|
-      from = ImportEntityResolver.find_by_name_and_type(relation["from_name"], relation["from_type"])
-      to = ImportEntityResolver.find_by_name_and_type(relation["to_name"], relation["to_type"])
+      # Execution-computed proposals (multi-declarer endpoints, second-
+      # declarer re-points) already carry entity ids — trust them; payload
+      # AMBIGUOUS edges still resolve endpoints by scoped name.
+      if relation["from_id"] && relation["to_id"]
+        from = MemoryEntity.find_by(id: relation["from_id"])
+        to = MemoryEntity.find_by(id: relation["to_id"])
+      else
+        from = ImportEntityResolver.find_by_name_and_type(relation["from_name"], relation["from_type"],
+                                                          project_id: project_id)
+        to = ImportEntityResolver.find_by_name_and_type(relation["to_name"], relation["to_type"],
+                                                        project_id: project_id)
+      end
       next unless from && to
       next if from.id == to.id
-      next if MemoryRelation.exists?(from_entity_id: from.id, to_entity_id: to.id,
-                                     relation_type: relation["relation_type"])
+      unless relation["candidates"]
+        next if MemoryRelation.exists?(from_entity_id: from.id, to_entity_id: to.id,
+                                       relation_type: relation["relation_type"])
+      end
 
       props = relation["properties"] || {}
       location = [ props["source_file"], props["source_location"] ].compact_blank.join(":")
@@ -28,13 +42,14 @@ class GraphifyImporter
         to_entity_id: to.id,
         to_name: to.name,
         to_entity_type: to.entity_type,
+        candidates: relation["candidates"],
         relation_type: relation["relation_type"],
         confidence_band: "low",
         score: (relation["confidence"].to_f * 10).round,
         supporting_observation_ids: [],
         explanation: "#{source.to_s.humanize} AMBIGUOUS edge in #{location}",
         evidence_terms: [ props["context"] ].compact
-      }
+      }.compact
     end
     return [] if items.empty?
 
@@ -66,20 +81,28 @@ class GraphifyImporter
     stub_ids = reference_stub_ids(match_results.filter_map(&:exact_match))
     foreign_paths = foreign_subtree_paths(match_results, by_path, stub_ids)
 
+    # The import's project scope (a matched Project root) — needed for the
+    # single-declarer claim rule below.
+    root_match = match_results.find { |m| !m.is_child }
+    project_id = exact_root_match(root_match)&.id if root_match
+
     match_results.map do |match|
       if match.is_child
         child_action = match.child_action
         if already_parented?(match.exact_match) && stub_ids.include?(match.exact_match&.id) &&
            match.import_node[:reference] != true
           # Claiming an unclaimed stub — but ONLY when this payload actually
-          # declares the node. `add_relation` replaces the stub-tagged
-          # part_of edge with the declaring tree's parent (part_of is
-          # single-parent), so the referencing repo's rescan can no longer
-          # diff the declaring repo's facts as its own. A payload that only
-          # *references* the stub too keeps the stored parent (skip):
-          # otherwise two referencing repos would ping-pong the edge on
-          # every alternating import.
-          child_action = "add_relation"
+          # declares the node AND no other project already declares the same
+          # name+type. `add_relation` replaces the stub-tagged part_of edge
+          # with the declaring tree's parent (single-parent) and moves the
+          # stub into this project; a payload that only *references* it
+          # keeps the stored parent (ping-pong guard). With 2+ declarers the
+          # stub stays global and the payload creates a project-scoped copy.
+          child_action = if declared_elsewhere?(match, excluding: project_id)
+                           "create"
+          else
+                           "add_relation"
+          end
         elsif child_action == "add_relation" && already_parented?(match.exact_match)
           child_action = "skip"
         end
@@ -116,6 +139,23 @@ class GraphifyImporter
   end
   private :already_parented?
 
+  # Another project (not this import's, not the global namespace) declares
+  # the same name+type as this node — the shared stub must stay unclaimed
+  # and each referencing edge gets an AMBIGUOUS proposal instead.
+  def declared_elsewhere?(match, excluding:)
+    node = match.import_node || {}
+    name = node[:name] || node["name"]
+    type = ImportEntityResolver.canonical_type(node[:entity_type] || node["entity_type"])
+    # NOTE: `where.not(project_id: [])` matches EVERY row in ActiveRecord
+    # — exclude NULL and the import's project as two clauses so a nil
+    # `excluding` (fresh project, not yet created) can't declare every
+    # same-named entity "foreign".
+    scope = MemoryEntity.where(name: name, entity_type: type).where.not(project_id: nil)
+    scope = scope.where.not(project_id: excluding) if excluding
+    scope.exists?
+  end
+  private :declared_elsewhere?
+
   # Paths of children whose matched entity already has a `part_of` parent
   # that is NOT the entity this import would attach under (when the import
   # parent resolves to a different entity — or creates a fresh one — the
@@ -129,10 +169,8 @@ class GraphifyImporter
     match_results.each_with_object(Set.new) do |match, foreign|
       next unless match.is_child && already_parented?(match.exact_match)
 
-      # An entity with NO active producer provenance is an unclaimed
-      # reference stub (an earlier import emitted it as a dangling edge
-      # target): whichever repo actually declares it gets to claim it —
-      # cross-repo order must not decide ownership.
+      # An unclaimed (NULL-project) reference stub is claimed by the
+      # declaring repo — cross-repo order must not decide ownership.
       next if stub_ids.include?(match.exact_match&.id)
 
       parent_path = match.node_path.sub(/\.children\.\d+\z/, "")
@@ -181,25 +219,18 @@ class GraphifyImporter
   end
   private :inside_any?
 
-  # Ids of entities that are unclaimed reference stubs: they carry a
-  # stub-tagged `part_of` edge (emitted as a dangling edge target by an
-  # earlier import) AND no active producer provenance (`Defined at …`).
-  # An operator-created entity with no obs is NOT a stub — its foreign
-  # subtree keeps the old exclusion behavior.
+  # Ids of entities that are unclaimed reference stubs: NULL-project
+  # entities still carrying the stub-tagged `part_of` edge an earlier
+  # import emitted for them. A claimed stub (moved into a project) or an
+  # operator-created entity is NOT a stub.
   def reference_stub_ids(entities)
     ids = entities.filter_map(&:id)
     return Set.new if ids.empty?
 
-    stubbed = MemoryRelation.where(from_entity_id: ids, relation_type: "part_of")
+    MemoryRelation.where(from_entity_id: MemoryEntity.where(id: ids, project_id: nil).select(:id),
+                         relation_type: "part_of")
       .where("JSON_UNQUOTE(JSON_EXTRACT(properties, '$.reference_stub')) = 'true'")
       .distinct.pluck(:from_entity_id).to_set
-    return Set.new if stubbed.empty?
-
-    with_prov = MemoryObservation.where(memory_entity_id: stubbed.to_a,
-                                        status: MemoryObservation::ACTIVE_STATUS)
-      .where("content LIKE ?", "Defined at %")
-      .distinct.pluck(:memory_entity_id).to_set
-    stubbed - with_prov
   end
   private :reference_stub_ids
   end

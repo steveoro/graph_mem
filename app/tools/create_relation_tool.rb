@@ -45,7 +45,8 @@ class CreateRelationTool < ApplicationTool
           confidence: confidence,
           properties: properties
         },
-        logger: logger
+        logger: logger,
+          project_id: graph_mem_context.current_project_id
       )
       if result[:status] == "possible_duplicate"
         return {

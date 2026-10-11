@@ -158,24 +158,31 @@ class ImportMatchingStrategy
   # @param path [String] Current path in the tree
   # @param parent_name [String, nil] Name of the parent node in import data
   # @return [Array<MatchResult>] Array of match results for this node and children
-  def match_node_recursive(node, path, parent_name)
+  def match_node_recursive(node, path, parent_name, parent_entity_id = nil)
     results = []
     node_name = node["name"] || node[:name]
     is_child = parent_name.present?
 
     # Match this node using appropriate strategy
     if is_child
-      node_result = match_child_node(node, path, parent_name)
+      node_result = match_child_node(node, path, parent_name, parent_entity_id)
     else
       node_result = match_root_node(node, path)
+      # A matched Project root pins this import's project scope: children
+      # resolve names inside it before falling back to the global namespace.
+      if node_result.selected_match_id &&
+         ImportEntityResolver.canonical_type(node["entity_type"] || node[:entity_type]) == "Project"
+        @import_project_id ||= node_result.selected_match_id
+      end
     end
     results << node_result
 
     # Match children recursively with this node as parent
+    this_entity_id = node_result.selected_match_id || node_result.exact_match&.id
     children = node["children"] || node[:children] || []
     children.each_with_index do |child, index|
       child_path = "#{path}.children.#{index}"
-      results.concat(match_node_recursive(child, child_path, node_name))
+      results.concat(match_node_recursive(child, child_path, node_name, this_entity_id))
     end
 
     results
@@ -232,19 +239,32 @@ class ImportMatchingStrategy
   # @param path [String] Path in the import tree
   # @param parent_name [String] Name of the parent in import data
   # @return [MatchResult] Match result for this node
-  def match_child_node(node, path, parent_name)
+  def match_child_node(node, path, parent_name, parent_entity_id = nil)
     name = node["name"] || node[:name]
     entity_type = node["entity_type"] || node[:entity_type]
     observations = node["observations"] || node[:observations] || []
 
-    # Find exact match by name AND entity_type
-    exact_match = ImportEntityResolver.find_by_name_and_type(name, entity_type)
+    # Find exact match by name AND entity_type — inside the import's
+    # project scope first. Reference nodes additionally resolve a single
+    # other project's declaration (a mere reference never creates a
+    # project-scoped copy). Class↔Module sibling-type fallbacks catch a
+    # same-scope v1.49 leftover, then a global reference stub awaiting a
+    # declarer — read-only here; execution decides whether retyping applies.
+    reference_node = node[:reference] == true || node["reference"] == true
+    exact_match = ImportEntityResolver.find_by_name_and_type(name, entity_type,
+                                                           project_id: @import_project_id,
+                                                           include_declared: reference_node)
+    exact_match ||= ImportEntityResolver.class_module_collision(name, entity_type,
+                                                                project_id: @import_project_id)
+    exact_match ||= ImportEntityResolver.class_module_collision(name, entity_type,
+                                                                project_id: nil)
 
     if exact_match
-      # Check if already has same parent
+      # Check if already has same parent (compared by entity id: names are
+      # no longer unique across projects).
       relation_type = node["relation_type"] || node[:relation_type] || "part_of"
       relation_direction = node["relation_direction"] || node[:relation_direction]
-      has_same_parent = check_parent_match(exact_match.id, parent_name, relation_type, relation_direction)
+      has_same_parent = check_parent_match(exact_match.id, parent_entity_id, relation_type, relation_direction)
 
       if has_same_parent
         child_action = CHILD_ACTION_SKIP
@@ -276,23 +296,23 @@ class ImportMatchingStrategy
     )
   end
 
-  # Check whether the imported relation already connects the entity to its parent.
-  def check_parent_match(entity_id, parent_name, raw_relation_type = "part_of", relation_direction = nil)
-    return false if parent_name.blank?
+  # Check whether the imported relation already connects the entity to its
+  # parent. Compared by entity id (names repeat across projects); a nil
+  # parent id means the payload parent wasn't matched — no same-parent.
+  def check_parent_match(entity_id, parent_entity_id, raw_relation_type = "part_of", relation_direction = nil)
+    return false if parent_entity_id.nil?
 
     relation_type = MemoryRelation.canonical_relation_type(raw_relation_type)
 
     if relation_direction == "parent_to_child"
       return MemoryRelation
-        .where(to_entity_id: entity_id, relation_type: relation_type)
-        .includes(:from_entity)
-        .any? { |relation| relation.from_entity&.name&.casecmp?(parent_name) }
+        .where(to_entity_id: entity_id, from_entity_id: parent_entity_id, relation_type: relation_type)
+        .exists?
     end
 
     MemoryRelation
-      .where(from_entity_id: entity_id, relation_type: relation_type)
-      .includes(:to_entity)
-      .any? { |relation| relation.to_entity&.name&.casecmp?(parent_name) }
+      .where(from_entity_id: entity_id, to_entity_id: parent_entity_id, relation_type: relation_type)
+      .exists?
   end
 
   # Check if an observation already exists for an entity

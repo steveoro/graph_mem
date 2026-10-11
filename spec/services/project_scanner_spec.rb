@@ -108,8 +108,8 @@ RSpec.describe ProjectScanner, type: :service do
 
   it "moves mis-assigned observations to the correct target entity during validation" do
     project = MemoryEntity.create!(name: "TestProject", entity_type: "Project")
-    jquery = MemoryEntity.create!(name: "jQuery", entity_type: "Framework")
-    compactor = MemoryEntity.create!(name: "Dream State Compactor", entity_type: "Component")
+    jquery = MemoryEntity.create!(name: "jQuery", entity_type: "Framework", project_id: project.id)
+    compactor = MemoryEntity.create!(name: "Dream State Compactor", entity_type: "Component", project_id: project.id)
     MemoryRelation.create!(from_entity: jquery, to_entity: project, relation_type: "part_of")
     MemoryRelation.create!(from_entity: compactor, to_entity: project, relation_type: "part_of")
     observation = MemoryObservation.create!(
@@ -183,7 +183,7 @@ RSpec.describe ProjectScanner, type: :service do
 
   it "marks observations with no clear target as obsolete during validation" do
     project = MemoryEntity.create!(name: "TestProject", entity_type: "Project")
-    entity = MemoryEntity.create!(name: "OrphanedFact", entity_type: "Component")
+    entity = MemoryEntity.create!(name: "OrphanedFact", entity_type: "Component", project_id: project.id)
     MemoryRelation.create!(from_entity: entity, to_entity: project, relation_type: "part_of")
     observation = MemoryObservation.create!(
       memory_entity: entity,

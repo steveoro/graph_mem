@@ -126,7 +126,8 @@ class BulkUpdateTool < ApplicationTool
             "Split into multiple `graph_write` calls of #{MAX_OPERATIONS} or fewer operations."
     end
 
-    result = GraphWriteService.call(operations: operations, logger: logger)
+    result = GraphWriteService.call(operations: operations, logger: logger,
+                                    project_id: graph_mem_context.current_project_id)
     return result if result[:status] == "possible_duplicate"
 
     entity_results = results_for(result, "create_entity")

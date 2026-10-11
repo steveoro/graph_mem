@@ -62,7 +62,8 @@ class ApplicationTool < FastMcp::Tool
       logger.warn "[CompactionValve] pause incomplete for #{tool_name}" unless paused
     end
 
-    normalized = ParameterNormalizer.normalize(tool_name, args)
+    normalized = ParameterNormalizer.normalize(tool_name, args,
+                                               project_id: graph_mem_context.current_project_id)
     arg_validation = self.class.input_schema.call(normalized)
     if arg_validation.errors.any?
       details = arg_validation.errors.to_h

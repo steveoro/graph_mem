@@ -131,7 +131,11 @@ module DashboardHelper
       "#{label} (#{reason || 'pending review'})"
     when "orphan_parent"
       entity = MemoryEntity.find_by(id: payload[:entity_id]) ||
-               MemoryEntity.find_by(name: payload[:entity_name])
+               begin
+                 ImportEntityResolver.find_by_name(payload[:entity_name])
+               rescue McpGraphMemErrors::AmbiguousReference, StandardError
+                 nil
+               end
       parent = MemoryEntity.find_by(id: payload[:parent_id]) ||
                MemoryEntity.find_by(id: Array(payload[:suggested_parents]).first&.dig(:project_id))
       "Set parent: #{entity&.name || payload[:entity_name].presence || 'Unknown'} → #{parent&.name || 'Unknown'} (#{reason || 'pending review'})"

@@ -528,9 +528,14 @@ class CompactionReviewService
       return { success: false, error: "Relation not found" } unless relation
 
       Current.deletion_reason = effective[:reason] || "scan_review"
+      from_entity = relation.from_entity
+      part_of = relation.relation_type == "part_of"
       relation.destroy!
+      # Un-parenting moves the child (and its subtree) back to the global
+      # namespace — same membership rule as graph_delete.
+      ProjectMembership.sync!(from_entity) if part_of && from_entity
       { success: true, message: "Relation #{relation_id} deleted" }
-    rescue ActiveRecord::RecordNotDestroyed, ActiveRecord::RecordInvalid => e
+    rescue ActiveRecord::RecordNotDestroyed, ActiveRecord::RecordInvalid, ProjectMembership::Collision => e
       { success: false, error: "Failed to delete relation: #{e.message}" }
     ensure
       Current.deletion_reason = nil
@@ -541,7 +546,11 @@ class CompactionReviewService
       entity = MemoryEntity.find_by(id: entity_id)
       return { success: false, error: "Entity not found" } unless entity
 
-      return { success: false, error: NodeOperationsStrategy::PROJECT_ROOT_PROTECTED_ERROR } if entity.entity_type == NodeOperationsStrategy::PROJECT_ENTITY_TYPE
+      if entity.entity_type == NodeOperationsStrategy::PROJECT_ENTITY_TYPE
+        members = MemoryEntity.where(project_id: entity.id).count
+        return { success: false,
+                 error: "#{NodeOperationsStrategy::PROJECT_ROOT_PROTECTED_ERROR} (#{members} members still scoped to it)" }
+      end
 
       Current.deletion_reason = effective[:reason] || "scan_review"
       entity.destroy!

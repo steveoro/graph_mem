@@ -993,10 +993,13 @@ RSpec.describe ImportExecutionStrategy, type: :model do
 
       report = strategy.execute(data_with_relations, decisions)
 
+      # Project-scoped names: edges to foreign/global endpoints all land
+      # tagged cross_repo — the old endpoint_reference gate is gone. Only
+      # edges whose SOURCE sits inside an excluded subtree still skip.
       expect(report.success).to be(true)
-      expect(report.relations_created).to eq(2)
-      expect(report.relations_cross_repo).to eq(2)
-      expect(report.relations_skipped).to eq(1)
+      expect(report.relations_created).to eq(3)
+      expect(report.relations_cross_repo).to eq(3)
+      expect(report.relations_skipped).to eq(0)
       expect(MemoryRelation.where(relation_type: 'depends_on').count).to eq(2)
       expect(MemoryRelation.where(relation_type: 'depends_on')
               .map { |r| r.properties['cross_repo'] }.uniq).to eq([ true ])
