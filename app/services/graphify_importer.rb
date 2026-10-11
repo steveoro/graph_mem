@@ -386,8 +386,8 @@ class GraphifyImporter
   end
 
   # Node observations pass through (e.g. extractor "Superclass:" lines),
-  # then provenance when the node declares a source file. Reference-only
-  # nodes carry no file → no provenance — a stub never claims a class.
+  # then provenance when the node declares a source file; reference-only
+  # nodes carry no file → a stub never claims a class.
   def entity_observations(node)
     # Passthrough observations keep their content but NEVER their own
     # source/confidence — otherwise an uploaded graph.json could stamp
@@ -395,15 +395,15 @@ class GraphifyImporter
     obs = Array(node["observations"]).filter_map do |o|
       next unless o.is_a?(Hash) && o["content"].present?
 
-      # Confidence clamps to [0,1] — payload must not stamp out-of-range trust.
-      o.merge("source" => producer_name,
-              "confidence" => o["confidence"].to_f.clamp(0.0, 1.0))
+      # Clamp numeric confidence to [0,1]; missing/non-numeric stays NULL
+      # (the ranker reads NULL as neutral 0.5, not 0.0).
+      confidence = Float(o["confidence"], exception: false)&.clamp(0.0, 1.0)
+      o.merge("source" => producer_name, "confidence" => confidence)
     end
     file = node["source_file"].to_s
-    line = node["source_location"].to_s
     return obs if file.blank?
 
-    obs + [ provenance_observation("Defined at #{[ file, line.presence ].compact.join(':')}") ]
+    obs + [ provenance_observation("Defined at #{[ file, node['source_location'].to_s.presence ].compact.join(':')}") ]
   end
 
   def provenance_observation(content)

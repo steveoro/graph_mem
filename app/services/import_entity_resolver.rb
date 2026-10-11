@@ -8,21 +8,19 @@ class ImportEntityResolver
     end
 
     def find_by_name_and_type(name, raw_type)
-      type = canonical_type(raw_type)
-      MemoryEntity.find_by(name: name, entity_type: type) ||
-        retype_class_module(name, type)
+      MemoryEntity.find_by(name: name, entity_type: canonical_type(raw_type))
     end
 
-    # Entity names are globally unique, so `module Billing` imported as
-    # `Class:Billing` under v1.49 (or a `Class:`-typed reference stub)
-    # collides with a later `Module:Billing` payload. Class/Module are the
-    # same declaration kind — retype the stored entity instead of
-    # duplicating. Any other type pair keeps strict name+type matching.
-    def retype_class_module(name, type)
+    # Read-only name-only lookup for Class↔Module same-name collisions
+    # (`module Billing` under v1.49 stored `Class:Billing`; a mixin reference
+    # stub vs the declaring repo's real type). Matching must NEVER write —
+    # this only returns the colliding entity; ImportExecutionStrategy
+    # decides whether retyping is allowed.
+    def class_module_collision(name, raw_type)
+      type = canonical_type(raw_type)
       return unless %w[Class Module].include?(type)
 
-      entity = MemoryEntity.find_by(name: name, entity_type: %w[Class Module] - [ type ])
-      entity&.update!(entity_type: type) ? entity : nil
+      MemoryEntity.find_by(name: name, entity_type: %w[Class Module] - [ type ])
     end
   end
 end

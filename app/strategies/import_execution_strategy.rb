@@ -411,8 +411,39 @@ class ImportExecutionStrategy
     )
     return unless entity
 
+    record_excluded_entity(entity)
+  end
+
+  def record_excluded_entity(entity)
     @excluded_entity_ids.add(entity.id)
     @excluded_entity_ids.merge(RelationSemantics.descendant_ids(entity.id))
+  end
+
+  # May a Class↔Module same-name collision retype the stored entity? Only
+  # when it is an unclaimed reference stub (no producer provenance — the
+  # declaring repo claims it, matching GraphifyImporter's stub-claim rule)
+  # or it already lives inside THIS import's project subtree (a v1.49
+  # leftover re-imported by the same repo — `@entity_mapping["0"]` is the
+  # root the import merged into or just created).
+  def retype_allowed?(entity)
+    reference_stub_entity?(entity) || in_import_subtree?(entity)
+  end
+
+  def in_import_subtree?(entity)
+    root_id = @entity_mapping["0"]
+    return false unless root_id
+
+    entity.id == root_id ||
+      RelationSemantics.descendant_ids(root_id).to_a.include?(entity.id)
+  end
+
+  def reference_stub_entity?(entity)
+    stub_edge = MemoryRelation.where(from_entity_id: entity.id, relation_type: "part_of")
+      .where("JSON_UNQUOTE(JSON_EXTRACT(properties, '$.reference_stub')) = 'true'").exists?
+    return false unless stub_edge
+
+    !MemoryObservation.where(memory_entity_id: entity.id, status: MemoryObservation::ACTIVE_STATUS)
+      .where("content LIKE ?", "Defined at %").exists?
   end
 
   # Handle add_relation action - entity exists but needs relation to new parent
@@ -493,6 +524,31 @@ class ImportExecutionStrategy
     if existing
       @logger.warn "ImportExecutionStrategy: Entity '#{name}' already exists, merging instead"
       return merge_into_existing(node, existing.id)
+    end
+
+    # Class↔Module same-name collision: retype ONLY when the stored entity is
+    # (a) an unclaimed reference stub — no provenance, whichever repo declares
+    # it owns it — or (b) inside THIS import's project subtree (a v1.49
+    # leftover being re-imported by the same repo, which emitted every
+    # declaration as Class). Retyping anywhere else would let two repos
+    # flip `entity_type` back and forth on each re-import, and a match-only
+    # preview must never write — so foreign real declarations keep the
+    # declared-name-collision skip (whole subtree excluded, like other
+    # cross-tree parenting conflicts).
+    collision = ImportEntityResolver.class_module_collision(name, entity_type)
+    if collision
+      if retype_allowed?(collision)
+        @logger.info "ImportExecutionStrategy: Retyping '#{name}' #{collision.entity_type} -> " \
+                     "#{entity_type} (stub or same-project leftover)"
+        collision.update!(entity_type: ImportEntityResolver.canonical_type(entity_type))
+        return merge_into_existing(node, collision.id)
+      end
+
+      @logger.warn "ImportExecutionStrategy: '#{name}' collides with a foreign " \
+                   "#{collision.entity_type} declaration — subtree excluded"
+      @entities_skipped += 1
+      record_excluded_entity(collision)
+      return nil
     end
 
     entity = MemoryEntity.create!(

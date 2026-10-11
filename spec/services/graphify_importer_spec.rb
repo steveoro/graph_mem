@@ -118,6 +118,26 @@ RSpec.describe GraphifyImporter do
     expect(described_class.new(parsed, project_name: "x").translate.stats[:nodes_imported]).to eq(10)
   end
 
+  it "clamps numeric confidence but keeps NULL for missing/non-numeric values" do
+    data = JSON.parse(graph_json)
+    node = data["nodes"].find { |n| n["label"] == "Swimmer" }
+    node["observations"] = [
+      { "content" => "no confidence key" },
+      { "content" => "over one", "confidence" => 7 },
+      { "content" => "negative", "confidence" => -1 },
+      { "content" => "numeric string", "confidence" => "0.8" },
+      { "content" => "non-numeric", "confidence" => "abc" }
+    ]
+    translated = described_class.new(JSON.generate(data), project_name: "x").translate
+    swimmer = flatten(translated.import_data["root_nodes"].first).find { |n| n["name"] == "Swimmer" }
+    by_content = swimmer["observations"].index_by { |o| o["content"] }
+    expect(by_content["no confidence key"]["confidence"]).to be_nil
+    expect(by_content["over one"]["confidence"]).to eq(1.0)
+    expect(by_content["negative"]["confidence"]).to eq(0.0)
+    expect(by_content["numeric string"]["confidence"]).to eq(0.8)
+    expect(by_content["non-numeric"]["confidence"]).to be_nil
+  end
+
   describe "input validation" do
     it "rejects a non-object payload" do
       expect { described_class.new("[1,2,3]", project_name: "x") }

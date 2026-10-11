@@ -156,7 +156,7 @@ class CompactionReviewService
       end
 
       row.update!(status: "active", dismissed_at: nil, applied_at: nil, resolution_reason: nil)
-      { success: true }
+      { success: true, message: "Suggestion restored to active" }
     end
 
     def ignore(item_id, report_type: "compaction_review")
@@ -164,7 +164,7 @@ class CompactionReviewService
       return { success: false, error: "Suggestion not found" } unless row
 
       row.update!(status: "ignored")
-      { success: true }
+      { success: true, message: "Suggestion ignored" }
     end
 
     def seed_report(report_type:, source:, source_ref: nil, items:)

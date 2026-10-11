@@ -335,6 +335,48 @@ RSpec.describe 'DataExchange', type: :request do
         expect(row.payload['relation_type']).to eq('calls')
       end
 
+      it 'records the payload producer on seeded scan_review rows (symbolized key)' do
+        # load_data parses with symbolize_names — reading "producer" as a
+        # string key silently labelled every UI-seeded row "graphify".
+        graphify_json = {
+          version: '1.0',
+          producer: 'rails_ast_extractor',
+          ambiguous_relations: [
+            {
+              from_name: 'Caller', from_type: 'Class',
+              to_name: 'Callee', to_type: 'Class',
+              relation_type: 'calls', confidence: 0.5,
+              properties: { source_file: 'app/caller.rb' }
+            }
+          ],
+          root_nodes: [
+            {
+              name: 'Graphify Project', entity_type: 'Project', aliases: '',
+              children: [
+                { name: 'Caller', entity_type: 'Class', relation_type: 'part_of', children: [] },
+                { name: 'Callee', entity_type: 'Class', relation_type: 'part_of', children: [] }
+              ]
+            }
+          ]
+        }.to_json
+
+        post import_upload_data_exchange_index_path, params: {
+          file: Rack::Test::UploadedFile.new(
+            StringIO.new(graphify_json), 'application/json', original_filename: 'graphify.json'
+          )
+        }
+        post import_execute_data_exchange_index_path, params: {
+          decisions: {
+            '0' => { node_path: '0', action: 'create', target_id: '', parent_id: '' }
+          }
+        }
+
+        report = MaintenanceReport.where(report_type: 'scan_review').last
+        expect(report.data['source']).to eq('rails_ast_extractor')
+        expect(report.maintenance_report_rows.last.payload['explanation'])
+          .to include('Rails ast extractor AMBIGUOUS')
+      end
+
       it 'can merge into existing entity' do
         post import_execute_data_exchange_index_path, params: {
           decisions: {
@@ -1367,6 +1409,30 @@ RSpec.describe 'DataExchange', type: :request do
       dom = ActionView::RecordIdentifier.dom_id(merge_row)
       expect(response.body).to include("action=\"replace\" target=\"#{dom}\"")
       expect(response.body).not_to include('Content missing')
+    end
+
+    it 'removes a dismissed row frame and refreshes the tab counts' do
+      post compaction_review_action_data_exchange_index_path,
+           params: { review_action: 'dismiss', report_type: 'scan_review',
+                     item_id: 'ts-merge', status: 'active', reason: 'not a dup' },
+           headers: { 'Accept' => 'text/vnd.turbo-stream.html' }
+
+      dom = ActionView::RecordIdentifier.dom_id(merge_row)
+      expect(response.body).to include("action=\"remove\" target=\"#{dom}\"")
+      expect(response.body).to include('target="review-tabs"')
+      expect(merge_row.reload.status).to eq('dismissed')
+    end
+
+    it 'restores a dismissed row back to active with a real flash message' do
+      merge_row.update!(status: 'dismissed', dismissed_at: Time.current)
+      post compaction_review_action_data_exchange_index_path,
+           params: { review_action: 'restore', report_type: 'scan_review',
+                     item_id: 'ts-merge', status: 'dismissed' },
+           headers: { 'Accept' => 'text/vnd.turbo-stream.html' }
+
+      expect(response.body).to include("action=\"remove\" target=\"#{ActionView::RecordIdentifier.dom_id(merge_row)}\"")
+      expect(response.body).to include('Suggestion restored to active')
+      expect(merge_row.reload.status).to eq('active')
     end
   end
 end

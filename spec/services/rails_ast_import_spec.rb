@@ -24,7 +24,7 @@ RSpec.describe "Rails AST extractor import" do
                                 Shared::Base Post Article Thing ExternalBase
                                 OtherBase Vendor Admin Admin::Admin Admin::Admin#inner
                                 Billing Notifiable admin.rb billing.rb notifiable.rb
-                                post.rb]).find_each do |e|
+                                post.rb Foo Foo#a foo.rb]).find_each do |e|
       MemoryRelation.where(from_entity_id: e.id).or(
         MemoryRelation.where(to_entity_id: e.id)
       ).delete_all
@@ -304,11 +304,17 @@ RSpec.describe "Rails AST extractor import" do
     end
   end
 
-  it "v1.49 upgrade: a stored Class entity retypes to Module on re-import" do
+  it "v1.49 upgrade: a stored Class entity inside this project subtree retypes to Module on re-import" do
     # v1.49 emitted every declaration as Class. Databases holding such an
     # import hit 'Name has already been taken' on the next rails_ast:import —
-    # the resolver now retypes Class↔Module pairs by unique name instead.
+    # the executor retypes a Class↔Module collision ONLY when the stored
+    # entity already lives inside THIS import's subtree (same-repo leftover).
+    project = MemoryEntity.create!(name: "Fixture", entity_type: "Project")
     legacy = MemoryEntity.create!(name: "Billing", entity_type: "Class")
+    MemoryRelation.create!(from_entity: legacy, to_entity: project, relation_type: "part_of")
+    MemoryObservation.create!(memory_entity: legacy,
+                              content: "Defined at app/models/billing.rb",
+                              source: "rails_ast_extractor")
     Dir.mktmpdir do |dir|
       FileUtils.mkdir_p(File.join(dir, "app/models"))
       File.write(File.join(dir, "app/models/billing.rb"), "module Billing; end\n")
@@ -316,6 +322,47 @@ RSpec.describe "Rails AST extractor import" do
       expect(report.success).to be true
       expect(legacy.reload.entity_type).to eq("Module")
       expect(MemoryEntity.where(name: "Billing").count).to eq(1)
+    end
+  end
+
+  it "match is read-only: a Module payload must not retype a stored Class during preview" do
+    # import_upload runs matching before the operator confirms anything —
+    # writing here would let a cancelled upload rewrite entity_type.
+    legacy = MemoryEntity.create!(name: "Billing", entity_type: "Class")
+    Dir.mktmpdir do |dir|
+      FileUtils.mkdir_p(File.join(dir, "app/models"))
+      File.write(File.join(dir, "app/models/billing.rb"), "module Billing; end\n")
+      payload = RailsAstExtractor.extract(dir, project_name: "Fixture")
+      import_data = GraphifyImporter.new(JSON.generate(payload), project_name: "Fixture").translate.import_data
+      ImportMatchingStrategy.new.match(import_data)
+      expect(legacy.reload.entity_type).to eq("Class")
+    end
+  end
+
+  it "conflicting real declarations keep their type — no cross-repo ping-pong" do
+    # RepoA declares `class Foo`; RepoB declares `module Foo`. The stored
+    # entity is a real declaration in ANOTHER project's subtree, so B's
+    # colliding subtree is skipped — re-importing either side never flips
+    # entity_type back and forth.
+    Dir.mktmpdir do |dir_a|
+      FileUtils.mkdir_p(File.join(dir_a, "app/models"))
+      File.write(File.join(dir_a, "app/models/foo.rb"), "class Foo\n  def a; end\nend\n")
+      expect(import_fixture(dir_a, project: "RepoA").success).to be true
+      foo = MemoryEntity.find_by(name: "Foo")
+      expect(foo.entity_type).to eq("Class")
+
+      Dir.mktmpdir do |dir_b|
+        FileUtils.mkdir_p(File.join(dir_b, "app/models"))
+        File.write(File.join(dir_b, "app/models/foo.rb"), "module Foo\n  def b; end\nend\n")
+        report = import_fixture(dir_b, project: "RepoB")
+        expect(report.success).to be true
+        expect(foo.reload.entity_type).to eq("Class")
+        expect(MemoryEntity.find_by(name: "Foo#b")).to be_nil
+        expect(MemoryEntity.where(name: "Foo").count).to eq(1)
+      end
+
+      expect(import_fixture(dir_a, project: "RepoA").success).to be true
+      expect(foo.reload.entity_type).to eq("Class")
     end
   end
 
@@ -342,6 +389,32 @@ RSpec.describe "Rails AST extractor import" do
       end
       expect(MemoryRelation.exists?(from_entity: MemoryEntity.find_by(name: "Post"),
                                     to_entity_id: stub.id, relation_type: "mixes_in")).to be true
+    end
+  end
+
+  it "declared-first order: a later referencing repo still links its mixin edge" do
+    # The reverse order: repo1 declares Notifiable first, then repo2 imports
+    # `include Notifiable` — the payload node is reference-only, so the
+    # declared entity keeps its RepoA parent while Post's edge still lands.
+    Dir.mktmpdir do |dir1|
+      FileUtils.mkdir_p(File.join(dir1, "app/models"))
+      File.write(File.join(dir1, "app/models/notifiable.rb"), "module Notifiable\n  def notify; end\nend\n")
+      expect(import_fixture(dir1, project: "RepoA").success).to be true
+      declared = MemoryEntity.find_by(name: "Notifiable")
+      repo_a_parent = MemoryRelation.find_by(from_entity_id: declared.id,
+                                           relation_type: "part_of").to_entity_id
+
+      Dir.mktmpdir do |dir2|
+        FileUtils.mkdir_p(File.join(dir2, "app/models"))
+        File.write(File.join(dir2, "app/models/post.rb"), "class Post\n  include Notifiable\nend\n")
+        expect(import_fixture(dir2, project: "RepoB").success).to be true
+        expect(MemoryEntity.where(name: "Notifiable").count).to eq(1)
+        # Still parented under RepoA — a mere reference never steals the edge.
+        expect(MemoryRelation.find_by(from_entity_id: declared.id,
+                                      relation_type: "part_of").to_entity_id).to eq(repo_a_parent)
+        expect(MemoryRelation.exists?(from_entity: MemoryEntity.find_by(name: "Post"),
+                                      to_entity_id: declared.id, relation_type: "mixes_in")).to be true
+      end
     end
   end
 end

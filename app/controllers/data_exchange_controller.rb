@@ -202,8 +202,9 @@ class DataExchangeController < ApplicationController
       GraphifyImporter.seed_ambiguous_relations(
         import_data[:ambiguous_relations].map { |r| r.deep_stringify_keys },
         project_name_for(import_data),
-        source: GraphifyImporter::KNOWN_PRODUCERS.include?(import_data["producer"].to_s) ?
-                import_data["producer"].to_s : "graphify"
+        # load_data parses with symbolize_names — the producer tag is :producer.
+        source: GraphifyImporter::KNOWN_PRODUCERS.include?(import_data[:producer].to_s) ?
+                import_data[:producer].to_s : "graphify"
       )
     end
 
@@ -329,6 +330,16 @@ class DataExchangeController < ApplicationController
 
   def review_action_turbo_streams(action, item_id)
     streams = [ turbo_stream.update("flash-messages", partial: "layouts/flash_messages") ]
+
+    # Refresh tab/kind counts under the same filters the row form echoed —
+    # otherwise "Active (4)" still reads 4 after the row is removed.
+    @status_filter = params.key?(:status) ? params[:status].to_s : "active"
+    @kind_filter = params[:kind].presence
+    @q = params[:q].presence
+    @stats = CompactionReviewService.status_counts(report_type: @report_type, kind: @kind_filter)
+    @kind_counts = CompactionReviewService.kind_counts(report_type: @report_type, status: @status_filter)
+    streams << turbo_stream.replace("review-tabs", partial: "data_exchange/compaction_review_tabs")
+
     row = item_id.present? ? CompactionReviewService.find_item(item_id, report_type: @report_type) : nil
     return streams unless row
 
