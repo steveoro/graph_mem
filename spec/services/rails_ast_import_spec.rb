@@ -19,16 +19,28 @@ RSpec.describe "Rails AST extractor import" do
   end
 
   def purge_fixture_names
-    MemoryEntity.where(name: %w[OtherApp Fixture Team Swimmer Order GogglesDb
-                                GogglesDb::User RepoA RepoB ApplicationRecord
-                                Shared::Base Post Article Thing ExternalBase
-                                OtherBase Vendor Admin Admin::Admin Admin::Admin#inner
-                                Billing Notifiable admin.rb billing.rb notifiable.rb
-                                post.rb Foo Foo#a Foo#b foo.rb foo_ext.rb]).find_each do |e|
+    names = %w[OtherApp Fixture Team Swimmer Order GogglesDb
+               GogglesDb::User RepoA RepoB ApplicationRecord
+               Shared::Base Post Article Thing ExternalBase
+               OtherBase Vendor Admin Admin::Admin Admin::Admin#inner
+               Billing Notifiable admin.rb billing.rb notifiable.rb
+               post.rb Foo Foo#a Foo#b foo.rb foo_ext.rb]
+    # Destroy member rows BEFORE unclaiming: with project-scoped names a
+    # member and a global may share a name, and moving the member to
+    # scope 0 would trip UNIQUE(project_scope, name).
+    MemoryEntity.where(name: names).where.not(entity_type: "Project").find_each do |e|
       MemoryRelation.where(from_entity_id: e.id).or(
         MemoryRelation.where(to_entity_id: e.id)
       ).delete_all
-      MemoryEntity.where(project_id: e.id).update_all(project_id: nil)
+      e.destroy!
+    end
+    MemoryEntity.where(name: names, entity_type: "Project").find_each do |e|
+      MemoryEntity.where(project_id: e.id).find_each do |member|
+        member.update!(project_id: nil) unless MemoryEntity.exists?(name: member.name, project_id: nil)
+      end
+      MemoryRelation.where(from_entity_id: e.id).or(
+        MemoryRelation.where(to_entity_id: e.id)
+      ).delete_all
       e.destroy!
     end
   end

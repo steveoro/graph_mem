@@ -14,7 +14,9 @@ RSpec.describe "project-scoped entity names" do
                     BackProj ReA ReB Notifiable Notifiable#notify notifiable.rb
                     post.rb account.rb Account Account#a Account#b swimmer.rb
                     Swimmer team.rb Team Thing OnlyB SharedGlobal CtxEntity
-                    NewRoot GlobalOne BackChild BackGrand BackOrphan ReChild].freeze
+                    NewRoot GlobalOne BackChild BackGrand BackOrphan ReChild
+                    Bar Foo bar.rb foo.rb RepoD Lone PA InnerProj InnerMember
+                    StubRef EdgeTarget n1.rb n2.rb n3.rb].freeze
 
   before { purge_fixture_names }
   after { purge_fixture_names }
@@ -22,16 +24,20 @@ RSpec.describe "project-scoped entity names" do
   def purge_fixture_names
     # Members first: unclaiming before their destroy would collide a
     # member's name with an existing global (UNIQUE project_scope,name).
-    %i[member project].each do |pass|
-      MemoryEntity.where(name: PURGED_NAMES).find_each do |e|
-        next if (pass == :member) == (e.entity_type == "Project")
-
-        MemoryRelation.where(from_entity_id: e.id).or(
-          MemoryRelation.where(to_entity_id: e.id)
-        ).delete_all
-        MemoryEntity.where(project_id: e.id).update_all(project_id: nil) if pass == :project
-        e.destroy!
+    MemoryEntity.where(name: PURGED_NAMES).where.not(entity_type: "Project").find_each do |e|
+      MemoryRelation.where(from_entity_id: e.id).or(
+        MemoryRelation.where(to_entity_id: e.id)
+      ).delete_all
+      e.destroy!
+    end
+    MemoryEntity.where(name: PURGED_NAMES, entity_type: "Project").find_each do |e|
+      MemoryEntity.where(project_id: e.id).find_each do |member|
+        member.update!(project_id: nil) unless MemoryEntity.exists?(name: member.name, project_id: nil)
       end
+      MemoryRelation.where(from_entity_id: e.id).or(
+        MemoryRelation.where(to_entity_id: e.id)
+      ).delete_all
+      e.destroy!
     end
   end
 
@@ -205,6 +211,299 @@ RSpec.describe "project-scoped entity names" do
 
       ProjectIdBackfill.new(out: ->(_l) { }).run
       expect(child.reload.project_id).to eq(proj_b.id)
+    end
+
+    it "does not stamp reference stubs through stub-tagged part_of edges" do
+      # A stub-tagged edge parks the target in the global namespace — the
+      # referencing project does NOT own it, so the walk must not claim it.
+      project = MemoryEntity.create!(name: "BackProj", entity_type: "Project")
+      member = MemoryEntity.create!(name: "BackChild", entity_type: "File")
+      MemoryRelation.create!(from_entity: member, to_entity: project, relation_type: "part_of")
+      stub = MemoryEntity.create!(name: "StubRef", entity_type: "Class")
+      MemoryRelation.create!(from_entity: stub, to_entity: member, relation_type: "part_of",
+                             properties: { "reference_stub" => true })
+
+      report = ProjectIdBackfill.new(out: ->(_l) { }).run
+      expect(member.reload.project_id).to eq(project.id)
+      expect(stub.reload.project_id).to be_nil
+      expect(report.per_project[project.id]).to eq(1)
+    end
+
+    it "does not stamp nested Projects or their members into the outer project" do
+      # Nested Projects start their own scope (nearest-Project wins, like
+      # project_id_for_parent): Inner stays NULL, its members take ITS id.
+      outer = MemoryEntity.create!(name: "BackProj", entity_type: "Project")
+      inner = MemoryEntity.create!(name: "InnerProj", entity_type: "Project")
+      inner_member = MemoryEntity.create!(name: "InnerMember", entity_type: "File")
+      MemoryRelation.create!(from_entity: inner, to_entity: outer, relation_type: "part_of")
+      MemoryRelation.create!(from_entity: inner_member, to_entity: inner, relation_type: "part_of")
+
+      report = ProjectIdBackfill.new(out: ->(_l) { }).run
+      expect(inner.reload.project_id).to be_nil
+      expect(inner_member.reload.project_id).to eq(inner.id)
+      expect(report.per_project[outer.id]).to be_nil
+      expect(report.per_project[inner.id]).to eq(1)
+    end
+
+    it "reports dry_run counts on unstamped data without writing" do
+      project = MemoryEntity.create!(name: "BackProj", entity_type: "Project")
+      member = MemoryEntity.create!(name: "BackChild", entity_type: "File")
+      MemoryRelation.create!(from_entity: member, to_entity: project, relation_type: "part_of")
+
+      dry = ProjectIdBackfill.new(out: ->(_l) { }).run(dry_run: true)
+      expect(dry.per_project[project.id]).to eq(1)
+      expect(member.reload.project_id).to be_nil
+    end
+  end
+
+  describe "use-case 1 (both orders): Bar -mixes_in-> Foo" do
+    it "reference-first then declaration claims the stub" do
+      Dir.mktmpdir do |dir_a|
+        write_models(dir_a, "bar.rb" => "class Bar\n  include Foo\nend\n")
+        expect(import_payload(dir_a, project: "RepoA").success).to be true
+      end
+      expect(MemoryEntity.find_by!(name: "Foo").project_id).to be_nil
+
+      Dir.mktmpdir do |dir_b|
+        write_models(dir_b, "foo.rb" => "class Foo\nend\n")
+        expect(import_payload(dir_b, project: "RepoB").success).to be true
+      end
+      foo = MemoryEntity.find_by!(name: "Foo")
+      proj_b = MemoryEntity.find_by!(name: "RepoB")
+      expect(foo.project_id).to eq(proj_b.id)
+      bar = MemoryEntity.find_by!(name: "Bar")
+      expect(MemoryRelation.exists?(from_entity: bar, to_entity: foo,
+                                    relation_type: "mixes_in")).to be true
+    end
+
+    it "declaration-first resolves the reference straight to the declarer" do
+      Dir.mktmpdir do |dir_b|
+        write_models(dir_b, "foo.rb" => "class Foo\nend\n")
+        expect(import_payload(dir_b, project: "RepoB").success).to be true
+      end
+      Dir.mktmpdir do |dir_a|
+        write_models(dir_a, "bar.rb" => "class Bar\n  include Foo\nend\n")
+        expect(import_payload(dir_a, project: "RepoA").success).to be true
+      end
+      expect(MemoryEntity.where(name: "Foo").count).to eq(1)
+      foo = MemoryEntity.find_by!(name: "Foo")
+      bar = MemoryEntity.find_by!(name: "Bar")
+      expect(MemoryRelation.exists?(from_entity: bar, to_entity: foo,
+                                    relation_type: "mixes_in")).to be true
+    end
+  end
+
+  describe "use-case 4 first half: reference under two declarers" do
+    it "keeps a fresh global stub and queues an AMBIGUOUS proposal" do
+      Dir.mktmpdir do |dir_a|
+        write_models(dir_a, "n1.rb" => "module Notifiable\nend\n")
+        expect(import_payload(dir_a, project: "RepoA").success).to be true
+      end
+      Dir.mktmpdir do |dir_c|
+        write_models(dir_c, "n2.rb" => "module Notifiable\nend\n")
+        expect(import_payload(dir_c, project: "RepoC").success).to be true
+      end
+      proposals_before = MaintenanceReportRow.where(kind: "relationship_proposal").count
+
+      Dir.mktmpdir do |dir_b|
+        write_models(dir_b, "post.rb" => "class Post\n  include Notifiable\nend\n")
+        expect(import_payload(dir_b, project: "RepoB").success).to be true
+      end
+
+      stub = MemoryEntity.where(name: "Notifiable", project_id: nil)
+      expect(stub.count).to eq(1)
+      post = MemoryEntity.find_by!(name: "Post")
+      expect(MemoryRelation.exists?(from_entity: post, to_entity: stub.first,
+                                    relation_type: "mixes_in")).to be true
+      expect(MaintenanceReportRow.where(kind: "relationship_proposal").count)
+        .to be > proposals_before
+    end
+
+    it "does not let a later declarer claim a stub when others already declared" do
+      # Multi-declarer claim guard (`!other_declarers?`): with a stub parked
+      # globally and two declaring projects, a third declaration gets its
+      # own scoped copy — the stub stays claimable-by-none.
+      Dir.mktmpdir do |dir_a|
+        write_models(dir_a, "n1.rb" => "module Notifiable\nend\n")
+        expect(import_payload(dir_a, project: "RepoA").success).to be true
+      end
+      Dir.mktmpdir do |dir_c|
+        write_models(dir_c, "n2.rb" => "module Notifiable\nend\n")
+        expect(import_payload(dir_c, project: "RepoC").success).to be true
+      end
+      Dir.mktmpdir do |dir_b|
+        write_models(dir_b, "post.rb" => "class Post\n  include Notifiable\nend\n")
+        expect(import_payload(dir_b, project: "RepoB").success).to be true
+      end
+      Dir.mktmpdir do |dir_d|
+        write_models(dir_d, "n3.rb" => "module Notifiable\nend\n")
+        expect(import_payload(dir_d, project: "RepoD").success).to be true
+      end
+
+      names = MemoryEntity.where(name: "Notifiable")
+      expect(names.count).to eq(4) # RepoA, RepoC, RepoD + the parked stub
+      expect(names.where(project_id: nil).count).to eq(1)
+      expect(MemoryEntity.find_by!(name: "RepoD").project_id).to be_nil
+    end
+
+    it "re-importing the referrer no-ops against the stored edge target" do
+      # After a claim, the referrer's stored edge still points at the
+      # claimed entity — an unchanged re-import must not mint a second
+      # stub plus a duplicate edge.
+      Dir.mktmpdir do |dir_b|
+        write_models(dir_b, "post.rb" => "class Post\n  include Notifiable\nend\n")
+        expect(import_payload(dir_b, project: "RepoB").success).to be true
+      end
+      Dir.mktmpdir do |dir_a|
+        write_models(dir_a, "n1.rb" => "module Notifiable\nend\n")
+        expect(import_payload(dir_a, project: "RepoA").success).to be true
+      end
+      claimed = MemoryEntity.find_by!(name: "Notifiable")
+      expect(claimed.project_id).to eq(MemoryEntity.find_by!(name: "RepoA").id)
+
+      Dir.mktmpdir do |dir_b|
+        write_models(dir_b, "post.rb" => "class Post\n  include Notifiable\nend\n")
+        report = import_payload(dir_b, project: "RepoB")
+        expect(report.success).to be true
+        expect(report.entities_created).to eq(0)
+      end
+      expect(MemoryEntity.where(name: "Notifiable").count).to eq(1)
+      post = MemoryEntity.find_by!(name: "Post")
+      expect(MemoryRelation.where(from_entity: post, to_entity: claimed,
+                                  relation_type: "mixes_in").count).to eq(1)
+    end
+  end
+
+  describe "use-case 5: v1.49 upgrade → backfill → re-import" do
+    it "re-import after stamping writes nothing new" do
+      Dir.mktmpdir do |dir|
+        write_models(dir, "swimmer.rb" => "class Swimmer\nend\n")
+        expect(import_payload(dir, project: "StableRepo").success).to be true
+      end
+      # Simulate pre-1.50 rows: stamps removed, edges intact.
+      MemoryEntity.where.not(entity_type: "Project").update_all(project_id: nil)
+
+      report = ProjectIdBackfill.new(out: ->(_l) { }).run
+      stable = MemoryEntity.find_by!(name: "StableRepo")
+      expect(report.per_project[stable.id]).to be >= 2
+      expect(MemoryEntity.find_by!(name: "Swimmer").project_id).to eq(stable.id)
+
+      Dir.mktmpdir do |dir|
+        write_models(dir, "swimmer.rb" => "class Swimmer\nend\n")
+        again = import_payload(dir, project: "StableRepo")
+        expect(again.success).to be true
+        expect(again.entities_created).to eq(0)
+        expect(again.relations_created).to eq(0)
+      end
+    end
+  end
+
+  describe "use-case 8: unchanged re-import checksum" do
+    it "second run of the same payload writes nothing" do
+      Dir.mktmpdir do |dir|
+        write_models(dir, "swimmer.rb" => "class Swimmer\n  def x; end\nend\n")
+        expect(import_payload(dir, project: "StableRepo").success).to be true
+      end
+      entity_ids = MemoryEntity.order(:id).pluck(:id)
+      relation_ids = MemoryRelation.order(:id).pluck(:id)
+
+      Dir.mktmpdir do |dir|
+        write_models(dir, "swimmer.rb" => "class Swimmer\n  def x; end\nend\n")
+        again = import_payload(dir, project: "StableRepo")
+        expect(again.success).to be true
+        expect(again.entities_created).to eq(0)
+        expect(again.relations_created).to eq(0)
+      end
+      expect(MemoryEntity.order(:id).pluck(:id)).to eq(entity_ids)
+      expect(MemoryRelation.order(:id).pluck(:id)).to eq(relation_ids)
+    end
+  end
+
+  describe "use-case 10: DB-level scoped uniqueness" do
+    it "allows same name across projects but rejects it inside one scope" do
+      proj_a = MemoryEntity.create!(name: "ProjA", entity_type: "Project")
+      proj_b = MemoryEntity.create!(name: "ProjB", entity_type: "Project")
+      MemoryEntity.create!(name: "EdgeTarget", entity_type: "Class", project_id: proj_a.id)
+      dup = MemoryEntity.new(name: "EdgeTarget", entity_type: "Class", project_id: proj_b.id)
+      expect { dup.save!(validate: false) }.not_to raise_error
+
+      clash = MemoryEntity.new(name: "EdgeTarget", entity_type: "Class", project_id: proj_a.id)
+      expect { clash.save!(validate: false) }.to raise_error(ActiveRecord::RecordNotUnique)
+    end
+
+    it "the down-migration duplicate guard would fire on per-project dups" do
+      proj_a = MemoryEntity.create!(name: "ProjA", entity_type: "Project")
+      proj_b = MemoryEntity.create!(name: "ProjB", entity_type: "Project")
+      MemoryEntity.create!(name: "EdgeTarget", entity_type: "Class", project_id: proj_a.id)
+      MemoryEntity.create!(name: "EdgeTarget", entity_type: "Class", project_id: proj_b.id)
+
+      rows = ActiveRecord::Base.connection.select_all(
+        "SELECT name FROM memory_entities GROUP BY name HAVING COUNT(*) > 1"
+      )
+      expect(rows.map { |r| r["name"] }).to include("EdgeTarget")
+    end
+  end
+
+  describe "MCP write scoping" do
+    it "create_relation part_of re-syncs the child's project" do
+      project = MemoryEntity.create!(name: "PA", entity_type: "Project")
+      lone = MemoryEntity.create!(name: "Lone", entity_type: "Class")
+
+      GraphWriteService.call(
+        operations: [ { type: "create_relation", from_entity_id: lone.id,
+                        to_entity_id: project.id, relation_type: "part_of" } ],
+        project_id: nil
+      )
+      expect(lone.reload.project_id).to eq(project.id)
+    end
+
+    it "create_entity under context attaches part_of and stamps project_id" do
+      project = MemoryEntity.create!(name: "PA", entity_type: "Project")
+      GraphWriteService.call(
+        operations: [ { type: "create_entity", name: "Lone", entity_type: "Class" } ],
+        project_id: project.id
+      )
+      entity = MemoryEntity.find_by!(name: "Lone")
+      expect(entity.project_id).to eq(project.id)
+      expect(MemoryRelation.exists?(from_entity: entity, to_entity: project,
+                                    relation_type: "part_of")).to be true
+    end
+
+    it "moving into a project that holds the name raises OperationFailed and rolls back" do
+      project = MemoryEntity.create!(name: "PA", entity_type: "Project")
+      MemoryEntity.create!(name: "SharedGlobal", entity_type: "Class", project_id: project.id)
+      global = MemoryEntity.create!(name: "SharedGlobal", entity_type: "Class")
+
+      expect {
+        GraphWriteService.call(
+          operations: [ { type: "create_relation", from_entity_id: global.id,
+                          to_entity_id: project.id, relation_type: "part_of" } ],
+          project_id: nil
+        )
+      }.to raise_error(McpGraphMemErrors::OperationFailed)
+      expect(global.reload.project_id).to be_nil
+      expect(MemoryRelation.exists?(from_entity: global, to_entity: project,
+                                    relation_type: "part_of")).to be false
+    end
+
+    it "find_by_name resolves a single foreign-scope candidate (documented design)" do
+      # A single same-named entity anywhere in the graph is unambiguous —
+      # writes DO wire to it even under an active context. Documented
+      # choice (Graphy flagged); the alternative (raise) needs a real
+      # cross-project write UX first.
+      proj_a = MemoryEntity.create!(name: "ProjA", entity_type: "Project")
+      proj_b = MemoryEntity.create!(name: "ProjB", entity_type: "Project")
+      foreign = MemoryEntity.create!(name: "EdgeTarget", entity_type: "Class", project_id: proj_a.id)
+
+      expect(ImportEntityResolver.find_by_name("EdgeTarget", project_id: proj_b.id)).to eq(foreign)
+    end
+
+    it "serializers expose project_id" do
+      project = MemoryEntity.create!(name: "PA", entity_type: "Project")
+      member = MemoryEntity.create!(name: "Lone", entity_type: "Class", project_id: project.id)
+      expect(GraphTraversalSerializer.entity_json(member)[:project_id]).to eq(project.id)
+      result = HybridSearchStrategy::SearchResult.new(entity: member, score: 1.0, matched_fields: [])
+      expect(result.to_h[:project_id]).to eq(project.id)
     end
   end
 end

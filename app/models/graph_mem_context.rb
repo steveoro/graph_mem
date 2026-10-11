@@ -7,7 +7,9 @@
 # agents. Agents without the header share the "default" client bucket.
 class GraphMemContext
   DEFAULT_CLIENT_ID = "default"
-  MAX_SCOPED_ENTITIES = 1_000
+  # NOTE: MAX_SCOPED_ENTITIES is gone — scope is an indexed project_id
+  # lookup since project-scoped names landed, so there is nothing to cap
+  # and scope_truncated is always false.
 
   class << self
     def for(client_id = DEFAULT_CLIENT_ID)
@@ -96,7 +98,8 @@ class GraphMemContext
     scoped_entity_scope&.entity_ids
   end
 
-  # Returns bounded scope IDs plus truncation metadata for diagnostics.
+  # Returns scope IDs plus (now vestigial) truncation metadata for
+  # diagnostics — always truncated: false since the cap was removed.
   def scoped_entity_scope
     return nil unless active?
 

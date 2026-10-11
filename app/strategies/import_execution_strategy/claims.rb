@@ -45,8 +45,16 @@ module ImportExecutionStrategy::Claims
   # Typed scoped lookup plus the Class-Module sibling fallbacks (same
   # scope first, then global) — mirrors ImportMatchingStrategy's
   # resolution so a `skip`/`add_relation` decision lands on the same
-  # entity the matcher chose.
-  def find_declared_or_stub(name, entity_type)
+  # entity the matcher chose. Reference nodes resolve against the WHOLE
+  # graph instead (stored edge target → single declarer → global stub),
+  # same as match, so a re-import lands on the claimed entity rather than
+  # minting a second stub.
+  def find_declared_or_stub(name, entity_type, reference: false, referrer_id: nil)
+    if reference
+      return ImportEntityResolver.find_reference(name, entity_type,
+                                                 project_id: @import_project_id,
+                                                 parent_entity_id: referrer_id)
+    end
     find_entity_by_name_and_type(name, entity_type, project_id: @import_project_id) ||
       ImportEntityResolver.class_module_collision(name, entity_type, project_id: @import_project_id) ||
       ImportEntityResolver.class_module_collision(name, entity_type, project_id: nil)

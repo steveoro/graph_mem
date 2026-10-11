@@ -62,7 +62,7 @@ text and do not claim conformance to success output schemas.
 
 ## Context Scoping (2 advertised tools)
 
-Context scoping allows search tools to **boost** entities related to the active project. The recursive `part_of` subtree is bounded; when the cap is reached, context-aware responses expose `scope_truncated: true` and continue with the partial scope. When a context is set via `set_context`, `search` prioritizes in-context query matches (cross-project results still appear, but ranked lower).
+Context scoping allows search tools to **boost** entities related to the active project. Since project-scoped names landed, the scope is an indexed `project_id` lookup (the project member set) — it is **not** capped, and `scope_truncated` is always `false` (`scope_max_entities` is always `null`; both fields remain for response compatibility). When a context is set via `set_context`, `search` prioritizes in-context query matches (cross-project results still appear, but ranked lower).
 
 Context is stored per MCP client in the `agent_contexts` table, keyed by the `X-MCP-Client` request header. Agents without the header share the `"default"` bucket.
 
@@ -277,7 +277,7 @@ budget as `search`.
   - `as_of` (string, optional): ISO 8601 instant evidence must cover; cannot be combined with `occurred_after`/`occurred_before`.
   - `max_tokens` (integer, optional): Cap the serialized evidence payload under an estimated token budget (~4 chars/token); adds `retrieval.token_budget` diagnostics.
 - **Response fields:** `query`, `summary`, `generation_mode`, `generated_by`, `fallback_reason`, `scope`, `entity_count`, `observation_count`, `observations`, `sources`, `retrieval`
-- **Retrieval diagnostics:** `scope_truncated` and `scope_max_entities` signal that an active-project subtree is partial rather than complete; `temporal` echoes the resolved window; `token_budget` reports packing when `max_tokens` is passed.
+- **Retrieval diagnostics:** `scope_truncated`/`scope_max_entities` are vestigial (always `false`/`null` — project scope is an uncapped `project_id` lookup); `temporal` echoes the resolved window; `token_budget` reports packing when `max_tokens` is passed.
 
 ## Temporal recall
 

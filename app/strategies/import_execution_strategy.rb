@@ -285,10 +285,13 @@ class ImportExecutionStrategy
     # Determine which action to take
     effective_action = child_action || action
 
-    # Process this node based on action
+    # Process this node based on action. `referrer_id` = the payload parent
+    # the node sits under — reference nodes use it to resolve the entity
+    # their stored edge already points at.
+    referrer_id = tree_parent_id || parent_entity_id
     entity_id = case effective_action
     when "skip"
-      handle_skip_action(node)
+      handle_skip_action(node, referrer_id)
     when "exclude"
       handle_exclude_action(node)
     when "add_relation"
@@ -296,7 +299,7 @@ class ImportExecutionStrategy
     when "merge"
       merge_into_existing(node, target_id)
     else
-      create_new_entity(node)
+      create_new_entity(node, referrer_id: referrer_id)
     end
 
     unless entity_id

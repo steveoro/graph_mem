@@ -13,7 +13,33 @@
 class ProjectMembership
   class Collision < StandardError; end
 
+  # Advisory lock serializing every subtree stamp: the backfill's
+  # compute+apply, ProjectMembership.reassign!, and every part_of writer
+  # that routes through them. Without it a re-parent landing between the
+  # backfill's compute and apply steps gets stamped under its OLD project
+  # (probed: move X under PB mid-run → X stamped PA). MariaDB GET_LOCK is
+  # reentrant on the same session, so nested writers inside a locked run
+  # just raise the refcount.
+  LOCK_NAME = "graph_mem.project_membership"
+  LOCK_TIMEOUT_SECONDS = 60
+
   class << self
+    # Runs `block` while holding the named advisory lock; other sessions
+    # taking the same lock wait up to LOCK_TIMEOUT_SECONDS.
+    def with_membership_lock(timeout: LOCK_TIMEOUT_SECONDS)
+      conn = ActiveRecord::Base.connection
+      acquired = conn.select_value("SELECT GET_LOCK(#{conn.quote(LOCK_NAME)}, #{timeout.to_i})")
+      unless acquired == 1 || acquired == true
+        raise Collision, "could not acquire #{LOCK_NAME} within #{timeout}s — " \
+                         "another import/backfill/graph mutation is running"
+      end
+      begin
+        yield
+      ensure
+        conn.select_value("SELECT RELEASE_LOCK(#{conn.quote(LOCK_NAME)})")
+      end
+    end
+
     # The project implied by a part_of parent: a Project parent means the
     # entity is a direct member of it; any other parent means the entity
     # inherits the parent's own project (NULL when the parent is unrooted).
@@ -39,6 +65,10 @@ class ProjectMembership
     # a same-name entity is an operator-level conflict, not a merge.
     # @raise [Collision] when the move would violate UNIQUE(project_scope, name)
     def reassign!(entity, target_project_id)
+      with_membership_lock { reassign_locked!(entity, target_project_id) }
+    end
+
+    def reassign_locked!(entity, target_project_id)
       return if entity.entity_type == NodeOperationsStrategy::PROJECT_ENTITY_TYPE
 
       subtree_ids = [ entity.id ] + RelationSemantics.descendant_ids(entity.id).to_a

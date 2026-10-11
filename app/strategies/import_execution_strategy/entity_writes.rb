@@ -6,11 +6,13 @@
 module ImportExecutionStrategy::EntityWrites
   private
 
-  def handle_skip_action(node)
+  def handle_skip_action(node, referrer_id = nil)
     name = node[:name] || node["name"]
     entity_type = node[:entity_type] || node["entity_type"]
 
-    existing = find_declared_or_stub(name, entity_type)
+    existing = find_declared_or_stub(name, entity_type,
+                                     reference: node[:reference] == true || node["reference"] == true,
+                                     referrer_id: referrer_id)
 
     if existing.nil? && (node[:reference] == true || node["reference"] == true)
       # A reference-only child marked skip resolved to another project's
@@ -33,7 +35,7 @@ module ImportExecutionStrategy::EntityWrites
       existing.id
     else
       @logger.warn "ImportExecutionStrategy: Skip action but entity '#{name}' not found, creating instead"
-      create_new_entity(node)
+      create_new_entity(node, referrer_id: referrer_id)
     end
   end
 
@@ -53,11 +55,13 @@ module ImportExecutionStrategy::EntityWrites
     name = node[:name] || node["name"]
     entity_type = node[:entity_type] || node["entity_type"]
 
-    existing = find_declared_or_stub(name, entity_type)
+    existing = find_declared_or_stub(name, entity_type,
+                                     reference: node[:reference] == true || node["reference"] == true,
+                                     referrer_id: parent_id)
 
     unless existing
       @logger.warn "ImportExecutionStrategy: Add relation action but entity '#{name}' not found, creating instead"
-      return create_new_entity(node)
+      return create_new_entity(node, referrer_id: parent_id)
     end
 
     retype_on_claim(existing, entity_type, node)
@@ -111,7 +115,7 @@ module ImportExecutionStrategy::EntityWrites
   # Create a new entity from import data
   # @param node [Hash] Import node data
   # @return [Integer, nil] The new entity ID on success
-  def create_new_entity(node)
+  def create_new_entity(node, referrer_id: nil)
     name = node[:name] || node["name"]
     entity_type = node[:entity_type] || node["entity_type"]
     aliases = node[:aliases] || node["aliases"]
@@ -120,10 +124,21 @@ module ImportExecutionStrategy::EntityWrites
 
     # Check if entity with same name and type already exists. Reference
     # nodes create GLOBAL stubs (project_id NULL — claimable by whichever
-    # repo declares the constant); declared nodes resolve inside this
-    # import's project, then the global namespace.
-    node_project_id = (node[:reference] == true || node["reference"] == true) ? nil : @import_project_id
-    existing = find_entity_by_name_and_type(name, entity_type, project_id: node_project_id)
+    # repo declares the constant) — but only when NOTHING resolves them:
+    # the stored edge's current target and a single declarer (Class↔Module
+    # included, a claim may have retyped the stub) win first, so an
+    # unchanged re-import no-ops instead of minting a duplicate stub +
+    # duplicate edge. Declared nodes resolve inside this import's project,
+    # then the global namespace.
+    reference_node = node[:reference] == true || node["reference"] == true
+    node_project_id = reference_node ? nil : @import_project_id
+    existing = if reference_node
+                 ImportEntityResolver.find_reference(name, entity_type,
+                                                     project_id: @import_project_id,
+                                                     parent_entity_id: referrer_id)
+    else
+                 find_entity_by_name_and_type(name, entity_type, project_id: node_project_id)
+    end
     if existing && node[:reference] != true && node["reference"] != true && reference_stub_entity?(existing)
       # A `create` decision that resolves to an unclaimed stub means the
       # matcher refused the claim (another project declares the name too).

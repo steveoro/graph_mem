@@ -251,9 +251,20 @@ class ImportMatchingStrategy
     # same-scope v1.49 leftover, then a global reference stub awaiting a
     # declarer — read-only here; execution decides whether retyping applies.
     reference_node = node[:reference] == true || node["reference"] == true
-    exact_match = ImportEntityResolver.find_by_name_and_type(name, entity_type,
-                                                           project_id: @import_project_id,
-                                                           include_declared: reference_node)
+    exact_match = if reference_node
+                    # References resolve against the WHOLE graph: the entity
+                    # the referrer's stored edge already targets wins (an
+                    # unchanged re-import no-ops even after a claim or a
+                    # second declarer), then a single declarer — Class↔Module
+                    # included, a claim may have retyped — then the global
+                    # stub.
+                    ImportEntityResolver.find_reference(name, entity_type,
+                                                        project_id: @import_project_id,
+                                                        parent_entity_id: parent_entity_id)
+    else
+                    ImportEntityResolver.find_by_name_and_type(name, entity_type,
+                                                               project_id: @import_project_id)
+    end
     exact_match ||= ImportEntityResolver.class_module_collision(name, entity_type,
                                                                 project_id: @import_project_id)
     exact_match ||= ImportEntityResolver.class_module_collision(name, entity_type,

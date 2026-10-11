@@ -109,13 +109,19 @@ module ImportExecutionStrategy::Relations
       types << (relation["from_type"] || relation[:from_type])
       types << (relation["to_type"] || relation[:to_type])
     end
+    # Class↔Module are one family for endpoint resolution: a payload may
+    # reference `Foo:Module` while the stored declaration is `Foo:Class`
+    # (mixin stubs emit Module; a claim can retype to Class). Fetch both
+    # and bucket them under one family key so either spelling resolves.
     canonical_types = types.uniq.map { |type| ImportEntityResolver.canonical_type(type) }.uniq
+                           .flat_map { |t| %w[Class Module].include?(t) ? %w[Class Module] : [ t ] }.uniq
 
     grouped = {}
     MemoryEntity.where(name: names.uniq, entity_type: canonical_types)
                 .pluck(:name, :entity_type, :id, :project_id)
                 .each do |(name, entity_type, id, project_id)|
-      (grouped[[ name.to_s.downcase, entity_type.to_s.downcase ]] ||= []) << [ id, project_id ]
+      family = %w[Class Module].include?(entity_type) ? "class-module" : entity_type.to_s.downcase
+      (grouped[[ name.to_s.downcase, family ]] ||= []) << [ id, project_id ]
     end
 
     map = {}
@@ -140,7 +146,9 @@ module ImportExecutionStrategy::Relations
   end
 
   def endpoint_key(name, raw_type)
-    [ name.to_s.downcase, ImportEntityResolver.canonical_type(raw_type).to_s.downcase ]
+    type = ImportEntityResolver.canonical_type(raw_type).to_s.downcase
+    type = "class-module" if %w[class module].include?(type) # Class↔Module family
+    [ name.to_s.downcase, type ]
   end
 
   # All (from_id, to_id, canonical_type) triples the resolvable relations

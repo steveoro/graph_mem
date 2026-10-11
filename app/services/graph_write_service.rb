@@ -125,6 +125,19 @@ class GraphWriteService
     ActiveRecord::Base.transaction { dispatch(operation[:type], operation[:attributes]) }
   end
 
+  # Moving/creating into a project that already holds the name surfaces as
+  # OperationFailed, not a bare UNIQUE(project_scope, name) failure; the
+  # surrounding transaction rolls the edge/entity back with it.
+  def sync_membership!(entity)
+    ProjectMembership.sync!(entity)
+  rescue ProjectMembership::Collision => e
+    raise McpGraphMemErrors::OperationFailed.new(
+      e.message,
+      category: "validation",
+      next_move: "Rename the entity or pick a different project scope, then retry."
+    )
+  end
+
   def dispatch(type, attributes)
     case type
     when "create_entity" then create_entity(attributes)
@@ -135,15 +148,26 @@ class GraphWriteService
 
   def create_entity(attributes)
     submitted_type = attributes[:entity_type]
+    is_project = ImportEntityResolver.canonical_type(attributes[:entity_type]) == "Project"
     entity = MemoryEntity.create!(
       name: attributes[:name],
       entity_type: attributes[:entity_type],
       aliases: attributes[:aliases],
-      description: attributes[:description],
-      # Members join the context project; Project roots and context-less
-      # creates stay in the global namespace.
-      project_id: ImportEntityResolver.canonical_type(attributes[:entity_type]) == "Project" ? nil : @project_id
+      description: attributes[:description]
+      # NO project_id here: membership must mirror the part_of chain —
+      # stamping the column without the edge leaves a member outside the
+      # tree (membership drifts, backfill stops being a no-op).
     )
+    # Members join the context project by ATTACHING to it: the part_of
+    # edge + ProjectMembership.sync! stamps project_id the same way every
+    # other writer does. Project roots and context-less creates stay
+    # global. A same-name clash in the project scope raises OperationFailed
+    # and rolls the whole create back (execution is transactional).
+    if @project_id && !is_project
+      MemoryRelation.create!(from_entity_id: entity.id, to_entity_id: @project_id,
+                             relation_type: "part_of")
+      sync_membership!(entity)
+    end
     Array(attributes[:observations]).each do |content|
       MemoryObservation.create!(memory_entity: entity, content: content)
     end
@@ -222,6 +246,12 @@ class GraphWriteService
       confidence: attributes[:confidence],
       properties: attributes[:properties] || {}
     )
+    # project_id mirrors the part_of chain: every write that creates a
+    # hierarchy edge must resync the child's scope, or the tree and the
+    # membership column drift apart (and the backfill stops being a no-op).
+    # A same-name clash in the target scope surfaces as OperationFailed
+    # and rolls the edge back with it (execution is transactional).
+    sync_membership!(MemoryEntity.find(from_id)) if canonical_type == "part_of"
     payload = GraphTraversalSerializer.relation_json(relation)
     type_hint = type_hint_for(
       attributes[:relation_type],
