@@ -13,7 +13,7 @@ class SubgraphSearchService
   def initialize(query:, context_scope: nil, logger: Rails.logger, page: nil, per_page: nil,
                  search_in_name: true, search_in_type: true, search_in_observations: true,
                  search_in_aliases: true, include_observations: true, include_relations: true,
-                 temporal_window: nil, max_tokens: nil)
+                 temporal_window: nil, max_tokens: nil, perspective: nil)
     @query = query
     @context_scope = context_scope
     @logger = logger
@@ -31,6 +31,9 @@ class SubgraphSearchService
     @temporal_window = @extraction.window
     @effective_query = @extraction.effective_query
     @max_tokens = max_tokens
+    # C3a: hard filter on observation perspective — `world` surfaces only
+    # factual obs, `experience` only work-log obs, nil everything.
+    @perspective = perspective
   end
 
   def call
@@ -157,7 +160,12 @@ class SubgraphSearchService
     conditions << "LOWER(memory_entities.aliases) LIKE :like_query_term" if @search_fields[:aliases]
     if @search_fields[:observations]
       base_query = base_query.left_joins(:memory_observations)
-      conditions << "(memory_observations.status = :active_status AND LOWER(memory_observations.content) LIKE :like_query_term)"
+      condition = "(memory_observations.status = :active_status AND LOWER(memory_observations.content) LIKE :like_query_term"
+      if @perspective.present?
+        condition += " AND memory_observations.perspective = :perspective"
+        params[:perspective] = @perspective
+      end
+      conditions << "#{condition})"
       params[:active_status] = MemoryObservation::ACTIVE_STATUS
     end
 
@@ -196,6 +204,9 @@ class SubgraphSearchService
     if @include_observations
       observations = entity.active_memory_observations
       observations = observations.select { |observation| @temporal_window.covers?(observation) } if @temporal_window
+      if @perspective.present?
+        observations = observations.select { |observation| observation.perspective == @perspective }
+      end
       payload[:observations] = observations.map do |observation|
         MemoryObservationSerializer.call(observation)
       end

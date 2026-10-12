@@ -213,8 +213,10 @@ CREATE TABLE `memory_observations` (
   `superseded_by_id` bigint(20) DEFAULT NULL,
   `trust_score` float NOT NULL DEFAULT 0,
   `embedded_at` datetime(6) DEFAULT NULL,
+  `perspective` varchar(16) DEFAULT NULL,
   PRIMARY KEY (`id`),
   KEY `index_memory_observations_on_memory_entity_id` (`memory_entity_id`),
+  KEY `index_memory_observations_on_perspective` (`perspective`),
   KEY `index_memory_observations_on_source` (`source`),
   KEY `index_memory_observations_on_valid_from` (`valid_from`),
   KEY `index_memory_observations_on_valid_until` (`valid_until`),
@@ -315,6 +317,7 @@ CREATE TABLE `schema_migrations` (
   PRIMARY KEY (`version`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 INSERT INTO `schema_migrations` (version) VALUES
+('20261013110000'),
 ('20261012000001'),
 ('20261012000000'),
 ('20261009180000'),

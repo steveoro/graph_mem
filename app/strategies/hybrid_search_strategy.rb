@@ -42,7 +42,8 @@ class HybridSearchStrategy
   # @param temporal_only [Boolean] When true (the query is nothing but a temporal phrase), the temporal
   #   channel IS the base result set and text/vector channels are skipped
   # @return [Array<SearchResult>]
-  def search(query, limit: 50, semantic: true, context_entity_ids: nil, scope_entity_ids: nil, temporal_window: nil, temporal_only: false)
+  def search(query, limit: 50, semantic: true, context_entity_ids: nil, scope_entity_ids: nil,
+             temporal_window: nil, temporal_only: false, perspective: nil)
     @query = query.to_s.strip
 
     scoped_ids = scope_entity_ids || context_entity_ids
@@ -61,7 +62,7 @@ class HybridSearchStrategy
       end
 
       observation_entity_ids = if semantic
-        ids = @vector_strategy.search_observations(query, limit: limit * 2)
+        ids = @vector_strategy.search_observations(query, limit: limit * 2, perspective: perspective)
         scoped_ids.present? ? ids & scoped_ids : ids
       else
         []

@@ -8,7 +8,12 @@ class MemoryObservation < ApplicationRecord
   OBSOLETE_STATUS = "obsolete"
   SUPERSEDED_STATUS = "superseded"
   STATUSES = [ ACTIVE_STATUS, OBSOLETE_STATUS, SUPERSEDED_STATUS ].freeze
-  MUTABLE_FIELDS = %i[content confidence source valid_from valid_until tags].freeze
+  MUTABLE_FIELDS = %i[content confidence source valid_from valid_until tags perspective].freeze
+  # C3a world/experience split (Hindsight port): `world` = external fact,
+  # `experience` = work-log entry. Closed two-value vocabulary — validated
+  # by inclusion, NOT the soft suggestion() pattern used for entity_type /
+  # relation_type (see migration comment).
+  PERSPECTIVES = %w[world experience].freeze
 
   class InactiveObservationError < StandardError; end
 
@@ -39,6 +44,7 @@ class MemoryObservation < ApplicationRecord
   validates :confidence, numericality: { greater_than_or_equal_to: 0, less_than_or_equal_to: 1 }, allow_nil: true
   validates :trust_score, numericality: { greater_than_or_equal_to: 0, less_than_or_equal_to: 1 }, allow_nil: true
   validates :status, inclusion: { in: STATUSES }
+  validates :perspective, inclusion: { in: PERSPECTIVES }, allow_nil: true
   validate :validity_range_is_ordered
   validate :tags_are_strings
   validate :lifecycle_state_is_consistent

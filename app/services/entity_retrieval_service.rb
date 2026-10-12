@@ -4,7 +4,7 @@
 class EntityRetrievalService
   class << self
     def search(query, limit: 50, semantic: true, context_entity_ids: nil, scope_entity_ids: nil,
-               context_scope: nil, temporal_window: nil)
+               context_scope: nil, temporal_window: nil, perspective: nil)
       extraction = TemporalQueryParser.apply(query, temporal_window: temporal_window)
       window = extraction.window
       strategy = HybridSearchStrategy.new
@@ -21,7 +21,8 @@ class EntityRetrievalService
         context_entity_ids: boost_ids,
         scope_entity_ids: scope_entity_ids,
         temporal_window: window,
-        temporal_only: extraction.temporal_only?
+        temporal_only: extraction.temporal_only?,
+        perspective: perspective
       )
 
       # A windowed query whose residual terms match nothing falls back to a
@@ -35,7 +36,8 @@ class EntityRetrievalService
           context_entity_ids: boost_ids,
           scope_entity_ids: scope_entity_ids,
           temporal_window: window,
-          temporal_only: true
+          temporal_only: true,
+          perspective: perspective
         )
         fallback = true
       end

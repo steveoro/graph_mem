@@ -154,6 +154,7 @@ results, summary }`. Any failed operation rolls back the full batch.
   - `observation_limit` (integer, optional): Return at most this many observations per entity.
   - `occurred_after` / `occurred_before` (string, optional): ISO 8601 bounds restricting returned observations to a temporal window (see [Temporal recall](#temporal-recall)).
   - `as_of` (string, optional): ISO 8601 instant observations must cover; cannot be combined with `occurred_after`/`occurred_before`.
+  - `perspective` (string, optional): Observation perspective hard filter — `world` surfaces only factual observations, `experience` only work-log entries; omitted returns both.
   - `max_tokens` (integer, optional): Pack entities then relations under an estimated token budget (~4 chars/token); adds `token_budget` diagnostics to the response.
 - **Response:** `{ entities, relations, missing_entity_ids, relation_scope, token_budget? }`.
 
@@ -181,6 +182,7 @@ results, summary }`. Any failed operation rolls back the full batch.
   - `text_content` (string, required): The observation content. Also accepted as `content`.
   - `confidence` (number, optional): Confidence score from 0.0 to 1.0.
   - `source` (string, optional): Source or provenance identifier.
+  - `perspective` (string, optional): Memory perspective — `world` (external fact) or `experience` (work-log entry). Closed vocabulary.
   - `valid_from` / `valid_until` (ISO 8601 strings, optional): Validity window.
   - `tags` (array of strings, optional): Structured tags.
 - **Embedding refresh:** Changes to content, source, or tags regenerate the observation embedding; confidence and validity-only changes do not.
@@ -190,7 +192,7 @@ results, summary }`. Any failed operation rolls back the full batch.
 - **Parameters:**
   - `observation_id` (integer, required): The active observation to update.
   - `text_content` (string, optional): Replacement content.
-  - `confidence`, `source`, `valid_from`, `valid_until`, `tags` (optional): Structured metadata updates.
+  - `confidence`, `source`, `perspective`, `valid_from`, `valid_until`, `tags` (optional): Structured metadata updates.
   - `supersede` (boolean, optional, default: false): Create a new active observation and link the original to it with status `superseded`.
   - `reason` (string, optional): Reason for supersession.
 - **Lifecycle:** Active observations appear in reads, traversal, relationship discovery, and observation search by default. `get_entities(entity_ids: [...], include_obsolete: true)` and REST/resource `include_obsolete=true` expose retained history.
@@ -248,6 +250,7 @@ results, summary }`. Any failed operation rolls back the full batch.
   - `search_in_name`, `search_in_type`, `search_in_aliases`, `search_in_observations` (boolean, optional): Subgraph search fields.
   - `occurred_after` / `occurred_before` (string, optional): ISO 8601 bounds enabling the temporal recall channel (see [Temporal recall](#temporal-recall)).
   - `as_of` (string, optional): ISO 8601 point-in-time window; cannot be combined with `occurred_after`/`occurred_before`.
+  - `perspective` (string, optional): Observation perspective hard filter — `world` surfaces only factual observations, `experience` only work-log entries; omitted returns both.
   - `max_tokens` (integer, optional): Pack ranked results under an estimated token budget (~4 chars/token); adds `retrieval.token_budget` diagnostics.
 - **Responses:**
   - Summary: `{ mode: "summary", results, pagination, retrieval }`

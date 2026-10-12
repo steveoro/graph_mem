@@ -18,7 +18,8 @@ RSpec.describe "project-scoped entity names" do
                     Bar Foo bar.rb foo.rb RepoD Lone PA InnerProj InnerMember
                     StubRef EdgeTarget n1.rb n2.rb n3.rb SwimProj
                     ApplicationRecord app_record.rb StaleDup BackChild2
-                    StaleStamp Xdup ProjX].freeze
+                    StaleStamp Xdup ProjX BackProj Noisy
+                    Other0 Other1 Other2 Other3 Other4 Other5].freeze
   # Names that can't live in the %w list above (spaces / quotes).
   PURGED_NAMES_EXTRA = [ "Foo's Bar" ].freeze
 
@@ -292,11 +293,11 @@ RSpec.describe "project-scoped entity names" do
   end
 
   describe "conflict_hint" do
-    def hint_for(key_value)
+    def hint_for(key_value, membership: nil)
       error = ActiveRecord::RecordNotUnique.new(
         "Duplicate entry '#{key_value}' for key 'index_memory_entities_on_project_scope_and_name'"
       )
-      ProjectIdBackfill.conflict_hint(error)
+      ProjectIdBackfill.conflict_hint(error, membership: membership)
     end
 
     it "names an apostrophe-containing entity, not a truncated prefix of it" do
@@ -317,12 +318,43 @@ RSpec.describe "project-scoped entity names" do
       proj = MemoryEntity.create!(name: "ProjX", entity_type: "Project")
       mover = MemoryEntity.create!(name: "Xdup", entity_type: "Task") # global, being stamped
       member = MemoryEntity.create!(name: "Xdup", entity_type: "Task", project_id: proj.id)
-      hint = hint_for("#{proj.id}-Xdup")
+      hint = hint_for("#{proj.id}-Xdup", membership: { mover.id => proj.id })
       expect(hint).to include("project 'ProjX'")
       expect(hint).to include("id #{member.id}")
       expect(hint).to include("id #{mover.id} 'Xdup' (global)")
       expect(hint).to include("already holds")
       expect(hint).not_to include("collides with global")
+    end
+
+    it "names only the real mover when same-name rows are rooted in other projects" do
+      # Graphy r19 probe: correctly-rooted `Noisy` rows in other projects
+      # must never crowd the actual stamped-but-unrooted mover out of the
+      # list (order+limit could hide it entirely on a bare name scan).
+      backproj = MemoryEntity.create!(name: "BackProj", entity_type: "Project")
+      others = Array.new(6) { |i| MemoryEntity.create!(name: "Other#{i}", entity_type: "Project") }
+      membership = {}
+      others.each do |p|
+        member = MemoryEntity.create!(name: "Noisy", entity_type: "Task", project_id: p.id)
+        MemoryRelation.create!(from_entity_id: member.id, to_entity_id: p.id,
+                               relation_type: "part_of")
+        membership[member.id] = p.id # reached by the backfill walk → in the batch
+      end
+      # The real conflict: stamped to BackProj but no part_of path reaches it,
+      # so it stays OUTSIDE membership and the unrooted clear collides with
+      # the global namesake.
+      stale = MemoryEntity.create!(name: "Noisy", entity_type: "Task",
+                                   project_id: backproj.id)
+      MemoryEntity.create!(name: "Noisy", entity_type: "Task") # global occupier
+
+      hint = hint_for("0-Noisy", membership: membership)
+      expect(hint).to include("moving: id #{stale.id}")
+      expect(hint).not_to include("Other")
+
+      # Without batch context the fallback keeps only unbacked stamps —
+      # the rooted members have a part_of edge so they still stay out.
+      hint = hint_for("0-Noisy")
+      expect(hint).to include("id #{stale.id}")
+      expect(hint).not_to include("Other")
     end
 
     it "matches a truncated key value as a LIKE prefix" do

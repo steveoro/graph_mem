@@ -60,7 +60,13 @@ module GraphVocabulary
     "has_many" => %w[has_and_belongs_to_many habtm hasmany],
     "has_one" => %w[hasone],
     "delegates_to" => %w[delegate delegates delegate_to],
-    "routes_to" => %w[routes routed_to routed_by]
+    "routes_to" => %w[routes routed_to routed_by],
+    # Causal edges (Hindsight port, approved option A): the canonical name is
+    # BACKWARD-reading — `Effect -[caused_by]-> Cause`. Forward verbs like
+    # `led_to`/`resulted_in`/`triggered` are deliberately NOT variants:
+    # mapping them here would store the edge backwards (same inversion trap
+    # as `contains`/`part_of` above). They stay usable as literal types.
+    "caused_by" => %w[resulted_from triggered_by consequence_of]
   }.freeze
   EXTRA_RELATION_TYPES = %w[
     extends configured_by tested_by migrated_by authorizes integrates_with replaces

@@ -5,7 +5,16 @@ require "rails_helper"
 RSpec.describe GraphVocabulary do
   it "exposes the code-owned canonical type examples" do
     expect(described_class::ENTITY_TYPES).to include("Project", "Feature", "Documentation")
-    expect(described_class::RELATION_TYPES).to include("part_of", "integrates_with", "replaces")
+    expect(described_class::RELATION_TYPES).to include("part_of", "integrates_with", "replaces",
+                                                       "caused_by")
+  end
+
+  it "keeps forward causal verbs out of caused_by variants (direction guard)" do
+    # `led_to`/`resulted_in`/`triggered` read FORWARD; canonicalizing them
+    # into backward-reading `caused_by` would store edges inverted.
+    variants = described_class::RELATION_TYPE_MAPPINGS["caused_by"]
+    expect(variants).to include("resulted_from", "triggered_by")
+    expect(variants).not_to include("led_to", "resulted_in", "triggered")
   end
 
   describe ".suggestion" do

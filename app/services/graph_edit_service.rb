@@ -108,12 +108,14 @@ class GraphEditService
     observation_id = attributes.delete(:observation_id)
     supersede = attributes.delete(:supersede) == true
     reason = attributes.delete(:reason)
-    updates = attributes.slice(:text_content, :confidence, :source, :valid_from, :valid_until, :tags)
+    updates = attributes.slice(:text_content, :confidence, :source, :valid_from, :valid_until, :tags,
+                               :perspective)
     updates[:content] = updates.delete(:text_content) if updates.key?(:text_content)
     if updates.empty?
       raise FastMcp::Tool::InvalidArgumentsError,
             "At least one observation attribute must be provided for update. " \
-            "Provide `text_content`, `confidence`, `source`, `valid_from`, `valid_until`, or `tags` and retry `graph_edit`."
+            "Provide `text_content`, `confidence`, `source`, `valid_from`, `valid_until`, `tags`, " \
+            "or `perspective` and retry `graph_edit`."
     end
 
     observation = MemoryObservation.find(observation_id)

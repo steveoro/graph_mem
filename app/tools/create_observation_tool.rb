@@ -27,12 +27,14 @@ class CreateObservationTool < ApplicationTool
     required(:text_content).filled(:string).description("The textual content of the observation")
     optional(:confidence).maybe(:float).description("Optional confidence score from 0.0 to 1.0.")
     optional(:source).maybe(:string).description("Optional source or provenance identifier.")
+    optional(:perspective).maybe(:string).description("Optional memory perspective: 'world' (external fact) or 'experience' (work-log entry).")
     optional(:valid_from).maybe(:string).description("Optional ISO 8601 start of the validity period.")
     optional(:valid_until).maybe(:string).description("Optional ISO 8601 end of the validity period.")
     optional(:tags).array(:string).description("Optional list of tags.")
   end
 
-  def call(entity_id:, text_content:, confidence: nil, source: nil, valid_from: nil, valid_until: nil, tags: [])
+  def call(entity_id:, text_content:, confidence: nil, source: nil, valid_from: nil, valid_until: nil,
+           tags: [], perspective: nil)
     logger.info "Performing CreateObservationTool with entity_id: #{entity_id}, text_content: '#{text_content}'"
     begin
       GraphWriteService.execute_one(
@@ -42,6 +44,7 @@ class CreateObservationTool < ApplicationTool
           text_content: text_content,
           confidence: confidence,
           source: source,
+          perspective: perspective,
           valid_from: valid_from,
           valid_until: valid_until,
           tags: tags

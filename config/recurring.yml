@@ -3,6 +3,10 @@ development:
     class: DreamStateCompactionJob
     queue: default
     schedule: every hour
+  stale_memory_scan:
+    class: StaleMemoryScanJob
+    queue: low_priority
+    schedule: every hour
   embedding_backfill:
     class: EmbeddingScheduledBackfillJob
     queue: low_priority
@@ -17,6 +21,10 @@ production:
     class: DreamStateCompactionJob
     queue: default
     schedule: at 3am every day
+  stale_memory_scan:
+    class: StaleMemoryScanJob
+    queue: low_priority
+    schedule: at 4:30am every day
   # NOTE: All times are in Greenwich Mean Time (GMT)
   database_backup_at_13:
     class: DatabaseBackupJob

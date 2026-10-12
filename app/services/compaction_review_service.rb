@@ -296,6 +296,14 @@ class CompactionReviewService
         return nil if entity_id.blank? || parent_id.blank?
 
         [ "reparent_entity", entity_id.to_i, parent_id.to_i ].join("|")
+      when "stale_memory"
+        # Dedupe on entity + sorted observation set: a re-scan re-detecting
+        # the same obs is the same item even if the scan timestamp differs.
+        entity_id = payload[:entity_id]
+        obs_ids = Array(payload[:observation_ids]).compact.map(&:to_i).sort
+        return nil if entity_id.blank? || obs_ids.empty?
+
+        [ "stale_memory", entity_id.to_i, obs_ids.join("-") ].join("|")
       else
         nil
       end
@@ -446,9 +454,38 @@ class CompactionReviewService
         delete_entity(effective)
       when "dismiss_compaction_review"
         dismiss_compaction_review(effective)
+      when "stale_memory"
+        apply_stale_memory(effective)
       else
         { success: false, error: "Unknown review kind: #{row.kind}" }
       end
+    end
+
+    # stale_memory apply: mark the flagged observations obsolete. Never
+    # destroys rows — `mark_obsolete!` keeps the audit trail (obsoleted_at +
+    # reason), matching how `delete_observation` obsoletes rather than
+    # removes. Missing or already-inactive obs are skipped, not errors —
+    # a re-scan can re-flag obs the operator already handled.
+    def apply_stale_memory(effective)
+      obs_ids = Array(effective[:observation_ids]).compact.map(&:to_i)
+      return { success: false, error: "No observation ids provided" } if obs_ids.empty?
+
+      reason = "Stale memory scan: #{effective[:signal] || 'flagged'} — #{effective[:reason]}".truncate(500)
+      marked = 0
+      skipped = []
+      MemoryObservation.where(id: obs_ids).find_each do |obs|
+        if obs.status == MemoryObservation::ACTIVE_STATUS
+          obs.mark_obsolete!(reason: reason)
+          marked += 1
+        else
+          skipped << obs.id
+        end
+      end
+      {
+        success: true,
+        message: "Marked #{marked} observation(s) obsolete" \
+                 "#{"; skipped #{skipped.size} already-inactive" if skipped.any?}"
+      }
     end
 
     def merge_entities(row, effective, action_params)

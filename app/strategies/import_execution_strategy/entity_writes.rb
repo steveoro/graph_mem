@@ -206,11 +206,17 @@ module ImportExecutionStrategy::EntityWrites
     observations_to_create.each do |obs_data|
       content = obs_data[:content] || obs_data["content"]
 
+      source = obs_data[:source] || obs_data["source"]
       MemoryObservation.create!(
         memory_entity_id: entity_id,
         content: content,
         confidence: obs_data[:confidence] || obs_data["confidence"],
-        source: obs_data[:source] || obs_data["source"],
+        source: source,
+        # C3a: code-structure imports emit factual observations → `world`.
+        # An explicit payload value wins; unknown/custom producers stay NULL
+        # (conservative — the migration backfill uses the same rule).
+        perspective: obs_data[:perspective] || obs_data["perspective"] ||
+          (GraphifyImporter::KNOWN_PRODUCERS.include?(source) ? "world" : nil),
         valid_from: obs_data[:valid_from] || obs_data["valid_from"],
         valid_until: obs_data[:valid_until] || obs_data["valid_until"],
         tags: obs_data[:tags] || obs_data["tags"] || []

@@ -30,8 +30,17 @@ class ProjectIdBackfill
   # branches on the scope: 0 = a stamped-but-unrooted row whose clear
   # collides with a global row; >0 = a stamp colliding inside a project
   # that already holds the name.
+  #
+  # @param membership [Hash<Integer, Integer>, nil] entity_id => target
+  #   project_id map of the apply batch that raised — the ONLY trustworthy
+  #   source of "moving" rows. Without it the mover is restricted to rows
+  #   whose stamp has no backing part_of path (stamped-but-unrooted), and
+  #   the list is dropped when it can't disambiguate: same-name rows
+  #   correctly rooted in OTHER projects are normal under scoped names and
+  #   must never be named as movers (Graphy r19 — order+limit could crowd
+  #   out the real mover and mislead the operator).
   # @return [String]
-  def self.conflict_hint(error)
+  def self.conflict_hint(error, membership: nil)
     match = error.message.match(/Duplicate entry '(\d+)-(.+)' for key/)
     return error.message.to_s unless match
 
@@ -49,8 +58,7 @@ class ProjectIdBackfill
     occupiers = MemoryEntity.where(project_scope: scope).where("name LIKE ?", name_like)
                             .order(:id).limit(5).map(&labeled)
     occupier = occupiers.presence&.join(", ") || "(occupying row not found — rerun may have freed it)"
-    movers = MemoryEntity.where("name LIKE ?", name_like).where.not(project_scope: scope)
-                         .order(:id).limit(5).map(&labeled)
+    movers = moving_rows(scope, name_like, membership).map(&labeled)
     moving = movers.presence ? " (moving: #{movers.join(', ')})" : ""
     once = "further conflicts are reported one at a time"
 
@@ -65,6 +73,39 @@ class ProjectIdBackfill
         "of them, then re-run (#{once})"
     end
   end
+
+  # Rows actually being moved into the clash scope — derived from the apply
+  # batch when available, otherwise narrowed to stamped-but-unrooted rows
+  # (a stamp with no part_of edge backing it). Never a bare name scan:
+  # same-name rows correctly rooted in other projects are normal.
+  def self.moving_rows(scope, name_like, membership)
+    base = MemoryEntity.where("name LIKE ?", name_like).order(:id).limit(5)
+    if membership
+      if scope.zero?
+        # Scope-0 clash = the unrooted clear: batch rows still stamped to a
+        # project that no longer reaches them.
+        base.where.not(id: membership.keys).where.not(project_id: nil)
+      else
+        # Project clash = batch rows being stamped INTO that scope whose
+        # current stamp differs.
+        base.where(id: membership.select { |_, project| project == scope }.keys)
+            .where("project_id IS NULL OR project_id <> ?", scope)
+      end
+    else
+      # No batch context: only a stamp without a part_of edge backing it
+      # can be moving — the stamped-but-unrooted definition the backfill
+      # itself clears. Global same-name rows can't be identified as the
+      # mover without the batch, so the list simply omits them.
+      base.where.not(project_id: nil)
+          .where(<<~SQL.squish)
+            NOT EXISTS (SELECT 1 FROM memory_relations mr
+                        WHERE mr.from_entity_id = memory_entities.id
+                          AND mr.to_entity_id = memory_entities.project_id
+                          AND mr.relation_type = 'part_of')
+          SQL
+    end
+  end
+  private_class_method :moving_rows
 
   # @param dry_run [Boolean] print the report without writing
   # @return [Report] per-project member counts, unrooted count, conflicts,
@@ -91,7 +132,17 @@ class ProjectIdBackfill
         # a failure mid-apply (e.g. clearing a scope that collides with a
         # global same-name row) must roll back every stamp, not leave the
         # projects written so far committed.
-        changed = dry_run ? 0 : MemoryEntity.transaction { apply_membership(membership) }
+        changed = dry_run ? 0 : MemoryEntity.transaction do
+          begin
+            apply_membership(membership)
+          rescue ActiveRecord::RecordNotUnique => e
+            # Re-raise carrying the batch-aware hint (movers derived from
+            # `membership`, not a name scan); the DB error stays as `cause`
+            # so the rake abort can still print the raw diagnostics.
+            raise ActiveRecord::RecordNotUnique,
+                  self.class.conflict_hint(e, membership: membership)
+          end
+        end
       end
     rescue ActiveRecord::LockWaitTimeout, ProjectMembership::LockTimeout
       retry if attempts < MAX_LOCK_WAIT_RETRIES
