@@ -7,7 +7,15 @@ namespace :graph_mem do
     dry_run = args[:mode].to_s == "dry_run"
     abort "usage: bin/rails graph_mem:backfill_project_ids[dry_run]" unless args[:mode].blank? || dry_run
 
-    ProjectIdBackfill.new.run(dry_run: dry_run)
+    begin
+      ProjectIdBackfill.new.run(dry_run: dry_run)
+    rescue ActiveRecord::RecordNotUnique => e
+      # Stamped-but-unrooted row colliding with a global same-name row:
+      # the transactional apply already rolled back — tell the operator
+      # how to unblock instead of surfacing the raw DB error.
+      abort "backfill aborted and rolled back: #{e.message} — " \
+            "dedupe entity names that exist both globally and under a project, then re-run"
+    end
   end
 
   desc "Report MCP tool usage (DAYS=30 by default; DAYS=all for all history)"

@@ -1616,5 +1616,19 @@ RSpec.describe 'DataExchange', type: :request do
 
       expect(scope_for(import_data, decisions)).to eq(project2.id)
     end
+
+    it 'accepts a merge target that is itself a nested (non-global) Project' do
+      # The strategy's @import_project_id pins WHATEVER the root mapped to —
+      # nested Projects own their own scope, so merging the payload root into
+      # a nested Project scopes the import there, not to the global namespace.
+      nested = MemoryEntity.create!(name: 'Nested Proj', entity_type: 'Project',
+                                    project_id: project1.id)
+      import_data = {
+        'root_nodes' => [ { 'name' => 'Any Name', 'entity_type' => 'Project' } ]
+      }
+      decisions = [ { node_path: '0', action: 'merge', target_id: nested.id } ]
+
+      expect(scope_for(import_data, decisions)).to eq(nested.id)
+    end
   end
 end

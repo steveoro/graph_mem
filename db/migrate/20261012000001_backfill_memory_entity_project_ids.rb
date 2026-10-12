@@ -6,7 +6,14 @@
 class BackfillMemoryEntityProjectIds < ActiveRecord::Migration[8.1]
   def up
     say_with_time "Backfilling memory_entities.project_id" do
-      ProjectIdBackfill.new(out: ->(line) { say line }).run(dry_run: false)
+      begin
+        ProjectIdBackfill.new(out: ->(line) { say line }).run(dry_run: false)
+      rescue ActiveRecord::RecordNotUnique => e
+        # A stamped-but-unrooted row sharing a global name aborts the apply —
+        # the transaction rolls back, so re-running after deduping is safe.
+        raise ActiveRecord::RecordNotUnique,
+              "#{e.message} — dedupe entity names that exist both globally and under a project, then re-run"
+      end
     end
   end
 

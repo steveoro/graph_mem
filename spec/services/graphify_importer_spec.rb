@@ -128,11 +128,15 @@ RSpec.describe GraphifyImporter do
         { "id" => "proj_root", "label" => "post.rb", "file_type" => "code",
           "source_file" => "app/models/post.rb" },
         { "id" => "post_cls", "label" => "Post", "_callable_class" => true },
-        { "id" => "ref_ext", "label" => "External::Dep", "reference" => true }
+        { "id" => "ref_ext", "label" => "External::Dep", "reference" => true },
+        { "id" => "ref_cont", "label" => "Contained::Dep", "reference" => true }
       ],
       "links" => [
         { "source" => "proj_root", "target" => "post_cls", "relation" => "contains" },
-        { "source" => "post_cls", "target" => "ref_ext", "relation" => "imports_from" }
+        { "source" => "post_cls", "target" => "ref_ext", "relation" => "imports_from" },
+        # A containment edge INTO a reference node parks it in the tree but is
+        # NOT a referrer — only non-containment inbound edges annotate.
+        { "source" => "post_cls", "target" => "ref_cont", "relation" => "contains" }
       ]
     }
     translated = described_class.new(JSON.generate(payload), project_name: "x").translate
@@ -142,6 +146,10 @@ RSpec.describe GraphifyImporter do
     expect(ref["referrers"]).to eq(
       [ { "name" => "Post", "entity_type" => "Class", "relation" => "depends_on" } ]
     )
+    ref_cont = flatten(translated.import_data["root_nodes"].first)
+               .find { |n| n["name"] == "Contained::Dep" }
+    expect(ref_cont["reference"]).to eq(true)
+    expect(ref_cont["referrers"]).to eq([])
   end
 
   it "clamps numeric confidence but keeps NULL for missing/non-numeric values" do
