@@ -495,8 +495,12 @@ class DataExchangeController < ApplicationController
     else
       render json: { success: false, error: relation.errors.full_messages.join(", ") }, status: :unprocessable_content
     end
+  rescue ActiveRecord::RecordInvalid => e
+    render json: { success: false, error: e.record.errors.full_messages.join(", ") }, status: :unprocessable_content
+  rescue ActiveRecord::RecordNotUnique
+    render json: { success: false, error: "That relation already exists." }, status: :unprocessable_content
   rescue ProjectMembership::LockTimeout, ProjectMembership::Collision => e
-    render json: { success: false, error: "#{e.message} — retry shortly." }, status: :unprocessable_content
+    render json: { success: false, error: membership_conflict_message(e) }, status: :unprocessable_content
   end
 
   # GET /data_exchange/orphan_nodes
@@ -527,7 +531,7 @@ class DataExchangeController < ApplicationController
       render json: { success: false, error: result[:error] }, status: :unprocessable_content
     end
   rescue ProjectMembership::LockTimeout, ProjectMembership::Collision => e
-    render json: { success: false, error: "#{e.message} — retry shortly." }, status: :unprocessable_content
+    render json: { success: false, error: membership_conflict_message(e) }, status: :unprocessable_content
   end
 
   # POST /data_exchange/merge_node
@@ -549,7 +553,7 @@ class DataExchangeController < ApplicationController
       render json: { success: false, error: result[:error] }, status: :unprocessable_content
     end
   rescue ProjectMembership::LockTimeout, ProjectMembership::Collision => e
-    render json: { success: false, error: "#{e.message} — retry shortly." }, status: :unprocessable_content
+    render json: { success: false, error: membership_conflict_message(e) }, status: :unprocessable_content
   end
 
   # DELETE /data_exchange/delete_node
@@ -570,7 +574,7 @@ class DataExchangeController < ApplicationController
       render json: { success: false, error: result[:error] }, status: :unprocessable_content
     end
   rescue ProjectMembership::LockTimeout, ProjectMembership::Collision => e
-    render json: { success: false, error: "#{e.message} — retry shortly." }, status: :unprocessable_content
+    render json: { success: false, error: membership_conflict_message(e) }, status: :unprocessable_content
   end
 
   # GET /data_exchange/duplicate_relations
@@ -685,6 +689,15 @@ class DataExchangeController < ApplicationController
   end
 
   private
+
+  # LockTimeout is transient — a concurrent import/backfill/merge holds the
+  # advisory lock, so "retry shortly" is the honest hint. Collision is a
+  # name conflict in the destination scope: retrying changes nothing, the
+  # entity must be renamed or re-parented elsewhere.
+  def membership_conflict_message(error)
+    hint = error.is_a?(ProjectMembership::LockTimeout) ? "retry shortly" : "rename the entity or pick another parent"
+    "#{error.message} — #{hint}."
+  end
 
   # Source reference for review rows seeded from an import payload — the first
   # root node's name (the imported project) when present. ImportSession data

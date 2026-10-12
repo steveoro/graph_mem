@@ -69,6 +69,23 @@ RSpec.describe ProjectMembership do
       end.not_to raise_error
     end
 
+    it "releases the lock under an active query cache — a cached RELEASE_LOCK must not leak the lock" do
+      conn = ActiveRecord::Base.connection
+      # Inside a request the executor turns the query cache on. Nested
+      # acquire → write (clears the cache) → inner release → outer release
+      # is exactly the sequence that served the outer RELEASE_LOCK from
+      # the cache before the statements were wrapped in conn.uncached.
+      conn.cache do
+        described_class.with_membership_lock do
+          MemoryEntity.create!(name: "CacheOuter", entity_type: "Class")
+          described_class.with_membership_lock do
+            MemoryEntity.create!(name: "CacheInner", entity_type: "Class")
+          end
+        end
+      end
+      expect(membership_lock_free?).to be true
+    end
+
     it "raises LockTimeout (not Collision) when the lock cannot be acquired" do
       conn = ActiveRecord::Base.connection
       name = described_class.lock_name(conn)
@@ -222,7 +239,29 @@ RSpec.describe ProjectMembership do
       hold_lock do
         expect do
           GraphDeleteService.execute_one("delete_relation", { relation_id: edge.id })
-        end.to raise_error(McpGraphMemErrors::OperationFailed, /retry shortly|membership lock/i)
+        end.to raise_error(McpGraphMemErrors::OperationFailed) do |error|
+          expect(error.category).to eq("concurrency")
+          expect(error.next_move).to match(/retry shortly/i)
+        end
+      end
+      expect(MemoryRelation.find_by(id: edge.id)).to be_present
+    end
+
+    it "GraphDeleteService.execute_one rolls the delete back when membership sync collides" do
+      # A Collision out of sync! must abort the whole delete: without the
+      # transaction the edge stays destroyed AND the service surfaces a
+      # validation error (rename/re-parent hint), not a concurrency one.
+      from_entity = MemoryEntity.create!(name: "ColDelFrom", entity_type: "Class")
+      to_entity = MemoryEntity.create!(name: "ColDelTo", entity_type: "Class")
+      edge = MemoryRelation.create!(from_entity: from_entity, to_entity: to_entity, relation_type: "part_of")
+
+      allow(ProjectMembership).to receive(:sync!).and_raise(ProjectMembership::Collision, "'ColDelFrom' already exists there")
+      expect do
+        GraphDeleteService.execute_one("delete_relation", { relation_id: edge.id })
+      end.to raise_error(McpGraphMemErrors::OperationFailed) do |error|
+        expect(error.category).to eq("validation")
+        expect(error.next_move).to match(/rename|move_to_parent/i)
+        expect(error.next_move).not_to match(/retry shortly/i)
       end
       expect(MemoryRelation.find_by(id: edge.id)).to be_present
     end

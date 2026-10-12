@@ -51,7 +51,16 @@ class ProjectMembership
     def with_membership_lock(timeout: LOCK_TIMEOUT_SECONDS)
       conn = ActiveRecord::Base.connection
       name = lock_name(conn)
-      acquired = conn.select_value("SELECT GET_LOCK(#{conn.quote(name)}, #{timeout.to_i})")
+      # Both lock statements MUST bypass the ActiveRecord query cache: inside
+      # a request (or any executor-wrapped block) SELECTs are query-cached,
+      # and the nested sequence acquire → write (clears the cache) → inner
+      # release → outer release would serve the outer RELEASE_LOCK from the
+      # cache. The statement never reaches MariaDB and the pooled session
+      # keeps the lock until the connection is recycled — every other
+      # writer then waits out the full timeout.
+      acquired = conn.uncached do
+        conn.select_value("SELECT GET_LOCK(#{conn.quote(name)}, #{timeout.to_i})")
+      end
       unless acquired == 1 || acquired == true
         raise LockTimeout, "could not acquire #{name} within #{timeout}s — " \
                            "another import, backfill, move or merge holds the membership lock"
@@ -59,7 +68,9 @@ class ProjectMembership
       begin
         yield
       ensure
-        conn.select_value("SELECT RELEASE_LOCK(#{conn.quote(name)})")
+        conn.uncached do
+          conn.select_value("SELECT RELEASE_LOCK(#{conn.quote(name)})")
+        end
       end
     end
 

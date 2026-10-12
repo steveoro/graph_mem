@@ -261,6 +261,55 @@ RSpec.describe CompactionReviewService, type: :service do
       expect(orphan.reload.project_id).to eq(project.id)
     end
 
+    it "applies a part_of proposal with the advisory lock BEFORE the transaction" do
+      project = MemoryEntity.create!(name: "PropOrdProj", entity_type: "Project")
+      orphan = MemoryEntity.create!(name: "PropOrdOrphan", entity_type: "Class")
+      proposal = MaintenanceReportRow.create!(
+        maintenance_report: report,
+        report_type: "compaction_review",
+        row_uuid: "prop-partof-ord",
+        kind: "relationship_proposal",
+        status: "active",
+        signature: described_class.signature_for(
+          "relationship_proposal",
+          { "from_id" => orphan.id, "to_id" => project.id, "relation_type" => "part_of" }
+        ),
+        payload: { "from_id" => orphan.id, "to_id" => project.id, "relation_type" => "part_of" }
+      )
+
+      # Without the outer with_membership_lock the first GET_LOCK observed is
+      # reassign!'s — issued INSIDE the transaction (the deadlock ordering).
+      excess = open_transactions_at_get_lock { described_class.apply(proposal.row_uuid) }
+      expect(excess).to eq(0)
+    end
+
+    it "rolls the created part_of edge back when membership sync fails" do
+      project = MemoryEntity.create!(name: "PropRbProj", entity_type: "Project")
+      orphan = MemoryEntity.create!(name: "PropRbOrphan", entity_type: "Class")
+      proposal = MaintenanceReportRow.create!(
+        maintenance_report: report,
+        report_type: "compaction_review",
+        row_uuid: "prop-partof-rb",
+        kind: "relationship_proposal",
+        status: "active",
+        signature: described_class.signature_for(
+          "relationship_proposal",
+          { "from_id" => orphan.id, "to_id" => project.id, "relation_type" => "part_of" }
+        ),
+        payload: { "from_id" => orphan.id, "to_id" => project.id, "relation_type" => "part_of" }
+      )
+
+      # create + sync must be atomic: a sync failure that left the edge
+      # committed would stamp nothing yet report "failed".
+      allow(ProjectMembership).to receive(:sync!).and_raise(ProjectMembership::Collision, "name clash")
+      result = described_class.apply(proposal.row_uuid)
+
+      expect(result[:success]).to be false
+      expect(MemoryRelation.exists?(from_entity: orphan, to_entity: project,
+                                    relation_type: "part_of")).to be false
+      expect(orphan.reload.project_id).to be_nil
+    end
+
     it "a part_of proposal under a held lock fails the apply and writes nothing" do
       stub_const("ProjectMembership::LOCK_TIMEOUT_SECONDS", 0)
       project = MemoryEntity.create!(name: "PropLockProj", entity_type: "Project")

@@ -680,6 +680,20 @@ RSpec.describe 'DataExchange', type: :request do
       expect(relation).to be_present
     end
 
+    it 'leaves the membership advisory lock free after the request' do
+      # Request-level regression for the query-cache leak: the executor's
+      # query cache could swallow the outer RELEASE_LOCK and leave this
+      # connection holding graph_mem.project_membership:* for every other
+      # writer until it was recycled.
+      post move_node_data_exchange_index_path, params: {
+        node_id: orphan_task.id,
+        parent_id: project1.id
+      }, as: :json
+
+      expect(response).to have_http_status(:ok)
+      expect(membership_lock_free?).to be true
+    end
+
     it 'returns a friendly 422 (not a 500) when the membership lock is held' do
       stub_const("ProjectMembership::LOCK_TIMEOUT_SECONDS", 0)
       conn = ActiveRecord::Base.connection
@@ -996,6 +1010,92 @@ RSpec.describe 'DataExchange', type: :request do
       }, as: :json
 
       expect(response).to have_http_status(:unprocessable_content)
+    end
+
+    it 'stamps project scope through sync and leaves the lock free (fresh part_of edge)' do
+      new_task = MemoryEntity.create!(name: 'Scoped UI Task', entity_type: 'Task')
+
+      post create_relation_data_exchange_index_path, params: {
+        from_id: new_task.id,
+        to_id: project2.id,
+        relation_type: 'part_of'
+      }, as: :json
+
+      expect(response).to have_http_status(:ok)
+      expect(JSON.parse(response.body)['success']).to be true
+      # Without sync! the child stays global until the next backfill (U1).
+      expect(MemoryEntity.find(new_task.id).project_id).to eq(project2.id)
+      # Same query-cache leak guard as move_node.
+      expect(membership_lock_free?).to be true
+    end
+
+    it 'takes the membership lock BEFORE the transaction on a fresh part_of edge' do
+      # Without the outer with_membership_lock the first GET_LOCK observed is
+      # reassign!'s — issued INSIDE the transaction (the deadlock ordering).
+      new_task = MemoryEntity.create!(name: 'Ordered UI Task', entity_type: 'Task')
+
+      excess = open_transactions_at_get_lock do
+        post create_relation_data_exchange_index_path, params: {
+          from_id: new_task.id,
+          to_id: project2.id,
+          relation_type: 'part_of'
+        }, as: :json
+      end
+
+      expect(response).to have_http_status(:ok)
+      expect(excess).to eq(0)
+    end
+
+    it 'returns a friendly 422 (not a 500) when the membership lock is held' do
+      new_task = MemoryEntity.create!(name: 'Blocked UI Task', entity_type: 'Task')
+      stub_const("ProjectMembership::LOCK_TIMEOUT_SECONDS", 0)
+      conn = ActiveRecord::Base.connection
+      name = ProjectMembership.lock_name(conn)
+      holder = stub_const("CreateRelLockHolder",
+                          Class.new(ActiveRecord::Base) { self.abstract_class = true })
+      holder.establish_connection(ActiveRecord::Base.connection_db_config)
+      holder.connection.select_value("SELECT GET_LOCK(#{conn.quote(name)}, 5)")
+
+      post create_relation_data_exchange_index_path, params: {
+        from_id: new_task.id,
+        to_id: project2.id,
+        relation_type: 'part_of'
+      }, as: :json
+
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(JSON.parse(response.body)['error']).to match(/retry shortly/i)
+      expect(MemoryRelation.exists?(from_entity_id: new_task.id, relation_type: 'part_of')).to be false
+    ensure
+      holder.connection.select_value("SELECT RELEASE_LOCK(#{conn.quote(name)})") if holder&.connection
+      holder.connection_pool&.disconnect! if holder
+    end
+
+    it 'returns 422 (not a 500) when the part_of edge already exists' do
+      post create_relation_data_exchange_index_path, params: {
+        from_id: task1.id,
+        to_id: project1.id,
+        relation_type: 'part_of'
+      }, as: :json
+
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(JSON.parse(response.body)['error']).to be_present
+    end
+
+    it 'hints rename/re-parent (not "retry shortly") on a scope name collision' do
+      MemoryEntity.create!(name: 'Dup Member', entity_type: 'Task', project_id: project2.id)
+      dup = MemoryEntity.create!(name: 'Dup Member', entity_type: 'Task')
+
+      post create_relation_data_exchange_index_path, params: {
+        from_id: dup.id,
+        to_id: project2.id,
+        relation_type: 'part_of'
+      }, as: :json
+
+      expect(response).to have_http_status(:unprocessable_content)
+      error = JSON.parse(response.body)['error']
+      expect(error).to match(/rename|pick another parent/i)
+      expect(error).not_to match(/retry shortly/i)
+      expect(MemoryRelation.exists?(from_entity_id: dup.id, relation_type: 'part_of')).to be false
     end
   end
 
