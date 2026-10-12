@@ -22,6 +22,7 @@ RSpec.describe "graph_mem:backfill_project_ids", type: :task do
   end
 
   it "aborts with an actionable dedupe hint when the apply hits a scope conflict" do
+    occupying = MemoryEntity.create!(name: "StaleDup", entity_type: "Task")
     error = ActiveRecord::RecordNotUnique.new(
       "Duplicate entry '0-StaleDup' for key 'index_memory_entities_on_project_scope_and_name'"
     )
@@ -33,7 +34,7 @@ RSpec.describe "graph_mem:backfill_project_ids", type: :task do
       expect {
         Rake::Task["graph_mem:backfill_project_ids"].invoke
       }.to raise_error(SystemExit)
-    }.to output(/StaleDup.*no longer part of.*global.*re-run/i).to_stderr
+    }.to output(/StaleDup.*no longer part of.*id #{occupying.id}.*re-run.*raw error: Duplicate entry/m).to_stderr
   end
 
   it "falls back to the raw message when the key format is unrecognized" do

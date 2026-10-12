@@ -18,7 +18,7 @@ RSpec.describe "project-scoped entity names" do
                     Bar Foo bar.rb foo.rb RepoD Lone PA InnerProj InnerMember
                     StubRef EdgeTarget n1.rb n2.rb n3.rb SwimProj
                     ApplicationRecord app_record.rb StaleDup BackChild2
-                    StaleStamp].freeze
+                    StaleStamp Xdup ProjX].freeze
 
   before { purge_fixture_names }
   after { purge_fixture_names }
@@ -288,6 +288,40 @@ RSpec.describe "project-scoped entity names" do
     end
   end
 
+  describe "conflict_hint" do
+    def hint_for(key_value)
+      error = ActiveRecord::RecordNotUnique.new(
+        "Duplicate entry '#{key_value}' for key 'index_memory_entities_on_project_scope_and_name'"
+      )
+      ProjectIdBackfill.conflict_hint(error)
+    end
+
+    it "names an apostrophe-containing entity, not a truncated prefix of it" do
+      row = MemoryEntity.create!(name: "Foo's Bar", entity_type: "Task")
+      hint = hint_for("0-Foo's Bar")
+      expect(hint).to include("'Foo's Bar'")
+      expect(hint).to include("id #{row.id}")
+      expect(hint).to include("no longer part of")
+    end
+
+    it "branches on a project-scope clash, naming the project and the occupying row" do
+      proj = MemoryEntity.create!(name: "ProjX", entity_type: "Project")
+      member = MemoryEntity.create!(name: "Xdup", entity_type: "Task", project_id: proj.id)
+      hint = hint_for("#{proj.id}-Xdup")
+      expect(hint).to include("project 'ProjX'")
+      expect(hint).to include("id #{member.id}")
+      expect(hint).to include("already holds")
+      expect(hint).not_to include("global")
+    end
+
+    it "matches a truncated key value as a LIKE prefix" do
+      long_name = "#{'A' * 60}LongTail"
+      MemoryEntity.create!(name: long_name, entity_type: "Task")
+      hint = hint_for("0-#{'A' * 40}...")
+      expect(hint).to include(long_name)
+    end
+  end
+
   describe "down migration guard" do
     it "raises IrreversibleMigration when a name exists in two scopes" do
       MemoryEntity.create!(name: "DupProj", entity_type: "Project")
@@ -306,6 +340,23 @@ RSpec.describe "project-scoped entity names" do
         allow(migration).to receive(ddl).and_raise("down migration reached #{ddl} — the duplicate-name guard regressed")
       end
       expect { migration.down }.to raise_error(ActiveRecord::IrreversibleMigration, /DupName/)
+    end
+
+    it "up re-raises RecordNotUnique with the operator hint, not the raw error" do
+      MemoryEntity.create!(name: "StaleDup", entity_type: "Task")
+      require Rails.root.join("db/migrate/20261012000001_backfill_memory_entity_project_ids")
+      migration = BackfillMemoryEntityProjectIds.new
+      allow(migration).to receive(:say_with_time).and_yield
+      backfill = instance_double(ProjectIdBackfill)
+      allow(ProjectIdBackfill).to receive(:new).and_return(backfill)
+      allow(backfill).to receive(:run).and_raise(
+        ActiveRecord::RecordNotUnique.new(
+          "Duplicate entry '0-StaleDup' for key 'index_memory_entities_on_project_scope_and_name'"
+        )
+      )
+
+      expect { migration.up }
+        .to raise_error(ActiveRecord::RecordNotUnique, /StaleDup.*no longer part of/i)
     end
   end
 

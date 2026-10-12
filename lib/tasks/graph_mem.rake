@@ -13,7 +13,8 @@ namespace :graph_mem do
       # Stamped-but-unrooted row colliding with a global same-name row:
       # the transactional apply already rolled back — tell the operator
       # how to unblock instead of surfacing the raw DB error.
-      abort "backfill aborted and rolled back: #{ProjectIdBackfill.conflict_hint(e)}"
+      abort "backfill aborted and rolled back: #{ProjectIdBackfill.conflict_hint(e)}\n" \
+            "  raw error: #{e.message}"
     end
   end
 

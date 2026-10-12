@@ -22,20 +22,37 @@ class ProjectIdBackfill
 
   MAX_LOCK_WAIT_RETRIES = 3
 
-  # Operator-facing explanation for a RecordNotUnique raised mid-apply: the
-  # colliding row is stamped-but-unrooted sharing a global row's name —
-  # a name existing in BOTH namespaces is normal under scoped names, so the
-  # message names the actual row and how to unblock. Callers rescue and
-  # surface this instead of the raw DB error (rake task aborts, migration
-  # re-raises with it).
+  # Operator-facing explanation for a RecordNotUnique raised mid-apply. The
+  # composite key 'SCOPE-NAME' is greedy-parsed to the `' for key` anchor so
+  # names containing `'` survive; a truncated value (long keys are cut by
+  # MariaDB) is matched as a LIKE prefix so the occupying rows are looked up
+  # and reported by id — never guessed from the string alone. The wording
+  # branches on the scope: 0 = a stamped-but-unrooted row whose clear
+  # collides with a global row; >0 = a stamp colliding inside a project
+  # that already holds the name.
   # @return [String]
   def self.conflict_hint(error)
-    name = error.message[/'\d+-([^']+)'/, 1]
-    return error.message.to_s if name.blank?
+    match = error.message.match(/Duplicate entry '(\d+)-(.+)' for key/)
+    return error.message.to_s unless match
 
-    "entity '#{name}' is stamped to a project it is no longer part of and " \
-      "collides with the global '#{name}' — re-parent it under its project, " \
-      "or merge/rename one of them, then re-run"
+    scope = match[1].to_i
+    prefix = match[2].delete_suffix("...") # MariaDB truncates long key values
+    occupiers = MemoryEntity.where(project_scope: scope)
+                            .where("name LIKE ?", "#{MemoryEntity.sanitize_sql_like(prefix)}%")
+                            .map { |row| "id #{row.id} '#{row.name}'" }
+    occupier = occupiers.presence&.join(", ") || "(occupying row not found — rerun may have freed it)"
+    once = "further conflicts are reported one at a time"
+
+    if scope.zero?
+      "entity '#{prefix}' is stamped to a project it is no longer part of; " \
+        "clearing its scope collides with global #{occupier} — re-parent it " \
+        "under its project, or merge/rename one of them, then re-run (#{once})"
+    else
+      project = MemoryEntity.find_by(id: scope)
+      "entity '#{prefix}' is being stamped into project '#{project&.name || scope}' " \
+        "(scope #{scope}) which already holds #{occupier} — merge or rename one " \
+        "of them, then re-run (#{once})"
+    end
   end
 
   # @param dry_run [Boolean] print the report without writing
