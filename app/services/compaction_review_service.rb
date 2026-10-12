@@ -528,14 +528,23 @@ class CompactionReviewService
       return { success: false, error: "Relation not found" } unless relation
 
       Current.deletion_reason = effective[:reason] || "scan_review"
-      from_entity = relation.from_entity
-      part_of = relation.relation_type == "part_of"
-      relation.destroy!
-      # Un-parenting moves the child (and its subtree) back to the global
-      # namespace — same membership rule as graph_delete.
-      ProjectMembership.sync!(from_entity) if part_of && from_entity
+      # Destroy + membership sync must be atomic: a Collision raised by
+      # sync! after destroy! would report failure with the edge already
+      # gone and the child still stamped in its old scope. The membership
+      # lock is taken BEFORE the transaction (advisory-first rule).
+      ProjectMembership.with_membership_lock do
+        ActiveRecord::Base.transaction do
+          from_entity = relation.from_entity
+          part_of = relation.relation_type == "part_of"
+          relation.destroy!
+          # Un-parenting moves the child (and its subtree) back to the
+          # global namespace — same membership rule as graph_delete.
+          ProjectMembership.sync!(from_entity) if part_of && from_entity
+        end
+      end
       { success: true, message: "Relation #{relation_id} deleted" }
-    rescue ActiveRecord::RecordNotDestroyed, ActiveRecord::RecordInvalid, ProjectMembership::Collision => e
+    rescue ActiveRecord::RecordNotDestroyed, ActiveRecord::RecordInvalid,
+           ProjectMembership::Collision, ProjectMembership::LockTimeout => e
       { success: false, error: "Failed to delete relation: #{e.message}" }
     ensure
       Current.deletion_reason = nil

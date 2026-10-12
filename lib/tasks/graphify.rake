@@ -1,12 +1,5 @@
 # frozen_string_literal: true
 
-# The Project root an import just created — AMBIGUOUS endpoint resolution
-# needs the import's project scope or same-named members of OTHER projects
-# never resolve (and zero proposals are silently seeded).
-def import_project_id(project_name)
-  MemoryEntity.find_by(name: project_name, entity_type: "Project")&.id
-end
-
 namespace :graphify do
   desc "Translate a Graphify graph.json into a graph_mem import file (GRAPH=…, PROJECT=..., OUT=...)"
   task translate: :environment do
@@ -73,8 +66,11 @@ namespace :graphify do
       warn "Embedding backfill skipped (#{e.class}: #{e.message}) — run rake embeddings:backfill"
     end
 
+    # The Project root the import just created/claimed — AMBIGUOUS
+    # endpoint resolution needs that scope or same-named members of
+    # OTHER projects never resolve (and zero proposals silently seed).
     rows = GraphifyImporter.seed_ambiguous_relations(result.ambiguous_relations, project,
-                                                     project_id: import_project_id(project))
+                                                     project_id: ImportEntityResolver.project_root_id(project))
     puts "Queued #{rows.size} ambiguous relation(s) for review (scan_review)." if rows.any?
   end
 end

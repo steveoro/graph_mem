@@ -16,7 +16,8 @@ RSpec.describe "project-scoped entity names" do
                     Swimmer team.rb Team Thing OnlyB SharedGlobal CtxEntity
                     NewRoot GlobalOne BackChild BackGrand BackOrphan ReChild
                     Bar Foo bar.rb foo.rb RepoD Lone PA InnerProj InnerMember
-                    StubRef EdgeTarget n1.rb n2.rb n3.rb].freeze
+                    StubRef EdgeTarget n1.rb n2.rb n3.rb SwimProj
+                    ApplicationRecord app_record.rb].freeze
 
   before { purge_fixture_names }
   after { purge_fixture_names }
@@ -254,6 +255,31 @@ RSpec.describe "project-scoped entity names" do
       expect(dry.per_project[project.id]).to eq(1)
       expect(member.reload.project_id).to be_nil
     end
+
+    it "clears project_id on rows no part_of chain reaches (unrooted)" do
+      project = MemoryEntity.create!(name: "BackProj", entity_type: "Project")
+      stale = MemoryEntity.create!(name: "StaleStamp", entity_type: "File",
+                                   project_id: project.id) # stamped but no edge
+      member = MemoryEntity.create!(name: "BackChild2", entity_type: "File")
+      MemoryRelation.create!(from_entity: member, to_entity: project, relation_type: "part_of")
+
+      ProjectIdBackfill.new(out: ->(_l) { }).run
+      expect(member.reload.project_id).to eq(project.id)
+      expect(stale.reload.project_id).to be_nil
+    end
+  end
+
+  describe "down migration guard" do
+    it "raises IrreversibleMigration when a name exists in two scopes" do
+      MemoryEntity.create!(name: "DupProj", entity_type: "Project")
+      MemoryEntity.create!(name: "DupName", entity_type: "File")
+      proj = MemoryEntity.find_by!(name: "DupProj")
+      MemoryEntity.create!(name: "DupName", entity_type: "File", project_id: proj.id)
+
+      require Rails.root.join("db/migrate/20261012000000_add_project_scope_to_memory_entities")
+      migration = AddProjectScopeToMemoryEntities.new
+      expect { migration.down }.to raise_error(ActiveRecord::IrreversibleMigration, /DupName/)
+    end
   end
 
   describe "use-case 1 (both orders): Bar -mixes_in-> Foo" do
@@ -290,6 +316,27 @@ RSpec.describe "project-scoped entity names" do
       bar = MemoryEntity.find_by!(name: "Bar")
       expect(MemoryRelation.exists?(from_entity: bar, to_entity: foo,
                                     relation_type: "mixes_in")).to be true
+    end
+
+    it "the referencer's own declaration wins over foreign declarers (two Foos, Bar in B)" do
+      Dir.mktmpdir do |dir_a|
+        write_models(dir_a, "foo_a.rb" => "class Foo\nend\n")
+        expect(import_payload(dir_a, project: "RepoA").success).to be true
+      end
+      Dir.mktmpdir do |dir_b|
+        write_models(dir_b,
+                     "foo_b.rb" => "class Foo\nend\n",
+                     "bar.rb" => "class Bar\n  include Foo\nend\n")
+        expect(import_payload(dir_b, project: "RepoB").success).to be true
+      end
+      foos = MemoryEntity.where(name: "Foo").index_by(&:project_id)
+      bar = MemoryEntity.find_by!(name: "Bar")
+      proj_b = MemoryEntity.find_by!(name: "RepoB")
+      # Bar's edge binds B's OWN Foo — the same-scope step wins over the
+      # foreign declarer and over the global namespace, no stub minted.
+      expect(MemoryRelation.exists?(from_entity: bar, to_entity: foos[proj_b.id],
+                                    relation_type: "mixes_in")).to be true
+      expect(MemoryEntity.find_by(name: "Foo", project_id: nil)).to be_nil
     end
   end
 
@@ -342,8 +389,73 @@ RSpec.describe "project-scoped entity names" do
 
       names = MemoryEntity.where(name: "Notifiable")
       expect(names.count).to eq(4) # RepoA, RepoC, RepoD + the parked stub
-      expect(names.where(project_id: nil).count).to eq(1)
+      stub = names.where(project_id: nil).sole
       expect(MemoryEntity.find_by!(name: "RepoD").project_id).to be_nil
+
+      # The parked stub keeps its id and stays global — it was never
+      # claimed (two declarers), so Post's edge still points AT it.
+      post = MemoryEntity.find_by!(name: "Post")
+      expect(MemoryRelation.exists?(from_entity: post, to_entity: stub,
+                                    relation_type: "mixes_in")).to be true
+      %w[RepoA RepoC RepoD].each do |repo|
+        scoped = names.joins("INNER JOIN memory_entities p ON memory_entities.project_id = p.id")
+                      .find_by(p: { name: repo })
+        expect(scoped).to be_present
+      end
+    end
+
+    it "re-importing the referrer still no-ops after a second declarer appears (S3c)" do
+      # d1 declares, the referrer points at the claimed stub, d3 declares
+      # too — the unchanged re-import must keep pointing at its stored
+      # edge target, not mint a fresh global stub + a duplicate edge.
+      Dir.mktmpdir do |dir_a|
+        write_models(dir_a, "n1.rb" => "module Notifiable\nend\n")
+        expect(import_payload(dir_a, project: "RepoA").success).to be true
+      end
+      Dir.mktmpdir do |dir_b|
+        write_models(dir_b, "post.rb" => "class Post\n  include Notifiable\nend\n")
+        expect(import_payload(dir_b, project: "RepoB").success).to be true
+      end
+      Dir.mktmpdir do |dir_d|
+        write_models(dir_d, "n3.rb" => "module Notifiable\nend\n")
+        expect(import_payload(dir_d, project: "RepoD").success).to be true
+      end
+      claimed = MemoryEntity.find_by!(name: "Notifiable",
+                                    project_id: MemoryEntity.find_by!(name: "RepoA").id)
+      entities_before = MemoryEntity.count
+
+      Dir.mktmpdir do |dir_b|
+        write_models(dir_b, "post.rb" => "class Post\n  include Notifiable\nend\n")
+        report = import_payload(dir_b, project: "RepoB")
+        expect(report.success).to be true
+        expect(report.entities_created).to eq(0)
+      end
+      expect(MemoryEntity.count).to eq(entities_before)
+      post = MemoryEntity.find_by!(name: "Post")
+      expect(MemoryRelation.where(from_entity: post, relation_type: "mixes_in")
+                           .pluck(:to_entity_id)).to eq([ claimed.id ])
+    end
+
+    it "resolves a same-project declaration before foreign declarers (S11)" do
+      # graphify:import then rails_ast:import of the SAME project: the
+      # second import's `Swimmer < ApplicationRecord` reference must bind
+      # to SwimProj's own ApplicationRecord, never a fresh global stub.
+      Dir.mktmpdir do |dir|
+        write_models(dir, "app_record.rb" => "class ApplicationRecord\nend\n")
+        expect(import_payload(dir, project: "SwimProj").success).to be true
+      end
+      Dir.mktmpdir do |dir|
+        write_models(dir, "swimmer.rb" => "class Swimmer < ApplicationRecord\nend\n")
+        report = import_payload(dir, project: "SwimProj")
+        expect(report.success).to be true
+      end
+      swim = MemoryEntity.find_by!(name: "SwimProj")
+      records = MemoryEntity.where(name: "ApplicationRecord")
+      expect(records.count).to eq(1)
+      expect(records.first.project_id).to eq(swim.id)
+      expect(MemoryRelation.exists?(from_entity: MemoryEntity.find_by!(name: "Swimmer"),
+                                    to_entity: records.first,
+                                    relation_type: "inherits")).to be true
     end
 
     it "re-importing the referrer no-ops against the stored edge target" do

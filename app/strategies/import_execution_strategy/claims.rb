@@ -46,18 +46,42 @@ module ImportExecutionStrategy::Claims
   # scope first, then global) — mirrors ImportMatchingStrategy's
   # resolution so a `skip`/`add_relation` decision lands on the same
   # entity the matcher chose. Reference nodes resolve against the WHOLE
-  # graph instead (stored edge target → single declarer → global stub),
-  # same as match, so a re-import lands on the claimed entity rather than
-  # minting a second stub.
-  def find_declared_or_stub(name, entity_type, reference: false, referrer_id: nil)
+  # graph instead (stored edge target → own scope → single declarer →
+  # global stub), same as match, so a re-import lands on the claimed
+  # entity rather than minting a second stub.
+  def find_declared_or_stub(name, entity_type, node = nil, reference: false)
     if reference
       return ImportEntityResolver.find_reference(name, entity_type,
                                                  project_id: @import_project_id,
-                                                 parent_entity_id: referrer_id)
+                                                 referrer_ids: reference_referrer_ids(node),
+                                                 relation_types: reference_relation_types(node))
     end
     find_entity_by_name_and_type(name, entity_type, project_id: @import_project_id) ||
       ImportEntityResolver.class_module_collision(name, entity_type, project_id: @import_project_id) ||
       ImportEntityResolver.class_module_collision(name, entity_type, project_id: nil)
+  end
+
+  # Resolved ids of the payload entities referencing this node — the
+  # `referrers` the importer annotated from non-containment edges. The
+  # tree parks references under the project root, so the tree parent is
+  # never the real referrer. Referrers are own-payload nodes: resolve
+  # inside THIS import's scope only.
+  def reference_referrer_ids(node)
+    Array(node && (node[:referrers] || node["referrers"])).filter_map do |ref|
+      ref = ref.symbolize_keys
+      MemoryEntity.find_by(name: ref[:name],
+                           entity_type: ImportEntityResolver.canonical_type(ref[:entity_type]),
+                           project_id: @import_project_id)&.id
+    end.uniq
+  end
+
+  # Canonical edge types the payload declares for the reference (+ part_of
+  # implicitly in the resolver) — the stored-edge match honors only these.
+  def reference_relation_types(node)
+    Array(node && (node[:referrers] || node["referrers"])).filter_map do |ref|
+      ref = ref.symbolize_keys
+      ref[:relation].presence && MemoryRelation.canonical_relation_type(ref[:relation])
+    end.uniq
   end
 
   # A declaring node that resolves onto an entity of a sibling type claims

@@ -218,6 +218,26 @@ RSpec.describe CompactionReviewService, type: :service do
       row.update!(status: "approved", applied_at: Time.current)
       expect(described_class.apply("relation-1", { "from_id" => from_entity.id, "to_id" => to_entity.id, "relation_type" => "solves" })[:success]).to be false
     end
+
+    it "rolls the edge back when membership sync fails — failure must not orphan the row" do
+      part_of_edge = MemoryRelation.create!(from_entity: from_entity, to_entity: to_entity,
+                                            relation_type: "part_of")
+      delete_row = MaintenanceReportRow.create!(
+        maintenance_report: report,
+        report_type: "compaction_review",
+        row_uuid: "del-rel-1",
+        kind: "delete_relation",
+        status: "active",
+        signature: described_class.signature_for("delete_relation", { relation_id: part_of_edge.id }),
+        payload: { "relation_id" => part_of_edge.id }
+      )
+      allow(ProjectMembership).to receive(:sync!).and_raise(ProjectMembership::Collision, "name clash")
+
+      result = described_class.apply(delete_row.row_uuid)
+
+      expect(result[:success]).to be false
+      expect(MemoryRelation.find_by(id: part_of_edge.id)).to be_present
+    end
   end
 
   describe "relation integrity review rows" do

@@ -75,11 +75,15 @@ class GraphWriteService
 
     results = []
     counts = Hash.new(0)
-    ActiveRecord::Base.transaction do
-      dependency_ordered_operations.each do |operation|
-        payload, additional_counts = execute_operation(operation)
-        additional_counts.each { |key, count| counts[key] += count }
-        results << GraphMutationBatch.result(operation, payload)
+    # Membership lock BEFORE the transaction: GET_LOCK taken while holding
+    # row locks deadlocks against the backfill (advisory-first rule).
+    ProjectMembership.with_membership_lock do
+      ActiveRecord::Base.transaction do
+        dependency_ordered_operations.each do |operation|
+          payload, additional_counts = execute_operation(operation)
+          additional_counts.each { |key, count| counts[key] += count }
+          results << GraphMutationBatch.result(operation, payload)
+        end
       end
     end
 
@@ -122,7 +126,9 @@ class GraphWriteService
     return duplicate if duplicate
 
     operation = @operations.first
-    ActiveRecord::Base.transaction { dispatch(operation[:type], operation[:attributes]) }
+    ProjectMembership.with_membership_lock do
+      ActiveRecord::Base.transaction { dispatch(operation[:type], operation[:attributes]) }
+    end
   end
 
   # Moving/creating into a project that already holds the name surfaces as
@@ -130,6 +136,14 @@ class GraphWriteService
   # surrounding transaction rolls the edge/entity back with it.
   def sync_membership!(entity)
     ProjectMembership.sync!(entity)
+  rescue ProjectMembership::LockTimeout => e
+    # A lock wait is transient, not a name conflict — retry shortly, never
+    # "rename the entity".
+    raise McpGraphMemErrors::OperationFailed.new(
+      e.message,
+      category: "concurrency",
+      next_move: "Another import, backfill or merge is running; retry shortly."
+    )
   rescue ProjectMembership::Collision => e
     raise McpGraphMemErrors::OperationFailed.new(
       e.message,
@@ -153,16 +167,19 @@ class GraphWriteService
       name: attributes[:name],
       entity_type: attributes[:entity_type],
       aliases: attributes[:aliases],
-      description: attributes[:description]
-      # NO project_id here: membership must mirror the part_of chain —
-      # stamping the column without the edge leaves a member outside the
-      # tree (membership drifts, backfill stops being a no-op).
+      description: attributes[:description],
+      # Insert directly in the FINAL scope: inserting at project_scope 0
+      # first would collide with a same-named GLOBAL entity even though
+      # the row is headed for the project scope (UNIQUE(project_scope,
+      # name) is per-scope). The part_of edge + sync! below keep the
+      # membership-mirrors-the-chain invariant.
+      project_id: (@project_id unless is_project)
     )
     # Members join the context project by ATTACHING to it: the part_of
-    # edge + ProjectMembership.sync! stamps project_id the same way every
-    # other writer does. Project roots and context-less creates stay
-    # global. A same-name clash in the project scope raises OperationFailed
-    # and rolls the whole create back (execution is transactional).
+    # edge makes the membership visible in the tree and
+    # ProjectMembership.sync! recomputes the column the same way every
+    # other writer does (a no-op here — inserted in scope already).
+    # Project roots and context-less creates stay global.
     if @project_id && !is_project
       MemoryRelation.create!(from_entity_id: entity.id, to_entity_id: @project_id,
                              relation_type: "part_of")

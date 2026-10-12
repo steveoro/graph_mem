@@ -32,7 +32,7 @@ class AddProjectScopeToMemoryEntities < ActiveRecord::Migration[8.1]
     # The global UNIQUE(name) can only be restored while no name exists in
     # two scopes. Fail loudly instead of letting the index build fail mid-DDL
     # (or worse, appear to succeed after a manual cleanup nobody reviewed).
-    duplicate_names = select_all("SELECT name FROM memory_entities GROUP BY name HAVING COUNT(*) > 1")
+    duplicate_names = select_all("SELECT name FROM memory_entities GROUP BY name HAVING COUNT(*) > 1").to_a
     if duplicate_names.any?
       sample = duplicate_names.map { |row| row["name"] }.first(10).join(", ")
       raise ActiveRecord::IrreversibleMigration,

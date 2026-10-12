@@ -12,58 +12,80 @@ class ImportEntityResolver
     # operator-created globals). Entities belonging to OTHER projects are
     # never matched: scoped names let same-name entities coexist per project,
     # so RepoB's `module Foo` no longer collides with RepoA's `class Foo`.
-    def find_by_name_and_type(name, raw_type, project_id: nil, include_declared: false)
+    def find_by_name_and_type(name, raw_type, project_id: nil)
       type = canonical_type(raw_type)
       own = project_id && MemoryEntity.find_by(name: name, entity_type: type, project_id: project_id)
       return own if own
-
-      if include_declared
-        # Reference resolution order: exactly ONE other project declaring
-        # this name+type resolves directly (a mere reference never creates
-        # a project-scoped copy); 2+ declarers stay ambiguous and fall
-        # through to the global stub.
-        # NOTE: `where.not(project_id: [])` matches EVERY row in
-        # ActiveRecord — build the exclusion as two clauses so a nil
-        # project_id never collapses into "not in ()".
-        declarers = MemoryEntity.where(name: name, entity_type: type).where.not(project_id: nil)
-        declarers = declarers.where.not(project_id: project_id) if project_id
-        return declarers.first if declarers.one?
-        # 2+ declarers: ambiguous — fall through to the global stub.
-      end
 
       MemoryEntity.find_by(name: name, entity_type: type, project_id: nil)
     end
 
     # Reference-node resolution (a mere reference never creates a
     # project-scoped copy). Order:
-    #   1. the entity the referrer's stored edge already targets — an
-    #      unchanged re-import must no-op even after a claim or a second
-    #      declarer (Post keeps pointing at its stored Foo);
-    #   2. exactly ONE declarer, Class↔Module siblings included — a claim
-    #      can retype the stub (include Foo → class Foo);
-    #   3. the global (unclaimed) stub, either declared type or sibling;
-    #   4. nil — caller creates a fresh global stub; the ambiguous-
+    #   1. the entity a resolved referrer's stored edge already targets —
+    #      an unchanged re-import must no-op even after a claim or a
+    #      second declarer (Post keeps pointing at its stored Foo). Edges
+    #      are limited to the relation types the payload declares for the
+    #      reference (+ part_of — the stub-park edge), so an unrelated
+    #      `mentions`/`relates_to` edge to a namesake can't hijack it;
+    #   2. the importing project's OWN declaration — a same-scope class
+    #      always wins over foreign declarers (S11: `Swimmer <
+    #      ApplicationRecord` inside the same project binds in-scope);
+    #   3. exactly ONE foreign declarer, Class↔Module siblings included —
+    #      a claim can retype the stub (include Foo → class Foo);
+    #   4. the global (unclaimed) stub, either declared type or sibling;
+    #   5. nil — caller creates a fresh global stub; the ambiguous-
     #      endpoint collector queues the re-point proposals.
-    # @param parent_entity_id [Integer, nil] the referencing entity (the
-    #   payload parent the reference node sits under)
-    def find_reference(name, raw_type, project_id:, parent_entity_id: nil)
-      if parent_entity_id
-        named = MemoryEntity.where(name: name).select(:id)
-        linked = MemoryRelation.where(from_entity_id: parent_entity_id, to_entity_id: named)
-                               .or(MemoryRelation.where(to_entity_id: parent_entity_id,
-                                                        from_entity_id: named))
-        candidate_ids = linked.flat_map { |r| [ r.from_entity_id, r.to_entity_id ] }.uniq - [ parent_entity_id ]
-        return MemoryEntity.find_by(id: candidate_ids.first) if candidate_ids.one?
-      end
+    # @param referrer_ids [Array<Integer>] resolved ids of the payload
+    #   entities whose edges reference this node — NOT the tree parent
+    #   (references park under the project root; the real referrer is the
+    #   source endpoint of the payload relation, e.g. Post for
+    #   `Post -mixes_in-> Notifiable`).
+    # @param relation_types [Array<String>] the payload edge types that
+    #   reference this node (canonical); restricts step 1's stored-edge
+    #   match. Empty = any edge type counts.
+    def find_reference(name, raw_type, project_id:, referrer_ids: [], relation_types: [])
+      stored = stored_reference_target(name, referrer_ids, relation_types)
+      return stored if stored
 
       type = canonical_type(raw_type)
       siblings = %w[Class Module].include?(type) ? %w[Class Module] - [ type ] : []
-      declared = MemoryEntity.where(name: name, entity_type: [ type ] + siblings).where.not(project_id: nil)
+      types = [ type ] + siblings
+
+      if project_id
+        own = MemoryEntity.find_by(name: name, entity_type: types, project_id: project_id)
+        return own if own
+      end
+
+      declared = MemoryEntity.where(name: name, entity_type: types).where.not(project_id: nil)
       declared = declared.where.not(project_id: project_id) if project_id
       return declared.first if declared.one?
 
-      MemoryEntity.find_by(name: name, entity_type: type, project_id: nil) ||
-        (siblings.any? && MemoryEntity.find_by(name: name, entity_type: siblings, project_id: nil))
+      MemoryEntity.find_by(name: name, entity_type: types, project_id: nil)
+    end
+
+    # The namesake a referrer's stored edge already points at. The match
+    # requires a SINGLE distinct candidate across every declared referrer
+    # — a tie (Post edges to two different Foos) falls through rather
+    # than picking one. `part_of` always counts so the parked stub edge
+    # still resolves its parked target.
+    def stored_reference_target(name, referrer_ids, relation_types)
+      return nil if referrer_ids.blank?
+
+      named = MemoryEntity.where(name: name).select(:id)
+      linked = MemoryRelation.where(from_entity_id: referrer_ids, to_entity_id: named)
+                             .or(MemoryRelation.where(to_entity_id: referrer_ids,
+                                                      from_entity_id: named))
+      types = relation_types | [ "part_of" ]
+      linked = linked.where(relation_type: types) if relation_types.present?
+      candidate_ids = linked.flat_map { |r| [ r.from_entity_id, r.to_entity_id ] }.uniq - referrer_ids
+      MemoryEntity.find_by(id: candidate_ids.first) if candidate_ids.one?
+    end
+
+    # Project root id by name — the scope an import just claimed for its
+    # AMBIGUOUS endpoint resolution (rake tasks pass it to the seeder).
+    def project_root_id(project_name)
+      MemoryEntity.find_by(name: project_name, entity_type: "Project")&.id
     end
 
     # Name-only scoped lookup (MCP writes + relation targets): the context

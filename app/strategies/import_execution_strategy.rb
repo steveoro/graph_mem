@@ -124,6 +124,12 @@ class ImportExecutionStrategy
                          "proceeding (store_vector compare-and-set keeps vectors consistent)"
           end
 
+          # Membership lock BEFORE the transaction: GET_LOCK taken while
+          # holding row locks deadlocks against the backfill (advisory-
+          # first rule — see ProjectMembership::LOCK_NAME_PREFIX docs).
+          # Imports re-parent and stamp subtrees all the way through, so
+          # the whole execute runs under it.
+          ProjectMembership.with_membership_lock do
           ActiveRecord::Base.transaction do
             root_nodes = import_data["root_nodes"] || import_data[:root_nodes] || []
 
@@ -176,6 +182,7 @@ class ImportExecutionStrategy
             end
 
             raise ActiveRecord::Rollback if @errors.any?
+          end
           end
         end
       end
@@ -285,13 +292,9 @@ class ImportExecutionStrategy
     # Determine which action to take
     effective_action = child_action || action
 
-    # Process this node based on action. `referrer_id` = the payload parent
-    # the node sits under — reference nodes use it to resolve the entity
-    # their stored edge already points at.
-    referrer_id = tree_parent_id || parent_entity_id
     entity_id = case effective_action
     when "skip"
-      handle_skip_action(node, referrer_id)
+      handle_skip_action(node)
     when "exclude"
       handle_exclude_action(node)
     when "add_relation"
@@ -299,7 +302,7 @@ class ImportExecutionStrategy
     when "merge"
       merge_into_existing(node, target_id)
     else
-      create_new_entity(node, referrer_id: referrer_id)
+      create_new_entity(node)
     end
 
     unless entity_id

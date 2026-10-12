@@ -20,6 +20,8 @@ class ProjectIdBackfill
     @out = out
   end
 
+  MAX_LOCK_WAIT_RETRIES = 3
+
   # @param dry_run [Boolean] print the report without writing
   # @return [Report] per-project member counts, unrooted count, conflicts,
   #   changed-row count (0 on a re-run)
@@ -28,13 +30,23 @@ class ProjectIdBackfill
     # can't land between the two steps and get stamped under its old
     # project. Every part_of writer that reroutes subtrees takes the same
     # lock (ProjectMembership.reassign!), so the walk sees a stable tree.
-    membership = conflicts = nil
-    unrooted_count = changed = 0
-    ProjectMembership.with_membership_lock do
-      membership, conflicts = compute_membership
-      unrooted_count = MemoryEntity.where.not(id: membership.keys)
-                                   .where.not(entity_type: "Project").count
-      changed = dry_run ? 0 : apply_membership(membership)
+    # A row-lock wait from a NON-membership writer can still surface as
+    # ActiveRecord::LockWaitTimeout — retry a bounded number of times
+    # (the membership lock ordering keeps these rare).
+    attempts = 0
+    begin
+      attempts += 1
+      membership = conflicts = nil
+      unrooted_count = changed = 0
+      ProjectMembership.with_membership_lock do
+        membership, conflicts = compute_membership
+        unrooted_count = MemoryEntity.where.not(id: membership.keys)
+                                     .where.not(entity_type: "Project").count
+        changed = dry_run ? 0 : apply_membership(membership)
+      end
+    rescue ActiveRecord::LockWaitTimeout, ProjectMembership::LockTimeout
+      retry if attempts < MAX_LOCK_WAIT_RETRIES
+      raise
     end
 
     per_project = membership.values.group_by(&:itself).transform_values(&:size)
@@ -72,43 +84,12 @@ class ProjectIdBackfill
     [ membership, conflicts ]
   end
 
-  # Reachable members of a project, walking part_of edges breadth-first —
-  # NOT RelationSemantics.descendant_ids: two edge/entity kinds stop the
-  # walk.
-  # (a) `reference_stub: true` edges park an unresolved target in the
-  #     GLOBAL namespace for whichever project declares it first — the
-  #     referencing project does not own it. Following them stamps the
-  #     stub into the referencer's scope, after which it can never be
-  #     claimed and the declarer creates a duplicate.
-  # (b) Nested Project children: a Project inside another project's tree
-  #     starts its OWN scope (nearest-Project wins, matching
-  #     ProjectMembership.project_id_for_parent). Its row stays NULL —
-  #     Projects are global — and its members belong to ITS walk, not the
-  #     outer one.
+  # Reachable members of a project — ProjectMembership.member_ids, the
+  # same walk every membership writer applies (reference_stub edges and
+  # nested Projects stop it: the referencing project does not own a
+  # parked stub, and a nested Project starts its own scope).
   def member_ids(project_id)
-    ids = Set.new
-    queue = [ project_id ]
-    until queue.empty?
-      current = queue.shift
-      # COALESCE: edges with NULL properties or no reference_stub key must
-      # NOT be filtered out — `NOT(JSON_EXTRACT = ...)` evaluates NULL for
-      # them and would drop them along with the stubs.
-      MemoryRelation.where(to_entity_id: current, relation_type: "part_of")
-        .where("COALESCE(JSON_UNQUOTE(JSON_EXTRACT(properties, '$.reference_stub')), 'false') <> 'true'")
-        .pluck(:from_entity_id).each do |child_id|
-          next if ids.include?(child_id)
-          next if project_entity_ids.include?(child_id) # nested Project: its own scope
-
-          ids.add(child_id)
-          queue << child_id
-        end
-    end
-    ids
-  end
-
-  def project_entity_ids
-    @project_entity_ids ||= MemoryEntity.where(entity_type: NodeOperationsStrategy::PROJECT_ENTITY_TYPE)
-                                        .pluck(:id).to_set
+    ProjectMembership.member_ids(project_id)
   end
 
   def apply_membership(membership)
@@ -120,6 +101,14 @@ class ProjectIdBackfill
                              .where("project_id IS NULL OR project_id <> ?", project_id)
                              .update_all(project_id: project_id)
     end
+    # Rows no part_of chain reaches are UNROOTED → project_id NULL. Rows
+    # stamped by an earlier run then re-parented away must be cleared or
+    # they sit in a scope that does not own them (membership mirrors the
+    # CURRENT edges).
+    changed += MemoryEntity.where.not(id: membership.keys)
+                           .where.not(entity_type: NodeOperationsStrategy::PROJECT_ENTITY_TYPE)
+                           .where.not(project_id: nil)
+                           .update_all(project_id: nil)
     changed
   end
 

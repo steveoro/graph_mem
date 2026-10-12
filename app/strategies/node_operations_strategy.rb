@@ -52,25 +52,29 @@ class NodeOperationsStrategy
       return error_result("Node is already a child of this parent")
     end
 
-    ActiveRecord::Base.transaction do
-      # Remove only existing hierarchy parents; preserve depends_on edges
-      MemoryRelation
-        .where(from_entity_id: node_id, relation_type: "part_of")
-        .destroy_all
+    # Membership lock BEFORE the transaction: taking GET_LOCK while
+    # holding row locks deadlocks against the backfill (advisory-first).
+    ProjectMembership.with_membership_lock do
+      ActiveRecord::Base.transaction do
+        # Remove only existing hierarchy parents; preserve depends_on edges
+        MemoryRelation
+          .where(from_entity_id: node_id, relation_type: "part_of")
+          .destroy_all
 
-      # Create new relation
-      MemoryRelation.create!(
-        from_entity_id: node_id,
-        to_entity_id: parent_id,
-        relation_type: "part_of"
-      )
+        # Create new relation
+        MemoryRelation.create!(
+          from_entity_id: node_id,
+          to_entity_id: parent_id,
+          relation_type: "part_of"
+        )
 
-      # Moving under a new parent moves the node (and its subtree) into the
-      # new parent's project scope; ProjectMembership refuses the move on a
-      # same-name collision in the target project.
-      ProjectMembership.sync!(node)
+        # Moving under a new parent moves the node (and its subtree) into the
+        # new parent's project scope; ProjectMembership refuses the move on a
+        # same-name collision in the target project.
+        ProjectMembership.sync!(node)
 
-      @logger.info "NodeOperationsStrategy: Moved node #{node.name} (#{node_id}) to parent #{parent.name} (#{parent_id})"
+        @logger.info "NodeOperationsStrategy: Moved node #{node.name} (#{node_id}) to parent #{parent.name} (#{parent_id})"
+      end
     end
 
     success_result("Successfully moved '#{node.name}' under '#{parent.name}'")
@@ -116,67 +120,70 @@ class NodeOperationsStrategy
 
     begin
       Current.deletion_reason = "duplicate"
-      ActiveRecord::Base.transaction do
-        locked_entities = MemoryEntity
-        .where(id: [ source_id, target_id ])
-        .order(:id)
-        .lock
-        .to_a
-        .index_by(&:id)
-      source = locked_entities[source_id]
-      target = locked_entities[target_id]
+      # Membership lock BEFORE the transaction — see move_node.
+      ProjectMembership.with_membership_lock do
+        ActiveRecord::Base.transaction do
+          locked_entities = MemoryEntity
+          .where(id: [ source_id, target_id ])
+          .order(:id)
+          .lock
+          .to_a
+          .index_by(&:id)
+        source = locked_entities[source_id]
+        target = locked_entities[target_id]
 
-      unless source
-        result = error_result("Source node not found")
-        next
+        unless source
+          result = error_result("Source node not found")
+          next
+        end
+        unless target
+          result = error_result("Target node not found")
+          next
+        end
+        if project_root?(source) || project_root?(target)
+          result = error_result(PROJECT_ROOT_PROTECTED_ERROR)
+          next
+        end
+
+        if source.entity_type != target.entity_type
+          result = error_result(
+            "Cannot merge entities of different types: " \
+            "'#{source.entity_type}' into '#{target.entity_type}'"
+          )
+          next
+        end
+
+        # Explicit merges keep the caller-provided source→target direction.
+        # Dream-state may call pick_survivor before invoking merge_into.
+
+        # Add source name and aliases to target aliases
+        merge_aliases(source, target)
+
+        # Transfer observations from source to target and recompute trust
+        transferred_observations = source.memory_observations.count
+        transfer_observations!(source, target)
+
+        reassign_outgoing_relations!(source_id, target_id)
+        reassign_incoming_relations!(source_id, target_id)
+
+        # Delete any relations that were directly between source and target
+        MemoryRelation.where(from_entity_id: source_id, to_entity_id: target_id).destroy_all
+        MemoryRelation.where(from_entity_id: target_id, to_entity_id: source_id).destroy_all
+
+        # Clean up duplicate relations that may have been created
+        cleanup_duplicate_relations(target_id)
+
+        # Update counter cache
+        target.update_column(:memory_observations_count, target.memory_observations.count)
+
+        # Delete the source entity
+        source_name = source.name
+        target_name = target.name
+        source.destroy!
+
+        @logger.info "NodeOperationsStrategy: Merged '#{source_name}' (#{source_id}) into '#{target_name}' (#{target_id}). Transferred #{transferred_observations} observations."
+        end
       end
-      unless target
-        result = error_result("Target node not found")
-        next
-      end
-      if project_root?(source) || project_root?(target)
-        result = error_result(PROJECT_ROOT_PROTECTED_ERROR)
-        next
-      end
-
-      if source.entity_type != target.entity_type
-        result = error_result(
-          "Cannot merge entities of different types: " \
-          "'#{source.entity_type}' into '#{target.entity_type}'"
-        )
-        next
-      end
-
-      # Explicit merges keep the caller-provided source→target direction.
-      # Dream-state may call pick_survivor before invoking merge_into.
-
-      # Add source name and aliases to target aliases
-      merge_aliases(source, target)
-
-      # Transfer observations from source to target and recompute trust
-      transferred_observations = source.memory_observations.count
-      transfer_observations!(source, target)
-
-      reassign_outgoing_relations!(source_id, target_id)
-      reassign_incoming_relations!(source_id, target_id)
-
-      # Delete any relations that were directly between source and target
-      MemoryRelation.where(from_entity_id: source_id, to_entity_id: target_id).destroy_all
-      MemoryRelation.where(from_entity_id: target_id, to_entity_id: source_id).destroy_all
-
-      # Clean up duplicate relations that may have been created
-      cleanup_duplicate_relations(target_id)
-
-      # Update counter cache
-      target.update_column(:memory_observations_count, target.memory_observations.count)
-
-      # Delete the source entity
-      source_name = source.name
-      target_name = target.name
-      source.destroy!
-
-      @logger.info "NodeOperationsStrategy: Merged '#{source_name}' (#{source_id}) into '#{target_name}' (#{target_id}). Transferred #{transferred_observations} observations."
-    end
     ensure
       Current.deletion_reason = nil
     end
@@ -203,23 +210,34 @@ class NodeOperationsStrategy
 
     begin
       Current.deletion_reason = reason
-      ActiveRecord::Base.transaction do
-        if cascade_delete
-        # Delete all descendants first
-        deleted_count = delete_descendants(node_id)
-        else
-        # Remove hierarchy links only; descendants with another parent remain attached
-        MemoryRelation
-          .where(to_entity_id: node_id, relation_type: "part_of")
-          .destroy_all
+      # Membership lock BEFORE the transaction — see move_node.
+      ProjectMembership.with_membership_lock do
+        ActiveRecord::Base.transaction do
+          if cascade_delete
+            # Delete all descendants first
+            deleted_count = delete_descendants(node_id)
+          else
+            # Remove hierarchy links only; descendants with another parent remain attached.
+            # Orphaned children lose their part_of chain → unrooted (global);
+            # re-sync them so project_id mirrors the CURRENT edges.
+            orphan_ids = MemoryRelation.where(to_entity_id: node_id, relation_type: "part_of")
+                                       .pluck(:from_entity_id)
+            MemoryRelation
+              .where(to_entity_id: node_id, relation_type: "part_of")
+              .destroy_all
+            orphan_ids.each do |child_id|
+              orphan = MemoryEntity.find_by(id: child_id)
+              ProjectMembership.sync!(orphan) if orphan
+            end
+          end
+
+          # Delete the node itself (observations will be deleted via dependent: :destroy)
+          node.destroy!
+          deleted_count += 1
+
+          @logger.info "NodeOperationsStrategy: Deleted node '#{node_name}' (#{node_id}). Total deleted: #{deleted_count}"
         end
-
-      # Delete the node itself (observations will be deleted via dependent: :destroy)
-      node.destroy!
-      deleted_count += 1
-
-      @logger.info "NodeOperationsStrategy: Deleted node '#{node_name}' (#{node_id}). Total deleted: #{deleted_count}"
-    end
+      end
     ensure
       Current.deletion_reason = nil
     end
@@ -300,17 +318,27 @@ class NodeOperationsStrategy
   end
 
   # Re-assign incoming relations (X -> source) without violating uniqueness.
+  # part_of children re-pointed under the target change scope when the
+  # target lives in a different project — re-sync their membership or
+  # they keep the SOURCE project's stamp inside the target's tree.
   def reassign_incoming_relations!(source_id, target_id)
+    reparented_child_ids = []
     MemoryRelation.where(to_entity_id: source_id).where.not(from_entity_id: target_id).find_each do |relation|
       if MemoryRelation.exists?(
         from_entity_id: relation.from_entity_id,
         to_entity_id: target_id,
         relation_type: relation.relation_type
       )
+        reparented_child_ids << relation.from_entity_id if relation.relation_type == "part_of"
         relation.destroy!
       else
+        reparented_child_ids << relation.from_entity_id if relation.relation_type == "part_of"
         relation.update!(to_entity_id: target_id)
       end
+    end
+    reparented_child_ids.uniq.each do |child_id|
+      entity = MemoryEntity.find_by(id: child_id)
+      ProjectMembership.sync!(entity) if entity
     end
   end
 

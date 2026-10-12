@@ -6,13 +6,12 @@
 module ImportExecutionStrategy::EntityWrites
   private
 
-  def handle_skip_action(node, referrer_id = nil)
+  def handle_skip_action(node)
     name = node[:name] || node["name"]
     entity_type = node[:entity_type] || node["entity_type"]
 
-    existing = find_declared_or_stub(name, entity_type,
-                                     reference: node[:reference] == true || node["reference"] == true,
-                                     referrer_id: referrer_id)
+    existing = find_declared_or_stub(name, entity_type, node,
+                                     reference: node[:reference] == true || node["reference"] == true)
 
     if existing.nil? && (node[:reference] == true || node["reference"] == true)
       # A reference-only child marked skip resolved to another project's
@@ -35,7 +34,7 @@ module ImportExecutionStrategy::EntityWrites
       existing.id
     else
       @logger.warn "ImportExecutionStrategy: Skip action but entity '#{name}' not found, creating instead"
-      create_new_entity(node, referrer_id: referrer_id)
+      create_new_entity(node)
     end
   end
 
@@ -55,13 +54,12 @@ module ImportExecutionStrategy::EntityWrites
     name = node[:name] || node["name"]
     entity_type = node[:entity_type] || node["entity_type"]
 
-    existing = find_declared_or_stub(name, entity_type,
-                                     reference: node[:reference] == true || node["reference"] == true,
-                                     referrer_id: parent_id)
+    existing = find_declared_or_stub(name, entity_type, node,
+                                     reference: node[:reference] == true || node["reference"] == true)
 
     unless existing
       @logger.warn "ImportExecutionStrategy: Add relation action but entity '#{name}' not found, creating instead"
-      return create_new_entity(node, referrer_id: parent_id)
+      return create_new_entity(node)
     end
 
     retype_on_claim(existing, entity_type, node)
@@ -115,7 +113,7 @@ module ImportExecutionStrategy::EntityWrites
   # Create a new entity from import data
   # @param node [Hash] Import node data
   # @return [Integer, nil] The new entity ID on success
-  def create_new_entity(node, referrer_id: nil)
+  def create_new_entity(node)
     name = node[:name] || node["name"]
     entity_type = node[:entity_type] || node["entity_type"]
     aliases = node[:aliases] || node["aliases"]
@@ -135,7 +133,8 @@ module ImportExecutionStrategy::EntityWrites
     existing = if reference_node
                  ImportEntityResolver.find_reference(name, entity_type,
                                                      project_id: @import_project_id,
-                                                     parent_entity_id: referrer_id)
+                                                     referrer_ids: reference_referrer_ids(node),
+                                                     relation_types: reference_relation_types(node))
     else
                  find_entity_by_name_and_type(name, entity_type, project_id: node_project_id)
     end

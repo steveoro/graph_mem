@@ -16,9 +16,13 @@ module ImportExecutionStrategy::Relations
     # preloaded set of existing triples: a 50k-edge payload cannot afford
     # two find_by + canonicalize + exists? lookups per edge.
     endpoint_ids = resolve_relation_endpoints(relations)
-    existing = preload_existing_relations(relations, endpoint_ids)
+    # Reference endpoints bind per-edge: the referrer's stored edge
+    # target wins even when 2+ projects declare the name — the shared
+    # (name,type) map cannot express that.
+    reference_to_ids = resolve_reference_targets(relations, endpoint_ids)
+    existing = preload_existing_relations(relations, endpoint_ids, reference_to_ids)
 
-    Array(relations).each do |relation|
+    Array(relations).each_with_index do |relation, index|
       raw_type = relation["relation_type"] || relation[:relation_type]
 
       # Relations are cross-cutting edges only: a hierarchical (part_of)
@@ -34,7 +38,7 @@ module ImportExecutionStrategy::Relations
 
       from_id = endpoint_ids[endpoint_key(relation["from_name"] || relation[:from_name],
                                           relation["from_type"] || relation[:from_type])]
-      to_id = endpoint_ids[endpoint_key(relation["to_name"] || relation[:to_name],
+      to_id = reference_to_ids[index] || endpoint_ids[endpoint_key(relation["to_name"] || relation[:to_name],
                                         relation["to_type"] || relation[:to_type])]
 
       unless from_id && to_id
@@ -73,8 +77,9 @@ module ImportExecutionStrategy::Relations
       # Multi-declarer endpoints: queue one AMBIGUOUS proposal per
       # referencing edge, listing the candidate declarations. The edge
       # itself stays pointed at the shared stub — nothing is rewired
-      # unattended.
-      collect_ambiguous_edge_proposal(relation, from_id, to_id)
+      # unattended. A stored-edge resolution already picked a real
+      # declarer for THIS edge: unambiguous, nothing to propose.
+      collect_ambiguous_edge_proposal(relation, from_id, to_id) unless reference_to_ids[index]
 
       # fatal: false — an invalid edge (e.g. out-of-range confidence) is
       # skipped and counted, never allowed to roll back the whole import.
@@ -145,6 +150,35 @@ module ImportExecutionStrategy::Relations
     map
   end
 
+  # Per-edge resolution for endpoints the payload marks as references
+  # (`endpoint_reference` in the edge's properties): the resolved FROM
+  # entity is the real referrer, and its stored edge target wins — an
+  # unchanged re-import binds the same target even after a claim or a
+  # second declarer. Only a stored-edge hit overrides the shared map:
+  # anything else (2+ declarers → stub + proposal) keeps the map's
+  # resolution, so AMBIGUOUS proposals still queue.
+  # Returns {relation_index => to_entity_id}.
+  def resolve_reference_targets(relations, endpoint_ids)
+    Array(relations).each_with_index.each_with_object({}) do |(relation, index), overrides|
+      props = relation["properties"] || relation[:properties] || {}
+      next unless props["endpoint_reference"] == true || props[:endpoint_reference] == true
+
+      raw_type = relation["relation_type"] || relation[:relation_type]
+      next if RelationSemantics.hierarchical?(raw_type)
+
+      from_id = endpoint_ids[endpoint_key(relation["from_name"] || relation[:from_name],
+                                          relation["from_type"] || relation[:from_type])]
+      next unless from_id
+
+      resolved = ImportEntityResolver.stored_reference_target(
+        relation["to_name"] || relation[:to_name],
+        [ from_id ],
+        [ MemoryRelation.canonical_relation_type(raw_type) ]
+      )
+      overrides[index] = resolved.id if resolved
+    end
+  end
+
   def endpoint_key(name, raw_type)
     type = ImportEntityResolver.canonical_type(raw_type).to_s.downcase
     type = "class-module" if %w[class module].include?(type) # Class↔Module family
@@ -155,14 +189,14 @@ module ImportExecutionStrategy::Relations
   # already have in the DB — one query instead of an exists? per edge. The
   # set doubles as the intra-payload dedupe: create_relation_safe adds each
 
-  def preload_existing_relations(relations, endpoint_ids)
-    triples = Array(relations).filter_map do |relation|
+  def preload_existing_relations(relations, endpoint_ids, reference_to_ids = {})
+    triples = Array(relations).each_with_index.filter_map do |relation, index|
       raw_type = relation["relation_type"] || relation[:relation_type]
       next if RelationSemantics.hierarchical?(raw_type)
 
       from_id = endpoint_ids[endpoint_key(relation["from_name"] || relation[:from_name],
                                           relation["from_type"] || relation[:from_type])]
-      to_id = endpoint_ids[endpoint_key(relation["to_name"] || relation[:to_name],
+      to_id = reference_to_ids[index] || endpoint_ids[endpoint_key(relation["to_name"] || relation[:to_name],
                                         relation["to_type"] || relation[:to_type])]
       [ from_id, to_id, MemoryRelation.canonical_relation_type(raw_type) ] if from_id && to_id
     end
@@ -224,11 +258,15 @@ module ImportExecutionStrategy::Relations
     @relation_endpoint_ids << from_entity_id << to_entity_id
     @logger.debug "ImportExecutionStrategy: Created relation #{from_entity_id} -[#{canonical_type}]-> #{to_entity_id}"
 
-    # A replaced part_of parent moves the entity (and its subtree) into the
-    # new parent's project — e.g. claiming a global stub into the declaring
-    # repo. ProjectMembership refuses the move on a same-name collision in
-    # the target scope.
-    if reparented
+    # Membership follows every new part_of attach — a reparent moves the
+    # entity (and its subtree) into the new parent's project, and a first
+    # attach moves an unrooted entity out of the global namespace — EXCEPT
+    # the reference_stub park edge: a parked stub is global by design and
+    # stays unclaimed (the claim path stamps it via the real edge).
+    # ProjectMembership refuses the move on a same-name collision in the
+    # target scope.
+    stub_edge = properties["reference_stub"] == true || properties[:reference_stub] == true
+    if RelationSemantics.single_parent?(canonical_type) && !stub_edge
       ProjectMembership.sync!(MemoryEntity.find_by(id: from_entity_id))
     end
   rescue RelationSemantics::ValidationError, ActiveRecord::RecordInvalid, ProjectMembership::Collision => e

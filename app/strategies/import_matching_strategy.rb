@@ -260,7 +260,8 @@ class ImportMatchingStrategy
                     # stub.
                     ImportEntityResolver.find_reference(name, entity_type,
                                                         project_id: @import_project_id,
-                                                        parent_entity_id: parent_entity_id)
+                                                        referrer_ids: reference_referrer_ids(node),
+                                                        relation_types: reference_relation_types(node))
     else
                     ImportEntityResolver.find_by_name_and_type(name, entity_type,
                                                                project_id: @import_project_id)
@@ -324,6 +325,34 @@ class ImportMatchingStrategy
     MemoryRelation
       .where(from_entity_id: entity_id, to_entity_id: parent_entity_id, relation_type: relation_type)
       .exists?
+  end
+
+  # The real referrers of a reference node — the tree parks it under the
+  # project root, so `parent_entity_id` is never the referrer. The
+  # importer annotates the node with the source entities of the payload
+  # edges that point at it; resolve them inside THIS import's scope
+  # (referrers are always own-payload nodes).
+  def reference_referrer_ids(node)
+    reference_referrers(node).filter_map do |ref|
+      ref = ref.symbolize_keys
+      MemoryEntity.find_by(name: ref[:name],
+                           entity_type: ImportEntityResolver.canonical_type(ref[:entity_type]),
+                           project_id: @import_project_id)&.id
+    end.uniq
+  end
+
+  # Canonical edge types the payload declares for the reference — the
+  # stored-edge step only honors these + part_of (unrelated edges to a
+  # namesake must not hijack the match).
+  def reference_relation_types(node)
+    reference_referrers(node).filter_map do |ref|
+      ref = ref.symbolize_keys
+      ref[:relation].presence && MemoryRelation.canonical_relation_type(ref[:relation])
+    end.uniq
+  end
+
+  def reference_referrers(node)
+    Array(node[:referrers] || node["referrers"])
   end
 
   # Check if an observation already exists for an entity

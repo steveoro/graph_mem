@@ -205,7 +205,7 @@ class DataExchangeController < ApplicationController
         # load_data parses with symbolize_names — the producer tag is :producer.
         source: GraphifyImporter::KNOWN_PRODUCERS.include?(import_data[:producer].to_s) ?
                 import_data[:producer].to_s : "graphify",
-        project_id: import_project_entity_id(import_data)
+        project_id: import_project_entity_id(import_data, decisions)
       )
     end
 
@@ -297,13 +297,22 @@ class DataExchangeController < ApplicationController
     when "ignore"
                CompactionReviewService.ignore(item_id, report_type: @report_type)
     when "approve"
+               # Renders the queue view: populate the SAME ivars
+               # compaction_review does or kind tabs / child warnings /
+               # filters silently drop off the re-rendered page.
                @report = CompactionReviewService.latest_report(report_type: @report_type)
                @current_item = CompactionReviewService.find_item(item_id, report_type: @report_type)
                @confirm_action = true
                @status_filter = params.key?(:status) ? params[:status].to_s : "active"
-               @items = CompactionReviewService.items(report_type: @report_type, status: @status_filter, page: params[:page])
+               @kind_filter = params[:kind].presence
+               @q = params[:q].presence
+               @items = CompactionReviewService.items(report_type: @report_type, status: @status_filter,
+                                                    kind: @kind_filter, page: params[:page], q: @q)
                @active_count = CompactionReviewService.active_count(report_type: @report_type)
-               @stats = CompactionReviewService.status_counts(report_type: @report_type)
+               @stats = CompactionReviewService.status_counts(report_type: @report_type, kind: @kind_filter)
+               @kind_counts = CompactionReviewService.kind_counts(report_type: @report_type, status: @status_filter)
+               @children_info = CompactionReviewService.delete_children_info(report_type: @report_type,
+                                                                           items: @items)
                return render :compaction_review
     else
                { success: false, error: "Unknown action." }
@@ -653,18 +662,39 @@ class DataExchangeController < ApplicationController
     (roots.is_a?(Array) ? roots.first&.dig("name") || roots.first&.dig(:name) : nil).presence || "import"
   end
 
-  # The Project entity the import's root merged into — endpoint names in
-  # AMBIGUOUS payloads resolve inside that scope (nil = global only).
-  def import_project_entity_id(import_data)
+  # The Project entity the import resolved as its scope — the first
+  # Project-typed node the execution targeted (same rule as the
+  # strategies' @import_project_id). Resolved through the DECISIONS'
+  # target_id, not the payload name: a root merged into a renamed
+  # Project would otherwise look the name up and land on the wrong (or
+  # no) scope. Falls back to a name lookup for a root created fresh by
+  # this run (no match target — the just-created row carries the
+  # payload's name).
+  def import_project_entity_id(import_data, decisions)
     roots = import_data["root_nodes"] || import_data[:root_nodes]
-    root = roots.is_a?(Array) ? roots.first : nil
-    return nil unless root
+    project_roots = Array(roots).select do |root|
+      (root["entity_type"] || root[:entity_type]).to_s == NodeOperationsStrategy::PROJECT_ENTITY_TYPE
+    end
 
-    MemoryEntity.find_by(
-      name: root["name"] || root[:name],
-      entity_type: NodeOperationsStrategy::PROJECT_ENTITY_TYPE,
-      project_id: nil
-    )&.id
+    Array(decisions).each do |decision|
+      target_id = decision[:target_id] || decision["target_id"]
+      next if target_id.blank?
+
+      entity = MemoryEntity.find_by(id: target_id)
+      if entity&.entity_type == NodeOperationsStrategy::PROJECT_ENTITY_TYPE && entity.project_id.nil?
+        return entity.id
+      end
+    end
+
+    project_roots.each do |root|
+      found = MemoryEntity.find_by(
+        name: root["name"] || root[:name],
+        entity_type: NodeOperationsStrategy::PROJECT_ENTITY_TYPE,
+        project_id: nil
+      )
+      return found.id if found
+    end
+    nil
   end
 
   def review_report_type

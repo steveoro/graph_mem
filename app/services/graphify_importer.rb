@@ -381,8 +381,28 @@ class GraphifyImporter
     if node["reference"] == true
       child["reference"] = true
       child["relation_properties"] = { "reference_stub" => true }
+      # The real referrer is the SOURCE of the payload edge pointing at
+      # this node — the tree parks the reference under the project root,
+      # so its tree parent is never the referrer. Resolution needs these
+      # to find the stored edge target (Post's `mixes_in` → its Foo).
+      child["referrers"] = reference_referrers(id)
     end
     child
+  end
+
+  # Every non-containment payload edge targeting `id`, as the resolver
+  # needs them: the referencing entity's name+type plus the edge type.
+  def reference_referrers(id)
+    @edges.filter_map do |edge|
+      next unless edge["target"] == id
+      next if CONTAINMENT_RELATIONS.include?(edge["relation"].to_s)
+
+      info = @entity_info[edge["source"]]
+      next unless info
+
+      { "name" => info[:name], "entity_type" => info[:entity_type],
+        "relation" => edge["relation"].to_s }
+    end.uniq { |r| [ r["name"], r["entity_type"], r["relation"] ] }
   end
 
   # Node observations pass through (e.g. extractor "Superclass:" lines),
