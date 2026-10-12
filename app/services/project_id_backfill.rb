@@ -22,6 +22,22 @@ class ProjectIdBackfill
 
   MAX_LOCK_WAIT_RETRIES = 3
 
+  # Operator-facing explanation for a RecordNotUnique raised mid-apply: the
+  # colliding row is stamped-but-unrooted sharing a global row's name —
+  # a name existing in BOTH namespaces is normal under scoped names, so the
+  # message names the actual row and how to unblock. Callers rescue and
+  # surface this instead of the raw DB error (rake task aborts, migration
+  # re-raises with it).
+  # @return [String]
+  def self.conflict_hint(error)
+    name = error.message[/'\d+-([^']+)'/, 1]
+    return error.message.to_s if name.blank?
+
+    "entity '#{name}' is stamped to a project it is no longer part of and " \
+      "collides with the global '#{name}' — re-parent it under its project, " \
+      "or merge/rename one of them, then re-run"
+  end
+
   # @param dry_run [Boolean] print the report without writing
   # @return [Report] per-project member counts, unrooted count, conflicts,
   #   changed-row count (0 on a re-run)

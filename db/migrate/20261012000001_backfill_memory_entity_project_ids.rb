@@ -11,8 +11,7 @@ class BackfillMemoryEntityProjectIds < ActiveRecord::Migration[8.1]
       rescue ActiveRecord::RecordNotUnique => e
         # A stamped-but-unrooted row sharing a global name aborts the apply —
         # the transaction rolls back, so re-running after deduping is safe.
-        raise ActiveRecord::RecordNotUnique,
-              "#{e.message} — dedupe entity names that exist both globally and under a project, then re-run"
+        raise ActiveRecord::RecordNotUnique, ProjectIdBackfill.conflict_hint(e)
       end
     end
   end
