@@ -78,13 +78,15 @@ class HybridSearchStrategy
       if temporal_window.blank?
         []
       elsif temporal_only
-        @temporal_strategy.search(temporal_window, limit: limit * 2, entity_ids: scope_entity_ids)
+        @temporal_strategy.search(temporal_window, limit: limit * 2, entity_ids: scope_entity_ids,
+                                  perspective: perspective)
       else
         candidates = (text_results.map { |result| result.entity.id } +
                       vector_results.map { |result| result.entity.id } +
                       observation_entity_ids).uniq
         candidates &= scope_entity_ids if scope_entity_ids.present?
-        candidates.empty? ? [] : @temporal_strategy.search(temporal_window, limit: nil, entity_ids: candidates)
+        candidates.empty? ? [] : @temporal_strategy.search(temporal_window, limit: nil, entity_ids: candidates,
+                                                           perspective: perspective)
       end
 
     scores, entities, matched = build_score_maps(

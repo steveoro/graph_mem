@@ -24,6 +24,25 @@ RSpec.describe "Observation perspective (C3a)" do
     expect(MemoryObservation::EMBEDDING_FIELDS).not_to include("perspective")
   end
 
+  it "supersede! carries perspective onto the replacement" do
+    original = obs(content: "typed fact", perspective: "world")
+    original.supersede!(content: "typed fact v2", reason: "update")
+    replacement = entity.memory_observations.order(:id).last
+    expect(replacement.perspective).to eq("world")
+    expect(replacement.status).to eq("active")
+  end
+
+  it "temporal channel respects the perspective filter" do
+    obs(content: "planet fact", perspective: "world")
+    exp_entity = MemoryEntity.create!(name: "PerspTemporal", entity_type: "Entity")
+    MemoryObservation.create!(memory_entity: exp_entity, content: "planet log",
+                              perspective: "experience")
+    window = TemporalWindow.new(occurred_after: 2.days.ago.iso8601)
+    world_ids = TemporalSearchStrategy.new.search(window, limit: 50, perspective: "world")
+    expect(world_ids).to include(entity.id)
+    expect(world_ids).not_to include(exp_entity.id)
+  end
+
   it "is writable via graph_write create_observation and serialized" do
     result = GraphWriteService.execute_one(
       "create_observation",

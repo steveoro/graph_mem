@@ -15,9 +15,13 @@
 #                             it open AND a solves/replaces/resolves edge
 #                             written AFTER the obs = discovered already
 #                             addressed during traversal.
-#   unrooted_after_rescan   — entity carries importer-stamped (world) obs but
-#                             is no longer reachable through any Project's
-#                             part_of tree = its file/module was removed.
+#   unrooted_after_rescan   — entity carries a 'Defined at' provenance obs
+#                             (i.e. it was DECLARED by a code import, not just
+#                             referenced — reference stubs parked in the global
+#                             namespace by design are excluded) but is no longer
+#                             reachable through any Project's part_of tree.
+#                             Covers rescan removal AND manual detachment — the
+#                             graph state is identical, so the reason names both.
 #
 # Flagging only: nothing is auto-deleted. Each signal enqueues a
 # `stale_memory` review row; applying it calls `mark_obsolete!` on the listed
@@ -35,13 +39,17 @@ class StaleMemoryScanner
   CONTRADICTION_LOOKBACK = 24.hours
   SCAN_REPORT_TYPE = "stale_memory_scan"
 
+  # Returns { items:, next_watermark: } — `next_watermark` is the bound the
+  # NEXT scan's contradiction pass should start from. It advances only when
+  # the contradiction pass completed: a failed pass must not lose the
+  # candidates it never visited (the report row is written regardless, so
+  # keying the watermark off report created_at would silently skip them).
   def self.scan
     items = []
     items.concat(expired_items)
     items.concat(addressed_items)
     items.concat(unrooted_items)
-    detect_contradictions
-    items
+    { items: items, next_watermark: detect_contradictions }
   end
 
   # --- Detector 1: explicit expiry elapsed ---------------------------------
@@ -86,13 +94,21 @@ class StaleMemoryScanner
   end
 
   # --- Detector 3: importer-stamped obs on an unrooted entity --------------
+  # Candidates must carry a 'Defined at' provenance obs (any status): only an
+  # entity an import actually DECLARED can be "left behind" by a rescan. This
+  # excludes reference stubs — globally parked by design, never rooted — which
+  # would otherwise flag merely for holding passthrough producer-stamped obs.
   def self.unrooted_items
+    declared = "EXISTS (SELECT 1 FROM memory_observations prov " \
+               "WHERE prov.memory_entity_id = memory_entities.id " \
+               "AND prov.content LIKE 'Defined at %')"
     candidates = MemoryEntity.where.not(entity_type: "Project")
                              .joins(:memory_observations)
                              .where(memory_observations: {
                                       status: MemoryObservation::ACTIVE_STATUS,
                                       source: GraphifyImporter::KNOWN_PRODUCERS
                                     })
+                             .where(declared)
                              .distinct
                              .pluck(:id, :name)
     return [] if candidates.empty?
@@ -108,7 +124,8 @@ class StaleMemoryScanner
       item(entity_id, entity_name, observations,
            signal: "unrooted_after_rescan",
            reason: "imported entity is no longer reachable from any Project " \
-                   "tree — its file/module was likely removed")
+                   "tree (removed by a rescan or detached manually) — its " \
+                   "imported facts won't surface in project-scoped recall")
     end
   end
 
@@ -118,19 +135,31 @@ class StaleMemoryScanner
   # keeps re-runs cheap and avoids duplicate reports. Gated by the same
   # AppSettings + vector flags the detector itself honors.
   def self.detect_contradictions
-    return unless AppSettings.contradiction_detection_enabled? && EmbeddingService.vector_enabled?
+    watermark = previous_watermark
+    return watermark unless AppSettings.contradiction_detection_enabled? && EmbeddingService.vector_enabled?
 
-    watermark = MaintenanceReport.where(report_type: SCAN_REPORT_TYPE)
-                                 .order(id: :desc).pick(:created_at) || CONTRADICTION_LOOKBACK.ago
+    cutoff = Time.current
     MemoryEntity.joins(:memory_observations)
                 .where(memory_observations: { status: MemoryObservation::ACTIVE_STATUS })
                 .where("memory_observations.updated_at > ?", watermark)
                 .distinct
                 .pluck(:id)
                 .each { |entity_id| ContradictionDetector.detect(entity_id) }
+    cutoff
   rescue StandardError => e
     # Vector work is best-effort inside a maintenance scan — log, never abort.
+    # Return the PREVIOUS watermark so the failed window is retried next run.
     Rails.logger.warn "[StaleMemoryScanner] contradiction pass skipped: #{e.message}"
+    watermark
+  end
+
+  # The scan watermark lives in the previous report's `data` (set by the job),
+  # falling back to its created_at for reports written before the field
+  # existed, then to the bounded lookback on the very first run.
+  def self.previous_watermark
+    report = MaintenanceReport.where(report_type: SCAN_REPORT_TYPE).order(id: :desc).first
+    stored = report&.data.is_a?(Hash) ? report.data["watermark"].presence : nil
+    Time.iso8601(stored.to_s) rescue (report&.created_at || CONTRADICTION_LOOKBACK.ago)
   end
 
   def self.item(entity_id, entity_name, observations, signal:, reason:)

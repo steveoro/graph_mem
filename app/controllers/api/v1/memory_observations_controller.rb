@@ -153,6 +153,7 @@ module Api
           :content,
           :confidence,
           :source,
+          :perspective,
           :valid_from,
           :valid_until,
           tags: []

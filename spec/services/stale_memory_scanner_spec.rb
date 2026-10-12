@@ -64,14 +64,26 @@ RSpec.describe StaleMemoryScanner do
     end
   end
 
-  describe "unrooted_items (importer-stamped obs, no project tree)" do
-    it "flags a producer-stamped entity not reachable from any Project" do
+  describe "unrooted_items (declared importer entities, no project tree)" do
+    it "flags a producer-DECLARED entity not reachable from any Project" do
       orphan = MemoryEntity.create!(name: "LostFile", entity_type: "File")
       MemoryObservation.create!(memory_entity: orphan, content: "class LostFile",
+                                source: "graphify")
+      # Declared-by-import evidence: a 'Defined at' provenance obs (any status).
+      MemoryObservation.create!(memory_entity: orphan, content: "Defined at lib/lost_file.rb:1",
                                 source: "graphify")
       items = described_class.unrooted_items
       expect(items.map { |i| i[:entity_id] }).to include(orphan.id)
       expect(items.find { |i| i[:entity_id] == orphan.id }[:signal]).to eq("unrooted_after_rescan")
+    end
+
+    it "does NOT flag a reference stub (producer-stamped but never declared)" do
+      stub = MemoryEntity.create!(name: "ForeignStub", entity_type: "Class")
+      # Passthrough producer-stamped obs but no 'Defined at' provenance obs —
+      # reference stubs live unrooted in the global namespace BY DESIGN.
+      MemoryObservation.create!(memory_entity: stub, content: "referenced helper",
+                                source: "graphify")
+      expect(described_class.unrooted_items.map { |i| i[:entity_id] }).not_to include(stub.id)
     end
 
     it "does NOT flag a rooted entity" do
@@ -95,19 +107,39 @@ RSpec.describe StaleMemoryScanner do
       ancient = MemoryObservation.create!(memory_entity: entity,
                                           content: "the bug lives in module X",
                                           created_at: 3.years.ago)
-      items = described_class.scan.flat_map { |i| i[:observation_ids] }
+      items = described_class.scan[:items].flat_map { |i| i[:observation_ids] }
       expect(items).not_to include(ancient.id)
     end
 
-    it "job seeds deduplicated review rows and a scan report" do
+    it "job seeds deduplicated review rows and a scan report with watermark" do
       allow(AppSettings).to receive(:stale_memory_scan_enabled?).and_return(true)
       obs("expired", valid_until: 1.day.ago)
       expect { StaleMemoryScanJob.perform_now }
         .to change { MaintenanceReportRow.where(kind: "stale_memory").count }.by(1)
         .and change { MaintenanceReport.where(report_type: "stale_memory_scan").count }.by(1)
+      expect(MaintenanceReport.where(report_type: "stale_memory_scan").last.data["watermark"]).to be_present
       # Idempotent re-run: the signature dedupes the same detection.
       expect { StaleMemoryScanJob.perform_now }
         .not_to change { MaintenanceReportRow.where(kind: "stale_memory", status: "active").count }
+    end
+
+    it "contradiction watermark does NOT advance when the pass fails mid-scan" do
+      allow(AppSettings).to receive(:contradiction_detection_enabled?).and_return(true)
+      allow(EmbeddingService).to receive(:vector_enabled?).and_return(true)
+      allow(ContradictionDetector).to receive(:detect).and_raise(StandardError, "boom")
+      prev = 12.hours.ago
+      allow(described_class).to receive(:previous_watermark).and_return(prev)
+      obs("recent fact")
+      # A failed pass keeps the previous watermark so the window is retried.
+      expect(described_class.scan[:next_watermark]).to eq(prev)
+    end
+
+    it "contradiction watermark advances after a clean pass" do
+      allow(AppSettings).to receive(:contradiction_detection_enabled?).and_return(true)
+      allow(EmbeddingService).to receive(:vector_enabled?).and_return(true)
+      allow(ContradictionDetector).to receive(:detect)
+      obs("recent fact")
+      expect(described_class.scan[:next_watermark]).to be > 1.minute.ago
     end
 
     it "job is a no-op when the setting is off" do
@@ -136,12 +168,15 @@ RSpec.describe StaleMemoryScanner do
       expect(other.reload.status).to eq("active")
     end
 
-    it "signature dedupes entity + sorted observation set" do
+    it "signature dedupes entity + obs set + signal (distinct diagnoses stay distinct)" do
       payload = { entity_id: 1, observation_ids: [ 3, 1, 2 ], signal: "x" }
       sig = CompactionReviewService.signature_for("stale_memory", payload)
-      expect(sig).to eq("stale_memory|1|1-2-3")
+      expect(sig).to eq("stale_memory|1|1-2-3|x")
       expect(CompactionReviewService.signature_for("stale_memory",
-                                                   entity_id: 1, observation_ids: [ 2, 1, 3 ])).to eq(sig)
+                                                   entity_id: 1, observation_ids: [ 2, 1, 3 ], signal: "x")).to eq(sig)
+      # Same obs set, different signal = a different review item.
+      expect(CompactionReviewService.signature_for("stale_memory",
+                                                   entity_id: 1, observation_ids: [ 1, 2, 3 ], signal: "y")).not_to eq(sig)
       expect(CompactionReviewService.signature_for("stale_memory", entity_id: 1)).to be_nil
     end
   end

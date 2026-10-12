@@ -297,13 +297,14 @@ class CompactionReviewService
 
         [ "reparent_entity", entity_id.to_i, parent_id.to_i ].join("|")
       when "stale_memory"
-        # Dedupe on entity + sorted observation set: a re-scan re-detecting
-        # the same obs is the same item even if the scan timestamp differs.
+        # Dedupe on entity + observation set + SIGNAL: distinct diagnoses over
+        # the same obs (expiry vs addressed-edge) are different items — a
+        # dismissal must only suppress the signal it was taken on.
         entity_id = payload[:entity_id]
         obs_ids = Array(payload[:observation_ids]).compact.map(&:to_i).sort
         return nil if entity_id.blank? || obs_ids.empty?
 
-        [ "stale_memory", entity_id.to_i, obs_ids.join("-") ].join("|")
+        [ "stale_memory", entity_id.to_i, obs_ids.join("-"), payload[:signal] ].join("|")
       else
         nil
       end

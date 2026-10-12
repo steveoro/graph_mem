@@ -11,7 +11,8 @@ class StaleMemoryScanJob < ApplicationJob
     return unless AppSettings.stale_memory_scan_enabled?
 
     started_at = Time.current
-    items = StaleMemoryScanner.scan
+    result = StaleMemoryScanner.scan
+    items = result[:items]
 
     unless items.empty?
       CompactionReviewService.seed_report(
@@ -28,6 +29,9 @@ class StaleMemoryScanJob < ApplicationJob
         items_seeded: items.size,
         by_signal: items.group_by { |item| item[:signal] }.transform_values(&:size),
         started_at: started_at.iso8601,
+        # Contradiction-pass watermark for the NEXT scan: advances only when
+        # the pass completed (a failed pass re-scans the same window).
+        watermark: result[:next_watermark].iso8601,
         duration_ms: ((Time.current - started_at) * 1000).round
       }
     )

@@ -161,6 +161,7 @@ class MemoryObservation < ApplicationRecord
       source: source,
       valid_from: valid_from,
       valid_until: valid_until,
+      perspective: perspective,
       tags: tags.dup
     }
   end

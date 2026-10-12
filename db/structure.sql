@@ -318,6 +318,7 @@ CREATE TABLE `schema_migrations` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 INSERT INTO `schema_migrations` (version) VALUES
 ('20261013110000'),
+('20261013120000'),
 ('20261012000001'),
 ('20261012000000'),
 ('20261009180000'),
