@@ -86,6 +86,24 @@ RSpec.describe ProjectMembership do
       expect(membership_lock_free?).to be true
     end
 
+    it "really re-acquires the lock on a second entry under an active query cache" do
+      # With a cached GET_LOCK, a second top-level entry in the same request
+      # (no write between them) would read the cached 1 and run its block
+      # WITHOUT holding the lock — IS_USED_LOCK would show another holder or
+      # NULL inside it.
+      conn = ActiveRecord::Base.connection
+      name = described_class.lock_name(conn)
+      conn.cache do
+        described_class.with_membership_lock { true }
+        described_class.with_membership_lock do
+          holder_id = conn.uncached { conn.select_value("SELECT IS_USED_LOCK(#{conn.quote(name)})") }
+          my_id = conn.uncached { conn.select_value("SELECT CONNECTION_ID()") }
+          expect(holder_id).to eq(my_id)
+        end
+      end
+      expect(membership_lock_free?).to be true
+    end
+
     it "raises LockTimeout (not Collision) when the lock cannot be acquired" do
       conn = ActiveRecord::Base.connection
       name = described_class.lock_name(conn)

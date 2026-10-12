@@ -1081,6 +1081,22 @@ RSpec.describe 'DataExchange', type: :request do
       expect(JSON.parse(response.body)['error']).to be_present
     end
 
+    it 'returns 422 with the validation message when the relation fails validation' do
+      new_task = MemoryEntity.create!(name: 'Invalid Rel Task', entity_type: 'Task')
+      invalid = MemoryRelation.new
+      invalid.errors.add(:relation_type, 'is bogus')
+      allow(MemoryRelation).to receive(:create!).and_raise(ActiveRecord::RecordInvalid.new(invalid))
+
+      post create_relation_data_exchange_index_path, params: {
+        from_id: new_task.id,
+        to_id: project2.id,
+        relation_type: 'part_of'
+      }, as: :json
+
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(JSON.parse(response.body)['error']).to match(/bogus/)
+    end
+
     it 'hints rename/re-parent (not "retry shortly") on a scope name collision' do
       MemoryEntity.create!(name: 'Dup Member', entity_type: 'Task', project_id: project2.id)
       dup = MemoryEntity.create!(name: 'Dup Member', entity_type: 'Task')

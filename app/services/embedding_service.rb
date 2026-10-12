@@ -202,12 +202,18 @@ class EmbeddingService
   def self.with_embedding_lock(timeout_seconds)
     conn = ActiveRecord::Base.connection
     lock_name = "#{EMBEDDING_LOCK_PREFIX}:#{conn.current_database}:embeddings"
-    acquired = conn.select_value(
-      "SELECT GET_LOCK(#{conn.quote(lock_name)}, #{timeout_seconds.to_i})"
-    ).to_i == 1
+    # Same query-cache invariant as ProjectMembership.with_membership_lock:
+    # inside a request/job the executor caches SELECTs — a cached GET_LOCK
+    # can report 1 without acquiring, and a cached RELEASE_LOCK skips the
+    # release, leaving the pooled session holding the lock until recycle.
+    acquired = conn.uncached do
+      conn.select_value(
+        "SELECT GET_LOCK(#{conn.quote(lock_name)}, #{timeout_seconds.to_i})"
+      )
+    end.to_i == 1
     yield(acquired)
   ensure
-    conn.select_value("SELECT RELEASE_LOCK(#{conn.quote(lock_name)})") if acquired
+    conn.uncached { conn.select_value("SELECT RELEASE_LOCK(#{conn.quote(lock_name)})") } if acquired
   end
 
   # Backfill embeddings for all entities and observations missing them.
