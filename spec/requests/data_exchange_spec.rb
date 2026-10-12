@@ -1581,4 +1581,40 @@ RSpec.describe 'DataExchange', type: :request do
       expect(merge_row.reload.status).to eq('active')
     end
   end
+
+  describe '#import_project_entity_id' do
+    def scope_for(import_data, decisions)
+      DataExchangeController.new.send(:import_project_entity_id, import_data, decisions)
+    end
+
+    it 'pins the merged ROOT node, not a child merged into another project' do
+      # New Project root (created fresh — no decision target) with a nested
+      # Project child that merged into an existing OTHER project: the scope
+      # must stay the new root, not the child's merge target.
+      import_data = {
+        'root_nodes' => [
+          { 'name' => 'Fresh Proj', 'entity_type' => 'Project',
+            'children' => [
+              { 'name' => 'Project Beta', 'entity_type' => 'Project' }
+            ] }
+        ]
+      }
+      fresh = MemoryEntity.create!(name: 'Fresh Proj', entity_type: 'Project')
+      decisions = [
+        { node_path: '0', action: 'create' },
+        { node_path: '0.children.0', action: 'merge', target_id: project2.id }
+      ]
+
+      expect(scope_for(import_data, decisions)).to eq(fresh.id)
+    end
+
+    it 'returns the merged root target when the root itself merged' do
+      import_data = {
+        'root_nodes' => [ { 'name' => 'Old Name', 'entity_type' => 'Project' } ]
+      }
+      decisions = [ { node_path: '0', action: 'merge', target_id: project2.id } ]
+
+      expect(scope_for(import_data, decisions)).to eq(project2.id)
+    end
+  end
 end

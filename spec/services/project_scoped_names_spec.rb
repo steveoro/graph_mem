@@ -17,7 +17,8 @@ RSpec.describe "project-scoped entity names" do
                     NewRoot GlobalOne BackChild BackGrand BackOrphan ReChild
                     Bar Foo bar.rb foo.rb RepoD Lone PA InnerProj InnerMember
                     StubRef EdgeTarget n1.rb n2.rb n3.rb SwimProj
-                    ApplicationRecord app_record.rb].freeze
+                    ApplicationRecord app_record.rb StaleDup BackChild2
+                    StaleStamp].freeze
 
   before { purge_fixture_names }
   after { purge_fixture_names }
@@ -266,6 +267,24 @@ RSpec.describe "project-scoped entity names" do
       ProjectIdBackfill.new(out: ->(_l) { }).run
       expect(member.reload.project_id).to eq(project.id)
       expect(stale.reload.project_id).to be_nil
+    end
+
+    it "rolls back every stamp when apply fails mid-write" do
+      # A stamped-but-unrooted row that shares a global name: clearing its
+      # scope collides with the existing global row (UNIQUE
+      # project_scope,name) — earlier project stamps must roll back with
+      # it, not stay half-applied.
+      project = MemoryEntity.create!(name: "BackProj", entity_type: "Project")
+      member = MemoryEntity.create!(name: "BackChild", entity_type: "Task")
+      MemoryRelation.create!(from_entity: member, to_entity: project, relation_type: "part_of")
+      stale = MemoryEntity.create!(name: "StaleDup", entity_type: "Task",
+                                   project_id: project.id) # stamped, no edge
+      MemoryEntity.create!(name: "StaleDup", entity_type: "Task") # global namesake
+
+      expect { ProjectIdBackfill.new(out: ->(_l) { }).run }
+        .to raise_error(ActiveRecord::RecordNotUnique)
+      expect(member.reload.project_id).to be_nil
+      expect(stale.reload.project_id).to eq(project.id)
     end
   end
 

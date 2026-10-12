@@ -42,7 +42,12 @@ class ProjectIdBackfill
         membership, conflicts = compute_membership
         unrooted_count = MemoryEntity.where.not(id: membership.keys)
                                      .where.not(entity_type: "Project").count
-        changed = dry_run ? 0 : apply_membership(membership)
+        # apply_membership runs several update_all statements — wrap them in
+        # one transaction INSIDE the advisory lock (lock-before-txn ordering):
+        # a failure mid-apply (e.g. clearing a scope that collides with a
+        # global same-name row) must roll back every stamp, not leave the
+        # projects written so far committed.
+        changed = dry_run ? 0 : MemoryEntity.transaction { apply_membership(membership) }
       end
     rescue ActiveRecord::LockWaitTimeout, ProjectMembership::LockTimeout
       retry if attempts < MAX_LOCK_WAIT_RETRIES

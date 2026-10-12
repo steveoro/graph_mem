@@ -19,6 +19,7 @@
 # Pure JSON transform — no LLM, no DB access beyond reading nothing.
 class GraphifyImporter
   extend Matching
+  include Payload
 
   # Graphify link relations that define the containment tree.
   CONTAINMENT_RELATIONS = %w[contains method defines].freeze
@@ -388,60 +389,6 @@ class GraphifyImporter
       child["referrers"] = reference_referrers(id)
     end
     child
-  end
-
-  # Every non-containment payload edge targeting `id`, as the resolver
-  # needs them: the referencing entity's name+type plus the edge type.
-  def reference_referrers(id)
-    @edges.filter_map do |edge|
-      next unless edge["target"] == id
-      next if CONTAINMENT_RELATIONS.include?(edge["relation"].to_s)
-
-      info = @entity_info[edge["source"]]
-      next unless info
-
-      { "name" => info[:name], "entity_type" => info[:entity_type],
-        "relation" => edge["relation"].to_s }
-    end.uniq { |r| [ r["name"], r["entity_type"], r["relation"] ] }
-  end
-
-  # Node observations pass through (e.g. extractor "Superclass:" lines),
-  # then provenance when the node declares a source file; reference-only
-  # nodes carry no file → a stub never claims a class.
-  def entity_observations(node)
-    # Passthrough observations keep their content but NEVER their own
-    # source/confidence — otherwise an uploaded graph.json could stamp
-    # "official verified" trust onto arbitrary claims.
-    obs = Array(node["observations"]).filter_map do |o|
-      next unless o.is_a?(Hash) && o["content"].present?
-
-      # Clamp numeric confidence to [0,1]; missing/non-numeric stays NULL
-      # (the ranker reads NULL as neutral 0.5, not 0.0).
-      confidence = Float(o["confidence"], exception: false)&.clamp(0.0, 1.0)
-      o.merge("source" => producer_name, "confidence" => confidence)
-    end
-    file = node["source_file"].to_s
-    return obs if file.blank?
-
-    obs + [ provenance_observation("Defined at #{[ file, node['source_location'].to_s.presence ].compact.join(':')}") ]
-  end
-
-  def provenance_observation(content)
-    {
-      "content" => content,
-      "source" => producer_name,
-      "confidence" => 1.0,
-      "tags" => [ producer_name, "provenance" ]
-    }
-  end
-
-  def graph_meta_line
-    meta = @data["graph"] || {}
-    parts = [ "Imported from graph.json" ]
-    parts << "graphify #{meta['graphify_version']}" if meta["graphify_version"]
-    parts << "schema #{meta['schema_version']}" if meta["schema_version"]
-    parts << "commit #{@data['built_at_commit']}" if @data["built_at_commit"]
-    parts.join(", ")
   end
 
   # Every non-containment edge becomes a name+type-addressed relation.

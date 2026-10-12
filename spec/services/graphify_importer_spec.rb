@@ -118,6 +118,32 @@ RSpec.describe GraphifyImporter do
     expect(described_class.new(parsed, project_name: "x").translate.stats[:nodes_imported]).to eq(10)
   end
 
+  it "annotates reference-node referrers with the CANONICAL relation type" do
+    # The referrer's stored edge is written under the canonical type
+    # (`imports_from` → `depends_on` via EDGE_RELATION_MAPPINGS); the
+    # stored-edge match would miss it if the annotation kept the raw
+    # payload name.
+    payload = {
+      "nodes" => [
+        { "id" => "proj_root", "label" => "post.rb", "file_type" => "code",
+          "source_file" => "app/models/post.rb" },
+        { "id" => "post_cls", "label" => "Post", "_callable_class" => true },
+        { "id" => "ref_ext", "label" => "External::Dep", "reference" => true }
+      ],
+      "links" => [
+        { "source" => "proj_root", "target" => "post_cls", "relation" => "contains" },
+        { "source" => "post_cls", "target" => "ref_ext", "relation" => "imports_from" }
+      ]
+    }
+    translated = described_class.new(JSON.generate(payload), project_name: "x").translate
+    ref = flatten(translated.import_data["root_nodes"].first)
+          .find { |n| n["name"] == "External::Dep" }
+    expect(ref["reference"]).to eq(true)
+    expect(ref["referrers"]).to eq(
+      [ { "name" => "Post", "entity_type" => "Class", "relation" => "depends_on" } ]
+    )
+  end
+
   it "clamps numeric confidence but keeps NULL for missing/non-numeric values" do
     data = JSON.parse(graph_json)
     node = data["nodes"].find { |n| n["label"] == "Swimmer" }

@@ -708,27 +708,34 @@ class DataExchangeController < ApplicationController
   end
 
   # The Project entity the import resolved as its scope — the first
-  # Project-typed node the execution targeted (same rule as the
-  # strategies' @import_project_id). Resolved through the DECISIONS'
-  # target_id, not the payload name: a root merged into a renamed
-  # Project would otherwise look the name up and land on the wrong (or
-  # no) scope. Falls back to a name lookup for a root created fresh by
-  # this run (no match target — the just-created row carries the
-  # payload's name).
+  # Project-typed ROOT node the execution targeted (same rule as the
+  # strategies' @import_project_id, which only pins top-level paths).
+  # Resolved through the DECISIONS' target_id, not the payload name: a
+  # root merged into a renamed Project would otherwise look the name up
+  # and land on the wrong (or no) scope. Child decisions are skipped —
+  # a nested node merged into another Project must not hijack the
+  # import's scope. Falls back to a name lookup for a root created
+  # fresh by this run (no match target — the just-created row carries
+  # the payload's name).
   def import_project_entity_id(import_data, decisions)
     roots = import_data["root_nodes"] || import_data[:root_nodes]
     project_roots = Array(roots).select do |root|
       (root["entity_type"] || root[:entity_type]).to_s == NodeOperationsStrategy::PROJECT_ENTITY_TYPE
     end
+    decision_by_path = Array(decisions).index_by do |decision|
+      (decision[:node_path] || decision["node_path"]).to_s
+    end
 
-    Array(decisions).each do |decision|
-      target_id = decision[:target_id] || decision["target_id"]
+    Array(roots).each_with_index do |root, index|
+      next unless (root["entity_type"] || root[:entity_type]).to_s ==
+                  NodeOperationsStrategy::PROJECT_ENTITY_TYPE
+
+      decision = decision_by_path[index.to_s]
+      target_id = decision && (decision[:target_id] || decision["target_id"])
       next if target_id.blank?
 
       entity = MemoryEntity.find_by(id: target_id)
-      if entity&.entity_type == NodeOperationsStrategy::PROJECT_ENTITY_TYPE && entity.project_id.nil?
-        return entity.id
-      end
+      return entity.id if entity
     end
 
     project_roots.each do |root|
