@@ -518,6 +518,8 @@ RSpec.describe "project-scoped entity names" do
       end
       entity_ids = MemoryEntity.order(:id).pluck(:id)
       relation_ids = MemoryRelation.order(:id).pluck(:id)
+      observation_ids = MemoryObservation.order(:id).pluck(:id)
+      proposal_ids = MaintenanceReportRow.order(:id).pluck(:id)
 
       Dir.mktmpdir do |dir|
         write_models(dir, "swimmer.rb" => "class Swimmer\n  def x; end\nend\n")
@@ -528,6 +530,8 @@ RSpec.describe "project-scoped entity names" do
       end
       expect(MemoryEntity.order(:id).pluck(:id)).to eq(entity_ids)
       expect(MemoryRelation.order(:id).pluck(:id)).to eq(relation_ids)
+      expect(MemoryObservation.order(:id).pluck(:id)).to eq(observation_ids)
+      expect(MaintenanceReportRow.order(:id).pluck(:id)).to eq(proposal_ids)
     end
   end
 
@@ -543,17 +547,9 @@ RSpec.describe "project-scoped entity names" do
       expect { clash.save!(validate: false) }.to raise_error(ActiveRecord::RecordNotUnique)
     end
 
-    it "the down-migration duplicate guard would fire on per-project dups" do
-      proj_a = MemoryEntity.create!(name: "ProjA", entity_type: "Project")
-      proj_b = MemoryEntity.create!(name: "ProjB", entity_type: "Project")
-      MemoryEntity.create!(name: "EdgeTarget", entity_type: "Class", project_id: proj_a.id)
-      MemoryEntity.create!(name: "EdgeTarget", entity_type: "Class", project_id: proj_b.id)
-
-      rows = ActiveRecord::Base.connection.select_all(
-        "SELECT name FROM memory_entities GROUP BY name HAVING COUNT(*) > 1"
-      )
-      expect(rows.map { |r| r["name"] }).to include("EdgeTarget")
-    end
+    # The real `down` invocation lives in the "down migration guard"
+    # describe block above — it raises IrreversibleMigration on this
+    # exact two-scope layout.
   end
 
   describe "MCP write scoping" do
