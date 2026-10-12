@@ -278,7 +278,54 @@ RSpec.describe "project-scoped entity names" do
 
       require Rails.root.join("db/migrate/20261012000000_add_project_scope_to_memory_entities")
       migration = AddProjectScopeToMemoryEntities.new
+      # Guard the guard: if the IrreversibleMigration check regresses, `down`
+      # would run REAL DDL against this shared test schema and cascade-fail
+      # the rest of the suite (observed once: 821 failures). Stub every
+      # schema-mutating call so a broken guard fails HERE instead.
+      %i[remove_index remove_column remove_foreign_key add_index add_column
+         add_foreign_key execute change_table drop_table rename_column].each do |ddl|
+        allow(migration).to receive(ddl).and_raise("down migration reached #{ddl} — the duplicate-name guard regressed")
+      end
       expect { migration.down }.to raise_error(ActiveRecord::IrreversibleMigration, /DupName/)
+    end
+  end
+
+  describe "multi-declarer retype-claim (M6/M6b)" do
+    it "a later declarer gets its own scoped Foo; the global stub is not retyped or claimed" do
+      # A and C both declare `class Foo`; B references Foo via `include`
+      # with TWO foreign declarers → global Module stub + AMBIGUOUS
+      # proposal. A later declarer (D) must NOT retype/claim that stub —
+      # Bar's mixes_in stays bound to the global stub and D's Foo lives
+      # in D's own scope.
+      Dir.mktmpdir do |dir|
+        write_models(dir, "foo.rb" => "class Foo\nend\n")
+        expect(import_payload(dir, project: "RepoA").success).to be true
+      end
+      Dir.mktmpdir do |dir|
+        write_models(dir, "foo.rb" => "class Foo\nend\n")
+        expect(import_payload(dir, project: "RepoC").success).to be true
+      end
+      Dir.mktmpdir do |dir|
+        write_models(dir, "bar.rb" => "class Bar\n  include Foo\nend\n")
+        expect(import_payload(dir, project: "RepoB").success).to be true
+      end
+      Dir.mktmpdir do |dir|
+        write_models(dir, "foo.rb" => "class Foo\nend\n")
+        expect(import_payload(dir, project: "RepoD").success).to be true
+      end
+
+      stub = MemoryEntity.find_by(name: "Foo", entity_type: "Module")
+      expect(stub).to be_present
+      expect(stub.project_id).to be_nil
+
+      bar = MemoryEntity.find_by!(name: "Bar")
+      expect(MemoryRelation.exists?(from_entity: bar, to_entity: stub,
+                                    relation_type: "mixes_in")).to be true
+
+      repo_d = MemoryEntity.find_by!(name: "RepoD", entity_type: "Project")
+      d_foo = MemoryEntity.find_by!(name: "Foo", entity_type: "Class", project_id: repo_d.id)
+      expect(MemoryRelation.exists?(from_entity: bar, to_entity: d_foo,
+                                    relation_type: "mixes_in")).to be false
     end
   end
 

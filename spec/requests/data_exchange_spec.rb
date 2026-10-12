@@ -447,6 +447,21 @@ RSpec.describe 'DataExchange', type: :request do
         expect(response).to redirect_to(import_report_data_exchange_index_path)
       end
 
+      it 'scopes the imported members under the merge TARGET project, not by payload name' do
+        # project_id resolves through the DECISIONS' target_id: a payload
+        # root named "Parent Project" merged into stored project1 must
+        # stamp children project1-scoped even though no entity named
+        # "Parent Project" exists to look up.
+        post import_execute_data_exchange_index_path, params: {
+          decisions: {
+            '0' => { node_path: '0', action: 'merge', target_id: project1.id.to_s, parent_id: '' }
+          }
+        }
+
+        child = MemoryEntity.find_by!(name: 'Child Task New')
+        expect(child.project_id).to eq(project1.id)
+      end
+
       it 'creates child entities from stored match decisions' do
         post import_execute_data_exchange_index_path, params: {
           decisions: {

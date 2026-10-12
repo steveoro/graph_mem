@@ -20,7 +20,35 @@ class GraphDeleteService
   # @param attributes [Hash] the operation-specific IDs and optional reason
   # @return [Hash] the legacy-compatible operation result
   def self.execute_one(type, attributes)
-    new(operations: []).send(:dispatch, type.to_s, attributes.to_h.deep_symbolize_keys)
+    # Same ordering as `call`: the membership lock first, then the
+    # transaction — a part_of delete commits AND syncs membership or does
+    # neither (a bare delete + failed sync left children with stale
+    # project_id).
+    new(operations: []).send(:execute_one, type.to_s, attributes.to_h.deep_symbolize_keys)
+  rescue ProjectMembership::LockTimeout => e
+    raise lock_timeout_error(e)
+  rescue ProjectMembership::Collision => e
+    raise membership_collision_error(e)
+  end
+
+  # A delete/merge re-scopes an entity into a namespace that already holds
+  # its name — the transaction rolls back, surfaced as a validation error.
+  def self.membership_collision_error(exception)
+    McpGraphMemErrors::OperationFailed.new(
+      exception.message,
+      category: "validation",
+      next_move: "A same-named entity already exists in the destination scope; rename one or use graph_edit move_to_parent, then retry."
+    )
+  end
+
+  # Maps a membership lock wait to a retryable OperationFailed — transient,
+  # never "escalate to a human".
+  def self.lock_timeout_error(exception)
+    McpGraphMemErrors::OperationFailed.new(
+      exception.message,
+      category: "concurrency",
+      next_move: "Another import, backfill or merge is running; retry shortly."
+    )
   end
 
   # @param operations [Array<Hash>] raw type-discriminated operation hashes
@@ -43,13 +71,17 @@ class GraphDeleteService
 
     results = []
     summary = Hash.new(0)
-    ActiveRecord::Base.transaction do
-      @operations.each do |operation|
-        payload = GraphMutationBatch.execute(operation) do |attributes|
-          dispatch(operation[:type], attributes)
+    # Membership lock BEFORE the transaction: GET_LOCK taken while holding
+    # row locks deadlocks against the backfill (advisory-first rule).
+    ProjectMembership.with_membership_lock do
+      ActiveRecord::Base.transaction do
+        @operations.each do |operation|
+          payload = GraphMutationBatch.execute(operation) do |attributes|
+            dispatch(operation[:type], attributes)
+          end
+          summary[operation[:type]] += 1
+          results << GraphMutationBatch.result(operation, payload)
         end
-        summary[operation[:type]] += 1
-        results << GraphMutationBatch.result(operation, payload)
       end
     end
 
@@ -65,9 +97,23 @@ class GraphDeleteService
         entities_merged: summary["merge_entities"]
       }
     }
+  rescue ProjectMembership::LockTimeout => e
+    raise self.class.lock_timeout_error(e)
+  rescue ProjectMembership::Collision => e
+    raise self.class.membership_collision_error(e)
   end
 
   private
+
+  def execute_one(type, attributes)
+    ProjectMembership.with_membership_lock do
+      ActiveRecord::Base.transaction { dispatch(type, attributes) }
+    end
+  rescue ProjectMembership::LockTimeout => e
+    raise self.class.lock_timeout_error(e)
+  rescue ProjectMembership::Collision => e
+    raise self.class.membership_collision_error(e)
+  end
 
   def dispatch(type, attributes)
     case type

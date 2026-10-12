@@ -98,9 +98,21 @@ class GraphWriteService
         relations_created: counts[:relations]
       }
     }
+  rescue ProjectMembership::LockTimeout => e
+    # Raised by the OUTER lock wrapper while another session holds it —
+    # retryable, not "escalate to a human".
+    raise lock_timeout_error(e)
   end
 
   private
+
+  def lock_timeout_error(exception)
+    McpGraphMemErrors::OperationFailed.new(
+      exception.message,
+      category: "concurrency",
+      next_move: "Another import, backfill or merge is running; retry shortly."
+    )
+  end
 
   def dependency_ordered_operations
     @operations.sort_by { |operation| [ TYPE_ORDER.fetch(operation[:type]), operation[:index] ] }
@@ -129,6 +141,8 @@ class GraphWriteService
     ProjectMembership.with_membership_lock do
       ActiveRecord::Base.transaction { dispatch(operation[:type], operation[:attributes]) }
     end
+  rescue ProjectMembership::LockTimeout => e
+    raise lock_timeout_error(e)
   end
 
   # Moving/creating into a project that already holds the name surfaces as

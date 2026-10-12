@@ -113,6 +113,10 @@ graph_mem accepts both its native snake_case/ID-based parameters and the
 - `graph_write` accepts either three arrays (`entities`, `observations`, `relations`) or a single `operations` array with `type`-discriminated items.
 - Observation text accepts `text_content`, `content`, or `contents` (array).
 - Relation endpoints accept `from_entity_id`/`to_entity_id` (int), `from`/`to` (name), or `from_entity`/`to_entity` (name).
+
+### Name resolution
+
+A name argument resolves in order: context project → global namespace → a single foreign-scope candidate → `AmbiguousReference` (retry with `entity_id`). Destructive ops are name-unsafe across scopes: `graph_delete`/`graph_edit` with a bare name can hit another project's same-named entity when it's the only candidate — use `entity_id` for deletes and moves.
 - Use native snake_case keys by default. Compatibility aliases are for
   interoperating clients, not a reason to mix naming styles in one request.
 

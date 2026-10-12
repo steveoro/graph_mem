@@ -87,4 +87,130 @@ RSpec.describe ProjectMembership do
       holder.connection_pool&.disconnect! if holder
     end
   end
+
+  describe "lock ordering (advisory lock BEFORE the transaction)" do
+    # Catches P7/P10/P18-style regressions: a membership writer that takes
+    # GET_LOCK *inside* its transaction deadlocks against the backfill.
+    # The spec observes GET_LOCK via sql.active_record and asserts the
+    # session had NOT opened a transaction yet.
+    # The spec's transactional fixture already holds one transaction open,
+    # so the assertion is "GET_LOCK ran at the BASELINE depth" — any
+    # service-level transaction wrapping it bumps the count above that.
+    def open_transactions_at_get_lock
+      baseline = ActiveRecord::Base.connection.open_transactions
+      count = nil
+      subscriber = ActiveSupport::Notifications.subscribe("sql.active_record") do |_name, _start, _finish, _id, payload|
+        count ||= ActiveRecord::Base.connection.open_transactions if payload[:sql].to_s.include?("GET_LOCK")
+      end
+      yield
+      count - baseline
+    ensure
+      ActiveSupport::Notifications.unsubscribe(subscriber)
+    end
+
+    it "GraphWriteService.call takes GET_LOCK outside its transaction" do
+      project = MemoryEntity.create!(name: "LockOrdProj", entity_type: "Project")
+      node = MemoryEntity.create!(name: "LockOrdNode", entity_type: "Class")
+
+      excess = open_transactions_at_get_lock do
+        GraphWriteService.call(operations: [
+          { type: "create_relation", from_entity_id: node.id, to_entity_id: project.id, relation_type: "part_of" }
+        ])
+      end
+      expect(excess).to eq(0)
+    end
+
+    it "GraphDeleteService.call takes GET_LOCK outside its transaction" do
+      from_entity = MemoryEntity.create!(name: "LockOrdDelFrom", entity_type: "Class")
+      to_entity = MemoryEntity.create!(name: "LockOrdDelTo", entity_type: "Class")
+      edge = MemoryRelation.create!(from_entity: from_entity, to_entity: to_entity, relation_type: "part_of")
+
+      excess = open_transactions_at_get_lock do
+        GraphDeleteService.call(operations: [ { type: "delete_relation", relation_id: edge.id } ])
+      end
+      expect(excess).to eq(0)
+    end
+
+    it "GraphDeleteService.execute_one wraps the op in lock+transaction" do
+      from_entity = MemoryEntity.create!(name: "LockOrdExFrom", entity_type: "Class")
+      to_entity = MemoryEntity.create!(name: "LockOrdExTo", entity_type: "Class")
+      edge = MemoryRelation.create!(from_entity: from_entity, to_entity: to_entity, relation_type: "part_of")
+
+      excess = open_transactions_at_get_lock do
+        GraphDeleteService.execute_one("delete_relation", { relation_id: edge.id })
+      end
+      expect(excess).to eq(0)
+      expect(MemoryRelation.find_by(id: edge.id)).to be_nil
+    end
+
+    it "NodeOperationsStrategy.move_to_parent takes GET_LOCK outside its transaction" do
+      project = MemoryEntity.create!(name: "LockOrdMvProj", entity_type: "Project")
+      node = MemoryEntity.create!(name: "LockOrdMvNode", entity_type: "Class")
+
+      excess = open_transactions_at_get_lock do
+        NodeOperationsStrategy.new.move_to_parent(node.id, project.id)
+      end
+      expect(excess).to eq(0)
+    end
+
+    it "ProjectIdBackfill.run takes GET_LOCK before computing" do
+      excess = open_transactions_at_get_lock do
+        ProjectIdBackfill.new(out: ->(_l) { }).run(dry_run: true)
+      end
+      expect(excess).to eq(0)
+    end
+  end
+
+  describe "busy lock at the outer wrapper" do
+    def hold_lock
+      conn = ActiveRecord::Base.connection
+      name = described_class.lock_name(conn)
+      holder = stub_const("OuterLockHolder",
+                          Class.new(ActiveRecord::Base) { self.abstract_class = true })
+      holder.establish_connection(ActiveRecord::Base.connection_db_config)
+      holder.connection.select_value("SELECT GET_LOCK(#{conn.quote(name)}, 5)")
+      yield
+    ensure
+      holder.connection.select_value("SELECT RELEASE_LOCK(#{conn.quote(name)})") if holder&.connection
+      holder.connection_pool&.disconnect! if holder
+    end
+
+    it "GraphWriteService surfaces OperationFailed concurrency, not 'escalate'" do
+      hold_lock do
+        expect do
+          GraphWriteService.call(operations: [
+            { type: "create_entity", name: "BusyNode", entity_type: "Class" }
+          ])
+        end.to raise_error(McpGraphMemErrors::OperationFailed) do |error|
+          expect(error.next_move).to match(/retry shortly/)
+          expect(error.next_move).not_to match(/[Rr]ename|escalate/i)
+        end
+      end
+    end
+
+    it "GraphDeleteService.execute_one under a held lock fails atomically — edge survives" do
+      from_entity = MemoryEntity.create!(name: "BusyDelFrom", entity_type: "Class")
+      to_entity = MemoryEntity.create!(name: "BusyDelTo", entity_type: "Class")
+      edge = MemoryRelation.create!(from_entity: from_entity, to_entity: to_entity, relation_type: "part_of")
+
+      hold_lock do
+        expect do
+          GraphDeleteService.execute_one("delete_relation", { relation_id: edge.id })
+        end.to raise_error(McpGraphMemErrors::OperationFailed, /retry shortly|membership lock/i)
+      end
+      expect(MemoryRelation.find_by(id: edge.id)).to be_present
+    end
+
+    it "ProjectIdBackfill retries once then succeeds when the lock frees" do
+      calls = 0
+      allow(ProjectMembership).to receive(:with_membership_lock).and_wrap_original do |orig, **_args, &block|
+        calls += 1
+        raise(ProjectMembership::LockTimeout, "held") if calls == 1
+
+        orig.call(&block)
+      end
+      expect { ProjectIdBackfill.new(out: ->(_l) { }).run }.not_to raise_error
+      expect(calls).to eq(2)
+    end
+  end
 end

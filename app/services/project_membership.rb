@@ -36,7 +36,8 @@ class ProjectMembership
   # ActiveRecord::LockWaitTimeout on the WRITER. The entry points that
   # wrap their work in with_membership_lock: ImportExecutionStrategy
   # (whole execute), NodeOperationsStrategy move_node/merge_into,
-  # ProjectIdBackfill.run, GraphWriteService entity/relation writes and
+  # ProjectIdBackfill.run, GraphWriteService entity/relation writes,
+  # GraphDeleteService call/execute_one (part_of deletes + merges) and
   # CompactionReviewService relation deletes. reassign! itself takes the
   # lock too so stray callers stay safe (reentrant on the same session).
   LOCK_NAME_PREFIX = "graph_mem.project_membership"

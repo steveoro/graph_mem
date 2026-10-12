@@ -33,6 +33,17 @@ All tools accept both graph_mem's native snake_case/ID-based parameters and the 
 - **Field aliases** are normalized (`content` to `text_content`, `from`/`to` to `from_entity_id`/`to_entity_id`)
 - **`operations` arrays** drive `graph_write`, `graph_edit`, and `graph_delete`
 
+### Name resolution order
+
+When a tool takes an entity **name** instead of an ID, resolution runs in this order:
+
+1. The **context project** scope (`set_context` project)
+2. The **global** namespace (`project_id IS NULL`)
+3. A **single foreign-scope candidate** — if exactly one entity anywhere carries the name, it resolves (documented convenience; ambiguity is never guessed)
+4. Several candidates → `AmbiguousReference` error listing them; retry with an `entity_id`
+
+**Destructive-name note:** name-based arguments can reach outside your context project — `graph_delete` with `delete_entity "Foo"` under context project A can delete project B's `Foo` when B's is the only `Foo` in the graph. Prefer `entity_id` for deletes/moves/edits when precision matters.
+
 ## Recommended Session Workflow
 
 Tools are designed to be used in four phases per session:
