@@ -266,6 +266,15 @@ class ImportExecutionStrategy
     @progress_tracker&.fail!(e)
 
     failed_report
+  rescue ProjectMembership::LockTimeout => e
+    # A busy membership lock is transient — the run failed before touching
+    # the graph, so report it as a clean failure with the retry hint.
+    @logger.warn "ImportExecutionStrategy: membership lock busy: #{e.message}"
+    @errors << "#{e.message} — another import, backfill or merge is running; retry shortly."
+
+    @progress_tracker&.fail!(e)
+
+    failed_report
   end
 
   include ImportExecutionStrategy::Claims

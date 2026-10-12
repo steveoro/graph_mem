@@ -680,13 +680,26 @@ RSpec.describe 'DataExchange', type: :request do
       expect(relation).to be_present
     end
 
-    it 'returns error for invalid node' do
+    it 'returns a friendly 422 (not a 500) when the membership lock is held' do
+      stub_const("ProjectMembership::LOCK_TIMEOUT_SECONDS", 0)
+      conn = ActiveRecord::Base.connection
+      name = ProjectMembership.lock_name(conn)
+      holder = stub_const("MoveNodeLockHolder",
+                          Class.new(ActiveRecord::Base) { self.abstract_class = true })
+      holder.establish_connection(ActiveRecord::Base.connection_db_config)
+      holder.connection.select_value("SELECT GET_LOCK(#{conn.quote(name)}, 5)")
+
       post move_node_data_exchange_index_path, params: {
-        node_id: 99999,
+        node_id: orphan_task.id,
         parent_id: project1.id
       }, as: :json
 
       expect(response).to have_http_status(:unprocessable_content)
+      expect(JSON.parse(response.body)['error']).to match(/membership lock|retry shortly/i)
+      expect(MemoryEntity.find(orphan_task.id).project_id).to be_nil
+    ensure
+      holder.connection.select_value("SELECT RELEASE_LOCK(#{conn.quote(name)})") if holder&.connection
+      holder.connection_pool&.disconnect! if holder
     end
   end
 

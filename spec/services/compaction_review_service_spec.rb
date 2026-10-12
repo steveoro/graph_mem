@@ -239,6 +239,63 @@ RSpec.describe CompactionReviewService, type: :service do
       expect(MemoryRelation.find_by(id: part_of_edge.id)).to be_present
     end
 
+    it "applying a part_of relationship_proposal syncs the child's project scope" do
+      project = MemoryEntity.create!(name: "PropProj", entity_type: "Project")
+      orphan = MemoryEntity.create!(name: "PropOrphan", entity_type: "Class")
+      proposal = MaintenanceReportRow.create!(
+        maintenance_report: report,
+        report_type: "compaction_review",
+        row_uuid: "prop-partof-1",
+        kind: "relationship_proposal",
+        status: "active",
+        signature: described_class.signature_for(
+          "relationship_proposal",
+          { "from_id" => orphan.id, "to_id" => project.id, "relation_type" => "part_of" }
+        ),
+        payload: { "from_id" => orphan.id, "to_id" => project.id, "relation_type" => "part_of" }
+      )
+
+      result = described_class.apply(proposal.row_uuid)
+
+      expect(result[:success]).to be true
+      expect(orphan.reload.project_id).to eq(project.id)
+    end
+
+    it "a part_of proposal under a held lock fails the apply and writes nothing" do
+      stub_const("ProjectMembership::LOCK_TIMEOUT_SECONDS", 0)
+      project = MemoryEntity.create!(name: "PropLockProj", entity_type: "Project")
+      orphan = MemoryEntity.create!(name: "PropLockOrphan", entity_type: "Class")
+      proposal = MaintenanceReportRow.create!(
+        maintenance_report: report,
+        report_type: "compaction_review",
+        row_uuid: "prop-partof-lock",
+        kind: "relationship_proposal",
+        status: "active",
+        signature: described_class.signature_for(
+          "relationship_proposal",
+          { "from_id" => orphan.id, "to_id" => project.id, "relation_type" => "part_of" }
+        ),
+        payload: { "from_id" => orphan.id, "to_id" => project.id, "relation_type" => "part_of" }
+      )
+
+      conn = ActiveRecord::Base.connection
+      name = ProjectMembership.lock_name(conn)
+      holder = stub_const("PropLockHolder",
+                          Class.new(ActiveRecord::Base) { self.abstract_class = true })
+      holder.establish_connection(ActiveRecord::Base.connection_db_config)
+      holder.connection.select_value("SELECT GET_LOCK(#{conn.quote(name)}, 5)")
+
+      result = described_class.apply(proposal.row_uuid)
+
+      expect(result[:success]).to be false
+      expect(MemoryRelation.exists?(from_entity: orphan, to_entity: project,
+                                    relation_type: "part_of")).to be false
+      expect(orphan.reload.project_id).to be_nil
+    ensure
+      holder.connection.select_value("SELECT RELEASE_LOCK(#{conn.quote(name)})") if holder&.connection
+      holder.connection_pool&.disconnect! if holder
+    end
+
     it "rolls the edge back on a LockTimeout — a busy lock is a failed apply, not a partial write" do
       part_of_edge = MemoryRelation.create!(from_entity: from_entity, to_entity: to_entity,
                                             relation_type: "part_of")

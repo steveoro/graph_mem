@@ -43,6 +43,31 @@ RSpec.describe ApplyMaintenanceReviewTool, type: :model do
       expect(merge_row.reload.status).to eq("approved")
     end
 
+    it "surfaces a busy membership lock as OperationFailed concurrency — never 'escalate'" do
+      stub_const("ProjectMembership::LOCK_TIMEOUT_SECONDS", 0)
+      conn = ActiveRecord::Base.connection
+      name = ProjectMembership.lock_name(conn)
+      holder = stub_const("ApplyToolLockHolder",
+                          Class.new(ActiveRecord::Base) { self.abstract_class = true })
+      holder.establish_connection(ActiveRecord::Base.connection_db_config)
+      holder.connection.select_value("SELECT GET_LOCK(#{conn.quote(name)}, 5)")
+
+      expect {
+        tool.call(item_id: merge_row.row_uuid,
+                  action_params: { "source_id" => source.id, "target_id" => target.id })
+      }.to raise_error(McpGraphMemErrors::OperationFailed) do |error|
+        expect(error.category).to eq("concurrency")
+        expect(error.next_move).to match(/retry shortly/)
+        expect(error.next_move).not_to match(/[Ee]scalate/)
+      end
+      # Both entities survive — a failed apply must not be a partial write.
+      expect(MemoryEntity.find_by(id: source.id)).to be_present
+      expect(MemoryEntity.find_by(id: target.id)).to be_present
+    ensure
+      holder.connection.select_value("SELECT RELEASE_LOCK(#{conn.quote(name)})") if holder&.connection
+      holder.connection_pool&.disconnect! if holder
+    end
+
     it "returns a dry-run preview without applying" do
       result = tool.call(item_id: merge_row.row_uuid, dry_run: true)
 

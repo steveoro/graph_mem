@@ -439,23 +439,47 @@ class DataExchangeController < ApplicationController
       relation_type: relation_type
     )
 
-    if RelationSemantics.hierarchical?(relation_type) &&
-       MemoryRelation.where(from_entity_id: from_id, relation_type: "part_of").where.not(to_entity_id: to_id).exists?
-      result = NodeOperationsStrategy.new.move_to_parent(from_id, to_id)
-      if result[:success]
-        relation = MemoryRelation.find_by(from_entity_id: from_id, to_entity_id: to_id, relation_type: "part_of")
-        return render json: {
-          success: true,
-          relation: {
-            id: relation.id,
-            from_entity_id: relation.from_entity_id,
-            to_entity_id: relation.to_entity_id,
-            relation_type: relation.relation_type
+    if RelationSemantics.hierarchical?(relation_type)
+      # Every part_of write goes through the membership lock + sync — a bare
+      # save would leave project_id stale until the next backfill.
+      if MemoryRelation.where(from_entity_id: from_id, relation_type: "part_of").where.not(to_entity_id: to_id).exists?
+        result = NodeOperationsStrategy.new.move_to_parent(from_id, to_id)
+        if result[:success]
+          relation = MemoryRelation.find_by(from_entity_id: from_id, to_entity_id: to_id, relation_type: "part_of")
+          return render json: {
+            success: true,
+            relation: {
+              id: relation.id,
+              from_entity_id: relation.from_entity_id,
+              to_entity_id: relation.to_entity_id,
+              relation_type: relation.relation_type
+            }
           }
-        }
+        end
+
+        return render json: { success: false, error: result[:error] }, status: :unprocessable_content
       end
 
-      return render json: { success: false, error: result[:error] }, status: :unprocessable_content
+      relation = nil
+      ProjectMembership.with_membership_lock do
+        ActiveRecord::Base.transaction do
+          relation = MemoryRelation.create!(
+            from_entity_id: from_id,
+            to_entity_id: to_id,
+            relation_type: relation_type
+          )
+          ProjectMembership.sync!(MemoryEntity.find(from_id))
+        end
+      end
+      return render json: {
+        success: true,
+        relation: {
+          id: relation.id,
+          from_entity_id: relation.from_entity_id,
+          to_entity_id: relation.to_entity_id,
+          relation_type: relation.relation_type
+        }
+      }
     end
 
     if relation.save
@@ -471,6 +495,8 @@ class DataExchangeController < ApplicationController
     else
       render json: { success: false, error: relation.errors.full_messages.join(", ") }, status: :unprocessable_content
     end
+  rescue ProjectMembership::LockTimeout, ProjectMembership::Collision => e
+    render json: { success: false, error: "#{e.message} — retry shortly." }, status: :unprocessable_content
   end
 
   # GET /data_exchange/orphan_nodes
@@ -500,6 +526,8 @@ class DataExchangeController < ApplicationController
     else
       render json: { success: false, error: result[:error] }, status: :unprocessable_content
     end
+  rescue ProjectMembership::LockTimeout, ProjectMembership::Collision => e
+    render json: { success: false, error: "#{e.message} — retry shortly." }, status: :unprocessable_content
   end
 
   # POST /data_exchange/merge_node
@@ -520,6 +548,8 @@ class DataExchangeController < ApplicationController
     else
       render json: { success: false, error: result[:error] }, status: :unprocessable_content
     end
+  rescue ProjectMembership::LockTimeout, ProjectMembership::Collision => e
+    render json: { success: false, error: "#{e.message} — retry shortly." }, status: :unprocessable_content
   end
 
   # DELETE /data_exchange/delete_node
@@ -539,6 +569,8 @@ class DataExchangeController < ApplicationController
     else
       render json: { success: false, error: result[:error] }, status: :unprocessable_content
     end
+  rescue ProjectMembership::LockTimeout, ProjectMembership::Collision => e
+    render json: { success: false, error: "#{e.message} — retry shortly." }, status: :unprocessable_content
   end
 
   # GET /data_exchange/duplicate_relations

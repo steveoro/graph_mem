@@ -469,13 +469,34 @@ class CompactionReviewService
       return { success: false, error: "Invalid relation" } if from_id.zero? || to_id.zero? || relation_type.blank?
       return { success: false, error: "Invalid relation type" } unless GraphVocabulary::RELATION_TYPES.include?(relation_type.to_s)
 
-      MemoryRelation.create!(
-        from_entity_id: from_id,
-        to_entity_id: to_id,
-        relation_type: MemoryRelation.canonical_relation_type(relation_type)
-      )
+      canonical_type = MemoryRelation.canonical_relation_type(relation_type)
+      if canonical_type == "part_of"
+        # A part_of edge changes membership: create + sync must be atomic and
+        # the lock comes BEFORE the transaction (advisory-first rule), same
+        # as delete_relation below. Without sync! the child keeps a stale
+        # project_id until the next backfill; a name clash or busy lock
+        # surfaces as a failed apply, not a partial write.
+        ProjectMembership.with_membership_lock do
+          ActiveRecord::Base.transaction do
+            MemoryRelation.create!(
+              from_entity_id: from_id,
+              to_entity_id: to_id,
+              relation_type: canonical_type
+            )
+            ProjectMembership.sync!(MemoryEntity.find(from_id))
+          end
+        end
+      else
+        MemoryRelation.create!(
+          from_entity_id: from_id,
+          to_entity_id: to_id,
+          relation_type: canonical_type
+        )
+      end
       { success: true, message: "Relation created" }
     rescue ActiveRecord::RecordInvalid, ActiveRecord::RecordNotUnique => e
+      { success: false, error: "Failed to create relation: #{e.message}" }
+    rescue ProjectMembership::Collision, ProjectMembership::LockTimeout => e
       { success: false, error: "Failed to create relation: #{e.message}" }
     end
 

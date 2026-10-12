@@ -163,6 +163,7 @@ RSpec.describe ProjectMembership do
 
   describe "busy lock at the outer wrapper" do
     def hold_lock
+      stub_const("ProjectMembership::LOCK_TIMEOUT_SECONDS", 0)
       conn = ActiveRecord::Base.connection
       name = described_class.lock_name(conn)
       holder = stub_const("OuterLockHolder",
@@ -182,9 +183,34 @@ RSpec.describe ProjectMembership do
             { type: "create_entity", name: "BusyNode", entity_type: "Class" }
           ])
         end.to raise_error(McpGraphMemErrors::OperationFailed) do |error|
+          expect(error.category).to eq("concurrency")
           expect(error.next_move).to match(/retry shortly/)
           expect(error.next_move).not_to match(/[Rr]ename|escalate/i)
         end
+      end
+    end
+
+    it "GraphWriteService.execute_one under a held lock surfaces the same concurrency error" do
+      hold_lock do
+        expect do
+          GraphWriteService.execute_one("create_relation",
+                                        { from_entity_id: 1, to_entity_id: 2, relation_type: "solves" })
+        end.to raise_error(McpGraphMemErrors::OperationFailed) do |error|
+          expect(error.category).to eq("concurrency")
+        end
+      end
+    end
+
+    it "ImportExecutionStrategy under a held lock reports a clean failure, not an exception" do
+      hold_lock do
+        report = ImportExecutionStrategy.new.execute(
+          { "root_nodes" => [
+            { "name" => "LockedProj", "entity_type" => "Project", "children" => [] }
+          ] },
+          [ { "node_path" => "0", "action" => "create" } ]
+        )
+        expect(report.success).to be false
+        expect(report.errors.join).to match(/membership lock|retry shortly/i)
       end
     end
 
