@@ -11,13 +11,14 @@ class CompactionReviewService
       MaintenanceReport.by_type(report_type).recent.first
     end
 
-    def items(report: nil, report_type: "compaction_review", status: "active", kind: nil, page: 1)
+    def items(report: nil, report_type: "compaction_review", status: "active", kind: nil, page: 1, q: nil)
       scope = MaintenanceReportRow.by_report_type(report_type)
       scope = scope.where(maintenance_report_id: report.id) if report
       scope = scope.by_status(status) if status.present?
       scope = scope.by_kind(kind) if kind.present?
 
       rows = scope.to_a
+      rows = filter_by_query(rows, q) if q.present?
       sorted = sort_rows(rows)
       Kaminari.paginate_array(sorted).page(page).per(PER_PAGE)
     end
@@ -26,8 +27,41 @@ class CompactionReviewService
       MaintenanceReportRow.by_report_type(report_type).active.count
     end
 
-    def status_counts(report_type: "compaction_review")
-      MaintenanceReportRow.by_report_type(report_type).group(:status).count
+    # Tab counts mirror what the list shows: status counts respect the kind
+    # filter, kind counts respect the status filter (otherwise the badge on
+    # a tab disagrees with the list it opens).
+    def status_counts(report_type: "compaction_review", kind: nil)
+      scope = MaintenanceReportRow.by_report_type(report_type)
+      scope = scope.by_kind(kind) if kind.present?
+      scope.group(:status).count
+    end
+
+    def kind_counts(report_type: "compaction_review", status: nil)
+      scope = MaintenanceReportRow.by_report_type(report_type)
+      scope = scope.by_status(status) if status.present?
+      scope.group(:kind).count
+    end
+
+    # For `delete_entity` rows on the page: how many children are queued
+    # for deletion themselves vs would be left parentless. entity.destroy!
+    # removes observations + relations via dependent: :destroy, but child
+    # ENTITIES keep living without a parent — applying one row NEVER
+    # cascades, by (possibly temporary) design choice: the operator
+    # approved one deletion, not a subtree wipe. If lone-seeded subtree
+    # deletions turn out common, revisit with a separate "apply with
+    # children" action rather than a default cascade.
+    def delete_children_info(report_type:, items:)
+      ids = items.filter_map { |row| row.kind == "delete_entity" ? delete_entity_target(row) : nil }.uniq
+      return {} if ids.empty?
+
+      queued = delete_entity_targets(report_type: report_type)
+      info = {}
+      MemoryRelation.where(relation_type: "part_of", to_entity_id: ids)
+                    .pluck(:to_entity_id, :from_entity_id).each do |parent_id, child_id|
+        slot = (info[parent_id] ||= { queued: 0, parentless: 0 })
+        queued.include?(child_id) ? slot[:queued] += 1 : slot[:parentless] += 1
+      end
+      info
     end
 
     def find_item(item_id, report_type: "compaction_review")
@@ -82,6 +116,36 @@ class CompactionReviewService
       { success: true, message: "#{rows.size} suggestion(s) dismissed" }
     end
 
+    # Bulk-apply iterates `apply` per row: non-actionable rows (already
+    # dismissed/approved) are skipped rather than failing the batch, and the
+    # summary keeps per-row failures visible for the operator.
+    def bulk_apply(item_ids, report_type: "compaction_review")
+      rows = MaintenanceReportRow.by_report_type(report_type).where(row_uuid: item_ids)
+      return { success: false, error: "No suggestions selected" } if rows.empty?
+
+      applied = 0
+      skipped = 0
+      failed = []
+      rows.each do |row|
+        unless row.status.in?(%w[active ignored])
+          skipped += 1
+          next
+        end
+
+        result = apply(row.row_uuid, {}, report_type: report_type)
+        if result[:success]
+          applied += 1
+        else
+          failed << "#{row.kind} #{row.row_uuid.to_s.first(8)}: #{result[:error]}"
+        end
+      end
+
+      message = "#{applied} suggestion(s) applied"
+      message += ", #{skipped} skipped (not actionable)" if skipped.positive?
+      message += "; #{failed.size} failed: #{failed.first(3).join('; ')}" if failed.any?
+      { success: failed.empty?, message: message }
+    end
+
     def restore(item_id, report_type: "compaction_review")
       row = find_item(item_id, report_type: report_type)
       return { success: false, error: "Suggestion not found" } unless row
@@ -92,7 +156,7 @@ class CompactionReviewService
       end
 
       row.update!(status: "active", dismissed_at: nil, applied_at: nil, resolution_reason: nil)
-      { success: true }
+      { success: true, message: "Suggestion restored to active" }
     end
 
     def ignore(item_id, report_type: "compaction_review")
@@ -100,7 +164,7 @@ class CompactionReviewService
       return { success: false, error: "Suggestion not found" } unless row
 
       row.update!(status: "ignored")
-      { success: true }
+      { success: true, message: "Suggestion ignored" }
     end
 
     def seed_report(report_type:, source:, source_ref: nil, items:)
@@ -257,6 +321,40 @@ class CompactionReviewService
       end
     end
 
+    # `q` hits payload VALUES (names, ids, explanations), not JSON keys —
+    # a raw `payload.to_json` haystack makes 'entity' or '_' match every
+    # row. The human-readable kind label is searchable too ("relationship
+    # proposal").
+    def filter_by_query(rows, q)
+      needle = q.to_s.downcase.strip
+      rows.select do |row|
+        values = [ row.kind, row.kind.tr("_", " ") ] +
+                 payload_values(row.payload) + payload_values(row.edited_payload)
+        values.compact.join(" ").downcase.include?(needle)
+      end
+    end
+
+    def payload_values(obj)
+      case obj
+      when Hash then obj.flat_map { |_k, v| payload_values(v) }
+      when Array then obj.flat_map { |v| payload_values(v) }
+      else [ obj.to_s ]
+      end
+    end
+
+    # All entity ids targeted by ACTIVE delete_entity rows in this queue —
+    # the "queued for deletion" set the children warning compares against.
+    def delete_entity_targets(report_type:)
+      MaintenanceReportRow.by_report_type(report_type).active.where(kind: "delete_entity")
+                          .filter_map { |row| delete_entity_target(row) }
+    end
+
+    def delete_entity_target(row)
+      payload = row.effective_payload.with_indifferent_access
+      target = payload[:entity_id] || payload.dig("payload", "entity_id")
+      target.to_i.positive? ? target.to_i : nil
+    end
+
     def entity_types(row)
       payload = row.effective_payload.with_indifferent_access
       case row.kind
@@ -371,13 +469,34 @@ class CompactionReviewService
       return { success: false, error: "Invalid relation" } if from_id.zero? || to_id.zero? || relation_type.blank?
       return { success: false, error: "Invalid relation type" } unless GraphVocabulary::RELATION_TYPES.include?(relation_type.to_s)
 
-      MemoryRelation.create!(
-        from_entity_id: from_id,
-        to_entity_id: to_id,
-        relation_type: MemoryRelation.canonical_relation_type(relation_type)
-      )
+      canonical_type = MemoryRelation.canonical_relation_type(relation_type)
+      if canonical_type == "part_of"
+        # A part_of edge changes membership: create + sync must be atomic and
+        # the lock comes BEFORE the transaction (advisory-first rule), same
+        # as delete_relation below. Without sync! the child keeps a stale
+        # project_id until the next backfill; a name clash or busy lock
+        # surfaces as a failed apply, not a partial write.
+        ProjectMembership.with_membership_lock do
+          ActiveRecord::Base.transaction do
+            MemoryRelation.create!(
+              from_entity_id: from_id,
+              to_entity_id: to_id,
+              relation_type: canonical_type
+            )
+            ProjectMembership.sync!(MemoryEntity.find(from_id))
+          end
+        end
+      else
+        MemoryRelation.create!(
+          from_entity_id: from_id,
+          to_entity_id: to_id,
+          relation_type: canonical_type
+        )
+      end
       { success: true, message: "Relation created" }
     rescue ActiveRecord::RecordInvalid, ActiveRecord::RecordNotUnique => e
+      { success: false, error: "Failed to create relation: #{e.message}" }
+    rescue ProjectMembership::Collision, ProjectMembership::LockTimeout => e
       { success: false, error: "Failed to create relation: #{e.message}" }
     end
 
@@ -430,9 +549,23 @@ class CompactionReviewService
       return { success: false, error: "Relation not found" } unless relation
 
       Current.deletion_reason = effective[:reason] || "scan_review"
-      relation.destroy!
+      # Destroy + membership sync must be atomic: a Collision raised by
+      # sync! after destroy! would report failure with the edge already
+      # gone and the child still stamped in its old scope. The membership
+      # lock is taken BEFORE the transaction (advisory-first rule).
+      ProjectMembership.with_membership_lock do
+        ActiveRecord::Base.transaction do
+          from_entity = relation.from_entity
+          part_of = relation.relation_type == "part_of"
+          relation.destroy!
+          # Un-parenting moves the child (and its subtree) back to the
+          # global namespace — same membership rule as graph_delete.
+          ProjectMembership.sync!(from_entity) if part_of && from_entity
+        end
+      end
       { success: true, message: "Relation #{relation_id} deleted" }
-    rescue ActiveRecord::RecordNotDestroyed, ActiveRecord::RecordInvalid => e
+    rescue ActiveRecord::RecordNotDestroyed, ActiveRecord::RecordInvalid,
+           ProjectMembership::Collision, ProjectMembership::LockTimeout => e
       { success: false, error: "Failed to delete relation: #{e.message}" }
     ensure
       Current.deletion_reason = nil
@@ -443,7 +576,11 @@ class CompactionReviewService
       entity = MemoryEntity.find_by(id: entity_id)
       return { success: false, error: "Entity not found" } unless entity
 
-      return { success: false, error: NodeOperationsStrategy::PROJECT_ROOT_PROTECTED_ERROR } if entity.entity_type == NodeOperationsStrategy::PROJECT_ENTITY_TYPE
+      if entity.entity_type == NodeOperationsStrategy::PROJECT_ENTITY_TYPE
+        members = MemoryEntity.where(project_id: entity.id).count
+        return { success: false,
+                 error: "#{NodeOperationsStrategy::PROJECT_ROOT_PROTECTED_ERROR} (#{members} members still scoped to it)" }
+      end
 
       Current.deletion_reason = effective[:reason] || "scan_review"
       entity.destroy!

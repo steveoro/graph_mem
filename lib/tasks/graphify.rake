@@ -66,7 +66,11 @@ namespace :graphify do
       warn "Embedding backfill skipped (#{e.class}: #{e.message}) — run rake embeddings:backfill"
     end
 
-    rows = GraphifyImporter.seed_ambiguous_relations(result.ambiguous_relations, project)
+    # The Project root the import just created/claimed — AMBIGUOUS
+    # endpoint resolution needs that scope or same-named members of
+    # OTHER projects never resolve (and zero proposals silently seed).
+    rows = GraphifyImporter.seed_ambiguous_relations(result.ambiguous_relations, project,
+                                                     project_id: ImportEntityResolver.project_root_id(project))
     puts "Queued #{rows.size} ambiguous relation(s) for review (scan_review)." if rows.any?
   end
 end

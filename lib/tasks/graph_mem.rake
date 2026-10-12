@@ -1,6 +1,23 @@
 # frozen_string_literal: true
 
 namespace :graph_mem do
+  desc "Backfill memory_entities.project_id from the part_of tree " \
+       "(arg 'dry_run' reports without writing; re-runs are no-ops)"
+  task :backfill_project_ids, [ :mode ] => :environment do |_t, args|
+    dry_run = args[:mode].to_s == "dry_run"
+    abort "usage: bin/rails graph_mem:backfill_project_ids[dry_run]" unless args[:mode].blank? || dry_run
+
+    begin
+      ProjectIdBackfill.new.run(dry_run: dry_run)
+    rescue ActiveRecord::RecordNotUnique => e
+      # Stamped-but-unrooted row colliding with a global same-name row:
+      # the transactional apply already rolled back — tell the operator
+      # how to unblock instead of surfacing the raw DB error.
+      abort "backfill aborted and rolled back: #{ProjectIdBackfill.conflict_hint(e)}\n" \
+            "  raw error: #{e.message}"
+    end
+  end
+
   desc "Report MCP tool usage (DAYS=30 by default; DAYS=all for all history)"
   task tool_usage: :environment do
     days = ENV.fetch("DAYS", ToolUsageReport::DEFAULT_WINDOW_DAYS.to_s)

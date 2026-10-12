@@ -36,9 +36,8 @@
               class: "dashboard-topnav__link dashboard-topnav__link--button",
               id: "btn-operator-logout",
               data: { testid: "btn-operator-logout" }
-    - if flash[:notice].present?
-      .dashboard-flash.dashboard-flash--notice= flash[:notice]
-    - if flash[:alert].present?
-      .dashboard-flash.dashboard-flash--alert= flash[:alert]
+    -# turbo_stream updates this container so in-frame actions surface flash.
+    #flash-messages
+      = render "layouts/flash_messages"
     %main.container.mx-auto.mt-8.px-5.flex
       = yield

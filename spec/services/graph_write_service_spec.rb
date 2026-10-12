@@ -134,4 +134,51 @@ RSpec.describe GraphWriteService do
       }.to raise_error(FastMcp::Tool::InvalidArgumentsError, /at most 50/)
     end
   end
+
+  describe "project-scoped names" do
+    it "create_entity inserts inside the context scope even when a global namesake exists" do
+      project = MemoryEntity.create!(name: "CtxProj", entity_type: "Project")
+      global = MemoryEntity.create!(name: "Shared", entity_type: "Task")
+
+      result = described_class.call(
+        operations: [ { type: "create_entity", name: "Shared", entity_type: "Task" } ],
+        project_id: project.id
+      )
+
+      expect(result[:status]).to eq("ok")
+      scoped = MemoryEntity.find_by!(name: "Shared", project_id: project.id)
+      expect(scoped.id).not_to eq(global.id)
+      expect(MemoryRelation.exists?(from_entity: scoped, to_entity: project,
+                                    relation_type: "part_of")).to be true
+    end
+
+    it "create_relation part_of stamps an unrooted entity into the parent's scope" do
+      project = MemoryEntity.create!(name: "CtxProj2", entity_type: "Project")
+      orphan = MemoryEntity.create!(name: "Lonely", entity_type: "Task")
+
+      described_class.call(
+        operations: [ { type: "create_relation", from_entity_id: orphan.id,
+                        to_entity_id: project.id, relation_type: "part_of" } ]
+      )
+
+      expect(orphan.reload.project_id).to eq(project.id)
+    end
+
+    it "maps a membership LockTimeout to a retryable OperationFailed" do
+      project = MemoryEntity.create!(name: "CtxProj3", entity_type: "Project")
+      orphan = MemoryEntity.create!(name: "Lonely2", entity_type: "Task")
+      allow(ProjectMembership).to receive(:sync!).and_raise(ProjectMembership::LockTimeout, "busy")
+
+      begin
+        described_class.call(
+          operations: [ { type: "create_relation", from_entity_id: orphan.id,
+                          to_entity_id: project.id, relation_type: "part_of" } ]
+        )
+        flunk "expected OperationFailed"
+      rescue McpGraphMemErrors::OperationFailed => e
+        expect(e.next_move).to match(/retry shortly/)
+        expect(e.next_move).not_to match(/[Rr]ename/)
+      end
+    end
+  end
 end

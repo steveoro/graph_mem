@@ -39,23 +39,31 @@ module ParameterNormalizer
   }.freeze
 
   class << self
-    def normalize(tool_name, params)
+    def normalize(tool_name, params, project_id: nil)
       params = deep_snake_case_keys(params)
       params = apply_field_aliases(params)
 
       if tool_name == "bulk_update"
-        params = normalize_bulk_update(params)
+        params = normalize_bulk_update(params, project_id: project_id)
       end
       params = normalize_graph_write(params) if tool_name == "graph_write"
       params = normalize_typed_operations(params) if tool_name.in?(%w[graph_edit graph_delete])
       params = normalize_search(params) if tool_name == "search"
-      params = normalize_get_entities(params) if tool_name == "get_entities"
+      params = normalize_get_entities(params, project_id: project_id) if tool_name == "get_entities"
 
-      params = resolve_entity_names(params)
+      params = resolve_entity_names(params, project_id: project_id)
       params
     end
 
     private
+
+    # Name → entity under project-scoped names: the `set_context` project
+    # first, then the global (NULL-project) namespace. Several declaring
+    # projects and no context match → AmbiguousReference listing the
+    # candidates; never guesses.
+    def find_entity_scoped(name, project_id)
+      ImportEntityResolver.find_by_name(name, project_id: project_id)
+    end
 
     # Recursively convert camelCase hash keys to snake_case.
     def deep_snake_case_keys(obj)
@@ -93,7 +101,7 @@ module ParameterNormalizer
     end
 
     # Convert an `operations` array into the canonical three-array format.
-    def normalize_bulk_update(params)
+    def normalize_bulk_update(params, project_id: nil)
       operations = params.delete(:operations)
       return params unless operations.is_a?(Array) && operations.any?
 
@@ -103,7 +111,7 @@ module ParameterNormalizer
 
       operations.each do |op|
         op = apply_field_aliases(op)
-        op = resolve_entity_names(op, lenient: true)
+        op = resolve_entity_names(op, lenient: true, project_id: project_id)
         type_key = op.delete(:type)&.to_s&.strip&.downcase
         bucket = OPERATION_TYPE_MAP[type_key]
 
@@ -160,7 +168,7 @@ module ParameterNormalizer
       result
     end
 
-    def normalize_get_entities(params)
+    def normalize_get_entities(params, project_id: nil)
       result = params.dup
       if result[:entity_ids].blank? && result[:entity_id].present?
         result[:entity_ids] = [ result[:entity_id] ]
@@ -171,7 +179,7 @@ module ParameterNormalizer
       result[:entity_ids] = result[:entity_ids].map do |value|
         next value unless value.is_a?(String) && value.present?
 
-        entity = MemoryEntity.find_by(name: value)
+        entity = find_entity_scoped(value, project_id)
         next entity.id if entity
 
         raise McpGraphMemErrors::ResourceNotFound.new(
@@ -242,7 +250,7 @@ module ParameterNormalizer
     # When lenient is true (used inside bulk_update operations parsing),
     # unresolvable names are silently skipped instead of raising errors --
     # the entity may be created earlier in the same transaction.
-    def resolve_entity_names(params, lenient: false)
+    def resolve_entity_names(params, lenient: false, project_id: nil)
       return params unless params.is_a?(Hash)
 
       result = params.dup
@@ -255,7 +263,7 @@ module ParameterNormalizer
         entity_name = result.delete(name_sym)
         next unless entity_name.is_a?(String) && entity_name.present?
 
-        entity = MemoryEntity.find_by(name: entity_name)
+        entity = find_entity_scoped(entity_name, project_id)
         if entity
           result[id_sym] = entity.id
         elsif lenient
@@ -272,7 +280,7 @@ module ParameterNormalizer
         val = result[id_field]
         next unless val.is_a?(String) && val.present?
 
-        entity = MemoryEntity.find_by(name: val)
+        entity = find_entity_scoped(val, project_id)
         if entity
           result[id_field] = entity.id
         elsif lenient

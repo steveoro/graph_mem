@@ -1,0 +1,424 @@
+# frozen_string_literal: true
+
+# Rails DSL emission for RailsAstExtractor: associations, mixins, scopes,
+# enum accessors, delegation, STI `inherits` edges, and the routes.rb
+# walker (resources/resource/verbs/root/namespace/scope).
+#
+# Design note: a fact that is only probably true is worse than a missing
+# fact — every emitter either resolves its target through the const index
+# or emits an honest reference stub, never a guessed-up edge.
+class RailsAstExtractor
+  module DslEmitters
+  private
+
+  # ------------------------------------------------------------------
+  # DSL handling
+  # ------------------------------------------------------------------
+  def handle_dsl_call(call, const_prefix:, rel:)
+    return if const_prefix.empty?
+
+    # A trailing "self" marker comes from `class << self`: DSL calls in the
+    # singleton block (rare) still attribute to the enclosing class/module.
+    const_prefix = const_prefix[0..-2] if const_prefix.last == "self"
+    owner_qualified = const_prefix.join("::")
+    owner = add_node(owner_qualified, source_file: nil,
+                     entity_type: declared_type(owner_qualified) || "Class")
+
+    case call.name.to_s
+    when *ASSOCIATION_RELATIONS.keys
+      emit_association(call, owner, owner_qualified, const_prefix, rel)
+    when *MIXIN_MACROS
+      args_const(call).each do |const_name|
+        target = resolve_const(const_name, const_prefix)
+        add_edge(owner, target_id_for(target, rel, stub_type: "Module"), "mixes_in",
+                 confidence: confidence_for(target), rel: rel,
+                 context: "#{call.name} #{const_name}", call_line: line(call))
+      end
+    when "scope"
+      sym = call.arguments&.arguments&.first
+      return unless sym.is_a?(Prism::SymbolNode) || sym.is_a?(Prism::StringNode)
+
+      name = sym.unescaped.to_s
+      mid = add_node("#{const_prefix.join('::')}.#{name}",
+                     source_file: rel, source_location: line(sym), entity_type: "Method")
+      add_containment(owner, mid)
+    when "enum"
+      emit_enum_accessor(call, owner, const_prefix, rel)
+    when "delegate"
+      emit_delegate(call, owner, const_prefix, rel)
+    end
+  end
+
+  def emit_association(call, owner, owner_qualified, const_prefix, rel)
+    sym = call.arguments&.arguments&.first
+    return unless sym.is_a?(Prism::SymbolNode)
+
+    assoc = sym.unescaped
+    options = options_hash(call)
+    @stats[:associations] += 1
+    return if options["polymorphic"] == true
+
+    relation = ASSOCIATION_RELATIONS[call.name.to_s]
+    # has_many/habtm names are plural: Rails derives the class via
+    # singularize+camelize (has_many :badges => Badge). With
+    # `through: :x, source: :y` the real target is the through model's
+    # `:y` association — the source name wins over the association name.
+    base_name = options["through"].present? && options["source"].present? ? options["source"].to_s : assoc.to_s
+    base = relation == "has_many" ? base_name.singularize : base_name
+    # Target class ordering matches Rails: explicit `class_name:` wins, then
+    # `source_type:` on a through association (`source: :taggable,
+    # source_type: "Post"` targets Post, not a Taggable stub), then the
+    # source/association name camelized.
+    class_name = if options["class_name"].is_a?(String)
+                   options["class_name"]
+    elsif options["through"].present? && options["source_type"].is_a?(String)
+                   options["source_type"]
+    else
+                   camelize(base)
+    end
+    @assoc_targets[owner_qualified][assoc.to_s] = class_name
+    target = resolve_const(class_name, const_prefix)
+    props = { "provenance" => "RAILS_DSL", "association" => assoc.to_s }
+    props["through"] = options["through"].to_s if options["through"]
+    props["source"] = options["source"].to_s if options["source"]
+    props["foreign_key"] = options["foreign_key"].to_s if options["foreign_key"]
+    props["through_relation"] = options["source_type"].to_s if options["source_type"]
+    add_edge(owner, target_id_for(target, rel), relation,
+             confidence: confidence_for(target), rel: rel,
+             context: "#{call.name} :#{assoc}", call_line: line(call), properties: props)
+  end
+
+  # `enum :status, { draft: 0, published: 1 }` and `enum :kind, %i[a b]`
+  # (positional form) plus legacy `enum status: { draft: 0 }` (keyword
+  # form): the value keys become the predicate accessors (`draft?`), not
+  # the enum name itself.
+  def emit_enum_accessor(call, owner, const_prefix, rel)
+    args = Array(call.arguments&.arguments)
+    kw = args.find { |a| a.is_a?(Prism::KeywordHashNode) }
+
+    enum_name = nil
+    definitions = []
+    options = {}
+
+    Array(kw&.elements).each do |assoc|
+      next unless assoc.is_a?(Prism::AssocNode)
+
+      key = assoc.key.respond_to?(:unescaped) ? assoc.key.unescaped.to_s : nil
+      next if key.blank?
+
+      if ENUM_OPTION_KEYS.include?(key)
+        options[key] = assoc.value
+      elsif assoc.value.is_a?(Prism::KeywordHashNode) ||
+            assoc.value.is_a?(Prism::HashNode) ||
+            assoc.value.is_a?(Prism::ArrayNode)
+        enum_name ||= key # `enum status: {…}` — the mapping key IS the name
+        definitions.concat(enum_value_names(assoc.value))
+      else
+        definitions << key # `enum :state, free: 0` — bare value kwarg
+      end
+    end
+    if definitions.empty? && args.second
+      # Positional form `enum :state, %i[free paid]` (options live in kw).
+      enum_name ||= args.first.respond_to?(:unescaped) ? args.first.unescaped.to_s : nil
+      definitions.concat(enum_value_names(args.second))
+    end
+    enum_name ||= args.first.respond_to?(:unescaped) ? args.first.unescaped.to_s : nil
+
+    prefix = enum_affix(options, "prefix", "_prefix", enum_name)
+    suffix = enum_affix(options, "suffix", "_suffix", enum_name)
+    definitions.uniq.each do |value|
+      accessor = [ prefix, value, suffix ].compact_blank.join("_")
+      mid = add_node("#{const_prefix.join('::')}##{accessor}?",
+                     source_file: rel, source_location: line(call), entity_type: "Method")
+      add_containment(owner, mid)
+    end
+  end
+
+  # `prefix: true` → the enum name; `prefix: :on` → the literal; absent → nil.
+  def enum_affix(options, *keys, enum_name)
+    keys.each do |k|
+      v = options[k]
+      next if v.nil?
+
+      return enum_name.presence if v.is_a?(Prism::TrueNode)
+      return nil if v.is_a?(Prism::FalseNode)
+      return v.unescaped.to_s if v.respond_to?(:unescaped)
+
+      return nil
+    end
+    nil
+  end
+
+  # enum's option kwargs — options are never value accessors.
+  ENUM_OPTION_KEYS = %w[
+    prefix suffix _prefix _suffix default _default scopes _scopes
+    validate instance_methods
+  ].freeze
+
+  def enum_value_names(node)
+    case node
+    when Prism::KeywordHashNode, Prism::HashNode
+      node.elements.filter_map do |e|
+        e.key.unescaped.to_s if e.is_a?(Prism::AssocNode) && e.key.respond_to?(:unescaped)
+      end
+    when Prism::ArrayNode
+      node.elements.filter_map { |e| e.unescaped.to_s if e.respond_to?(:unescaped) }
+    else
+      []
+    end
+  end
+
+  # `to:` is an association/method name, not a class name: resolve it
+  # through this class's own association map (`belongs_to :owner,
+  # class_name: "User"` => delegate reaches User). Non-association
+  # targets (`:class`, `:@ivar`, undefined methods) are skipped — a
+  # missing fact beats a false one.
+  def emit_delegate(call, owner, const_prefix, rel)
+    options = options_hash(call)
+    target_sym = options["to"]
+    return unless target_sym.is_a?(String) && target_sym.present?
+
+    class_name = @assoc_targets[const_prefix.join("::")][target_sym]
+    unless class_name
+      # `to:` may name an association declared LATER in the same class
+      # body — queue it and retry when the body closes (drain_delegates).
+      @pending_delegates << { call: call, owner: owner, owner_qualified: const_prefix.join("::"),
+                              target_sym: target_sym, const_prefix: const_prefix, rel: rel }
+      return
+    end
+    emit_delegate_edge(call, owner, class_name, target_sym, const_prefix, rel)
+  end
+
+  # Retries delegates queued by emit_delegate when their `to:` assoc was
+  # not yet declared — an assoc defined later in the body resolves them;
+  # anything still unresolved is dropped (missing fact beats false fact).
+  def drain_delegates(owner_qualified, rel)
+    pending, rest = @pending_delegates.partition { |d| d[:owner_qualified] == owner_qualified }
+    @pending_delegates = rest
+    pending.each do |d|
+      class_name = @assoc_targets[owner_qualified][d[:target_sym]]
+      emit_delegate_edge(d[:call], d[:owner], class_name, d[:target_sym], d[:const_prefix], rel) if class_name
+    end
+  end
+
+  def emit_delegate_edge(call, owner, class_name, target_sym, const_prefix, rel)
+    fields = Array(call.arguments&.arguments).filter_map do |a|
+      a.unescaped if a.is_a?(Prism::SymbolNode)
+    end
+    target = resolve_const(class_name, const_prefix)
+    add_edge(owner, target_id_for(target, rel), "delegates_to",
+             confidence: confidence_for(target), rel: rel,
+             context: "delegate #{fields.join(', ')}, to: :#{target_sym}",
+             call_line: line(call),
+             properties: { "provenance" => "RAILS_DSL", "fields" => fields.map(&:to_s) })
+  end
+
+  # STI knowledge rides an `inherits` EDGE, not an observation: the
+  # rescan's relation_diff retires stale edges, while observations are
+  # only diffed on `Defined at` — a changed/dropped superclass would
+  # leave contradictory permanent facts as text.
+  def emit_inherits(stmt, owner, const_prefix, rel)
+    return unless stmt.is_a?(Prism::ClassNode) && stmt.superclass
+
+    superclass = collect_const_path(stmt.superclass)
+    return if superclass.blank?
+
+    target = resolve_const(superclass, const_prefix)
+    add_edge(owner, target_id_for(target, rel), "inherits",
+             confidence: confidence_for(target), rel: rel,
+             context: "< #{superclass}", call_line: line(stmt),
+             properties: { "provenance" => "RAILS_DSL" })
+  end
+
+  # ------------------------------------------------------------------
+  # Routes
+  # ------------------------------------------------------------------
+  def scan_routes
+    path = @repo.join(ROUTES_FILE)
+    # Same escape guard as ruby_files: a symlinked routes.rb pointing
+    # outside the repo must not inject phantom routes/controllers.
+    return unless path.file? &&
+                  File.realpath(path).start_with?("#{File.realpath(@repo.to_s)}/")
+
+    program = parse_ok(path.to_s)
+    return unless program
+
+    rel = ROUTES_FILE
+    file_id = add_node("routes.rb", source_file: rel, entity_type: "File")
+    program.statements&.body&.each do |stmt|
+      draw = stmt.is_a?(Prism::CallNode) && stmt.name == :draw ? stmt.block : nil
+      walk_routes(Array(draw&.body&.body), file_id: file_id, rel: rel,
+                  ns_prefix: [], path_prefix: "")
+    end
+  end
+
+  def walk_routes(statements, file_id:, rel:, ns_prefix:, path_prefix:)
+    statements.each do |stmt|
+      next unless stmt.is_a?(Prism::CallNode)
+
+      case stmt.name.to_s
+      when "resources", "resource"
+        emit_resource_routes(stmt, file_id: file_id, rel: rel,
+                             ns_prefix: ns_prefix, path_prefix: path_prefix)
+      when "namespace", "scope"
+        ns, pfx = scope_parts(stmt)
+        walk_routes(Array(stmt.block&.body&.body), file_id: file_id, rel: rel,
+                    ns_prefix: ns_prefix + ns, path_prefix: path_prefix + pfx)
+      when "root"
+        # `root "pages#home"` (positional) and `root to: "pages#home"`
+        # (keyword) are both legal; a namespaced root maps to /admin.
+        to = options_hash(stmt)["to"].to_s
+        if to.blank?
+          arg = stmt.arguments&.arguments&.first
+          to = arg.respond_to?(:unescaped) ? arg.unescaped.to_s : ""
+        end
+        ctrl, action = to.split("#", 2)
+        rid = add_node("GET #{path_prefix.presence || '/'}", source_file: rel,
+                       source_location: line(stmt), entity_type: "Route")
+        add_containment(file_id, rid)
+        emit_routes_to(rid, controller_const(ctrl, ns_prefix), action, rel, stmt)
+      when *HTTP_VERBS
+        emit_verb_route(stmt, file_id: file_id, rel: rel,
+                        ns_prefix: ns_prefix, path_prefix: path_prefix)
+      else
+        walk_routes(Array(stmt.block&.body&.body), file_id: file_id, rel: rel,
+                    ns_prefix: ns_prefix, path_prefix: path_prefix) if stmt.block
+      end
+    end
+  end
+
+  def emit_resource_routes(stmt, file_id:, rel:, ns_prefix:, path_prefix:)
+    arg = stmt.arguments&.arguments&.first
+    base = arg.respond_to?(:unescaped) ? arg.unescaped.to_s : nil
+    return if base.blank?
+
+    options = options_hash(stmt)
+    singular = stmt.name.to_s == "resource"
+    # Singular `resource :profile` routes to ProfilesController (Rails
+    # pluralizes) and emits no `/:id` segment in any path.
+    ctrl_name = options["controller"].presence || (singular ? base.pluralize : base)
+    ctrl_const = controller_const(ctrl_name, ns_prefix)
+    base_path = "#{path_prefix}/#{options['path'].presence || base}"
+    actions = REST_ACTIONS.reject { |a, _| singular && a == "index" }
+    actions = actions.slice(*Array(options["only"]).map(&:to_s)) if options["only"]
+    excepts = Array(options["except"]).map(&:to_s)
+    actions = actions.except(*excepts) if excepts.any?
+
+    actions.each do |action, defs|
+      defs.each do |(verb, suffix)|
+        suffix = suffix.sub(":base/:id", ":base") if singular
+        route_label = "#{verb} #{normalize_path(suffix.gsub(':base', base_path))}"
+        rid = add_node(route_label, source_file: rel, source_location: line(stmt),
+                       entity_type: "Route")
+        add_containment(file_id, rid)
+        emit_routes_to(rid, ctrl_const, action, rel, stmt)
+      end
+    end
+
+    emit_member_blocks(stmt, file_id: file_id, rel: rel, ctrl_const: ctrl_const,
+                       base_path: base_path, base: base, ns_prefix: ns_prefix,
+                       singular: singular)
+  end
+
+  def emit_member_blocks(stmt, file_id:, rel:, ctrl_const:, base_path:, base:, ns_prefix:, singular: false)
+    Array(stmt.block&.body&.body).each do |sub|
+      next unless sub.is_a?(Prism::CallNode)
+
+      # Nested `resources` sit inside the resources block itself:
+      # /parents/:id/children — a singular parent contributes no :id.
+      if %w[resources resource].include?(sub.name.to_s)
+        emit_resource_routes(sub, file_id: file_id, rel: rel,
+                             ns_prefix: ns_prefix,
+                             path_prefix: singular ? base_path : "#{base_path}/:#{base.singularize}_id")
+        next
+      end
+      next unless %w[member collection].include?(sub.name.to_s)
+
+      member = sub.name.to_s == "member"
+      Array(sub.block&.body&.body).each do |verb_call|
+        next unless verb_call.is_a?(Prism::CallNode)
+        next unless HTTP_VERBS.include?(verb_call.name.to_s)
+
+        arg = verb_call.arguments&.arguments&.first
+        act = arg.respond_to?(:unescaped) ? arg.unescaped.to_s : nil
+        next if act.blank?
+
+        segment = member && !singular ? "#{base_path}/:id/#{act}" : "#{base_path}/#{act}"
+        rid = add_node("#{verb_call.name.to_s.upcase} #{normalize_path(segment)}",
+                       source_file: rel, source_location: line(verb_call), entity_type: "Route")
+        add_containment(file_id, rid)
+        emit_routes_to(rid, ctrl_const, act, rel, verb_call)
+      end
+    end
+  end
+
+  def emit_verb_route(stmt, file_id:, rel:, ns_prefix:, path_prefix:)
+    arg = stmt.arguments&.arguments&.first
+    raw = arg.respond_to?(:unescaped) ? arg.unescaped.to_s : nil
+    return if raw.blank?
+
+    path = raw.start_with?("/") ? raw : "/#{raw}"
+    options = options_hash(stmt)
+    to = options["to"].to_s
+    ctrl, action =
+      if to.include?("#")
+        to.split("#", 2)
+      elsif options["controller"].present? || options["action"].present?
+        segs = path_segments(path)
+        [ options["controller"].to_s.presence || segs.first.to_s,
+          options["action"].to_s.presence || segs.last.to_s ]
+      else
+        # Rails convention for a bare verb route: leading segments are the
+        # controller path, the LAST segment is the action; a lone segment
+        # defaults its action to `index` (`get 'health'` => `health#index`).
+        segs = path_segments(path)
+        [ segs[0..-2].presence&.join("/") || segs.first.to_s,
+          segs.size > 1 ? segs.last.to_s : "index" ]
+      end
+    ctrl_const = controller_const(ctrl, ns_prefix)
+    verb = stmt.name.to_s == "match" ? "MATCH" : stmt.name.to_s.upcase
+    rid = add_node("#{verb} #{normalize_path(path_prefix + path)}", source_file: rel,
+                   source_location: line(stmt), entity_type: "Route")
+    add_containment(file_id, rid)
+    emit_routes_to(rid, ctrl_const, action, rel, stmt)
+  end
+
+  def emit_routes_to(rid, ctrl_const, action, rel, stmt)
+    return if ctrl_const.blank? || action.blank?
+
+    # Undeclared actions are route-stub Method nodes: no source_file →
+    # no provenance (a route mentioning `#stats` doesn't "define" it).
+    decl = @method_decls["#{ctrl_const}##{action}"]
+    mid = add_node("#{ctrl_const}##{action}",
+                   source_file: decl ? decl[:file] : nil,
+                   source_location: decl ? decl[:line] : nil,
+                   entity_type: "Method")
+    add_containment(add_node(ctrl_const, source_file: nil,
+                             entity_type: declared_type(ctrl_const) || "Class"), mid)
+    add_edge(rid, mid, "routes_to", confidence: "EXTRACTED", rel: rel,
+             context: "routes_to #{ctrl_const}##{action}", call_line: line(stmt),
+             properties: { "provenance" => "RAILS_DSL" })
+  end
+
+  def controller_const(base, ns_prefix)
+    (ns_prefix + [ "#{camelize(base)}Controller" ]).join("::")
+  end
+
+  def scope_parts(stmt)
+    options = options_hash(stmt)
+    arg = stmt.arguments&.arguments&.first
+    name = arg.respond_to?(:unescaped) ? arg.unescaped.to_s : ""
+    # `scope "/api"` arrives with a leading slash — join once or the label
+    # becomes `GET //api`. `path:` (on namespace AND scope) overrides the
+    # URL prefix while the module name still drives controllers.
+    path = options["path"].to_s.presence || name
+    pfx = path.present? ? "/#{path.delete_prefix('/')}" : ""
+    if stmt.name.to_s == "namespace"
+      [ [ camelize(name) ], pfx ]
+    else
+      ns = options["module"].to_s.presence&.split("/")&.map { |s| camelize(s) } || []
+      [ ns, pfx ]
+    end
+  end
+  end
+end

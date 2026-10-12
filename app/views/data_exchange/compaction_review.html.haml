@@ -25,25 +25,36 @@
             = text_field_tag :entity_type, nil, placeholder: "Optional", class: "mt-1 block rounded border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
           = submit_tag "Import suggestions", class: "rounded bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
 
-  - if @stats
-    .flex.flex-wrap.gap-2.mb-4
-      - { "" => "All", "active" => "Active", "ignored" => "Ignored", "dismissed" => "Dismissed", "approved" => "Approved" }.each do |status, label|
-        - count = status == "" ? @stats.values.sum : (@stats[status] || 0)
-        - active_class = (@status_filter == status) ? "bg-blue-600 text-white" : "bg-gray-200 text-gray-700 hover:bg-gray-300"
-        = link_to "#{label} (#{count})", compaction_review_data_exchange_index_path(status: status, report_type: (@report_type unless @report_type == "compaction_review")), class: "rounded px-3 py-1 text-sm #{active_class}"
+  -# Turbo-stream row actions replace this container so tab/kind counts stay
+  -# current after a row changes status.
+  #review-tabs
+    = render "data_exchange/compaction_review_tabs"
+
+  = form_with url: compaction_review_data_exchange_index_path, method: :get, local: true, html: { class: "mb-4 flex flex-wrap items-center gap-2" } do
+    = hidden_field_tag :status, @status_filter unless @status_filter == "active"
+    = hidden_field_tag :kind, @kind_filter if @kind_filter
+    = hidden_field_tag :report_type, @report_type unless @report_type == "compaction_review"
+    = text_field_tag :q, @q, placeholder: "Search queue…", class: "rounded border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500 w-64"
+    = submit_tag "Search", class: "rounded bg-gray-700 px-3 py-1 text-white hover:bg-gray-800 text-sm"
+    - if @q
+      = link_to "Clear", compaction_review_data_exchange_index_path(status: (@status_filter == "active" ? nil : @status_filter), kind: @kind_filter, report_type: (@report_type unless @report_type == "compaction_review")), class: "text-sm text-blue-600 hover:underline"
 
   = form_with url: compaction_review_action_data_exchange_index_path, method: :post, local: true, html: { id: "bulk-form" } do
-    = hidden_field_tag :review_action, "bulk_dismiss"
     = hidden_field_tag :report_type, @report_type unless @report_type == "compaction_review"
+    = hidden_field_tag :status, @status_filter
+    = hidden_field_tag :kind, @kind_filter if @kind_filter
+    = hidden_field_tag :q, @q if @q
+    = hidden_field_tag :page, params[:page]
     .mb-4.flex.flex-wrap.items-center.gap-4
       = check_box_tag "select_all", "1", false, data: { action: "change->compaction-review#toggleAll", "compaction-review-target": "selectAll" }, class: "h-4 w-4"
       = label_tag :select_all, "Select all", class: "text-sm"
-      = submit_tag "Dismiss selected", class: "rounded bg-red-600 px-3 py-1 text-white hover:bg-red-700 text-sm", data: { turbo_confirm: "Dismiss all selected suggestions?" }
+      = button_tag "Apply selected", name: "review_action", value: "bulk_apply", class: "rounded bg-green-600 px-3 py-1 text-white hover:bg-green-700 text-sm", data: { turbo_confirm: "Apply all selected suggestions?" }
+      = button_tag "Dismiss selected", name: "review_action", value: "bulk_dismiss", class: "rounded bg-red-600 px-3 py-1 text-white hover:bg-red-700 text-sm", data: { turbo_confirm: "Dismiss all selected suggestions?" }
 
   - if @items && @items.any?
     .space-y-4
       - @items.each do |row|
-        = render "compaction_review_item", row: row
+        = render "compaction_review_item_frame", row: row
     .mt-4
       = paginate @items, theme: 'tailwind'
   - else

@@ -483,6 +483,38 @@ RSpec.describe EmbeddingService do
       expect(ActiveRecord::Base.connection.select_value("SELECT GET_LOCK('graph_mem:embeddings', 0)").to_i).to eq(1)
       ActiveRecord::Base.connection.select_value("SELECT RELEASE_LOCK('graph_mem:embeddings')")
     end
+
+    it "really re-acquires the lock on a second entry under an active query cache" do
+      # A cached GET_LOCK would serve the previous 1 and run the block
+      # WITHOUT holding the lock (same invariant as the membership lock).
+      conn = ActiveRecord::Base.connection
+      name = "graph_mem:#{conn.current_database}:embeddings"
+      conn.cache do
+        described_class.with_embedding_lock(5) { |acquired| expect(acquired).to be true }
+        described_class.with_embedding_lock(5) do |acquired|
+          expect(acquired).to be true
+          holder_id = conn.uncached { conn.select_value("SELECT IS_USED_LOCK(#{conn.quote(name)})") }
+          my_id = conn.uncached { conn.select_value("SELECT CONNECTION_ID()") }
+          expect(holder_id).to eq(my_id)
+        end
+      end
+    end
+
+    it "releases the lock under an active query cache (nested entries with a write)" do
+      # The query-cache leak sequence: outer acquire → write (clears the
+      # cache) → inner acquire/release → outer release served from cache —
+      # the statement never runs and the session keeps the lock.
+      conn = ActiveRecord::Base.connection
+      name = "graph_mem:#{conn.current_database}:embeddings"
+      conn.cache do
+        described_class.with_embedding_lock(5) do |acquired|
+          expect(acquired).to be true
+          MemoryEntity.create!(name: "EmbLockWrite", entity_type: "Class")
+          described_class.with_embedding_lock(5) { |inner| expect(inner).to be true }
+        end
+      end
+      expect(conn.uncached { conn.select_value("SELECT IS_USED_LOCK(#{conn.quote(name)})") }).to be_nil
+    end
   end
 
   describe ".reset_instance!" do

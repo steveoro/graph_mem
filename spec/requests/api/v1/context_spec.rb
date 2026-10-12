@@ -31,7 +31,7 @@ RSpec.describe "API V1 Context", type: :request do
         expect(data["description"]).to eq("Desc")
         expect(data["scope_entity_count"]).to eq(1)
         expect(data["scope_truncated"]).to be(false)
-        expect(data["scope_max_entities"]).to eq(GraphMemContext::MAX_SCOPED_ENTITIES)
+        expect(data["scope_max_entities"]).to be_nil
       end
     end
 

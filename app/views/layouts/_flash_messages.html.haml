@@ -1,0 +1,5 @@
+- if flash[:notice].present?
+  .dashboard-flash.dashboard-flash--notice= flash[:notice]
+-# :error and :alert share the alert styling — several controllers set :error.
+- if flash[:alert].present? || flash[:error].present?
+  .dashboard-flash.dashboard-flash--alert= flash[:alert].presence || flash[:error]

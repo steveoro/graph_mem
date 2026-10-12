@@ -130,6 +130,15 @@ RSpec.describe ParameterNormalizer do
         expect(result[:to_entity_id]).to eq(task.id)
       end
 
+      it "prefers the context project's entity over a global namesake" do
+        scoped = MemoryEntity.create!(name: "MyTask", entity_type: "Task", project_id: project.id)
+        result = described_class.normalize("create_observation", {
+          entity_name: "MyTask",
+          text_content: "fact"
+        }, project_id: project.id)
+        expect(result[:entity_id]).to eq(scoped.id)
+      end
+
       it "resolves string values in entity_id fields" do
         result = described_class.normalize("set_context", {
           entity_id: "MyProject"

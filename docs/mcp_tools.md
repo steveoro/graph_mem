@@ -33,6 +33,17 @@ All tools accept both graph_mem's native snake_case/ID-based parameters and the 
 - **Field aliases** are normalized (`content` to `text_content`, `from`/`to` to `from_entity_id`/`to_entity_id`)
 - **`operations` arrays** drive `graph_write`, `graph_edit`, and `graph_delete`
 
+### Name resolution order
+
+When a tool takes an entity **name** instead of an ID, resolution runs in this order:
+
+1. The **context project** scope (`set_context` project)
+2. The **global** namespace (`project_id IS NULL`)
+3. A **single foreign-scope candidate** — if exactly one entity anywhere carries the name, it resolves (documented convenience; ambiguity is never guessed)
+4. Several candidates → `AmbiguousReference` error listing them; retry with an `entity_id`
+
+**Destructive-name note:** name-based arguments can reach outside your context project — `graph_delete` with `delete_entity "Foo"` under context project A can delete project B's `Foo` when B's is the only `Foo` in the graph. Prefer `entity_id` for deletes/moves/edits when precision matters.
+
 ## Recommended Session Workflow
 
 Tools are designed to be used in four phases per session:
@@ -62,7 +73,7 @@ text and do not claim conformance to success output schemas.
 
 ## Context Scoping (2 advertised tools)
 
-Context scoping allows search tools to **boost** entities related to the active project. The recursive `part_of` subtree is bounded; when the cap is reached, context-aware responses expose `scope_truncated: true` and continue with the partial scope. When a context is set via `set_context`, `search` prioritizes in-context query matches (cross-project results still appear, but ranked lower).
+Context scoping allows search tools to **boost** entities related to the active project. Since project-scoped names landed, the scope is an indexed `project_id` lookup (the project member set) — it is **not** capped, and `scope_truncated` is always `false` (`scope_max_entities` is always `null`; both fields remain for response compatibility). When a context is set via `set_context`, `search` prioritizes in-context query matches (cross-project results still appear, but ranked lower).
 
 Context is stored per MCP client in the `agent_contexts` table, keyed by the `X-MCP-Client` request header. Agents without the header share the `"default"` bucket.
 
@@ -125,7 +136,7 @@ results, summary }`. Any failed operation rolls back the full batch.
 #### `create_entity`
 - **Description:** Create a single new entity node. Pass required `name` (string) and `entity_type` (string); optional `observations` (array of strings), `aliases` (pipe-separated string), `description` (string). Alias `entityType` maps to `entity_type`. Types are canonicalized; cosine distance < 0.25 returns a warning instead of creating. Do not use until you have searched for an existing node; use `search` first. Do not use to add facts to a known entity; use `create_observation` instead. Do not use to change metadata on an existing node; use `update_entity` instead. Do not use for an atomic batch of up to 50 creates; use `bulk_update` instead.
 - **Parameters:**
-  - `name` (string, required): The unique name for the new entity.
+  - `name` (string, required): The unique name for the new entity — unique within the client's context-project scope (or the shared global scope when no project is set).
   - `entity_type` (string, required): The type classification (auto-canonicalized, e.g., "workspace" becomes "Project").
   - `aliases` (string, optional): Pipe-separated alternative names.
   - `description` (string, optional): Short description of the entity.
@@ -150,7 +161,7 @@ results, summary }`. Any failed operation rolls back the full batch.
 - **Description:** Update metadata of an existing entity (not observations). Pass required `entity_id` (integer); optional `name` (unique string), `entity_type` (canonicalized string), `aliases` (replaces existing; empty string clears), `description` (empty string clears). Do not use to add or edit facts; use `create_observation` or `update_observation` instead. Do not use to create a node; use `create_entity` instead. Do not use to read; use `get_entities` instead. Do not use to delete; use `delete_entity` instead. Do not use to combine two entities; use `merge_entities` instead.
 - **Parameters:**
   - `entity_id` (integer, required): The ID of the entity.
-  - `name` (string, optional): New name (must be unique).
+  - `name` (string, optional): New name (must stay unique within the entity's project scope).
   - `entity_type` (string, optional): New type (auto-canonicalized).
   - `aliases` (string, optional): New aliases (replaces existing). Empty string clears.
   - `description` (string, optional): New description. Empty string clears.
@@ -277,7 +288,7 @@ budget as `search`.
   - `as_of` (string, optional): ISO 8601 instant evidence must cover; cannot be combined with `occurred_after`/`occurred_before`.
   - `max_tokens` (integer, optional): Cap the serialized evidence payload under an estimated token budget (~4 chars/token); adds `retrieval.token_budget` diagnostics.
 - **Response fields:** `query`, `summary`, `generation_mode`, `generated_by`, `fallback_reason`, `scope`, `entity_count`, `observation_count`, `observations`, `sources`, `retrieval`
-- **Retrieval diagnostics:** `scope_truncated` and `scope_max_entities` signal that an active-project subtree is partial rather than complete; `temporal` echoes the resolved window; `token_budget` reports packing when `max_tokens` is passed.
+- **Retrieval diagnostics:** `scope_truncated`/`scope_max_entities` are vestigial (always `false`/`null` — project scope is an uncapped `project_id` lookup); `temporal` echoes the resolved window; `token_budget` reports packing when `max_tokens` is passed.
 
 ## Temporal recall
 

@@ -376,4 +376,51 @@ RSpec.describe NodeOperationsStrategy, type: :model do
       expect(MemoryEntity.find_by(id: project_child.id)).to be_present
     end
   end
+
+  describe "project-scoped membership" do
+    let(:strategy) { described_class.new }
+    let(:project_a) { MemoryEntity.create!(name: "OpProjA", entity_type: "Project") }
+    let(:project_b) { MemoryEntity.create!(name: "OpProjB", entity_type: "Project") }
+
+    it "move_to_parent re-scopes the node and its member subtree" do
+      node = MemoryEntity.create!(name: "Movable", entity_type: "File", project_id: project_a.id)
+      child = MemoryEntity.create!(name: "MovableChild", entity_type: "Class", project_id: project_a.id)
+      MemoryRelation.create!(from_entity: node, to_entity: project_a, relation_type: "part_of")
+      MemoryRelation.create!(from_entity: child, to_entity: node, relation_type: "part_of")
+
+      result = strategy.move_to_parent(node.id, project_b.id)
+
+      expect(result[:success]).to be true
+      expect(node.reload.project_id).to eq(project_b.id)
+      expect(child.reload.project_id).to eq(project_b.id)
+    end
+
+    it "merge_into re-scopes children re-pointed under the foreign target" do
+      source = MemoryEntity.create!(name: "MergeSrc", entity_type: "Class", project_id: project_a.id)
+      source_child = MemoryEntity.create!(name: "MergeSrcChild", entity_type: "Method",
+                                          project_id: project_a.id)
+      target = MemoryEntity.create!(name: "MergeDst", entity_type: "Class", project_id: project_b.id)
+      MemoryRelation.create!(from_entity: source, to_entity: project_a, relation_type: "part_of")
+      MemoryRelation.create!(from_entity: source_child, to_entity: source, relation_type: "part_of")
+      MemoryRelation.create!(from_entity: target, to_entity: project_b, relation_type: "part_of")
+
+      result = strategy.merge_into(source.id, target.id)
+
+      expect(result[:success]).to be true
+      expect(source_child.reload.project_id).to eq(project_b.id)
+    end
+
+    it "delete_node un-roots orphaned children" do
+      node = MemoryEntity.create!(name: "DelScoped", entity_type: "File", project_id: project_a.id)
+      child = MemoryEntity.create!(name: "DelScopedChild", entity_type: "Class",
+                                   project_id: project_a.id)
+      MemoryRelation.create!(from_entity: node, to_entity: project_a, relation_type: "part_of")
+      MemoryRelation.create!(from_entity: child, to_entity: node, relation_type: "part_of")
+
+      result = strategy.delete_node(node.id)
+
+      expect(result[:success]).to be true
+      expect(child.reload.project_id).to be_nil
+    end
+  end
 end

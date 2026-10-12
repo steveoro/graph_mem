@@ -335,6 +335,48 @@ RSpec.describe 'DataExchange', type: :request do
         expect(row.payload['relation_type']).to eq('calls')
       end
 
+      it 'records the payload producer on seeded scan_review rows (symbolized key)' do
+        # load_data parses with symbolize_names — reading "producer" as a
+        # string key silently labelled every UI-seeded row "graphify".
+        graphify_json = {
+          version: '1.0',
+          producer: 'rails_ast_extractor',
+          ambiguous_relations: [
+            {
+              from_name: 'Caller', from_type: 'Class',
+              to_name: 'Callee', to_type: 'Class',
+              relation_type: 'calls', confidence: 0.5,
+              properties: { source_file: 'app/caller.rb' }
+            }
+          ],
+          root_nodes: [
+            {
+              name: 'Graphify Project', entity_type: 'Project', aliases: '',
+              children: [
+                { name: 'Caller', entity_type: 'Class', relation_type: 'part_of', children: [] },
+                { name: 'Callee', entity_type: 'Class', relation_type: 'part_of', children: [] }
+              ]
+            }
+          ]
+        }.to_json
+
+        post import_upload_data_exchange_index_path, params: {
+          file: Rack::Test::UploadedFile.new(
+            StringIO.new(graphify_json), 'application/json', original_filename: 'graphify.json'
+          )
+        }
+        post import_execute_data_exchange_index_path, params: {
+          decisions: {
+            '0' => { node_path: '0', action: 'create', target_id: '', parent_id: '' }
+          }
+        }
+
+        report = MaintenanceReport.where(report_type: 'scan_review').last
+        expect(report.data['source']).to eq('rails_ast_extractor')
+        expect(report.maintenance_report_rows.last.payload['explanation'])
+          .to include('Rails ast extractor AMBIGUOUS')
+      end
+
       it 'can merge into existing entity' do
         post import_execute_data_exchange_index_path, params: {
           decisions: {
@@ -403,6 +445,21 @@ RSpec.describe 'DataExchange', type: :request do
         }.to change(MemoryEntity, :count).by(2)  # Parent + new child (existing task is merged/skipped)
 
         expect(response).to redirect_to(import_report_data_exchange_index_path)
+      end
+
+      it 'scopes the imported members under the merge TARGET project, not by payload name' do
+        # project_id resolves through the DECISIONS' target_id: a payload
+        # root named "Parent Project" merged into stored project1 must
+        # stamp children project1-scoped even though no entity named
+        # "Parent Project" exists to look up.
+        post import_execute_data_exchange_index_path, params: {
+          decisions: {
+            '0' => { node_path: '0', action: 'merge', target_id: project1.id.to_s, parent_id: '' }
+          }
+        }
+
+        child = MemoryEntity.find_by!(name: 'Child Task New')
+        expect(child.project_id).to eq(project1.id)
       end
 
       it 'creates child entities from stored match decisions' do
@@ -623,13 +680,40 @@ RSpec.describe 'DataExchange', type: :request do
       expect(relation).to be_present
     end
 
-    it 'returns error for invalid node' do
+    it 'leaves the membership advisory lock free after the request' do
+      # Request-level regression for the query-cache leak: the executor's
+      # query cache could swallow the outer RELEASE_LOCK and leave this
+      # connection holding graph_mem.project_membership:* for every other
+      # writer until it was recycled.
       post move_node_data_exchange_index_path, params: {
-        node_id: 99999,
+        node_id: orphan_task.id,
+        parent_id: project1.id
+      }, as: :json
+
+      expect(response).to have_http_status(:ok)
+      expect(membership_lock_free?).to be true
+    end
+
+    it 'returns a friendly 422 (not a 500) when the membership lock is held' do
+      stub_const("ProjectMembership::LOCK_TIMEOUT_SECONDS", 0)
+      conn = ActiveRecord::Base.connection
+      name = ProjectMembership.lock_name(conn)
+      holder = stub_const("MoveNodeLockHolder",
+                          Class.new(ActiveRecord::Base) { self.abstract_class = true })
+      holder.establish_connection(ActiveRecord::Base.connection_db_config)
+      holder.connection.select_value("SELECT GET_LOCK(#{conn.quote(name)}, 5)")
+
+      post move_node_data_exchange_index_path, params: {
+        node_id: orphan_task.id,
         parent_id: project1.id
       }, as: :json
 
       expect(response).to have_http_status(:unprocessable_content)
+      expect(JSON.parse(response.body)['error']).to match(/membership lock|retry shortly/i)
+      expect(MemoryEntity.find(orphan_task.id).project_id).to be_nil
+    ensure
+      holder.connection.select_value("SELECT RELEASE_LOCK(#{conn.quote(name)})") if holder&.connection
+      holder.connection_pool&.disconnect! if holder
     end
   end
 
@@ -926,6 +1010,108 @@ RSpec.describe 'DataExchange', type: :request do
       }, as: :json
 
       expect(response).to have_http_status(:unprocessable_content)
+    end
+
+    it 'stamps project scope through sync and leaves the lock free (fresh part_of edge)' do
+      new_task = MemoryEntity.create!(name: 'Scoped UI Task', entity_type: 'Task')
+
+      post create_relation_data_exchange_index_path, params: {
+        from_id: new_task.id,
+        to_id: project2.id,
+        relation_type: 'part_of'
+      }, as: :json
+
+      expect(response).to have_http_status(:ok)
+      expect(JSON.parse(response.body)['success']).to be true
+      # Without sync! the child stays global until the next backfill (U1).
+      expect(MemoryEntity.find(new_task.id).project_id).to eq(project2.id)
+      # Same query-cache leak guard as move_node.
+      expect(membership_lock_free?).to be true
+    end
+
+    it 'takes the membership lock BEFORE the transaction on a fresh part_of edge' do
+      # Without the outer with_membership_lock the first GET_LOCK observed is
+      # reassign!'s — issued INSIDE the transaction (the deadlock ordering).
+      new_task = MemoryEntity.create!(name: 'Ordered UI Task', entity_type: 'Task')
+
+      excess = open_transactions_at_get_lock do
+        post create_relation_data_exchange_index_path, params: {
+          from_id: new_task.id,
+          to_id: project2.id,
+          relation_type: 'part_of'
+        }, as: :json
+      end
+
+      expect(response).to have_http_status(:ok)
+      expect(excess).to eq(0)
+    end
+
+    it 'returns a friendly 422 (not a 500) when the membership lock is held' do
+      new_task = MemoryEntity.create!(name: 'Blocked UI Task', entity_type: 'Task')
+      stub_const("ProjectMembership::LOCK_TIMEOUT_SECONDS", 0)
+      conn = ActiveRecord::Base.connection
+      name = ProjectMembership.lock_name(conn)
+      holder = stub_const("CreateRelLockHolder",
+                          Class.new(ActiveRecord::Base) { self.abstract_class = true })
+      holder.establish_connection(ActiveRecord::Base.connection_db_config)
+      holder.connection.select_value("SELECT GET_LOCK(#{conn.quote(name)}, 5)")
+
+      post create_relation_data_exchange_index_path, params: {
+        from_id: new_task.id,
+        to_id: project2.id,
+        relation_type: 'part_of'
+      }, as: :json
+
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(JSON.parse(response.body)['error']).to match(/retry shortly/i)
+      expect(MemoryRelation.exists?(from_entity_id: new_task.id, relation_type: 'part_of')).to be false
+    ensure
+      holder.connection.select_value("SELECT RELEASE_LOCK(#{conn.quote(name)})") if holder&.connection
+      holder.connection_pool&.disconnect! if holder
+    end
+
+    it 'returns 422 (not a 500) when the part_of edge already exists' do
+      post create_relation_data_exchange_index_path, params: {
+        from_id: task1.id,
+        to_id: project1.id,
+        relation_type: 'part_of'
+      }, as: :json
+
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(JSON.parse(response.body)['error']).to be_present
+    end
+
+    it 'returns 422 with the validation message when the relation fails validation' do
+      new_task = MemoryEntity.create!(name: 'Invalid Rel Task', entity_type: 'Task')
+      invalid = MemoryRelation.new
+      invalid.errors.add(:relation_type, 'is bogus')
+      allow(MemoryRelation).to receive(:create!).and_raise(ActiveRecord::RecordInvalid.new(invalid))
+
+      post create_relation_data_exchange_index_path, params: {
+        from_id: new_task.id,
+        to_id: project2.id,
+        relation_type: 'part_of'
+      }, as: :json
+
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(JSON.parse(response.body)['error']).to match(/bogus/)
+    end
+
+    it 'hints rename/re-parent (not "retry shortly") on a scope name collision' do
+      MemoryEntity.create!(name: 'Dup Member', entity_type: 'Task', project_id: project2.id)
+      dup = MemoryEntity.create!(name: 'Dup Member', entity_type: 'Task')
+
+      post create_relation_data_exchange_index_path, params: {
+        from_id: dup.id,
+        to_id: project2.id,
+        relation_type: 'part_of'
+      }, as: :json
+
+      expect(response).to have_http_status(:unprocessable_content)
+      error = JSON.parse(response.body)['error']
+      expect(error).to match(/rename|pick another parent/i)
+      expect(error).not_to match(/retry shortly/i)
+      expect(MemoryRelation.exists?(from_entity_id: dup.id, relation_type: 'part_of')).to be false
     end
   end
 
@@ -1231,6 +1417,218 @@ RSpec.describe 'DataExchange', type: :request do
       expect(response).to redirect_to(root_path)
       expect(scan_delete_row.reload.status).to eq('dismissed')
       expect(MemoryEntity.find_by(id: task1.id)).to be_present
+    end
+  end
+
+  describe 'GET /data_exchange/compaction_review — kind filter + search' do
+    let!(:compaction_report) do
+      MaintenanceReport.create!(report_type: 'compaction_review', data: { 'source' => 'test' })
+    end
+    let!(:scan_report) do
+      MaintenanceReport.create!(report_type: 'scan_review', data: { 'source' => 'graphify' })
+    end
+
+    before do
+      MaintenanceReportRow.create!(
+        maintenance_report: compaction_report, report_type: 'compaction_review',
+        row_uuid: 'kf-merge', kind: 'entity_merge', status: 'active',
+        signature: CompactionReviewService.signature_for('entity_merge', {
+          'entity_a' => { 'entity_id' => task1.id }, 'entity_b' => { 'entity_id' => project1.id } }),
+        payload: { 'entity_a' => { 'entity_id' => task1.id, 'name' => 'Alfa Pair A' },
+                   'entity_b' => { 'entity_id' => project1.id, 'name' => 'Alfa Pair B' } }
+      )
+      MaintenanceReportRow.create!(
+        maintenance_report: scan_report, report_type: 'scan_review',
+        row_uuid: 'kf-delete', kind: 'delete_entity', status: 'active',
+        signature: "delete_entity|#{task1.id}",
+        payload: { 'entity_id' => task1.id, 'entity_name' => 'Zeta Gone' }
+      )
+    end
+
+    it 'filters scan_review rows by kind with counts' do
+      MaintenanceReportRow.create!(
+        maintenance_report: scan_report, report_type: 'scan_review',
+        row_uuid: 'kf-reparent', kind: 'reparent_entity', status: 'active',
+        signature: "reparent_entity|#{task1.id}",
+        payload: { 'entity_id' => task1.id, 'parent_id' => project1.id }
+      )
+
+      get compaction_review_data_exchange_index_path, params: { report_type: 'scan_review', kind: 'delete_entity' }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.body).to include('kf-delete')
+      expect(response.body).not_to include('kf-reparent')
+      expect(response.body).to include('delete entity (1)')
+    end
+
+    it 'searches payloads via q' do
+      get compaction_review_data_exchange_index_path, params: { q: 'alfa pair' }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.body).to include('kf-merge')
+      expect(response.body).not_to include('kf-delete')
+    end
+
+    it 'bulk-applies selected actionable rows and reports the summary' do
+      ghost_uuid = 'kf-ghost'
+      MaintenanceReportRow.create!(
+        maintenance_report: scan_report, report_type: 'scan_review',
+        row_uuid: ghost_uuid, kind: 'delete_relation', status: 'active',
+        signature: 'delete_relation|999998',
+        payload: { 'relation_id' => 999_998 }
+      )
+
+      post compaction_review_action_data_exchange_index_path,
+           params: { review_action: 'bulk_apply', report_type: 'scan_review',
+                     item_ids: [ 'kf-delete', ghost_uuid ] }
+
+      expect(response).to redirect_to(compaction_review_data_exchange_index_path(report_type: 'scan_review'))
+      follow_redirect!
+      expect(response.body).to include('applied')
+      expect(MemoryEntity.find_by(id: task1.id)).to be_nil
+      expect(MaintenanceReportRow.find_by(row_uuid: 'kf-delete').status).to eq('approved')
+      # Failed row stays actionable with the error recorded.
+      expect(MaintenanceReportRow.find_by(row_uuid: ghost_uuid).status).to eq('active')
+    end
+  end
+
+  describe 'POST /data_exchange/compaction_review_action turbo_stream' do
+    let!(:scan_report) do
+      MaintenanceReport.create!(report_type: 'scan_review', data: { 'source' => 'test' })
+    end
+
+    let!(:delete_row) do
+      MaintenanceReportRow.create!(
+        maintenance_report: scan_report,
+        report_type: 'scan_review',
+        row_uuid: 'ts-delete',
+        kind: 'delete_entity',
+        status: 'active',
+        signature: CompactionReviewService.signature_for('delete_entity', { 'entity_id' => task1.id }),
+        payload: { 'entity_id' => task1.id, 'entity_name' => task1.name }
+      )
+    end
+
+    let!(:merge_row) do
+      MaintenanceReportRow.create!(
+        maintenance_report: scan_report,
+        report_type: 'scan_review',
+        row_uuid: 'ts-merge',
+        kind: 'entity_merge',
+        status: 'active',
+        signature: CompactionReviewService.signature_for('entity_merge', {
+          'entity_a' => { 'entity_id' => task1.id },
+          'entity_b' => { 'entity_id' => project1.id }
+        }),
+        payload: {
+          'entity_a' => { 'entity_id' => task1.id, 'name' => task1.name, 'entity_type' => 'Task' },
+          'entity_b' => { 'entity_id' => project1.id, 'name' => project1.name, 'entity_type' => 'Project' },
+          'cosine_distance' => 0.12
+        }
+      )
+    end
+
+    it 'removes an applied row frame and updates the flash (no Content missing)' do
+      post compaction_review_action_data_exchange_index_path,
+           params: { review_action: 'apply', report_type: 'scan_review',
+                     item_id: 'ts-delete', status: 'active' },
+           headers: { 'Accept' => 'text/vnd.turbo-stream.html' }
+
+      expect(response.media_type).to eq('text/vnd.turbo-stream.html')
+      dom = ActionView::RecordIdentifier.dom_id(delete_row)
+      expect(response.body).to include("action=\"remove\" target=\"#{dom}\"")
+      expect(response.body).to include('target="flash-messages"')
+      expect(delete_row.reload.status).to eq('approved')
+      expect(MemoryEntity.find_by(id: task1.id)).to be_nil
+    end
+
+    it 'replaces the frame when the row still matches the filter (All tab edit)' do
+      post compaction_review_action_data_exchange_index_path,
+           params: { review_action: 'edit', report_type: 'scan_review',
+                     item_id: 'ts-merge', status: '',
+                     relationship_type: 'part_of' },
+           headers: { 'Accept' => 'text/vnd.turbo-stream.html' }
+
+      expect(response.media_type).to eq('text/vnd.turbo-stream.html')
+      dom = ActionView::RecordIdentifier.dom_id(merge_row)
+      expect(response.body).to include("action=\"replace\" target=\"#{dom}\"")
+      expect(response.body).not_to include('Content missing')
+    end
+
+    it 'removes a dismissed row frame and refreshes the tab counts' do
+      post compaction_review_action_data_exchange_index_path,
+           params: { review_action: 'dismiss', report_type: 'scan_review',
+                     item_id: 'ts-merge', status: 'active', reason: 'not a dup' },
+           headers: { 'Accept' => 'text/vnd.turbo-stream.html' }
+
+      dom = ActionView::RecordIdentifier.dom_id(merge_row)
+      expect(response.body).to include("action=\"remove\" target=\"#{dom}\"")
+      # `update` keeps the #review-tabs wrapper — a `replace` would remove it
+      # and the NEXT row action would find no target (refresh-once bug).
+      expect(response.body).to include('action="update" target="review-tabs"')
+      expect(merge_row.reload.status).to eq('dismissed')
+    end
+
+    it 'restores a dismissed row back to active with a real flash message' do
+      merge_row.update!(status: 'dismissed', dismissed_at: Time.current)
+      post compaction_review_action_data_exchange_index_path,
+           params: { review_action: 'restore', report_type: 'scan_review',
+                     item_id: 'ts-merge', status: 'dismissed' },
+           headers: { 'Accept' => 'text/vnd.turbo-stream.html' }
+
+      expect(response.body).to include("action=\"remove\" target=\"#{ActionView::RecordIdentifier.dom_id(merge_row)}\"")
+      expect(response.body).to include('Suggestion restored to active')
+      expect(merge_row.reload.status).to eq('active')
+    end
+  end
+
+  describe '#import_project_entity_id' do
+    def scope_for(import_data, decisions)
+      DataExchangeController.new.send(:import_project_entity_id, import_data, decisions)
+    end
+
+    it 'pins the merged ROOT node, not a child merged into another project' do
+      # New Project root (created fresh — no decision target) with a nested
+      # Project child that merged into an existing OTHER project: the scope
+      # must stay the new root, not the child's merge target.
+      import_data = {
+        'root_nodes' => [
+          { 'name' => 'Fresh Proj', 'entity_type' => 'Project',
+            'children' => [
+              { 'name' => 'Project Beta', 'entity_type' => 'Project' }
+            ] }
+        ]
+      }
+      fresh = MemoryEntity.create!(name: 'Fresh Proj', entity_type: 'Project')
+      decisions = [
+        { node_path: '0', action: 'create' },
+        { node_path: '0.children.0', action: 'merge', target_id: project2.id }
+      ]
+
+      expect(scope_for(import_data, decisions)).to eq(fresh.id)
+    end
+
+    it 'returns the merged root target when the root itself merged' do
+      import_data = {
+        'root_nodes' => [ { 'name' => 'Old Name', 'entity_type' => 'Project' } ]
+      }
+      decisions = [ { node_path: '0', action: 'merge', target_id: project2.id } ]
+
+      expect(scope_for(import_data, decisions)).to eq(project2.id)
+    end
+
+    it 'accepts a merge target that is itself a nested (non-global) Project' do
+      # The strategy's @import_project_id pins WHATEVER the root mapped to —
+      # nested Projects own their own scope, so merging the payload root into
+      # a nested Project scopes the import there, not to the global namespace.
+      nested = MemoryEntity.create!(name: 'Nested Proj', entity_type: 'Project',
+                                    project_id: project1.id)
+      import_data = {
+        'root_nodes' => [ { 'name' => 'Any Name', 'entity_type' => 'Project' } ]
+      }
+      decisions = [ { node_path: '0', action: 'merge', target_id: nested.id } ]
+
+      expect(scope_for(import_data, decisions)).to eq(nested.id)
     end
   end
 end

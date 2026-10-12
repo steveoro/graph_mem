@@ -2,7 +2,7 @@
 
 GraphMem is a Ruby on Rails application implementing a Model Context Protocol (MCP) server for graph-based memory management. It enables AI assistants and other clients to create, retrieve, search, and manage knowledge entities and their relationships through a standardized interface.
 
-[![Version](https://img.shields.io/badge/version-1.49.0-blue.svg)](lib/graph_mem/version.rb)
+[![Version](https://img.shields.io/badge/version-1.50.0-blue.svg)](lib/graph_mem/version.rb)
 [![Rails](https://img.shields.io/badge/rails-8.1.4-orange.svg)](Gemfile)
 [![Ruby](https://img.shields.io/badge/ruby-3.4.1-red.svg)](Gemfile)
 
@@ -30,6 +30,8 @@ Access is controlled by network reach plus an optional shared bearer token. By d
 ```
 
 The example above assumes using the container setup, which is hardcoded to port 3030. (APP_PORT is currently hardcoded in Dockerfile and docker-compose.yml).
+
+**Project-scoped names:** entity names are unique *per project* (`UNIQUE(project_scope, name)` — members carry `project_id` of their Project root; Project roots and unclaimed reference stubs live in the global namespace). Two projects can therefore hold same-named entities independently, and name resolution is context-first-then-global — a name declared in several projects raises an ambiguity error listing the candidates instead of guessing. Pre-1.50 graphs can be stamped by `bin/rails graph_mem:backfill_project_ids` (dry-run supported).
 
 Use `/mcp` for the default 2025-03-26 **Streamable HTTP** profile. Use
 `/mcp/readonly` for context and read tools only, or `/mcp/maintenance` for the

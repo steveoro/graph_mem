@@ -93,9 +93,21 @@ class DataExchangeController < ApplicationController
 
   # POST /data_exchange/import_upload
   # Receives JSON file, runs matching, stores in temp files, redirects to review
+  # Uploaded graph JSON is parsed + matched entirely in memory; a hard cap
+  # keeps a stray huge export from ballooning the request. 64 MB covers
+  # ~50k-node graphs with headroom — anything bigger should go through the
+  # headless rake import instead (by design choice, not a hard limit).
+  MAX_UPLOAD_BYTES = 64.megabytes
+
   def import_upload
     unless params[:file].present?
       flash[:error] = "Please select a file to import"
+      return redirect_to root_path
+    end
+
+    if params[:file].size > MAX_UPLOAD_BYTES
+      flash[:error] = "File too large (#{(params[:file].size / 1.megabyte.to_f).round(1)} MB > " \
+                      "#{MAX_UPLOAD_BYTES / 1.megabyte} MB). Use `rails graphify:import` or `rails_ast:import` instead."
       return redirect_to root_path
     end
 
@@ -189,7 +201,11 @@ class DataExchangeController < ApplicationController
     if report.success && import_data[:ambiguous_relations].present?
       GraphifyImporter.seed_ambiguous_relations(
         import_data[:ambiguous_relations].map { |r| r.deep_stringify_keys },
-        project_name_for(import_data)
+        project_name_for(import_data),
+        # load_data parses with symbolize_names — the producer tag is :producer.
+        source: GraphifyImporter::KNOWN_PRODUCERS.include?(import_data[:producer].to_s) ?
+                import_data[:producer].to_s : "graphify",
+        project_id: import_project_entity_id(import_data, decisions)
       )
     end
 
@@ -239,14 +255,18 @@ class DataExchangeController < ApplicationController
     # defaults to "active". `.presence ||` collapsed both.
     @status_filter = params.key?(:status) ? params[:status].to_s : "active"
     @kind_filter = params[:kind].presence
+    @q = params[:q].presence
     @items = CompactionReviewService.items(
       report_type: @report_type,
       status: @status_filter,
       kind: @kind_filter,
-      page: params[:page]
+      page: params[:page],
+      q: @q
     )
     @active_count = CompactionReviewService.active_count(report_type: @report_type)
-    @stats = CompactionReviewService.status_counts(report_type: @report_type)
+    @stats = CompactionReviewService.status_counts(report_type: @report_type, kind: @kind_filter)
+    @kind_counts = CompactionReviewService.kind_counts(report_type: @report_type, status: @status_filter)
+    @children_info = CompactionReviewService.delete_children_info(report_type: @report_type, items: @items)
     @current_item = CompactionReviewService.find_item(params[:item_id], report_type: @report_type) if params[:item_id].present?
   end
 
@@ -270,18 +290,29 @@ class DataExchangeController < ApplicationController
                CompactionReviewService.dismiss(item_id, reason: params[:reason], report_type: @report_type)
     when "bulk_dismiss"
                CompactionReviewService.bulk_dismiss(params[:item_ids] || [], report_type: @report_type)
+    when "bulk_apply"
+               CompactionReviewService.bulk_apply(params[:item_ids] || [], report_type: @report_type)
     when "restore"
                CompactionReviewService.restore(item_id, report_type: @report_type)
     when "ignore"
                CompactionReviewService.ignore(item_id, report_type: @report_type)
     when "approve"
+               # Renders the queue view: populate the SAME ivars
+               # compaction_review does or kind tabs / child warnings /
+               # filters silently drop off the re-rendered page.
                @report = CompactionReviewService.latest_report(report_type: @report_type)
                @current_item = CompactionReviewService.find_item(item_id, report_type: @report_type)
                @confirm_action = true
                @status_filter = params.key?(:status) ? params[:status].to_s : "active"
-               @items = CompactionReviewService.items(report_type: @report_type, status: @status_filter, page: params[:page])
+               @kind_filter = params[:kind].presence
+               @q = params[:q].presence
+               @items = CompactionReviewService.items(report_type: @report_type, status: @status_filter,
+                                                    kind: @kind_filter, page: params[:page], q: @q)
                @active_count = CompactionReviewService.active_count(report_type: @report_type)
-               @stats = CompactionReviewService.status_counts(report_type: @report_type)
+               @stats = CompactionReviewService.status_counts(report_type: @report_type, kind: @kind_filter)
+               @kind_counts = CompactionReviewService.kind_counts(report_type: @report_type, status: @status_filter)
+               @children_info = CompactionReviewService.delete_children_info(report_type: @report_type,
+                                                                           items: @items)
                return render :compaction_review
     else
                { success: false, error: "Unknown action." }
@@ -291,8 +322,54 @@ class DataExchangeController < ApplicationController
       return render json: result
     end
 
-    flash[result[:success] ? :notice : :alert] = result[:success] ? (result[:message] || "Done.") : (result[:error] || "Action failed.")
+    # Per-row forms submit inside turbo frames: answer with turbo streams —
+    # replace the row's frame when it still matches the filter, remove it
+    # when the action changed its status, and always update the flash
+    # container. A plain redirect here would navigate the frame alone and
+    # surface "Content missing" (bulk actions keep the html redirect path —
+    # their form submits full-page).
+    if request.format.turbo_stream?
+      flash.now[result[:success] ? :notice : :alert] =
+        result[:success] ? (result[:message] || "Done.") : (result[:message] || result[:error] || "Action failed.")
+      return render turbo_stream: review_action_turbo_streams(action, item_id)
+    end
+
+    flash[result[:success] ? :notice : :alert] = result[:success] ? (result[:message] || "Done.") : (result[:message] || result[:error] || "Action failed.")
     redirect_to review_action_redirect_path
+  end
+
+  def review_action_turbo_streams(action, item_id)
+    streams = [ turbo_stream.update("flash-messages", partial: "layouts/flash_messages") ]
+
+    # Refresh tab/kind counts under the same filters the row form echoed —
+    # otherwise "Active (4)" still reads 4 after the row is removed.
+    @status_filter = params.key?(:status) ? params[:status].to_s : "active"
+    @kind_filter = params[:kind].presence
+    @q = params[:q].presence
+    @stats = CompactionReviewService.status_counts(report_type: @report_type, kind: @kind_filter)
+    @kind_counts = CompactionReviewService.kind_counts(report_type: @report_type, status: @status_filter)
+    # `update` keeps the #review-tabs wrapper (replace would swap it out for
+    # the partial's un-wrapped content — the next action then has no target,
+    # so counts refreshed exactly once and went stale).
+    streams << turbo_stream.update("review-tabs", partial: "data_exchange/compaction_review_tabs")
+
+    row = item_id.present? ? CompactionReviewService.find_item(item_id, report_type: @report_type) : nil
+    return streams unless row
+
+    # The row form echoes the active filter: "" = All tab, absent = Active.
+    filter = params.key?(:status) ? params[:status].to_s : "active"
+    stays = filter.empty? || filter == "all" || row.status == filter
+    frame_id = ActionView::RecordIdentifier.dom_id(row)
+    if stays
+      streams << turbo_stream.replace(
+        frame_id,
+        partial: "data_exchange/compaction_review_item_frame",
+        locals: { row: row }
+      )
+    else
+      streams << turbo_stream.remove(frame_id)
+    end
+    streams
   end
 
   # POST /data_exchange/compaction_review/import_suggest_merges
@@ -362,23 +439,47 @@ class DataExchangeController < ApplicationController
       relation_type: relation_type
     )
 
-    if RelationSemantics.hierarchical?(relation_type) &&
-       MemoryRelation.where(from_entity_id: from_id, relation_type: "part_of").where.not(to_entity_id: to_id).exists?
-      result = NodeOperationsStrategy.new.move_to_parent(from_id, to_id)
-      if result[:success]
-        relation = MemoryRelation.find_by(from_entity_id: from_id, to_entity_id: to_id, relation_type: "part_of")
-        return render json: {
-          success: true,
-          relation: {
-            id: relation.id,
-            from_entity_id: relation.from_entity_id,
-            to_entity_id: relation.to_entity_id,
-            relation_type: relation.relation_type
+    if RelationSemantics.hierarchical?(relation_type)
+      # Every part_of write goes through the membership lock + sync — a bare
+      # save would leave project_id stale until the next backfill.
+      if MemoryRelation.where(from_entity_id: from_id, relation_type: "part_of").where.not(to_entity_id: to_id).exists?
+        result = NodeOperationsStrategy.new.move_to_parent(from_id, to_id)
+        if result[:success]
+          relation = MemoryRelation.find_by(from_entity_id: from_id, to_entity_id: to_id, relation_type: "part_of")
+          return render json: {
+            success: true,
+            relation: {
+              id: relation.id,
+              from_entity_id: relation.from_entity_id,
+              to_entity_id: relation.to_entity_id,
+              relation_type: relation.relation_type
+            }
           }
-        }
+        end
+
+        return render json: { success: false, error: result[:error] }, status: :unprocessable_content
       end
 
-      return render json: { success: false, error: result[:error] }, status: :unprocessable_content
+      relation = nil
+      ProjectMembership.with_membership_lock do
+        ActiveRecord::Base.transaction do
+          relation = MemoryRelation.create!(
+            from_entity_id: from_id,
+            to_entity_id: to_id,
+            relation_type: relation_type
+          )
+          ProjectMembership.sync!(MemoryEntity.find(from_id))
+        end
+      end
+      return render json: {
+        success: true,
+        relation: {
+          id: relation.id,
+          from_entity_id: relation.from_entity_id,
+          to_entity_id: relation.to_entity_id,
+          relation_type: relation.relation_type
+        }
+      }
     end
 
     if relation.save
@@ -394,6 +495,12 @@ class DataExchangeController < ApplicationController
     else
       render json: { success: false, error: relation.errors.full_messages.join(", ") }, status: :unprocessable_content
     end
+  rescue ActiveRecord::RecordInvalid => e
+    render json: { success: false, error: e.record.errors.full_messages.join(", ") }, status: :unprocessable_content
+  rescue ActiveRecord::RecordNotUnique
+    render json: { success: false, error: "That relation already exists." }, status: :unprocessable_content
+  rescue ProjectMembership::LockTimeout, ProjectMembership::Collision => e
+    render json: { success: false, error: membership_conflict_message(e) }, status: :unprocessable_content
   end
 
   # GET /data_exchange/orphan_nodes
@@ -423,6 +530,8 @@ class DataExchangeController < ApplicationController
     else
       render json: { success: false, error: result[:error] }, status: :unprocessable_content
     end
+  rescue ProjectMembership::LockTimeout, ProjectMembership::Collision => e
+    render json: { success: false, error: membership_conflict_message(e) }, status: :unprocessable_content
   end
 
   # POST /data_exchange/merge_node
@@ -443,6 +552,8 @@ class DataExchangeController < ApplicationController
     else
       render json: { success: false, error: result[:error] }, status: :unprocessable_content
     end
+  rescue ProjectMembership::LockTimeout, ProjectMembership::Collision => e
+    render json: { success: false, error: membership_conflict_message(e) }, status: :unprocessable_content
   end
 
   # DELETE /data_exchange/delete_node
@@ -462,6 +573,8 @@ class DataExchangeController < ApplicationController
     else
       render json: { success: false, error: result[:error] }, status: :unprocessable_content
     end
+  rescue ProjectMembership::LockTimeout, ProjectMembership::Collision => e
+    render json: { success: false, error: membership_conflict_message(e) }, status: :unprocessable_content
   end
 
   # GET /data_exchange/duplicate_relations
@@ -577,12 +690,63 @@ class DataExchangeController < ApplicationController
 
   private
 
+  # LockTimeout is transient — a concurrent import/backfill/merge holds the
+  # advisory lock, so "retry shortly" is the honest hint. Collision is a
+  # name conflict in the destination scope: retrying changes nothing, the
+  # entity must be renamed or re-parented elsewhere.
+  def membership_conflict_message(error)
+    hint = error.is_a?(ProjectMembership::LockTimeout) ? "retry shortly" : "rename the entity or pick another parent"
+    "#{error.message} — #{hint}."
+  end
+
   # Source reference for review rows seeded from an import payload — the first
   # root node's name (the imported project) when present. ImportSession data
   # is loaded symbolized, so probe both key styles.
   def project_name_for(import_data)
     roots = import_data["root_nodes"] || import_data[:root_nodes]
     (roots.is_a?(Array) ? roots.first&.dig("name") || roots.first&.dig(:name) : nil).presence || "import"
+  end
+
+  # The Project entity the import resolved as its scope — the first
+  # Project-typed ROOT node the execution targeted (same rule as the
+  # strategies' @import_project_id, which only pins top-level paths).
+  # Resolved through the DECISIONS' target_id, not the payload name: a
+  # root merged into a renamed Project would otherwise look the name up
+  # and land on the wrong (or no) scope. Child decisions are skipped —
+  # a nested node merged into another Project must not hijack the
+  # import's scope. Falls back to a name lookup for a root created
+  # fresh by this run (no match target — the just-created row carries
+  # the payload's name).
+  def import_project_entity_id(import_data, decisions)
+    roots = import_data["root_nodes"] || import_data[:root_nodes]
+    project_roots = Array(roots).select do |root|
+      (root["entity_type"] || root[:entity_type]).to_s == NodeOperationsStrategy::PROJECT_ENTITY_TYPE
+    end
+    decision_by_path = Array(decisions).index_by do |decision|
+      (decision[:node_path] || decision["node_path"]).to_s
+    end
+
+    Array(roots).each_with_index do |root, index|
+      next unless (root["entity_type"] || root[:entity_type]).to_s ==
+                  NodeOperationsStrategy::PROJECT_ENTITY_TYPE
+
+      decision = decision_by_path[index.to_s]
+      target_id = decision && (decision[:target_id] || decision["target_id"])
+      next if target_id.blank?
+
+      entity = MemoryEntity.find_by(id: target_id)
+      return entity.id if entity
+    end
+
+    project_roots.each do |root|
+      found = MemoryEntity.find_by(
+        name: root["name"] || root[:name],
+        entity_type: NodeOperationsStrategy::PROJECT_ENTITY_TYPE,
+        project_id: nil
+      )
+      return found.id if found
+    end
+    nil
   end
 
   def review_report_type
@@ -598,7 +762,8 @@ class DataExchangeController < ApplicationController
     if params[:return_to] == "dashboard"
       root_path
     else
-      compaction_review_data_exchange_index_path(report_type: review_report_type_param, status: params[:status], page: params[:page])
+      compaction_review_data_exchange_index_path(report_type: review_report_type_param, status: params[:status],
+                                                 kind: params[:kind], q: params[:q], page: params[:page])
     end
   end
 

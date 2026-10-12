@@ -7,7 +7,9 @@
 # agents. Agents without the header share the "default" client bucket.
 class GraphMemContext
   DEFAULT_CLIENT_ID = "default"
-  MAX_SCOPED_ENTITIES = 1_000
+  # NOTE: MAX_SCOPED_ENTITIES is gone — scope is an indexed project_id
+  # lookup since project-scoped names landed, so there is nothing to cap
+  # and scope_truncated is always false.
 
   class << self
     def for(client_id = DEFAULT_CLIENT_ID)
@@ -54,8 +56,12 @@ class GraphMemContext
     @client_id = self.class.normalize_client_id(client_id)
   end
 
+  # Read path stays non-creating: resolving the context (e.g. during tool
+  # arg normalization) must not mint an AgentContext row — that is real
+  # client activity and a failed call must not record it. Writers
+  # (set_project!/clear!) still go through `record` and create it.
   def current_project_id
-    record.current_project_id
+    AgentContext.find_by(client_id: client_id)&.current_project_id
   end
 
   def current_project_id=(id)
@@ -92,18 +98,18 @@ class GraphMemContext
     scoped_entity_scope&.entity_ids
   end
 
-  # Returns bounded scope IDs plus truncation metadata for diagnostics.
+  # Returns scope IDs plus (now vestigial) truncation metadata for
+  # diagnostics — always truncated: false since the cap was removed.
   def scoped_entity_scope
     return nil unless active?
 
-    scope = ProjectSubtree.resolve(current_project_id, max_entities: MAX_SCOPED_ENTITIES)
-    if scope.truncated
-      Rails.logger.warn(
-        "[GraphMemContext] project #{current_project_id} scope truncated at #{scope.max_entities} entities"
-      )
-    end
-
-    scope
+    # Project-scoped names made scope an indexed column lookup instead of
+    # a capped part_of walk: members carry project_id = their Project root.
+    # The 1000-entity cap is gone — the predicate is a single indexed filter
+    # (the root itself stays NULL-project, hence the OR on id).
+    entity_ids = MemoryEntity.where(project_id: current_project_id)
+      .or(MemoryEntity.where(id: current_project_id)).pluck(:id)
+    ProjectSubtree::Result.new(entity_ids: entity_ids, truncated: false, max_entities: nil)
   end
 
   private

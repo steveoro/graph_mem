@@ -19,10 +19,25 @@ RSpec.describe "Rails AST extractor import" do
   end
 
   def purge_fixture_names
-    MemoryEntity.where(name: %w[OtherApp Fixture Team Swimmer Order GogglesDb
-                                GogglesDb::User RepoA RepoB ApplicationRecord
-                                Shared::Base Post Article Thing ExternalBase
-                                OtherBase Vendor]).find_each do |e|
+    names = %w[OtherApp Fixture Team Swimmer Order GogglesDb
+               GogglesDb::User RepoA RepoB ApplicationRecord
+               Shared::Base Post Article Thing ExternalBase
+               OtherBase Vendor Admin Admin::Admin Admin::Admin#inner
+               Billing Notifiable admin.rb billing.rb notifiable.rb
+               post.rb Foo Foo#a Foo#b foo.rb foo_ext.rb]
+    # Destroy member rows BEFORE unclaiming: with project-scoped names a
+    # member and a global may share a name, and moving the member to
+    # scope 0 would trip UNIQUE(project_scope, name).
+    MemoryEntity.where(name: names).where.not(entity_type: "Project").find_each do |e|
+      MemoryRelation.where(from_entity_id: e.id).or(
+        MemoryRelation.where(to_entity_id: e.id)
+      ).delete_all
+      e.destroy!
+    end
+    MemoryEntity.where(name: names, entity_type: "Project").find_each do |e|
+      MemoryEntity.where(project_id: e.id).find_each do |member|
+        member.update!(project_id: nil) unless MemoryEntity.exists?(name: member.name, project_id: nil)
+      end
       MemoryRelation.where(from_entity_id: e.id).or(
         MemoryRelation.where(to_entity_id: e.id)
       ).delete_all
@@ -74,7 +89,7 @@ RSpec.describe "Rails AST extractor import" do
     # Swimmer's belongs_to :team is then an in-subtree → foreign-endpoint
     # edge: allowed, tagged cross_repo, counted.
     foreign_root = MemoryEntity.create!(name: "OtherApp", entity_type: "Project")
-    foreign_team = MemoryEntity.create!(name: "Team", entity_type: "Class")
+    foreign_team = MemoryEntity.create!(name: "Team", entity_type: "Class", project_id: foreign_root.id)
     # part_of points child → parent (Team part_of OtherApp).
     MemoryRelation.create!(from_entity: foreign_team, to_entity: foreign_root,
                            relation_type: "part_of")
@@ -97,7 +112,9 @@ RSpec.describe "Rails AST extractor import" do
       edge = belongs.first
       expect(edge.to_entity_id).to eq(foreign_team.id)
       expect(edge.properties["cross_repo"]).to eq(true)
-      expect(report.relations_cross_repo).to eq(1)
+      # 2: belongs_to → foreign-owned Team AND inherits → the global
+      # ApplicationRecord stub — both leave this project's namespace.
+      expect(report.relations_cross_repo).to eq(2)
     end
   end
 
@@ -281,6 +298,173 @@ RSpec.describe "Rails AST extractor import" do
       second = import_fixture(dir)
       expect(second.success).to be true
       expect(second.rescan_relations_flagged).to be >= 2
+    end
+  end
+
+  it "module + same-named nested class imports without a NameTaken collision" do
+    Dir.mktmpdir do |dir|
+      FileUtils.mkdir_p(File.join(dir, "app/models"))
+      File.write(File.join(dir, "app/models/admin.rb"), <<~RUBY)
+        module Admin
+          class Admin
+            def inner; end
+          end
+        end
+      RUBY
+      report = import_fixture(dir)
+      expect(report.success).to be true
+      expect(MemoryEntity.find_by(name: "Admin", entity_type: "Module")).to be_present
+      expect(MemoryEntity.find_by(name: "Admin::Admin", entity_type: "Class")).to be_present
+      expect(MemoryEntity.find_by(name: "Admin", entity_type: "Class")).to be_nil
+    end
+  end
+
+  it "v1.49 upgrade: a stored Class entity inside this project subtree retypes to Module on re-import", :with_test_embeddings do
+    # v1.49 emitted every declaration as Class. Databases holding such an
+    # import hit 'Name has already been taken' on the next rails_ast:import —
+    # the executor retypes a Class↔Module collision ONLY when the stored
+    # entity already lives inside THIS import's subtree (same-repo leftover).
+    project = MemoryEntity.create!(name: "Fixture", entity_type: "Project")
+    legacy = MemoryEntity.create!(name: "Billing", entity_type: "Class", project_id: project.id)
+    MemoryRelation.create!(from_entity: legacy, to_entity: project, relation_type: "part_of")
+    MemoryObservation.create!(memory_entity: legacy,
+                              content: "Defined at app/models/billing.rb",
+                              source: "rails_ast_extractor")
+    Dir.mktmpdir do |dir|
+      FileUtils.mkdir_p(File.join(dir, "app/models"))
+      File.write(File.join(dir, "app/models/billing.rb"), "module Billing; end\n")
+      report = import_fixture(dir)
+      expect(report.success).to be true
+      expect(legacy.reload.entity_type).to eq("Module")
+      expect(MemoryEntity.where(name: "Billing").count).to eq(1)
+    end
+  end
+
+  it "match is read-only: a Module payload must not retype a stored Class during preview" do
+    # import_upload runs matching before the operator confirms anything —
+    # writing here would let a cancelled upload rewrite entity_type.
+    legacy = MemoryEntity.create!(name: "Billing", entity_type: "Class")
+    Dir.mktmpdir do |dir|
+      FileUtils.mkdir_p(File.join(dir, "app/models"))
+      File.write(File.join(dir, "app/models/billing.rb"), "module Billing; end\n")
+      payload = RailsAstExtractor.extract(dir, project_name: "Fixture")
+      import_data = GraphifyImporter.new(JSON.generate(payload), project_name: "Fixture").translate.import_data
+      ImportMatchingStrategy.new.match(import_data)
+      expect(legacy.reload.entity_type).to eq("Class")
+    end
+  end
+
+  it "conflicting real declarations keep their type — no cross-repo ping-pong" do
+    # RepoA declares `class Foo`; RepoB declares `module Foo`. The stored
+    # entity is a real declaration in ANOTHER project's subtree, so B's
+    # colliding subtree is skipped — re-importing either side never flips
+    # entity_type back and forth.
+    Dir.mktmpdir do |dir_a|
+      FileUtils.mkdir_p(File.join(dir_a, "app/models"))
+      File.write(File.join(dir_a, "app/models/foo.rb"), "class Foo\n  def a; end\nend\n")
+      expect(import_fixture(dir_a, project: "RepoA").success).to be true
+      foo = MemoryEntity.find_by(name: "Foo")
+      expect(foo.entity_type).to eq("Class")
+
+      Dir.mktmpdir do |dir_b|
+        FileUtils.mkdir_p(File.join(dir_b, "app/models"))
+        # Distinct basename on purpose: with `foo.rb` on both sides the
+        # same-file collision rule would pre-empt the Class↔Module check and
+        # this spec couldn't go red with `retype_allowed?` forced to true.
+        File.write(File.join(dir_b, "app/models/foo_ext.rb"), "module Foo\n  def b; end\nend\n")
+        report = import_fixture(dir_b, project: "RepoB")
+        expect(report.success).to be true
+        # Scoped names let both declarations coexist: RepoA's Class stays
+        # Class, RepoB gets its own Module Foo with its own subtree.
+        expect(foo.reload.entity_type).to eq("Class")
+        foo_b = MemoryEntity.find_by(name: "Foo#b")
+        expect(foo_b).to be_present
+        expect(foo_b.project_id).to eq(MemoryEntity.find_by(name: "RepoB").id)
+        foos = MemoryEntity.where(name: "Foo", entity_type: %w[Class Module])
+        expect(foos.count).to eq(2)
+        expect(foos.find_by(entity_type: "Module").project_id).to eq(foo_b.project_id)
+      end
+
+      expect(import_fixture(dir_a, project: "RepoA").success).to be true
+      expect(foo.reload.entity_type).to eq("Class")
+    end
+  end
+
+  it "a Class declaration claims a same-named Module reference stub (stub retype branch)" do
+    # RepoB only references Foo via `include` → Module-typed reference stub.
+    # RepoA then declares `class Foo` — the Class↔Module collision is allowed
+    # to retype precisely because the stored entity is an unclaimed stub.
+    Dir.mktmpdir do |dir_b|
+      FileUtils.mkdir_p(File.join(dir_b, "app/models"))
+      File.write(File.join(dir_b, "app/models/post.rb"), "class Post\n  include Foo\nend\n")
+      expect(import_fixture(dir_b, project: "RepoB").success).to be true
+      stub = MemoryEntity.find_by(name: "Foo")
+      expect(stub&.entity_type).to eq("Module")
+
+      Dir.mktmpdir do |dir_a|
+        FileUtils.mkdir_p(File.join(dir_a, "app/models"))
+        File.write(File.join(dir_a, "app/models/foo.rb"), "class Foo\n  def a; end\nend\n")
+        expect(import_fixture(dir_a, project: "RepoA").success).to be true
+        expect(stub.reload.entity_type).to eq("Class")
+        expect(MemoryEntity.where(name: "Foo").count).to eq(1)
+        # Claimed by the declaring repo: Foo#a materialized under RepoA's Foo.
+        expect(MemoryEntity.find_by(name: "Foo#a")).to be_present
+      end
+
+      expect(MemoryRelation.exists?(from_entity: MemoryEntity.find_by(name: "Post"),
+                                    to_entity_id: stub.id, relation_type: "mixes_in")).to be true
+    end
+  end
+
+  it "cross-repo mixin stub claims the Module in both import orders" do
+    # repo2 only references Notifiable → Module-typed reference stub; repo1
+    # declares it → claims the stub (declared nodes may claim, references not).
+    Dir.mktmpdir do |dir2|
+      FileUtils.mkdir_p(File.join(dir2, "app/models"))
+      File.write(File.join(dir2, "app/models/post.rb"), "class Post\n  include Notifiable\nend\n")
+      expect(import_fixture(dir2, project: "RepoB").success).to be true
+      stub = MemoryEntity.find_by(name: "Notifiable")
+      expect(stub&.entity_type).to eq("Module")
+      stub_edge = MemoryRelation.find_by(from_entity_id: stub.id, relation_type: "part_of")
+      repo_b_parent = stub_edge&.to_entity_id
+
+      Dir.mktmpdir do |dir1|
+        FileUtils.mkdir_p(File.join(dir1, "app/models"))
+        File.write(File.join(dir1, "app/models/notifiable.rb"), "module Notifiable\n  def notify; end\nend\n")
+        expect(import_fixture(dir1, project: "RepoA").success).to be true
+        expect(MemoryEntity.where(name: "Notifiable").count).to eq(1)
+        # Claimed: the stub edge is replaced by the declaring tree's parent.
+        expect(MemoryRelation.find_by(from_entity_id: stub.id, relation_type: "part_of").to_entity_id)
+          .not_to eq(repo_b_parent)
+      end
+      expect(MemoryRelation.exists?(from_entity: MemoryEntity.find_by(name: "Post"),
+                                    to_entity_id: stub.id, relation_type: "mixes_in")).to be true
+    end
+  end
+
+  it "declared-first order: a later referencing repo still links its mixin edge" do
+    # The reverse order: repo1 declares Notifiable first, then repo2 imports
+    # `include Notifiable` — the payload node is reference-only, so the
+    # declared entity keeps its RepoA parent while Post's edge still lands.
+    Dir.mktmpdir do |dir1|
+      FileUtils.mkdir_p(File.join(dir1, "app/models"))
+      File.write(File.join(dir1, "app/models/notifiable.rb"), "module Notifiable\n  def notify; end\nend\n")
+      expect(import_fixture(dir1, project: "RepoA").success).to be true
+      declared = MemoryEntity.find_by(name: "Notifiable")
+      repo_a_parent = MemoryRelation.find_by(from_entity_id: declared.id,
+                                           relation_type: "part_of").to_entity_id
+
+      Dir.mktmpdir do |dir2|
+        FileUtils.mkdir_p(File.join(dir2, "app/models"))
+        File.write(File.join(dir2, "app/models/post.rb"), "class Post\n  include Notifiable\nend\n")
+        expect(import_fixture(dir2, project: "RepoB").success).to be true
+        expect(MemoryEntity.where(name: "Notifiable").count).to eq(1)
+        # Still parented under RepoA — a mere reference never steals the edge.
+        expect(MemoryRelation.find_by(from_entity_id: declared.id,
+                                      relation_type: "part_of").to_entity_id).to eq(repo_a_parent)
+        expect(MemoryRelation.exists?(from_entity: MemoryEntity.find_by(name: "Post"),
+                                      to_entity_id: declared.id, relation_type: "mixes_in")).to be true
+      end
     end
   end
 end

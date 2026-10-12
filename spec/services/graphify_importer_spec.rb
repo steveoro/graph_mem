@@ -118,6 +118,60 @@ RSpec.describe GraphifyImporter do
     expect(described_class.new(parsed, project_name: "x").translate.stats[:nodes_imported]).to eq(10)
   end
 
+  it "annotates reference-node referrers with the CANONICAL relation type" do
+    # The referrer's stored edge is written under the canonical type
+    # (`imports_from` → `depends_on` via EDGE_RELATION_MAPPINGS); the
+    # stored-edge match would miss it if the annotation kept the raw
+    # payload name.
+    payload = {
+      "nodes" => [
+        { "id" => "proj_root", "label" => "post.rb", "file_type" => "code",
+          "source_file" => "app/models/post.rb" },
+        { "id" => "post_cls", "label" => "Post", "_callable_class" => true },
+        { "id" => "ref_ext", "label" => "External::Dep", "reference" => true },
+        { "id" => "ref_cont", "label" => "Contained::Dep", "reference" => true }
+      ],
+      "links" => [
+        { "source" => "proj_root", "target" => "post_cls", "relation" => "contains" },
+        { "source" => "post_cls", "target" => "ref_ext", "relation" => "imports_from" },
+        # A containment edge INTO a reference node parks it in the tree but is
+        # NOT a referrer — only non-containment inbound edges annotate.
+        { "source" => "post_cls", "target" => "ref_cont", "relation" => "contains" }
+      ]
+    }
+    translated = described_class.new(JSON.generate(payload), project_name: "x").translate
+    ref = flatten(translated.import_data["root_nodes"].first)
+          .find { |n| n["name"] == "External::Dep" }
+    expect(ref["reference"]).to eq(true)
+    expect(ref["referrers"]).to eq(
+      [ { "name" => "Post", "entity_type" => "Class", "relation" => "depends_on" } ]
+    )
+    ref_cont = flatten(translated.import_data["root_nodes"].first)
+               .find { |n| n["name"] == "Contained::Dep" }
+    expect(ref_cont["reference"]).to eq(true)
+    expect(ref_cont["referrers"]).to eq([])
+  end
+
+  it "clamps numeric confidence but keeps NULL for missing/non-numeric values" do
+    data = JSON.parse(graph_json)
+    node = data["nodes"].find { |n| n["label"] == "Swimmer" }
+    node["observations"] = [
+      { "content" => "no confidence key" },
+      { "content" => "over one", "confidence" => 7 },
+      { "content" => "negative", "confidence" => -1 },
+      { "content" => "numeric string", "confidence" => "0.8" },
+      { "content" => "non-numeric", "confidence" => "abc" }
+    ]
+    translated = described_class.new(JSON.generate(data), project_name: "x").translate
+    swimmer = flatten(translated.import_data["root_nodes"].first).find { |n| n["name"] == "Swimmer" }
+    by_content = swimmer["observations"].index_by { |o| o["content"] }
+    expect(by_content["no confidence key"]["confidence"]).to be_nil
+    expect(by_content["over one"]["confidence"]).to eq(1.0)
+    expect(by_content["negative"]["confidence"]).to eq(0.0)
+    expect(by_content["numeric string"]["confidence"]).to eq(0.8)
+    expect(by_content["non-numeric"]["confidence"]).to be_nil
+  end
+
   describe "input validation" do
     it "rejects a non-object payload" do
       expect { described_class.new("[1,2,3]", project_name: "x") }

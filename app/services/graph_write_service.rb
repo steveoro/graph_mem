@@ -13,8 +13,11 @@ class GraphWriteService
   # @return [Hash] batch result, or `status: "possible_duplicate"` with no writes
   # @raise [FastMcp::Tool::InvalidArgumentsError] for invalid create data
   # @raise [McpGraphMemErrors::Error] when a dependency cannot be created
-  def self.call(operations:, logger: Rails.logger)
-    new(operations: operations, logger: logger).call
+  # @param project_id [Integer, nil] `set_context` project — name→entity
+  #   resolution prefers it, then the global namespace; created entities
+  #   join it (nil = a global entity).
+  def self.call(operations:, logger: Rails.logger, project_id: nil)
+    new(operations: operations, logger: logger, project_id: project_id).call
   end
 
   # Executes one legacy create operation without the batch envelope.
@@ -23,10 +26,11 @@ class GraphWriteService
   # @param attributes [Hash] operation-specific create fields
   # @param logger [#debug] logger used by duplicate probing
   # @return [Hash] the created record payload or possible-duplicate response
-  def self.execute_one(type, attributes, logger: Rails.logger)
+  def self.execute_one(type, attributes, logger: Rails.logger, project_id: nil)
     service = new(
       operations: [ attributes.to_h.merge(type: type.to_s) ],
-      logger: logger
+      logger: logger,
+      project_id: project_id
     )
     service.send(:execute_one)
   end
@@ -45,9 +49,10 @@ class GraphWriteService
 
   # @param operations [Array<Hash>] raw type-discriminated create operations
   # @param logger [#debug] logger used by duplicate probing
-  def initialize(operations:, logger:)
+  def initialize(operations:, logger:, project_id: nil)
     @operations = GraphMutationBatch.normalize_operations(operations)
     @logger = logger
+    @project_id = project_id
   end
 
   # Runs duplicate preflight, then executes the batch in one transaction.
@@ -70,11 +75,15 @@ class GraphWriteService
 
     results = []
     counts = Hash.new(0)
-    ActiveRecord::Base.transaction do
-      dependency_ordered_operations.each do |operation|
-        payload, additional_counts = execute_operation(operation)
-        additional_counts.each { |key, count| counts[key] += count }
-        results << GraphMutationBatch.result(operation, payload)
+    # Membership lock BEFORE the transaction: GET_LOCK taken while holding
+    # row locks deadlocks against the backfill (advisory-first rule).
+    ProjectMembership.with_membership_lock do
+      ActiveRecord::Base.transaction do
+        dependency_ordered_operations.each do |operation|
+          payload, additional_counts = execute_operation(operation)
+          additional_counts.each { |key, count| counts[key] += count }
+          results << GraphMutationBatch.result(operation, payload)
+        end
       end
     end
 
@@ -89,9 +98,21 @@ class GraphWriteService
         relations_created: counts[:relations]
       }
     }
+  rescue ProjectMembership::LockTimeout => e
+    # Raised by the OUTER lock wrapper while another session holds it —
+    # retryable, not "escalate to a human".
+    raise lock_timeout_error(e)
   end
 
   private
+
+  def lock_timeout_error(exception)
+    McpGraphMemErrors::OperationFailed.new(
+      exception.message,
+      category: "concurrency",
+      next_move: "Another import, backfill or merge is running; retry shortly."
+    )
+  end
 
   def dependency_ordered_operations
     @operations.sort_by { |operation| [ TYPE_ORDER.fetch(operation[:type]), operation[:index] ] }
@@ -117,7 +138,32 @@ class GraphWriteService
     return duplicate if duplicate
 
     operation = @operations.first
-    ActiveRecord::Base.transaction { dispatch(operation[:type], operation[:attributes]) }
+    ProjectMembership.with_membership_lock do
+      ActiveRecord::Base.transaction { dispatch(operation[:type], operation[:attributes]) }
+    end
+  rescue ProjectMembership::LockTimeout => e
+    raise lock_timeout_error(e)
+  end
+
+  # Moving/creating into a project that already holds the name surfaces as
+  # OperationFailed, not a bare UNIQUE(project_scope, name) failure; the
+  # surrounding transaction rolls the edge/entity back with it.
+  def sync_membership!(entity)
+    ProjectMembership.sync!(entity)
+  rescue ProjectMembership::LockTimeout => e
+    # A lock wait is transient, not a name conflict — retry shortly, never
+    # "rename the entity".
+    raise McpGraphMemErrors::OperationFailed.new(
+      e.message,
+      category: "concurrency",
+      next_move: "Another import, backfill or merge is running; retry shortly."
+    )
+  rescue ProjectMembership::Collision => e
+    raise McpGraphMemErrors::OperationFailed.new(
+      e.message,
+      category: "validation",
+      next_move: "Rename the entity or pick a different project scope, then retry."
+    )
   end
 
   def dispatch(type, attributes)
@@ -130,12 +176,29 @@ class GraphWriteService
 
   def create_entity(attributes)
     submitted_type = attributes[:entity_type]
+    is_project = ImportEntityResolver.canonical_type(attributes[:entity_type]) == "Project"
     entity = MemoryEntity.create!(
       name: attributes[:name],
       entity_type: attributes[:entity_type],
       aliases: attributes[:aliases],
-      description: attributes[:description]
+      description: attributes[:description],
+      # Insert directly in the FINAL scope: inserting at project_scope 0
+      # first would collide with a same-named GLOBAL entity even though
+      # the row is headed for the project scope (UNIQUE(project_scope,
+      # name) is per-scope). The part_of edge + sync! below keep the
+      # membership-mirrors-the-chain invariant.
+      project_id: (@project_id unless is_project)
     )
+    # Members join the context project by ATTACHING to it: the part_of
+    # edge makes the membership visible in the tree and
+    # ProjectMembership.sync! recomputes the column the same way every
+    # other writer does (a no-op here — inserted in scope already).
+    # Project roots and context-less creates stay global.
+    if @project_id && !is_project
+      MemoryRelation.create!(from_entity_id: entity.id, to_entity_id: @project_id,
+                             relation_type: "part_of")
+      sync_membership!(entity)
+    end
     Array(attributes[:observations]).each do |content|
       MemoryObservation.create!(memory_entity: entity, content: content)
     end
@@ -214,6 +277,12 @@ class GraphWriteService
       confidence: attributes[:confidence],
       properties: attributes[:properties] || {}
     )
+    # project_id mirrors the part_of chain: every write that creates a
+    # hierarchy edge must resync the child's scope, or the tree and the
+    # membership column drift apart (and the backfill stops being a no-op).
+    # A same-name clash in the target scope surfaces as OperationFailed
+    # and rolls the edge back with it (execution is transactional).
+    sync_membership!(MemoryEntity.find(from_id)) if canonical_type == "part_of"
     payload = GraphTraversalSerializer.relation_json(relation)
     type_hint = type_hint_for(
       attributes[:relation_type],
@@ -227,7 +296,7 @@ class GraphWriteService
   def resolve_entity_id(value)
     return value unless value.is_a?(String)
 
-    MemoryEntity.find_by(name: value)&.id || value
+    ImportEntityResolver.find_by_name(value, project_id: @project_id)&.id || value
   end
 
   def duplicate_response

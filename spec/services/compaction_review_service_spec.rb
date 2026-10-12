@@ -218,6 +218,152 @@ RSpec.describe CompactionReviewService, type: :service do
       row.update!(status: "approved", applied_at: Time.current)
       expect(described_class.apply("relation-1", { "from_id" => from_entity.id, "to_id" => to_entity.id, "relation_type" => "solves" })[:success]).to be false
     end
+
+    it "rolls the edge back when membership sync fails — failure must not orphan the row" do
+      part_of_edge = MemoryRelation.create!(from_entity: from_entity, to_entity: to_entity,
+                                            relation_type: "part_of")
+      delete_row = MaintenanceReportRow.create!(
+        maintenance_report: report,
+        report_type: "compaction_review",
+        row_uuid: "del-rel-1",
+        kind: "delete_relation",
+        status: "active",
+        signature: described_class.signature_for("delete_relation", { relation_id: part_of_edge.id }),
+        payload: { "relation_id" => part_of_edge.id }
+      )
+      allow(ProjectMembership).to receive(:sync!).and_raise(ProjectMembership::Collision, "name clash")
+
+      result = described_class.apply(delete_row.row_uuid)
+
+      expect(result[:success]).to be false
+      expect(MemoryRelation.find_by(id: part_of_edge.id)).to be_present
+    end
+
+    it "applying a part_of relationship_proposal syncs the child's project scope" do
+      project = MemoryEntity.create!(name: "PropProj", entity_type: "Project")
+      orphan = MemoryEntity.create!(name: "PropOrphan", entity_type: "Class")
+      proposal = MaintenanceReportRow.create!(
+        maintenance_report: report,
+        report_type: "compaction_review",
+        row_uuid: "prop-partof-1",
+        kind: "relationship_proposal",
+        status: "active",
+        signature: described_class.signature_for(
+          "relationship_proposal",
+          { "from_id" => orphan.id, "to_id" => project.id, "relation_type" => "part_of" }
+        ),
+        payload: { "from_id" => orphan.id, "to_id" => project.id, "relation_type" => "part_of" }
+      )
+
+      result = described_class.apply(proposal.row_uuid)
+
+      expect(result[:success]).to be true
+      expect(orphan.reload.project_id).to eq(project.id)
+    end
+
+    it "applies a part_of proposal with the advisory lock BEFORE the transaction" do
+      project = MemoryEntity.create!(name: "PropOrdProj", entity_type: "Project")
+      orphan = MemoryEntity.create!(name: "PropOrdOrphan", entity_type: "Class")
+      proposal = MaintenanceReportRow.create!(
+        maintenance_report: report,
+        report_type: "compaction_review",
+        row_uuid: "prop-partof-ord",
+        kind: "relationship_proposal",
+        status: "active",
+        signature: described_class.signature_for(
+          "relationship_proposal",
+          { "from_id" => orphan.id, "to_id" => project.id, "relation_type" => "part_of" }
+        ),
+        payload: { "from_id" => orphan.id, "to_id" => project.id, "relation_type" => "part_of" }
+      )
+
+      # Without the outer with_membership_lock the first GET_LOCK observed is
+      # reassign!'s — issued INSIDE the transaction (the deadlock ordering).
+      excess = open_transactions_at_get_lock { described_class.apply(proposal.row_uuid) }
+      expect(excess).to eq(0)
+    end
+
+    it "rolls the created part_of edge back when membership sync fails" do
+      project = MemoryEntity.create!(name: "PropRbProj", entity_type: "Project")
+      orphan = MemoryEntity.create!(name: "PropRbOrphan", entity_type: "Class")
+      proposal = MaintenanceReportRow.create!(
+        maintenance_report: report,
+        report_type: "compaction_review",
+        row_uuid: "prop-partof-rb",
+        kind: "relationship_proposal",
+        status: "active",
+        signature: described_class.signature_for(
+          "relationship_proposal",
+          { "from_id" => orphan.id, "to_id" => project.id, "relation_type" => "part_of" }
+        ),
+        payload: { "from_id" => orphan.id, "to_id" => project.id, "relation_type" => "part_of" }
+      )
+
+      # create + sync must be atomic: a sync failure that left the edge
+      # committed would stamp nothing yet report "failed".
+      allow(ProjectMembership).to receive(:sync!).and_raise(ProjectMembership::Collision, "name clash")
+      result = described_class.apply(proposal.row_uuid)
+
+      expect(result[:success]).to be false
+      expect(MemoryRelation.exists?(from_entity: orphan, to_entity: project,
+                                    relation_type: "part_of")).to be false
+      expect(orphan.reload.project_id).to be_nil
+    end
+
+    it "a part_of proposal under a held lock fails the apply and writes nothing" do
+      stub_const("ProjectMembership::LOCK_TIMEOUT_SECONDS", 0)
+      project = MemoryEntity.create!(name: "PropLockProj", entity_type: "Project")
+      orphan = MemoryEntity.create!(name: "PropLockOrphan", entity_type: "Class")
+      proposal = MaintenanceReportRow.create!(
+        maintenance_report: report,
+        report_type: "compaction_review",
+        row_uuid: "prop-partof-lock",
+        kind: "relationship_proposal",
+        status: "active",
+        signature: described_class.signature_for(
+          "relationship_proposal",
+          { "from_id" => orphan.id, "to_id" => project.id, "relation_type" => "part_of" }
+        ),
+        payload: { "from_id" => orphan.id, "to_id" => project.id, "relation_type" => "part_of" }
+      )
+
+      conn = ActiveRecord::Base.connection
+      name = ProjectMembership.lock_name(conn)
+      holder = stub_const("PropLockHolder",
+                          Class.new(ActiveRecord::Base) { self.abstract_class = true })
+      holder.establish_connection(ActiveRecord::Base.connection_db_config)
+      holder.connection.select_value("SELECT GET_LOCK(#{conn.quote(name)}, 5)")
+
+      result = described_class.apply(proposal.row_uuid)
+
+      expect(result[:success]).to be false
+      expect(MemoryRelation.exists?(from_entity: orphan, to_entity: project,
+                                    relation_type: "part_of")).to be false
+      expect(orphan.reload.project_id).to be_nil
+    ensure
+      holder.connection.select_value("SELECT RELEASE_LOCK(#{conn.quote(name)})") if holder&.connection
+      holder.connection_pool&.disconnect! if holder
+    end
+
+    it "rolls the edge back on a LockTimeout — a busy lock is a failed apply, not a partial write" do
+      part_of_edge = MemoryRelation.create!(from_entity: from_entity, to_entity: to_entity,
+                                            relation_type: "part_of")
+      delete_row = MaintenanceReportRow.create!(
+        maintenance_report: report,
+        report_type: "compaction_review",
+        row_uuid: "del-rel-lock",
+        kind: "delete_relation",
+        status: "active",
+        signature: described_class.signature_for("delete_relation", { relation_id: part_of_edge.id }),
+        payload: { "relation_id" => part_of_edge.id }
+      )
+      allow(ProjectMembership).to receive(:sync!).and_raise(ProjectMembership::LockTimeout, "lock held")
+
+      result = described_class.apply(delete_row.row_uuid)
+
+      expect(result[:success]).to be false
+      expect(MemoryRelation.find_by(id: part_of_edge.id)).to be_present
+    end
   end
 
   describe "relation integrity review rows" do
@@ -317,6 +463,112 @@ RSpec.describe CompactionReviewService, type: :service do
 
       result = described_class.apply("unknown-1")
       expect(result[:success]).to be false
+    end
+  end
+
+  describe ".items with q" do
+    it "matches names and ids inside the payload, case-insensitively" do
+      expect(described_class.items(q: "source task").map(&:row_uuid)).to include("merge-1")
+      expect(described_class.items(q: "SOURCE TASK").map(&:row_uuid)).to include("merge-1")
+    end
+
+    it "matches the kind string and returns nothing on a miss" do
+      expect(described_class.items(q: "orphan_parent").map(&:row_uuid)).to eq([ "orphan-1" ])
+      expect(described_class.items(q: "zzz-no-such-text")).to be_empty
+    end
+  end
+
+  describe ".kind_counts" do
+    it "groups active queue rows by kind" do
+      counts = described_class.kind_counts
+      expect(counts["entity_merge"]).to eq(1)
+      expect(counts["orphan_parent"]).to eq(1)
+      expect(counts["relationship_proposal"]).to eq(1)
+    end
+  end
+
+  describe ".bulk_apply" do
+    let!(:proposable_target) { MemoryEntity.create!(name: "Other B", entity_type: "PossibleSolution") }
+
+    it "applies selected actionable rows and skips non-actionable ones" do
+      described_class.dismiss("orphan-1")
+
+      result = described_class.bulk_apply([ "merge-1", "orphan-1", "rel-1" ])
+
+      expect(result[:success]).to be true
+      expect(result[:message]).to include("skipped")
+      expect(described_class.find_item("orphan-1").status).to eq("dismissed")
+    end
+
+    it "reports per-row failures without aborting the batch" do
+      MaintenanceReportRow.create!(
+        maintenance_report: report,
+        report_type: "compaction_review",
+        row_uuid: "ghost-1",
+        kind: "delete_entity",
+        status: "active",
+        signature: "delete_entity|999999",
+        payload: { "entity_id" => 999_999, "entity_name" => "Ghost" }
+      )
+
+      result = described_class.bulk_apply([ "merge-1", "ghost-1" ])
+
+      expect(result[:success]).to be false
+      expect(result[:message]).to include("failed")
+      expect(result[:message]).to include("Entity not found")
+    end
+
+    it "refuses an empty selection" do
+      expect(described_class.bulk_apply([])[:success]).to be false
+    end
+  end
+
+  describe ".delete_children_info" do
+    let!(:parent_entity) { MemoryEntity.create!(name: "Parent C", entity_type: "Class") }
+    let!(:queued_child) { MemoryEntity.create!(name: "Queued Child", entity_type: "Method") }
+    let!(:lone_child) { MemoryEntity.create!(name: "Lone Child", entity_type: "Method") }
+    let!(:delete_row) do
+      MaintenanceReportRow.create!(
+        maintenance_report: report,
+        report_type: "compaction_review",
+        row_uuid: "del-1",
+        kind: "delete_entity",
+        status: "active",
+        signature: "delete_entity|#{parent_entity.id}",
+        payload: { "entity_id" => parent_entity.id, "entity_name" => parent_entity.name }
+      )
+    end
+
+    before do
+      MemoryRelation.create!(from_entity: queued_child, to_entity: parent_entity, relation_type: "part_of")
+      MemoryRelation.create!(from_entity: lone_child, to_entity: parent_entity, relation_type: "part_of")
+      MaintenanceReportRow.create!(
+        maintenance_report: report,
+        report_type: "compaction_review",
+        row_uuid: "del-child",
+        kind: "delete_entity",
+        status: "active",
+        signature: "delete_entity|#{queued_child.id}",
+        payload: { "entity_id" => queued_child.id, "entity_name" => queued_child.name }
+      )
+    end
+
+    it "splits children into queued-for-deletion vs parentless" do
+      info = described_class.delete_children_info(report_type: "compaction_review", items: [ delete_row ])
+
+      expect(info[parent_entity.id]).to eq(queued: 1, parentless: 1)
+    end
+
+    it "ignores dismissed delete rows when counting queued children" do
+      described_class.dismiss("del-child")
+
+      info = described_class.delete_children_info(report_type: "compaction_review", items: [ delete_row ])
+
+      expect(info[parent_entity.id]).to eq(queued: 0, parentless: 2)
+    end
+
+    it "returns empty for pages without delete_entity rows" do
+      expect(described_class.delete_children_info(report_type: "compaction_review", items: [ merge_row ])).to eq({})
     end
   end
 end

@@ -2,11 +2,19 @@
 -# relationship_proposal rows may nest their fields under "payload" (legacy seeding); merge nested-then-flat.
 - rel = payload["payload"].is_a?(Hash) ? payload["payload"].merge(payload.except("payload")) : payload
 - form_id = "row-form-#{row.row_uuid}"
-.border.rounded.p-4.bg-white.shadow-sm{ id: dom_id(row) }
-  = form_with url: compaction_review_action_data_exchange_index_path, method: :post, local: true, html: { id: form_id } do
+-# The caller wraps each card in turbo_frame_tag dom_id(row) (no duplicate
+-# id here): submitting a per-row form re-renders only this frame, so a long
+-# queue keeps its scroll position instead of a full reload. NOT `local: true`
+-# — Turbo must intercept the submit so the controller can answer with
+-# turbo_stream (a plain local submit navigates the frame alone →
+-# "Content missing" after redirects).
+.border.rounded.p-4.bg-white.shadow-sm
+  = form_with url: compaction_review_action_data_exchange_index_path, method: :post, html: { id: form_id } do
     = hidden_field_tag :item_id, row.row_uuid
     = hidden_field_tag :report_type, @report_type unless @report_type == "compaction_review"
     = hidden_field_tag :status, @status_filter
+    = hidden_field_tag :kind, @kind_filter if @kind_filter
+    = hidden_field_tag :q, @q if @q
     = hidden_field_tag :page, params[:page]
     .grid.grid-cols-1.md:grid-cols-12.gap-4
       .md:col-span-1
@@ -87,12 +95,17 @@
             %p.text-xs.text-gray-600
               #{relation.from_entity&.name} → #{relation.to_entity&.name} (#{relation.relation_type})
         - when "delete_entity"
-          - entity_id = payload["entity_id"] || payload.dig("payload", "entity_id")
+          - entity_id = (payload["entity_id"] || payload.dig("payload", "entity_id")).to_i
           - entity_name = payload["entity_name"] || payload.dig("payload", "entity_name") || MemoryEntity.find_by(id: entity_id)&.name
+          - kids = (@children_info || {})[entity_id]
           %p.text-sm.mb-2
             %strong Delete entity
             %span.text-gray-500= " ##{entity_id}"
           %p.text-xs.text-gray-600= entity_name
+          - if kids && kids[:queued].positive?
+            %p.text-xs.text-amber-700.mt-1 #{kids[:queued]} child#{"ren" unless kids[:queued] == 1} queued for deletion too
+          - if kids && kids[:parentless].positive?
+            %p.text-xs.text-red-600.mt-1 #{kids[:parentless]} child#{"ren" unless kids[:parentless] == 1} will be left parentless
         - when "delete_observation"
           - observation_id = payload["observation_id"]
           - observation = MemoryObservation.find_by(id: observation_id)

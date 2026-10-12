@@ -52,6 +52,14 @@ class ApplyMaintenanceReviewTool < ApplicationTool
     raise
   rescue *ToolError::TIMEOUT_CLASSES
     raise
+  rescue ProjectMembership::LockTimeout => e
+    # A busy membership lock is transient — the same "retry shortly"
+    # contract every other write tool returns, never "escalate".
+    raise McpGraphMemErrors::OperationFailed.new(
+      e.message,
+      category: "concurrency",
+      next_move: "Another import, backfill or merge is running; retry shortly."
+    )
   rescue StandardError => e
     logger.error "ApplyMaintenanceReviewTool unexpected error: #{e.class}: #{e.message}"
     raise McpGraphMemErrors::InternalServerError, "An unexpected error occurred."

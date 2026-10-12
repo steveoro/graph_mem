@@ -13,6 +13,7 @@ class HybridSearchStrategy
         entity_id: entity.id,
         name: entity.name,
         entity_type: entity.entity_type,
+        project_id: entity.project_id,
         description: entity.description,
         aliases: entity.aliases,
         memory_observations_count: entity.memory_observations_count,

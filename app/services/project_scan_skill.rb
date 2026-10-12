@@ -306,7 +306,8 @@ class ProjectScanSkill
     return nil if name.blank? || type.blank?
 
     unique_name = unique_name_for(name, type)
-    existing = MemoryEntity.find_by(name: unique_name, entity_type: type)
+    project_id = @project_entity&.id
+    existing = MemoryEntity.find_by(name: unique_name, entity_type: type, project_id: project_id)
     if existing
       unless @dry_run
         updates = {}
@@ -321,6 +322,7 @@ class ProjectScanSkill
       entity = MemoryEntity.create!(
         name: unique_name,
         entity_type: type,
+        project_id: project_id,
         description: description.to_s.strip.presence
       )
       @created_count += 1
@@ -328,15 +330,19 @@ class ProjectScanSkill
     end
   end
 
+  # Same-name-different-type inside THIS project still gets the "(Type)"
+  # suffix — but scoped names mean a same-named entity in another project
+  # is not a collision any more, so cross-project lookups don't apply.
   def unique_name_for(name, type)
     base = name.to_s.strip
-    return base unless MemoryEntity.exists?(name: base)
-    return base if MemoryEntity.exists?(name: base, entity_type: type)
+    scope = MemoryEntity.where(project_id: @project_entity&.id)
+    return base unless scope.exists?(name: base)
+    return base if scope.exists?(name: base, entity_type: type)
 
     suffix = type
     candidate = "#{base} (#{suffix})"
     counter = 2
-    while MemoryEntity.exists?(name: candidate)
+    while scope.exists?(name: candidate)
       candidate = "#{base} (#{suffix} #{counter})"
       counter += 1
     end
@@ -371,6 +377,13 @@ class ProjectScanSkill
       relation_type: MemoryRelation.canonical_relation_type("part_of"),
       confidence: 0.9
     )
+    # Attaching under a project parent pulls the child (and its subtree)
+    # into that project's scope — a same-name conflict is reported, not raised.
+    begin
+      ProjectMembership.sync!(child)
+    rescue ProjectMembership::Collision => e
+      @errors << "Project scope conflict for #{child.name}: #{e.message}"
+    end
     @relations_created_count += 1
   end
 

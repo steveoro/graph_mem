@@ -43,7 +43,8 @@ class CreateEntityTool < ApplicationTool
         aliases: aliases,
         description: description
       },
-      logger: logger
+      logger: logger,
+      project_id: graph_mem_context.current_project_id
     )
     if service_result[:status] == "possible_duplicate"
       candidate = service_result[:candidates].first
