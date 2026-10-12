@@ -19,6 +19,8 @@ RSpec.describe "project-scoped entity names" do
                     StubRef EdgeTarget n1.rb n2.rb n3.rb SwimProj
                     ApplicationRecord app_record.rb StaleDup BackChild2
                     StaleStamp Xdup ProjX].freeze
+  # Names that can't live in the %w list above (spaces / quotes).
+  PURGED_NAMES_EXTRA = [ "Foo's Bar" ].freeze
 
   before { purge_fixture_names }
   after { purge_fixture_names }
@@ -26,7 +28,8 @@ RSpec.describe "project-scoped entity names" do
   def purge_fixture_names
     # Members first: unclaiming before their destroy would collide a
     # member's name with an existing global (UNIQUE project_scope,name).
-    MemoryEntity.where(name: PURGED_NAMES).where.not(entity_type: "Project").find_each do |e|
+    MemoryEntity.where(name: PURGED_NAMES + PURGED_NAMES_EXTRA)
+                .where.not(entity_type: "Project").find_each do |e|
       MemoryRelation.where(from_entity_id: e.id).or(
         MemoryRelation.where(to_entity_id: e.id)
       ).delete_all
@@ -297,21 +300,29 @@ RSpec.describe "project-scoped entity names" do
     end
 
     it "names an apostrophe-containing entity, not a truncated prefix of it" do
-      row = MemoryEntity.create!(name: "Foo's Bar", entity_type: "Task")
+      proj = MemoryEntity.create!(name: "ProjX", entity_type: "Project")
+      mover = MemoryEntity.create!(name: "Foo's Bar", entity_type: "Task",
+                                   project_id: proj.id) # stamped, being cleared
+      occupier = MemoryEntity.create!(name: "Foo's Bar", entity_type: "Task") # global
       hint = hint_for("0-Foo's Bar")
-      expect(hint).to include("'Foo's Bar'")
-      expect(hint).to include("id #{row.id}")
+      # The `entity 'Foo's Bar'` label pins the greedy parse — a `[^']+` parse
+      # would emit `entity 'Foo'` (the LIKE lookup would still find the rows).
+      expect(hint).to include("entity 'Foo's Bar'")
+      expect(hint).to include("id #{occupier.id}")
+      expect(hint).to include("id #{mover.id} 'Foo's Bar' (stamped to 'ProjX')")
       expect(hint).to include("no longer part of")
     end
 
-    it "branches on a project-scope clash, naming the project and the occupying row" do
+    it "branches on a project-scope clash, naming the project, the occupier and the mover" do
       proj = MemoryEntity.create!(name: "ProjX", entity_type: "Project")
+      mover = MemoryEntity.create!(name: "Xdup", entity_type: "Task") # global, being stamped
       member = MemoryEntity.create!(name: "Xdup", entity_type: "Task", project_id: proj.id)
       hint = hint_for("#{proj.id}-Xdup")
       expect(hint).to include("project 'ProjX'")
       expect(hint).to include("id #{member.id}")
+      expect(hint).to include("id #{mover.id} 'Xdup' (global)")
       expect(hint).to include("already holds")
-      expect(hint).not_to include("global")
+      expect(hint).not_to include("collides with global")
     end
 
     it "matches a truncated key value as a LIKE prefix" do

@@ -37,19 +37,30 @@ class ProjectIdBackfill
 
     scope = match[1].to_i
     prefix = match[2].delete_suffix("...") # MariaDB truncates long key values
-    occupiers = MemoryEntity.where(project_scope: scope)
-                            .where("name LIKE ?", "#{MemoryEntity.sanitize_sql_like(prefix)}%")
-                            .map { |row| "id #{row.id} '#{row.name}'" }
+    name_like = "#{MemoryEntity.sanitize_sql_like(prefix)}%"
+    labeled = lambda do |row|
+      if row.project_id
+        project = MemoryEntity.find_by(id: row.project_id)
+        "id #{row.id} '#{row.name}' (stamped to '#{project&.name || row.project_id}')"
+      else
+        "id #{row.id} '#{row.name}' (global)"
+      end
+    end
+    occupiers = MemoryEntity.where(project_scope: scope).where("name LIKE ?", name_like)
+                            .order(:id).limit(5).map(&labeled)
     occupier = occupiers.presence&.join(", ") || "(occupying row not found — rerun may have freed it)"
+    movers = MemoryEntity.where("name LIKE ?", name_like).where.not(project_scope: scope)
+                         .order(:id).limit(5).map(&labeled)
+    moving = movers.presence ? " (moving: #{movers.join(', ')})" : ""
     once = "further conflicts are reported one at a time"
 
     if scope.zero?
-      "entity '#{prefix}' is stamped to a project it is no longer part of; " \
+      "entity '#{prefix}'#{moving} is stamped to a project it is no longer part of; " \
         "clearing its scope collides with global #{occupier} — re-parent it " \
         "under its project, or merge/rename one of them, then re-run (#{once})"
     else
       project = MemoryEntity.find_by(id: scope)
-      "entity '#{prefix}' is being stamped into project '#{project&.name || scope}' " \
+      "entity '#{prefix}'#{moving} is being stamped into project '#{project&.name || scope}' " \
         "(scope #{scope}) which already holds #{occupier} — merge or rename one " \
         "of them, then re-run (#{once})"
     end
