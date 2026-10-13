@@ -191,6 +191,7 @@ class CompactionReviewService
           next if signature.blank?
           next if MaintenanceReportSuppression.suppressed?(report_type, signature)
           next if MaintenanceReportRow.by_report_type(report_type).pending.where(signature: signature).exists?
+          next if absorb_stale_memory?(report_type, payload)
 
           MaintenanceReportRow.create!(
             maintenance_report_id: report.id,
@@ -206,6 +207,49 @@ class CompactionReviewService
         report.update!(data: report.data.merge(count: created_rows.size))
         created_rows
       end
+    end
+
+    # stale_memory rows dedupe per (entity, signal): a re-detection whose
+    # observation set grew on an already-queued entity ABSORBS into the
+    # pending row — union of obs ids, refreshed signature — instead of
+    # stacking a second row for the same diagnosis. Only ACTIVE rows absorb:
+    # merging into an ignored/dismissed row would hide the new obs behind a
+    # row the operator already set aside. A merged set that was suppressed
+    # before is never resurrected (the row keeps its previous obs set).
+    # Returns true when the item was absorbed — no new row is created.
+    def absorb_stale_memory?(report_type, payload)
+      return false unless payload[:kind] == "stale_memory"
+
+      entity_id = payload[:entity_id].to_i
+      signal = payload[:signal].to_s
+      return false if entity_id.zero? || signal.blank?
+
+      # effective_payload is a plain string-keyed hash (JSON column) — index
+      # it with strings, not symbols.
+      rows = MaintenanceReportRow.by_report_type(report_type).active
+                                 .where(kind: "stale_memory")
+                                 .select do |row|
+        row.effective_payload["entity_id"].to_i == entity_id &&
+          row.effective_payload["signal"].to_s == signal
+      end
+      return false if rows.empty?
+
+      keep = rows.max_by(&:id)
+      merged_ids = (rows.flat_map { |r| Array(r.effective_payload["observation_ids"]).map(&:to_i) } +
+                    Array(payload[:observation_ids]).map(&:to_i)).uniq.sort
+      merged_payload = keep.effective_payload
+                           .merge(payload.slice("entity_name", "reason"))
+                           .merge(observation_ids: merged_ids)
+      merged_sig = signature_for("stale_memory", merged_payload)
+
+      if merged_sig.present? && merged_sig != keep.signature &&
+         !MaintenanceReportSuppression.suppressed?(report_type, merged_sig)
+        keep.update!(signature: merged_sig, payload: merged_payload)
+      end
+      # Pre-merge duplicates for the same diagnosis are retired into the
+      # row that absorbed them (audit kept via the ignored status).
+      (rows - [ keep ]).each { |row| row.update!(status: "ignored") }
+      true
     end
 
     def suppressed?(kind, payload, report_type: "compaction_review")
@@ -296,6 +340,15 @@ class CompactionReviewService
         return nil if entity_id.blank? || parent_id.blank?
 
         [ "reparent_entity", entity_id.to_i, parent_id.to_i ].join("|")
+      when "stale_memory"
+        # Dedupe on entity + observation set + SIGNAL: distinct diagnoses over
+        # the same obs (expiry vs addressed-edge) are different items — a
+        # dismissal must only suppress the signal it was taken on.
+        entity_id = payload[:entity_id]
+        obs_ids = Array(payload[:observation_ids]).compact.map(&:to_i).sort
+        return nil if entity_id.blank? || obs_ids.empty?
+
+        [ "stale_memory", entity_id.to_i, obs_ids.join("-"), payload[:signal] ].join("|")
       else
         nil
       end
@@ -446,9 +499,57 @@ class CompactionReviewService
         delete_entity(effective)
       when "dismiss_compaction_review"
         dismiss_compaction_review(effective)
+      when "stale_memory"
+        apply_stale_memory(effective)
       else
         { success: false, error: "Unknown review kind: #{row.kind}" }
       end
+    end
+
+    # stale_memory apply: mark the flagged observations obsolete. Never
+    # destroys rows — `mark_obsolete!` keeps the audit trail (obsoleted_at +
+    # reason), matching how `delete_observation` obsoletes rather than
+    # removes. Missing or already-inactive obs are skipped, not errors —
+    # a re-scan can re-flag obs the operator already handled.
+    #
+    # The signal is RE-CHECKED at apply time: the graph may have moved since
+    # the row was queued (an addressing edge removed, the entity re-rooted,
+    # an expiry edited). Obs the detector no longer flags are skipped, never
+    # obsoleted — flagging is discovery-anchored, so a cleared discovery
+    # signal clears the row's action too.
+    def apply_stale_memory(effective)
+      obs_ids = Array(effective[:observation_ids]).compact.map(&:to_i)
+      return { success: false, error: "No observation ids provided" } if obs_ids.empty?
+
+      flagged_ids = StaleMemoryScanner.still_flagged_ids(
+        entity_id: effective[:entity_id].to_i,
+        signal: effective[:signal],
+        observation_ids: obs_ids
+      )
+
+      reason = "Stale memory scan: #{effective[:signal] || 'flagged'} — #{effective[:reason]}".truncate(500)
+      marked = 0
+      skipped_inactive = 0
+      skipped_resolved = 0
+      found = 0
+      MemoryObservation.where(id: obs_ids).find_each do |obs|
+        found += 1
+        if obs.status != MemoryObservation::ACTIVE_STATUS
+          skipped_inactive += 1
+        elsif flagged_ids.include?(obs.id)
+          obs.mark_obsolete!(reason: reason)
+          marked += 1
+        else
+          skipped_resolved += 1
+        end
+      end
+      missing = obs_ids.size - found
+
+      message = "Marked #{marked} observation(s) obsolete"
+      message += "; skipped #{skipped_inactive} already-inactive" if skipped_inactive.positive?
+      message += "; skipped #{skipped_resolved} no-longer-flagged" if skipped_resolved.positive?
+      message += "; skipped #{missing} not-found" if missing.positive?
+      { success: true, message: message }
     end
 
     def merge_entities(row, effective, action_params)

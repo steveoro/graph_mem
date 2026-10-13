@@ -1,7 +1,8 @@
 # frozen_string_literal: true
 
 class MaintenanceReport < ApplicationRecord
-  REPORT_TYPES = %w[orphans duplicates compaction_review embedding_maintenance contradictions scan_review].freeze
+  REPORT_TYPES = %w[orphans duplicates compaction_review embedding_maintenance contradictions
+                    scan_review stale_memory_scan].freeze
   MAX_REPORTS_PER_TYPE = 30
 
   serialize :data, coder: JSON

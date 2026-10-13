@@ -42,7 +42,8 @@ class HybridSearchStrategy
   # @param temporal_only [Boolean] When true (the query is nothing but a temporal phrase), the temporal
   #   channel IS the base result set and text/vector channels are skipped
   # @return [Array<SearchResult>]
-  def search(query, limit: 50, semantic: true, context_entity_ids: nil, scope_entity_ids: nil, temporal_window: nil, temporal_only: false)
+  def search(query, limit: 50, semantic: true, context_entity_ids: nil, scope_entity_ids: nil,
+             temporal_window: nil, temporal_only: false, perspective: nil)
     @query = query.to_s.strip
 
     scoped_ids = scope_entity_ids || context_entity_ids
@@ -61,7 +62,7 @@ class HybridSearchStrategy
       end
 
       observation_entity_ids = if semantic
-        ids = @vector_strategy.search_observations(query, limit: limit * 2)
+        ids = @vector_strategy.search_observations(query, limit: limit * 2, perspective: perspective)
         scoped_ids.present? ? ids & scoped_ids : ids
       else
         []
@@ -77,13 +78,15 @@ class HybridSearchStrategy
       if temporal_window.blank?
         []
       elsif temporal_only
-        @temporal_strategy.search(temporal_window, limit: limit * 2, entity_ids: scope_entity_ids)
+        @temporal_strategy.search(temporal_window, limit: limit * 2, entity_ids: scope_entity_ids,
+                                  perspective: perspective)
       else
         candidates = (text_results.map { |result| result.entity.id } +
                       vector_results.map { |result| result.entity.id } +
                       observation_entity_ids).uniq
         candidates &= scope_entity_ids if scope_entity_ids.present?
-        candidates.empty? ? [] : @temporal_strategy.search(temporal_window, limit: nil, entity_ids: candidates)
+        candidates.empty? ? [] : @temporal_strategy.search(temporal_window, limit: nil, entity_ids: candidates,
+                                                           perspective: perspective)
       end
 
     scores, entities, matched = build_score_maps(

@@ -26,6 +26,7 @@ class UpdateObservationTool < ApplicationTool
     optional(:text_content).maybe(:string).description("Replacement observation content.")
     optional(:confidence).maybe(:float).description("Confidence score from 0.0 to 1.0.")
     optional(:source).maybe(:string).description("Source or provenance identifier.")
+    optional(:perspective).maybe(:string).description("Memory perspective: 'world' (external fact) or 'experience' (work-log entry).")
     optional(:valid_from).maybe(:string).description("ISO 8601 start of the validity period.")
     optional(:valid_until).maybe(:string).description("ISO 8601 end of the validity period.")
     optional(:tags).array(:string).description("Structured tags.")

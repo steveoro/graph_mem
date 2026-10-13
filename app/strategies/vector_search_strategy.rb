@@ -49,7 +49,7 @@ class VectorSearchStrategy
 
   # Search observations semantically.
   # @return [Array<Integer>] Entity IDs whose observations match
-  def search_observations(query, limit: 50)
+  def search_observations(query, limit: 50, perspective: nil)
     return [] unless EmbeddingService.vector_enabled?
 
     query_vector = @embedding_service.embed(query)
@@ -66,9 +66,11 @@ class VectorSearchStrategy
       [ "MIN(VEC_DISTANCE_COSINE(embedding, VEC_FromText(?))) ASC", vector_sql ]
     )
 
-    MemoryObservation
-      .active
-      .with_embedding
+    scope = MemoryObservation
+            .active
+            .with_embedding
+    scope = scope.where(perspective: perspective) if perspective.present?
+    scope
       .select(:memory_entity_id, Arel.sql(distance_sql))
       .group(:memory_entity_id)
       .order(Arel.sql(order_sql))

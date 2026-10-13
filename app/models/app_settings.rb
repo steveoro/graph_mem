@@ -8,6 +8,7 @@ class AppSettings < RailsSettings::Base
   field :enable_dream_state_compactor, default: true, type: :boolean
   field :enable_garbage_collector, default: true, type: :boolean
   field :enable_contradiction_detection, default: true, type: :boolean
+  field :enable_stale_memory_scan, default: true, type: :boolean
 
   # Database backup settings
   field :backup_folder_path, default: "db/backup", type: :string
@@ -116,6 +117,10 @@ class AppSettings < RailsSettings::Base
 
   def self.contradiction_detection_enabled?
     read_boolean_setting("enable_contradiction_detection", default: true)
+  end
+
+  def self.stale_memory_scan_enabled?
+    read_boolean_setting("enable_stale_memory_scan", default: true)
   end
 
   def self.llm_summarization_enabled?

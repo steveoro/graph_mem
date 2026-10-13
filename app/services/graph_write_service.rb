@@ -232,6 +232,7 @@ class GraphWriteService
       content: attributes[:text_content] || attributes[:content],
       confidence: attributes[:confidence],
       source: attributes[:source],
+      perspective: attributes[:perspective],
       valid_from: attributes[:valid_from],
       valid_until: attributes[:valid_until],
       tags: attributes[:tags] || []

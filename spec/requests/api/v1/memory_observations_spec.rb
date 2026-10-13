@@ -78,6 +78,7 @@ RSpec.describe 'API V1 Memory Observations', type: :request do
           content: { type: :string, example: 'This is an observation.' },
           confidence: { type: :number, format: :float, minimum: 0, maximum: 1, nullable: true },
           source: { type: :string, nullable: true },
+          perspective: { type: :string, enum: %w[world experience], nullable: true },
           valid_from: { type: :string, format: 'date-time', nullable: true },
           valid_until: { type: :string, format: 'date-time', nullable: true },
           tags: { type: :array, items: { type: :string } }
@@ -94,6 +95,7 @@ RSpec.describe 'API V1 Memory Observations', type: :request do
             source: 'integration-test',
             valid_from: '2026-07-01T00:00:00Z',
             valid_until: '2026-08-01T00:00:00Z',
+            perspective: 'world',
             tags: %w[test api]
           }
         end
@@ -105,6 +107,8 @@ RSpec.describe 'API V1 Memory Observations', type: :request do
           expect(data['memory_entity_id']).to eq(memory_entity.id)
           expect(data['confidence']).to eq(0.9)
           expect(data['source']).to eq('integration-test')
+          expect(data['perspective']).to eq('world')
+          expect(MemoryObservation.find(data['id']).perspective).to eq('world')
           expect(data['tags']).to eq(%w[test api])
           expect(memory_entity.reload.memory_observations.count).to eq(1)
         end
@@ -195,6 +199,7 @@ RSpec.describe 'API V1 Memory Observations', type: :request do
           content: { type: :string, example: 'Updated Observation Content' },
           confidence: { type: :number, format: :float, minimum: 0, maximum: 1, nullable: true },
           source: { type: :string, nullable: true },
+          perspective: { type: :string, enum: %w[world experience], nullable: true },
           valid_from: { type: :string, format: 'date-time', nullable: true },
           valid_until: { type: :string, format: 'date-time', nullable: true },
           tags: { type: :array, items: { type: :string } },

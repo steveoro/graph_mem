@@ -116,6 +116,17 @@
           - if observation
             %p.text-xs.text-gray-600.mb-2= observation.content
             %p.text-xs.text-gray-500= "from #{entity_name} (#{observation.memory_entity&.entity_type})"
+        - when "stale_memory"
+          - stale_obs = MemoryObservation.where(id: Array(payload["observation_ids"])).index_by(&:id)
+          %p.text-sm.mb-2
+            %strong= payload["entity_name"] || MemoryEntity.find_by(id: payload["entity_id"])&.name
+            %span.text-gray-500= " (##{payload['entity_id']})"
+          %p.text-xs.text-gray-600.mb-2= "#{Array(payload['observation_ids']).size} observation(s) flagged as stale"
+          - Array(payload["observation_ids"]).first(5).each do |obs_id|
+            - obs = stale_obs[obs_id.to_i]
+            %p.text-xs.text-gray-500.mb-1= "##{obs_id}: #{obs ? obs.content.to_s.truncate(90) : '(missing)'}"
+          - if Array(payload["observation_ids"]).size > 5
+            %p.text-xs.text-gray-400= "…and #{Array(payload['observation_ids']).size - 5} more"
         - when "dismiss_compaction_review"
           %p.text-sm.mb-2
             %strong Dismiss compaction review
@@ -174,6 +185,12 @@
             %p.text-xs.text-gray-500= payload["reason"]
         - when "dismiss_compaction_review"
           %p.text-xs= "Dismiss a conflicting compaction review item."
+        - when "stale_memory"
+          %p.text-xs
+            %span.inline-flex.items-center.rounded.bg-amber-100.px-2.py-0.5.text-amber-800= payload["signal"].to_s.humanize
+          - if payload["reason"].present?
+            %p.text-xs.text-gray-500.mt-1= payload["reason"]
+          %p.text-xs.text-gray-500.mt-1= "Apply marks the flagged observations obsolete (audit trail kept)."
       .md:col-span-3.flex.flex-wrap.items-start.gap-2
         - if row.active? || row.ignored?
           = submit_tag "Save", name: "review_action", value: "edit", class: "rounded bg-blue-600 px-2 py-1 text-xs text-white hover:bg-blue-700", form: form_id

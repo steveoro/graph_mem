@@ -43,16 +43,21 @@ class SearchTool < ApplicationTool
     optional(:occurred_after).maybe(:string).description("ISO 8601 lower bound for occurred-time recall (valid_from/valid_until, or retention time for undated facts).")
     optional(:occurred_before).maybe(:string).description("ISO 8601 upper bound for occurred-time recall.")
     optional(:as_of).maybe(:string).description("ISO 8601 instant: facts whose validity contains it (or already retained by it) — cannot be combined with occurred_after/occurred_before.")
+    optional(:perspective).maybe(:string).description("Observation perspective hard filter: 'world' surfaces only factual observations, 'experience' only work-log entries; omitted returns both.")
     optional(:max_tokens).filled(:integer).description("Estimated token budget (chars/4 heuristic): ranked results are packed until the next item would exceed it.")
   end
 
   def call(query: nil, include: [], page: nil, per_page: nil, limit: nil,
            search_in_name: true, search_in_type: true, search_in_aliases: true,
            search_in_observations: true, occurred_after: nil, occurred_before: nil,
-           as_of: nil, max_tokens: nil)
+           as_of: nil, max_tokens: nil, perspective: nil)
     effective_page, effective_per_page = normalized_paging(page, per_page || limit)
     projections = normalize_projections(include)
     temporal_window = build_temporal_window(occurred_after, occurred_before, as_of)
+    if perspective.present? && !MemoryObservation::PERSPECTIVES.include?(perspective)
+      raise FastMcp::Tool::InvalidArgumentsError,
+            "perspective must be one of #{MemoryObservation::PERSPECTIVES.join(', ')} (world = external fact, experience = work-log entry)."
+    end
     max_tokens = TokenBudget.validate_max_tokens!(max_tokens, error_class: FastMcp::Tool::InvalidArgumentsError)
 
     if query.nil?
@@ -77,7 +82,8 @@ class SearchTool < ApplicationTool
         search_in_aliases: search_in_aliases,
         search_in_observations: search_in_observations,
         temporal_window: temporal_window,
-        max_tokens: max_tokens
+        max_tokens: max_tokens,
+        perspective: perspective
       )
     else
       summary_result(
@@ -85,7 +91,8 @@ class SearchTool < ApplicationTool
         page: effective_page,
         per_page: effective_per_page,
         temporal_window: temporal_window,
-        max_tokens: max_tokens
+        max_tokens: max_tokens,
+        perspective: perspective
       )
     end
   rescue *ToolError::TIMEOUT_CLASSES
@@ -122,7 +129,7 @@ class SearchTool < ApplicationTool
     normalized
   end
 
-  def summary_result(query, page:, per_page:, temporal_window: nil, max_tokens: nil)
+  def summary_result(query, page:, per_page:, temporal_window: nil, max_tokens: nil, perspective: nil)
     context_scope = graph_mem_context.scoped_entity_scope
     offset = (page - 1) * per_page
     payload = EntityRetrievalService.search(
@@ -133,7 +140,8 @@ class SearchTool < ApplicationTool
       # scope_entity_ids would hard-filter temporal-only queries.
       context_entity_ids: context_scope&.entity_ids,
       context_scope: context_scope,
-      temporal_window: temporal_window
+      temporal_window: temporal_window,
+      perspective: perspective
     )
     page_results = payload[:results].map(&:to_h).drop(offset).first(per_page)
     retrieval = payload[:retrieval].merge(result_count: page_results.size)

@@ -14,7 +14,7 @@ namespace :graph_mem do
       # the transactional apply already rolled back — tell the operator
       # how to unblock instead of surfacing the raw DB error.
       abort "backfill aborted and rolled back: #{ProjectIdBackfill.conflict_hint(e)}\n" \
-            "  raw error: #{e.message}"
+            "  raw error: #{e.cause&.message || e.message}"
     end
   end
 

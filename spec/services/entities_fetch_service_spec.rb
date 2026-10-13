@@ -77,7 +77,31 @@ RSpec.describe EntitiesFetchService do
       expect(current.dig(:entities, 0, :observations_truncated)).to be(true)
       expect(historical.dig(:entities, 0, :observations).pluck(:observation_id)).to include(obsolete.id)
     end
+
+    it "perspective filters the observation payload (world vs experience)" do
+      world_obs = MemoryObservation.create!(memory_entity: first, content: "A fact",
+                                            perspective: "world")
+      MemoryObservation.create!(memory_entity: first, content: "Work log entry",
+                                perspective: "experience")
+      MemoryObservation.create!(memory_entity: first, content: "Untyped note")
+
+      world = described_class.call(entity_ids: [ first.id ], perspective: "world")
+      expect(world.dig(:entities, 0, :observations).pluck(:observation_id)).to eq([ world_obs.id ])
+
+      experience = described_class.call(entity_ids: [ first.id ], perspective: "experience")
+      expect(experience.dig(:entities, 0, :observations).size).to eq(1)
+
+      # Omitted returns every observation — the filter is opt-in.
+      all = described_class.call(entity_ids: [ first.id ])
+      expect(all.dig(:entities, 0, :observations).size).to eq(3)
+    end
+
+    it "rejects an unknown perspective" do
+      expect { described_class.call(entity_ids: [ first.id ], perspective: "opinion") }
+        .to raise_error(FastMcp::Tool::InvalidArgumentsError, /perspective must be one of/)
+    end
   end
+
   describe "temporal + token budget" do
     let!(:entity_a) { MemoryEntity.create!(name: "EA", entity_type: "Project") }
     let!(:entity_b) { MemoryEntity.create!(name: "EB", entity_type: "Project") }
