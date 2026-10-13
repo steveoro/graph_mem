@@ -33,6 +33,9 @@ class StaleMemoryScanner
   # Obs text still asserting the entity is unresolved. Kept tight on purpose:
   # a looser match would flag facts merely mentioning the bug.
   OPEN_MARKERS = /\b(open|unresolved|pending|blocked|outstanding|to-?do|not fixed|still broken|wontfix-yet)\b/i
+  # Negation guard: phrases asserting the OPPOSITE state ("no longer open")
+  # must not be treated as open claims. Kept equally tight.
+  NEGATED_MARKERS = /\b(no longer|not anymore|never was|isn'?t|wasn'?t)\s+(open|unresolved|pending|blocked|outstanding|broken)\b/i
   ADDRESSING_RELATIONS = %w[solves replaces resolves fixes].freeze
   # Vector contradiction detection candidates are bounded by obs activity
   # since the previous scan — a cost bound, not a staleness criterion.
@@ -73,6 +76,7 @@ class StaleMemoryScanner
                             .joins(:memory_entity)
                             .where(memory_entities: { entity_type: ADDRESSABLE_TYPES })
                             .where("memory_observations.content REGEXP ?", OPEN_MARKERS.source)
+                            .where.not("memory_observations.content REGEXP ?", NEGATED_MARKERS.source)
                             .joins(
                               "INNER JOIN memory_relations addressing " \
                               "ON addressing.to_entity_id = memory_entities.id " \
@@ -160,6 +164,37 @@ class StaleMemoryScanner
     report = MaintenanceReport.where(report_type: SCAN_REPORT_TYPE).order(id: :desc).first
     stored = report&.data.is_a?(Hash) ? report.data["watermark"].presence : nil
     Time.iso8601(stored.to_s) rescue (report&.created_at || CONTRADICTION_LOOKBACK.ago)
+  end
+
+  # Apply-time re-check: the graph moves between scan and apply — an
+  # addressing edge can be removed, an entity re-rooted, an expiry edited.
+  # Only observations a detector STILL flags may be obsoleted; the rest are
+  # reported as no-longer-flagged rather than stale. Signals this scanner
+  # doesn't know are not second-guessed — every still-active obs counts.
+  def self.still_flagged_ids(entity_id:, signal:, observation_ids:)
+    scope = MemoryObservation.active.where(id: observation_ids)
+    case signal.to_s
+    when "valid_until_elapsed"
+      scope.where("valid_until IS NOT NULL AND valid_until < ?", Time.current).pluck(:id)
+    when "addressed_by_newer_edge"
+      scope.select do |obs|
+        MemoryRelation.where(to_entity_id: entity_id, relation_type: ADDRESSING_RELATIONS)
+                      .where("created_at > ?", obs.created_at).exists?
+      end.map(&:id)
+    when "unrooted_after_rescan"
+      entity_rooted?(entity_id) ? [] : scope.pluck(:id)
+    else
+      scope.pluck(:id)
+    end
+  end
+
+  # Single-entity variant of the unrooted detector's membership walk: rooted
+  # means reachable through ANY Project's part_of tree. The project_id stamp
+  # alone is only a cache — the edge walk is authoritative.
+  def self.entity_rooted?(entity_id)
+    MemoryEntity.where(entity_type: "Project").pluck(:id).any? do |project_id|
+      ProjectMembership.member_ids(project_id).include?(entity_id)
+    end
   end
 
   def self.item(entity_id, entity_name, observations, signal:, reason:)

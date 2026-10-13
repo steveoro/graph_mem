@@ -36,6 +36,14 @@ RSpec.describe GetEntitiesTool, type: :model do
       expect(result[:missing_entity_ids]).to eq([ 999_999 ])
     end
 
+    it "threads perspective through to the fetch service" do
+      allow(EntitiesFetchService).to receive(:call)
+        .and_return(entities: [], relations: [], missing_entity_ids: [])
+      tool.call(entity_ids: [ first.id ], perspective: "world")
+      expect(EntitiesFetchService).to have_received(:call)
+        .with(hash_including(perspective: "world"))
+    end
+
     it "maps one missing ID to a canonical not-found error" do
       expect {
         tool.call(entity_ids: [ 999_999 ])

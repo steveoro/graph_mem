@@ -83,6 +83,26 @@ RSpec.describe "Observation perspective (C3a)" do
         .to contain_exactly("world", "experience")
     end
 
+    it "subgraph perspective filter excludes other-perspective obs from payloads" do
+      entities = SubgraphSearchService.call(query: "planet", include_observations: true,
+                                            include_relations: false,
+                                            perspective: "world")[:entities]
+      perspectives = entities.flat_map { |e| e[:observations].map { |o| o[:perspective] } }
+      expect(perspectives).to eq([ "world" ])
+    end
+
+    it "vector observation search applies the perspective filter" do
+      strategy = VectorSearchStrategy.new(embedding_service: instance_double(EmbeddingService, embed: [ 0.0 ] * 768))
+      allow(EmbeddingService).to receive(:vector_enabled?).and_return(true)
+      relation = MemoryObservation.all
+      allow(MemoryObservation).to receive(:active).and_return(relation)
+      allow(relation).to receive(:with_embedding).and_return(relation)
+      %i[select group order limit pluck].each { |m| allow(relation).to receive(m).and_return(relation) }
+      allow(relation).to receive(:pluck).and_return([])
+      expect(relation).to receive(:where).with(perspective: "world").and_return(relation)
+      strategy.search_observations("q", perspective: "world")
+    end
+
     it "summary mode threads perspective to retrieval" do
       expect(EntityRetrievalService).to receive(:search)
         .with("planet", hash_including(perspective: "experience"))

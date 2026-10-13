@@ -11,8 +11,12 @@ class SeedCausedByRelationMappings < ActiveRecord::Migration[8.1]
 
   def up
     ([ CANONICAL ] + VARIANTS).each do |variant|
-      RelationTypeMapping.find_or_initialize_by(variant: variant.downcase)
-                         .update!(canonical_type: CANONICAL)
+      mapping = RelationTypeMapping.find_or_initialize_by(variant: variant.downcase)
+      # Only write NEW variants or ones already pointing at this canonical —
+      # never clobber an operator's deliberate remap (e.g. triggered_by→depends_on).
+      next if mapping.persisted? && mapping.canonical_type != CANONICAL
+
+      mapping.update!(canonical_type: CANONICAL)
     end
     RelationTypeMapping.reset_canonicalize_cache!
   end

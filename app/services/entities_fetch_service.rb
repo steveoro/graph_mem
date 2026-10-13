@@ -10,7 +10,7 @@ class EntitiesFetchService
   def initialize(entity_ids:, relations: nil, include_obsolete: false, include_ranked: false,
                  query: nil, observation_limit: nil, strict_single: true,
                  always_rank_observations: false, temporal_window: nil, max_tokens: nil,
-                 context_active: false)
+                 perspective: nil, context_active: false)
     @entity_ids = Array(entity_ids).map(&:to_i).uniq
     @relations_mode = relations.presence || default_relations_mode
     @include_obsolete = include_obsolete
@@ -23,6 +23,7 @@ class EntitiesFetchService
     @temporal_window = @extraction.window
     @effective_query = @extraction.effective_query
     @max_tokens = max_tokens
+    @perspective = perspective
     @context_active = context_active
   end
 
@@ -58,10 +59,14 @@ class EntitiesFetchService
     if @entity_ids.empty?
       raise FastMcp::Tool::InvalidArgumentsError, "entity_ids array cannot be empty."
     end
-    return if @relations_mode.in?(RELATION_MODES)
+    unless @relations_mode.in?(RELATION_MODES)
+      raise FastMcp::Tool::InvalidArgumentsError,
+            "relations must be one of: #{RELATION_MODES.join(', ')}."
+    end
+    return if @perspective.nil? || @perspective.in?(MemoryObservation::PERSPECTIVES)
 
     raise FastMcp::Tool::InvalidArgumentsError,
-          "relations must be one of: #{RELATION_MODES.join(', ')}."
+          "perspective must be one of: #{MemoryObservation::PERSPECTIVES.join(', ')}."
   end
 
   def default_relations_mode
@@ -71,6 +76,9 @@ class EntitiesFetchService
   def entity_payload(entity)
     pool = @include_obsolete ? entity.memory_observations : entity.active_memory_observations
     pool = pool.select { |observation| @temporal_window.covers?(observation) } if @temporal_window
+    # Perspective is a hard filter on the observation payload, not a rank —
+    # same semantics as `search`/`traverse_graph` (closed vocabulary).
+    pool = pool.select { |observation| observation.perspective == @perspective } if @perspective.present?
     observations = ranked_observations(pool)
 
     {
