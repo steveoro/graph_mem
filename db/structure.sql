@@ -163,7 +163,7 @@ CREATE TABLE `memory_entities` (
   `memory_observations_count` int(11) DEFAULT NULL,
   `aliases` text DEFAULT NULL,
   `description` text DEFAULT NULL,
-  `embedding` vector(768) DEFAULT NULL,
+  `embedding` vector(768) NOT NULL,
   `embedded_at` datetime(6) DEFAULT NULL,
   `project_id` bigint(20) DEFAULT NULL,
   `project_scope` bigint(20) GENERATED ALWAYS AS (coalesce(`project_id`,0)) STORED,
@@ -173,9 +173,25 @@ CREATE TABLE `memory_entities` (
   KEY `idx_memory_entities_embedded_at` (`embedded_at`),
   KEY `idx_memory_entities_project_type` (`project_id`,`entity_type`),
   FULLTEXT KEY `index_memory_entities_fulltext` (`name`,`aliases`),
+  VECTOR KEY `idx_memory_entities_embedding` (`embedding`) `DISTANCE`='cosine',
   CONSTRAINT `fk_rails_c5169366bc` FOREIGN KEY (`project_id`) REFERENCES `memory_entities` (`id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=25701 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
+/*!50003 SET @saved_cs_client      = @@character_set_client */ ;
+/*!50003 SET @saved_cs_results     = @@character_set_results */ ;
+/*!50003 SET @saved_col_connection = @@collation_connection */ ;
+/*!50003 SET character_set_client  = utf8mb4 */ ;
+/*!50003 SET character_set_results = utf8mb4 */ ;
+/*!50003 SET collation_connection  = utf8mb4_uca1400_ai_ci */ ;
+/*!50003 SET @saved_sql_mode       = @@sql_mode */ ;
+/*!50003 SET sql_mode              = 'NO_AUTO_VALUE_ON_ZERO,STRICT_TRANS_TABLES,STRICT_ALL_TABLES,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION' */ ;
+DELIMITER ;;
+/*!50003 CREATE*/ /*!50017 DEFINER=`root`@`localhost`*/ /*!50003 TRIGGER trg_memory_entities_embedding_bi BEFORE INSERT ON memory_entities FOR EACH ROW SET NEW.embedding = IFNULL(NEW.embedding, VEC_FromText(CONCAT('[', REPEAT('0,', 767), '0]'))) */;;
+DELIMITER ;
+/*!50003 SET sql_mode              = @saved_sql_mode */ ;
+/*!50003 SET character_set_client  = @saved_cs_client */ ;
+/*!50003 SET character_set_results = @saved_cs_results */ ;
+/*!50003 SET collation_connection  = @saved_col_connection */ ;
 DROP TABLE IF EXISTS `memory_observations`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8mb4 */;
@@ -185,7 +201,7 @@ CREATE TABLE `memory_observations` (
   `memory_entity_id` bigint(20) NOT NULL,
   `created_at` datetime(6) NOT NULL,
   `updated_at` datetime(6) NOT NULL,
-  `embedding` vector(768) DEFAULT NULL,
+  `embedding` vector(768) NOT NULL,
   `confidence` float DEFAULT NULL,
   `source` varchar(255) DEFAULT NULL,
   `valid_from` datetime(6) DEFAULT NULL,
@@ -210,10 +226,26 @@ CREATE TABLE `memory_observations` (
   KEY `index_memory_observations_temporal_cover` (`status`,`memory_entity_id`,`valid_from`,`valid_until`,`created_at`),
   KEY `idx_memory_observations_embedded_at` (`embedded_at`),
   KEY `index_memory_observations_on_perspective` (`perspective`),
+  VECTOR KEY `idx_memory_observations_embedding` (`embedding`) `DISTANCE`='cosine',
   CONSTRAINT `fk_rails_59348732bc` FOREIGN KEY (`superseded_by_id`) REFERENCES `memory_observations` (`id`) ON DELETE SET NULL,
   CONSTRAINT `fk_rails_675e0d9a7a` FOREIGN KEY (`memory_entity_id`) REFERENCES `memory_entities` (`id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=17407 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
+/*!50003 SET @saved_cs_client      = @@character_set_client */ ;
+/*!50003 SET @saved_cs_results     = @@character_set_results */ ;
+/*!50003 SET @saved_col_connection = @@collation_connection */ ;
+/*!50003 SET character_set_client  = utf8mb4 */ ;
+/*!50003 SET character_set_results = utf8mb4 */ ;
+/*!50003 SET collation_connection  = utf8mb4_uca1400_ai_ci */ ;
+/*!50003 SET @saved_sql_mode       = @@sql_mode */ ;
+/*!50003 SET sql_mode              = 'NO_AUTO_VALUE_ON_ZERO,STRICT_TRANS_TABLES,STRICT_ALL_TABLES,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION' */ ;
+DELIMITER ;;
+/*!50003 CREATE*/ /*!50017 DEFINER=`root`@`localhost`*/ /*!50003 TRIGGER trg_memory_observations_embedding_bi BEFORE INSERT ON memory_observations FOR EACH ROW SET NEW.embedding = IFNULL(NEW.embedding, VEC_FromText(CONCAT('[', REPEAT('0,', 767), '0]'))) */;;
+DELIMITER ;
+/*!50003 SET sql_mode              = @saved_sql_mode */ ;
+/*!50003 SET character_set_client  = @saved_cs_client */ ;
+/*!50003 SET character_set_results = @saved_cs_results */ ;
+/*!50003 SET collation_connection  = @saved_col_connection */ ;
 DROP TABLE IF EXISTS `memory_relations`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8mb4 */;
