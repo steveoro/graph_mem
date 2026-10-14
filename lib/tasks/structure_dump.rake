@@ -7,11 +7,23 @@
 # terminator, which leaves a stray "*/" in structure.sql — db:schema:load
 # then fails with ERROR 1064 on fresh databases. Strip the tag after every
 # dump so the committed file stays loadable (see PR #97).
-Rake::Task["db:schema:dump"].enhance do
+#
+# The snapshot prerequisite + StructureDumpGuard additionally prevent dumps
+# taken from a DB that never ran `embeddings:add_indexes` from degrading the
+# committed file (VECTOR KEYs, NOT NULL columns and insert triggers would go
+# missing — CI treats that as a broken structure.sql).
+namespace :db do
+  task snapshot_structure_sql: :environment do
+    path = Rails.root.join("db/structure.sql")
+    StructureDumpGuard.snapshot = path.read if path.exist?
+  end
+end
+
+Rake::Task["db:schema:dump"].enhance([ "db:snapshot_structure_sql" ]) do
   path = Rails.root.join("db/structure.sql")
   next unless path.exist?
 
   original = path.read
-  cleaned = StructureDumpCleaner.call(original)
+  cleaned = StructureDumpGuard.call(StructureDumpCleaner.call(original))
   path.write(cleaned) if cleaned != original
 end

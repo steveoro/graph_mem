@@ -16,11 +16,16 @@ RSpec.describe "db/structure.sql" do
   it "writes trigger terminators on the dump's own one-line format" do
     expect(structure_sql.scan(%r{TRIGGER .*? \*/;;}m).size).to eq(2)
   end
+
+  it "carries the full indexed embedding schema (NOT NULL + VECTOR KEY)" do
+    expect(structure_sql.scan(/`embedding` vector\(\d+\) NOT NULL/i).size).to eq(2)
+    expect(structure_sql.scan(/VECTOR KEY `idx_memory_\w+_embedding`/i).size).to eq(2)
+  end
 end
 
 RSpec.describe StructureDumpCleaner do
   let(:trigger_line) do
-    "/*!50003 CREATE*/ /*!50003 TRIGGER trg_x BEFORE INSERT ON t FOR EACH ROW SET NEW.x = 1"
+    "/*!50003 CREATE*/ /*!50017 DEFINER=`root`@`localhost`*/ /*!50003 TRIGGER trg_x BEFORE INSERT ON t FOR EACH ROW SET NEW.x = 1"
   end
 
   it "strips marginalia on the same line as the terminator (real dev dump)" do
@@ -36,5 +41,72 @@ RSpec.describe StructureDumpCleaner do
   it "leaves clean trigger lines untouched" do
     clean = "#{trigger_line} */;;\n"
     expect(described_class.call(clean)).to eq(clean)
+  end
+end
+
+RSpec.describe StructureDumpGuard do
+  let(:canonical_dump) do
+    <<~SQL
+      CREATE TABLE `memory_entities` (
+        `id` bigint(20) NOT NULL AUTO_INCREMENT,
+        `embedding` vector(768) NOT NULL,
+        VECTOR KEY `idx_memory_entities_embedding` (`embedding`) `DISTANCE`='cosine'
+      );
+      DELIMITER ;;
+      /*!50003 CREATE*/ /*!50017 DEFINER=`root`@`localhost`*/ /*!50003 TRIGGER trg_memory_entities_embedding_bi BEFORE INSERT ON memory_entities FOR EACH ROW SET NEW.embedding = IFNULL(NEW.embedding, 'x') */;;
+      DELIMITER ;
+      CREATE TABLE `memory_observations` (
+        `id` bigint(20) NOT NULL AUTO_INCREMENT,
+        `embedding` vector(768) NOT NULL,
+        VECTOR KEY `idx_memory_observations_embedding` (`embedding`) `DISTANCE`='cosine'
+      );
+      DELIMITER ;;
+      /*!50003 CREATE*/ /*!50017 DEFINER=`root`@`localhost`*/ /*!50003 TRIGGER trg_memory_observations_embedding_bi BEFORE INSERT ON memory_observations FOR EACH ROW SET NEW.embedding = IFNULL(NEW.embedding, 'x') */;;
+      DELIMITER ;
+    SQL
+  end
+
+  # Same tables on a DB where `embeddings:add_indexes` never ran.
+  let(:degraded_dump) do
+    <<~SQL
+      CREATE TABLE `memory_entities` (
+        `id` bigint(20) NOT NULL AUTO_INCREMENT,
+        `embedding` vector(768) DEFAULT NULL
+      );
+      CREATE TABLE `memory_observations` (
+        `id` bigint(20) NOT NULL AUTO_INCREMENT,
+        `embedding` vector(768) DEFAULT NULL
+      );
+    SQL
+  end
+
+  before { described_class.snapshot = nil }
+
+  it "passes a canonical dump through untouched" do
+    expect(described_class.call(canonical_dump)).to eq(canonical_dump)
+  end
+
+  it "restores the previous canonical dump when the fresh one lost the embedding indexes" do
+    described_class.snapshot = canonical_dump
+    expect { expect(described_class.call(degraded_dump)).to eq(canonical_dump) }
+      .to output(/without the embedding indexes\/triggers/).to_stderr
+  end
+
+  it "keeps the fresh dump (with a warning) when no canonical snapshot exists" do
+    expect { expect(described_class.call(degraded_dump)).to eq(degraded_dump) }
+      .to output(/no previous canonical dump/).to_stderr
+  end
+
+  it "warns but keeps dumps that carry no embedding columns at all" do
+    column_less = "CREATE TABLE `memory_entities` (\n  `id` bigint(20) NOT NULL\n);\n"
+    expect { expect(described_class.call(column_less)).to eq(column_less) }
+      .to output(/no embedding VECTOR columns/).to_stderr
+  end
+
+  it "bypasses the guard when GRAPH_MEM_ALLOW_UNINDEXED_DUMP is set" do
+    described_class.snapshot = canonical_dump
+    allow(ENV).to receive(:[]).and_call_original
+    allow(ENV).to receive(:[]).with("GRAPH_MEM_ALLOW_UNINDEXED_DUMP").and_return("1")
+    expect(described_class.call(degraded_dump)).to eq(degraded_dump)
   end
 end
