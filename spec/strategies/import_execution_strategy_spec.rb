@@ -685,6 +685,93 @@ RSpec.describe ImportExecutionStrategy, type: :model do
         expect(report.errors.first).to include('not found')
       end
     end
+
+    context 'first-time import performance' do
+      # 20 children x 3 observations + 19 relations: the pre-refactor flow
+      # ran ~3 detector queries per observation plus a COUNT+UPDATE recount
+      # pair per node (~240 extra SELECTs here). The optimized flow plucks
+      # active contents once per entity (never for freshly-created ones) and
+      # reconciles counters in a single grouped update.
+      let(:import_data) do
+        children = (1..20).map do |i|
+          {
+            'name' => "Perf Task #{i}",
+            'entity_type' => 'Task',
+            'relation_type' => 'part_of',
+            'observations' => [
+              { 'content' => "perf obs #{i}.1" },
+              { 'content' => "perf obs #{i}.2" },
+              { 'content' => "perf obs #{i}.3" }
+            ],
+            'children' => []
+          }
+        end
+        {
+          'root_nodes' => [
+            { 'name' => 'Perf Project', 'entity_type' => 'Project',
+              'observations' => [ { 'content' => 'root obs' } ], 'children' => children }
+          ],
+          'relations' => (1..19).map do |i|
+            { 'from_name' => "Perf Task #{i}", 'from_type' => 'Task',
+              'to_name' => "Perf Task #{i + 1}", 'to_type' => 'Task',
+              'relation_type' => 'relates_to' }
+          end
+        }
+      end
+
+      let(:decisions) { [ { node_path: '0', action: 'create' } ] }
+
+      def sql_queries(&block)
+        queries = []
+        subscriber = ActiveSupport::Notifications.subscribe('sql.active_record') do |_n, _s, _f, _id, payload|
+          queries << payload[:sql] unless %w[SCHEMA TRANSACTION].include?(payload[:name].to_s)
+        end
+        block.call
+        queries
+      ensure
+        ActiveSupport::Notifications.unsubscribe(subscriber)
+      end
+
+      it 'never calls the duplicate detector — no stored observations to compare' do
+        report = strategy.execute(import_data, decisions)
+
+        expect(report.success).to be(true)
+        expect(report.entities_created).to eq(21)
+        expect(report.observations_created).to eq(61)
+        expect(observation_duplicate_detector).not_to have_received(:find_duplicate)
+      end
+
+      it 'keeps memory_observations SELECTs bounded — O(entities), not O(observations)' do
+        queries = sql_queries { strategy.execute(import_data, decisions) }
+        obs_selects = queries.grep(/\ASELECT\b/i).count do |sql|
+          sql.match?(/\bFROM\s+`?memory_observations`?/i)
+        end
+
+        # One grouped counter reconcile + the deferred per-endpoint trust
+        # recompute (~1 SELECT per touched entity). The pre-refactor detector
+        # issued ~3 SELECTs per observation (~180 here).
+        expect(obs_selects).to be <= 60
+      end
+
+      it 're-imports idempotently with unchanged counts' do
+        first = strategy.execute(import_data, decisions)
+        expect(first.success).to be(true)
+
+        counts = {
+          entities: MemoryEntity.count,
+          observations: MemoryObservation.count,
+          relations: MemoryRelation.count
+        }
+        expect(MemoryEntity.find_by(name: 'Perf Project').memory_observations_count).to eq(1)
+
+        second = described_class.new(observation_duplicate_detector: observation_duplicate_detector)
+                            .execute(import_data, decisions)
+        expect(second.success).to be(true)
+        expect(MemoryEntity.count).to eq(counts[:entities])
+        expect(MemoryObservation.count).to eq(counts[:observations])
+        expect(MemoryRelation.count).to eq(counts[:relations])
+      end
+    end
   end
 
   describe 'ImportReport' do
@@ -1018,7 +1105,6 @@ RSpec.describe ImportExecutionStrategy, type: :model do
     let(:decisions) { [ { node_path: '0', action: 'create' } ] }
 
     it 'suppresses inline embeddings and enqueues a maintenance backfill' do
-      entity_embedder = instance_double(EmbeddingService)
       allow(EmbeddingService).to receive(:embed_entity).and_raise('should not be called')
       allow(EmbeddingService).to receive(:embed_observation).and_raise('should not be called')
       expect(EmbeddingsMaintenanceEnqueuer).to receive(:enqueue!).with('backfill')

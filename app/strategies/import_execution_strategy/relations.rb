@@ -21,6 +21,12 @@ module ImportExecutionStrategy::Relations
     # (name,type) map cannot express that.
     reference_to_ids = resolve_reference_targets(relations, endpoint_ids)
     existing = preload_existing_relations(relations, endpoint_ids, reference_to_ids)
+    # {entity_id => owning project id}: every resolvable endpoint's
+    # project stamp (Project roots own themselves), loaded once so the
+    # edge loop never queries per pair.
+    endpoint_projects = MemoryEntity.where(id: endpoint_ids.values | reference_to_ids.values)
+                                    .pluck(:id, :project_id, :entity_type)
+                                    .to_h { |id, pid, type| [ id, pid || (type == NodeOperationsStrategy::PROJECT_ENTITY_TYPE ? id : nil) ] }
 
     Array(relations).each_with_index do |relation, index|
       raw_type = relation["relation_type"] || relation[:relation_type]
@@ -58,9 +64,6 @@ module ImportExecutionStrategy::Relations
       # definition now (scoped names made them ordinary) — tagged so the
       # operator can tell local structure from bridging.
       properties = relation["properties"] || relation[:properties] || {}
-      endpoint_projects = MemoryEntity.where(id: [ from_id, to_id ])
-                                      .pluck(:id, :project_id, :entity_type)
-                                      .to_h { |id, pid, type| [ id, pid || (type == NodeOperationsStrategy::PROJECT_ENTITY_TYPE ? id : nil) ] }
       from_project = endpoint_projects[from_id]
       to_project = endpoint_projects[to_id]
       cross_repo = from_project != to_project
@@ -199,15 +202,24 @@ module ImportExecutionStrategy::Relations
       to_id = reference_to_ids[index] || endpoint_ids[endpoint_key(relation["to_name"] || relation[:to_name],
                                         relation["to_type"] || relation[:to_type])]
       [ from_id, to_id, MemoryRelation.canonical_relation_type(raw_type) ] if from_id && to_id
-    end
+    end.uniq
     return Set.new if triples.empty?
 
-    MemoryRelation
-      .where(from_entity_id: triples.map(&:first).uniq,
-             to_entity_id: triples.map(&:second).uniq,
-             relation_type: triples.map(&:third).uniq)
-      .pluck(:from_entity_id, :to_entity_id, :relation_type)
-      .each_with_object(Set.new) { |(from_id, to_id, type), set| set << [ from_id, to_id, type ] }
+    # Composite row-value IN matches the (from,to,type) unique index
+    # exactly — the old three separate IN lists cross-joined into a
+    # superset that pulled unrelated edges. Sliced to keep the SQL under
+    # statement-size limits on large payloads.
+    seen = Set.new
+    triples.each_slice(1_000) do |slice|
+      quoted = slice.map do |from_id, to_id, type|
+        "(#{from_id.to_i}, #{to_id.to_i}, #{MemoryRelation.connection.quote(type)})"
+      end
+      MemoryRelation
+        .where(Arel.sql("(from_entity_id, to_entity_id, relation_type) IN (#{quoted.join(', ')})"))
+        .pluck(:from_entity_id, :to_entity_id, :relation_type)
+        .each { |from_id, to_id, type| seen << [ from_id, to_id, type ] }
+    end
+    seen
   end
 
   # Create a relation safely (handling duplicates)
@@ -234,9 +246,8 @@ module ImportExecutionStrategy::Relations
     end
 
     # Hierarchy is single-parent: replace any existing part_of parent before attaching.
-    reparented = false
     if RelationSemantics.single_parent?(canonical_type)
-      reparented = MemoryRelation.where(from_entity_id: from_entity_id, relation_type: canonical_type).destroy_all.any?
+      MemoryRelation.where(from_entity_id: from_entity_id, relation_type: canonical_type).destroy_all
     end
 
     RelationSemantics.validate_create!(

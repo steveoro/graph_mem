@@ -22,7 +22,8 @@ class SeedCausedByRelationMappings < ActiveRecord::Migration[8.1]
   end
 
   def down
-    RelationTypeMapping.where(variant: ([ CANONICAL ] + VARIANTS).map(&:downcase)).delete_all
+    RelationTypeMapping.where(variant: ([ CANONICAL ] + VARIANTS).map(&:downcase),
+                              canonical_type: CANONICAL).delete_all
     RelationTypeMapping.reset_canonicalize_cache!
   end
 end

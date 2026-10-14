@@ -63,6 +63,8 @@ module Api
             .where.not(id: MemoryRelation.select(:to_entity_id))
             .count,
           most_connected: most_connected_entities,
+          god_nodes: god_nodes,
+          god_node_count: god_node_count,
           recently_updated: MemoryEntity.order(updated_at: :desc).limit(10).pluck(:id, :name, :entity_type, :updated_at)
             .map { |id, name, type, at| { id: id, name: name, entity_type: type, updated_at: at.iso8601 } }
         }
@@ -71,15 +73,34 @@ module Api
       private
 
       def most_connected_entities
-        from_counts = MemoryRelation.group(:from_entity_id).count
-        to_counts = MemoryRelation.group(:to_entity_id).count
-        merged = from_counts.merge(to_counts) { |_k, a, b| a + b }
-
-        merged.sort_by { |_id, cnt| -cnt }.first(10).filter_map do |entity_id, count|
-          entity = MemoryEntity.find_by(id: entity_id)
-          next unless entity
-          { id: entity.id, name: entity.name, entity_type: entity.entity_type, relation_count: count }
+        ranked_degree_pairs.first(10).filter_map do |entity_id, count|
+          entity_payload_for_degree(entity_id, count)
         end
+      end
+
+      def god_nodes
+        ranked_degree_pairs.select { |_id, count| count > GetGraphStatsTool::GOD_NODE_DEGREE_THRESHOLD }
+                          .first(10)
+                          .filter_map { |entity_id, count| entity_payload_for_degree(entity_id, count) }
+      end
+
+      def god_node_count
+        ranked_degree_pairs.count { |_id, count| count > GetGraphStatsTool::GOD_NODE_DEGREE_THRESHOLD }
+      end
+
+      def ranked_degree_pairs
+        @ranked_degree_pairs ||= begin
+          from_counts = MemoryRelation.group(:from_entity_id).count
+          to_counts = MemoryRelation.group(:to_entity_id).count
+          from_counts.merge(to_counts) { |_id, a, b| a + b }.sort_by { |_id, count| -count }
+        end
+      end
+
+      def entity_payload_for_degree(entity_id, count)
+        entity = MemoryEntity.find_by(id: entity_id)
+        return unless entity
+
+        { id: entity.id, name: entity.name, entity_type: entity.entity_type, relation_count: count }
       end
     end
   end

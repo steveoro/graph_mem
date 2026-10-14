@@ -432,11 +432,24 @@ class SummarizerService
       response[:generation_mode] = "llm"
       response[:generated_by] = SummarizationConfig.resolved_config[:model]
       response[:fallback_reason] = nil
+      response[:citation_check] = citation_check_for(result[:text], evidence)
       return response
     end
 
     response[:fallback_reason] = result[:error] || "provider_unavailable"
     response
+  end
+
+  def citation_check_for(text, evidence)
+    valid_ids = evidence.map { |entry| entry[:observation].id }.to_set
+    cited_ids = text.to_s.scan(/observation_id\s*=\s*(\d+)/i).flatten.map(&:to_i).uniq
+    unknown_ids = cited_ids - valid_ids.to_a
+    {
+      cited_ids: cited_ids,
+      unknown_ids: unknown_ids,
+      uncited_evidence_ids: (valid_ids.to_a - cited_ids),
+      possible_hallucination: unknown_ids.any?
+    }
   end
 
   def fallback_reason_for_disabled

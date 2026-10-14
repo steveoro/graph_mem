@@ -91,6 +91,17 @@ RSpec.describe "Observation perspective (C3a)" do
       expect(perspectives).to eq([ "world" ])
     end
 
+    it "subgraph perspective filter excludes an entity matching only via experience obs" do
+      experience_only = MemoryEntity.create!(name: "ExperienceOnly", entity_type: "Entity")
+      MemoryObservation.create!(memory_entity: experience_only, content: "unique planet experience",
+                                perspective: "experience")
+
+      entities = SubgraphSearchService.call(query: "planet", include_observations: true,
+                                            include_relations: false,
+                                            perspective: "world")[:entities]
+      expect(entities.map { |e| e[:entity_id] }).not_to include(experience_only.id)
+    end
+
     it "vector observation search applies the perspective filter" do
       strategy = VectorSearchStrategy.new(embedding_service: instance_double(EmbeddingService, embed: [ 0.0 ] * 768))
       allow(EmbeddingService).to receive(:vector_enabled?).and_return(true)
@@ -124,7 +135,7 @@ RSpec.describe "Observation perspective (C3a)" do
       { "content" => "custom source", "source" => "my_crawler" },
       { "content" => "explicit", "source" => "graphify", "perspective" => "experience" }
     ] }
-    strategy.send(:import_observations, node, entity2.id)
+    strategy.send(:import_observations, node, entity2)
     expect(entity2.memory_observations.order(:id).pluck(:perspective))
       .to eq([ "world", nil, "experience" ])
   end

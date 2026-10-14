@@ -444,7 +444,14 @@ class GraphifyImporter
   end
 
   def build_stats(relations, ambiguous)
-    mapped = @edges.count { |edge| EDGE_RELATION_MAPPINGS.key?(edge["relation"].to_s) }
+    # Single pass: the old per-metric `count` blocks each re-walked @edges.
+    mapped = 0
+    containment = 0
+    @edges.each do |edge|
+      relation = edge["relation"].to_s
+      containment += 1 if CONTAINMENT_RELATIONS.include?(relation)
+      mapped += 1 if EDGE_RELATION_MAPPINGS.key?(relation)
+    end
 
     {
       nodes_total: (@data["nodes"] || []).size,
@@ -455,13 +462,12 @@ class GraphifyImporter
       nodes_skipped_overlong: @nodes_skipped_overlong,
       nodes_promoted_to_root: @nodes_promoted_to_root,
       edges_total: @edges.size,
-      edges_containment: @edges.count { |edge| CONTAINMENT_RELATIONS.include?(edge["relation"].to_s) },
+      edges_containment: containment,
       relations_emitted: relations.size,
       relations_ambiguous: ambiguous.size,
       relations_dropped_unresolved: @unresolved_edges || 0,
       relations_deduped: mapped - relations.size - ambiguous.size - (@unresolved_edges || 0),
-      relations_unmapped: @edges.size -
-        @edges.count { |edge| CONTAINMENT_RELATIONS.include?(edge["relation"].to_s) } - mapped
+      relations_unmapped: @edges.size - containment - mapped
     }
   end
 end

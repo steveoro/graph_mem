@@ -219,6 +219,21 @@ RSpec.describe CompactionReviewService, type: :service do
       expect(described_class.apply("relation-1", { "from_id" => from_entity.id, "to_id" => to_entity.id, "relation_type" => "solves" })[:success]).to be false
     end
 
+    it "re-checks the row status inside the lock before applying" do
+      row = described_class.find_item("relation-1")
+      allow(described_class).to receive(:find_item).and_return(row)
+      allow(row).to receive(:with_lock) do |&block|
+        row.update!(status: "dismissed", dismissed_at: Time.current)
+        block.call
+      end
+
+      result = described_class.apply("relation-1", { "from_id" => from_entity.id, "to_id" => to_entity.id, "relation_type" => "solves" })
+
+      expect(result[:success]).to be false
+      expect(result[:error]).to include("not actionable")
+      expect(MemoryRelation.find_by(from_entity_id: from_entity.id, to_entity_id: to_entity.id, relation_type: "solves")).to be_nil
+    end
+
     it "rolls the edge back when membership sync fails — failure must not orphan the row" do
       part_of_edge = MemoryRelation.create!(from_entity: from_entity, to_entity: to_entity,
                                             relation_type: "part_of")
@@ -334,9 +349,10 @@ RSpec.describe CompactionReviewService, type: :service do
       holder.establish_connection(ActiveRecord::Base.connection_db_config)
       holder.connection.select_value("SELECT GET_LOCK(#{conn.quote(name)}, 5)")
 
-      result = described_class.apply(proposal.row_uuid)
-
-      expect(result[:success]).to be false
+      # The busy advisory lock surfaces as a raised LockTimeout — callers
+      # map it to the transient "retry shortly" concurrency envelope.
+      expect { described_class.apply(proposal.row_uuid) }
+        .to raise_error(ProjectMembership::LockTimeout)
       expect(MemoryRelation.exists?(from_entity: orphan, to_entity: project,
                                     relation_type: "part_of")).to be false
       expect(orphan.reload.project_id).to be_nil
@@ -446,6 +462,84 @@ RSpec.describe CompactionReviewService, type: :service do
 
       rows = described_class.seed_report(report_type: "compaction_review", source: "test", items: items)
       expect(rows).to be_empty
+    end
+  end
+
+  describe ".absorb_stale_memory?" do
+    let(:scan_entity) { MemoryEntity.create!(name: "ScanEnt", entity_type: "Issue") }
+    let(:obs1) { MemoryObservation.create!(memory_entity: scan_entity, content: "obs 1") }
+    let(:obs2) { MemoryObservation.create!(memory_entity: scan_entity, content: "obs 2") }
+    let(:obs3) { MemoryObservation.create!(memory_entity: scan_entity, content: "obs 3") }
+
+    def stale_row(uuid, obs_ids, edited: nil)
+      payload = {
+        "kind" => "stale_memory",
+        "entity_id" => scan_entity.id,
+        "signal" => "valid_until_elapsed",
+        "observation_ids" => obs_ids
+      }
+      MaintenanceReportRow.create!(
+        maintenance_report: report,
+        report_type: "stale_memory_scan",
+        row_uuid: uuid,
+        kind: "stale_memory",
+        status: "active",
+        signature: described_class.signature_for("stale_memory", payload),
+        payload: payload,
+        edited_payload: edited
+      )
+    end
+
+    it "merges a re-detection into the pending row and retires duplicates" do
+      keep = stale_row("sm-1", [ obs1.id ])
+      duplicate = stale_row("sm-2", [ obs2.id ])
+      payload = {
+        kind: "stale_memory", entity_id: scan_entity.id,
+        signal: "valid_until_elapsed", observation_ids: [ obs3.id ]
+      }
+
+      expect(described_class.absorb_stale_memory?("stale_memory_scan", payload)).to be true
+
+      keep.reload
+      expect(keep.effective_payload["observation_ids"].map(&:to_i)).to eq([ obs1.id, obs2.id, obs3.id ].sort)
+      expect(duplicate.reload.status).to eq("ignored")
+    end
+
+    it "merges new observation ids into edited_payload so operator edits win" do
+      keep = stale_row("sm-1", [ obs1.id ], edited: { "observation_ids" => [ obs1.id ], "note" => "keep" })
+      payload = {
+        kind: "stale_memory", entity_id: scan_entity.id,
+        signal: "valid_until_elapsed", observation_ids: [ obs2.id ]
+      }
+
+      described_class.absorb_stale_memory?("stale_memory_scan", payload)
+
+      keep.reload
+      expect(keep.edited_payload["observation_ids"].map(&:to_i)).to eq([ obs1.id, obs2.id ])
+      expect(keep.edited_payload["note"]).to eq("keep")
+    end
+
+    it "does not resurrect a suppressed merged signature" do
+      keep = stale_row("sm-1", [ obs1.id ])
+      merged_sig = described_class.signature_for(
+        "stale_memory",
+        "entity_id" => scan_entity.id, "signal" => "valid_until_elapsed",
+        "observation_ids" => [ obs1.id, obs2.id ].sort
+      )
+      MaintenanceReportSuppression.create!(
+        report_type: "stale_memory_scan",
+        signature: merged_sig,
+        kind: "stale_memory",
+        dismissed_at: Time.current
+      )
+      payload = {
+        kind: "stale_memory", entity_id: scan_entity.id,
+        signal: "valid_until_elapsed", observation_ids: [ obs2.id ]
+      }
+
+      described_class.absorb_stale_memory?("stale_memory_scan", payload)
+
+      expect(keep.reload.effective_payload["observation_ids"].map(&:to_i)).to eq([ obs1.id ])
     end
   end
 

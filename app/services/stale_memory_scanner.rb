@@ -35,7 +35,7 @@ class StaleMemoryScanner
   OPEN_MARKERS = /\b(open|unresolved|pending|blocked|outstanding|to-?do|not fixed|still broken|wontfix-yet)\b/i
   # Negation guard: phrases asserting the OPPOSITE state ("no longer open")
   # must not be treated as open claims. Kept equally tight.
-  NEGATED_MARKERS = /\b(no longer|not anymore|never was|isn'?t|wasn'?t)\s+(open|unresolved|pending|blocked|outstanding|broken)\b/i
+  NEGATED_MARKERS = /\b(no longer|not anymore|never was|isn'?t|wasn'?t|not)\s+(open|unresolved|pending|blocked|outstanding|broken)\b/i
   ADDRESSING_RELATIONS = %w[solves replaces resolves fixes].freeze
   # Vector contradiction detection candidates are bounded by obs activity
   # since the previous scan — a cost bound, not a staleness criterion.

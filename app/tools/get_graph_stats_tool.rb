@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 class GetGraphStatsTool < ApplicationTool
+  GOD_NODE_DEGREE_THRESHOLD = 100
+
   def self.tool_name
     "get_graph_stats"
   end
@@ -14,7 +16,7 @@ class GetGraphStatsTool < ApplicationTool
   )
 
   description "Return live knowledge-graph health metrics (totals, entity_type_distribution, orphan_count, " \
-    "most_connected, recent updates). Takes no arguments. " \
+    "most_connected, god_nodes, recent updates). Takes no arguments. " \
     "Do not use for stored report documents; use `get_maintenance_reports` instead. " \
     "Do not use to page actual entities; use `search` instead. " \
     "Do not use for a topic summary; use `summarize` instead. " \
@@ -27,6 +29,8 @@ class GetGraphStatsTool < ApplicationTool
       entity_type_distribution: entity_type_distribution,
       orphan_count: orphan_count,
       most_connected: most_connected,
+      god_nodes: god_nodes,
+      god_node_count: god_node_count,
       recently_updated: recently_updated,
       latest_maintenance: latest_maintenance
     }
@@ -62,17 +66,31 @@ class GetGraphStatsTool < ApplicationTool
   end
 
   def most_connected
-    from_counts = MemoryRelation.group(:from_entity_id).count
-    to_counts   = MemoryRelation.group(:to_entity_id).count
-
-    merged = from_counts.merge(to_counts) { |_k, a, b| a + b }
-    top_ids = merged.sort_by { |_id, cnt| -cnt }.first(10)
-
-    top_ids.map do |entity_id, count|
+    ranked_degrees.first(10).filter_map do |entity_id, count|
       entity = MemoryEntity.find_by(id: entity_id)
       next unless entity
       { id: entity.id, name: entity.name, entity_type: entity.entity_type, relation_count: count }
-    end.compact
+    end
+  end
+
+  def god_nodes
+    ranked_degrees.select { |_id, count| count > GOD_NODE_DEGREE_THRESHOLD }.first(10).filter_map do |entity_id, count|
+      entity = MemoryEntity.find_by(id: entity_id)
+      next unless entity
+      { id: entity.id, name: entity.name, entity_type: entity.entity_type, relation_count: count }
+    end
+  end
+
+  def god_node_count
+    ranked_degrees.count { |_id, count| count > GOD_NODE_DEGREE_THRESHOLD }
+  end
+
+  def ranked_degrees
+    @ranked_degrees ||= begin
+      from_counts = MemoryRelation.group(:from_entity_id).count
+      to_counts = MemoryRelation.group(:to_entity_id).count
+      from_counts.merge(to_counts) { |_id, a, b| a + b }.sort_by { |_id, count| -count }
+    end
   end
 
   def recently_updated

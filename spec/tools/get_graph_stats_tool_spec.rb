@@ -94,6 +94,48 @@ RSpec.describe GetGraphStatsTool, type: :model do
       end
     end
 
+    describe "god_nodes" do
+      def create_hub_with_degree(degree)
+        EmbeddingService.suppress_inline_embeddings do
+          hub = MemoryEntity.create!(name: "GodHub-#{SecureRandom.hex(4)}", entity_type: "Entity")
+          target_rows = degree.times.map do |i|
+            { name: "GodTarget-#{hub.id}-#{i}", entity_type: "Entity",
+              created_at: Time.current, updated_at: Time.current }
+          end
+          MemoryEntity.insert_all!(target_rows)
+          target_ids = MemoryEntity.where(name: target_rows.map { |row| row[:name] }).pluck(:id)
+          MemoryRelation.insert_all!(
+            target_ids.map do |to_id|
+              { from_entity_id: hub.id, to_entity_id: to_id, relation_type: "calls",
+                created_at: Time.current, updated_at: Time.current }
+            end
+          )
+          hub
+        end
+      end
+
+      it "reports entities whose degree exceeds the fixed threshold" do
+        hub = create_hub_with_degree(101)
+        result = tool.call
+        god = result[:god_nodes].find { |entry| entry[:id] == hub.id }
+        expect(god).to include(relation_count: 101)
+        expect(result[:god_node_count]).to be >= 1
+      end
+
+      it "does not report entities at the fixed threshold" do
+        hub = create_hub_with_degree(100)
+        result = tool.call
+        expect(result[:god_nodes].map { |entry| entry[:id] }).not_to include(hub.id)
+      end
+
+      it "caps god_nodes at 10 entries" do
+        11.times { create_hub_with_degree(101) }
+        result = tool.call
+        expect(result[:god_nodes].size).to be <= 10
+        expect(result[:god_node_count]).to be >= 11
+      end
+    end
+
     describe "most_connected" do
       it "returns an array of entity hashes" do
         result = tool.call

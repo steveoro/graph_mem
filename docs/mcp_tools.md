@@ -413,6 +413,7 @@ These tools perform structural graph queries. `direction` is one of `outgoing`
   - `max_entities` (integer, optional, default: 100, max: 1000): Maximum number of entities to return.
   - `include` (array, optional): Any of `entities`, `relations`, and `traversal`.
 - **Response:** BFS defaults to `{ entities, relations, traversal }`; relation-query mode defaults to `{ relations }`.
+- **Caller lookup:** to list an entity's callers, use `direction: "incoming"` with `relation_types: ["calls"]`. There is no `get_callers` tool — the dedicated tool is permanently dropped in favor of this recipe.
 
 #### `find_shortest_path`
 - **Description:** Find the shortest hop-count path between two entities. Pass required `from_entity_id` and `to_entity_id` (integer; also accepts entity name); optional `max_depth` (integer, default 2, max 5), `direction` (both|outgoing|incoming, default both), `relation_types` (array of strings). Returns ordered path entities and relations, or found false when none exists within max_depth. Do not use for a full neighborhood from one start; use `traverse_graph` instead. Do not use for 1-hop filters; use `traverse_graph` instead. Do not use for keyword lookup; use `search` instead.
@@ -488,7 +489,7 @@ These tools perform structural graph queries. `direction` is one of `outgoing`
 - **Response:** Updated review-row status payload.
 
 #### `get_graph_stats`
-- **Description:** Return live knowledge-graph health metrics (totals, entity_type_distribution, orphan_count, most_connected, recent updates). Takes no arguments. Do not use for stored report documents; use `get_maintenance_reports` instead. Do not use to page actual entities; use `search` instead. Do not use for a topic summary; use `summarize` instead. Do not use for compaction job status; use `dream_state_status` instead. Do not use for software version; use `get_version` instead.
+- **Description:** Return live knowledge-graph health metrics (totals, entity_type_distribution, orphan_count, most_connected, god_nodes, recent updates). `god_nodes` lists entities whose total incident-edge count exceeds 100 (capped at 10) plus `god_node_count`. Takes no arguments. Do not use for stored report documents; use `get_maintenance_reports` instead. Do not use to page actual entities; use `search` instead. Do not use for a topic summary; use `summarize` instead. Do not use for compaction job status; use `dream_state_status` instead. Do not use for software version; use `get_version` instead.
 - **Parameters:** None
 
 ## Utility Tools (2 tools)

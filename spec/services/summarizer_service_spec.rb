@@ -94,6 +94,65 @@ RSpec.describe SummarizerService do
       expect(result[:sources]).not_to be_empty
     end
 
+    it "reports valid LLM citations with no hallucination flag" do
+      AppSettings.enable_llm_summarization = true
+      AppSettings.summary_url = "http://summary.test:11434"
+      AppSettings.summary_model = "qwen3:8b"
+      AppSettings.summary_provider = "ollama"
+
+      allow(HybridSearchStrategy).to receive(:new).and_return(
+        instance_double(HybridSearchStrategy, search: [
+          HybridSearchStrategy::SearchResult.new(entity: entity, score: 0.9, matched_fields: [ "name" ])
+        ])
+      )
+      allow(SummaryGenerationClient).to receive(:generate).and_return(
+        { ok: true, text: "Steve uses Ruby. [observation_id=#{active_observation.id}]", error: nil }
+      )
+
+      result = described_class.call(query: "Steve")
+
+      expect(result[:citation_check]).to include(
+        cited_ids: [ active_observation.id ],
+        unknown_ids: [],
+        uncited_evidence_ids: [],
+        possible_hallucination: false
+      )
+    end
+
+    it "flags unknown citation ids as possible hallucination" do
+      AppSettings.enable_llm_summarization = true
+      AppSettings.summary_url = "http://summary.test:11434"
+      AppSettings.summary_model = "qwen3:8b"
+      AppSettings.summary_provider = "ollama"
+
+      allow(HybridSearchStrategy).to receive(:new).and_return(
+        instance_double(HybridSearchStrategy, search: [
+          HybridSearchStrategy::SearchResult.new(entity: entity, score: 0.9, matched_fields: [ "name" ])
+        ])
+      )
+      allow(SummaryGenerationClient).to receive(:generate).and_return(
+        { ok: true, text: "Steve uses Perl. [observation_id=999999]", error: nil }
+      )
+
+      result = described_class.call(query: "Steve")
+
+      expect(result[:citation_check][:possible_hallucination]).to be true
+      expect(result[:citation_check][:unknown_ids]).to eq([ 999_999 ])
+      expect(result[:citation_check][:uncited_evidence_ids]).to eq([ active_observation.id ])
+    end
+
+    it "does not add citation_check for deterministic summaries" do
+      allow(HybridSearchStrategy).to receive(:new).and_return(
+        instance_double(HybridSearchStrategy, search: [
+          HybridSearchStrategy::SearchResult.new(entity: entity, score: 0.9, matched_fields: [ "name" ])
+        ])
+      )
+
+      result = described_class.call(query: "Steve")
+      expect(result[:generation_mode]).to eq("deterministic")
+      expect(result).not_to have_key(:citation_check)
+    end
+
     it "falls back when the provider fails" do
       AppSettings.enable_llm_summarization = true
       AppSettings.summary_url = "http://summary.test:11434"
