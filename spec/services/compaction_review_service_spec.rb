@@ -471,10 +471,10 @@ RSpec.describe CompactionReviewService, type: :service do
     let(:obs2) { MemoryObservation.create!(memory_entity: scan_entity, content: "obs 2") }
     let(:obs3) { MemoryObservation.create!(memory_entity: scan_entity, content: "obs 3") }
 
-    def stale_row(uuid, obs_ids, edited: nil)
+    def stale_row(uuid, obs_ids, edited: nil, entity: scan_entity)
       payload = {
         "kind" => "stale_memory",
-        "entity_id" => scan_entity.id,
+        "entity_id" => entity.id,
         "signal" => "valid_until_elapsed",
         "observation_ids" => obs_ids
       }
@@ -559,10 +559,24 @@ RSpec.describe CompactionReviewService, type: :service do
       selects = queries.select { |sql| sql.match?(/FROM `?maintenance_report_rows`?/i) }
       expect(selects).not_to be_empty
       expect(selects).to all(match(/FOR UPDATE/i))
-      # The candidate SELECT must narrow by entity in SQL — locking every
-      # active stale_memory row would block unrelated applies for the
-      # whole seed transaction.
-      expect(selects.grep(/JSON_VALUE/i)).not_to be_empty
+      # The candidate SELECT must narrow on the indexed generated column —
+      # a WHERE without an index would still X-lock every scanned row.
+      expect(selects.grep(/stale_entity_id/i)).not_to be_empty
+    end
+
+    it "hits the stale-entity index for the candidate locking read" do
+      15.times { stale_row("sm-pad-#{_1}", [ obs1.id ]) }
+      other = MemoryEntity.create!(name: "OtherPad", entity_type: "Issue")
+      15.times { stale_row("sm-other-#{_1}", [ obs1.id ], entity: other) }
+
+      sql = MaintenanceReportRow.by_report_type("stale_memory_scan").active
+                                .where(kind: "stale_memory", stale_entity_id: scan_entity.id)
+                                .order(:id).lock(true)
+                                .from("#{MaintenanceReportRow.quoted_table_name} FORCE INDEX (index_mrr_stale_candidates)")
+                                .to_sql
+      plan = ActiveRecord::Base.connection.select_one("EXPLAIN #{sql}")
+
+      expect(plan["key"]).to eq("index_mrr_stale_candidates")
     end
 
     it "absorbs a row whose entity_id only matches via an operator edit" do
@@ -662,15 +676,20 @@ RSpec.describe CompactionReviewService, type: :service do
           .to eq([ obs1.id, obs3.id ].sort)
       end
 
-      it "propagates when the retry also fails" do
+      it "propagates after the bounded retries are exhausted" do
         stale_row("sm-1", [ obs1.id ])
-        allow(described_class).to receive(:stale_memory_candidates).and_raise(checkread_error)
+        calls = 0
+        allow(described_class).to receive(:stale_memory_candidates) do
+          calls += 1
+          raise checkread_error
+        end
 
         expect {
           described_class.seed_report(
             report_type: "stale_memory_scan", source: "test", items: [ stale_payload ]
           )
         }.to raise_error(ActiveRecord::StatementInvalid)
+        expect(calls).to eq(CompactionReviewService::CHECKREAD_MAX_ATTEMPTS)
       end
 
       it "does not retry on unrelated statement errors" do
@@ -811,6 +830,159 @@ RSpec.describe CompactionReviewService, type: :service do
 
     it "returns empty for pages without delete_entity rows" do
       expect(described_class.delete_children_info(report_type: "compaction_review", items: [ merge_row ])).to eq({})
+    end
+  end
+
+  # Real two-connection race: fixtures must be COMMITTED to be visible to
+  # other connections, so setup/cleanup use before/after(:context), which
+  # run outside the per-example transaction. Rows are cleaned up manually.
+  describe "concurrent cross-entity stale seeds" do
+    before(:context) do
+      @entity_a = MemoryEntity.create!(name: "RaceEntA", entity_type: "Issue")
+      @entity_b = MemoryEntity.create!(name: "RaceEntB", entity_type: "Issue")
+      @obs_a = MemoryObservation.create!(memory_entity: @entity_a, content: "seed obs a")
+      @obs_b = MemoryObservation.create!(memory_entity: @entity_b, content: "seed obs b")
+      # A queue of unrelated stale rows widens the FOR UPDATE scan enough
+      # for the cross-entity collision to fire reliably on a regression —
+      # without it, two threads slip past each other before the window
+      # opens (Graphy's probe needed ~200 scanned rows, 6/6 crashes). The
+      # pads get LOW ids and the race rows HIGH ids: under a whole-queue
+      # scan the racing seed locks hundreds of rows before reaching the
+      # other thread's keeper — a wide window for its commits to land.
+      pad_entity = MemoryEntity.create!(name: "RacePad", entity_type: "Issue")
+      250.times { |i| seeded_stale_row(pad_entity, @obs_a, "race-pad-#{i}") }
+      # Pre-existing active rows so each seed ABSORBS (updates a row)
+      # rather than only inserting — the committed update is what trips
+      # ER_CHECKREAD on a racing FOR UPDATE scan.
+      seeded_stale_row(@entity_a, @obs_a, "race-a")
+      seeded_stale_row(@entity_b, @obs_b, "race-b")
+    end
+
+    after(:context) do
+      MaintenanceReportRow.where(report_type: "stale_memory_scan").delete_all
+      MaintenanceReportSuppression.where(report_type: "stale_memory_scan").delete_all
+      MaintenanceReport.where(report_type: "stale_memory_scan").delete_all
+      MemoryEntity.where(id: [ @entity_a.id, @entity_b.id ]).destroy_all
+      MemoryEntity.where(name: "RacePad").destroy_all
+    end
+
+    def seeded_stale_row(entity, obs, uuid)
+      payload = {
+        "kind" => "stale_memory", "entity_id" => entity.id,
+        "signal" => "valid_until_elapsed", "observation_ids" => [ obs.id ]
+      }
+      MaintenanceReportRow.create!(
+        maintenance_report: MaintenanceReport.create!(report_type: "stale_memory_scan", data: { "source" => "test" }),
+        report_type: "stale_memory_scan",
+        row_uuid: uuid,
+        kind: "stale_memory",
+        status: "active",
+        signature: described_class.signature_for("stale_memory", payload),
+        payload: payload
+      )
+    end
+
+    # A real second DB session. Transactional fixtures pin ActiveRecord's
+    # pool across ALL threads (so fixture rows stay visible), which means a
+    # second with_connection is the SAME InnoDB session — its locks are its
+    # own and nothing ever blocks or collides. A raw Mysql2 client bypasses
+    # the pinning entirely.
+    def race_db_client
+      cfg = ActiveRecord::Base.connection_db_config.configuration_hash
+      Mysql2::Client.new(
+        cfg.slice(:host, :socket, :port, :username, :password, :database).compact
+      )
+    end
+
+    it "holds locks only on its own entity's rows while a seed is in flight" do
+      # Deterministic version of Graphy's xent.rb probe: while a seed holds
+      # its candidate locks, a locking read on ANOTHER entity's stale row
+      # must not wait. Under the old whole-queue scan the NOWAIT probe
+      # fails instantly (race-b is X-locked); under the entity-scoped index
+      # range it succeeds because race-b is never locked.
+      race_b_id = MaintenanceReportRow.find_by!(row_uuid: "race-b").id
+      locks_taken = Queue.new
+      probe = Queue.new
+
+      allow(described_class).to receive(:stale_memory_candidates).and_wrap_original do |original, *args|
+        rows = original.call(*args) # FOR UPDATE locks are held until commit
+        locks_taken << true
+        sleep(0.3)
+        rows
+      end
+
+      writer = Thread.new do
+        client = race_db_client
+        locks_taken.pop
+        begin
+          client.query("SELECT id FROM maintenance_report_rows WHERE id = #{race_b_id} FOR UPDATE NOWAIT")
+          probe << :ok
+        rescue Mysql2::Error => e
+          probe << e
+        ensure
+          client.close
+        end
+      end
+
+      obs = MemoryObservation.create!(memory_entity: @entity_a, content: "seed while writer probes")
+      described_class.seed_report(
+        report_type: "stale_memory_scan", source: "test",
+        items: [ { kind: "stale_memory", entity_id: @entity_a.id,
+                   signal: "valid_until_elapsed",
+                   observation_ids: [ obs.id ] } ]
+      )
+      writer.join
+
+      expect(probe.pop).to eq(:ok)
+    end
+
+    it "never crashes with ER_CHECKREAD while a writer touches another entity's row" do
+      # Graphy's xent3.rb shape: commits on entity B's stale row racing a
+      # seed on entity A. Under the old whole-queue scan a commit landing
+      # inside a seed's read window aborts its FOR UPDATE (ER_CHECKREAD);
+      # with the entity-scoped index range there is no shared lock surface,
+      # so seeds deterministically complete.
+      race_b_id = MaintenanceReportRow.find_by!(row_uuid: "race-b").id
+      base = MaintenanceReportRow.find_by!(row_uuid: "race-a")
+                               .effective_payload["observation_ids"].size
+      stop = false
+      errors = Queue.new
+
+      writer = Thread.new do
+        client = race_db_client
+        client.query("SET SESSION innodb_lock_wait_timeout = 1")
+        i = 0
+        until stop
+          begin
+            client.query(
+              "UPDATE maintenance_report_rows SET resolution_reason = \"beat-#{i += 1}\" " \
+              "WHERE id = #{race_b_id}"
+            )
+          rescue Mysql2::Error
+            # Lock wait on a row the seed holds — retry on the next beat.
+          end
+          sleep(0.002)
+        end
+        client.close
+      end
+
+      8.times do |i|
+        obs = MemoryObservation.create!(memory_entity: @entity_a, content: "raced obs #{i}")
+        described_class.seed_report(
+          report_type: "stale_memory_scan", source: "test",
+          items: [ { kind: "stale_memory", entity_id: @entity_a.id,
+                     signal: "valid_until_elapsed",
+                     observation_ids: [ obs.id ] } ]
+        )
+      rescue ActiveRecord::StatementInvalid => e
+        errors << e
+      end
+      stop = true
+      writer.join
+
+      expect(errors).to be_empty
+      row = MaintenanceReportRow.find_by!(row_uuid: "race-a")
+      expect(row.effective_payload["observation_ids"].size).to eq(base + 8)
     end
   end
 end

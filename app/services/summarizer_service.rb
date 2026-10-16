@@ -443,11 +443,11 @@ class SummarizerService
   def citation_check_for(text, evidence)
     valid_ids = evidence.map { |entry| entry[:observation].id }.to_set
     # Accepts observation_id=12, observation_ids=12,13 and list forms like
-    # [observation_id=12, 13]. A comma-continued number only counts when it
-    # is followed by another `,`, a closing `]`/`)`/`.`, or the end of the
-    # line — prose after a bare citation ("observation_id=7, 2026 plan")
-    # is not a citation list.
-    cited_ids = text.to_s.scan(/observation_ids?\s*=\s*(\d+(?:\s*,\s*\d+(?=\s*[,.\])]|\s*$))*)/i)
+    # [observation_id=12, 13]. A comma-continued number only counts when
+    # ANOTHER list element follows (`,\s*\d`), the list closes (`]`/`)`),
+    # or the line ends — a `.` or a word after the number means prose
+    # ("observation_id=7, 2026." / "7, 2026, and later" credit only 7).
+    cited_ids = text.to_s.scan(/observation_ids?\s*=\s*(\d+(?:\s*,\s*\d+(?=\s*,\s*\d|\s*[)\]]|\s*$))*)/i)
                     .flatten
                     .flat_map { |list| list.split(",") }
                     .map { |num| num.strip.to_i }.uniq

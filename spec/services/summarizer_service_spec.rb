@@ -209,14 +209,32 @@ RSpec.describe SummarizerService do
         expect(check[:possible_hallucination]).to be false
       end
 
-      it "credits a list terminated by a period or the end of the text" do
+      it "ignores a prose number that ends the sentence or clause" do
+        [
+          "See observation_id=#{active_observation.id}, 2026.",
+          "See observation_id=#{active_observation.id}, 2026, and later"
+        ].each do |text|
+          allow(SummaryGenerationClient).to receive(:generate).and_return(
+            { ok: true, error: nil, text: text }
+          )
+
+          check = described_class.call(query: "Steve")[:citation_check]
+          expect(check[:cited_ids]).to eq([ active_observation.id ]), "expected only #{active_observation.id} cited in #{text.inspect}"
+          expect(check[:unknown_ids]).to be_empty
+        end
+      end
+
+      it "does not treat a bare period as the end of an unbracketed list" do
+        # Deliberate strictness: "observation_ids=12,13." is prose-shaped —
+        # bracketed "[observation_id=12, 13]." still credits both via `]`.
         allow(SummaryGenerationClient).to receive(:generate).and_return(
           { ok: true, error: nil,
             text: "Cited as observation_ids=#{active_observation.id},#{second_observation.id}." }
         )
 
         check = described_class.call(query: "Steve")[:citation_check]
-        expect(check[:cited_ids]).to match_array([ active_observation.id, second_observation.id ])
+        expect(check[:cited_ids]).to eq([ active_observation.id ])
+        expect(check[:uncited_evidence_ids]).to eq([ second_observation.id ])
       end
     end
 

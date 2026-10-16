@@ -177,3 +177,63 @@ RSpec.describe StructureDumpGuard do
     end
   end
 end
+
+# Pin the enhance wiring itself — replacing the process_file! call with a
+# no-op in the rake block must fail this spec (mutation M1d).
+RSpec.describe "db:schema:dump guard wiring" do
+  before { Rails.application.load_tasks }
+
+  it "snapshots before the dump and runs the guard afterwards" do
+    task = Rake::Task["db:schema:dump"]
+    expect(task.prerequisites).to include("db:snapshot_structure_sql")
+
+    guard_action = task.actions.find do |action|
+      action.source_location&.first.to_s.end_with?("structure_dump.rake")
+    end
+    expect(guard_action).not_to be_nil
+
+    allow(StructureDumpGuard).to receive(:process_file!)
+    guard_action.call
+    expect(StructureDumpGuard).to have_received(:process_file!)
+      .with(Rails.root.join("db/structure.sql"))
+  end
+end
+
+# The generated column backing the stale-memory candidate lock: without it
+# the FOR UPDATE scans every stale row and X-locks them all.
+RSpec.describe "maintenance_report_rows.stale_entity_id" do
+  let(:report) { MaintenanceReport.create!(report_type: "stale_memory_scan", data: { "source" => "test" }) }
+
+  def write_row(kind:, payload:, edited: nil)
+    MaintenanceReportRow.create!(
+      maintenance_report: report,
+      report_type: "stale_memory_scan",
+      row_uuid: SecureRandom.uuid,
+      kind: kind,
+      status: "active",
+      signature: "sig-#{SecureRandom.hex(4)}",
+      payload: payload,
+      edited_payload: edited
+    )
+  end
+
+  it "computes entity_id from the payload for stale_memory rows" do
+    row = write_row(kind: "stale_memory", payload: { "entity_id" => 42 })
+    expect(row.reload.stale_entity_id).to eq(42)
+  end
+
+  it "prefers an operator-edited entity_id (effective_payload semantics)" do
+    row = write_row(kind: "stale_memory", payload: { "entity_id" => 42 }, edited: { "entity_id" => 7 })
+    expect(row.reload.stale_entity_id).to eq(7)
+  end
+
+  it "is NULL for non-stale kinds even when the payload carries an id" do
+    row = write_row(kind: "entity_merge", payload: { "entity_id" => 42 })
+    expect(row.reload.stale_entity_id).to be_nil
+  end
+
+  it "is NULL (never an insert error) for non-numeric entity_ids" do
+    row = write_row(kind: "stale_memory", payload: { "entity_id" => "abc" })
+    expect(row.reload.stale_entity_id).to be_nil
+  end
+end

@@ -8,6 +8,10 @@ class CompactionReviewService
   # MariaDB ER_CHECKREAD — a locking read found a row changed since the
   # transaction's consistent read was taken (snapshot isolation).
   CHECKREAD_ERRNO = 1020
+  # Bounded retries for a seed racing a concurrent apply/dismiss — the
+  # index-narrowed candidate lock makes cross-entity collisions impossible,
+  # so a few attempts cover the residual same-entity race.
+  CHECKREAD_MAX_ATTEMPTS = 3
 
   class << self
     def latest_report(report_type: "compaction_review")
@@ -408,38 +412,39 @@ class CompactionReviewService
 
     private
 
-    # Locking read of the active stale_memory rows that could match this
-    # entity, in deterministic id order. The SQL narrows on entity_id via
-    # JSON_VALUE (payload or an operator's edited_payload override) so a
-    # seed only locks the rows it can absorb into; the full entity+signal
-    # match still runs in Ruby on the locked set.
+    # Locking read of the active stale_memory rows for this entity, in
+    # deterministic id order. `stale_entity_id` is an indexed generated
+    # column (COALESCE of edited/payload entity_id — same semantics as
+    # effective_payload). FORCE INDEX pins the FOR UPDATE to that index:
+    # the optimizer otherwise prefers broader indexes (e.g. report_type),
+    # which would X-lock every scanned queue row — the exact blocking
+    # behavior this index exists to remove. A seed locks only the rows it
+    # can absorb into; seeds on different entities can never collide. The
+    # full entity+signal match still runs in Ruby on the locked set.
     def stale_memory_candidates(report_type, entity_id)
       MaintenanceReportRow.by_report_type(report_type)
                           .active
-                          .where(kind: "stale_memory")
-                          .where(
-                            "JSON_VALUE(payload, '$.entity_id') = :entity_id " \
-                            "OR JSON_VALUE(edited_payload, '$.entity_id') = :entity_id",
-                            entity_id: entity_id.to_s
-                          )
+                          .where(kind: "stale_memory", stale_entity_id: entity_id)
                           .order(:id)
                           .lock(true)
+                          .from("#{MaintenanceReportRow.quoted_table_name} FORCE INDEX (index_mrr_stale_candidates)")
                           .to_a
     end
 
     # MariaDB 11.8 raises ER_CHECKREAD (errno 1020) when a locking read finds
     # a row changed since the transaction's consistent read was taken — the
     # "read-write during jobs must block or queue, never race" collision in
-    # exception form. Retry ONCE around the whole transaction; the fresh
-    # read view sees the settled row states.
+    # exception form. Retry around the WHOLE transaction with a small
+    # backoff; the fresh read view sees the settled row states.
     def with_checkread_retry
-      retried = false
+      attempts = 0
       begin
         yield
       rescue ActiveRecord::StatementInvalid => e
-        raise if retried || !checkread?(e)
+        raise unless checkread?(e) && attempts < CHECKREAD_MAX_ATTEMPTS - 1
 
-        retried = true
+        attempts += 1
+        sleep(0.05 * attempts)
         retry
       end
     end
