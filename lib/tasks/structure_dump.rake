@@ -19,6 +19,15 @@ namespace :db do
   end
 end
 
-Rake::Task["db:schema:dump"].enhance([ "db:snapshot_structure_sql" ]) do
-  StructureDumpGuard.process_file!(Rails.root.join("db/structure.sql"))
+# This app is multi-database, so `db:migrate` can reach the dump through
+# the per-database task (`db:schema:dump:primary`) as well as the shared
+# one — the hook must cover both or the cleaner/guard silently skip dumps
+# run via the namespaced migrate tasks. Only primary writes
+# db/structure.sql; queue dumps to queue_structure.sql are untouched.
+[ "db:schema:dump", "db:schema:dump:primary" ].each do |task_name|
+  next unless Rake::Task.task_defined?(task_name)
+
+  Rake::Task[task_name].enhance([ "db:snapshot_structure_sql" ]) do
+    StructureDumpGuard.process_file!(Rails.root.join("db/structure.sql"))
+  end
 end

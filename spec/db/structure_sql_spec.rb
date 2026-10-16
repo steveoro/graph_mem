@@ -42,6 +42,11 @@ RSpec.describe StructureDumpCleaner do
     clean = "#{trigger_line} */;;\n"
     expect(described_class.call(clean)).to eq(clean)
   end
+
+  it "strips AUTO_INCREMENT counters — they are whichever local DB dumped, pure diff noise" do
+    dirty = ") ENGINE=InnoDB AUTO_INCREMENT=1638 DEFAULT CHARSET=utf8mb4;\n"
+    expect(described_class.call(dirty)).to eq(") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;\n")
+  end
 end
 
 RSpec.describe StructureDumpGuard do
@@ -179,29 +184,52 @@ RSpec.describe StructureDumpGuard do
 end
 
 # Pin the enhance wiring itself — replacing the process_file! call with a
-# no-op in the rake block must fail this spec (mutation M1d).
+# no-op in the rake block must fail this spec (mutation M1d). Both the
+# shared task and the multi-database namespaced one must be hooked —
+# `db:migrate:primary` dumps via `db:schema:dump:primary`, not the shared
+# `db:schema:dump`, so an unhooked namespaced task silently bypasses the
+# cleaner and guard.
 RSpec.describe "db:schema:dump guard wiring" do
-  before { Rails.application.load_tasks }
+  Rails.application.load_tasks
 
-  it "snapshots before the dump and runs the guard afterwards" do
-    task = Rake::Task["db:schema:dump"]
-    expect(task.prerequisites).to include("db:snapshot_structure_sql")
+  # The namespaced task exists only where the env has a multi-database
+  # config (development); the single-database test env defines just the
+  # shared one.
+  hooked_tasks = [ "db:schema:dump", "db:schema:dump:primary" ]
+                 .select { |name| Rake::Task.task_defined?(name) }
 
-    guard_action = task.actions.find do |action|
-      action.source_location&.first.to_s.end_with?("structure_dump.rake")
+  hooked_tasks.each do |task_name|
+    it "#{task_name} snapshots before the dump and runs the guard afterwards" do
+      task = Rake::Task[task_name]
+      expect(task.prerequisites).to include("db:snapshot_structure_sql")
+
+      guard_action = task.actions.find do |action|
+        action.source_location&.first.to_s.end_with?("structure_dump.rake")
+      end
+      expect(guard_action).not_to be_nil
+
+      allow(StructureDumpGuard).to receive(:process_file!)
+      guard_action.call
+      expect(StructureDumpGuard).to have_received(:process_file!)
+        .with(Rails.root.join("db/structure.sql"))
     end
-    expect(guard_action).not_to be_nil
-
-    allow(StructureDumpGuard).to receive(:process_file!)
-    guard_action.call
-    expect(StructureDumpGuard).to have_received(:process_file!)
-      .with(Rails.root.join("db/structure.sql"))
   end
 end
 
 # The generated column backing the stale-memory candidate lock: without it
 # the FOR UPDATE scans every stale row and X-locks them all.
 RSpec.describe "maintenance_report_rows.stale_entity_id" do
+  let(:structure_sql) { Rails.root.join("db/structure.sql").read }
+
+  it "indexes ONLY (stale_entity_id, report_type) — status must stay out" do
+    # `status` in this index is the D1 deadlock: an apply's
+    # update!(status:) moves the row's index entry into a range a waiting
+    # seed has next-key locked, and InnoDB kills the seed. `kind` is
+    # redundant (the generated column is NULL for other kinds).
+    expect(structure_sql)
+      .to include("KEY `index_mrr_stale_candidates` (`stale_entity_id`,`report_type`)")
+  end
+
   let(:report) { MaintenanceReport.create!(report_type: "stale_memory_scan", data: { "source" => "test" }) }
 
   def write_row(kind:, payload:, edited: nil)
@@ -235,5 +263,10 @@ RSpec.describe "maintenance_report_rows.stale_entity_id" do
   it "is NULL (never an insert error) for non-numeric entity_ids" do
     row = write_row(kind: "stale_memory", payload: { "entity_id" => "abc" })
     expect(row.reload.stale_entity_id).to be_nil
+  end
+
+  it "accepts an integral-float id like '42.0' — matches Ruby's to_i" do
+    row = write_row(kind: "stale_memory", payload: { "entity_id" => "42.0" })
+    expect(row.reload.stale_entity_id).to eq(42)
   end
 end

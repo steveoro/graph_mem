@@ -432,21 +432,28 @@ class CompactionReviewService
     end
 
     # MariaDB 11.8 raises ER_CHECKREAD (errno 1020) when a locking read finds
-    # a row changed since the transaction's consistent read was taken — the
-    # "read-write during jobs must block or queue, never race" collision in
-    # exception form. Retry around the WHOLE transaction with a small
-    # backoff; the fresh read view sees the settled row states.
+    # a row changed since the transaction's consistent read was taken, and
+    # InnoDB kills a waiting transaction with ER_LOCK_DEADLOCK (1213 —
+    # ActiveRecord::Deadlocked, NOT a StatementInvalid) when two writers
+    # hold locks the other needs. Both are transient forms of the same
+    # "read-write during jobs must block or queue, never race" collision:
+    # retry around the WHOLE transaction with a small backoff; the fresh
+    # read view sees the settled row states and the lock order re-forms.
     def with_checkread_retry
       attempts = 0
       begin
         yield
-      rescue ActiveRecord::StatementInvalid => e
-        raise unless checkread?(e) && attempts < CHECKREAD_MAX_ATTEMPTS - 1
+      rescue ActiveRecord::StatementInvalid, ActiveRecord::Deadlocked => e
+        raise unless transient_lock_error?(e) && attempts < CHECKREAD_MAX_ATTEMPTS - 1
 
         attempts += 1
         sleep(0.05 * attempts)
         retry
       end
+    end
+
+    def transient_lock_error?(error)
+      error.is_a?(ActiveRecord::Deadlocked) || checkread?(error)
     end
 
     def checkread?(error)
