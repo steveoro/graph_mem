@@ -24,29 +24,6 @@
       "note": ""
     },
     {
-      "warning_type": "SQL Injection",
-      "warning_code": 0,
-      "fingerprint": "7e164029d74bc6d89bcf9fecb9e8cc2435a1716a44cc905d9d781ac557046e95",
-      "check_name": "SQL",
-      "message": "Possible SQL injection",
-      "file": "app/strategies/vector_search_strategy.rb",
-      "line": 35,
-      "link": "https://brakemanscanner.org/docs/warning_types/sql_injection/",
-      "code": "MemoryEntity.where.not(:embedding => nil).where(:entity_type => entity_type).select(\"memory_entities.*, VEC_DISTANCE_COSINE(embedding, VEC_FromText('#{\"[#{embedding_service.embed(query).join(\",\")}]\"}')) AS vec_distance\")",
-      "render_path": null,
-      "location": {
-        "type": "method",
-        "class": "VectorSearchStrategy",
-        "method": "search"
-      },
-      "user_input": "embedding_service.embed(query).join(\",\")",
-      "confidence": "Medium",
-      "cwe_id": [
-        89
-      ],
-      "note": ""
-    },
-    {
       "warning_type": "File Access",
       "warning_code": 16,
       "fingerprint": "882aef7a28469b2193f57f7b3c3633745da3c7479c7ea5cbc91e8f4a68444511",
@@ -231,5 +208,5 @@
       "note": ""
     }
   ],
-  "brakeman_version": "8.0.5"
+  "brakeman_version": "8.1.0"
 }
