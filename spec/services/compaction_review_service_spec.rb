@@ -541,6 +541,124 @@ RSpec.describe CompactionReviewService, type: :service do
 
       expect(keep.reload.effective_payload["observation_ids"].map(&:to_i)).to eq([ obs1.id ])
     end
+
+    it "reads the candidates with a row lock" do
+      stale_row("sm-1", [ obs1.id ])
+      payload = {
+        kind: "stale_memory", entity_id: scan_entity.id,
+        signal: "valid_until_elapsed", observation_ids: [ obs2.id ]
+      }
+
+      queries = []
+      subscriber = ActiveSupport::Notifications.subscribe("sql.active_record") do |*, event|
+        queries << event[:sql]
+      end
+      described_class.absorb_stale_memory?("stale_memory_scan", payload)
+      ActiveSupport::Notifications.unsubscribe(subscriber)
+
+      selects = queries.select { |sql| sql.match?(/FROM `?maintenance_report_rows`?/i) }
+      expect(selects).not_to be_empty
+      expect(selects).to all(match(/FOR UPDATE/i))
+    end
+
+    it "never merges into or retires a row that settled before the lock" do
+      settled = stale_row("sm-1", [ obs1.id ])
+      active = stale_row("sm-2", [ obs2.id ])
+      payload = {
+        kind: "stale_memory", entity_id: scan_entity.id,
+        signal: "valid_until_elapsed", observation_ids: [ obs3.id ]
+      }
+      # `settled` was active when the locking read ran but got approved
+      # before the merge — the in-memory filter must still drop it.
+      allow_any_instance_of(MaintenanceReportRow).to receive(:active?) do |row|
+        row.id == settled.id ? false : row.status == "active"
+      end
+
+      expect(described_class.absorb_stale_memory?("stale_memory_scan", payload)).to be true
+
+      expect(settled.reload.status).to eq("active")
+      expect(settled.effective_payload["observation_ids"].map(&:to_i)).to eq([ obs1.id ])
+      expect(active.reload.effective_payload["observation_ids"].map(&:to_i))
+        .to eq([ obs2.id, obs3.id ].sort)
+    end
+
+    it "does not touch a row that was already approved" do
+      approved = stale_row("sm-1", [ obs1.id ])
+      approved.update!(status: "approved")
+      payload = {
+        kind: "stale_memory", entity_id: scan_entity.id,
+        signal: "valid_until_elapsed", observation_ids: [ obs2.id ]
+      }
+
+      expect(described_class.absorb_stale_memory?("stale_memory_scan", payload)).to be false
+      expect(approved.reload.status).to eq("approved")
+      expect(approved.effective_payload["observation_ids"].map(&:to_i)).to eq([ obs1.id ])
+    end
+
+    context "when a locking read hits ER_CHECKREAD" do
+      def checkread_error
+        mysql_error = Mysql2::Error.new(
+          "Record has changed since last read in table 'maintenance_report_rows'"
+        )
+        allow(mysql_error).to receive(:error_number).and_return(1020)
+        error = ActiveRecord::StatementInvalid.new(mysql_error.message)
+        allow(error).to receive(:cause).and_return(mysql_error)
+        error
+      end
+
+      let(:stale_payload) do
+        {
+          kind: "stale_memory", entity_id: scan_entity.id,
+          signal: "valid_until_elapsed", observation_ids: [ obs3.id ]
+        }
+      end
+
+      it "retries the seed once and still absorbs the item" do
+        keep = stale_row("sm-1", [ obs1.id ])
+        attempts = 0
+        allow(described_class).to receive(:stale_memory_candidates).and_wrap_original do |m, *args|
+          attempts += 1
+          raise checkread_error if attempts == 1
+
+          m.call(*args)
+        end
+
+        rows = described_class.seed_report(
+          report_type: "stale_memory_scan", source: "test", items: [ stale_payload ]
+        )
+
+        expect(rows).to be_empty
+        expect(keep.reload.effective_payload["observation_ids"].map(&:to_i))
+          .to eq([ obs1.id, obs3.id ].sort)
+      end
+
+      it "propagates when the retry also fails" do
+        stale_row("sm-1", [ obs1.id ])
+        allow(described_class).to receive(:stale_memory_candidates).and_raise(checkread_error)
+
+        expect {
+          described_class.seed_report(
+            report_type: "stale_memory_scan", source: "test", items: [ stale_payload ]
+          )
+        }.to raise_error(ActiveRecord::StatementInvalid)
+      end
+
+      it "does not retry on unrelated statement errors" do
+        stale_row("sm-1", [ obs1.id ])
+        calls = 0
+        allow(described_class).to receive(:stale_memory_candidates) do
+          calls += 1
+          raise ActiveRecord::StatementInvalid, "some other failure"
+        end
+
+        expect {
+          described_class.seed_report(
+            report_type: "stale_memory_scan", source: "test", items: [ stale_payload ]
+          )
+        }.to raise_error(ActiveRecord::StatementInvalid)
+        expect(calls).to eq(1)
+      end
+    end
   end
 
   describe ".apply_action" do

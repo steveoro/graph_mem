@@ -442,7 +442,12 @@ class SummarizerService
 
   def citation_check_for(text, evidence)
     valid_ids = evidence.map { |entry| entry[:observation].id }.to_set
-    cited_ids = text.to_s.scan(/observation_id\s*=\s*(\d+)/i).flatten.map(&:to_i).uniq
+    # Accepts observation_id=12, observation_ids=12,13 and list forms like
+    # [observation_id=12, 13] — numbers after commas belong to the same list.
+    cited_ids = text.to_s.scan(/observation_ids?\s*=\s*(\d+(?:\s*,\s*\d+)*)/i)
+                    .flatten
+                    .flat_map { |list| list.split(",") }
+                    .map { |num| num.strip.to_i }.uniq
     unknown_ids = cited_ids - valid_ids.to_a
     {
       cited_ids: cited_ids,

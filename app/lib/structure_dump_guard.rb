@@ -11,13 +11,20 @@
 # blocks — silently degrading the committed file (CI spec caught this once).
 #
 # The guard restores the previous canonical dump when a fresh dump regresses,
-# so an unindexed machine can never produce a committable structure.sql. It
-# never aborts: db:migrate auto-dump and deploy flows stay green. Operators
+# so an unindexed machine can never produce a committable structure.sql — but
+# only when the fresh dump carries no schema_migrations versions the snapshot
+# lacks: a new migration's DDL must never be silently discarded, so that case
+# raises UnrecoverableDumpError and the dump task aborts instead. Operators
 # who intentionally dropped the indexes can bypass with
 # GRAPH_MEM_ALLOW_UNINDEXED_DUMP=1.
 class StructureDumpGuard
   EMBEDDING_COLUMN = /`embedding` vector\(\d+\)/i
   NOT_NULL_EMBEDDING = /`embedding` vector\(\d+\) NOT NULL/i
+  MIGRATIONS_INSERT = /INSERT INTO `schema_migrations` \(version\) VALUES\s*(.*?);/m
+
+  # Raised when a degraded dump carries migrations the snapshot lacks —
+  # restoring the snapshot would erase their DDL, so the dump task aborts.
+  class UnrecoverableDumpError < StandardError; end
 
   class << self
     # Content of db/structure.sql as it was before the current dump (set by
@@ -32,7 +39,7 @@ class StructureDumpGuard
       return content if canonical?(content)
 
       if content.match?(EMBEDDING_COLUMN)
-        warn_unindexed_dump || content
+        warn_unindexed_dump(content) || content
       else
         warn "[db:schema:dump] WARNING: structure.sql contains no embedding " \
              "VECTOR columns — the source DB predates MariaDB 11.7 support. " \
@@ -55,8 +62,20 @@ class StructureDumpGuard
 
     private
 
-    def warn_unindexed_dump
+    def warn_unindexed_dump(content)
       if snapshot.present? && canonical?(snapshot)
+        new_versions = migration_versions(content) - migration_versions(snapshot)
+        # Restoring would erase the DDL and schema_migrations rows of
+        # migrations the snapshot predates — fail loudly instead.
+        if new_versions.any?
+          raise UnrecoverableDumpError,
+                "dump came from a DB without the embedding indexes/triggers " \
+                "AND carries schema_migrations versions the previous " \
+                "structure.sql lacks (#{new_versions.join(', ')}). Not " \
+                "restoring — that would drop the new migration's schema. " \
+                "Rerun the dump from an indexed DB, or set " \
+                "GRAPH_MEM_ALLOW_UNINDEXED_DUMP=1 to keep this output."
+        end
         warn "[db:schema:dump] WARNING: dump came from a DB without the " \
              "embedding indexes/triggers (embeddings:add_indexes never ran). " \
              "Restored the previous structure.sql — rerun the dump from an " \
@@ -69,6 +88,11 @@ class StructureDumpGuard
              "available to restore — do not commit this structure.sql."
         nil
       end
+    end
+
+    # schema_migrations versions present in a dump ("('20261013120000'),\n...")
+    def migration_versions(content)
+      content[MIGRATIONS_INSERT, 1].to_s.scan(/'(\d+)'/).flatten
     end
   end
 end

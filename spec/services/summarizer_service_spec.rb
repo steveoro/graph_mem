@@ -141,6 +141,63 @@ RSpec.describe SummarizerService do
       expect(result[:citation_check][:uncited_evidence_ids]).to eq([ active_observation.id ])
     end
 
+    describe "citation list formats" do
+      let!(:second_observation) do
+        MemoryObservation.create!(
+          memory_entity: entity,
+          content: "Steve uses VSCode.",
+          confidence: 0.8,
+          source: "profile"
+        )
+      end
+
+      before do
+        AppSettings.enable_llm_summarization = true
+        AppSettings.summary_url = "http://summary.test:11434"
+        AppSettings.summary_model = "qwen3:8b"
+        AppSettings.summary_provider = "ollama"
+        allow(HybridSearchStrategy).to receive(:new).and_return(
+          instance_double(HybridSearchStrategy, search: [
+            HybridSearchStrategy::SearchResult.new(entity: entity, score: 0.9, matched_fields: [ "name" ])
+          ])
+        )
+      end
+
+      it "credits every id in a bracketed comma list" do
+        allow(SummaryGenerationClient).to receive(:generate).and_return(
+          { ok: true, error: nil,
+            text: "Steve uses Ruby. [observation_id=#{active_observation.id}, #{second_observation.id}]" }
+        )
+
+        check = described_class.call(query: "Steve")[:citation_check]
+        expect(check[:cited_ids]).to match_array([ active_observation.id, second_observation.id ])
+        expect(check[:uncited_evidence_ids]).to be_empty
+      end
+
+      it "credits the plural key form" do
+        allow(SummaryGenerationClient).to receive(:generate).and_return(
+          { ok: true, error: nil,
+            text: "Facts. observation_ids=#{active_observation.id},#{second_observation.id}" }
+        )
+
+        check = described_class.call(query: "Steve")[:citation_check]
+        expect(check[:cited_ids]).to match_array([ active_observation.id, second_observation.id ])
+        expect(check[:uncited_evidence_ids]).to be_empty
+      end
+
+      it "still flags unknown ids inside a list" do
+        allow(SummaryGenerationClient).to receive(:generate).and_return(
+          { ok: true, error: nil,
+            text: "Mixed. [observation_id=#{active_observation.id}, 999999]" }
+        )
+
+        check = described_class.call(query: "Steve")[:citation_check]
+        expect(check[:unknown_ids]).to eq([ 999_999 ])
+        expect(check[:possible_hallucination]).to be true
+        expect(check[:uncited_evidence_ids]).to eq([ second_observation.id ])
+      end
+    end
+
     it "does not add citation_check for deterministic summaries" do
       allow(HybridSearchStrategy).to receive(:new).and_return(
         instance_double(HybridSearchStrategy, search: [

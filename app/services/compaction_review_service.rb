@@ -5,6 +5,9 @@
 class CompactionReviewService
   PER_PAGE = 50
   STATUSES = MaintenanceReportRow::STATUSES
+  # MariaDB ER_CHECKREAD — a locking read found a row changed since the
+  # transaction's consistent read was taken (snapshot isolation).
+  CHECKREAD_ERRNO = 1020
 
   class << self
     def latest_report(report_type: "compaction_review")
@@ -186,42 +189,49 @@ class CompactionReviewService
     def seed_report(report_type:, source:, source_ref: nil, items:)
       return [] if items.empty?
 
-      MaintenanceReport.transaction do
-        report = MaintenanceReport.create!(
-          report_type: report_type,
-          data: {
-            source: source,
-            source_ref: source_ref,
-            count: 0,
-            seeded_at: Time.current.iso8601
-          }
-        )
-
-        created_rows = items.filter_map do |item|
-          item = normalize_item(item)
-          kind = item["kind"]
-          next if kind.blank?
-          payload = item.except("id")
-
-          signature = signature_for(kind, payload)
-          next if signature.blank?
-          next if MaintenanceReportSuppression.suppressed?(report_type, signature)
-          next if MaintenanceReportRow.by_report_type(report_type).pending.where(signature: signature).exists?
-          next if absorb_stale_memory?(report_type, payload)
-
-          MaintenanceReportRow.create!(
-            maintenance_report_id: report.id,
+      # Retry the whole transaction — not the statement — on ER_CHECKREAD:
+      # under MariaDB snapshot isolation the read view is fixed at the
+      # transaction's first consistent read, so re-running the same locking
+      # read inside it would fail again. A fresh transaction sees the state
+      # the concurrent apply/dismiss settled into.
+      with_checkread_retry do
+        MaintenanceReport.transaction do
+          report = MaintenanceReport.create!(
             report_type: report_type,
-            row_uuid: item["id"] || SecureRandom.uuid,
-            kind: kind,
-            status: "active",
-            payload: payload,
-            signature: signature
+            data: {
+              source: source,
+              source_ref: source_ref,
+              count: 0,
+              seeded_at: Time.current.iso8601
+            }
           )
-        end
 
-        report.update!(data: report.data.merge(count: created_rows.size))
-        created_rows
+          created_rows = items.filter_map do |item|
+            item = normalize_item(item)
+            kind = item["kind"]
+            next if kind.blank?
+            payload = item.except("id")
+
+            signature = signature_for(kind, payload)
+            next if signature.blank?
+            next if MaintenanceReportSuppression.suppressed?(report_type, signature)
+            next if MaintenanceReportRow.by_report_type(report_type).pending.where(signature: signature).exists?
+            next if absorb_stale_memory?(report_type, payload)
+
+            MaintenanceReportRow.create!(
+              maintenance_report_id: report.id,
+              report_type: report_type,
+              row_uuid: item["id"] || SecureRandom.uuid,
+              kind: kind,
+              status: "active",
+              payload: payload,
+              signature: signature
+            )
+          end
+
+          report.update!(data: report.data.merge(count: created_rows.size))
+          created_rows
+        end
       end
     end
 
@@ -240,22 +250,25 @@ class CompactionReviewService
       signal = payload[:signal].to_s
       return false if entity_id.zero? || signal.blank?
 
+      # The candidate read IS the locking read: under MariaDB snapshot
+      # isolation a plain read followed by FOR UPDATE on a row changed in
+      # between aborts the statement with ER_CHECKREAD (1020). Locking first
+      # reads the CURRENT committed state and holds it — no read-then-lock
+      # window for a concurrent apply/dismiss to strike through.
       # effective_payload is a plain string-keyed hash (JSON column) — index
       # it with strings, not symbols.
-      rows = MaintenanceReportRow.by_report_type(report_type).active
-                                 .where(kind: "stale_memory")
-                                 .select do |row|
+      locked_rows = stale_memory_candidates(report_type).select do |row|
         row.effective_payload["entity_id"].to_i == entity_id &&
           row.effective_payload["signal"].to_s == signal
       end
-      return false if rows.empty?
+      # A row settled (approved/dismissed) between the lock and this merge is
+      # never merged into nor retired — its obs ids were already acted on.
+      locked_rows.select!(&:active?)
+      return false if locked_rows.empty?
 
-      # Lock every candidate row in deterministic id order before merging so
-      # a concurrent seeder cannot overwrite a just-absorbed payload. The
-      # EARLIEST pending row absorbs — it holds the original queue position.
-      locked_rows = MaintenanceReportRow.where(id: rows.map(&:id)).order(:id).lock(true).to_a
+      # The EARLIEST active row absorbs — it holds the original queue
+      # position.
       keep = locked_rows.min_by(&:id)
-      return false unless keep&.active?
 
       merged_ids = (locked_rows.flat_map { |r| Array(r.effective_payload["observation_ids"]).map(&:to_i) } +
                     Array(payload[:observation_ids]).map(&:to_i)).uniq.sort
@@ -394,6 +407,40 @@ class CompactionReviewService
     end
 
     private
+
+    # Locking read of every active stale_memory row for the report type, in
+    # deterministic id order. Kept behind one seam so the entity/signal
+    # match in absorb_stale_memory? always runs on locked rows.
+    def stale_memory_candidates(report_type)
+      MaintenanceReportRow.by_report_type(report_type)
+                          .active
+                          .where(kind: "stale_memory")
+                          .order(:id)
+                          .lock(true)
+                          .to_a
+    end
+
+    # MariaDB 11.8 raises ER_CHECKREAD (errno 1020) when a locking read finds
+    # a row changed since the transaction's consistent read was taken — the
+    # "read-write during jobs must block or queue, never race" collision in
+    # exception form. Retry ONCE around the whole transaction; the fresh
+    # read view sees the settled row states.
+    def with_checkread_retry
+      retried = false
+      begin
+        yield
+      rescue ActiveRecord::StatementInvalid => e
+        raise if retried || !checkread?(e)
+
+        retried = true
+        retry
+      end
+    end
+
+    def checkread?(error)
+      cause = error.cause
+      cause.respond_to?(:error_number) && cause.error_number == CHECKREAD_ERRNO
+    end
 
     def sort_rows(rows)
       rows.sort_by.with_index do |row, idx|

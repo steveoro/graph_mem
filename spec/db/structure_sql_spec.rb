@@ -109,4 +109,38 @@ RSpec.describe StructureDumpGuard do
     allow(ENV).to receive(:[]).with("GRAPH_MEM_ALLOW_UNINDEXED_DUMP").and_return("1")
     expect(described_class.call(degraded_dump)).to eq(degraded_dump)
   end
+
+  def with_migration_versions(dump, versions)
+    insert = "INSERT INTO `schema_migrations` (version) VALUES\n" +
+             versions.map { |v| "('#{v}')" }.join(",\n") + ";\n"
+    "#{dump}\n#{insert}"
+  end
+
+  it "raises instead of restoring when the degraded dump carries new migrations" do
+    described_class.snapshot = with_migration_versions(canonical_dump, %w[20261001000000])
+    # The probe Graphy ran: a new column AND a schema_migrations row the
+    # snapshot predates — restoring the snapshot would erase both.
+    fresh = with_migration_versions(degraded_dump, %w[20261001000000 20261105000000])
+            .sub(");\n", "  `new_flag` tinyint(1) DEFAULT NULL\n);\n")
+
+    expect { described_class.call(fresh) }
+      .to raise_error(StructureDumpGuard::UnrecoverableDumpError, /20261105000000/)
+  end
+
+  it "still restores when the degraded dump carries the same migrations" do
+    described_class.snapshot = with_migration_versions(canonical_dump, %w[20261001000000])
+    fresh = with_migration_versions(degraded_dump, %w[20261001000000])
+
+    expect { expect(described_class.call(fresh)).to eq(described_class.snapshot) }
+      .to output(/without the embedding indexes\/triggers/).to_stderr
+  end
+
+  it "still restores when the fresh dump is missing versions the snapshot has" do
+    # A stale DB dumped — restoring is strictly beneficial here.
+    described_class.snapshot = with_migration_versions(canonical_dump, %w[20261001000000 20261105000000])
+    fresh = with_migration_versions(degraded_dump, %w[20261001000000])
+
+    expect { expect(described_class.call(fresh)).to eq(described_class.snapshot) }
+      .to output(/Restored the previous/).to_stderr
+  end
 end

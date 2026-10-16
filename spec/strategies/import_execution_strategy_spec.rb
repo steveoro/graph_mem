@@ -216,6 +216,70 @@ RSpec.describe ImportExecutionStrategy, type: :model do
       end
     end
 
+    context 'observation counters and in-run dedupe' do
+      it 'dedupes identical contents within a single import payload' do
+        # Two identical observations on a FRESH entity: the exact-content
+        # cache (not the detector, skipped for import-created rows) is what
+        # stops the second insert — pins the contents.add bookkeeping.
+        dup_data = {
+          'root_nodes' => [
+            {
+              'name' => 'Dup Project', 'entity_type' => 'Project',
+              'observations' => [
+                { 'content' => 'same fact' },
+                { 'content' => 'same fact' }
+              ],
+              'children' => []
+            }
+          ]
+        }
+        dup_decisions = [ { node_path: '0', action: 'create' } ]
+
+        report = strategy.execute(dup_data, dup_decisions)
+
+        expect(report.observations_created).to eq(1)
+        expect(MemoryObservation.where(content: 'same fact').count).to eq(1)
+      end
+
+      it 'reconciles a drifted memory_observations_count to the real row count' do
+        existing_project.update_column(:memory_observations_count, 7)
+        merge_decisions = [ { node_path: '0', action: 'merge', target_id: existing_project.id } ]
+        merge_data = {
+          'root_nodes' => [
+            {
+              'name' => 'Existing Project', 'entity_type' => 'Project',
+              'observations' => [ { 'content' => 'brand new fact' } ],
+              'children' => []
+            }
+          ]
+        }
+
+        strategy.execute(merge_data, merge_decisions)
+
+        # 1 pre-existing + 1 imported — not 8 (drift + counter_cache bump).
+        expect(existing_project.reload.memory_observations_count).to eq(2)
+      end
+
+      it 'resets the counter to 0 for a touched entity left with no observations' do
+        empty_entity = MemoryEntity.create!(name: 'Touched Empty', entity_type: 'Project')
+        empty_entity.update_column(:memory_observations_count, 5)
+        merge_decisions = [ { node_path: '0', action: 'merge', target_id: empty_entity.id } ]
+        merge_data = {
+          'root_nodes' => [
+            {
+              'name' => 'Touched Empty', 'entity_type' => 'Project',
+              'observations' => [],
+              'children' => []
+            }
+          ]
+        }
+
+        strategy.execute(merge_data, merge_decisions)
+
+        expect(empty_entity.reload.memory_observations_count).to eq(0)
+      end
+    end
+
     context 'with nested children' do
       let(:import_data) do
         {

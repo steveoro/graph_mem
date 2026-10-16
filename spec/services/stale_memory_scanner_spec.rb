@@ -72,6 +72,25 @@ RSpec.describe StaleMemoryScanner do
       expect(described_class.addressed_items).to be_empty
     end
 
+    it "does NOT flag a plain 'not open' claim" do
+      MemoryObservation.create!(memory_entity: issue, content: "the ticket is not open",
+                                created_at: 5.days.ago)
+      MemoryRelation.create!(from_entity_id: fixer.id, to_entity_id: issue.id,
+                             relation_type: "solves", created_at: 1.day.ago)
+      expect(described_class.addressed_items).to be_empty
+    end
+
+    it "still flags an open claim alongside an unrelated 'not blocked'" do
+      # The negation guard is a whole-content NOT REGEXP — a bare `not`
+      # negating a different marker must not hide the open claim.
+      MemoryObservation.create!(memory_entity: issue,
+                                content: "issue still open, deploy not blocked",
+                                created_at: 5.days.ago)
+      MemoryRelation.create!(from_entity_id: fixer.id, to_entity_id: issue.id,
+                             relation_type: "solves", created_at: 1.day.ago)
+      expect(described_class.addressed_items.size).to eq(1)
+    end
+
     it "does NOT flag non-Issue/Task entities" do
       MemoryObservation.create!(memory_entity: entity, content: "still open", created_at: 5.days.ago)
       MemoryRelation.create!(from_entity_id: fixer.id, to_entity_id: entity.id,

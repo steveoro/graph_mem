@@ -87,7 +87,7 @@ When enabled and the provider succeeds:
 
 - `summary`: fluent synthesis text
 - `generated_by`: configured model name
-- `citation_check`: parsed `observation_id=N` citations — `cited_ids`, `unknown_ids` (possible hallucination), `uncited_evidence_ids`, `possible_hallucination`
+- `citation_check`: parsed `observation_id=N` citations — `cited_ids`, `unknown_ids` (possible hallucination), `uncited_evidence_ids`, `possible_hallucination`. Singular and plural keys both count, and comma-separated lists (`[observation_id=12, 13]`, `observation_ids=12,13`) credit every id.
 - Same `observations` and `sources` as the deterministic path
 
 Provider failures degrade gracefully to deterministic output. Deterministic summaries are self-citing by construction, so `citation_check` is only emitted for `generation_mode == "llm"`.

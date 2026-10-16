@@ -24,6 +24,14 @@ Rake::Task["db:schema:dump"].enhance([ "db:snapshot_structure_sql" ]) do
   next unless path.exist?
 
   original = path.read
-  cleaned = StructureDumpGuard.call(StructureDumpCleaner.call(original))
+  begin
+    cleaned = StructureDumpGuard.call(StructureDumpCleaner.call(original))
+  rescue StructureDumpGuard::UnrecoverableDumpError => e
+    # The fresh dump carries migrations the snapshot lacks — restoring would
+    # lose their DDL, and leaving the degraded file in place makes it
+    # committable. Write the snapshot back and fail the task instead.
+    path.write(StructureDumpGuard.snapshot) if StructureDumpGuard.snapshot.present?
+    abort "[db:schema:dump] ERROR: #{e.message}"
+  end
   path.write(cleaned) if cleaned != original
 end
