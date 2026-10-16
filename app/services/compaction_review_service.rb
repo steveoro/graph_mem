@@ -257,7 +257,7 @@ class CompactionReviewService
       # window for a concurrent apply/dismiss to strike through.
       # effective_payload is a plain string-keyed hash (JSON column) — index
       # it with strings, not symbols.
-      locked_rows = stale_memory_candidates(report_type).select do |row|
+      locked_rows = stale_memory_candidates(report_type, entity_id).select do |row|
         row.effective_payload["entity_id"].to_i == entity_id &&
           row.effective_payload["signal"].to_s == signal
       end
@@ -408,13 +408,20 @@ class CompactionReviewService
 
     private
 
-    # Locking read of every active stale_memory row for the report type, in
-    # deterministic id order. Kept behind one seam so the entity/signal
-    # match in absorb_stale_memory? always runs on locked rows.
-    def stale_memory_candidates(report_type)
+    # Locking read of the active stale_memory rows that could match this
+    # entity, in deterministic id order. The SQL narrows on entity_id via
+    # JSON_VALUE (payload or an operator's edited_payload override) so a
+    # seed only locks the rows it can absorb into; the full entity+signal
+    # match still runs in Ruby on the locked set.
+    def stale_memory_candidates(report_type, entity_id)
       MaintenanceReportRow.by_report_type(report_type)
                           .active
                           .where(kind: "stale_memory")
+                          .where(
+                            "JSON_VALUE(payload, '$.entity_id') = :entity_id " \
+                            "OR JSON_VALUE(edited_payload, '$.entity_id') = :entity_id",
+                            entity_id: entity_id.to_s
+                          )
                           .order(:id)
                           .lock(true)
                           .to_a

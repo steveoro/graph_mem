@@ -196,6 +196,28 @@ RSpec.describe SummarizerService do
         expect(check[:possible_hallucination]).to be true
         expect(check[:uncited_evidence_ids]).to eq([ second_observation.id ])
       end
+
+      it "ignores prose numbers after a bare citation" do
+        allow(SummaryGenerationClient).to receive(:generate).and_return(
+          { ok: true, error: nil,
+            text: "See observation_id=#{active_observation.id}, 2026 plan" }
+        )
+
+        check = described_class.call(query: "Steve")[:citation_check]
+        expect(check[:cited_ids]).to eq([ active_observation.id ])
+        expect(check[:unknown_ids]).to be_empty
+        expect(check[:possible_hallucination]).to be false
+      end
+
+      it "credits a list terminated by a period or the end of the text" do
+        allow(SummaryGenerationClient).to receive(:generate).and_return(
+          { ok: true, error: nil,
+            text: "Cited as observation_ids=#{active_observation.id},#{second_observation.id}." }
+        )
+
+        check = described_class.call(query: "Steve")[:citation_check]
+        expect(check[:cited_ids]).to match_array([ active_observation.id, second_observation.id ])
+      end
     end
 
     it "does not add citation_check for deterministic summaries" do

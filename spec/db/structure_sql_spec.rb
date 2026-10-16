@@ -143,4 +143,37 @@ RSpec.describe StructureDumpGuard do
     expect { expect(described_class.call(fresh)).to eq(described_class.snapshot) }
       .to output(/Restored the previous/).to_stderr
   end
+
+  describe ".process_file!" do
+    let(:file) do
+      Tempfile.new([ "structure", ".sql" ]).tap { |f| f.write(file_content) && f.flush }
+    end
+    let(:path) { Pathname.new(file.path) }
+
+    after { file.close! }
+
+    context "when the dump is unrecoverable" do
+      let(:file_content) do
+        with_migration_versions(degraded_dump, %w[20261001000000 20261105000000])
+      end
+
+      it "writes the snapshot back and aborts with a non-zero exit" do
+        described_class.snapshot = with_migration_versions(canonical_dump, %w[20261001000000])
+
+        expect { described_class.process_file!(path) }
+          .to raise_error(SystemExit)
+          .and output(/ERROR:.*20261105000000/).to_stderr
+        expect(path.read).to eq(described_class.snapshot)
+      end
+    end
+
+    context "when the fresh dump is canonical" do
+      let(:file_content) { canonical_dump }
+
+      it "writes the cleaned content without aborting" do
+        expect { described_class.process_file!(path) }.not_to raise_error
+        expect(path.read).to eq(canonical_dump)
+      end
+    end
+  end
 end

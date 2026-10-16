@@ -559,6 +559,36 @@ RSpec.describe CompactionReviewService, type: :service do
       selects = queries.select { |sql| sql.match?(/FROM `?maintenance_report_rows`?/i) }
       expect(selects).not_to be_empty
       expect(selects).to all(match(/FOR UPDATE/i))
+      # The candidate SELECT must narrow by entity in SQL — locking every
+      # active stale_memory row would block unrelated applies for the
+      # whole seed transaction.
+      expect(selects.grep(/JSON_VALUE/i)).not_to be_empty
+    end
+
+    it "absorbs a row whose entity_id only matches via an operator edit" do
+      other_entity = MemoryEntity.create!(name: "OtherEnt", entity_type: "Issue")
+      payload = {
+        "kind" => "stale_memory", "entity_id" => other_entity.id,
+        "signal" => "valid_until_elapsed", "observation_ids" => [ obs1.id ]
+      }
+      row = MaintenanceReportRow.create!(
+        maintenance_report: report,
+        report_type: "stale_memory_scan",
+        row_uuid: "sm-edit",
+        kind: "stale_memory",
+        status: "active",
+        signature: described_class.signature_for("stale_memory", payload),
+        payload: payload,
+        edited_payload: { "entity_id" => scan_entity.id }
+      )
+      fresh = {
+        kind: "stale_memory", entity_id: scan_entity.id,
+        signal: "valid_until_elapsed", observation_ids: [ obs2.id ]
+      }
+
+      expect(described_class.absorb_stale_memory?("stale_memory_scan", fresh)).to be true
+      expect(row.reload.edited_payload["observation_ids"].map(&:to_i))
+        .to eq([ obs1.id, obs2.id ].sort)
     end
 
     it "never merges into or retires a row that settled before the lock" do

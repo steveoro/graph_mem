@@ -48,6 +48,26 @@ class StructureDumpGuard
       end
     end
 
+    # Post-dump processing for db/structure.sql: strips marginalia tags,
+    # then applies the guard. When the dump is unrecoverable (degraded AND
+    # carrying schema_migrations versions the snapshot lacks), restoring
+    # would erase the new migration's DDL and leaving the file in place
+    # makes it committable — so the snapshot is written back and the task
+    # aborts with a non-zero exit instead.
+    def process_file!(path)
+      return unless path.exist?
+
+      original = path.read
+      cleaned =
+        begin
+          call(StructureDumpCleaner.call(original))
+        rescue UnrecoverableDumpError => e
+          path.write(snapshot) if snapshot.present?
+          abort "[db:schema:dump] ERROR: #{e.message}"
+        end
+      path.write(cleaned) if cleaned != original
+    end
+
     # True when the dump carries the full indexed embedding schema: both
     # NOT NULL columns, both VECTOR KEYs, both insert triggers.
     def canonical?(content)
