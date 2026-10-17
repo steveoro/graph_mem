@@ -269,4 +269,9 @@ RSpec.describe "maintenance_report_rows.stale_entity_id" do
     row = write_row(kind: "stale_memory", payload: { "entity_id" => "42.0" })
     expect(row.reload.stale_entity_id).to eq(42)
   end
+
+  it "is NULL (never a RangeError) for ids beyond BIGINT" do
+    row = write_row(kind: "stale_memory", payload: { "entity_id" => "9223372036854775808" })
+    expect(row.reload.stale_entity_id).to be_nil
+  end
 end

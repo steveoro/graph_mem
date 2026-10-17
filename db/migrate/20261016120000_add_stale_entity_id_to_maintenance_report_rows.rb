@@ -20,13 +20,20 @@
 # "42.0" and "42.5" both give 42 (a string CAST AS UNSIGNED would error or
 # round instead); a `[.]` character class writes the literal dot without a
 # backslash, which neither the SQL string literal nor the dump escapes.
+# The {1,18} integer bound keeps values inside BIGINT: 19+ digit ids yield
+# NULL rather than a RangeError on write.
+#
+# NOTE for dev databases that ran the r4 revision of this migration: it
+# was edited in place, so re-apply it with
+# `bin/rails db:migrate:redo VERSION=20261016120000` (the by-name `down`
+# makes the redo safe).
 class AddStaleEntityIdToMaintenanceReportRows < ActiveRecord::Migration[8.1]
   def up
     add_column :maintenance_report_rows, :stale_entity_id, :virtual,
                type: :bigint,
                as: "CASE WHEN `kind` = 'stale_memory' " \
                    "AND COALESCE(JSON_VALUE(`edited_payload`, '$.entity_id'), " \
-                   "JSON_VALUE(`payload`, '$.entity_id')) REGEXP '^[0-9]+([.][0-9]+)?$' " \
+                   "JSON_VALUE(`payload`, '$.entity_id')) REGEXP '^[0-9]{1,18}([.][0-9]+)?$' " \
                    "THEN FLOOR(CAST(COALESCE(JSON_VALUE(`edited_payload`, '$.entity_id'), " \
                    "JSON_VALUE(`payload`, '$.entity_id')) AS DECIMAL(30,6))) ELSE NULL END"
     add_index :maintenance_report_rows, %i[stale_entity_id report_type],

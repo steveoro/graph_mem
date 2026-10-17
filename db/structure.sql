@@ -110,7 +110,7 @@ CREATE TABLE `maintenance_report_rows` (
   `dismissed_at` datetime(6) DEFAULT NULL,
   `created_at` datetime(6) NOT NULL,
   `updated_at` datetime(6) NOT NULL,
-  `stale_entity_id` bigint(20) GENERATED ALWAYS AS (case when `kind` = 'stale_memory' and coalesce(json_value(`edited_payload`,'$.entity_id'),json_value(`payload`,'$.entity_id')) regexp '^[0-9]+([.][0-9]+)?$' then floor(cast(coalesce(json_value(`edited_payload`,'$.entity_id'),json_value(`payload`,'$.entity_id')) as decimal(30,6))) else NULL end) VIRTUAL,
+  `stale_entity_id` bigint(20) GENERATED ALWAYS AS (case when `kind` = 'stale_memory' and coalesce(json_value(`edited_payload`,'$.entity_id'),json_value(`payload`,'$.entity_id')) regexp '^[0-9]{1,18}([.][0-9]+)?$' then floor(cast(coalesce(json_value(`edited_payload`,'$.entity_id'),json_value(`payload`,'$.entity_id')) as decimal(30,6))) else NULL end) VIRTUAL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `index_maintenance_report_rows_on_report_and_uuid` (`maintenance_report_id`,`row_uuid`),
   KEY `index_maintenance_report_rows_on_report_type_and_signature` (`report_type`,`signature`),
