@@ -94,6 +94,162 @@ RSpec.describe SummarizerService do
       expect(result[:sources]).not_to be_empty
     end
 
+    it "reports valid LLM citations with no hallucination flag" do
+      AppSettings.enable_llm_summarization = true
+      AppSettings.summary_url = "http://summary.test:11434"
+      AppSettings.summary_model = "qwen3:8b"
+      AppSettings.summary_provider = "ollama"
+
+      allow(HybridSearchStrategy).to receive(:new).and_return(
+        instance_double(HybridSearchStrategy, search: [
+          HybridSearchStrategy::SearchResult.new(entity: entity, score: 0.9, matched_fields: [ "name" ])
+        ])
+      )
+      allow(SummaryGenerationClient).to receive(:generate).and_return(
+        { ok: true, text: "Steve uses Ruby. [observation_id=#{active_observation.id}]", error: nil }
+      )
+
+      result = described_class.call(query: "Steve")
+
+      expect(result[:citation_check]).to include(
+        cited_ids: [ active_observation.id ],
+        unknown_ids: [],
+        uncited_evidence_ids: [],
+        possible_hallucination: false
+      )
+    end
+
+    it "flags unknown citation ids as possible hallucination" do
+      AppSettings.enable_llm_summarization = true
+      AppSettings.summary_url = "http://summary.test:11434"
+      AppSettings.summary_model = "qwen3:8b"
+      AppSettings.summary_provider = "ollama"
+
+      allow(HybridSearchStrategy).to receive(:new).and_return(
+        instance_double(HybridSearchStrategy, search: [
+          HybridSearchStrategy::SearchResult.new(entity: entity, score: 0.9, matched_fields: [ "name" ])
+        ])
+      )
+      allow(SummaryGenerationClient).to receive(:generate).and_return(
+        { ok: true, text: "Steve uses Perl. [observation_id=999999]", error: nil }
+      )
+
+      result = described_class.call(query: "Steve")
+
+      expect(result[:citation_check][:possible_hallucination]).to be true
+      expect(result[:citation_check][:unknown_ids]).to eq([ 999_999 ])
+      expect(result[:citation_check][:uncited_evidence_ids]).to eq([ active_observation.id ])
+    end
+
+    describe "citation list formats" do
+      let!(:second_observation) do
+        MemoryObservation.create!(
+          memory_entity: entity,
+          content: "Steve uses VSCode.",
+          confidence: 0.8,
+          source: "profile"
+        )
+      end
+
+      before do
+        AppSettings.enable_llm_summarization = true
+        AppSettings.summary_url = "http://summary.test:11434"
+        AppSettings.summary_model = "qwen3:8b"
+        AppSettings.summary_provider = "ollama"
+        allow(HybridSearchStrategy).to receive(:new).and_return(
+          instance_double(HybridSearchStrategy, search: [
+            HybridSearchStrategy::SearchResult.new(entity: entity, score: 0.9, matched_fields: [ "name" ])
+          ])
+        )
+      end
+
+      it "credits every id in a bracketed comma list" do
+        allow(SummaryGenerationClient).to receive(:generate).and_return(
+          { ok: true, error: nil,
+            text: "Steve uses Ruby. [observation_id=#{active_observation.id}, #{second_observation.id}]" }
+        )
+
+        check = described_class.call(query: "Steve")[:citation_check]
+        expect(check[:cited_ids]).to match_array([ active_observation.id, second_observation.id ])
+        expect(check[:uncited_evidence_ids]).to be_empty
+      end
+
+      it "credits the plural key form" do
+        allow(SummaryGenerationClient).to receive(:generate).and_return(
+          { ok: true, error: nil,
+            text: "Facts. observation_ids=#{active_observation.id},#{second_observation.id}" }
+        )
+
+        check = described_class.call(query: "Steve")[:citation_check]
+        expect(check[:cited_ids]).to match_array([ active_observation.id, second_observation.id ])
+        expect(check[:uncited_evidence_ids]).to be_empty
+      end
+
+      it "still flags unknown ids inside a list" do
+        allow(SummaryGenerationClient).to receive(:generate).and_return(
+          { ok: true, error: nil,
+            text: "Mixed. [observation_id=#{active_observation.id}, 999999]" }
+        )
+
+        check = described_class.call(query: "Steve")[:citation_check]
+        expect(check[:unknown_ids]).to eq([ 999_999 ])
+        expect(check[:possible_hallucination]).to be true
+        expect(check[:uncited_evidence_ids]).to eq([ second_observation.id ])
+      end
+
+      it "ignores prose numbers after a bare citation" do
+        allow(SummaryGenerationClient).to receive(:generate).and_return(
+          { ok: true, error: nil,
+            text: "See observation_id=#{active_observation.id}, 2026 plan" }
+        )
+
+        check = described_class.call(query: "Steve")[:citation_check]
+        expect(check[:cited_ids]).to eq([ active_observation.id ])
+        expect(check[:unknown_ids]).to be_empty
+        expect(check[:possible_hallucination]).to be false
+      end
+
+      it "ignores a prose number that ends the sentence or clause" do
+        [
+          "See observation_id=#{active_observation.id}, 2026.",
+          "See observation_id=#{active_observation.id}, 2026, and later"
+        ].each do |text|
+          allow(SummaryGenerationClient).to receive(:generate).and_return(
+            { ok: true, error: nil, text: text }
+          )
+
+          check = described_class.call(query: "Steve")[:citation_check]
+          expect(check[:cited_ids]).to eq([ active_observation.id ]), "expected only #{active_observation.id} cited in #{text.inspect}"
+          expect(check[:unknown_ids]).to be_empty
+        end
+      end
+
+      it "does not treat a bare period as the end of an unbracketed list" do
+        # Deliberate strictness: "observation_ids=12,13." is prose-shaped —
+        # bracketed "[observation_id=12, 13]." still credits both via `]`.
+        allow(SummaryGenerationClient).to receive(:generate).and_return(
+          { ok: true, error: nil,
+            text: "Cited as observation_ids=#{active_observation.id},#{second_observation.id}." }
+        )
+
+        check = described_class.call(query: "Steve")[:citation_check]
+        expect(check[:cited_ids]).to eq([ active_observation.id ])
+        expect(check[:uncited_evidence_ids]).to eq([ second_observation.id ])
+      end
+    end
+
+    it "does not add citation_check for deterministic summaries" do
+      allow(HybridSearchStrategy).to receive(:new).and_return(
+        instance_double(HybridSearchStrategy, search: [
+          HybridSearchStrategy::SearchResult.new(entity: entity, score: 0.9, matched_fields: [ "name" ])
+        ])
+      )
+
+      result = described_class.call(query: "Steve")
+      expect(result[:generation_mode]).to eq("deterministic")
+      expect(result).not_to have_key(:citation_check)
+    end
+
     it "falls back when the provider fails" do
       AppSettings.enable_llm_summarization = true
       AppSettings.summary_url = "http://summary.test:11434"

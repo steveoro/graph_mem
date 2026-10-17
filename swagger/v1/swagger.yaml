@@ -1193,6 +1193,12 @@ paths:
                     type: array
                     items:
                       type: object
+                  god_nodes:
+                    type: array
+                    items:
+                      type: object
+                  god_node_count:
+                    type: integer
                   recently_updated:
                     type: array
                     items:

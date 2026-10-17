@@ -87,9 +87,10 @@ When enabled and the provider succeeds:
 
 - `summary`: fluent synthesis text
 - `generated_by`: configured model name
+- `citation_check`: parsed `observation_id=N` citations — `cited_ids`, `unknown_ids` (possible hallucination), `uncited_evidence_ids`, `possible_hallucination`. Singular and plural keys both count, and comma-separated lists (`[observation_id=12, 13]`, `observation_ids=12,13`) credit every id. A comma-continued number only counts when another list element follows or the list closes — prose like `observation_id=7, 2026 plan` credits only 7. Trade-off: a bare unbracketed list ending a sentence (`observation_ids=12, 13.`) credits only the elements before the period; wrap the list in brackets (`[observation_id=12, 13]`) to make it sentence-safe.
 - Same `observations` and `sources` as the deterministic path
 
-Provider failures degrade gracefully to deterministic output.
+Provider failures degrade gracefully to deterministic output. Deterministic summaries are self-citing by construction, so `citation_check` is only emitted for `generation_mode == "llm"`.
 
 ## Prompt contract
 

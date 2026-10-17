@@ -173,8 +173,14 @@ class SubgraphSearchService
   end
 
   def merge_vector_ids(matching_ids)
-    vector_results = VectorSearchStrategy.new.search(@effective_query, limit: @per_page * 2)
-    (matching_ids + vector_results.map { |result| result.entity.id }).uniq
+    strategy = VectorSearchStrategy.new
+    if @perspective.present?
+      vector_ids = strategy.search_observations(@effective_query, limit: @per_page * 2, perspective: @perspective)
+      (matching_ids + vector_ids).uniq
+    else
+      vector_ids = strategy.search(@effective_query, limit: @per_page * 2).map { |result| result.entity.id }
+      (matching_ids + vector_ids).uniq
+    end
   rescue *ToolError::TIMEOUT_CLASSES
     raise
   rescue StandardError => e

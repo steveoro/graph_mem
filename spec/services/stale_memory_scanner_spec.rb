@@ -64,6 +64,33 @@ RSpec.describe StaleMemoryScanner do
       expect(described_class.addressed_items).to be_empty
     end
 
+    it "does NOT flag 'not open anymore' phrasing" do
+      MemoryObservation.create!(memory_entity: issue, content: "Bug #7 is not open anymore",
+                                created_at: 5.days.ago)
+      MemoryRelation.create!(from_entity_id: fixer.id, to_entity_id: issue.id,
+                             relation_type: "solves", created_at: 1.day.ago)
+      expect(described_class.addressed_items).to be_empty
+    end
+
+    it "does NOT flag a plain 'not open' claim" do
+      MemoryObservation.create!(memory_entity: issue, content: "the ticket is not open",
+                                created_at: 5.days.ago)
+      MemoryRelation.create!(from_entity_id: fixer.id, to_entity_id: issue.id,
+                             relation_type: "solves", created_at: 1.day.ago)
+      expect(described_class.addressed_items).to be_empty
+    end
+
+    it "still flags an open claim alongside an unrelated 'not blocked'" do
+      # The negation guard is a whole-content NOT REGEXP — a bare `not`
+      # negating a different marker must not hide the open claim.
+      MemoryObservation.create!(memory_entity: issue,
+                                content: "issue still open, deploy not blocked",
+                                created_at: 5.days.ago)
+      MemoryRelation.create!(from_entity_id: fixer.id, to_entity_id: issue.id,
+                             relation_type: "solves", created_at: 1.day.ago)
+      expect(described_class.addressed_items.size).to eq(1)
+    end
+
     it "does NOT flag non-Issue/Task entities" do
       MemoryObservation.create!(memory_entity: entity, content: "still open", created_at: 5.days.ago)
       MemoryRelation.create!(from_entity_id: fixer.id, to_entity_id: entity.id,
@@ -111,6 +138,19 @@ RSpec.describe StaleMemoryScanner do
     it "does NOT flag unrooted entities whose obs are not importer-stamped" do
       MemoryObservation.create!(memory_entity: entity, content: "manual note", source: "user")
       expect(described_class.unrooted_items.map { |i| i[:entity_id] }).not_to include(entity.id)
+    end
+  end
+
+  describe ".still_flagged_ids" do
+    it "re-checks valid_until direction — only still-elapsed obs are returned" do
+      expired = obs("expired", valid_until: 1.day.ago)
+      future = obs("future", valid_until: 1.day.from_now)
+      ids = described_class.still_flagged_ids(
+        entity_id: entity.id,
+        signal: "valid_until_elapsed",
+        observation_ids: [ expired.id, future.id ]
+      )
+      expect(ids).to eq([ expired.id ])
     end
   end
 

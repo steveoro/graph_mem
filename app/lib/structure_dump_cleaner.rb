@@ -13,7 +13,12 @@ class StructureDumpCleaner
   # replacing with a single space restores the canonical one-line form.
   MARGINALIA = %r{ ?/\*application='[^']*'\*/\s*(?=\*/;;)}.freeze
 
+  # AUTO_INCREMENT=N is whichever local DB did the dump talking — pure diff
+  # noise with no functional effect (schema:load starts tables at 1; prod's
+  # db:prepare migrates and never loads the file).
+  AUTO_INCREMENT_NOISE = / AUTO_INCREMENT=\d+/.freeze
+
   def self.call(content)
-    content.gsub(MARGINALIA, " ")
+    content.gsub(MARGINALIA, " ").gsub(AUTO_INCREMENT_NOISE, "")
   end
 end

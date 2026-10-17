@@ -3,7 +3,7 @@
 require "rails_helper"
 
 RSpec.describe SubgraphSearchService do
-  let(:vector_strategy) { instance_double(VectorSearchStrategy, search: []) }
+  let(:vector_strategy) { instance_double(VectorSearchStrategy, search: [], search_observations: []) }
 
   before { allow(VectorSearchStrategy).to receive(:new).and_return(vector_strategy) }
 
@@ -20,6 +20,16 @@ RSpec.describe SubgraphSearchService do
       first_payload = result[:entities].find { |entity| entity[:entity_id] == first.id }
       expect(first_payload[:observations].pluck(:observation_id)).to include(observation.id)
       expect(result[:relations].pluck(:relation_id)).to include(relation.id)
+    end
+
+    it "scopes vector candidates to perspective observations when perspective is set" do
+      MemoryEntity.create!(name: "PerspVec", entity_type: "Entity")
+      expect(vector_strategy).to receive(:search_observations)
+        .with("PerspVec", limit: 40, perspective: "world")
+        .and_return([])
+      expect(vector_strategy).not_to receive(:search)
+
+      described_class.call(query: "PerspVec", perspective: "world")
     end
 
     it "omits unrequested projections" do

@@ -58,6 +58,40 @@ RSpec.describe "API V1 Maintenance", type: :request do
       hub = most.find { |m| m["id"] == a.id }
       expect(hub["relation_count"]).to eq(2) if hub
     end
+
+    describe "god_nodes" do
+      def create_hub_with_degree(degree)
+        EmbeddingService.suppress_inline_embeddings do
+          hub = MemoryEntity.create!(name: "ApiGodHub-#{SecureRandom.hex(4)}", entity_type: "Entity")
+          target_rows = degree.times.map do |i|
+            { name: "ApiGodTarget-#{hub.id}-#{i}", entity_type: "Entity",
+              created_at: Time.current, updated_at: Time.current }
+          end
+          MemoryEntity.insert_all!(target_rows)
+          target_ids = MemoryEntity.where(name: target_rows.map { |row| row[:name] }).pluck(:id)
+          MemoryRelation.insert_all!(
+            target_ids.map do |to_id|
+              { from_entity_id: hub.id, to_entity_id: to_id, relation_type: "calls",
+                created_at: Time.current, updated_at: Time.current }
+            end
+          )
+          hub
+        end
+      end
+
+      it "uses the strict degree > threshold boundary" do
+        boundary = create_hub_with_degree(GetGraphStatsTool::GOD_NODE_DEGREE_THRESHOLD)
+        over = create_hub_with_degree(GetGraphStatsTool::GOD_NODE_DEGREE_THRESHOLD + 1)
+
+        get "/api/v1/maintenance/stats"
+        data = JSON.parse(response.body)
+        god_ids = data["god_nodes"].map { |g| g["id"] }
+
+        expect(god_ids).to include(over.id)
+        expect(god_ids).not_to include(boundary.id)
+        expect(data["god_node_count"]).to eq(1)
+      end
+    end
   end
 
   describe "GET /api/v1/maintenance/suggest_merges" do

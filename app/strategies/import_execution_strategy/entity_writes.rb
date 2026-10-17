@@ -25,10 +25,8 @@ module ImportExecutionStrategy::EntityWrites
       retype_on_claim(existing, entity_type, node)
 
       # Import any missing observations
-      import_observations(node, existing.id)
-
-      # Update counter cache if observations were added
-      existing.update_column(:memory_observations_count, existing.memory_observations.count)
+      import_observations(node, existing)
+      @counter_touch_ids << existing.id
 
       @entities_skipped += 1
       existing.id
@@ -67,10 +65,8 @@ module ImportExecutionStrategy::EntityWrites
     @logger.info "ImportExecutionStrategy: Adding relation for entity '#{name}' (#{existing.id}) to parent #{parent_id}"
 
     # Add observations if not duplicates
-    import_observations(node, existing.id)
-
-    # Update counter cache
-    existing.update_column(:memory_observations_count, existing.memory_observations.count)
+    import_observations(node, existing)
+    @counter_touch_ids << existing.id
 
     @entities_merged += 1
     existing.id
@@ -95,10 +91,8 @@ module ImportExecutionStrategy::EntityWrites
     end
 
     # Add observations
-    import_observations(node, target_entity.id)
-
-    # Update counter cache
-    target_entity.update_column(:memory_observations_count, target_entity.memory_observations.count)
+    import_observations(node, target_entity)
+    @counter_touch_ids << target_entity.id
 
     @entities_merged += 1
     target_entity.id
@@ -178,11 +172,11 @@ module ImportExecutionStrategy::EntityWrites
     # proposal per edge (never rewired automatically).
     collect_repoint_proposals(entity) if node_project_id.present?
 
-    # Add observations
-    import_observations(node, entity.id)
+    @fresh_entity_ids << entity.id
 
-    # Update counter cache
-    entity.update_column(:memory_observations_count, entity.memory_observations.count)
+    # Add observations
+    import_observations(node, entity)
+    @counter_touch_ids << entity.id
 
     @entities_created += 1
     entity.id
@@ -191,24 +185,33 @@ module ImportExecutionStrategy::EntityWrites
     nil
   end
 
-  def import_observations(node, entity_id)
+  # Import a node's observations onto `entity`. Active contents are
+  # plucked ONCE per entity and cached across nodes: entities created in
+  # this run start with an empty set and skip the query entirely, so a
+  # first-time import never pays the duplicate detector's per-observation
+  # setup queries. The detector runs only for non-exact content on
+  # entities with PRE-EXISTING observations — the path where semantic
+  # dedup (and its UnavailableError) applies. Import-created rows are
+  # unembedded by design (deferred backfill), so the detector would only
+  # degrade to the exact match the cache already covers.
+  def import_observations(node, entity)
     observations = node[:observations] || node["observations"] || []
-    entity = MemoryEntity.find(entity_id)
-    contents_seen = Set.new
-    observations_to_create = observations.filter do |obs_data|
-      content = obs_data[:content] || obs_data["content"]
-      next false if content.blank? || contents_seen.include?(content)
+    return if observations.empty?
 
-      contents_seen.add(content)
-      !@observation_duplicate_detector.find_duplicate(entity: entity, content: content).duplicate
-    end
-
-    observations_to_create.each do |obs_data|
+    entry = exact_observation_contents(entity)
+    contents = entry[:contents]
+    observations.each do |obs_data|
       content = obs_data[:content] || obs_data["content"]
+      next if content.blank? || contents.include?(content)
+
+      if entry[:pre_existing] &&
+         @observation_duplicate_detector.find_duplicate(entity: entity, content: content).duplicate
+        next
+      end
 
       source = obs_data[:source] || obs_data["source"]
       MemoryObservation.create!(
-        memory_entity_id: entity_id,
+        memory_entity_id: entity.id,
         content: content,
         confidence: obs_data[:confidence] || obs_data["confidence"],
         source: source,
@@ -221,10 +224,26 @@ module ImportExecutionStrategy::EntityWrites
         valid_until: obs_data[:valid_until] || obs_data["valid_until"],
         tags: obs_data[:tags] || obs_data["tags"] || []
       )
+      contents.add(content)
       @observations_created += 1
     rescue ActiveRecord::RecordInvalid => e
-      @errors << "Failed to create observation for entity #{entity_id}: #{e.message}"
+      @errors << "Failed to create observation for entity #{entity.id}: #{e.message}"
     end
+  end
+
+  # Cached active-content set per entity, plus whether the entity held
+  # pre-existing rows. Entities minted by this run — and existing
+  # entities with zero active observations — are `pre_existing: false`:
+  # everything in the set was written by this run and is therefore
+  # unembedded, so the detector's semantic path cannot add anything.
+  def exact_observation_contents(entity)
+    @exact_obs_cache[entity.id] ||=
+      if @fresh_entity_ids.include?(entity.id)
+        { contents: Set.new, pre_existing: false }
+      else
+        contents = MemoryObservation.active.where(memory_entity_id: entity.id).pluck(:content).to_set
+        { contents: contents, pre_existing: contents.any? }
+      end
   end
 
   # Apply name+type-addressed relations after the entity tree exists.

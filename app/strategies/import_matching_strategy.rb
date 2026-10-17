@@ -94,6 +94,7 @@ class ImportMatchingStrategy
   # @param json_data [String, Hash] JSON string or parsed hash
   # @return [Hash] Matching results with structure for review
   def match(json_data)
+    @exact_obs_cache = {} # entity_id => Set of active observation contents
     data = parse_json(json_data)
     return error_result("Invalid JSON format") unless data
 
@@ -359,11 +360,21 @@ class ImportMatchingStrategy
   # @param entity [MemoryEntity] The target entity
   # @param observation [Hash] The observation data
   # @return [Boolean] True if observation exists
+  #
+  # Active contents are plucked once per entity and cached: exact matches
+  # resolve against the Set without re-querying, and an empty set short-
+  # circuits the detector entirely (its own `observations.exists?` early
+  # return could only answer `duplicate: false`). Semantic dedup still
+  # runs for non-exact content on entities that HAVE observations.
   def observation_exists?(entity, observation)
     content = observation["content"] || observation[:content]
     return false if content.blank?
 
-    @observation_duplicate_detector.find_duplicate(entity: entity, content: content).duplicate
+    contents = (@exact_obs_cache[entity.id] ||=
+                 MemoryObservation.active.where(memory_entity_id: entity.id).pluck(:content).to_set)
+    return true if contents.include?(content)
+
+    contents.any? && @observation_duplicate_detector.find_duplicate(entity: entity, content: content).duplicate
   end
 
   # Determine confidence status for root nodes based on matches

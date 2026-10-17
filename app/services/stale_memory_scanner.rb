@@ -34,8 +34,11 @@ class StaleMemoryScanner
   # a looser match would flag facts merely mentioning the bug.
   OPEN_MARKERS = /\b(open|unresolved|pending|blocked|outstanding|to-?do|not fixed|still broken|wontfix-yet)\b/i
   # Negation guard: phrases asserting the OPPOSITE state ("no longer open")
-  # must not be treated as open claims. Kept equally tight.
-  NEGATED_MARKERS = /\b(no longer|not anymore|never was|isn'?t|wasn'?t)\s+(open|unresolved|pending|blocked|outstanding|broken)\b/i
+  # must not be treated as open claims. Kept equally tight — a bare `not`
+  # only negates `open` ("the ticket is not open"): with a whole-content
+  # NOT REGEXP, letting it negate `blocked`/`pending` too would hide mixed
+  # observations like "issue still open, deploy not blocked".
+  NEGATED_MARKERS = /\b(?:no longer|never was|isn'?t|wasn'?t)\s+(?:open|unresolved|pending|blocked|outstanding|broken)\b|\bnot\s+open\b/i
   ADDRESSING_RELATIONS = %w[solves replaces resolves fixes].freeze
   # Vector contradiction detection candidates are bounded by obs activity
   # since the previous scan — a cost bound, not a staleness criterion.

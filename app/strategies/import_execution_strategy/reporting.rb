@@ -27,6 +27,23 @@ module ImportExecutionStrategy::Reporting
 
   private
 
+  # Reconcile `memory_observations_count` for every entity that received
+  # observations — one GROUP BY plus one UPDATE per distinct count value
+  # (a couple of queries total), replacing the per-node recount the
+  # executor used to run. Entities touched but left with zero rows are
+  # reset to 0 too, so the flush doubles as drift repair.
+  def flush_observation_counters!
+    return if @counter_touch_ids.empty?
+
+    counts = MemoryObservation.where(memory_entity_id: @counter_touch_ids.to_a)
+                              .group(:memory_entity_id).count
+    counts.group_by { |_id, count| count }.each do |count, pairs|
+      MemoryEntity.where(id: pairs.map(&:first)).update_all(memory_observations_count: count)
+    end
+    zero_ids = @counter_touch_ids - counts.keys
+    MemoryEntity.where(id: zero_ids.to_a).update_all(memory_observations_count: 0) if zero_ids.any?
+  end
+
   def initialize_progress!(import_data)
     return unless @progress_tracker
 

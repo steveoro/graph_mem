@@ -77,6 +77,9 @@ class ImportExecutionStrategy
     @entity_mapping = {} # Maps import node paths to created/matched entity IDs
     @relation_endpoint_ids = Set.new # endpoints of every relation created
     @excluded_entity_ids = Set.new # entities inside excluded foreign subtrees
+    @counter_touch_ids = Set.new # entities whose observation count needs reconciling
+    @fresh_entity_ids = Set.new # entities created by THIS run (observation set known-empty)
+    @exact_obs_cache = {} # entity_id => Set of active observation contents
     # Project scope of THIS import: the Project entity the root node merged
     # into or created. Members are created/looked up inside it; NULL means
     # a global import (no Project root). Set on first Project-root mapping.
@@ -180,6 +183,11 @@ class ImportExecutionStrategy
                 import_data, @rescan_stored_ids, @entity_mapping
               )
             end
+
+            # One batched counter reconcile for every entity that received
+            # observations — replaces the per-node recount query pair. Kept
+            # inside the transaction so a rollback discards it with the rest.
+            flush_observation_counters!
 
             raise ActiveRecord::Rollback if @errors.any?
           end
