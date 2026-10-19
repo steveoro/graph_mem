@@ -109,19 +109,33 @@ RSpec.describe "Operator embeddings", type: :request do
   end
 
   describe "POST /operator/embeddings/add_indexes" do
-    before do
-      sign_in_operator
-      allow(EmbeddingIndexManager).to receive(:add_indexes!).and_return(
-        success: true, message: "VECTOR INDEX active", indexes: {}
-      )
-    end
+    before { sign_in_operator }
 
-    it "adds indexes and redirects with notice" do
+    it "adds indexes and redirects with notice when converged" do
+      allow(EmbeddingIndexManager).to receive(:add_indexes!).and_return(
+        success: true, converged: true, message: "VECTOR INDEX active",
+        warnings: [], indexes: {}
+      )
+
       post operator_add_embeddings_indexes_path
 
       expect(response).to redirect_to(operator_embeddings_path)
       follow_redirect!
       expect(response.body).to include("VECTOR INDEX active")
+    end
+
+    it "flashes an alert with the warnings when the database did not converge" do
+      allow(EmbeddingIndexManager).to receive(:add_indexes!).and_return(
+        success: true, converged: false,
+        message: "Finished with warnings. WARNINGS: memory_entities.embedding drifted.",
+        warnings: [ "memory_entities.embedding drifted" ], indexes: {}
+      )
+
+      post operator_add_embeddings_indexes_path
+
+      expect(response).to redirect_to(operator_embeddings_path)
+      expect(flash[:alert]).to start_with("Indexes not fully converged:")
+      expect(flash[:alert].scan("drifted").size).to eq(1)
     end
   end
 

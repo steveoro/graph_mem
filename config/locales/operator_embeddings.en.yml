@@ -36,6 +36,7 @@ en:
         memory_entities: "Entities table"
         memory_observations: "Observations table"
         add_failed: "Failed to add indexes: %{error}"
+        add_not_converged: "Indexes not fully converged: %{details}"
         drop_failed: "Failed to drop indexes: %{error}"
       last_report:
         title: "Last maintenance job"

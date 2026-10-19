@@ -1,29 +1,6 @@
 {
   "ignored_warnings": [
     {
-      "warning_type": "SQL Injection",
-      "warning_code": 0,
-      "fingerprint": "00861d96c9b5ff83ca5efb5296f8b3a5d392a074761874c71cde96d7728afc54",
-      "check_name": "SQL",
-      "message": "Possible SQL injection",
-      "file": "app/services/embedding_index_manager.rb",
-      "line": 38,
-      "link": "https://brakemanscanner.org/docs/warning_types/sql_injection/",
-      "code": "ActiveRecord::Base.connection.execute(\"ALTER TABLE memory_observations MODIFY embedding VECTOR(#{EmbeddingConfig.resolved_config[:dims]}) NOT NULL DEFAULT #{zero_vector_sql(EmbeddingConfig.resolved_config[:dims])}\")",
-      "render_path": null,
-      "location": {
-        "type": "method",
-        "class": "EmbeddingIndexManager",
-        "method": "add_indexes!"
-      },
-      "user_input": "EmbeddingConfig.resolved_config[:dims]",
-      "confidence": "Medium",
-      "cwe_id": [
-        89
-      ],
-      "note": ""
-    },
-    {
       "warning_type": "File Access",
       "warning_code": 16,
       "fingerprint": "882aef7a28469b2193f57f7b3c3633745da3c7479c7ea5cbc91e8f4a68444511",
@@ -53,7 +30,7 @@
       "check_name": "SQL",
       "message": "Possible SQL injection",
       "file": "app/services/embedding_index_manager.rb",
-      "line": 75,
+      "line": 97,
       "link": "https://brakemanscanner.org/docs/warning_types/sql_injection/",
       "code": "ActiveRecord::Base.connection.execute(\"ALTER TABLE #{:BRAKEMAN_SAFE_LITERAL} MODIFY embedding VECTOR(#{EmbeddingConfig.resolved_config[:dims]}) DEFAULT NULL\")",
       "render_path": null,
@@ -99,7 +76,7 @@
       "check_name": "SQL",
       "message": "Possible SQL injection",
       "file": "app/services/embedding_vector_trigger_manager.rb",
-      "line": 56,
+      "line": 108,
       "link": "https://brakemanscanner.org/docs/warning_types/sql_injection/",
       "code": "connection.execute(\"DROP TRIGGER IF EXISTS #{trigger}\")",
       "render_path": null,
@@ -139,29 +116,6 @@
       "note": ""
     },
     {
-      "warning_type": "SQL Injection",
-      "warning_code": 0,
-      "fingerprint": "c51df2de48440a7fe5eee0957f6d3e113e992e19f415c6663ad9da5b1305206c",
-      "check_name": "SQL",
-      "message": "Possible SQL injection",
-      "file": "app/services/embedding_index_manager.rb",
-      "line": 37,
-      "link": "https://brakemanscanner.org/docs/warning_types/sql_injection/",
-      "code": "ActiveRecord::Base.connection.execute(\"ALTER TABLE memory_entities MODIFY embedding VECTOR(#{EmbeddingConfig.resolved_config[:dims]}) NOT NULL DEFAULT #{zero_vector_sql(EmbeddingConfig.resolved_config[:dims])}\")",
-      "render_path": null,
-      "location": {
-        "type": "method",
-        "class": "EmbeddingIndexManager",
-        "method": "add_indexes!"
-      },
-      "user_input": "EmbeddingConfig.resolved_config[:dims]",
-      "confidence": "Medium",
-      "cwe_id": [
-        89
-      ],
-      "note": ""
-    },
-    {
       "warning_type": "File Access",
       "warning_code": 16,
       "fingerprint": "f593cb3c0e84811a3407ae9b8c6732ffd493a000fce9935045d504fa88d58423",
@@ -191,7 +145,7 @@
       "check_name": "SQL",
       "message": "Possible SQL injection",
       "file": "app/services/embedding_vector_trigger_manager.rb",
-      "line": 28,
+      "line": 50,
       "link": "https://brakemanscanner.org/docs/warning_types/sql_injection/",
       "code": "connection.execute(\"CREATE TRIGGER #{trigger}\\nBEFORE INSERT ON #{table}\\nFOR EACH ROW\\nSET NEW.embedding = IFNULL(NEW.embedding, #{zero_vector_sql})\\n\".squish)",
       "render_path": null,

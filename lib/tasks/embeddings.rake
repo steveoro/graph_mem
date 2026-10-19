@@ -42,11 +42,12 @@ namespace :embeddings do
     puts "Done. Re-embedded #{result[:entities]} entities, #{result[:observations]} observations."
   end
 
-  desc "Add VECTOR INDEX after all embeddings are backfilled (requires MariaDB 11.7+)"
+  desc "Add VECTOR INDEX after all embeddings are backfilled (idempotent — also reinstalls insert triggers; requires MariaDB 11.7+)"
   task add_indexes: :environment do
     result = EmbeddingIndexManager.add_indexes!
     puts result[:message]
-  rescue EmbeddingIndexManager::PrecheckError => e
+    abort "embeddings:add_indexes finished but the database is not fully converged — see WARNINGS above." unless result[:converged]
+  rescue EmbeddingIndexManager::Error => e
     abort "ERROR: #{e.message}"
   end
 

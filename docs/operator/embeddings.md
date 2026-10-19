@@ -28,6 +28,8 @@ When coverage is 100% and no NULL embeddings remain:
 1. Click **Add ANN indexes** on the embeddings page (or run `bin/rails embeddings:add_indexes`).
 2. Confirm the **Vector search ready** indicator turns **Yes**.
 
+The task is idempotent: it skips columns/indexes/triggers that are already correct and reinstalls missing or drifted ones. Re-running it is also the repair path when `db:schema:dump` warns that the dump came from a DB without the embedding indexes/triggers (see `docs/troubleshooting.md`). A non-zero exit — or an alert flash — means drift it could not repair safely.
+
 ## 5. Verify search
 
 Use MCP `search_entities` or the web search UI. Hybrid search uses vectors when indexes are active.
@@ -47,7 +49,7 @@ After changing model or dims in settings or ENV:
 | Test connection | `embeddings:check` |
 | Backfill | `embeddings:backfill` |
 | Regenerate | `embeddings:regenerate` |
-| Add indexes | `embeddings:add_indexes` |
+| Add indexes | `embeddings:add_indexes` (idempotent — also reinstalls insert triggers) |
 | Drop indexes | `embeddings:drop_indexes` |
 
 All rake tasks use the same `EmbeddingConfig` resolution as the UI.

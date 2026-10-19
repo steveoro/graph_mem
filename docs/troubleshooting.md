@@ -100,6 +100,19 @@ This guide addresses common issues you might encounter when working with GraphMe
 
 ## Database Issues
 
+### Problem: `db:schema:dump` warns "dump came from a DB without the embedding indexes/triggers"
+
+**Symptoms:**
+- `bin/rails db:schema:dump` prints a `StructureDumpGuard` warning and restores the previous `structure.sql` (or aborts when the degraded dump carries new migrations).
+
+**Cause:** the source database has the `VECTOR` indexes but lacks the insert triggers (or vice versa) — typically because `AddEmbeddingInsertTriggers` ran while the embedding columns were still nullable, e.g. a different migrate order or a schema loaded before the triggers existed.
+
+**Solutions:**
+
+1. **Repair via the idempotent task:** `bin/rails embeddings:add_indexes` is safe to re-run — it skips pieces already in place, reinstalls missing/drifted insert triggers, and exits non-zero with `WARNINGS:` if drift remains that it cannot safely repair.
+2. **When it reports drift on an indexed column** (unexpected default or `vector(n)` dimensions): the ALTER would have to rebuild the vector index, so repair explicitly — `bin/rails embeddings:drop_indexes` then `embeddings:add_indexes` (plus `embeddings:regenerate` first if the embedding model/dimensions actually changed).
+3. **Re-dump:** `bin/rails db:schema:dump` — the warning should be gone and the dump is canonical again.
+
 ### Problem: Database Connection Errors
 
 **Symptoms:**

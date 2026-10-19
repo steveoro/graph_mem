@@ -2,7 +2,7 @@
 
 GraphMem is a Ruby on Rails application implementing a Model Context Protocol (MCP) server for graph-based memory management. It enables AI assistants and other clients to create, retrieve, search, and manage knowledge entities and their relationships through a standardized interface.
 
-[![Version](https://img.shields.io/badge/version-1.51.0-blue.svg)](lib/graph_mem/version.rb)
+[![Version](https://img.shields.io/badge/version-1.52.1-blue.svg)](lib/graph_mem/version.rb)
 [![Rails](https://img.shields.io/badge/rails-8.1.4-orange.svg)](Gemfile)
 [![Ruby](https://img.shields.io/badge/ruby-3.4.1-red.svg)](Gemfile)
 
@@ -487,7 +487,7 @@ docker compose exec app curl -sf http://localhost:11434/api/embed \
 | `embeddings:check` | Smoke-test Ollama connectivity and config |
 | `embeddings:backfill` | Generate embeddings for records missing them |
 | `embeddings:regenerate` | Recompute all embeddings in-place (e.g. after switching models) |
-| `embeddings:add_indexes` | Add `VECTOR INDEX` (HNSW, cosine) after all rows are populated |
+| `embeddings:add_indexes` | Add `VECTOR INDEX` (HNSW, cosine) after all rows are populated — idempotent; also repairs missing insert triggers |
 | `embeddings:drop_indexes` | Remove indexes and revert columns to nullable |
 
 ### Switching Embedding Models

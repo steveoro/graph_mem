@@ -31,7 +31,12 @@ module Operator
 
     def add_indexes
       result = EmbeddingIndexManager.add_indexes!
-      redirect_to operator_embeddings_path, notice: result[:message]
+      if result[:converged]
+        redirect_to operator_embeddings_path, notice: result[:message]
+      else
+        redirect_to operator_embeddings_path,
+                    alert: t("operator.embeddings.indexes.add_not_converged", details: result[:message].truncate(800))
+      end
     rescue EmbeddingIndexManager::PrecheckError => e
       redirect_to operator_embeddings_path, alert: e.message
     rescue EmbeddingIndexManager::Error => e
