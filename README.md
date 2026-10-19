@@ -375,8 +375,49 @@ Assuming `graph_mem-app-1` is the running container name, edit `mcp_servers.json
 
 ### Claude Code
 
-Typically both stdio and SSE should work as all 3 options highlighted above should.
-Edit your Claude's `mcp_servers.json` with the one of your choosing.
+Claude Code does not read the Cursor-style `mcp.json` / `mcp_servers.json` files. Configure it through
+`.mcp.json` (project root, shareable), `~/.claude.json` (user scope) or the `claude mcp add` CLI.
+
+**Streamable HTTP (recommended).** Unlike Cursor, Claude Code requires an explicit `"type": "http"`:
+an entry with only `url` + `headers` is rejected as invalid. Custom headers such as `X-MCP-Client` are
+passed through untouched.
+
+```json
+{
+  "mcpServers": {
+    "graph_mem": {
+      "type": "http",
+      "url": "http://localhost:3030/mcp",
+      "headers": { "X-MCP-Client": "${MCP_CLIENT_ID:-claude-code-1}" }
+    }
+  }
+}
+```
+
+Or, equivalently, via the CLI (`--scope` is one of `local`, `project` or `user`):
+
+```bash
+claude mcp add --transport http graph_mem http://localhost:3030/mcp \
+  --header "X-MCP-Client: claude-code" --scope user
+```
+
+**Unique client id per Claude instance.** `.mcp.json` supports environment variable expansion
+(`${VAR}` and `${VAR:-default}`), so a single shared file can still give every instance its own id:
+
+```json
+"headers": { "X-MCP-Client": "${MCP_CLIENT_ID:-claude-code-1}" }
+```
+
+```bash
+MCP_CLIENT_ID=claude-my_project claude
+```
+
+Instances started without the variable fall back to `claude-code-1`. Other agents keep using their own
+configuration and ids; as noted above, each concurrent agent must send a distinct `X-MCP-Client` value.
+When a token is configured, add `"Authorization": "Bearer <GRAPH_MEM_MCP_TOKEN>"` to the same `headers` object.
+
+**stdio.** The stdio options (C and D above) work as well, using the same `command` / `args` / `env`
+fields (add `"type": "stdio"` if you prefer to be explicit).
 
 
 ### LAN Access (Multiple Machines)
