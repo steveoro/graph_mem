@@ -31,7 +31,7 @@ class SearchTool < ApplicationTool
     "Do not use for synthesized prose; use `summarize` instead."
 
   arguments do
-    optional(:query).maybe(:string).description("Search query. Omit for catalog mode.")
+    optional(:query).maybe(:string, max_size?: SearchQueryLimits::MAX_QUERY_LENGTH).description("Search query. Omit for catalog mode.")
     optional(:include).array(:string).description("Subgraph projections: observations and/or relations.")
     optional(:search_in_name).filled(:bool)
     optional(:search_in_type).filled(:bool)
@@ -70,6 +70,7 @@ class SearchTool < ApplicationTool
       )
     end
     raise FastMcp::Tool::InvalidArgumentsError, "Query term cannot be blank." if query.blank?
+    SearchQueryLimits.check!(query)
 
     if projections.any?
       subgraph_result(

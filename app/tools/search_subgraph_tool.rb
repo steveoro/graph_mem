@@ -33,7 +33,7 @@ class SearchSubgraphTool < ApplicationTool
 
   # Defines arguments for fast-mcp validation.
   arguments do
-    required(:query).filled(:string).description("The search term to find within entity names, types, aliases, or observations.")
+    required(:query).filled(:string, max_size?: SearchQueryLimits::MAX_QUERY_LENGTH).description("The search term to find within entity names, types, aliases, or observations.")
     optional(:search_in_name).filled(:bool).description("Whether to search in entity names. Defaults to true.")
     optional(:search_in_type).filled(:bool).description("Whether to search in entity types. Defaults to true.")
     optional(:search_in_aliases).filled(:bool).description("Whether to search in entity aliases. Defaults to true.")
@@ -126,6 +126,7 @@ class SearchSubgraphTool < ApplicationTool
   def call(query:, search_in_name: true, search_in_type: true, search_in_observations: true,
            search_in_aliases: true, page: nil, per_page: nil,
            occurred_after: nil, occurred_before: nil, as_of: nil, max_tokens: nil)
+    SearchQueryLimits.check!(query)
     max_tokens = TokenBudget.validate_max_tokens!(max_tokens, error_class: FastMcp::Tool::InvalidArgumentsError)
     SubgraphSearchService.call(
       query: query,

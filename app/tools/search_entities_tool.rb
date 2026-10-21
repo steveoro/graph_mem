@@ -23,11 +23,12 @@ class SearchEntitiesTool < ApplicationTool
     "Do not use to answer what the graph knows about a topic; use `summarize` instead."
 
   arguments do
-    required(:query).filled(:string).description("The search term to find within entity names, entity types, or aliases. Multiple words will be tokenized for better matching (case-insensitive).")
+    required(:query).filled(:string, max_size?: SearchQueryLimits::MAX_QUERY_LENGTH).description("The search term to find within entity names, entity types, or aliases. Multiple words will be tokenized for better matching (case-insensitive).")
     optional(:limit).filled(:integer).description("Maximum entities to return (1-100). Defaults to 50.")
   end
 
   def call(query:, limit: 50)
+    SearchQueryLimits.check!(query)
     logger.info "Performing SearchEntitiesTool with query: #{query}"
     begin
       limit = [ limit.to_i, 1 ].max.clamp(1, 100)

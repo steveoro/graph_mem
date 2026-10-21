@@ -29,7 +29,7 @@ class GetEntityTool < ApplicationTool
     required(:entity_id).filled(:integer).description("The ID of the entity to retrieve.")
     optional(:include_obsolete).filled(:bool).description("Include obsolete and superseded observations. Defaults to false.")
     optional(:include_ranked).filled(:bool).description("Sort observations by trust score descending. Defaults to false.")
-    optional(:query).filled(:string).description("Optional query for relevance-ranked observations.")
+    optional(:query).filled(:string, max_size?: SearchQueryLimits::MAX_QUERY_LENGTH).description("Optional query for relevance-ranked observations.")
     optional(:observation_limit).filled(:integer).description("Maximum observations to return per entity.")
     optional(:occurred_after).maybe(:string).description("ISO 8601 lower bound for observation occurred time.")
     optional(:occurred_before).maybe(:string).description("ISO 8601 upper bound for observation occurred time.")
@@ -39,6 +39,7 @@ class GetEntityTool < ApplicationTool
 
   def call(entity_id:, include_obsolete: false, include_ranked: false, query: nil, observation_limit: nil,
            occurred_after: nil, occurred_before: nil, as_of: nil, max_tokens: nil)
+    SearchQueryLimits.check!(query)
     max_tokens = TokenBudget.validate_max_tokens!(max_tokens, error_class: FastMcp::Tool::InvalidArgumentsError)
     logger.info "Performing GetEntityTool with entity_id: #{entity_id}"
     begin

@@ -25,10 +25,11 @@ class RankObservationsTool < ApplicationTool
     required(:entity_id).filled(:integer).description("The ID of the entity whose observations should be ranked.")
     optional(:include_obsolete).filled(:bool).description("Include obsolete and superseded observations in the ranking. Defaults to false.")
     optional(:limit).filled(:integer).description("Maximum number of observations to return. Defaults to all.")
-    optional(:query).filled(:string).description("Optional query for relevance-ranked observations.")
+    optional(:query).filled(:string, max_size?: SearchQueryLimits::MAX_QUERY_LENGTH).description("Optional query for relevance-ranked observations.")
   end
 
   def call(entity_id:, include_obsolete: false, limit: nil, query: nil)
+    SearchQueryLimits.check!(query)
     logger.info "Performing RankObservationsTool with entity_id: #{entity_id}"
     begin
       entity = MemoryEntity.find(entity_id)

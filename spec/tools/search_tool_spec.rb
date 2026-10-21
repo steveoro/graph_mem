@@ -78,6 +78,21 @@ RSpec.describe SearchTool, type: :model do
       }.to raise_error(FastMcp::Tool::InvalidArgumentsError, /include values/)
     end
 
+    it "rejects queries longer than 2048 characters" do
+      expect { tool.call(query: "a" * 2049) }
+        .to raise_error(FastMcp::Tool::InvalidArgumentsError, /too long/)
+    end
+
+    it "accepts exactly 2048 characters" do
+      allow(EntityRetrievalService).to receive(:search).and_return(results: [], retrieval: {})
+      expect { tool.call(query: "a" * 2048) }.not_to raise_error
+    end
+
+    it "advertises maxLength 2048 in its input schema" do
+      schema = described_class.input_schema_to_json
+      expect(schema.dig(:properties, :query, :maxLength)).to eq(2048)
+    end
+
     it "validates canonical paging" do
       expect { tool.call(page: 0) }.to raise_error(FastMcp::Tool::InvalidArgumentsError, /Page number/)
       expect { tool.call(per_page: 101) }.to raise_error(FastMcp::Tool::InvalidArgumentsError, /Per page/)
