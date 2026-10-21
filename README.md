@@ -388,7 +388,10 @@ passed through untouched.
     "graph_mem": {
       "type": "http",
       "url": "http://localhost:3030/mcp",
-      "headers": { "X-MCP-Client": "${MCP_CLIENT_ID:-claude-code-1}" }
+      "headers": {
+        "Authorization": "Bearer <JWT_TOKEN>",
+        "X-MCP-Client": "${MCP_CLIENT_ID:-claude-code-1}"
+      }
     }
   }
 }
