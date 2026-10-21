@@ -1,6 +1,6 @@
 # Kickoff prompt for Claude Code (paste as the first message, from the graph_mem clone)
 
-You are implementing two approved plans for Steve in his local clones:
+You are implementing two approved plans for Steve (me) in his local clones:
 - graph_mem: this repo (`steveoro/graph_mem`). fast-mcp: `../fast-mcp` (`steveoro/fast-mcp`). If either path is wrong, ask me; don't search the disk.
 - The plans are in this repo: `docs/plans/mcp-update-plan.md` and `docs/plans/ui-dashboard-plan.md`. If they aren't there, stop and ask me; don't reconstruct them.
 
