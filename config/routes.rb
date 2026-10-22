@@ -1,19 +1,21 @@
 Rails.application.routes.draw do
-  mount Rswag::Api::Engine => "/api-docs"
-  mount Rswag::Ui::Engine => "/api-docs"
+  # /api-docs (Rswag) is restricted to authenticated operators.
+  constraints(OperatorSessionConstraint.new) do
+    mount Rswag::Api::Engine => "/api-docs"
+    mount Rswag::Ui::Engine => "/api-docs"
+  end
+
   # Define your application routes per the DSL in https://guides.rubyonrails.org/routing.html
 
   # Serve WebSocket cable requests for real-time progress updates
   mount ActionCable.server => "/cable"
 
-  # Reveal health status on /up that r
-  # eturns 200 if the app boots with no exceptions, otherwise 500.
+  # Reveal health status on /up that returns 200 if the app boots with no exceptions, otherwise 500.
   # Can be used by load balancers and uptime monitors to verify that the app is live.
   get "up" => "rails/health#show", as: :rails_health_check
 
-  # Render dynamic PWA files from app/views/pwa/* (remember to link manifest in application.html.erb)
-  # get "manifest" => "rails/pwa#manifest", as: :pwa_manifest
-  # get "service-worker" => "rails/pwa#service_worker", as: :pwa_service_worker
+  # CSP violation reports (report-only in UI-0, enforced in UI-1)
+  post "csp-reports", to: "csp_reports#create"
 
   # API routes
   namespace :api do

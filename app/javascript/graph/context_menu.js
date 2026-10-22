@@ -1,4 +1,5 @@
-import { analyzeObservations, renderDuplicateWarning, renderObservationCards } from 'graph/observation_renderer'
+import { el, text, br } from 'lib/dom';
+import { analyzeObservations, renderDuplicateWarning, renderObservationCards } from 'graph/observation_renderer';
 
 const RELATION_TYPES = [
   'part_of', 'depends_on', 'relates_to', 'implements', 'extends',
@@ -26,40 +27,41 @@ export class ContextMenuManager {
 
     const aliases = data.aliases ? data.aliases.trim() : '';
     const menuItems = [
-      { text: `<strong>${data.label}</strong>`, divider: true },
-      { text: `ID: ${data.id}` },
-      { text: `Type: ${data.type || 'N/A'}` },
-      ...(aliases ? [{ text: `Aliases: ${aliases}` }] : []),
-      { text: `Observations: ${data.memory_observations_count || 0}`, action: 'show-observations' },
+      { header: String(data.label ?? ''), divider: true },
+      { label: 'ID: ' + (data.id ?? '') },
+      { label: 'Type: ' + (data.type || 'N/A') },
+      ...(aliases ? [{ label: 'Aliases: ' + aliases }] : []),
+      { label: 'Observations: ' + (data.memory_observations_count || 0), action: 'show-observations' },
       { divider: true },
-      { text: 'Edit data', action: 'edit' },
-      { text: 'Toggle relations', action: 'toggle-relations' },
-      { text: 'Toggle observations', action: 'toggle-observations' },
-      { text: 'Delete', action: 'delete', danger: true }
+      { label: 'Edit data', action: 'edit' },
+      { label: 'Toggle relations', action: 'toggle-relations' },
+      { label: 'Toggle observations', action: 'toggle-observations' },
+      { label: 'Delete', action: 'delete', danger: true }
     ];
 
     menuItems.forEach(item => {
-      const el = document.createElement('div');
-      if (item.divider) {
-        el.className = 'ctx-divider';
-        if (item.text) {
-          el.innerHTML = item.text;
-          el.className = 'ctx-header';
-        }
+      const itemEl = document.createElement('div');
+      if (item.divider && !item.header) {
+        itemEl.className = 'ctx-divider';
+      } else if (item.header !== undefined) {
+        const strong = document.createElement('strong');
+        strong.textContent = item.header;
+        itemEl.appendChild(strong);
+        itemEl.className = 'ctx-header';
       } else {
-        el.innerHTML = item.text;
-        el.className = 'ctx-item' +
+        itemEl.textContent = item.label;
+        itemEl.className = 'ctx-item' +
           (item.action ? ' ctx-item--clickable' : '') +
           (item.danger ? ' ctx-item--danger' : '');
         if (item.action) {
-          el.onclick = (e) => {
+          itemEl.onclick = (e) => {
             e.stopPropagation();
             this.#handleNodeAction(item.action, data, cy);
             this.hide();
           };
         }
       }
-      menu.appendChild(el);
+      menu.appendChild(itemEl);
     });
 
     const containerRect = cy.container().getBoundingClientRect();
@@ -80,39 +82,41 @@ export class ContextMenuManager {
     const menu = document.createElement('div');
     menu.className = 'contextual-menu edge-menu';
 
-    const fromName = data.from_entity_name || data.source;
-    const toName = data.to_entity_name || data.target;
+    const fromName = String(data.from_entity_name || data.source || '');
+    const toName = String(data.to_entity_name || data.target || '');
 
     const menuItems = [
-      { text: `<strong>Relation</strong>`, divider: true, edge: true },
-      { text: `${fromName} → ${toName}` },
-      { text: `Type: ${data.label}` },
+      { staticHeader: 'Relation', divider: true, edge: true },
+      { label: fromName + ' \u2192 ' + toName },
+      { label: 'Type: ' + (data.label || '') },
       { divider: true },
-      { text: 'Edit Type', action: 'edit-type' },
-      { text: 'Delete Relation', action: 'delete', danger: true }
+      { label: 'Edit Type', action: 'edit-type' },
+      { label: 'Delete Relation', action: 'delete', danger: true }
     ];
 
     menuItems.forEach(item => {
-      const el = document.createElement('div');
-      if (item.divider && !item.text) {
-        el.className = 'ctx-divider';
-      } else if (item.divider) {
-        el.innerHTML = item.text;
-        el.className = 'ctx-header' + (item.edge ? ' ctx-header--edge' : '');
+      const itemEl = document.createElement('div');
+      if (item.divider && !item.staticHeader) {
+        itemEl.className = 'ctx-divider';
+      } else if (item.staticHeader !== undefined) {
+        const strong = document.createElement('strong');
+        strong.textContent = item.staticHeader;
+        itemEl.appendChild(strong);
+        itemEl.className = 'ctx-header' + (item.edge ? ' ctx-header--edge' : '');
       } else {
-        el.innerHTML = item.text;
-        el.className = 'ctx-item' +
+        itemEl.textContent = item.label;
+        itemEl.className = 'ctx-item' +
           (item.action ? ' ctx-item--clickable' : '') +
           (item.danger ? ' ctx-item--danger' : '');
         if (item.action) {
-          el.onclick = (e) => {
+          itemEl.onclick = (e) => {
             e.stopPropagation();
             this.#handleEdgeAction(item.action, data, edge);
             this.hide();
           };
         }
       }
-      menu.appendChild(el);
+      menu.appendChild(itemEl);
     });
 
     const containerRect = cy.container().getBoundingClientRect();
@@ -145,7 +149,7 @@ export class ContextMenuManager {
         break;
       case 'toggle-observations':
         if (nodeData.memory_observations_count > 10) {
-          if (!confirm(`This entity has ${nodeData.memory_observations_count} observations. Show them all?`)) return;
+          if (!confirm('This entity has ' + nodeData.memory_observations_count + ' observations. Show them all?')) return;
         }
         await this.#showObservationsModal(nodeData, cy);
         break;
@@ -160,14 +164,22 @@ export class ContextMenuManager {
       const observations = await this.api.fetchObservations(nodeData.id);
       const analysis = analyzeObservations(observations);
 
-      this.modal.show('Entity Observations', `
-        <h3>${nodeData.label} (ID: ${nodeData.id})</h3>
-        <p><strong>Type:</strong> ${nodeData.type || 'N/A'}</p>
-        <p><strong>Total Observations:</strong> ${observations.length}</p>
-        ${renderDuplicateWarning(analysis)}
-        <hr>
-        ${renderObservationCards(observations, analysis)}
-      `);
+      const frag = document.createDocumentFragment();
+
+      frag.appendChild(el('h3', {},
+        text(String(nodeData.label ?? '') + ' (ID: ' + (nodeData.id ?? '') + ')')));
+      frag.appendChild(el('p', {},
+        el('strong', {}, 'Type:'), text(' ' + (nodeData.type || 'N/A'))));
+      frag.appendChild(el('p', {},
+        el('strong', {}, 'Total Observations:'), text(' ' + observations.length)));
+
+      const warning = renderDuplicateWarning(analysis);
+      if (warning) frag.appendChild(warning);
+
+      frag.appendChild(document.createElement('hr'));
+      frag.appendChild(renderObservationCards(observations, analysis));
+
+      this.modal.show('Entity Observations', frag);
 
       if (analysis.hasDuplicates) {
         const btn = document.getElementById('delete-dup-obs-btn');
@@ -187,7 +199,7 @@ export class ContextMenuManager {
 
     try {
       const result = await this.api.deleteDuplicateObservations(entityId);
-      alert(`Success! ${result.message}`);
+      alert('Success! ' + result.message);
       this.modal.close();
       this.onRefreshGraph();
 
@@ -203,29 +215,40 @@ export class ContextMenuManager {
 
   #showEditModal(nodeData) {
     const aliases = nodeData.aliases ? nodeData.aliases.trim() : '';
-    this.modal.show('Edit Entity', `
-      <h3>Edit Entity</h3>
-      <form id="edit-entity-form">
-        <div class="graph-form-group">
-          <label class="graph-form-label">Name:</label>
-          <input type="text" id="entity-name" value="${nodeData.label}" class="graph-form-input">
-        </div>
-        <div class="graph-form-group">
-          <label class="graph-form-label">Type:</label>
-          <input type="text" id="entity-type" value="${nodeData.type || ''}" class="graph-form-input">
-        </div>
-        <div class="graph-form-group--lg">
-          <label class="graph-form-label">Aliases:</label>
-          <input type="text" id="entity-aliases" value="${aliases}"
-                 placeholder="Comma-separated alternative names" class="graph-form-input">
-          <small class="graph-form-hint">Enter alternative names separated by commas</small>
-        </div>
-        <div class="graph-form-actions">
-          <button type="button" id="edit-cancel-btn" class="graph-btn graph-btn--secondary">Cancel</button>
-          <button type="submit" class="graph-btn graph-btn--primary">Save</button>
-        </div>
-      </form>
-    `);
+
+    const nameInput = el('input', {
+      type: 'text', id: 'entity-name', className: 'graph-form-input', value: String(nodeData.label ?? '')
+    });
+    const typeInput = el('input', {
+      type: 'text', id: 'entity-type', className: 'graph-form-input', value: String(nodeData.type || '')
+    });
+    const aliasesInput = el('input', {
+      type: 'text', id: 'entity-aliases', className: 'graph-form-input',
+      placeholder: 'Comma-separated alternative names', value: aliases
+    });
+
+    const form = el('form', { id: 'edit-entity-form' },
+      el('h3', {}, 'Edit Entity'),
+      el('div', { className: 'graph-form-group' },
+        el('label', { className: 'graph-form-label' }, 'Name:'),
+        nameInput
+      ),
+      el('div', { className: 'graph-form-group' },
+        el('label', { className: 'graph-form-label' }, 'Type:'),
+        typeInput
+      ),
+      el('div', { className: 'graph-form-group--lg' },
+        el('label', { className: 'graph-form-label' }, 'Aliases:'),
+        aliasesInput,
+        el('small', { className: 'graph-form-hint' }, 'Enter alternative names separated by commas')
+      ),
+      el('div', { className: 'graph-form-actions' },
+        el('button', { type: 'button', id: 'edit-cancel-btn', className: 'graph-btn graph-btn--secondary' }, 'Cancel'),
+        el('button', { type: 'submit', className: 'graph-btn graph-btn--primary' }, 'Save')
+      )
+    );
+
+    this.modal.show('Edit Entity', form);
 
     document.getElementById('edit-cancel-btn').onclick = () => this.modal.close();
     document.getElementById('edit-entity-form').onsubmit = async (e) => {
@@ -243,7 +266,7 @@ export class ContextMenuManager {
         alert('Entity updated successfully.');
       } catch (error) {
         console.error('Error updating entity:', error);
-        alert(`Failed to update entity: ${error.message}`);
+        alert('Failed to update entity: ' + error.message);
       }
     };
   }
@@ -263,7 +286,7 @@ export class ContextMenuManager {
   }
 
   async #deleteNode(nodeData, cy) {
-    if (!confirm(`Are you sure you want to delete "${nodeData.label}"? This action cannot be undone.`)) return;
+    if (!confirm('Are you sure you want to delete "' + (nodeData.label ?? '') + '"? This action cannot be undone.')) return;
 
     try {
       await this.api.deleteEntity(nodeData.id);
@@ -271,7 +294,7 @@ export class ContextMenuManager {
       alert('Entity deleted successfully.');
     } catch (error) {
       console.error('Error deleting entity:', error);
-      alert(`Failed to delete entity: ${error.message}`);
+      alert('Failed to delete entity: ' + error.message);
     }
   }
 
@@ -290,37 +313,46 @@ export class ContextMenuManager {
 
   #showEditRelationTypeModal(edgeData) {
     const currentType = edgeData.label;
-    const fromName = edgeData.from_entity_name || edgeData.source;
-    const toName = edgeData.to_entity_name || edgeData.target;
+    const fromName = String(edgeData.from_entity_name || edgeData.source || '');
+    const toName = String(edgeData.to_entity_name || edgeData.target || '');
 
-    const optionsHtml = RELATION_TYPES.map(type =>
-      `<option value="${type}" ${type === currentType ? 'selected' : ''}>${type}</option>`
-    ).join('');
+    const options = RELATION_TYPES.map(type => {
+      const opt = el('option', { value: type }, type);
+      if (type === currentType) opt.selected = true;
+      return opt;
+    });
 
-    this.modal.show('Edit Relation Type', `
-      <div class="relation-info--spaced">
-        <p><strong>From:</strong> ${fromName}</p>
-        <p><strong>To:</strong> ${toName}</p>
-      </div>
-      <div class="graph-form-group--lg">
-        <label for="relation-type-select" class="graph-form-label--bold">Relation Type:</label>
-        <select id="relation-type-select" class="graph-form-select">
-          ${optionsHtml}
-        </select>
-      </div>
-      <div class="graph-form-actions--flex">
-        <button id="rel-cancel-btn" class="graph-btn graph-btn--lg graph-btn--outline">Cancel</button>
-        <button id="rel-save-btn" class="graph-btn graph-btn--lg graph-btn--primary">Save</button>
-      </div>
-    `);
+    const select = el('select', { id: 'relation-type-select', className: 'graph-form-select' }, ...options);
+
+    const frag = document.createDocumentFragment();
+    frag.appendChild(
+      el('div', { className: 'relation-info--spaced' },
+        el('p', {}, el('strong', {}, 'From:'), text(' ' + fromName)),
+        el('p', {}, el('strong', {}, 'To:'), text(' ' + toName))
+      )
+    );
+    frag.appendChild(
+      el('div', { className: 'graph-form-group--lg' },
+        el('label', { htmlFor: 'relation-type-select', className: 'graph-form-label--bold' }, 'Relation Type:'),
+        select
+      )
+    );
+    frag.appendChild(
+      el('div', { className: 'graph-form-actions--flex' },
+        el('button', { id: 'rel-cancel-btn', className: 'graph-btn graph-btn--lg graph-btn--outline' }, 'Cancel'),
+        el('button', { id: 'rel-save-btn', className: 'graph-btn graph-btn--lg graph-btn--primary' }, 'Save')
+      )
+    );
+
+    this.modal.show('Edit Relation Type', frag);
 
     document.getElementById('rel-cancel-btn').onclick = () => this.modal.close();
     document.getElementById('rel-save-btn').onclick = async () => {
-      const select = document.getElementById('relation-type-select');
-      if (!select) return;
+      const selectEl = document.getElementById('relation-type-select');
+      if (!selectEl) return;
 
       try {
-        const result = await this.api.updateRelationType(edgeData.relation_id, select.value);
+        const result = await this.api.updateRelationType(edgeData.relation_id, selectEl.value);
         if (result.success) {
           this.modal.close();
           this.onRefreshGraph();
@@ -336,10 +368,10 @@ export class ContextMenuManager {
   }
 
   async #deleteRelation(edgeData, edge) {
-    const fromName = edgeData.from_entity_name || edgeData.source;
-    const toName = edgeData.to_entity_name || edgeData.target;
+    const fromName = String(edgeData.from_entity_name || edgeData.source || '');
+    const toName = String(edgeData.to_entity_name || edgeData.target || '');
 
-    if (!confirm(`Delete relation "${fromName} -[${edgeData.label}]-> ${toName}"?`)) return;
+    if (!confirm('Delete relation "' + fromName + ' -[' + (edgeData.label || '') + ']-> ' + toName + '"?')) return;
 
     try {
       const result = await this.api.deleteRelation(edgeData.relation_id);

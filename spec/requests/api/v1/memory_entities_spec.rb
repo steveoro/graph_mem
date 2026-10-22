@@ -2,6 +2,8 @@ require 'rails_helper'
 require 'swagger_helper'
 
 RSpec.describe 'API V1 Memory Entities', type: :request do
+  before { sign_in_operator }
+
   path '/api/v1/memory_entities' do
     get('list memory entities') do
       tags 'Memory Entities'

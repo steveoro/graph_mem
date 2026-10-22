@@ -13,6 +13,8 @@ en:
       signed_in: "Signed in successfully."
       signed_out: "Signed out."
       invalid_credentials: "Invalid username or password."
+      session_expired: "Your session has expired. Please sign in again."
+      too_many_attempts: "Too many sign-in attempts. Please wait and try again."
     settings:
       title: "System Settings"
       subtitle: "Configure feature flags, database backup, embedding service, summarization behavior, and project scan settings."

@@ -1,25 +1,25 @@
 # Be sure to restart your server when you modify this file.
-
-# Define an application-wide content security policy.
-# See the Securing Rails Applications Guide for more information:
-# https://guides.rubyonrails.org/security.html#content-security-policy-header
-
-# Rails.application.configure do
-#   config.content_security_policy do |policy|
-#     policy.default_src :self, :https
-#     policy.font_src    :self, :https, :data
-#     policy.img_src     :self, :https, :data
-#     policy.object_src  :none
-#     policy.script_src  :self, :https
-#     policy.style_src   :self, :https
-#     # Specify URI for violation reports
-#     # policy.report_uri "/csp-violation-report-endpoint"
-#   end
 #
-#   # Generate session nonces for permitted importmap, inline scripts, and inline styles.
-#   config.content_security_policy_nonce_generator = ->(request) { request.session.id.to_s }
-#   config.content_security_policy_nonce_directives = %w(script-src style-src)
-#
-#   # Report violations without enforcing the policy.
-#   # config.content_security_policy_report_only = true
-# end
+# UI-0: CSP enabled as report-only (F1 / §6 UI-0 §1.5).
+# Enforcement switches to enforced in UI-1 once inline handlers are removed.
+
+Rails.application.configure do
+  config.content_security_policy do |policy|
+    policy.default_src :self
+    # Nonce is auto-appended by the middleware via content_security_policy_nonce_directives below.
+    policy.script_src  :self
+    # Tailwind v4 and Cytoscape require inline styles.
+    policy.style_src   :self, :unsafe_inline
+    policy.connect_src :self, :ws, :wss
+    policy.img_src     :self, :data
+    policy.object_src  :none
+    policy.frame_ancestors :none
+    policy.report_uri "/csp-reports"
+  end
+
+  config.content_security_policy_nonce_generator = ->(_request) { SecureRandom.base64(36) }
+  config.content_security_policy_nonce_directives = %w[script-src]
+
+  # Report-only in 1.53.0; enforced in UI-1 (1.55.0) once inline handlers are gone.
+  config.content_security_policy_report_only = true
+end

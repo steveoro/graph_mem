@@ -1,9 +1,17 @@
+import { el } from 'lib/dom';
+
 export class ModalManager {
   constructor() {
     this.currentModal = null;
   }
 
-  show(title, content) {
+  /**
+   * show(title, contentNode)
+   *
+   * title       — plain string (code constant, never user data).
+   * contentNode — a DOM Node (Element or DocumentFragment) built by the caller.
+   */
+  show(title, contentNode) {
     this.close();
 
     const overlay = document.createElement('div');
@@ -12,16 +20,15 @@ export class ModalManager {
     const modal = document.createElement('div');
     modal.className = 'graph-modal';
 
-    const closeBtn = document.createElement('button');
-    closeBtn.innerHTML = '\u00d7';
-    closeBtn.className = 'graph-modal-close';
-    closeBtn.onclick = () => this.close();
+    const closeBtn = el('button', { className: 'graph-modal-close', onclick: () => this.close() }, '\u00d7');
 
-    modal.innerHTML = `<h2>${title}</h2>${content}`;
+    const heading = el('h2', {}, title);   // title is always a code-defined constant
+    modal.appendChild(heading);
+    if (contentNode) modal.appendChild(contentNode);
     modal.appendChild(closeBtn);
+
     overlay.appendChild(modal);
     document.body.appendChild(overlay);
-
     this.currentModal = overlay;
   }
 
@@ -30,11 +37,5 @@ export class ModalManager {
       this.currentModal.remove();
       this.currentModal = null;
     }
-  }
-
-  escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
   }
 }
