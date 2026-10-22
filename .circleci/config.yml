@@ -1,9 +1,10 @@
 version: 2.1
 orbs:
   ruby: circleci/ruby@4.0.0
+  browser-tools: circleci/browser-tools@2.4.2
 
 ruby: &ruby
-  image: cimg/ruby:3.4.1
+  image: cimg/ruby:3.4.1-browsers
   environment:
     RAILS_ENV: test
     BUNDLE_JOBS: 2
@@ -50,6 +51,11 @@ jobs:
           MARIADB_ROOT_PASSWORD: Password123!
     steps:
       - checkout
+      - browser-tools/install_chrome
+      - browser-tools/install_chromedriver
+      - run:
+          name: Verify browser tools
+          command: google-chrome --version && chromedriver --version
       - run:
           name: Install database client
           command: |
@@ -65,7 +71,9 @@ jobs:
             bin/rails db:create db:schema:load
       - run:
           name: RSpec
-          command: bundle exec rspec --exclude-pattern "spec/system/**/*_spec.rb"
+          command: bundle exec rspec
+      - store_artifacts:
+          path: tmp/capybara
 
 workflows:
   test:

@@ -218,12 +218,10 @@ RSpec.describe EmbeddingIndexManager do
     def canonical_embedding_schema?
       real_conn = ActiveRecord::Base.connection
       dims = EmbeddingConfig.resolved_config[:dims]
-      manager = described_class.new
       EmbeddingIndexStatus::INDEX_NAMES.all? do |table, index_name|
         column = real_conn.columns(table.to_s).find { |c| c.name == "embedding" }
         column&.null == false &&
           column&.sql_type.to_s.include?("vector(#{dims})") &&
-          manager.send(:zero_vector_default?, column, dims) &&
           real_conn.execute(
             "SHOW INDEX FROM #{table} WHERE Key_name = #{real_conn.quote(index_name)}"
           ).to_a.any?
