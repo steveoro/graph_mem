@@ -15,7 +15,7 @@ module Operator
           "Set OPERATOR_USERNAME / OPERATOR_PASSWORD or Rails credentials[:operator]."
         )
         render :fallback_credentials_error, status: :service_unavailable
-        return
+        nil
       end
     end
 

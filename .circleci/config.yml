@@ -1,6 +1,6 @@
 version: 2.1
 orbs:
-  ruby: circleci/ruby@3.0.0
+  ruby: circleci/ruby@4.0.0
 
 ruby: &ruby
   image: cimg/ruby:3.4.1
@@ -72,4 +72,8 @@ workflows:
     jobs:
       - rubocop
       - brakeman
-      - rspec
+
+      - rspec:
+          requires:
+            - brakeman
+            - rubocop
