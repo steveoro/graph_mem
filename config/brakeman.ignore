@@ -93,29 +93,6 @@
       "note": ""
     },
     {
-      "warning_type": "HTTP Verb Confusion",
-      "warning_code": 118,
-      "fingerprint": "a2a42f98e88831fc3b59e589ff9c98fa204e2754b3f916139e1f4a8e288ec54c",
-      "check_name": "VerbConfusion",
-      "message": "Potential HTTP verb confusion. `HEAD` is routed like `GET` but `request.get?` will return `false`",
-      "file": "app/controllers/application_controller.rb",
-      "line": 43,
-      "link": "https://brakemanscanner.org/docs/warning_types/http_verb_confusion/",
-      "code": "session[:operator_return_to] = request.fullpath if request.get?",
-      "render_path": null,
-      "location": {
-        "type": "method",
-        "class": "ApplicationController",
-        "method": "authenticate_operator!"
-      },
-      "user_input": "request.get?",
-      "confidence": "Weak",
-      "cwe_id": [
-        352
-      ],
-      "note": ""
-    },
-    {
       "warning_type": "File Access",
       "warning_code": 16,
       "fingerprint": "f593cb3c0e84811a3407ae9b8c6732ffd493a000fce9935045d504fa88d58423",
