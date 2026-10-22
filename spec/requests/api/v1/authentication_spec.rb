@@ -38,9 +38,9 @@ RSpec.describe "API V1 authentication (UI-0, F2)", type: :request do
     context "with a public IP and no GRAPH_MEM_MCP_ALLOWED_IPS set" do
       before { ENV.delete("GRAPH_MEM_MCP_ALLOWED_IPS") }
 
-      it "returns 401 (IP not in allowlist)" do
+      it "returns 403 (valid token, IP not in allowlist)" do
         get path, headers: { "Authorization" => "Bearer #{token}", "REMOTE_ADDR" => "1.2.3.4" }
-        expect(response).to have_http_status(:unauthorized)
+        expect(response).to have_http_status(:forbidden)
       end
     end
 

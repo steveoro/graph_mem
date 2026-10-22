@@ -20,6 +20,6 @@ Rails.application.configure do
   config.content_security_policy_nonce_generator = ->(_request) { SecureRandom.base64(36) }
   config.content_security_policy_nonce_directives = %w[script-src]
 
-  # Report-only in 1.53.0; enforced in UI-1 (1.55.0) once inline handlers are gone.
+  # Report-only in 1.54.0; enforced in UI-1 once inline handlers are gone.
   config.content_security_policy_report_only = true
 end

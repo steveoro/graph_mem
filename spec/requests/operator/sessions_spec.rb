@@ -123,6 +123,35 @@ RSpec.describe "Operator sessions", type: :request do
     end
   end
 
+  context "when OPERATOR_USERNAME and OPERATOR_PASSWORD are blank" do
+    around do |example|
+      original_username = ENV["OPERATOR_USERNAME"]
+      original_password = ENV["OPERATOR_PASSWORD"]
+      ENV["OPERATOR_USERNAME"] = ""
+      ENV["OPERATOR_PASSWORD"] = ""
+      example.run
+    ensure
+      ENV["OPERATOR_USERNAME"] = original_username
+      ENV["OPERATOR_PASSWORD"] = original_password
+    end
+
+    it "rejects login with empty params" do
+      post operator_session_path, params: { username: "", password: "" }
+      expect(response).to have_http_status(:unprocessable_content)
+    end
+  end
+
+  it "redirects to the originally requested page after login" do
+    get graph_path
+    expect(response).to redirect_to(operator_login_path)
+
+    post operator_session_path, params: {
+      username: OperatorAuthHelpers::TEST_OPERATOR_USERNAME,
+      password: OperatorAuthHelpers::TEST_OPERATOR_PASSWORD
+    }
+    expect(response).to redirect_to(graph_path)
+  end
+
   describe "production with default (fallback) credentials" do
     before do
       allow(Rails).to receive(:env).and_return(ActiveSupport::StringInquirer.new("production"))

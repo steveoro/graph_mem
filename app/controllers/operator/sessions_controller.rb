@@ -29,8 +29,15 @@ module Operator
 
       username, password = operator_credentials
 
-      if ActiveSupport::SecurityUtils.secure_compare(params[:username].to_s, username.to_s) &&
-         ActiveSupport::SecurityUtils.secure_compare(params[:password].to_s, password.to_s)
+      username_match = ActiveSupport::SecurityUtils.secure_compare(
+        Digest::SHA256.hexdigest(params[:username].to_s),
+        Digest::SHA256.hexdigest(username.to_s)
+      )
+      password_match = ActiveSupport::SecurityUtils.secure_compare(
+        Digest::SHA256.hexdigest(params[:password].to_s),
+        Digest::SHA256.hexdigest(password.to_s)
+      )
+      if username_match & password_match
         return_to = session[:operator_return_to]
         reset_session
         session[:role]         = "operator"
@@ -54,8 +61,8 @@ module Operator
 
     def production_fallback_credentials?
       Rails.env.production? &&
-        self.class.operator_password == "changeme" &&
-        self.class.operator_username == "operator"
+        (self.class.operator_password == "changeme" ||
+         self.class.operator_username == "operator")
     end
   end
 end

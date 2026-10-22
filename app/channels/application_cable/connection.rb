@@ -12,13 +12,24 @@ module ApplicationCable
 
     def find_verified_operator
       session_data = decrypt_session_cookie
-      role = session_data&.dig("role")
-      # Accept legacy key from sessions that haven't been rotated yet.
-      legacy = session_data&.dig("operator_signed_in")
-
-      reject_unauthorized_connection unless role == "operator" || legacy == true
+      reject_unauthorized_connection unless operator_session?(session_data)
 
       session_data&.dig("user") || "operator"
+    end
+
+    def operator_session?(session_data)
+      role = session_data&.dig("role")
+      legacy = session_data&.dig("operator_signed_in")
+      return false unless role == "operator" || legacy == true
+
+      now = Time.current.to_i
+      last_seen = session_data&.dig("last_seen_at")
+      signed_in = session_data&.dig("signed_in_at")
+
+      return false if last_seen && now - last_seen > 24.hours.to_i
+      return false if signed_in && now - signed_in > 7.days.to_i
+
+      true
     end
 
     def decrypt_session_cookie

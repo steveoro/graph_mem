@@ -28,8 +28,12 @@ module ApiAuthentication
     return if operator_api_session?
     return if valid_bearer_token?
 
-    response.set_header("WWW-Authenticate", 'Bearer realm="graph_mem"')
-    render json: { error: "Unauthorized" }, status: :unauthorized
+    if @bearer_ip_forbidden
+      render json: { error: "Forbidden" }, status: :forbidden
+    else
+      response.set_header("WWW-Authenticate", 'Bearer realm="graph_mem"')
+      render json: { error: "Unauthorized" }, status: :unauthorized
+    end
   end
 
   def operator_api_session?
@@ -55,15 +59,22 @@ module ApiAuthentication
   end
 
   def valid_bearer_token?
-    configured_token = ENV["GRAPH_MEM_MCP_TOKEN"].presence
+    configured_token = ENV["GRAPH_MEM_MCP_TOKEN"].to_s.strip.presence
     return false unless configured_token
 
     auth_header = request.headers["Authorization"].to_s
-    return false unless auth_header.start_with?("Bearer ")
+    match = auth_header.match(/\ABearer\s+(.+)/i)
+    return false unless match
 
-    provided_token = auth_header.delete_prefix("Bearer ").strip
+    provided_token = match[1].strip
     return false unless ActiveSupport::SecurityUtils.secure_compare(provided_token, configured_token)
 
-    GraphMem::McpAccessPolicy.from_env(logger: Rails.logger).network_allowed?(request.remote_ip)
+    policy = GraphMem::McpAccessPolicy.from_env(logger: Rails.logger)
+    unless policy.network_allowed?(request.remote_ip)
+      @bearer_ip_forbidden = true
+      return false
+    end
+
+    true
   end
 end
