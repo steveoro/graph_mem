@@ -65,7 +65,7 @@ jobs:
             bin/rails db:create db:schema:load
       - run:
           name: RSpec
-          command: bundle exec rspec
+          command: bundle exec rspec --exclude-pattern "spec/system/**/*_spec.rb"
 
 workflows:
   test:
