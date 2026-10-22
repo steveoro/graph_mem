@@ -3,8 +3,10 @@
 module Operator
   class SessionsController < ApplicationController
     rate_limit to: 10, within: 3.minutes, only: :create,
-               with: -> { render :new, status: :too_many_requests,
-                                  locals: { error: t("operator.sessions.too_many_attempts") } }
+               with: -> {
+                 flash.now[:alert] = t("operator.sessions.too_many_attempts")
+                 render :new, status: :too_many_requests
+               }
 
     def new
       redirect_to root_path and return if operator_signed_in?
@@ -29,12 +31,13 @@ module Operator
 
       if ActiveSupport::SecurityUtils.secure_compare(params[:username].to_s, username.to_s) &&
          ActiveSupport::SecurityUtils.secure_compare(params[:password].to_s, password.to_s)
+        return_to = session[:operator_return_to]
         reset_session
         session[:role]         = "operator"
         session[:user]         = username
         session[:signed_in_at] = Time.current.to_i
         session[:last_seen_at] = Time.current.to_i
-        redirect_to session.delete(:operator_return_to) || root_path,
+        redirect_to return_to || root_path,
                     notice: t("operator.sessions.signed_in")
       else
         flash.now[:alert] = t("operator.sessions.invalid_credentials")

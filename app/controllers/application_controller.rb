@@ -16,15 +16,15 @@ class ApplicationController < ActionController::Base
 
   class << self
     def operator_username
-      ENV.fetch("OPERATOR_USERNAME") do
-        Rails.application.credentials.dig(:operator, :username) || "operator"
-      end
+      ENV["OPERATOR_USERNAME"].presence ||
+        Rails.application.credentials.dig(:operator, :username) ||
+        "operator"
     end
 
     def operator_password
-      ENV.fetch("OPERATOR_PASSWORD") do
-        Rails.application.credentials.dig(:operator, :password) || "changeme"
-      end
+      ENV["OPERATOR_PASSWORD"].presence ||
+        Rails.application.credentials.dig(:operator, :password) ||
+        "changeme"
     end
   end
 

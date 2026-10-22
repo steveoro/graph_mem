@@ -73,6 +73,7 @@ RSpec.describe "XSS escaping in graph UI", type: :system do
           );
         })();
       JS
+      expect(page).to have_text(PROBE, wait: 2)
       no_probe!("tooltip")
     end
 
@@ -95,9 +96,12 @@ RSpec.describe "XSS escaping in graph UI", type: :system do
             },
             renderedPosition: { x: 100, y: 100 },
             position:         { x: 100, y: 100 }
-          }, null);
+          }, {
+            container: function() { return document.createElement('div'); }
+          });
         })();
       JS
+      expect(page).to have_text(PROBE, wait: 2)
       no_probe!("context menu")
     end
 
@@ -122,6 +126,7 @@ RSpec.describe "XSS escaping in graph UI", type: :system do
           done();
         })(arguments[0]);
       JS
+      expect(page).to have_text(PROBE, wait: 2)
       no_probe!("observation modal (cards + duplicate warning)")
     end
 
@@ -142,6 +147,7 @@ RSpec.describe "XSS escaping in graph UI", type: :system do
           done();
         })(arguments[0]);
       JS
+      expect(page).to have_text(PROBE, wait: 2)
       no_probe!("drag-drop action menu header")
       page.execute_script("document.querySelectorAll('.node-action-menu__header').forEach(n => n.remove())")
     end
@@ -200,10 +206,11 @@ RSpec.describe "XSS escaping in graph UI", type: :system do
 
     it "search autocomplete does not parse HTML in entity name returned by the API" do
       # Find the first search input rendered for our review row
-      search_input = find("input[data-action*='searchEntity']", wait: 5)
+      search_input = first("input[data-action*='searchEntity']", wait: 5)
       search_input.fill_in with: "prob"
       # Wait for debounce (200 ms) + promise resolution
       sleep 0.5
+      expect(page).to have_text(PROBE, wait: 2)
       no_probe!("compaction review autocomplete")
     end
   end

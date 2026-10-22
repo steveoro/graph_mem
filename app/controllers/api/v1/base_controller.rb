@@ -5,8 +5,6 @@ module Api
     class BaseController < ApplicationController
       include ApiAuthentication
 
-      skip_forgery_protection
-
       rescue_from ActiveRecord::RecordNotFound do |e|
         render json: { error: e.message }, status: :not_found
       end
@@ -20,6 +18,13 @@ module Api
       end
 
       private
+
+      # CSRF is not needed for Bearer-token requests; session-authenticated
+      # calls from the JS front-end still carry the token.
+      def verify_authenticity_token
+        return if request.headers["Authorization"]&.start_with?("Bearer ")
+        super
+      end
 
       def render_error(message, status: :unprocessable_content, details: nil)
         body = { error: message }
