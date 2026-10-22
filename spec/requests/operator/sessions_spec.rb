@@ -124,20 +124,34 @@ RSpec.describe "Operator sessions", type: :request do
   end
 
   context "when OPERATOR_USERNAME and OPERATOR_PASSWORD are blank" do
-    around do |example|
-      original_username = ENV["OPERATOR_USERNAME"]
-      original_password = ENV["OPERATOR_PASSWORD"]
+    # Set in `before` (not `around`): the global request-spec hook in
+    # operator_auth_helpers.rb overwrites ENV, and context hooks run after it.
+    before do
+      @original_env = ENV.values_at("OPERATOR_USERNAME", "OPERATOR_PASSWORD")
       ENV["OPERATOR_USERNAME"] = ""
       ENV["OPERATOR_PASSWORD"] = ""
-      example.run
-    ensure
-      ENV["OPERATOR_USERNAME"] = original_username
-      ENV["OPERATOR_PASSWORD"] = original_password
+      allow(Rails.application.credentials).to receive(:dig).and_return(nil)
     end
 
-    it "rejects login with empty params" do
+    after do
+      ENV["OPERATOR_USERNAME"], ENV["OPERATOR_PASSWORD"] = @original_env
+    end
+
+    it "rejects login with empty params and sets no session" do
       post operator_session_path, params: { username: "", password: "" }
       expect(response).to have_http_status(:unprocessable_content)
+      get operator_login_path
+      expect(response).to have_http_status(:ok)
+    end
+
+    it "rejects login with missing params" do
+      post operator_session_path
+      expect(response).to have_http_status(:unprocessable_content)
+    end
+
+    it "falls back to the operator/changeme defaults" do
+      post operator_session_path, params: { username: "operator", password: "changeme" }
+      expect(response).to redirect_to(root_path)
     end
   end
 
@@ -164,6 +178,25 @@ RSpec.describe "Operator sessions", type: :request do
     it "shows the configuration error page instead of the login form" do
       get operator_login_path
       expect(response).to have_http_status(:service_unavailable)
+    end
+  end
+
+  describe "production with a custom password" do
+    before do
+      allow(Rails).to receive(:env).and_return(ActiveSupport::StringInquirer.new("production"))
+      ENV.delete("OPERATOR_USERNAME") # username resolves to the public default "operator"
+      ENV["OPERATOR_PASSWORD"] = "a-strong-secret"
+      allow(Rails.application.credentials).to receive(:dig).and_return(nil)
+    end
+
+    it "renders the login form" do
+      get operator_login_path
+      expect(response).to have_http_status(:ok)
+    end
+
+    it "accepts the configured credentials" do
+      post operator_session_path, params: { username: "operator", password: "a-strong-secret" }
+      expect(response).to redirect_to(root_path)
     end
   end
 end

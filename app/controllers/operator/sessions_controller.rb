@@ -59,10 +59,10 @@ module Operator
 
     private
 
+    # The default username ("operator") is public and documented; only the
+    # default password is a risk, so only that locks production out.
     def production_fallback_credentials?
-      Rails.env.production? &&
-        (self.class.operator_password == "changeme" ||
-         self.class.operator_username == "operator")
+      Rails.env.production? && self.class.operator_password == "changeme"
     end
   end
 end

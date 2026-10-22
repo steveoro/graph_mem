@@ -58,7 +58,14 @@ module ApiAuthentication
     true
   end
 
+  # Memoised: the CSRF check and the auth check both ask.
   def valid_bearer_token?
+    return @valid_bearer_token if defined?(@valid_bearer_token)
+
+    @valid_bearer_token = compute_valid_bearer_token
+  end
+
+  def compute_valid_bearer_token
     configured_token = ENV["GRAPH_MEM_MCP_TOKEN"].to_s.strip.presence
     return false unless configured_token
 

@@ -39,4 +39,22 @@ RSpec.describe ApplicationCable::Connection, type: :channel do
       expect { connect }.to have_rejected_connection
     end
   end
+
+  describe "with an expired operator session" do
+    it "rejects a session idle past the idle timeout" do
+      stale = Time.current.to_i - ApplicationController::SESSION_IDLE_TIMEOUT.to_i - 60
+      cookies.encrypted[session_key] = {
+        value: { "role" => "operator", "last_seen_at" => stale, "signed_in_at" => Time.current.to_i }
+      }
+      expect { connect }.to have_rejected_connection
+    end
+
+    it "rejects a session past the absolute timeout" do
+      old = Time.current.to_i - ApplicationController::SESSION_ABSOLUTE_TIMEOUT.to_i - 60
+      cookies.encrypted[session_key] = {
+        value: { "role" => "operator", "last_seen_at" => Time.current.to_i, "signed_in_at" => old }
+      }
+      expect { connect }.to have_rejected_connection
+    end
+  end
 end

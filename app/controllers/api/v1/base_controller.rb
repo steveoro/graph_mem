@@ -19,10 +19,11 @@ module Api
 
       private
 
-      # CSRF is not needed for Bearer-token requests; session-authenticated
-      # calls from the JS front-end still carry the token.
+      # CSRF is skipped only for requests that a *valid* Bearer token
+      # authenticates; cookie-session calls (including those carrying a junk
+      # Authorization header) must still send the CSRF token.
       def verify_authenticity_token
-        return if request.headers["Authorization"]&.start_with?("Bearer ")
+        return if valid_bearer_token?
         super
       end
 

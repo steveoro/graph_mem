@@ -26,8 +26,8 @@ module ApplicationCable
       last_seen = session_data&.dig("last_seen_at")
       signed_in = session_data&.dig("signed_in_at")
 
-      return false if last_seen && now - last_seen > 24.hours.to_i
-      return false if signed_in && now - signed_in > 7.days.to_i
+      return false if last_seen && now - last_seen > ApplicationController::SESSION_IDLE_TIMEOUT.to_i
+      return false if signed_in && now - signed_in > ApplicationController::SESSION_ABSOLUTE_TIMEOUT.to_i
 
       true
     end

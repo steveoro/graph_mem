@@ -144,6 +144,21 @@ is outside the allowlist, or the `Origin` check failed.
 CORS preflight (`OPTIONS`) is answered before the token check, so browser-based clients can send
 credentials.
 
+## HTTP API (`/api/v1`)
+
+The REST API is not anonymous. Every verb on every `/api/v1/*` endpoint requires one of:
+
+1. **An operator browser session** (sign in at `/operator/login`). Cookie-authenticated writes are
+   CSRF-protected: send the page's token in `X-CSRF-Token`, as the graph UI does.
+2. **The bearer token** (`GRAPH_MEM_MCP_TOKEN`) from an IP allowed by `GRAPH_MEM_MCP_ALLOWED_IPS`.
+   Bearer-authenticated requests skip the CSRF check; an invalid `Authorization` header does not.
+   The token is normalised exactly as for `/mcp` (whitespace stripped, `Bearer` case-insensitive).
+
+With no token configured the bearer path is disabled and only sessions work. There is no
+loopback/private-range exemption. Failures return `401` (no or invalid credentials, with
+`WWW-Authenticate: Bearer realm="graph_mem"`) or `403` (valid token from a disallowed IP).
+`/csp-reports` is the one unauthenticated endpoint (rate-limited; it only logs reports).
+
 ## Limitations
 
 Know what this does **not** give you.
