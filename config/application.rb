@@ -34,9 +34,6 @@ module GraphMem
     # when retrieving multiple relations to avoid N+1 query issues.
     # config.active_record.verbose_query_logs = true
 
-    # === Add lib to autoload paths ===
-    config.autoload_paths << Rails.root.join("lib")
-
     # Use SQL schema format -- schema.rb can't represent MariaDB VECTOR columns
     config.active_record.schema_format = :sql
 
