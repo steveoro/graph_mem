@@ -23,7 +23,7 @@ module Api
       # authenticates; cookie-session calls (including those carrying a junk
       # Authorization header) must still send the CSRF token.
       def verify_authenticity_token
-        return if valid_bearer_token?
+        return if request.authorization.to_s.match?(/\ABearer\s/i) && session[:role].blank? && !session[:operator_signed_in]
         super
       end
 

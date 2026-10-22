@@ -21,9 +21,6 @@ module ApiAuthentication
 
   private
 
-  IDLE_TIMEOUT    = 24.hours
-  ABSOLUTE_TIMEOUT = 7.days
-
   def authenticate_api_request!
     return if operator_api_session?
     return if valid_bearer_token?
@@ -45,11 +42,11 @@ module ApiAuthentication
     signed_in = session[:signed_in_at]
     now = Time.current.to_i
 
-    if last_seen && now - last_seen > IDLE_TIMEOUT.to_i
+    if last_seen && now - last_seen > ApplicationController::SESSION_IDLE_TIMEOUT.to_i
       reset_session
       return false
     end
-    if signed_in && now - signed_in > ABSOLUTE_TIMEOUT.to_i
+    if signed_in && now - signed_in > ApplicationController::SESSION_ABSOLUTE_TIMEOUT.to_i
       reset_session
       return false
     end
