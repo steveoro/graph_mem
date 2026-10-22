@@ -1,3 +1,5 @@
+import { el, text, br } from 'lib/dom';
+
 export function analyzeObservations(observations) {
   const contentCounts = {};
   observations.forEach(obs => {
@@ -12,35 +14,44 @@ export function analyzeObservations(observations) {
   return { contentCounts, hasDuplicates, duplicateCount };
 }
 
+/** Returns a DOM node (or null when there are no duplicates). */
 export function renderDuplicateWarning(analysis, { deleteBtnId = 'delete-dup-obs-btn' } = {}) {
-  if (!analysis.hasDuplicates) return '';
+  if (!analysis.hasDuplicates) return null;
 
-  return `
-    <div class="obs-warning-box">
-      <p><strong>Found ${analysis.duplicateCount} duplicate observation(s)</strong></p>
-      <button id="${deleteBtnId}" class="graph-btn graph-btn--danger">
-        Delete All Duplicates
-      </button>
-    </div>
-  `;
+  const btn = el('button', { id: deleteBtnId, className: 'graph-btn graph-btn--danger' },
+    'Delete All Duplicates');
+
+  const p = el('p', {},
+    el('strong', {}, 'Found ' + analysis.duplicateCount + ' duplicate observation(s)'));
+
+  return el('div', { className: 'obs-warning-box' }, p, btn);
 }
 
+/** Returns a DOM node containing all observation cards. */
 export function renderObservationCards(observations, analysis) {
-  if (observations.length === 0) return '<p>No observations found.</p>';
+  if (observations.length === 0) {
+    return el('p', {}, 'No observations found.');
+  }
 
-  return observations
+  const frag = document.createDocumentFragment();
+  observations
     .slice()
     .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
-    .map(obs => {
+    .forEach(obs => {
       const isDuplicate = analysis.contentCounts[obs.content] > 1;
-      return `
-        <div class="obs-card ${isDuplicate ? 'obs-card--duplicate' : ''}">
-          <div class="obs-card__date">
-            ${new Date(obs.created_at).toLocaleString()}
-            ${isDuplicate ? '<span class="obs-card__dup-badge">[DUPLICATE]</span>' : ''}
-          </div>
-          <div>${obs.content}</div>
-        </div>
-      `;
-    }).join('');
+      const cardClass = 'obs-card' + (isDuplicate ? ' obs-card--duplicate' : '');
+
+      const dateContent = [text(new Date(obs.created_at).toLocaleString())];
+      if (isDuplicate) {
+        dateContent.push(el('span', { className: 'obs-card__dup-badge' }, '[DUPLICATE]'));
+      }
+
+      const card = el('div', { className: cardClass },
+        el('div', { className: 'obs-card__date' }, ...dateContent),
+        el('div', {}, text(obs.content))
+      );
+      frag.appendChild(card);
+    });
+
+  return frag;
 }

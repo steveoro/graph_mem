@@ -32,6 +32,9 @@ services:
       EMBEDDING_DIMS: ${EMBEDDING_DIMS:-768}
       SOLID_QUEUE_IN_PUMA: "true"
       RAILS_FORCE_SSL: "false"
+      # Operator credentials — must be set in production; no defaults here (F3).
+      OPERATOR_USERNAME: ${OPERATOR_USERNAME:-}
+      OPERATOR_PASSWORD: ${OPERATOR_PASSWORD:-}
       # MCP access control; see docs/mcp_access_control.md
       GRAPH_MEM_MCP_TOKEN: ${GRAPH_MEM_MCP_TOKEN:-}
       GRAPH_MEM_MCP_ALLOWED_IPS: ${GRAPH_MEM_MCP_ALLOWED_IPS:-}

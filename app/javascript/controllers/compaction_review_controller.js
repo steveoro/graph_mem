@@ -32,13 +32,29 @@ export default class extends Controller {
 
         const currentValue = select.value
         const currentText = select.options[select.selectedIndex]?.text || ""
-        const currentOption = currentValue ? `<option value="${currentValue}">${currentText}</option>` : ""
-        const resultOptions = data.entities
-          .filter((entity) => entity.id.toString() !== currentValue)
-          .map((entity) => `<option value="${entity.id}">${entity.name} (${entity.entity_type})</option>`)
-          .join("")
 
-        select.innerHTML = currentOption + resultOptions
+        // Build options using DOM construction (no innerHTML with user data)
+        const frag = document.createDocumentFragment()
+
+        if (currentValue) {
+          const kept = document.createElement("option")
+          kept.value = currentValue
+          kept.textContent = currentText
+          frag.appendChild(kept)
+        }
+
+        data.entities
+          .filter((entity) => entity.id.toString() !== currentValue)
+          .forEach((entity) => {
+            const opt = document.createElement("option")
+            opt.value = String(entity.id)
+            opt.textContent = String(entity.name ?? '') + ' (' + String(entity.entity_type ?? '') + ')'
+            frag.appendChild(opt)
+          })
+
+        // Replace all options at once
+        while (select.firstChild) select.removeChild(select.firstChild)
+        select.appendChild(frag)
         select.value = currentValue
       })
   }

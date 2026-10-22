@@ -3,8 +3,7 @@
 module Api
   module V1
     class BaseController < ApplicationController
-      skip_before_action :authenticate_operator!
-      skip_forgery_protection
+      include ApiAuthentication
 
       rescue_from ActiveRecord::RecordNotFound do |e|
         render json: { error: e.message }, status: :not_found
@@ -19,6 +18,14 @@ module Api
       end
 
       private
+
+      # CSRF is skipped only for requests that a *valid* Bearer token
+      # authenticates; cookie-session calls (including those carrying a junk
+      # Authorization header) must still send the CSRF token.
+      def verify_authenticity_token
+        return if valid_bearer_token? || (request.authorization.to_s.match?(/\ABearer\s/i) && session[:role].blank? && !session[:operator_signed_in])
+        super
+      end
 
       def render_error(message, status: :unprocessable_content, details: nil)
         body = { error: message }

@@ -1,3 +1,5 @@
+import { el, text } from 'lib/dom';
+
 export class DragDropManager {
   constructor(api, modal, { onRefreshGraph }) {
     this.api = api;
@@ -83,12 +85,12 @@ export class DragDropManager {
     const menu = document.createElement('div');
     menu.className = 'node-action-menu';
 
-    const header = document.createElement('div');
-    header.className = 'node-action-menu__header';
-    header.innerHTML = `
-      <div class="node-action-menu__title">Node-to-Node Action</div>
-      <div class="node-action-menu__subtitle">"${sourceName}" → "${targetName}"</div>
-    `;
+    const header = el('div', { className: 'node-action-menu__header' },
+      el('div', { className: 'node-action-menu__title' }, 'Node-to-Node Action'),
+      el('div', { className: 'node-action-menu__subtitle' },
+        text('\u201c' + String(sourceName ?? '') + '\u201d \u2192 \u201c' + String(targetName ?? '') + '\u201d')
+      )
+    );
     menu.appendChild(header);
 
     const typesMatch = (sourceType === targetType) ||
@@ -101,47 +103,47 @@ export class DragDropManager {
         description: 'Merge source into target (preserves target name as alias)',
         action: 'merge',
         enabled: typesMatch,
-        icon: '🔗',
-        disabledReason: typesMatch ? null : `Cannot merge different types: "${sourceType || 'N/A'}" ≠ "${targetType || 'N/A'}"`
+        icon: '\uD83D\uDD17',
+        disabledReason: typesMatch ? null :
+          'Cannot merge different types: "' + (sourceType || 'N/A') + '" \u2260 "' + (targetType || 'N/A') + '"'
       },
       {
         text: 'Create Relation',
         description: 'Create a relationship between the nodes',
         action: 'create-relation',
         enabled: true,
-        icon: '→'
+        icon: '\u2192'
       },
       {
         text: 'Cancel',
         description: 'Return source node to original position',
         action: 'cancel',
         enabled: true,
-        icon: '✕',
+        icon: '\u2715',
         cancel: true
       }
     ];
 
     actions.forEach(actionItem => {
-      const el = document.createElement('div');
       const isEnabled = actionItem.enabled;
       const isCancel = actionItem.cancel;
 
-      el.className = 'node-action-menu__item' +
-        (!isEnabled ? ' node-action-menu__item--disabled' : '') +
-        (isCancel ? ' node-action-menu__item--cancel' : '');
-
-      el.innerHTML = `
-        <div class="node-action-menu__item-row">
-          <span class="node-action-menu__icon">${actionItem.icon}</span>
-          <span class="node-action-menu__item-name">${actionItem.text}</span>
-        </div>
-        <div class="node-action-menu__desc">
-          ${actionItem.disabledReason || actionItem.description}
-        </div>
-      `;
+      const itemEl = el('div', {
+        className: 'node-action-menu__item' +
+          (!isEnabled ? ' node-action-menu__item--disabled' : '') +
+          (isCancel ? ' node-action-menu__item--cancel' : '')
+      },
+        el('div', { className: 'node-action-menu__item-row' },
+          el('span', { className: 'node-action-menu__icon' }, actionItem.icon),
+          el('span', { className: 'node-action-menu__item-name' }, actionItem.text)
+        ),
+        el('div', { className: 'node-action-menu__desc' },
+          text(actionItem.disabledReason || actionItem.description)
+        )
+      );
 
       if (isEnabled) {
-        el.onclick = async (e) => {
+        itemEl.onclick = async (e) => {
           if (this.currentCloseHandler) {
             document.removeEventListener('click', this.currentCloseHandler);
             this.currentCloseHandler = null;
@@ -153,7 +155,10 @@ export class DragDropManager {
           this.hideMenu();
 
           if (actionItem.action === 'merge') {
-            const confirmMessage = `Do you really want to merge these two nodes and their subgraphs into a single one?\n\nSource: "${sourceName}" (type: ${sourceType || 'N/A'})\nTarget: "${targetName}" (type: ${targetType || 'N/A'})`;
+            const confirmMessage =
+              'Do you really want to merge these two nodes and their subgraphs into a single one?\n\n' +
+              'Source: "' + String(sourceName ?? '') + '" (type: ' + (sourceType || 'N/A') + ')\n' +
+              'Target: "' + String(targetName ?? '') + '" (type: ' + (targetType || 'N/A') + ')';
             if (confirm(confirmMessage)) {
               this.#mergeEntities(actionData).catch(err => console.error('Error in merge:', err));
             } else {
@@ -169,7 +174,7 @@ export class DragDropManager {
         };
       }
 
-      menu.appendChild(el);
+      menu.appendChild(itemEl);
     });
 
     const containerRect = this.containerTarget.getBoundingClientRect();
@@ -204,33 +209,40 @@ export class DragDropManager {
         const sourceNode = this.cy.$id(sourceId);
         if (sourceNode.length > 0) this.cy.remove(sourceNode);
       }
-      alert(`'${sourceId}' merged into '${targetId}'.`);
+      alert("'" + sourceId + "' merged into '" + targetId + "'.");
     } catch (error) {
       console.error('Error during merge:', error);
-      alert(`Failed to merge: ${error.message}`);
+      alert('Failed to merge: ' + error.message);
     }
   }
 
   #showCreateRelationModal({ sourceId, targetId, sourceName, targetName }) {
-    this.modal.show('Create Relation', `
-      <h3>Create Relation</h3>
-      <p>Create a relationship between:</p>
-      <div class="relation-info">
-        <strong>"${sourceName}"</strong> → <strong>"${targetName}"</strong>
-      </div>
-      <form id="create-relation-form">
-        <div class="graph-form-group--lg">
-          <label class="graph-form-label">Relation Type:</label>
-          <input type="text" id="relation-type" placeholder="e.g., depends_on, relates_to, part_of"
-                 class="graph-form-input">
-          <small class="graph-form-hint">Describe how the first node relates to the second</small>
-        </div>
-        <div class="graph-form-actions">
-          <button type="button" id="create-rel-cancel-btn" class="graph-btn graph-btn--secondary">Cancel</button>
-          <button type="submit" class="graph-btn graph-btn--primary">Create Relation</button>
-        </div>
-      </form>
-    `);
+    const input = el('input', {
+      type: 'text', id: 'relation-type',
+      placeholder: 'e.g., depends_on, relates_to, part_of',
+      className: 'graph-form-input'
+    });
+
+    const form = el('form', { id: 'create-relation-form' },
+      el('h3', {}, 'Create Relation'),
+      el('p', {}, 'Create a relationship between:'),
+      el('div', { className: 'relation-info' },
+        el('strong', {}, '\u201c' + String(sourceName ?? '') + '\u201d'),
+        text(' \u2192 '),
+        el('strong', {}, '\u201c' + String(targetName ?? '') + '\u201d')
+      ),
+      el('div', { className: 'graph-form-group--lg' },
+        el('label', { className: 'graph-form-label' }, 'Relation Type:'),
+        input,
+        el('small', { className: 'graph-form-hint' }, 'Describe how the first node relates to the second')
+      ),
+      el('div', { className: 'graph-form-actions' },
+        el('button', { type: 'button', id: 'create-rel-cancel-btn', className: 'graph-btn graph-btn--secondary' }, 'Cancel'),
+        el('button', { type: 'submit', className: 'graph-btn graph-btn--primary' }, 'Create Relation')
+      )
+    );
+
+    this.modal.show('Create Relation', form);
 
     document.getElementById('create-rel-cancel-btn').onclick = () => this.modal.close();
     document.getElementById('create-relation-form').onsubmit = async (e) => {
@@ -245,7 +257,7 @@ export class DragDropManager {
         alert('Relation created successfully.');
       } catch (error) {
         console.error('Error creating relation:', error);
-        alert(`Failed to create relation: ${error.message}`);
+        alert('Failed to create relation: ' + error.message);
       }
     };
   }

@@ -1,3 +1,5 @@
+import { el, text, br } from 'lib/dom';
+
 export class Tooltip {
   constructor() {
     this.currentTooltip = null;
@@ -11,13 +13,18 @@ export class Tooltip {
     tooltip.className = 'node-tooltip';
 
     const aliases = data.aliases ? data.aliases.trim() : '';
-    tooltip.innerHTML = `
-      <strong>${data.label}</strong><br>
-      ID: ${data.id}<br>
-      Type: ${data.type || 'N/A'}<br>
-      ${aliases ? `Aliases: ${aliases}<br>` : ''}
-      Observations: ${data.memory_observations_count || 0}
-    `;
+
+    tooltip.appendChild(el('strong', {}, String(data.label ?? '')));
+    tooltip.appendChild(br());
+    tooltip.appendChild(text('ID: ' + (data.id ?? '')));
+    tooltip.appendChild(br());
+    tooltip.appendChild(text('Type: ' + (data.type || 'N/A')));
+    tooltip.appendChild(br());
+    if (aliases) {
+      tooltip.appendChild(text('Aliases: ' + aliases));
+      tooltip.appendChild(br());
+    }
+    tooltip.appendChild(text('Observations: ' + (data.memory_observations_count || 0)));
 
     tooltip.style.left = (containerRect.left + position.x + 10) + 'px';
     tooltip.style.top = (containerRect.top + position.y - 10) + 'px';

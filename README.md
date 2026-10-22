@@ -388,7 +388,10 @@ passed through untouched.
     "graph_mem": {
       "type": "http",
       "url": "http://localhost:3030/mcp",
-      "headers": { "X-MCP-Client": "${MCP_CLIENT_ID:-claude-code-1}" }
+      "headers": {
+        "Authorization": "Bearer <GRAPH_MEM_MCP_TOKEN>",
+        "X-MCP-Client": "${MCP_CLIENT_ID:-claude-code-1}"
+      }
     }
   }
 }
@@ -560,7 +563,7 @@ FILE=202601011200_production.sql.bz2 bin/rails db:restore
 
 Scheduled backups run via Solid Queue (`DatabaseBackupJob`) when **Enable scheduled backups** is on in System Settings. Production schedule: 1pm and 5pm GMT (`config/recurring.yml`). Use the **Jobs** dashboard at `/operator/jobs` (same operator session) to inspect queue status.
 
-Sign in at `/operator/login`. Default operator credentials: `operator` / `changeme` (override with `OPERATOR_USERNAME` / `OPERATOR_PASSWORD` or Rails credentials under `operator:`).
+Sign in at `/operator/login`. Default operator credentials: `operator` / `changeme`. In production the login returns 503 until the password is changed from `changeme` (the default username is fine). Override with `OPERATOR_USERNAME` / `OPERATOR_PASSWORD` or Rails credentials under `operator:`).
 
 
 ## Environment Variables
@@ -578,7 +581,9 @@ Sign in at `/operator/login`. Default operator credentials: `operator` / `change
 | `DATABASE_URL` | -- | Full database URL (overrides individual DB settings) |
 | `DB_BACKUP_HOST_PATH` | `./db/backup` | full path to DB backup(s) folder (default is invalid: docker-compose won't expand special characters) |
 | `OPERATOR_USERNAME` | `operator` | Operator login username for the web dashboard |
-| `OPERATOR_PASSWORD` | `changeme` | Operator login password (change in production) |
+| `OPERATOR_PASSWORD` | `changeme` | Operator login password (production refuses to serve the login form while it is still `changeme`) |
+| `GRAPH_MEM_MCP_TOKEN` | -- | Shared bearer token for `/mcp` and `/api/v1`; without it `/api/v1` accepts operator sessions only |
+| `GRAPH_MEM_MCP_ALLOWED_IPS` | private ranges | IP allowlist applied to bearer-token requests on `/mcp` and `/api/v1` |
 
 
 ## Documentation

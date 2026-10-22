@@ -2,17 +2,49 @@
 
 module Operator
   class SessionsController < ApplicationController
+    rate_limit to: 10, within: 3.minutes, only: :create,
+               with: -> {
+                 flash.now[:alert] = t("operator.sessions.too_many_attempts")
+                 render :new, status: :too_many_requests
+               }
+
     def new
-      redirect_to root_path if operator_signed_in?
+      redirect_to root_path and return if operator_signed_in?
+
+      if production_fallback_credentials?
+        Rails.logger.error(
+          "[SessionsController] Production is running with default operator credentials. " \
+          "Set OPERATOR_USERNAME / OPERATOR_PASSWORD or Rails credentials[:operator]."
+        )
+        render :fallback_credentials_error, status: :service_unavailable
+        nil
+      end
     end
 
     def create
+      if production_fallback_credentials?
+        render :fallback_credentials_error, status: :service_unavailable
+        return
+      end
+
       username, password = operator_credentials
 
-      if ActiveSupport::SecurityUtils.secure_compare(params[:username].to_s, username.to_s) &&
-         ActiveSupport::SecurityUtils.secure_compare(params[:password].to_s, password.to_s)
-        session[:operator_signed_in] = true
-        redirect_to session.delete(:operator_return_to) || root_path,
+      username_match = ActiveSupport::SecurityUtils.secure_compare(
+        Digest::SHA256.hexdigest(params[:username].to_s),
+        Digest::SHA256.hexdigest(username.to_s)
+      )
+      password_match = ActiveSupport::SecurityUtils.secure_compare(
+        Digest::SHA256.hexdigest(params[:password].to_s),
+        Digest::SHA256.hexdigest(password.to_s)
+      )
+      if username_match & password_match
+        return_to = session[:operator_return_to]
+        reset_session
+        session[:role]         = "operator"
+        session[:user]         = username
+        session[:signed_in_at] = Time.current.to_i
+        session[:last_seen_at] = Time.current.to_i
+        redirect_to return_to || root_path,
                     notice: t("operator.sessions.signed_in")
       else
         flash.now[:alert] = t("operator.sessions.invalid_credentials")
@@ -23,6 +55,14 @@ module Operator
     def destroy
       reset_session
       redirect_to operator_login_path, notice: t("operator.sessions.signed_out")
+    end
+
+    private
+
+    # The default username ("operator") is public and documented; only the
+    # default password is a risk, so only that locks production out.
+    def production_fallback_credentials?
+      Rails.env.production? && self.class.operator_password == "changeme"
     end
   end
 end

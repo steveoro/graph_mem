@@ -21,6 +21,11 @@ Rails.application.configure do
   # Show full error reports.
   config.consider_all_requests_local = true
   config.cache_store = :null_store
+  # rate_limit (ActionController::RateLimiting) reads from the controller's
+  # cache_store, which defaults to config.action_controller.cache_store. The
+  # global NullStore means no counter ever increments — override to MemoryStore
+  # so rate-limit specs can verify the 429 behaviour.
+  config.action_controller.cache_store = :memory_store
 
   # Render exception templates for rescuable exceptions and raise for other exceptions.
   config.action_dispatch.show_exceptions = :rescuable

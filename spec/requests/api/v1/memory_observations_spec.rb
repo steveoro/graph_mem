@@ -2,6 +2,8 @@ require 'rails_helper'
 require 'swagger_helper'
 
 RSpec.describe 'API V1 Memory Observations', type: :request do
+  before { sign_in_operator }
+
   let(:memory_entity) { MemoryEntity.create!(name: 'Parent Entity', entity_type: 'ParentType') }
   let(:memory_entity_id) { memory_entity.id }
 

@@ -4,6 +4,8 @@ require 'rails_helper'
 require 'swagger_helper' # Include swagger helper if documenting
 
 RSpec.describe 'API V1 Status', type: :request do
+  before { sign_in_operator }
+
   path '/api/v1/status' do
     get('show status') do
       tags 'Status'

@@ -16,8 +16,19 @@ end
 RSpec.configure do |config|
   config.include OperatorAuthHelpers, type: :request
 
-  config.before(type: :request) do
+  config.before(:each, type: :request) do
     ENV["OPERATOR_USERNAME"] = OperatorAuthHelpers::TEST_OPERATOR_USERNAME
     ENV["OPERATOR_PASSWORD"] = OperatorAuthHelpers::TEST_OPERATOR_PASSWORD
+    # Clear the rate-limit MemoryStore before every example so counters from one
+    # test never bleed into the next. (rate_limit counts ALL POST /operator/session
+    # requests — including successful sign_in_operator calls — so 10+ sign-ins
+    # across the suite would exhaust the 10/3min window and return 429.)
+    Operator::SessionsController.cache_store.clear
+    # Auto sign-in for API v1 specs, except the dedicated authentication spec which
+    # explicitly tests 401 / bearer-token scenarios without a pre-existing session.
+    file = RSpec.current_example.metadata[:file_path].to_s
+    if file.include?("requests/api/v1/") && !file.include?("authentication_spec")
+      sign_in_operator
+    end
   end
 end

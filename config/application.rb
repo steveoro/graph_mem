@@ -18,7 +18,7 @@ module GraphMem
     # Please, add to the `ignore` list any other `lib` subdirectories that do
     # not contain `.rb` files, or that should not be reloaded or eager loaded.
     # Common ones are `templates`, `generators`, or `middleware`, for example.
-    config.autoload_lib(ignore: %w[assets tasks])
+    config.autoload_lib(ignore: %w[assets tasks graph_mem/version.rb])
 
     # Configuration for the application, engines, and railties goes here.
     #
@@ -33,9 +33,6 @@ module GraphMem
     # For example, in the context of Relations, ensure that associated MemoryEntity objects are preloaded
     # when retrieving multiple relations to avoid N+1 query issues.
     # config.active_record.verbose_query_logs = true
-
-    # === Add lib to autoload paths ===
-    config.autoload_paths << Rails.root.join("lib")
 
     # Use SQL schema format -- schema.rb can't represent MariaDB VECTOR columns
     config.active_record.schema_format = :sql
