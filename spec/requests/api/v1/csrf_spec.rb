@@ -50,8 +50,12 @@ RSpec.describe "API V1 CSRF protection (UI-0)", type: :request do
   end
 
   context "with a valid Bearer token and no session" do
-    it "accepts a write without a CSRF token" do
+    before do
+      reset!                      # drop the global auto sign-in
       enable_forgery_protection
+    end
+
+    it "accepts a write without a CSRF token" do
       post path, params: params, headers: bearer_headers
       expect(response).to have_http_status(:created)
     end
