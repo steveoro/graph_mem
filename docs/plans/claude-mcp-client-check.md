@@ -1,6 +1,6 @@
 # PR-3 step 5: Claude Code as the MCP client against a local graph_mem
 
-For Steve. Run it once PR-3 (graph_mem 1.53.1) is checked out locally. Part A is shell commands you run yourself. Part B is the prompt you paste into Claude Code. Part C is the table you paste back to Graphy.
+For Steve. Run it once PR-3 (graph_mem 1.54.1) is checked out locally (re-run it after MG-4, 1.56.0, when the official `mcp` gem becomes the engine). Part A is shell commands you run yourself. Part B is the prompt you paste into Claude Code. Part C is the table you paste back to the reviewer.
 The `claude mcp add` syntax below was checked against the current Claude Code MCP docs (code.claude.com/docs/en/mcp) on 2026-10-21. Flags used: `--transport http|stdio`, `--header`/`-H`, `--env`/`-e`, `--scope local`, the `--` separator for stdio, and `claude mcp add-json` for an HTTP entry with several headers.
 
 ## A. Setup (shell)
@@ -52,6 +52,27 @@ cd "$G" && printf '%s\n' \
   | GRAPH_MEM_MCP_PROFILE=maintenance RAILS_ENV=development timeout 90 /bin/bash bin/mcp_graph_mem_runner.sh 2>/dev/null \
   | ruby -rjson -e 'n=0;r=0;STDIN.each_line{|l| next if l.strip.empty?; begin; JSON.parse(l); r+=1; rescue JSON::ParserError; n+=1; puts "NOISE: #{l[0,120]}"; end}; puts "json=#{r} noise=#{n}"'
 # expected: json=2 noise=0
+
+# N3 explicit "id": null must be refused and NOT executed (MCP Ruby SDK 1.8.1 #612)
+INIT='{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"probe","version":"0"}}}'
+SID=$(curl -s -D - -o /dev/null -X POST http://localhost:3030/mcp -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
+  -H "Authorization: Bearer $GRAPH_MEM_MCP_TOKEN" -d "$INIT" | awk -F': ' 'tolower($1)=="mcp-session-id"{print $2}' | tr -d '\r')
+H=(-H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' -H "Authorization: Bearer $GRAPH_MEM_MCP_TOKEN" -H "Mcp-Session-Id: $SID" -H 'MCP-Protocol-Version: 2025-06-18')
+curl -s -X POST http://localhost:3030/mcp "${H[@]}" -d '{"jsonrpc":"2.0","method":"notifications/initialized"}' -o /dev/null
+W='"method":"tools/call","params":{"name":"graph_write","arguments":{"operations":[{"type":"create_entity","name":"McpCheck NullId","entity_type":"Component"}]}}'
+curl -s -w ' HTTP %{http_code}\n' -X POST http://localhost:3030/mcp "${H[@]}" -d "{\"jsonrpc\":\"2.0\",\"id\":null,$W}"
+# expected: error -32600 "Invalid Request", data "Request ID must not be null", NO "id" member (D-17), HTTP 400
+curl -s -w ' HTTP %{http_code}\n' -X POST http://localhost:3030/mcp "${H[@]}" -d "{\"jsonrpc\":\"2.0\",$W}"
+# expected: empty body, HTTP 202. Then in Part B step 5, `search "McpCheck NullId"` must find NOTHING (neither call ran)
+
+# N4 invalid UTF-8 object key → 400 -32700, not 500 (SDK 1.8.1 #624)
+printf '{"jsonrpc":"2.0","id":7,"method":"tools/list","\xff":1}' | curl -s -w ' HTTP %{http_code}\n' -X POST http://localhost:3030/mcp "${H[@]}" --data-binary @-
+# expected: error -32700, no "id" member, HTTP 400
+
+# N5 initialize no longer promises notifications graph_mem never sends (SDK 1.8.1 #620 principle)
+curl -s -X POST http://localhost:3030/mcp -H 'Content-Type: application/json' -H 'Accept: application/json' -H "Authorization: Bearer $GRAPH_MEM_MCP_TOKEN" -d "$INIT" \
+  | ruby -rjson -e 'b=STDIN.read; j=JSON.parse(b[/\{.*\}/m]); p j.dig("result","capabilities"); p j.dig("result").key?("instructions")'
+# expected (1.54.x and later): resources subscribe/listChanged false, tools listChanged false; instructions key present (true) — the per-profile text, wired in 1.54.0
 cd /tmp/gm-mcp-check
 ```
 
@@ -66,7 +87,7 @@ Then run Part B twice: once with `claude` (default negotiation) and once with `M
 > 2. `get_current_time`. Expected: an ISO-8601 time and a `version` field.
 > 3. `graph_write`: create a `Project` entity `McpCheck Synth Project` and an entity `McpCheck SynthWidget` (type `Component`) with the observation "McpCheck probe observation 1", plus a relation SynthWidget `part_of` Project. Expected: both ids, the observation id and the relation id returned; a second identical write is rejected as a duplicate (not a silent second copy).
 > 4. `set_context` with the project id, then `get_context`. Expected: the active project is `McpCheck Synth Project`.
-> 5. `search` "McpCheck SynthWidget". Expected: SynthWidget is the first hit, with no error even if vector search is unavailable.
+> 5. `search` "McpCheck SynthWidget". Expected: SynthWidget is the first hit, with no error even if vector search is unavailable. Also `search` "McpCheck NullId": expected **no** hit (shell check N3 must not have written anything).
 > 6. `get_entities` for the SynthWidget id, with observations. Expected: the observation from step 3.
 > 7. `traverse_graph` from the project, depth 1. Expected: SynthWidget is reached via `part_of`.
 > 8. `find_shortest_path` SynthWidget → Project. Expected: a path of length 1.
@@ -99,7 +120,7 @@ Then run Part B twice: once with `claude` (default negotiation) and once with `M
 > **Cleanup (gm-http)**
 > 26. `graph_delete` SynthWidget and `McpCheck Synth Project` (by id), then `set_context` null, then `search` "McpCheck". Expected: deletes confirmed; context cleared; no McpCheck hits.
 
-## C. Results table (fill in and paste back to Graphy)
+## C. Results table (fill in and paste back to the reviewer)
 
 Claude Code version: ____ · graph_mem commit: ____ · date/time (Europe/Rome): ____
 
@@ -110,6 +131,9 @@ Claude Code version: ____ · graph_mem commit: ____ · date/time (Europe/Rome): 
 | Negotiated protocol, stdio (from the log) | | | |
 | N1 curl wrong token → 401 + WWW-Authenticate | (run once) | n/a | |
 | N2 stdio stdout `json=2 noise=0` | (run once) | n/a | |
+| N3 `id: null` → 400 -32600; id-less → 202; neither wrote `McpCheck NullId` | (run once) | n/a | |
+| N4 invalid UTF-8 key → 400 -32700 | (run once) | n/a | |
+| N5 capabilities: subscribe/listChanged false; `instructions` present (1.54.x+) | (run once) | n/a | |
 | B 1–13 gm-http (count PASS / 13) | | | |
 | B 14–16 gm-ro | | | |
 | B 17–23 gm-maint (incl. scan refusals 19–22) | | | |
