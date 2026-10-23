@@ -1,20 +1,69 @@
 - group_key = local_assigns.fetch(:group_key)
-- current_roots = AppSettings.project_scan_roots
+- status = ScanRootPolicy.status
+- legacy_roots = AppSettings.legacy_project_scan_roots
+
+.dashboard-settings-field{ data: { testid: "scan-folders" } }
+  %h3.dashboard-settings-field__label= t("operator.settings.project_scans.folders_title")
+  - unless status[:scans_switch]
+    %p.dashboard-alert--danger{ data: { testid: "scans-switched-off" } }= t("operator.settings.project_scans.switched_off")
+  - if status[:hard_roots].none? { |root| root[:error].nil? }
+    .dashboard-alert--danger{ data: { testid: "scans-not-configured" } }
+      %p= t("operator.settings.project_scans.nothing_mounted")
+      %pre= status[:compose_volume_line]
+      %p= t("operator.settings.project_scans.docs_hint")
+  %table.project-scans-table
+    %thead
+      %tr
+        %th= t("operator.settings.project_scans.folder")
+        %th= t("operator.settings.project_scans.mounted")
+        %th= t("operator.settings.project_scans.access")
+        %th= t("operator.settings.project_scans.readable")
+    %tbody
+      - status[:hard_roots].each do |root|
+        %tr{ data: { testid: "scan-folder-row" } }
+          %td
+            %code= root[:path]
+            - if root[:error]
+              %p.dashboard-alert--danger= root[:error]
+          %td= status[:mode] == "container" ? (root[:mounted] ? "✓" : "✗") : t("operator.settings.project_scans.native")
+          %td
+            - case root[:read_only]
+            - when true
+              %span.dashboard-badge.dashboard-badge--completed= t("operator.settings.project_scans.read_only")
+            - when false
+              %span.dashboard-badge.dashboard-badge--paused= t("operator.settings.project_scans.read_write")
+            - else
+              = "—"
+          %td= root[:readable] ? "✓" : "✗"
+  - if status[:warnings].include?(:running_as_root)
+    %p.dashboard-alert--warning= t("operator.settings.project_scans.running_as_root")
 
 = form_with url: operator_settings_bulk_update_path, method: :patch, local: true, class: "dashboard-settings-form" do
   = hidden_field_tag :tab, group_key
 
   .dashboard-settings-field
-    %label.dashboard-settings-field__label{ for: "setting_project_scan_roots" }
-      = t("operator.settings.fields.project_scan_roots.label")
-    %p.dashboard-settings-field__hint= t("operator.settings.fields.project_scan_roots.description")
-    = text_area_tag "settings[project_scan_roots]",
-      current_roots,
-      id: "setting_project_scan_roots",
-      rows: 4,
+    %label.dashboard-settings-field__label{ for: "setting_project_scan_subfolders" }
+      = t("operator.settings.fields.project_scan_subfolders.label")
+    %p.dashboard-settings-field__hint= t("operator.settings.fields.project_scan_subfolders.description")
+    = text_area_tag "settings[project_scan_subfolders]",
+      AppSettings.project_scan_subfolders_raw,
+      id: "setting_project_scan_subfolders",
+      rows: 3,
       class: "dashboard-settings-field__input",
-      data: { testid: "setting-project_scan_roots" }
-    %p.dashboard-settings-field__hint= t("operator.settings.project_scans.roots_hint")
+      data: { testid: "setting-project_scan_subfolders" }
+    %p.dashboard-settings-field__hint= t("operator.settings.project_scans.subfolders_hint")
+    - if status[:warnings].include?(:whole_home_allowed)
+      %p.dashboard-alert--warning{ data: { testid: "whole-home-warning" } }= t("operator.settings.project_scans.whole_home")
+    %ul{ data: { testid: "scan-subfolder-status" } }
+      - status[:subfolders].each do |entry|
+        %li
+          %code= entry[:input]
+          - if entry[:error]
+            %span.dashboard-badge.dashboard-badge--failed= t("operator.settings.project_scans.rejected", reason: entry[:error])
+          - elsif entry[:exists]
+            %span.dashboard-badge.dashboard-badge--running= t("operator.settings.project_scans.exists")
+          - else
+            %span.dashboard-badge.dashboard-badge--idle= t("operator.settings.project_scans.missing")
 
   .dashboard-settings-field
     .flex.items-center.gap-2
@@ -49,3 +98,28 @@
       operator_settings_path(tab: group_key),
       class: "dashboard-btn dashboard-btn--secondary",
       data: { testid: "operator-settings-reset-btn-project_scans" }
+
+- if legacy_roots
+  .dashboard-alert--warning{ data: { testid: "legacy-scan-roots" } }
+    %p= t("operator.settings.project_scans.legacy_ignored", value: legacy_roots)
+    = button_to t("operator.settings.project_scans.legacy_clear"), operator_clear_legacy_scan_roots_path,
+      method: :delete, class: "dashboard-btn dashboard-btn--secondary",
+      data: { testid: "clear-legacy-scan-roots" }
+
+.dashboard-settings-field{ data: { testid: "scan-check-path" } }
+  %h3.dashboard-settings-field__label= t("operator.settings.project_scans.check_title")
+  = form_with url: operator_check_scan_path_path, method: :get, data: { turbo_frame: "scan-path-check" } do
+    = text_field_tag :path, nil, placeholder: "/home/you/Projects/app", class: "dashboard-settings-field__input",
+      data: { testid: "scan-check-path-input" }
+    = submit_tag t("operator.settings.project_scans.check_button"), class: "dashboard-btn dashboard-btn--secondary"
+  = render "operator/settings/scan_path_check", result: nil, path: nil
+
+.dashboard-settings-field{ data: { testid: "scan-always-blocked" } }
+  %h3.dashboard-settings-field__label= t("operator.settings.project_scans.blocked_title")
+  %p.dashboard-settings-field__hint= t("operator.settings.project_scans.blocked_hint")
+  %p
+    %strong= t("operator.settings.project_scans.blocked_folders")
+    = status[:denylist][:root_folders].join(", ")
+  %p
+    %strong= t("operator.settings.project_scans.blocked_files")
+    = (status[:denylist][:file_folders] + status[:denylist][:files]).join(", ")

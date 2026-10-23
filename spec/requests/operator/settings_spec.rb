@@ -251,39 +251,83 @@ RSpec.describe "Operator settings", type: :request do
       expect(response.body).to include('data-testid="import-observation-duplicate-distance-value"')
     end
 
-    it "renders the project scans settings tab" do
+    it "renders the project scans tab: folders, filter, check-a-path and the always-blocked list" do
+      with_scan_home do |home|
+        get operator_settings_path(tab: "project_scans")
+
+        expect(response).to have_http_status(:ok)
+        body = response.body
+        expect(body).to include('data-testid="operator-settings-tab-project_scans"', 'data-testid="setting-project_scan_subfolders"',
+                                'data-testid="scan-check-path"', 'data-testid="scan-always-blocked"', home)
+        expect(body).not_to include('data-testid="setting-project_scan_roots"')
+      end
+    end
+
+    def save_subfolders(value)
+      patch operator_settings_bulk_update_path, params: { tab: "project_scans", settings: { project_scan_subfolders: value } }
+    end
+
+    it "stores absolute entries under the scan folder as relative ones" do
+      with_scan_home do |home|
+        save_subfolders("#{home}/Projects, work/clients")
+
+        expect(response).to redirect_to(operator_settings_path(tab: "project_scans"))
+        expect(AppSettings.project_scan_subfolders_raw).to eq("Projects, work/clients")
+      end
+    end
+
+    it "rejects bad entries one by one and keeps the old value" do
+      with_scan_home do
+        save_subfolders("../x, /etc, .ssh, Projects/.git")
+        follow_redirect!
+
+        expect(response.body).to include("../x contains", "/etc is outside the scan root", ".ssh is inside a hidden",
+                                         "Projects/.git is inside a hidden")
+        expect(AppSettings.project_scan_subfolders_raw).to eq("Projects")
+      end
+    end
+
+    it "saves a missing folder and shows it as missing, and allows a blank filter with a warning" do
+      with_scan_home do
+        save_subfolders("Projects, someday")
+        get operator_settings_path(tab: "project_scans")
+        expect(response.body).to include("someday").and include("missing")
+
+        save_subfolders("")
+        get operator_settings_path(tab: "project_scans")
+        expect(response.body).to include('data-testid="whole-home-warning"')
+      end
+    end
+
+    it "shows and clears a leftover legacy project_scan_roots value" do
+      AppSettings.project_scan_roots = "/srv/code"
       get operator_settings_path(tab: "project_scans")
+      expect(response.body).to include('data-testid="legacy-scan-roots"', "/srv/code")
 
-      expect(response).to have_http_status(:ok)
-      expect(response.body).to include('data-testid="operator-settings-tab-project_scans"')
-      expect(response.body).to include('data-testid="setting-project_scan_roots"')
+      delete operator_clear_legacy_scan_roots_path
+
+      expect(AppSettings.legacy_project_scan_roots).to be_nil
     end
+  end
 
-    it "updates project scan roots" do
-      patch operator_settings_bulk_update_path,
-            params: {
-              tab: "project_scans",
-              settings: {
-                project_scan_roots: "/opt/repos, /tmp/scans"
-              }
-            }
+  describe "GET /operator/settings/project_scans/check_path" do
+    before { sign_in_operator }
 
-      expect(response).to redirect_to(operator_settings_path(tab: "project_scans"))
-      expect(AppSettings.project_scan_roots).to eq("/opt/repos, /tmp/scans")
-    end
+    it "renders each policy code inside the Turbo Frame" do
+      with_scan_home do |home|
+        FileUtils.mkdir_p(File.join(home, "Projects", "alpha"))
+        FileUtils.mkdir_p(File.join(home, ".ssh"))
+        {
+          File.join(home, "Projects", "alpha") => "ok",
+          File.join(home, ".ssh") => "denied",
+          "/etc" => "not_mounted",
+          File.join(home, "Projects", "nope") => "not_found"
+        }.each do |path, code|
+          get operator_check_scan_path_path(path: path)
 
-    it "rejects an empty project scan root list" do
-      patch operator_settings_bulk_update_path,
-            params: {
-              tab: "project_scans",
-              settings: {
-                project_scan_roots: "   "
-              }
-            }
-
-      expect(response).to redirect_to(operator_settings_path(tab: "project_scans"))
-      follow_redirect!
-      expect(response.body).to include("At least one project scan root is required")
+          expect(response.body).to include('<turbo-frame id="scan-path-check">', %(data-code="#{code}"))
+        end
+      end
     end
   end
 

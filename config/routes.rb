@@ -139,6 +139,8 @@ Rails.application.routes.draw do
     post "settings/backup/run", to: "settings#run_backup", as: :run_backup
     post "settings/backup/restore", to: "settings#restore_backup", as: :restore_backup
     delete "settings/backup", to: "settings#destroy_backup", as: :destroy_backup
+    get "settings/project_scans/check_path", to: "settings#check_scan_path", as: :check_scan_path
+    delete "settings/project_scans/legacy_roots", to: "settings#clear_legacy_scan_roots", as: :clear_legacy_scan_roots
   end
 
   mount MissionControl::Jobs::Engine, at: "/operator/jobs"

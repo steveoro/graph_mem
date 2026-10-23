@@ -77,6 +77,21 @@ module Operator
       redirect_to operator_settings_path(tab: params[:tab])
     end
 
+    # GET /operator/settings/project_scans/check_path?path= (Turbo Frame): what ScanRootPolicy
+    # would do with a path, without queueing anything.
+    def check_scan_path
+      @scan_path_result = params[:path].present? ? ScanRootPolicy.resolve(params[:path]) : nil
+      render partial: "operator/settings/scan_path_check", locals: { result: @scan_path_result, path: params[:path] }
+    end
+
+    # DELETE /operator/settings/project_scans/legacy_roots: drop the ignored pre-1.54 value.
+    def clear_legacy_scan_roots
+      AppSettings.where(var: "project_scan_roots").delete_all
+      AppSettings.clear_cache
+      flash[:notice] = t("operator.settings.project_scans.legacy_cleared")
+      redirect_to operator_settings_path(tab: "project_scans")
+    end
+
     def run_backup
       BackupFileService.new.run_backup!
       flash[:notice] = t("operator.settings.backup.run_success")
@@ -140,7 +155,7 @@ module Operator
         },
         project_scans: {
           title: t("operator.settings.groups.project_scans"),
-          settings: %w[project_scan_roots enable_project_scan_validation]
+          settings: %w[project_scan_subfolders enable_project_scan_validation]
         },
         telemetry: {
           title: t("operator.settings.groups.telemetry"),
@@ -204,16 +219,18 @@ module Operator
       t("operator.settings.imports.invalid_observation_duplicate_max_distance")
     end
 
+    # Validates the subfolder filter entry by entry (PR-0 §0.2) and stores the entries relative to
+    # the scan root. A blank filter is allowed (the whole home, minus the denylist); a folder that
+    # doesn't exist yet is saved and shown as missing.
     def validate_project_scans_settings(settings)
-      roots = settings["project_scan_roots"].to_s.split(/[\r\n,]+/).map(&:strip).reject(&:blank?)
-      return t("operator.settings.project_scans.roots_required") if roots.empty?
+      return nil unless settings.key?("project_scan_subfolders")
 
-      roots.each do |root|
-        File.expand_path(root)
-      rescue StandardError => e
-        return t("operator.settings.project_scans.invalid_root", error: e.message)
-      end
+      roots = ScanRootPolicy.hard_roots.filter_map { |root| root[:path] unless root[:error] }
+      entries = ScanRootPolicy::Subfolders.parse(settings["project_scan_subfolders"], hard_roots: roots)
+      errors = entries.select { |entry| entry[:error] }.map { |entry| "#{entry[:input]} #{entry[:error]}" }
+      return t("operator.settings.project_scans.invalid_subfolders", errors: errors.join("; ")) if errors.any?
 
+      settings["project_scan_subfolders"] = ScanRootPolicy::Subfolders.join(entries.map { |entry| entry[:path] })
       nil
     end
 

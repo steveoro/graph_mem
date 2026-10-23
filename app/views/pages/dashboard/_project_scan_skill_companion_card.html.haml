@@ -42,6 +42,7 @@
     = form_with url: project_scan_skills_path, method: :post, class: "project-scan-skill-form", data: { testid: "project-scan-skill-form" } do |f|
       .project-scan-skill-form__fields
         = f.text_field :project_root, placeholder: "/path/to/project", class: "dashboard-input", required: true, data: { testid: "project-scan-skill-root" }
+        = render "pages/dashboard/scan_folders_hint"
         = f.text_field :project_name, placeholder: "Project name (optional)", class: "dashboard-input", data: { testid: "project-scan-skill-name" }
         = f.text_field :aliases, placeholder: "Aliases (comma-separated, optional)", class: "dashboard-input", data: { testid: "project-scan-skill-aliases" }
       .project-scan-skill-form__options

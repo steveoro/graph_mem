@@ -104,7 +104,7 @@ class ScanRootPolicy
         scans_switch: enabled?,
         mode: container? ? "container" : "native",
         hard_roots: roots,
-        subfolders: subfolder_entries(roots.select { |root| root[:error].nil? }),
+        subfolders: subfolder_status(roots.select { |root| root[:error].nil? }),
         allowed_roots: allowed_roots.map { |root| root[:path] },
         denylist: Denylist.to_h,
         warnings: status_warnings(roots),
@@ -115,6 +115,14 @@ class ScanRootPolicy
     # @return [Array<Hash>] the parsed filter entries for +roots+
     def subfolder_entries(roots = valid_hard_roots)
       Subfolders.parse(AppSettings.project_scan_subfolders_raw, hard_roots: roots.map { |root| root[:path] })
+    end
+
+    # The filter entries for +roots+, each with +exists:+ (the folder is there under some root).
+    def subfolder_status(roots)
+      subfolder_entries(roots).map do |entry|
+        exists = entry[:error].nil? && roots.any? { |root| File.directory?(File.join(root[:path], entry[:path])) }
+        entry.merge(exists: exists)
+      end
     end
 
     def filter_blank?

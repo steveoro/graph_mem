@@ -1,0 +1,12 @@
+= turbo_frame_tag "scan-path-check" do
+  - if result
+    - if result.ok?
+      %p{ data: { testid: "scan-check-result", code: result.code } }
+        %span.dashboard-badge.dashboard-badge--running ✓
+        %code= result.path
+        - if result.warnings.any?
+          %span.dashboard-alert--warning= ScanRootResolution.warning_suffix(result).strip
+    - else
+      %p{ data: { testid: "scan-check-result", code: result.code } }
+        %span.dashboard-badge.dashboard-badge--failed= result.code
+        = result.message

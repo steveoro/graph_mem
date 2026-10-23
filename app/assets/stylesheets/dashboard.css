@@ -367,6 +367,15 @@
   font-size: 0.85rem;
 }
 
+.dashboard-alert--warning {
+  background: #fef3c7;
+  border: 1px solid #fcd34d;
+  color: #92400e;
+  padding: 0.5rem 0.75rem;
+  border-radius: 6px;
+  font-size: 0.85rem;
+}
+
 .dashboard-progress {
   margin: 0.75rem 0;
 }
@@ -904,6 +913,12 @@
 .project-scan-form__field label {
   font-weight: 500;
   font-size: 0.85rem;
+}
+
+.project-scan-form__hint {
+  margin: 0.25rem 0 0;
+  font-size: 0.75rem;
+  color: #64748b;
 }
 
 .project-scan-form__input,
