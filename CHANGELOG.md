@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - `graph_write` and `graph_edit` schemas now advertise the provenance/staleness fields the services already accepted (`source`, `confidence`, `valid_from`, `valid_until`, `tags`, `perspective`; relation `weight`/`properties`).
+- `graph_edit` `update_entity` and `graph_write` `create_entity` take `aliases` as an array of strings: each is stripped, blanks are dropped, duplicates are removed case-insensitively (first spelling kept) and the list is stored `|`-joined. A legacy pipe-separated string is still accepted; an alias containing `|` is rejected.
 
 ### Changed
 - **Agent-facing text is situation-first** (agent-rules AR-T): the skill description, the `search` / `graph_write` / `graph_edit` description openers, the `orient` / `recall` / `persist` prompts and the `next_move` hints now say *when* to recall (task start, before a convention, before first editing a file or component) and *when* to persist (corrections, preferences, locations, verified fixes), as one general rule per observation, superseding old rules with `graph_edit` instead of appending.

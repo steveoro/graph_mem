@@ -2,8 +2,26 @@
 
 module GraphMutationBatch
   MAX_OPERATIONS = 50
+  ALIAS_SEPARATOR = "|"
 
   module_function
+
+  # Normalizes tool `aliases` input to the stored pipe-separated string.
+  #
+  # @param value [Array<String>, String, nil] an alias list, or a legacy pipe-separated string
+  # @return [String, nil] stripped, blank-free, case-insensitively unique aliases joined by "|"
+  # @raise [FastMcp::Tool::InvalidArgumentsError] when an array item contains "|"
+  def normalize_aliases(value)
+    return if value.nil?
+
+    list = value.is_a?(Array) ? value.map(&:to_s) : value.to_s.split(ALIAS_SEPARATOR)
+    if value.is_a?(Array) && (bad = list.find { |item| item.include?(ALIAS_SEPARATOR) })
+      raise FastMcp::Tool::InvalidArgumentsError,
+            "Alias #{bad.inspect} contains \"|\", the stored separator; pass each alias as its own array item."
+    end
+
+    list.map(&:strip).reject(&:blank?).uniq(&:downcase).join(ALIAS_SEPARATOR)
+  end
 
   # Converts external operation hashes into the indexed internal representation.
   #

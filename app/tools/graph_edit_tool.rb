@@ -44,7 +44,10 @@ class GraphEditTool < ApplicationTool
         observation_id: id_reference,
         name: { type: "string" },
         entity_type: { type: "string", examples: GraphVocabulary::ENTITY_TYPES },
-        aliases: { type: "string", description: "Pipe-separated; replaces existing; empty string clears." },
+        aliases: {
+          type: "array", items: { type: "string" },
+          description: "Replaces existing aliases; [] clears. No \"|\" inside an alias. A legacy pipe-separated string is still accepted."
+        },
         description: { type: "string" },
         text_content: { type: "string" },
         supersede: { type: "boolean", description: "true keeps the old text as history." },

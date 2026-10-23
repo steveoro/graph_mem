@@ -88,6 +88,25 @@ RSpec.describe GraphWriteTool, type: :model do
       expect(observation.valid_until).to eq(valid_until)
     end
 
+    it "stores create_entity aliases from an array as a deduplicated pipe-separated list" do
+      expect(operation_properties).to include(aliases: include(type: "array", items: { type: "string" }))
+
+      tool.call_with_schema_validation!(
+        operations: [ { type: "create_entity", name: "Alpha Service", entity_type: "Service", aliases: [ "Alpha", " alpha ", "α-svc" ] } ]
+      )
+
+      expect(MemoryEntity.find_by!(name: "Alpha Service").aliases).to eq("Alpha|α-svc")
+    end
+
+    it "rejects a create_entity alias that contains the pipe separator" do
+      expect do
+        tool.call_with_schema_validation!(
+          operations: [ { type: "create_entity", name: "Alpha Service", entity_type: "Service", aliases: [ "A|B" ] } ]
+        )
+      end.to raise_error(FastMcp::Tool::InvalidArgumentsError, /contains "\|"/)
+      expect(MemoryEntity.where(name: "Alpha Service")).not_to exist
+    end
+
     it "rejects a confidence outside 0..1" do
       expect do
         tool.call_with_schema_validation!(

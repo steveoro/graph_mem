@@ -88,7 +88,7 @@ class GraphEditService
 
     entity.name = updates[:name] if updates[:name].present?
     entity.entity_type = updates[:entity_type] if updates[:entity_type].present?
-    entity.aliases = updates[:aliases] if updates.key?(:aliases)
+    entity.aliases = GraphMutationBatch.normalize_aliases(updates[:aliases]) if updates.key?(:aliases)
     entity.description = updates[:description] if updates.key?(:description)
     entity.save!
 

@@ -48,6 +48,7 @@ class GraphWriteTool < ApplicationTool
       name: { type: "string" },
       entity_type: { type: "string", examples: GraphVocabulary::ENTITY_TYPES },
       entity_id: { oneOf: [ { type: "integer" }, { type: "string" } ] },
+      aliases: { type: "array", items: { type: "string" }, description: "create_entity only. No \"|\" inside an alias." },
       text_content: { type: "string" },
       from_entity_id: { oneOf: [ { type: "integer" }, { type: "string" } ] },
       to_entity_id: { oneOf: [ { type: "integer" }, { type: "string" } ] },

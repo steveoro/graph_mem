@@ -43,21 +43,50 @@ RSpec.describe GraphEditTool, type: :model do
       reason: include(type: "string"),
       valid_until: include(type: "string", format: "date-time"),
       perspective: include(enum: MemoryObservation::PERSPECTIVES),
-      aliases: include(type: "string"),
+      aliases: include(type: "array", items: { type: "string" }),
       entity_id: include(type: "integer"),
       observation_id: include(type: "integer")
     )
     expect(items.dig(:properties, :type, :examples)).to eq(GraphEditService::TYPES)
   end
 
-  it "stores update_entity aliases as the advertised pipe-separated string" do
+  it "round-trips update_entity aliases as a deduplicated pipe-separated list" do
     entity = MemoryEntity.create!(name: "SynthWidget", entity_type: "Component", aliases: "old")
+    aliases = [ " A.C.M.E., Inc. ", "ACME", "acme", "" ]
+
+    tool.call_with_schema_validation!(operations: [ { type: "update_entity", entity_id: entity.id, aliases: aliases } ])
+
+    expect(entity.reload.aliases).to eq("A.C.M.E., Inc.|ACME")
+    expect(entity.aliases.split("|")).to eq([ "A.C.M.E., Inc.", "ACME" ])
+  end
+
+  it "still accepts a legacy pipe-separated aliases string" do
+    entity = MemoryEntity.create!(name: "SynthWidget", entity_type: "Component")
 
     tool.call_with_schema_validation!(
-      operations: [ { type: "update_entity", entity_id: entity.id, aliases: "Synth Widget|SW" } ]
+      operations: [ { type: "update_entity", entity_id: entity.id, aliases: "Synth Widget| SW |sw" } ]
     )
 
     expect(entity.reload.aliases).to eq("Synth Widget|SW")
+  end
+
+  it "clears aliases with an empty array" do
+    entity = MemoryEntity.create!(name: "SynthWidget", entity_type: "Component", aliases: "old")
+
+    tool.call_with_schema_validation!(operations: [ { type: "update_entity", entity_id: entity.id, aliases: [] } ])
+
+    expect(entity.reload.aliases).to eq("")
+  end
+
+  it "rejects an alias that contains the pipe separator" do
+    entity = MemoryEntity.create!(name: "SynthWidget", entity_type: "Component", aliases: "old")
+
+    expect do
+      tool.call_with_schema_validation!(
+        operations: [ { type: "update_entity", entity_id: entity.id, aliases: [ "A|B" ] } ]
+      )
+    end.to raise_error(FastMcp::Tool::InvalidArgumentsError, /contains "\|"/)
+    expect(entity.reload.aliases).to eq("old")
   end
 
   it "supersedes an observation with a new valid_until" do
