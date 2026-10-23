@@ -18,7 +18,11 @@ class SearchTool < ApplicationTool
     open_world_hint: false
   )
 
-  description "Search or page graph entities through one uniform response envelope. Omit `query` for catalog mode; " \
+  description "Recall what earlier sessions learned before you act. Call before choosing a convention " \
+    "(version bump, changelog, docs or test style, config location, release step) and before first editing a " \
+    "file or component named in the task; query by the task's project, file paths and component names, not " \
+    "only by topic. " \
+    "Search or page graph entities through one uniform response envelope. Omit `query` for catalog mode; " \
     "pass `query` alone for ranked summary mode; add `include` values observations and/or relations for subgraph mode. " \
     "Pass optional `page` (default 1), `per_page` (default 20, max 100), legacy alias `limit`, subgraph " \
     "`search_in_name`, `search_in_type`, `search_in_aliases`, `search_in_observations` flags, and `max_tokens` " \

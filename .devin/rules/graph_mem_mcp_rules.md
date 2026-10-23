@@ -1,1 +1,0 @@
-../../docs/rules/graph_mem_mcp_rules.md

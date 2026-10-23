@@ -15,7 +15,12 @@ class GraphWriteTool < ApplicationTool
     open_world_hint: false
   )
 
-  description "Atomically create entities, observations, and relations (max #{MAX_OPERATIONS} logical operations). " \
+  description "Persist a durable lesson. Call when the user corrects you or states a preference, when you learn " \
+    "where something lives, or when a fix or procedure is verified. Write each observation as one general, " \
+    "imperative rule with scope and reason (\"In <project>, when <situation>, do <action> because <reason>\"), " \
+    "not a log of what happened; set `source`, and `valid_until` for time-bound facts. To correct a stored rule, " \
+    "use `graph_edit` update_observation with `supersede: true` instead of appending. " \
+    "Atomically create entities, observations, and relations (max #{MAX_OPERATIONS} logical operations). " \
     "Pass primary `operations` items with type create_entity, create_observation, or create_relation; the existing " \
     "`entities`, `observations`, and `relations` arrays are also accepted. Single writes use one operation. " \
     "A possible entity duplicate prevents every write and returns candidate details. " \
@@ -43,10 +48,19 @@ class GraphWriteTool < ApplicationTool
       name: { type: "string" },
       entity_type: { type: "string", examples: GraphVocabulary::ENTITY_TYPES },
       entity_id: { oneOf: [ { type: "integer" }, { type: "string" } ] },
+      aliases: { type: "array", items: { type: "string" }, description: "create_entity only. No \"|\" inside an alias." },
       text_content: { type: "string" },
       from_entity_id: { oneOf: [ { type: "integer" }, { type: "string" } ] },
       to_entity_id: { oneOf: [ { type: "integer" }, { type: "string" } ] },
-      relation_type: { type: "string", examples: GraphVocabulary::RELATION_TYPES }
+      relation_type: { type: "string", examples: GraphVocabulary::RELATION_TYPES },
+      source: { type: "string", description: "Who/what this came from, e.g. \"claude-code/opus: release task\"." },
+      confidence: { type: "number", minimum: 0, maximum: 1 },
+      valid_from: { type: "string", format: "date-time" },
+      valid_until: { type: "string", format: "date-time", description: "Set for time-bound facts; must be ≥ valid_from." },
+      tags: { type: "array", items: { type: "string" } },
+      perspective: { type: "string", enum: MemoryObservation::PERSPECTIVES },
+      weight: { type: "number", minimum: 0, description: "create_relation only." },
+      properties: { type: "object", description: "create_relation only." }
     }
     schema[:properties][:operations][:items] = {
       type: "object",
@@ -61,6 +75,14 @@ class GraphWriteTool < ApplicationTool
         entity_type: { type: "string", examples: GraphVocabulary::ENTITY_TYPES }
       },
       additionalProperties: true
+    }
+    schema[:properties][:observations][:items] = {
+      type: "object",
+      additionalProperties: true,
+      properties: {
+        entity_id: operation_properties[:entity_id],
+        text_content: operation_properties[:text_content]
+      }.merge(operation_properties.slice(:source, :confidence, :valid_from, :valid_until, :tags, :perspective))
     }
     schema[:properties][:relations][:items] = {
       type: "object",

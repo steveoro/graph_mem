@@ -1,7 +1,10 @@
 ---
 name: project-scan
 description: Perform a multi-stage, source-code-grounded scan of a project and persist the findings in GraphMem using GraphMem's own MCP tools. Use when the user wants to scan a project root and no LLM summarization server is reachable, or when they want a progressive, human-guided scan with checkpoints.
-triggers: ["user"]
+triggers:
+  - user
+disable-model-invocation: true
+license: LGPL-3.0-or-later
 ---
 
 # Project Scan Skill

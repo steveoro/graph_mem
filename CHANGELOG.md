@@ -5,7 +5,24 @@ All notable changes to GraphMem will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.53.0] - 2026-10-23
+
+### Added
+- `graph_write` and `graph_edit` schemas now advertise the provenance/staleness fields the services already accepted (`source`, `confidence`, `valid_from`, `valid_until`, `tags`, `perspective`; relation `weight`/`properties`).
+- `graph_edit` `update_entity` and `graph_write` `create_entity` take `aliases` as an array of strings: each is stripped, blanks are dropped, duplicates are removed case-insensitively (first spelling kept) and the list is stored `|`-joined. A legacy pipe-separated string is still accepted; an alias containing `|`, or an item that isn't a string or number, is rejected. In `update_entity`, `[]` or `null` clears the aliases.
+
+### Changed
+- **Agent-facing text is situation-first** (agent-rules AR-T): the skill description, the `search` / `graph_write` / `graph_edit` description openers, the `orient` / `recall` / `persist` prompts and the `next_move` hints now say *when* to recall (task start, before a convention, before first editing a file or component) and *when* to persist (corrections, preferences, locations, verified fixes), as one general rule per observation, superseding old rules with `graph_edit` instead of appending.
+- **Skill follows the Agent Skills spec**: a "what, then when" description, `license: LGPL-3.0-or-later`, `compatibility` and a `metadata.graph-mem-version` kept equal to the app version; the recall/persist workflow, a Gotchas section and call templates live in `SKILL.md`, with tool details in `references/tools.md` and scans/dream-state/review queues in `references/maintenance.md`.
+- **Memory homes**: prompts, the skill and its templates name one place per kind of memory: `<Project> Conventions` (BestPractice, part_of the Project), the global `User Preferences` (Preference; create it with the context cleared), and the entity an environment fact describes.
+- New `GraphMem::McpInstructions.for(profile)` holds the per-profile MCP server `instructions` text (readonly omits the persist sentence). Not sent yet: it is wired in once graph_mem runs on fast-mcp 1.8.0.
+- `rank_observations`' `next_move` no longer names write tools, which the readonly profile lacks.
+- `docs/rules/README.md` has one install recipe for every agent: the skill in `.agents/skills/` (plus `.claude/skills/` for Claude Code) and a 10-line snippet in `AGENTS.md`. The graph_mem reference text moved into the skill's `references/`.
+
+### Fixed
+- Agent-facing hints no longer point at nonexistent operations (`graph_edit move_to_parent`, `graph_write update_entity`) or at the maintenance-only `dream_state_status` for default-profile sessions.
+- Every agent now loads the repo's rules from one root `AGENTS.md` (Cursor, Codex, Copilot, Devin; Claude Code through `@AGENTS.md` in `CLAUDE.md`). The per-tool rule files in `.cursor/rules/` and `.devin/rules/` are removed; Cursor had been ignoring the `.md` ones.
+- Agents in this repo (Cursor, Codex, Copilot, Devin via `.agents/skills/`; Claude Code via `.claude/skills/`) now discover the graph_mem skills; the stale Cursor skill shim is removed; `project_scan` moves to `skills/project-scan/` (renamed to match its skill name, linked from `.agents/skills/` and `.claude/skills/`, and run only on request).
 
 ### Security
 - **UI-0 / F1 — XSS: replace all `innerHTML` template-literal sinks** in the graph UI with safe DOM construction. Six sinks fixed: `graph/tooltip.js` (label/type/aliases), `graph/context_menu.js` (node header, labels, edge info), `graph/observation_renderer.js` (`renderObservationCards`, `renderDuplicateWarning`), `graph/drag_drop_manager.js` (action-menu header, relation-form labels), `graph/modal_manager.js` (modal title + content node), `controllers/compaction_review_controller.js` (entity-search select options). New `app/javascript/lib/dom.js` provides `el()`, `text()`, `br()`, `escapeHtml()` helpers; pinned in importmap under `lib/`. Guarded by `spec/javascript_sinks_spec.rb` (static grep — any new `innerHTML = \`...\${` line fails CI) and `spec/system/escaping_spec.rb` (runtime: five examples covering the tooltip, context menu, observation/modal, drag-drop menu and compaction-review sinks with an `<img src=x data-probe=1>` payload via Selenium headless Chrome).

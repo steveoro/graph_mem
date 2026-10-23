@@ -24,6 +24,27 @@ RSpec.describe "GraphMem workflow prompts" do
     )
   end
 
+  it "points orient at the memory homes" do
+    expect(OrientPrompt.new.messages.dig(0, :content, :text)).to include("Conventions", "User Preferences")
+  end
+
+  it "makes recall search by file paths and resolve missing values" do
+    expect(RecallPrompt.new.messages(topic: "SynthWidget").dig(0, :content, :text)).to include(
+      "file paths",
+      "find that value"
+    )
+  end
+
+  it "makes persist supersede old rules and record provenance" do
+    expect(PersistPrompt.new.messages.dig(0, :content, :text)).to include("supersede: true", "valid_until", "source")
+  end
+
+  it "gives every workflow prompt a situational description" do
+    expect(OrientPrompt.metadata[:description]).to start_with("Run at the start of a task")
+    expect(RecallPrompt.metadata[:description]).to start_with("Run before choosing a convention")
+    expect(PersistPrompt.metadata[:description]).to start_with("Run before your final reply")
+  end
+
   describe "ApplicationPrompt.mcp_metadata" do
     it "raises ArgumentError for unknown profile names" do
       klass = Class.new(ApplicationPrompt)

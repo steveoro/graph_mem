@@ -1,1 +1,0 @@
-../../docs/rules/general_coding_rules.md

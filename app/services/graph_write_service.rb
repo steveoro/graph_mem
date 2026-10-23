@@ -180,7 +180,7 @@ class GraphWriteService
     entity = MemoryEntity.create!(
       name: attributes[:name],
       entity_type: attributes[:entity_type],
-      aliases: attributes[:aliases],
+      aliases: GraphMutationBatch.normalize_aliases(attributes[:aliases]),
       description: attributes[:description],
       # Insert directly in the FINAL scope: inserting at project_scope 0
       # first would collide with a same-named GLOBAL entity even though

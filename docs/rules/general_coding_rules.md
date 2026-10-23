@@ -1,9 +1,3 @@
----
-description: General coding rules (project-agnostic)
-globs:
-alwaysApply: true
----
-
 # Core Coding Rules
 
 These rules are project-agnostic. They are bundled with the GraphMem agent
