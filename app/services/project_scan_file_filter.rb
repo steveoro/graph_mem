@@ -4,10 +4,10 @@
 # absolute or contain "..", drops files whose realpath leaves the root, and drops denylisted
 # files (ScanRootPolicy.denied_file?) even when a glob names them explicitly.
 #
-# When the project folder is itself a scan root (a whole home), its top-level hidden and
+# When the project folder is a home folder (ScanRootPolicy.home_folder?), its top-level hidden and
 # protected entries (~/.config, ~/.bash_history, ~/Library, …) belong to the home rather than to
-# a project, so they are never read either. ScanRootPolicy.resolve already refuses a scan root as
-# a project folder; this is the second layer.
+# a project, so they are never read either. ScanRootPolicy.resolve already refuses a home as a
+# project folder; this is the second layer.
 #
 # @example
 #   filter = ProjectScanFileFilter.new("/home/steve/Projects/foo")
@@ -22,7 +22,7 @@ class ProjectScanFileFilter
   # @param project_root [String] the project folder (resolved to its realpath when it exists)
   def initialize(project_root)
     @root = ScanRootPolicy.realpath_or_nil(project_root) || File.expand_path(project_root)
-    @root_is_scan_root = ScanRootPolicy.hard_roots.any? { |hard| hard[:path] == @root }
+    @root_is_home = ScanRootPolicy.home_folder?(@root)
     @counters = { "skipped_outside_root" => 0, "skipped_denylisted" => 0 }
   end
 
@@ -57,7 +57,7 @@ class ProjectScanFileFilter
   private
 
   def root_level_denied?(path, real)
-    @root_is_scan_root && [ path, real ].any? do |candidate|
+    @root_is_home && [ path, real ].any? do |candidate|
       next false unless ScanRootPolicy.contained?(@root, candidate)
 
       first = ScanRootPolicy.relative_to(@root, candidate).split("/").first.to_s

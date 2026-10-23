@@ -57,7 +57,8 @@ class ScanRootPolicy
       return "contains '..'" if segments.include?("..")
       return "has an empty path segment" if segments.any?(&:empty?)
 
-      denied = segments.find { |segment| Denylist.root_segment_denied?(segment) }
+      denied = segments.find { |segment| segment.start_with?(".") }
+      denied ||= segments.first if Denylist.root_segment_denied?(segments.first)
       "is inside a hidden or protected folder (#{denied})" if denied
     end
   end

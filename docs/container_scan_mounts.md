@@ -14,8 +14,11 @@ Three layers decide what can actually be scanned, all enforced by `ScanRootPolic
    effect immediately, in every process, with no restart.
 3. **The hard denylist** (never configurable):
    - **scan roots and project folders** can't be, or be inside, a hidden folder (`.ssh`, `.gnupg`,
-     `.aws`, `.config`, …, anything starting with `.`) or `snap`, `Library`, `AppData`, `Maildir`,
-     `Mail`. The scan root itself can't be scanned as one project either: pick a folder inside it;
+     `.aws`, `.config`, …, anything starting with `.`, at any depth), and can't sit in `snap`,
+     `Library`, `AppData`, `Maildir` or `Mail` directly under the scan root (a project called
+     `library` deeper down is fine). A **home folder** (yours, `/root`, or any folder directly under
+     `/home` or `/Users`) can't be scanned as one project: pick a folder inside it. `/home` and
+     `/Users` themselves can't be scan roots;
    - **inside a project**, `.git`, `.ssh`, `.gnupg`, `.aws`, `.kube`, `.docker`, `.password-store`,
      `.env*`, key and certificate files, `credentials*`, `master.key`, `*.tfstate`, shell history and
      a few other secret files are never read, even when a `file_globs` entry names them (matching

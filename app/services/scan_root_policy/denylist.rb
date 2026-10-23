@@ -25,10 +25,14 @@ class ScanRootPolicy
       segment.start_with?(".") || ROOT_SEGMENTS.any? { |denied| denied.casecmp?(segment) }
     end
 
+    # Dot-segments are denied at any depth; the protected home-level names (ROOT_SEGMENTS) only as
+    # the first segment below the root, so a project called "library" or "snap" is fine.
+    #
     # @param relative_path [String] a path relative to a hard root
-    # @return [Boolean] true when any segment is denied for scan roots
+    # @return [Boolean] true when the path can't be (or be inside) a scan root
     def root_path_denied?(relative_path)
-      relative_path.split("/").any? { |segment| root_segment_denied?(segment) }
+      segments = relative_path.split("/")
+      segments.any? { |segment| segment.start_with?(".") } || root_segment_denied?(segments.first.to_s)
     end
 
     # Case-insensitive: secrets don't need exact case, and some filesystems ignore it.

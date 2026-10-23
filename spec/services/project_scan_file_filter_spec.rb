@@ -3,8 +3,9 @@
 require "rails_helper"
 
 RSpec.describe ProjectScanFileFilter do
-  it "never reads a scan root's top-level hidden entries, even via explicit globs" do
+  it "never reads a home folder's top-level hidden entries, even via explicit globs" do
     with_scan_home(subfolders: "") do |home|
+      allow(Dir).to receive(:home).and_return(home)
       FileUtils.mkdir_p(File.join(home, ".config", "gh"))
       File.write(File.join(home, ".config", "gh", "hosts.yml"), "oauth_token: synthetic")
       File.write(File.join(home, ".bash_history"), "synthetic")
@@ -46,6 +47,15 @@ RSpec.describe ProjectScanFileFilter do
 
       expect(filter.invalid_glob(%w[docs/*.md {..,x}/secret])).to eq("{..,x}/secret")
       expect(filter.glob("*.md")).to eq([ File.join(root, "a.md") ])
+    end
+  end
+
+  it "keeps top-level dot-folders readable in a project mounted as its own (non-home) scan root" do
+    with_scan_home(subfolders: "") do |root|
+      FileUtils.mkdir_p(File.join(root, ".github"))
+      File.write(File.join(root, ".github", "ci.yml"), "on: push")
+
+      expect(described_class.new(root).kept_path(File.join(root, ".github", "ci.yml"))).to be_present
     end
   end
 end

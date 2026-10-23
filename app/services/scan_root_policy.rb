@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "etc"
+
 # The one boundary for project scans (mcp plan PR-0 §0.4): the dashboard forms, POST /api/v1/scan,
 # MCP scan_project and job start all resolve their path through it.
 #
@@ -20,6 +22,7 @@ class ScanRootPolicy
   MAX_INPUT_LENGTH = 4096
   SYSTEM_PATHS = %w[/usr /etc /bin /sbin /lib /lib32 /lib64 /libx32 /proc /sys /dev /var /boot].freeze
   CONTAINER_PATHS = %w[/rails /home/rails].freeze
+  HOMES_PARENTS = %w[/home /Users].freeze
   COMPOSE_VOLUME_LINE = "- ${GRAPH_MEM_SCAN_HOME:-${HOME}}:${GRAPH_MEM_SCAN_HOME:-${HOME}}:ro"
 
   class << self
@@ -133,6 +136,17 @@ class ScanRootPolicy
       Subfolders.split(AppSettings.project_scan_subfolders_raw).empty?
     end
 
+    # A user's home folder: Dir.home, its owner's passwd home, /root, or a folder directly under
+    # /home or /Users. A home holds dotfiles and secrets, so it can't be scanned as one project.
+    #
+    # @param real [String] a real path
+    # @return [Boolean]
+    def home_folder?(real)
+      return true if real == "/root" || HOMES_PARENTS.include?(File.dirname(real))
+
+      [ Dir.home, owner_home(real) ].compact.filter_map { |home| realpath_or_nil(home) }.include?(real)
+    end
+
     def relative_to(root, path)
       path == root ? "" : path.delete_prefix("#{root.delete_suffix('/')}/")
     end
@@ -144,6 +158,12 @@ class ScanRootPolicy
     end
 
     private
+
+    def owner_home(path)
+      Etc.getpwuid(File.stat(path).uid).dir
+    rescue ArgumentError, SystemCallError
+      nil
+    end
 
     def configured_roots
       raw = ENV["GRAPH_MEM_SCAN_ROOTS"].to_s
@@ -172,6 +192,7 @@ class ScanRootPolicy
     # or the container user's home).
     def overlap_error(real)
       return "/ can't be a scan root" if real == "/"
+      return "#{real} holds every user's home; use one home or a folder inside it" if HOMES_PARENTS.include?(real)
 
       guarded = SYSTEM_PATHS + (container? ? CONTAINER_PATHS + [ Rails.root.to_s ] : [])
       hit = guarded.find { |path| contained?(path, real) || contained?(real, path) }

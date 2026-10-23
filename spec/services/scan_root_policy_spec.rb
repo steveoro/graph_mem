@@ -192,11 +192,39 @@ RSpec.describe ScanRootPolicy do
   end
 
   describe "PR #111 review" do
-    it "refuses the scan root itself as a project folder, including '~'" do
+    it "refuses a home folder as one project, including '~'" do
       with_scan_home(subfolders: "") do |home|
-        expect(resolve(home)).to have_attributes(code: :invalid)
-        expect(resolve(home).message).to include("pick a project folder inside it")
-        expect(resolve("~").code).to eq(:invalid)
+        allow(Dir).to receive(:home).and_return(home)
+
+        expect(resolve(home)).to have_attributes(code: :whole_root)
+        expect(resolve(home).message).to include("is a home folder; pick a project folder inside it")
+        expect(resolve("~").code).to eq(:whole_root)
+      end
+    end
+
+    it "accepts a scan root that isn't a home as one project (per-project mounts, GRAPH_MEM_SCAN_ROOTS=/tmp/foo)" do
+      with_scan_home(subfolders: "") do |root|
+        expect(resolve(root)).to have_attributes(ok: true, path: root)
+      end
+    end
+
+    it "treats /root and folders directly under /home or /Users as homes, and refuses /home as a root" do
+      expect(described_class.home_folder?("/root")).to be(true)
+      expect(described_class.home_folder?("/home/someone")).to be(true)
+      expect(described_class.home_folder?("/Users/someone")).to be(true)
+      expect(described_class.home_folder?("/home/someone/Projects")).to be(false)
+
+      ENV["GRAPH_MEM_SCAN_ROOTS"] = "/home"
+      expect(described_class.hard_roots.first[:error]).to include("holds every user's home") if File.directory?("/home")
+    end
+
+    it "matches protected home-level names only as the first segment below the root" do
+      with_scan_home(subfolders: "") do |home|
+        expect(resolve(mkdir(home, "Projects", "library"))).to be_ok
+        expect(resolve(mkdir(home, "Projects", "snap"))).to be_ok
+        expect(resolve(mkdir(home, "Snap", "x")).code).to eq(:denied)
+        expect(ScanRootPolicy::Subfolders.parse("Projects/library, Mail").map { |entry| entry[:error] })
+          .to eq([ nil, "is inside a hidden or protected folder (Mail)" ])
       end
     end
 

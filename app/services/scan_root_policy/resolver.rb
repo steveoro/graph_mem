@@ -43,8 +43,8 @@ class ScanRootPolicy
       return real if real.is_a?(Result)
       return failure(:outside_roots, "#{@path} resolves outside #{@root[:path]} (through a symlink).") unless @policy.contained?(@root[:path], real)
       return denied(real) if Denylist.root_path_denied?(@policy.relative_to(@root[:path], real))
-      if real == @root[:path]
-        return failure(:invalid, "#{real} is the whole scan folder; pick a project folder inside it.")
+      if @policy.home_folder?(real)
+        return failure(:whole_root, "#{real} is a home folder; pick a project folder inside it.")
       end
 
       return outside_filter(real) unless @policy.allowed_roots.any? { |allowed| @policy.contained?(allowed[:path], real) }
