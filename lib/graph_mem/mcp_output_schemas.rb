@@ -142,7 +142,20 @@ module GraphMem
           status: { enum: %w[ok possible_duplicate] },
           results: { type: "array" },
           summary: { type: "object" },
-          candidates: { type: "array" }
+          candidates: { type: "array" },
+          reason: { enum: %w[similar same_name same_relation concurrent_insert] },
+          # on_duplicate: "skip" only (mcp plan PR-2 §2.8)
+          skipped: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                index: { type: "integer" }, type: { type: "string" }, name: { type: "string" },
+                existing_id: { type: "integer" }, reason: { enum: %w[exists similar duplicate_in_batch] }
+              },
+              required: %w[index type reason]
+            }
+          }
         },
         required: %w[mode status],
         oneOf: [

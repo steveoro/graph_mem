@@ -32,6 +32,9 @@ class GraphWriteTool < ApplicationTool
     optional(:entities).array(:hash).description("Compatibility array of entities to create.")
     optional(:observations).array(:hash).description("Compatibility array of observations to create.")
     optional(:relations).array(:hash).description("Compatibility array of relations to create.")
+    optional(:on_duplicate).filled(:string).description(
+      "reject (default): a possible duplicate prevents every write. skip: duplicates are listed under `skipped` and the rest is written."
+    )
   end
 
   # Publishes soft type vocabularies without rejecting custom values.
@@ -96,7 +99,7 @@ class GraphWriteTool < ApplicationTool
     schema
   end
 
-  def call(operations: [], entities: [], observations: [], relations: [])
+  def call(operations: [], entities: [], observations: [], relations: [], on_duplicate: "reject")
     bucket_operations = GraphWriteService.operations_from_buckets(
       entities: entities,
       observations: observations,
@@ -105,7 +108,8 @@ class GraphWriteTool < ApplicationTool
     GraphWriteService.call(
       operations: Array(operations) + bucket_operations,
       logger: logger,
-      project_id: graph_mem_context.current_project_id
+      project_id: graph_mem_context.current_project_id,
+      on_duplicate: on_duplicate
     )
   rescue *ToolError::TIMEOUT_CLASSES
     raise

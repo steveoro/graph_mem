@@ -86,4 +86,21 @@ RSpec.describe GraphDeleteService do
       expect(first.reload).to be_present
     end
   end
+
+  it "reports counts equal to the rows actually deleted (PR-2 §2.8)" do
+    target = MemoryEntity.create!(name: "SynthWidget Delete", entity_type: "Component")
+    other = MemoryEntity.create!(name: "Alpha Service Delete", entity_type: "Service")
+    2.times { |i| target.memory_observations.create!(content: "fact #{i}") }
+    MemoryRelation.create!(from_entity_id: target.id, to_entity_id: other.id, relation_type: "depends_on")
+    before = [ MemoryEntity.count, MemoryObservation.count, MemoryRelation.count ]
+
+    summary = described_class.call(operations: [ { type: "delete_entity", entity_id: target.id } ])[:summary]
+
+    expect(summary).to include(
+      entities_deleted: before[0] - MemoryEntity.count,
+      observations_deleted: before[1] - MemoryObservation.count,
+      relations_deleted: before[2] - MemoryRelation.count
+    )
+    expect(summary).to include(entities_deleted: 1, observations_deleted: 2, relations_deleted: 1)
+  end
 end

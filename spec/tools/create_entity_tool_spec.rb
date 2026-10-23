@@ -155,13 +155,14 @@ RSpec.describe CreateEntityTool, type: :model do
     end
 
     context 'validation errors' do
-      it 'raises InvalidArgumentsError for duplicate name' do
-        MemoryEntity.create!(name: 'Duplicate', entity_type: 'Project')
+      it 'answers an exact duplicate name with a warning and the existing entity, writing nothing' do
+        existing = MemoryEntity.create!(name: 'Duplicate', entity_type: 'Project')
         allow(vector_strategy).to receive(:search).and_return([])
 
-        expect {
-          tool.call(name: 'Duplicate', entity_type: 'Project')
-        }.to raise_error(FastMcp::Tool::InvalidArgumentsError, /Validation Failed/)
+        result = nil
+        expect { result = tool.call(name: 'Duplicate', entity_type: 'Project') }.not_to change(MemoryEntity, :count)
+        expect(result).to have_key(:warning)
+        expect(result[:existing_entity][:entity_id]).to eq(existing.id)
       end
 
       it 'raises InvalidArgumentsError when name is blank' do
