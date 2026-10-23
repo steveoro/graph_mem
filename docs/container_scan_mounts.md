@@ -1,0 +1,118 @@
+# Project scans in a container
+
+graph_mem's project scans read source files from disk. In Docker the container can only see
+folders that are mounted into it, so `docker-compose.yml` mounts the host user's **home folder,
+read-only, at the same path** inside the container. A host path such as
+`/home/steve/Projects/foo` then works as typed, in the dashboard, `POST /api/v1/scan` and MCP
+`scan_project`.
+
+Three layers decide what can actually be scanned, all enforced by `ScanRootPolicy`:
+
+1. **The scan root:** `GRAPH_MEM_SCAN_ROOTS` (the mounted home). Nothing outside it is visible.
+2. **The subfolder filter:** Settings › Project scans, default `Projects`. Only these folders under
+   the root are scannable. It is read on every scan request and at job start, so a change takes
+   effect immediately, in every process, with no restart.
+3. **The hard denylist** (never configurable): hidden folders (`.ssh`, `.gnupg`, `.aws`, `.config`,
+   …, anything starting with `.`), `snap`, `Library`, `AppData`, `Maildir`, `Mail`; and, inside a
+   project, `.git`, `.env*`, key and certificate files, `credentials*`, `master.key`, `*.tfstate`,
+   even when a `file_globs` entry names them.
+
+Settings › Project scans shows the mounted folders (read-only or read-write), the filter with the
+status of each entry, the always-blocked list and a "check a path" box.
+
+## Linux Docker (tested)
+
+`docker-compose.yml`, `app` service:
+
+```yaml
+    environment:
+      GRAPH_MEM_SCAN_ROOTS: ${GRAPH_MEM_SCAN_HOME:-${HOME}}
+      GRAPH_MEM_SCANS: ${GRAPH_MEM_SCANS:-on}   # "off" disables scans without touching the mount
+    volumes:
+      - ${GRAPH_MEM_SCAN_HOME:-${HOME}}:${GRAPH_MEM_SCAN_HOME:-${HOME}}:ro
+```
+
+- `GRAPH_MEM_SCAN_HOME` (in `.env`) overrides the folder. Leave it empty to use the `HOME` of the
+  user running compose; set it explicitly for systemd or cron, where `HOME` may be unset.
+- Check the result with `docker compose config`: the volume must end in `:ro`.
+- `docker run` equivalent: `-v "$HOME:$HOME:ro" -e GRAPH_MEM_SCAN_ROOTS="$HOME"`.
+- Kamal (untested): `volumes: ["/home/deploy:/home/deploy:ro"]` plus `GRAPH_MEM_SCAN_ROOTS`.
+
+**Always mount `:ro`.** The scanner never writes, and read-only keeps anything in the container
+from touching your home. A read-write mount still works, but Settings and every scan result show
+an amber "mounted read-write" warning.
+
+If nothing is mounted at the scan root, scans are disabled and say so ("nothing is mounted").
+A scan root can't be `/`, a system folder (`/usr`, `/etc`, `/var`, …), the app (`/rails`) or the
+container user's own home (`/home/rails`).
+
+## UID and permissions
+
+The app runs as uid/gid 1000. If your host uid is 1000 (the usual first user), it reads your files
+as you. Otherwise grant read access to the scanned subfolders only:
+
+```bash
+setfacl -m u:1000:x "$HOME"                                  # traverse only
+setfacl -R -m u:1000:rX -m d:u:1000:rX "$HOME/Projects"      # read the scanned folders
+```
+
+or use a shared group via `group_add`. **Never** `chmod -R o+r $HOME`. Don't change the container
+`user:` either: `storage/`, `log/` and `tmp/` are owned by uid 1000.
+
+## Rootless Podman (best-effort, not CI-tested)
+
+`podman compose` works with the same file plus an override:
+
+```yaml
+services:
+  app:
+    userns_mode: "keep-id:uid=1000,gid=1000"   # your host uid ↔ container uid 1000 (Podman ≥ 4.3)
+    security_opt: ["label=disable"]           # SELinux hosts: see below
+```
+
+Quadlet (`~/.config/containers/systemd/graph_mem.container`, after building or pulling the image):
+
+```ini
+[Container]
+Image=localhost/graph_mem:latest
+Network=host
+UserNS=keep-id:uid=1000,gid=1000
+SecurityLabelDisable=true
+Volume=%h:%h:ro
+Environment=GRAPH_MEM_SCAN_ROOTS=%h
+EnvironmentFile=%h/.config/graph_mem/env
+```
+
+## SELinux (Fedora/RHEL, Podman or Docker)
+
+An unlabelled bind mount reads as "permission denied".
+
+**Never use `:z` or `:Z` on your home directory.** They relabel every file under it recursively,
+which breaks other confined programs, and `:Z` makes the files private to this one container.
+Instead:
+
+- use `:ro` plus `label=disable` (as above; weaker isolation, for this container only), or
+- mount individual project folders with `:ro,z` **only** if they are dedicated to graph_mem, and
+  set `GRAPH_MEM_SCAN_ROOTS` to them.
+
+## Docker Desktop (macOS/Windows)
+
+Untested. Identity mapping should work on macOS (`/Users/you`) once the folder is shared in Docker
+Desktop. Windows paths need a path map, which graph_mem doesn't have yet.
+
+## Changing what's scannable
+
+- The **subfolder filter** is runtime: edit it in Settings › Project scans.
+- The **mount** (`GRAPH_MEM_SCAN_HOME`) needs `docker compose up -d`, which recreates `app`.
+
+## Symlinks
+
+Links that resolve outside the scan root, or into a hidden folder, are skipped: as a scan root
+they are refused, and inside a project the files they point to are never read.
+
+## Native installs (`bin/dev`)
+
+Without the container, the scan root is `GRAPH_MEM_SCAN_ROOTS` or, by default, your home folder,
+with the same `Projects` filter. To scan somewhere else (for example `/tmp/foo`), set
+`GRAPH_MEM_SCAN_ROOTS` or widen the filter. `PROJECT_SCAN_ROOTS` and the old "allowed project scan
+roots" setting are no longer used.

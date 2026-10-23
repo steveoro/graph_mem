@@ -188,6 +188,12 @@ The app is available at `http://localhost:3030`. Swagger API docs at `http://loc
 
 The app port (3030) is hardcoded on Dockerfile and docker-compose.yml because the service relies on host networking to access the embedding service by `ollama`. This allows a simpler container setup on different machines without resorting to iptables or firewall mangling.
 
+**Project scans in Docker:** compose mounts your home folder **read-only at the same path** inside
+the container (`${HOME}:${HOME}:ro`, override with `GRAPH_MEM_SCAN_HOME`), so a host path like
+`/home/you/Projects/app` can be scanned as typed. Only the folders in the Settings › Project scans
+subfolder filter (default `Projects`) are scannable, and hidden folders and secret files never are.
+See [docs/container_scan_mounts.md](docs/container_scan_mounts.md) (UID, rootless Podman, SELinux).
+
 This containerized app is a **single-user server** with no authentication layer -- it is
 designed to run locally on a machine and/or be accessible only through a trusted LAN.
 **Do not expose this service to the public internet.**

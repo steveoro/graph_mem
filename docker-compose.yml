@@ -38,9 +38,15 @@ services:
       # MCP access control; see docs/mcp_access_control.md
       GRAPH_MEM_MCP_TOKEN: ${GRAPH_MEM_MCP_TOKEN:-}
       GRAPH_MEM_MCP_ALLOWED_IPS: ${GRAPH_MEM_MCP_ALLOWED_IPS:-}
+      # Scan root = the host user's home, at the SAME path inside the container
+      # (docs/container_scan_mounts.md).
+      GRAPH_MEM_SCAN_ROOTS: ${GRAPH_MEM_SCAN_HOME:-${HOME}}
+      GRAPH_MEM_SCANS: ${GRAPH_MEM_SCANS:-on}            # "off" disables scans without touching the mount
     volumes:
       - ${DB_BACKUP_HOST_PATH:-./db/backup}:/rails/db/backup
       - graph_mem_storage:/rails/storage
+      # READ-ONLY. Same path in and out, so /home/<you>/Projects/foo works as typed.
+      - ${GRAPH_MEM_SCAN_HOME:-${HOME}}:${GRAPH_MEM_SCAN_HOME:-${HOME}}:ro
 
 volumes:
   graph_mem_db:

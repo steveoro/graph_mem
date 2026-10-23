@@ -5,6 +5,20 @@ All notable changes to GraphMem will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- Project scans in containers: the host user's home is mounted read-only at the same path (`${HOME}:${HOME}:ro`, override with `GRAPH_MEM_SCAN_HOME`); `GRAPH_MEM_SCAN_ROOTS` / `GRAPH_MEM_SCANS`; Settings › Project scans shows mounts (read-only/read-write), a runtime subfolder filter (default "Projects"), the always-blocked list and a path checker. `docs/container_scan_mounts.md` (Linux Docker; rootless Podman best-effort; SELinux, UID).
+
+### Changed
+- `project_scan_roots` is replaced by `project_scan_subfolders` (relative to the scan root, editable at runtime); `PROJECT_SCAN_ROOTS` (never effective) is removed. Native installs default to home + "Projects", so scanning outside `~/Projects` (e.g. `/tmp/foo`) needs `GRAPH_MEM_SCAN_ROOTS` or a wider filter.
+
+### Security
+- One `ScanRootPolicy` for the dashboard, `POST /api/v1/scan`, MCP `scan_project` and job start (previously the API and MCP accepted any directory). Hidden folders and secret files (`.ssh`, `.gnupg`, `.aws`, `.env`, keys, `.git/config`, …) are never scanned, even via explicit `file_globs`. `..`/absolute `file_globs` are rejected; symlinks resolving outside the root are skipped.
+
+### Fixed
+- Scanner applied `max_files` before sorting (non-deterministic file set).
+
 ## [1.53.0] - 2026-10-23
 
 ### Added
