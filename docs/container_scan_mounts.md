@@ -117,8 +117,8 @@ which breaks other confined programs, and `:Z` makes the files private to this o
 Instead:
 
 - use `:ro` plus `label=disable` (as above; weaker isolation, for this container only), or
-- mount individual project folders with `:ro,z` **only** if they are dedicated to graph_mem, and
-  set `GRAPH_MEM_SCAN_ROOTS` to them.
+- mount one folder dedicated to graph_mem with `:ro,z` **only** (never your home), set
+  `GRAPH_MEM_SCAN_HOME` to it and blank the subfolder filter: that folder and every project in it is scannable.
 
 ## Docker Desktop (macOS/Windows)
 
