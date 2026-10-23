@@ -41,6 +41,7 @@ services:
       # Scan root = the host user's home, at the SAME path inside the container
       # (docs/container_scan_mounts.md).
       GRAPH_MEM_SCAN_ROOTS: ${GRAPH_MEM_SCAN_HOME:-${HOME}}
+      GRAPH_MEM_HOST_HOME: ${HOME:-}                  # refused as one project, even outside /home
       GRAPH_MEM_SCANS: ${GRAPH_MEM_SCANS:-on}            # "off" disables scans without touching the mount
     volumes:
       - ${DB_BACKUP_HOST_PATH:-./db/backup}:/rails/db/backup
