@@ -14,7 +14,11 @@ module GraphMutationBatch
   def normalize_aliases(value)
     return if value.nil?
 
-    list = value.is_a?(Array) ? value.map(&:to_s) : value.to_s.split(ALIAS_SEPARATOR)
+    valid = value.is_a?(String) ||
+            (value.is_a?(Array) && value.all? { |item| item.is_a?(String) || item.is_a?(Numeric) })
+    raise FastMcp::Tool::InvalidArgumentsError, "aliases must be an array of strings." unless valid
+
+    list = value.is_a?(Array) ? value.map(&:to_s) : value.split(ALIAS_SEPARATOR)
     if value.is_a?(Array) && (bad = list.find { |item| item.include?(ALIAS_SEPARATOR) })
       raise FastMcp::Tool::InvalidArgumentsError,
             "Alias #{bad.inspect} contains \"|\", the stored separator; pass each alias as its own array item."
