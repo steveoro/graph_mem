@@ -140,5 +140,5 @@ denylist above, is never read; scanners read the realpath they checked, not the 
 
 Without the container, the scan root is `GRAPH_MEM_SCAN_ROOTS` or, by default, your home folder,
 with the same `Projects` filter. To scan somewhere else (for example `/tmp/foo`), set
-`GRAPH_MEM_SCAN_ROOTS` or widen the filter. `PROJECT_SCAN_ROOTS` and the old "allowed project scan
+`GRAPH_MEM_SCAN_ROOTS` to it and blank the subfolder filter. `PROJECT_SCAN_ROOTS` and the old "allowed project scan
 roots" setting are no longer used.
