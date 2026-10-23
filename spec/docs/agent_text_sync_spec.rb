@@ -161,4 +161,38 @@ RSpec.describe "agent text sync" do
       end
     end
   end
+
+  describe "skill text (AR-T)" do
+    let(:skill_path) { root.join("skills/graph-mem-mcp-toolset/SKILL.md") }
+    let(:skill_text) { skill_path.read }
+    let(:references) { root.join("skills/graph-mem-mcp-toolset/references") }
+
+    it "opens the description with what the skill does, in the third person" do
+      description = frontmatter(skill_path)["description"]
+
+      expect(description).to start_with("Recalls and records project conventions")
+      expect(description).not_to match(/\byou(r)?\b/i)
+      expect(description).not_to match(/\bI\b/)
+    end
+
+    it "keeps the skill metadata version equal to the app version" do
+      expect(frontmatter(skill_path).dig("metadata", "graph-mem-version")).to eq(GraphMem::VERSION)
+    end
+
+    it "has Gotchas and one fully qualified tool name" do
+      expect(skill_text).to include("## Gotchas", "graph_mem:search")
+    end
+
+    it "keeps maintenance text in references/maintenance.md" do
+      expect(references.join("maintenance.md")).to exist
+      expect(skill_text).to include("Read `references/maintenance.md` when")
+      expect(skill_text).not_to include("dream_state_status", "list_maintenance_review")
+    end
+
+    it "keeps scan and dream-state sections out of references/tools.md" do
+      tools = references.join("tools.md").read
+
+      expect(tools).not_to include("## Project Scan Validation", "## Dream-State Compaction Awareness")
+    end
+  end
 end

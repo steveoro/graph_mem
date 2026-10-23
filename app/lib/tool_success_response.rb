@@ -4,13 +4,16 @@
 class ToolSuccessResponse
   CONTEXT_EXEMPT_TOOLS = %w[get_context set_context clear_context get_version].freeze
   DEFAULT_HINTS = {
-    "search" => "Call `get_entities` with selected ids when full detail is needed.",
-    "get_entities" => "Call `traverse_graph` when neighboring entities or edges are needed.",
+    "search" => "Apply any matching rules before editing; if a rule needs a value you don't have, look it up " \
+                "first. Call `get_entities` with selected ids for full detail.",
+    "get_entities" => "Apply matching rules before editing. Call `traverse_graph` when neighbouring entities or " \
+                      "edges are needed.",
     "traverse_graph" => "Call `get_entities` to inspect relevant entity details.",
     "find_shortest_path" => "Call `get_entities` with ids from the returned path.",
     "summarize" => "Use the returned source ids with `get_entities` to verify important claims.",
-    "rank_observations" => "Use `graph_write` to append facts or `graph_edit` to correct one.",
-    "graph_write" => "Call `get_entities` to verify persisted graph changes.",
+    "rank_observations" => "Cite the top-ranked observation ids, or load their entities with `get_entities`.",
+    "graph_write" => "Call `get_entities` to verify. If this corrects an older rule, supersede the old " \
+                     "observation with `graph_edit`.",
     "graph_edit" => "Call `get_entities` to verify edited graph records.",
     "graph_delete" => "Call `search` or `get_entities` to verify the resulting graph.",
     "get_current_time" => "Use this timestamp for observation validity or provenance when needed.",
@@ -63,7 +66,8 @@ class ToolSuccessResponse
       if payload[:status] == "no_context"
         "Call `search` for a Project, then `set_context` with its entity id."
       else
-        "Call `search` or `get_entities` to recall project knowledge."
+        "Load the project's Conventions entity with `get_entities`, then `search` by this task's file paths " \
+          "and decisions."
       end
     when "set_context"
       payload[:status] == "context_cleared" ?

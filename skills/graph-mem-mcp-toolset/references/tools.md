@@ -1,12 +1,6 @@
 Read `references/tools.md` when a tool call fails, when choosing entity or relation types or search parameters, when an observation needs a lifecycle change or conflicts with another, or when an older client uses alias tool names.
 
-# Graph Memory — 4-Phase Session Workflow
-
-These rules apply whenever the `graph_mem` MCP toolset is configured for your
-session — including sessions where you are developing graph_mem itself.
-Use the `graph_mem` MCP tools every session. "Knowledge graph", "graph mem", and
-"memory graph" all refer to the same toolset. Treat this workflow as session
-state management, not as a substitute for inspecting the repository.
+# graph_mem tool reference
 
 The default `/mcp` connection omits maintenance tools. Use a separate
 `/mcp/maintenance` connection only when maintenance work is required; the
@@ -28,7 +22,7 @@ no-context banner when orientation is required.
 
 Tool `isError` content is a JSON envelope with `category`, `retriable`, `next_move`,
 and `message`. Follow `next_move`. Do not retry `system_error` blindly.
-See `docs/mcp_tools.md` Error Handling for the category table.
+graph_mem's repository documents the category table in `docs/mcp_tools.md` (Error Handling).
 
 ## Multi-Agent Context Scoping
 
@@ -36,67 +30,6 @@ See `docs/mcp_tools.md` Error Handling for the category table.
 - `set_context` affects ONLY your own client bucket; pass `entity_id: null` to clear it.
 - Agents without the header share the `"default"` bucket. Set a stable `X-MCP-Client` in your MCP config when multiple agents use one instance.
 - Because context persists, on Orient you may already have an active context from a prior session — always `get_context` first before assuming none.
-
-## Project Scan Validation
-
-- `scan_project(project_root, project_name, aliases, mode, dry_run, file_globs)` starts an
-  asynchronous source-scan of a project root. It treats the files as the source of truth,
-  reconciles the graph, and then runs an automatic facts-checking pass over the existing
-  project subtree.
-- The final validation pass is implemented in the `ProjectScanValidator` service and
-  is gated by `enable_project_scan_validation`.
-- It is batched and resumable:
-  - `project_scan_validation_batch_size` (default `5`) controls how many entities
-    are validated per batch. `0` disables batching.
-  - When the batch limit is reached, the `OperationProgress` is paused and
-    `validation_state` is persisted. A subsequent `mode: "validate"` scan with the
-    same `scan_id` resumes from the saved pending entity list.
-  - This lets an agent or operator digest the generated `scan_review` queue in
-    small, repeated rounds instead of one massive run.
-- It distinguishes scan-sourced observations from manually-created ones:
-  - Scan-sourced observations (`source` starts with `project_scan:` or
-    `project_scan_skill:` from a prior run) can be moved or obsoleted automatically.
-  - Manual/sourceless observations are never silently deleted. They are queued as
-    `move_observation` or `delete_observation` `scan_review` items so the
-    operator/agent can decide; the scan conclusion is preserved in the review payload.
-- Skips entities, observations, and relations created during the same scan run
-  (identified by the per-run source ref `project_scan:<scan_id>:<phase>` and
-  `MemoryRelation#properties["scan_id"]`).
-- Moves scan-sourced observations to a better-matching target entity when the target
-  is unambiguous (the target name/alias appears as a whole word or phrase in the
-  observation text and the text does not reference its current entity or project).
-- Marks scan-sourced observations that do not reference their entity or project and
-  have no clear target as `obsolete` with `confidence: 1.0`.
-- Handles relation ownership semantics:
-  - `part_of` is an ownership edge: a `MemoryEntity` may have only one `part_of`
-    parent. A `part_of` relation to the wrong `Project` root is corrupt and is
-    auto-deleted.
-  - `used_by`, `depends_on`, `requires`, `configured_by`, `implements`, `extends`,
-    and `integrates_with` are reference/usage edges. Stale ones are queued as
-    `delete_relation` review items, not auto-deleted.
-- Queues stale usage relations (`delete_relation`), entities that no longer appear
-  in the source (`delete_entity`), observations that do not belong (`delete_observation`),
-  and wrong-parent moves (`reparent_entity`, `move_observation`) as `scan_review`
-  maintenance rows.
-- Use `mode: "validate"` to run only the validation pass on an existing project
-  without re-reading files.
-- Agents can consume `scan_review` rows via `get_maintenance_reports(report_type:
-  "scan_review")` and apply `move_observation`, `reparent_entity`, `delete_relation`,
-  `delete_entity`, or `delete_observation` actions just like compaction reviews.
-
-## Dream-State Compaction Awareness
-
-- A background "dream-state" job periodically compacts the graph: it
-  auto-parents orphans, auto-merges near-identical entities (cosine distance <
-  0.10, same `entity_type` only), and deletes byte-identical duplicate
-  observations. Lower-confidence cases are queued for review.
-- On `/mcp/maintenance`, call `dream_state_status` to see whether compaction is `running`/`paused` plus its progress/stats.
-- Call `list_maintenance_review` to read the queue of merge/orphan suggestions the job flagged for review, then action good ones with `apply_maintenance_review` (or a `graph_delete` `merge_entities` operation when both ids are known). Use `get_maintenance_reports` for stored report documents.
-- Mutating tools cooperatively pause compaction automatically — no action needed, but search results may shift slightly while a run is in progress.
-- Implication for writes: don't rely on the job to clean up sloppiness. Prefer
-  `graph_write` on an existing entity or `graph_edit` over creating
-  near-duplicates. Mutating tools may pause compaction, so do not assume that
-  maintenance state is unchanged during a session.
 
 ## Standard Compatibility
 

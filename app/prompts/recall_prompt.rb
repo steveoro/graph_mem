@@ -2,7 +2,8 @@
 
 class RecallPrompt < ApplicationPrompt
   prompt_name "recall"
-  description "Recall source-backed GraphMem knowledge for a topic before work."
+  description "Run before choosing a convention or first editing a file or component: recalls rules by " \
+              "topic, file paths and decision type."
   mcp_metadata(profiles: %i[default readonly maintenance])
   argument :topic, description: "Keywords or subject to recall", required: true
 
@@ -17,12 +18,13 @@ class RecallPrompt < ApplicationPrompt
         content: {
           type: "text",
           text: <<~TEXT.strip
-            Recall GraphMem knowledge about #{topic.inspect}:
-            1. Call search with the topic.
-            2. Load relevant known ids with get_entities.
-            3. Use traverse_graph or find_shortest_path when structure matters.
-            4. Use summarize only for a source-backed synthesized answer.
-            Prefer active observations and inspect maintenance tools only on the maintenance profile.
+            Recall GraphMem knowledge for: #{topic.inspect}
+            1. Call search with the topic, then search again with this task's file paths, component names and decision types (for example "version bump", "changelog", "docs examples", "tests", "config").
+            2. Load the best ids with get_entities. If you haven't yet this session, also load the project's Conventions entity and the global User Preferences entity.
+            3. Turn each relevant rule into a checklist item for this task. If a rule depends on a value you don't have yet (a tier, a flag, a config key, a version), find that value in the repository or project metadata before acting.
+            4. When rules conflict, follow the newest active observation and mention the conflict in your reply.
+            5. Use traverse_graph or find_shortest_path only when structure matters, and summarize only for a source-backed overview.
+            Prefer active observations; maintenance tools exist only on the maintenance profile.
           TEXT
         }
       }

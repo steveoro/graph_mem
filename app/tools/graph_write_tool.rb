@@ -15,7 +15,12 @@ class GraphWriteTool < ApplicationTool
     open_world_hint: false
   )
 
-  description "Atomically create entities, observations, and relations (max #{MAX_OPERATIONS} logical operations). " \
+  description "Persist a durable lesson. Call when the user corrects you or states a preference, when you learn " \
+    "where something lives, or when a fix or procedure is verified. Write each observation as one general, " \
+    "imperative rule with scope and reason (\"In <project>, when <situation>, do <action> because <reason>\"), " \
+    "not a log of what happened; set `source`, and `valid_until` for time-bound facts. To correct a stored rule, " \
+    "use `graph_edit` update_observation with `supersede: true` instead of appending. " \
+    "Atomically create entities, observations, and relations (max #{MAX_OPERATIONS} logical operations). " \
     "Pass primary `operations` items with type create_entity, create_observation, or create_relation; the existing " \
     "`entities`, `observations`, and `relations` arrays are also accepted. Single writes use one operation. " \
     "A possible entity duplicate prevents every write and returns candidate details. " \

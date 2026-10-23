@@ -11,6 +11,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `graph_write` and `graph_edit` schemas now advertise the provenance/staleness fields the services already accepted (`source`, `confidence`, `valid_from`, `valid_until`, `tags`, `perspective`; relation `weight`/`properties`).
 
 ### Changed
+- **Agent-facing text is situation-first** (agent-rules AR-T): the skill description, the `search` / `graph_write` / `graph_edit` description openers, the `orient` / `recall` / `persist` prompts and the `next_move` hints now say *when* to recall (task start, before a convention, before first editing a file or component) and *when* to persist (corrections, preferences, locations, verified fixes), as one general rule per observation, superseding old rules with `graph_edit` instead of appending.
+- **Skill follows the Agent Skills spec**: a "what, then when" description, `license: LGPL-3.0-or-later`, `compatibility` and a `metadata.graph-mem-version` kept equal to the app version; the recall/persist workflow, a Gotchas section and call templates live in `SKILL.md`, with tool details in `references/tools.md` and scans/dream-state/review queues in `references/maintenance.md`.
+- **Memory homes**: prompts, the skill and its templates name one place per kind of memory: `<Project> Conventions` (BestPractice, part_of the Project), the global `User Preferences` (Preference; create it with the context cleared), and the entity an environment fact describes.
+- New `GraphMem::McpInstructions.for(profile)` holds the per-profile MCP server `instructions` text (readonly omits the persist sentence). Not sent yet: it is wired in once graph_mem runs on fast-mcp 1.8.0.
+- `rank_observations`' `next_move` no longer names write tools, which the readonly profile lacks.
 - `docs/rules/README.md` has one install recipe for every agent: the skill in `.agents/skills/` (plus `.claude/skills/` for Claude Code) and a 10-line snippet in `AGENTS.md`. The graph_mem reference text moved into the skill's `references/`.
 
 ### Fixed

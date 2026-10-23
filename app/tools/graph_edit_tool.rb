@@ -15,7 +15,9 @@ class GraphEditTool < ApplicationTool
     open_world_hint: false
   )
 
-  description "Atomically edit graph data with up to #{MAX_OPERATIONS} type-discriminated `operations`. " \
+  description "Rewrite what the graph already knows. When a stored rule or fact is outdated, call " \
+    "update_observation with `supersede: true` (history is kept) rather than adding a new dated observation. " \
+    "Atomically edit graph data with up to #{MAX_OPERATIONS} type-discriminated `operations`. " \
     "Use update_entity with entity_id and metadata fields, or update_observation with observation_id, fields, " \
     "and optional supersede/reason. Every operation rolls back if any operation fails. " \
     "Do not use to create data; use `graph_write` instead. " \
