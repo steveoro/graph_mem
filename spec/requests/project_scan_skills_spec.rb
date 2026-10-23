@@ -1,64 +1,59 @@
 # frozen_string_literal: true
 
 require "rails_helper"
-require "tmpdir"
 
 RSpec.describe "Project scan skills", type: :request do
   before { sign_in_operator }
 
+  def flash_text
+    follow_redirect!
+    response.body
+  end
+
   describe "POST /project_scan_skills" do
-    it "queues a guided project scan and redirects to the dashboard" do
-      Dir.mktmpdir do |dir|
+    it "queues a guided project scan for the resolved realpath and redirects to the dashboard" do
+      with_scan_project do |project|
         expect {
-          post project_scan_skills_path, params: { project_root: dir, dry_run: "1" }
+          post project_scan_skills_path, params: { project_root: project, dry_run: "1" }
         }.to have_enqueued_job(ProjectScanSkillJob).and change(OperationProgress, :count).by(1)
 
         operation = OperationProgress.order(created_at: :desc).first
-        expect(operation.status).to eq("pending")
-        expect(operation.operation_type).to eq("project_scan_skill")
-        expect(operation.details["depths"]).to eq(ProjectScanSkill::DEPTH_ORDER)
-
+        expect(operation).to have_attributes(status: "pending", operation_type: "project_scan_skill")
+        expect(operation.details).to include("depths" => ProjectScanSkill::DEPTH_ORDER, "project_root" => project)
         expect(response).to redirect_to(root_path)
-        follow_redirect!
-        expect(response.body).to include("Guided project scan queued")
+        expect(flash_text).to include("Guided project scan queued for #{project}")
       end
     end
 
     it "rejects a missing project root" do
       post project_scan_skills_path
 
-      expect(response).to redirect_to(root_path)
-      follow_redirect!
-      expect(response.body).to include("Project root is required")
-    end
-
-    it "rejects a project root that is not a directory" do
-      post project_scan_skills_path, params: { project_root: "/nonexistent/path" }
-
-      expect(response).to redirect_to(root_path)
-      follow_redirect!
-      expect(response.body).to include("Project root is not a directory")
+      expect(flash_text).to include("Give the path of the project folder to scan")
     end
 
     it "rejects invalid depths" do
-      Dir.mktmpdir do |dir|
-        post project_scan_skills_path, params: { project_root: dir, depths: %w[birds_eye invalid_depth] }
+      with_scan_project do |project|
+        post project_scan_skills_path, params: { project_root: project, depths: %w[birds_eye invalid_depth] }
 
-        expect(response).to redirect_to(root_path)
-        follow_redirect!
-        expect(response.body).to include("Invalid depths")
+        expect(flash_text).to include("Invalid depths")
       end
     end
 
-    it "rejects a project root outside the allowed directories" do
-      Dir.mktmpdir do |dir|
-        allow(AppSettings).to receive(:project_scan_root_paths).and_return([ "/nonexistent/allowed" ])
+    {
+      "/etc" => "visible to graph_mem: only",
+      "%{home}/.ssh" => "inside a hidden or protected folder",
+      "%{home}/Other/x" => "outside the scan filter (Projects)"
+    }.each do |template, message|
+      it "rejects #{template} and queues nothing" do
+        with_scan_home do |home|
+          path = format(template, home: home)
+          FileUtils.mkdir_p(path) unless path == "/etc"
 
-        post project_scan_skills_path, params: { project_root: dir }
-
-        expect(response).to redirect_to(root_path)
-        follow_redirect!
-        expect(response.body).to include("outside the allowed scan directories")
+          expect {
+            post project_scan_skills_path, params: { project_root: path }
+          }.not_to have_enqueued_job(ProjectScanSkillJob)
+          expect(flash_text).to include(message)
+        end
       end
     end
   end

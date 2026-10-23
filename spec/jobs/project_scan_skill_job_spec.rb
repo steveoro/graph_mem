@@ -5,8 +5,7 @@ require "tmpdir"
 
 RSpec.describe ProjectScanSkillJob, type: :job do
   it "processes the operation and broadcasts" do
-    Dir.mktmpdir do |root|
-      File.write(File.join(root, "README.md"), "# Test\n")
+    with_scan_project do |root|
       operation = OperationProgress.create!(
         operation_type: "project_scan_skill",
         operation_id: SecureRandom.uuid,

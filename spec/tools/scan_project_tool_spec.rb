@@ -1,7 +1,6 @@
 # frozen_string_literal: true
 
 require "rails_helper"
-require "tmpdir"
 
 RSpec.describe ScanProjectTool, type: :model do
   let(:tool) { described_class.new }
@@ -22,41 +21,57 @@ RSpec.describe ScanProjectTool, type: :model do
   end
 
   describe "#call" do
-    it "enqueues a scan and returns a queued payload" do
-      Dir.mktmpdir("scan_project_tool") do |dir|
+    it "enqueues a scan of the resolved realpath and returns a queued payload" do
+      with_scan_project do |project|
         result = nil
         expect {
-          result = tool.call(project_root: dir, mode: "initial")
-        }.to have_enqueued_job(ProjectScanJob)
+          result = tool.call(project_root: project, mode: "initial")
+        }.to have_enqueued_job(ProjectScanJob).with(anything, project, any_args)
 
-        expect(result[:status]).to eq("queued")
+        expect(result).to include(status: "queued", mode: "initial", project_root: project, warnings: [])
         expect(result[:scan_id]).to be_present
-        expect(result[:mode]).to eq("initial")
-        expect(result[:project_root]).to eq(File.expand_path(dir))
       end
     end
 
-    it "raises InvalidArgumentsError when the project root is not a directory" do
-      expect {
-        tool.call(project_root: "/nonexistent/graph-mem-scan-root")
-      }.to raise_error(FastMcp::Tool::InvalidArgumentsError, /not a directory/i)
+    {
+      "/nonexistent/graph-mem-scan-root" => /isn't visible to graph_mem/,
+      "%{home}/.ssh" => /hidden or protected folder/,
+      "%{home}/Other/x" => /outside the scan filter/,
+      "%{home}/Projects/missing" => /was not found/
+    }.each do |template, message|
+      it "raises InvalidArgumentsError for #{template}" do
+        with_scan_home do |home|
+          path = format(template, home: home)
+          FileUtils.mkdir_p(path) if path.end_with?(".ssh", "/x")
+
+          expect { tool.call(project_root: path) }.to raise_error(FastMcp::Tool::InvalidArgumentsError, message)
+        end
+      end
+    end
+
+    it "raises InvalidArgumentsError for file_globs that leave the project root" do
+      with_scan_project do |project|
+        expect {
+          tool.call(project_root: project, file_globs: [ "/etc/*" ])
+        }.to raise_error(FastMcp::Tool::InvalidArgumentsError, /must be relative/)
+      end
     end
 
     it "raises InvalidArgumentsError listing allowed modes" do
-      Dir.mktmpdir("scan_project_tool") do |dir|
+      with_scan_project do |project|
         expect {
-          tool.call(project_root: dir, mode: "bogus")
+          tool.call(project_root: project, mode: "bogus")
         }.to raise_error(FastMcp::Tool::InvalidArgumentsError, /initial, rescan, validate/)
       end
     end
 
     it "raises a generic InternalServerError when enqueue fails" do
-      Dir.mktmpdir("scan_project_tool") do |dir|
+      with_scan_project do |project|
         allow(ProjectScanJob).to receive(:perform_later).and_raise(StandardError.new("queue exploded"))
         allow(Rails.logger).to receive(:error)
 
         expect {
-          tool.call(project_root: dir)
+          tool.call(project_root: project)
         }.to raise_error(McpGraphMemErrors::InternalServerError, /unexpected error/) do |error|
           expect(error.message).not_to include("queue exploded")
         end

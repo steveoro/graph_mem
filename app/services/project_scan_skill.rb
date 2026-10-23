@@ -43,7 +43,10 @@ class ProjectScanSkill
   def initialize(operation)
     @operation = operation
     details = operation.details || {}
-    @project_root = File.expand_path(details["project_root"].to_s)
+    # PR-0 §0.5 item 4: re-check the boundary (and the live subfolder filter) when the job runs.
+    @root_resolution = ScanRootPolicy.resolve(details["project_root"].to_s)
+    @project_root = @root_resolution.path || File.expand_path(details["project_root"].to_s)
+    @file_filter = ProjectScanFileFilter.new(@project_root)
     @project_name = details["project_name"].to_s.strip.presence
     @aliases = Array(details["aliases"]).flat_map { |a| a.to_s.split(/[,|;]/).map(&:strip) }.reject(&:blank?)
     @dry_run = details["dry_run"] == true
@@ -55,6 +58,11 @@ class ProjectScanSkill
   end
 
   def process!
+    unless @root_resolution.ok?
+      fail!(@root_resolution.message)
+      return result(:failed)
+    end
+
     unless Dir.exist?(@project_root)
       fail!("Project root does not exist: #{@project_root}")
       return result(:failed)
@@ -102,6 +110,7 @@ class ProjectScanSkill
     @updated_count = existing[:entities_updated].to_i
     @observations_created_count = existing[:observations_created].to_i
     @relations_created_count = existing[:relations_created].to_i
+    @file_filter.counters.each_key { |key| @file_filter.counters[key] = existing[key].to_i }
   end
 
   def counters
@@ -110,7 +119,7 @@ class ProjectScanSkill
       entities_updated: @updated_count,
       observations_created: @observations_created_count,
       relations_created: @relations_created_count
-    }
+    }.merge(@file_filter.counters.transform_keys(&:to_sym))
   end
 
   def result(status)
@@ -387,10 +396,11 @@ class ProjectScanSkill
     @relations_created_count += 1
   end
 
+  # Internal globs only; files outside the root or denylisted are never read (PR-0 §0.5 item 5).
   def discover_files(globs)
     globs.flat_map do |pattern|
-      Dir.glob(File.join(@project_root, pattern)).select { |f| File.file?(f) }
-    end.uniq.first(MAX_FILES)
+      Dir.glob(File.join(@project_root, pattern)).select { |f| File.file?(f) && @file_filter.keep?(f) }
+    end.uniq.sort.first(MAX_FILES)
   end
 
   def top_level_directories

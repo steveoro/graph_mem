@@ -34,8 +34,18 @@ class ProjectScanJob < ApplicationJob
       OperationProgressBroadcaster.call(operation)
     end
 
+    # PR-0 §0.5 item 4: re-check the boundary at job start. The subfolder filter is read anew, so
+    # a folder removed from it since the scan was queued fails here instead of being scanned.
+    resolution = ScanRootPolicy.resolve(project_root)
+    unless resolution.ok?
+      operation.fail!(resolution.message)
+      OperationProgressBroadcaster.call(operation)
+      return { success: false, status: "failed", errors: [ resolution.message ], code: resolution.code,
+               scan_id: scan_id, operation_id: operation.operation_id }
+    end
+
     scanner = ProjectScanner.new(
-      project_root: project_root,
+      project_root: resolution.path,
       project_name: project_name,
       aliases: aliases,
       mode: mode,
@@ -58,7 +68,7 @@ class ProjectScanJob < ApplicationJob
           counters: result.to_h.slice(
             :entities_created, :entities_updated, :observations_created, :observations_obsoleted,
             :observations_moved, :relations_created, :relations_deleted, :entities_reparented,
-            :dismissed_compaction_items
+            :dismissed_compaction_items, :skipped_outside_root, :skipped_denylisted
           ).compact,
           details: operation.details&.merge(
             fallback: result.fallback,

@@ -1,9 +1,21 @@
 # frozen_string_literal: true
 
 namespace :graphify do
+  # PR-0 §0.5 item 6: GRAPH's folder goes through ScanRootPolicy. A denylisted folder is always
+  # refused; outside the scan roots only warns (an operator shell, not a web input) unless
+  # GRAPH_MEM_SCAN_STRICT=1.
+  check_graph_path = lambda do |path|
+    resolution = ScanRootPolicy.resolve(File.dirname(File.expand_path(path)))
+    return if resolution.ok?
+
+    abort("GRAPH refused: #{resolution.message}") if resolution.code == :denied || ENV["GRAPH_MEM_SCAN_STRICT"] == "1"
+    warn("Warning: #{resolution.message} (set GRAPH_MEM_SCAN_STRICT=1 to refuse)")
+  end
+
   desc "Translate a Graphify graph.json into a graph_mem import file (GRAPH=…, PROJECT=..., OUT=...)"
   task translate: :environment do
     path = ENV["GRAPH"].presence || abort("GRAPH is required (location of graph.json)")
+    check_graph_path.call(path)
     project = ENV["PROJECT"].presence || File.basename(File.dirname(File.expand_path(path))).presence ||
               abort("PROJECT is required (name of the root Project entity)")
     out = ENV["OUT"].presence || "graph_mem_import.json"
@@ -25,6 +37,7 @@ namespace :graphify do
   desc "Headless Graphify import: match, auto-accept, execute (GRAPH=…, PROJECT=...)"
   task import: :environment do
     path = ENV["GRAPH"].presence || abort("GRAPH is required (location of graph.json)")
+    check_graph_path.call(path)
     project = ENV["PROJECT"].presence || File.basename(File.dirname(File.expand_path(path))).presence ||
               abort("PROJECT is required (name of the root Project entity)")
 

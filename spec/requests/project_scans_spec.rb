@@ -1,78 +1,82 @@
 # frozen_string_literal: true
 
 require "rails_helper"
-require "tmpdir"
 
 RSpec.describe "Project scans", type: :request do
   before { sign_in_operator }
 
+  def flash_text
+    follow_redirect!
+    response.body
+  end
+
   describe "POST /project_scans" do
-    it "queues a project scan and redirects to the dashboard" do
-      Dir.mktmpdir do |dir|
+    it "queues a project scan for the resolved realpath and redirects to the dashboard" do
+      with_scan_project do |project|
         expect {
-          post project_scans_path, params: { project_root: dir, mode: "initial", dry_run: "1" }
-        }.to have_enqueued_job(ProjectScanJob).and change(OperationProgress, :count).by(1)
+          post project_scans_path, params: { project_root: project, mode: "initial", dry_run: "1" }
+        }.to have_enqueued_job(ProjectScanJob).with(anything, project, any_args)
+          .and change(OperationProgress, :count).by(1)
 
         operation = OperationProgress.order(created_at: :desc).first
-        expect(operation.status).to eq("pending")
-        expect(operation.operation_type).to eq("project_scan")
-
+        expect(operation).to have_attributes(status: "pending", operation_type: "project_scan")
+        expect(operation.details["project_root"]).to eq(project)
         expect(response).to redirect_to(root_path)
-        follow_redirect!
-        expect(response.body).to include("Project scan queued")
+        expect(flash_text).to include("Project scan queued for #{project}")
       end
     end
 
     it "rejects a missing project root" do
       post project_scans_path
 
-      expect(response).to redirect_to(root_path)
-      follow_redirect!
-      expect(response.body).to include("Project root is required")
+      expect(flash_text).to include("Give the path of the project folder to scan")
     end
 
-    it "rejects a project root that is not a directory" do
-      post project_scans_path, params: { project_root: "/nonexistent/path" }
+    it "rejects a path that doesn't exist, saying whether its parent does" do
+      with_scan_home do |home|
+        post project_scans_path, params: { project_root: File.join(home, "Projects", "missing") }
 
-      expect(response).to redirect_to(root_path)
-      follow_redirect!
-      expect(response.body).to include("Project root is not a directory")
+        expect(flash_text).to include("was not found", "its parent #{home}/Projects exists")
+      end
     end
 
     it "rejects an invalid mode" do
-      Dir.mktmpdir do |dir|
-        post project_scans_path, params: { project_root: dir, mode: "bad" }
+      with_scan_project do |project|
+        post project_scans_path, params: { project_root: project, mode: "bad" }
 
-        expect(response).to redirect_to(root_path)
-        follow_redirect!
-        expect(response.body).to include("Mode must be one of")
+        expect(flash_text).to include("Mode must be one of")
       end
     end
 
     it "passes optional project name, aliases, and file globs" do
-      Dir.mktmpdir do |dir|
+      with_scan_project do |project|
         post project_scans_path, params: {
-          project_root: dir,
-          project_name: "graph-mem",
-          aliases: "gm, graph-mem",
-          mode: "rescan",
+          project_root: project, project_name: "graph-mem", aliases: "gm, graph-mem", mode: "rescan",
           file_globs: "README*, package.json"
         }
 
         expect(response).to redirect_to(root_path)
-        expect(ProjectScanJob).to have_been_enqueued
+        expect(ProjectScanJob).to have_been_enqueued.with(anything, project, "graph-mem", "gm, graph-mem", "rescan",
+                                                          false, %w[README* package.json])
       end
     end
 
-    it "rejects a project root outside the allowed directories" do
-      Dir.mktmpdir do |dir|
-        allow(AppSettings).to receive(:project_scan_root_paths).and_return([ "/nonexistent/allowed" ])
+    {
+      "/etc" => "visible to graph_mem: only",
+      "%{home}/.ssh" => "inside a hidden or protected folder",
+      "%{home}/Other/x" => "outside the scan filter (Projects)",
+      "%{home}/Projects/../.." => "Use a path without"
+    }.each do |template, message|
+      it "rejects #{template} and queues nothing" do
+        with_scan_home do |home|
+          path = format(template, home: home)
+          FileUtils.mkdir_p(path) unless path.include?("..") || path == "/etc"
 
-        post project_scans_path, params: { project_root: dir, mode: "initial" }
-
-        expect(response).to redirect_to(root_path)
-        follow_redirect!
-        expect(response.body).to include("outside the allowed scan directories")
+          expect {
+            post project_scans_path, params: { project_root: path, mode: "initial" }
+          }.not_to have_enqueued_job(ProjectScanJob)
+          expect(flash_text).to include(message)
+        end
       end
     end
   end
