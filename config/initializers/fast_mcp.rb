@@ -65,15 +65,22 @@ fast_mcp_logger.info("[McpAccessPolicy] /mcp access: #{mcp_access_policy.describ
 # `localhost_only: false` is intentional: it disables the inner legacy transport's
 # own IP check, which can only compare exact strings. McpStreamableHttpTransport
 # applies mcp_access_policy to both endpoints before delegating.
+mcp_allowed_origins = [ "localhost", "127.0.0.1", "::1", /\A192\.168\.\d{1,3}\.\d{1,3}\z/, /\A10\.\d{1,3}\.\d{1,3}\.\d{1,3}\z/ ]
 Rails.application.config.middleware.use(
   GraphMem::McpStreamableHttpTransport,
   server,
   path_prefix: "/mcp",
   messages_route: "messages",
   sse_route: "sse",
-  allowed_origins: [ "localhost", "127.0.0.1", "::1", /\A192\.168\.\d{1,3}\.\d{1,3}\z/, /\A10\.\d{1,3}\.\d{1,3}\.\d{1,3}\z/ ],
+  allowed_origins: mcp_allowed_origins,
   localhost_only: false,
-  access_policy: mcp_access_policy
+  access_policy: mcp_access_policy,
+  # fast-mcp 1.8.0 legacy-SSE options, passed explicitly (mcp plan PR-2 §2.1): a 4 MiB body
+  # cap, CORS reflecting only these origins, and a server-issued session id that every
+  # /mcp/messages POST must carry (400 without it, 404 for an unknown one).
+  max_request_bytes: Integer(ENV.fetch("GRAPH_MEM_MCP_MAX_REQUEST_BYTES", 4 * 1024 * 1024)),
+  cors_allowed_origins: mcp_allowed_origins,
+  require_sse_session: true
 )
 
 FastMcp.server = server

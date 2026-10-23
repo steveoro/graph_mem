@@ -5,11 +5,19 @@ require "rails_helper"
 RSpec.describe "MCP messages endpoint", type: :request do
   after { AgentContext.delete_all }
 
+  # fast-mcp 1.8.0 requires a server-issued SSE session on every /mcp/messages POST. Register a
+  # synthetic SSE client on the mounted transport's inner RackTransport, as GET /mcp/sse would.
+  let(:legacy_session_id) do
+    get "/up" # builds the middleware stack
+    transports = ObjectSpace.each_object(GraphMem::McpStreamableHttpTransport).map(&:legacy_transport)
+    SecureRandom.uuid.tap { |id| transports.each { |legacy| legacy.register_sse_client(id, StringIO.new) } }
+  end
+
   describe "POST /mcp/messages" do
     it "records client activity using the X-MCP-Client header from HTTP requests" do
       host! "localhost"
 
-      post "/mcp/messages",
+      post "/mcp/messages?sessionId=#{legacy_session_id}",
         params: {
           jsonrpc: "2.0",
           method: "tools/call",
@@ -32,7 +40,7 @@ RSpec.describe "MCP messages endpoint", type: :request do
     it "uses the default profile and does not call hidden maintenance tools" do
       host! "localhost"
 
-      post "/mcp/messages",
+      post "/mcp/messages?sessionId=#{legacy_session_id}",
         params: {
           jsonrpc: "2.0",
           method: "tools/call",
@@ -54,7 +62,7 @@ RSpec.describe "MCP messages endpoint", type: :request do
     it "keeps list-hidden compatibility aliases callable" do
       host! "localhost"
 
-      post "/mcp/messages",
+      post "/mcp/messages?sessionId=#{legacy_session_id}",
         params: {
           jsonrpc: "2.0",
           method: "tools/call",
@@ -77,7 +85,7 @@ RSpec.describe "MCP messages endpoint", type: :request do
       entity = MemoryEntity.create!(name: "Legacy mutation adapter", entity_type: "Task")
       host! "localhost"
 
-      post "/mcp/messages",
+      post "/mcp/messages?sessionId=#{legacy_session_id}",
         params: {
           jsonrpc: "2.0",
           method: "tools/call",
@@ -94,6 +102,16 @@ RSpec.describe "MCP messages endpoint", type: :request do
 
       expect(response).to have_http_status(:ok)
       expect(entity.reload.description).to eq("Legacy updated")
+    end
+
+    it "refuses a POST without a sessionId (fast-mcp 1.8.0 require_sse_session)" do
+      host! "localhost"
+
+      post "/mcp/messages", params: { jsonrpc: "2.0", method: "ping", id: 5 }.to_json,
+                            headers: { "CONTENT_TYPE" => "application/json" }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(JSON.parse(response.body).dig("error", "message")).to include("Missing sessionId")
     end
   end
 end
