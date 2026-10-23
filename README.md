@@ -80,12 +80,11 @@ GraphMem ships agent-facing rules and a vendor-neutral skill:
   agent's rule set (per-agent install targets: `docs/rules/README.md`)
 - `docs/rules/general_coding_rules.md` — optional, project-agnostic coding rules
 - `skills/graph-mem-mcp-toolset/SKILL.md` — vendor-neutral operational skill
-  (works in Cursor, Claude Code, Devin, ...; the `.cursor/skills/` copy is a
-  thin adapter)
+  (works in Cursor, Claude Code, Devin, ...; this repo links it from
+  `.agents/skills/` and `.claude/skills/`)
 
-**Developing GraphMem itself** (editing this repo): see `AGENTS.md`,
-`docs/development.md`, and the repo-scoped rules under `.cursor/rules/` and
-`.devin/rules/`.
+**Developing GraphMem itself** (editing this repo): see `AGENTS.md` (the one
+rule file for every agent; `CLAUDE.md` imports it) and `docs/development.md`.
 
 ### MCP Tools
 

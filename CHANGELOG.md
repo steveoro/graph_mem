@@ -10,8 +10,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - `graph_write` and `graph_edit` schemas now advertise the provenance/staleness fields the services already accepted (`source`, `confidence`, `valid_from`, `valid_until`, `tags`, `perspective`; relation `weight`/`properties`).
 
+### Changed
+- `docs/rules/README.md` has one install recipe for every agent: the skill in `.agents/skills/` (plus `.claude/skills/` for Claude Code) and a 10-line snippet in `AGENTS.md`. The graph_mem reference text moved into the skill's `references/`.
+
 ### Fixed
 - Agent-facing hints no longer point at nonexistent operations (`graph_edit move_to_parent`, `graph_write update_entity`) or at the maintenance-only `dream_state_status` for default-profile sessions.
+- Every agent now loads the repo's rules from one root `AGENTS.md` (Cursor, Codex, Copilot, Devin; Claude Code through `@AGENTS.md` in `CLAUDE.md`). The per-tool rule files in `.cursor/rules/` and `.devin/rules/` are removed; Cursor had been ignoring the `.md` ones.
+- Agents in this repo (Cursor, Codex, Copilot, Devin via `.agents/skills/`; Claude Code via `.claude/skills/`) now discover the graph_mem skills; the stale Cursor skill shim is removed; `project_scan` moves to `skills/project-scan/` (renamed to match its skill name, linked from `.agents/skills/` and `.claude/skills/`, and run only on request).
 
 ### Security
 - **UI-0 / F1 — XSS: replace all `innerHTML` template-literal sinks** in the graph UI with safe DOM construction. Six sinks fixed: `graph/tooltip.js` (label/type/aliases), `graph/context_menu.js` (node header, labels, edge info), `graph/observation_renderer.js` (`renderObservationCards`, `renderDuplicateWarning`), `graph/drag_drop_manager.js` (action-menu header, relation-form labels), `graph/modal_manager.js` (modal title + content node), `controllers/compaction_review_controller.js` (entity-search select options). New `app/javascript/lib/dom.js` provides `el()`, `text()`, `br()`, `escapeHtml()` helpers; pinned in importmap under `lib/`. Guarded by `spec/javascript_sinks_spec.rb` (static grep — any new `innerHTML = \`...\${` line fails CI) and `spec/system/escaping_spec.rb` (runtime: five examples covering the tooltip, context menu, observation/modal, drag-drop menu and compaction-review sinks with an `<img src=x data-probe=1>` payload via Selenium headless Chrome).

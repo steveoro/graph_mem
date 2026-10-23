@@ -1,41 +1,56 @@
 # Agent rules & skills
 
-The files in this directory — and `skills/graph-mem-mcp-toolset/` at the repo
-root — are meant to be **copied out of this repo** into whichever agent or IDE
-talks to your running GraphMem MCP server. They are the *consumer* side of the
-project: rules and playbooks for an agent that has GraphMem configured as an
-MCP toolset.
+The files in this directory, and the skills under `skills/` at the repo root,
+are meant to be **copied out of this repo** into any project whose coding agent
+talks to a running GraphMem MCP server. They are the *consumer* side of the
+project.
 
-For guidance on *developing* GraphMem itself, see `AGENTS.md`,
-`docs/development.md`, and the repo-scoped rules under `.cursor/rules/` and
-`.devin/rules/` — those are never copied out.
+For guidance on *developing* GraphMem itself, see the root `AGENTS.md` (the one
+rule file for every agent in this repo) and `docs/development.md`.
 
 ## Files
 
 | File | What it is |
 |---|---|
-| `graph_mem_mcp_rules.md` | Always-on rules for agents using the GraphMem MCP toolset: the 4-phase session workflow, tool usage, dedup discipline, context scoping. |
-| `general_coding_rules.md` | Generic coding conventions, independent of GraphMem. Adopt or skip. |
-| `../../skills/graph-mem-mcp-toolset/SKILL.md` | The full operational playbook in vendor-neutral SKILL.md format. |
+| `graph_mem_mcp_rules.md` | The `AGENTS.md` snippet (10 lines): when to use the graph_mem skill. |
+| `general_coding_rules.md` | Optional, project-agnostic coding rules; also plain Markdown for `AGENTS.md`. |
+| `../../skills/graph-mem-mcp-toolset/` | The skill, with its `references/` (tool and maintenance reference, loaded only when needed). |
+| `../../skills/project-scan/` | The on-request project scan skill. |
 
-## Where to install them
+## Install in another project (the same for every agent)
 
-| Agent / IDE | Rules target | Skill target |
+1. Copy the whole `skills/graph-mem-mcp-toolset/` folder (including `references/`),
+   and `skills/project-scan/` if you want the on-request scan skill, into the
+   project's `.agents/skills/`. For Claude Code, also put them in `.claude/skills/`
+   (a symlink from one location to the other works in Claude Code; this repo links both).
+2. Paste `graph_mem_mcp_rules.md` into the project's root `AGENTS.md` (create it if
+   it's missing).
+3. Claude Code only: if the project has a `CLAUDE.md`, make `@AGENTS.md` its first
+   line, and move anything in it that applies to all agents into `AGENTS.md`. Claude
+   Code reads `AGENTS.md` by itself only when there's no `CLAUDE.md`.
+
+## Who reads what
+
+For reference; nothing to configure per agent.
+
+| Agent / IDE | Rules | Skills |
 |---|---|---|
-| Cursor | `.cursor/rules/graph_mem.mdc` (project) or Settings → Rules (global) | `.cursor/skills/graph-mem-mcp-toolset/` |
-| Windsurf | append to `~/.codeium/windsurf/memories/global_rules.md` (global) or `.windsurf/rules/` (project) | `.windsurf/skills/` if your version supports skills; otherwise the rules file alone carries the workflow |
-| Claude Code | append to `CLAUDE.md` (project) or `~/.claude/CLAUDE.md` (global) | `.claude/skills/graph-mem-mcp-toolset/` |
-| Devin | `.devin/rules/` in the target repo, or personal plugin rules | `.devin/skills/graph-mem-mcp-toolset/` (`.cursor/skills/` is also discovered) |
-| AGENTS.md-compatible (Codex, Copilot, ...) | append to `AGENTS.md` | copy `skills/graph-mem-mcp-toolset/` into the repo |
+| Cursor | `AGENTS.md` | `.agents/skills/` |
+| Codex | `AGENTS.md` | `.agents/skills/` |
+| GitHub Copilot / VS Code | `AGENTS.md` (VS Code setting `chat.useAgentsMdFile`, on by default) | `.agents/skills/` |
+| Devin CLI and Devin Desktop (formerly Windsurf) | `AGENTS.md` | `.agents/skills/` |
+| Claude Code | `CLAUDE.md` with `@AGENTS.md`, or `AGENTS.md` when there's no `CLAUDE.md` | `.claude/skills/` |
 
 ## Notes
 
-- The YAML frontmatter (`description`, `alwaysApply`) is Cursor's rule format;
-  other hosts ignore it harmlessly — strip it if your host is strict about
-  file shape.
-- When copying the skill into your own project, use the canonical
-  `skills/graph-mem-mcp-toolset/` directory — the copy under `.cursor/skills/`
-  is a thin adapter that points back at the canonical file.
-- Keep `X-MCP-Client` set in your MCP config so each agent gets its own
-  persisted context bucket (see the Multi-Agent Context Scoping section of
-  `graph_mem_mcp_rules.md`).
+- Per-tool rule folders (`.cursor/rules/*.mdc`, `.devin/rules/`, `.windsurf/rules/`,
+  `.github/copilot-instructions.md`) still work but aren't needed. Don't put the
+  graph_mem text in both places: clients that combine sources load it twice.
+- Windsurf is now Devin Desktop; older `.windsurf/` setups are still read as a fallback.
+- The skill is plain Markdown: no scripts and no URL fetches. Review any skill before
+  installing it, including this one.
+- Keep `X-MCP-Client` set in your MCP config so each agent gets its own context
+  bucket (see the skill's `references/tools.md`).
+- `project-scan` runs only when the user asks for it: it uses Devin's `triggers` and
+  Cursor/Claude Code's `disable-model-invocation`; `skills-ref validate` reports them as
+  unexpected fields, which is expected.

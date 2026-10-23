@@ -16,6 +16,11 @@ generic wrapper such as `CallMcpTool` or `mcp_call_tool`. The server name in
 your MCP config may differ (`graph_mem`, `user-graph_mem`, ...); that is a
 client-side label, not part of the tool contract.
 
+## Reference files
+
+- Read `references/tools.md` when a tool call fails, when choosing entity or relation types or search parameters, when an observation needs a lifecycle change or conflicts with another, or when an older client uses alias tool names.
+- Read `references/hosts.md` when running in Cursor and MCP calls fail or the server reports `needsAuth`.
+
 ## Quick Start
 
 1. **Schema first**

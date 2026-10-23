@@ -297,6 +297,15 @@ GraphMem follows [Semantic Versioning](https://semver.org/):
 
 The current version is stored in `lib/graph_mem/version.rb`.
 
+**Release check (manual, not CI):** before each release, run `skills-ref validate`
+(from `agentskills/agentskills`, the `skills-ref` package) on `skills/graph-mem-mcp-toolset`
+and `skills/project-scan`, and paste the output in the release PR. Run it only in a
+throwaway venv outside the repo, on temporary copies of the two folders (`cp -rL`), so no
+venv, `pip` cache or validator output lands in the working tree. Expected: the first is
+valid; the second reports only `triggers` and `disable-model-invocation` as unexpected
+fields (documented in `docs/rules/README.md`). Also keep `metadata.graph-mem-version` in
+`skills/graph-mem-mcp-toolset/SKILL.md` equal to `GraphMem::VERSION`.
+
 ## Additional Resources
 
 * [Ruby on Rails Guides](https://guides.rubyonrails.org/)
