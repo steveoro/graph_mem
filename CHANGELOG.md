@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `graph_write` and `graph_edit` schemas now advertise the provenance/staleness fields the services already accepted (`source`, `confidence`, `valid_from`, `valid_until`, `tags`, `perspective`; relation `weight`/`properties`).
+
 ### Fixed
 - Agent-facing hints no longer point at nonexistent operations (`graph_edit move_to_parent`, `graph_write update_entity`) or at the maintenance-only `dream_state_status` for default-profile sessions.
 

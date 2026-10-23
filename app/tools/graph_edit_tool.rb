@@ -25,6 +25,41 @@ class GraphEditTool < ApplicationTool
     required(:operations).array(:hash).description("update_entity or update_observation operations.")
   end
 
+  # Publishes the update fields GraphEditService accepts without rejecting extra keys.
+  #
+  # @return [Hash] JSON Schema with a typed `operations` item
+  def self.input_schema_to_json
+    schema = super.deep_dup
+    id_reference = { oneOf: [ { type: "integer" }, { type: "string" } ] }
+    schema[:properties][:operations][:items] = {
+      type: "object",
+      required: [ "type" ],
+      additionalProperties: true,
+      properties: {
+        type: { type: "string", examples: GraphEditService::TYPES, description: "Operation discriminator." },
+        entity_id: id_reference,
+        observation_id: id_reference,
+        name: { type: "string" },
+        entity_type: { type: "string", examples: GraphVocabulary::ENTITY_TYPES },
+        aliases: { type: "array", items: { type: "string" } },
+        description: { type: "string" },
+        text_content: { type: "string" },
+        supersede: { type: "boolean", description: "true keeps the old text as history." },
+        reason: { type: "string" }
+      }.merge(observation_field_properties)
+    }
+    schema
+  end
+
+  # Observation field definitions shared with `graph_write`.
+  #
+  # @return [Hash]
+  def self.observation_field_properties
+    GraphWriteTool.input_schema_to_json.dig(:properties, :operations, :items, :properties)
+                  .slice(:confidence, :source, :valid_from, :valid_until, :tags, :perspective)
+  end
+  private_class_method :observation_field_properties
+
   def call(operations:)
     GraphEditService.call(operations: operations)
   rescue *ToolError::TIMEOUT_CLASSES

@@ -46,7 +46,15 @@ class GraphWriteTool < ApplicationTool
       text_content: { type: "string" },
       from_entity_id: { oneOf: [ { type: "integer" }, { type: "string" } ] },
       to_entity_id: { oneOf: [ { type: "integer" }, { type: "string" } ] },
-      relation_type: { type: "string", examples: GraphVocabulary::RELATION_TYPES }
+      relation_type: { type: "string", examples: GraphVocabulary::RELATION_TYPES },
+      source: { type: "string", description: "Who/what this came from, e.g. \"claude-code/opus: release task\"." },
+      confidence: { type: "number", minimum: 0, maximum: 1 },
+      valid_from: { type: "string", format: "date-time" },
+      valid_until: { type: "string", format: "date-time", description: "Set for time-bound facts; must be ≥ valid_from." },
+      tags: { type: "array", items: { type: "string" } },
+      perspective: { type: "string", enum: MemoryObservation::PERSPECTIVES },
+      weight: { type: "number", description: "create_relation only." },
+      properties: { type: "object", description: "create_relation only." }
     }
     schema[:properties][:operations][:items] = {
       type: "object",
@@ -61,6 +69,14 @@ class GraphWriteTool < ApplicationTool
         entity_type: { type: "string", examples: GraphVocabulary::ENTITY_TYPES }
       },
       additionalProperties: true
+    }
+    schema[:properties][:observations][:items] = {
+      type: "object",
+      additionalProperties: true,
+      properties: {
+        entity_id: operation_properties[:entity_id],
+        text_content: operation_properties[:text_content]
+      }.merge(operation_properties.slice(:source, :confidence, :valid_from, :valid_until, :tags, :perspective))
     }
     schema[:properties][:relations][:items] = {
       type: "object",

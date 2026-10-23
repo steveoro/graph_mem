@@ -33,4 +33,36 @@ RSpec.describe GraphEditTool, type: :model do
     expect(result[:summary][:entities_updated]).to eq(1)
     expect(entity.reload.description).to eq("Normalized")
   end
+
+  it "advertises a typed operation item that still accepts extra keys" do
+    items = described_class.input_schema_to_json.dig(:properties, :operations, :items)
+
+    expect(items).to include(required: [ "type" ], additionalProperties: true)
+    expect(items[:properties]).to include(
+      supersede: include(type: "boolean"),
+      reason: include(type: "string"),
+      valid_until: include(type: "string", format: "date-time"),
+      perspective: include(enum: MemoryObservation::PERSPECTIVES),
+      aliases: include(type: "array")
+    )
+    expect(items.dig(:properties, :type, :examples)).to eq(GraphEditService::TYPES)
+  end
+
+  it "supersedes an observation with a new valid_until" do
+    entity = MemoryEntity.create!(name: "SynthWidget", entity_type: "Component")
+    observation = entity.memory_observations.create!(content: "Use should syntax")
+    valid_until = 3.days.from_now.change(usec: 0)
+
+    result, = tool.call_with_schema_validation!(
+      operations: [ {
+        type: "update_observation", observation_id: observation.id, text_content: "Use expect syntax",
+        valid_until: valid_until.iso8601, supersede: true, reason: "style changed"
+      } ]
+    )
+
+    expect(result[:status]).to eq("ok")
+    current = entity.memory_observations.find_by(content: "Use expect syntax")
+    expect(current.valid_until).to eq(valid_until)
+    expect(entity.memory_observations.where(content: "Use should syntax")).to exist
+  end
 end
