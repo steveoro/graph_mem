@@ -18,7 +18,7 @@ You are implementing three approved plans for Steve in his local clones:
 - Branch `claude/ar-rules-rewrite` off `main` **after #106 has merged** (not off any CI-fix branch; don't touch those). Follow `agent-rules-plan.md`, with these separate commits in this order:
   1. **AR-D1:** stale tool-name hints, incl. `dream_state.md` l.244/l.321 and `relation_semantics.rb:53`.
   2. **AR-D2:** expose `source`, `confidence`, `valid_from`/`valid_until`, `tags` and `perspective` in the write schemas; relation `weight`/`confidence`/`properties`; an item schema for `graph_edit` observations.
-  3. **AR-D3:** Cursor rules as `.mdc`.
+  3. **AR-D3:** skill discovery (`.agents/`, `.claude/` and `.windsurf/` skill links, Cursor shim retired, `project-scan` moved to `skills/`) and Cursor rules as `.mdc`; see agent-rules §D.
   4. **AR-T:** the skill description, tool-description openers, the recall/persist/orient prompts, the ~40-line rules file plus `docs/rules/graph_mem_reference.md`, and `GraphMem::McpInstructions` (texts and specs only). Start from the plan's exact text; list every deviation, with its reason, in the report.
   5. **Release 1.53.0:** bump `lib/graph_mem/version.rb` and rename `## [Unreleased]` → `## [1.53.0] - <date>`. Keep #106's UI-0 Security entries verbatim under it, plus any merged M-D lines. 1.53.0 releases UI-0 too.
 - AR-D1–D3 follow the exact step lists in agent-rules §D: copy them, don't rephrase.
