@@ -7,6 +7,10 @@ require "concurrent"
 require "rack"
 require_relative "mcp_access_policy"
 require_relative "mcp_profile"
+require_relative "mcp_streamable_http/headers"
+require_relative "mcp_streamable_http/sessions"
+require_relative "mcp_streamable_http/streams"
+require_relative "mcp_streamable_http/responses"
 
 module GraphMem
   # Rack transport for FastMcp that supports the 2025-03-26 Streamable HTTP
@@ -23,6 +27,10 @@ module GraphMem
   # so the existing SSE behaviour and client configs keep working without a rewrite.
   # Only public methods on the inner transport are used.
   class McpStreamableHttpTransport < FastMcp::Transports::BaseTransport
+    include McpStreamableHttp::Sessions
+    include McpStreamableHttp::Streams
+    include McpStreamableHttp::Responses
+
     DEFAULT_PATH_PREFIX = "/mcp"
     DEFAULT_MESSAGES_ROUTE = "messages"
     DEFAULT_SSE_ROUTE = "sse"
@@ -37,29 +45,8 @@ module GraphMem
     REAPER_INTERVAL = 60
     STREAM_QUEUE_SIZE = 100
 
-    SSE_HEADERS = {
-      "Content-Type" => "text/event-stream",
-      "Cache-Control" => "no-cache, no-store, must-revalidate",
-      "Connection" => "keep-alive",
-      "X-Accel-Buffering" => "no",
-      "Access-Control-Allow-Origin" => "*",
-      "Access-Control-Allow-Methods" => "GET, POST, DELETE, OPTIONS",
-      "Access-Control-Allow-Headers" => "Authorization, Content-Type, Mcp-Session-Id, X-MCP-Client",
-      "Access-Control-Expose-Headers" => "Mcp-Session-Id",
-      "Access-Control-Max-Age" => "86400",
-      "Keep-Alive" => "timeout=600",
-      "Pragma" => "no-cache",
-      "Expires" => "0"
-    }.freeze
-
-    CORS_HEADERS = {
-      "access-control-allow-origin" => "*",
-      "access-control-allow-methods" => "GET, POST, DELETE, OPTIONS",
-      "access-control-allow-headers" => "Authorization, Content-Type, Mcp-Session-Id, X-MCP-Client",
-      "access-control-expose-headers" => "Mcp-Session-Id",
-      "access-control-max-age" => "86400",
-      "Content-Type" => "text/plain"
-    }.freeze
+    SSE_HEADERS = McpStreamableHttp::SSE_HEADERS
+    CORS_HEADERS = McpStreamableHttp::CORS_HEADERS
 
     RESPONSE_TIMEOUT = 30
 
@@ -377,198 +364,6 @@ module GraphMem
       end
     end
 
-    def monotonic_time
-      Process.clock_gettime(Process::CLOCK_MONOTONIC)
-    end
-
-    def build_session(session_id, protocol_version)
-      {
-        id: session_id,
-        requested_protocol_version: protocol_version,
-        streams: [],
-        active_requests: 0,
-        last_active_at: monotonic_time,
-        closed: false
-      }
-    end
-
-    def lease_existing_session(session_id)
-      expired_session = nil
-      session = @sessions_mutex.synchronize do
-        candidate = @sessions[session_id]
-        if candidate.nil? || candidate[:closed]
-          nil
-        elsif session_expired_locked?(candidate, monotonic_time)
-          candidate[:closed] = true
-          @sessions.delete(session_id) if @sessions[session_id].equal?(candidate)
-          expired_session = candidate
-          nil
-        else
-          candidate[:active_requests] += 1
-          candidate[:last_active_at] = monotonic_time
-          candidate
-        end
-      end
-
-      close_session(expired_session) if expired_session
-      return [ nil, :expired ] if expired_session
-      return [ nil, :missing ] unless session
-
-      [ session, nil ]
-    end
-
-    def release_session(session)
-      @sessions_mutex.synchronize do
-        session[:active_requests] -= 1 if session[:active_requests].positive?
-        session[:last_active_at] = monotonic_time unless session[:closed]
-      end
-    end
-
-    def touch_session!(session)
-      @sessions_mutex.synchronize do
-        session[:last_active_at] = monotonic_time unless session[:closed]
-      end
-    end
-
-    def session_for_id(session_id)
-      return unless session_id
-
-      @sessions_mutex.synchronize do
-        session = @sessions[session_id]
-        session unless session&.[](:closed)
-      end
-    end
-
-    def remove_session(session_id)
-      @sessions_mutex.synchronize do
-        session = @sessions[session_id]
-        next unless session
-
-        session[:closed] = true
-        @sessions.delete(session_id) if @sessions[session_id].equal?(session)
-        session
-      end
-    end
-
-    def register_stream(session, io, response_queue = nil)
-      stream = {
-        queue: SizedQueue.new(@stream_queue_size),
-        response_queue: response_queue,
-        io: io,
-        closed: false,
-        mutex: Mutex.new
-      }
-
-      registered = @sessions_mutex.synchronize do
-        if session[:closed] || !@sessions[session[:id]].equal?(session)
-          false
-        else
-          session[:streams] << stream
-          session[:last_active_at] = monotonic_time
-          true
-        end
-      end
-
-      registered ? stream : nil
-    end
-
-    def unregister_stream(session, stream)
-      @sessions_mutex.synchronize do
-        session[:streams]&.delete(stream)
-      end
-    end
-
-    def streamable_get_loop(session, stream, session_id)
-      write_sse_headers(stream[:io], "Mcp-Session-Id" => session_id)
-
-      loop do
-        break if stream_closed?(stream)
-
-        touch_session!(session)
-        message = next_stream_message(stream)
-
-        if message
-          write_sse_message(stream[:io], message)
-        else
-          break if stream_closed?(stream)
-
-          # No message waiting; send a keep-alive comment.
-          write_sse_keep_alive(stream[:io])
-          sleep 1
-        end
-      end
-    rescue IOError, EOFError, SystemCallError
-      @logger.info("Streamable SSE client #{session_id} disconnected")
-    ensure
-      unregister_stream(session, stream)
-      close_stream(session, stream)
-    end
-
-    def next_stream_message(stream)
-      [ stream[:response_queue], stream[:queue] ].compact.each do |queue|
-        begin
-          return queue.pop(true)
-        rescue ThreadError
-          next
-        end
-      end
-
-      nil
-    end
-
-    def stream_closed?(stream)
-      stream[:mutex].synchronize { stream[:closed] }
-    end
-
-    def close_stream(session, stream)
-      return unless stream
-
-      should_close = stream[:mutex].synchronize do
-        if stream[:closed]
-          false
-        else
-          stream[:closed] = true
-          true
-        end
-      end
-      return unless should_close
-
-      [ stream[:queue], stream[:response_queue] ].compact.each do |queue|
-        queue.close unless queue.closed?
-      end
-      close_io(stream[:io])
-      unregister_stream(session, stream) if session
-    end
-
-    def close_io(io)
-      return unless io
-
-      io.close unless io.closed?
-    rescue IOError, SystemCallError
-      nil
-    end
-
-    def enqueue_stream(session, stream, message)
-      return if stream_closed?(stream)
-
-      stream[:queue].push(message, true)
-    rescue ThreadError
-      @logger.warn("Closing a slow Streamable HTTP SSE stream")
-      close_stream(session, stream)
-    end
-
-    def broadcast_to_session_streams(session, message)
-      streams = @sessions_mutex.synchronize do
-        session[:closed] ? [] : session[:streams].dup
-      end
-      streams.each { |stream| enqueue_stream(session, stream, message) }
-    end
-
-    def broadcast_to_streamable_sessions(message)
-      sessions = @sessions_mutex.synchronize { @sessions.values.dup }
-      sessions.each { |session| broadcast_to_session_streams(session, message) }
-    end
-
     def normalize_initialize_protocol_version!(session, message)
       return unless message.is_a?(Hash)
 
@@ -592,81 +387,6 @@ module GraphMem
       json_rpc_error_response(400, -32_700, "Parse error: Invalid JSON")
     end
 
-    def message_to_json(message)
-      message.is_a?(String) ? message : JSON.generate(message)
-    end
-
-    def json_response_headers(session_id = nil)
-      headers = CORS_HEADERS.merge("Content-Type" => "application/json")
-      headers["Mcp-Session-Id"] = session_id if session_id
-      headers
-    end
-
-    def write_sse_headers(io, extra_headers = {})
-      io.write("HTTP/1.1 200 OK\r\n")
-      SSE_HEADERS.merge(extra_headers).each { |key, value| io.write("#{key}: #{value}\r\n") }
-      io.write("\r\n")
-      io.write(": SSE connection established\n\n")
-      io.flush
-    end
-
-    def write_sse_message(io, message)
-      json = message_to_json(message)
-      io.write("event: message\ndata: #{json}\n\n")
-      io.flush
-    end
-
-    def write_sse_keep_alive(io)
-      io.write(": keep-alive\n\n")
-      io.flush
-    end
-
-    def close_session(session)
-      return unless session
-
-      streams = @sessions_mutex.synchronize do
-        session[:closed] = true
-        streams = session[:streams].dup
-        session[:streams].clear
-        streams
-      end
-      streams.each { |stream| close_stream(nil, stream) }
-    end
-
-    def session_expired_locked?(session, now)
-      !session[:closed] &&
-        session[:active_requests].zero? &&
-        session[:streams].empty? &&
-        now - session[:last_active_at] > @session_timeout
-    end
-
-    def reap_expired_sessions
-      return unless @reaper_mutex.try_lock
-
-      expired_sessions = []
-      begin
-        now = monotonic_time
-        return if now - @last_reaped_at < @reaper_interval
-
-        @last_reaped_at = now
-        @sessions_mutex.synchronize do
-          @sessions.each do |session_id, session|
-            next unless session_expired_locked?(session, now)
-            next unless @sessions[session_id].equal?(session)
-
-            session[:closed] = true
-            @sessions.delete(session_id)
-            expired_sessions << [ session_id, session ]
-          end
-        end
-      ensure
-        @reaper_mutex.unlock
-      end
-
-      expired_sessions.each { |_session_id, session| close_session(session) }
-      @logger.info("Reaped #{expired_sessions.size} expired MCP sessions") if expired_sessions.any?
-    end
-
     def acceptable_post_accept?(accept)
       accept.empty? ||
         accept.include?("*/*") ||
@@ -678,84 +398,6 @@ module GraphMem
       accept.include?("text/event-stream") &&
         !accept.include?("application/json") &&
         !accept.include?("*/*")
-    end
-
-    # Network reach is decided by McpAccessPolicy, which understands CIDR ranges
-    # and guarantees the allowlist stays narrow while no token is configured.
-    #
-    # Note for proxied deployments: Rack derives request.ip from X-Forwarded-For,
-    # which a client can set. Behind a reverse proxy the token, not this check,
-    # is the real control.
-    def valid_client_ip?(request)
-      return true if @access_policy.network_allowed?(request.ip)
-
-      @logger.warn("Blocked connection from disallowed IP: #{request.ip}")
-      false
-    end
-
-    def validate_origin(request, env)
-      origin = env["HTTP_ORIGIN"]
-      origin = env["HTTP_REFERER"] || request.host if origin.nil? || origin.empty?
-
-      hostname = extract_hostname(origin)
-      return true if hostname.nil? || allowed_origins.empty?
-
-      allowed = allowed_origins.any? do |allowed_origin|
-        if allowed_origin.is_a?(Regexp)
-          hostname.match?(allowed_origin)
-        else
-          hostname == allowed_origin
-        end
-      end
-
-      unless allowed
-        @logger.warn("Blocked request with origin: #{hostname}")
-        return false
-      end
-
-      true
-    end
-
-    def extract_hostname(url)
-      return nil if url.nil? || url.empty?
-
-      begin
-        has_scheme = url.match?(%r{^[a-zA-Z][a-zA-Z0-9+.-]*://})
-        parsing_url = has_scheme ? url : "http://#{url}"
-
-        uri = URI.parse(parsing_url)
-        return nil if uri.host.nil? || uri.host.empty?
-
-        uri.host
-      rescue URI::InvalidURIError
-        url.split(":").first if url.match?(%r{^([^:/]+)(:\d+)?$})
-      end
-    end
-
-    def forbidden_response(message)
-      json_rpc_error_response(403, -32_600, message)
-    end
-
-    def unauthorized_response
-      @logger.warn("Rejected MCP request without a valid bearer token")
-      status, headers, body = json_rpc_error_response(
-        401, -32_600,
-        "Unauthorized: send `Authorization: Bearer <#{GraphMem::McpAccessPolicy::TOKEN_ENV}>`"
-      )
-      [ status, headers.merge("WWW-Authenticate" => 'Bearer realm="graph_mem"'), body ]
-    end
-
-    def endpoint_not_found_response
-      json_rpc_error_response(404, -32_601, "Endpoint not found")
-    end
-
-    def method_not_allowed_response
-      json_rpc_error_response(405, -32_601, "Method not allowed")
-    end
-
-    def json_rpc_error_response(http_status, code, message, id = nil)
-      [ http_status, json_response_headers,
-       [ JSON.generate(jsonrpc: "2.0", error: { code: code, message: message }, id: id) ] ]
     end
   end
 end
