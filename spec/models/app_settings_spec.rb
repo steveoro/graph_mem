@@ -32,8 +32,8 @@ RSpec.describe AppSettings, type: :model do
       expect(AppSettings).to respond_to(:import_observation_duplicate_max_distance)
     end
 
-    it "defines the project scan roots setting" do
-      expect(AppSettings).to respond_to(:project_scan_roots)
+    it "defines the project scan subfolder filter" do
+      expect(AppSettings).to respond_to(:project_scan_subfolders)
       expect(AppSettings).to respond_to(:project_scan_root_paths)
     end
   end
@@ -67,8 +67,23 @@ RSpec.describe AppSettings, type: :model do
       expect(AppSettings.import_observation_duplicate_max_distance).to eq(0.35)
     end
 
-    it "provides default project scan roots" do
-      expect(AppSettings.project_scan_root_paths).to include(Dir.pwd, Dir.home, Dir.tmpdir)
+    it "defaults the subfolder filter to Projects" do
+      expect(AppSettings.project_scan_subfolders).to eq("Projects")
+      expect(AppSettings.project_scan_subfolders_raw).to eq("Projects")
+    end
+
+    it "delegates project_scan_root_paths to the scan policy" do
+      with_scan_home do |home|
+        expect(AppSettings.project_scan_root_paths).to eq([ File.join(home, "Projects") ])
+      end
+    end
+
+    it "reports a stored legacy project_scan_roots value, which is ignored" do
+      expect(AppSettings.legacy_project_scan_roots).to be_nil
+
+      AppSettings.project_scan_roots = "/srv/code"
+
+      expect(AppSettings.legacy_project_scan_roots).to eq("/srv/code")
     end
   end
 
