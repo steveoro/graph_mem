@@ -38,7 +38,10 @@ class AppSettings < RailsSettings::Base
   field :import_observation_duplicate_max_distance, default: 0.35, type: :float,
         validates: { numericality: { greater_than_or_equal_to: 0.2, less_than_or_equal_to: 0.5 } }
 
-  # Project scan settings
+  # Project scan settings. project_scan_subfolders is relative to the scan root (ScanRootPolicy);
+  # project_scan_roots is the pre-1.54 setting, kept one release only so Settings can show and
+  # clear a leftover value (it is ignored).
+  field :project_scan_subfolders, default: "Projects", type: :string
   field :project_scan_roots, default: [ Dir.pwd, Dir.home, Dir.tmpdir ].join(","), type: :string
   field :enable_project_scan_validation, default: true, type: :boolean
   field :project_scan_validation_batch_size, default: 5, type: :integer,
@@ -71,11 +74,38 @@ class AppSettings < RailsSettings::Base
     read_boolean_setting("enable_scheduled_embedding_backfill")
   end
 
+  # The folders scans may use, as real paths (thin delegate kept for existing callers).
+  #
+  # @return [Array<String>]
   def self.project_scan_root_paths
-    raw = project_scan_roots.to_s.presence || ENV["PROJECT_SCAN_ROOTS"].to_s
-    roots = raw.split(/[\r\n,]+/).map(&:strip).reject(&:blank?)
-    roots = [ Dir.pwd, Dir.home, Dir.tmpdir ] if roots.empty?
-    roots.map { |p| File.expand_path(p) }.uniq
+    ScanRootPolicy.allowed_roots.map { |root| root[:path] }
+  end
+
+  # The subfolder filter, read straight from the table so every process (Puma, Solid Queue,
+  # the stdio runner) sees a change on its next call, with no cache in between.
+  #
+  # @return [String] the raw comma/newline-separated value ("Projects" when unset)
+  def self.project_scan_subfolders_raw
+    raw = connection.select_value(
+      sanitize_sql([ "SELECT value FROM #{table_name} WHERE var = ?", "project_scan_subfolders" ])
+    )
+    return "Projects" if raw.nil?
+
+    YAML.safe_load(raw.to_s).to_s
+  rescue StandardError
+    "Projects"
+  end
+
+  # A stored pre-1.54 project_scan_roots value that is now ignored, or nil.
+  #
+  # @return [String, nil]
+  def self.legacy_project_scan_roots
+    raw = connection.select_value(
+      sanitize_sql([ "SELECT value FROM #{table_name} WHERE var = ?", "project_scan_roots" ])
+    )
+    raw && YAML.safe_load(raw.to_s).to_s.presence
+  rescue StandardError
+    nil
   end
 
   def self.backup_schedule_cron

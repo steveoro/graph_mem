@@ -79,9 +79,9 @@ See [summarization guide](summarization.md).
 
 | Setting | Default | Effect |
 |---|---|---|
-| `project_scan_roots` | `Rails.root, Dir.home, Dir.tmpdir` | Comma- or newline-separated list of filesystem directories the dashboard project-scan trigger is allowed to scan. Each entry is expanded to an absolute path and the requested `project_root` must be a descendant of one of them. |
+| `project_scan_subfolders` | `Projects` | Comma- or newline-separated folders, relative to the scan root, that may be scanned (e.g. `Projects, work/clients`). Read uncached on every scan request and at job start, so a change applies at once in every process. Blank = the whole scan root (hidden folders and secret files stay blocked). Replaces `project_scan_roots`, which is ignored and can be cleared from Settings. |
 
-`ProjectScansController` reads the configured roots via `AppSettings.project_scan_root_paths`, which falls back to `PROJECT_SCAN_ROOTS` ENV and then the default directories. See the [project scan plan](plans/project_scan.md) for the broader scan workflow.
+Every scan entry point (dashboard, `POST /api/v1/scan`, MCP `scan_project`, job start) resolves the path through `ScanRootPolicy`: the scan root comes from `GRAPH_MEM_SCAN_ROOTS` (in Docker, the read-only home mount) or natively `Dir.home`; `PROJECT_SCAN_ROOTS` is gone. See [container scan mounts](container_scan_mounts.md) and the [project scan plan](plans/done/project_scan.md) for the broader scan workflow.
 
 ## Mission Control Jobs
 

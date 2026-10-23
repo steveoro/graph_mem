@@ -1,7 +1,6 @@
 # frozen_string_literal: true
 
 require "rails_helper"
-require "tmpdir"
 require "fileutils"
 
 RSpec.describe ProjectScanSkill, type: :service do
@@ -43,7 +42,7 @@ RSpec.describe ProjectScanSkill, type: :service do
   end
 
   it "processes one depth and pauses" do
-    Dir.mktmpdir do |root|
+    with_scan_project do |root|
       create_project_files(root)
       operation = create_operation(root)
 
@@ -59,7 +58,7 @@ RSpec.describe ProjectScanSkill, type: :service do
   end
 
   it "processes all depths and completes" do
-    Dir.mktmpdir do |root|
+    with_scan_project do |root|
       create_project_files(root)
       operation = create_operation(root)
 
@@ -77,7 +76,7 @@ RSpec.describe ProjectScanSkill, type: :service do
   end
 
   it "creates project and child entities across all depths" do
-    Dir.mktmpdir do |root|
+    with_scan_project do |root|
       create_project_files(root)
       operation = create_operation(root)
 
@@ -100,7 +99,7 @@ RSpec.describe ProjectScanSkill, type: :service do
   end
 
   it "does not persist in dry-run mode" do
-    Dir.mktmpdir do |root|
+    with_scan_project do |root|
       create_project_files(root)
       operation = create_operation(root, dry_run: true)
 
@@ -118,5 +117,45 @@ RSpec.describe ProjectScanSkill, type: :service do
     expect(result[:status]).to eq(:failed)
     operation.reload
     expect(operation.status).to eq("failed")
+  end
+
+  it "fails with the policy message when the folder left the subfolder filter" do
+    with_scan_project do |root|
+      create_project_files(root)
+      operation = create_operation(root)
+      write_scan_subfolders_raw("work")
+
+      expect(described_class.process!(operation)[:status]).to eq(:failed)
+      expect(operation.reload).to have_attributes(status: "failed")
+      expect(operation.error_message).to include("outside the scan filter")
+    end
+  end
+
+  it "never reads denylisted files or files linked from outside the project" do
+    with_scan_project do |root, home|
+      create_project_files(root)
+      File.write(File.join(root, ".env"), "SECRET=synthetic")
+      File.write(File.join(home, "outside.md"), "# outside")
+      File.symlink(File.join(home, "outside.md"), File.join(root, "docs", "linked.md"))
+      read = []
+      allow(File).to receive(:binread).and_wrap_original { |original, path, *args| read << path.to_s; original.call(path, *args) }
+
+      described_class.process!(create_operation(root, depths: %w[tests_and_docs]))
+
+      expect(read).not_to include(File.join(root, ".env"), File.join(root, "docs", "linked.md"))
+      expect(OperationProgress.last.counters).to include("skipped_outside_root" => 1)
+    end
+  end
+
+  it "doesn't list entries of a source folder linked from outside the project" do
+    with_scan_project do |root, home|
+      create_project_files(root)
+      outside = File.join(home, "elsewhere").tap { |dir| FileUtils.mkdir_p(File.join(dir, "secret_widget")) }
+      File.symlink(outside, File.join(root, "lib"))
+
+      described_class.process!(create_operation(root, depths: %w[architecture]))
+
+      expect(MemoryEntity.where("name LIKE ?", "%secret_widget%")).to be_empty
+    end
   end
 end

@@ -5,9 +5,18 @@ module Api
     class ScanProjectsController < BaseController
       # POST /api/v1/scan
       def create
-        project_root = params[:project_root].to_s.strip
-        return render_error("project_root is required") if project_root.blank?
-        return render_error("project_root is not a directory") unless File.directory?(File.expand_path(project_root))
+        resolution = ScanRootPolicy.resolve(params[:project_root])
+        unless resolution.ok?
+          status = resolution.code == :denied ? :forbidden : :unprocessable_content
+          return render_error(resolution.message, status: status, details: { code: resolution.code.to_s })
+        end
+
+        project_root = resolution.path
+        file_globs = Array(params[:file_globs])
+        if (bad_glob = ProjectScanFileFilter.new(project_root).invalid_glob(file_globs))
+          return render_error("file_globs entry #{bad_glob.inspect} must be relative to project_root, without '..'",
+                              details: { code: "invalid_file_globs" })
+        end
 
         mode = params[:mode].to_s.downcase.presence || "initial"
         return render_error("mode must be initial, rescan, or validate") unless ScanProjectTool::MODES.include?(mode)
@@ -15,19 +24,20 @@ module Api
         scan_id = params[:scan_id].to_s.presence || SecureRandom.uuid
         ProjectScanJob.perform_later(
           scan_id,
-          File.expand_path(project_root),
+          project_root,
           params[:project_name].to_s.presence,
           params[:aliases].to_s.presence,
           mode,
           params[:dry_run] == true || params[:dry_run].to_s.downcase == "true",
-          Array(params[:file_globs])
+          file_globs
         )
 
         render json: {
           scan_id: scan_id,
           status: "queued",
           resumed: params[:scan_id].to_s.present?,
-          project_root: File.expand_path(project_root),
+          project_root: project_root,
+          warnings: resolution.warnings.map(&:to_s),
           mode: mode,
           dry_run: params[:dry_run].to_s.downcase == "true"
         }

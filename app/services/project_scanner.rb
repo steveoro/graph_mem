@@ -45,6 +45,8 @@ class ProjectScanner
     :errors,
     :fallback,
     :fallback_reason,
+    :skipped_outside_root,
+    :skipped_denylisted,
     keyword_init: true
   ) do
     def initialize(success: true, status: "completed", message: nil, **kwargs)
@@ -70,7 +72,9 @@ class ProjectScanner
         dismissed_compaction_items: dismissed_compaction_items || 0,
         errors: errors || [],
         fallback: fallback || false,
-        fallback_reason: fallback_reason
+        fallback_reason: fallback_reason,
+        skipped_outside_root: skipped_outside_root || 0,
+        skipped_denylisted: skipped_denylisted || 0
       }
     end
   end
@@ -106,6 +110,7 @@ class ProjectScanner
     @relations_deleted_count = 0
     @entities_reparented_count = 0
     @validation_paused = false
+    @file_filter = ProjectScanFileFilter.new(@project_root)
   end
 
   def call
@@ -115,6 +120,10 @@ class ProjectScanner
 
     if @mode == "validate"
       return run_validation_only
+    end
+
+    if (bad_glob = @file_filter.invalid_glob(@file_globs))
+      return failed_result("file_globs entry #{bad_glob.inspect} must be relative to the project root, without '..'")
     end
 
     update_progress!(phase: "discovering_files", message: "Discovering project files")
@@ -161,7 +170,8 @@ class ProjectScanner
         dismissed_compaction_items: @dismissed_compaction_items,
         errors: @errors,
         fallback: extracted[:fallback] == true,
-        fallback_reason: extracted[:fallback_reason] || extracted[:error]
+        fallback_reason: extracted[:fallback_reason] || extracted[:error],
+        **skip_counters
       )
     end
 
@@ -182,11 +192,17 @@ class ProjectScanner
       dismissed_compaction_items: @dismissed_compaction_items,
       errors: @errors,
       fallback: extracted[:fallback] == true,
-      fallback_reason: extracted[:fallback_reason] || extracted[:error]
+      fallback_reason: extracted[:fallback_reason] || extracted[:error],
+      **skip_counters
     )
   end
 
   private
+
+  # Files the scan skipped because they left the root or are denylisted (ProjectScanFileFilter).
+  def skip_counters
+    @file_filter.counters.transform_keys(&:to_sym)
+  end
 
   def failed_result(message)
     @errors << message
@@ -263,17 +279,25 @@ class ProjectScanner
     )
   end
 
+  # Globs under the root, keeping only files inside it that aren't denylisted (PR-0 §0.5),
+  # sorted before the max_files cap so the selected set doesn't depend on filesystem order.
+  # Returns the realpaths that were checked, so the read can't follow a different link.
   def discover_files
-    globs = @file_globs.flat_map { |g| Dir.glob(File.join(@project_root, g)) }
-    glob_files = globs.select { |f| File.file?(f) && File.readable?(f) && !binary?(f) }
+    glob_files = readable_files(@file_globs.flat_map { |g| @file_filter.glob(g) })
 
     # If explicit globs produce nothing, fall back to a shallow source scan.
-    if glob_files.empty?
-      glob_files = Dir.glob(File.join(@project_root, "**", "*"))
-                      .select { |f| File.file?(f) && File.readable?(f) && !binary?(f) && text_extension?(f) }
-    end
+    glob_files = readable_files(@file_filter.glob("**/*").select { |f| text_extension?(f) }) if glob_files.empty?
 
-    glob_files.first(@max_files).sort
+    glob_files.sort.first(@max_files)
+  end
+
+  def readable_files(paths)
+    paths.uniq.filter_map do |path|
+      next unless File.file?(path)
+
+      real = @file_filter.kept_path(path)
+      real if real && File.readable?(real) && !binary?(real)
+    end.uniq
   end
 
   def binary?(path)
@@ -299,7 +323,7 @@ class ProjectScanner
     files.each do |file|
       next if File.size(file) > MAX_FILE_BYTES
 
-      relative = Pathname.new(file).relative_path_from(@project_root).to_s
+      relative = Pathname.new(file).relative_path_from(@file_filter.root).to_s
       content = File.binread(file).force_encoding("UTF-8")
       content = content.encode("UTF-8", invalid: :replace, undef: :replace)
       snippet = "--- FILE: #{relative}\n#{content}\n---\n"
@@ -399,7 +423,7 @@ class ProjectScanner
 
     manifests = @discovered_files.select { |file| manifest_file?(file) }
     manifests.each do |file|
-      relative = Pathname.new(file).relative_path_from(@project_root).to_s
+      relative = Pathname.new(file).relative_path_from(@file_filter.root).to_s
       next if relative.blank?
 
       content_preview = file_preview(file, 400)

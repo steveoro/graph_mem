@@ -16,7 +16,9 @@ class ScanProjectTool < ApplicationTool
   )
 
   description "Enqueue an asynchronous filesystem scan that reconciles the knowledge graph with a project root; " \
-    "returns a scan_id and does not wait. Pass required `project_root` (string); optional `project_name` (string), " \
+    "returns a scan_id and does not wait. `project_root` is an absolute path under the operator's scan folders " \
+    "(see `scan_project_status` / the Settings page); hidden folders are never scannable. " \
+    "Optional: `project_name` (string), " \
     "`aliases` (comma- or pipe-separated string), `mode` (initial, rescan, or validate; default initial), " \
     "`dry_run` (bool), `file_globs` (array of strings), `scan_id` (string, resume a paused validation batch). " \
     "Do not use to poll completion; use `scan_project_status` instead. " \
@@ -24,7 +26,7 @@ class ScanProjectTool < ApplicationTool
     "Do not use to scope searches to a project already in the graph; use `set_context` instead."
 
   arguments do
-    required(:project_root).filled(:string).description("Absolute or relative path to the project root directory.")
+    required(:project_root).filled(:string).description("Absolute path of the project folder, under the operator's scan folders.")
     optional(:project_name).maybe(:string).description("Preferred project name. Defaults to the directory name or the LLM-extracted name.")
     optional(:aliases).maybe(:string).description("Comma- or pipe-separated aliases for the project root entity.")
     optional(:mode).filled(:string).description("Scan mode: initial, rescan, or validate. Default: initial.")
@@ -34,8 +36,12 @@ class ScanProjectTool < ApplicationTool
   end
 
   def call(project_root:, project_name: nil, aliases: nil, mode: "initial", dry_run: false, file_globs: [], scan_id: nil)
-    unless File.directory?(File.expand_path(project_root.to_s))
-      raise FastMcp::Tool::InvalidArgumentsError, "Project root does not exist or is not a directory"
+    resolution = ScanRootPolicy.resolve(project_root)
+    raise FastMcp::Tool::InvalidArgumentsError, resolution.message unless resolution.ok?
+
+    if (bad_glob = ProjectScanFileFilter.new(resolution.path).invalid_glob(file_globs))
+      raise FastMcp::Tool::InvalidArgumentsError,
+            "file_globs entry #{bad_glob.inspect} must be relative to project_root, without '..'"
     end
 
     unless MODES.include?(mode.to_s.downcase)
@@ -44,7 +50,7 @@ class ScanProjectTool < ApplicationTool
 
     resumed = scan_id.to_s.present?
     scan_id = scan_id.to_s.presence || SecureRandom.uuid
-    expanded_root = File.expand_path(project_root.to_s)
+    expanded_root = resolution.path
 
     ProjectScanJob.perform_later(
       scan_id,
@@ -61,6 +67,7 @@ class ScanProjectTool < ApplicationTool
       status: "queued",
       resumed: resumed,
       project_root: expanded_root,
+      warnings: resolution.warnings.map(&:to_s),
       mode: mode.to_s.downcase,
       dry_run: dry_run == true
     }

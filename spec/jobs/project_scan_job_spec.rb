@@ -4,8 +4,8 @@ require "rails_helper"
 
 RSpec.describe ProjectScanJob, type: :job do
   around do |example|
-    Dir.mktmpdir("project_scan_job_test") do |dir|
-      @project_root = dir
+    with_scan_project("job_test") do |project|
+      @project_root = project
       example.run
     end
   end
@@ -57,5 +57,17 @@ RSpec.describe ProjectScanJob, type: :job do
     )
 
     expect(OperationProgressBroadcaster).to have_received(:call).at_least(:once)
+  end
+
+  it "fails the operation with the policy message when the folder left the filter after enqueue" do
+    scan_id = SecureRandom.uuid
+    write_scan_subfolders_raw("work")
+
+    result = described_class.perform_now(scan_id, @project_root, "JobTestProject", nil, "initial", false, [])
+
+    expect(result).to include(success: false, code: :outside_filter)
+    expect(OperationProgress.find_by(operation_id: scan_id)).to have_attributes(status: "failed")
+    expect(OperationProgress.find_by(operation_id: scan_id).error_message).to include("outside the scan filter")
+    expect(SummaryGenerationClient).not_to have_received(:generate)
   end
 end

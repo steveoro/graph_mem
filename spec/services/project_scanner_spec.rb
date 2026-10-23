@@ -220,4 +220,37 @@ RSpec.describe ProjectScanner, type: :service do
     expect(result.success).to be false
     expect(result.errors).to include(/Project root does not exist/)
   end
+
+  describe "staying inside the project root (PR-0 §0.5)" do
+    %w[../outside/* /etc/*].each do |glob|
+      it "fails without reading anything for file_globs #{glob.inspect}" do
+        result = ProjectScanner.new(project_root: @project_root, file_globs: [ glob ]).call
+
+        expect(result.success).to be false
+        expect(result.errors.first).to include("must be relative to the project root")
+        expect(SummaryGenerationClient).not_to have_received(:generate)
+      end
+    end
+
+    it "skips a symlinked file that resolves outside the root and an explicitly globbed .env" do
+      Dir.mktmpdir("outside") do |outside|
+        File.write(File.join(outside, "secret.md"), "OUTSIDE_TEXT")
+        File.symlink(File.join(outside, "secret.md"), File.join(@project_root, "linked.md"))
+        File.write(File.join(@project_root, ".env"), "ENV_TEXT=1")
+
+        scanner = ProjectScanner.new(project_root: @project_root, file_globs: %w[README.md linked.md .env])
+        result = scanner.call
+
+        expect(scanner.send(:discover_files)).to eq([ File.join(@project_root, "README.md") ])
+        expect(result.to_h).to include(skipped_outside_root: 1, skipped_denylisted: 1)
+      end
+    end
+
+    it "sorts before applying max_files, so the kept set is deterministic" do
+      %w[c.md a.md b.md].each { |name| File.write(File.join(@project_root, name), "# #{name}") }
+      scanner = ProjectScanner.new(project_root: @project_root, file_globs: %w[*.md], max_files: 2)
+
+      expect(scanner.send(:discover_files)).to eq(%w[README.md a.md].map { |name| File.join(@project_root, name) })
+    end
+  end
 end
