@@ -109,7 +109,8 @@ class ScanRootPolicy
     def outside_filter(real)
       folder = @policy.relative_to(@root[:path], real).split("/").first.to_s
       filter = Subfolders.split(AppSettings.project_scan_subfolders_raw).join(", ")
-      failure(:outside_filter, "#{real} is outside the scan filter (#{filter}). Add #{folder} in Settings › Project scans.")
+      hint = folder.empty? ? "Blank the filter" : "Add #{folder}"
+      failure(:outside_filter, "#{real} is outside the scan filter (#{filter}). #{hint} in Settings › Project scans.")
     end
 
     def not_readable(path)
