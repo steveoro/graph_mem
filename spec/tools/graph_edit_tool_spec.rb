@@ -78,6 +78,17 @@ RSpec.describe GraphEditTool, type: :model do
     expect(entity.reload.aliases).to eq("")
   end
 
+  it "rejects aliases that are not strings" do
+    entity = MemoryEntity.create!(name: "SynthWidget", entity_type: "Component", aliases: "old")
+
+    expect do
+      tool.call_with_schema_validation!(
+        operations: [ { type: "update_entity", entity_id: entity.id, aliases: [ { "a" => 1 } ] } ]
+      )
+    end.to raise_error(FastMcp::Tool::InvalidArgumentsError, /aliases must be an array of strings/)
+    expect(entity.reload.aliases).to eq("old")
+  end
+
   it "rejects an alias that contains the pipe separator" do
     entity = MemoryEntity.create!(name: "SynthWidget", entity_type: "Component", aliases: "old")
 
