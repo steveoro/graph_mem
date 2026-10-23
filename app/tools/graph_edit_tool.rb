@@ -32,7 +32,8 @@ class GraphEditTool < ApplicationTool
   # @return [Hash] JSON Schema with a typed `operations` item
   def self.input_schema_to_json
     schema = super.deep_dup
-    id_reference = { oneOf: [ { type: "integer" }, { type: "string" } ] }
+    # GraphEditService looks records up by numeric id only; names are not resolved.
+    id_reference = { type: "integer", description: "Numeric id; names aren't resolved." }
     schema[:properties][:operations][:items] = {
       type: "object",
       required: [ "type" ],
@@ -43,7 +44,7 @@ class GraphEditTool < ApplicationTool
         observation_id: id_reference,
         name: { type: "string" },
         entity_type: { type: "string", examples: GraphVocabulary::ENTITY_TYPES },
-        aliases: { type: "array", items: { type: "string" } },
+        aliases: { type: "string", description: "Pipe-separated; replaces existing; empty string clears." },
         description: { type: "string" },
         text_content: { type: "string" },
         supersede: { type: "boolean", description: "true keeps the old text as history." },

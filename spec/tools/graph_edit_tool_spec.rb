@@ -43,9 +43,21 @@ RSpec.describe GraphEditTool, type: :model do
       reason: include(type: "string"),
       valid_until: include(type: "string", format: "date-time"),
       perspective: include(enum: MemoryObservation::PERSPECTIVES),
-      aliases: include(type: "array")
+      aliases: include(type: "string"),
+      entity_id: include(type: "integer"),
+      observation_id: include(type: "integer")
     )
     expect(items.dig(:properties, :type, :examples)).to eq(GraphEditService::TYPES)
+  end
+
+  it "stores update_entity aliases as the advertised pipe-separated string" do
+    entity = MemoryEntity.create!(name: "SynthWidget", entity_type: "Component", aliases: "old")
+
+    tool.call_with_schema_validation!(
+      operations: [ { type: "update_entity", entity_id: entity.id, aliases: "Synth Widget|SW" } ]
+    )
+
+    expect(entity.reload.aliases).to eq("Synth Widget|SW")
   end
 
   it "supersedes an observation with a new valid_until" do

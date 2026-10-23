@@ -63,7 +63,7 @@ RSpec.describe GraphWriteTool, type: :model do
         valid_until: include(type: "string", format: "date-time"),
         tags: include(type: "array", items: { type: "string" }),
         perspective: include(type: "string", enum: MemoryObservation::PERSPECTIVES),
-        weight: include(type: "number"),
+        weight: include(type: "number", minimum: 0),
         properties: include(type: "object")
       )
       expect(schema.dig(:properties, :observations, :items, :properties).keys).to contain_exactly(

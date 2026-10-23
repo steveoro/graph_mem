@@ -58,7 +58,7 @@ class GraphWriteTool < ApplicationTool
       valid_until: { type: "string", format: "date-time", description: "Set for time-bound facts; must be ≥ valid_from." },
       tags: { type: "array", items: { type: "string" } },
       perspective: { type: "string", enum: MemoryObservation::PERSPECTIVES },
-      weight: { type: "number", description: "create_relation only." },
+      weight: { type: "number", minimum: 0, description: "create_relation only." },
       properties: { type: "object", description: "create_relation only." }
     }
     schema[:properties][:operations][:items] = {
