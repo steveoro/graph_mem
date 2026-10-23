@@ -588,7 +588,7 @@ Sign in at `/operator/login`. Default operator credentials: `operator` / `change
 | `OPERATOR_USERNAME` | `operator` | Operator login username for the web dashboard |
 | `OPERATOR_PASSWORD` | `changeme` | Operator login password (production refuses to serve the login form while it is still `changeme`) |
 | `GRAPH_MEM_MCP_TOKEN` | -- | Shared bearer token for `/mcp` and `/api/v1`; without it `/api/v1` accepts operator sessions only |
-| `GRAPH_MEM_MCP_ALLOWED_IPS` | private ranges | IP allowlist applied to bearer-token requests on `/mcp` and `/api/v1` |
+| `GRAPH_MEM_MCP_ALLOWED_IPS` | loopback + private ranges | IP allowlist applied to bearer-token requests on `/mcp` and `/api/v1` |
 
 
 ## Documentation
