@@ -568,7 +568,7 @@ FILE=202601011200_production.sql.bz2 bin/rails db:restore
 
 Scheduled backups run via Solid Queue (`DatabaseBackupJob`) when **Enable scheduled backups** is on in System Settings. Production schedule: 1pm and 5pm GMT (`config/recurring.yml`). Use the **Jobs** dashboard at `/operator/jobs` (same operator session) to inspect queue status.
 
-Sign in at `/operator/login`. Default operator credentials: `operator` / `changeme`. In production the login returns 503 until the password is changed from `changeme` (the default username is fine). Override with `OPERATOR_USERNAME` / `OPERATOR_PASSWORD` or Rails credentials under `operator:`).
+Sign in at `/operator/login`. Default operator credentials: `operator` / `changeme`. In production the login returns 503 until the password is changed from `changeme` (the default username is fine). Override with `OPERATOR_USERNAME` / `OPERATOR_PASSWORD` or Rails credentials under `operator:`.
 
 
 ## Environment Variables
