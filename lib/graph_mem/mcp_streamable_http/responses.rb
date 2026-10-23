@@ -11,8 +11,19 @@ module GraphMem
         message.is_a?(String) ? message : JSON.generate(message)
       end
 
+      # §2.9: Access-Control-Allow-Origin reflects the request's Origin, and only once
+      # validate_origin accepted it; never "*". Always Vary: Origin.
+      def cors_headers
+        CORS_HEADERS.merge(cors_origin_headers(Thread.current[:graph_mem_mcp_cors_origin]))
+      end
+
+      def cors_origin_headers(origin, sse: false)
+        allow, vary = sse ? %w[Access-Control-Allow-Origin Vary] : %w[access-control-allow-origin vary]
+        origin ? { allow => origin, vary => "Origin" } : { vary => "Origin" }
+      end
+
       def json_response_headers(session_id = nil)
-        headers = CORS_HEADERS.merge("Content-Type" => "application/json")
+        headers = cors_headers.merge("Content-Type" => "application/json")
         headers["Mcp-Session-Id"] = session_id if session_id
         headers
       end
@@ -90,9 +101,11 @@ module GraphMem
         json_rpc_error_response(405, -32_601, "Method not allowed")
       end
 
-      def json_rpc_error_response(http_status, code, message, id = nil)
+      # §2.19 (D-17): the id member is echoed only for an Integer or a validly encoded String id,
+      # through the same rule as fast-mcp 1.8.0 (FastMcp::JsonRpc).
+      def json_rpc_error_response(http_status, code, message, id = nil, data: nil)
         [ http_status, json_response_headers,
-         [ JSON.generate(jsonrpc: "2.0", error: { code: code, message: message }, id: id) ] ]
+          [ JSON.generate(FastMcp::JsonRpc.error_response(code, message, id, data: data)) ] ]
       end
     end
   end

@@ -11,15 +11,35 @@ module GraphMem
         Process.clock_gettime(Process::CLOCK_MONOTONIC)
       end
 
-      def build_session(session_id, protocol_version)
+      # Minimal per-session state (GHSA-84m7 lesson): the negotiated version and the client's
+      # name/version only, never the whole initialize payload.
+      def build_session(session_id, protocol_version, client_info: nil)
+        info = client_info.is_a?(Hash) ? client_info.slice(:name, :version).transform_values { |value| value.to_s[0, 200] } : {}
         {
           id: session_id,
-          requested_protocol_version: protocol_version,
+          negotiated_protocol_version: protocol_version,
+          client_info: info,
           streams: [],
+          get_stream_reserved: false,
           active_requests: 0,
           last_active_at: monotonic_time,
           closed: false
         }
+      end
+
+      # §2.4: one GET stream per session. Reserved atomically before the socket is hijacked.
+      #
+      # @return [Boolean] false when the session already has (or is opening) a GET stream
+      def reserve_get_stream(session)
+        @sessions_mutex.synchronize do
+          next false if session[:get_stream_reserved] || session[:closed]
+
+          session[:get_stream_reserved] = true
+        end
+      end
+
+      def release_get_stream(session)
+        @sessions_mutex.synchronize { session[:get_stream_reserved] = false }
       end
 
       def lease_existing_session(session_id)
@@ -90,6 +110,7 @@ module GraphMem
           streams
         end
         streams.each { |stream| close_stream(nil, stream) }
+        @server.remove_subscriber(session[:id]) if @server.respond_to?(:remove_subscriber)
       end
 
       def session_expired_locked?(session, now)
@@ -99,13 +120,15 @@ module GraphMem
           now - session[:last_active_at] > @session_timeout
       end
 
-      def reap_expired_sessions
+      # @param force [Boolean] run even if the reaper ran less than @reaper_interval ago (the
+      #   session cap does this before refusing a new session)
+      def reap_expired_sessions(force: false)
         return unless @reaper_mutex.try_lock
 
         expired_sessions = []
         begin
           now = monotonic_time
-          return if now - @last_reaped_at < @reaper_interval
+          return if !force && now - @last_reaped_at < @reaper_interval
 
           @last_reaped_at = now
           @sessions_mutex.synchronize do

@@ -7,14 +7,18 @@ require "concurrent"
 require "rack"
 require_relative "mcp_access_policy"
 require_relative "mcp_profile"
-require_relative "mcp_streamable_http/headers"
+require_relative "mcp_streamable_http"
 require_relative "mcp_streamable_http/sessions"
 require_relative "mcp_streamable_http/streams"
 require_relative "mcp_streamable_http/responses"
+require_relative "mcp_streamable_http/request_checks"
 
 module GraphMem
-  # Rack transport for FastMcp that supports the 2025-03-26 Streamable HTTP
-  # transport while preserving the legacy 2024-11-05 SSE transport.
+  # Rack transport for FastMcp: Streamable HTTP (handshake versions 2024-11-05 … 2025-11-25,
+  # negotiated by fast-mcp) plus the legacy 2024-11-05 SSE transport. 2026-07-28 clients fall back
+  # through a failed server/discover probe. Requests are validated before dispatch (mcp plan PR-2):
+  # a 4 MiB body cap (413), JSON-RPC shape and ids (400), MCP-Protocol-Version on in-session
+  # requests (400), a session cap (503) and one GET stream per session (409).
   #
   # Endpoints:
   #   /mcp              - Streamable HTTP, default profile
@@ -30,6 +34,7 @@ module GraphMem
     include McpStreamableHttp::Sessions
     include McpStreamableHttp::Streams
     include McpStreamableHttp::Responses
+    include McpStreamableHttp::RequestChecks
 
     DEFAULT_PATH_PREFIX = "/mcp"
     DEFAULT_MESSAGES_ROUTE = "messages"
@@ -49,6 +54,7 @@ module GraphMem
     CORS_HEADERS = McpStreamableHttp::CORS_HEADERS
 
     RESPONSE_TIMEOUT = 30
+    MAX_SESSIONS = 256
 
     attr_reader :app, :path_prefix, :messages_route, :sse_route, :allowed_origins,
                 :allowed_ips, :localhost_only, :legacy_transport, :sessions, :access_policy
@@ -70,6 +76,9 @@ module GraphMem
       @session_timeout = options.fetch(:session_timeout, SESSION_TIMEOUT).to_f
       @reaper_interval = options.fetch(:reaper_interval, REAPER_INTERVAL).to_f
       @stream_queue_size = [ options.fetch(:stream_queue_size, STREAM_QUEUE_SIZE).to_i, 1 ].max
+      @max_request_bytes = Integer(options[:max_request_bytes] ||
+                                   ENV.fetch("GRAPH_MEM_MCP_MAX_REQUEST_BYTES", DEFAULT_MAX_REQUEST_BYTES))
+      @max_sessions = Integer(options[:max_sessions] || ENV.fetch("GRAPH_MEM_MCP_MAX_SESSIONS", MAX_SESSIONS))
       @legacy_transport = FastMcp::Transports::RackTransport.new(app, server, options)
       @sessions = Concurrent::Hash.new
       @sessions_mutex = Mutex.new
@@ -111,6 +120,7 @@ module GraphMem
       Thread.current[:graph_mem_mcp_transport] = nil
       Thread.current[:graph_mem_mcp_session_id] = nil
       Thread.current[:graph_mem_mcp_response_queue] = nil
+      Thread.current[:graph_mem_mcp_cors_origin] = nil
     end
 
     # Called by FastMcp::Server#send_response through the request context's
@@ -154,9 +164,12 @@ module GraphMem
       return forbidden_response("Forbidden: Remote IP not allowed") unless valid_client_ip?(request)
       return forbidden_response("Forbidden: Origin validation failed") unless validate_origin(request, env)
 
+      # Reflected only after validate_origin accepted it (§2.9): never "*".
+      Thread.current[:graph_mem_mcp_cors_origin] = env["HTTP_ORIGIN"].presence
+
       # CORS preflight carries no Authorization header, so it must be answered
       # before the token check or browser clients can never send credentials.
-      return [ 200, CORS_HEADERS.dup, [] ] if request.env["REQUEST_METHOD"] == "OPTIONS"
+      return [ 200, cors_headers, [] ] if request.env["REQUEST_METHOD"] == "OPTIONS"
       return unauthorized_response unless @access_policy.authenticated?(request)
 
       subpath = request.path[@path_prefix.length..]
@@ -176,7 +189,7 @@ module GraphMem
     def handle_streamable_request(request, env)
       case request.env["REQUEST_METHOD"]
       when "OPTIONS"
-        [ 200, CORS_HEADERS.dup, [] ]
+        [ 200, cors_headers, [] ]
       when "POST"
         handle_streamable_post(request, env)
       when "GET"
@@ -206,23 +219,26 @@ module GraphMem
         return json_rpc_error_response(406, -32_600, "Not Acceptable: Accept must include application/json, text/event-stream, or */*")
       end
 
-      body = request.body.read
+      # §2.3: capped before any session work, so an oversized POST never creates a session.
+      body = read_limited_body(request)
       return json_rpc_error_response(400, -32_700, "Parse error: empty body") if body.empty?
 
-      parsed = parse_json(body)
-      return parsed if parsed.is_a?(Array) # error response
+      kind, parsed = parse_json(body)
+      return parsed if kind == :error
 
-      method = parsed[:method] || parsed["method"]
-      request_id = parsed.key?(:id) ? parsed[:id] : parsed["id"]
+      invalid = envelope_error(parsed)
+      return invalid if invalid
+
+      method = parsed[:method]
+      request_id = parsed[:id]
 
       session_id, session = resolve_session(request, parsed, method)
-      return session if session.is_a?(Array) # error response
+      return session unless session.is_a?(Hash) # an error response
 
-      # Notifications (no id) get a 202 Accepted and do not return a body.
-      if request_id.nil?
-        dispatch_server_request(body, request, session_id: session_id)
-        return [ 202, CORS_HEADERS.dup, [] ]
-      end
+      version_error = protocol_version_error(request, request_id) unless method == "initialize"
+      return version_error if version_error
+
+      return accept_without_reply(body, request, session_id, method) if request_id.nil?
 
       wants_sse = sse_response_requested?(accept)
 
@@ -239,10 +255,23 @@ module GraphMem
       end
 
       handle_streamable_post_json(session, response_queue, session_id, body, request)
+    rescue PayloadTooLarge
+      json_rpc_error_response(413, -32_600, "Request body too large (limit #{@max_request_bytes} bytes)")
     ensure
       release_session(session) if session.is_a?(Hash)
       Thread.current[:graph_mem_mcp_session_id] = nil
       Thread.current[:graph_mem_mcp_response_queue] = nil
+    end
+
+    # A message without an id gets 202 and no body. Notifications and client responses are
+    # dispatched; an id-less *request* method is not (§2.3b): it would run and its result be lost.
+    def accept_without_reply(body, request, session_id, method)
+      if method.nil? || notification_method?(method)
+        dispatch_server_request(body, request, session_id: session_id)
+      else
+        @logger.debug("Ignoring id-less request method #{method} (a notification of a request is meaningless)")
+      end
+      [ 202, cors_headers, [] ]
     end
 
     def streamable_post_sse_response(env, session, response_queue, session_id, body, request)
@@ -298,14 +327,19 @@ module GraphMem
 
       stream = nil
       io = nil
+      reserved = false
       begin
+        version_error = protocol_version_error(request)
+        return version_error if version_error
         return method_not_allowed_response unless env["rack.hijack"]
+        # §2.4: one GET stream per session; reserved before the socket is hijacked.
+        return json_rpc_error_response(409, -32_000, "Conflict: this session already has an SSE stream") unless (reserved = reserve_get_stream(session))
 
         env["rack.hijack"].call
         io = env["rack.hijack_io"]
         raise IOError, "MCP hijack did not provide an IO" unless io
 
-        stream = register_stream(session, io)
+        stream = register_stream(session, io, nil, kind: :get)
         raise IOError, "MCP session was closed before the SSE stream opened" unless stream
 
         stream[:thread] = Thread.new { streamable_get_loop(session, stream, session_id) }
@@ -316,6 +350,7 @@ module GraphMem
         close_io(io) unless stream
         raise
       ensure
+        release_get_stream(session) if reserved && stream.nil?
         release_session(session)
       end
     end
@@ -325,43 +360,63 @@ module GraphMem
       if session_id.nil? || session_id.empty?
         return json_rpc_error_response(400, -32_600, "Bad Request: missing Mcp-Session-Id header")
       end
+      return json_rpc_error_response(404, -32_001, "Session not found") unless session_for_id(session_id)
+
+      version_error = protocol_version_error(request)
+      return version_error if version_error
 
       session = remove_session(session_id)
       return json_rpc_error_response(404, -32_001, "Session not found") unless session
 
       close_session(session)
 
-      [ 200, CORS_HEADERS.dup, [] ]
+      [ 200, cors_headers, [] ]
     end
 
     def resolve_session(request, parsed, method)
-      if method == "initialize"
-        session_id = SecureRandom.uuid
-        requested_version = parsed.dig(:params, :protocolVersion) || parsed.dig(:params, "protocolVersion").to_s
-        version = requested_version.to_s >= "2025-03-26" ? "2025-03-26" : "2024-11-05"
-        session = build_session(session_id, version)
+      return create_session(parsed) if method == "initialize"
 
-        @sessions_mutex.synchronize do
-          @sessions[session_id] = session
-          session[:active_requests] += 1
-          session[:last_active_at] = monotonic_time
-        end
-
-        [ session_id, session ]
-      else
-        session_id = request.env["HTTP_MCP_SESSION_ID"]
-        if session_id.nil? || session_id.empty?
-          return [ nil, json_rpc_error_response(400, -32_600, "Bad Request: missing Mcp-Session-Id header") ]
-        end
-
-        session, error = lease_existing_session(session_id)
-        unless session
-          message = error == :expired ? "Session expired" : "Session not found"
-          return [ nil, json_rpc_error_response(404, -32_001, message) ]
-        end
-
-        [ session_id, session ]
+      request_id = parsed[:id]
+      session_id = request.env["HTTP_MCP_SESSION_ID"]
+      if session_id.nil? || session_id.empty?
+        return [ nil, json_rpc_error_response(400, -32_600, "Bad Request: missing Mcp-Session-Id header", request_id) ]
       end
+
+      session, error = lease_existing_session(session_id)
+      unless session
+        message = error == :expired ? "Session expired" : "Session not found"
+        return [ nil, json_rpc_error_response(404, -32_001, message, request_id) ]
+      end
+
+      [ session_id, session ]
+    end
+
+    # §2.2: the version is negotiated by fast-mcp (echo a supported one, else the newest), so HTTP
+    # and stdio agree. A 2026-07-28 MCP-Protocol-Version header on initialize is ignored (lenient).
+    # §2.4: at the session cap the reaper runs once more before refusing with 503.
+    def create_session(parsed)
+      unless session_capacity_available?
+        return [ nil, json_rpc_error_response(503, -32_000, "Too many sessions", parsed[:id]) ]
+      end
+
+      session_id = SecureRandom.uuid
+      version = @server.negotiate_protocol_version(parsed.dig(:params, :protocolVersion))
+      session = build_session(session_id, version, client_info: parsed.dig(:params, :clientInfo))
+
+      @sessions_mutex.synchronize do
+        @sessions[session_id] = session
+        session[:active_requests] += 1
+        session[:last_active_at] = monotonic_time
+      end
+
+      [ session_id, session ]
+    end
+
+    def session_capacity_available?
+      return true if @sessions.size < @max_sessions
+
+      reap_expired_sessions(force: true)
+      @sessions.size < @max_sessions
     end
 
     def normalize_initialize_protocol_version!(session, message)
@@ -371,7 +426,7 @@ module GraphMem
       return unless result.is_a?(Hash)
 
       if result.key?(:protocolVersion) || result.key?("protocolVersion")
-        result[:protocolVersion] = session[:requested_protocol_version]
+        result[:protocolVersion] = session[:negotiated_protocol_version]
       end
     end
 
@@ -379,12 +434,6 @@ module GraphMem
       request.env
              .select { |key, _value| key.start_with?("HTTP_") }
              .transform_keys { |key| key.sub("HTTP_", "").downcase.tr("_", "-") }
-    end
-
-    def parse_json(body)
-      JSON.parse(body, symbolize_names: true)
-    rescue JSON::ParserError
-      json_rpc_error_response(400, -32_700, "Parse error: Invalid JSON")
     end
 
     def acceptable_post_accept?(accept)

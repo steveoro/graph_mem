@@ -7,11 +7,15 @@ module GraphMem
     module Streams
       private
 
-      def register_stream(session, io, response_queue = nil)
+      # @param kind [Symbol] :get (the session's standalone stream) or :post (one response stream)
+      def register_stream(session, io, response_queue = nil, kind: :post)
         stream = {
           queue: SizedQueue.new(@stream_queue_size),
           response_queue: response_queue,
           io: io,
+          kind: kind,
+          # Captured on the request thread; the stream loop runs on its own thread.
+          headers: cors_origin_headers(Thread.current[:graph_mem_mcp_cors_origin], sse: true),
           closed: false,
           mutex: Mutex.new
         }
@@ -32,11 +36,12 @@ module GraphMem
       def unregister_stream(session, stream)
         @sessions_mutex.synchronize do
           session[:streams]&.delete(stream)
+          session[:get_stream_reserved] = false if stream[:kind] == :get
         end
       end
 
       def streamable_get_loop(session, stream, session_id)
-        write_sse_headers(stream[:io], "Mcp-Session-Id" => session_id)
+        write_sse_headers(stream[:io], stream[:headers].merge("Mcp-Session-Id" => session_id))
 
         loop do
           break if stream_closed?(stream)

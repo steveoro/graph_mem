@@ -62,7 +62,8 @@ RSpec.describe "MCP Streamable HTTP endpoint", type: :request do
 
       expect(response).to have_http_status(:ok)
       expect(response.content_type).to eq("application/json")
-      expect(response.headers["Access-Control-Allow-Origin"]).to eq("*")
+      expect(response.headers["Access-Control-Allow-Origin"]).to eq("http://localhost:3001")
+      expect(response.headers["Vary"]).to eq("Origin")
       expect(response.headers["Access-Control-Expose-Headers"]).to include("Mcp-Session-Id")
       expect(response.headers["Mcp-Session-Id"]).to be_present
 
@@ -347,7 +348,8 @@ RSpec.describe "MCP Streamable HTTP endpoint", type: :request do
         }
 
       expect(response).to have_http_status(:bad_request)
-      expect(response.headers["Access-Control-Allow-Origin"]).to eq("*")
+      expect(response.headers["Access-Control-Allow-Origin"]).to eq("http://localhost:3001")
+      expect(response.headers["Vary"]).to eq("Origin")
       expect(response.headers["Access-Control-Expose-Headers"]).to include("Mcp-Session-Id")
     end
   end
