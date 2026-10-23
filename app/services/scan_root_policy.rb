@@ -144,7 +144,7 @@ class ScanRootPolicy
     def home_folder?(real)
       return true if real == "/root" || HOMES_PARENTS.include?(File.dirname(real))
 
-      [ Dir.home, owner_home(real) ].compact.filter_map { |home| realpath_or_nil(home) }.include?(real)
+      [ Dir.home, ENV["GRAPH_MEM_HOST_HOME"].presence, owner_home(real) ].compact.filter_map { |home| realpath_or_nil(home) }.include?(real)
     end
 
     def relative_to(root, path)
