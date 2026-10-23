@@ -29,6 +29,14 @@ RSpec.describe "agent text sync" do
     File.read(path).split("---", 3)[2]
   end
 
+  # Tracked paths only: untracked local agent state must not turn the suite red.
+  def tracked_files(*paths)
+    output = `git -C #{root} ls-files -- #{paths.join(" ")}`
+    raise "git ls-files failed in #{root}" unless $?.success?
+
+    output.lines.map(&:chomp)
+  end
+
   def skill_files
     %w[skills .agents/skills .claude/skills].flat_map { |dir| root.glob("#{dir}/*/SKILL.md") }
   end
@@ -37,8 +45,14 @@ RSpec.describe "agent text sync" do
     it "embeds the copy-out snippet verbatim as the AGENTS.md graph_mem section" do
       expect(snippet).to start_with("## graph_mem memory (MCP)\n")
       expect(snippet).not_to start_with("---")
-      expect(snippet.lines.size).to be <= 12
       expect(agents_md).to include(snippet)
+    end
+
+    it "keeps the AGENTS.md graph_mem section within 12 lines" do
+      section = agents_md[/^## graph_mem memory \(MCP\)\n.*?(?=^## )/m]
+
+      expect(section).to be_present
+      expect(section.rstrip.lines.size).to be <= 12
     end
 
     it "carries the general coding rules in AGENTS.md" do
@@ -60,15 +74,13 @@ RSpec.describe "agent text sync" do
   end
 
   describe "no per-tool rule files" do
-    it "has no Cursor or Devin rules folders" do
-      expect(root.join(".cursor/rules")).not_to exist
-      expect(root.join(".devin/rules")).not_to exist
+    it "tracks no Cursor or Devin rules folders" do
+      expect(tracked_files(".cursor/rules", ".devin/rules")).to be_empty
     end
 
     it "tracks no other per-tool rule files" do
-      tracked = `git -C #{root} ls-files -- .cursorrules .windsurfrules .github/copilot-instructions.md .claude/rules`
-
-      expect(tracked).to be_empty
+      expect(tracked_files(".cursorrules", ".windsurfrules", ".github/copilot-instructions.md", ".claude/rules"))
+        .to be_empty
     end
   end
 
@@ -97,7 +109,7 @@ RSpec.describe "agent text sync" do
     end
 
     it "has no retired skill locations" do
-      %w[.cursor/skills .devin .windsurf].each { |path| expect(root.join(path)).not_to exist }
+      expect(tracked_files(".cursor/skills", ".devin", ".windsurf")).to be_empty
     end
 
     it "runs project-scan only on request" do
@@ -141,6 +153,8 @@ RSpec.describe "agent text sync" do
 
         expect(text.lines.size).to be < 500
         links.reject { |link| link.match?(%r{\A[a-z]+://}) }.each do |link|
+          target = skill_root.join(link).cleanpath
+          expect(target.to_s).to start_with("#{skill_root.cleanpath}/"), "#{path}: #{link} leaves the skill root"
           expect(link.count("/")).to be <= 1, "#{path}: #{link} is nested too deep"
           expect(skill_root.join(link)).to exist, "#{path}: #{link} does not exist"
         end

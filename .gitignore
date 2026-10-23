@@ -44,8 +44,6 @@
 # AI rules: share the project rules and skills, keep local agent state out.
 # .cursor/worktrees.json is per-workstation state and was tracked by accident.
 .cursor/*
-!.cursor/rules/
-!.cursor/skills/
 !.cursor/environment.json
 !.cursor/install.sh
 !.cursor/start.sh
