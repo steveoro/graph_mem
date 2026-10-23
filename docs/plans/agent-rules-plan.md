@@ -13,6 +13,14 @@
 - New §0b on the standard's status, and four questions for Steve (§E Q6–Q9), **all answered by Steve on Oct 23, 2026** and applied: licence `LGPL-3.0-or-later`; `project-scan` on request only; `project-scan` canonical in `skills/`; Windsurf verified in the install table.
 - **Oct 23-b (Steve, 11:33):** `.windsurf/` is being sunset in favour of `.devin/` (Windsurf is now Devin Desktop). The plan uses **no `.windsurf/` paths**: the `.windsurf/skills/` link is dropped (Devin CLI and Devin Desktop both read `.agents/skills/`, so no `.devin/skills/` links are needed), the install table says Devin uses `.devin/` with Windsurf as a legacy note, and AR-D4 step 6 moves any `.windsurf/` content to `.devin/` (none exists at `ecc47b7`).
 
+**Oct 23-c update** (Steve's decision, Oct 23, 2026; `agent-rules-plan.md.2026-10-23-c` is the version before it). Claude found that the §5 note (reference-doc links in `.cursor/rules/` and `.devin/rules/`) conflicted with AR-D3 step 5 (no `.md` under `.cursor/rules/`) and with Devin loading every `.devin/rules/` file as a rule. Steve's call: **be as standard and IDE-agnostic as possible**, so graph_mem works as a plug-and-play MCP server whatever IDE or coding agent a developer uses. What changed (decision 9, §E Q10):
+- **One rule for every agent:** a short (10-line) graph_mem section in root `AGENTS.md`; root `CLAUDE.md` imports it with `@AGENTS.md` (§5). Every target client documents reading root `AGENTS.md` (§0a).
+- **`CLAUDE.md` merges into `AGENTS.md`** (Steve, Oct 23-c, later the same day): everything in the root `CLAUDE.md` that applies to all agents moves to `AGENTS.md`. `CLAUDE.md` becomes `@AGENTS.md` on its first line, followed only by Claude Code-specific content (none at `ecc47b7`). AR-D3 step 1a; step 5 checks it.
+- **The per-tool rule files are removed**, not turned into pointers: `.cursor/rules/*` and `.devin/rules/*` go, and their always-on text moves into `AGENTS.md` (AR-D3 steps 1–2). This supersedes the Oct 23-a `.mdc` rename and the Oct 23-b "Devin uses `.devin/`" install row.
+- **Reference text lives in the skill:** `skills/graph-mem-mcp-toolset/references/tools.md` and `references/maintenance.md`, each linked with a "Read … when" line. There's no `docs/rules/graph_mem_reference.md`, and neither rules folder holds reference text (§1, §5).
+- The install guide is one recipe for every agent: skill folder into `.agents/skills/` (plus `.claude/skills/` for Claude Code), snippet into `AGENTS.md` (AR-D3 step 8). The step 5 spec checks `AGENTS.md` and the `CLAUDE.md` import.
+- Steve okayed: `skills-ref` runs only in a throwaway venv on temporary copies (step 6); Steve checks the clients other than Claude Code, and the PR lists them as pending (step 7); Claude may rewrite the unpushed branch into five clean commits (§D).
+
 Third track next to `mcp-update-plan.md` and `ui-dashboard-plan.md` (same folder; one shared release train, §C).
 Input: an internal research brief (FrontierMemory 1.0 by Letta, audited against graph_mem `57d9524`). I re-checked every graph_mem claim against a read-only graph_mem checkout (`57d9524`, v1.52.1) and the fast-mcp clone (`main` @ `b2a8eb8`; graph_mem's `Gemfile.lock` pins `b10243c`, an ancestor). Results are in §0. Nothing was pushed, posted or opened on GitHub. No private client code was read or used.
 
@@ -30,14 +38,14 @@ graph_mem's agent-facing text is good at routing ("Do not use X; use Y") but fir
 
 | | |
 |---|---|
-| **Repos** | `steveoro/graph_mem` (main @ `57d9524` when written; Rails 8.1, Ruby 3.4.1, RVM `ruby-3.4.1@graph_mem`, MariaDB 11.8+). One fast-mcp item (§1.13 of the mcp plan) lives in `steveoro/fast-mcp`. Read `CLAUDE.md`, `AGENTS.md`, `.devin/rules/*` and the other two plans' briefs (mcp §A, UI §0.1). The same rules apply. |
+| **Repos** | `steveoro/graph_mem` (main @ `57d9524` when written; Rails 8.1, Ruby 3.4.1, RVM `ruby-3.4.1@graph_mem`, MariaDB 11.8+). One fast-mcp item (§1.13 of the mcp plan) lives in `steveoro/fast-mcp`. Read `CLAUDE.md`, `AGENTS.md`, `.devin/rules/*` (removed by AR-D3, Oct 23-c) and the other two plans' briefs (mcp §A, UI §0.1). The same rules apply. |
 | **Who does what** | **[Claude]** does the whole rewrite on **one branch**: AR-D1, AR-D2, AR-D3 and AR-T, as separate commits in that order. The exact AR-D step lists in §D still apply; Claude copies their text and doesn't rephrase it. Claude also builds the eval harness (AR-E) and any follow-up fixes (AR-F). **[Devin-simple]** only does AR-D4, the docs follow-ups after the release. Stop and ask if a step doesn't match the code. |
-| **Branches** | `claude/ar-rules-rewrite` off current graph_mem `main`. It's independent of the CircleCI-fix branches (`claude/pr-1-hardening-1.8.0` is in fast-mcp; `devin/m-d1-query-cap` and `devin/m-d2-description-length` are in graph_mem). Branch it off `main` **after PR #106 (UI-0) has merged**. It's the next Claude item now: graph_mem's CircleCI is fixed by #106, and Claude's fast-mcp branch waits for PR-1 (§C row 0). Later work: `claude/ar-e-eval` (harness), `claude/ar-f<n>-<slug>` (follow-ups), `devin/ar-d4-docs`. No force-push after review starts. Agents never merge, tag or push tags; Steve merges and tags. graphy-review[bot] reviews every PR. |
+| **Branches** | `claude/ar-rules-rewrite` off current graph_mem `main`. It's independent of the CircleCI-fix branches (`claude/pr-1-hardening-1.8.0` is in fast-mcp; `devin/m-d1-query-cap` and `devin/m-d2-description-length` are in graph_mem). Branch it off `main` **after PR #106 (UI-0) has merged**. It's the next Claude item now: graph_mem's CircleCI is fixed by #106, and Claude's fast-mcp branch waits for PR-1 (§C row 0). Later work: `claude/ar-e-eval` (harness), `claude/ar-f<n>-<slug>` (follow-ups), `devin/ar-d4-docs`. No force-push after review starts. *(Oct 23-c, Steve okayed)* Before the branch's first push, Claude may rewrite its local history into the five clean commits (AR-D1, AR-D2, AR-D3, AR-T, Release 1.53.0); recommended. Agents never merge, tag or push tags; Steve merges and tags. graphy-review[bot] reviews every PR. |
 | **Versions** | The rewrite branch is the **graph_mem 1.53.0** release PR. Its last commit bumps `lib/graph_mem/version.rb` from `1.52.1` to `1.53.0` and renames `## [Unreleased]` to `## [1.53.0] - <merge date>`, folding in whatever `[Unreleased]` lines `main` already has: **always #106's UI-0 `### Security` section** (keep its six entries verbatim under `## [1.53.0]` › Security), plus M-D1/M-D2 if they merged first (mcp plan D-23). AR-E and AR-D4 add `[Unreleased]` lines and never bump. Follow-up fixes are 1.53.x patches. *(Oct 23-a)* From 1.53.0 on, every release commit also sets the skill's `metadata.graph-mem-version` to the new version (a sync spec checks it against `GraphMem::VERSION`) and runs `skills-ref validate` by hand (§D AR-D3 step 6). |
 | **Running specs safely** | Same as the other plans: `source "$HOME/.rvm/scripts/rvm" && rvm use ruby-3.4.1@graph_mem`, `RAILS_ENV=test OLLAMA_URL=http://127.0.0.1:9`, test DB truncated before and after (UI plan §0.1), full suite run alone, nothing listening on 11434, no scratch files left behind. |
 | **The eval is not the suite** | The LLM-driven eval (§8) lives in `eval/agent_memory/`, outside `spec/` and outside Zeitwerk. It never runs in CI or in `bundle exec rspec`, and it uses its own databases (`graph_mem_eval_*`), never the dev, test or prod DBs. Two Ollama modes:<br>• **Real comparison** (`agent_eval run`): `--embeddings` is the **default**. It uses Steve's local Ollama (`OLLAMA_URL`, default `http://127.0.0.1:11434`) against the eval DBs only.<br>• **Smoke and CI-adjacent runs** (`agent_eval smoke`, `--no-embeddings`, and everything in `spec/eval/`): `OLLAMA_URL=http://127.0.0.1:9`, which is unroutable.<br>Only the eval's deterministic parts (verifiers, corpus builder, metrics) get rspec coverage, in `spec/eval/`, with no LLM and no network. The rspec suite itself keeps `OLLAMA_URL=http://127.0.0.1:9` as always. |
 | **Fixtures and tasks** | Synthetic only, or open-source repos Steve names. **Never use private client code, not even read-only, and never mention it in PRs, tasks, corpora or results.** |
-| **Text rules** | Every agent-facing string is **situation-first and imperative** ("Call before…", "Use when…"). Mechanics come after the trigger sentence. The routing sentences stay ("Do not use X; use Y"). Advertised text names only canonical tools (never `search_entities`, `create_entity` or other hidden aliases). Limits: tool descriptions and `instructions` ≤ 2,048 chars (mcp decision D-7); skill `description` ≤ 1,024 chars (Agent Skills frontmatter limit; Claude Code also truncates description + `when_to_use` at 1,536 in its listing, so the key use case goes first); skill frontmatter uses only the six spec fields (`name`, `description`, `license`, `compatibility`, `metadata`, `allowed-tools`) apart from the documented vendor exceptions (§D AR-D3 step 4); skill body < 500 lines and about 5,000 tokens; skills are pure Markdown (no `scripts/`, no URL fetches); always-on rules file ≤ 45 lines. |
+| **Text rules** | Every agent-facing string is **situation-first and imperative** ("Call before…", "Use when…"). Mechanics come after the trigger sentence. The routing sentences stay ("Do not use X; use Y"). Advertised text names only canonical tools (never `search_entities`, `create_entity` or other hidden aliases). Limits: tool descriptions and `instructions` ≤ 2,048 chars (mcp decision D-7); skill `description` ≤ 1,024 chars (Agent Skills frontmatter limit; Claude Code also truncates description + `when_to_use` at 1,536 in its listing, so the key use case goes first); skill frontmatter uses only the six spec fields (`name`, `description`, `license`, `compatibility`, `metadata`, `allowed-tools`) apart from the documented vendor exceptions (§D AR-D3 step 4); skill body < 500 lines and about 5,000 tokens; skills are pure Markdown (no `scripts/`, no URL fetches); the graph_mem section of `AGENTS.md` ≤ 12 lines (*Oct 23-c*; it replaces the 45-line always-on rules file). |
 | **Done criteria** | Required specs green; full suite green when run alone; rubocop; brakeman; 0 rows in the test DB; CHANGELOG. The rewrite branch does **not** wait for the eval (§8.6). AR-E is done when its smoke run works and the README records the measured time and cost per run. |
 
 ## B. Decisions (Oct 22, 2026; Steve's Oct 22-b answers applied)
@@ -58,13 +66,19 @@ graph_mem's agent-facing text is good at routing ("Do not use X; use Y") but fir
    - per-client instrumentation beyond what the eval already extracts from Claude Code's `stream-json` output and the existing `tool_invocations` telemetry (§5.6).
 7. **Embeddings on for the real comparison (Steve, Oct 22-b).** It uses the local Ollama against the `graph_mem_eval_*` DBs only. The unroutable URL stays the default for smoke and CI-adjacent runs (§A). If Max-plan rate limits bite, the first pass may be the 6-task / 72-run subset (§8.4).
 8. **Self-measured only (Steve, Oct 22-b).** No contact with Letta, and no FrontierMemory submission or HF access request. The question is closed.
+9. **One standard rule file for every agent (Steve, Oct 23-c).** graph_mem should be a plug-and-play MCP server whatever IDE or coding agent a developer uses, so the repo and the install guide use only cross-agent standards:
+   - **rules:** root `AGENTS.md` (read by Cursor, Codex, Copilot/VS Code, Devin CLI and Desktop; Claude Code through a one-line `@AGENTS.md` import in `CLAUDE.md`, §0a). `CLAUDE.md` holds nothing that applies to all agents;
+   - **skills:** the Agent Skills folders `.agents/skills/` (plus `.claude/skills/` for Claude Code);
+   - **reference text:** inside the skill (`references/`), loaded only when needed.
+
+   Per-tool rule files are **removed**, not reduced to pointers. A pointer adds nothing: Cursor ignores `.md` files in `.cursor/rules` and doesn't inline files a rule references. A copy is worse: it loads twice in clients that combine `AGENTS.md` with their own rule files (Cursor, Copilot and Devin all do). If AR-D3 step 7 shows a client that doesn't load `AGENTS.md`, that client gets its own native always-on file holding a byte-identical copy of the section, and only with Steve's OK.
 
 ## C. Release-train placement (identical to mcp plan §C and UI plan §0.3; `D-nn` numbers refer to the mcp plan's decisions)
 
 | # | Item | Repo / version | Who | Depends on |
 |---|---|---|---|---|
 | 0 | CircleCI fixes. **Status Oct 22, 17:15 (Europe/Rome):** graph_mem's CircleCI is fixed by PR #106 (ruby orb 4.0, `cimg/ruby:3.4.1-browsers` for rspec so the system specs run, `structure.sql` zero-vector DEFAULTs; all green at `d4de51b`). Still open: `devin/m-d1-query-cap` (`35c6423`) and `devin/m-d2-description-length` (`8ff8a9c`): no commits since Oct 21 evening, CircleCI rspec red (rubocop/brakeman green), no PR; Devin merges `main` after #106 and re-runs CI. fast-mcp `claude/pr-1-hardening-1.8.0` (`9f2c72a`): unchanged since Oct 21 18:24, no PR, **no CI has ever run on it** (fast-mcp's GitHub Actions run only on `main` pushes and PRs); Claude runs its suite locally when it resumes PR-1 (row 2, D-22) | n/a | [Devin-simple]; [Claude] at row 2 | #106 merged (Devin branches) |
-| 1 | **AR** rules & skills rewrite: commits AR-D1 (stale hints), AR-D2 (schema fields), AR-D3 (skill discovery + Cursor `.mdc`), AR-T (agent text) on `claude/ar-rules-rewrite`; bumps to 1.53.0, and its release commit also releases UI-0 (it folds #106's `[Unreleased]` Security section into `[1.53.0]`) | graph_mem **1.53.0** | [Claude] | off `main` after #106 merged; **next up** (step 0 no longer blocks it) |
+| 1 | **AR** rules & skills rewrite: commits AR-D1 (stale hints), AR-D2 (schema fields), AR-D3 (skill discovery + one `AGENTS.md` rule), AR-T (agent text) on `claude/ar-rules-rewrite`; bumps to 1.53.0, and its release commit also releases UI-0 (it folds #106's `[Unreleased]` Security section into `[1.53.0]`) | graph_mem **1.53.0** | [Claude] | off `main` after #106 merged; **next up** (step 0 no longer blocks it) |
 | 1a | **AR-E** eval harness, then the post-release eval (old arm = pre-rewrite `main` in a worktree, new arm = the 1.53.0 release commit) | graph_mem `[Unreleased]` (dev tooling) | [Claude] builds, Steve runs | 1.53.0 tagged |
 | 1b | **AR-F<n>** follow-up text fixes, only if the eval shows new worse than old (validate and iterate) | graph_mem 1.53.x (patch) | [Claude] | eval result |
 | 1c | **AR-D4** docs follow-ups | `[Unreleased]` | [Devin-simple] | 1.53.0 |
@@ -130,6 +144,8 @@ Checked on a read-only checkout at `7fdb196` with `git ls-files -s`, `readlink`,
 | Symlinked skill folders: client support UNVERIFIED | **Partly resolved: Claude Code documents it** ("a project skill entry can be a symlink to a directory elsewhere on disk… loads the skill once even if several locations point at the same target"). Cursor, Codex, Copilot and Devin remain **UNVERIFIED** | check in AR-D3 step 7 |
 | Repo licence | `LICENSE` is the GNU **LGPL v3** text | the repo doesn't state `-only` vs `-or-later`; Steve decided `LGPL-3.0-or-later` for the skill (§E Q6) |
 | Skill has no scripts or URLs | **Confirmed** | no `scripts/` folder; `rg 'https?://' skills .devin/skills` → no hits |
+| *(Oct 23-c)* Root `AGENTS.md` is read by every target client | **Documented by all six; not yet tested in this repo** (AR-D3 step 7) | **Cursor:** "Cursor supports AGENTS.md in the project root and subdirectories"; `.md` files in `.cursor/rules` are ignored ("If you prefer plain markdown, use AGENTS.md instead"); a file a rule references isn't inlined (https://cursor.com/docs/context/rules). **Codex:** reads `AGENTS.md` from the project root down to the working directory, one file per directory, 32 KiB combined by default (https://developers.openai.com/codex/guides/agents-md). **Copilot / VS Code:** the Copilot harness uses `.github/copilot-instructions.md` or `AGENTS.md`; the Local harness reads workspace-root `AGENTS.md` via `chat.useAgentsMdFile`, on by default; sources are additive, with no precedence order (https://code.visualstudio.com/docs/copilot/customization/custom-instructions). **Devin CLI:** `AGENTS.md` is the recommended rules file; `.devin/rules/` is optional (https://docs.devin.ai/cli/extensibility/rules). **Devin Desktop:** `AGENTS.md` goes through the same rules engine; root = always-on (https://docs.devin.ai/desktop/cascade/memories). **Claude Code:** reads `AGENTS.md` directly (v2.1.277+) only when there's no `CLAUDE.md`; with a `CLAUDE.md`, an `@AGENTS.md` import is the documented way, and it never loads the file twice (https://code.claude.com/docs/en/memory). graph_mem has a 46-line `CLAUDE.md`, so it needs the import |
+| *(Oct 23-c)* Repo rule files at `ecc47b7` | **Listed** | `.cursor/rules/`: `general_coding_rules.md` and `graph_mem_mcp_rules.md` (symlinks, ignored by Cursor) and `rvm-ruby-commands.mdc` (a real file, loaded by Cursor today). `.devin/rules/`: `general_coding_rules.md` and `graph_mem_mcp_rules.md` (symlinks) and `git_safety.md` (a real file). Root `AGENTS.md` (28 lines) points at `docs/rules/graph_mem_mcp_rules.md` and at the two rule folders. No `.github/copilot-instructions.md`, `.cursorrules`, tracked `.windsurfrules` or `.claude/rules/` |
 
 ## 0b. Status of the Agent Skills standard (as of Oct 23, 2026)
 
@@ -139,10 +155,12 @@ Checked on a read-only checkout at `7fdb196` with `git ls-files -s`, `readlink`,
 - **Adopters.** 46 platforms in the official showcase, including Cursor, Copilot, VS Code, Claude Code, Codex, Gemini CLI and Letta. Devin's docs say it follows the standard.
 - **Open / unverified** (tracked here, not blocking 1.53.0):
   - symlinked skill folders in Cursor, Codex, Copilot and Devin (Claude Code documents support, §0a), checked by Claude in AR-D3 step 7;
-  - Cursor following an `.mdc` symlink to an `.md` target (AR-D3 step 1);
+  - *(Oct 23-c)* each client actually loading root `AGENTS.md` in this repo, with `CLAUDE.md`'s `@AGENTS.md` import for Claude Code. All of them document it (§0a), but it hasn't been tested here. Claude checks Claude Code; Steve checks the rest (AR-D3 step 7);
+  - *(Oct 23-c)* Copilot outside VS Code (Copilot CLI, the cloud coding agent): only the VS Code docs were read;
   - what, if anything, came of supply-chain issue #418 (closed 30 Jun as out of scope);
   - the gap between Anthropic's "more than 70 platforms" and the 46 listed;
   - when the first versioned spec release lands.
+  - *(Moot Oct 23-c: Cursor following an `.mdc` symlink to an `.md` target; the per-tool rule files are removed.)*
   - *(Resolved Oct 23: `skills-ref` does parse block-style `triggers`, §0a. Windsurf is now Devin Desktop, and its docs list `.devin/rules/` and `.devin/skills/` as preferred, with `.windsurf/` read only as a fallback, so it's no longer listed.)*
 
 ---
@@ -150,7 +168,7 @@ Checked on a read-only checkout at `7fdb196` with `git ls-files -s`, `readlink`,
 ## Items in priority order (the brief's §7)
 
 ### 1. Skill description, frontmatter and body (AR-T) [Claude]
-**Files:** `skills/graph-mem-mcp-toolset/SKILL.md`, new `skills/graph-mem-mcp-toolset/references/maintenance.md` (`references/hosts.md` already exists from AR-D3). *(Oct 23-a: the Cursor shim is deleted in AR-D3, so there's no second copy to keep in sync. `.agents/skills/…` and `.claude/skills/…` are symlinks to this folder.)*
+**Files:** `skills/graph-mem-mcp-toolset/SKILL.md`, new `skills/graph-mem-mcp-toolset/references/maintenance.md`, and `references/tools.md` (`references/hosts.md` and the first version of `references/tools.md` already exist from AR-D3). *(Oct 23-a: the Cursor shim is deleted in AR-D3, so there's no second copy to keep in sync. `.agents/skills/…` and `.claude/skills/…` are symlinks to this folder.)*
 
 **New frontmatter** (description 784 chars; validated with `skills-ref` on a temp copy):
 ```yaml
@@ -181,6 +199,7 @@ metadata:
 
 **Body changes** (whole body < 500 lines and about 5,000 tokens; today it's 105 lines):
 - The first section becomes "When to use this skill" (the trigger list from item 5).
+- *(Oct 23-c)* The **Recall** and **Persist** sections take the text of item 5's "skill workflow sections" block, replacing the body's current workflow text on the same points. This is where the detailed always-on guidance now lives, loaded when the skill triggers.
 - Add a **Call templates** section: one JSON example each for `search` (by file path), `get_entities`, `graph_write create_observation` (with `source` and `valid_until`), `graph_edit update_observation` with `supersede: true`, and creating the two home entities (decision 2). Keep it inline while it's short; if it passes about 80 lines, move it to `references/call-templates.md` with a "Read when…" line.
 - **Name the tools fully once.** Keep the existing host-prefix note (l.11-17) and add: "The recommended MCP server key is `graph_mem`, so a fully qualified call looks like `graph_mem:search` (Claude Code shows it as `mcp__graph_mem__search`)."
 - Add a **Gotchas** section, kept in `SKILL.md` (not in a reference file):
@@ -193,7 +212,7 @@ metadata:
 - **Move** the dream-state and maintenance paragraphs (today's "Multi-Agent & Dream-State Awareness" l.59-69, minus the `X-MCP-Client` context bullet, which stays) to **`references/maintenance.md`**, one level deep inside the skill folder so a copied skill stays self-contained. `SKILL.md` links it with: "Read `references/maintenance.md` when connected to `/mcp/maintenance` or acting on maintenance review rows." The file opens with the same sentence; it gets a short table of contents if it passes 100 lines.
 - `references/hosts.md` (created in AR-D3 step 3) holds the Cursor notes from the retired shim (`user-graph_mem` key, `GetMcpTools` before `CallMcpTool`, `mcp_auth` on `needsAuth`, the call envelope), linked with: "Read `references/hosts.md` when running in Cursor and MCP calls fail or the server reports `needsAuth`."
 - No `scripts/` folder and no URL fetches in the skill (security, §D AR-D3 step 4).
-- `docs/rules/graph_mem_reference.md` (item 5) stays the rules-side reference; it may repeat the maintenance text, but the skill never links outside its own folder.
+- *(Oct 23-c)* **`references/tools.md`** holds the reference text from the old 146-line rules file (item 5), moved there in AR-D3 step 1. AR-T trims it: the scan and dream-state sections go to `references/maintenance.md`, and the recall/persist guidance goes to `SKILL.md`. It opens with, and `SKILL.md` links it with: "Read `references/tools.md` when a tool call fails, when choosing entity or relation types or search parameters, when an observation needs a lifecycle change or conflicts with another, or when an older client uses alias tool names." There's no `docs/rules/graph_mem_reference.md`, and the skill never links outside its own folder.
 
 ### 2. Trigger-first openers for `search` and `graph_write` (AR-T) [Claude]
 **Files:** `app/tools/search_tool.rb`, `app/tools/graph_write_tool.rb`, `app/tools/graph_edit_tool.rb`, `app/lib/tool_success_response.rb`.
@@ -255,20 +274,35 @@ Persist durable GraphMem knowledge before your final reply:
 5. Follow possible_duplicate and next_move responses; never force a duplicate.
 ```
 
-### 5. Always-on rules: about 40 lines, the rest behind a signpost (AR-T) [Claude]
+### 5. Always-on rule: one short graph_mem section in `AGENTS.md`; detail in the skill (AR-D3 text; AR-T trims the reference) [Claude]
+*(Oct 23-c, decision 9: this replaces the Oct 22 "40-line always-on file + `docs/rules/graph_mem_reference.md` + copies in `.cursor/rules/` and `.devin/rules/`" design.)*
+
 **Files:**
-- `docs/rules/graph_mem_mcp_rules.md` (replaced by the text below);
-- new `docs/rules/graph_mem_reference.md`, which gets every section removed from the always-on file: Workflow Prompts details, MCP tool errors in full, multi-agent scoping details, **Project Scan Validation (l.44-89)**, **Dream-State Compaction Awareness (l.91-103)**, **Standard Compatibility and aliases (l.105-121)**, query/type guidance, observation lifecycle details, conflict handling, and `summarize` internals. Move them verbatim apart from fixing stale names, with a short "for maintenance-profile sessions" header on the scan and dream sections;
-- the copies `.cursor/rules/graph_mem_mcp_rules.mdc` and `.devin/rules/graph_mem_mcp_rules.md` (renamed in AR-D3), plus copies of the reference doc next to each. *(Oct 23-a: these "copies" are symlinks into `docs/rules/` since `8a1150e`; add the reference doc the same way, as `.cursor/rules/graph_mem_reference.md` and `.devin/rules/graph_mem_reference.md` links. Cursor ignores the `.md` one, which is fine: it's linked from the rules text, not always-on.)*
+- root `AGENTS.md`: a new `## graph_mem memory (MCP)` section, exactly the text below, placed right after the intro paragraph. It replaces the "Using GraphMem as an MCP toolset" bullet list; that list's `docs/mcp_tools.md` bullet moves to "Developing GraphMem" (AR-D3 step 1);
+- `docs/rules/graph_mem_mcp_rules.md`: the same text, byte-identical, with no frontmatter. It's the copy-out snippet for other projects (AR-D3 step 8). It keeps its path, so existing links still work;
+- root `CLAUDE.md`: merged into `AGENTS.md`; it becomes `@AGENTS.md` on its first line, plus Claude Code-only content if any (AR-D3 step 1a);
+- reference text: everything else from the old 146-line file goes into the skill, never into a rules folder:
+  - `skills/graph-mem-mcp-toolset/references/tools.md`: Workflow Prompts details, MCP tool errors in full, multi-agent scoping details, Standard Compatibility and aliases (l.105-121), query/type guidance, observation lifecycle details, conflict handling, `summarize` internals;
+  - `references/maintenance.md` (item 1): **Project Scan Validation (l.44-89)** and **Dream-State Compaction Awareness (l.91-103)**, under a short "for maintenance-profile sessions" header.
+  - Move them verbatim, apart from fixing stale names. AR-D3 step 1 moves the whole old file to `references/tools.md`; AR-T splits it as above.
+- No `.cursor/rules/` or `.devin/rules/` files and no reference links there (AR-D3 step 2).
 
-**New always-on file** (40 lines including frontmatter):
+**`AGENTS.md` section** (10 lines; the same text in `docs/rules/graph_mem_mcp_rules.md`):
 ```markdown
----
-description: graph_mem MCP memory: when to recall and when to write
-globs:
-alwaysApply: true
----
+## graph_mem memory (MCP)
 
+This project uses the graph_mem MCP server: a shared knowledge graph of what
+earlier sessions learned (conventions, preferences, where things live, verified fixes).
+Use the `graph-mem-mcp-toolset` skill:
+- at the start of a task, to load the project's conventions and the user's preferences;
+- before deciding a convention (version bump, changelog or docs style, tests, naming,
+  config location, release steps) or first editing a file or component;
+- before the final reply, to save corrections, preferences, locations and verified fixes.
+Without the skill: call `search` before deciding, and `graph_write` before the final reply.
+```
+
+**Skill workflow sections** (go into `SKILL.md`, item 1; this was the Oct 22 always-on draft, with the frontmatter dropped and the last bullet now pointing at the skill's own references):
+```markdown
 # graph_mem: recall before you decide, persist what you learned
 
 graph_mem is a shared knowledge graph of what earlier sessions learned:
@@ -302,8 +336,8 @@ reading the repository, not instead of it.
 - Context is per `X-MCP-Client`; it boosts, not filters, search. `set_context(entity_id: null)` clears it.
 - Prefer `entity_id` over names for edits and deletes: a bare name can hit another project.
 - On errors read `category`, `retriable`, `next_move`; retry only when `retriable` is true.
-- Scans, dream-state, review queues, aliases and parameter details (maintenance
-  profile `/mcp/maintenance`): see `graph_mem_reference.md` next to this file.
+- Aliases, errors and parameter details: read `references/tools.md`. Scans,
+  dream-state and review queues (`/mcp/maintenance`): read `references/maintenance.md`.
 ```
 
 ### 6. MCP server `instructions` (fast-mcp PR-1 §1.13; texts in AR-T, 1.53.0; wiring in mcp PR-2 §2.17, 1.54.0) [Claude]
@@ -335,7 +369,7 @@ Step lists in §D:
 - the shim's alias names and "execution templates" (*Oct 23-a:* resolved by deleting the shim in AR-D3);
 - the three `move_to_parent` / `update_entity` hints;
 - both `dream_state_status` session-start lines;
-- the Cursor `.md` rule files that Cursor ignores;
+- the Cursor `.md` rule files that Cursor ignores (*Oct 23-c:* resolved by removing the per-tool rule files; `AGENTS.md` carries the rule, AR-D3 steps 1–2);
 - *(Oct 23-a)* skill discovery: no client finds repo-root `skills/`, and `project_scan` fails validation (AR-D3).
 
 ### 8. Local FrontierMemory-style eval (AR-E harness; post-release validation of 1.53.0) [Claude builds, Steve runs]
@@ -372,14 +406,14 @@ spec/eval/                       rspec for verifiers, corpus builder, metrics (n
 |---|---|---|
 | **none** | no MCP server (`--strict-mcp-config` with an empty config), no memory files | none |
 | **gold** | no MCP server; `gold.md` copied into the workspace as `MEMORY.md`, with a workspace `CLAUDE.md` line "Read MEMORY.md before starting" | none (hand-written) |
-| **old** | graph_mem at the **pre-rewrite `main` commit** (`OLD_REF`, default `NEW_REF^1`, the first parent of the 1.53.0 release commit on `main`) checked out in a `git worktree`, on port 3031, DB `graph_mem_eval_old`; that commit's skill and rules installed in the workspace (the skill under `.claude/skills/graph-mem-mcp-toolset/`, the only path Claude Code reads; the old commit has no such folder, so the harness copies it from `skills/`) | the memory agent reads the shuffled corpus and writes with the **old** persist prompt + old rules |
-| **new** | graph_mem at the **1.53.0 release commit** (`NEW_REF`: the tag `v1.53.0` if Steve creates one; graph_mem's remote has no git tags today, so by default Steve passes the SHA) in a second worktree, on port 3032, DB `graph_mem_eval_new`; the new skill and rules installed (same `.claude/skills/` path) | the same corpus, with the **new** persist prompt + new rules |
+| **old** | graph_mem at the **pre-rewrite `main` commit** (`OLD_REF`, default `NEW_REF^1`, the first parent of the 1.53.0 release commit on `main`) checked out in a `git worktree`, on port 3031, DB `graph_mem_eval_old`; that commit's skill and rules installed in the workspace (the old `docs/rules/graph_mem_mcp_rules.md` as the workspace `CLAUDE.md`; the skill under `.claude/skills/graph-mem-mcp-toolset/`, the only path Claude Code reads; the old commit has no such folder, so the harness copies it from `skills/`) | the memory agent reads the shuffled corpus and writes with the **old** persist prompt + old rules |
+| **new** | graph_mem at the **1.53.0 release commit** (`NEW_REF`: the tag `v1.53.0` if Steve creates one; graph_mem's remote has no git tags today, so by default Steve passes the SHA) in a second worktree, on port 3032, DB `graph_mem_eval_new`; the new skill and rules installed the way a copy-out user installs them (*Oct 23-c:* the snippet as the workspace `AGENTS.md` plus a `CLAUDE.md` holding `@AGENTS.md`; the skill at the same `.claude/skills/` path) | the same corpus, with the **new** persist prompt + new rules |
 | *opt.* gold-in-graph-old / -new | graph_mem with `gold.md` rules seeded as observations in their homes (decision 2) | none; isolates **retrieval** (triggers) from **writing** quality |
 
 Each arm runs its own graph_mem from a separate `git worktree` (`eval/agent_memory/tmp/worktrees/<arm>`, removed afterwards) with `DATABASE_URL` pointing at its eval DB. The harness:
 - creates and drops those DBs, and refuses names that don't start with `graph_mem_eval_`;
 - prints the resolved SHAs;
-- refuses an `OLD_REF` that already contains `docs/rules/graph_mem_reference.md`, so the old arm can't silently be the rewrite.
+- refuses an `OLD_REF` that already contains `skills/graph-mem-mcp-toolset/references/tools.md` (*Oct 23-c*; it was `docs/rules/graph_mem_reference.md`), so the old arm can't silently be the rewrite.
 
 The old arm also lacks AR-D1–D3 (they're part of 1.53.0), so old vs new measures the whole 1.53.0 bundle. *(Oct 22-c)* UI-0 (PR #106) merged before the rewrite, so **both** arms have it and it doesn't skew the comparison. UI-0 guards `/api/v1`, the HTML UI and ActionCable; `/mcp*` and stdio are unchanged. If the harness ever calls `/api/v1` (e.g. to seed), it needs the bearer token from an allowed IP. Ablation A1 isolates the skill description.
 
@@ -447,7 +481,7 @@ The old arm also lacks AR-D1–D3 (they're part of 1.53.0), so old vs new measur
    - **New holds up** if all three of these hold: new full-pass ≥ old; new recall-before-first-edit ≥ old; and no task where old passes 3/3 and new passes ≤ 1/3. Record it in the README; nothing more to do.
    - **New is worse** on any of the three: Claude opens a **follow-up fix PR**, `claude/ar-f<n>-<slug>`, a 1.53.x patch (or the next patch if 1.54.0 is already out). It's targeted at the failing tasks and changes text only (descriptions, prompts, rules, skill, instructions). It re-runs `new` on that branch for the affected tasks, plus t12, and attaches the before/after table. No revert and no block: Steve merges it like any other patch.
    - Repeat at most twice per finding. If a third round is still worse, the PR says so and lists what was tried; Steve decides.
-6. **After 1.54.0** (instructions delivered): run A2 (§8.4) once. Re-run the comparison after any later AR-F that changes the always-on text.
+6. **After 1.54.0** (instructions delivered): run A2 (§8.4) once. Re-run the comparison after any later AR-F that changes the `AGENTS.md` graph_mem section or the skill's workflow text.
 
 ### 8.7 AR-E files, acceptance and specs
 - **Files:** everything under `eval/agent_memory/`; `spec/eval/{verifiers,corpus_builder,metrics}_spec.rb`; `config/application.rb` (exclude `eval/` from autoload and eager load); `.gitignore` (raw results); `docs/agent_eval.md` (short; links the README).
@@ -457,7 +491,7 @@ The old arm also lacks AR-D1–D3 (they're part of 1.53.0), so old vs new measur
   - the stream-json parser works on recorded sample streams (synthetic, checked in);
   - the DB-name guard refuses names that don't start with `graph_mem_eval_`.
 - **Acceptance:** `agent_eval prepare` + `agent_eval smoke` works end to end on Steve's machine. The README records the **measured** time and cost per task run and per dream run from that smoke run, plus the 72- and 144-run extrapolations. `run` defaults to `--embeddings` and refuses to start if Ollama isn't reachable (it suggests `--no-embeddings`). Nothing in `spec/` calls an LLM or the network.
-- **Specs (additions):** `OLD_REF` guard (refuses a ref with `graph_mem_reference.md`); the `core6` task set resolves to the six ids above; resume skips finished attempts.
+- **Specs (additions):** `OLD_REF` guard (refuses a ref with `skills/graph-mem-mcp-toolset/references/tools.md`); the `core6` task set resolves to the six ids above; resume skips finished attempts.
 - **Trigger-eval specs** (*Oct 23-a*): `queries.json` has 20 entries, 8–10 of each polarity, and a 12/8 split; the `Skill`-call detector works on recorded sample JSON outputs (synthetic, checked in); nothing under `skills/` contains an `evals/` folder.
 
 ---
@@ -465,12 +499,13 @@ The old arm also lacks AR-D1–D3 (they're part of 1.53.0), so old vs new measur
 ## D. Step lists: AR-D1–D3 (Claude commits on `claude/ar-rules-rewrite`) and AR-D4 (Devin-simple)
 
 **Rules for AR-D1–D3** (Claude, one commit each, in order, on the rewrite branch):
-- commit messages `AR-D1: stale agent hints`, `AR-D2: expose write fields in schemas`, `AR-D3: skill discovery, Cursor .mdc rules + sync spec`;
+- commit messages `AR-D1: stale agent hints`, `AR-D2: expose write fields in schemas`, `AR-D3: skill discovery, AGENTS.md rule + sync spec` (*Oct 23-c*);
 - touch only the listed files;
 - run the listed spec after each commit;
 - CHANGELOG lines go under `## [Unreleased]` (the release commit renames it);
 - copy the replacement text exactly;
-- stop and ask if a line doesn't match.
+- stop and ask if a line doesn't match;
+- *(Oct 23-c, Steve okayed; recommended)* the branch isn't pushed yet, so before its first push Claude may rewrite the local history into the five clean commits (AR-D1, AR-D2, AR-D3, AR-T, `Release 1.53.0`), each with its own spec run. No force-push once it's pushed.
 
 **Rules for AR-D4** (Devin):
 - branch `devin/ar-d4-docs` off `main` after 1.53.0;
@@ -490,7 +525,7 @@ The old arm also lacks AR-D1–D3 (they're part of 1.53.0), so old vs new measur
 4. `docs/dream_state.md`:
    - l.321 → "1. On the maintenance profile (`/mcp/maintenance`), call `dream_state_status` to see whether compaction is `running` or `paused`. Default-profile agents don't need to: mutating tools pause compaction automatically."
    - l.244: prefix the sentence with "On the maintenance profile, ".
-   - `docs/rules/graph_mem_mcp_rules.md:97` (and its two copies, identically): prefix with "On `/mcp/maintenance`, ".
+   - `docs/rules/graph_mem_mcp_rules.md:97`: prefix with "On `/mcp/maintenance`, ". The `.cursor/rules/` and `.devin/rules/` links follow it; AR-D3 then moves this text to `references/tools.md`, and AR-T moves it on to `references/maintenance.md`.
 5. New spec `spec/services/next_move_vocabulary_spec.rb`:
    - collect every string literal following `next_move:` in `app/services/graph_*_service.rb` and `app/services/relation_semantics.rb`;
    - for each backticked or bare `graph_(write|edit|delete) <op>` mention, assert `<op>` is in that service's `TYPES`;
@@ -522,14 +557,34 @@ The old arm also lacks AR-D1–D3 (they're part of 1.53.0), so old vs new measur
    - Re-run `spec/tools/tool_description_length_spec.rb` if M-D2 has merged (otherwise check every description is ≤ 2,048 chars by hand and say so in the PR).
 4. CHANGELOG › Added: "`graph_write` and `graph_edit` schemas now advertise the provenance/staleness fields the services already accepted (`source`, `confidence`, `valid_from`, `valid_until`, `tags`, `perspective`; relation `weight`/`properties`)."
 
-**AR-D3 [Claude, commit 3]. Skill discovery, Cursor `.mdc` rules + copy-sync spec (1.53.0)** *(Oct 23-a: steps 4–8 and the README rewrite are new)*
+**AR-D3 [Claude, commit 3]. Skill discovery, one `AGENTS.md` rule + sync spec (1.53.0)** *(Oct 23-a: steps 4–8 and the README rewrite are new. Oct 23-c: steps 1–2 replace the `.mdc` rename, decision 9)*
 
-1. **Cursor `.mdc` rules (the files are symlinks).** `.cursor/rules/graph_mem_mcp_rules.md` and `general_coding_rules.md` are symlinks to `../../docs/rules/<name>.md` (`8a1150e`), so `git mv` renames **the link only**:
-   - `git mv .cursor/rules/graph_mem_mcp_rules.md .cursor/rules/graph_mem_mcp_rules.mdc` and the same for `general_coding_rules`. The **targets stay** `docs/rules/*.md`: don't rename them, because Devin's `.devin/rules/*.md` links and copy-out users depend on the `.md` names.
-   - After the move, `readlink` each new link and check it still reads `../../docs/rules/<name>.md` and `git ls-files -s` still shows mode `120000`.
-   - Content edits (frontmatter etc.) go to the **target** in `docs/rules/`, never "through" the link. `docs/rules/general_coding_rules.md` already has Cursor frontmatter (`description`, `globs`, `alwaysApply: true`), so nothing to add there.
-   - **Check for Steve/Claude [UNVERIFIED]:** whether Cursor loads an `.mdc` **symlink** whose target ends in `.md`. Open the repo in Cursor and confirm both rules show as always-on (Cursor Settings → Rules). If Cursor ignores them, replace the two `.cursor/rules/*.mdc` links with regular files (copies of the targets) and switch the sync spec (step 5) from "is a symlink to" to "is byte-identical to" for those two; say which in the PR.
-2. `docs/rules/README.md:25`: keep `.cursor/rules/graph_mem.mdc` and add "(the extension must be `.mdc`; Cursor ignores `.md` files in `.cursor/rules`)".
+1. **One rule file for every agent: root `AGENTS.md`** (*Oct 23-c*):
+   - **Keep the reference text.** Run `git mv docs/rules/graph_mem_mcp_rules.md skills/graph-mem-mcp-toolset/references/tools.md`. Drop its YAML frontmatter, and make its first line the "Read `references/tools.md` when…" sentence from §1. Add the same line to `SKILL.md`. This keeps the old text, with AR-D1's fixes, available between commits; AR-T trims and splits it (§1, §5).
+   - Create a new `docs/rules/graph_mem_mcp_rules.md` with exactly the §5 `AGENTS.md` section (no frontmatter).
+   - **`AGENTS.md`:**
+     - after the intro paragraph, replace the "Using GraphMem as an MCP toolset" section with the same §5 text, byte-identical;
+     - in "Developing GraphMem", replace the bullet "Repo-scoped rules live in `.cursor/rules/` and `.devin/rules/` …" and the one-line RVM bullet with three subsections:
+       - `### Coding rules`: the bullet list from `docs/rules/general_coding_rules.md`, verbatim;
+       - `### Ruby commands (RVM)`: the body of `.cursor/rules/rvm-ruby-commands.mdc` without its frontmatter, with its headings demoted one level;
+       - `### Git safety`: the body of `.devin/rules/git_safety.md` without its frontmatter;
+     - add "Tool reference: `docs/mcp_tools.md`." there too;
+     - size: Codex reads 32 KiB by default; the line limit is under step 1a.
+   - **`docs/rules/general_coding_rules.md`:** drop the frontmatter (Cursor-only, no longer needed). It stays as an optional copy-out snippet.
+1a. **Merge the root `CLAUDE.md` into `AGENTS.md`** (*Oct 23-c*, Steve):
+   - Read `CLAUDE.md` at the current `main` (46 lines at `ecc47b7`). Move everything that applies to all agents into `AGENTS.md`, under "Developing GraphMem", without duplicating what step 1 already put there. Merge overlaps into one wording and list each merge in the PR. At `ecc47b7` that is everything except the "This file provides guidance to Claude Code" sentence:
+     - the project summary (Rails 8.1, Ruby 3.4.1, MariaDB 11.8+, MCP + REST + operator UI) → `AGENTS.md`'s intro;
+     - **Commands**: the RVM prefix block, lint, tests, single spec, `bin/dev`, `bin/mcp`, the docs list. These merge with step 1's RVM subsection and the existing lint/test bullets;
+     - **Database gotchas**: `db/structure.sql`, the `vector(768)` dump loss on older MariaDB, pragma churn, 768-dim Ollama embeddings;
+     - **Architecture**: layers, data model, MCP layer and profiles, per-agent context, writes, search, background jobs, project scans, operator UI, specs and rake tasks;
+     - **Conventions**: these overlap with `general_coding_rules.md` and `git_safety.md` (step 1), so merge them. The l.46 GraphMem pointer becomes the `AGENTS.md` graph_mem section; drop it, since the section is already there.
+   - Afterwards `AGENTS.md` stays under 200 lines (Claude Code's guidance for memory files; well inside Codex's 32 KiB).
+   - `CLAUDE.md` becomes exactly `@AGENTS.md` on its first line. Below it goes only Claude Code-specific content (Claude Code commands, `.claude/` settings, hooks); there's none at `ecc47b7`, so the file is that one line. This is the documented setup for a repo that keeps a `CLAUDE.md`; Claude Code never loads the file twice. If anything Claude-only turns up, keep it under a `## Claude Code only` heading and say so in the PR.
+2. **Remove the per-tool rule files** (*Oct 23-c*, decision 9: the most standard option; all target clients document reading root `AGENTS.md`, §0a):
+   - `git rm .cursor/rules/general_coding_rules.md .cursor/rules/graph_mem_mcp_rules.md .cursor/rules/rvm-ruby-commands.mdc .devin/rules/general_coding_rules.md .devin/rules/graph_mem_mcp_rules.md .devin/rules/git_safety.md`. Their always-on text is in `AGENTS.md` (step 1). `.cursor/rules/` and `.devin/rules/` disappear; `.cursor/environment.json`, `install.sh` and `start.sh` stay (they aren't rules).
+   - Don't leave pointer files: Cursor ignores `.md` files in `.cursor/rules` and doesn't inline a referenced file, and a copy would load twice in clients that also read `AGENTS.md`.
+   - Run `rg -n "\.cursor/rules|\.devin/rules|graph_mem_reference|rvm-ruby-commands|git_safety" --hidden -g '!.git' -g '!CHANGELOG.md' -g '!docs/plans/**'`. Point every hit at `AGENTS.md` (README, `docs/development.md`, `docs/rules/README.md` are covered by step 8) and list the hits in the PR.
+   - **Fallback:** if step 7 shows a client that doesn't load `AGENTS.md`, report it in the PR and don't add anything. With Steve's OK, that client alone gets its native always-on file holding a byte-identical copy of the `AGENTS.md` graph_mem section (for Cursor, `.cursor/rules/graph_mem.mdc` with `alwaysApply: true`), and the sync spec checks the copy.
 3. **Skill discovery for this repo.**
    - `mkdir -p .agents/skills .claude/skills`;
    - `ln -s ../../skills/graph-mem-mcp-toolset .agents/skills/graph-mem-mcp-toolset` (read by Cursor, Codex, Copilot and Devin);
@@ -542,53 +597,86 @@ The old arm also lacks AR-D1–D3 (they're part of 1.53.0), so old vs new measur
      - `ln -s ../../skills/project-scan .agents/skills/project-scan` (Cursor, Codex, Copilot, Devin);
      - `ln -s ../../skills/project-scan .claude/skills/project-scan` (Claude Code).
      - No `.devin/skills/` or `.windsurf/skills/` link: Devin CLI and Devin Desktop both read `.agents/skills/` (Oct 23-b).
-   - If `.devin/skills/` is then empty, it disappears from the tree. Keep `.devin/rules/` as is.
+   - `.devin/` then has nothing left (step 2 removed its rules), so it disappears from the tree.
    - **On request only** (decided): change `triggers: ["user"]` to block style (`triggers:` / `  - user`, Devin's user-only switch; `skills-ref` parses it, §0a) and add `disable-model-invocation: true` (the Cursor/Claude Code equivalent). Add `license: LGPL-3.0-or-later`. No other content change.
    - These two vendor fields are **documented validator exceptions**: list them in `docs/rules/README.md` Notes ("`project-scan` runs only when the user asks for it: it uses Devin's `triggers` and Cursor/Claude Code's `disable-model-invocation`; `skills-ref validate` reports them as unexpected fields, which is expected").
    - Fix any in-repo reference to `.devin/skills/project_scan` (`rg -n "project_scan" --hidden -g '!.git'`) to point at `skills/project-scan/`, apart from CHANGELOG history.
 5. **New `spec/docs/agent_text_sync_spec.rb`** (no network, no Python):
-   - `docs/rules/graph_mem_mcp_rules.md` is the real file, and `.cursor/rules/graph_mem_mcp_rules.mdc` and `.devin/rules/graph_mem_mcp_rules.md` are symlinks that resolve to it (or byte-identical copies if step 1's Cursor check failed); same for `general_coding_rules`;
-   - no file under `.cursor/rules/` ends in `.md`;
-   - `.agents/skills/graph-mem-mcp-toolset` and `.claude/skills/graph-mem-mcp-toolset` are symlinks resolving to `skills/graph-mem-mcp-toolset`; `.agents/skills/project-scan` and `.claude/skills/project-scan` are symlinks resolving to `skills/project-scan`; `.cursor/skills/graph-mem-mcp-toolset`, `.devin/skills/project_scan` and `.windsurf/` don't exist;
+   - *(Oct 23-c)* **one rule file:**
+     - root `AGENTS.md` contains the content of `docs/rules/graph_mem_mcp_rules.md` byte-for-byte, starting at a line `## graph_mem memory (MCP)`; that section is ≤ 12 lines, and `docs/rules/graph_mem_mcp_rules.md` has no YAML frontmatter;
+     - `AGENTS.md` contains the bullet list of `docs/rules/general_coding_rules.md` verbatim;
+     - root `CLAUDE.md`'s first line is exactly `@AGENTS.md` (step 1a), and it doesn't duplicate `AGENTS.md`: no non-blank line after the import, other than a heading, appears verbatim in `AGENTS.md`, and anything after the import sits under `## Claude Code only`;
+   - *(Oct 23-c)* **no per-tool rule files:**
+     - `.cursor/rules/` and `.devin/rules/` don't exist, so "no `.md` under `.cursor/rules/`" holds by construction;
+     - no `.cursorrules`, `.windsurfrules`, `.github/copilot-instructions.md` or `.claude/rules/` is tracked (`git ls-files`);
+     - if Steve later approves a per-client fallback (step 2), this bullet names that one file and checks it's byte-identical to the `AGENTS.md` section;
+   - *(Oct 23-c)* **reference text only in the skill:**
+     - `docs/rules/` holds only `README.md`, `graph_mem_mcp_rules.md` and `general_coding_rules.md`; `docs/rules/graph_mem_reference.md` doesn't exist;
+     - `skills/graph-mem-mcp-toolset/references/tools.md` exists and `SKILL.md` links it with a "Read `references/tools.md` when" line;
+   - `.agents/skills/graph-mem-mcp-toolset` and `.claude/skills/graph-mem-mcp-toolset` are symlinks resolving to `skills/graph-mem-mcp-toolset`; `.agents/skills/project-scan` and `.claude/skills/project-scan` are symlinks resolving to `skills/project-scan`; `.cursor/skills/`, `.devin/` and `.windsurf/` don't exist;
    - `skills/project-scan/SKILL.md` has `disable-model-invocation: true` and `triggers == ["user"]`;
-   - **validator rules, mirrored from `skills-ref`, for every `SKILL.md` under `skills/`, `.agents/skills/`, `.claude/skills/`, `.devin/skills/`:**
+   - **validator rules, mirrored from `skills-ref`, for every `SKILL.md` under `skills/`, `.agents/skills/`, `.claude/skills/`:**
      - frontmatter is the first block between `---` lines and parses with `YAML.safe_load`; no flow-style collections in it (no line matching `/:\s*[\[{]/`), because the validator's strict parser rejects them;
      - `name` matches `/\A[a-z0-9]+(-[a-z0-9]+)*\z/` (so no leading, trailing or double hyphen), is 1–64 chars and equals the parent directory name;
      - `description` is a non-empty string ≤ 1,024 chars;
      - only `name`, `description`, `license`, `compatibility`, `metadata`, `allowed-tools`, plus an explicit per-skill allowlist of vendor extras: `{ "project-scan" => %w[triggers disable-model-invocation] }` and nothing for `graph-mem-mcp-toolset`;
      - `compatibility`, if present, ≤ 500 chars; `metadata`, if present, is a Hash of String → String;
      - the body is < 500 lines;
-     - every relative link in `SKILL.md` points at an existing file at most one directory below the skill root (e.g. `references/x.md`);
+     - every relative link in `SKILL.md` points at an existing file at most one directory below the skill root (e.g. `references/x.md`), and every file in `references/` is linked from `SKILL.md` by a "Read `references/<file>` when" line;
    - **security:** no `scripts/` folder inside any skill, and no `http://` or `https://` URLs in skill files; call templates name endpoints as paths (`/mcp`, `/mcp/maintenance`), not full URLs;
    - the AR-T additions in §AR-T (description start, metadata version) land in this spec in commit 4.
-6. **Release check (manual, not CI):** before each release, Steve or Claude runs `skills-ref validate` (from `agentskills/agentskills/skills-ref`, in a throwaway venv outside the repo) on `skills/graph-mem-mcp-toolset` and `skills/project-scan`, and pastes the output in the release PR. Expected: the first is valid; the second reports only the two documented exception fields. Add this line to the release checklist in `docs/development.md` (or wherever the release steps live; if there is none, add it to the PR template text in the PR description and tell Steve).
-7. **Check for Claude [UNVERIFIED per client]: auto-discovery through the links.** Open the repo in Cursor, Codex, Copilot/VS Code, Devin (CLI and Desktop) and Claude Code and confirm each lists `graph-mem-mcp-toolset` and `project-scan` (via `.agents/skills`, or `.claude/skills` in Claude Code) **once each**, and that `project-scan` isn't auto-invoked. Claude Code documents symlinked skill folders and loads a target once even when several locations point at it, so only a quick `/skills` check there. Devin Desktop also scans `.claude/skills` when Claude Code config reading is on, so check it doesn't list either skill twice; if it does, say so in the PR and ask Steve how to handle it. If a client doesn't follow folder symlinks, note it in `docs/rules/README.md`; don't replace a link with a copy without asking Steve.
-8. **`docs/rules/README.md` install table rewrite** (replace the "Where to install them" table and its Notes line about the `.cursor/skills/` adapter):
+6. **Release check (manual, not CI):** before each release, Steve or Claude runs `skills-ref validate` (from `agentskills/agentskills/skills-ref`) on `skills/graph-mem-mcp-toolset` and `skills/project-scan`, and pastes the output in the release PR. Expected: the first is valid; the second reports only the two documented exception fields. Add this line to the release checklist in `docs/development.md` (or wherever the release steps live; if there is none, add it to the PR template text in the PR description and tell Steve). *(Oct 23-c, Steve okayed)* The validator runs **only in a throwaway venv outside the repo, on temporary copies of the two skill folders** (`cp -rL` into a temp dir), never inside the repo: no venv, `pip` cache or validator output is ever written to the working tree.
+7. **Client checks [UNVERIFIED per client]: rules and skills picked up automatically.** *(Oct 23-c, Steve okayed:)* Claude checks **Claude Code**. **Steve** checks the other clients, and the PR lists them as **pending** with this checklist:
+   - **Claude Code** (Claude): `/context` lists `CLAUDE.md` with `AGENTS.md` imported, once; `/skills` lists `graph-mem-mcp-toolset` and `project-scan` once each; `project-scan` isn't auto-invoked.
+   - **Cursor** (Steve): Customize → Rules shows `AGENTS.md` and no project rules; the RVM rule is followed (ask for a spec run and check it uses `rvm use`); both skills listed once via `.agents/skills`.
+   - **Codex** (Steve): `codex --ask-for-approval never "Summarize the current instructions."` quotes the graph_mem section; both skills listed.
+   - **Copilot / VS Code** (Steve): Chat: Open Customizations lists `AGENTS.md`; References on a reply include it; both skills listed.
+   - **Devin CLI and Desktop** (Steve): the rules list shows `AGENTS.md` as always-on; both skills listed once. Desktop also scans `.claude/skills/` when Claude Code config reading is on, so check for duplicates.
+   - If a client lists a skill twice, doesn't follow the folder symlinks, or doesn't load `AGENTS.md`: note it in the PR and in `docs/rules/README.md`. Don't add copies or per-tool files without Steve's OK (step 2 fallback).
+8. **`docs/rules/README.md` rewrite** (*Oct 23-c:* one install recipe for every agent; replaces the "Files" and "Where to install them" tables and the Notes):
+   - **Files table:**
+     - `graph_mem_mcp_rules.md`: the `AGENTS.md` snippet (10 lines);
+     - `general_coding_rules.md`: optional generic coding rules, also plain Markdown for `AGENTS.md`;
+     - `../../skills/graph-mem-mcp-toolset/`: the skill, with its `references/` (tool and maintenance reference, loaded only when needed);
+     - `../../skills/project-scan/`: the on-request scan skill.
+   - **"Install in another project (the same for every agent)":**
+     1. Copy the whole `skills/graph-mem-mcp-toolset/` folder (including `references/`), and `skills/project-scan/` if you want the on-request scan skill, into the project's `.agents/skills/`. For Claude Code, also put them in `.claude/skills/` (a symlink from one location to the other works in Claude Code; this repo links both).
+     2. Paste `graph_mem_mcp_rules.md` into the project's root `AGENTS.md` (create it if it's missing).
+     3. Claude Code only: if the project has a `CLAUDE.md`, make `@AGENTS.md` its first line, and move anything in it that applies to all agents into `AGENTS.md`. Claude Code reads `AGENTS.md` by itself only when there's no `CLAUDE.md`.
+   - **"Who reads what"** (for reference; nothing to configure per agent):
 
-   | Agent / IDE | Rules target | Skill target |
-   |---|---|---|
-   | Cursor | `.cursor/rules/graph_mem.mdc` (project; must be `.mdc`) or Settings → Rules (global) | `.agents/skills/graph-mem-mcp-toolset/` (Cursor also reads `.cursor/skills/`) |
-   | Codex, GitHub Copilot / VS Code, other AGENTS.md hosts | append to `AGENTS.md` | `.agents/skills/graph-mem-mcp-toolset/` |
-   | Devin (CLI and Desktop, formerly Windsurf) | `.devin/rules/` in the target repo (or `AGENTS.md`); global: `~/.devin/rules/` (CLI) or Cascade Customizations → Rules → + Global (Desktop) | `.agents/skills/graph-mem-mcp-toolset/` (`.devin/skills/` also works) |
-   | Claude Code | append to `CLAUDE.md` (project) or `~/.claude/CLAUDE.md` (global) | `.claude/skills/graph-mem-mcp-toolset/` (the only path Claude Code reads) |
+     | Agent / IDE | Rules | Skills |
+     |---|---|---|
+     | Cursor | `AGENTS.md` | `.agents/skills/` |
+     | Codex | `AGENTS.md` | `.agents/skills/` |
+     | GitHub Copilot / VS Code | `AGENTS.md` (VS Code setting `chat.useAgentsMdFile`, on by default) | `.agents/skills/` |
+     | Devin CLI and Devin Desktop (formerly Windsurf) | `AGENTS.md` | `.agents/skills/` |
+     | Claude Code | `CLAUDE.md` with `@AGENTS.md`, or `AGENTS.md` when there's no `CLAUDE.md` | `.claude/skills/` |
 
-   - Lead-in sentence: "Copy the whole `skills/graph-mem-mcp-toolset/` folder (including `references/`), and `skills/project-scan/` if you want the on-request scan skill, into `.agents/skills/` and, for Claude Code, `.claude/skills/`. A symlink from one location to the other works in Claude Code; this repo links both for its own sessions."
-   - Notes: drop the line about the `.cursor/skills/` adapter; add "The skill is plain Markdown: no scripts and no URL fetches. Review any skill before installing it, including this one." and the `project-scan` validator-exception note from step 4; add "Windsurf is now Devin Desktop: use the Devin row. Older Windsurf setups in `.windsurf/rules/` and `.windsurf/skills/` are still read as a fallback, but `.devin/` is preferred."
-9. CHANGELOG › Fixed: "Cursor now loads the repo's always-on rules (`.mdc`)." and "Agents in this repo (Cursor, Codex, Copilot, Devin via `.agents/skills/`; Claude Code via `.claude/skills/`) now discover the graph_mem skills; the stale Cursor skill shim is removed; `project_scan` moves to `skills/project-scan/` (renamed to match its skill name, linked from `.agents/skills/` and `.claude/skills/`, and run only on request)." CHANGELOG › Changed: "`docs/rules/README.md` install table follows the Agent Skills paths."
+   - **Notes:**
+     - Per-tool rule folders (`.cursor/rules/*.mdc`, `.devin/rules/`, `.windsurf/rules/`, `.github/copilot-instructions.md`) still work but aren't needed. Don't put the graph_mem text in both places: clients that combine sources load it twice.
+     - Windsurf is now Devin Desktop; older `.windsurf/` setups are still read as a fallback.
+     - "The skill is plain Markdown: no scripts and no URL fetches. Review any skill before installing it, including this one."
+     - Keep `X-MCP-Client` set in your MCP config so each agent gets its own context bucket (see the skill's `references/tools.md`).
+     - Add the `project-scan` validator-exception note from step 4.
+9. CHANGELOG › Fixed: "Every agent now loads the repo's rules from one root `AGENTS.md` (Cursor, Codex, Copilot, Devin; Claude Code through `@AGENTS.md` in `CLAUDE.md`). The per-tool rule files in `.cursor/rules/` and `.devin/rules/` are removed; Cursor had been ignoring the `.md` ones." and "Agents in this repo (Cursor, Codex, Copilot, Devin via `.agents/skills/`; Claude Code via `.claude/skills/`) now discover the graph_mem skills; the stale Cursor skill shim is removed; `project_scan` moves to `skills/project-scan/` (renamed to match its skill name, linked from `.agents/skills/` and `.claude/skills/`, and run only on request)." CHANGELOG › Changed: "`docs/rules/README.md` has one install recipe for every agent: the skill in `.agents/skills/` (plus `.claude/skills/` for Claude Code) and a 10-line snippet in `AGENTS.md`. The graph_mem reference text moved into the skill's `references/`."
 
 **[Devin-simple] AR-D4. Docs follow-ups (after 1.53.0)**
 
-1. README "Rules & Skills" (l.73-88): add `docs/rules/graph_mem_reference.md` ("maintenance and parameter reference, linked from the always-on rules") and one line on the memory homes (decision 2).
-2. `docs/rules/README.md`: under the install table (rewritten in AR-D3 step 8), add one line "copy `graph_mem_reference.md` next to the rules file". Don't change the table rows.
-3. `AGENTS.md` / `CLAUDE.md` "Using GraphMem as an MCP toolset": point to the new files; no other edits.
-4. `rg -n "search_entities|create_entity|move_to_parent|execution templates" README.md docs skills .agents .claude .cursor .devin`: list remaining hits in the PR; don't edit alias docs in `docs/mcp_tools.md` (aliases are documented there on purpose).
+1. README "Rules & Skills" (l.73-88): describe the setup in two lines ("copy the skill into `.agents/skills/` and paste `docs/rules/graph_mem_mcp_rules.md` into your `AGENTS.md`; the tool and maintenance reference is inside the skill", *Oct 23-c*), link `docs/rules/README.md`, and add one line on the memory homes (decision 2).
+2. ~~`docs/rules/README.md`: "copy `graph_mem_reference.md` next to the rules file"~~ *(Oct 23-c: skip; there's no separate reference file, and AR-D3 step 8 already covers the README.)*
+3. ~~`AGENTS.md` / `CLAUDE.md` pointers~~ *(Oct 23-c: skip; AR-D3 step 1 rewrites both.)*
+4. `rg -n "search_entities|create_entity|move_to_parent|execution templates" README.md AGENTS.md CLAUDE.md docs skills .agents .claude`: list remaining hits in the PR; don't edit alias docs in `docs/mcp_tools.md` (aliases are documented there on purpose).
 5. *(Oct 23-a)* README "Rules & Skills": replace any "copy `skills/graph-mem-mcp-toolset/` into the repo" wording with "copy it into `.agents/skills/` (and `.claude/skills/` for Claude Code); see `docs/rules/README.md`". Then `rg -n "\.cursor/skills|\.devin/skills|project_scan" README.md AGENTS.md CLAUDE.md docs` and list the hits in the PR; fix only the ones that tell a user where to install the skill.
-6. *(Oct 23-b)* **Move any `.windsurf/` content to `.devin/`** (mechanical):
-   - `git ls-files .windsurf .windsurfrules`. At `ecc47b7` this lists nothing (`.windsurfrules` is only git-ignored, `.gitignore` l.53), so the step is just the check below; skip the moves if the list is empty.
-   - Otherwise `git mv` each path to its `.devin/` equivalent: `.windsurf/rules/X.md` → `.devin/rules/X.md`, `.windsurf/skills/X/` → `.devin/skills/X/`, `.windsurf/workflows/X.md` → `.devin/workflows/X.md`, `.windsurf/global_rules.md` → `.devin/global_rules.md`, a tracked `.windsurfrules` → `.devin/rules/windsurfrules.md`. If a target already exists, stop and ask Steve.
-   - **Check:** `rg -n "\.windsurf/|\.windsurfrules" --hidden -g '!.git' -g '!CHANGELOG.md' -g '!docs/plans/**'` returns nothing, apart from the legacy note in `docs/rules/README.md` and the `.gitignore` line (keep both). Paste the output in the PR.
+6. *(Oct 23-b; targets updated Oct 23-c)* **Move any `.windsurf/` content to the standard locations** (mechanical):
+   - Run `git ls-files .windsurf .windsurfrules .devin`. At `ecc47b7` there's no `.windsurf/` content (`.windsurfrules` is only git-ignored, `.gitignore` l.53), and after 1.53.0 there's no `.devin/` either. So the step is just the check below; skip the moves if the list is empty.
+   - Otherwise:
+     - a skill folder `X/` → `git mv` to `skills/X/`, plus a relative `.agents/skills/X` link (and `.claude/skills/X`);
+     - rule text (`.windsurf/rules/*.md`, `.windsurf/global_rules.md`, a tracked `.windsurfrules`) → stop and ask Steve before folding it into `AGENTS.md`;
+     - workflows (`.windsurf/workflows/`) → stop and ask Steve (Devin is phasing workflows out in favour of skills).
+   - **Check:** `rg -n "\.windsurf/|\.windsurfrules|\.devin/" --hidden -g '!.git' -g '!CHANGELOG.md' -g '!docs/plans/**'` returns nothing apart from the legacy notes in `docs/rules/README.md` and the `.gitignore` line (keep both). Paste the output in the PR.
    - Leave product mentions of Windsurf alone (README "Windsurf" MCP section, `docs/troubleshooting.md`, `bin/windsurf_mcp_graph_mem_runner.sh`, the `~/.codeium/windsurf-next` default in `lib/tasks/memory_data.rake`): they're about the app and its config files, not repo paths. List them in the PR for Steve.
-   - CHANGELOG › Changed: "Repo agent config uses `.devin/` only (Windsurf is now Devin Desktop)." only if something moved.
+   - CHANGELOG › Changed: "Repo agent config uses only `AGENTS.md`, `skills/` and `.agents/skills/` (Windsurf is now Devin Desktop)." only if something moved.
 
 ---
 
@@ -598,7 +686,7 @@ The old arm also lacks AR-D1–D3 (they're part of 1.53.0), so old vs new measur
   - items 1, 2, 4, 5, 6 above;
   - `lib/graph_mem/mcp_instructions.rb` (per-profile texts; not wired, decision 3);
   - `app/lib/tool_success_response.rb`;
-  - `docs/rules/graph_mem_reference.md` (new) + copies;
+  - `skills/graph-mem-mcp-toolset/references/tools.md` (trimmed after the AR-D3 move; *Oct 23-c*, it replaces `docs/rules/graph_mem_reference.md` and its copies);
   - `skills/…/SKILL.md` and its new `references/maintenance.md` (`references/hosts.md` and the shim's removal are AR-D3);
   - CHANGELOG `## [Unreleased]` › Changed (renamed to `## [1.53.0]` in commit 5);
   - `lib/graph_mem/version.rb`.
@@ -608,16 +696,17 @@ The old arm also lacks AR-D1–D3 (they're part of 1.53.0), so old vs new measur
     - `search` starts with "Recall what earlier sessions learned";
     - `graph_write` starts with "Persist a durable lesson";
     - `graph_edit` starts with "Rewrite what the graph already knows";
-    - every advertised description, prompt text, `next_move` hint, `instructions` text, the always-on rules file and the skill name only tools advertised on the profile they're shown on: parse `` `name` `` tokens that match a registered tool name and check them against `McpProfile.select_tools`; maintenance tools may appear only in the reference docs (`docs/rules/graph_mem_reference.md` and the skill's `references/maintenance.md`) or next to "/mcp/maintenance";
+    - every advertised description, prompt text, `next_move` hint, `instructions` text, the `AGENTS.md` graph_mem section (checked as the default profile) and the skill name only tools advertised on the profile they're shown on: parse `` `name` `` tokens that match a registered tool name and check them against `McpProfile.select_tools`; maintenance tools may appear only in the skill's `references/maintenance.md` or next to "/mcp/maintenance";
     - no hidden alias name appears in any of them.
   - `spec/lib/graph_mem/mcp_instructions_spec.rb`: default and maintenance texts ≤ 2,048 chars and contain "orient", "search", "persist"; readonly has no "persist"; every tool named is on that profile. (The `initialize` delivery specs come with the wiring in mcp PR-2 §2.17.)
-  - `agent_text_sync_spec.rb` additions: rules file ≤ 45 lines; skill description ≤ 1,024 chars and starts with "Recalls and records project conventions"; it contains no `\byou(r)?\b` and no `\bI\b`; `metadata["graph-mem-version"] == GraphMem::VERSION` (so the release commit must set it); `SKILL.md` has a `## Gotchas` heading and names `graph_mem:search`; `references/maintenance.md` exists, is linked from `SKILL.md` with a "Read `references/maintenance.md` when" line, and `SKILL.md` itself no longer contains `dream_state_status` or `list_maintenance_review`; the rules reference doc exists and is linked.
-- **Acceptance:** specs green; full suite green when run alone; text exactly as in this plan, or the PR lists each deviation with a reason; the release PR carries the manual `skills-ref validate` output (AR-D3 step 6) and the results of the two client checks (AR-D3 steps 1 and 7) or says which ones Steve still has to do. The PR description lists the five commits and says "eval: post-release, agent-rules §8.6". No eval results are needed to merge.
+  - `agent_text_sync_spec.rb` additions: the `AGENTS.md` graph_mem section ≤ 12 lines (already in AR-D3's spec); skill description ≤ 1,024 chars and starts with "Recalls and records project conventions"; it contains no `\byou(r)?\b` and no `\bI\b`; `metadata["graph-mem-version"] == GraphMem::VERSION` (so the release commit must set it); `SKILL.md` has a `## Gotchas` heading and names `graph_mem:search`; `references/maintenance.md` exists, is linked from `SKILL.md` with a "Read `references/maintenance.md` when" line, and `SKILL.md` itself no longer contains `dream_state_status` or `list_maintenance_review`; `references/tools.md` no longer contains the scan or dream-state sections.
+- **Acceptance:** specs green; full suite green when run alone; text exactly as in this plan, or the PR lists each deviation with a reason; the release PR carries the manual `skills-ref validate` output (AR-D3 step 6) and the Claude Code check from AR-D3 step 7, and lists the other clients' checks as **pending for Steve** (Oct 23-c). The PR description lists the five commits and says "eval: post-release, agent-rules §8.6". No eval results are needed to merge.
 - **Risks:**
   - Hosts ignore `instructions` or skills, which the eval shows and A2 measures.
   - More recall calls cost tokens, which the eval's cost metric shows.
   - Over-application on the distractor task (t12) is the check against rules that fire too eagerly.
   - *(Oct 23-a)* A client that doesn't follow folder symlinks sees no skill in this repo (AR-D3 step 7 finds out). Copy-out users are unaffected: they copy the real folder.
+  - *(Oct 23-c)* A client that doesn't load root `AGENTS.md` loses the always-on rule in this repo until Steve approves a per-client copy (AR-D3 step 2 fallback). All target clients document `AGENTS.md` support (§0a).
   - *(Oct 23-a)* The spec is unversioned: if a versioned release changes a field rule, the sync spec is the one place to update.
 
 ## 9. Later (not scheduled)
@@ -641,4 +730,15 @@ Steve's Oct 22-b answers closed the first five:
 8. **Where should `project-scan` live?** → **`skills/project-scan/` is canonical**, linked like the main skill from the paths agents pick up automatically: `.agents/skills/` and `.claude/skills/` (AR-D3 step 4). *(Oct 23-b: the `.windsurf/skills/` link was dropped; Devin reads `.agents/skills/`.)*
 9. **Windsurf row in the install table** → first decided as "stays, marked verified". **Superseded Oct 23-b:** `.windsurf/` is being sunset, so the Devin row covers it (`.devin/rules/`, `.agents/skills/`) with Windsurf as a legacy note (AR-D3 step 8), and AR-D4 step 6 moves any `.windsurf/` content to `.devin/`. Auto-discovery through symlinks remains a Claude check (AR-D3 step 7).
 
-The future of fast-mcp was decided on Oct 22-c (mcp plan D-24: it freezes at 1.8.x with bug fixes only, and is archived after both consumer apps have migrated). Apart from the client checks in §0b and AR-D3 steps 1 and 7, there are no open items left in the train.
+**Oct 23-c decision** (Steve, Oct 23, 2026, after Claude flagged the §5 / AR-D3 step 5 conflict):
+
+10. **Rules and reference layout** → **as standard and IDE-agnostic as possible** (decision 9):
+    - one 10-line graph_mem section in root `AGENTS.md`, imported by `CLAUDE.md`;
+    - root `CLAUDE.md` merged into `AGENTS.md`: `CLAUDE.md` = `@AGENTS.md` first, then Claude Code-only content (none today; AR-D3 step 1a);
+    - per-tool rule files removed (`.cursor/rules/*`, `.devin/rules/*`), their always-on text folded into `AGENTS.md`;
+    - reference text in the skill's `references/`;
+    - one install recipe for every agent.
+
+    Also okayed: `skills-ref` only in a throwaway venv on temporary copies; Steve checks the clients other than Claude Code (pending in the PR); Claude may rewrite the unpushed branch into five clean commits (recommended). This supersedes Q9's install-table wording.
+
+The future of fast-mcp was decided on Oct 22-c (mcp plan D-24: it freezes at 1.8.x with bug fixes only, and is archived after both consumer apps have migrated). Apart from the client checks in §0b and AR-D3 step 7, there are no open items left in the train.
