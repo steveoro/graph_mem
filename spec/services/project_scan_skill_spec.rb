@@ -146,4 +146,16 @@ RSpec.describe ProjectScanSkill, type: :service do
       expect(OperationProgress.last.counters).to include("skipped_outside_root" => 1)
     end
   end
+
+  it "doesn't list entries of a source folder linked from outside the project" do
+    with_scan_project do |root, home|
+      create_project_files(root)
+      outside = File.join(home, "elsewhere").tap { |dir| FileUtils.mkdir_p(File.join(dir, "secret_widget")) }
+      File.symlink(outside, File.join(root, "lib"))
+
+      described_class.process!(create_operation(root, depths: %w[architecture]))
+
+      expect(MemoryEntity.where("name LIKE ?", "%secret_widget%")).to be_empty
+    end
+  end
 end

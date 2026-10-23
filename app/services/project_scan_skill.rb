@@ -181,6 +181,8 @@ class ProjectScanSkill
     source_dirs.uniq.each do |dir|
       full_dir = File.join(@project_root, dir)
       next unless Dir.exist?(full_dir)
+      # A linked lib/ or src/ outside the project would leak its entries' names into the graph.
+      next unless ScanRootPolicy.contained?(@file_filter.root, ScanRootPolicy.realpath_or_nil(full_dir).to_s)
 
       parent_type = architecture_type_for(dir)
       Dir.children(full_dir).reject { |c| skip_child?(c) }.each do |child|
@@ -399,7 +401,7 @@ class ProjectScanSkill
   # Internal globs only; files outside the root or denylisted are never read (PR-0 §0.5 item 5).
   def discover_files(globs)
     globs.flat_map do |pattern|
-      Dir.glob(File.join(@project_root, pattern)).select { |f| File.file?(f) && @file_filter.keep?(f) }
+      @file_filter.glob(pattern).filter_map { |f| @file_filter.kept_path(f) if File.file?(f) }
     end.uniq.sort.first(MAX_FILES)
   end
 
@@ -423,7 +425,7 @@ class ProjectScanSkill
   end
 
   def relative_path(file)
-    Pathname.new(file).relative_path_from(@project_root).to_s
+    Pathname.new(file).relative_path_from(@file_filter.root).to_s
   rescue ArgumentError
     ""
   end

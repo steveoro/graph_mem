@@ -46,7 +46,7 @@ services:
       - ${DB_BACKUP_HOST_PATH:-./db/backup}:/rails/db/backup
       - graph_mem_storage:/rails/storage
       # READ-ONLY. Same path in and out, so /home/<you>/Projects/foo works as typed.
-      - ${GRAPH_MEM_SCAN_HOME:-${HOME}}:${GRAPH_MEM_SCAN_HOME:-${HOME}}:ro
+      - ${GRAPH_MEM_SCAN_HOME:-${HOME:?set GRAPH_MEM_SCAN_HOME (HOME is unset)}}:${GRAPH_MEM_SCAN_HOME:-${HOME}}:ro
 
 volumes:
   graph_mem_db:

@@ -12,10 +12,15 @@ Three layers decide what can actually be scanned, all enforced by `ScanRootPolic
 2. **The subfolder filter:** Settings › Project scans, default `Projects`. Only these folders under
    the root are scannable. It is read on every scan request and at job start, so a change takes
    effect immediately, in every process, with no restart.
-3. **The hard denylist** (never configurable): hidden folders (`.ssh`, `.gnupg`, `.aws`, `.config`,
-   …, anything starting with `.`), `snap`, `Library`, `AppData`, `Maildir`, `Mail`; and, inside a
-   project, `.git`, `.env*`, key and certificate files, `credentials*`, `master.key`, `*.tfstate`,
-   even when a `file_globs` entry names them.
+3. **The hard denylist** (never configurable):
+   - **scan roots and project folders** can't be, or be inside, a hidden folder (`.ssh`, `.gnupg`,
+     `.aws`, `.config`, …, anything starting with `.`) or `snap`, `Library`, `AppData`, `Maildir`,
+     `Mail`. The scan root itself can't be scanned as one project either: pick a folder inside it;
+   - **inside a project**, `.git`, `.ssh`, `.gnupg`, `.aws`, `.kube`, `.docker`, `.password-store`,
+     `.env*`, key and certificate files, `credentials*`, `master.key`, `*.tfstate`, shell history and
+     a few other secret files are never read, even when a `file_globs` entry names them (matching
+     ignores case). Other project dot-folders such as `.github` stay readable through explicit
+     globs; the default `**/*` scan skips every dot-file.
 
 Settings › Project scans shows the mounted folders (read-only or read-write), the filter with the
 status of each entry, the always-blocked list and a "check a path" box.
@@ -45,6 +50,23 @@ an amber "mounted read-write" warning.
 If nothing is mounted at the scan root, scans are disabled and say so ("nothing is mounted").
 A scan root can't be `/`, a system folder (`/usr`, `/etc`, `/var`, …), the app (`/rails`) or the
 container user's own home (`/home/rails`).
+
+## Narrowing the mount (recommended)
+
+The default mounts your whole home, so the policy above is the only thing between the container
+and `~/.ssh` or `~/.config`. If your projects all live in one folder, mount just that:
+
+```bash
+# .env
+GRAPH_MEM_SCAN_HOME=/home/you/Projects
+```
+
+and set the subfolder filter in Settings › Project scans to **blank** (the default `Projects` would
+look for `~/Projects/Projects`). Every project folder inside the mount is then scannable, and
+nothing else of your home is visible to the container at all.
+
+If `HOME` is unset (systemd, cron) and `GRAPH_MEM_SCAN_HOME` is empty, `docker compose` stops with
+"set GRAPH_MEM_SCAN_HOME (HOME is unset)" instead of starting with a broken mount.
 
 ## UID and permissions
 
@@ -107,8 +129,9 @@ Desktop. Windows paths need a path map, which graph_mem doesn't have yet.
 
 ## Symlinks
 
-Links that resolve outside the scan root, or into a hidden folder, are skipped: as a scan root
-they are refused, and inside a project the files they point to are never read.
+A project folder whose realpath leaves the scan root, or lands in a hidden or protected folder, is
+refused. Inside a project, a file whose realpath leaves the project, or matches the in-project
+denylist above, is never read; scanners read the realpath they checked, not the link.
 
 ## Native installs (`bin/dev`)
 

@@ -57,8 +57,12 @@ class ScanRootPolicy
     # @return [Array<Hash>] +{ path:, root: }+ with real paths
     def allowed_roots
       roots = valid_hard_roots
-      entries = subfolder_entries(roots).reject { |entry| entry[:error] }
-      return roots.map { |root| { path: root[:path], root: root[:path] } } if entries.empty?
+      parsed = subfolder_entries(roots)
+      # Only a really blank filter means "the whole root"; a filter whose entries are all invalid
+      # (written straight to the table, say) allows nothing.
+      return roots.map { |root| { path: root[:path], root: root[:path] } } if parsed.empty?
+
+      entries = parsed.reject { |entry| entry[:error] }
 
       roots.flat_map do |root|
         entries.filter_map do |entry|

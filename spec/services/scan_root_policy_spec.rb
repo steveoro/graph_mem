@@ -190,4 +190,30 @@ RSpec.describe ScanRootPolicy do
       end
     end
   end
+
+  describe "PR #111 review" do
+    it "refuses the scan root itself as a project folder, including '~'" do
+      with_scan_home(subfolders: "") do |home|
+        expect(resolve(home)).to have_attributes(code: :invalid)
+        expect(resolve(home).message).to include("pick a project folder inside it")
+        expect(resolve("~").code).to eq(:invalid)
+      end
+    end
+
+    it "allows nothing when every stored filter entry is invalid (fails closed)" do
+      with_scan_home do |home|
+        project = mkdir(home, "Projects", "alpha")
+        write_scan_subfolders_raw(".ssh, ../x")
+
+        expect(described_class.allowed_roots).to eq([])
+        expect(resolve(project).code).to eq(:outside_filter)
+      end
+    end
+
+    it "matches protected root folder names regardless of case" do
+      with_scan_home(subfolders: "") do |home|
+        expect(resolve(mkdir(home, "library", "x")).code).to eq(:denied)
+      end
+    end
+  end
 end

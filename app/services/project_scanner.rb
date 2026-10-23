@@ -281,18 +281,23 @@ class ProjectScanner
 
   # Globs under the root, keeping only files inside it that aren't denylisted (PR-0 §0.5),
   # sorted before the max_files cap so the selected set doesn't depend on filesystem order.
+  # Returns the realpaths that were checked, so the read can't follow a different link.
   def discover_files
-    globs = @file_globs.flat_map { |g| Dir.glob(File.join(@project_root, g)) }.uniq
-    glob_files = globs.select { |f| File.file?(f) && @file_filter.keep?(f) && File.readable?(f) && !binary?(f) }
+    glob_files = readable_files(@file_globs.flat_map { |g| @file_filter.glob(g) })
 
     # If explicit globs produce nothing, fall back to a shallow source scan.
-    if glob_files.empty?
-      glob_files = Dir.glob(File.join(@project_root, "**", "*")).select do |f|
-        File.file?(f) && text_extension?(f) && @file_filter.keep?(f) && File.readable?(f) && !binary?(f)
-      end
-    end
+    glob_files = readable_files(@file_filter.glob("**/*").select { |f| text_extension?(f) }) if glob_files.empty?
 
     glob_files.sort.first(@max_files)
+  end
+
+  def readable_files(paths)
+    paths.uniq.filter_map do |path|
+      next unless File.file?(path)
+
+      real = @file_filter.kept_path(path)
+      real if real && File.readable?(real) && !binary?(real)
+    end.uniq
   end
 
   def binary?(path)
@@ -318,7 +323,7 @@ class ProjectScanner
     files.each do |file|
       next if File.size(file) > MAX_FILE_BYTES
 
-      relative = Pathname.new(file).relative_path_from(@project_root).to_s
+      relative = Pathname.new(file).relative_path_from(@file_filter.root).to_s
       content = File.binread(file).force_encoding("UTF-8")
       content = content.encode("UTF-8", invalid: :replace, undef: :replace)
       snippet = "--- FILE: #{relative}\n#{content}\n---\n"
@@ -418,7 +423,7 @@ class ProjectScanner
 
     manifests = @discovered_files.select { |file| manifest_file?(file) }
     manifests.each do |file|
-      relative = Pathname.new(file).relative_path_from(@project_root).to_s
+      relative = Pathname.new(file).relative_path_from(@file_filter.root).to_s
       next if relative.blank?
 
       content_preview = file_preview(file, 400)

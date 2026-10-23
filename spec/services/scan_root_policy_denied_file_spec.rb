@@ -4,7 +4,8 @@ require "rails_helper"
 
 RSpec.describe ScanRootPolicy, ".denied_file?" do
   denied = %w[.env .env.local config/master.key id_ed25519 .git/config deploy.pem terraform.tfstate
-              certs/server.key .aws/credentials secrets/credentials.yml .netrc]
+              certs/server.key .aws/credentials secrets/credentials.yml .netrc
+              Deploy.PEM .ENV ID_RSA .SSH/config .Git/HEAD .bash_history .zsh_history .pgpass .my.cnf vpn/home.ovpn]
   allowed = %w[app/models/x.rb .github/workflows/ci.yml README.md config/database.yml docs/keys.md]
 
   around do |example|
