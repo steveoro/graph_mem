@@ -52,7 +52,8 @@ end
 server = FastMcp::Server.new(
   name: server_info[:name],
   version: server_info[:version],
-  logger: FastMcp::Logger.new
+  logger: FastMcp::Logger.new,
+  **GraphMem::McpServerOptions.for_stdio(profile)
 )
 GraphMem::McpToolRegistry.register_with!(server, profile: profile)
 RunnerLogger.info(

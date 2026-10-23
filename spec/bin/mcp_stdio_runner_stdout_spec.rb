@@ -45,6 +45,10 @@ RSpec.describe "bin/mcp_stdio_runner.rb stdout" do
     expect(replies).to all(include("jsonrpc" => "2.0"))
     expect(replies.map { |reply| reply["id"] }).to eq([ 1, 2, 3 ])
     expect(replies.first.dig("result", "protocolVersion")).to eq("2025-11-25")
+    expect(replies.first["result"]).to include(
+      "instructions" => GraphMem::McpInstructions.for(:default),
+      "capabilities" => GraphMem::McpServerOptions::CAPABILITIES.deep_stringify_keys
+    )
     expect(err).to include("Registered tool")
   end
 end

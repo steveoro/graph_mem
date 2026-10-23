@@ -7,6 +7,7 @@ require_relative "../../lib/graph_mem/mcp_tool_registry"
 require_relative "../../lib/graph_mem/mcp_error_formatter"
 require_relative "../../lib/graph_mem/mcp_server_patch"
 require_relative "../../lib/graph_mem/mcp_streamable_http_transport"
+require_relative "../../lib/graph_mem/mcp_server_options"
 
 # Toggle this to enable/disable debug output
 debug_mode = false
@@ -25,10 +26,13 @@ puts "[DEBUG] FastMcp Initializer: Starting setup..." if debug_mode
 fast_mcp_logger = Logger.new(ENV["GRAPH_MEM_MCP_STDIO"] ? $stderr : $stdout)
 fast_mcp_logger.level = Logger::DEBUG # Or your preferred level (INFO, WARN, ERROR)
 
+# Per-profile instructions (GraphMem::McpInstructions, mcp plan PR-2 §2.17) and only the
+# capabilities graph_mem delivers (§2.18).
 server = FastMcp::Server.new(
   name: Rails.application.class.module_parent_name.underscore.dasherize,
   version: GraphMem::VERSION.to_s,
-  logger: fast_mcp_logger
+  logger: fast_mcp_logger,
+  **GraphMem::McpServerOptions.for_http
 )
 
 GraphMem::McpErrorFormatter.install(server)
