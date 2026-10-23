@@ -98,6 +98,19 @@ RSpec.describe GraphWriteTool, type: :model do
       expect(MemoryEntity.find_by!(name: "Alpha Service").aliases).to eq("Alpha|α-svc")
     end
 
+    it "rejects non-string create_entity aliases, with the operation index, and creates nothing" do
+      [ [ { "a" => 1 } ], { "a" => 1 }, [ [ "x" ] ], [ "ok", { "a" => 1 } ] ].each do |aliases|
+        expect do
+          tool.call_with_schema_validation!(
+            operations: [ { type: "create_entity", name: "Alpha Service", entity_type: "Service", aliases: aliases } ]
+          )
+        end.to raise_error(
+          FastMcp::Tool::InvalidArgumentsError, /create_entity\[0\]: aliases must be an array of strings\./
+        )
+      end
+      expect(MemoryEntity.where(name: "Alpha Service")).not_to exist
+    end
+
     it "rejects a create_entity alias that contains the pipe separator" do
       expect do
         tool.call_with_schema_validation!(

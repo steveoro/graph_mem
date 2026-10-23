@@ -78,15 +78,34 @@ RSpec.describe GraphEditTool, type: :model do
     expect(entity.reload.aliases).to eq("")
   end
 
-  it "rejects aliases that are not strings" do
-    entity = MemoryEntity.create!(name: "SynthWidget", entity_type: "Component", aliases: "old")
+  {
+    "a Hash item" => [ { "a" => 1 } ],
+    "a Hash as the whole value" => { "a" => 1 },
+    "a nested array" => [ [ "x" ] ],
+    "a mixed array" => [ "ok", { "a" => 1 } ]
+  }.each do |label, aliases|
+    it "rejects #{label} for aliases, with the operation index, and keeps the old aliases" do
+      entity = MemoryEntity.create!(name: "SynthWidget", entity_type: "Component", aliases: "old")
 
-    expect do
-      tool.call_with_schema_validation!(
-        operations: [ { type: "update_entity", entity_id: entity.id, aliases: [ { "a" => 1 } ] } ]
+      expect do
+        tool.call_with_schema_validation!(
+          operations: [ { type: "update_entity", entity_id: entity.id, aliases: aliases } ]
+        )
+      end.to raise_error(
+        FastMcp::Tool::InvalidArgumentsError, /update_entity\[0\]: aliases must be an array of strings\./
       )
-    end.to raise_error(FastMcp::Tool::InvalidArgumentsError, /aliases must be an array of strings/)
-    expect(entity.reload.aliases).to eq("old")
+      expect(entity.reload.aliases).to eq("old")
+    end
+  end
+
+  it "stores numeric aliases as text" do
+    entity = MemoryEntity.create!(name: "SynthWidget", entity_type: "Component")
+
+    tool.call_with_schema_validation!(
+      operations: [ { type: "update_entity", entity_id: entity.id, aliases: [ 42, "X-42" ] } ]
+    )
+
+    expect(entity.reload.aliases).to eq("42|X-42")
   end
 
   it "rejects an alias that contains the pipe separator" do
