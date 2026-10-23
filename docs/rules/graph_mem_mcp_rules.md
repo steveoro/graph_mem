@@ -94,7 +94,7 @@ See `docs/mcp_tools.md` Error Handling for the category table.
   auto-parents orphans, auto-merges near-identical entities (cosine distance <
   0.10, same `entity_type` only), and deletes byte-identical duplicate
   observations. Lower-confidence cases are queued for review.
-- Call `dream_state_status` to see whether compaction is `running`/`paused` plus its progress/stats.
+- On `/mcp/maintenance`, call `dream_state_status` to see whether compaction is `running`/`paused` plus its progress/stats.
 - Call `list_maintenance_review` to read the queue of merge/orphan suggestions the job flagged for review, then action good ones with `apply_maintenance_review` (or a `graph_delete` `merge_entities` operation when both ids are known). Use `get_maintenance_reports` for stored report documents.
 - Mutating tools cooperatively pause compaction automatically — no action needed, but search results may shift slightly while a run is in progress.
 - Implication for writes: don't rely on the job to clean up sloppiness. Prefer

@@ -50,7 +50,7 @@ class RelationSemantics
       if single_parent?(type)
         existing = MemoryRelation.where(from_entity_id: from_id, relation_type: type).where.not(to_entity_id: to_id)
         if existing.exists?
-          raise ValidationError, "Entity already has a #{type} parent; use move_to_parent instead"
+          raise ValidationError, "Entity already has a #{type} parent; remove that relation first (MCP: graph_delete delete_relation), then create the new one"
         end
       end
 

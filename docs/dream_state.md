@@ -241,7 +241,7 @@ Manual start enqueues `DreamStateCompactionJob` via `CompactionRunner.start_or_r
 | `suggest_merges`          | On-demand duplicate search (separate from dream-state auto-merge thresholds)                         |
 
 
-Agents should call `dream_state_status` for a cheap health check and `get_maintenance_reports(report_type: "compaction_review")` to drain the review queue.
+On the maintenance profile, agents should call `dream_state_status` for a cheap health check and `get_maintenance_reports(report_type: "compaction_review")` to drain the review queue.
 
 ## Relation integrity recovery
 
@@ -318,7 +318,7 @@ bundle exec rspec spec/integration/dream_state_usefulness_spec.rb
 
 ## Typical agent workflow
 
-1. At session start, call `dream_state_status` to see if compaction is `running` or `paused`.
+1. On the maintenance profile (`/mcp/maintenance`), call `dream_state_status` to see whether compaction is `running` or `paused`. Default-profile agents don't need to: mutating tools pause compaction automatically.
 2. During work, mutating tools automatically pause an active run if needed.
 3. Periodically call `get_maintenance_reports(report_type: "compaction_review")`.
 4. Apply clear merge suggestions with a `graph_delete` `merge_entities` operation; parent orphans manually when scores are ambiguous.

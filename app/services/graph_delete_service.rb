@@ -37,7 +37,7 @@ class GraphDeleteService
     McpGraphMemErrors::OperationFailed.new(
       exception.message,
       category: "validation",
-      next_move: "A same-named entity already exists in the destination scope; rename one or use graph_edit move_to_parent, then retry."
+      next_move: "A same-named entity already exists in the destination scope; rename one with `graph_edit` update_entity, then retry."
     )
   end
 
@@ -135,7 +135,7 @@ class GraphDeleteService
       raise McpGraphMemErrors::OperationFailed.new(
         "#{NodeOperationsStrategy::PROJECT_ROOT_PROTECTED_ERROR} (#{members} member entities are scoped to it)",
         category: "validation",
-        next_move: "Move members out of this project first (graph_edit move_to_parent, or graph_write update_entity), then retry."
+        next_move: "Re-parent or delete this project's members first (for each member: `graph_delete` delete_relation on its part_of edge, then `graph_write` create_relation part_of to the new parent), then retry."
       )
     end
 

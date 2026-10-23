@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Agent-facing hints no longer point at nonexistent operations (`graph_edit move_to_parent`, `graph_write update_entity`) or at the maintenance-only `dream_state_status` for default-profile sessions.
+
 ### Security
 - **UI-0 / F1 — XSS: replace all `innerHTML` template-literal sinks** in the graph UI with safe DOM construction. Six sinks fixed: `graph/tooltip.js` (label/type/aliases), `graph/context_menu.js` (node header, labels, edge info), `graph/observation_renderer.js` (`renderObservationCards`, `renderDuplicateWarning`), `graph/drag_drop_manager.js` (action-menu header, relation-form labels), `graph/modal_manager.js` (modal title + content node), `controllers/compaction_review_controller.js` (entity-search select options). New `app/javascript/lib/dom.js` provides `el()`, `text()`, `br()`, `escapeHtml()` helpers; pinned in importmap under `lib/`. Guarded by `spec/javascript_sinks_spec.rb` (static grep — any new `innerHTML = \`...\${` line fails CI) and `spec/system/escaping_spec.rb` (runtime: five examples covering the tooltip, context menu, observation/modal, drag-drop menu and compaction-review sinks with an `<img src=x data-probe=1>` payload via Selenium headless Chrome).
 - **UI-0 / F2 — API authentication**: all `/api/v1/*` endpoints now require either (a) an active operator browser session or (b) a Bearer token matching `GRAPH_MEM_MCP_TOKEN` from an IP allowed by `McpAccessPolicy`. `ApiAuthentication` concern replaces the previous `skip_before_action :authenticate_operator!` in `Api::V1::BaseController`. Session expiry (idle 24 h, absolute 7 d) is enforced in both the browser and API paths.
