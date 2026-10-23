@@ -20,8 +20,9 @@ end
 
 puts "[DEBUG] FastMcp Initializer: Starting setup..." if debug_mode
 
-# Configure FastMcp logger
-fast_mcp_logger = Logger.new(STDOUT)
+# Configure FastMcp logger. Under the stdio runner (GRAPH_MEM_MCP_STDIO=1) stdout carries JSON-RPC,
+# so log to stderr there (mcp plan PR-2 §2.13).
+fast_mcp_logger = Logger.new(ENV["GRAPH_MEM_MCP_STDIO"] ? $stderr : $stdout)
 fast_mcp_logger.level = Logger::DEBUG # Or your preferred level (INFO, WARN, ERROR)
 
 server = FastMcp::Server.new(
