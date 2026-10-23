@@ -3,12 +3,6 @@
 require_relative "../../lib/import_session"
 
 class DataExchangeController < ApplicationController
-  # Skip CSRF for API-like endpoints (file download and JSON responses)
-  skip_before_action :verify_authenticity_token, only: [
-    :export, :export_async, :move_node, :merge_node, :delete_node,
-    :delete_duplicate_relations, :create_relation, :update_relation, :delete_relation
-  ]
-
   # GET /data_exchange/export?ids[]=1&ids[]=2
   # Returns JSON file with selected root nodes and all their children (sync/direct download)
   def export
