@@ -78,6 +78,28 @@ This guide addresses common issues you might encounter when working with GraphMe
    - Check the error message for specific details
    - Verify the database is accessible and not corrupted
 
+### Problem: HTTP 413, 503, 409 or 400 from `/mcp`
+
+These come from the transport's request checks, before any tool runs
+(limits in [mcp_access_control.md](mcp_access_control.md#request-limits-and-protocol-checks)):
+
+- **413** — the body is over `GRAPH_MEM_MCP_MAX_REQUEST_BYTES` (4 MiB). Split the batch, or raise
+  the limit.
+- **503 "Too many sessions"** — `GRAPH_MEM_MCP_MAX_SESSIONS` (256) sessions are open. Usually a
+  client that opens a session per call without sending `DELETE`; idle sessions expire after 30
+  minutes.
+- **409** — a second `GET` stream on the same session. Close the first one, or start a new session.
+- **400 "Unsupported protocol version"** — the `MCP-Protocol-Version` header names a version the
+  server doesn't support. Send the version `initialize` returned.
+- **400 `-32600`** — the body is not a single JSON-RPC 2.0 object (an array, a missing `jsonrpc`,
+  or `"id": null`).
+
+### Problem: A stdio client reports a parse error or a non-JSON line
+
+The runner writes JSON-RPC only to stdout and logs to stderr. If a client still sees log text on
+stdout, check that it launches `bin/mcp_stdio_runner.rb` itself, not `bin/rails` or a wrapper
+script that prints to stdout before starting it.
+
 ### Problem: Cascade MCP Client Not Discovering Tools
 
 **Symptoms:**

@@ -142,7 +142,41 @@ returned as `401` with `WWW-Authenticate: Bearer realm="graph_mem"`. A `403` mea
 is outside the allowlist, or the `Origin` check failed.
 
 CORS preflight (`OPTIONS`) is answered before the token check, so browser-based clients can send
-credentials.
+credentials. `Access-Control-Allow-Origin` reflects the request's `Origin` only when it is allowed
+(with `Vary: Origin`), never `*`.
+
+## Request limits and protocol checks
+
+Every request passes the access policy first; these checks run after it, before the request reaches
+a tool.
+
+| Check | Default | Response |
+|---|---|---|
+| Body size (`GRAPH_MEM_MCP_MAX_REQUEST_BYTES`) | 4 MiB (`4194304`) | `413`, JSON-RPC `-32600`. Also applies to the legacy `/mcp/messages`. |
+| Open Streamable HTTP sessions (`GRAPH_MEM_MCP_MAX_SESSIONS`) | 256 | `503` "Too many sessions" on a new `initialize`, after expired sessions are reaped once more. |
+| A second `GET` stream on one session | — | `409`. Each session has at most one server-to-client SSE stream. |
+| `MCP-Protocol-Version` on in-session requests | — | `400` for a version the server doesn't support. Any supported version is accepted, even one other than the negotiated one; a missing header is accepted (pre-2025-06-18 clients). |
+| Body shape | — | `400` for a body that isn't a JSON-RPC 2.0 object (arrays included), `"id": null`, or an id that isn't a string or integer; `-32700` for invalid JSON. |
+| Unknown `Mcp-Session-Id` | — | `404`, checked before the protocol-version header. |
+
+Error responses carry the request's JSON-RPC `id` whenever it could be read. Sessions idle for 30
+minutes are reaped, so the session cap only fills up with clients that are actually active.
+
+`initialize` negotiates `2024-11-05`, `2025-03-26`, `2025-06-18` or `2025-11-25`, echoing a
+supported request and answering `2025-11-25` to anything else. `2026-07-28` clients fall back to
+the handshake through a failed `server/discover` probe; a client that sets
+`MCP_PROTOCOL_NEGOTIATION=legacy` skips the probe.
+
+## stdio
+
+The stdio runner has no network surface: whoever can start it gets the full graph, with no token or
+IP check. Launch it only from a client config you control, as a fixed absolute path to
+`bin/mcp_stdio_runner.rb` (or a wrapper script with a fixed path), with no user-supplied
+arguments. Select the catalog with `GRAPH_MEM_MCP_PROFILE` in the launcher's environment, not on
+the command line.
+
+stdout carries JSON-RPC only. Rails, FastMcp and runner logs go to stderr, which most clients
+show in their MCP log view.
 
 ## HTTP API (`/api/v1`)
 
