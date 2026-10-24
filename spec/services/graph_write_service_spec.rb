@@ -209,6 +209,35 @@ RSpec.describe GraphWriteService do
       expect(result[:next_move]).to include("Skipped 3 duplicate(s)")
     end
 
+    it "also skips the operations that name a skipped similar entity, and writes the rest" do
+      stored = MemoryEntity.create!(name: "Alpha Service", entity_type: "Service")
+      similar_hit = Struct.new(:entity, :distance).new(stored, 0.01)
+      allow(vector_strategy).to receive(:search) do |query, **|
+        query.include?("Alpha Svc") ? [ similar_hit ] : []
+      end
+
+      result = described_class.call(
+        on_duplicate: "skip",
+        operations: [
+          { type: "create_entity", name: "Alpha Svc", entity_type: "Service" },
+          { type: "create_observation", entity_name: "Alpha Svc", text_content: "Alpha Svc runs nightly" },
+          { type: "create_relation", from_entity_id: "alpha svc", to_entity_id: "SynthWidget", relation_type: "depends_on" },
+          { type: "create_entity", name: "SynthWidget", entity_type: "Component" },
+          { type: "create_observation", entity_name: "SynthWidget", text_content: "SynthWidget renders charts" }
+        ]
+      )
+
+      expect(result[:status]).to eq("ok")
+      expect(result[:skipped]).to contain_exactly(
+        include(index: 0, reason: "similar", existing_id: stored.id),
+        include(index: 1, reason: "depends_on_skipped"),
+        include(index: 2, reason: "depends_on_skipped")
+      )
+      expect(result[:summary]).to include(entities_created: 1, observations_created: 1, relations_created: 0, skipped: 3)
+      expect(MemoryEntity.find_by!(name: "SynthWidget").memory_observations.pluck(:content)).to eq([ "SynthWidget renders charts" ])
+      expect(MemoryEntity.where(name: "Alpha Svc")).to be_empty
+    end
+
     it "keeps rejecting by default, with no skipped list" do
       MemoryEntity.create!(name: "Alpha Service", entity_type: "Service")
 

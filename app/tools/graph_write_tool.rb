@@ -33,7 +33,7 @@ class GraphWriteTool < ApplicationTool
     optional(:observations).array(:hash).description("Compatibility array of observations to create.")
     optional(:relations).array(:hash).description("Compatibility array of relations to create.")
     optional(:on_duplicate).filled(:string).description(
-      "reject (default): a possible duplicate prevents every write. skip: duplicates are listed under `skipped` and the rest is written."
+      "reject (default): a possible duplicate prevents every write. skip: duplicates, and operations naming a skipped similar entity, are listed under `skipped` and the rest is written."
     )
   end
 

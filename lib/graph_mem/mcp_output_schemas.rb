@@ -151,7 +151,7 @@ module GraphMem
               type: "object",
               properties: {
                 index: { type: "integer" }, type: { type: "string" }, name: { type: "string" },
-                existing_id: { type: "integer" }, reason: { enum: %w[exists similar duplicate_in_batch] }
+                existing_id: { type: "integer" }, reason: { enum: %w[exists similar duplicate_in_batch depends_on_skipped] }
               },
               required: %w[index type reason]
             }

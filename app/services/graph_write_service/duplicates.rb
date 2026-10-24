@@ -53,15 +53,40 @@ class GraphWriteService
 
     # Splits the batch into operations to run and +skipped+ entries (on_duplicate: "skip").
     # The semantic candidates were computed outside the lock and are passed in.
+    #
+    # A "similar" skip leaves no entity with the requested name, so observations and relations
+    # that name it are skipped too ("depends_on_skipped"); "exists" and "duplicate_in_batch"
+    # skips don't need this, since their name resolves to the stored or first-created entity.
     def plan_skips(semantic_candidates)
       seen = Set.new
+      reasons = @operations.to_h do |operation|
+        [ operation[:index], skip_reason(operation, semantic_candidates[operation[:index]], seen) ]
+      end
+      similar_names = @operations.filter_map do |operation|
+        operation.dig(:attributes, :name).to_s.downcase if reasons[operation[:index]]&.first == "similar"
+      end.to_set
+
       kept, skipped = @operations.partition do |operation|
-        reason, existing_id = skip_reason(operation, semantic_candidates[operation[:index]], seen)
+        reason, existing_id = reasons[operation[:index]] || dependent_skip_reason(operation, similar_names)
         @skipped << skip_entry(operation, reason, existing_id) if reason
         reason.nil?
       end
       @operations = kept
       skipped
+    end
+
+    # @return [Array(String, nil), nil] ["depends_on_skipped", nil] when +operation+ names a skipped entity
+    def dependent_skip_reason(operation, skipped_names)
+      return if skipped_names.empty?
+
+      attributes = operation[:attributes]
+      refs = case operation[:type]
+      when "create_observation" then [ attributes[:entity_id] || attributes[:entity_name] ]
+      when "create_relation"
+        [ attributes[:from_entity_id] || attributes[:from_entity], attributes[:to_entity_id] || attributes[:to_entity] ]
+      else []
+      end
+      [ "depends_on_skipped", nil ] if refs.any? { |ref| ref.is_a?(String) && skipped_names.include?(ref.downcase) }
     end
 
     def skip_reason(operation, similar, seen)
