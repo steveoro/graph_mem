@@ -116,10 +116,11 @@ module McpCompat
       [ response.status, message&.dig("id"), message.nil? ? nil : (message.key?("error") ? message.dig("error", "code") : "result") ]
     end
 
-    # @return [String] "same", "documented divergence", "graph_mem only" or "unexpected"
+    # @return [String] "same", "same (stale divergence note)", "documented divergence",
+    #   "graph_mem only" or "unexpected"
     def classify(kase, graph_mem_outline, reference_outline)
       return "graph_mem only" if kase.dig("expect", "reference").nil?
-      return "same" if graph_mem_outline == reference_outline
+      return kase["divergence"] ? "same (stale divergence note)" : "same" if graph_mem_outline == reference_outline
 
       kase["divergence"] ? "documented divergence" : "unexpected"
     end
