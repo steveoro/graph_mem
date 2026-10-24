@@ -441,7 +441,7 @@ stdio: add `input:` / `output:` IO options to `StdioTransport#initialize` (:10; 
 
 ### 1.10 Acceptance criteria
 - `bundle exec rspec` and `rubocop` are green. The existing initialize specs are updated (they currently expect 2024-11-05 for any request).
-- Manual stdio check with the compat harness's `drive.rb` and `scenarios.json` against the synthetic server: `initialize 2026-07-28` → `2025-11-25`; `server/discover` → `-32601`; parse error → `-32700`; no reply to `notifications/cancelled`.
+- Manual stdio check with the compat harness (`drive.rb` and `scenarios.json` at the time; `script/mcp_compat/compare.rb --stdio-…` since 1.54.1) against the synthetic server: `initialize 2026-07-28` → `2025-11-25`; `server/discover` → `-32601`; parse error → `-32700`; no reply to `notifications/cancelled`.
 - Ruby SDK 1.8.0 client `auto` and `legacy` both connect (today: both connect at 2024-11-05; afterwards they should negotiate 2025-11-25).
 - No change in default behaviour for well-behaved clients other than the documented SSE and JSON-RPC strictness.
 
@@ -875,8 +875,8 @@ Fixtures are synthetic names only (`SynthWidget`, `Alpha Service`). Mutation-che
 ### 2.14 Acceptance criteria
 - Full suite green **run on its own** (`RAILS_ENV=test OLLAMA_URL=http://127.0.0.1:9`, test DB truncated before and after), plus rubocop and brakeman green, CI green.
 - The test DB is left with 0 rows.
-- Manual: the compat harness's `http_probe.sh http://127.0.0.1:<port>/mcp` matches the "graph_mem after PR-2" column of §3.0 (oversized → 413; `initialize 2026-07-28` → `2025-11-25`; bad header → 400; arrays → 400; unknown session → 404 with id).
-- `drive.rb` against `bin/mcp_stdio_runner.rb`: every stdout line is JSON-RPC 2.0. The Ruby SDK 1.8.0 client (`rsdk_client.rb`) connects in `auto` and `legacy`, and the TS client 2.3.1 (`tsclient/tsclient.mjs`) connects in both modes over stdio and HTTP.
+- Manual: the compat harness's `http_probe.sh http://127.0.0.1:<port>/mcp` (since 1.54.1: `script/mcp_compat/compare.rb --http-graph-mem <url>`) matches the "graph_mem after PR-2" column of §3.0 (oversized → 413; `initialize 2026-07-28` → `2025-11-25`; bad header → 400; arrays → 400; unknown session → 404 with id).
+- `drive.rb` (since 1.54.1: `compare.rb --stdio-graph-mem`) against `bin/mcp_stdio_runner.rb`: every stdout line is JSON-RPC 2.0. The Ruby SDK 1.8.0 client (`rsdk_client.rb`) connects in `auto` and `legacy`, and the TS client 2.3.1 (`tsclient/tsclient.mjs`) connects in both modes over stdio and HTTP.
 - No behaviour change for existing callers of `graph_write` unless they pass `on_duplicate: "skip"`.
 - §2.20: each item has its own green spec, and the two CSRF matrix rows fail when the fix is reverted. §2.21: the suite finishes with no outbound HTTP even when DNS resolves every name.
 
