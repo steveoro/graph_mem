@@ -9,9 +9,12 @@ RSpec.describe "MCP messages endpoint", type: :request do
   # synthetic SSE client on the mounted transport's inner RackTransport, as GET /mcp/sse would.
   let(:legacy_session_id) do
     get "/up" # builds the middleware stack
-    transports = ObjectSpace.each_object(GraphMem::McpStreamableHttpTransport).map(&:legacy_transport)
-    SecureRandom.uuid.tap { |id| transports.each { |legacy| legacy.register_sse_client(id, StringIO.new) } }
+    @legacy_transports = ObjectSpace.each_object(GraphMem::McpStreamableHttpTransport).map(&:legacy_transport)
+    SecureRandom.uuid.tap { |id| @legacy_transports.each { |legacy| legacy.register_sse_client(id, StringIO.new) } }
   end
+
+  # Unregister the synthetic client, or it stays in the shared transport for the rest of the run.
+  after { @legacy_transports&.each { |legacy| legacy.unregister_sse_client(legacy_session_id) } }
 
   describe "POST /mcp/messages" do
     it "records client activity using the X-MCP-Client header from HTTP requests" do

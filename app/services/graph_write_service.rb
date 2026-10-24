@@ -360,11 +360,6 @@ class GraphWriteService
     ImportEntityResolver.find_by_name(value, project_id: @project_id)&.id || value
   end
 
-
-
-
-
-
   def type_hint_for(value, examples, mapping_class)
     return if mapping_class.canonicalize(value)
 
