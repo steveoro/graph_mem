@@ -14,11 +14,12 @@ for the 2026-07-28 rows).
 | File | What it does |
 |---|---|
 | `spec/requests/mcp_protocol_compat_spec.rb` | Runs in the normal suite and asserts graph_mem's expectations: HTTP through the Rails app, stdio through `bin/mcp_stdio_runner.rb` subprocesses. Needs no Node. |
-| `compare.rb` | Replays the cases against running servers, checks each target's expectations, and compares graph_mem with the reference by shape and code: "same", "documented divergence", "graph_mem only" or "unexpected" (exit 1). Plain Ruby. |
+| `compare.rb` | Replays the cases against running servers, checks each target's expectations, and compares graph_mem with the reference by shape and code: "same", "documented divergence", "graph_mem only" or "unexpected" (exit 1); a "same" row that still carries a `divergence` note is labelled stale. Plain Ruby. |
 | `handshake_cases.rb` | Loads and checks the cases; shared by the spec and `compare.rb`. |
 | `rsdk_server.rb <stdio\|http PORT>` | A one-tool server on the official Ruby SDK (`mcp` 1.8.1), for `compare.rb`'s informational `ruby_sdk` column. |
 | `rsdk_client.rb <stdio\|http> <auto\|legacy> <url \| -- cmd…>` | Connects the Ruby SDK client (`RSDK_VERSION`, default 1.8.1) and lists tools. |
 | `tsclient/tsclient.mjs <stdio\|http> <auto\|legacy> <url \| -- cmd…>` | Connects the TS client (`@modelcontextprotocol/client` 2.3.1) and lists tools. |
+| `refservers/` | `package.json` + `package-lock.json` for the reference servers (Memory and Everything 2.0.0, SDK 2.3.1). |
 | `clients.sh <url>` | The client matrix: TS 2.3.1 and Ruby SDK 1.8.0 and 1.8.1, × auto and legacy, × stdio and HTTP (12 rows). |
 
 ## Setup (once)
@@ -32,13 +33,12 @@ gem install mcp -v 1.8.0 && gem install mcp -v 1.8.1 && gem install faraday rack
 (cd script/mcp_compat/tsclient && npm ci)   # Node >= 20
 ```
 
-Reference servers (Node; `engines` says >= 24, but they also ran on Node 22). Install them in a
-folder of their own, with the SDK pinned to the `v2.0.0` tag's lockfile:
+Reference servers (Node; `engines` says >= 24, but they also ran on Node 22). `refservers/`
+pins Memory and Everything 2.0.0, with the SDK's `server` and `core` packages overridden to 2.3.1,
+and its committed `package-lock.json` pins every transitive dependency:
 
 ```bash
-mkdir -p ~/mcp-ref && cd ~/mcp-ref && npm init -y
-npm pkg set 'overrides.@modelcontextprotocol/server=2.3.1' 'overrides.@modelcontextprotocol/core=2.3.1'
-npm install --ignore-scripts @modelcontextprotocol/server-memory@2.0.0 @modelcontextprotocol/server-everything@2.0.0
+(cd script/mcp_compat/refservers && npm ci --ignore-scripts)
 ```
 
 ## Run (from the graph_mem checkout)
@@ -47,7 +47,7 @@ npm install --ignore-scripts @modelcontextprotocol/server-memory@2.0.0 @modelcon
 export RAILS_ENV=test OLLAMA_URL=http://127.0.0.1:9   # no real Ollama, ever
 W="$HOME/.rvm/wrappers/ruby-3.4.1@graph_mem"
 C="$HOME/.rvm/wrappers/ruby-3.4.1@mcp_compat"
-R=~/mcp-ref/node_modules/@modelcontextprotocol
+R=script/mcp_compat/refservers/node_modules/@modelcontextprotocol
 
 # HTTP servers on loopback: graph_mem, Everything, and (optionally) the Ruby SDK
 "$W/bundle" exec rails server -b 127.0.0.1 -p 3999 &

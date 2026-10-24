@@ -1,0 +1,13 @@
+{
+  "name": "graph-mem-mcp-compat-refservers",
+  "private": true,
+  "description": "The v2.0.0 MCP reference servers (Memory, Everything) that compare.rb replays the cases against",
+  "dependencies": {
+    "@modelcontextprotocol/server-everything": "2.0.0",
+    "@modelcontextprotocol/server-memory": "2.0.0"
+  },
+  "overrides": {
+    "@modelcontextprotocol/server": "2.3.1",
+    "@modelcontextprotocol/core": "2.3.1"
+  }
+}
