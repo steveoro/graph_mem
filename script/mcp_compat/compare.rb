@@ -12,6 +12,8 @@
 # Give any subset of targets: one target only checks its expectations; graph_mem and the reference
 # together are also compared. Each compared row is "same", "documented divergence", "graph_mem only"
 # or "unexpected", by shape and code (status, ids, result or error code), never by message text.
+# A "same" row whose case still has a `divergence` note is labelled "same (stale divergence note)":
+# it passes, but the note should go.
 # The ruby_sdk target (rsdk_server.rb, the official `mcp` gem) has no expectations: its rows only
 # say whether it answers like graph_mem, as input for the migration (MG-0), and never fail.
 # Exit 1 on a failed expectation or an "unexpected" row. See README.md for the commands.
@@ -60,9 +62,9 @@ def run_stdio(command, kase, expectation, timeout:, settle:)
     deadline = started + timeout
     loop do
       now = Process.clock_gettime(Process::CLOCK_MONOTONIC)
-      # Once the expected replies are in (or with no expectation, after a quiet spell), wait
-      # +settle+ more seconds for extra ones.
-      done = expected.nil? ? lines.any? || now - started > 5 : lines.size >= expected
+      # Once the expected replies are in (or, when none or no count is expected, after the first
+      # reply or 5 s of silence), wait +settle+ more seconds for extra ones.
+      done = expected.to_i.zero? ? lines.any? || now - started > 5 : lines.size >= expected
       limit = done ? [ last_at + settle, deadline ].min : deadline
       break if now >= limit
       next unless stdout.wait_readable(limit - now)
@@ -90,7 +92,7 @@ end
 # --- HTTP: one request per case, in a fresh session when the case asks for one ----------------
 
 def http_request(uri, verb, body: nil, headers: {}, read_timeout: 30)
-  Net::HTTP.start(uri.host, uri.port, read_timeout: read_timeout) do |http|
+  Net::HTTP.start(uri.host, uri.port, use_ssl: uri.scheme == "https", read_timeout: read_timeout) do |http|
     request = Net::HTTP.const_get(verb.capitalize).new(uri)
     Cases::BASE_HEADERS.merge(headers).each { |name, value| request[name] = value }
     request.body = body if body
@@ -130,7 +132,7 @@ end
 def second_get_stream(uri, session_headers)
   stream_headers = session_headers.merge("Accept" => "text/event-stream")
   holder = Thread.new do
-    Net::HTTP.start(uri.host, uri.port, read_timeout: 30) do |http|
+    Net::HTTP.start(uri.host, uri.port, use_ssl: uri.scheme == "https", read_timeout: 30) do |http|
       request = Net::HTTP::Get.new(uri)
       stream_headers.each { |name, value| request[name] = value }
       http.request(request) { |response| response.read_body { nil } }
