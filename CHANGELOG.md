@@ -7,17 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.54.0] - 2026-10-24
+
 ### Added
 - Project scans in containers: the host user's home is mounted read-only at the same path (`${HOME}:${HOME}:ro`, override with `GRAPH_MEM_SCAN_HOME`); `GRAPH_MEM_SCAN_ROOTS` / `GRAPH_MEM_SCANS`; Settings › Project scans shows mounts (read-only/read-write), a runtime subfolder filter (default "Projects"), the always-blocked list and a path checker. `docs/container_scan_mounts.md` (Linux Docker; rootless Podman best-effort; SELinux, UID).
+- MCP transport limits: a 4 MiB request body cap (`GRAPH_MEM_MCP_MAX_REQUEST_BYTES`, 413), a 256-session cap on Streamable HTTP (`GRAPH_MEM_MCP_MAX_SESSIONS`, 503), 409 on a second GET stream for one session, and the JSON-RPC `id` on 400/404 errors. Documented in `docs/mcp_access_control.md`.
+- `graph_write` `on_duplicate: "skip"` with a `skipped` list (`"reject"`, the default, keeps the previous behaviour).
 
 ### Changed
 - `project_scan_roots` is replaced by `project_scan_subfolders` (relative to the scan root, editable at runtime); `PROJECT_SCAN_ROOTS` (never effective) is removed. Native installs default to home + "Projects", so scanning outside `~/Projects` (e.g. `/tmp/foo`) needs `GRAPH_MEM_SCAN_ROOTS` (e.g. `/tmp/foo`) plus a blank subfolder filter, since the filter applies under every scan root.
+- fast-mcp bumped to steveoro v1.8.0 (handshake negotiation up to 2025-11-25, strict JSON-RPC, per-session subscriptions).
+- Streamable HTTP and stdio negotiate 2024-11-05 / 2025-03-26 / 2025-06-18 / 2025-11-25; any other requested version gets 2025-11-25. 2026-07-28 clients fall back via the `server/discover` probe.
+- `MCP-Protocol-Version` is validated on in-session requests (400 for unsupported values).
+- CORS reflects allowed origins only (`Vary: Origin`); `MCP-Protocol-Version` is allowed and exposed.
+- `initialize` advertises `resources.subscribe`/`listChanged` and `tools.listChanged` as false (graph_mem never sent them).
+- MCP `initialize` now carries per-profile instructions (texts from 1.53.0, `GraphMem::McpInstructions`).
+- **Behaviour change:** an exact duplicate entity name in `graph_write` now returns a structured `possible_duplicate` (`reason: "same_name"`) instead of a validation error.
 
 ### Security
 - One `ScanRootPolicy` for the dashboard, `POST /api/v1/scan`, MCP `scan_project` and job start (previously the API and MCP accepted any directory). Hidden folders can't be scan roots or project folders, nor can `snap`/`Library`/`AppData`/`Maildir`/`Mail` directly under the scan root; a home folder (yours, `/root`, `/home/*`, `/Users/*`) can't be scanned as one project, and `/home` / `/Users` can't be scan roots. Inside a project, `.git`, `.ssh`, `.gnupg`, `.aws`, `.kube`, `.docker`, `.password-store` and secret files (`.env*`, keys, certificates, `credentials*`, `master.key`, `*.tfstate`, shell history, …; case-insensitive) are never read, even via explicit `file_globs`. `..`/absolute `file_globs` are rejected; symlinks resolving outside the root are skipped. A filter whose entries are all invalid allows nothing (only a blank filter means the whole root).
+- `/api/v1`: a write with a wrong or expired bearer token and no session now gets 401 (or 403 for a disallowed IP) instead of a CSRF 422.
+- Import review page: its inline script moved to a Stimulus controller, ready for CSP enforcement.
+- The graph UI's data_exchange JSON writes now send and require the CSRF token.
+- `allow_guest` appends instead of replacing; API session expiry reuses the app-wide timeouts.
+- Docs: the production 503 names only `OPERATOR_PASSWORD`; `GRAPH_MEM_MCP_ALLOWED_IPS` defaults to loopback + private ranges.
 
 ### Fixed
 - Scanner applied `max_files` before sorting (non-deterministic file set).
+- A JSON-array POST body was returned as the raw HTTP response (status/headers/body chosen by the caller); non-object bodies now get 400 -32600.
+- The stdio runner wrote Rails/FastMcp log lines to stdout, breaking strict stdio clients (e.g. the Ruby MCP SDK); logs now go to stderr.
+- Duplicate preflight now runs under the write lock (batch and single-op paths); concurrent duplicates return a structured response.
+- Delete counts reflect rows actually deleted.
+- A request with `"id": null` is refused (400 -32600) and never executed; id-less request methods are no longer executed behind a 202.
+- An invalid UTF-8 object key in a POST body returns 400 -32700 instead of 500.
 
 ## [1.53.0] - 2026-10-23
 
