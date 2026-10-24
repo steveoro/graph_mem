@@ -187,7 +187,9 @@ The REST API is not anonymous. Every verb on every `/api/v1/*` endpoint requires
 1. **An operator browser session** (sign in at `/operator/login`). Cookie-authenticated writes are
    CSRF-protected: send the page's token in `X-CSRF-Token`, as the graph UI does.
 2. **The bearer token** (`GRAPH_MEM_MCP_TOKEN`) from an IP allowed by `GRAPH_MEM_MCP_ALLOWED_IPS`.
-   Bearer-authenticated requests skip the CSRF check; an invalid `Authorization` header does not.
+   A valid bearer token skips the CSRF check. With no session, any `Bearer` header skips it too, and
+   the request then gets `401`/`403`; with a session, an invalid `Authorization` header still needs
+   the CSRF token.
    The token is normalised exactly as for `/mcp` (whitespace stripped, `Bearer` case-insensitive).
 
 With no token configured the bearer path is disabled and only sessions work. There is no

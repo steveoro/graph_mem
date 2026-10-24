@@ -19,9 +19,10 @@ module Api
 
       private
 
-      # CSRF is skipped only for requests that a *valid* Bearer token
-      # authenticates; cookie-session calls (including those carrying a junk
-      # Authorization header) must still send the CSRF token.
+      # CSRF is skipped for a valid Bearer token, and for any Bearer header on a
+      # request with no session (authentication then refuses it with 401/403
+      # rather than a CSRF 422). With a session, a junk Authorization header
+      # still needs the CSRF token.
       def verify_authenticity_token
         return if valid_bearer_token? || (request.authorization.to_s.match?(/\ABearer\s/i) && session[:role].blank? && !session[:operator_signed_in])
         super
