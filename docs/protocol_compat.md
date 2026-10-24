@@ -29,7 +29,7 @@ What the TS client 2.3.1 does with the answer to its `server/discover` probe:
 legacy era.
 
 | Client | Mode | Transport | OK | Protocol | Timing note |
-|---|---|---|---|---|---|
+| --- | --- | --- | --- | --- | --- |
 | TS client 2.3.1 | auto | stdio | OK | 2025-11-25 | about 1.2 s longer than `legacy` (the `server/discover` probe runs in a sibling process) |
 | TS client 2.3.1 | auto | HTTP | OK | 2025-11-25 | |
 | TS client 2.3.1 | legacy | stdio | OK | 2025-11-25 | |
@@ -48,7 +48,7 @@ legacy era.
 Pending Steve's run (PR-3 step 5). Checklist: `docs/plans/claude-mcp-client-check.md` §C.
 
 | Check | Default negotiation | `MCP_PROTOCOL_NEGOTIATION=legacy` | Notes |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | `claude mcp list`: 4 ✔, gm-badtoken ✘ 401 | | | |
 | Negotiated protocol, HTTP (from the log) | | | |
 | Negotiated protocol, stdio (from the log) | | | |
@@ -75,7 +75,7 @@ Pending Steve's run (PR-3 step 5). Checklist: `docs/plans/claude-mcp-client-chec
 ### stdio
 
 | Case | graph_mem | Memory/Everything 2.0.0 | Ruby SDK 1.8.1 | Verdict |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | initialize 2025-03-26 is echoed | `[[1, "result"]]` | `[[1, "result"]]` | `[[1, "result"]]` | same |
 | initialize 2025-11-25 is echoed, with serverInfo | `[[1, "result"]]` | `[[1, "result"]]` | `[[1, "result"]]` | same |
 | initialize capabilities: no subscribe or listChanged; instructions present | `[[1, "result"]]` | n/a (server-specific) | `[[1, "result"]]` | graph_mem only |
@@ -96,7 +96,7 @@ Pending Steve's run (PR-3 step 5). Checklist: `docs/plans/claude-mcp-client-chec
 ### Streamable HTTP
 
 | Case | graph_mem | Memory/Everything 2.0.0 | Ruby SDK 1.8.1 | Verdict |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | server/discover with a 2026-07-28 envelope and headers, no session | `[400, 11, -32600]` | `[200, 11, "result"]` | `[200, 11, "result"]` | documented divergence |
 | 2026-07-28 header without the envelope | `[400, 12, -32600]` | `[400, 12, -32602]` | `[400, 12, -32602]` | documented divergence |
 | MCP-Protocol-Version header disagrees with the envelope | `[400, 13, -32600]` | `[400, 13, -32020]` | `[400, 13, -32020]` | documented divergence |
