@@ -95,10 +95,10 @@ The default 12 tools advertise `outputSchema` and emit matching
 `structuredContent` plus mirrored JSON text. Maintenance-only and hidden tools
 remain text-only until their schemas are migrated.
 
-For the STDIO interface (useful for Windsurf integration):
+For the STDIO interface:
 
 ```bash
-bin/windsurf_mcp_graph_mem_runner.sh
+bundle exec ruby bin/mcp_stdio_runner.rb
 ```
 
 STDIO defaults to the `default` profile. Set `GRAPH_MEM_MCP_PROFILE=readonly` or
