@@ -41,6 +41,16 @@ RSpec.describe GraphMem::McpStreamableHttpTransport, "hardening" do
     [ status, headers["Mcp-Session-Id"], json(body) ]
   end
 
+  # Opens a server-to-client SSE stream on a hijacked StringIO; returns the Rack status (-1 = hijacked).
+  def open_get_stream(session_id)
+    env = Rack::MockRequest.env_for("/mcp", method: "GET", "HTTP_ACCEPT" => "text/event-stream",
+                                            "REMOTE_ADDR" => "127.0.0.1", "HTTP_HOST" => "localhost")
+    env["HTTP_MCP_SESSION_ID"] = session_id
+    env["rack.hijack"] = -> { }
+    env["rack.hijack_io"] = StringIO.new
+    transport.call(env).first
+  end
+
   def rpc(session_id, method, id: 2, params: nil, headers: {})
     payload = { jsonrpc: "2.0", id: id, method: method }
     payload[:params] = params if params
@@ -167,8 +177,21 @@ RSpec.describe GraphMem::McpStreamableHttpTransport, "hardening" do
     context "at the session cap" do
       let(:options) { { max_sessions: 2 } }
 
-      it "refuses a new session with 503 once the cap is reached" do
-        2.times { initialize_session }
+      it "evicts the least recently active idle session instead of refusing" do
+        _status, older, = initialize_session
+        _status, newer, = initialize_session
+        sleep 0.01
+        rpc(older, "ping") # now the older session is the more recently active one
+
+        status, new_session, = initialize_session
+
+        expect(status).to eq(200)
+        expect(transport.sessions.keys).to contain_exactly(older, new_session)
+        expect(rpc(newer, "ping").first).to eq(404)
+      end
+
+      it "refuses a new session with 503 when every session is busy" do
+        2.times { open_get_stream(initialize_session[1]) }
         status, _headers, body = rack("POST", body: { jsonrpc: "2.0", id: 9, method: "initialize", params: {} })
 
         expect(status).to eq(503)
@@ -196,17 +219,9 @@ RSpec.describe GraphMem::McpStreamableHttpTransport, "hardening" do
 
     it "answers a second GET stream for the same session with 409" do
       _status, session_id, = initialize_session
-      open_get = lambda do
-        env = Rack::MockRequest.env_for("/mcp", method: "GET", "HTTP_ACCEPT" => "text/event-stream",
-                                                "REMOTE_ADDR" => "127.0.0.1", "HTTP_HOST" => "localhost")
-        env["HTTP_MCP_SESSION_ID"] = session_id
-        env["rack.hijack"] = -> { }
-        env["rack.hijack_io"] = StringIO.new
-        transport.call(env).first
-      end
 
-      expect(open_get.call).to eq(-1)
-      expect(open_get.call).to eq(409)
+      expect(open_get_stream(session_id)).to eq(-1)
+      expect(open_get_stream(session_id)).to eq(409)
     end
   end
 

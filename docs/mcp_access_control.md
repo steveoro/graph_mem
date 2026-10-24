@@ -153,14 +153,16 @@ a tool.
 | Check | Default | Response |
 |---|---|---|
 | Body size (`GRAPH_MEM_MCP_MAX_REQUEST_BYTES`) | 4 MiB (`4194304`) | `413`, JSON-RPC `-32600`. Also applies to the legacy `/mcp/messages`. |
-| Open Streamable HTTP sessions (`GRAPH_MEM_MCP_MAX_SESSIONS`) | 256 | `503` "Too many sessions" on a new `initialize`, after expired sessions are reaped once more. |
+| Open Streamable HTTP sessions (`GRAPH_MEM_MCP_MAX_SESSIONS`) | 256 | At the cap, a new `initialize` first reaps expired sessions, then closes the least recently active idle one (no request in flight, no open stream). `503` "Too many sessions" only when every session is busy. |
 | A second `GET` stream on one session | — | `409`. Each session has at most one server-to-client SSE stream. |
 | `MCP-Protocol-Version` on in-session requests | — | `400` for a version the server doesn't support. Any supported version is accepted, even one other than the negotiated one; a missing header is accepted (pre-2025-06-18 clients). |
 | Body shape | — | `400` for a body that isn't a JSON-RPC 2.0 object (arrays included), `"id": null`, or an id that isn't a string or integer; `-32700` for invalid JSON. |
 | Unknown `Mcp-Session-Id` | — | `404`, checked before the protocol-version header. |
 
 Error responses carry the request's JSON-RPC `id` whenever it could be read. Sessions idle for 30
-minutes are reaped, so the session cap only fills up with clients that are actually active.
+minutes are reaped. A client that opens a session per call without sending `DELETE` doesn't lock
+others out at the cap: its idle sessions are the first to be evicted. An evicted session gets `404`
+on its next request, and the client starts a new one.
 
 `initialize` negotiates `2024-11-05`, `2025-03-26`, `2025-06-18` or `2025-11-25`, echoing a
 supported request and answering `2025-11-25` to anything else. `2026-07-28` clients fall back to

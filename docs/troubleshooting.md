@@ -85,9 +85,11 @@ These come from the transport's request checks, before any tool runs
 
 - **413** — the body is over `GRAPH_MEM_MCP_MAX_REQUEST_BYTES` (4 MiB). Split the batch, or raise
   the limit.
-- **503 "Too many sessions"** — `GRAPH_MEM_MCP_MAX_SESSIONS` (256) sessions are open. Usually a
-  client that opens a session per call without sending `DELETE`; idle sessions expire after 30
-  minutes.
+- **503 "Too many sessions"** — `GRAPH_MEM_MCP_MAX_SESSIONS` (256) sessions are open and every one
+  is busy (a request in flight or an open stream); idle ones are evicted first. Raise the limit, or
+  find the client holding that many streams open.
+- **404 "Session not found" on a session that worked before** — the server restarted, or the
+  session was evicted as the least recently active idle one at the session cap. Start a new session.
 - **409** — a second `GET` stream on the same session. Close the first one, or start a new session.
 - **400 "Unsupported protocol version"** — the `MCP-Protocol-Version` header names a version the
   server doesn't support. Send the version `initialize` returned.

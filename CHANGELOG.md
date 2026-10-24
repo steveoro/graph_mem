@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - Project scans in containers: the host user's home is mounted read-only at the same path (`${HOME}:${HOME}:ro`, override with `GRAPH_MEM_SCAN_HOME`); `GRAPH_MEM_SCAN_ROOTS` / `GRAPH_MEM_SCANS`; Settings › Project scans shows mounts (read-only/read-write), a runtime subfolder filter (default "Projects"), the always-blocked list and a path checker. `docs/container_scan_mounts.md` (Linux Docker; rootless Podman best-effort; SELinux, UID).
-- MCP transport limits: a 4 MiB request body cap (`GRAPH_MEM_MCP_MAX_REQUEST_BYTES`, 413), a 256-session cap on Streamable HTTP (`GRAPH_MEM_MCP_MAX_SESSIONS`, 503), 409 on a second GET stream for one session, and the JSON-RPC `id` on 400/404 errors. Documented in `docs/mcp_access_control.md`.
+- MCP transport limits: a 4 MiB request body cap (`GRAPH_MEM_MCP_MAX_REQUEST_BYTES`, 413), a 256-session cap on Streamable HTTP (`GRAPH_MEM_MCP_MAX_SESSIONS`: at the cap the least recently active idle session is evicted, 503 only when all are busy), 409 on a second GET stream for one session, and the JSON-RPC `id` on 400/404 errors. Documented in `docs/mcp_access_control.md`.
 - `graph_write` `on_duplicate: "skip"` with a `skipped` list (`"reject"`, the default, keeps the previous behaviour).
 
 ### Changed

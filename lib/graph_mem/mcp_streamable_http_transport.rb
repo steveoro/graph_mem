@@ -393,7 +393,9 @@ module GraphMem
 
     # §2.2: the version is negotiated by fast-mcp (echo a supported one, else the newest), so HTTP
     # and stdio agree. A 2026-07-28 MCP-Protocol-Version header on initialize is ignored (lenient).
-    # §2.4: at the session cap the reaper runs once more before refusing with 503.
+    # §2.4: at the session cap the reaper runs once more, then the least recently active idle
+    # session is evicted; 503 only when every session is busy. The capacity check and the insert
+    # below aren't one critical section, so concurrent initializes can overshoot the cap by a few.
     def create_session(parsed)
       unless session_capacity_available?
         return [ nil, json_rpc_error_response(503, -32_000, "Too many sessions", parsed[:id]) ]
@@ -416,7 +418,7 @@ module GraphMem
       return true if @sessions.size < @max_sessions
 
       reap_expired_sessions(force: true)
-      @sessions.size < @max_sessions
+      @sessions.size < @max_sessions || evict_idlest_session
     end
 
     def normalize_initialize_protocol_version!(session, message)

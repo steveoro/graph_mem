@@ -120,6 +120,29 @@ module GraphMem
           now - session[:last_active_at] > @session_timeout
       end
 
+      # At the session cap, closes the least recently active idle session (no request in flight,
+      # no stream, no GET stream being opened), so a client that opens a session per call without
+      # DELETE can't lock everyone else out until its sessions expire.
+      #
+      # @return [Boolean] true when a session was evicted, false when every session is busy
+      def evict_idlest_session
+        victim = @sessions_mutex.synchronize do
+          idle = @sessions.values.select do |session|
+            !session[:closed] && session[:active_requests].zero? && session[:streams].empty? &&
+              !session[:get_stream_reserved]
+          end
+          idle.min_by { |session| session[:last_active_at] }&.tap do |session|
+            session[:closed] = true
+            @sessions.delete(session[:id])
+          end
+        end
+        return false unless victim
+
+        close_session(victim)
+        @logger.info("Session cap reached: evicted the least recently active idle MCP session")
+        true
+      end
+
       # @param force [Boolean] run even if the reaper ran less than @reaper_interval ago (the
       #   session cap does this before refusing a new session)
       def reap_expired_sessions(force: false)
