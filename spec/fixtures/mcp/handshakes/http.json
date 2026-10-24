@@ -1,0 +1,296 @@
+{
+  "_comment": [
+    "MCP Streamable HTTP handshake cases (mcp-update-plan PR-3 §3.0-§3.1). Synthetic and read-only: no case runs a tool.",
+    "Each case sends one request. `session`: \"none\" (no Mcp-Session-Id), \"new\" (a fresh session: initialize 2025-11-25",
+    "plus notifications/initialized, deleted afterwards), or \"unknown\" (an id the server never issued).",
+    "`request`: `headers`, and one of `body` (a JSON value), `body_raw` (text), `body_hex` (bytes) or `body_pad_bytes`",
+    "(a ping padded past that many bytes). `kind: \"second_get_stream\"` holds one GET stream open and sends a second.",
+    "Every request carries Content-Type: application/json and Accept: application/json, text/event-stream.",
+    "`expect` holds one expectation per target: `graph_mem` (asserted by spec/requests/mcp_protocol_compat_spec.rb)",
+    "and `reference` (Everything 2.0.0, checked by script/mcp_compat/compare.rb; null when the case is graph_mem-only):",
+    "`status`; `id` (compared when present; null also matches an omitted id); `error_code`; `result` (subset match);",
+    "`result_has` (keys that must exist); `empty_body`; `opens_session` (whether Mcp-Session-Id comes back).",
+    "`divergence` says why graph_mem and the reference may differ; `changes_in` names the plan step that changes graph_mem's answer.",
+    "Reference expectations come from the v2.0.0 code (plan §0b) and were confirmed against",
+    "@modelcontextprotocol/server-everything 2.0.0 with server/core 2.3.1 (the tag's lockfile) on 2026-10-24."
+  ],
+  "cases": [
+    {
+      "name": "server/discover with a 2026-07-28 envelope and headers, no session",
+      "session": "none",
+      "request": {
+        "headers": {"MCP-Protocol-Version": "2026-07-28", "Mcp-Method": "server/discover"},
+        "body": {"jsonrpc": "2.0", "id": 11, "method": "server/discover", "params": {"_meta": {"io.modelcontextprotocol/protocolVersion": "2026-07-28", "io.modelcontextprotocol/clientCapabilities": {}, "io.modelcontextprotocol/clientInfo": {"name": "mcp-compat", "version": "0"}}}}
+      },
+      "expect": {
+        "graph_mem": {"status": 400, "id": 11, "error_code": -32600, "opens_session": false},
+        "reference": {"status": 200, "id": 11, "result": {"supportedVersions": ["2026-07-28"]}, "opens_session": false}
+      },
+      "divergence": "graph_mem has no 2026-07-28 era yet: a 4xx JSON-RPC error to the probe makes 2026-07-28 clients fall back to initialize.",
+      "changes_in": "MG-5"
+    },
+    {
+      "name": "2026-07-28 header without the envelope",
+      "session": "none",
+      "request": {
+        "headers": {"MCP-Protocol-Version": "2026-07-28", "Mcp-Method": "tools/list"},
+        "body": {"jsonrpc": "2.0", "id": 12, "method": "tools/list", "params": {}}
+      },
+      "expect": {
+        "graph_mem": {"status": 400, "id": 12, "error_code": -32600},
+        "reference": {"status": 400, "id": 12, "error_code": -32602}
+      },
+      "divergence": "Fallback-safe error code: both are 4xx JSON-RPC errors with the id, so clients fall back to initialize.",
+      "changes_in": "MG-5"
+    },
+    {
+      "name": "MCP-Protocol-Version header disagrees with the envelope",
+      "session": "none",
+      "request": {
+        "headers": {"MCP-Protocol-Version": "2025-11-25", "Mcp-Method": "tools/list"},
+        "body": {"jsonrpc": "2.0", "id": 13, "method": "tools/list", "params": {"_meta": {"io.modelcontextprotocol/protocolVersion": "2026-07-28", "io.modelcontextprotocol/clientCapabilities": {}, "io.modelcontextprotocol/clientInfo": {"name": "mcp-compat", "version": "0"}}}}
+      },
+      "expect": {
+        "graph_mem": {"status": 400, "id": 13, "error_code": -32600},
+        "reference": {"status": 400, "id": 13, "error_code": -32020}
+      },
+      "divergence": "Fallback-safe error code: both are 4xx JSON-RPC errors with the id, so clients fall back to initialize.",
+      "changes_in": "MG-5"
+    },
+    {
+      "name": "a future protocol revision (2027-01-01) in header and envelope",
+      "session": "none",
+      "request": {
+        "headers": {"MCP-Protocol-Version": "2027-01-01", "Mcp-Method": "tools/list"},
+        "body": {"jsonrpc": "2.0", "id": 14, "method": "tools/list", "params": {"_meta": {"io.modelcontextprotocol/protocolVersion": "2027-01-01", "io.modelcontextprotocol/clientCapabilities": {}, "io.modelcontextprotocol/clientInfo": {"name": "mcp-compat", "version": "0"}}}}
+      },
+      "expect": {
+        "graph_mem": {"status": 400, "id": 14, "error_code": -32600},
+        "reference": {"status": 400, "id": 14, "error_code": -32022}
+      },
+      "divergence": "Fallback-safe error code: both are 4xx JSON-RPC errors with the id, so clients fall back to initialize.",
+      "changes_in": "MG-5"
+    },
+    {
+      "name": "initialize sent with a 2026-07-28 header",
+      "session": "none",
+      "request": {
+        "headers": {"MCP-Protocol-Version": "2026-07-28"},
+        "body": {"jsonrpc": "2.0", "id": 20, "method": "initialize", "params": {"protocolVersion": "2025-11-25", "capabilities": {}, "clientInfo": {"name": "mcp-compat", "version": "0"}}}
+      },
+      "expect": {
+        "graph_mem": {"status": 200, "id": 20, "result": {"protocolVersion": "2025-11-25"}, "opens_session": true},
+        "reference": {"status": 400, "id": 20, "error_code": -32020}
+      },
+      "divergence": "graph_mem is deliberately lenient: the header is ignored on initialize, which is what a falling-back client needs."
+    },
+    {
+      "name": "initialize 2026-07-28 gets 2025-11-25",
+      "session": "none",
+      "request": {"body": {"jsonrpc": "2.0", "id": 21, "method": "initialize", "params": {"protocolVersion": "2026-07-28", "capabilities": {}, "clientInfo": {"name": "mcp-compat", "version": "0"}}}},
+      "expect": {
+        "graph_mem": {"status": 200, "id": 21, "result": {"protocolVersion": "2025-11-25"}, "opens_session": true},
+        "reference": {"status": 200, "id": 21, "result": {"protocolVersion": "2025-11-25"}, "opens_session": true}
+      }
+    },
+    {
+      "name": "initialize 2025-11-25 is echoed",
+      "session": "none",
+      "request": {"body": {"jsonrpc": "2.0", "id": 21, "method": "initialize", "params": {"protocolVersion": "2025-11-25", "capabilities": {}, "clientInfo": {"name": "mcp-compat", "version": "0"}}}},
+      "expect": {
+        "graph_mem": {"status": 200, "id": 21, "result": {"protocolVersion": "2025-11-25"}, "result_has": ["serverInfo"], "opens_session": true},
+        "reference": {"status": 200, "id": 21, "result": {"protocolVersion": "2025-11-25"}, "result_has": ["serverInfo"], "opens_session": true}
+      }
+    },
+    {
+      "name": "initialize 2025-06-18 is echoed",
+      "session": "none",
+      "request": {"body": {"jsonrpc": "2.0", "id": 21, "method": "initialize", "params": {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "mcp-compat", "version": "0"}}}},
+      "expect": {
+        "graph_mem": {"status": 200, "id": 21, "result": {"protocolVersion": "2025-06-18"}},
+        "reference": {"status": 200, "id": 21, "result": {"protocolVersion": "2025-06-18"}}
+      }
+    },
+    {
+      "name": "initialize 2025-03-26 is echoed",
+      "session": "none",
+      "request": {"body": {"jsonrpc": "2.0", "id": 21, "method": "initialize", "params": {"protocolVersion": "2025-03-26", "capabilities": {}, "clientInfo": {"name": "mcp-compat", "version": "0"}}}},
+      "expect": {
+        "graph_mem": {"status": 200, "id": 21, "result": {"protocolVersion": "2025-03-26"}},
+        "reference": {"status": 200, "id": 21, "result": {"protocolVersion": "2025-03-26"}}
+      }
+    },
+    {
+      "name": "initialize 2024-11-05 is echoed",
+      "session": "none",
+      "request": {"body": {"jsonrpc": "2.0", "id": 21, "method": "initialize", "params": {"protocolVersion": "2024-11-05", "capabilities": {}, "clientInfo": {"name": "mcp-compat", "version": "0"}}}},
+      "expect": {
+        "graph_mem": {"status": 200, "id": 21, "result": {"protocolVersion": "2024-11-05"}},
+        "reference": {"status": 200, "id": 21, "result": {"protocolVersion": "2024-11-05"}}
+      }
+    },
+    {
+      "name": "initialize \"9\" gets 2025-11-25",
+      "session": "none",
+      "request": {"body": {"jsonrpc": "2.0", "id": 21, "method": "initialize", "params": {"protocolVersion": "9", "capabilities": {}, "clientInfo": {"name": "mcp-compat", "version": "0"}}}},
+      "expect": {
+        "graph_mem": {"status": 200, "id": 21, "result": {"protocolVersion": "2025-11-25"}},
+        "reference": {"status": 200, "id": 21, "result": {"protocolVersion": "2025-11-25"}}
+      }
+    },
+    {
+      "name": "initialize capabilities: no subscribe or listChanged; instructions present",
+      "session": "none",
+      "request": {"body": {"jsonrpc": "2.0", "id": 22, "method": "initialize", "params": {"protocolVersion": "2025-11-25", "capabilities": {}, "clientInfo": {"name": "mcp-compat", "version": "0"}}}},
+      "expect": {
+        "graph_mem": {"status": 200, "id": 22, "result": {"capabilities": {"resources": {"subscribe": false, "listChanged": false}, "tools": {"listChanged": false}}}, "result_has": ["instructions"]},
+        "reference": null
+      },
+      "divergence": "Server-specific: Everything implements subscriptions, list-changed notifications and logging; graph_mem doesn't."
+    },
+    {
+      "name": "in a session, no MCP-Protocol-Version header",
+      "session": "new",
+      "request": {"body": {"jsonrpc": "2.0", "id": 30, "method": "ping"}},
+      "expect": {
+        "graph_mem": {"status": 200, "id": 30, "result": {}},
+        "reference": {"status": 200, "id": 30, "result": {}}
+      }
+    },
+    {
+      "name": "in a session, MCP-Protocol-Version 1999-01-01",
+      "session": "new",
+      "request": {"headers": {"MCP-Protocol-Version": "1999-01-01"}, "body": {"jsonrpc": "2.0", "id": 31, "method": "ping"}},
+      "expect": {
+        "graph_mem": {"status": 400, "id": 31, "error_code": -32000},
+        "reference": {"status": 400, "id": null, "error_code": -32000}
+      },
+      "divergence": "Same status and code; graph_mem echoes the request id (PR-2 §2.19), the TS SDK sends id: null."
+    },
+    {
+      "name": "in a session, MCP-Protocol-Version 2026-07-28",
+      "session": "new",
+      "request": {"headers": {"MCP-Protocol-Version": "2026-07-28"}, "body": {"jsonrpc": "2.0", "id": 32, "method": "ping"}},
+      "expect": {
+        "graph_mem": {"status": 400, "id": 32, "error_code": -32000},
+        "reference": {"status": 400, "id": null, "error_code": -32000}
+      },
+      "divergence": "Same status and code; graph_mem echoes the request id (PR-2 §2.19), the TS SDK sends id: null."
+    },
+    {
+      "name": "in a session, tools/list",
+      "session": "new",
+      "request": {"headers": {"MCP-Protocol-Version": "2025-11-25"}, "body": {"jsonrpc": "2.0", "id": 33, "method": "tools/list"}},
+      "expect": {
+        "graph_mem": {"status": 200, "id": 33, "result_has": ["tools"]},
+        "reference": {"status": 200, "id": 33, "result_has": ["tools"]}
+      }
+    },
+    {
+      "name": "resources/subscribe is not offered",
+      "session": "new",
+      "request": {"body": {"jsonrpc": "2.0", "id": 34, "method": "resources/subscribe", "params": {"uri": "memory_graph"}}},
+      "expect": {
+        "graph_mem": {"status": 200, "id": 34, "error_code": -32601},
+        "reference": null
+      },
+      "divergence": "Server-specific: Everything implements resource subscriptions; graph_mem advertises subscribe: false."
+    },
+    {
+      "name": "tools/call with \"id\": null is refused, not run",
+      "session": "new",
+      "request": {"body": {"jsonrpc": "2.0", "id": null, "method": "tools/call", "params": {"name": "get_current_time", "arguments": {}}}},
+      "expect": {
+        "graph_mem": {"status": 400, "id": null, "error_code": -32600},
+        "reference": {"status": 400, "id": null, "error_code": -32700}
+      },
+      "divergence": "Neither runs it; the TS SDK reports the schema failure as -32700, graph_mem (like the Ruby SDK 1.8.1) as -32600."
+    },
+    {
+      "name": "tools/call without an id is a notification: 202, not run",
+      "session": "new",
+      "request": {"body": {"jsonrpc": "2.0", "method": "tools/call", "params": {"name": "get_current_time", "arguments": {}}}},
+      "expect": {
+        "graph_mem": {"status": 202, "empty_body": true},
+        "reference": {"status": 202, "empty_body": true}
+      }
+    },
+    {
+      "name": "an invalid UTF-8 object key",
+      "session": "new",
+      "request": {"body_hex": "7b226a736f6e727063223a22322e30222c226964223a33352c226d6574686f64223a2270696e67222c22706172616d73223a7b22ff223a317d7d"},
+      "expect": {
+        "graph_mem": {"status": 400, "error_code": -32700},
+        "reference": {"status": 200, "id": 35, "result": {}}
+      },
+      "divergence": "graph_mem refuses invalid UTF-8 with -32700 (like the Ruby SDK 1.8.1); Node decodes the byte as U+FFFD and answers the ping."
+    },
+    {
+      "name": "a JSON array (batch) body",
+      "session": "new",
+      "request": {"body": [{"jsonrpc": "2.0", "id": 36, "method": "ping"}]},
+      "expect": {
+        "graph_mem": {"status": 400, "error_code": -32600},
+        "reference": {"status": 200, "id": 36, "result": {}}
+      },
+      "divergence": "graph_mem refuses batches (removed in 2025-06-18, and an array body was a high bug before 1.54.0); the TS SDK still accepts them on the 2025 transport."
+    },
+    {
+      "name": "a message without the jsonrpc member",
+      "session": "new",
+      "request": {"body": {"id": 37, "method": "ping"}},
+      "expect": {
+        "graph_mem": {"status": 400, "id": 37, "error_code": -32600},
+        "reference": {"status": 400, "id": null, "error_code": -32700}
+      },
+      "divergence": "Both refuse it with 400; graph_mem uses -32600 and echoes the id, the TS SDK reports -32700."
+    },
+    {
+      "name": "a parse error",
+      "session": "new",
+      "request": {"body_raw": "{\"jsonrpc\":\"2.0\",\"id\":38,\"method\":"},
+      "expect": {
+        "graph_mem": {"status": 400, "error_code": -32700},
+        "reference": {"status": 400, "error_code": -32700}
+      }
+    },
+    {
+      "name": "a body over 4 MiB",
+      "session": "new",
+      "request": {"body_pad_bytes": 5242880},
+      "expect": {
+        "graph_mem": {"status": 413, "error_code": -32600},
+        "reference": {"status": 413, "error_code": -32000}
+      },
+      "divergence": "Same status and the same 4 MiB cap; the JSON-RPC error code differs."
+    },
+    {
+      "name": "a second GET stream on one session",
+      "session": "new",
+      "kind": "second_get_stream",
+      "expect": {
+        "graph_mem": {"status": 409, "error_code": -32000},
+        "reference": {"status": 409, "error_code": -32000}
+      }
+    },
+    {
+      "name": "an unknown session",
+      "session": "unknown",
+      "request": {"body": {"jsonrpc": "2.0", "id": 40, "method": "ping"}},
+      "expect": {
+        "graph_mem": {"status": 404, "id": 40, "error_code": -32001},
+        "reference": {"status": 404, "id": 40, "error_code": -32001}
+      }
+    },
+    {
+      "name": "a request other than initialize, with no session",
+      "session": "none",
+      "request": {"body": {"jsonrpc": "2.0", "id": 41, "method": "tools/list"}},
+      "expect": {
+        "graph_mem": {"status": 400, "id": 41, "error_code": -32600},
+        "reference": {"status": 400, "id": null, "error_code": -32000}
+      },
+      "divergence": "Both refuse it with 400; graph_mem uses -32600 and echoes the id, the TS SDK reports -32000 \"Server not initialized\"."
+    }
+  ]
+}
