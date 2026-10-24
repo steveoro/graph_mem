@@ -255,6 +255,8 @@ RSpec.describe EmbeddingService do
     it "returns nil when embed returns nil" do
       allow(described_class).to receive(:vector_enabled?).and_return(true)
       allow(service).to receive(:embed).and_return(nil)
+      # Creating the entity embeds it through the singleton; keep that on the stubbed service too.
+      allow(described_class).to receive(:instance).and_return(service)
       expect(service.embed_entity_binary(entity)).to be_nil
     end
   end

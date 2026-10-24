@@ -177,7 +177,7 @@ RSpec.describe StaleMemoryScanner do
 
     it "contradiction watermark does NOT advance when the pass fails mid-scan" do
       allow(AppSettings).to receive(:contradiction_detection_enabled?).and_return(true)
-      allow(EmbeddingService).to receive(:vector_enabled?).and_return(true)
+      configure_test_embeddings!
       allow(ContradictionDetector).to receive(:detect).and_raise(StandardError, "boom")
       prev = 12.hours.ago
       allow(described_class).to receive(:previous_watermark).and_return(prev)
@@ -188,7 +188,7 @@ RSpec.describe StaleMemoryScanner do
 
     it "contradiction watermark advances after a clean pass" do
       allow(AppSettings).to receive(:contradiction_detection_enabled?).and_return(true)
-      allow(EmbeddingService).to receive(:vector_enabled?).and_return(true)
+      configure_test_embeddings!
       allow(ContradictionDetector).to receive(:detect)
       obs("recent fact")
       expect(described_class.scan[:next_watermark]).to be > 1.minute.ago

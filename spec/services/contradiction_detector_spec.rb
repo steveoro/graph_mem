@@ -17,7 +17,7 @@ RSpec.describe ContradictionDetector do
 
     context "when contradiction detection is disabled" do
       before do
-        allow(EmbeddingService).to receive(:vector_enabled?).and_return(true)
+        configure_test_embeddings!
         allow(AppSettings).to receive(:contradiction_detection_enabled?).and_return(false)
       end
 
