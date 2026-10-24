@@ -32,7 +32,7 @@ args = parser.parse(ARGV)
 abort(parser.banner) if args.empty?
 
 scenario_path = options[:scenarios] || File.join(__dir__, "scenarios.json")
-scenarios = JSON.parse(File.read(scenario_path))["scenarios"]
+scenarios = JSON.parse(File.read(scenario_path, encoding: "UTF-8"))["scenarios"] # UTF-8 whatever the locale
 scenarios = scenarios.select { |s| s["name"].include?(options[:only]) } if options[:only]
 
 def encode_line(item)
