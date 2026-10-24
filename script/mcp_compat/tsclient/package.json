@@ -1,0 +1,2 @@
+{ "name": "mcp-compat-tsclient", "private": true, "type": "module",
+  "dependencies": { "@modelcontextprotocol/client": "2.3.1" } }
