@@ -160,9 +160,10 @@ a tool.
 | Unknown `Mcp-Session-Id` | — | `404`, checked before the protocol-version header. |
 
 Error responses carry the request's JSON-RPC `id` whenever it could be read. Sessions idle for 30
-minutes are reaped. A client that opens a session per call without sending `DELETE` doesn't lock
-others out at the cap: its idle sessions are the first to be evicted. An evicted session gets `404`
-on its next request, and the client starts a new one.
+minutes are reaped. At the cap, the least recently active idle session is evicted, so a client that
+opens a session per call without sending `DELETE` can't lock others out; it can, however, push out
+sessions that have been idle longer than its own. An evicted session gets `404` on its next request,
+and the client starts a new one.
 
 `initialize` negotiates `2024-11-05`, `2025-03-26`, `2025-06-18` or `2025-11-25`, echoing a
 supported request and answering `2025-11-25` to anything else. `2026-07-28` clients fall back to
