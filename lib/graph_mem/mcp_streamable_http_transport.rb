@@ -178,7 +178,13 @@ module GraphMem
       when "/#{@sse_route}", "/#{@messages_route}"
         # Legacy 2024-11-05 endpoints are handled entirely by FastMcp's transport.
         Thread.current[:graph_mem_mcp_transport] = @legacy_transport
-        @legacy_transport.call(env)
+        begin
+          @legacy_transport.call(env)
+        ensure
+          # RackTransport#call sets @server.transport to itself; take it back, or out-of-request
+          # messages (no request context) would go only to legacy SSE clients.
+          @server.transport = self
+        end
       when "", "/", "/readonly", "/readonly/", "/maintenance", "/maintenance/"
         handle_streamable_request(request, env)
       else
@@ -238,7 +244,10 @@ module GraphMem
       version_error = protocol_version_error(request, request_id) unless method == "initialize"
       return version_error if version_error
 
-      return accept_without_reply(body, request, session_id, method) if request_id.nil?
+      # A client's JSON-RPC response (to a server-to-client request) carries an id but gets no
+      # reply either: 202, as the spec says, instead of waiting for one until the 504.
+      client_response = parsed.key?(:result) || parsed.key?(:error)
+      return accept_without_reply(body, request, session_id, method) if request_id.nil? || client_response
 
       wants_sse = sse_response_requested?(accept)
 

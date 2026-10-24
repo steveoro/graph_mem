@@ -161,6 +161,18 @@ RSpec.describe GraphMem::McpStreamableHttpTransport, "hardening" do
       expect(MemoryEntity.where(name: "SynthWidget Blind")).not_to exist
     end
 
+    it "accepts a client's JSON-RPC response (result or error, with an id) with 202 at once" do
+      _status, session_id, = initialize_session
+
+      [ { result: {} }, { error: { code: -32_601, message: "Method not found" } } ].each_with_index do |reply, index|
+        started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+        status, _headers, body = rack("POST", body: { jsonrpc: "2.0", id: "srv-#{index}" }.merge(reply), session_id: session_id)
+
+        expect([ status, body ]).to eq([ 202, "" ])
+        expect(Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).to be < 5
+      end
+    end
+
     it "still accepts notifications/initialized with 202" do
       _status, session_id, = initialize_session
 
@@ -222,6 +234,17 @@ RSpec.describe GraphMem::McpStreamableHttpTransport, "hardening" do
 
       expect(open_get_stream(session_id)).to eq(-1)
       expect(open_get_stream(session_id)).to eq(409)
+    end
+  end
+
+  describe "legacy delegation" do
+    it "keeps the server's transport after a /mcp/messages request" do
+      transport # building it makes it the server's transport
+      expect(server.transport).to equal(transport)
+
+      rack("POST", path: "/mcp/messages", body: { jsonrpc: "2.0", id: 1, method: "ping" })
+
+      expect(server.transport).to equal(transport)
     end
   end
 
