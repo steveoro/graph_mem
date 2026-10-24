@@ -13,8 +13,8 @@ module Operator
 
       if production_fallback_credentials?
         Rails.logger.error(
-          "[SessionsController] Production is running with default operator credentials. " \
-          "Set OPERATOR_USERNAME / OPERATOR_PASSWORD or Rails credentials[:operator]."
+          "[SessionsController] Production is running with the default operator password. " \
+          "Set OPERATOR_PASSWORD (or Rails credentials `operator.password`) to something other than `changeme`."
         )
         render :fallback_credentials_error, status: :service_unavailable
         nil

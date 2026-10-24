@@ -39,7 +39,7 @@ Both variables are optional. The defaults are safe for a laptop or a home/office
 | Variable | Default | Meaning |
 |---|---|---|
 | `GRAPH_MEM_MCP_TOKEN` | unset | Shared secret. When set, every request must send `Authorization: Bearer <token>`. When unset, no token is required. |
-| `GRAPH_MEM_MCP_ALLOWED_IPS` | loopback + RFC1918 | Comma-separated addresses or CIDR ranges. `any` (also `all`, `*`) lifts the restriction entirely — **only honoured when a token is set**. |
+| `GRAPH_MEM_MCP_ALLOWED_IPS` | loopback + private (RFC1918, IPv6 ULA and link-local) | Comma-separated addresses or CIDR ranges. `any` (also `all`, `*`) lifts the restriction entirely — **only honoured when a token is set**. |
 
 Default ranges: `127.0.0.0/8`, `::1`, `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`,
 `fc00::/7`, `fe80::/10`.
@@ -142,7 +142,44 @@ returned as `401` with `WWW-Authenticate: Bearer realm="graph_mem"`. A `403` mea
 is outside the allowlist, or the `Origin` check failed.
 
 CORS preflight (`OPTIONS`) is answered before the token check, so browser-based clients can send
-credentials.
+credentials. `Access-Control-Allow-Origin` reflects the request's `Origin` only when it is allowed
+(with `Vary: Origin`), never `*`.
+
+## Request limits and protocol checks
+
+Every request passes the access policy first; these checks run after it, before the request reaches
+a tool.
+
+| Check | Default | Response |
+|---|---|---|
+| Body size (`GRAPH_MEM_MCP_MAX_REQUEST_BYTES`) | 4 MiB (`4194304`) | `413`, JSON-RPC `-32600`. Also applies to the legacy `/mcp/messages`, and to each stdio line (a `-32600` reply; the runner keeps serving). |
+| Open Streamable HTTP sessions (`GRAPH_MEM_MCP_MAX_SESSIONS`) | 256 | At the cap, a new `initialize` first reaps expired sessions, then closes the least recently active idle one (no request in flight, no open stream). `503` "Too many sessions" only when every session is busy. |
+| A second `GET` stream on one session | — | `409`. Each session has at most one server-to-client SSE stream. |
+| `MCP-Protocol-Version` on in-session requests | — | `400` for a version the server doesn't support. Any supported version is accepted, even one other than the negotiated one; a missing header is accepted (pre-2025-06-18 clients). |
+| Body shape | — | `400` for a body that isn't a JSON-RPC 2.0 object (arrays included), `"id": null`, or an id that isn't a string or integer; `-32700` for invalid JSON. |
+| Unknown `Mcp-Session-Id` | — | `404`, checked before the protocol-version header. |
+
+Error responses carry the request's JSON-RPC `id` whenever it could be read. Sessions idle for 30
+minutes are reaped. At the cap, the least recently active idle session is evicted, so a client that
+opens a session per call without sending `DELETE` can't lock others out; it can, however, push out
+sessions that have been idle longer than its own. An evicted session gets `404` on its next request,
+and the client starts a new one.
+
+`initialize` negotiates `2024-11-05`, `2025-03-26`, `2025-06-18` or `2025-11-25`, echoing a
+supported request and answering `2025-11-25` to anything else. `2026-07-28` clients fall back to
+the handshake through a failed `server/discover` probe; a client that sets
+`MCP_PROTOCOL_NEGOTIATION=legacy` skips the probe.
+
+## stdio
+
+The stdio runner has no network surface: whoever can start it gets the full graph, with no token or
+IP check. Launch it only from a client config you control, as a fixed absolute path to
+`bin/mcp_stdio_runner.rb` (or a wrapper script with a fixed path), with no user-supplied
+arguments. Select the catalog with `GRAPH_MEM_MCP_PROFILE` in the launcher's environment, not on
+the command line.
+
+stdout carries JSON-RPC only. Rails, FastMcp and runner logs go to stderr, which most clients
+show in their MCP log view.
 
 ## HTTP API (`/api/v1`)
 
@@ -151,7 +188,9 @@ The REST API is not anonymous. Every verb on every `/api/v1/*` endpoint requires
 1. **An operator browser session** (sign in at `/operator/login`). Cookie-authenticated writes are
    CSRF-protected: send the page's token in `X-CSRF-Token`, as the graph UI does.
 2. **The bearer token** (`GRAPH_MEM_MCP_TOKEN`) from an IP allowed by `GRAPH_MEM_MCP_ALLOWED_IPS`.
-   Bearer-authenticated requests skip the CSRF check; an invalid `Authorization` header does not.
+   A valid bearer token skips the CSRF check. With no session, any `Bearer` header skips it too, and
+   the request then gets `401`/`403`; with a session, an invalid `Authorization` header still needs
+   the CSRF token.
    The token is normalised exactly as for `/mcp` (whitespace stripped, `Bearer` case-insensitive).
 
 With no token configured the bearer path is disabled and only sessions work. There is no

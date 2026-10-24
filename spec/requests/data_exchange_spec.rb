@@ -235,6 +235,29 @@ RSpec.describe 'DataExchange', type: :request do
         expect(response.body).to include('Import Review')
       end
     end
+
+    # mcp plan PR-2 §2.20 item 2: the page's scripts all carry the CSP nonce.
+    context 'with a root node that has a match' do
+      before do
+        valid_json = {
+          version: '1.0',
+          root_nodes: [ { name: project1.name, entity_type: 'Project', observations: [], children: [] } ]
+        }.to_json
+        uploaded_file = Rack::Test::UploadedFile.new(StringIO.new(valid_json), 'application/json',
+                                                     original_filename: 'test.json')
+        post import_upload_data_exchange_index_path, params: { file: uploaded_file }
+      end
+
+      it 'renders every <script> with a nonce and wires the match select to Stimulus' do
+        get import_review_data_exchange_index_path
+
+        page = Nokogiri::HTML(response.body)
+        expect(page.css('script')).not_to be_empty
+        expect(page.css('script').map { |script| script['nonce'] }).to all(be_present)
+        expect(page.at_css('form[data-controller="import-decision"]')).to be_present
+        expect(page.at_css('select.match-select')['data-action']).to eq('change->import-decision#sync')
+      end
+    end
   end
 
   describe 'POST /data_exchange/import_execute' do

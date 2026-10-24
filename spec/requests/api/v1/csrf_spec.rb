@@ -60,4 +60,26 @@ RSpec.describe "API V1 CSRF protection (UI-0)", type: :request do
       expect(response).to have_http_status(:created)
     end
   end
+
+  # mcp plan PR-2 §2.20 item 1: a refused bearer write with no session gets the auth answer
+  # (401/403), not a CSRF 422 (fix in bbda8b9).
+  context "with a refused Bearer token and no session" do
+    before do
+      reset!
+      enable_forgery_protection
+    end
+
+    it "answers a junk Bearer write with 401 and WWW-Authenticate" do
+      post path, params: params, headers: { "Authorization" => "Bearer junk-#{SecureRandom.hex(4)}", "REMOTE_ADDR" => "127.0.0.1" }
+
+      expect(response).to have_http_status(:unauthorized)
+      expect(response.headers["WWW-Authenticate"]).to include("Bearer")
+    end
+
+    it "answers a valid token from a public IP with 403" do
+      post path, params: params, headers: bearer_headers.merge("REMOTE_ADDR" => "203.0.113.7")
+
+      expect(response).to have_http_status(:forbidden)
+    end
+  end
 end

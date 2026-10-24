@@ -30,7 +30,7 @@
           .text-2xl.font-bold.text-purple-600= @stats[:add_relation] || @stats["add_relation"] || 0
           .text-gray-600.text-sm Add Link
   - root_index = 0
-  = form_with url: import_execute_data_exchange_index_path, method: :post, local: true, class: "w-full" do |f|
+  = form_with url: import_execute_data_exchange_index_path, method: :post, local: true, class: "w-full", data: { controller: "import-decision" } do |f|
     .bg-white.rounded-lg.shadow.overflow-hidden.mb-6
       %table.min-w-full.divide-y.divide-gray-200
         %thead.bg-gray-50
@@ -88,7 +88,7 @@
                 - else
                   / Root nodes: show dropdown with form fields
                   - if matches_list.any?
-                    %select.match-select.w-full.border.border-gray-300.rounded.px-2.py-1.text-sm{"data-index" => root_index, :name => "decisions[#{root_index}][target_id]"}
+                    %select.match-select.w-full.border.border-gray-300.rounded.px-2.py-1.text-sm{"data-index" => root_index, "data-action" => "change->import-decision#sync", :name => "decisions[#{root_index}][target_id]"}
                       %option{:value => ""} -- Create New --
                       - matches_list.each do |m|
                         %option{:value => "#{m[:entity_id] || m["entity_id"]}", :selected => (m[:entity_id] || m["entity_id"]).to_s == selected_match.to_s}
@@ -159,17 +159,3 @@
       .flex.justify-end.gap-4
         = link_to "Cancel", import_cancel_data_exchange_index_path, class: "bg-gray-500 hover:bg-gray-600 text-white px-6 py-2 rounded", data: { turbo_method: :delete, turbo_confirm: "Are you sure you want to cancel this import?" }
         = submit_tag "Proceed with Import", class: "bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded cursor-pointer"
-
-  :javascript
-    // Update action field when match selection changes (for root nodes)
-    document.addEventListener('DOMContentLoaded', function() {
-      document.querySelectorAll('.match-select').forEach(function(select) {
-        select.addEventListener('change', function() {
-          var index = this.dataset.index;
-          var actionInput = document.querySelector('.action-input[data-index="' + index + '"]');
-          if (actionInput) {
-            actionInput.value = this.value ? 'merge' : 'create';
-          }
-        });
-      });
-    });

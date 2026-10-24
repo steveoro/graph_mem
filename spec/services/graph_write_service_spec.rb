@@ -181,4 +181,76 @@ RSpec.describe GraphWriteService do
       end
     end
   end
+
+  describe "on_duplicate: skip (PR-2 §2.8)" do
+    it "lists stored and in-batch duplicates under skipped and creates the rest" do
+      stored = MemoryEntity.create!(name: "Alpha Service", entity_type: "Service")
+      stored.memory_observations.create!(content: "Alpha Service runs nightly")
+
+      result = described_class.call(
+        on_duplicate: "skip",
+        operations: [
+          { type: "create_entity", name: "Alpha Service", entity_type: "Service" },
+          { type: "create_entity", name: "SynthWidget", entity_type: "Component" },
+          { type: "create_entity", name: "SynthWidget", entity_type: "Component" },
+          { type: "create_observation", entity_id: stored.id, text_content: "Alpha Service runs nightly" },
+          { type: "create_observation", entity_id: stored.id, text_content: "Alpha Service has a cache" }
+        ]
+      )
+
+      expect(result[:status]).to eq("ok")
+      expect(result[:skipped]).to contain_exactly(
+        include(index: 0, reason: "exists", existing_id: stored.id),
+        include(index: 2, reason: "duplicate_in_batch"),
+        include(index: 3, reason: "exists")
+      )
+      expect(result[:summary]).to include(entities_created: 1, observations_created: 1, skipped: 3)
+      expect(MemoryEntity.where(name: "SynthWidget").count).to eq(1)
+      expect(result[:next_move]).to include("Skipped 3 duplicate(s)")
+    end
+
+    it "also skips the operations that name a skipped similar entity, and writes the rest" do
+      stored = MemoryEntity.create!(name: "Alpha Service", entity_type: "Service")
+      similar_hit = Struct.new(:entity, :distance).new(stored, 0.01)
+      allow(vector_strategy).to receive(:search) do |query, **|
+        query.include?("Alpha Svc") ? [ similar_hit ] : []
+      end
+
+      result = described_class.call(
+        on_duplicate: "skip",
+        operations: [
+          { type: "create_entity", name: "Alpha Svc", entity_type: "Service" },
+          { type: "create_observation", entity_name: "Alpha Svc", text_content: "Alpha Svc runs nightly" },
+          { type: "create_relation", from_entity_id: "alpha svc", to_entity_id: "SynthWidget", relation_type: "depends_on" },
+          { type: "create_entity", name: "SynthWidget", entity_type: "Component" },
+          { type: "create_observation", entity_name: "SynthWidget", text_content: "SynthWidget renders charts" }
+        ]
+      )
+
+      expect(result[:status]).to eq("ok")
+      expect(result[:skipped]).to contain_exactly(
+        include(index: 0, reason: "similar", existing_id: stored.id),
+        include(index: 1, reason: "depends_on_skipped"),
+        include(index: 2, reason: "depends_on_skipped")
+      )
+      expect(result[:summary]).to include(entities_created: 1, observations_created: 1, relations_created: 0, skipped: 3)
+      expect(MemoryEntity.find_by!(name: "SynthWidget").memory_observations.pluck(:content)).to eq([ "SynthWidget renders charts" ])
+      expect(MemoryEntity.where(name: "Alpha Svc")).to be_empty
+      expect(result[:next_move]).to include("duplicate(s) or dependent operation(s)")
+    end
+
+    it "keeps rejecting by default, with no skipped list" do
+      MemoryEntity.create!(name: "Alpha Service", entity_type: "Service")
+
+      result = described_class.call(operations: [ { type: "create_entity", name: "Alpha Service", entity_type: "Service" } ])
+
+      expect(result).to include(status: "possible_duplicate", reason: "same_name")
+      expect(result).not_to have_key(:skipped)
+    end
+
+    it "refuses an unknown on_duplicate mode" do
+      expect { described_class.call(operations: [], on_duplicate: "merge") }
+        .to raise_error(FastMcp::Tool::InvalidArgumentsError, /on_duplicate must be one of/)
+    end
+  end
 end

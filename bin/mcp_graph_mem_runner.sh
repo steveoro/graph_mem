@@ -62,7 +62,8 @@ EXPECTED_RUBY_VERSION="ruby-3.4.1"
 EXPECTED_GEMSET="graph_mem"
 echo "[RunnerLog] Attempting to use RVM: ${EXPECTED_RUBY_VERSION}@${EXPECTED_GEMSET}" >&2
 
-rvm use "${EXPECTED_RUBY_VERSION}@${EXPECTED_GEMSET}" --create
+# stdout is the JSON-RPC channel: RVM's "Using ..." line must go to stderr.
+rvm use "${EXPECTED_RUBY_VERSION}@${EXPECTED_GEMSET}" --create >&2
 RVM_USE_EXIT_CODE=$?
 echo "[RunnerLog] 'rvm use' exit code: ${RVM_USE_EXIT_CODE}" >&2
 

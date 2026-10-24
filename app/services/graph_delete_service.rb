@@ -71,10 +71,12 @@ class GraphDeleteService
 
     results = []
     summary = Hash.new(0)
+    deleted = nil
     # Membership lock BEFORE the transaction: GET_LOCK taken while holding
     # row locks deadlocks against the backfill (advisory-first rule).
     ProjectMembership.with_membership_lock do
       ActiveRecord::Base.transaction do
+        before = row_counts
         @operations.each do |operation|
           payload = GraphMutationBatch.execute(operation) do |attributes|
             dispatch(operation[:type], attributes)
@@ -82,6 +84,7 @@ class GraphDeleteService
           summary[operation[:type]] += 1
           results << GraphMutationBatch.result(operation, payload)
         end
+        deleted = before.to_h { |model, count| [ model, count - model.count ] }
       end
     end
 
@@ -91,9 +94,12 @@ class GraphDeleteService
       results: results,
       summary: {
         operations: @operations.size,
-        entities_deleted: summary["delete_entity"],
+        # Rows actually removed (§2.8): deleting or merging an entity also removes its
+        # observations and relations, which the operation count didn't show.
+        entities_deleted: deleted[MemoryEntity],
+        observations_deleted: deleted[MemoryObservation],
         observations_obsoleted: summary["delete_observation"],
-        relations_deleted: summary["delete_relation"],
+        relations_deleted: deleted[MemoryRelation],
         entities_merged: summary["merge_entities"]
       }
     }
@@ -104,6 +110,11 @@ class GraphDeleteService
   end
 
   private
+
+  # Row counts read inside the transaction, so the delta is exactly this batch's deletes.
+  def row_counts
+    [ MemoryEntity, MemoryObservation, MemoryRelation ].to_h { |model| [ model, model.count ] }
+  end
 
   def execute_one(type, attributes)
     ProjectMembership.with_membership_lock do

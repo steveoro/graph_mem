@@ -149,19 +149,16 @@ RSpec.describe BulkUpdateTool, type: :model do
     context 'transactional rollback' do
       let!(:existing) { MemoryEntity.create!(name: 'Existing For Rollback', entity_type: 'Project') }
 
-      it 'rolls back all changes when entity creation fails' do
+      it 'writes nothing and reports the existing entity when a name already exists' do
         initial_entity_count = MemoryEntity.count
 
-        expect {
-          tool.call(entities: [
-            { name: 'Good Entity', entity_type: 'Project' },
-            { name: 'Existing For Rollback', entity_type: 'Project' }
-          ])
-        }.to raise_error(FastMcp::Tool::InvalidArgumentsError, /rolled back/) do |error|
-          expect(error.message).to match(/Fix the listed op errors/)
-          expect(error.message).to include('`graph_write`')
-        end
+        result = tool.call(entities: [
+          { name: 'Good Entity', entity_type: 'Project' },
+          { name: 'Existing For Rollback', entity_type: 'Project' }
+        ])
 
+        expect(result).to include(status: "possible_duplicate", reason: "same_name")
+        expect(result[:candidates].first[:entity_id]).to eq(existing.id)
         expect(MemoryEntity.count).to eq(initial_entity_count)
       end
 

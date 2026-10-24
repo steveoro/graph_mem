@@ -179,6 +179,19 @@ RSpec.describe "Operator sessions", type: :request do
       get operator_login_path
       expect(response).to have_http_status(:service_unavailable)
     end
+
+    # mcp plan PR-2 §2.20 item 5: only the password matters, so the page and the log say so.
+    it "asks only for a non-default password, on the page and in the log" do
+      allow(Rails.logger).to receive(:error)
+
+      get operator_login_path
+
+      page_text = Nokogiri::HTML(response.body).text.squish
+      expect(page_text).to include("Set OPERATOR_PASSWORD (or Rails credentials operator.password) to something other than changeme")
+      expect(page_text).not_to include("OPERATOR_USERNAME")
+      expect(Rails.logger).to have_received(:error)
+        .with(include("Set OPERATOR_PASSWORD (or Rails credentials `operator.password`) to something other than `changeme`."))
+    end
   end
 
   describe "production with a custom password" do

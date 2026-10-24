@@ -1,7 +1,10 @@
 # frozen_string_literal: true
 
 class GraphWriteService
+  include Duplicates
+
   TYPES = %w[create_entity create_observation create_relation].freeze
+  ON_DUPLICATE_MODES = %w[reject skip].freeze
   TYPE_ORDER = TYPES.each_with_index.to_h.freeze
   DEDUP_DISTANCE_THRESHOLD = 0.25
 
@@ -16,8 +19,10 @@ class GraphWriteService
   # @param project_id [Integer, nil] `set_context` project — name→entity
   #   resolution prefers it, then the global namespace; created entities
   #   join it (nil = a global entity).
-  def self.call(operations:, logger: Rails.logger, project_id: nil)
-    new(operations: operations, logger: logger, project_id: project_id).call
+  # @param on_duplicate [String] "reject" (default: a possible duplicate prevents every write) or
+  #   "skip" (duplicates are listed under `skipped` and the rest is written)
+  def self.call(operations:, logger: Rails.logger, project_id: nil, on_duplicate: "reject")
+    new(operations: operations, logger: logger, project_id: project_id, on_duplicate: on_duplicate).call
   end
 
   # Executes one legacy create operation without the batch envelope.
@@ -49,35 +54,44 @@ class GraphWriteService
 
   # @param operations [Array<Hash>] raw type-discriminated create operations
   # @param logger [#debug] logger used by duplicate probing
-  def initialize(operations:, logger:, project_id: nil)
+  def initialize(operations:, logger:, project_id: nil, on_duplicate: "reject")
     @operations = GraphMutationBatch.normalize_operations(operations)
     @logger = logger
     @project_id = project_id
+    @on_duplicate = on_duplicate.to_s.presence || "reject"
+    @skipped = []
+    unless ON_DUPLICATE_MODES.include?(@on_duplicate)
+      raise FastMcp::Tool::InvalidArgumentsError, "on_duplicate must be one of: #{ON_DUPLICATE_MODES.join(', ')}"
+    end
   end
 
-  # Runs duplicate preflight, then executes the batch in one transaction.
+  # Runs the duplicate checks, then executes the batch in one transaction.
   #
-  # Entity operations run before observations and relations so later
-  # operations may reference newly created entities by name. Results are
-  # returned in the caller's original order.
+  # Semantic duplicates are probed before the write lock (that may call the embedding service);
+  # exact duplicates are re-checked under the lock, right before the transaction, so two
+  # concurrent writers of the same name get one entity and one structured response (§2.7).
+  # Entity operations run before observations and relations so later operations may reference
+  # newly created entities by name. Results are returned in the caller's original order.
   #
   # @return [Hash] canonical batch result or possible-duplicate response
   # @raise [FastMcp::Tool::InvalidArgumentsError, McpGraphMemErrors::Error]
   #   when any operation fails; the transaction is rolled back
   def call
-    GraphMutationBatch.validate_operations!(
-      @operations,
-      allowed_types: TYPES,
-      tool_name: "graph_write"
-    )
-    duplicate = duplicate_response
-    return duplicate if duplicate
+    GraphMutationBatch.validate_operations!(@operations, allowed_types: TYPES, tool_name: "graph_write")
+    semantic = skip_mode? ? semantic_candidates : semantic_duplicate_response
+    return semantic if semantic.is_a?(Hash) && semantic[:status] == "possible_duplicate"
 
     results = []
     counts = Hash.new(0)
     # Membership lock BEFORE the transaction: GET_LOCK taken while holding
     # row locks deadlocks against the backfill (advisory-first rule).
     ProjectMembership.with_membership_lock do
+      if skip_mode?
+        plan_skips(semantic)
+      elsif (exact = exact_duplicate_response)
+        return exact
+      end
+
       ActiveRecord::Base.transaction do
         dependency_ordered_operations.each do |operation|
           payload, additional_counts = execute_operation(operation)
@@ -87,17 +101,9 @@ class GraphWriteService
       end
     end
 
-    {
-      mode: "batch",
-      status: "ok",
-      results: results.sort_by { |result| result[:index] },
-      summary: {
-        operations: @operations.size,
-        entities_created: counts[:entities],
-        observations_created: counts[:observations],
-        relations_created: counts[:relations]
-      }
-    }
+    batch_result(results, counts)
+  rescue Duplicates::ConcurrentDuplicate => e
+    concurrent_duplicate_response(e)
   rescue ProjectMembership::LockTimeout => e
     # Raised by the OUTER lock wrapper while another session holds it —
     # retryable, not "escalate to a human".
@@ -105,6 +111,40 @@ class GraphWriteService
   end
 
   private
+
+  def skip_mode?
+    @on_duplicate == "skip"
+  end
+
+  # @return [Hash{Integer => Object}] semantic matches by operation index (skip mode)
+  def semantic_candidates
+    @operations.each_with_object({}) do |operation, candidates|
+      next unless operation[:type] == "create_entity"
+
+      similar = semantic_candidate(operation)
+      candidates[operation[:index]] = similar if similar
+    end
+  end
+
+  def batch_result(results, counts)
+    result = {
+      mode: "batch",
+      status: "ok",
+      results: results.sort_by { |entry| entry[:index] },
+      summary: {
+        operations: results.size + @skipped.size,
+        entities_created: counts[:entities],
+        observations_created: counts[:observations],
+        relations_created: counts[:relations]
+      }
+    }
+    return result unless skip_mode?
+
+    result[:summary][:skipped] = @skipped.size
+    result[:skipped] = @skipped.sort_by { |entry| entry[:index] }
+    result[:next_move] = "Skipped #{@skipped.size} duplicate(s) or dependent operation(s); use `graph_edit` to change the existing records." if @skipped.any?
+    result
+  end
 
   def lock_timeout_error(exception)
     McpGraphMemErrors::OperationFailed.new(
@@ -119,8 +159,10 @@ class GraphWriteService
   end
 
   def execute_operation(operation)
-    payload = GraphMutationBatch.execute(operation) do |attributes|
-      dispatch(operation[:type], attributes)
+    payload = begin
+      GraphMutationBatch.execute(operation) { |attributes| dispatch(operation[:type], attributes) }
+    rescue Duplicates::ConcurrentDuplicate
+      raise Duplicates::ConcurrentDuplicate.new(operation)
     end
 
     counts =
@@ -133,14 +175,20 @@ class GraphWriteService
     [ payload, counts ]
   end
 
+  # The single-operation path runs the same two duplicate layers as #call (§2.7).
   def execute_one
-    duplicate = duplicate_response
+    duplicate = semantic_duplicate_response
     return duplicate if duplicate
 
     operation = @operations.first
     ProjectMembership.with_membership_lock do
+      exact = exact_duplicate_response
+      return exact if exact
+
       ActiveRecord::Base.transaction { dispatch(operation[:type], operation[:attributes]) }
     end
+  rescue Duplicates::ConcurrentDuplicate => e
+    concurrent_duplicate_response(e)
   rescue ProjectMembership::LockTimeout => e
     raise lock_timeout_error(e)
   end
@@ -177,18 +225,7 @@ class GraphWriteService
   def create_entity(attributes)
     submitted_type = attributes[:entity_type]
     is_project = ImportEntityResolver.canonical_type(attributes[:entity_type]) == "Project"
-    entity = MemoryEntity.create!(
-      name: attributes[:name],
-      entity_type: attributes[:entity_type],
-      aliases: GraphMutationBatch.normalize_aliases(attributes[:aliases]),
-      description: attributes[:description],
-      # Insert directly in the FINAL scope: inserting at project_scope 0
-      # first would collide with a same-named GLOBAL entity even though
-      # the row is headed for the project scope (UNIQUE(project_scope,
-      # name) is per-scope). The part_of edge + sync! below keep the
-      # membership-mirrors-the-chain invariant.
-      project_id: (@project_id unless is_project)
-    )
+    entity = create_entity_row!(attributes, is_project)
     # Members join the context project by ATTACHING to it: the part_of
     # edge makes the membership visible in the tree and
     # ProjectMembership.sync! recomputes the column the same way every
@@ -203,6 +240,29 @@ class GraphWriteService
       MemoryObservation.create!(memory_entity: entity, content: content)
     end
 
+    entity_payload(entity, submitted_type)
+  end
+
+  # A unique-index race (two writers of one name) raises ConcurrentDuplicate, so #call can roll
+  # back and answer with the existing entity instead of an error (§2.7).
+  def create_entity_row!(attributes, is_project)
+    MemoryEntity.create!(
+      name: attributes[:name],
+      entity_type: attributes[:entity_type],
+      aliases: GraphMutationBatch.normalize_aliases(attributes[:aliases]),
+      description: attributes[:description],
+      # Insert directly in the FINAL scope: inserting at project_scope 0
+      # first would collide with a same-named GLOBAL entity even though
+      # the row is headed for the project scope (UNIQUE(project_scope,
+      # name) is per-scope). The part_of edge + sync! below keep the
+      # membership-mirrors-the-chain invariant.
+      project_id: (@project_id unless is_project)
+    )
+  rescue ActiveRecord::RecordNotUnique
+    raise Duplicates::ConcurrentDuplicate.new({ type: "create_entity", attributes: attributes })
+  end
+
+  def entity_payload(entity, submitted_type)
     payload = {
       entity_id: entity.id,
       name: entity.name,
@@ -298,93 +358,6 @@ class GraphWriteService
     return value unless value.is_a?(String)
 
     ImportEntityResolver.find_by_name(value, project_id: @project_id)&.id || value
-  end
-
-  def duplicate_response
-    @operations.each do |operation|
-      duplicate =
-        case operation[:type]
-        when "create_entity" then duplicate_entity_response(operation)
-        when "create_relation" then duplicate_relation_response(operation)
-        end
-      return duplicate if duplicate
-    end
-    nil
-  end
-
-  def find_similar_entity(name, entity_type)
-    canonical_type = EntityTypeMapping.canonicalize(entity_type) || entity_type.to_s.strip
-    result = VectorSearchStrategy.new.search(
-      "#{canonical_type}: #{name}",
-      limit: 1,
-      entity_type: canonical_type
-    ).first
-    result if result && result.distance < DEDUP_DISTANCE_THRESHOLD
-  rescue *ToolError::TIMEOUT_CLASSES
-    raise
-  rescue StandardError => e
-    @logger.debug "GraphWriteService: dedup check unavailable — #{e.message}"
-    nil
-  end
-
-  def duplicate_entity_response(operation)
-    attributes = operation[:attributes]
-    similar = find_similar_entity(attributes[:name], attributes[:entity_type])
-    return unless similar
-
-    possible_duplicate(
-      operation,
-      kind: "entity",
-      submitted: attributes.slice(:name, :entity_type, :aliases, :description),
-      candidates: [
-        {
-          entity_id: similar.entity.id,
-          name: similar.entity.name,
-          entity_type: similar.entity.entity_type,
-          description: similar.entity.description,
-          aliases: similar.entity.aliases,
-          similarity_distance: similar.distance.round(4)
-        }
-      ],
-      next_move: "Use `graph_edit` or add an observation with `graph_write`; retry only if distinct."
-    )
-  end
-
-  def duplicate_relation_response(operation)
-    attributes = operation[:attributes]
-    from_id = resolve_entity_id(attributes[:from_entity_id] || attributes[:from_entity])
-    to_id = resolve_entity_id(attributes[:to_entity_id] || attributes[:to_entity])
-    canonical_type = MemoryRelation.canonical_relation_type(attributes[:relation_type])
-    relation = MemoryRelation.find_by(
-      from_entity_id: from_id,
-      to_entity_id: to_id,
-      relation_type: canonical_type
-    )
-    return unless relation
-
-    possible_duplicate(
-      operation,
-      kind: "relation",
-      submitted: {
-        from_entity_id: from_id,
-        to_entity_id: to_id,
-        relation_type: canonical_type
-      },
-      candidates: [ GraphTraversalSerializer.relation_json(relation) ],
-      next_move: "Use the existing relation, or remove it with `graph_delete` before replacing it."
-    )
-  end
-
-  def possible_duplicate(operation, kind:, submitted:, candidates:, next_move:)
-    {
-      mode: "batch",
-      status: "possible_duplicate",
-      kind: kind,
-      operation_index: operation[:index],
-      submitted: submitted,
-      candidates: candidates,
-      next_move: next_move
-    }
   end
 
   def type_hint_for(value, examples, mapping_class)

@@ -7,6 +7,7 @@ require_relative "../../lib/graph_mem/mcp_tool_registry"
 require_relative "../../lib/graph_mem/mcp_error_formatter"
 require_relative "../../lib/graph_mem/mcp_server_patch"
 require_relative "../../lib/graph_mem/mcp_streamable_http_transport"
+require_relative "../../lib/graph_mem/mcp_server_options"
 
 # Toggle this to enable/disable debug output
 debug_mode = false
@@ -20,14 +21,18 @@ end
 
 puts "[DEBUG] FastMcp Initializer: Starting setup..." if debug_mode
 
-# Configure FastMcp logger
-fast_mcp_logger = Logger.new(STDOUT)
+# Configure FastMcp logger. Under the stdio runner (GRAPH_MEM_MCP_STDIO=1) stdout carries JSON-RPC,
+# so log to stderr there (mcp plan PR-2 §2.13).
+fast_mcp_logger = Logger.new(ENV["GRAPH_MEM_MCP_STDIO"] ? $stderr : $stdout)
 fast_mcp_logger.level = Logger::DEBUG # Or your preferred level (INFO, WARN, ERROR)
 
+# Per-profile instructions (GraphMem::McpInstructions, mcp plan PR-2 §2.17) and only the
+# capabilities graph_mem delivers (§2.18).
 server = FastMcp::Server.new(
   name: Rails.application.class.module_parent_name.underscore.dasherize,
   version: GraphMem::VERSION.to_s,
-  logger: fast_mcp_logger
+  logger: fast_mcp_logger,
+  **GraphMem::McpServerOptions.for_http
 )
 
 GraphMem::McpErrorFormatter.install(server)
@@ -65,15 +70,22 @@ fast_mcp_logger.info("[McpAccessPolicy] /mcp access: #{mcp_access_policy.describ
 # `localhost_only: false` is intentional: it disables the inner legacy transport's
 # own IP check, which can only compare exact strings. McpStreamableHttpTransport
 # applies mcp_access_policy to both endpoints before delegating.
+mcp_allowed_origins = [ "localhost", "127.0.0.1", "::1", /\A192\.168\.\d{1,3}\.\d{1,3}\z/, /\A10\.\d{1,3}\.\d{1,3}\.\d{1,3}\z/ ]
 Rails.application.config.middleware.use(
   GraphMem::McpStreamableHttpTransport,
   server,
   path_prefix: "/mcp",
   messages_route: "messages",
   sse_route: "sse",
-  allowed_origins: [ "localhost", "127.0.0.1", "::1", /\A192\.168\.\d{1,3}\.\d{1,3}\z/, /\A10\.\d{1,3}\.\d{1,3}\.\d{1,3}\z/ ],
+  allowed_origins: mcp_allowed_origins,
   localhost_only: false,
-  access_policy: mcp_access_policy
+  access_policy: mcp_access_policy,
+  # fast-mcp 1.8.0 legacy-SSE options, passed explicitly (mcp plan PR-2 §2.1): a 4 MiB body
+  # cap, CORS reflecting only these origins, and a server-issued session id that every
+  # /mcp/messages POST must carry (400 without it, 404 for an unknown one).
+  max_request_bytes: Integer(ENV.fetch("GRAPH_MEM_MCP_MAX_REQUEST_BYTES", 4 * 1024 * 1024)),
+  cors_allowed_origins: mcp_allowed_origins,
+  require_sse_session: true
 )
 
 FastMcp.server = server

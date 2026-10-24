@@ -62,6 +62,26 @@ GraphMem installs its `ToolError` envelope through FastMCP's
 request carried in per-request context, so tool classes remain bound to one
 server under concurrent requests.
 
+#### fast-mcp feature map
+
+GraphMem depends on the steveoro fork of fast-mcp, pinned to `1.8.0` in the `Gemfile`
+(`McpServerPatch::EXPECTED_FORK_VERSION` must match). What each side owns:
+
+| Feature | fast-mcp 1.8.0 | GraphMem |
+|---|---|---|
+| Tool, resource and prompt classes, input/output schemas, dispatch | `FastMcp::Tool`, `FastMcp::Resource`, `FastMcp::Prompt`, `FastMcp::Server` | `ApplicationTool`, `app/resources`, `app/prompts`; registered by `McpToolRegistry` |
+| `initialize` version negotiation (2024-11-05 … 2025-11-25) | `Server#negotiate_protocol_version` | — |
+| Strict JSON-RPC 2.0 (null ids, id-less requests) | `FastMcp::Server` | the same checks before dispatch, as HTTP 400s (`McpStreamableHttp::RequestChecks`) |
+| `instructions` and `capabilities` in `initialize` | `Server.new(instructions:, capabilities:)` | per-profile texts and capability flags (`McpServerOptions`, `McpInstructions`) |
+| Per-request tool and prompt filtering | `filter_tools`, `filter_prompts` | connection profiles (`McpProfile`) |
+| Hidden compatibility aliases | — | `McpServerPatch#handle_tools_list` |
+| Error formatting | `error_formatter` hook | `ToolError` envelope (`McpErrorFormatter`) |
+| Streamable HTTP transport (`/mcp`, `/mcp/readonly`, `/mcp/maintenance`) | — | `McpStreamableHttpTransport` and `mcp_streamable_http/`: sessions, SSE streams, body and session caps, `MCP-Protocol-Version` check, CORS |
+| Legacy SSE transport (`/mcp/sse`, `/mcp/messages`) | `Transports::RackTransport`: body cap, CORS allowlist, required server-issued session id | delegated to by `McpStreamableHttpTransport` |
+| Access control (token, IP allowlist) | — | `McpAccessPolicy`, applied to both transports ([mcp_access_control.md](mcp_access_control.md)) |
+| stdio transport | `Transports::StdioTransport` | `bin/mcp_stdio_runner.rb`: stdout for JSON-RPC only, logs to stderr |
+| Resource subscriptions | per-session subscriptions | not advertised (`subscribe: false`): GraphMem never sends `resources/updated` |
+
 Tool categories:
 - **Context** (2): `set_context`, `get_context`
 - **Read/query** (6): `search`, `get_entities`, `traverse_graph`,

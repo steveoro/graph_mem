@@ -7,7 +7,7 @@
 # compatibility aliases after FastMCP applies the request profile filter.
 module GraphMem
   module McpServerPatch
-    EXPECTED_FORK_VERSION = "1.7.1"
+    EXPECTED_FORK_VERSION = "1.8.0"
 
     private
 

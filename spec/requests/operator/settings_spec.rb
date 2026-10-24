@@ -5,6 +5,14 @@ require "rails_helper"
 RSpec.describe "Operator settings", type: :request do
   let(:backup_dir) { Rails.root.join("tmp", "test_settings_backups") }
 
+  # Examples below set fallback ENV values; restore them so later specs don't call those URLs.
+  around do |example|
+    original = %w[OLLAMA_URL EMBEDDING_MODEL SUMMARY_MODEL].to_h { |key| [ key, ENV[key] ] }
+    example.run
+  ensure
+    original.each { |key, value| value.nil? ? ENV.delete(key) : ENV[key] = value }
+  end
+
   before do
     FileUtils.mkdir_p(backup_dir)
     AppSettings.clear_cache

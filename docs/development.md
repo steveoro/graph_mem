@@ -95,15 +95,26 @@ The default 12 tools advertise `outputSchema` and emit matching
 `structuredContent` plus mirrored JSON text. Maintenance-only and hidden tools
 remain text-only until their schemas are migrated.
 
-For the STDIO interface (useful for Windsurf integration):
+For the STDIO interface:
 
 ```bash
-bin/windsurf_mcp_graph_mem_runner.sh
+bundle exec ruby bin/mcp_stdio_runner.rb
 ```
 
 STDIO defaults to the `default` profile. Set `GRAPH_MEM_MCP_PROFILE=readonly` or
 `GRAPH_MEM_MCP_PROFILE=maintenance` in the launcher environment to select a
 different catalog. The readonly stdio catalog also omits the `persist` prompt.
+
+The stdio runner keeps stdout for JSON-RPC only: Rails, FastMcp and runner logs go to stderr, so a
+`puts` or a `Logger.new($stdout)` in app code can't break strict clients such as the Ruby MCP SDK.
+Read the logs from the client's MCP log view, or redirect stderr when running the runner by hand.
+Launch it by a fixed absolute path with no user-supplied arguments
+(see [mcp_access_control.md](mcp_access_control.md#stdio)).
+
+Clients that probe `server/discover` before falling back to `initialize` start the runner twice
+on first connect; `MCP_PROTOCOL_NEGOTIATION=legacy` in the client's environment skips the probe.
+Body, session and `MCP-Protocol-Version` limits on the HTTP endpoints are listed in
+[mcp_access_control.md](mcp_access_control.md#request-limits-and-protocol-checks).
 
 ## Adding MCP Tools
 
