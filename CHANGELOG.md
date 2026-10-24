@@ -16,7 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - `project_scan_roots` is replaced by `project_scan_subfolders` (relative to the scan root, editable at runtime); `PROJECT_SCAN_ROOTS` (never effective) is removed. Native installs default to home + "Projects", so scanning outside `~/Projects` (e.g. `/tmp/foo`) needs `GRAPH_MEM_SCAN_ROOTS` (e.g. `/tmp/foo`) plus a blank subfolder filter, since the filter applies under every scan root.
-- fast-mcp bumped to steveoro v1.8.0 (handshake negotiation up to 2025-11-25, strict JSON-RPC, per-session subscriptions).
+- fast-mcp bumped to steveoro v1.8.0 (handshake negotiation up to 2025-11-25, strict JSON-RPC, per-session subscriptions). **Legacy `/mcp/sse` clients:** every `/mcp/messages` POST must carry the server-issued `sessionId` (400 without it, 404 for an unknown one), and a legacy stream with no POST for 30 minutes is closed (fast-mcp's default `sse_idle_timeout`).
 - Streamable HTTP and stdio negotiate 2024-11-05 / 2025-03-26 / 2025-06-18 / 2025-11-25; any other requested version gets 2025-11-25. 2026-07-28 clients fall back via the `server/discover` probe.
 - `MCP-Protocol-Version` is validated on in-session requests (400 for unsupported values).
 - CORS reflects allowed origins only (`Vary: Origin`); `MCP-Protocol-Version` is allowed and exposed.
@@ -26,10 +26,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 - One `ScanRootPolicy` for the dashboard, `POST /api/v1/scan`, MCP `scan_project` and job start (previously the API and MCP accepted any directory). Hidden folders can't be scan roots or project folders, nor can `snap`/`Library`/`AppData`/`Maildir`/`Mail` directly under the scan root; a home folder (yours, `/root`, `/home/*`, `/Users/*`) can't be scanned as one project, and `/home` / `/Users` can't be scan roots. Inside a project, `.git`, `.ssh`, `.gnupg`, `.aws`, `.kube`, `.docker`, `.password-store` and secret files (`.env*`, keys, certificates, `credentials*`, `master.key`, `*.tfstate`, shell history, …; case-insensitive) are never read, even via explicit `file_globs`. `..`/absolute `file_globs` are rejected; symlinks resolving outside the root are skipped. A filter whose entries are all invalid allows nothing (only a blank filter means the whole root).
-- `/api/v1`: a write with a wrong or expired bearer token and no session now gets 401 (or 403 for a disallowed IP) instead of a CSRF 422.
+- `/api/v1` CSRF matrix specs for refused bearer writes with no session: a junk token gets 401, a valid token from a disallowed IP gets 403 (behaviour since 1.53.0).
 - Import review page: its inline script moved to a Stimulus controller, ready for CSP enforcement.
-- The graph UI's data_exchange JSON writes now send and require the CSRF token.
-- `allow_guest` appends instead of replacing; API session expiry reuses the app-wide timeouts.
+- The graph UI's data_exchange JSON writes now require the CSRF token (the graph UI already sent it).
+- `allow_guest` appends instead of replacing.
 - Docs: the production 503 names only `OPERATOR_PASSWORD`; `GRAPH_MEM_MCP_ALLOWED_IPS` defaults to loopback + private ranges.
 
 ### Fixed
