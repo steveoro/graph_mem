@@ -142,7 +142,7 @@ class GraphWriteService
 
     result[:summary][:skipped] = @skipped.size
     result[:skipped] = @skipped.sort_by { |entry| entry[:index] }
-    result[:next_move] = "Skipped #{@skipped.size} duplicate(s); use `graph_edit` to change the existing records." if @skipped.any?
+    result[:next_move] = "Skipped #{@skipped.size} duplicate(s) or dependent operation(s); use `graph_edit` to change the existing records." if @skipped.any?
     result
   end
 

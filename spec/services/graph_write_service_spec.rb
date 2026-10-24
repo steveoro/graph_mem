@@ -236,6 +236,7 @@ RSpec.describe GraphWriteService do
       expect(result[:summary]).to include(entities_created: 1, observations_created: 1, relations_created: 0, skipped: 3)
       expect(MemoryEntity.find_by!(name: "SynthWidget").memory_observations.pluck(:content)).to eq([ "SynthWidget renders charts" ])
       expect(MemoryEntity.where(name: "Alpha Svc")).to be_empty
+      expect(result[:next_move]).to include("duplicate(s) or dependent operation(s)")
     end
 
     it "keeps rejecting by default, with no skipped list" do
