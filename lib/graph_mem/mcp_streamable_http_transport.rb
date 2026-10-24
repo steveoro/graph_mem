@@ -245,8 +245,9 @@ module GraphMem
       return version_error if version_error
 
       # A client's JSON-RPC response (to a server-to-client request) carries an id but gets no
-      # reply either: 202, as the spec says, instead of waiting for one until the 504.
-      client_response = parsed.key?(:result) || parsed.key?(:error)
+      # reply either: 202, as the spec says, instead of waiting for one until the 504. Anything with
+      # a method is still dispatched.
+      client_response = method.nil? && (parsed.key?(:result) || parsed.key?(:error))
       return accept_without_reply(body, request, session_id, method) if request_id.nil? || client_response
 
       wants_sse = sse_response_requested?(accept)

@@ -173,6 +173,14 @@ RSpec.describe GraphMem::McpStreamableHttpTransport, "hardening" do
       end
     end
 
+    it "still dispatches a message with both a method and a result" do
+      _status, session_id, = initialize_session
+      status, _headers, body = rack("POST", body: { jsonrpc: "2.0", id: 5, method: "ping", result: {} }, session_id: session_id)
+
+      expect(status).not_to eq(202)
+      expect(json(body)).to include("id" => 5)
+    end
+
     it "still accepts notifications/initialized with 202" do
       _status, session_id, = initialize_session
 
