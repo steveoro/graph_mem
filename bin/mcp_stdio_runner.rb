@@ -63,7 +63,9 @@ RunnerLogger.info(
 )
 
 begin
-  server.start(output: mcp_out)
+  # Same line cap as the HTTP body cap (fast-mcp's stdio cap is off unless passed): an over-limit
+  # line gets -32600 and the loop goes on.
+  server.start(output: mcp_out, max_request_bytes: Integer(ENV.fetch("GRAPH_MEM_MCP_MAX_REQUEST_BYTES", 4 * 1024 * 1024)))
 rescue Interrupt
   RunnerLogger.info("GraphMem MCP server (stdio) interrupted. Exiting...")
 rescue StandardError => e

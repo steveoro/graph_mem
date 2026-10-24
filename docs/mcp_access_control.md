@@ -152,7 +152,7 @@ a tool.
 
 | Check | Default | Response |
 |---|---|---|
-| Body size (`GRAPH_MEM_MCP_MAX_REQUEST_BYTES`) | 4 MiB (`4194304`) | `413`, JSON-RPC `-32600`. Also applies to the legacy `/mcp/messages`. |
+| Body size (`GRAPH_MEM_MCP_MAX_REQUEST_BYTES`) | 4 MiB (`4194304`) | `413`, JSON-RPC `-32600`. Also applies to the legacy `/mcp/messages`, and to each stdio line (a `-32600` reply; the runner keeps serving). |
 | Open Streamable HTTP sessions (`GRAPH_MEM_MCP_MAX_SESSIONS`) | 256 | At the cap, a new `initialize` first reaps expired sessions, then closes the least recently active idle one (no request in flight, no open stream). `503` "Too many sessions" only when every session is busy. |
 | A second `GET` stream on one session | — | `409`. Each session has at most one server-to-client SSE stream. |
 | `MCP-Protocol-Version` on in-session requests | — | `400` for a version the server doesn't support. Any supported version is accepted, even one other than the negotiated one; a missing header is accepted (pre-2025-06-18 clients). |

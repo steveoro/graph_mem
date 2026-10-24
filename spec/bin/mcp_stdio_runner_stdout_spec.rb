@@ -26,10 +26,10 @@ RSpec.describe "bin/mcp_stdio_runner.rb stdout" do
     [ ToolInvocation, AgentContext ].each { |model| model.where(created_at: started_at..).delete_all }
   end
 
-  def run_runner
-    env = { "RAILS_ENV" => "test", "OLLAMA_URL" => "http://127.0.0.1:9", "GRAPH_MEM_MCP_PROFILE" => "default" }
+  def run_runner(lines = messages.map { |message| JSON.generate(message) }, extra_env: {})
+    env = { "RAILS_ENV" => "test", "OLLAMA_URL" => "http://127.0.0.1:9", "GRAPH_MEM_MCP_PROFILE" => "default" }.merge(extra_env)
     Open3.popen3(env, RbConfig.ruby, Rails.root.join("bin/mcp_stdio_runner.rb").to_s, chdir: Rails.root.to_s) do |stdin, stdout, stderr, wait|
-      messages.each { |message| stdin.puts(JSON.generate(message)) }
+      lines.each { |line| stdin.puts(line) }
       stdin.close
       err_reader = Thread.new { stderr.read }
       out = Timeout.timeout(90) { stdout.read }
@@ -50,5 +50,15 @@ RSpec.describe "bin/mcp_stdio_runner.rb stdout" do
       "capabilities" => GraphMem::McpServerOptions::CAPABILITIES.deep_stringify_keys
     )
     expect(err).to include("Registered tool")
+  end
+
+  it "refuses a line over GRAPH_MEM_MCP_MAX_REQUEST_BYTES with -32600 and keeps serving" do
+    oversized = JSON.generate(jsonrpc: "2.0", id: 1, method: "ping", params: { pad: "x" * 5_000 })
+    out, = run_runner([ oversized, JSON.generate(jsonrpc: "2.0", id: 2, method: "ping") ],
+                      extra_env: { "GRAPH_MEM_MCP_MAX_REQUEST_BYTES" => "2000" })
+    replies = out.lines.map { |line| JSON.parse(line) }
+
+    expect(replies.first.dig("error", "code")).to eq(-32_600)
+    expect(replies.last).to include("id" => 2, "result" => {})
   end
 end
