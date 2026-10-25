@@ -91,7 +91,7 @@ Companion plans: `ui-dashboard-plan.md` and, since Oct 22, `agent-rules-plan.md`
 | 4 | **PR-0** home mount, ScanRootPolicy, subfolder filter, denylist | graph_mem `[Unreleased]` → 1.54.0 | [Claude] | UI-0 merged (#106 ✅) |
 | 5 | **PR-2** MCP hardening + fast-mcp 1.8.0 bump + the two high bugs + `instructions` wiring (§2.17) + the #106 leftovers and test hygiene (mcp §2.20–2.21); **bumps to 1.54.0** | graph_mem **1.54.0** | [Claude] | PR-1 tagged, PR-0 merged, 1.53.0 merged |
 | 6 | **PR-3** interop specs/scripts (+ docs); engine-agnostic, the migration's safety net | graph_mem **1.54.1** | [Claude] + [Devin-simple] | 1.54.0 |
-| D | **M-D1** query cap, **M-D2** description-length spec (D-23), **M-D3** docs line-refs (after PR-2) | `[Unreleased]` | [Devin-simple] | as listed |
+| D | **M-D1** query cap, **M-D2** description-length spec (D-23), **M-D3** docs line-refs (after PR-2; ✅ done by Claude in 1.54.3) | `[Unreleased]` | [Devin-simple] | as listed |
 | 7 | **MG-0** migration design (reads `ruby_mcp` `a0ff088`); a written doc, no release | n/a | [Claude] | PR-3 merged |
 | 8 | **MG-1** adapter layer, `mcp` gem, engine switch (default fast-mcp), 3 pilot tools | graph_mem **1.55.0** | [Claude] | MG-0 approved by Steve |
 | 9 | **MG-2a** tools batch A: the 12 `/mcp` tools + parity-spec template | graph_mem 1.55.1 | [Claude] | MG-1 |

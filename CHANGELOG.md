@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.54.3] - 2026-10-25
+
+### Changed
+- Docs: fast-mcp v1.8.0 and the 2024-11-05 … 2025-11-25 negotiation range in the README, development and troubleshooting guides; `/mcp/sse` marked deprecated (kept for older clients). `docs/mcp_tools.md`'s `scan_project` entry matches the tool. (M-D3)
+
+### Fixed
+- An ambiguous entity name inside a `graph_write` / `graph_edit` / `graph_delete` batch returns the `ambiguous_name` error with its candidates again, instead of "An unexpected error occurred." (`GraphMutationBatch` now re-raises with `Exception#exception`, keeping every field.)
+- `scan_project` and `POST /api/v1/scan` refuse a `scan_id` that belongs to a finished scan or to another operation (`code: "scan_id_not_resumable"`, 422 on REST) instead of replying `queued` and failing in the worker.
+
 ## [1.54.2] - 2026-10-25
 
 Fixes from the Claude Code client check (PR-3 step 5).
