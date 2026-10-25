@@ -17,7 +17,7 @@ class ProjectScanJob < ApplicationJob
   # @param file_globs [Array<String>, nil]
   # @return [OperationProgress, nil] the new pending row, or nil when the scan_id already existed
   def self.enqueue(scan_id:, project_root:, project_name:, aliases:, mode:, dry_run:, file_globs:)
-    operation = unless OperationProgress.exists?(operation_id: scan_id)
+    operation = begin
       OperationProgress.create!(
         operation_type: "project_scan",
         operation_id: scan_id,
@@ -29,6 +29,8 @@ class ProjectScanJob < ApplicationJob
         message: "Queued project scan",
         details: { project_root: project_root, project_name: project_name, mode: mode, dry_run: dry_run }
       )
+    rescue ActiveRecord::RecordNotUnique
+      nil # the scan_id exists already (a resumed scan, or a concurrent call with the same id)
     end
 
     begin
