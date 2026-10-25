@@ -28,6 +28,14 @@ RSpec.describe ToolError do
       expect(payload["next_move"]).to include("`search`")
     end
 
+    it "adds the error's code only when it carries one" do
+      coded = described_class.envelope(McpGraphMemErrors::InvalidArguments.new("Refused.", code: :outside_filter))
+      plain = described_class.envelope(McpGraphMemErrors::ResourceNotFound.new("Missing."))
+
+      expect(coded).to include("category" => "validation", "code" => "outside_filter", "message" => "Refused.")
+      expect(plain).not_to have_key("code")
+    end
+
     it "maps InvalidArgumentsError to validation" do
       error = FastMcp::Tool::InvalidArgumentsError.new("Invalid arguments: {\"name\":[\"is missing\"]}")
       payload = described_class.envelope(error, tool_name: "create_entity")

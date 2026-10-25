@@ -22,14 +22,14 @@ module Api
         return render_error("mode must be initial, rescan, or validate") unless ScanProjectTool::MODES.include?(mode)
 
         scan_id = params[:scan_id].to_s.presence || SecureRandom.uuid
-        ProjectScanJob.perform_later(
-          scan_id,
-          project_root,
-          params[:project_name].to_s.presence,
-          params[:aliases].to_s.presence,
-          mode,
-          params[:dry_run] == true || params[:dry_run].to_s.downcase == "true",
-          file_globs
+        ProjectScanJob.enqueue(
+          scan_id: scan_id,
+          project_root: project_root,
+          project_name: params[:project_name].to_s.presence,
+          aliases: params[:aliases].to_s.presence,
+          mode: mode,
+          dry_run: params[:dry_run] == true || params[:dry_run].to_s.downcase == "true",
+          file_globs: file_globs
         )
 
         render json: {

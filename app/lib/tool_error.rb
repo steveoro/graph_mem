@@ -7,6 +7,8 @@ require "net/http"
 # Maps tool exceptions to the structured MCP error envelope.
 class ToolError
   ENVELOPE_KEYS = %w[error category retriable next_move message tool].freeze
+  # Added only when the error carries one (McpGraphMemErrors::Error#code).
+  OPTIONAL_ENVELOPE_KEYS = %w[code].freeze
 
   CATEGORY_NOT_FOUND = "not_found"
   CATEGORY_VALIDATION = "validation"
@@ -42,7 +44,10 @@ class ToolError
         "next_move" => next_move_for(error, category),
         "message" => message_for(error),
         "tool" => tool_name
-      }
+      }.tap do |payload|
+        code = error.code if error.respond_to?(:code)
+        payload["code"] = code if code.present?
+      end
     end
 
     def dump(error, tool_name: nil)
