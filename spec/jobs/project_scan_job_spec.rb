@@ -110,6 +110,21 @@ RSpec.describe ProjectScanJob, type: :job do
         .to raise_error(described_class::ScanIdNotResumable, /is pending, not paused/)
     end
 
+    it "broadcasts the claim and keeps the first batch's started_at when the resumed job runs" do
+      scan_id = SecureRandom.uuid
+      paused = OperationProgress.start!(operation_type: "project_scan", operation_id: scan_id, total_count: 6)
+      paused.update!(started_at: 2.hours.ago.change(usec: 0))
+      paused.pause!
+      first_started_at = paused.started_at
+      allow(OperationProgressBroadcaster).to receive(:call).and_call_original
+
+      described_class.enqueue(scan_id: scan_id, **args)
+      expect(OperationProgressBroadcaster).to have_received(:call).with(having_attributes(operation_id: scan_id, status: "pending"))
+
+      described_class.perform_now(scan_id, @project_root, nil, nil, "initial", true, [])
+      expect(paused.reload.started_at).to eq(first_started_at)
+    end
+
     it "puts a claimed scan back to paused when enqueuing fails" do
       scan_id = SecureRandom.uuid
       paused = OperationProgress.start!(operation_type: "project_scan", operation_id: scan_id, total_count: 6)

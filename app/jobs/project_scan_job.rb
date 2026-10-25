@@ -62,7 +62,11 @@ class ProjectScanJob < ApplicationJob
   def self.claim_paused!(scan_id)
     claimed = OperationProgress.where(operation_id: scan_id, operation_type: "project_scan", status: "paused")
                                .update_all(status: "pending", phase: "queued", message: "Queued to resume")
-    return if claimed == 1
+    if claimed == 1
+      # update_all skips callbacks: tell the operator UI the scan is queued again.
+      OperationProgressBroadcaster.call(OperationProgress.find_by(operation_id: scan_id))
+      return
+    end
 
     existing = OperationProgress.find_by(operation_id: scan_id)
     reason = if existing.nil? then "no longer exists"
@@ -99,7 +103,8 @@ class ProjectScanJob < ApplicationJob
 
     unless operation.status == "running"
       operation.resume!(message: "Resuming project scan") if operation.status == "paused"
-      operation.update!(status: "running", started_at: Time.current) unless operation.status == "running"
+      # A resumed scan keeps the first batch's started_at; a new scan's pending row has none yet.
+      operation.update!(status: "running", started_at: operation.started_at || Time.current) unless operation.status == "running"
       OperationProgressBroadcaster.call(operation)
     end
 
