@@ -70,11 +70,9 @@
         {"jsonrpc": "2.0", "id": 7, "method": "server/discover", "params": {"_meta": {"io.modelcontextprotocol/protocolVersion": "2026-07-28", "io.modelcontextprotocol/clientCapabilities": {}, "io.modelcontextprotocol/clientInfo": {"name": "mcp-compat", "version": "0"}}}}
       ],
       "expect": {
-        "graph_mem": {"replies": 1, "messages": [{"id": 7, "error_code": -32601}]},
+        "graph_mem": {"replies": 1, "messages": [{"id": 7, "result": {"supportedVersions": ["2026-07-28"]}}]},
         "reference": {"replies": 1, "messages": [{"id": 7, "result": {"supportedVersions": ["2026-07-28"], "resultType": "complete"}, "result_has": ["capabilities", "_meta"]}]}
-      },
-      "divergence": "graph_mem has no 2026-07-28 era yet: any JSON-RPC error to the probe makes 2026-07-28 clients fall back to initialize.",
-      "changes_in": "MG-5"
+      }
     },
     {
       "name": "server/discover claiming 2027-01-01",
@@ -82,11 +80,10 @@
         {"jsonrpc": "2.0", "id": 7, "method": "server/discover", "params": {"_meta": {"io.modelcontextprotocol/protocolVersion": "2027-01-01", "io.modelcontextprotocol/clientCapabilities": {}, "io.modelcontextprotocol/clientInfo": {"name": "mcp-compat", "version": "0"}}}}
       ],
       "expect": {
-        "graph_mem": {"replies": 1, "messages": [{"id": 7, "error_code": -32601}]},
+        "graph_mem": {"replies": 1, "messages": [{"id": 7, "result": {"supportedVersions": ["2026-07-28"]}}]},
         "reference": {"replies": 1, "messages": [{"id": 7, "error_code": -32022}]}
       },
-      "divergence": "Fallback-safe error code: both are JSON-RPC errors to the probe, so clients fall back to initialize.",
-      "changes_in": "MG-5"
+      "divergence": "graph_mem (the official SDK) answers discover with its supported versions whatever the envelope claims; Memory answers -32022. Either way the client then picks a version both support."
     },
     {
       "name": "server/discover with an envelope missing clientCapabilities",
@@ -94,11 +91,10 @@
         {"jsonrpc": "2.0", "id": 7, "method": "server/discover", "params": {"_meta": {"io.modelcontextprotocol/protocolVersion": "2026-07-28", "io.modelcontextprotocol/clientInfo": {"name": "mcp-compat", "version": "0"}}}}
       ],
       "expect": {
-        "graph_mem": {"replies": 1, "messages": [{"id": 7, "error_code": -32601}]},
+        "graph_mem": {"replies": 1, "messages": [{"id": 7, "result": {"supportedVersions": ["2026-07-28"]}}]},
         "reference": {"replies": 1, "messages": [{"id": 7, "error_code": -32602}]}
       },
-      "divergence": "Fallback-safe error code: both are JSON-RPC errors to the probe, so clients fall back to initialize.",
-      "changes_in": "MG-5"
+      "divergence": "graph_mem (the official SDK) answers discover without clientCapabilities in the envelope; Memory refuses it with -32602."
     },
     {
       "name": "tools/list with a 2026-07-28 envelope and no initialize is served",
@@ -106,10 +102,9 @@
         {"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {"_meta": {"io.modelcontextprotocol/protocolVersion": "2026-07-28", "io.modelcontextprotocol/clientCapabilities": {}, "io.modelcontextprotocol/clientInfo": {"name": "mcp-compat", "version": "0"}}}}
       ],
       "expect": {
-        "graph_mem": {"replies": 1, "messages": [{"id": 2, "result_has": ["tools"]}]},
+        "graph_mem": {"replies": 1, "messages": [{"id": 2, "result_has": ["tools", "resultType", "ttlMs", "cacheScope"]}]},
         "reference": {"replies": 1, "messages": [{"id": 2, "result_has": ["tools", "resultType", "ttlMs", "cacheScope"]}]}
-      },
-      "changes_in": "MG-5 (graph_mem adds resultType, ttlMs and cacheScope)"
+      }
     },
     {
       "name": "discover, then initialize 2025-11-25, then tools/list (the auto-mode fallback path)",
@@ -120,11 +115,10 @@
         {"jsonrpc": "2.0", "id": 3, "method": "tools/list"}
       ],
       "expect": {
-        "graph_mem": {"replies": 3, "messages": [{"id": 1, "error_code": -32601}, {"id": 2, "result": {"protocolVersion": "2025-11-25"}}, {"id": 3, "result_has": ["tools"]}]},
+        "graph_mem": {"replies": 3, "messages": [{"id": 1, "result": {"supportedVersions": ["2026-07-28"]}}, {"id": 2, "error_code": -32601}, {"id": 3, "error_code": -32602}]},
         "reference": {"replies": 3, "messages": [{"id": 1, "result_has": ["supportedVersions"]}, {"id": 2, "result": {"protocolVersion": "2025-11-25"}}, {"id": 3, "result_has": ["tools"]}]}
       },
-      "divergence": "graph_mem refuses the probe (no 2026-07-28 era yet); initialize and tools/list then succeed on both.",
-      "changes_in": "MG-5"
+      "divergence": "After server/discover, graph_mem (the official SDK) keeps the process in the 2026-07-28 era and refuses the legacy initialize and the tools/list after it; Memory falls back in-process. The TS client isn't affected: in auto mode it probes in a sibling process."
     },
     {
       "name": "malformed lines: parse error, batch, missing jsonrpc, primitive",
@@ -135,10 +129,10 @@
         42
       ],
       "expect": {
-        "graph_mem": {"replies": 4, "messages": [{"id": null, "error_code": -32700}, {"id": null, "error_code": -32600}, {"id": 3, "error_code": -32600}, {"id": null, "error_code": -32600}]},
+        "graph_mem": {"replies": 4, "messages": [{"id": null, "error_code": -32700}, {"id": 2, "result": {}}, {"id": 3, "error_code": -32600}, {"id": null, "error_code": -32600}]},
         "reference": {"replies": 0, "messages": []}
       },
-      "divergence": "graph_mem answers malformed lines with a JSON-RPC error; the TS SDK drops them silently (onerror). Both keep serving."
+      "divergence": "graph_mem (the official SDK) answers malformed lines with JSON-RPC errors and serves a one-element batch; the TS SDK drops them silently. Both keep serving."
     },
     {
       "name": "an unknown notification gets no reply",
