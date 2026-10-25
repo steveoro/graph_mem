@@ -2,13 +2,13 @@
 
 require_relative "../../lib/graph_mem/mcp_output_schemas"
 
-class ApplicationTool < FastMcp::Tool
+class ApplicationTool
+  include GraphMem::McpSchema::ToolApi
+
   COMPACTION_VALVE_TOOLS = ToolMutationPolicy::COMPACTION_VALVE_TOOLS
   MCP_CLIENT_HEADER = "x-mcp-client"
   MCP_PROFILE_NAMES = GraphMem::McpProfile::NAMES
   MCP_ANNOTATION_KEYS = %i[read_only_hint destructive_hint idempotent_hint open_world_hint].freeze
-
-  attr_accessor :server
 
   class << self
     def input_schema_to_json
@@ -67,7 +67,7 @@ class ApplicationTool < FastMcp::Tool
     arg_validation = self.class.input_schema.call(normalized)
     if arg_validation.errors.any?
       details = arg_validation.errors.to_h
-      raise FastMcp::Tool::InvalidArgumentsError,
+      raise GraphMem::InvalidArgumentsError,
             "Invalid arguments: #{details.to_json}. Correct the argument format required by the tool schema and retry."
     end
 

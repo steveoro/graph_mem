@@ -5,7 +5,7 @@ require "rails_helper"
 RSpec.describe ToolError do
   describe ".category_for" do
     it "exposes the same classifier used by error envelopes" do
-      error = FastMcp::Tool::InvalidArgumentsError.new("Invalid arguments")
+      error = GraphMem::InvalidArgumentsError.new("Invalid arguments")
 
       expect(described_class.category_for(error)).to eq("validation")
       expect(described_class.category_for(Timeout::Error.new)).to eq("timeout")
@@ -37,7 +37,7 @@ RSpec.describe ToolError do
     end
 
     it "maps InvalidArgumentsError to validation" do
-      error = FastMcp::Tool::InvalidArgumentsError.new("Invalid arguments: {\"name\":[\"is missing\"]}")
+      error = GraphMem::InvalidArgumentsError.new("Invalid arguments: {\"name\":[\"is missing\"]}")
       payload = described_class.envelope(error, tool_name: "create_entity")
 
       expect(payload["category"]).to eq("validation")
@@ -46,7 +46,7 @@ RSpec.describe ToolError do
     end
 
     it "maps entity-name misses raised as InvalidArgumentsError to not_found" do
-      error = FastMcp::Tool::InvalidArgumentsError.new("Entity not found by name: 'Missing'.")
+      error = GraphMem::InvalidArgumentsError.new("Entity not found by name: 'Missing'.")
       payload = described_class.envelope(error, tool_name: "get_entity")
 
       expect(payload["category"]).to eq("not_found")

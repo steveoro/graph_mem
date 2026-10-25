@@ -14,7 +14,7 @@ class GraphWriteService
   #   operation-specific attributes
   # @param logger [#debug] logger used when duplicate probing is unavailable
   # @return [Hash] batch result, or `status: "possible_duplicate"` with no writes
-  # @raise [FastMcp::Tool::InvalidArgumentsError] for invalid create data
+  # @raise [GraphMem::InvalidArgumentsError] for invalid create data
   # @raise [McpGraphMemErrors::Error] when a dependency cannot be created
   # @param project_id [Integer, nil] `set_context` project — name→entity
   #   resolution prefers it, then the global namespace; created entities
@@ -61,7 +61,7 @@ class GraphWriteService
     @on_duplicate = on_duplicate.to_s.presence || "reject"
     @skipped = []
     unless ON_DUPLICATE_MODES.include?(@on_duplicate)
-      raise FastMcp::Tool::InvalidArgumentsError, "on_duplicate must be one of: #{ON_DUPLICATE_MODES.join(', ')}"
+      raise GraphMem::InvalidArgumentsError, "on_duplicate must be one of: #{ON_DUPLICATE_MODES.join(', ')}"
     end
   end
 
@@ -74,7 +74,7 @@ class GraphWriteService
   # newly created entities by name. Results are returned in the caller's original order.
   #
   # @return [Hash] canonical batch result or possible-duplicate response
-  # @raise [FastMcp::Tool::InvalidArgumentsError, McpGraphMemErrors::Error]
+  # @raise [GraphMem::InvalidArgumentsError, McpGraphMemErrors::Error]
   #   when any operation fails; the transaction is rolled back
   def call
     GraphMutationBatch.validate_operations!(@operations, allowed_types: TYPES, tool_name: "graph_write")

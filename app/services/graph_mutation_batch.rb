@@ -10,17 +10,17 @@ module GraphMutationBatch
   #
   # @param value [Array<String>, String, nil] an alias list, or a legacy pipe-separated string
   # @return [String, nil] stripped, blank-free, case-insensitively unique aliases joined by "|"
-  # @raise [FastMcp::Tool::InvalidArgumentsError] when an array item contains "|"
+  # @raise [GraphMem::InvalidArgumentsError] when an array item contains "|"
   def normalize_aliases(value)
     return if value.nil?
 
     valid = value.is_a?(String) ||
             (value.is_a?(Array) && value.all? { |item| item.is_a?(String) || item.is_a?(Numeric) })
-    raise FastMcp::Tool::InvalidArgumentsError, "aliases must be an array of strings." unless valid
+    raise GraphMem::InvalidArgumentsError, "aliases must be an array of strings." unless valid
 
     list = value.is_a?(Array) ? value.map(&:to_s) : value.split(ALIAS_SEPARATOR)
     if value.is_a?(Array) && (bad = list.find { |item| item.include?(ALIAS_SEPARATOR) })
-      raise FastMcp::Tool::InvalidArgumentsError,
+      raise GraphMem::InvalidArgumentsError,
             "Alias #{bad.inspect} contains \"|\", the stored separator; pass each alias as its own array item."
     end
 
@@ -47,21 +47,21 @@ module GraphMutationBatch
   # @param allowed_types [Array<String>] accepted discriminator values
   # @param tool_name [String] canonical tool name used in error messages
   # @return [void]
-  # @raise [FastMcp::Tool::InvalidArgumentsError] when validation fails
+  # @raise [GraphMem::InvalidArgumentsError] when validation fails
   def validate_operations!(operations, allowed_types:, tool_name:)
     if operations.empty?
-      raise FastMcp::Tool::InvalidArgumentsError,
+      raise GraphMem::InvalidArgumentsError,
             "#{tool_name} requires at least one operation."
     end
     if operations.size > MAX_OPERATIONS
-      raise FastMcp::Tool::InvalidArgumentsError,
+      raise GraphMem::InvalidArgumentsError,
             "#{tool_name} accepts at most #{MAX_OPERATIONS} operations; received #{operations.size}."
     end
 
     operations.each do |operation|
       next if operation[:type].in?(allowed_types)
 
-      raise FastMcp::Tool::InvalidArgumentsError,
+      raise GraphMem::InvalidArgumentsError,
             "#{tool_name} operation[#{operation[:index]}] has unknown type #{operation[:type].inspect}; " \
             "expected one of: #{allowed_types.join(', ')}."
     end
@@ -72,12 +72,12 @@ module GraphMutationBatch
   # @param operation [Hash] normalized operation from `.normalize_operations`
   # @yieldparam attributes [Hash] operation-specific attributes
   # @return [Object] the block result
-  # @raise [FastMcp::Tool::InvalidArgumentsError, McpGraphMemErrors::Error]
+  # @raise [GraphMem::InvalidArgumentsError, McpGraphMemErrors::Error]
   #   with indexed context while preserving the original error category
   def execute(operation)
     yield(operation[:attributes])
-  rescue FastMcp::Tool::InvalidArgumentsError => e
-    raise FastMcp::Tool::InvalidArgumentsError,
+  rescue GraphMem::InvalidArgumentsError => e
+    raise GraphMem::InvalidArgumentsError,
           "#{operation[:type]}[#{operation[:index]}]: #{e.message}"
   rescue McpGraphMemErrors::Error => e
     # Exception#exception copies the error with a new message, keeping its class and every field
@@ -85,7 +85,7 @@ module GraphMutationBatch
     # constructor, such as AmbiguousReference.
     raise e.exception("#{operation[:type]}[#{operation[:index]}]: #{e.message}")
   rescue ActiveRecord::RecordInvalid => e
-    raise FastMcp::Tool::InvalidArgumentsError,
+    raise GraphMem::InvalidArgumentsError,
           "#{operation[:type]}[#{operation[:index]}]: #{e.record.errors.full_messages.join(', ')}"
   rescue ActiveRecord::RecordNotFound => e
     raise McpGraphMemErrors::ResourceNotFound,

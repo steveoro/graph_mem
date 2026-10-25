@@ -56,7 +56,7 @@ class FindShortestPathTool < ApplicationTool
       end
     rescue *ToolError::TIMEOUT_CLASSES
       raise
-    rescue McpGraphMemErrors::Error, FastMcp::Tool::InvalidArgumentsError
+    rescue McpGraphMemErrors::Error, GraphMem::InvalidArgumentsError
       raise
     rescue StandardError => e
       logger.error "InternalServerError in FindShortestPathTool: #{e.class}: #{e.message}"

@@ -89,7 +89,7 @@ RSpec.describe ApplyMaintenanceReviewTool, type: :model do
     it "raises InvalidArgumentsError when the review cannot be applied as given" do
       expect {
         tool.call(item_id: merge_row.row_uuid, action_params: { "source_id" => source.id, "target_id" => source.id })
-      }.to raise_error(FastMcp::Tool::InvalidArgumentsError, /into itself/) do |error|
+      }.to raise_error(GraphMem::InvalidArgumentsError, /into itself/) do |error|
         expect(error.message).to include("`apply_maintenance_review`")
         expect(error.message).to include("`dismiss_maintenance_review`")
       end
@@ -100,7 +100,7 @@ RSpec.describe ApplyMaintenanceReviewTool, type: :model do
 
       expect {
         tool.call(item_id: merge_row.row_uuid, action_params: { "source_id" => source.id, "target_id" => target.id })
-      }.to raise_error(FastMcp::Tool::InvalidArgumentsError, /not actionable/) do |error|
+      }.to raise_error(GraphMem::InvalidArgumentsError, /not actionable/) do |error|
         expect(error.message).to include("`list_maintenance_review`")
       end
       expect(MemoryEntity.find_by(id: source.id)).to be_present

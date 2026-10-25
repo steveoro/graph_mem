@@ -51,7 +51,7 @@ RSpec.describe ApplicationTool do
   end
 
   describe ".mcp_metadata" do
-    it "stores profile membership and forwards all FastMcp annotations" do
+    it "stores profile membership and forwards all MCP annotations" do
       tool_class = Class.new(described_class)
 
       tool_class.mcp_metadata(
@@ -138,12 +138,12 @@ RSpec.describe ApplicationTool do
   end
 
   describe "#description" do
-    it "returns the FastMcp class-level description when set" do
+    it "returns the class-level description when set" do
       tool = DslTestTool.new
       expect(tool.description).to eq("A tool with DSL arguments")
     end
 
-    it "returns nil when no description is set via FastMcp DSL" do
+    it "returns nil when no description is set via the DSL" do
       tool = NoDslTestTool.new
       expect(tool.description).to be_nil
     end
@@ -222,7 +222,7 @@ RSpec.describe ApplicationTool do
       tool = DslTestTool.new
       expect {
         tool.call_with_schema_validation!(count: 5)
-      }.to raise_error(FastMcp::Tool::InvalidArgumentsError, /name/) do |error|
+      }.to raise_error(GraphMem::InvalidArgumentsError, /name/) do |error|
         expect(error.message).to include("Invalid arguments:")
         details = error.message[/{.*}/]
         expect(JSON.parse(details)).to have_key("name")
@@ -238,13 +238,13 @@ RSpec.describe ApplicationTool do
 
       expect {
         tool.call_with_schema_validation!(count: 5)
-      }.to raise_error(FastMcp::Tool::InvalidArgumentsError)
+      }.to raise_error(GraphMem::InvalidArgumentsError)
 
       invocation = ToolInvocation.find_by!(client_id: "cursor-validation")
       expect(invocation).to have_attributes(
         tool_name: "dsl_test",
         outcome: "error",
-        error_class: "FastMcp::Tool::InvalidArgumentsError",
+        error_class: "GraphMem::InvalidArgumentsError",
         error_category: "validation",
         result_size: nil,
         argument_keys: [ "count" ]
@@ -287,12 +287,12 @@ RSpec.describe ApplicationTool do
       expect(ctx.last_seen_at).to be_within(2.seconds).of(Time.current)
     end
 
-    it "records MCP client activity from fast-mcp normalized headers" do
-      tool = DslTestTool.new(headers: { "x-mcp-client" => "cursor-fast-mcp" })
+    it "records MCP client activity from lower-case normalized headers" do
+      tool = DslTestTool.new(headers: { "x-mcp-client" => "cursor-normalized" })
 
       tool.call_with_schema_validation!(name: "test")
 
-      ctx = AgentContext.find_by!(client_id: "cursor-fast-mcp")
+      ctx = AgentContext.find_by!(client_id: "cursor-normalized")
       expect(ctx.last_tool_name).to eq("dsl_test")
       expect(ctx.last_seen_at).to be_within(2.seconds).of(Time.current)
     end
@@ -302,7 +302,7 @@ RSpec.describe ApplicationTool do
 
       expect {
         tool.call_with_schema_validation!(count: 5)
-      }.to raise_error(FastMcp::Tool::InvalidArgumentsError)
+      }.to raise_error(GraphMem::InvalidArgumentsError)
 
       expect(AgentContext.find_by(client_id: "cursor-A")).to be_nil
     end
@@ -314,7 +314,7 @@ RSpec.describe ApplicationTool do
       begin
         ApplicationTool.instance_method(:call).bind_call(tool, name: "test")
       rescue NoMethodError
-        # Expected if FastMcp::Tool doesn't implement #call
+        # Expected: the base API does not implement #call
       end
       expect(Current.actor).to eq("mcp:dsl_test")
     end
@@ -355,7 +355,7 @@ RSpec.describe ApplicationTool do
       expect(tool.current_client_id).to eq("cursor-C")
     end
 
-    it "reads x-mcp-client from fast-mcp normalized headers" do
+    it "reads x-mcp-client from lower-case normalized headers" do
       tool = DslTestTool.new(headers: { "x-mcp-client" => "cursor-D" })
       expect(tool.current_client_id).to eq("cursor-D")
     end

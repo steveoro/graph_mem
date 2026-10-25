@@ -59,21 +59,21 @@ class SearchTool < ApplicationTool
     projections = normalize_projections(include)
     temporal_window = build_temporal_window(occurred_after, occurred_before, as_of)
     if perspective.present? && !MemoryObservation::PERSPECTIVES.include?(perspective)
-      raise FastMcp::Tool::InvalidArgumentsError,
+      raise GraphMem::InvalidArgumentsError,
             "perspective must be one of #{MemoryObservation::PERSPECTIVES.join(', ')} (world = external fact, experience = work-log entry)."
     end
-    max_tokens = TokenBudget.validate_max_tokens!(max_tokens, error_class: FastMcp::Tool::InvalidArgumentsError)
+    max_tokens = TokenBudget.validate_max_tokens!(max_tokens, error_class: GraphMem::InvalidArgumentsError)
 
     if query.nil?
       if projections.any? || temporal_window.present? || max_tokens.present?
-        raise FastMcp::Tool::InvalidArgumentsError, "include, temporal bounds and max_tokens require a query."
+        raise GraphMem::InvalidArgumentsError, "include, temporal bounds and max_tokens require a query."
       end
 
       return { mode: "catalog" }.merge(
         EntityCatalogService.call(page: effective_page, per_page: effective_per_page)
       )
     end
-    raise FastMcp::Tool::InvalidArgumentsError, "Query term cannot be blank." if query.blank?
+    raise GraphMem::InvalidArgumentsError, "Query term cannot be blank." if query.blank?
 
     if projections.any?
       subgraph_result(
@@ -101,7 +101,7 @@ class SearchTool < ApplicationTool
     end
   rescue *ToolError::TIMEOUT_CLASSES
     raise
-  rescue McpGraphMemErrors::Error, FastMcp::Tool::InvalidArgumentsError
+  rescue McpGraphMemErrors::Error, GraphMem::InvalidArgumentsError
     raise
   rescue StandardError => e
     logger.error "SearchTool unexpected error: #{e.class}: #{e.message}"
@@ -113,9 +113,9 @@ class SearchTool < ApplicationTool
   def normalized_paging(page, per_page)
     normalized_page = page.nil? ? DEFAULT_PAGE : page.to_i
     normalized_per_page = per_page.nil? ? DEFAULT_PER_PAGE : per_page.to_i
-    raise FastMcp::Tool::InvalidArgumentsError, "Page number must be 1 or greater." if normalized_page < 1
+    raise GraphMem::InvalidArgumentsError, "Page number must be 1 or greater." if normalized_page < 1
     unless normalized_per_page.between?(1, MAX_PER_PAGE)
-      raise FastMcp::Tool::InvalidArgumentsError,
+      raise GraphMem::InvalidArgumentsError,
             "Per page count must be between 1 and #{MAX_PER_PAGE}."
     end
 
@@ -126,7 +126,7 @@ class SearchTool < ApplicationTool
     normalized = Array(projections).map(&:to_s).uniq
     unknown = normalized - PROJECTIONS
     if unknown.any?
-      raise FastMcp::Tool::InvalidArgumentsError,
+      raise GraphMem::InvalidArgumentsError,
             "include values must be observations and/or relations; received #{unknown.join(', ')}."
     end
 
@@ -220,6 +220,6 @@ class SearchTool < ApplicationTool
       as_of: as_of
     )
   rescue ArgumentError => e
-    raise FastMcp::Tool::InvalidArgumentsError, e.message
+    raise GraphMem::InvalidArgumentsError, e.message
   end
 end

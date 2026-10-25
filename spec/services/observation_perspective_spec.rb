@@ -123,7 +123,7 @@ RSpec.describe "Observation perspective (C3a)" do
 
     it "rejects an invalid perspective value" do
       expect { SearchTool.new.call(query: "planet", perspective: "sideways") }
-        .to raise_error(FastMcp::Tool::InvalidArgumentsError, /perspective must be one of/)
+        .to raise_error(GraphMem::InvalidArgumentsError, /perspective must be one of/)
     end
   end
 

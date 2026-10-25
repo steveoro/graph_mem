@@ -4,8 +4,8 @@ module GraphMem
   # Per-profile MCP server `instructions` text: what graph_mem is and when an
   # agent should recall from it or write to it.
   #
-  # Not sent yet: fast-mcp 1.7.1 cannot deliver `instructions`. The initializer
-  # wires it in once graph_mem runs on fast-mcp 1.8.0.
+  # Sent as `instructions` in the `initialize` result, one text per profile
+  # (GraphMem::OfficialMcp::ServerFactory).
   #
   # @example
   #   GraphMem::McpInstructions.for(:readonly) # => "graph_mem is a shared knowledge graph ..."

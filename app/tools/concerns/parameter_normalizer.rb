@@ -20,17 +20,6 @@ module ParameterNormalizer
     "to"           => "to_entity_id"
   }.freeze
 
-  # Operation type strings accepted in the `operations` array, mapped
-  # to the canonical bulk_update bucket they belong to.
-  OPERATION_TYPE_MAP = {
-    "create_entity"      => :entities,
-    "entity"             => :entities,
-    "create_observation" => :observations,
-    "add_observation"    => :observations,
-    "observation"        => :observations,
-    "create_relation"    => :relations,
-    "relation"           => :relations
-  }.freeze
   GRAPH_WRITE_TYPE_ALIASES = {
     "entity" => "create_entity",
     "observation" => "create_observation",
@@ -43,9 +32,6 @@ module ParameterNormalizer
       params = deep_snake_case_keys(params)
       params = apply_field_aliases(params)
 
-      if tool_name == "bulk_update"
-        params = normalize_bulk_update(params, project_id: project_id)
-      end
       params = normalize_graph_write(params) if tool_name == "graph_write"
       params = normalize_typed_operations(params) if tool_name.in?(%w[graph_edit graph_delete])
       params = normalize_search(params) if tool_name == "search"
@@ -98,41 +84,6 @@ module ParameterNormalizer
         end
       end
       result
-    end
-
-    # Convert an `operations` array into the canonical three-array format.
-    def normalize_bulk_update(params, project_id: nil)
-      operations = params.delete(:operations)
-      return params unless operations.is_a?(Array) && operations.any?
-
-      entities     = params[:entities]     || []
-      observations = params[:observations] || []
-      relations    = params[:relations]    || []
-
-      operations.each do |op|
-        op = apply_field_aliases(op)
-        op = resolve_entity_names(op, lenient: true, project_id: project_id)
-        type_key = op.delete(:type)&.to_s&.strip&.downcase
-        bucket = OPERATION_TYPE_MAP[type_key]
-
-        if type_key.blank?
-          raise FastMcp::Tool::InvalidArgumentsError, "bulk_update operation is missing type"
-        end
-        if bucket.nil?
-          raise FastMcp::Tool::InvalidArgumentsError, "Unknown bulk_update operation type: #{type_key}"
-        end
-
-        case bucket
-        when :entities
-          entities << normalize_entity_op(op)
-        when :observations
-          observations.concat(normalize_observation_op(op))
-        when :relations
-          relations << normalize_relation_op(op)
-        end
-      end
-
-      params.merge(entities: entities, observations: observations, relations: relations)
     end
 
     def normalize_search(params)
@@ -190,67 +141,9 @@ module ParameterNormalizer
       result
     end
 
-    def normalize_entity_op(op)
-      {
-        name:         op[:name],
-        entity_type:  op[:entity_type],
-        aliases:      op[:aliases],
-        description:  op[:description],
-        observations: normalize_contents_to_array(op)
-      }.compact
-    end
-
-    def normalize_observation_op(op)
-      entity_id = op[:entity_id]
-      texts = normalize_contents_to_array(op)
-
-      if texts.any?
-        texts.map { |text| observation_attributes(op).merge(entity_id: entity_id, text_content: text) }
-      elsif op[:text_content]
-        [ observation_attributes(op).merge(entity_id: entity_id, text_content: op[:text_content]) ]
-      else
-        []
-      end
-    end
-
-    def normalize_relation_op(op)
-      {
-        from_entity_id: op[:from_entity_id],
-        to_entity_id:   op[:to_entity_id],
-        relation_type:  op[:relation_type],
-        weight:         op[:weight],
-        confidence:     op[:confidence],
-        properties:     op[:properties]
-      }
-    end
-
-    def observation_attributes(op)
-      {
-        confidence: op[:confidence],
-        source: op[:source],
-        valid_from: op[:valid_from],
-        valid_until: op[:valid_until],
-        tags: op[:tags]
-      }.compact
-    end
-
-    # The standard server uses `contents` (array of strings) and/or
-    # `observations` (array of strings on entity operations).
-    # Normalize both to a flat array of strings.
-    def normalize_contents_to_array(op)
-      result = []
-      result.concat(Array(op[:contents]))       if op[:contents]
-      result.concat(Array(op[:observations]))    if op[:observations]
-      result.push(op[:text_content])             if op[:text_content] && result.empty?
-      result
-    end
-
     # Resolve entity-name fields to entity IDs. Only triggered when the
     # field value is a string and the target ID field is not already set.
-    # When lenient is true (used inside bulk_update operations parsing),
-    # unresolvable names are silently skipped instead of raising errors --
-    # the entity may be created earlier in the same transaction.
-    def resolve_entity_names(params, lenient: false, project_id: nil)
+    def resolve_entity_names(params, project_id: nil)
       return params unless params.is_a?(Hash)
 
       result = params.dup
@@ -266,8 +159,6 @@ module ParameterNormalizer
         entity = find_entity_scoped(entity_name, project_id)
         if entity
           result[id_sym] = entity.id
-        elsif lenient
-          next
         else
           raise McpGraphMemErrors::ResourceNotFound.new(
             "Entity not found by name: '#{entity_name}'. Use entity_id (integer) or verify the entity name.",
@@ -283,8 +174,6 @@ module ParameterNormalizer
         entity = find_entity_scoped(val, project_id)
         if entity
           result[id_field] = entity.id
-        elsif lenient
-          next
         else
           raise McpGraphMemErrors::ResourceNotFound.new(
             "Entity not found by name: '#{val}'. Provide a valid entity name or use an integer entity_id.",

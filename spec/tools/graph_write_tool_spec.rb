@@ -105,7 +105,7 @@ RSpec.describe GraphWriteTool, type: :model do
             operations: [ { type: "create_entity", name: "Alpha Service", entity_type: "Service", aliases: aliases } ]
           )
         end.to raise_error(
-          FastMcp::Tool::InvalidArgumentsError, /create_entity\[0\]: aliases must be an array of strings\./
+          GraphMem::InvalidArgumentsError, /create_entity\[0\]: aliases must be an array of strings\./
         )
       end
       expect(MemoryEntity.where(name: "Alpha Service")).not_to exist
@@ -116,7 +116,7 @@ RSpec.describe GraphWriteTool, type: :model do
         tool.call_with_schema_validation!(
           operations: [ { type: "create_entity", name: "Alpha Service", entity_type: "Service", aliases: [ "A|B" ] } ]
         )
-      end.to raise_error(FastMcp::Tool::InvalidArgumentsError, /contains "\|"/)
+      end.to raise_error(GraphMem::InvalidArgumentsError, /contains "\|"/)
       expect(MemoryEntity.where(name: "Alpha Service")).not_to exist
     end
 

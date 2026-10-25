@@ -175,7 +175,7 @@ RSpec.describe GraphDeleteService do
             { type: "merge_entities", source_entity_id: first.id, target_entity_id: second.id }
           ]
         )
-      }.to raise_error(FastMcp::Tool::InvalidArgumentsError, /same entity/)
+      }.to raise_error(GraphMem::InvalidArgumentsError, /same entity/)
 
       expect(first.reload).to be_present
     end

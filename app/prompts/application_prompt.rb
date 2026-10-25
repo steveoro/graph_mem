@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
-class ApplicationPrompt < FastMcp::Prompt
+class ApplicationPrompt
+  include GraphMem::McpSchema::PromptApi
+
   MCP_PROFILE_NAMES = GraphMem::McpProfile::NAMES
 
   class << self

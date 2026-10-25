@@ -1,0 +1,3137 @@
+{
+  "tools/list": {
+    "tools": [
+      {
+        "name": "traverse_graph",
+        "description": "Traverse from one entity or query relations directly through one object-shaped response. Pass optional `start_entity_id` for bounded BFS; `from_entity_id`, `to_entity_id`, and singular `relation_type` for edge filters; `max_depth` (integer, default 2, max 5), `direction` (both|outgoing|incoming, default both), `relation_types` (array of strings), `max_entities` (integer, default 100, max 1000), and `include` (entities, relations, traversal). With no start entity, relation filters query edges directly; no filters list all edges. Do not use for keyword search; use `search` instead. Do not use for the shortest path between two ids; use `find_shortest_path` instead. Do not use for an explicit id set with no expansion; use `get_entities` instead.",
+        "inputSchema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {
+            "start_entity_id": {
+              "type": "integer",
+              "not": {
+                "type": "null"
+              },
+              "description": "Entity ID to start BFS from. Also accepts a name."
+            },
+            "from_entity_id": {
+              "type": "integer",
+              "not": {
+                "type": "null"
+              },
+              "description": "Direct edge-query source entity."
+            },
+            "to_entity_id": {
+              "type": "integer",
+              "not": {
+                "type": "null"
+              },
+              "description": "Direct edge-query destination entity."
+            },
+            "relation_type": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Singular relation type alias for edge queries."
+            },
+            "max_depth": {
+              "type": "integer",
+              "not": {
+                "type": "null"
+              },
+              "description": "Maximum number of hops to expand. Default 2, max 5."
+            },
+            "direction": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Traversal direction: one of both, outgoing, incoming. Default both."
+            },
+            "relation_types": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Optional: restrict traversal to these relation types (canonicalized)."
+            },
+            "max_entities": {
+              "type": "integer",
+              "not": {
+                "type": "null"
+              },
+              "description": "Maximum number of entities to return. Default 100, max 1000."
+            },
+            "include": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Response projections: entities, relations, traversal."
+            }
+          },
+          "required": []
+        },
+        "outputSchema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {
+            "version": {
+              "type": "string"
+            },
+            "next_move": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "context": {
+              "$ref": "#/$defs/context"
+            },
+            "entities": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/entity"
+              }
+            },
+            "relations": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/relation"
+              }
+            },
+            "traversal": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          },
+          "required": [
+            "version"
+          ],
+          "additionalProperties": true,
+          "$defs": {
+            "context": {
+              "type": "object",
+              "properties": {
+                "status": {
+                  "const": "none"
+                },
+                "next_move": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "status",
+                "next_move"
+              ],
+              "additionalProperties": true
+            },
+            "observation": {
+              "type": "object",
+              "properties": {
+                "observation_id": {
+                  "type": "integer"
+                },
+                "content": {
+                  "type": "string"
+                },
+                "observation_content": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": true
+            },
+            "entity": {
+              "type": "object",
+              "properties": {
+                "entity_id": {
+                  "type": "integer"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "entity_type": {
+                  "type": "string"
+                },
+                "observations": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/observation"
+                  }
+                }
+              },
+              "additionalProperties": true
+            },
+            "relation": {
+              "type": "object",
+              "properties": {
+                "relation_id": {
+                  "type": "integer"
+                },
+                "from_entity_id": {
+                  "type": "integer"
+                },
+                "to_entity_id": {
+                  "type": "integer"
+                },
+                "relation_type": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": true
+            },
+            "pagination": {
+              "type": "object",
+              "properties": {
+                "current_page": {
+                  "type": "integer"
+                },
+                "per_page": {
+                  "type": "integer"
+                }
+              },
+              "additionalProperties": true
+            }
+          },
+          "oneOf": [
+            {
+              "required": [
+                "traversal"
+              ]
+            },
+            {
+              "not": {
+                "required": [
+                  "traversal"
+                ]
+              },
+              "anyOf": [
+                {
+                  "required": [
+                    "entities"
+                  ]
+                },
+                {
+                  "required": [
+                    "relations"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "annotations": {
+          "destructiveHint": false,
+          "idempotentHint": true,
+          "openWorldHint": false,
+          "readOnlyHint": true
+        }
+      },
+      {
+        "name": "summarize",
+        "description": "Summarize what the knowledge graph knows about a topic with deterministic source-backed evidence (optional LLM synthesis). Pass required `query` (string); optional `entity_id` (integer), `max_results` (integer, default 10), `max_observations` (integer, default 20), `observations_per_entity` (integer; 0 disables cap), `max_depth` (integer, default 0), `include_sources` (bool, default true), `scope` (string: context or global), `style` (string: concise or detailed), `occurred_after`/`occurred_before`/`as_of` (ISO 8601) to restrict evidence to a temporal window (temporal phrases in the query are also understood), and `max_tokens` to cap the evidence payload. Do not use for match listings; use `search` instead. Do not use to inspect one known entity; use `get_entities` instead. Do not use for a structural neighborhood; use `traverse_graph` instead. Do not use for numeric health metrics; use `get_graph_stats` instead.",
+        "inputSchema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {
+            "query": {
+              "type": "string",
+              "minLength": 1,
+              "description": "The topic or question to summarize."
+            },
+            "entity_id": {
+              "type": "integer",
+              "not": {
+                "type": "null"
+              },
+              "description": "Optional entity ID to scope summarization to a single entity."
+            },
+            "max_results": {
+              "type": "integer",
+              "not": {
+                "type": "null"
+              },
+              "description": "Maximum entities to retrieve before ranking observations. Defaults to 10."
+            },
+            "max_observations": {
+              "type": "integer",
+              "not": {
+                "type": "null"
+              },
+              "description": "Maximum observations to include in the summary. Defaults to 20."
+            },
+            "observations_per_entity": {
+              "type": "integer",
+              "not": {
+                "type": "null"
+              },
+              "description": "Maximum observations to include per entity before capping. 0 disables the cap. Defaults to the AppSetting."
+            },
+            "max_depth": {
+              "type": "integer",
+              "not": {
+                "type": "null"
+              },
+              "description": "Optional graph traversal depth from matched entities. Defaults to 0."
+            },
+            "include_sources": {
+              "type": "boolean",
+              "not": {
+                "type": "null"
+              },
+              "description": "Include source entity and observation IDs. Defaults to true."
+            },
+            "scope": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Retrieval scope: \"context\" (default when a project context is active) or \"global\"."
+            },
+            "style": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Summary style: \"concise\" (default) or \"detailed\"."
+            },
+            "occurred_after": {
+              "type": [
+                "null",
+                "string"
+              ],
+              "description": "ISO 8601 lower bound for evidence occurred time."
+            },
+            "occurred_before": {
+              "type": [
+                "null",
+                "string"
+              ],
+              "description": "ISO 8601 upper bound for evidence occurred time."
+            },
+            "as_of": {
+              "type": [
+                "null",
+                "string"
+              ],
+              "description": "ISO 8601 instant evidence must cover (exclusive with after/before)."
+            },
+            "max_tokens": {
+              "type": "integer",
+              "not": {
+                "type": "null"
+              },
+              "description": "Estimated token budget (chars/4) for the evidence payload."
+            }
+          },
+          "required": [
+            "query"
+          ]
+        },
+        "outputSchema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {
+            "version": {
+              "type": "string"
+            },
+            "next_move": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "context": {
+              "$ref": "#/$defs/context"
+            },
+            "query": {
+              "type": "string"
+            },
+            "summary": {
+              "type": "string"
+            },
+            "sources": {
+              "type": "array"
+            }
+          },
+          "required": [
+            "query",
+            "summary",
+            "version"
+          ],
+          "additionalProperties": true,
+          "$defs": {
+            "context": {
+              "type": "object",
+              "properties": {
+                "status": {
+                  "const": "none"
+                },
+                "next_move": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "status",
+                "next_move"
+              ],
+              "additionalProperties": true
+            },
+            "observation": {
+              "type": "object",
+              "properties": {
+                "observation_id": {
+                  "type": "integer"
+                },
+                "content": {
+                  "type": "string"
+                },
+                "observation_content": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": true
+            },
+            "entity": {
+              "type": "object",
+              "properties": {
+                "entity_id": {
+                  "type": "integer"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "entity_type": {
+                  "type": "string"
+                },
+                "observations": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/observation"
+                  }
+                }
+              },
+              "additionalProperties": true
+            },
+            "relation": {
+              "type": "object",
+              "properties": {
+                "relation_id": {
+                  "type": "integer"
+                },
+                "from_entity_id": {
+                  "type": "integer"
+                },
+                "to_entity_id": {
+                  "type": "integer"
+                },
+                "relation_type": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": true
+            },
+            "pagination": {
+              "type": "object",
+              "properties": {
+                "current_page": {
+                  "type": "integer"
+                },
+                "per_page": {
+                  "type": "integer"
+                }
+              },
+              "additionalProperties": true
+            }
+          }
+        },
+        "annotations": {
+          "destructiveHint": false,
+          "idempotentHint": true,
+          "openWorldHint": true,
+          "readOnlyHint": true
+        }
+      },
+      {
+        "name": "suggest_merges",
+        "description": "Live vector scan of duplicate entities; returns pairs and does not merge. Pass optional `threshold` (float, default 0.3 cosine distance), `limit` (integer, default 20), `entity_type` (string). Do not use to execute a merge; use `graph_delete` instead. Do not use for queued dream-state review rows; use `list_maintenance_review` instead. Do not use for observation polarity conflicts; use `detect_contradictions` instead. Do not use for compaction job status; use `dream_state_status` instead.",
+        "inputSchema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {
+            "threshold": {
+              "type": "number",
+              "not": {
+                "type": "null"
+              },
+              "description": "Maximum cosine distance to consider as a potential duplicate (0.0 = identical, 1.0 = unrelated). Default: 0.3."
+            },
+            "limit": {
+              "type": "integer",
+              "not": {
+                "type": "null"
+              },
+              "description": "Maximum number of merge suggestions to return. Default: 20."
+            },
+            "entity_type": {
+              "type": [
+                "null",
+                "string"
+              ],
+              "description": "Filter suggestions to a specific entity type (e.g., 'Project')."
+            }
+          },
+          "required": []
+        },
+        "annotations": {
+          "destructiveHint": false,
+          "idempotentHint": true,
+          "openWorldHint": false,
+          "readOnlyHint": true
+        }
+      },
+      {
+        "name": "set_context",
+        "description": "Set this MCP client's active project so `search` boosts in-context entities without hard-filtering. Pass required `entity_id` as an integer/name, or null to clear the active context. Do not use to read the current project; use `get_context` instead. Do not omit entity_id; use null to search globally. Do not use to change entity fields or create a project; use `graph_edit` or `graph_write` instead.",
+        "inputSchema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {
+            "entity_id": {
+              "type": [
+                "null",
+                "integer"
+              ],
+              "description": "Project entity ID, or null to clear context."
+            }
+          },
+          "required": [
+            "entity_id"
+          ]
+        },
+        "outputSchema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {
+            "version": {
+              "type": "string"
+            },
+            "next_move": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "context": {
+              "$ref": "#/$defs/context"
+            },
+            "status": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "status",
+            "version"
+          ],
+          "additionalProperties": true,
+          "$defs": {
+            "context": {
+              "type": "object",
+              "properties": {
+                "status": {
+                  "const": "none"
+                },
+                "next_move": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "status",
+                "next_move"
+              ],
+              "additionalProperties": true
+            },
+            "observation": {
+              "type": "object",
+              "properties": {
+                "observation_id": {
+                  "type": "integer"
+                },
+                "content": {
+                  "type": "string"
+                },
+                "observation_content": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": true
+            },
+            "entity": {
+              "type": "object",
+              "properties": {
+                "entity_id": {
+                  "type": "integer"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "entity_type": {
+                  "type": "string"
+                },
+                "observations": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/observation"
+                  }
+                }
+              },
+              "additionalProperties": true
+            },
+            "relation": {
+              "type": "object",
+              "properties": {
+                "relation_id": {
+                  "type": "integer"
+                },
+                "from_entity_id": {
+                  "type": "integer"
+                },
+                "to_entity_id": {
+                  "type": "integer"
+                },
+                "relation_type": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": true
+            },
+            "pagination": {
+              "type": "object",
+              "properties": {
+                "current_page": {
+                  "type": "integer"
+                },
+                "per_page": {
+                  "type": "integer"
+                }
+              },
+              "additionalProperties": true
+            }
+          },
+          "oneOf": [
+            {
+              "properties": {
+                "status": {
+                  "const": "context_set"
+                }
+              }
+            },
+            {
+              "properties": {
+                "status": {
+                  "const": "context_cleared"
+                }
+              }
+            }
+          ]
+        },
+        "annotations": {
+          "destructiveHint": false,
+          "idempotentHint": true,
+          "openWorldHint": false,
+          "readOnlyHint": false
+        }
+      },
+      {
+        "name": "search",
+        "description": "Recall what earlier sessions learned before you act. Call before choosing a convention (version bump, changelog, docs or test style, config location, release step) and before first editing a file or component named in the task; query by the task's project, file paths and component names, not only by topic. Search or page graph entities through one uniform response envelope. Omit `query` for catalog mode; pass `query` alone for ranked summary mode; add `include` values observations and/or relations for subgraph mode. Pass optional `page` (default 1), `per_page` (default 20, max 100), legacy alias `limit`, subgraph `search_in_name`, `search_in_type`, `search_in_aliases`, `search_in_observations` flags, and `max_tokens` (integer) to pack ranked results under an estimated token budget. Temporal recall: pass `occurred_after`, `occurred_before`, and/or `as_of` (ISO 8601) to weight and filter facts by occurred time; temporal phrases in the query itself (\"in October 2026\", \"during 2024\", \"last week\") are also understood. Active context boosts query matches rather than filtering them. Do not use to load known entity IDs; use `get_entities` instead. Do not use for multi-hop expansion; use `traverse_graph` instead. Do not use for synthesized prose; use `summarize` instead.",
+        "inputSchema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {
+            "query": {
+              "type": [
+                "null",
+                "string"
+              ],
+              "description": "Search query. Omit for catalog mode."
+            },
+            "include": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Subgraph projections: observations and/or relations."
+            },
+            "search_in_name": {
+              "type": "boolean",
+              "not": {
+                "type": "null"
+              }
+            },
+            "search_in_type": {
+              "type": "boolean",
+              "not": {
+                "type": "null"
+              }
+            },
+            "search_in_aliases": {
+              "type": "boolean",
+              "not": {
+                "type": "null"
+              }
+            },
+            "search_in_observations": {
+              "type": "boolean",
+              "not": {
+                "type": "null"
+              }
+            },
+            "page": {
+              "type": "integer",
+              "not": {
+                "type": "null"
+              },
+              "description": "Page number. Defaults to 1."
+            },
+            "per_page": {
+              "type": "integer",
+              "not": {
+                "type": "null"
+              },
+              "description": "Results per page (1-100). Defaults to 20."
+            },
+            "limit": {
+              "type": "integer",
+              "not": {
+                "type": "null"
+              },
+              "description": "Legacy alias for per_page; per_page wins when both are supplied."
+            },
+            "occurred_after": {
+              "type": [
+                "null",
+                "string"
+              ],
+              "description": "ISO 8601 lower bound for occurred-time recall (valid_from/valid_until, or retention time for undated facts)."
+            },
+            "occurred_before": {
+              "type": [
+                "null",
+                "string"
+              ],
+              "description": "ISO 8601 upper bound for occurred-time recall."
+            },
+            "as_of": {
+              "type": [
+                "null",
+                "string"
+              ],
+              "description": "ISO 8601 instant: facts whose validity contains it (or already retained by it) — cannot be combined with occurred_after/occurred_before."
+            },
+            "perspective": {
+              "type": [
+                "null",
+                "string"
+              ],
+              "description": "Observation perspective hard filter: 'world' surfaces only factual observations, 'experience' only work-log entries; omitted returns both."
+            },
+            "max_tokens": {
+              "type": "integer",
+              "not": {
+                "type": "null"
+              },
+              "description": "Estimated token budget (chars/4 heuristic): ranked results are packed until the next item would exceed it."
+            }
+          },
+          "required": []
+        },
+        "outputSchema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {
+            "version": {
+              "type": "string"
+            },
+            "next_move": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "context": {
+              "$ref": "#/$defs/context"
+            },
+            "mode": {
+              "enum": [
+                "catalog",
+                "summary",
+                "subgraph"
+              ]
+            },
+            "entities": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/entity"
+              }
+            },
+            "results": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": true
+              }
+            },
+            "relations": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/relation"
+              }
+            },
+            "pagination": {
+              "$ref": "#/$defs/pagination"
+            }
+          },
+          "required": [
+            "mode",
+            "version"
+          ],
+          "additionalProperties": true,
+          "$defs": {
+            "context": {
+              "type": "object",
+              "properties": {
+                "status": {
+                  "const": "none"
+                },
+                "next_move": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "status",
+                "next_move"
+              ],
+              "additionalProperties": true
+            },
+            "observation": {
+              "type": "object",
+              "properties": {
+                "observation_id": {
+                  "type": "integer"
+                },
+                "content": {
+                  "type": "string"
+                },
+                "observation_content": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": true
+            },
+            "entity": {
+              "type": "object",
+              "properties": {
+                "entity_id": {
+                  "type": "integer"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "entity_type": {
+                  "type": "string"
+                },
+                "observations": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/observation"
+                  }
+                }
+              },
+              "additionalProperties": true
+            },
+            "relation": {
+              "type": "object",
+              "properties": {
+                "relation_id": {
+                  "type": "integer"
+                },
+                "from_entity_id": {
+                  "type": "integer"
+                },
+                "to_entity_id": {
+                  "type": "integer"
+                },
+                "relation_type": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": true
+            },
+            "pagination": {
+              "type": "object",
+              "properties": {
+                "current_page": {
+                  "type": "integer"
+                },
+                "per_page": {
+                  "type": "integer"
+                }
+              },
+              "additionalProperties": true
+            }
+          },
+          "oneOf": [
+            {
+              "properties": {
+                "mode": {
+                  "const": "catalog"
+                }
+              },
+              "required": [
+                "entities",
+                "pagination"
+              ]
+            },
+            {
+              "properties": {
+                "mode": {
+                  "const": "summary"
+                }
+              },
+              "required": [
+                "results",
+                "pagination",
+                "retrieval"
+              ]
+            },
+            {
+              "properties": {
+                "mode": {
+                  "const": "subgraph"
+                }
+              },
+              "required": [
+                "entities",
+                "pagination",
+                "retrieval"
+              ]
+            }
+          ]
+        },
+        "annotations": {
+          "destructiveHint": false,
+          "idempotentHint": true,
+          "openWorldHint": false,
+          "readOnlyHint": true
+        }
+      },
+      {
+        "name": "scan_project",
+        "description": "Enqueue an asynchronous filesystem scan that reconciles the knowledge graph with a project root; returns a scan_id and does not wait. `project_root` is an absolute path under the operator's scan folders (see `scan_project_status` / the Settings page); hidden folders are never scannable. Optional: `project_name` (string), `aliases` (comma- or pipe-separated string), `mode` (initial, rescan, or validate; default initial), `dry_run` (bool), `file_globs` (array of strings), `scan_id` (string, resume a paused validation batch). Do not use to poll completion; use `scan_project_status` instead. Do not use to create a single node by hand; use `graph_write` instead. Do not use to scope searches to a project already in the graph; use `set_context` instead.",
+        "inputSchema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {
+            "project_root": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Absolute path of the project folder, under the operator's scan folders."
+            },
+            "project_name": {
+              "type": [
+                "null",
+                "string"
+              ],
+              "description": "Preferred project name. Defaults to the directory name or the LLM-extracted name."
+            },
+            "aliases": {
+              "type": [
+                "null",
+                "string"
+              ],
+              "description": "Comma- or pipe-separated aliases for the project root entity."
+            },
+            "mode": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Scan mode: initial, rescan, or validate. Default: initial."
+            },
+            "dry_run": {
+              "type": [
+                "null",
+                "boolean"
+              ],
+              "description": "When true, preview changes without writing to the graph."
+            },
+            "file_globs": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Optional file globs to scan, relative to project_root."
+            },
+            "scan_id": {
+              "type": [
+                "null",
+                "string"
+              ],
+              "description": "Existing scan operation_id to resume a paused validation batch. If omitted, a new scan is started."
+            }
+          },
+          "required": [
+            "project_root"
+          ]
+        },
+        "annotations": {
+          "destructiveHint": true,
+          "idempotentHint": false,
+          "openWorldHint": true,
+          "readOnlyHint": false
+        }
+      },
+      {
+        "name": "scan_project_status",
+        "description": "Poll one asynchronous project scan for status, phase, progress, counters, fallback flags, and scan_review items. Pass required `scan_id` (string from `scan_project`). Do not use to start or resume a scan; use `scan_project` instead. Do not use for compaction-job status; use `dream_state_status` instead. Do not use for stored scan_review documents; use `get_maintenance_reports` instead.",
+        "inputSchema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {
+            "scan_id": {
+              "type": "string",
+              "minLength": 1,
+              "description": "The scan_id returned by scan_project."
+            }
+          },
+          "required": [
+            "scan_id"
+          ]
+        },
+        "annotations": {
+          "destructiveHint": false,
+          "idempotentHint": true,
+          "openWorldHint": false,
+          "readOnlyHint": true
+        }
+      },
+      {
+        "name": "rank_observations",
+        "description": "Return one known entity's observations sorted by trust_score (most reliable first). Pass required `entity_id` (integer; also accepts entity name); optional `include_obsolete` (bool, default false), `limit` (integer, default all), `query` (string; relevance then trust). Do not use when you also need relations or entity metadata; use `get_entities` instead. Do not use for opposing observation pairs; use `detect_contradictions` instead. Do not use to find observations across entities by keyword; use `search` instead. Do not use for a topic answer; use `summarize` instead.",
+        "inputSchema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {
+            "entity_id": {
+              "type": "integer",
+              "not": {
+                "type": "null"
+              },
+              "description": "The ID of the entity whose observations should be ranked."
+            },
+            "include_obsolete": {
+              "type": "boolean",
+              "not": {
+                "type": "null"
+              },
+              "description": "Include obsolete and superseded observations in the ranking. Defaults to false."
+            },
+            "limit": {
+              "type": "integer",
+              "not": {
+                "type": "null"
+              },
+              "description": "Maximum number of observations to return. Defaults to all."
+            },
+            "query": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Optional query for relevance-ranked observations."
+            }
+          },
+          "required": [
+            "entity_id"
+          ]
+        },
+        "outputSchema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {
+            "version": {
+              "type": "string"
+            },
+            "next_move": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "context": {
+              "$ref": "#/$defs/context"
+            },
+            "entity_id": {
+              "type": "integer"
+            },
+            "observations": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/observation"
+              }
+            }
+          },
+          "required": [
+            "entity_id",
+            "observations",
+            "version"
+          ],
+          "additionalProperties": true,
+          "$defs": {
+            "context": {
+              "type": "object",
+              "properties": {
+                "status": {
+                  "const": "none"
+                },
+                "next_move": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "status",
+                "next_move"
+              ],
+              "additionalProperties": true
+            },
+            "observation": {
+              "type": "object",
+              "properties": {
+                "observation_id": {
+                  "type": "integer"
+                },
+                "content": {
+                  "type": "string"
+                },
+                "observation_content": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": true
+            },
+            "entity": {
+              "type": "object",
+              "properties": {
+                "entity_id": {
+                  "type": "integer"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "entity_type": {
+                  "type": "string"
+                },
+                "observations": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/observation"
+                  }
+                }
+              },
+              "additionalProperties": true
+            },
+            "relation": {
+              "type": "object",
+              "properties": {
+                "relation_id": {
+                  "type": "integer"
+                },
+                "from_entity_id": {
+                  "type": "integer"
+                },
+                "to_entity_id": {
+                  "type": "integer"
+                },
+                "relation_type": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": true
+            },
+            "pagination": {
+              "type": "object",
+              "properties": {
+                "current_page": {
+                  "type": "integer"
+                },
+                "per_page": {
+                  "type": "integer"
+                }
+              },
+              "additionalProperties": true
+            }
+          }
+        },
+        "annotations": {
+          "destructiveHint": false,
+          "idempotentHint": true,
+          "openWorldHint": false,
+          "readOnlyHint": true
+        }
+      },
+      {
+        "name": "list_maintenance_review",
+        "description": "List paginated maintenance-review queue rows (including item_id) for later apply or dismiss. Pass optional `report_type` (string, default compaction_review), `status` (active, dismissed, approved, or ignored; default active), `kind` (string, e.g. entity_merge or orphan_parent), `page` (integer, default 1). per_page is not an input. Do not use for whole report documents; use `get_maintenance_reports` instead. Do not use to apply a row; use `apply_maintenance_review` instead. Do not use to dismiss, ignore, or restore a row; use `dismiss_maintenance_review` instead. Do not use to merge two known entity ids; use `graph_delete` instead.",
+        "inputSchema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {
+            "report_type": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Report type. Defaults to \"compaction_review\"."
+            },
+            "status": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Row status filter: active, dismissed, approved, ignored."
+            },
+            "kind": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Row kind filter, e.g. entity_merge or orphan_parent."
+            },
+            "page": {
+              "type": "integer",
+              "not": {
+                "type": "null"
+              },
+              "description": "Page number (1-based). Defaults to 1."
+            }
+          },
+          "required": []
+        },
+        "annotations": {
+          "destructiveHint": false,
+          "idempotentHint": true,
+          "openWorldHint": false,
+          "readOnlyHint": true
+        }
+      },
+      {
+        "name": "graph_write",
+        "description": "Persist a durable lesson. Call when the user corrects you or states a preference, when you learn where something lives, or when a fix or procedure is verified. Write each observation as one general, imperative rule with scope and reason (\"In <project>, when <situation>, do <action> because <reason>\"), not a log of what happened; set `source`, and `valid_until` for time-bound facts. To correct a stored rule, use `graph_edit` update_observation with `supersede: true` instead of appending. Atomically create entities, observations, and relations (max 50 logical operations). Pass primary `operations` items with type create_entity, create_observation, or create_relation; the existing `entities`, `observations`, and `relations` arrays are also accepted. Single writes use one operation. A possible entity duplicate prevents every write and returns candidate details. Do not use to update existing data; use `graph_edit` instead. Do not use to delete or merge data; use `graph_delete` instead.",
+        "inputSchema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {
+            "operations": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "examples": [
+                      "create_entity",
+                      "create_observation",
+                      "create_relation"
+                    ],
+                    "description": "Operation discriminator."
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "entity_type": {
+                    "type": "string",
+                    "examples": [
+                      "Project",
+                      "Framework",
+                      "ApplicationStack",
+                      "Workflow",
+                      "BestPractice",
+                      "Task",
+                      "Step",
+                      "Issue",
+                      "Error",
+                      "PossibleSolution",
+                      "Model",
+                      "DatabaseTable",
+                      "DatabaseSchema",
+                      "Class",
+                      "Module",
+                      "File",
+                      "Method",
+                      "APIEndpoint",
+                      "Route",
+                      "Component",
+                      "Service",
+                      "Configuration",
+                      "Migration",
+                      "TestCase",
+                      "Permission",
+                      "User",
+                      "Preference",
+                      "Constant",
+                      "ProjectPlan",
+                      "Feature",
+                      "Gem",
+                      "Tool",
+                      "Resource",
+                      "Documentation"
+                    ]
+                  },
+                  "entity_id": {
+                    "oneOf": [
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  "aliases": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "create_entity only. No \"|\" inside an alias."
+                  },
+                  "text_content": {
+                    "type": "string"
+                  },
+                  "from_entity_id": {
+                    "oneOf": [
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  "to_entity_id": {
+                    "oneOf": [
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  "relation_type": {
+                    "type": "string",
+                    "examples": [
+                      "part_of",
+                      "depends_on",
+                      "relates_to",
+                      "implements",
+                      "solves",
+                      "calls",
+                      "inherits",
+                      "mixes_in",
+                      "belongs_to",
+                      "has_many",
+                      "has_one",
+                      "delegates_to",
+                      "routes_to",
+                      "caused_by",
+                      "extends",
+                      "configured_by",
+                      "tested_by",
+                      "migrated_by",
+                      "authorizes",
+                      "integrates_with",
+                      "replaces"
+                    ]
+                  },
+                  "source": {
+                    "type": "string",
+                    "description": "Who/what this came from, e.g. \"claude-code/opus: release task\"."
+                  },
+                  "confidence": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  },
+                  "valid_from": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "valid_until": {
+                    "type": "string",
+                    "format": "date-time",
+                    "description": "Set for time-bound facts; must be ≥ valid_from."
+                  },
+                  "tags": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "perspective": {
+                    "type": "string",
+                    "enum": [
+                      "world",
+                      "experience"
+                    ]
+                  },
+                  "weight": {
+                    "type": "number",
+                    "minimum": 0,
+                    "description": "create_relation only."
+                  },
+                  "properties": {
+                    "type": "object",
+                    "description": "create_relation only."
+                  }
+                },
+                "required": [
+                  "type"
+                ],
+                "additionalProperties": true
+              },
+              "description": "Type-discriminated create operations."
+            },
+            "entities": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "entity_type": {
+                    "type": "string",
+                    "examples": [
+                      "Project",
+                      "Framework",
+                      "ApplicationStack",
+                      "Workflow",
+                      "BestPractice",
+                      "Task",
+                      "Step",
+                      "Issue",
+                      "Error",
+                      "PossibleSolution",
+                      "Model",
+                      "DatabaseTable",
+                      "DatabaseSchema",
+                      "Class",
+                      "Module",
+                      "File",
+                      "Method",
+                      "APIEndpoint",
+                      "Route",
+                      "Component",
+                      "Service",
+                      "Configuration",
+                      "Migration",
+                      "TestCase",
+                      "Permission",
+                      "User",
+                      "Preference",
+                      "Constant",
+                      "ProjectPlan",
+                      "Feature",
+                      "Gem",
+                      "Tool",
+                      "Resource",
+                      "Documentation"
+                    ]
+                  }
+                },
+                "additionalProperties": true
+              },
+              "description": "Compatibility array of entities to create."
+            },
+            "observations": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": true,
+                "properties": {
+                  "entity_id": {
+                    "oneOf": [
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  "text_content": {
+                    "type": "string"
+                  },
+                  "source": {
+                    "type": "string",
+                    "description": "Who/what this came from, e.g. \"claude-code/opus: release task\"."
+                  },
+                  "confidence": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  },
+                  "valid_from": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "valid_until": {
+                    "type": "string",
+                    "format": "date-time",
+                    "description": "Set for time-bound facts; must be ≥ valid_from."
+                  },
+                  "tags": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "perspective": {
+                    "type": "string",
+                    "enum": [
+                      "world",
+                      "experience"
+                    ]
+                  }
+                }
+              },
+              "description": "Compatibility array of observations to create."
+            },
+            "relations": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "from_entity_id": {
+                    "oneOf": [
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  "to_entity_id": {
+                    "oneOf": [
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  "relation_type": {
+                    "type": "string",
+                    "examples": [
+                      "part_of",
+                      "depends_on",
+                      "relates_to",
+                      "implements",
+                      "solves",
+                      "calls",
+                      "inherits",
+                      "mixes_in",
+                      "belongs_to",
+                      "has_many",
+                      "has_one",
+                      "delegates_to",
+                      "routes_to",
+                      "caused_by",
+                      "extends",
+                      "configured_by",
+                      "tested_by",
+                      "migrated_by",
+                      "authorizes",
+                      "integrates_with",
+                      "replaces"
+                    ]
+                  }
+                },
+                "additionalProperties": true
+              },
+              "description": "Compatibility array of relations to create."
+            },
+            "on_duplicate": {
+              "type": "string",
+              "minLength": 1,
+              "description": "reject (default): a possible duplicate prevents every write. skip: duplicates, and operations naming a skipped similar entity, are listed under `skipped` and the rest is written."
+            }
+          },
+          "required": []
+        },
+        "outputSchema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {
+            "version": {
+              "type": "string"
+            },
+            "next_move": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "context": {
+              "$ref": "#/$defs/context"
+            },
+            "mode": {
+              "const": "batch"
+            },
+            "status": {
+              "enum": [
+                "ok",
+                "possible_duplicate"
+              ]
+            },
+            "results": {
+              "type": "array"
+            },
+            "summary": {
+              "type": "object"
+            },
+            "candidates": {
+              "type": "array"
+            },
+            "reason": {
+              "enum": [
+                "similar",
+                "same_name",
+                "same_relation",
+                "concurrent_insert"
+              ]
+            },
+            "skipped": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "index": {
+                    "type": "integer"
+                  },
+                  "type": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "existing_id": {
+                    "type": "integer"
+                  },
+                  "reason": {
+                    "enum": [
+                      "exists",
+                      "similar",
+                      "duplicate_in_batch",
+                      "depends_on_skipped"
+                    ]
+                  }
+                },
+                "required": [
+                  "index",
+                  "type",
+                  "reason"
+                ]
+              }
+            }
+          },
+          "required": [
+            "mode",
+            "status",
+            "version"
+          ],
+          "additionalProperties": true,
+          "$defs": {
+            "context": {
+              "type": "object",
+              "properties": {
+                "status": {
+                  "const": "none"
+                },
+                "next_move": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "status",
+                "next_move"
+              ],
+              "additionalProperties": true
+            },
+            "observation": {
+              "type": "object",
+              "properties": {
+                "observation_id": {
+                  "type": "integer"
+                },
+                "content": {
+                  "type": "string"
+                },
+                "observation_content": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": true
+            },
+            "entity": {
+              "type": "object",
+              "properties": {
+                "entity_id": {
+                  "type": "integer"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "entity_type": {
+                  "type": "string"
+                },
+                "observations": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/observation"
+                  }
+                }
+              },
+              "additionalProperties": true
+            },
+            "relation": {
+              "type": "object",
+              "properties": {
+                "relation_id": {
+                  "type": "integer"
+                },
+                "from_entity_id": {
+                  "type": "integer"
+                },
+                "to_entity_id": {
+                  "type": "integer"
+                },
+                "relation_type": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": true
+            },
+            "pagination": {
+              "type": "object",
+              "properties": {
+                "current_page": {
+                  "type": "integer"
+                },
+                "per_page": {
+                  "type": "integer"
+                }
+              },
+              "additionalProperties": true
+            }
+          },
+          "oneOf": [
+            {
+              "properties": {
+                "status": {
+                  "const": "ok"
+                }
+              },
+              "required": [
+                "results",
+                "summary"
+              ]
+            },
+            {
+              "properties": {
+                "status": {
+                  "const": "possible_duplicate"
+                }
+              },
+              "required": [
+                "kind",
+                "operation_index",
+                "submitted",
+                "candidates"
+              ]
+            }
+          ]
+        },
+        "annotations": {
+          "destructiveHint": false,
+          "idempotentHint": false,
+          "openWorldHint": false,
+          "readOnlyHint": false
+        }
+      },
+      {
+        "name": "graph_edit",
+        "description": "Rewrite what the graph already knows. When a stored rule or fact is outdated, call update_observation with `supersede: true` (history is kept) rather than adding a new dated observation. Atomically edit graph data with up to 50 type-discriminated `operations`. Use update_entity with entity_id and metadata fields, or update_observation with observation_id, fields, and optional supersede/reason. Every operation rolls back if any operation fails. Do not use to create data; use `graph_write` instead. Do not use to obsolete, delete, or merge data; use `graph_delete` instead.",
+        "inputSchema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {
+            "operations": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "type"
+                ],
+                "additionalProperties": true,
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "examples": [
+                      "update_entity",
+                      "update_observation"
+                    ],
+                    "description": "Operation discriminator."
+                  },
+                  "entity_id": {
+                    "type": "integer",
+                    "description": "Numeric id; names aren't resolved."
+                  },
+                  "observation_id": {
+                    "type": "integer",
+                    "description": "Numeric id; names aren't resolved."
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "entity_type": {
+                    "type": "string",
+                    "examples": [
+                      "Project",
+                      "Framework",
+                      "ApplicationStack",
+                      "Workflow",
+                      "BestPractice",
+                      "Task",
+                      "Step",
+                      "Issue",
+                      "Error",
+                      "PossibleSolution",
+                      "Model",
+                      "DatabaseTable",
+                      "DatabaseSchema",
+                      "Class",
+                      "Module",
+                      "File",
+                      "Method",
+                      "APIEndpoint",
+                      "Route",
+                      "Component",
+                      "Service",
+                      "Configuration",
+                      "Migration",
+                      "TestCase",
+                      "Permission",
+                      "User",
+                      "Preference",
+                      "Constant",
+                      "ProjectPlan",
+                      "Feature",
+                      "Gem",
+                      "Tool",
+                      "Resource",
+                      "Documentation"
+                    ]
+                  },
+                  "aliases": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "Replaces existing aliases; [] or null clears. No \"|\" inside an alias. A legacy pipe-separated string is still accepted."
+                  },
+                  "description": {
+                    "type": "string"
+                  },
+                  "text_content": {
+                    "type": "string"
+                  },
+                  "supersede": {
+                    "type": "boolean",
+                    "description": "true keeps the old text as history."
+                  },
+                  "reason": {
+                    "type": "string"
+                  },
+                  "confidence": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  },
+                  "source": {
+                    "type": "string",
+                    "description": "Who/what this came from, e.g. \"claude-code/opus: release task\"."
+                  },
+                  "valid_from": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "valid_until": {
+                    "type": "string",
+                    "format": "date-time",
+                    "description": "Set for time-bound facts; must be ≥ valid_from."
+                  },
+                  "tags": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "perspective": {
+                    "type": "string",
+                    "enum": [
+                      "world",
+                      "experience"
+                    ]
+                  }
+                }
+              },
+              "description": "update_entity or update_observation operations."
+            }
+          },
+          "required": [
+            "operations"
+          ]
+        },
+        "outputSchema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {
+            "version": {
+              "type": "string"
+            },
+            "next_move": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "context": {
+              "$ref": "#/$defs/context"
+            },
+            "mode": {
+              "const": "batch"
+            },
+            "status": {
+              "const": "ok"
+            },
+            "results": {
+              "type": "array"
+            },
+            "summary": {
+              "type": "object"
+            }
+          },
+          "required": [
+            "mode",
+            "status",
+            "results",
+            "summary",
+            "version"
+          ],
+          "additionalProperties": true,
+          "$defs": {
+            "context": {
+              "type": "object",
+              "properties": {
+                "status": {
+                  "const": "none"
+                },
+                "next_move": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "status",
+                "next_move"
+              ],
+              "additionalProperties": true
+            },
+            "observation": {
+              "type": "object",
+              "properties": {
+                "observation_id": {
+                  "type": "integer"
+                },
+                "content": {
+                  "type": "string"
+                },
+                "observation_content": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": true
+            },
+            "entity": {
+              "type": "object",
+              "properties": {
+                "entity_id": {
+                  "type": "integer"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "entity_type": {
+                  "type": "string"
+                },
+                "observations": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/observation"
+                  }
+                }
+              },
+              "additionalProperties": true
+            },
+            "relation": {
+              "type": "object",
+              "properties": {
+                "relation_id": {
+                  "type": "integer"
+                },
+                "from_entity_id": {
+                  "type": "integer"
+                },
+                "to_entity_id": {
+                  "type": "integer"
+                },
+                "relation_type": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": true
+            },
+            "pagination": {
+              "type": "object",
+              "properties": {
+                "current_page": {
+                  "type": "integer"
+                },
+                "per_page": {
+                  "type": "integer"
+                }
+              },
+              "additionalProperties": true
+            }
+          }
+        },
+        "annotations": {
+          "destructiveHint": true,
+          "idempotentHint": false,
+          "openWorldHint": false,
+          "readOnlyHint": false
+        }
+      },
+      {
+        "name": "graph_delete",
+        "description": "Atomically remove or merge graph data with up to 50 type-discriminated `operations`. Supported types are delete_entity, delete_observation (marks obsolete), delete_relation, and merge_entities. Hard deletes accept per-operation reason; merge preserves duplicate audit semantics. Every operation rolls back if any operation fails. A Project root can be deleted only on the maintenance profile, and only once it has no members. Do not use to create data; use `graph_write` instead. Do not use to update retained data; use `graph_edit` instead.",
+        "inputSchema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {
+            "operations": {
+              "type": "array",
+              "items": {
+                "type": "object"
+              },
+              "description": "delete_entity, delete_observation, delete_relation, or merge_entities operations."
+            }
+          },
+          "required": [
+            "operations"
+          ]
+        },
+        "outputSchema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {
+            "version": {
+              "type": "string"
+            },
+            "next_move": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "context": {
+              "$ref": "#/$defs/context"
+            },
+            "mode": {
+              "const": "batch"
+            },
+            "status": {
+              "const": "ok"
+            },
+            "results": {
+              "type": "array"
+            },
+            "summary": {
+              "type": "object"
+            }
+          },
+          "required": [
+            "mode",
+            "status",
+            "results",
+            "summary",
+            "version"
+          ],
+          "additionalProperties": true,
+          "$defs": {
+            "context": {
+              "type": "object",
+              "properties": {
+                "status": {
+                  "const": "none"
+                },
+                "next_move": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "status",
+                "next_move"
+              ],
+              "additionalProperties": true
+            },
+            "observation": {
+              "type": "object",
+              "properties": {
+                "observation_id": {
+                  "type": "integer"
+                },
+                "content": {
+                  "type": "string"
+                },
+                "observation_content": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": true
+            },
+            "entity": {
+              "type": "object",
+              "properties": {
+                "entity_id": {
+                  "type": "integer"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "entity_type": {
+                  "type": "string"
+                },
+                "observations": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/observation"
+                  }
+                }
+              },
+              "additionalProperties": true
+            },
+            "relation": {
+              "type": "object",
+              "properties": {
+                "relation_id": {
+                  "type": "integer"
+                },
+                "from_entity_id": {
+                  "type": "integer"
+                },
+                "to_entity_id": {
+                  "type": "integer"
+                },
+                "relation_type": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": true
+            },
+            "pagination": {
+              "type": "object",
+              "properties": {
+                "current_page": {
+                  "type": "integer"
+                },
+                "per_page": {
+                  "type": "integer"
+                }
+              },
+              "additionalProperties": true
+            }
+          }
+        },
+        "annotations": {
+          "destructiveHint": true,
+          "idempotentHint": false,
+          "openWorldHint": false,
+          "readOnlyHint": false
+        }
+      },
+      {
+        "name": "get_maintenance_reports",
+        "description": "Read stored maintenance report documents, not paginated review rows. Pass optional `report_type` (orphans, duplicates, compaction_review, embedding_maintenance, contradictions, or scan_review; omit for the latest of each type) and `limit` (integer, default 5, max 30). Do not use for paginated item_id rows; use `list_maintenance_review` instead. Do not use to apply or dismiss a row; use `apply_maintenance_review` or `dismiss_maintenance_review` instead. Do not use for live compaction job status; use `dream_state_status` instead. Do not use for a live duplicate scan; use `suggest_merges` instead.",
+        "inputSchema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {
+            "report_type": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "enum": [
+                "orphans",
+                "duplicates",
+                "compaction_review",
+                "embedding_maintenance",
+                "contradictions",
+                "scan_review",
+                "stale_memory_scan",
+                null
+              ],
+              "description": "Filter to one type: orphans, duplicates, compaction_review, embedding_maintenance, contradictions, scan_review, stale_memory_scan. Omit for the latest of each type."
+            },
+            "limit": {
+              "type": "integer",
+              "description": "Max reports to return. Default: 5, max: 30."
+            }
+          },
+          "required": []
+        },
+        "annotations": {
+          "destructiveHint": false,
+          "idempotentHint": true,
+          "openWorldHint": false,
+          "readOnlyHint": true
+        }
+      },
+      {
+        "name": "get_graph_stats",
+        "description": "Return live knowledge-graph health metrics (totals, entity_type_distribution, orphan_count, most_connected, god_nodes, recent updates). Takes no arguments. Do not use for stored report documents; use `get_maintenance_reports` instead. Do not use to page actual entities; use `search` instead. Do not use for a topic summary; use `summarize` instead. Do not use for compaction job status; use `dream_state_status` instead. Software version is included in every successful response.",
+        "inputSchema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {},
+          "required": []
+        },
+        "annotations": {
+          "destructiveHint": false,
+          "idempotentHint": true,
+          "openWorldHint": false,
+          "readOnlyHint": true
+        }
+      },
+      {
+        "name": "get_entities",
+        "description": "Load one or more known entities with observations and a relation projection. Pass required `entity_ids` (array of IDs or resolvable names); optional `relations` (all or internal), `include_obsolete`, `include_ranked`, `query`, `observation_limit`, `perspective`, `occurred_after`/`occurred_before`/`as_of` (ISO 8601) to restrict observations to a temporal window, and `max_tokens` to pack the response under an estimated token budget. One unique ID defaults relations to all incident edges; multiple IDs default to internal edges only. Returns entities in input order plus missing_entity_ids. Do not use for keyword discovery or catalog paging; use `search` instead. Do not use for multi-hop neighbor expansion; use `traverse_graph` instead. Do not use for synthesized prose; use `summarize` instead.",
+        "inputSchema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {
+            "entity_ids": {
+              "type": "array",
+              "items": {
+                "type": "integer"
+              },
+              "description": "Entity IDs to load; name strings are resolved before validation."
+            },
+            "relations": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Relation projection: all or internal. Defaults by entity count."
+            },
+            "include_obsolete": {
+              "type": "boolean",
+              "not": {
+                "type": "null"
+              },
+              "description": "Include obsolete and superseded observations."
+            },
+            "include_ranked": {
+              "type": "boolean",
+              "not": {
+                "type": "null"
+              },
+              "description": "Sort observations by trust score."
+            },
+            "query": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Rank observations by relevance to this query."
+            },
+            "observation_limit": {
+              "type": "integer",
+              "not": {
+                "type": "null"
+              },
+              "description": "Maximum observations returned per entity."
+            },
+            "occurred_after": {
+              "type": [
+                "null",
+                "string"
+              ],
+              "description": "ISO 8601 lower bound for observation occurred time."
+            },
+            "occurred_before": {
+              "type": [
+                "null",
+                "string"
+              ],
+              "description": "ISO 8601 upper bound for observation occurred time."
+            },
+            "as_of": {
+              "type": [
+                "null",
+                "string"
+              ],
+              "description": "ISO 8601 instant observations must cover (exclusive with after/before)."
+            },
+            "perspective": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Observation perspective hard filter: world or experience."
+            },
+            "max_tokens": {
+              "type": "integer",
+              "not": {
+                "type": "null"
+              },
+              "description": "Estimated token budget (chars/4) for packing the response."
+            }
+          },
+          "required": [
+            "entity_ids"
+          ]
+        },
+        "outputSchema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {
+            "version": {
+              "type": "string"
+            },
+            "next_move": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "context": {
+              "$ref": "#/$defs/context"
+            },
+            "entities": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/entity"
+              }
+            },
+            "relations": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/relation"
+              }
+            },
+            "missing_entity_ids": {
+              "type": "array",
+              "items": {
+                "type": "integer"
+              }
+            },
+            "relation_scope": {
+              "enum": [
+                "all",
+                "internal"
+              ]
+            }
+          },
+          "required": [
+            "entities",
+            "relations",
+            "missing_entity_ids",
+            "relation_scope",
+            "version"
+          ],
+          "additionalProperties": true,
+          "$defs": {
+            "context": {
+              "type": "object",
+              "properties": {
+                "status": {
+                  "const": "none"
+                },
+                "next_move": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "status",
+                "next_move"
+              ],
+              "additionalProperties": true
+            },
+            "observation": {
+              "type": "object",
+              "properties": {
+                "observation_id": {
+                  "type": "integer"
+                },
+                "content": {
+                  "type": "string"
+                },
+                "observation_content": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": true
+            },
+            "entity": {
+              "type": "object",
+              "properties": {
+                "entity_id": {
+                  "type": "integer"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "entity_type": {
+                  "type": "string"
+                },
+                "observations": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/observation"
+                  }
+                }
+              },
+              "additionalProperties": true
+            },
+            "relation": {
+              "type": "object",
+              "properties": {
+                "relation_id": {
+                  "type": "integer"
+                },
+                "from_entity_id": {
+                  "type": "integer"
+                },
+                "to_entity_id": {
+                  "type": "integer"
+                },
+                "relation_type": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": true
+            },
+            "pagination": {
+              "type": "object",
+              "properties": {
+                "current_page": {
+                  "type": "integer"
+                },
+                "per_page": {
+                  "type": "integer"
+                }
+              },
+              "additionalProperties": true
+            }
+          }
+        },
+        "annotations": {
+          "destructiveHint": false,
+          "idempotentHint": true,
+          "openWorldHint": false,
+          "readOnlyHint": true
+        }
+      },
+      {
+        "name": "get_current_time",
+        "description": "Return the current server time as an ISO 8601 string. Takes no arguments; software version is included in every successful response. Do not use for graph health metrics; use `get_graph_stats` instead. Do not use to set observation validity windows; use `graph_write` or `graph_edit` instead.",
+        "inputSchema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {},
+          "required": []
+        },
+        "outputSchema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {
+            "version": {
+              "type": "string"
+            },
+            "next_move": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "context": {
+              "$ref": "#/$defs/context"
+            },
+            "timestamp": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          "required": [
+            "timestamp",
+            "version"
+          ],
+          "additionalProperties": true,
+          "$defs": {
+            "context": {
+              "type": "object",
+              "properties": {
+                "status": {
+                  "const": "none"
+                },
+                "next_move": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "status",
+                "next_move"
+              ],
+              "additionalProperties": true
+            },
+            "observation": {
+              "type": "object",
+              "properties": {
+                "observation_id": {
+                  "type": "integer"
+                },
+                "content": {
+                  "type": "string"
+                },
+                "observation_content": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": true
+            },
+            "entity": {
+              "type": "object",
+              "properties": {
+                "entity_id": {
+                  "type": "integer"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "entity_type": {
+                  "type": "string"
+                },
+                "observations": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/observation"
+                  }
+                }
+              },
+              "additionalProperties": true
+            },
+            "relation": {
+              "type": "object",
+              "properties": {
+                "relation_id": {
+                  "type": "integer"
+                },
+                "from_entity_id": {
+                  "type": "integer"
+                },
+                "to_entity_id": {
+                  "type": "integer"
+                },
+                "relation_type": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": true
+            },
+            "pagination": {
+              "type": "object",
+              "properties": {
+                "current_page": {
+                  "type": "integer"
+                },
+                "per_page": {
+                  "type": "integer"
+                }
+              },
+              "additionalProperties": true
+            }
+          }
+        },
+        "annotations": {
+          "destructiveHint": false,
+          "idempotentHint": true,
+          "openWorldHint": false,
+          "readOnlyHint": true
+        }
+      },
+      {
+        "name": "get_context",
+        "description": "Read this MCP client's active project context (entity and scope fields, or status no_context); auto-clears if the project entity is gone. Takes no arguments. Do not use to activate or switch projects; use `set_context` instead. Do not use to wipe context so searches span all projects; use `set_context` with entity_id null instead. Do not use to load an entity's observations or relations; use `get_entities` instead.",
+        "inputSchema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {},
+          "required": []
+        },
+        "outputSchema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {
+            "version": {
+              "type": "string"
+            },
+            "next_move": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "context": {
+              "$ref": "#/$defs/context"
+            },
+            "status": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "status",
+            "version"
+          ],
+          "additionalProperties": true,
+          "$defs": {
+            "context": {
+              "type": "object",
+              "properties": {
+                "status": {
+                  "const": "none"
+                },
+                "next_move": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "status",
+                "next_move"
+              ],
+              "additionalProperties": true
+            },
+            "observation": {
+              "type": "object",
+              "properties": {
+                "observation_id": {
+                  "type": "integer"
+                },
+                "content": {
+                  "type": "string"
+                },
+                "observation_content": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": true
+            },
+            "entity": {
+              "type": "object",
+              "properties": {
+                "entity_id": {
+                  "type": "integer"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "entity_type": {
+                  "type": "string"
+                },
+                "observations": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/observation"
+                  }
+                }
+              },
+              "additionalProperties": true
+            },
+            "relation": {
+              "type": "object",
+              "properties": {
+                "relation_id": {
+                  "type": "integer"
+                },
+                "from_entity_id": {
+                  "type": "integer"
+                },
+                "to_entity_id": {
+                  "type": "integer"
+                },
+                "relation_type": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": true
+            },
+            "pagination": {
+              "type": "object",
+              "properties": {
+                "current_page": {
+                  "type": "integer"
+                },
+                "per_page": {
+                  "type": "integer"
+                }
+              },
+              "additionalProperties": true
+            }
+          },
+          "oneOf": [
+            {
+              "properties": {
+                "status": {
+                  "const": "no_context"
+                }
+              }
+            },
+            {
+              "properties": {
+                "status": {
+                  "const": "context_active"
+                }
+              }
+            },
+            {
+              "properties": {
+                "status": {
+                  "const": "context_cleared"
+                }
+              }
+            }
+          ]
+        },
+        "annotations": {
+          "destructiveHint": false,
+          "idempotentHint": true,
+          "openWorldHint": false,
+          "readOnlyHint": false
+        }
+      },
+      {
+        "name": "find_shortest_path",
+        "description": "Find the shortest hop-count path between two entities. Pass required `from_entity_id` and `to_entity_id` (integer; also accepts entity name); optional `max_depth` (integer, default 2, max 5), `direction` (both|outgoing|incoming, default both), `relation_types` (array of strings). Returns ordered path entities and relations, or found false when none exists within max_depth. Do not use for a full neighborhood from one start; use `traverse_graph` instead. Do not use for 1-hop filters; use `traverse_graph` instead. Do not use for keyword lookup; use `search` instead.",
+        "inputSchema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {
+            "from_entity_id": {
+              "type": "integer",
+              "not": {
+                "type": "null"
+              },
+              "description": "The ID of the source entity. Also accepts entity name (string)."
+            },
+            "to_entity_id": {
+              "type": "integer",
+              "not": {
+                "type": "null"
+              },
+              "description": "The ID of the target entity. Also accepts entity name (string)."
+            },
+            "max_depth": {
+              "type": "integer",
+              "not": {
+                "type": "null"
+              },
+              "description": "Maximum number of hops to search. Default 2, max 5."
+            },
+            "direction": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Traversal direction: one of both, outgoing, incoming. Default both."
+            },
+            "relation_types": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Optional: restrict traversal to these relation types (canonicalized)."
+            }
+          },
+          "required": [
+            "from_entity_id",
+            "to_entity_id"
+          ]
+        },
+        "outputSchema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {
+            "version": {
+              "type": "string"
+            },
+            "next_move": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "context": {
+              "$ref": "#/$defs/context"
+            },
+            "found": {
+              "type": "boolean"
+            },
+            "hop_count": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "direction": {
+              "type": "string"
+            },
+            "entities": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/entity"
+              }
+            },
+            "relations": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/relation"
+              }
+            }
+          },
+          "required": [
+            "found",
+            "hop_count",
+            "direction",
+            "entities",
+            "relations",
+            "version"
+          ],
+          "additionalProperties": true,
+          "$defs": {
+            "context": {
+              "type": "object",
+              "properties": {
+                "status": {
+                  "const": "none"
+                },
+                "next_move": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "status",
+                "next_move"
+              ],
+              "additionalProperties": true
+            },
+            "observation": {
+              "type": "object",
+              "properties": {
+                "observation_id": {
+                  "type": "integer"
+                },
+                "content": {
+                  "type": "string"
+                },
+                "observation_content": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": true
+            },
+            "entity": {
+              "type": "object",
+              "properties": {
+                "entity_id": {
+                  "type": "integer"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "entity_type": {
+                  "type": "string"
+                },
+                "observations": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/observation"
+                  }
+                }
+              },
+              "additionalProperties": true
+            },
+            "relation": {
+              "type": "object",
+              "properties": {
+                "relation_id": {
+                  "type": "integer"
+                },
+                "from_entity_id": {
+                  "type": "integer"
+                },
+                "to_entity_id": {
+                  "type": "integer"
+                },
+                "relation_type": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": true
+            },
+            "pagination": {
+              "type": "object",
+              "properties": {
+                "current_page": {
+                  "type": "integer"
+                },
+                "per_page": {
+                  "type": "integer"
+                }
+              },
+              "additionalProperties": true
+            }
+          }
+        },
+        "annotations": {
+          "destructiveHint": false,
+          "idempotentHint": true,
+          "openWorldHint": false,
+          "readOnlyHint": true
+        }
+      },
+      {
+        "name": "dream_state_status",
+        "description": "Report the live dream-state compaction job (status, phase, cursor, stats, timestamps). Takes no arguments. Do not use for stored report documents; use `get_maintenance_reports` instead. Do not use for individual review-queue rows; use `list_maintenance_review` instead. Do not use for graph health totals; use `get_graph_stats` instead. Do not use for an on-demand duplicate scan; use `suggest_merges` instead.",
+        "inputSchema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {},
+          "required": []
+        },
+        "annotations": {
+          "destructiveHint": false,
+          "idempotentHint": true,
+          "openWorldHint": false,
+          "readOnlyHint": true
+        }
+      },
+      {
+        "name": "dismiss_maintenance_review",
+        "description": "Dismiss, ignore, or restore a maintenance-review queue row without applying the suggestion. Pass required `item_id` (string UUID) and `action` (dismiss, ignore, or restore); optional `report_type` (string, default compaction_review), `reason` (string). Do not use to execute the suggestion; use `apply_maintenance_review` instead. Do not use to look up a row; use `list_maintenance_review` instead. Do not use to merge entities; use `graph_delete` instead.",
+        "inputSchema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {
+            "item_id": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Maintenance report row UUID."
+            },
+            "action": {
+              "type": "string",
+              "minLength": 1,
+              "description": "One of: dismiss, ignore, restore."
+            },
+            "report_type": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Report type. Defaults to \"compaction_review\"."
+            },
+            "reason": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Optional dismissal reason."
+            }
+          },
+          "required": [
+            "item_id",
+            "action"
+          ]
+        },
+        "annotations": {
+          "destructiveHint": false,
+          "idempotentHint": true,
+          "openWorldHint": false,
+          "readOnlyHint": false
+        }
+      },
+      {
+        "name": "detect_contradictions",
+        "description": "Scan an entity's active observations and 1-hop related observations for semantically similar pairs with opposite polarity; returns candidates and stores a contradictions MaintenanceReport. Pass required `entity_id` (integer; also accepts entity name); optional `max_distance` (float, default 0.35), `max_results` (integer, default 20). Does not merge or delete. Do not use for trust ranking; use `rank_observations` instead. Do not use for duplicate entities; use `suggest_merges` instead. Do not use to read stored reports; use `get_maintenance_reports` instead. Do not use to resolve a conflicting fact; use `graph_edit` or `graph_delete` instead.",
+        "inputSchema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {
+            "entity_id": {
+              "type": "integer",
+              "not": {
+                "type": "null"
+              },
+              "description": "The ID of the entity to scan for contradictions."
+            },
+            "max_distance": {
+              "type": "number",
+              "not": {
+                "type": "null"
+              },
+              "description": "Maximum cosine distance threshold (smaller = stricter). Defaults to 0.35."
+            },
+            "max_results": {
+              "type": "integer",
+              "not": {
+                "type": "null"
+              },
+              "description": "Maximum candidate pairs to return. Defaults to 20."
+            }
+          },
+          "required": [
+            "entity_id"
+          ]
+        },
+        "annotations": {
+          "destructiveHint": false,
+          "idempotentHint": false,
+          "openWorldHint": false,
+          "readOnlyHint": false
+        }
+      },
+      {
+        "name": "apply_maintenance_review",
+        "description": "Apply a queued maintenance-review row (merge, relationship proposal, orphan parent, or relation integrity). Pass required `item_id` (string UUID); optional `report_type` (string, default compaction_review), `dry_run` (bool, default false), `action_params` (hash). Do not use without a queue item_id; use `list_maintenance_review` first. Do not use to skip, ignore, or restore without applying; use `dismiss_maintenance_review` instead. Do not use to merge two known entity ids outside the queue; use `graph_delete` instead.",
+        "inputSchema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {
+            "item_id": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Maintenance report row UUID."
+            },
+            "report_type": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Report type. Defaults to \"compaction_review\"."
+            },
+            "dry_run": {
+              "type": "boolean",
+              "not": {
+                "type": "null"
+              },
+              "description": "When true, validate and preview without applying."
+            },
+            "action_params": {
+              "type": "object",
+              "description": "Optional overrides for merge/relation/orphan endpoints."
+            }
+          },
+          "required": [
+            "item_id"
+          ]
+        },
+        "annotations": {
+          "destructiveHint": true,
+          "idempotentHint": false,
+          "openWorldHint": false,
+          "readOnlyHint": false
+        }
+      }
+    ]
+  },
+  "prompts/list": {
+    "prompts": [
+      {
+        "name": "recall",
+        "description": "Run before choosing a convention or first editing a file or component: recalls rules by topic, file paths and decision type.",
+        "arguments": [
+          {
+            "name": "topic",
+            "description": "Keywords or subject to recall",
+            "required": true
+          }
+        ]
+      },
+      {
+        "name": "persist",
+        "description": "Run before your final reply when you were corrected, learned a preference or location, or verified a fix."
+      },
+      {
+        "name": "orient",
+        "description": "Run at the start of a task: sets the project context and loads its conventions and the user's preferences."
+      }
+    ]
+  },
+  "resources/templates/list": {
+    "resourceTemplates": [
+      {
+        "uriTemplate": "memory_relations{?page,per_page,from_entity_id,to_entity_id,relation_type,created_after,created_before,updated_after,updated_before,sort_by,sort_dir,include_from_entity,include_to_entity}",
+        "name": "MemoryRelations",
+        "description": "Access memory relations with pagination, filtering, sorting and entity inclusion",
+        "mimeType": "application/json"
+      },
+      {
+        "uriTemplate": "memory_observations{?page,per_page,memory_entity_id,content,created_after,created_before,updated_after,updated_before,sort_by,sort_dir,include_entity,include_obsolete}",
+        "name": "MemoryObservations",
+        "description": "Access memory observations with pagination, filtering, sorting and entity inclusion",
+        "mimeType": "application/json"
+      },
+      {
+        "uriTemplate": "memory_graph{?entity_id,depth,include_observations,include_relations}",
+        "name": "MemoryGraph",
+        "description": "Provides a graph view of memory entities with their related observations and relations",
+        "mimeType": "application/json"
+      },
+      {
+        "uriTemplate": "memory_entities{?page,per_page,entity_type,name,aliases,id,created_after,created_before,updated_after,updated_before,min_observations,sort_by,sort_dir,include_observations,include_relations,include_obsolete,include_ranked,or_filters}",
+        "name": "MemoryEntities",
+        "description": "Access memory entities with pagination, filtering, sorting and relation inclusion",
+        "mimeType": "application/json"
+      }
+    ]
+  }
+}

@@ -10,7 +10,7 @@ class GraphDeleteService
   # @param allow_empty_project_delete [Boolean] true lets delete_entity remove a Project root that
   #   has no members (the maintenance profile); a Project with members is always refused
   # @return [Hash] batch status, per-operation results, and summary counts
-  # @raise [FastMcp::Tool::InvalidArgumentsError] for invalid/conflicting input
+  # @raise [GraphMem::InvalidArgumentsError] for invalid/conflicting input
   # @raise [McpGraphMemErrors::Error] when a requested record or operation fails
   def self.call(operations:, allow_empty_project_delete: false)
     new(operations: operations, allow_empty_project_delete: allow_empty_project_delete).call
@@ -65,7 +65,7 @@ class GraphDeleteService
   # Executes normalized operations in request order inside one transaction.
   #
   # @return [Hash] `{ mode: "batch", status: "ok", results:, summary: }`
-  # @raise [FastMcp::Tool::InvalidArgumentsError] when validation fails
+  # @raise [GraphMem::InvalidArgumentsError] when validation fails
   # @raise [McpGraphMemErrors::Error] when an operation cannot be completed
   def call
     GraphMutationBatch.validate_operations!(
@@ -288,22 +288,22 @@ class GraphDeleteService
       )
     end
     if text.match?(/into itself/i)
-      return FastMcp::Tool::InvalidArgumentsError.new(
+      return GraphMem::InvalidArgumentsError.new(
         "#{text}. Pass different entity ids, or use a delete_entity operation with `graph_delete`."
       )
     end
     if text.match?(/Project root|protected/i)
-      return FastMcp::Tool::InvalidArgumentsError.new(
+      return GraphMem::InvalidArgumentsError.new(
         "#{text}. Use `graph_edit` or `graph_write` on the existing Project root."
       )
     end
     if text.match?(/different types/i)
-      return FastMcp::Tool::InvalidArgumentsError.new(
+      return GraphMem::InvalidArgumentsError.new(
         "#{text}. Merge only same-type entities, or use a delete_entity operation with `graph_delete`."
       )
     end
     if text.match?(/Cannot merge|cycle/i)
-      return FastMcp::Tool::InvalidArgumentsError.new(
+      return GraphMem::InvalidArgumentsError.new(
         "#{text}. Choose different endpoints, or use a delete_entity operation with `graph_delete`."
       )
     end
@@ -335,7 +335,7 @@ class GraphDeleteService
     end.compact
     return if entity_ids.uniq.size == entity_ids.size
 
-    raise FastMcp::Tool::InvalidArgumentsError,
+    raise GraphMem::InvalidArgumentsError,
           "graph_delete cannot target the same entity more than once in one batch."
   end
 
@@ -345,7 +345,7 @@ class GraphDeleteService
     end
     return if ids.uniq.size == ids.size
 
-    raise FastMcp::Tool::InvalidArgumentsError,
+    raise GraphMem::InvalidArgumentsError,
           "graph_delete cannot target the same #{id_field} more than once in one batch."
   end
 end

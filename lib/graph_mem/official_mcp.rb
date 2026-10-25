@@ -5,16 +5,7 @@ require "mcp"
 module GraphMem
   # graph_mem's MCP layer on the official MCP Ruby SDK (`mcp` gem); see
   # docs/plans/mg-streamlined-plan.md.
-  #
-  # Load shim (removed in PR B): the gem defines MCP::Tool, MCP::Server, … through load-path
-  # autoloads such as `autoload :Tool, "mcp/tool"`. Another gem still in the bundle ships the same
-  # relative paths (lib/mcp/{version,tool,prompt,resource,server}.rb), so those autoloads would
-  # resolve to its files and MCP::Tool would never be defined. Requiring the five files from this
-  # gem's own directory first avoids that.
   module OfficialMcp
-    GEM_LIB = File.join(Gem.loaded_specs.fetch("mcp").full_gem_path, "lib")
-    %w[version tool prompt resource server].each { |file| require File.join(GEM_LIB, "mcp", file) }
-
     # Errors on the gem's own -32603 path (tool errors are answered by ToolWrapper instead).
     EXCEPTION_REPORTER = lambda do |exception, context|
       Rails.error.report(exception, handled: true, context: { mcp: context.to_h })

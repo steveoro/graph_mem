@@ -2,7 +2,7 @@
 
 # Adds GraphMem workflow guidance to successful MCP tool results.
 class ToolSuccessResponse
-  CONTEXT_EXEMPT_TOOLS = %w[get_context set_context clear_context get_version].freeze
+  CONTEXT_EXEMPT_TOOLS = %w[get_context set_context].freeze
   DEFAULT_HINTS = {
     "search" => "Apply any matching rules before editing; if a rule needs a value you don't have, look it up " \
                 "first. Call `get_entities` with selected ids for full detail.",

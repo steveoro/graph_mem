@@ -35,14 +35,14 @@ RSpec.describe ToolTelemetry do
         client_id: "cursor-test",
         outcome: "error",
         duration_ms: 2,
-        error_class: "FastMcp::Tool::InvalidArgumentsError",
+        error_class: "GraphMem::InvalidArgumentsError",
         error_category: "validation",
         argument_keys: [ "entity_type" ]
       )
 
       expect(invocation).to have_attributes(
         outcome: "error",
-        error_class: "FastMcp::Tool::InvalidArgumentsError",
+        error_class: "GraphMem::InvalidArgumentsError",
         error_category: "validation",
         result_size: nil
       )

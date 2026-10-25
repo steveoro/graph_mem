@@ -55,7 +55,7 @@ RSpec.describe DismissMaintenanceReviewTool, type: :model do
     it "raises InvalidArgumentsError for an unknown action" do
       expect {
         tool.call(item_id: row.row_uuid, action: "delete")
-      }.to raise_error(FastMcp::Tool::InvalidArgumentsError, /Invalid action/) do |error|
+      }.to raise_error(GraphMem::InvalidArgumentsError, /Invalid action/) do |error|
         expect(error.message).to include("dismiss")
         expect(error.message).to include("ignore")
         expect(error.message).to include("restore")

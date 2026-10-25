@@ -8,7 +8,7 @@ class GraphEditService
   # @param operations [Array<Hash>] hashes with `type: "update_entity"` or
   #   `type: "update_observation"` plus the target ID and mutable fields
   # @return [Hash] batch status, per-operation results, and summary counts
-  # @raise [FastMcp::Tool::InvalidArgumentsError] for invalid update data
+  # @raise [GraphMem::InvalidArgumentsError] for invalid update data
   # @raise [McpGraphMemErrors::Error] when a target cannot be found
   def self.call(operations:)
     new(operations: operations).call
@@ -31,7 +31,7 @@ class GraphEditService
   # Executes normalized operations in request order inside one transaction.
   #
   # @return [Hash] `{ mode: "batch", status: "ok", results:, summary: }`
-  # @raise [FastMcp::Tool::InvalidArgumentsError] when any edit is invalid
+  # @raise [GraphMem::InvalidArgumentsError] when any edit is invalid
   # @raise [McpGraphMemErrors::Error] when any target cannot be updated
   def call
     GraphMutationBatch.validate_operations!(
@@ -74,7 +74,7 @@ class GraphEditService
     updates = attributes.slice(:name, :entity_type, :aliases, :description)
     unless updates[:name].present? || updates[:entity_type].present? ||
            updates.key?(:aliases) || updates.key?(:description)
-      raise FastMcp::Tool::InvalidArgumentsError,
+      raise GraphMem::InvalidArgumentsError,
             "At least one attribute (name, entity_type, aliases, or description) must be provided for update."
     end
 
@@ -112,7 +112,7 @@ class GraphEditService
                                :perspective)
     updates[:content] = updates.delete(:text_content) if updates.key?(:text_content)
     if updates.empty?
-      raise FastMcp::Tool::InvalidArgumentsError,
+      raise GraphMem::InvalidArgumentsError,
             "At least one observation attribute must be provided for update. " \
             "Provide `text_content`, `confidence`, `source`, `valid_from`, `valid_until`, `tags`, " \
             "or `perspective` and retry `graph_edit`."
@@ -132,7 +132,7 @@ class GraphEditService
       next_move: "Call `get_entities` to inspect observation ids, then retry `graph_edit`."
     )
   rescue MemoryObservation::InactiveObservationError => e
-    raise FastMcp::Tool::InvalidArgumentsError,
+    raise GraphMem::InvalidArgumentsError,
           "#{e.message} Use `graph_delete` to obsolete data or `graph_write` to append a replacement."
   end
 

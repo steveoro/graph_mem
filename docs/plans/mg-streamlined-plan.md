@@ -193,7 +193,9 @@ before tagging).
    the wire).
 
 **Gate:**
-- `rg -n "FastMcp|fast_mcp|fast-mcp" app lib config bin spec Gemfile Gemfile.lock` finds nothing.
+- `rg -n "FastMcp|fast_mcp|fast-mcp" app lib config bin spec Gemfile Gemfile.lock --glob '!spec/fixtures/files/**'`
+  finds nothing. (Steve, 2026-10-25: the graph-export fixtures under `spec/fixtures/files/` mention fast-mcp
+  as data, the graph's own history, and stay as they are.)
 - The full suite, PR A's gate specs, rubocop and brakeman are green.
 - The snapshot spec shows `tools/list` byte-identical to 1.55.0 for all 3 profiles.
 - CHANGELOG history is untouched.

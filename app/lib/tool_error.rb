@@ -106,7 +106,7 @@ class ToolError
     end
 
     def validation?(error)
-      error.is_a?(FastMcp::Tool::InvalidArgumentsError)
+      error.is_a?(GraphMem::InvalidArgumentsError)
     end
 
     def name_not_found?(error)

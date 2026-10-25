@@ -55,7 +55,7 @@ RSpec.describe SummarizeTool, type: :model do
     it "raises InvalidArgumentsError for invalid scope" do
       expect {
         tool.call(query: "GraphMem", scope: "not-a-scope")
-      }.to raise_error(FastMcp::Tool::InvalidArgumentsError, /scope must be context or global/)
+      }.to raise_error(GraphMem::InvalidArgumentsError, /scope must be context or global/)
     end
 
     it "raises InternalServerError on unexpected errors" do

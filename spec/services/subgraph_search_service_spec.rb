@@ -88,7 +88,7 @@ RSpec.describe SubgraphSearchService do
     it "preserves field and paging validations" do
       expect {
         described_class.call(query: "")
-      }.to raise_error(FastMcp::Tool::InvalidArgumentsError, /blank/)
+      }.to raise_error(GraphMem::InvalidArgumentsError, /blank/)
       expect {
         described_class.call(
           query: "x",
@@ -97,10 +97,10 @@ RSpec.describe SubgraphSearchService do
           search_in_aliases: false,
           search_in_observations: false
         )
-      }.to raise_error(FastMcp::Tool::InvalidArgumentsError, /At least one/)
+      }.to raise_error(GraphMem::InvalidArgumentsError, /At least one/)
       expect {
         described_class.call(query: "x", page: 0)
-      }.to raise_error(FastMcp::Tool::InvalidArgumentsError, /Page number/)
+      }.to raise_error(GraphMem::InvalidArgumentsError, /Page number/)
     end
   end
 
