@@ -527,10 +527,12 @@ PLATFORMS
   x86_64-linux-musl
 
 DEPENDENCIES
+  addressable (~> 2.8)
   bootsnap
   brakeman
   capybara
   debug
+  dry-schema (~> 1.14)
   fast-mcp!
   haml-rails
   html2haml

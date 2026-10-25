@@ -39,6 +39,9 @@ gem "fast-mcp",
 # The official MCP Ruby SDK serves MCP (mg-streamlined-plan.md); the gem above stays until PR B
 # only for the tool, prompt and resource base classes. Exact pin: one PR per upgrade (D14).
 gem "mcp", "1.8.1"
+# The tool `arguments` DSL (lib/graph_mem/mcp_schema) and resource URI templates.
+gem "dry-schema", "~> 1.14"
+gem "addressable", "~> 2.8"
 gem "haml-rails"
 gem "html2haml"
 gem "kaminari" # Pagination
