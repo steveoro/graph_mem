@@ -2,15 +2,17 @@
 
 # Central policy for compaction valve coverage and heavy read tools.
 class ToolMutationPolicy
-    COMPACTION_VALVE_TOOLS = %w[
+  COMPACTION_VALVE_TOOLS = %w[
     graph_write graph_edit graph_delete
-    bulk_update create_entity create_observation create_relation
-    delete_entity delete_observation delete_relation update_entity update_observation
-    merge_entities search_entities search_subgraph suggest_merges summarize
-    detect_contradictions apply_maintenance_review dismiss_maintenance_review
+    suggest_merges summarize detect_contradictions
+    apply_maintenance_review dismiss_maintenance_review
   ].freeze
 
   class << self
+    # Whether a call to the tool pauses a running dream-state compaction first.
+    #
+    # @param tool_name [String, Symbol] a registered MCP tool name
+    # @return [Boolean]
     def compaction_valve?(tool_name)
       COMPACTION_VALVE_TOOLS.include?(tool_name.to_s)
     end
