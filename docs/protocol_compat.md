@@ -66,7 +66,7 @@ in 1.54.2 (#115), and expectations the checklist got wrong, since corrected in i
 | B 17–23 gm-maint (incl. scan refusals 19–22) | 3 / 7 | 3 / 7 | 19–21: refused correctly but without a machine-readable code; 23: `scan_project_status` answered "not found" until a worker started the scan. Both fixed in 1.54.2 |
 | B 24 gm-stdio | PASS | PASS | Errors came back as plain `Error:` text instead of the JSON envelope; fixed in 1.54.2 |
 | B 25 gm-badtoken | PASS | PASS | `AUTH_HEADER_REJECTED`, HTTP 401 |
-| B 26 cleanup, no McpCheck left | FAIL | PARTIAL | An empty Project couldn't be deleted over MCP; finished from the operator UI. 1.54.2 allows it on the maintenance profile |
+| B 26 cleanup, no McpCheck left | FAIL | PARTIAL | An empty Project couldn't be deleted over MCP; finished from the operator UI. 1.54.2 allows it on the maintenance profile once it has no members (`project_delete_needs_maintenance` elsewhere, `project_has_members` with members) |
 | First stdio connect time (rough, seconds) | not recorded | not recorded | |
 | Anything odd (stderr in the Claude Code UI, timeouts, warnings) | none | none | `search` reports 2 entities in scope with a project context and 19 without one: expected (project scope vs the shared global scope) |
 
