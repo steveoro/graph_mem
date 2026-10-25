@@ -96,7 +96,10 @@ RSpec.describe GraphDeleteService do
     end
 
     it "maps a member committed after the count (FK refusal) to project_has_members" do
-      allow_any_instance_of(MemoryEntity).to receive(:destroy!).and_raise(ActiveRecord::InvalidForeignKey, "fk")
+      allow_any_instance_of(MemoryEntity).to receive(:destroy!) do
+        first.update_column(:project_id, project.id)
+        raise ActiveRecord::InvalidForeignKey, "fk"
+      end
 
       expect {
         described_class.call(
@@ -104,6 +107,18 @@ RSpec.describe GraphDeleteService do
         )
       }.to raise_error(McpGraphMemErrors::OperationFailed, /just added/) { |error|
         expect(error.code).to eq("project_has_members")
+      }
+    end
+
+    it "maps an FK refusal without a new member to a retriable project_changed_during_delete" do
+      allow_any_instance_of(MemoryEntity).to receive(:destroy!).and_raise(ActiveRecord::InvalidForeignKey, "fk")
+
+      expect {
+        described_class.call(
+          operations: [ { type: "delete_entity", entity_id: project.id } ], allow_empty_project_delete: true
+        )
+      }.to raise_error(McpGraphMemErrors::OperationFailed, /observation or relation/) { |error|
+        expect([ error.code, error.category, error.retriable ]).to eq([ "project_changed_during_delete", "concurrency", true ])
       }
     end
 
