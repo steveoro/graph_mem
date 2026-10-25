@@ -32,18 +32,6 @@ class SuggestMergesTool < ApplicationTool
       .description("Filter suggestions to a specific entity type (e.g., 'Project').")
   end
 
-  def input_schema_to_json
-    {
-      type: "object",
-      properties: {
-        threshold: { type: "number", description: "Max cosine distance (0-1). Default: #{DEFAULT_THRESHOLD}." },
-        limit: { type: "integer", description: "Max suggestions. Default: #{DEFAULT_LIMIT}." },
-        entity_type: { type: [ "string", "null" ], description: "Filter by entity type." }
-      },
-      required: []
-    }
-  end
-
   def call(threshold: nil, limit: nil, entity_type: nil)
     effective_threshold = threshold || DEFAULT_THRESHOLD
     effective_limit = limit || DEFAULT_LIMIT
