@@ -98,9 +98,14 @@ def run_with_timeout(env, command, seconds:, chdir:, stdin_data: "")
     stdin.write(stdin_data)
     stdin.close
     unless wait.join(seconds)
-      Process.kill("TERM", wait.pid)
-      wait.join(5) || Process.kill("KILL", wait.pid)
-      return [ readers[0].value, readers[1].value, nil, true ]
+      begin
+        Process.kill("TERM", wait.pid)
+        wait.join(5) || Process.kill("KILL", wait.pid)
+      rescue Errno::ESRCH
+        nil
+      end
+      # A stuck grandchild (e.g. a stdio server) can hold the pipes open: don't wait for it forever.
+      return [ (readers[0].join(5)&.value).to_s, (readers[1].join(5)&.value).to_s, nil, true ]
     end
     [ readers[0].value, readers[1].value, wait.value, false ]
   end
@@ -144,7 +149,8 @@ class ProtocolTap
 
     body = env["rack.input"].read
     env["rack.input"].rewind
-    JSON.parse(body)["method"]
+    message = JSON.parse(body)
+    message["method"] if message.is_a?(Hash)
   rescue JSON::ParserError
     nil
   end
@@ -166,7 +172,7 @@ check_clients = %w[http ro maint].flat_map { |name| %w[default legacy].map { |mo
 results = []
 add = ->(part, check, pass, detail) { results << { part: part, check: check, pass: pass, detail: detail.to_s } }
 graph_mem_version = "?"
-commit = `git -C #{ROOT} rev-parse --short HEAD 2>/dev/null`.strip
+commit = (Open3.capture2("git", "-C", ROOT, "rev-parse", "--short", "HEAD", err: File::NULL).first.strip rescue "")
 commit = "?" if commit.empty?
 
 begin
@@ -260,7 +266,7 @@ begin
   # --- Part B (twice) and Part C ---------------------------------------------------------------------
   # gm-stdio runs this interpreter with Bundler's own executable and the current gem paths, so it uses
   # the same Ruby and gems as this script whatever PATH Claude Code gives its stdio servers.
-  bundle_args = [ Gem.bin_path("bundler", "bundle"), "exec", "ruby", File.join(ROOT, "bin/mcp_stdio_runner.rb") ]
+  bundle_args = [ Gem.bin_path("bundler", "bundle"), "exec", RbConfig.ruby, File.join(ROOT, "bin/mcp_stdio_runner.rb") ]
   gem_env = { "GEM_HOME" => ENV["GEM_HOME"], "GEM_PATH" => ENV["GEM_PATH"], "BUNDLE_GEMFILE" => File.join(ROOT, "Gemfile") }.compact
   modes = options[:only] ? [ options[:only] ] : %w[default legacy]
   modes.each do |mode|
