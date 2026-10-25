@@ -28,6 +28,8 @@ Rails.application.config.middleware.use(GraphMem::OfficialMcp::RequestContext)
 Rails.application.config.middleware.use(GraphMem::OfficialMcp::Router)
 
 Rails.application.config.after_initialize do
+  # Fail at boot, not on every /mcp request, on a malformed GRAPH_MEM_MCP_* number.
+  GraphMem::OfficialMcp::Transports.options
   Rails.logger.info("[McpAccessPolicy] /mcp access: #{GraphMem::OfficialMcp.access_policy.describe}") unless ENV["GRAPH_MEM_MCP_STDIO"]
 end
 
