@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.54.1] - 2026-10-24
+
+### Added
+- MCP protocol compatibility cases in `spec/fixtures/mcp/handshakes/` (16 stdio, 27 Streamable HTTP): version negotiation, the 2026-07-28 fallback, `MCP-Protocol-Version`, session errors, id rules, body shape and size. Each case records graph_mem's answer and the v2.0.0 reference servers' (Memory, Everything), with a reason for every difference.
+- `spec/requests/mcp_protocol_compat_spec.rb` asserts graph_mem's answers in the normal suite: HTTP through the Rails app, stdio through runner subprocesses. Wire-level only, so it carries over to the official `mcp` gem migration.
+- `script/mcp_compat/compare.rb` replays the cases against running servers (graph_mem, the reference servers, and the official Ruby SDK 1.8.1 as an informational column) and fails on an unexpected difference.
+- `script/mcp_compat/clients.sh` connects the Ruby SDK clients 1.8.0 and 1.8.1 and the TS client 2.3.1 to graph_mem (12 rows).
+- `docs/protocol_compat.md`: supported protocol versions, how 2026-07-28 clients fall back, the client matrix, the Claude Code check results and the reference comparison.
+
 ## [1.54.0] - 2026-10-24
 
 ### Added
