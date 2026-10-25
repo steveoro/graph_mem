@@ -34,7 +34,8 @@ gem "tailwindcss-rails", "~> 4.3"
 
 gem "fast-mcp",
     git: "https://github.com/steveoro/fast-mcp.git",
-    ref: "84c98ddc1d2e0e0d3528fa0a3e898242e6a3e390" # FastMCP v1.8.0 (tag 1.8.0)
+    ref: "84c98ddc1d2e0e0d3528fa0a3e898242e6a3e390", # FastMCP v1.8.0 (tag 1.8.0)
+    require: "fast_mcp" # base classes only, until PR B; the deleted initializer used to require it
 # The official MCP Ruby SDK serves MCP (mg-streamlined-plan.md); the gem above stays until PR B
 # only for the tool, prompt and resource base classes. Exact pin: one PR per upgrade (D14).
 gem "mcp", "1.8.1"
