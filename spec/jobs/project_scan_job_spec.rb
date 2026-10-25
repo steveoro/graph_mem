@@ -76,15 +76,48 @@ RSpec.describe ProjectScanJob, type: :job do
       { project_root: @project_root, project_name: nil, aliases: nil, mode: "initial", dry_run: true, file_globs: [] }
     end
 
-    it "keeps the existing row when the scan_id is already recorded (resume or a concurrent call)" do
+    it "refuses a second call with a queued scan's id (a concurrent call) and queues one job" do
       scan_id = SecureRandom.uuid
       first = described_class.enqueue(scan_id: scan_id, **args)
 
-      second = nil
-      expect { second = described_class.enqueue(scan_id: scan_id, **args) }.to have_enqueued_job(described_class)
+      expect {
+        expect { described_class.enqueue(scan_id: scan_id, **args) }
+          .to raise_error(described_class::ScanIdNotResumable, /is pending, not paused/)
+      }.not_to have_enqueued_job(described_class)
       expect(first).to have_attributes(status: "pending", phase: "queued")
-      expect(second).to be_nil
       expect(OperationProgress.where(operation_id: scan_id).count).to eq(1)
+    end
+
+    it "refuses a running scan's id" do
+      scan_id = SecureRandom.uuid
+      OperationProgress.start!(operation_type: "project_scan", operation_id: scan_id, total_count: 6)
+
+      expect { described_class.enqueue(scan_id: scan_id, **args) }
+        .to raise_error(described_class::ScanIdNotResumable, /is running, not paused/)
+    end
+
+    it "resumes a paused scan by claiming its row, so a second resume is refused" do
+      scan_id = SecureRandom.uuid
+      paused = OperationProgress.start!(operation_type: "project_scan", operation_id: scan_id, total_count: 6)
+      paused.pause!(message: "Paused for the next batch")
+
+      result = nil
+      expect { result = described_class.enqueue(scan_id: scan_id, **args) }.to have_enqueued_job(described_class)
+      expect(result).to be_nil
+      expect(paused.reload).to have_attributes(status: "pending", phase: "queued")
+
+      expect { described_class.enqueue(scan_id: scan_id, **args) }
+        .to raise_error(described_class::ScanIdNotResumable, /is pending, not paused/)
+    end
+
+    it "puts a claimed scan back to paused when enqueuing fails" do
+      scan_id = SecureRandom.uuid
+      paused = OperationProgress.start!(operation_type: "project_scan", operation_id: scan_id, total_count: 6)
+      paused.pause!
+      allow(described_class).to receive(:perform_later).and_raise(StandardError, "queue down")
+
+      expect { described_class.enqueue(scan_id: scan_id, **args) }.to raise_error(StandardError, "queue down")
+      expect(paused.reload.status).to eq("paused")
     end
 
     it "refuses a finished scan's id without enqueuing anything" do
@@ -94,7 +127,7 @@ RSpec.describe ProjectScanJob, type: :job do
 
       expect {
         expect { described_class.enqueue(scan_id: scan_id, **args) }
-          .to raise_error(described_class::ScanIdNotResumable, /already completed; omit scan_id/)
+          .to raise_error(described_class::ScanIdNotResumable, /is completed, not paused; omit scan_id/)
       }.not_to have_enqueued_job(described_class)
     end
 

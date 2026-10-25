@@ -70,7 +70,7 @@ RSpec.describe ScanProjectTool, type: :model do
 
         expect {
           tool.call(project_root: project, scan_id: scan_id)
-        }.to raise_error(McpGraphMemErrors::InvalidArguments, /already failed/) { |error|
+        }.to raise_error(McpGraphMemErrors::InvalidArguments, /is failed, not paused/) { |error|
           expect(ToolError.envelope(error)).to include("category" => "validation", "code" => "scan_id_not_resumable")
           expect(error.next_move).to include("Omit `scan_id`")
         }
