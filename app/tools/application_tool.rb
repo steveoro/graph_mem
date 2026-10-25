@@ -2,7 +2,9 @@
 
 require_relative "../../lib/graph_mem/mcp_output_schemas"
 
-class ApplicationTool < FastMcp::Tool
+class ApplicationTool
+  include GraphMem::McpSchema::ToolApi
+
   COMPACTION_VALVE_TOOLS = ToolMutationPolicy::COMPACTION_VALVE_TOOLS
   MCP_CLIENT_HEADER = "x-mcp-client"
   MCP_PROFILE_NAMES = GraphMem::McpProfile::NAMES

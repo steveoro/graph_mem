@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
-class ApplicationResource < ActionResource::Base
-  # write your custom logic to be shared across all resources here
+# Base class of the MCP resource templates in app/resources (see GraphMem::McpSchema::ResourceApi).
+class ApplicationResource
+  include GraphMem::McpSchema::ResourceApi
 end
