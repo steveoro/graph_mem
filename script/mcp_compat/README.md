@@ -98,8 +98,10 @@ bundle exec ruby script/mcp_compat/claude_client_check.rb                 # both
 bundle exec ruby script/mcp_compat/claude_client_check.rb --only legacy --model haiku --budget 1
 ```
 
-It boots graph_mem in-process on `127.0.0.1:3995` (test environment and database, a throwaway bearer
-token, synthetic scan folders in a temp dir) and:
+It boots graph_mem in-process on `127.0.0.1:3995` (`--port` to change it; test environment, a throwaway
+bearer token, synthetic scan folders in a temp dir) and refuses any database but graph_mem's test one.
+**Don't run it alongside rspec:** both use the test database, and the script's cleanup removes the rows
+created while it runs. It:
 
 1. **Part A:** checks a wrong token (401 + `WWW-Authenticate`), stdio stdout hygiene, `"id": null` and
    id-less calls (nothing runs), an invalid UTF-8 key, the `initialize` capabilities and instructions,
@@ -115,11 +117,15 @@ token, synthetic scan folders in a temp dir) and:
    event), the prompts each profile offered, the protocol version each client negotiated (recorded by a
    Rack tap for HTTP and a pipe tap for stdio), the tools each client really called (`tool_invocations`),
    that the readonly profile wrote nothing, and that no `McpCheck` entity is left. A check fails if either
-   the agent or graph_mem's side says so.
+   the agent or graph_mem's side says so. The protocol check reads the version each client actually used
+   for its tool calls (the `MCP-Protocol-Version` header over HTTP, the request's `_meta` version or the
+   `initialize` result over stdio): 2026-07-28 with the default negotiation, 2025-11-25 with `legacy`.
 
 It prints the results table, exits 1 on any failure, and removes what it created (entities, telemetry
 rows, contexts, the scratch folder). Cost: one Claude Code session per mode, capped by `--budget`
-(default 3 USD each); on 2026-10-25 a run cost about 0.36 USD with Sonnet and 0.02 USD with Haiku.
+(default 3 USD each) and `--timeout` (default 900 s each); a session that exits non-zero or times out is
+a failed check with its last stderr lines (the token redacted). On 2026-10-25 a run cost about 0.36 USD
+with Sonnet and 0.02 USD with Haiku. gm-stdio runs with the script's own Ruby, Bundler and gem paths.
 
 Results on 2026-10-25 (graph_mem 1.55.0, Claude Code 2.1.310): all checks pass in both modes; Claude Code
 negotiates 2026-07-28 over HTTP and stdio by default, and 2025-11-25 with `MCP_PROTOCOL_NEGOTIATION=legacy`.

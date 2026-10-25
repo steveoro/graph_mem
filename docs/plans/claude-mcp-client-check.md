@@ -1,6 +1,6 @@
 # PR-3 step 5: Claude Code as the MCP client against a local graph_mem
 
-> **Automated since 1.55.0:** `bundle exec ruby script/mcp_compat/claude_client_check.rb` runs Parts A–C
+> **Automated (after 1.55.0):** `bundle exec ruby script/mcp_compat/claude_client_check.rb` runs Parts A–C
 > end to end, and checks graph_mem's side independently of the agent's report (see
 > `script/mcp_compat/README.md` › Claude Code client check). This page stays as the manual fallback and
 > the description of what is checked; the script's expectations follow graph_mem 1.55.0 (the official

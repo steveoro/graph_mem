@@ -21,7 +21,7 @@ Folders for the scan steps: SYNTH = `{{SYNTH}}`, OUTSIDE = `{{OUTSIDE}}`, HIDDEN
 12. Resources on gm-http (use the resource tools; percent-encode the space): read `memory_entities?name=McpCheck%20SynthWidget`, `memory_graph?entity_id=<project id>&depth=1&include_relations=true`, `memory_observations?memory_entity_id=<widget id>` and `memory_relations?from_entity_id=<widget id>`. Expected: each read returns JSON containing the McpCheck data, and the graph read reaches SynthWidget.
 
 **gm-ro (readonly profile)**
-14. List gm-ro's tools. Expected: exactly 9 (step 1's list without graph_write, graph_edit and graph_delete).
+14. List gm-ro's tools, then call gm-ro's `get_current_time`. Expected: exactly 9 tools (step 1's list without graph_write, graph_edit and graph_delete), and a time with a `version` field.
 15. Try to use `graph_write` on gm-ro. Expected: it isn't offered (or "Tool not found"); nothing is written.
 
 **gm-maint (maintenance profile)**
