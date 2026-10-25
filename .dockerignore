@@ -32,6 +32,8 @@
 
 # Ignore assets.
 /node_modules/
+# Node test clients and reference servers of the MCP compat harness (script/mcp_compat/).
+**/node_modules/
 /app/assets/builds/*
 !/app/assets/builds/.keep
 /public/assets
