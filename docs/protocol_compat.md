@@ -7,7 +7,8 @@ supported `initialize` version is echoed; anything else (2026-07-28, a future da
 2025-11-25. 2026-07-28 clients fall back automatically: their `server/discover` probe gets a
 JSON-RPC error, and the client then runs `initialize` (2025-11-25). `MCP_PROTOCOL_NEGOTIATION=legacy`
 on the client skips the probe. Native 2026-07-28 support comes with the migration to the official
-`mcp` gem (MG-5).
+`mcp` gem (MG-5). The legacy HTTP+SSE endpoint (`/mcp/sse`) is still served, but nothing below
+covers it.
 
 ## How 2026-07-28 clients fall back
 
@@ -45,36 +46,41 @@ legacy era.
 
 ## Claude Code
 
-Pending Steve's run (PR-3 step 5). Checklist: `docs/plans/claude-mcp-client-check.md` §C.
+Steve's run of `docs/plans/claude-mcp-client-check.md` (PR-3 step 5), 2026-10-25: Claude Code
+2.1.310 against graph_mem 1.54.1 (`bin/mcp` over HTTP with a bearer token, and the stdio runner).
+No protocol or connection failure in either run. The failed steps were three server bugs, fixed in
+1.54.2, and expectations the checklist got wrong, since corrected in it.
 
 | Check | Default negotiation | `MCP_PROTOCOL_NEGOTIATION=legacy` | Notes |
 | --- | --- | --- | --- |
-| `claude mcp list`: 4 ✔, gm-badtoken ✘ 401 | | | |
-| Negotiated protocol, HTTP (from the log) | | | |
-| Negotiated protocol, stdio (from the log) | | | |
-| N1 curl wrong token → 401 + WWW-Authenticate | (run once) | n/a | |
-| N2 stdio stdout `json=2 noise=0` | (run once) | n/a | |
-| N3 `id: null` → 400 -32600; id-less → 202; neither wrote `McpCheck NullId` | (run once) | n/a | |
-| N4 invalid UTF-8 key → 400 -32700 | (run once) | n/a | |
-| N5 capabilities: subscribe/listChanged false; `instructions` present (1.54.x+) | (run once) | n/a | |
-| B 1–13 gm-http (count PASS / 13) | | | |
-| B 14–16 gm-ro | | | |
-| B 17–23 gm-maint (incl. scan refusals 19–22) | | | |
-| B 24 gm-stdio | | | |
-| B 25 gm-badtoken | | | |
-| B 26 cleanup, no McpCheck left | | | |
-| First stdio connect time (rough, seconds) | | | |
-| Anything odd (stderr in the Claude Code UI, timeouts, warnings) | | | |
+| `claude mcp list`: 4 ✔, gm-badtoken ✘ 401 | OK (Part A, run once) | n/a | |
+| Negotiated protocol, HTTP (from the log) | not recorded | not recorded | |
+| Negotiated protocol, stdio (from the log) | not recorded | not recorded | |
+| N1 curl wrong token → 401 + WWW-Authenticate | OK | n/a | |
+| N2 stdio stdout `json=2 noise=0` | OK | n/a | |
+| N3 `id: null` → 400 -32600; id-less → 202; neither wrote `McpCheck NullId` | OK | n/a | Step 5 found no `McpCheck NullId` in either run |
+| N4 invalid UTF-8 key → 400 -32700 | OK | n/a | No `id` member |
+| N5 capabilities: subscribe/listChanged false, prompts listChanged false; `instructions` present (1.54.x+) | OK | n/a | |
+| B 1–13 gm-http (count PASS / 13) | 12 / 13 | 12 / 13 | Step 12: Claude Code doesn't list resource templates; reads need a percent-encoded name and `include_relations=true` (checklist corrected) |
+| B 14–16 gm-ro | 3 / 3 | 3 / 3 | |
+| B 17–23 gm-maint (incl. scan refusals 19–22) | 3 / 7 | 3 / 7 | 19–21: refused correctly but without a machine-readable code; 23: `scan_project_status` answered "not found" until a worker started the scan. Both fixed in 1.54.2 |
+| B 24 gm-stdio | PASS | PASS | Errors came back as plain `Error:` text instead of the JSON envelope; fixed in 1.54.2 |
+| B 25 gm-badtoken | PASS | PASS | `AUTH_HEADER_REJECTED`, HTTP 401 |
+| B 26 cleanup, no McpCheck left | FAIL | PARTIAL | An empty Project couldn't be deleted over MCP; finished from the operator UI. 1.54.2 allows it on the maintenance profile |
+| First stdio connect time (rough, seconds) | not recorded | not recorded | |
+| Anything odd (stderr in the Claude Code UI, timeouts, warnings) | none | none | `search` reports 2 entities in scope with a project context and 19 without one: expected (project scope vs the shared global scope) |
 
 ## Handshake comparison
 
 `script/mcp_compat/compare.rb`, 2026-10-24: graph_mem 1.54.1, reference servers 2.0.0 with SDK
 2.3.1, Ruby SDK 1.8.1. Outlines show `[status, id, result or error code]` (HTTP) or the replies as
-`[id, result or error code]` (stdio); the cases are in `spec/fixtures/mcp/handshakes/`.
+`[id, result or error code]` (stdio); the cases are in `spec/fixtures/mcp/handshakes/`. The reference
+is Memory on stdio and Everything on HTTP. The Ruby SDK column is informational (input for MG-0): it
+has no expectations and never changes the verdict.
 
 ### stdio
 
-| Case | graph_mem | Memory/Everything 2.0.0 | Ruby SDK 1.8.1 | Verdict |
+| Case | graph_mem | Memory 2.0.0 | Ruby SDK 1.8.1 | Verdict |
 | --- | --- | --- | --- | --- |
 | initialize 2025-03-26 is echoed | `[[1, "result"]]` | `[[1, "result"]]` | `[[1, "result"]]` | same |
 | initialize 2025-11-25 is echoed, with serverInfo | `[[1, "result"]]` | `[[1, "result"]]` | `[[1, "result"]]` | same |
@@ -93,9 +99,14 @@ Pending Steve's run (PR-3 step 5). Checklist: `docs/plans/claude-mcp-client-chec
 | resources/subscribe is not offered | `[[1, "result"], [4, -32601]]` | n/a (server-specific) | `[[1, "result"], [4, -32601]]` | graph_mem only |
 | an invalid UTF-8 object key, then a ping | `[[nil, -32700], [2, "result"]]` | `[[1, "result"], [2, "result"]]` | `[[nil, -32700], [2, "result"]]` | documented divergence |
 
+On the auto-mode fallback path the Ruby SDK 1.8.1 refuses the legacy `initialize` that follows a
+`server/discover` (`-32601`, then `-32602` for `tools/list`), while Memory falls back in the same
+process. This matters for MG-5. The TS client isn't affected, because on stdio it probes in a
+sibling process.
+
 ### Streamable HTTP
 
-| Case | graph_mem | Memory/Everything 2.0.0 | Ruby SDK 1.8.1 | Verdict |
+| Case | graph_mem | Everything 2.0.0 | Ruby SDK 1.8.1 | Verdict |
 | --- | --- | --- | --- | --- |
 | server/discover with a 2026-07-28 envelope and headers, no session | `[400, 11, -32600]` | `[200, 11, "result"]` | `[200, 11, "result"]` | documented divergence |
 | 2026-07-28 header without the envelope | `[400, 12, -32600]` | `[400, 12, -32602]` | `[400, 12, -32602]` | documented divergence |
