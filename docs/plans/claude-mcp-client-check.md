@@ -1,5 +1,11 @@
 # PR-3 step 5: Claude Code as the MCP client against a local graph_mem
 
+> **Automated (after 1.55.0):** `bundle exec ruby script/mcp_compat/claude_client_check.rb` runs Parts A–C
+> end to end, and checks graph_mem's side independently of the agent's report (see
+> `script/mcp_compat/README.md` › Claude Code client check). This page stays as the manual fallback and
+> the description of what is checked; the script's expectations follow graph_mem 1.55.0 (the official
+> MCP Ruby SDK), so where the steps below differ, the script is current.
+
 For Steve. Run it once PR-3 (graph_mem 1.54.1) is checked out locally (re-run it after MG-4, 1.56.0, when the official `mcp` gem becomes the engine). Part A is shell commands you run yourself. Part B is the prompt you paste into Claude Code. Part C is the table you paste back to the reviewer.
 The `claude mcp add` syntax below was checked against the current Claude Code MCP docs (code.claude.com/docs/en/mcp) on 2026-10-21. Flags used: `--transport http|stdio`, `--header`/`-H`, `--env`/`-e`, `--scope local`, the `--` separator for stdio, and `claude mcp add-json` for an HTTP entry with several headers.
 

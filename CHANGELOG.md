@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `script/mcp_compat/claude_client_check.rb`: the Claude Code client check (`docs/plans/claude-mcp-client-check.md`) as one command. It runs Part A directly, Part B through `claude -p` in both negotiation modes, and checks graph_mem's side independently (connections, prompts per profile, negotiated versions, `tool_invocations`, leftovers). Test tooling only.
+
 ## [1.55.0] - 2026-10-25
 
 MCP now runs on the official MCP Ruby SDK (`docs/plans/mg-streamlined-plan.md`, PR A).

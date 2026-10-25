@@ -1,0 +1,23 @@
+{
+  "type": "object",
+  "properties": {
+    "steps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "step": { "type": "integer" },
+          "server": { "type": "string" },
+          "expected": { "type": "string" },
+          "actual": { "type": "string" },
+          "pass": { "type": "boolean" }
+        },
+        "required": ["step", "server", "expected", "actual", "pass"],
+        "additionalProperties": false
+      }
+    },
+    "odd": { "type": "string", "description": "Anything unexpected: warnings, timeouts, tools you could not see. Empty when nothing." }
+  },
+  "required": ["steps", "odd"],
+  "additionalProperties": false
+}
