@@ -4,7 +4,7 @@ Detailed reference for GraphMem's 22 Model Context Protocol (MCP) tools.
 
 ## Overview
 
-MCP tools in GraphMem are Ruby classes that implement operations on the knowledge graph. Each tool is accessed via JSON-RPC calls from an MCP client. Tools auto-register via `ApplicationTool` inheritance.
+MCP tools in GraphMem are Ruby classes that implement operations on the knowledge graph. Each tool is accessed via JSON-RPC calls from an MCP client. The protocol is served by the official MCP Ruby SDK (`mcp` gem); tools auto-register via `ApplicationTool` inheritance, and each profile's server wraps them (see [architecture.md](architecture.md#1-mcp-interface-layer-22-advertised-tools)).
 
 ## Connection Profiles
 
@@ -14,8 +14,8 @@ GraphMem registers 22 tool classes and filters the catalog by connection URL:
 - `/mcp/readonly` — 9 canonical context and read tools
 - `/mcp/maintenance` — all 22 canonical tools
 
-Profiles govern call eligibility; calling a tool outside the selected profile returns `Tool not
-found`. The 18 hidden compatibility aliases were removed in 1.55.0 (use the canonical tools).
+Profiles govern call eligibility; calling a tool outside the selected profile returns the JSON-RPC
+error `-32602` (`data`: `Tool not found: <name>`). The 18 hidden compatibility aliases were removed in 1.55.0 (use the canonical tools).
 Profiles are selected when connecting and are not authorization boundaries.
 Every tool also publishes the standard MCP `readOnlyHint`, `destructiveHint`,
 `idempotentHint`, and `openWorldHint` annotations.
@@ -462,7 +462,7 @@ Some errors add a `code` naming the exact reason, for agents that branch on it: 
 Exception mapping:
 
 - `McpGraphMemErrors::ResourceNotFound` → `not_found`
-- `FastMcp::Tool::InvalidArgumentsError` and Dry-schema failures → `validation`, except entity-name misses (`Entity not found by name`) → `not_found`
+- `GraphMem::InvalidArgumentsError` (argument validation failures) → `validation`, except entity-name misses (`Entity not found by name`) → `not_found`
 - `McpGraphMemErrors::OperationFailed` → `system_error` unless the call site sets `category: "validation"` for a caller-correctable policy
 - `McpGraphMemErrors::InternalServerError` and unknown `StandardError` → `system_error` (generic message; original exception is logged server-side)
 - `Timeout::Error` / `Net::OpenTimeout` / `Net::ReadTimeout` → `timeout`

@@ -78,17 +78,16 @@ The server exposes three Streamable HTTP profiles:
 - `/mcp/readonly` — 9 advertised context and read tools
 - `/mcp/maintenance` — all 22 canonical tools
 
-Streamable HTTP and stdio negotiate 2024-11-05 … 2025-11-25; 2026-07-28 clients fall back
-automatically via the `server/discover` probe; `MCP_PROTOCOL_NEGOTIATION=legacy` skips the
-probe (and the extra stdio process start).
+MCP is served by the official MCP Ruby SDK (`mcp` gem, pinned to 1.8.1) through the adapter in
+`lib/graph_mem/official_mcp/` ([architecture.md](architecture.md#official-mcp-sdk-feature-map)).
+Streamable HTTP and stdio speak 2026-07-28 (`server/discover`) and 2024-11-05 … 2025-11-25 (the
+`initialize` handshake). Each profile has its own server and transport, and a session belongs to
+the profile path that created it. Any other `/mcp/*` path (including the legacy `/mcp/sse`,
+removed in 1.55.0) is 404.
 
-Eighteen deprecated read, mutation, context, and version aliases remain callable,
-bringing the transitional registry to 40 classes, but are omitted from
-`tools/list`.
-
-HTTP profiles are applied in place from the Rack request in FastMCP's
-per-request context; no filtered server copies or profile caches are created.
-The 2024-11-05 SSE endpoint remains at `/mcp/sse` (deprecated in MCP 2026-07-28; kept for older clients) and uses the default profile.
+The MCP endpoint checks the `Host` header (DNS-rebinding protection, always on). `localhost`,
+`127.0.0.1` and `::1` are accepted; to reach a dev server by another address or name, list it in
+`GRAPH_MEM_MCP_ALLOWED_HOSTS` ([mcp_access_control.md](mcp_access_control.md)).
 Workflow guidance is available on demand through the `orient`, `recall`, and
 `persist` MCP prompts (`persist` is not available on the readonly profile).
 Each concrete prompt declares its profiles explicitly with
@@ -96,8 +95,8 @@ Each concrete prompt declares its profiles explicitly with
 class defaults to all three profiles as a safety net for undeclared subclasses.
 
 The default 12 tools advertise `outputSchema` and emit matching
-`structuredContent` plus mirrored JSON text. Maintenance-only and hidden tools
-remain text-only until their schemas are migrated.
+`structuredContent` plus mirrored JSON text. Maintenance-only tools remain
+text-only until their schemas are migrated.
 
 For the STDIO interface:
 
@@ -109,14 +108,15 @@ STDIO defaults to the `default` profile. Set `GRAPH_MEM_MCP_PROFILE=readonly` or
 `GRAPH_MEM_MCP_PROFILE=maintenance` in the launcher environment to select a
 different catalog. The readonly stdio catalog also omits the `persist` prompt.
 
-The stdio runner keeps stdout for JSON-RPC only: Rails, FastMcp and runner logs go to stderr, so a
+The stdio runner keeps stdout for JSON-RPC only: Rails, MCP and runner logs go to stderr, so a
 `puts` or a `Logger.new($stdout)` in app code can't break strict clients such as the Ruby MCP SDK.
 Read the logs from the client's MCP log view, or redirect stderr when running the runner by hand.
 Launch it by a fixed absolute path with no user-supplied arguments
 (see [mcp_access_control.md](mcp_access_control.md#stdio)).
 
-Clients that probe `server/discover` before falling back to `initialize` start the runner twice
-on first connect; `MCP_PROTOCOL_NEGOTIATION=legacy` in the client's environment skips the probe.
+Clients that probe `server/discover` in a separate process (the TS client in `auto` mode) start the
+runner twice on first connect; `MCP_PROTOCOL_NEGOTIATION=legacy` in the client's environment skips
+the probe.
 Body, session and `MCP-Protocol-Version` limits on the HTTP endpoints are listed in
 [mcp_access_control.md](mcp_access_control.md#request-limits-and-protocol-checks).
 
@@ -124,10 +124,10 @@ Body, session and `MCP-Protocol-Version` limits on the HTTP endpoints are listed
 
 1. Create `app/tools/my_feature_tool.rb` inheriting from `ApplicationTool` with a `tool_name` class method.
 2. Declare `mcp_metadata` with profile membership, the `advertised:` flag, and all four boolean MCP annotation hints.
-3. Add the tool name to `spec/integration/fast_mcp_registration_spec.rb` (`EXPECTED_TOOL_NAMES`).
+3. Update the tool counts in `spec/lib/graph_mem/mcp_tool_registry_spec.rb`, and re-record the list snapshots in `spec/fixtures/mcp/snapshots/` (`spec/mcp/tools_list_snapshot_spec.rb` compares `tools/list`, `prompts/list` and `resources/templates/list` per profile; say so in the PR).
 4. Add a request/tool spec under `spec/tools/`.
 
-Tool files are **not** registered by filename alone. `GraphMem::McpToolRegistry` eager-loads every `*_tool.rb` before calling `server.register_tools`, so new classes are picked up even in development lazy-load mode.
+Tool files are **not** registered by filename alone. `GraphMem::McpToolRegistry` eager-loads every `*_tool.rb` before `GraphMem::OfficialMcp::ServerFactory` builds each profile's server, so new classes are picked up even in development lazy-load mode.
 
 After adding a tool:
 
@@ -149,8 +149,8 @@ The GraphMem project follows a standard Rails application structure with a few a
 ├── bin/                  # Scripts and utilities
 ├── config/
 │   ├── initializers/
-│   │   ├── fast_mcp.rb   # MCP server configuration
-│   │   └── ...           # See lib/graph_mem for transport code
+│   │   ├── mcp.rb        # MCP middleware (access gate, request context, router)
+│   │   └── ...           # See lib/graph_mem/official_mcp for the SDK adapter
 │   └── ...
 ├── db/
 │   ├── migrate/          # Database migrations
@@ -324,7 +324,8 @@ fields (documented in `docs/rules/README.md`). Also keep `metadata.graph-mem-ver
 ## Additional Resources
 
 * [Ruby on Rails Guides](https://guides.rubyonrails.org/)
-* [GraphMem FastMCP fork](https://github.com/steveoro/fast-mcp)
+* [Official MCP Ruby SDK](https://github.com/modelcontextprotocol/ruby-sdk)
+* [Migrating a Rails app from fast-mcp to the `mcp` gem](guides/migrating-fast-mcp-to-mcp-gem.md)
 * [MCP Specification](https://modelcontextprotocol.io/specification/2025-11-25/basic/transports)
 
 
