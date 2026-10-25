@@ -21,6 +21,7 @@ Fixes from the Claude Code client check (PR-3 step 5).
 
 ### Documentation
 - `memory_graph` needs `include_relations=true` to return neighbours; `memory_entities` values must be percent-encoded.
+- `docs/protocol_compat.md` describes the tool error envelope, its `code` and the stdio change.
 
 ## [1.54.1] - 2026-10-24
 
