@@ -2,8 +2,9 @@
 
 require "rails_helper"
 
-# What each profile advertises (tools/list, prompts/list, resources/templates/list), byte for byte as
-# recorded on graph_mem 1.55.0 in spec/fixtures/mcp/snapshots/ (mg-streamlined-plan.md, PR B). A
+# What each profile advertises (tools/list, prompts/list, resources/templates/list), compared as JSON
+# (keys in order, lists sorted by name) with what was recorded on graph_mem 1.55.0 in
+# spec/fixtures/mcp/snapshots/ (mg-streamlined-plan.md, PR B). A
 # change to a tool's name, description, schema or annotations, a prompt, or a resource template
 # fails here. If the change is intended, re-record the snapshots and say so in the PR.
 #
