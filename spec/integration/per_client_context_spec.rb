@@ -13,7 +13,6 @@ RSpec.describe "Per-client MCP context isolation", type: :integration do
   let(:set_context_b) { SetContextTool.new(headers: agent_b_headers) }
   let(:get_context_a) { GetContextTool.new(headers: agent_a_headers) }
   let(:get_context_b) { GetContextTool.new(headers: agent_b_headers) }
-  let(:clear_context_a) { ClearContextTool.new(headers: agent_a_headers) }
 
   after { GraphMemContext.clear_all! }
 
@@ -46,7 +45,7 @@ RSpec.describe "Per-client MCP context isolation", type: :integration do
     set_context_a.call(entity_id: project_a.id)
     set_context_b.call(entity_id: project_b.id)
 
-    clear_context_a.call
+    set_context_a.call(entity_id: nil)
 
     expect(get_context_a.call[:status]).to eq("no_context")
     expect(get_context_b.call[:entity_id]).to eq(project_b.id)

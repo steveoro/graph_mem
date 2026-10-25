@@ -78,11 +78,11 @@ RSpec.describe ToolUsageReport do
 
     it "uses the registered tool catalog by default" do
       allow(GraphMem::McpToolRegistry).to receive(:load_all!)
-      allow(GraphMem::McpToolRegistry).to receive(:tool_classes).and_return([ SearchEntitiesTool ])
+      allow(GraphMem::McpToolRegistry).to receive(:tool_classes).and_return([ SearchTool ])
 
       report = described_class.call(since: 1.day.ago)
 
-      expect(report[:tools].map { |row| row[:tool_name] }).to eq([ "search_entities" ])
+      expect(report[:tools].map { |row| row[:tool_name] }).to eq([ "search" ])
     end
   end
 end
