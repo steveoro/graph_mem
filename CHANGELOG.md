@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.55.1] - 2026-10-25
+
+### Removed
+- The fast-mcp dependency (internal; no change on the wire). The tool `arguments` DSL and the prompt and resource class APIs it provided are vendored in `lib/graph_mem/mcp_schema/` (MIT; see `NOTICE.md`), `GraphMem::InvalidArgumentsError` replaces its error class, and the old transport, server patch and options are deleted. `dry-schema` and `addressable` are direct dependencies now. `spec/mcp/tools_list_snapshot_spec.rb` checks that `tools/list`, `prompts/list` and `resources/templates/list` are unchanged from 1.55.0 for every profile.
+
 ### Added
 - `script/mcp_compat/claude_client_check.rb`: the Claude Code client check (`docs/plans/claude-mcp-client-check.md`) as one command. It runs Part A directly, Part B through `claude -p` in both negotiation modes, and checks graph_mem's side independently (connections, prompts per profile, negotiated versions, `tool_invocations`, leftovers). Test tooling only.
 
