@@ -1,15 +1,15 @@
 # MCP compat harness
 
 Wire-level checks of graph_mem's MCP transports (mcp-update-plan PR-3). Every check looks at what
-goes over the wire (HTTP status, headers, JSON-RPC bodies, stdout lines), never at fast-mcp
-classes, so the same cases keep working after the migration to the official `mcp` gem. All traffic
+goes over the wire (HTTP status, headers, JSON-RPC bodies, stdout lines), never at server
+classes, so the same cases kept working through the migration to the official `mcp` gem. All traffic
 is synthetic and read-only. Run it against a local dev or test instance, never production.
 
 The cases live in `spec/fixtures/mcp/handshakes/` (`stdio.json`, `http.json`). Each case gives the
 messages and headers and the expected answer per target: `graph_mem`, and `reference` (the v2.0.0
 reference servers: Memory over stdio, Everything over HTTP). A `divergence` explains every place
-where graph_mem answers differently, and `changes_in` names the plan step that changes it (MG-5
-for the 2026-07-28 rows).
+where graph_mem answers differently, and an optional `changes_in` names the plan step that will
+change it (no case carries one since 1.55.0).
 
 | File | What it does |
 |---|---|
@@ -72,20 +72,16 @@ afterwards. No case runs a tool, so the test DB stays empty.
 
 ## Expected results
 
-At 1.54.1 (2026-10-24; reference servers at 2.0.0 with SDK 2.3.1, on Node 22):
+At 1.55.1 (2026-10-25; reference servers at 2.0.0 with SDK 2.3.1, on Node 22):
 
-- `compare.rb`: 0 failed expectations, 0 unexpected differences (16 stdio and 27 HTTP cases).
-- `clients.sh`: 12 of 12 OK, all on 2025-11-25 in the legacy era. The TS stdio `auto` row takes
-  about 1.2 s longer than `legacy` (the `server/discover` probe runs in a sibling process); the
-  Ruby SDK's `auto` costs nothing extra.
+- `compare.rb`: 0 failed expectations, 0 unexpected differences (16 stdio and 27 HTTP cases). The
+  `ruby_sdk` column (`mcp` 1.8.1, informational) answers every case exactly like graph_mem, which
+  runs on the same gem since 1.55.0.
+- `clients.sh`: 12 of 12 OK. Every `auto` row negotiates 2026-07-28, every `legacy` row 2025-11-25.
+  The TS stdio `auto` row takes about 1.3 s longer than `legacy` (the `server/discover` probe runs in
+  a sibling process); the Ruby SDK's `auto` costs nothing extra.
 
-The `ruby_sdk` column (official `mcp` 1.8.1, informational, for MG-0) answers like graph_mem on the
-handshake, the id rules, invalid UTF-8, batches and the 4 MiB cap. It differs where it already speaks
-2026-07-28 (it answers `server/discover` like the reference) and in a few error details: it
-accepts a 2026-07-28 `MCP-Protocol-Version` on a 2025 session, answers 1999-01-01 with `-32022`,
-and uses `-32600` without the id for an unknown or missing session. One difference matters for
-MG-5: on stdio, after a `server/discover` it refuses the legacy `initialize` that follows (`-32601`),
-while Memory falls back in-process. The TS client probes in a sibling process, so it isn't affected.
+Results, tables and the remaining divergences from the reference: [`docs/protocol_compat.md`](../../docs/protocol_compat.md).
 
 ## Claude Code client check
 
