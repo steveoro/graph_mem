@@ -15,9 +15,10 @@ So there are exactly two controls:
 1. **Network reach** — which client IPs may connect (`GRAPH_MEM_MCP_ALLOWED_IPS`).
 2. **A shared bearer token** — one secret, shared by the owner's agents (`GRAPH_MEM_MCP_TOKEN`).
 
-Both are applied by `GraphMem::McpAccessPolicy` at a single chokepoint in
-`GraphMem::McpStreamableHttpTransport#handle_mcp_request`, which covers the Streamable HTTP
-endpoint **and** the legacy `/mcp/sse` and `/mcp/messages` endpoints.
+Both are applied by `GraphMem::McpAccessPolicy` at a single chokepoint,
+`GraphMem::OfficialMcp::AccessGate`: a Rack middleware in front of every `/mcp` path, before the
+request reaches the official MCP Ruby SDK's Streamable HTTP transport for that profile. On top of
+that, the SDK's DNS-rebinding protection checks the `Host` and `Origin` headers (below).
 
 > If you need two people to have separate memories, run two instances against two databases.
 > That is an afternoon of work, gives perfect isolation, and cannot leak. See the reasoning in
@@ -40,12 +41,22 @@ Both variables are optional. The defaults are safe for a laptop or a home/office
 |---|---|---|
 | `GRAPH_MEM_MCP_TOKEN` | unset | Shared secret. When set, every request must send `Authorization: Bearer <token>`. When unset, no token is required. |
 | `GRAPH_MEM_MCP_ALLOWED_IPS` | loopback + private (RFC1918, IPv6 ULA and link-local) | Comma-separated addresses or CIDR ranges. `any` (also `all`, `*`) lifts the restriction entirely — **only honoured when a token is set**. |
+| `GRAPH_MEM_MCP_ALLOWED_HOSTS` | empty (`localhost`, `127.0.0.1` and `::1` are always accepted) | Comma-separated `Host` names (any port) or `host:port` values clients use to reach the server, e.g. `192.168.0.10,graphmem.lan`. **Set it when clients on other machines connect**: any other `Host` gets `403`. |
+| `GRAPH_MEM_MCP_ALLOWED_ORIGINS` | empty | Comma-separated exact `scheme://host:port` origins accepted from browser-based clients, beyond same-origin requests. Requests without an `Origin` header (non-browser MCP clients) are not affected. |
 
 Default ranges: `127.0.0.0/8`, `::1`, `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`,
 `fc00::/7`, `fe80::/10`.
 
 An explicit allowlist replaces these defaults rather than extending them. Include
 `127.0.0.0/8` and `::1` when clients on the server host use `localhost`.
+
+### DNS-rebinding protection (always on)
+
+The SDK's transport refuses a request whose `Host` isn't a loopback name or listed in
+`GRAPH_MEM_MCP_ALLOWED_HOSTS`, and a browser request whose `Origin` is neither same-origin nor listed
+in `GRAPH_MEM_MCP_ALLOWED_ORIGINS`, with `403`. graph_mem never turns this protection off: it also
+covers the `Origin` check, and the IP allowlist can't stop a rebinding attack (the victim's browser
+connects from an allowed address).
 
 The active posture is logged once at boot:
 
@@ -126,7 +137,6 @@ Choose the URL for the required tool profile:
 - `/mcp` — default context, read, and graph-write tools
 - `/mcp/readonly` — context and read tools only
 - `/mcp/maintenance` — the full catalog, including maintenance tools
-- `/mcp/sse` — legacy transport using the default profile
 
 Every profile uses the same token and network policy. Profiles reduce accidental tool selection;
 they do not grant different permissions to different token holders.
@@ -139,11 +149,10 @@ A rejected request is explicit about the fix:
 ```
 
 returned as `401` with `WWW-Authenticate: Bearer realm="graph_mem"`. A `403` means the client's IP
-is outside the allowlist, or the `Origin` check failed.
+is outside the allowlist, or the `Host` or `Origin` check failed.
 
-CORS preflight (`OPTIONS`) is answered before the token check, so browser-based clients can send
-credentials. `Access-Control-Allow-Origin` reflects the request's `Origin` only when it is allowed
-(with `Vary: Origin`), never `*`.
+CORS preflight (`OPTIONS`) is answered by `rack-cors` (`config/initializers/cors.rb`) before the
+token check, so browser-based clients can send credentials.
 
 ## Request limits and protocol checks
 
@@ -152,23 +161,20 @@ a tool.
 
 | Check | Default | Response |
 |---|---|---|
-| Body size (`GRAPH_MEM_MCP_MAX_REQUEST_BYTES`) | 4 MiB (`4194304`) | `413`, JSON-RPC `-32600`. Also applies to the legacy `/mcp/messages`, and to each stdio line (a `-32600` reply; the runner keeps serving). |
-| Open Streamable HTTP sessions (`GRAPH_MEM_MCP_MAX_SESSIONS`) | 256 | At the cap, a new `initialize` first reaps expired sessions, then closes the least recently active idle one (no request in flight, no open stream). `503` "Too many sessions" only when every session is busy. |
+| Body size (`GRAPH_MEM_MCP_MAX_REQUEST_BYTES`) | 4 MiB (`4194304`) | `413`, JSON-RPC `-32600`. An `initialize` request is also capped at 64 KiB. On stdio the same value caps each line, and a longer line ends the session. |
+| Open Streamable HTTP sessions (`GRAPH_MEM_MCP_MAX_SESSIONS`) | 256 per profile path | At the cap, a new `initialize` first reaps expired sessions, then gets `503`. |
 | A second `GET` stream on one session | — | `409`. Each session has at most one server-to-client SSE stream. |
-| `MCP-Protocol-Version` on in-session requests | — | `400` for a version the server doesn't support. Any supported version is accepted, even one other than the negotiated one; a missing header is accepted (pre-2025-06-18 clients). |
-| Body shape | — | `400` for a body that isn't a JSON-RPC 2.0 object (arrays included), `"id": null`, or an id that isn't a string or integer; `-32700` for invalid JSON. |
-| Unknown `Mcp-Session-Id` | — | `404`, checked before the protocol-version header. |
+| Unknown or missing `Mcp-Session-Id` | — | `404` for an unknown session, `400` for a missing one on anything but `initialize`. |
 
-Error responses carry the request's JSON-RPC `id` whenever it could be read. Sessions idle for 30
-minutes are reaped. At the cap, the least recently active idle session is evicted, so a client that
-opens a session per call without sending `DELETE` can't lock others out; it can, however, push out
-sessions that have been idle longer than its own. An evicted session gets `404` on its next request,
-and the client starts a new one.
+Edge cases (unsupported `MCP-Protocol-Version` values, `"id": null`, a missing `jsonrpc` member,
+batches) are answered as the official MCP Ruby SDK answers them; `docs/protocol_compat.md` lists
+each case. Sessions idle for 30 minutes are reaped, and a session belongs to the profile path that
+created it. Clients should end sessions with `DELETE` rather than leave them to expire.
 
 `initialize` negotiates `2024-11-05`, `2025-03-26`, `2025-06-18` or `2025-11-25`, echoing a
-supported request and answering `2025-11-25` to anything else. `2026-07-28` clients fall back to
-the handshake through a failed `server/discover` probe; a client that sets
-`MCP_PROTOCOL_NEGOTIATION=legacy` skips the probe.
+supported request and answering `2025-11-25` to anything else. `2026-07-28` clients are served in
+that revision's stateless lifecycle (`server/discover`, per-request `_meta`); a client that sets
+`MCP_PROTOCOL_NEGOTIATION=legacy` uses the handshake instead.
 
 ## stdio
 
@@ -178,8 +184,8 @@ IP check. Launch it only from a client config you control, as a fixed absolute p
 arguments. Select the catalog with `GRAPH_MEM_MCP_PROFILE` in the launcher's environment, not on
 the command line.
 
-stdout carries JSON-RPC only. Rails, FastMcp and runner logs go to stderr, which most clients
-show in their MCP log view.
+stdout carries JSON-RPC only. Rails and runner logs go to stderr, which most clients show in
+their MCP log view.
 
 ## HTTP API (`/api/v1`)
 
@@ -236,6 +242,5 @@ validation, which falls back to `request.host` when `Origin` and `Referer` are a
 for every non-browser MCP client.
 
 The practical effect was that any host able to reach the port had unauthenticated read and write
-access to the whole graph. `localhost_only: false` is still passed to the inner legacy transport
-on purpose, to keep its string-equality-only check out of the way; `McpAccessPolicy` now governs
-both endpoints.
+access to the whole graph. Since 1.55.0 `McpAccessPolicy` runs in its own middleware
+(`GraphMem::OfficialMcp::AccessGate`) in front of every `/mcp` path.
