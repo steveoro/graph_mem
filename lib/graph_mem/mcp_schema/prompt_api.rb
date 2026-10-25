@@ -1,8 +1,8 @@
 # frozen_string_literal: true
 
-# Vendored from fast-mcp 1.8.0 (https://github.com/yjacquin/fast-mcp, fork https://github.com/steveoro/fast-mcp,
-# tag 1.8.0), MIT License, Copyright (c) 2025 Yorick Jacquin. Namespaced under GraphMem::McpSchema;
-# the full licence text is in lib/graph_mem/mcp_schema/LICENSE.fast-mcp.
+# Vendored code, MIT License, Copyright (c) 2025 Yorick Jacquin: the full licence text is in
+# lib/graph_mem/mcp_schema/LICENSE, the source project and version in NOTICE.md. Namespaced under
+# GraphMem::McpSchema.
 
 module GraphMem
   module McpSchema
@@ -49,6 +49,13 @@ module GraphMem
         def arguments
           inherited = superclass.respond_to?(:arguments) ? superclass.arguments : []
           (inherited + (@arguments || [])).uniq { |argument| argument[:name] }
+        end
+
+        # @return [Hash] { name:, description:, arguments: } as prompts/list shows it
+        def metadata
+          result = { name: prompt_name, description: description.to_s }
+          result[:arguments] = arguments if arguments.any?
+          result
         end
 
         private
