@@ -284,6 +284,7 @@ ensure
   AgentContext.where(created_at: started_at..).delete_all
   AgentContext.where(client_id: check_clients).delete_all
   MemoryEntity.where("name LIKE ?", "McpCheck%").destroy_all
+  [ AuditLog, MemoryRelation, MemoryObservation, OperationProgress ].each { |model| model.where(created_at: started_at..).delete_all }
   FileUtils.remove_entry(work) if work
 end
 
