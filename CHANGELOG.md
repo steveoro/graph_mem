@@ -14,7 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - An ambiguous entity name inside a `graph_write` / `graph_edit` / `graph_delete` batch returns the `ambiguous_name` error with its candidates again, instead of "An unexpected error occurred." (`GraphMutationBatch` now re-raises with `Exception#exception`, keeping every field.)
-- `scan_project` and `POST /api/v1/scan` refuse a `scan_id` that belongs to a finished scan or to another operation (`code: "scan_id_not_resumable"`, 422 on REST) instead of replying `queued` and failing in the worker.
+- `scan_project` and `POST /api/v1/scan` resume only a paused scan. Any other `scan_id` (a queued, running or finished scan, or another operation's id) is refused before anything is queued (`code: "scan_id_not_resumable"`, 422 on REST): before, a finished one replied `queued` and then failed in the worker, and a queued or running one started a second scan on the same row. The paused row is claimed atomically, so two concurrent resumes queue one job.
+- Deleting a Project while a scan adds an observation or relation to it now fails with the retriable `project_changed_during_delete` (retry once) instead of `project_has_members` and re-parenting advice for members that don't exist. A member added in that window is still `project_has_members`.
 
 ## [1.54.2] - 2026-10-25
 

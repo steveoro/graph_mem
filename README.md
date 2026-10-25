@@ -298,7 +298,7 @@ Edit your Cursor's `mcp.json`:
 }
 ```
 
-**Option B -- Legacy SSE transport (Docker / older clients; deprecated in MCP 2026-07-28; kept for older clients):**
+**Option B -- Legacy SSE transport (Docker / older clients; deprecated in MCP 2026-07-28):**
 ```json
 {
   "mcpServers": {
