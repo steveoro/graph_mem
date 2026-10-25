@@ -170,6 +170,7 @@ GEM
       activesupport (>= 5.1)
       haml (>= 4.0.6)
       railties (>= 5.1)
+    hana (1.3.7)
     html2haml (2.3.0)
       erubis (~> 2.7.0)
       haml (>= 4.0)
@@ -194,6 +195,11 @@ GEM
     json-schema (6.2.1)
       addressable (~> 2.8)
       bigdecimal (>= 3.1, < 5)
+    json_schemer (2.5.0)
+      bigdecimal
+      hana (~> 1.3)
+      regexp_parser (~> 2.0)
+      simpleidn (~> 0.2)
     kamal (2.12.0)
       activesupport (>= 7.0)
       base64 (~> 0.2)
@@ -232,6 +238,8 @@ GEM
       net-smtp
     marcel (1.2.1)
     matrix (0.4.3)
+    mcp (1.8.1)
+      json_schemer (>= 2.4)
     method_source (1.1.0)
     mime-types (3.7.0)
       logger
@@ -437,6 +445,7 @@ GEM
       rubyzip (>= 1.2.2, < 4.0)
       websocket (~> 1.0)
     sexp_processor (4.17.6)
+    simpleidn (0.3.0)
     solid_cable (4.1.0)
       actioncable (>= 7.2)
       activejob (>= 7.2)
@@ -530,6 +539,7 @@ DEPENDENCIES
   kamal
   kaminari
   kaminari-tailwind
+  mcp (= 1.8.1)
   mission_control-jobs
   mysql2
   prism

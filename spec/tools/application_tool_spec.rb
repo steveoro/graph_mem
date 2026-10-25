@@ -373,7 +373,6 @@ RSpec.describe ApplicationTool do
 
   describe "#current_mcp_profile" do
     let(:tool) { GraphDeleteTool.new }
-    let(:server) { GraphDeleteTool.server }
 
     around do |example|
       previous = ENV.fetch("GRAPH_MEM_MCP_PROFILE", nil)
@@ -383,18 +382,19 @@ RSpec.describe ApplicationTool do
       previous.nil? ? ENV.delete("GRAPH_MEM_MCP_PROFILE") : ENV["GRAPH_MEM_MCP_PROFILE"] = previous
     end
 
+    # The MCP request context sets the request path's profile for the duration of a tool call.
     def with_request(path, &block)
-      request = Rack::Request.new(Rack::MockRequest.env_for(path, method: "POST"))
-      server.with_request_context(transport: nil, request: request, &block)
+      profile = GraphMem::OfficialMcp::Router.profile_for(path)
+      GraphMem::OfficialMcp::RequestContext::Context.new(client_id: nil, profile: profile, session_id: nil).around_call(&block)
     end
 
     it "uses GRAPH_MEM_MCP_PROFILE when there is no HTTP request (stdio, direct calls)" do
       expect(tool.current_mcp_profile).to eq(:maintenance)
     end
 
-    it "uses the request path over the environment, mapping legacy /mcp/messages to default" do
-      expect(with_request("/mcp/messages") { tool.current_mcp_profile }).to eq(:default)
+    it "uses the request path's profile over the environment" do
       expect(with_request("/mcp") { tool.current_mcp_profile }).to eq(:default)
+      expect(with_request("/mcp/readonly") { tool.current_mcp_profile }).to eq(:readonly)
       expect(with_request("/mcp/maintenance") { tool.current_mcp_profile }).to eq(:maintenance)
     end
   end

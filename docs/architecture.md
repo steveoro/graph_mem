@@ -52,7 +52,6 @@ Tools are Ruby classes in `app/tools/` that inherit from `ApplicationTool`
 (which inherits from `FastMcp::Tool`). `McpToolRegistry` registers 40 callable
 classes plus `orient`, `recall`, and `persist` prompts (the fork provides the
 `FastMcp::Prompt` API; `McpToolRegistry` calls `register_prompts`).
-`McpServerPatch` omits 18 compatibility aliases from `tools/list`.
 Over HTTP a `filter_prompts` block applies the same connection profiles to
 prompts (`persist` declares only the default and maintenance profiles, so the
 readonly profile neither lists nor renders it). Over stdio the profile is
@@ -74,7 +73,6 @@ GraphMem depends on the steveoro fork of fast-mcp, pinned to `1.8.0` in the `Gem
 | Strict JSON-RPC 2.0 (null ids, id-less requests) | `FastMcp::Server` | the same checks before dispatch, as HTTP 400s (`McpStreamableHttp::RequestChecks`) |
 | `instructions` and `capabilities` in `initialize` | `Server.new(instructions:, capabilities:)` | per-profile texts and capability flags (`McpServerOptions`, `McpInstructions`) |
 | Per-request tool and prompt filtering | `filter_tools`, `filter_prompts` | connection profiles (`McpProfile`) |
-| Hidden compatibility aliases | — | `McpServerPatch#handle_tools_list` |
 | Error formatting | `error_formatter` hook | `ToolError` envelope (`McpErrorFormatter`) |
 | Streamable HTTP transport (`/mcp`, `/mcp/readonly`, `/mcp/maintenance`) | — | `McpStreamableHttpTransport` and `mcp_streamable_http/`: sessions, SSE streams, body and session caps, `MCP-Protocol-Version` check, CORS |
 | Legacy SSE transport (`/mcp/sse`, `/mcp/messages`) | `Transports::RackTransport`: body cap, CORS allowlist, required server-issued session id | delegated to by `McpStreamableHttpTransport` |

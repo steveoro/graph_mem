@@ -12,7 +12,23 @@ RSpec.describe "MCP protocol compatibility (handshake fixtures)", type: :request
   cases = McpCompat::HandshakeCases
 
   describe "Streamable HTTP" do
-    after { AgentContext.delete_all }
+    before { @streams = [] }
+
+    after do
+      @streams.each { |thread| thread.join(2) || thread.kill }
+      AgentContext.delete_all
+    end
+
+    # A stand-in for the server's socket: accepts writes until the transport closes it.
+    def open_stream
+      stream = Object.new
+      closed = false
+      stream.define_singleton_method(:write) { |data| data.to_s.bytesize }
+      stream.define_singleton_method(:flush) { stream }
+      stream.define_singleton_method(:close) { closed = true }
+      stream.define_singleton_method(:closed?) { closed }
+      stream
+    end
 
     def call_app(verb, body: nil, headers: {}, hijack: false)
       env = Rack::MockRequest.env_for("/mcp", method: verb, input: body.to_s, "REMOTE_ADDR" => "127.0.0.1", "HTTP_HOST" => "localhost")
@@ -25,8 +41,13 @@ RSpec.describe "MCP protocol compatibility (handshake fixtures)", type: :request
       end
       status, response_headers, response_body = Rails.application.call(env)
       text = +""
-      response_body.each { |chunk| text << chunk } unless status == -1
-      response_body.close if response_body.respond_to?(:close)
+      if response_body.respond_to?(:each)
+        response_body.each { |chunk| text << chunk } unless status == -1
+        response_body.close if response_body.respond_to?(:close)
+      else
+        # A streaming body (an open GET stream): run it in the background until the session ends.
+        @streams << Thread.new { response_body.call(open_stream) }
+      end
       McpCompat::HandshakeCases::Response.new(status: status, headers: response_headers.transform_keys(&:downcase), body: text)
     end
 

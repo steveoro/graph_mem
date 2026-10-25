@@ -27,8 +27,6 @@ rescue LoadError => e
   abort "Failed to load Rails environment. Make sure you are in the project root or use 'bundle exec'. Error: #{e.message}"
 end
 
-require 'fast_mcp'
-
 # Rails logs to stderr too (production points Rails.logger at STDOUT).
 Rails.logger = ActiveSupport::Logger.new($stderr)
 ActiveRecord::Base.logger = Rails.logger
@@ -48,26 +46,16 @@ rescue GraphMem::McpProfile::InvalidProfile => e
   abort "GraphMem Stdio Runner: #{e.message}"
 end
 
-# FastMcp::Logger in stdio mode drops everything; the runner's own logs go to stderr above.
-server = FastMcp::Server.new(
-  name: server_info[:name],
-  version: server_info[:version],
-  logger: FastMcp::Logger.new,
-  **GraphMem::McpServerOptions.for_stdio(profile)
-)
-# Same ToolError JSON envelope as HTTP (config/initializers/fast_mcp.rb), not FastMCP's plain text.
-GraphMem::McpErrorFormatter.install(server)
-GraphMem::McpToolRegistry.register_with!(server, profile: profile)
+server = GraphMem::OfficialMcp::ServerFactory.for(profile)
 RunnerLogger.info(
-  "GraphMem Stdio Runner: Registered #{server.tools.count} tools, " \
-  "#{server.prompts.count} prompts, and " \
-  "#{server.resources.count} resources for the #{profile} profile."
+  "GraphMem Stdio Runner: serving #{server.tools.count} tools, #{server.prompts.count} prompts and " \
+  "#{server.resource_templates.count} resource templates for the #{profile} profile."
 )
 
 begin
-  # Same line cap as the HTTP body cap (fast-mcp's stdio cap is off unless passed): an over-limit
-  # line gets -32600 and the loop goes on.
-  server.start(output: mcp_out, max_request_bytes: Integer(ENV.fetch("GRAPH_MEM_MCP_MAX_REQUEST_BYTES", 4 * 1024 * 1024)))
+  # Responses go to the saved real stdout. A line over GRAPH_MEM_MCP_MAX_REQUEST_BYTES ends the
+  # session (the gem's behaviour, D7).
+  GraphMem::OfficialMcp::StdioTransport.new(server, output: mcp_out).open
 rescue Interrupt
   RunnerLogger.info("GraphMem MCP server (stdio) interrupted. Exiting...")
 rescue StandardError => e

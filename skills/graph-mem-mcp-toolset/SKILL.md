@@ -15,7 +15,7 @@ description: >-
 license: LGPL-3.0-or-later
 compatibility: Requires a reachable graph_mem MCP server (HTTP /mcp or stdio)
 metadata:
-  graph-mem-version: "1.54.3"
+  graph-mem-version: "1.55.0"
 ---
 
 # graph_mem: recall before you decide, persist what you learned
@@ -75,7 +75,6 @@ The recommended MCP server key is `graph_mem`, so a fully qualified call looks l
 ## Gotchas
 
 - Use `entity_id`, not names, for edits and deletes: a bare name can hit another project.
-- Hidden aliases (`search_entities`, `create_entity`, …) aren't canonical; advertise and call the canonical tools.
 - `persist` isn't available on the readonly profile.
 - There's no MCP `move_to_parent`: re-parent with `graph_delete delete_relation`, then `graph_write create_relation part_of`.
 - To correct a stored rule, supersede it (`graph_edit update_observation`, `supersede: true`); don't append a dated correction.
@@ -84,7 +83,7 @@ The recommended MCP server key is `graph_mem`, so a fully qualified call looks l
 
 ## Reference files
 
-- Read `references/tools.md` when a tool call fails, when choosing entity or relation types or search parameters, when an observation needs a lifecycle change or conflicts with another, or when an older client uses alias tool names.
+- Read `references/tools.md` when a tool call fails, when choosing entity or relation types or search parameters, when an observation needs a lifecycle change or conflicts with another.
 - Read `references/maintenance.md` when connected to `/mcp/maintenance` or acting on maintenance review rows.
 - Read `references/hosts.md` when running in Cursor and MCP calls fail or the server reports `needsAuth`.
 

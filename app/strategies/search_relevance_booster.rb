@@ -1,12 +1,12 @@
 # frozen_string_literal: true
 
-# Shared boost logic used by HybridSearchStrategy and SearchSubgraphTool
+# Shared boost logic used by HybridSearchStrategy and SubgraphSearchService
 # to apply name matching, entity type priority, structural importance,
 # and graduated context boosting.
 #
 # Constants are defined here and referenced by HybridSearchStrategy (which
 # applies them to RRF scores) and by .rank_entity_ids (which applies them
-# to a flat list of entity IDs for SearchSubgraphTool).
+# to a flat list of entity IDs for SubgraphSearchService).
 module SearchRelevanceBooster
   EXACT_NAME_MATCH_BONUS = 0.10
   NAME_PREFIX_MATCH_BONUS = 0.04

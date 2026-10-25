@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.55.0] - 2026-10-25
+
+MCP now runs on the official MCP Ruby SDK (`docs/plans/mg-streamlined-plan.md`, PR A).
+
+### Changed
+- MCP is served by the official MCP Ruby SDK (`mcp` 1.8.1, pinned exactly) over Streamable HTTP (`/mcp`, `/mcp/readonly`, `/mcp/maintenance`) and stdio (`bin/mcp_stdio_runner.rb`). It includes the 2026-07-28 protocol: `server/discover` and the stateless per-request lifecycle, next to the `initialize` handshake (2024-11-05 … 2025-11-25). Tools, prompts, resource templates, profiles, the `ToolError` envelope (with `code`), `next_move` and telemetry are unchanged.
+- Edge-case wire answers follow the SDK: unsupported `MCP-Protocol-Version` values, `"id": null`, a missing `jsonrpc` member, unknown or missing sessions, a second GET stream and malformed stdio lines. The 16 changed cases are listed in `docs/protocol_compat.md`, whose "Ruby SDK 1.8.1" column they now match.
+- At the session cap (`GRAPH_MEM_MCP_MAX_SESSIONS`, 256 per profile path), a new session gets `503` instead of evicting an idle one. A session belongs to the profile path that created it. An `initialize` request is capped at 64 KiB, and a stdio line over `GRAPH_MEM_MCP_MAX_REQUEST_BYTES` ends the session.
+- The `Host` and `Origin` headers are checked (the SDK's DNS-rebinding protection, always on). **Upgrade note:** clients on other machines that reach the server by IP or name need that host in `GRAPH_MEM_MCP_ALLOWED_HOSTS`; `localhost`, `127.0.0.1` and `::1` are always accepted.
+
+### Added
+- `GRAPH_MEM_MCP_ALLOWED_HOSTS`: extra `Host` names (any port) or `host:port` values the server accepts. Passed through `docker-compose.yml`.
+- `GRAPH_MEM_MCP_ALLOWED_ORIGINS`: exact `scheme://host:port` origins accepted from browser-based clients. Passed through `docker-compose.yml`.
+
+### Removed
+- **BREAKING:** the legacy HTTP+SSE endpoint (`/mcp/sse`, `/mcp/messages`). Clients must use Streamable HTTP on `/mcp`, `/mcp/readonly` or `/mcp/maintenance`.
+- **BREAKING:** the 18 hidden alias tools: `bulk_update`, `clear_context`, `create_entity`, `create_observation`, `create_relation`, `delete_entity`, `delete_observation`, `delete_relation`, `find_relations`, `get_entity`, `get_subgraph_by_ids`, `get_version`, `list_entities`, `merge_entities`, `search_entities`, `search_subgraph`, `update_entity`, `update_observation`. Clients must use the canonical tools: `graph_write` (`create_entity`, `create_observation`, `create_relation`, `bulk_update`), `graph_edit` (`update_entity`, `update_observation`) and `graph_delete` (`delete_entity`, `delete_observation`, `delete_relation`, `merge_entities`) take the old names as operation types; `search` replaces `search_entities`, `search_subgraph` and `list_entities`; `get_entities` replaces `get_entity` and `get_subgraph_by_ids`; `traverse_graph` replaces `find_relations`; `set_context` with `entity_id: null` replaces `clear_context`; and every successful result carries the `version` that `get_version` returned.
+
 ## [1.54.3] - 2026-10-25
 
 ### Changed

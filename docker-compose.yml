@@ -38,6 +38,8 @@ services:
       # MCP access control; see docs/mcp_access_control.md
       GRAPH_MEM_MCP_TOKEN: ${GRAPH_MEM_MCP_TOKEN:-}
       GRAPH_MEM_MCP_ALLOWED_IPS: ${GRAPH_MEM_MCP_ALLOWED_IPS:-}
+      GRAPH_MEM_MCP_ALLOWED_HOSTS: ${GRAPH_MEM_MCP_ALLOWED_HOSTS:-}
+      GRAPH_MEM_MCP_ALLOWED_ORIGINS: ${GRAPH_MEM_MCP_ALLOWED_ORIGINS:-}
       # Scan root = the host user's home, at the SAME path inside the container
       # (docs/container_scan_mounts.md).
       GRAPH_MEM_SCAN_ROOTS: ${GRAPH_MEM_SCAN_HOME:-${HOME}}

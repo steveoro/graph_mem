@@ -23,11 +23,9 @@
         "body": {"jsonrpc": "2.0", "id": 11, "method": "server/discover", "params": {"_meta": {"io.modelcontextprotocol/protocolVersion": "2026-07-28", "io.modelcontextprotocol/clientCapabilities": {}, "io.modelcontextprotocol/clientInfo": {"name": "mcp-compat", "version": "0"}}}}
       },
       "expect": {
-        "graph_mem": {"status": 400, "id": 11, "error_code": -32600, "opens_session": false},
+        "graph_mem": {"status": 200, "id": 11, "result": {"supportedVersions": ["2026-07-28"]}, "opens_session": false},
         "reference": {"status": 200, "id": 11, "result": {"supportedVersions": ["2026-07-28"]}, "opens_session": false}
-      },
-      "divergence": "graph_mem has no 2026-07-28 era yet: a 4xx JSON-RPC error to the probe makes 2026-07-28 clients fall back to initialize.",
-      "changes_in": "MG-5"
+      }
     },
     {
       "name": "2026-07-28 header without the envelope",
@@ -37,11 +35,9 @@
         "body": {"jsonrpc": "2.0", "id": 12, "method": "tools/list", "params": {}}
       },
       "expect": {
-        "graph_mem": {"status": 400, "id": 12, "error_code": -32600},
+        "graph_mem": {"status": 400, "id": 12, "error_code": -32602},
         "reference": {"status": 400, "id": 12, "error_code": -32602}
-      },
-      "divergence": "Fallback-safe error code: both are 4xx JSON-RPC errors with the id, so clients fall back to initialize.",
-      "changes_in": "MG-5"
+      }
     },
     {
       "name": "MCP-Protocol-Version header disagrees with the envelope",
@@ -51,11 +47,9 @@
         "body": {"jsonrpc": "2.0", "id": 13, "method": "tools/list", "params": {"_meta": {"io.modelcontextprotocol/protocolVersion": "2026-07-28", "io.modelcontextprotocol/clientCapabilities": {}, "io.modelcontextprotocol/clientInfo": {"name": "mcp-compat", "version": "0"}}}}
       },
       "expect": {
-        "graph_mem": {"status": 400, "id": 13, "error_code": -32600},
+        "graph_mem": {"status": 400, "id": 13, "error_code": -32020},
         "reference": {"status": 400, "id": 13, "error_code": -32020}
-      },
-      "divergence": "Fallback-safe error code: both are 4xx JSON-RPC errors with the id, so clients fall back to initialize.",
-      "changes_in": "MG-5"
+      }
     },
     {
       "name": "a future protocol revision (2027-01-01) in header and envelope",
@@ -65,11 +59,9 @@
         "body": {"jsonrpc": "2.0", "id": 14, "method": "tools/list", "params": {"_meta": {"io.modelcontextprotocol/protocolVersion": "2027-01-01", "io.modelcontextprotocol/clientCapabilities": {}, "io.modelcontextprotocol/clientInfo": {"name": "mcp-compat", "version": "0"}}}}
       },
       "expect": {
-        "graph_mem": {"status": 400, "id": 14, "error_code": -32600},
+        "graph_mem": {"status": 400, "id": 14, "error_code": -32022},
         "reference": {"status": 400, "id": 14, "error_code": -32022}
-      },
-      "divergence": "Fallback-safe error code: both are 4xx JSON-RPC errors with the id, so clients fall back to initialize.",
-      "changes_in": "MG-5"
+      }
     },
     {
       "name": "initialize sent with a 2026-07-28 header",
@@ -162,20 +154,20 @@
       "session": "new",
       "request": {"headers": {"MCP-Protocol-Version": "1999-01-01"}, "body": {"jsonrpc": "2.0", "id": 31, "method": "ping"}},
       "expect": {
-        "graph_mem": {"status": 400, "id": 31, "error_code": -32000},
+        "graph_mem": {"status": 400, "id": 31, "error_code": -32022},
         "reference": {"status": 400, "id": null, "error_code": -32000}
       },
-      "divergence": "Same status and code; graph_mem echoes the request id (PR-2 §2.19), the TS SDK sends id: null."
+      "divergence": "Same status; graph_mem (the official SDK) answers an unsupported MCP-Protocol-Version with -32022 listing the supported versions and echoes the id, the TS SDK with -32000 and id: null."
     },
     {
       "name": "in a session, MCP-Protocol-Version 2026-07-28",
       "session": "new",
       "request": {"headers": {"MCP-Protocol-Version": "2026-07-28"}, "body": {"jsonrpc": "2.0", "id": 32, "method": "ping"}},
       "expect": {
-        "graph_mem": {"status": 400, "id": 32, "error_code": -32000},
+        "graph_mem": {"status": 200, "id": 32, "result": {}},
         "reference": {"status": 400, "id": null, "error_code": -32000}
       },
-      "divergence": "Same status and code; graph_mem echoes the request id (PR-2 §2.19), the TS SDK sends id: null."
+      "divergence": "graph_mem (the official SDK) serves a request whose MCP-Protocol-Version names the newer revision on a 2025 session; the TS SDK refuses it with 400 -32000."
     },
     {
       "name": "in a session, tools/list",
@@ -201,10 +193,10 @@
       "session": "new",
       "request": {"body": {"jsonrpc": "2.0", "id": null, "method": "tools/call", "params": {"name": "get_current_time", "arguments": {}}}},
       "expect": {
-        "graph_mem": {"status": 400, "id": null, "error_code": -32600},
+        "graph_mem": {"status": 200, "id": null, "error_code": -32600},
         "reference": {"status": 400, "id": null, "error_code": -32700}
       },
-      "divergence": "Neither runs it; the TS SDK reports the schema failure as -32700, graph_mem (like the Ruby SDK 1.8.1) as -32600."
+      "divergence": "Neither runs it; graph_mem (the official SDK) answers -32600 with HTTP 200, the TS SDK -32700 with 400."
     },
     {
       "name": "tools/call without an id is a notification: 202, not run",
@@ -240,10 +232,10 @@
       "session": "new",
       "request": {"body": {"id": 37, "method": "ping"}},
       "expect": {
-        "graph_mem": {"status": 400, "id": 37, "error_code": -32600},
+        "graph_mem": {"status": 200, "id": 37, "error_code": -32600},
         "reference": {"status": 400, "id": null, "error_code": -32700}
       },
-      "divergence": "Both refuse it with 400; graph_mem uses -32600 and echoes the id, the TS SDK reports -32700."
+      "divergence": "Both refuse it; graph_mem (the official SDK) answers -32600 with HTTP 200 and echoes the id, the TS SDK -32700 with 400."
     },
     {
       "name": "a parse error",
@@ -269,28 +261,30 @@
       "session": "new",
       "kind": "second_get_stream",
       "expect": {
-        "graph_mem": {"status": 409, "error_code": -32000},
+        "graph_mem": {"status": 409, "id": null, "error_code": -32600},
         "reference": {"status": 409, "error_code": -32000}
-      }
+      },
+      "divergence": "Same status; graph_mem (the official SDK) uses -32600, the TS SDK -32000."
     },
     {
       "name": "an unknown session",
       "session": "unknown",
       "request": {"body": {"jsonrpc": "2.0", "id": 40, "method": "ping"}},
       "expect": {
-        "graph_mem": {"status": 404, "id": 40, "error_code": -32001},
+        "graph_mem": {"status": 404, "id": null, "error_code": -32600},
         "reference": {"status": 404, "id": 40, "error_code": -32001}
-      }
+      },
+      "divergence": "Same status; graph_mem (the official SDK) uses -32600 without the id, the TS SDK -32001 with the id. Clients start a new session on 404 either way."
     },
     {
       "name": "a request other than initialize, with no session",
       "session": "none",
       "request": {"body": {"jsonrpc": "2.0", "id": 41, "method": "tools/list"}},
       "expect": {
-        "graph_mem": {"status": 400, "id": 41, "error_code": -32600},
+        "graph_mem": {"status": 400, "id": null, "error_code": -32600},
         "reference": {"status": 400, "id": null, "error_code": -32000}
       },
-      "divergence": "Both refuse it with 400; graph_mem uses -32600 and echoes the id, the TS SDK reports -32000 \"Server not initialized\"."
+      "divergence": "Both refuse it with 400 and no id; graph_mem (the official SDK) uses -32600, the TS SDK -32000 \"Server not initialized\"."
     }
   ]
 }

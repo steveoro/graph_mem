@@ -92,14 +92,14 @@ Companion plans: `ui-dashboard-plan.md` and, since Oct 22, `agent-rules-plan.md`
 | 5 | **PR-2** MCP hardening + fast-mcp 1.8.0 bump + the two high bugs + `instructions` wiring (§2.17) + the #106 leftovers and test hygiene (mcp §2.20–2.21); **bumps to 1.54.0** | graph_mem **1.54.0** | [Claude] | PR-1 tagged, PR-0 merged, 1.53.0 merged |
 | 6 | **PR-3** interop specs/scripts (+ docs); engine-agnostic, the migration's safety net | graph_mem **1.54.1** | [Claude] + [Devin-simple] | 1.54.0 |
 | D | **M-D1** query cap, **M-D2** description-length spec (D-23), **M-D3** docs line-refs (after PR-2; ✅ done by Claude in 1.54.3) | `[Unreleased]` | [Devin-simple] | as listed |
-| 7 | **MG-0** migration design (reads `ruby_mcp` `a0ff088`); a written doc, no release | n/a | [Claude] | PR-3 merged |
-| 8 | **MG-1** adapter layer, `mcp` gem, engine switch (default fast-mcp), 3 pilot tools | graph_mem **1.55.0** | [Claude] | MG-0 approved by Steve |
-| 9 | **MG-2a** tools batch A: the 12 `/mcp` tools + parity-spec template | graph_mem 1.55.1 | [Claude] | MG-1 |
-| 10 | **MG-2b** tools batch B: the other 28 tool classes | graph_mem 1.55.2 | [Devin-simple] | MG-2a |
-| 11 | **MG-3** resources and prompts | graph_mem 1.55.3 | [Claude] | MG-2a |
-| 12 | **MG-4** transports and auth on the gem; the official engine becomes the default | graph_mem **1.56.0** | [Claude] | MG-2b, MG-3 |
-| 13 | **MG-5** 2026-07-28 dual era through the gem | graph_mem **1.57.0** | [Claude] | MG-4 |
-| 14 | **MG-6** drop fast-mcp + **MG-D1** docs | graph_mem **1.58.0** | [Claude] + [Devin-simple] | MG-5 |
+| 7 | ~~**MG-0** migration design (reads `ruby_mcp` `a0ff088`); a written doc, no release~~ **Superseded** by [`mg-streamlined-plan.md`](mg-streamlined-plan.md) | n/a | [Claude] | PR-3 merged |
+| 8 | ~~**MG-1** adapter layer, `mcp` gem, engine switch (default fast-mcp), 3 pilot tools~~ **Superseded** by [`mg-streamlined-plan.md`](mg-streamlined-plan.md) | graph_mem **1.55.0** | [Claude] | MG-0 approved by Steve |
+| 9 | ~~**MG-2a** tools batch A: the 12 `/mcp` tools + parity-spec template~~ **Superseded** by [`mg-streamlined-plan.md`](mg-streamlined-plan.md) | graph_mem 1.55.1 | [Claude] | MG-1 |
+| 10 | ~~**MG-2b** tools batch B: the other 28 tool classes~~ **Superseded** by [`mg-streamlined-plan.md`](mg-streamlined-plan.md) | graph_mem 1.55.2 | [Devin-simple] | MG-2a |
+| 11 | ~~**MG-3** resources and prompts~~ **Superseded** by [`mg-streamlined-plan.md`](mg-streamlined-plan.md) | graph_mem 1.55.3 | [Claude] | MG-2a |
+| 12 | ~~**MG-4** transports and auth on the gem; the official engine becomes the default~~ **Superseded** by [`mg-streamlined-plan.md`](mg-streamlined-plan.md) | graph_mem **1.56.0** | [Claude] | MG-2b, MG-3 |
+| 13 | ~~**MG-5** 2026-07-28 dual era through the gem~~ **Superseded** by [`mg-streamlined-plan.md`](mg-streamlined-plan.md) | graph_mem **1.57.0** | [Claude] | MG-4 |
+| 14 | ~~**MG-6** drop fast-mcp + **MG-D1** docs~~ **Superseded** by [`mg-streamlined-plan.md`](mg-streamlined-plan.md) | graph_mem **1.58.0** | [Claude] + [Devin-simple] | MG-5 |
 | 15+ | UI series UI-1 … UI-7 | graph_mem 1.59.0 … 1.66.0 | [Claude] | 1.58.0 |
 
 **Why the rules rewrite is 1.53.0.** It's the next graph_mem release and it's ready long before the hardening bundle, which waits for the fast-mcp 1.8.0 tag. S-7 rules out a v1.52.2. AR-D2 adds fields to two tool schemas, which is a minor change. The hardening bundle keeps its content and becomes 1.54.0.
@@ -996,6 +996,10 @@ The fixtures could drift from real clients. Mitigation: the client matrix uses t
 ---
 
 ## MG. Migrating graph_mem to the official `mcp` gem (new Oct 22-b, D-20; replaces the PR-4-0 spike and PR-4a/4b)
+
+> **Superseded (2026-10-25).** Steve approved [`mg-streamlined-plan.md`](mg-streamlined-plan.md), which replaces this
+> section and rows 7–14 of the release table: PR A (engine swap, 1.55.0), PR B (drop fast-mcp, 1.55.1) and PR C
+> (docs and the migration guide, 1.55.2). What follows is kept for history.
 
 **Goal.** graph_mem runs on the official MCP Ruby SDK (the `mcp` gem, 1.8.1 at the time of writing). It keeps every wire behaviour PR-3 pins and gets 2026-07-28 from the gem. Until then, fast-mcp 1.8.0 (PR-1) is graph_mem's bug-fix release. The old PR-4a/4b design (dual era built into fast-mcp 1.9.0) is in `mcp-update-plan.2026-10-22-b.md`; MG-5 reuses its acceptance rows.
 

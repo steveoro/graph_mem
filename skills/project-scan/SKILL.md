@@ -37,9 +37,9 @@ Use this skill instead of the `scan_project` tool when:
 
 1. Verify GraphMem is reachable via the MCP/REST tools configured in this session.
 2. Search for an existing `Project` entity with the target name or aliases:
-   - `search_entities` with `q: <project_name>` and `entity_type: Project`.
-   - If found, record its `entity_id` and use `update_entity` to refresh `description`/`aliases` only if currently blank.
-   - If not found, `create_entity` with `entity_type: Project`.
+   - `search` with `query: <project_name>`, and pick the hit whose `entity_type` is `Project`.
+   - If found, record its `entity_id` and use `graph_edit` (an `update_entity` operation) to refresh `description`/`aliases` only if currently blank.
+   - If not found, `graph_write` with a `create_entity` operation and `entity_type: Project`.
 3. Set the project as context with `set_context` if the GraphMem client supports it.
 
 ## Scan stages
@@ -108,9 +108,9 @@ Goal: test coverage and development notes.
 ## Persistence rules
 
 - Always use `source: "project_scan_skill:<depth>:<project_root>"` on observations so they can be obsoleted by later scans.
-- Use `create_observation` to add facts; avoid duplicating identical content by reading existing observations first or using `bulk_update`.
-- For every new entity, prefer `create_relation` with `part_of` to the project/parent.
-- Use `create_entity` for new components and `create_relation` for dependencies.
+- Use `graph_write` `create_observation` operations to add facts; avoid duplicating identical content by reading existing observations first (`get_entities`).
+- For every new entity, prefer a `create_relation` operation with `part_of` to the project/parent.
+- Use `graph_write` `create_entity` operations for new components and `create_relation` operations for dependencies, batched in one call where you can.
 - If an entity already exists, add missing observations instead of creating a duplicate.
 
 ## Progress tracking
