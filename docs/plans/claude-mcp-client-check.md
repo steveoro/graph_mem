@@ -120,7 +120,7 @@ Then run Part B twice: once with `claude` (default negotiation) and once with `M
 > 25. Report how this server shows up for you. Expected: not connected, failed with 401; no tools available.
 >
 > **Cleanup (gm-http)**
-> 26. On gm-http: `graph_delete` SynthWidget (by id), then try `McpCheck Synth Project` (by id): refused, because a Project can only be deleted on the maintenance profile. Then on gm-maint: `graph_delete` the project (by id; 1.54.2+ allows it once it has no members). Then `set_context` null and `search` "McpCheck". Expected: widget deleted; project refused on gm-http, deleted on gm-maint; context cleared; no McpCheck hits.
+> 26. On gm-http: `graph_delete` SynthWidget (by id), then try `McpCheck Synth Project` (by id). Then on gm-maint: `graph_delete` the project (by id). Then `set_context` null and `search` "McpCheck". Expected: widget deleted; context cleared. 1.54.2+: the project is refused on gm-http (a Project can only be deleted on the maintenance profile) and deleted on gm-maint once it has no members, so no McpCheck hits are left. Earlier versions refuse it on both profiles ("Project root entities cannot be deleted or merged away (0 member entities …)"); there, `McpCheck Synth Project` is the only expected hit (remove it by hand; not a FAIL).
 
 ## C. Results table (fill in and paste back to the reviewer)
 

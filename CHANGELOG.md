@@ -29,6 +29,7 @@ Fixes from the Claude Code client check (PR-3 step 5).
 - `spec/requests/mcp_protocol_compat_spec.rb` asserts graph_mem's answers in the normal suite: HTTP through the Rails app, stdio through runner subprocesses. Wire-level only, so it carries over to the official `mcp` gem migration.
 - `script/mcp_compat/compare.rb` replays the cases against running servers (graph_mem, the reference servers, and the official Ruby SDK 1.8.1 as an informational column) and fails on an unexpected difference.
 - `script/mcp_compat/clients.sh` connects the Ruby SDK clients 1.8.0 and 1.8.1 and the TS client 2.3.1 to graph_mem (12 rows).
+- `docs/protocol_compat.md`: supported protocol versions, how 2026-07-28 clients fall back, the client matrix, the Claude Code check results and the reference comparison.
 
 ## [1.54.0] - 2026-10-24
 

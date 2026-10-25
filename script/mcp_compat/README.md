@@ -34,8 +34,9 @@ gem install mcp -v 1.8.0 && gem install mcp -v 1.8.1 && gem install faraday rack
 ```
 
 Reference servers (Node; `engines` says >= 24, but they also ran on Node 22). `refservers/`
-pins Memory and Everything 2.0.0, with the SDK's `server` and `core` packages overridden to 2.3.1,
-and its committed `package-lock.json` pins every transitive dependency:
+pins Memory and Everything 2.0.0, with the SDK's `server` and `core` packages overridden to 2.3.1
+(`node` 2.1.2 and `server-legacy` 2.4.0 declare newer `server`/`core` ranges but run against the
+overrides), and its committed `package-lock.json` pins every transitive dependency:
 
 ```bash
 (cd script/mcp_compat/refservers && npm ci --ignore-scripts)
