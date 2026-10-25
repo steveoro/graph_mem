@@ -1027,6 +1027,9 @@ The fixtures could drift from real clients. Mitigation: the client matrix uses t
   - `FastMcp` in 75 `.rb` files.
 
 ### MG-0 [Claude] Migration design + a reusable migration guide (no release; replaces the one-day spike)
+> **Status 2026-10-25:** drafted. Decisions in [`mcp-gem-migration.md`](mcp-gem-migration.md), guide draft v0.1 in
+> [`../guides/migrating-fast-mcp-to-mcp-gem.md`](../guides/migrating-fast-mcp-to-mcp-gem.md); awaiting Steve's approval.
+> The inventory numbers below are from `57d9524`; the decisions doc has the current ones (4 hand-written schemas, `FastMcp` in 81 files).
 - **Branch:** `claude/mg-0-design`. It holds two docs and nothing else. There's also a throwaway spike branch for the pilot measurements, which is never merged.
   1. **`docs/guides/migrating-fast-mcp-to-mcp-gem.md`: the reusable guide** (draft v0.1, finalised in MG-6). It's written for **any Rails app** moving from fast-mcp to the official `mcp` gem, and its main text makes no graph_mem-only assumptions. graph_mem details go in boxes marked "Example (graph_mem)", with synthetic names.
   2. **`docs/plans/mcp-gem-migration.md`: graph_mem's own decisions** (list below) plus the exact Devin-simple step lists for MG-2b and MG-D1. It links to the guide for the "how".
