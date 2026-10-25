@@ -80,13 +80,10 @@ module GraphMutationBatch
     raise FastMcp::Tool::InvalidArgumentsError,
           "#{operation[:type]}[#{operation[:index]}]: #{e.message}"
   rescue McpGraphMemErrors::Error => e
-    raise e.class.new(
-      "#{operation[:type]}[#{operation[:index]}]: #{e.message}",
-      category: e.category,
-      retriable: e.retriable,
-      next_move: e.next_move,
-      code: e.code
-    )
+    # Exception#exception copies the error with a new message, keeping its class and every field
+    # (category, retriable, next_move, code); `e.class.new` broke on subclasses with their own
+    # constructor, such as AmbiguousReference.
+    raise e.exception("#{operation[:type]}[#{operation[:index]}]: #{e.message}")
   rescue ActiveRecord::RecordInvalid => e
     raise FastMcp::Tool::InvalidArgumentsError,
           "#{operation[:type]}[#{operation[:index]}]: #{e.record.errors.full_messages.join(', ')}"

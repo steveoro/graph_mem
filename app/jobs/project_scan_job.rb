@@ -4,9 +4,18 @@
 class ProjectScanJob < ApplicationJob
   queue_as :default
 
+  # Statuses `perform` continues from: its own pending row, a claimed resume, or a running scan.
+  RESUMABLE_STATUSES = %w[pending paused running].freeze
+
+  # Raised by .enqueue when the scan_id can't be resumed: a queued, running or finished scan, or
+  # another kind of operation.
+  class ScanIdNotResumable < StandardError; end
+
   # Records the scan as "pending" and enqueues it, so `scan_project_status` (and the REST/UI status
   # views) can find the scan_id as soon as it is returned, before a worker picks the job up.
-  # A resumed scan (an existing operation) keeps its row. If enqueuing fails, the new row is removed.
+  # A caller-supplied scan_id resumes only a paused scan (a paused validation batch): its row is
+  # claimed atomically (paused → pending), so two concurrent resumes can't both queue a job.
+  # If enqueuing fails, the new row is removed, or a claimed one goes back to paused.
   #
   # @param scan_id [String] operation id to report back to the caller
   # @param project_root [String] realpath already accepted by ScanRootPolicy
@@ -15,7 +24,8 @@ class ProjectScanJob < ApplicationJob
   # @param mode [String] initial, rescan or validate
   # @param dry_run [Boolean]
   # @param file_globs [Array<String>, nil]
-  # @return [OperationProgress, nil] the new pending row, or nil when the scan_id already existed
+  # @return [OperationProgress, nil] the new pending row, or nil when resuming a paused scan
+  # @raise [ScanIdNotResumable] when the scan_id isn't a paused scan; nothing is enqueued
   def self.enqueue(scan_id:, project_root:, project_name:, aliases:, mode:, dry_run:, file_globs:)
     operation = begin
       OperationProgress.create!(
@@ -30,23 +40,55 @@ class ProjectScanJob < ApplicationJob
         details: { project_root: project_root, project_name: project_name, mode: mode, dry_run: dry_run }
       )
     rescue ActiveRecord::RecordNotUnique
-      nil # the scan_id exists already (a resumed scan, or a concurrent call with the same id)
+      # The scan_id exists already: a resume, or a concurrent call with the same id.
+      claim_paused!(scan_id)
+      nil
     end
 
     begin
       perform_later(scan_id, project_root, project_name, aliases, mode, dry_run, file_globs)
     rescue StandardError
-      operation&.destroy
+      if operation
+        operation.destroy
+      else
+        OperationProgress.where(operation_id: scan_id, status: "pending").update_all(status: "paused")
+      end
       raise
     end
+    broadcast_claim(scan_id) unless operation
     operation
   end
+
+  # The claim's update_all skips callbacks: tell the operator UI the scan is queued again. Best
+  # effort, after the job is queued: a failed broadcast must not fail or undo the resume.
+  def self.broadcast_claim(scan_id)
+    claimed_row = OperationProgress.find_by(operation_id: scan_id)
+    OperationProgressBroadcaster.call(claimed_row) if claimed_row
+  rescue StandardError => e
+    Rails.logger.warn("Scan #{scan_id}: claim broadcast failed: #{e.message}")
+  end
+  private_class_method :broadcast_claim
+
+  # Moves a paused scan to pending in one UPDATE, so only one caller can resume it.
+  def self.claim_paused!(scan_id)
+    claimed = OperationProgress.where(operation_id: scan_id, operation_type: "project_scan", status: "paused")
+                               .update_all(status: "pending", phase: "queued", message: "Queued to resume")
+    return if claimed == 1
+
+    existing = OperationProgress.find_by(operation_id: scan_id)
+    reason = if existing.nil? then "no longer exists"
+    elsif existing.operation_type == "project_scan" then "is #{existing.status}, not paused"
+    else "belongs to another operation"
+    end
+    raise ScanIdNotResumable, "scan_id #{scan_id} #{reason}; omit scan_id to start a new scan."
+  end
+  private_class_method :claim_paused!
 
   def perform(scan_id, project_root, project_name, aliases, mode, dry_run, file_globs)
     operation = OperationProgress.find_by(operation_id: scan_id)
 
     if operation
-      unless operation.status.in?(%w[pending paused running])
+      unless operation.status.in?(RESUMABLE_STATUSES)
         # A completed/failed operation with this ID should not be overwritten.
         # Treat it as a fresh run by creating a new OperationProgress.
         operation = nil
@@ -68,7 +110,8 @@ class ProjectScanJob < ApplicationJob
 
     unless operation.status == "running"
       operation.resume!(message: "Resuming project scan") if operation.status == "paused"
-      operation.update!(status: "running", started_at: Time.current) unless operation.status == "running"
+      # A resumed scan keeps the first batch's started_at; a new scan's pending row has none yet.
+      operation.update!(status: "running", started_at: operation.started_at || Time.current) unless operation.status == "running"
       OperationProgressBroadcaster.call(operation)
     end
 

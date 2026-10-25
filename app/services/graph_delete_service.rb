@@ -153,9 +153,7 @@ class GraphDeleteService
     rescue ActiveRecord::InvalidForeignKey
       raise unless project
 
-      # A member committed after the count (a writer outside the membership lock, e.g. a scan)
-      # is invisible to this transaction's snapshot: only the FK catches it.
-      raise project_has_members_error("a member entity was just added to it")
+      raise late_project_row_error(entity)
     end
     # No FK on agent_contexts: drop the context of every client still pointing at this project.
     AgentContext.where(current_project_id: entity.id).update_all(current_project_id: nil) if project
@@ -190,6 +188,25 @@ class GraphDeleteService
       code: "project_delete_needs_maintenance",
       next_move: "Escalate to a human, or retry on a maintenance-profile connection " \
                  "(`/mcp/maintenance` over HTTP, `GRAPH_MEM_MCP_PROFILE=maintenance` over stdio)."
+    )
+  end
+
+  # Rows committed after this transaction's snapshot (e.g. a scan writing outside the membership
+  # lock) are invisible to the member count and to dependent: :destroy; only an FK catches them.
+  # Three FKs point at the Project row (members, observations, relations): a locking read, which
+  # sees committed rows, tells a new member apart. InnoDB keeps the transaction usable after the
+  # failed statement.
+  def late_project_row_error(entity)
+    if MemoryEntity.where(project_id: entity.id).lock("LOCK IN SHARE MODE").exists?
+      return project_has_members_error("a member entity was just added to it")
+    end
+
+    McpGraphMemErrors::OperationFailed.new(
+      "Project #{entity.id} gained an observation or relation while it was being deleted",
+      category: "concurrency",
+      retriable: true,
+      code: "project_changed_during_delete",
+      next_move: "Retry the delete once: the new observation or relation is removed with the Project."
     )
   end
 

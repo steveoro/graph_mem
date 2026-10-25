@@ -21,6 +21,20 @@ RSpec.describe "Scan Projects API", type: :request do
       end
     end
 
+    it "returns 422 with code scan_id_not_resumable for a finished scan's id" do
+      with_scan_project do |project|
+        scan_id = SecureRandom.uuid
+        OperationProgress.create!(operation_type: "project_scan", operation_id: scan_id, status: "completed",
+                                  total_count: 6, current_count: 6, percentage: 100)
+
+        expect {
+          post "/api/v1/scan", params: { project_root: project, scan_id: scan_id }
+        }.not_to have_enqueued_job(ProjectScanJob)
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(JSON.parse(response.body)["details"]).to eq("code" => "scan_id_not_resumable")
+      end
+    end
+
     it "returns 422 for missing project_root" do
       post "/api/v1/scan", params: {}
       expect(response).to have_http_status(:unprocessable_content)

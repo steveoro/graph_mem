@@ -253,4 +253,18 @@ RSpec.describe GraphWriteService do
         .to raise_error(FastMcp::Tool::InvalidArgumentsError, /on_duplicate must be one of/)
     end
   end
+
+  describe "an ambiguous name inside a batch" do
+    it "raises AmbiguousReference with the operation index and the candidates, not a system error" do
+      projects = Array.new(2) { |n| MemoryEntity.create!(name: "Ambiguity project #{n} #{SecureRandom.hex(3)}", entity_type: "Project") }
+      name = "Ambiguous member #{SecureRandom.hex(3)}"
+      projects.each { |project| MemoryEntity.create!(name: name, entity_type: "Task", project_id: project.id) }
+
+      expect {
+        described_class.call(operations: [ { type: "create_observation", entity_name: name, text_content: "x" } ])
+      }.to raise_error(McpGraphMemErrors::AmbiguousReference, /\Acreate_observation\[0\]: Name '#{name}' is ambiguous/) { |error|
+        expect(ToolError.envelope(error)).to include("category" => "ambiguous_name")
+      }
+    end
+  end
 end

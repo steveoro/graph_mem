@@ -62,6 +62,21 @@ RSpec.describe ScanProjectTool, type: :model do
       end
     end
 
+    it "refuses a finished scan's scan_id with code scan_id_not_resumable" do
+      with_scan_project do |project|
+        scan_id = SecureRandom.uuid
+        OperationProgress.create!(operation_type: "project_scan", operation_id: scan_id, status: "failed",
+                                  total_count: 6, current_count: 2, percentage: 33)
+
+        expect {
+          tool.call(project_root: project, scan_id: scan_id)
+        }.to raise_error(McpGraphMemErrors::InvalidArguments, /is failed, not paused/) { |error|
+          expect(ToolError.envelope(error)).to include("category" => "validation", "code" => "scan_id_not_resumable")
+          expect(error.next_move).to include("Omit `scan_id`")
+        }
+      end
+    end
+
     it "refuses file_globs that leave the project root with code invalid_file_globs" do
       with_scan_project do |project|
         expect {

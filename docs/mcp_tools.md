@@ -15,7 +15,7 @@ connection URL:
 - `/mcp` — 12 canonical context, read, and mutation tools
 - `/mcp/readonly` — 9 canonical context and read tools
 - `/mcp/maintenance` — all 22 canonical tools
-- `/mcp/sse` and `/mcp/messages` — legacy transport using the default profile
+- `/mcp/sse` and `/mcp/messages` — legacy transport using the default profile (deprecated in MCP 2026-07-28; kept for older clients)
 
 Profiles govern call eligibility; calling a tool outside the selected profile returns `Tool not
 found`. The eighteen compatibility aliases remain callable in their profiles but are omitted from
@@ -100,7 +100,7 @@ GraphMem detects this two ways and adds `warning` plus `next_move` to the `set_c
   the same client id within the last 5 minutes. Works on every transport.
 - **Concurrent session** — a different `Mcp-Session-Id` called a tool under the same client id
   within the same window. Only available on the Streamable HTTP endpoint; the legacy `/mcp/sse`
-  endpoint has no per-connection id.
+  endpoint (deprecated in MCP 2026-07-28; kept for older clients) has no per-connection id.
 
 The fix is always the same: give each agent its own `X-MCP-Client` header value.
 
@@ -126,7 +126,7 @@ The fix is always the same: give each agent its own `X-MCP-Client` header value.
 
 #### `graph_delete`
 - **Description:** Atomically delete entities/relations, obsolete observations, or merge entities. Per-operation audit reasons remain enforced.
-- **Project roots:** `delete_entity` on a `Project` is refused on `/mcp` (`code: "project_delete_needs_maintenance"`) and allowed on `/mcp/maintenance` (or stdio with `GRAPH_MEM_MCP_PROFILE=maintenance`) once no entity is scoped to it; with members it is refused everywhere (`code: "project_has_members"`, re-parent or delete them first). The delete clears every `X-MCP-Client` context that pointed at the project. Merging a Project away stays refused.
+- **Project roots:** `delete_entity` on a `Project` is refused on `/mcp` (`code: "project_delete_needs_maintenance"`) and allowed on `/mcp/maintenance` (or stdio with `GRAPH_MEM_MCP_PROFILE=maintenance`) once no entity is scoped to it; with members it is refused everywhere (`code: "project_has_members"`, re-parent or delete them first). If an observation or relation is added to the Project while it is being deleted, the delete fails with the retriable `code: "project_changed_during_delete"` (category `concurrency`): retry once. The delete clears every `X-MCP-Client` context that pointed at the project. Merging a Project away stays refused.
 - **Operation types:** `delete_entity`, `delete_observation`, `delete_relation`, `merge_entities`.
 
 All three tools accept at most 50 logical operations and return `{ mode: "batch", status,
@@ -506,9 +506,9 @@ These tools perform structural graph queries. `direction` is one of `outgoing`
 ## Project Source Scan (2 tools)
 
 #### `scan_project`
-- **Description:** Enqueue an asynchronous filesystem scan that reconciles the knowledge graph with a project root; returns a scan_id and does not wait. Pass required `project_root` (string); optional `project_name` (string), `aliases` (comma- or pipe-separated string), `mode` (initial, rescan, or validate; default initial), `dry_run` (bool), `file_globs` (array of strings), `scan_id` (string, resume a paused validation batch). Do not use to poll completion; use `scan_project_status` instead. Do not use to create a single node by hand; use `create_entity` instead. Do not use to scope searches to a project already in the graph; use `set_context` instead.
+- **Description:** Enqueue an asynchronous filesystem scan that reconciles the knowledge graph with a project root; returns a scan_id and does not wait. Pass required `project_root` (string); optional `project_name` (string), `aliases` (comma- or pipe-separated string), `mode` (initial, rescan, or validate; default initial), `dry_run` (bool), `file_globs` (array of strings), `scan_id` (string, resume a paused validation batch). Do not use to poll completion; use `scan_project_status` instead. Do not use to create a single node by hand; use `graph_write` instead. Do not use to scope searches to a project already in the graph; use `set_context` instead.
 - **Parameters:**
-  - `project_root` (string, required): Absolute or relative path to the project root directory.
+  - `project_root` (string, required): Absolute path of the project folder, under the operator's scan folders (hidden folders are never scannable).
   - `project_name` (string, optional): Preferred project name. Defaults to the directory name or the LLM-extracted name.
   - `aliases` (string, optional): Comma- or pipe-separated aliases for the project root entity.
   - `mode` (string, optional): `initial`, `rescan`, or `validate`. Default: `initial`.
@@ -516,7 +516,7 @@ These tools perform structural graph queries. `direction` is one of `outgoing`
   - `file_globs` (array of strings, optional): Optional file globs to scan, relative to `project_root`.
   - `scan_id` (string, optional): Existing scan operation_id to resume a paused validation batch. If omitted, a new scan is started.
 - **Response:** `{ scan_id, status: "queued", project_root, mode, dry_run }`. The scan is recorded as `pending` before the reply, so `scan_project_status` finds the `scan_id` at once, even before a job worker starts it.
-- **Refusals:** a `validation` error with `code` (`not_mounted`, `denied`, `outside_filter`, `not_found`, `invalid_file_globs`, …) and a `next_move` for that reason.
+- **Refusals:** a `validation` error with `code` (`not_mounted`, `denied`, `outside_filter`, `not_found`, `invalid_file_globs`, …) and a `next_move` for that reason. A `scan_id` resumes only a paused scan; a queued, running or finished scan's id (or another operation's) is refused with `scan_id_not_resumable` and nothing is queued. Two concurrent resumes of one paused scan queue a single job.
 
 #### `scan_project_status`
 - **Description:** Poll one asynchronous project scan for status, phase, progress, counters, fallback flags, and scan_review items. Pass required `scan_id` (string from `scan_project`). Do not use to start or resume a scan; use `scan_project` instead. Do not use for compaction-job status; use `dream_state_status` instead. Do not use for stored scan_review documents; use `get_maintenance_reports` instead.
