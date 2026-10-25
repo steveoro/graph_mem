@@ -95,6 +95,51 @@ RSpec.describe GraphDeleteService do
       expect(project.reload).to be_present
     end
 
+    it "maps a member committed after the count (FK refusal) to project_has_members" do
+      allow_any_instance_of(MemoryEntity).to receive(:destroy!).and_raise(ActiveRecord::InvalidForeignKey, "fk")
+
+      expect {
+        described_class.call(
+          operations: [ { type: "delete_entity", entity_id: project.id } ], allow_empty_project_delete: true
+        )
+      }.to raise_error(McpGraphMemErrors::OperationFailed, /just added/) { |error|
+        expect(error.code).to eq("project_has_members")
+      }
+    end
+
+    it "rolls back the whole batch and keeps the code when a later Project delete is refused" do
+      first.update!(project_id: project.id)
+      relation_id = relation.id
+
+      expect {
+        described_class.call(
+          operations: [
+            { type: "delete_relation", relation_id: relation_id },
+            { type: "delete_entity", entity_id: project.id }
+          ],
+          allow_empty_project_delete: true
+        )
+      }.to raise_error(McpGraphMemErrors::OperationFailed, /\Adelete_entity\[1\]: /) { |error|
+        expect(error.code).to eq("project_has_members")
+      }
+      expect(MemoryRelation.exists?(relation_id)).to be(true)
+    end
+
+    it "deletes the last member and then its Project in one maintenance batch" do
+      first.update!(project_id: project.id)
+
+      result = described_class.call(
+        operations: [
+          { type: "delete_entity", entity_id: first.id },
+          { type: "delete_entity", entity_id: project.id }
+        ],
+        allow_empty_project_delete: true
+      )
+
+      expect(result[:summary][:entities_deleted]).to eq(2)
+      expect(MemoryEntity.where(id: [ first.id, project.id ])).to be_empty
+    end
+
     it "delegates entity merges to NodeOperationsStrategy" do
       result = described_class.call(
         operations: [

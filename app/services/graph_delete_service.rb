@@ -148,7 +148,15 @@ class GraphDeleteService
     guard_project_delete!(entity) if project
 
     snapshot = entity.attributes
-    with_deletion_reason(attributes[:reason]) { entity.destroy! }
+    begin
+      with_deletion_reason(attributes[:reason]) { entity.destroy! }
+    rescue ActiveRecord::InvalidForeignKey
+      raise unless project
+
+      # A member committed after the count (a writer outside the membership lock, e.g. a scan)
+      # is invisible to this transaction's snapshot: only the FK catches it.
+      raise project_has_members_error("a member entity was just added to it")
+    end
     # No FK on agent_contexts: drop the context of every client still pointing at this project.
     AgentContext.where(current_project_id: entity.id).update_all(current_project_id: nil) if project
     {
@@ -173,21 +181,26 @@ class GraphDeleteService
   # profile, so ordinary agents can't drop a context root by accident.
   def guard_project_delete!(entity)
     members = MemoryEntity.where(project_id: entity.id).count
-    if members.positive?
-      raise McpGraphMemErrors::OperationFailed.new(
-        "#{NodeOperationsStrategy::PROJECT_ROOT_PROTECTED_ERROR} (#{members} member entities are scoped to it)",
-        category: "validation",
-        code: "project_has_members",
-        next_move: "Re-parent or delete this project's members first (for each member: `graph_delete` delete_relation on its part_of edge, then `graph_write` create_relation part_of to the new parent), then retry on the maintenance profile."
-      )
-    end
+    raise project_has_members_error("#{members} member entities are scoped to it") if members.positive?
     return if @allow_empty_project_delete
 
     raise McpGraphMemErrors::OperationFailed.new(
       "#{NodeOperationsStrategy::PROJECT_ROOT_PROTECTED_ERROR} on this profile; this one has no members, so it can be deleted on the maintenance profile",
       category: "validation",
       code: "project_delete_needs_maintenance",
-      next_move: "Escalate to a human, or retry this delete over the maintenance profile (`/mcp/maintenance`)."
+      next_move: "Escalate to a human, or retry on a maintenance-profile connection " \
+                 "(`/mcp/maintenance` over HTTP, `GRAPH_MEM_MCP_PROFILE=maintenance` over stdio)."
+    )
+  end
+
+  def project_has_members_error(detail)
+    McpGraphMemErrors::OperationFailed.new(
+      "#{NodeOperationsStrategy::PROJECT_ROOT_PROTECTED_ERROR} (#{detail})",
+      category: "validation",
+      code: "project_has_members",
+      next_move: "Re-parent or delete this project's members first (for each member: `graph_delete` delete_relation " \
+                 "on its part_of edge, then `graph_write` create_relation part_of to the new parent; a scan may still " \
+                 "be writing them), then retry on the maintenance profile."
     )
   end
 
