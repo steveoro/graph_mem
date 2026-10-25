@@ -69,18 +69,18 @@ RSpec.describe SearchTool, type: :model do
     end
 
     it "rejects blank queries, projections without a query, and unknown projections" do
-      expect { tool.call(query: "") }.to raise_error(FastMcp::Tool::InvalidArgumentsError, /blank/)
+      expect { tool.call(query: "") }.to raise_error(GraphMem::InvalidArgumentsError, /blank/)
       expect {
         tool.call(include: [ "relations" ])
-      }.to raise_error(FastMcp::Tool::InvalidArgumentsError, /require a query/)
+      }.to raise_error(GraphMem::InvalidArgumentsError, /require a query/)
       expect {
         tool.call(query: "x", include: [ "unknown" ])
-      }.to raise_error(FastMcp::Tool::InvalidArgumentsError, /include values/)
+      }.to raise_error(GraphMem::InvalidArgumentsError, /include values/)
     end
 
     it "validates canonical paging" do
-      expect { tool.call(page: 0) }.to raise_error(FastMcp::Tool::InvalidArgumentsError, /Page number/)
-      expect { tool.call(per_page: 101) }.to raise_error(FastMcp::Tool::InvalidArgumentsError, /Per page/)
+      expect { tool.call(page: 0) }.to raise_error(GraphMem::InvalidArgumentsError, /Page number/)
+      expect { tool.call(per_page: 101) }.to raise_error(GraphMem::InvalidArgumentsError, /Per page/)
     end
 
     it "passes explicit temporal bounds through as a TemporalWindow" do
@@ -97,16 +97,16 @@ RSpec.describe SearchTool, type: :model do
     it "rejects temporal bounds and max_tokens without a query" do
       expect {
         tool.call(occurred_after: "2026-08-01")
-      }.to raise_error(FastMcp::Tool::InvalidArgumentsError, /require a query/)
+      }.to raise_error(GraphMem::InvalidArgumentsError, /require a query/)
       expect {
         tool.call(max_tokens: 100)
-      }.to raise_error(FastMcp::Tool::InvalidArgumentsError, /require a query/)
+      }.to raise_error(GraphMem::InvalidArgumentsError, /require a query/)
     end
 
     it "rejects as_of combined with occurred bounds" do
       expect {
         tool.call(query: "deploys", as_of: "2026-08-15", occurred_after: "2026-08-01")
-      }.to raise_error(FastMcp::Tool::InvalidArgumentsError, /cannot be combined/)
+      }.to raise_error(GraphMem::InvalidArgumentsError, /cannot be combined/)
     end
 
     it "packs summary results under max_tokens with diagnostics" do
@@ -155,7 +155,7 @@ RSpec.describe SearchTool, type: :model do
     it "rejects non-positive or out-of-range max_tokens" do
       [ 0, -5, 100_001 ].each do |bad|
         expect { described_class.new.call(query: "alpha", max_tokens: bad) }
-          .to raise_error(FastMcp::Tool::InvalidArgumentsError)
+          .to raise_error(GraphMem::InvalidArgumentsError)
       end
     end
   end

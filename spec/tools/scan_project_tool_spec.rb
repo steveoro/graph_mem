@@ -91,7 +91,7 @@ RSpec.describe ScanProjectTool, type: :model do
       with_scan_project do |project|
         expect {
           tool.call(project_root: project, mode: "bogus")
-        }.to raise_error(FastMcp::Tool::InvalidArgumentsError, /initial, rescan, validate/)
+        }.to raise_error(GraphMem::InvalidArgumentsError, /initial, rescan, validate/)
       end
     end
 

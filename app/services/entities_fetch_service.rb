@@ -57,15 +57,15 @@ class EntitiesFetchService
 
   def validate!
     if @entity_ids.empty?
-      raise FastMcp::Tool::InvalidArgumentsError, "entity_ids array cannot be empty."
+      raise GraphMem::InvalidArgumentsError, "entity_ids array cannot be empty."
     end
     unless @relations_mode.in?(RELATION_MODES)
-      raise FastMcp::Tool::InvalidArgumentsError,
+      raise GraphMem::InvalidArgumentsError,
             "relations must be one of: #{RELATION_MODES.join(', ')}."
     end
     return if @perspective.nil? || @perspective.in?(MemoryObservation::PERSPECTIVES)
 
-    raise FastMcp::Tool::InvalidArgumentsError,
+    raise GraphMem::InvalidArgumentsError,
           "perspective must be one of: #{MemoryObservation::PERSPECTIVES.join(', ')}."
   end
 

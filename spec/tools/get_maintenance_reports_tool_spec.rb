@@ -52,7 +52,7 @@ RSpec.describe GetMaintenanceReportsTool, type: :model do
       it "raises on an unknown report_type" do
         expect {
           tool.call(report_type: "bogus")
-        }.to raise_error(FastMcp::Tool::InvalidArgumentsError, /Unknown report_type/) do |error|
+        }.to raise_error(GraphMem::InvalidArgumentsError, /Unknown report_type/) do |error|
           expect(error.message).to include("Valid types:")
           MaintenanceReport::REPORT_TYPES.each { |type| expect(error.message).to include(type) }
           expect(error.message).to include("`get_maintenance_reports`")

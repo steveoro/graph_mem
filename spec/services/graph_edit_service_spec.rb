@@ -64,7 +64,7 @@ RSpec.describe GraphEditService do
             { type: "update_observation", observation_id: observation.id, text_content: "Second", supersede: true }
           ]
         )
-      }.to raise_error(FastMcp::Tool::InvalidArgumentsError, /Inactive/)
+      }.to raise_error(GraphMem::InvalidArgumentsError, /Inactive/)
 
       expect(observation.reload.status).to eq(MemoryObservation::ACTIVE_STATUS)
       expect(observation.superseded_by_id).to be_nil

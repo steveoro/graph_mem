@@ -32,7 +32,7 @@ class DismissMaintenanceReviewTool < ApplicationTool
   def call(item_id:, action:, report_type: "compaction_review", reason: nil)
     action = action.to_s
     unless ALLOWED_ACTIONS.include?(action)
-      raise FastMcp::Tool::InvalidArgumentsError,
+      raise GraphMem::InvalidArgumentsError,
             "Invalid action '#{action}'. action must be one of: #{ALLOWED_ACTIONS.join(', ')}."
     end
 
@@ -60,7 +60,7 @@ class DismissMaintenanceReviewTool < ApplicationTool
       "The maintenance review could not be updated.",
       next_move: "Call `list_maintenance_review` to inspect the item, then retry `dismiss_maintenance_review`."
     )
-  rescue McpGraphMemErrors::Error, FastMcp::Tool::InvalidArgumentsError
+  rescue McpGraphMemErrors::Error, GraphMem::InvalidArgumentsError
     raise
   rescue *ToolError::TIMEOUT_CLASSES
     raise

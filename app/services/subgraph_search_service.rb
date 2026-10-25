@@ -81,16 +81,16 @@ class SubgraphSearchService
   private
 
   def validate!
-    raise FastMcp::Tool::InvalidArgumentsError, "Query term cannot be blank." if @query.blank?
+    raise GraphMem::InvalidArgumentsError, "Query term cannot be blank." if @query.blank?
 
     unless @search_fields.values.any?
-      raise FastMcp::Tool::InvalidArgumentsError,
+      raise GraphMem::InvalidArgumentsError,
             "At least one search field (name, type, aliases, observations) must be enabled."
     end
-    raise FastMcp::Tool::InvalidArgumentsError, "Page number must be 1 or greater." if @page < 1
+    raise GraphMem::InvalidArgumentsError, "Page number must be 1 or greater." if @page < 1
     return if @per_page.between?(1, MAX_PER_PAGE)
 
-    raise FastMcp::Tool::InvalidArgumentsError,
+    raise GraphMem::InvalidArgumentsError,
           "Per page count must be between 1 and #{MAX_PER_PAGE}."
   end
 

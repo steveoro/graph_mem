@@ -38,12 +38,12 @@ class EntityCatalogService
 
   def validate_paging!
     if @page < 1
-      raise FastMcp::Tool::InvalidArgumentsError,
+      raise GraphMem::InvalidArgumentsError,
             "page must be an integer >= 1; received #{@page}."
     end
     return if @per_page.between?(1, MAX_PER_PAGE)
 
-    raise FastMcp::Tool::InvalidArgumentsError,
+    raise GraphMem::InvalidArgumentsError,
           "per_page must be an integer between 1 and #{MAX_PER_PAGE}; received #{@per_page}."
   end
 

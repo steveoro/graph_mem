@@ -17,7 +17,7 @@ RSpec.describe GraphMem::McpServerPatch do
       when "not_found"
         raise McpGraphMemErrors::ResourceNotFound, "Entity with ID=1 not found."
       when "validation"
-        raise FastMcp::Tool::InvalidArgumentsError, "Page number must be 1 or greater."
+        raise GraphMem::InvalidArgumentsError, "Page number must be 1 or greater."
       else
         raise "secret boom"
       end

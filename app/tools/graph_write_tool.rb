@@ -113,7 +113,7 @@ class GraphWriteTool < ApplicationTool
     )
   rescue *ToolError::TIMEOUT_CLASSES
     raise
-  rescue McpGraphMemErrors::Error, FastMcp::Tool::InvalidArgumentsError
+  rescue McpGraphMemErrors::Error, GraphMem::InvalidArgumentsError
     raise
   rescue StandardError => e
     logger.error "GraphWriteTool unexpected error: #{e.class}: #{e.message}"

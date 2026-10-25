@@ -32,7 +32,7 @@ class GraphDeleteTool < ApplicationTool
     GraphDeleteService.call(operations: operations, allow_empty_project_delete: current_mcp_profile == :maintenance)
   rescue *ToolError::TIMEOUT_CLASSES
     raise
-  rescue McpGraphMemErrors::Error, FastMcp::Tool::InvalidArgumentsError
+  rescue McpGraphMemErrors::Error, GraphMem::InvalidArgumentsError
     raise
   rescue StandardError => e
     logger.error "GraphDeleteTool unexpected error: #{e.class}: #{e.message}"

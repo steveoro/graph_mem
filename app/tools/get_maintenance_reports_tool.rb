@@ -52,7 +52,7 @@ class GetMaintenanceReportsTool < ApplicationTool
 
     if report_type.present?
       unless MaintenanceReport::REPORT_TYPES.include?(report_type)
-        raise FastMcp::Tool::InvalidArgumentsError,
+        raise GraphMem::InvalidArgumentsError,
               "Unknown report_type '#{report_type}'. Valid types: #{MaintenanceReport::REPORT_TYPES.join(', ')}. " \
               "Retry `get_maintenance_reports` with one of those types, or call `list_maintenance_review` for paginated review rows."
       end
@@ -69,7 +69,7 @@ class GetMaintenanceReportsTool < ApplicationTool
       reports: reports.map { |report| serialize(report) },
       total: reports.size
     }
-  rescue FastMcp::Tool::InvalidArgumentsError
+  rescue GraphMem::InvalidArgumentsError
     raise
   rescue *ToolError::TIMEOUT_CLASSES
     raise

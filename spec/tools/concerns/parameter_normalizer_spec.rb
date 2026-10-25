@@ -337,7 +337,7 @@ RSpec.describe ParameterNormalizer do
           described_class.normalize("bulk_update", {
             operations: [ { type: "unknown_op", name: "X" } ]
           })
-        }.to raise_error(FastMcp::Tool::InvalidArgumentsError, /Unknown bulk_update operation type/)
+        }.to raise_error(GraphMem::InvalidArgumentsError, /Unknown bulk_update operation type/)
       end
 
       it "rejects operations missing type" do
@@ -345,7 +345,7 @@ RSpec.describe ParameterNormalizer do
           described_class.normalize("bulk_update", {
             operations: [ { name: "X" } ]
           })
-        }.to raise_error(FastMcp::Tool::InvalidArgumentsError, /missing type/)
+        }.to raise_error(GraphMem::InvalidArgumentsError, /missing type/)
       end
 
       it "does not process operations for non-bulk_update tools" do

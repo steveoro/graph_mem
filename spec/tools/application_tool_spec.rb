@@ -222,7 +222,7 @@ RSpec.describe ApplicationTool do
       tool = DslTestTool.new
       expect {
         tool.call_with_schema_validation!(count: 5)
-      }.to raise_error(FastMcp::Tool::InvalidArgumentsError, /name/) do |error|
+      }.to raise_error(GraphMem::InvalidArgumentsError, /name/) do |error|
         expect(error.message).to include("Invalid arguments:")
         details = error.message[/{.*}/]
         expect(JSON.parse(details)).to have_key("name")
@@ -238,13 +238,13 @@ RSpec.describe ApplicationTool do
 
       expect {
         tool.call_with_schema_validation!(count: 5)
-      }.to raise_error(FastMcp::Tool::InvalidArgumentsError)
+      }.to raise_error(GraphMem::InvalidArgumentsError)
 
       invocation = ToolInvocation.find_by!(client_id: "cursor-validation")
       expect(invocation).to have_attributes(
         tool_name: "dsl_test",
         outcome: "error",
-        error_class: "FastMcp::Tool::InvalidArgumentsError",
+        error_class: "GraphMem::InvalidArgumentsError",
         error_category: "validation",
         result_size: nil,
         argument_keys: [ "count" ]
@@ -302,7 +302,7 @@ RSpec.describe ApplicationTool do
 
       expect {
         tool.call_with_schema_validation!(count: 5)
-      }.to raise_error(FastMcp::Tool::InvalidArgumentsError)
+      }.to raise_error(GraphMem::InvalidArgumentsError)
 
       expect(AgentContext.find_by(client_id: "cursor-A")).to be_nil
     end

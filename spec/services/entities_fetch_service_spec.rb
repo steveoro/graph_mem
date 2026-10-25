@@ -55,7 +55,7 @@ RSpec.describe EntitiesFetchService do
       }.to raise_error(ActiveRecord::RecordNotFound)
       expect {
         described_class.call(entity_ids: [])
-      }.to raise_error(FastMcp::Tool::InvalidArgumentsError, /cannot be empty/)
+      }.to raise_error(GraphMem::InvalidArgumentsError, /cannot be empty/)
     end
 
     it "ranks, limits, and optionally includes obsolete observations" do
@@ -98,7 +98,7 @@ RSpec.describe EntitiesFetchService do
 
     it "rejects an unknown perspective" do
       expect { described_class.call(entity_ids: [ first.id ], perspective: "opinion") }
-        .to raise_error(FastMcp::Tool::InvalidArgumentsError, /perspective must be one of/)
+        .to raise_error(GraphMem::InvalidArgumentsError, /perspective must be one of/)
     end
   end
 

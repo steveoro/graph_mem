@@ -30,10 +30,10 @@ RSpec.describe EntityCatalogService do
     it "validates page bounds" do
       expect {
         described_class.call(page: 0)
-      }.to raise_error(FastMcp::Tool::InvalidArgumentsError, /page must be/)
+      }.to raise_error(GraphMem::InvalidArgumentsError, /page must be/)
       expect {
         described_class.call(per_page: 101)
-      }.to raise_error(FastMcp::Tool::InvalidArgumentsError, /per_page must be/)
+      }.to raise_error(GraphMem::InvalidArgumentsError, /per_page must be/)
     end
   end
 end

@@ -44,7 +44,7 @@ class SummarizeTool < ApplicationTool
   def call(query:, entity_id: nil, max_results: 10, max_observations: 20, observations_per_entity: nil,
            max_depth: 0, include_sources: true, scope: nil, style: "concise",
            occurred_after: nil, occurred_before: nil, as_of: nil, max_tokens: nil)
-    max_tokens = TokenBudget.validate_max_tokens!(max_tokens, error_class: FastMcp::Tool::InvalidArgumentsError)
+    max_tokens = TokenBudget.validate_max_tokens!(max_tokens, error_class: GraphMem::InvalidArgumentsError)
     logger.info "Performing SummarizeTool with query: #{query}"
     begin
       context_scope = graph_mem_context.scoped_entity_scope
@@ -76,10 +76,10 @@ class SummarizeTool < ApplicationTool
       )
     rescue ArgumentError => e
       logger.error "InvalidArguments in SummarizeTool: #{e.message}"
-      raise FastMcp::Tool::InvalidArgumentsError, e.message
+      raise GraphMem::InvalidArgumentsError, e.message
     rescue *ToolError::TIMEOUT_CLASSES
       raise
-    rescue McpGraphMemErrors::Error, FastMcp::Tool::InvalidArgumentsError
+    rescue McpGraphMemErrors::Error, GraphMem::InvalidArgumentsError
       raise
     rescue StandardError => e
       logger.error "InternalServerError in SummarizeTool: #{e.class}: #{e.message}"

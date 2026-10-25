@@ -92,7 +92,7 @@ RSpec.describe GraphEditTool, type: :model do
           operations: [ { type: "update_entity", entity_id: entity.id, aliases: aliases } ]
         )
       end.to raise_error(
-        FastMcp::Tool::InvalidArgumentsError, /update_entity\[0\]: aliases must be an array of strings\./
+        GraphMem::InvalidArgumentsError, /update_entity\[0\]: aliases must be an array of strings\./
       )
       expect(entity.reload.aliases).to eq("old")
     end
@@ -115,7 +115,7 @@ RSpec.describe GraphEditTool, type: :model do
       tool.call_with_schema_validation!(
         operations: [ { type: "update_entity", entity_id: entity.id, aliases: [ "A|B" ] } ]
       )
-    end.to raise_error(FastMcp::Tool::InvalidArgumentsError, /contains "\|"/)
+    end.to raise_error(GraphMem::InvalidArgumentsError, /contains "\|"/)
     expect(entity.reload.aliases).to eq("old")
   end
 

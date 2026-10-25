@@ -40,7 +40,7 @@ class GetEntitiesTool < ApplicationTool
   def call(entity_ids:, relations: nil, include_obsolete: false, include_ranked: false,
            query: nil, observation_limit: nil, occurred_after: nil, occurred_before: nil,
            as_of: nil, perspective: nil, max_tokens: nil)
-    max_tokens = TokenBudget.validate_max_tokens!(max_tokens, error_class: FastMcp::Tool::InvalidArgumentsError)
+    max_tokens = TokenBudget.validate_max_tokens!(max_tokens, error_class: GraphMem::InvalidArgumentsError)
     EntitiesFetchService.call(
       entity_ids: entity_ids,
       relations: relations,
@@ -61,7 +61,7 @@ class GetEntitiesTool < ApplicationTool
     )
   rescue *ToolError::TIMEOUT_CLASSES
     raise
-  rescue McpGraphMemErrors::Error, FastMcp::Tool::InvalidArgumentsError
+  rescue McpGraphMemErrors::Error, GraphMem::InvalidArgumentsError
     raise
   rescue StandardError => e
     logger.error "GetEntitiesTool unexpected error: #{e.class}: #{e.message}"
@@ -77,6 +77,6 @@ class GetEntitiesTool < ApplicationTool
       as_of: as_of
     )
   rescue ArgumentError => e
-    raise FastMcp::Tool::InvalidArgumentsError, e.message
+    raise GraphMem::InvalidArgumentsError, e.message
   end
 end

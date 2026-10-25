@@ -67,7 +67,7 @@ class TraverseGraphTool < ApplicationTool
       project_response(GraphTraversalSerializer.traversal(result), include, default: %w[entities relations traversal])
     rescue *ToolError::TIMEOUT_CLASSES
       raise
-    rescue McpGraphMemErrors::Error, FastMcp::Tool::InvalidArgumentsError
+    rescue McpGraphMemErrors::Error, GraphMem::InvalidArgumentsError
       raise
     rescue StandardError => e
       logger.error "InternalServerError in TraverseGraphTool: #{e.class}: #{e.message}"
@@ -91,7 +91,7 @@ class TraverseGraphTool < ApplicationTool
     )
     projections = normalized_projections(include, default: [ "relations" ])
     if "traversal".in?(projections)
-      raise FastMcp::Tool::InvalidArgumentsError,
+      raise GraphMem::InvalidArgumentsError,
             "The traversal projection requires start_entity_id without direct endpoint filters."
     end
 
@@ -116,7 +116,7 @@ class TraverseGraphTool < ApplicationTool
     allowed = %w[entities relations traversal]
     unknown = projections - allowed
     if projections.empty? || unknown.any?
-      raise FastMcp::Tool::InvalidArgumentsError,
+      raise GraphMem::InvalidArgumentsError,
             "include must contain one or more of: #{allowed.join(', ')}."
     end
     projections

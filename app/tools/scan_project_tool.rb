@@ -60,7 +60,7 @@ class ScanProjectTool < ApplicationTool
     end
 
     unless MODES.include?(mode.to_s.downcase)
-      raise FastMcp::Tool::InvalidArgumentsError, "mode must be one of: #{MODES.join(', ')}"
+      raise GraphMem::InvalidArgumentsError, "mode must be one of: #{MODES.join(', ')}"
     end
 
     resumed = scan_id.to_s.present?
@@ -91,7 +91,7 @@ class ScanProjectTool < ApplicationTool
       e.message, code: "scan_id_not_resumable",
       next_move: "Omit `scan_id` to start a new scan; pass one only to resume a paused validation batch."
     )
-  rescue FastMcp::Tool::InvalidArgumentsError, McpGraphMemErrors::Error
+  rescue GraphMem::InvalidArgumentsError, McpGraphMemErrors::Error
     raise
   rescue *ToolError::TIMEOUT_CLASSES
     raise

@@ -126,12 +126,12 @@ RSpec.describe GraphWriteService do
     it "validates operation type and batch size" do
       expect {
         described_class.call(operations: [ { type: "unknown" } ])
-      }.to raise_error(FastMcp::Tool::InvalidArgumentsError, /unknown type/)
+      }.to raise_error(GraphMem::InvalidArgumentsError, /unknown type/)
 
       operations = 51.times.map { |index| { type: "create_entity", name: "E#{index}", entity_type: "Task" } }
       expect {
         described_class.call(operations: operations)
-      }.to raise_error(FastMcp::Tool::InvalidArgumentsError, /at most 50/)
+      }.to raise_error(GraphMem::InvalidArgumentsError, /at most 50/)
     end
   end
 
@@ -250,7 +250,7 @@ RSpec.describe GraphWriteService do
 
     it "refuses an unknown on_duplicate mode" do
       expect { described_class.call(operations: [], on_duplicate: "merge") }
-        .to raise_error(FastMcp::Tool::InvalidArgumentsError, /on_duplicate must be one of/)
+        .to raise_error(GraphMem::InvalidArgumentsError, /on_duplicate must be one of/)
     end
   end
 
