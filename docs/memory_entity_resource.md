@@ -35,7 +35,8 @@ memory_entities?page=2&per_page=10
 
 ## Filtering
 
-Filter entities using any of the following parameters:
+Filter entities using any of the following parameters. Percent-encode the values: a space is
+`%20` (`memory_entities?name=Synth%20Widget`); a raw space makes the URI invalid and the read fails.
 
 | Parameter | Description | Example |
 |-----------|-------------|---------|

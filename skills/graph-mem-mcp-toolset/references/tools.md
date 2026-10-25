@@ -21,7 +21,8 @@ no-context banner when orientation is required.
 ## MCP Tool Errors
 
 Tool `isError` content is a JSON envelope with `category`, `retriable`, `next_move`,
-and `message`. Follow `next_move`. Do not retry `system_error` blindly.
+and `message`, plus a `code` naming the exact reason when there is one (e.g. `scan_project`'s
+`outside_filter`). Follow `next_move`. Do not retry `system_error` blindly.
 graph_mem's repository documents the category table in `docs/mcp_tools.md` (Error Handling).
 
 ## Multi-Agent Context Scoping
@@ -48,6 +49,10 @@ graph_mem accepts both its native snake_case/ID-based parameters and the
 ### Name resolution
 
 A name argument resolves in order: context project → global namespace → a single foreign-scope candidate → `AmbiguousReference` (retry with `entity_id`). Destructive ops are name-unsafe across scopes: `graph_delete`/`graph_edit` with a bare name can hit another project's same-named entity when it's the only candidate — use `entity_id` for deletes and moves.
+
+A `Project` root can be deleted only over `/mcp/maintenance`, and only once no entity is scoped to it
+(`code: "project_delete_needs_maintenance"` / `"project_has_members"` otherwise). Deleting it clears
+every client context that pointed at it.
 
 ## Query and Type Guidance
 
