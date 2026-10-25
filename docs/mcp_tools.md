@@ -516,7 +516,7 @@ These tools perform structural graph queries. `direction` is one of `outgoing`
   - `file_globs` (array of strings, optional): Optional file globs to scan, relative to `project_root`.
   - `scan_id` (string, optional): Existing scan operation_id to resume a paused validation batch. If omitted, a new scan is started.
 - **Response:** `{ scan_id, status: "queued", project_root, mode, dry_run }`. The scan is recorded as `pending` before the reply, so `scan_project_status` finds the `scan_id` at once, even before a job worker starts it.
-- **Refusals:** a `validation` error with `code` (`not_mounted`, `denied`, `outside_filter`, `not_found`, `invalid_file_globs`, …) and a `next_move` for that reason.
+- **Refusals:** a `validation` error with `code` (`not_mounted`, `denied`, `outside_filter`, `not_found`, `invalid_file_globs`, …) and a `next_move` for that reason. A `scan_id` resumes only a pending, paused or running scan; a finished scan's id (or another operation's) is refused with `scan_id_not_resumable` and nothing is queued.
 
 #### `scan_project_status`
 - **Description:** Poll one asynchronous project scan for status, phase, progress, counters, fallback flags, and scan_review items. Pass required `scan_id` (string from `scan_project`). Do not use to start or resume a scan; use `scan_project` instead. Do not use for compaction-job status; use `dream_state_status` instead. Do not use for stored scan_review documents; use `get_maintenance_reports` instead.

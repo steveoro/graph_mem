@@ -86,6 +86,11 @@ class ScanProjectTool < ApplicationTool
       mode: mode.to_s.downcase,
       dry_run: dry_run == true
     }
+  rescue ProjectScanJob::ScanIdNotResumable => e
+    raise McpGraphMemErrors::InvalidArguments.new(
+      e.message, code: "scan_id_not_resumable",
+      next_move: "Omit `scan_id` to start a new scan; pass one only to resume a paused validation batch."
+    )
   rescue FastMcp::Tool::InvalidArgumentsError, McpGraphMemErrors::Error
     raise
   rescue *ToolError::TIMEOUT_CLASSES

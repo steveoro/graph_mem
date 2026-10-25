@@ -41,6 +41,8 @@ module Api
           mode: mode,
           dry_run: params[:dry_run].to_s.downcase == "true"
         }
+      rescue ProjectScanJob::ScanIdNotResumable => e
+        render_error(e.message, details: { code: "scan_id_not_resumable" })
       end
 
       # GET /api/v1/scan/:id

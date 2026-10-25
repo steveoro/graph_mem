@@ -86,5 +86,23 @@ RSpec.describe ProjectScanJob, type: :job do
       expect(second).to be_nil
       expect(OperationProgress.where(operation_id: scan_id).count).to eq(1)
     end
+
+    it "refuses a finished scan's id without enqueuing anything" do
+      scan_id = SecureRandom.uuid
+      OperationProgress.create!(operation_type: "project_scan", operation_id: scan_id, status: "completed",
+                                total_count: 6, current_count: 6, percentage: 100)
+
+      expect {
+        expect { described_class.enqueue(scan_id: scan_id, **args) }
+          .to raise_error(described_class::ScanIdNotResumable, /already completed; omit scan_id/)
+      }.not_to have_enqueued_job(described_class)
+    end
+
+    it "refuses another operation's id" do
+      export = OperationProgress.start!(operation_type: "export", total_count: 1)
+
+      expect { described_class.enqueue(scan_id: export.operation_id, **args) }
+        .to raise_error(described_class::ScanIdNotResumable, /belongs to another operation/)
+    end
   end
 end

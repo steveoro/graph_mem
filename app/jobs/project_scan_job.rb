@@ -4,9 +4,16 @@
 class ProjectScanJob < ApplicationJob
   queue_as :default
 
+  # Statuses of an existing scan that a caller-supplied scan_id may resume.
+  RESUMABLE_STATUSES = %w[pending paused running].freeze
+
+  # Raised by .enqueue when the scan_id belongs to a finished scan or to another kind of operation.
+  class ScanIdNotResumable < StandardError; end
+
   # Records the scan as "pending" and enqueues it, so `scan_project_status` (and the REST/UI status
   # views) can find the scan_id as soon as it is returned, before a worker picks the job up.
-  # A resumed scan (an existing operation) keeps its row. If enqueuing fails, the new row is removed.
+  # A resumed scan (an existing pending, paused or running scan) keeps its row. If enqueuing fails,
+  # the new row is removed.
   #
   # @param scan_id [String] operation id to report back to the caller
   # @param project_root [String] realpath already accepted by ScanRootPolicy
@@ -15,7 +22,9 @@ class ProjectScanJob < ApplicationJob
   # @param mode [String] initial, rescan or validate
   # @param dry_run [Boolean]
   # @param file_globs [Array<String>, nil]
-  # @return [OperationProgress, nil] the new pending row, or nil when the scan_id already existed
+  # @return [OperationProgress, nil] the new pending row, or nil when resuming an existing scan
+  # @raise [ScanIdNotResumable] when the scan_id is a finished scan or another operation's id;
+  #   nothing is enqueued
   def self.enqueue(scan_id:, project_root:, project_name:, aliases:, mode:, dry_run:, file_globs:)
     operation = begin
       OperationProgress.create!(
@@ -30,7 +39,9 @@ class ProjectScanJob < ApplicationJob
         details: { project_root: project_root, project_name: project_name, mode: mode, dry_run: dry_run }
       )
     rescue ActiveRecord::RecordNotUnique
-      nil # the scan_id exists already (a resumed scan, or a concurrent call with the same id)
+      # The scan_id exists already: a resumed scan, or a concurrent call with the same id.
+      ensure_resumable!(scan_id)
+      nil
     end
 
     begin
@@ -42,11 +53,20 @@ class ProjectScanJob < ApplicationJob
     operation
   end
 
+  def self.ensure_resumable!(scan_id)
+    existing = OperationProgress.find_by(operation_id: scan_id)
+    return if existing.nil? || (existing.operation_type == "project_scan" && existing.status.in?(RESUMABLE_STATUSES))
+
+    reason = existing.operation_type == "project_scan" ? "is already #{existing.status}" : "belongs to another operation"
+    raise ScanIdNotResumable, "scan_id #{scan_id} #{reason}; omit scan_id to start a new scan."
+  end
+  private_class_method :ensure_resumable!
+
   def perform(scan_id, project_root, project_name, aliases, mode, dry_run, file_globs)
     operation = OperationProgress.find_by(operation_id: scan_id)
 
     if operation
-      unless operation.status.in?(%w[pending paused running])
+      unless operation.status.in?(RESUMABLE_STATUSES)
         # A completed/failed operation with this ID should not be overwritten.
         # Treat it as a fresh run by creating a new OperationProgress.
         operation = nil
