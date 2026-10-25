@@ -6,8 +6,9 @@ require "rails_helper"
 # profile gating, access control, the tool error envelope, sessions and the success metadata.
 # Synthetic data only.
 RSpec.describe "MCP on the official SDK", type: :request do
-  REQUEST_HEADERS = { "CONTENT_TYPE" => "application/json", "HTTP_ACCEPT" => "application/json, text/event-stream" }.freeze
-  PROFILE_TOOL_COUNTS = { "/mcp" => 12, "/mcp/readonly" => 9, "/mcp/maintenance" => 22 }.freeze
+  profile_tool_counts = { "/mcp" => 12, "/mcp/readonly" => 9, "/mcp/maintenance" => 22 }
+
+  def request_headers = { "CONTENT_TYPE" => "application/json", "HTTP_ACCEPT" => "application/json, text/event-stream" }
 
   before do
     host! "localhost"
@@ -34,14 +35,14 @@ RSpec.describe "MCP on the official SDK", type: :request do
     post path,
       params: { jsonrpc: "2.0", id: 1, method: "initialize",
                 params: { protocolVersion: version, capabilities: {}, clientInfo: { name: "SynthClient", version: "1" } } }.to_json,
-      headers: REQUEST_HEADERS.merge(headers)
+      headers: request_headers.merge(headers)
     response.headers["Mcp-Session-Id"]
   end
 
   def rpc(path, session_id, method, params: nil, id: 2, headers: {})
     payload = { jsonrpc: "2.0", id: id, method: method }
     payload[:params] = params if params
-    post path, params: payload.to_json, headers: REQUEST_HEADERS.merge("Mcp-Session-Id" => session_id).merge(headers)
+    post path, params: payload.to_json, headers: request_headers.merge("Mcp-Session-Id" => session_id).merge(headers)
     response.parsed_body
   end
 
@@ -77,7 +78,7 @@ RSpec.describe "MCP on the official SDK", type: :request do
   end
 
   describe "profile gating" do
-    PROFILE_TOOL_COUNTS.each do |path, count|
+    profile_tool_counts.each do |path, count|
       it "lists #{count} tools on #{path}" do
         session_id = initialize_session(path)
         names = rpc(path, session_id, "tools/list").dig("result", "tools").map { |tool| tool["name"] }
@@ -86,6 +87,15 @@ RSpec.describe "MCP on the official SDK", type: :request do
         expect(names).to match_array(GraphMem::McpToolRegistry.tool_classes_for(profile).map(&:tool_name))
         expect(names.size).to eq(count)
       end
+    end
+
+    it "advertises every tool's annotations" do
+      session_id = initialize_session("/mcp/maintenance")
+      tools = rpc("/mcp/maintenance", session_id, "tools/list").dig("result", "tools").index_by { |tool| tool["name"] }
+
+      expect(tools.values).to all(include("annotations" => include("readOnlyHint", "destructiveHint", "idempotentHint", "openWorldHint")))
+      expect(tools.dig("summarize", "annotations")).to include("readOnlyHint" => true, "openWorldHint" => true)
+      expect(tools.dig("graph_delete", "annotations")).to include("destructiveHint" => true, "idempotentHint" => false)
     end
 
     it "refuses a write tool on /mcp/readonly and writes nothing" do

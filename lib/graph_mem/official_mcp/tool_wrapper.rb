@@ -7,7 +7,7 @@ module GraphMem
     # @example
     #   ToolWrapper.build(SearchTool) # => Class < MCP::Tool, tool_name "search"
     module ToolWrapper
-      ANNOTATION_KEYS = %i[read_only_hint destructive_hint idempotent_hint open_world_hint].freeze
+      ANNOTATION_KEYS = ApplicationTool::MCP_ANNOTATION_KEYS
 
       # The gem rejects a call missing a `required` key before the tool runs, with its own text.
       # graph_mem tools accept aliases for required keys (`entityType`, names for ids) and
