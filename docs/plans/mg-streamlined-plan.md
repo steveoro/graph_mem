@@ -1,6 +1,7 @@
 # graph_mem on the official `mcp` gem: streamlined plan (replaces MG-0 … MG-6)
 
-**Status: APPROVED by Steve on 2026-10-25.** All work is Claude's. This plan supersedes the MG track in
+**Status: DONE (2026-10-25).** PR A shipped as 1.55.0 (#118), PR B as 1.55.1 (#120), PR C as 1.55.2.
+Approved by Steve on 2026-10-25. All work is Claude's. This plan supersedes the MG track in
 `docs/plans/mcp-update-plan.md` (§MG, rows 7–14) and the MG-0 draft in PR #117, which is closed unmerged
 (Steve closes it; the branch `claude/mg-0-design` stays for reference: spike results, the load shim and the
 `AccessToken` context pattern).
