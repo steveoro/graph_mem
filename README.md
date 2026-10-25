@@ -110,19 +110,17 @@ Observations use an `active`, `obsolete`, or `superseded` lifecycle. Normal enti
 * `traverse_graph` -- Bounded multi-hop traversal or direct endpoint/type relation query
 * `find_shortest_path` -- Shortest path (by hop count) between two entities
 
-The prior read and mutation names remain callable compatibility aliases but are
-hidden from `tools/list` while telemetry measures remaining use.
+The older per-operation tool names (`create_entity`, `search_entities`, …) were removed in 1.55.0;
+use the tools above (`graph_write`, `graph_edit` and `graph_delete` take them as operation types).
 
 #### Context and Workflow
 * `set_context` -- Scope subsequent operations to a project (per `X-MCP-Client`)
 * `get_context` -- Check the active project context
-* `clear_context` -- Remove project scoping
 * `suggest_merges` -- Find potential duplicate entities via vector similarity
 * `dream_state_status` -- Report background graph compaction state (running/paused/cursor)
 * `get_maintenance_reports` -- Read maintenance/compaction reports, including the `compaction_review` queue
 
 #### Utility
-* `get_version` -- Server version
 * `get_current_time` -- Server time in ISO 8601
 
 ### Dream-State Compaction

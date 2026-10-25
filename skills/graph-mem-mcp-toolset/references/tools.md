@@ -1,4 +1,4 @@
-Read `references/tools.md` when a tool call fails, when choosing entity or relation types or search parameters, when an observation needs a lifecycle change or conflicts with another, or when an older client uses alias tool names.
+Read `references/tools.md` when a tool call fails, when choosing entity or relation types or search parameters, when an observation needs a lifecycle change or conflicts with another.
 
 # graph_mem tool reference
 
