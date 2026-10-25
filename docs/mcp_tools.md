@@ -373,7 +373,7 @@ These tools perform structural graph queries. `direction` is one of `outgoing`
 - **Response:** Updated review-row status payload.
 
 #### `get_graph_stats`
-- **Description:** Return live knowledge-graph health metrics (totals, entity_type_distribution, orphan_count, most_connected, god_nodes, recent updates). `god_nodes` lists entities whose total incident-edge count exceeds 100 (capped at 10) plus `god_node_count`. Takes no arguments. Do not use for stored report documents; use `get_maintenance_reports` instead. Do not use to page actual entities; use `search` instead. Do not use for a topic summary; use `summarize` instead. Do not use for compaction job status; use `dream_state_status` instead. Do not use for software version; use `get_version` instead.
+- **Description:** Return live knowledge-graph health metrics (totals, entity_type_distribution, orphan_count, most_connected, god_nodes, recent updates). `god_nodes` lists entities whose total incident-edge count exceeds 100 (capped at 10) plus `god_node_count`. Takes no arguments. Do not use for stored report documents; use `get_maintenance_reports` instead. Do not use to page actual entities; use `search` instead. Do not use for a topic summary; use `summarize` instead. Do not use for compaction job status; use `dream_state_status` instead. Software version is included in every successful response.
 - **Parameters:** None
 
 ## Utility Tools (1 tool)
