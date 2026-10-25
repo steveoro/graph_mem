@@ -48,8 +48,8 @@ legacy era.
 
 Steve's run of `docs/plans/claude-mcp-client-check.md` (PR-3 step 5), 2026-10-25: Claude Code
 2.1.310 against graph_mem 1.54.1 (`bin/mcp` over HTTP with a bearer token, and the stdio runner).
-No protocol or connection failure in either run. The failed steps were three server bugs, fixed in
-1.54.2, and expectations the checklist got wrong, since corrected in it.
+No protocol or connection failure in either run. The misses were four server-side gaps, all addressed
+in 1.54.2 (#115), and expectations the checklist got wrong, since corrected in it.
 
 | Check | Default negotiation | `MCP_PROTOCOL_NEGOTIATION=legacy` | Notes |
 | --- | --- | --- | --- |
