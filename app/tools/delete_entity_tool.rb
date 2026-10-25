@@ -44,7 +44,10 @@ class DeleteEntityTool < ApplicationTool
   def call(entity_id:, reason: nil)
     logger.info "Performing DeleteEntityTool with entity_id: #{entity_id}, reason: #{reason}"
     begin
-      GraphDeleteService.execute_one("delete_entity", entity_id: entity_id, reason: reason)
+      GraphDeleteService.execute_one(
+        "delete_entity", { entity_id: entity_id, reason: reason },
+        allow_empty_project_delete: current_mcp_profile == :maintenance
+      )
     rescue ActiveRecord::RecordNotFound => e
       error_message = "Entity with ID=#{entity_id} not found."
       logger.error "ResourceNotFound in DeleteEntityTool: #{error_message} (was: #{e.message})"

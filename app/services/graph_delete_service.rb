@@ -7,24 +7,28 @@ class GraphDeleteService
   #
   # @param operations [Array<Hash>] hashes with a `type` from TYPES and the
   #   corresponding IDs/reason fields
+  # @param allow_empty_project_delete [Boolean] true lets delete_entity remove a Project root that
+  #   has no members (the maintenance profile); a Project with members is always refused
   # @return [Hash] batch status, per-operation results, and summary counts
   # @raise [FastMcp::Tool::InvalidArgumentsError] for invalid/conflicting input
   # @raise [McpGraphMemErrors::Error] when a requested record or operation fails
-  def self.call(operations:)
-    new(operations: operations).call
+  def self.call(operations:, allow_empty_project_delete: false)
+    new(operations: operations, allow_empty_project_delete: allow_empty_project_delete).call
   end
 
   # Executes one legacy delete/merge operation without the batch envelope.
   #
   # @param type [String, Symbol] one of TYPES
   # @param attributes [Hash] the operation-specific IDs and optional reason
+  # @param allow_empty_project_delete [Boolean] see {.call}
   # @return [Hash] the legacy-compatible operation result
-  def self.execute_one(type, attributes)
+  def self.execute_one(type, attributes, allow_empty_project_delete: false)
     # Same ordering as `call`: the membership lock first, then the
     # transaction — a part_of delete commits AND syncs membership or does
     # neither (a bare delete + failed sync left children with stale
     # project_id).
-    new(operations: []).send(:execute_one, type.to_s, attributes.to_h.deep_symbolize_keys)
+    new(operations: [], allow_empty_project_delete: allow_empty_project_delete)
+      .send(:execute_one, type.to_s, attributes.to_h.deep_symbolize_keys)
   rescue ProjectMembership::LockTimeout => e
     raise lock_timeout_error(e)
   rescue ProjectMembership::Collision => e
@@ -52,8 +56,10 @@ class GraphDeleteService
   end
 
   # @param operations [Array<Hash>] raw type-discriminated operation hashes
-  def initialize(operations:)
+  # @param allow_empty_project_delete [Boolean] see {.call}
+  def initialize(operations:, allow_empty_project_delete: false)
     @operations = GraphMutationBatch.normalize_operations(operations)
+    @allow_empty_project_delete = allow_empty_project_delete
   end
 
   # Executes normalized operations in request order inside one transaction.
@@ -138,20 +144,13 @@ class GraphDeleteService
   def delete_entity(attributes)
     entity_id = attributes[:entity_id]
     entity = MemoryEntity.find(entity_id)
-    if entity.entity_type == NodeOperationsStrategy::PROJECT_ENTITY_TYPE
-      # Members carry project_id = this root (FK ON DELETE RESTRICT) — a
-      # project can't be deleted while members point at it; report the
-      # count explicitly instead of surfacing a raw FK error.
-      members = MemoryEntity.where(project_id: entity.id).count
-      raise McpGraphMemErrors::OperationFailed.new(
-        "#{NodeOperationsStrategy::PROJECT_ROOT_PROTECTED_ERROR} (#{members} member entities are scoped to it)",
-        category: "validation",
-        next_move: "Re-parent or delete this project's members first (for each member: `graph_delete` delete_relation on its part_of edge, then `graph_write` create_relation part_of to the new parent), then retry."
-      )
-    end
+    project = entity.entity_type == NodeOperationsStrategy::PROJECT_ENTITY_TYPE
+    guard_project_delete!(entity) if project
 
     snapshot = entity.attributes
     with_deletion_reason(attributes[:reason]) { entity.destroy! }
+    # No FK on agent_contexts: drop the context of every client still pointing at this project.
+    AgentContext.where(current_project_id: entity.id).update_all(current_project_id: nil) if project
     {
       entity_id: snapshot["id"],
       name: snapshot["name"],
@@ -166,6 +165,29 @@ class GraphDeleteService
     raise McpGraphMemErrors::ResourceNotFound.new(
       "Entity with ID=#{entity_id} not found.",
       next_move: "Call `search`, then retry `graph_delete` with a known entity_id."
+    )
+  end
+
+  # Members carry project_id = this root (FK ON DELETE RESTRICT), so a Project with members can't
+  # be deleted: report the count instead of a raw FK error. An empty one only on the maintenance
+  # profile, so ordinary agents can't drop a context root by accident.
+  def guard_project_delete!(entity)
+    members = MemoryEntity.where(project_id: entity.id).count
+    if members.positive?
+      raise McpGraphMemErrors::OperationFailed.new(
+        "#{NodeOperationsStrategy::PROJECT_ROOT_PROTECTED_ERROR} (#{members} member entities are scoped to it)",
+        category: "validation",
+        code: "project_has_members",
+        next_move: "Re-parent or delete this project's members first (for each member: `graph_delete` delete_relation on its part_of edge, then `graph_write` create_relation part_of to the new parent), then retry on the maintenance profile."
+      )
+    end
+    return if @allow_empty_project_delete
+
+    raise McpGraphMemErrors::OperationFailed.new(
+      "#{NodeOperationsStrategy::PROJECT_ROOT_PROTECTED_ERROR} on this profile; this one has no members, so it can be deleted on the maintenance profile",
+      category: "validation",
+      code: "project_delete_needs_maintenance",
+      next_move: "Escalate to a human, or retry this delete over the maintenance profile (`/mcp/maintenance`)."
     )
   end
 

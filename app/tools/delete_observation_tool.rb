@@ -46,8 +46,7 @@ class DeleteObservationTool < ApplicationTool
     begin
       GraphDeleteService.execute_one(
         "delete_observation",
-        observation_id: observation_id,
-        reason: reason
+        { observation_id: observation_id, reason: reason }
       )
     rescue ActiveRecord::RecordNotFound => e
       error_message = "Observation with ID=#{observation_id} not found."

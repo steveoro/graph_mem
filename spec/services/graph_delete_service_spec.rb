@@ -61,6 +61,40 @@ RSpec.describe GraphDeleteService do
       expect(project.reload).to be_present
     end
 
+    it "refuses an empty Project unless allow_empty_project_delete is set" do
+      expect {
+        described_class.call(operations: [ { type: "delete_entity", entity_id: project.id } ])
+      }.to raise_error(McpGraphMemErrors::OperationFailed, /maintenance profile/) { |error|
+        expect(error.code).to eq("project_delete_needs_maintenance")
+      }
+      expect(project.reload).to be_present
+    end
+
+    it "deletes an empty Project with allow_empty_project_delete and clears contexts pointing at it" do
+      AgentContext.create!(client_id: "delete-spec-#{SecureRandom.hex(4)}", current_project_id: project.id)
+
+      result = described_class.call(
+        operations: [ { type: "delete_entity", entity_id: project.id } ], allow_empty_project_delete: true
+      )
+
+      expect(result[:summary][:entities_deleted]).to eq(1)
+      expect(MemoryEntity.find_by(id: project.id)).to be_nil
+      expect(AgentContext.where(current_project_id: project.id)).to be_empty
+    end
+
+    it "refuses a Project with members even with allow_empty_project_delete" do
+      first.update!(project_id: project.id)
+
+      expect {
+        described_class.call(
+          operations: [ { type: "delete_entity", entity_id: project.id } ], allow_empty_project_delete: true
+        )
+      }.to raise_error(McpGraphMemErrors::OperationFailed, /1 member entities/) { |error|
+        expect(error.code).to eq("project_has_members")
+      }
+      expect(project.reload).to be_present
+    end
+
     it "delegates entity merges to NodeOperationsStrategy" do
       result = described_class.call(
         operations: [
