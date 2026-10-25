@@ -55,6 +55,8 @@ server = FastMcp::Server.new(
   logger: FastMcp::Logger.new,
   **GraphMem::McpServerOptions.for_stdio(profile)
 )
+# Same ToolError JSON envelope as HTTP (config/initializers/fast_mcp.rb), not FastMCP's plain text.
+GraphMem::McpErrorFormatter.install(server)
 GraphMem::McpToolRegistry.register_with!(server, profile: profile)
 RunnerLogger.info(
   "GraphMem Stdio Runner: Registered #{server.tools.count} tools, " \

@@ -52,6 +52,20 @@ RSpec.describe "bin/mcp_stdio_runner.rb stdout" do
     expect(err).to include("Registered tool")
   end
 
+  it "returns a failed tool call as the same ToolError JSON envelope as HTTP" do
+    lines = messages.first(2).map { |message| JSON.generate(message) } << JSON.generate(
+      jsonrpc: "2.0", id: 4, method: "tools/call",
+      params: { name: "scan_project", arguments: { project_root: "/nonexistent/graph-mem-scan-root", dry_run: true } }
+    )
+    out, = run_runner(lines, extra_env: { "GRAPH_MEM_MCP_PROFILE" => "maintenance" })
+    reply = out.lines.map { |line| JSON.parse(line) }.find { |message| message["id"] == 4 }
+
+    expect(reply.dig("result", "isError")).to be(true)
+    envelope = JSON.parse(reply.dig("result", "content", 0, "text"))
+    expect(envelope).to include("error" => true, "category" => "validation", "tool" => "scan_project", "retriable" => false)
+    expect(envelope["code"]).to be_present
+  end
+
   it "refuses a line over GRAPH_MEM_MCP_MAX_REQUEST_BYTES with -32600 and keeps serving" do
     oversized = JSON.generate(jsonrpc: "2.0", id: 1, method: "ping", params: { pad: "x" * 5_000 })
     out, = run_runner([ oversized, JSON.generate(jsonrpc: "2.0", id: 2, method: "ping") ],
