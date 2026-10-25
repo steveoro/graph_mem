@@ -10,8 +10,6 @@ class ApplicationTool
   MCP_PROFILE_NAMES = GraphMem::McpProfile::NAMES
   MCP_ANNOTATION_KEYS = %i[read_only_hint destructive_hint idempotent_hint open_world_hint].freeze
 
-  attr_accessor :server
-
   class << self
     def input_schema_to_json
       super || { type: "object", properties: {}, required: [] }
