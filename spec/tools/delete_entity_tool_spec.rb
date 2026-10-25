@@ -82,7 +82,7 @@ RSpec.describe DeleteEntityTool, type: :model do
         }.to raise_error(McpGraphMemErrors::OperationFailed, /Project root entities cannot be deleted or merged away/) do |error|
           expect(error.category).to eq("validation")
           expect(error.code).to eq("project_delete_needs_maintenance")
-          expect(error.next_move).to include("/mcp/maintenance")
+          expect(error.next_move).to include("/mcp/maintenance", "GRAPH_MEM_MCP_PROFILE=maintenance")
         end
 
         expect(MemoryEntity.find_by(id: entity.id)).to be_present

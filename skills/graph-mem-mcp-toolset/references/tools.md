@@ -50,7 +50,8 @@ graph_mem accepts both its native snake_case/ID-based parameters and the
 
 A name argument resolves in order: context project → global namespace → a single foreign-scope candidate → `AmbiguousReference` (retry with `entity_id`). Destructive ops are name-unsafe across scopes: `graph_delete`/`graph_edit` with a bare name can hit another project's same-named entity when it's the only candidate — use `entity_id` for deletes and moves.
 
-A `Project` root can be deleted only over `/mcp/maintenance`, and only once no entity is scoped to it
+A `Project` root can be deleted only on the maintenance profile (`/mcp/maintenance`, or stdio with
+`GRAPH_MEM_MCP_PROFILE=maintenance`), and only once no entity is scoped to it
 (`code: "project_delete_needs_maintenance"` / `"project_has_members"` otherwise). Deleting it clears
 every client context that pointed at it.
 
