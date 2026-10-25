@@ -84,7 +84,8 @@ module GraphMutationBatch
       "#{operation[:type]}[#{operation[:index]}]: #{e.message}",
       category: e.category,
       retriable: e.retriable,
-      next_move: e.next_move
+      next_move: e.next_move,
+      code: e.code
     )
   rescue ActiveRecord::RecordInvalid => e
     raise FastMcp::Tool::InvalidArgumentsError,

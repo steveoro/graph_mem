@@ -14,6 +14,10 @@ RSpec.describe "Scan Projects API", type: :request do
         json = JSON.parse(response.body)
         expect(json).to include("status" => "queued", "project_root" => project, "warnings" => [])
         expect(json["scan_id"]).to be_present
+
+        get "/api/v1/scan/#{json['scan_id']}"
+        expect(response).to have_http_status(:ok)
+        expect(JSON.parse(response.body)).to include("status" => "pending", "phase" => "queued")
       end
     end
 

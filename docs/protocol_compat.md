@@ -10,6 +10,12 @@ on the client skips the probe. Native 2026-07-28 support comes with the migratio
 `mcp` gem (MG-5). The legacy HTTP+SSE endpoint (`/mcp/sse`) is still served, but nothing below
 covers it.
 
+Failed tool calls (`isError: true`) carry one JSON object as their text: `error`, `category`,
+`retriable`, `next_move`, `message`, `tool`, and since 1.54.2 an optional `code` for the exact
+reason (e.g. `outside_filter`, `project_has_members`). From 1.54.2 stdio returns the same object as
+HTTP; 1.54.1 and earlier sent plain `Error:` text over stdio. Details: [`docs/mcp_tools.md`](mcp_tools.md)
+(Error Handling).
+
 ## How 2026-07-28 clients fall back
 
 What the TS client 2.3.1 does with the answer to its `server/discover` probe:

@@ -18,7 +18,8 @@ class GraphDeleteTool < ApplicationTool
   description "Atomically remove or merge graph data with up to #{MAX_OPERATIONS} type-discriminated `operations`. " \
     "Supported types are delete_entity, delete_observation (marks obsolete), delete_relation, and merge_entities. " \
     "Hard deletes accept per-operation reason; merge preserves duplicate audit semantics. Every operation rolls back " \
-    "if any operation fails. Do not use to create data; use `graph_write` instead. " \
+    "if any operation fails. A Project root can be deleted only on the maintenance profile, and only once it has no members. " \
+    "Do not use to create data; use `graph_write` instead. " \
     "Do not use to update retained data; use `graph_edit` instead."
 
   arguments do
@@ -28,7 +29,7 @@ class GraphDeleteTool < ApplicationTool
   end
 
   def call(operations:)
-    GraphDeleteService.call(operations: operations)
+    GraphDeleteService.call(operations: operations, allow_empty_project_delete: current_mcp_profile == :maintenance)
   rescue *ToolError::TIMEOUT_CLASSES
     raise
   rescue McpGraphMemErrors::Error, FastMcp::Tool::InvalidArgumentsError

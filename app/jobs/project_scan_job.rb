@@ -4,6 +4,44 @@
 class ProjectScanJob < ApplicationJob
   queue_as :default
 
+  # Records the scan as "pending" and enqueues it, so `scan_project_status` (and the REST/UI status
+  # views) can find the scan_id as soon as it is returned, before a worker picks the job up.
+  # A resumed scan (an existing operation) keeps its row. If enqueuing fails, the new row is removed.
+  #
+  # @param scan_id [String] operation id to report back to the caller
+  # @param project_root [String] realpath already accepted by ScanRootPolicy
+  # @param project_name [String, nil]
+  # @param aliases [String, nil]
+  # @param mode [String] initial, rescan or validate
+  # @param dry_run [Boolean]
+  # @param file_globs [Array<String>, nil]
+  # @return [OperationProgress, nil] the new pending row, or nil when the scan_id already existed
+  def self.enqueue(scan_id:, project_root:, project_name:, aliases:, mode:, dry_run:, file_globs:)
+    operation = begin
+      OperationProgress.create!(
+        operation_type: "project_scan",
+        operation_id: scan_id,
+        status: "pending",
+        total_count: 6,
+        current_count: 0,
+        percentage: 0,
+        phase: "queued",
+        message: "Queued project scan",
+        details: { project_root: project_root, project_name: project_name, mode: mode, dry_run: dry_run }
+      )
+    rescue ActiveRecord::RecordNotUnique
+      nil # the scan_id exists already (a resumed scan, or a concurrent call with the same id)
+    end
+
+    begin
+      perform_later(scan_id, project_root, project_name, aliases, mode, dry_run, file_globs)
+    rescue StandardError
+      operation&.destroy
+      raise
+    end
+    operation
+  end
+
   def perform(scan_id, project_root, project_name, aliases, mode, dry_run, file_globs)
     operation = OperationProgress.find_by(operation_id: scan_id)
 

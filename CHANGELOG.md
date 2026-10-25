@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.54.2] - 2026-10-25
+
+Fixes from the Claude Code client check (PR-3 step 5).
+
+### Added
+- MCP error envelopes carry an optional `code` naming the exact reason. `scan_project` refusals use the `ScanRootPolicy` codes (`not_mounted`, `denied`, `outside_filter`, …, plus `invalid_file_globs`), each with its own `next_move`.
+- `graph_delete` deletes a `Project` root on the maintenance profile once no entity is scoped to it, and clears the client contexts that pointed at it. The default profile still refuses (`project_delete_needs_maintenance`); a Project with members is refused everywhere (`project_has_members`).
+
+### Fixed
+- `scan_project` (MCP) and `POST /api/v1/scan` record the scan as pending before replying, so `scan_project_status` / `GET /api/v1/scan/:id` find the `scan_id` straight away instead of answering "not found" until a worker starts the job. All three entry points share `ProjectScanJob.enqueue`.
+- The stdio runner returns tool errors as the same JSON envelope as HTTP, instead of plain `Error:` text.
+
+### Documentation
+- `memory_graph` needs `include_relations=true` to return neighbours; `memory_entities` values must be percent-encoded.
+- `docs/protocol_compat.md` describes the tool error envelope, its `code` and the stdio change.
+
 ## [1.54.1] - 2026-10-24
 
 ### Added

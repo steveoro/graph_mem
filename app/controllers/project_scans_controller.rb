@@ -15,31 +15,14 @@ class ProjectScansController < ApplicationController
     end
 
     scan_id = SecureRandom.uuid
-    OperationProgress.create!(
-      operation_type: "project_scan",
-      operation_id: scan_id,
-      status: "pending",
-      total_count: 6,
-      current_count: 0,
-      percentage: 0,
-      phase: "queued",
-      message: "Queued project scan",
-      details: {
-        project_root: real_root,
-        project_name: params[:project_name].to_s.presence,
-        mode: mode,
-        dry_run: params[:dry_run] == "1"
-      }
-    )
-
-    ProjectScanJob.perform_later(
-      scan_id,
-      real_root,
-      params[:project_name].to_s.presence,
-      params[:aliases].to_s.presence,
-      mode,
-      params[:dry_run] == "1",
-      file_globs_param
+    ProjectScanJob.enqueue(
+      scan_id: scan_id,
+      project_root: real_root,
+      project_name: params[:project_name].to_s.presence,
+      aliases: params[:aliases].to_s.presence,
+      mode: mode,
+      dry_run: params[:dry_run] == "1",
+      file_globs: file_globs_param
     )
 
     redirect_to root_path, notice: "Project scan queued for #{real_root}. Scan ID: #{scan_id}." \

@@ -482,6 +482,22 @@ RSpec.describe "MCP Streamable HTTP endpoint", type: :request do
       expect(response.parsed_body["result"]).not_to have_key("structuredContent")
     end
 
+    it "deletes an empty Project through graph_delete only on the maintenance profile" do
+      project = MemoryEntity.create!(name: "Empty profile project #{SecureRandom.hex(4)}", entity_type: "Project")
+      delete_project = { name: "graph_delete", arguments: { operations: [ { type: "delete_entity", entity_id: project.id } ] } }
+
+      session_id = initialize_session("/mcp")
+      post_rpc("/mcp", session_id, "tools/call", params: delete_project)
+      envelope = JSON.parse(response.parsed_body.dig("result", "content", 0, "text"))
+      expect(envelope).to include("category" => "validation", "code" => "project_delete_needs_maintenance")
+      expect(MemoryEntity.exists?(project.id)).to be(true)
+
+      session_id = initialize_session("/mcp/maintenance")
+      post_rpc("/mcp/maintenance", session_id, "tools/call", params: delete_project, id: 3)
+      expect(response.parsed_body.dig("result", "isError")).not_to be(true)
+      expect(MemoryEntity.exists?(project.id)).to be(false)
+    end
+
     it "selects tools from each request path even when a session id is reused" do
       session_id = initialize_session("/mcp")
 

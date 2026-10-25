@@ -125,7 +125,8 @@ The fix is always the same: give each agent its own `X-MCP-Client` header value.
 - **Operation types:** `update_entity`, `update_observation`.
 
 #### `graph_delete`
-- **Description:** Atomically delete entities/relations, obsolete observations, or merge entities. Project-root protection and per-operation audit reasons remain enforced.
+- **Description:** Atomically delete entities/relations, obsolete observations, or merge entities. Per-operation audit reasons remain enforced.
+- **Project roots:** `delete_entity` on a `Project` is refused on `/mcp` (`code: "project_delete_needs_maintenance"`) and allowed on `/mcp/maintenance` (or stdio with `GRAPH_MEM_MCP_PROFILE=maintenance`) once no entity is scoped to it; with members it is refused everywhere (`code: "project_has_members"`, re-parent or delete them first). The delete clears every `X-MCP-Client` context that pointed at the project. Merging a Project away stays refused.
 - **Operation types:** `delete_entity`, `delete_observation`, `delete_relation`, `merge_entities`.
 
 All three tools accept at most 50 logical operations and return `{ mode: "batch", status,
@@ -514,7 +515,8 @@ These tools perform structural graph queries. `direction` is one of `outgoing`
   - `dry_run` (boolean, optional): When `true`, preview changes without writing to the graph.
   - `file_globs` (array of strings, optional): Optional file globs to scan, relative to `project_root`.
   - `scan_id` (string, optional): Existing scan operation_id to resume a paused validation batch. If omitted, a new scan is started.
-- **Response:** `{ scan_id, status: "queued", project_root, mode, dry_run }`
+- **Response:** `{ scan_id, status: "queued", project_root, mode, dry_run }`. The scan is recorded as `pending` before the reply, so `scan_project_status` finds the `scan_id` at once, even before a job worker starts it.
+- **Refusals:** a `validation` error with `code` (`not_mounted`, `denied`, `outside_filter`, `not_found`, `invalid_file_globs`, …) and a `next_move` for that reason.
 
 #### `scan_project_status`
 - **Description:** Poll one asynchronous project scan for status, phase, progress, counters, fallback flags, and scan_review items. Pass required `scan_id` (string from `scan_project`). Do not use to start or resume a scan; use `scan_project` instead. Do not use for compaction-job status; use `dream_state_status` instead. Do not use for stored scan_review documents; use `get_maintenance_reports` instead.
@@ -564,6 +566,8 @@ MCP `tools/call` failures return `isError: true` with a **single JSON object** a
   "tool": "get_entities"
 }
 ```
+
+Some errors add a `code` naming the exact reason, for agents that branch on it: `scan_project` refusals (`not_mounted`, `denied`, `outside_filter`, `not_found`, `invalid_file_globs`, … the codes `ScanRootPolicy` returns) and `graph_delete` on a Project (`project_delete_needs_maintenance`, `project_has_members`). The key is absent when there is no code. stdio returns the same envelope as HTTP.
 
 `next_move` is an imperative instruction for the calling agent. It names a sibling tool in backticks when that tool can produce a valid retry input.
 

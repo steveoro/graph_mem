@@ -15,7 +15,7 @@ memory_graph
 | entity_id | **(Required)** The ID of the entity to start the graph traversal from | `entity_id=42` |
 | depth | Traversal depth for related entities (default: 1, max: 3) | `depth=2` |
 | include_observations | Whether to include observations for entities (true/false) | `include_observations=true` |
-| include_relations | Whether to include relations for entities (true/false) | `include_relations=true` |
+| include_relations | Whether to include relations, and the related entities they reach (true/false). Without it the read returns the start entity alone, whatever the depth. | `include_relations=true` |
 
 ## Features
 

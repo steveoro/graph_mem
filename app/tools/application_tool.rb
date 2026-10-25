@@ -119,6 +119,15 @@ class ApplicationTool < FastMcp::Tool
     GraphMemContext.for(current_client_id)
   end
 
+  # Profile serving this call: from the HTTP request path (/mcp, /mcp/readonly, /mcp/maintenance),
+  # or GRAPH_MEM_MCP_PROFILE when there is no HTTP request (stdio, direct calls).
+  #
+  # @return [Symbol] one of GraphMem::McpProfile::NAMES
+  def current_mcp_profile
+    request = self.class.server&.current_request
+    request ? GraphMem::McpProfile.from_request(request) : GraphMem::McpProfile.from_env
+  end
+
   # Mcp-Session-Id of the current Streamable HTTP request, or nil on the legacy
   # /mcp/sse endpoint and over stdio.
   def current_session_id

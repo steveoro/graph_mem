@@ -70,4 +70,21 @@ RSpec.describe ProjectScanJob, type: :job do
     expect(OperationProgress.find_by(operation_id: scan_id).error_message).to include("outside the scan filter")
     expect(SummaryGenerationClient).not_to have_received(:generate)
   end
+
+  describe ".enqueue" do
+    let(:args) do
+      { project_root: @project_root, project_name: nil, aliases: nil, mode: "initial", dry_run: true, file_globs: [] }
+    end
+
+    it "keeps the existing row when the scan_id is already recorded (resume or a concurrent call)" do
+      scan_id = SecureRandom.uuid
+      first = described_class.enqueue(scan_id: scan_id, **args)
+
+      second = nil
+      expect { second = described_class.enqueue(scan_id: scan_id, **args) }.to have_enqueued_job(described_class)
+      expect(first).to have_attributes(status: "pending", phase: "queued")
+      expect(second).to be_nil
+      expect(OperationProgress.where(operation_id: scan_id).count).to eq(1)
+    end
+  end
 end

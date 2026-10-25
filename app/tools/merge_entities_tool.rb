@@ -30,8 +30,7 @@ class MergeEntitiesTool < ApplicationTool
   def call(source_entity_id:, target_entity_id:)
     GraphDeleteService.execute_one(
       "merge_entities",
-      source_entity_id: source_entity_id,
-      target_entity_id: target_entity_id
+      { source_entity_id: source_entity_id, target_entity_id: target_entity_id }
     )
   rescue McpGraphMemErrors::Error, FastMcp::Tool::InvalidArgumentsError
     raise

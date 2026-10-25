@@ -33,27 +33,42 @@ RSpec.describe ScanProjectTool, type: :model do
       end
     end
 
+    it "records the scan as pending before returning, so scan_project_status finds it at once" do
+      with_scan_project do |project|
+        result = tool.call(project_root: project, dry_run: true)
+
+        status = ScanProjectStatusTool.new.call(scan_id: result[:scan_id])
+        expect(status).to include(scan_id: result[:scan_id], status: "pending", phase: "queued")
+        expect(status[:details]).to include("project_root" => project, "dry_run" => true)
+      end
+    end
+
     {
-      "/nonexistent/graph-mem-scan-root" => /isn't visible to graph_mem/,
-      "%{home}/.ssh" => /hidden or protected folder/,
-      "%{home}/Other/x" => /outside the scan filter/,
-      "%{home}/Projects/missing" => /was not found/
-    }.each do |template, message|
-      it "raises InvalidArgumentsError for #{template}" do
+      "/nonexistent/graph-mem-scan-root" => [ /isn't visible to graph_mem/, "not_mounted" ],
+      "%{home}/.ssh" => [ /hidden or protected folder/, "denied" ],
+      "%{home}/Other/x" => [ /outside the scan filter/, "outside_filter" ],
+      "%{home}/Projects/missing" => [ /was not found/, "not_found" ]
+    }.each do |template, (message, code)|
+      it "refuses #{template} with a validation error and code #{code}" do
         with_scan_home do |home|
           path = format(template, home: home)
           FileUtils.mkdir_p(path) if path.end_with?(".ssh", "/x")
 
-          expect { tool.call(project_root: path) }.to raise_error(FastMcp::Tool::InvalidArgumentsError, message)
+          expect { tool.call(project_root: path) }.to raise_error(McpGraphMemErrors::InvalidArguments, message) { |error|
+            expect(ToolError.envelope(error, tool_name: "scan_project")).to include("category" => "validation", "code" => code)
+          }
+          expect(OperationProgress.where(operation_type: "project_scan")).to be_empty
         end
       end
     end
 
-    it "raises InvalidArgumentsError for file_globs that leave the project root" do
+    it "refuses file_globs that leave the project root with code invalid_file_globs" do
       with_scan_project do |project|
         expect {
           tool.call(project_root: project, file_globs: [ "/etc/*" ])
-        }.to raise_error(FastMcp::Tool::InvalidArgumentsError, /must be relative/)
+        }.to raise_error(McpGraphMemErrors::InvalidArguments, /must be relative/) { |error|
+          expect(error.code).to eq("invalid_file_globs")
+        }
       end
     end
 
@@ -77,6 +92,7 @@ RSpec.describe ScanProjectTool, type: :model do
         end
 
         expect(Rails.logger).to have_received(:error).with(/queue exploded/)
+        expect(OperationProgress.where(operation_type: "project_scan")).to be_empty
       end
     end
   end

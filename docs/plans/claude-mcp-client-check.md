@@ -111,7 +111,7 @@ Then run Part B twice: once with `claude` (default negotiation) and once with `M
 > 20. `scan_project` `project_root: "~/.ssh"` written as an absolute path under my home, `dry_run: true`. Expected: refused, `code: "denied"` in the error envelope (1.54.2+; earlier versions give only the message).
 > 21. `scan_project` `project_root: "<home>/McpCheckOutside"`, `dry_run: true`. Expected: refused, `code: "outside_filter"` in the error envelope (1.54.2+; earlier versions give only the message), with the "add it in Settings › Project scans" hint.
 > 22. `scan_project` `project_root: "<home>/Projects/mcp-check-synth"`, `dry_run: true`, `file_globs: ["../*"]`. Expected: refused (no `..` / absolute globs).
-> 23. `scan_project` `project_root: "<home>/Projects/mcp-check-synth"`, `dry_run: true`. Expected: accepted, with a `scan_id`; then `scan_project_status` with that id, at once and again after a few seconds: `queued` straight away (1.54.2+; earlier versions answer "not found" until a worker starts the scan), then `running` or `completed`, and no graph writes (dry run).
+> 23. `scan_project` `project_root: "<home>/Projects/mcp-check-synth"`, `dry_run: true`. Expected: accepted, with a `scan_id`; then `scan_project_status` with that id, at once and again after a few seconds: `status: "pending"` with `phase: "queued"` straight away (1.54.2+; earlier versions answer "not found" until a worker starts the scan), then `running` or `completed`, and no graph writes (dry run).
 >
 > **gm-stdio (maintenance profile over stdio)**
 > 24. Repeat steps 1–2 (expect 22 tools here), step 5, and step 19. Expected: the same results as over HTTP, errors included: the same JSON envelope (1.54.2+; earlier versions give plain `Error:` text on stdio).

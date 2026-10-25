@@ -9,14 +9,27 @@ module McpGraphMemErrors
     RETRIABLE = false
     NEXT_MOVE = "Escalate to a human. Do not retry blindly."
 
-    attr_reader :category, :retriable, :next_move
+    attr_reader :category, :retriable, :next_move, :code
 
-    def initialize(message = nil, category: nil, retriable: nil, next_move: nil)
+    # @param message [String, nil]
+    # @param category [String, nil] envelope category; defaults to the class's CATEGORY
+    # @param retriable [Boolean, nil] defaults to the class's RETRIABLE
+    # @param next_move [String, nil] defaults to the class's NEXT_MOVE
+    # @param code [String, Symbol, nil] optional machine-readable reason, added to the envelope as `code`
+    def initialize(message = nil, category: nil, retriable: nil, next_move: nil, code: nil)
       super(message)
       @category = category || self.class::CATEGORY
       @retriable = retriable.nil? ? self.class::RETRIABLE : retriable
       @next_move = next_move || self.class::NEXT_MOVE
+      @code = code&.to_s
     end
+  end
+
+  # Raised when the arguments are well-formed but refused by a policy the caller can act on
+  # (e.g. a scan folder outside the scan filter). Carries a `code` naming the reason.
+  class InvalidArguments < Error
+    CATEGORY = "validation"
+    NEXT_MOVE = "Correct the argument format required by the tool schema and retry."
   end
 
   # Raised when a resource (e.g., an ActiveRecord model) cannot be found.

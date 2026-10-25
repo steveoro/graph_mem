@@ -2,6 +2,16 @@
 
 class ScanProjectTool < ApplicationTool
   MODES = %w[initial rescan validate].freeze
+  # next_move per ScanRootPolicy refusal code; the code itself goes into the error envelope.
+  REFUSAL_NEXT_MOVES = {
+    disabled: "Escalate to a human: project scans are turned off on this server (GRAPH_MEM_SCANS=off).",
+    not_configured: "Escalate to a human: no scan folder is configured for graph_mem.",
+    not_mounted: "Retry with a folder under the visible root named in the message.",
+    denied: "Pick a different folder: hidden and protected folders can never be scanned.",
+    outside_filter: "Ask the operator to add the folder in Settings › Project scans, or pick a folder inside the filter.",
+    not_readable: "Escalate to a human: graph_mem can't read that folder.",
+    default: "Correct `project_root` (an absolute path to an existing folder under the scan root) and retry."
+  }.freeze
 
   def self.tool_name
     "scan_project"
@@ -37,11 +47,16 @@ class ScanProjectTool < ApplicationTool
 
   def call(project_root:, project_name: nil, aliases: nil, mode: "initial", dry_run: false, file_globs: [], scan_id: nil)
     resolution = ScanRootPolicy.resolve(project_root)
-    raise FastMcp::Tool::InvalidArgumentsError, resolution.message unless resolution.ok?
+    unless resolution.ok?
+      raise McpGraphMemErrors::InvalidArguments.new(
+        resolution.message, code: resolution.code, next_move: REFUSAL_NEXT_MOVES.fetch(resolution.code, REFUSAL_NEXT_MOVES[:default])
+      )
+    end
 
     if (bad_glob = ProjectScanFileFilter.new(resolution.path).invalid_glob(file_globs))
-      raise FastMcp::Tool::InvalidArgumentsError,
-            "file_globs entry #{bad_glob.inspect} must be relative to project_root, without '..'"
+      raise McpGraphMemErrors::InvalidArguments.new(
+        "file_globs entry #{bad_glob.inspect} must be relative to project_root, without '..'", code: "invalid_file_globs"
+      )
     end
 
     unless MODES.include?(mode.to_s.downcase)
@@ -52,14 +67,14 @@ class ScanProjectTool < ApplicationTool
     scan_id = scan_id.to_s.presence || SecureRandom.uuid
     expanded_root = resolution.path
 
-    ProjectScanJob.perform_later(
-      scan_id,
-      expanded_root,
-      project_name.to_s.presence,
-      aliases.to_s.presence,
-      mode.to_s.downcase,
-      dry_run == true,
-      file_globs
+    ProjectScanJob.enqueue(
+      scan_id: scan_id,
+      project_root: expanded_root,
+      project_name: project_name.to_s.presence,
+      aliases: aliases.to_s.presence,
+      mode: mode.to_s.downcase,
+      dry_run: dry_run == true,
+      file_globs: file_globs
     )
 
     {
@@ -71,7 +86,7 @@ class ScanProjectTool < ApplicationTool
       mode: mode.to_s.downcase,
       dry_run: dry_run == true
     }
-  rescue FastMcp::Tool::InvalidArgumentsError
+  rescue FastMcp::Tool::InvalidArgumentsError, McpGraphMemErrors::Error
     raise
   rescue *ToolError::TIMEOUT_CLASSES
     raise

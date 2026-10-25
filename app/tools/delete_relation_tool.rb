@@ -46,8 +46,7 @@ class DeleteRelationTool < ApplicationTool
     begin
       GraphDeleteService.execute_one(
         "delete_relation",
-        relation_id: relation_id,
-        reason: reason
+        { relation_id: relation_id, reason: reason }
       )
     rescue *ToolError::TIMEOUT_CLASSES
       raise

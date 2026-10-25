@@ -73,7 +73,7 @@ RSpec.describe DeleteEntityTool, type: :model do
         }.to change(MemoryRelation, :count).by(-2)
       end
 
-      it 'rejects deletion of Project root entities' do
+      it 'rejects deletion of an empty Project root outside the maintenance profile' do
         entity = MemoryEntity.create!(name: 'Protected Project', entity_type: 'Project')
         MemoryObservation.create!(memory_entity: entity, content: 'obs 1')
 
@@ -81,12 +81,33 @@ RSpec.describe DeleteEntityTool, type: :model do
           tool.call(entity_id: entity.id)
         }.to raise_error(McpGraphMemErrors::OperationFailed, /Project root entities cannot be deleted or merged away/) do |error|
           expect(error.category).to eq("validation")
-          expect(error.next_move).to include("graph_delete")
-          expect(error.next_move).to include("graph_write")
+          expect(error.code).to eq("project_delete_needs_maintenance")
+          expect(error.next_move).to include("/mcp/maintenance", "GRAPH_MEM_MCP_PROFILE=maintenance")
         end
 
         expect(MemoryEntity.find_by(id: entity.id)).to be_present
         expect(entity.memory_observations.count).to eq(1)
+      end
+
+      it 'rejects a Project root with members, pointing at re-parenting' do
+        entity = MemoryEntity.create!(name: 'Owning Project', entity_type: 'Project')
+        MemoryEntity.create!(name: 'Owned member', entity_type: 'Task', project_id: entity.id)
+
+        expect {
+          tool.call(entity_id: entity.id)
+        }.to raise_error(McpGraphMemErrors::OperationFailed, /1 member entities/) do |error|
+          expect(error.code).to eq("project_has_members")
+          expect(error.next_move).to include("graph_delete", "graph_write")
+        end
+      end
+
+      it 'deletes an empty Project root on the maintenance profile' do
+        entity = MemoryEntity.create!(name: 'Empty Project', entity_type: 'Project')
+        allow(tool).to receive(:current_mcp_profile).and_return(:maintenance)
+
+        tool.call(entity_id: entity.id)
+
+        expect(MemoryEntity.find_by(id: entity.id)).to be_nil
       end
 
       it 'returns ISO 8601 timestamps' do
