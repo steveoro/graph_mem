@@ -1,8 +1,8 @@
 # frozen_string_literal: true
 
-# Vendored from fast-mcp 1.8.0 (https://github.com/yjacquin/fast-mcp, fork https://github.com/steveoro/fast-mcp,
-# tag 1.8.0), MIT License, Copyright (c) 2025 Yorick Jacquin. Namespaced under GraphMem::McpSchema;
-# the full licence text is in lib/graph_mem/mcp_schema/LICENSE.fast-mcp.
+# Vendored code, MIT License, Copyright (c) 2025 Yorick Jacquin: the full licence text is in
+# lib/graph_mem/mcp_schema/LICENSE, the source project and version in NOTICE.md. Namespaced under
+# GraphMem::McpSchema.
 
 require "dry-schema"
 require "addressable/template"
