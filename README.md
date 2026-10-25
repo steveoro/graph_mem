@@ -37,6 +37,7 @@ Use `/mcp` for the default 2025-03-26 **Streamable HTTP** profile. Use
 `/mcp/readonly` for context and read tools only, or `/mcp/maintenance` for the
 full catalog including maintenance operations. The legacy 2024-11-05 SSE
 endpoint remains available at `/mcp/sse` and uses the default profile.
+Client and protocol compatibility: [`docs/protocol_compat.md`](docs/protocol_compat.md).
 
 The server also publishes `orient`, `recall`, and `persist` MCP prompts
 (`persist` is not available on the readonly profile — `/mcp/readonly`, or stdio
