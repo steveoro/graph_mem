@@ -125,6 +125,17 @@ RSpec.describe ProjectScanJob, type: :job do
       expect(paused.reload.started_at).to eq(first_started_at)
     end
 
+    it "still queues the resume when the claim broadcast fails" do
+      scan_id = SecureRandom.uuid
+      OperationProgress.start!(operation_type: "project_scan", operation_id: scan_id, total_count: 6).pause!
+      allow(OperationProgressBroadcaster).to receive(:call).and_raise(StandardError, "cable down")
+      allow(Rails.logger).to receive(:warn)
+
+      expect { described_class.enqueue(scan_id: scan_id, **args) }.to have_enqueued_job(described_class)
+      expect(OperationProgress.find_by(operation_id: scan_id).status).to eq("pending")
+      expect(Rails.logger).to have_received(:warn).with(/claim broadcast failed: cable down/)
+    end
+
     it "puts a claimed scan back to paused when enqueuing fails" do
       scan_id = SecureRandom.uuid
       paused = OperationProgress.start!(operation_type: "project_scan", operation_id: scan_id, total_count: 6)

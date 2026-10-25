@@ -55,18 +55,25 @@ class ProjectScanJob < ApplicationJob
       end
       raise
     end
+    broadcast_claim(scan_id) unless operation
     operation
   end
+
+  # The claim's update_all skips callbacks: tell the operator UI the scan is queued again. Best
+  # effort, after the job is queued: a failed broadcast must not fail or undo the resume.
+  def self.broadcast_claim(scan_id)
+    claimed_row = OperationProgress.find_by(operation_id: scan_id)
+    OperationProgressBroadcaster.call(claimed_row) if claimed_row
+  rescue StandardError => e
+    Rails.logger.warn("Scan #{scan_id}: claim broadcast failed: #{e.message}")
+  end
+  private_class_method :broadcast_claim
 
   # Moves a paused scan to pending in one UPDATE, so only one caller can resume it.
   def self.claim_paused!(scan_id)
     claimed = OperationProgress.where(operation_id: scan_id, operation_type: "project_scan", status: "paused")
                                .update_all(status: "pending", phase: "queued", message: "Queued to resume")
-    if claimed == 1
-      # update_all skips callbacks: tell the operator UI the scan is queued again.
-      OperationProgressBroadcaster.call(OperationProgress.find_by(operation_id: scan_id))
-      return
-    end
+    return if claimed == 1
 
     existing = OperationProgress.find_by(operation_id: scan_id)
     reason = if existing.nil? then "no longer exists"
