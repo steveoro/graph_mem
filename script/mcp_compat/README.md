@@ -21,6 +21,7 @@ for the 2026-07-28 rows).
 | `tsclient/tsclient.mjs <stdio\|http> <auto\|legacy> <url \| -- cmd…>` | Connects the TS client (`@modelcontextprotocol/client` 2.3.1) and lists tools. |
 | `refservers/` | `package.json` + `package-lock.json` for the reference servers (Memory and Everything 2.0.0, SDK 2.3.1). |
 | `clients.sh <url>` | The client matrix: TS 2.3.1 and Ruby SDK 1.8.0 and 1.8.1, × auto and legacy, × stdio and HTTP (12 rows). |
+| `claude_client_check.rb` | Claude Code as the client: the automated `docs/plans/claude-mcp-client-check.md` (below). |
 
 ## Setup (once)
 
@@ -85,6 +86,43 @@ accepts a 2026-07-28 `MCP-Protocol-Version` on a 2025 session, answers 1999-01-0
 and uses `-32600` without the id for an unknown or missing session. One difference matters for
 MG-5: on stdio, after a `server/discover` it refuses the legacy `initialize` that follows (`-32601`),
 while Memory falls back in-process. The TS client probes in a sibling process, so it isn't affected.
+
+## Claude Code client check
+
+`claude_client_check.rb` automates `docs/plans/claude-mcp-client-check.md`. Run it from the graph_mem
+checkout with the graph_mem Ruby, and the `claude` CLI (2.1.296 or later) logged in:
+
+```bash
+source "$HOME/.rvm/scripts/rvm" && rvm use ruby-3.4.1@graph_mem
+bundle exec ruby script/mcp_compat/claude_client_check.rb                 # both negotiation modes
+bundle exec ruby script/mcp_compat/claude_client_check.rb --only legacy --model haiku --budget 1
+```
+
+It boots graph_mem in-process on `127.0.0.1:3995` (test environment and database, a throwaway bearer
+token, synthetic scan folders in a temp dir) and:
+
+1. **Part A:** checks a wrong token (401 + `WWW-Authenticate`), stdio stdout hygiene, `"id": null` and
+   id-less calls (nothing runs), an invalid UTF-8 key, the `initialize` capabilities and instructions,
+   and the three prompts (rendering, `recall` without a topic, no `persist` on readonly) directly over
+   HTTP and stdio.
+2. **Part B:** runs `claude -p` with the checklist's prompt (`claude_client_check/prompt.md`) against five
+   servers (`gm-http`, `gm-ro`, `gm-maint`, `gm-stdio`, `gm-badtoken`), once with the default negotiation
+   and once with `MCP_PROTOCOL_NEGOTIATION=legacy`. The servers come from `--mcp-config` with
+   `--strict-mcp-config`, settings from the empty scratch folder only, and no built-in tools but the MCP
+   resource tools, so your own Claude Code configuration is neither used nor changed. The agent returns its
+   step table as JSON (`claude_client_check/schema.json`).
+3. **Part C, checked on graph_mem's side:** the connection status of each server (Claude Code's `init`
+   event), the prompts each profile offered, the protocol version each client negotiated (recorded by a
+   Rack tap for HTTP and a pipe tap for stdio), the tools each client really called (`tool_invocations`),
+   that the readonly profile wrote nothing, and that no `McpCheck` entity is left. A check fails if either
+   the agent or graph_mem's side says so.
+
+It prints the results table, exits 1 on any failure, and removes what it created (entities, telemetry
+rows, contexts, the scratch folder). Cost: one Claude Code session per mode, capped by `--budget`
+(default 3 USD each); on 2026-10-25 a run cost about 0.36 USD with Sonnet and 0.02 USD with Haiku.
+
+Results on 2026-10-25 (graph_mem 1.55.0, Claude Code 2.1.310): all checks pass in both modes; Claude Code
+negotiates 2026-07-28 over HTTP and stdio by default, and 2025-11-25 with `MCP_PROTOCOL_NEGOTIATION=legacy`.
 
 ## Provenance
 
