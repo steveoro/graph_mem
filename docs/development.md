@@ -72,11 +72,15 @@ Alternatively, use the provided MCP server script:
 bin/mcp
 ```
 
-The server exposes three 2025-03-26 Streamable HTTP profiles:
+The server exposes three Streamable HTTP profiles:
 
 - `/mcp` — 12 advertised context, read, and mutation tools
 - `/mcp/readonly` — 9 advertised context and read tools
 - `/mcp/maintenance` — all 22 canonical tools
+
+Streamable HTTP and stdio negotiate 2024-11-05 … 2025-11-25; 2026-07-28 clients fall back
+automatically via the `server/discover` probe; `MCP_PROTOCOL_NEGOTIATION=legacy` skips the
+probe (and the extra stdio process start).
 
 Eighteen deprecated read, mutation, context, and version aliases remain callable,
 bringing the transitional registry to 40 classes, but are omitted from
@@ -84,7 +88,7 @@ bringing the transitional registry to 40 classes, but are omitted from
 
 HTTP profiles are applied in place from the Rack request in FastMCP's
 per-request context; no filtered server copies or profile caches are created.
-The 2024-11-05 SSE endpoint remains at `/mcp/sse` and uses the default profile.
+The 2024-11-05 SSE endpoint remains at `/mcp/sse` (deprecated in MCP 2026-07-28; kept for older clients) and uses the default profile.
 Workflow guidance is available on demand through the `orient`, `recall`, and
 `persist` MCP prompts (`persist` is not available on the readonly profile).
 Each concrete prompt declares its profiles explicitly with
@@ -216,7 +220,7 @@ curl -s -X POST http://localhost:3030/mcp \
   -H "Authorization: Bearer dev-token" \
   -H "Content-Type: application/json" \
   -H "X-MCP-Client: curl-dev" \
-  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26"}}'
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25"}}'
 ```
 
 Without the header the same request returns `401` with `WWW-Authenticate: Bearer`. A `403`
@@ -321,7 +325,7 @@ fields (documented in `docs/rules/README.md`). Also keep `metadata.graph-mem-ver
 
 * [Ruby on Rails Guides](https://guides.rubyonrails.org/)
 * [GraphMem FastMCP fork](https://github.com/steveoro/fast-mcp)
-* [MCP Specification](https://spec.modelcontextprotocol.io/specification/2025-03-26/basic/transports/)
+* [MCP Specification](https://modelcontextprotocol.io/specification/2025-11-25/basic/transports)
 
 
 ## Getting Help

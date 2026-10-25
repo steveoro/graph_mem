@@ -33,11 +33,15 @@ The example above assumes using the container setup, which is hardcoded to port 
 
 **Project-scoped names:** entity names are unique *per project* (`UNIQUE(project_scope, name)` — members carry `project_id` of their Project root; Project roots and unclaimed reference stubs live in the global namespace). Two projects can therefore hold same-named entities independently, and name resolution is context-first-then-global — a name declared in several projects raises an ambiguity error listing the candidates instead of guessing. Pre-1.50 graphs can be stamped by `bin/rails graph_mem:backfill_project_ids` (dry-run supported).
 
-Use `/mcp` for the default 2025-03-26 **Streamable HTTP** profile. Use
+Use `/mcp` for the default **Streamable HTTP** profile. Use
 `/mcp/readonly` for context and read tools only, or `/mcp/maintenance` for the
 full catalog including maintenance operations. The legacy 2024-11-05 SSE
-endpoint remains available at `/mcp/sse` and uses the default profile.
+endpoint remains available at `/mcp/sse` (deprecated in MCP 2026-07-28; kept for older clients) and uses the default profile.
 Client and protocol compatibility: [`docs/protocol_compat.md`](docs/protocol_compat.md).
+
+Streamable HTTP and stdio negotiate 2024-11-05 … 2025-11-25; 2026-07-28 clients fall back
+automatically via the `server/discover` probe; `MCP_PROTOCOL_NEGOTIATION=legacy` skips the
+probe (and the extra stdio process start).
 
 The server also publishes `orient`, `recall`, and `persist` MCP prompts
 (`persist` is not available on the readonly profile — `/mcp/readonly`, or stdio
@@ -65,7 +69,7 @@ The header is a cooperative scope key, **not** a credential: an agent can claim 
 
 * **Ruby**: 3.4.1+
 * **Rails**: 8.1.4+
-* **MCP Implementation**: [fast-mcp](https://github.com/steveoro/fast-mcp) gem (Steve's fork of yjacquin/fast-mcp, pinned to v1.7.1) with a custom `GraphMem::McpStreamableHttpTransport` that adds 2025-03-26 Streamable HTTP support while keeping the 2024-11-05 SSE transport
+* **MCP Implementation**: [fast-mcp](https://github.com/steveoro/fast-mcp) gem (Steve's fork of yjacquin/fast-mcp, pinned to v1.8.0) with a custom `GraphMem::McpStreamableHttpTransport` that adds Streamable HTTP support (2024-11-05 … 2025-11-25) while keeping the 2024-11-05 SSE transport
 * **Database**: MariaDB 11.8+ (VECTOR support required)
 * **Embeddings**: Ollama with nomic-embed-text (768 dimensions)
 
@@ -210,7 +214,7 @@ sudo ufw allow from 192.168.0.0/24 to any port 3030 proto tcp comment "GraphMem 
 sudo ufw allow from 192.168.0.0/24 to any port 11434 proto tcp comment "Ollama from LAN"
 ```
 
-This way, the graph_mem UI will be accessible on `http://<graph_mem_server_ip>:3030/` while the MCP server will be at `http://<graph_mem_server_ip>:3030/mcp/sse`.
+This way, the graph_mem UI will be accessible on `http://<graph_mem_server_ip>:3030/` while the MCP server will be at `http://<graph_mem_server_ip>:3030/mcp` (Streamable HTTP; the legacy `/mcp/sse` endpoint is deprecated in MCP 2026-07-28; kept for older clients).
 
 ### Access control on a shared LAN
 
@@ -294,7 +298,7 @@ Edit your Cursor's `mcp.json`:
 }
 ```
 
-**Option B -- Legacy SSE transport (Docker / older clients):**
+**Option B -- Legacy SSE transport (Docker / older clients; deprecated in MCP 2026-07-28; kept for older clients):**
 ```json
 {
   "mcpServers": {
@@ -338,7 +342,7 @@ Edit your Windsurf's `mcp_config.json` using the same approach as Cursor's. Usua
 
 ### Antigravity / Devin (Streamable HTTP)
 
-GraphMem now supports the 2025-03-26 Streamable HTTP transport. Point these clients at the base MCP URL:
+GraphMem supports the Streamable HTTP transport (MCP 2024-11-05 … 2025-11-25). Point these clients at the base MCP URL:
 
 ```json
 {
@@ -351,7 +355,7 @@ GraphMem now supports the 2025-03-26 Streamable HTTP transport. Point these clie
 }
 ```
 
-The legacy SSE endpoint (`/mcp/sse`) remains available for older clients.
+The legacy SSE endpoint (`/mcp/sse`, deprecated in MCP 2026-07-28) remains available for older clients.
 
 Assuming `graph_mem-app-1` is the running container name, edit `mcp_servers.json`:
 
@@ -479,7 +483,7 @@ Use the Streamable HTTP endpoint for modern clients:
 { "url": "http://<workstation-ip>:3030/mcp" }
 ```
 
-The legacy SSE endpoint is still available:
+The legacy SSE endpoint is still available (deprecated in MCP 2026-07-28; kept for older clients):
 
 ```json
 { "url": "http://<workstation-ip>:3030/mcp/sse" }
