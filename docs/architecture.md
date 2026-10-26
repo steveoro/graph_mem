@@ -222,7 +222,8 @@ A **change set** (`change_sets`, `ChangeSet`) groups the writes of one user-visi
 
 - **What records a set.** `ChangeSet.record(kind:)` wraps each entry point:
   - `graph_write` / `graph_edit` / `graph_delete` (MCP and services): `graph.write`, `graph.edit`, `graph.delete`;
-  - the review actions (`CompactionReviewService` apply, dismiss, restore, ignore and the bulk variants): `review.*`;
+  - the review actions (`CompactionReviewService` apply, dismiss, restore, ignore, snooze and the bulk variants): `review.*`;
+  - the review policies (`ReviewPolicyRunner`, actor `policy:<name>`): `policy.<name>`, one set per batch of 200 rows;
   - every merge path (`NodeOperationsStrategy#merge_into`): `merge`, or the caller's kind: `maintenance.merge_node`, `compaction.auto_merge` (actor `compaction:<run_id>`, one set per merge), `api.write` (every non-GET `/api/v1` request).
   - A set opened inside another one joins it: a merge in a `graph_delete` batch or a review apply belongs to the outer set.
   - Imports, scans, observation dedupe and garbage collection are not recorded (their audit rows keep `change_set_id` NULL).
@@ -252,3 +253,26 @@ A **change set** (`change_sets`, `ChangeSet`) groups the writes of one user-visi
   - **The undo is itself a set** (`undo`), and undoing it is a `redo`, undoable in turn. Undoing a create deletes rows, so that undo is `hard_delete` and can't be redone.
 - **Lock order and embeddings.** The undo takes the membership lock, then suppresses inline embeds, then opens the transaction, then takes row locks: the advisory-first rule, so it serializes with merges, imports, the backfill and review applies. The restored source keeps its old vector and `embedded_at`; text the undo changed (the target's aliases, restored names) is re-embedded after the lock is released (at most 50 inline, the rest by the daily backfill). Trust scores are recomputed, never restored.
 - **Retention.** `ChangeSetPruneJob` (daily, 5:30 AM GMT) clears snapshots older than 30 days and deletes sets older than 90 days that no audit row references.
+
+## Review queue: classification, limits and policies (UI-5a)
+
+The review rows (`maintenance_report_rows`) that dream-state compaction, the stale scan, project scans and imports seed. The Review page that uses them is UI-5b; until then the old Compaction review page shows them.
+
+- **Columns.** `group_key`, `anchor_entity_id`, `project_id`, `confidence` (0-1), `priority` (0-100), `expires_at` (a snooze's end), `resolved_by` (`operator`, `agent`, `policy:<name>`, `generator`) and `change_set_id` (the set that last changed the row, for undo). Status `expired` joins `active`, `ignored`, `approved`, `dismissed`. Suppressions gain `expires_at` (NULL = permanent) and `source` (`dismissed`, `snoozed`, `expired`, `policy`); an expired suppression no longer blocks its signature.
+- **Classification.** `ReviewRowClassifier` runs at seed time: the group key and anchor per kind (pairs collapse both directions; observation kinds key on the owner), a confidence per kind and `priority = 100 × (0.6 impact + 0.4 confidence) × age boost` (+ a bump for well-connected anchors; Project roots weigh more; errors never sort below 40). `ReviewRowClassifier.backfill!` (also `bin/rails review:backfill`) classifies older rows. It also orders symmetric `relates_to` signatures, so A→B and B→A are one suggestion.
+- **Limits at the source.** Per kind and run: `RUN_CAPS` (relationship 200, merge 100, orphan 100, contradiction 100; counted across one run's flushes, best priority kept). A full backlog (`review_backlog_ceiling` active rows of a kind, default 300) only takes items that beat its lowest priority. The report's data records `skipped_run_cap` / `skipped_backlog_full`. The queue pages in SQL (root-first rows, then priority); a text search scans at most 2,000 rows.
+- **What can be applied in bulk.** Only `relationship_proposal` and `stale_memory` (`SAFE_BULK_KINDS`). Merges, deletes, moves and reparents (`DESTRUCTIVE_KINDS`) and contradictions (`CHOICE_KINDS`) are applied one by one; bulk apply skips them.
+- **Snooze.** `CompactionReviewService.snooze` (and `ignore`, which now snoozes for 30 days): status `ignored` until `expires_at`, with a matching "snoozed" suppression. Dismissing a snoozed signature makes the suppression permanent; undo brings the snooze back.
+- **Contradictions.** The scheduled stale scan seeds one `contradiction` row per pair its contradiction pass finds (signature `contradiction|<low>-<high>`, either order). Applying needs `keep_observation_id`: that observation is kept and the other is marked obsolete, a `review.apply` set (30 days) undone like any obsolete mark. MCP/API `detect_contradictions` still seed nothing.
+- **Policies.** `ReviewPolicyJob` runs `ReviewPolicyRunner` nightly at 5:00 GMT and after a compaction run, stale scan or project scan that seeded rows (never two at once). Each policy reads its `AppSettings` toggle uncached, acts on at most 500 rows per run, in batches of 200, each batch one undoable `policy.<name>` set:
+
+  | Policy | Default | Does |
+  |---|---|---|
+  | `snooze_expiry` | always | snoozed rows whose snooze ended → active, snoozed suppression removed |
+  | `dangling` | on | rows pointing at something gone, or whose effect already holds → dismissed (no suppression) |
+  | `no_longer_flagged` | on | stale_memory rows the scanner no longer flags → dismissed (no suppression) |
+  | `expire_low_confidence` | on, 30 days | confidence < 0.4, untouched for N days → expired + 90-day suppression |
+  | `auto_apply_expired_validity` | off | stale_memory `valid_until_elapsed` → applied (max 100) |
+  | `auto_apply_relationships` | off | high-band proposals ≥ 0.90 confidence, never `part_of` → applied (max 50) |
+
+  Hard rule: a policy never applies a destructive or choice kind, whatever the settings say. Each run writes a `review_policy_run` report with the counts, the change-set uuids and the apply/dismiss rates per kind and score.

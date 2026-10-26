@@ -116,10 +116,11 @@ The graph starts in **Root View**, which shows the project roots. **Full Graph**
 - **Save** keeps your edits to the row (for example a different merge target or relation type).
 - **Apply** carries out the suggestion. It asks for confirmation.
 - **Dismiss** rejects it. A dismissed suggestion stays suppressed, so compaction doesn't propose it again.
-- **Ignore** snoozes it. An ignored suggestion can come back after its row is pruned.
+- **Ignore** snoozes it for 30 days: the row comes back afterwards, and the suggestion isn't proposed again until then.
+- **Keep #N** (contradiction rows only): keeps that observation and marks the other one obsolete (undoable for 30 days). Dismiss when both are right.
 - **Restore** returns a dismissed or approved row to active.
 
-**Bulk actions:** **Apply selected** / **Dismiss selected** act on the ticked rows.
+**Bulk actions:** **Apply selected** / **Dismiss selected** act on the ticked rows. Apply selected only applies relationship proposals and stale-memory rows; merges, deletes, moves and contradictions are applied one by one.
 
 **Pruning:** approved, dismissed and ignored rows are deleted every day once they're older than the retention set in **Settings › Telemetry** (`compaction_review_row_retention_days`, 30 days by default).
 
