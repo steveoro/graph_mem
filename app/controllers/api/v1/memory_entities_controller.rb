@@ -8,7 +8,7 @@ module Api
       include GuestSearchThrottle
 
       before_action :set_entity, only: [ :show, :update, :destroy, :merge ]
-      throttle_guest_search :search
+      throttle_guest_search :search, :show
 
       # GET /api/v1/memory_entities
       def index

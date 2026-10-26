@@ -16,7 +16,7 @@ UI-1: the app shell, a read-only guest role, and an enforced Content Security Po
 - A minimum design system: Tailwind v4 `@theme` tokens and `ui-*` component classes (buttons, inputs, badges, cards), `UiHelper`, and the Stimulus `nav` and `toast` controllers.
 - A read-only guest account, **disabled until a guest password is configured** (`GRAPH_MEM_GUEST_PASSWORD` or Rails credentials `guest.password`; username `GRAPH_MEM_GUEST_USERNAME` / `guest.username`, default `guest`). Guests sign in on the same form, see Search and Explore (no edit items, no drag-and-drop) and a read-only badge, and can read the graph through 11 `/api/v1` read endpoints. The guest's username and password must differ from the operator's. Guest sessions expire after 2 h idle or 24 h, and end when the password changes.
 - `enable_guest_access` (Settings › Feature Flags, default on): turning it off signs guests out on their next request.
-- Guest searches (HTML and API) are limited to 60 a minute per IP, since a vector query costs an embedding call; operators and bearer-token clients aren't limited.
+- Guest searches (HTML and API, including entity reads ranked by `query`) are limited to 60 a minute per IP and 300 a minute across all guests, since a vector query costs an embedding call; operators and bearer-token clients aren't limited.
 
 ### Changed
 - The layout no longer forces every page into a flex row; sign-in uses its own `auth` layout. The flash container (and Turbo Stream target) is now `toasts`.

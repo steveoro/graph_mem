@@ -205,8 +205,9 @@ The REST API is not anonymous. Every verb on every `/api/v1/*` endpoint requires
    `graph/traverse` and `graph/shortest_path`. Every other endpoint answers a guest with `403`
    `{"error":"forbidden","role":"guest"}`. A guest session together with a valid bearer token gets
    full access (the token is the owner's machine credential). Guest searches
-   (`/search`, `memory_entities/search`, `search/subgraph`) share a budget of 60 a minute per IP
-   (`429` after that); requests with a valid bearer token aren't throttled.
+   (`/search`, `memory_entities/search`, `search/subgraph`, and `memory_entities/:id` when it gets a
+   `query`) share a budget of 60 a minute per IP and 300 a minute across all guests (`429` with
+   `Retry-After` after that); requests with a valid bearer token aren't throttled.
 
 `/mcp*` never reads browser sessions: an operator or guest cookie grants no MCP access.
 
