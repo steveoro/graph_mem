@@ -110,9 +110,9 @@ Controllers in `app/controllers/api/v1/` provide REST equivalents for all MCP op
 #### Search Strategies (`app/strategies/`)
 
 - **EntitySearchStrategy** - Text-based search with token matching and relevance scoring
-- **VectorSearchStrategy** - Semantic search using MariaDB VECTOR cosine distance, with a quality gate that filters results above a maximum cosine distance threshold. Supports an optional `entity_type` filter to restrict results to a specific type (used by `CreateEntityTool` dedup and other type-aware callers)
+- **VectorSearchStrategy** - Semantic search using MariaDB VECTOR cosine distance, with a quality gate that filters results above a maximum cosine distance threshold. Supports an optional `entity_type` filter to restrict results to a specific type (used by `graph_write`'s duplicate check on `create_entity` and other type-aware callers)
 - **HybridSearchStrategy** - Combines text and vector via weighted Reciprocal Rank Fusion (RRF), then applies post-fusion relevance boosts: exact name matching, entity type priority, structural importance (relation count), and graduated context boosting
-- **SearchRelevanceBooster** - Shared module providing boost constants and a `rank_entity_ids` method used by both `HybridSearchStrategy` and `SearchSubgraphTool`
+- **SearchRelevanceBooster** - Shared module providing boost constants and a `rank_entity_ids` method used by both `HybridSearchStrategy` and `SubgraphSearchService` (`search` in subgraph mode)
 
 #### Context Scoping (`app/models/graph_mem_context.rb`)
 
@@ -126,7 +126,7 @@ bucket for backward compatibility. When set:
 - `GraphMemContext.scoped_entity_ids` remains the backward-compatible ID array (`nil` when no context is active).
 - Context/search/summarize responses expose `scope_truncated` and `scope_max_entities` wherever scope counts are reported.
 - `HybridSearchStrategy` applies a graduated context boost (stronger for the root project entity, lighter for its children)
-- `SearchSubgraphTool` ranks results using `SearchRelevanceBooster` with context-aware scoring
+- `search` in subgraph mode (`SubgraphSearchService`) ranks results using `SearchRelevanceBooster` with context-aware scoring
 - `AgentContextsSnapshot` exposes active clients, current projects, and recent tool activity to the operator dashboard
 
 #### Embedding configuration (`app/services/embedding_config.rb`)

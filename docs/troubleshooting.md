@@ -53,16 +53,17 @@ This guide addresses common issues you might encounter when working with GraphMe
      ```json
      {
        "jsonrpc": "2.0",
-       "method": "VersionTool",
+       "method": "tools/list",
        "params": {},
        "id": 1
      }
      ```
 
-2. **Unknown Method**
-   - Check the method name matches an existing tool
-   - Tool names are case-sensitive
-   - Use the full tool name (e.g., `CreateEntityTool` not `CreateEntity`)
+2. **Unknown Tool**
+   - `tools/call` with an unknown name answers `-32602` (`data`: `Tool not found: <name>`)
+   - Tool names are case-sensitive snake_case (`graph_write`, not `GraphWriteTool`); the 18 aliases
+     removed in 1.55.0 (`create_entity`, `search_entities`, …) are unknown now
+   - The tool must also be in the profile you connected to (`/mcp`, `/mcp/readonly` or `/mcp/maintenance`)
 
 3. **Invalid Parameters**
    - Ensure all required parameters are provided
@@ -70,13 +71,13 @@ This guide addresses common issues you might encounter when working with GraphMe
    - Refer to the [MCP Tools Documentation](mcp_tools.md) for parameter requirements
 
 4. **Entity Not Found**
-   - Error code `-32002` indicates a requested resource wasn't found
+   - The tool returns an `isError` result whose JSON envelope has `category: "not_found"`
    - Verify entity IDs exist in the database
-   - Use `SearchEntitiesTool` to find valid entity IDs
+   - Use `search` to find valid entity IDs
 
 5. **Operation Failed**
-   - Error code `-32003` indicates an operation failed
-   - Check the error message for specific details
+   - The envelope has `category: "system_error"` (or `validation` for a refusal you can correct);
+     read `message`, `code` and `next_move` ([mcp_tools.md](mcp_tools.md), Error Handling)
    - Verify the database is accessible and not corrupted
 
 ### Problem: HTTP 413, 503, 409 or 400 from `/mcp`
@@ -86,11 +87,11 @@ These come from the transport's request checks, before any tool runs
 
 - **413** — the body is over `GRAPH_MEM_MCP_MAX_REQUEST_BYTES` (4 MiB). Split the batch, or raise
   the limit.
-- **503 "Too many sessions"** — `GRAPH_MEM_MCP_MAX_SESSIONS` (256) sessions are open and every one
-  is busy (a request in flight or an open stream); idle ones are evicted first. Raise the limit, or
-  find the client holding that many streams open.
-- **404 "Session not found" on a session that worked before** — the server restarted, or the
-  session was evicted as the least recently active idle one at the session cap. Start a new session.
+- **503 "Too many sessions"** — `GRAPH_MEM_MCP_MAX_SESSIONS` (256, per profile path) sessions are
+  open. A new `initialize` first reaps expired sessions; live ones are never evicted. Wait for idle
+  sessions to expire (30 minutes), raise the limit, or find the client holding that many sessions.
+- **404 "Session not found" on a session that worked before** — the server restarted, the session
+  expired, or it was opened on another profile path. Start a new session.
 - **409** — a second `GET` stream on the same session. Close the first one, or start a new session.
 - **400 "Unsupported protocol version"** — the `MCP-Protocol-Version` header names a version the
   server doesn't support. Send the version `initialize` returned.
@@ -229,18 +230,18 @@ script that prints to stdout before starting it.
 ### Problem: Relation Creation Fails
 
 **Symptoms:**
-- Error when calling `CreateRelationTool`
+- Error from `graph_write` with a `create_relation` operation
 - Relation not saved in database
 
 **Solutions:**
 
 1. **Entity Existence**
    - Verify both source and target entities exist
-   - Check entity IDs with `GetEntityTool`
+   - Check entity IDs with `get_entities`
 
 2. **Duplicate Relations**
    - Check if the relation already exists
-   - Use `FindRelationsTool` to verify existing relations
+   - Use `traverse_graph` to verify existing relations
 
 ## API versus MCP Issues
 
