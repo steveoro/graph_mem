@@ -89,4 +89,25 @@ RSpec.describe "Navigation", type: :system do
       expect(page.evaluate_script("window.__noReload")).to be(true)
     end
   end
+
+  context "as a guest" do
+    before do
+      enable_guest!
+      sign_in_through_form(username: "guest", password: OperatorAuthHelpers::TEST_GUEST_PASSWORD)
+      expect(page).to have_current_path(search_path, wait: 5)
+    end
+
+    it "shows only Search, Explore, the read-only badge and Sign out" do
+      expect(nav_testids).to eq(%w[nav-search nav-explore])
+      expect(page).to have_css("[data-testid='nav-guest-badge']", text: "Read-only guest", visible: :all)
+      expect(page).to have_css("#btn-operator-logout", visible: :all)
+    end
+
+    it "shows the 403 page for an operator-only URL" do
+      visit maintenance_path
+
+      expect(page).to have_css("[data-testid='guest-forbidden']")
+      expect(page).to have_css("h1", text: "Operator only")
+    end
+  end
 end

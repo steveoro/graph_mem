@@ -19,9 +19,14 @@ en:
       sign_out: "Sign out"
       signed_in_as: "Signed in as %{user}"
       unknown_user: "unknown"
+      guest_badge: "Read-only guest"
       groups:
         review: "Review & Fix"
         projects: "Projects & Data"
         system: "System"
     toasts:
       dismiss: "Dismiss"
+    forbidden:
+      title: "Operator only"
+      body: "This page needs the operator account. You are signed in as a read-only guest."
+      search_link: "Go to Search"

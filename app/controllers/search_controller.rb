@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 class SearchController < ApplicationController
+  allow_guest :results
+
   RESULTS_PER_PAGE = 25
 
   def results
