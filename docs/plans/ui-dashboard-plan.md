@@ -3,6 +3,7 @@
 **Final version, 2026-10-21 (Europe/Rome)**, written for Steve, for **Claude** to implement locally, with simple step lists for Devin.
 **Oct 22-b update** (Steve's answers, 10:44; `ui-dashboard-plan.2026-10-22-b.md` is the version before it). Only the release train changed: the agent-rules rewrite ships first as graph_mem 1.53.0, the hardening bundle (incl. UI-0) is now **1.54.0**, PR-4 / fast-mcp 1.9.0 is replaced by a migration to the official `mcp` gem (1.55.0–1.58.0), and the UI series is renumbered to **1.59.0–1.66.0** (UI-1 … UI-7). No UI content changed.
 **Oct 22-c update** (17:15; `ui-dashboard-plan.2026-10-22-c.md` is the version before it). **UI-0 is DONE** in PR #106 (merged Oct 22 as `f9febd6`, PR head `bbda8b9`, CI green). #106 adds a `## [Unreleased]` › Security section and doesn't bump the version, so UI-0 is released with the next release commit, **1.53.0** (the rules rewrite). **No version number moved.** 1.54.0 is now PR-0 + PR-2. #106's leftover low items are small tasks in mcp plan PR-2 §2.20 (§6 UI-0 below lists them). §6.D-4 is shorter because #106 already deleted `data_manage.js`. Step 0 has its real status (§0.3 row 0).
+**Oct 26 update** (Steve, Oct 26). The MCP track is **done**: everything up to the migration to the official `mcp` gem shipped as 1.53.0–1.55.2 (last PRs #118, #119, #120, #121). The order of the remaining work is now: the chores **D-1, D-2 and D-3 as one PR → 1.55.3** (step list: `docs/plans/chores-d1-d3-plan.md`), then **UI-1 → 1.56.0**, then **UI-4a and UI-5** pulled ahead of UI-2, UI-3 and UI-4b. §0.3 and the §6 headings carry the new versions; the §0.3 table is authoritative, and older version numbers quoted elsewhere in this file (1.59.0–1.66.0 for the UI series) are the pre-Oct-26 numbering. M-D1 and M-D2 were never merged; their branches are deleted and the work is carried as §6.D D-7 and D-8. The completed plans folder (`docs/plans/done/`) and the streamlined migration plan were removed.
 Previous drafts: `ui-dashboard-plan.2026-10-21-pre.md` (the Oct 20 draft with the open questions); `ui-dashboard-plan.2026-10-21-b.md` (Oct 21 morning, before Steve's 1:32 PM answers on guest credentials, auto-apply policies and PR-4).
 Base: `steveoro/graph_mem` `origin/main` @ `57d9524` (v1.52.1), re-checked on 2026-10-21 in a detached read-only worktree. `origin/main` hasn't moved.
 Method (Oct 20): I read every route, controller, view, partial, Stimulus/JS module and stylesheet, then booted the app against a throwaway DB seeded with **synthetic data only** (`ui-shots/seed_synthetic.rb`). The screenshots are in `ui-shots/`. Oct 21: I re-read the review queue, the proposal generators, the merge path, auditing and settings caching to ground §2.4, §2.5 and §5. Nothing was pushed, posted or opened on GitHub.
@@ -64,42 +65,36 @@ Answered and dropped from the open questions: all four Oct 20 UI questions (acco
 
 | # | Item | Repo / version | Who | Depends on |
 |---|---|---|---|---|
-| 0 | CircleCI fixes. **Status Oct 22, 17:15 (Europe/Rome):** graph_mem's CircleCI is fixed by PR #106 (ruby orb 4.0, `cimg/ruby:3.4.1-browsers` for rspec so the system specs run, `structure.sql` zero-vector DEFAULTs; all green at `d4de51b`). Still open: `devin/m-d1-query-cap` (`35c6423`) and `devin/m-d2-description-length` (`8ff8a9c`): no commits since Oct 21 evening, CircleCI rspec red (rubocop/brakeman green), no PR; Devin merges `main` after #106 and re-runs CI. fast-mcp `claude/pr-1-hardening-1.8.0` (`9f2c72a`): unchanged since Oct 21 18:24, no PR, **no CI has ever run on it** (fast-mcp's GitHub Actions run only on `main` pushes and PRs); Claude runs its suite locally when it resumes PR-1 (row 2, D-22) | n/a | [Devin-simple]; [Claude] at row 2 | #106 merged (Devin branches) |
-| 1 | **AR** rules & skills rewrite: commits AR-D1 (stale hints), AR-D2 (schema fields), AR-D3 (skill discovery + one `AGENTS.md` rule), AR-T (agent text) on `claude/ar-rules-rewrite`; bumps to 1.53.0, and its release commit also releases UI-0 (it folds #106's `[Unreleased]` Security section into `[1.53.0]`) | graph_mem **1.53.0** | [Claude] | off `main` after #106 merged; **next up** (step 0 no longer blocks it) |
-| 1a | **AR-E** eval harness, then the post-release eval (old arm = pre-rewrite `main` in a worktree, new arm = the 1.53.0 release commit) | graph_mem `[Unreleased]` (dev tooling) | [Claude] builds, Steve runs | 1.53.0 tagged |
-| 1b | **AR-F<n>** follow-up text fixes, only if the eval shows new worse than old (validate and iterate) | graph_mem 1.53.x (patch) | [Claude] | eval result |
-| 1c | **AR-D4** docs follow-ups | `[Unreleased]` | [Devin-simple] | 1.53.0 |
-| 2 | **PR-1** fast-mcp hardening + negotiation + `instructions:` (§1.13) + SDK 1.8.1 conformance (§1.14), continued on `claude/pr-1-hardening-1.8.0` (`9f2c72a`, §0c) | fast-mcp **1.8.0** (Steve tags `v1.8.0`), the short-term bug-fix release | [Claude] | n/a (runs in parallel with row 1) |
-| 3 | ✅ **UI-0** security baseline: **DONE in PR #106** (`claude/ui-0-security-baseline`, merged as `f9febd6`; `/api/v1` auth, login hardening, JS escaping, cable/api-docs auth, CSP report-only; 5 review rounds, CI green, merged Oct 22). Its leftover lows are PR-2 §2.20 | graph_mem `[Unreleased]` (#106 doesn't bump) → released in **1.53.0** | [Claude] | done |
-| 4 | **PR-0** home mount, ScanRootPolicy, subfolder filter, denylist | graph_mem `[Unreleased]` → 1.54.0 | [Claude] | UI-0 merged (#106 ✅) |
-| 5 | **PR-2** MCP hardening + fast-mcp 1.8.0 bump + the two high bugs + `instructions` wiring (§2.17) + the #106 leftovers and test hygiene (mcp §2.20–2.21); **bumps to 1.54.0** | graph_mem **1.54.0** | [Claude] | PR-1 tagged, PR-0 merged, 1.53.0 merged |
-| 6 | **PR-3** interop specs/scripts (+ docs); engine-agnostic, the migration's safety net | graph_mem **1.54.1** | [Claude] + [Devin-simple] | 1.54.0 |
-| D | **M-D1** query cap, **M-D2** description-length spec (D-23), **M-D3** docs line-refs (after PR-2) | `[Unreleased]` | [Devin-simple] | as listed |
-| 7 | **MG-0** migration design (reads `ruby_mcp` `a0ff088`); a written doc, no release | n/a | [Claude] | PR-3 merged |
-| 8 | **MG-1** adapter layer, `mcp` gem, engine switch (default fast-mcp), 3 pilot tools | graph_mem **1.55.0** | [Claude] | MG-0 approved by Steve |
-| 9 | **MG-2a** tools batch A: the 12 `/mcp` tools + parity-spec template | graph_mem 1.55.1 | [Claude] | MG-1 |
-| 10 | **MG-2b** tools batch B: the other 28 tool classes | graph_mem 1.55.2 | [Devin-simple] | MG-2a |
-| 11 | **MG-3** resources and prompts | graph_mem 1.55.3 | [Claude] | MG-2a |
-| 12 | **MG-4** transports and auth on the gem; the official engine becomes the default | graph_mem **1.56.0** | [Claude] | MG-2b, MG-3 |
-| 13 | **MG-5** 2026-07-28 dual era through the gem | graph_mem **1.57.0** | [Claude] | MG-4 |
-| 14 | **MG-6** drop fast-mcp + **MG-D1** docs | graph_mem **1.58.0** | [Claude] + [Devin-simple] | MG-5 |
-| 15 | **UI-1** app shell, design system, roles incl. guest, CSP enforced | graph_mem **1.59.0** | [Claude] | 1.58.0 |
-| 16 | **UI-2** Home | **1.60.0** | [Claude] | UI-1 |
-| 17 | **UI-3** Search | **1.61.0** | [Claude] | UI-1 |
-| 18 | **UI-4a** change sets, merge snapshots, undo (backend) | **1.62.0** | [Claude] | UI-1 |
-| 19 | **UI-4b** Explore | **1.63.0** | [Claude] | UI-3 (panel), UI-4a |
-| 20 | **UI-5** Review & Fix | **1.64.0** | [Claude] | UI-4a |
-| 21 | **UI-6** Projects & Data | **1.65.0** | [Claude] | PR-0, UI-1 |
-| 22 | **UI-7** System (settings schema, backups, access) | **1.66.0** | [Claude] | UI-1 |
-| UD | Devin-simple chores (§6.D) | `[Unreleased]` | [Devin-simple] | as listed |
+| 0 | ✅ CircleCI fixes: done in #106 | n/a | | done |
+| 1 | ✅ **AR** rules & skills rewrite (#107) | graph_mem **1.53.0** | [Claude] | done |
+| 1a | **AR-E** eval harness, then the post-release eval. **Not started; not scheduled.** | graph_mem `[Unreleased]` (dev tooling) | [Claude] builds, Steve runs | 1.53.0 ✅ |
+| 1b | **AR-F<n>** follow-up text fixes, only if the eval shows new worse than old | next patch | [Claude] | eval result |
+| 1c | **AR-D4** docs follow-ups (`agent-rules-plan.md` §D). Open; not scheduled | `[Unreleased]` | [Devin-simple] | 1.53.0 ✅ |
+| 2 | ✅ **PR-1** fast-mcp 1.8.0; graph_mem moved to it in 1.54.0 and dropped fast-mcp entirely in 1.55.1 | fast-mcp 1.8.0 | [Claude] | done |
+| 3 | ✅ **UI-0** security baseline (#106) | released in **1.53.0** | [Claude] | done |
+| 4 | ✅ **PR-0** home mount, ScanRootPolicy, subfolder filter, denylist (#111) | graph_mem **1.54.0** | [Claude] | done |
+| 5 | ✅ **PR-2** MCP hardening (#112) | graph_mem **1.54.0** | [Claude] | done |
+| 6 | ✅ **PR-3** interop specs/scripts and protocol compatibility doc (#113, #114); follow-up fixes (#115 → 1.54.2) | graph_mem **1.54.1**, 1.54.2 | [Claude] + [Devin-simple] | done |
+| D | ✅ **M-D3** docs line-refs (#116 → 1.54.3). **M-D1** query cap and **M-D2** description-length spec: **dropped** as branches (never merged, written for fast-mcp, far behind `main`; branches deleted Oct 26). The work is carried as §6.D **D-7** and **D-8** | 1.54.3 | [Devin-simple] | done / see §6.D |
+| 7–14 | ✅ **MG** track (MG-0 … MG-6, MG-D1), streamlined into three PRs: the engine swap (#118 → **1.55.0**), the Claude client-check script (#119, released in 1.55.1), fast-mcp removal (#120 → **1.55.1**), docs and the migration guide (#121 → **1.55.2**). Decisions D1–D14: `docs/guides/migrating-fast-mcp-to-mcp-gem.md` §2 | graph_mem **1.55.0–1.55.2** | [Claude] | done |
+| C | **Chores D-1, D-2, D-3** (§6.D) as **one PR**: review button labels, schedule the row cleanup job, no re-embedding inside the merge lock. Step list: `docs/plans/chores-d1-d3-plan.md` | graph_mem **1.55.3** | [Claude] | 1.55.2 ✅; **next up** |
+| 15 | **UI-1** app shell, design system, roles incl. guest, CSP enforced | graph_mem **1.56.0** | [Claude] | C merged |
+| 16 | **UI-4a** change sets, merge snapshots, undo (backend) | **1.57.0** | [Claude] | UI-1, D-3 (in C) |
+| 17 | **UI-5** Review & Fix | **1.58.0** | [Claude] | UI-1, UI-4a |
+| 18 | **UI-2** Home | **1.59.0** | [Claude] | UI-1 |
+| 19 | **UI-3** Search | **1.60.0** | [Claude] | UI-1 |
+| 20 | **UI-4b** Explore | **1.61.0** | [Claude] | UI-3 (panel), UI-4a |
+| 21 | **UI-6** Projects & Data | **1.62.0** | [Claude] | PR-0 ✅, UI-1 |
+| 22 | **UI-7** System (settings schema, backups, access) | **1.63.0** | [Claude] | UI-1 |
+| UD | The other Devin-simple chores (§6.D: D-4 … D-8) | `[Unreleased]` | [Devin-simple] | as listed |
 
-Rows 0, 1, 1a–1c come from `agent-rules-plan.md`; rows 7–14 are the migration track in the mcp plan (§MG). Neither touches UI files. `D-nn` numbers refer to the mcp plan's decisions.
+Rows 0, 1, 1a–1c come from `agent-rules-plan.md`; rows 2, 4–6, 7–14 and D from `mcp-update-plan.md` (both done apart from 1a–1c). `D-nn` numbers refer to the mcp plan's decisions.
 
-**Why the migration comes before the UI series.** It keeps Steve's "MCP layer first" order, so the UI builds on the final MCP stack. The UI series doesn't depend on it technically: if Steve wants the UI sooner, UI-1 … UI-7 can follow MG-4 and only the numbering changes. Claude doesn't swap on its own.
+**Order from Oct 26 (Steve).** The chores first, as one small patch release (1.55.3), so UI-4a starts on a merge path without HTTP calls inside the lock (D-3) and the review queue shows real labels (D-1) and stops growing (D-2) before its redesign. Then UI-1, because every UI PR builds on its shell and roles. Then UI-4a and UI-5, which have the biggest payoff (Review & Fix) and need only UI-1 and UI-4a. UI-2, UI-3 and UI-4b follow; UI-6 and UI-7 only need UI-1 and close the series. The version numbers above follow that order (my numbering, one minor version per UI PR); if Steve reorders again, only the numbers change, not the content. Claude doesn't swap on its own.
 
 **Why UI-0 had to come before the mount (met: #106 merged first, released in 1.53.0).** 1.54.0 mounts the operator's **whole home folder** into the container. Without UI-0, anyone on the LAN can `POST /api/v1/scan` and then read the scanned content back through the unauthenticated `GET /api/v1/memory_entities/...`, and scanned file text becomes entity names and observations that today reach `innerHTML` (F1). So API auth and the JS escaping are preconditions of the mount, not polish. PR-0 must not merge before UI-0 (done). CSP went in as **report-only** (#106) and is enforced in UI-1, once the shell rewrite has removed the inline handlers. The guest role needs the new nav, so it lands in UI-1. UI-0 already stores `session[:role]` so that UI-1 needs no session migration.
 
-UI-5 (Review & Fix) has the biggest payoff for Steve. UI-4a deliberately comes before it, because auto-resolution and group actions reuse change sets and undo. If Steve wants Review & Fix sooner, UI-5 may jump ahead of UI-2/UI-3/UI-4b; it only needs UI-1 and UI-4a.
+UI-5 (Review & Fix) has the biggest payoff for Steve. UI-4a deliberately comes before it, because auto-resolution and group actions reuse change sets and undo. **Decided Oct 26:** UI-4a and UI-5 jump ahead of UI-2/UI-3/UI-4b (rows 16–17).
 
 ---
 
@@ -502,7 +497,7 @@ This lives in `NodeOperationsStrategy#merge_into_once` (one place), so **every**
 ---
 ## 6. PR series
 
-Conventions are in §0.1 and the order is in §0.3. In every PR: request specs for each new route, system specs (`spec/system`, `driven_by :selenium, using: :headless_chrome`) for flows that touch JS, and synthetic fixtures only.
+Conventions are in §0.1 and the order is in §0.3 (Oct 26: chores, UI-1, UI-4a, UI-5, UI-2, UI-3, UI-4b, UI-6, UI-7; the sections below keep their original order). In every PR: request specs for each new route, system specs (`spec/system`, `driven_by :selenium, using: :headless_chrome`) for flows that touch JS, and synthetic fixtures only.
 
 ### UI-0 [Claude]: security baseline: ✅ DONE in PR #106 (released in 1.53.0)
 - **Delivered** on `claude/ui-0-security-baseline` (PR head `d4de51b` at review: 13 commits, 50 files; merged Oct 22 as `f9febd6` after Steve added `39db049` and `bbda8b9`; CircleCI rubocop/brakeman/rspec green with the system specs running on `cimg/ruby:3.4.1-browsers`). The review bot reviewed it in 5 rounds; the last one ended "Looks good to me — ready for Steve". **CHANGELOG:** `## [Unreleased]` › Security, with six entries (F1 XSS, F2 API auth, F3 login, F4 ActionCable, CSP report-only, Rswag gate). **No version bump**, so the 1.53.0 release commit (rules rewrite) folds it in.
@@ -528,7 +523,7 @@ Conventions are in §0.1 and the order is in §0.3. In every PR: request specs f
 ### PR-0 and PR-2 (mcp plan): scan mounts and MCP hardening, release 1.54.0
 See `mcp-update-plan.md`. On the UI side, PR-0 adds only the Settings › Project scans panel, "check a path" and the scan-form hints. The full path picker comes in UI-6.
 
-### UI-1 [Claude]: app shell, design system, roles (guest), CSP enforced → **1.59.0**
+### UI-1 [Claude]: app shell, design system, roles (guest), CSP enforced → **1.56.0**
 - **Branch:** `claude/ui-1-shell-roles`.
 - **Files:** `app/views/layouts/{application,auth}.html.haml`, `app/views/ui/*` (§3.2), `app/helpers/ui_helper.rb` (incl. `can_write?`), `app/assets/tailwind/application.css` (tokens + component layer), `app/javascript/controllers/{toast,nav}_controller.js`, `app/views/kaminari/ui/*`, `config/routes.rb` (section routes as thin aliases + 301 redirects), `config/locales/ui.en.yml`, `spec/support/system.rb`. Roles: `role_authorization.rb` (`allow_guest`), `sessions_controller.rb` (guest login), `app/models/app_settings.rb` (`enable_guest_access` field + an uncached reader), new `lib/graph_mem/guest_credentials.rb` (resolves ENV → credentials once at boot; `configured?`, `username`, `fingerprint`; no default password), `config/initializers/guest_access.rb` (boot check: guest password/username ≠ operator's, else error log + guest disabled; info log "guest access: not configured / available"), `api_authentication.rb` (`GUEST_READ_ACTIONS`). CSP switches from report-only to enforced. **Starts from #106:** `RoleAuthorization` and `session[:role]` already exist, and `allow_guest` appends after PR-2 §2.20 item 7. Enforcing CSP needs PR-2 §2.20 item 2 (the import-review nonce) merged and zero report-only violations in the log.
 - **Changes:** sidebar nav per §2 with role-aware items; backlog badge (attention groups after UI-5, active rows until then, cached 30 s); toast region; page-header partial; existing pages render inside the shell unchanged; the guest role exactly as in §2.1 and §5.4.
@@ -536,28 +531,28 @@ See `mcp-update-plan.md`. On the UI side, PR-0 adds only the Settings › Projec
 - **Acceptance:** every existing page is reachable from the nav; guests can't reach anything outside §5.4 (route-matrix spec green); zero CSP violations with enforcement on.
 - **Risks:** CSS collisions with `dashboard.css` (scope new classes `.ui-*` until UI-7 deletes the old file).
 
-### UI-2 [Claude]: Home → **1.60.0**
+### UI-2 [Claude]: Home → **1.59.0**
 - **Branch:** `claude/ui-2-home`.
 - **Files:** `app/controllers/pages_controller.rb`, new `app/services/home_snapshot.rb` (composes `MaintenanceDashboardSnapshot`, `EmbeddingStatusSnapshot`, `AgentContextsSnapshot`, review digest, recent jobs from `OperationProgress`, recent change sets, `ScanRootPolicy.status`), `app/views/pages/home.html.haml`, `app/views/home/_*.html.haml` (lazy Turbo Frames); remove `pages/dashboard/*` partials as their content moves.
 - **Changes:** §2.2. No forms except quick search. Until UI-5/UI-6 land, the removed buttons link to the old pages.
 - **Specs:** `spec/requests/pages_spec.rb` (health strip green/amber/red with a stubbed snapshot; digest rows link correctly; no `form` other than search; guest → redirect to `/search`); `spec/services/home_snapshot_spec.rb`; a system spec Home → digest → Review.
 - **Acceptance:** Home fits in ~1.5 screens at 1440×900 with synthetic data and renders in < 300 ms with the embedding service unreachable (`OLLAMA_URL=http://127.0.0.1:9`; lazy frames).
 
-### UI-3 [Claude]: Search → **1.61.0**
+### UI-3 [Claude]: Search → **1.60.0**
 - **Branch:** `claude/ui-3-search`.
 - **Files:** new `app/services/graph_search.rb` (extracted from `app/tools/search_tool.rb`; the tool calls it), `app/controllers/search_controller.rb` (thin, `allow_guest :results, :index`), `app/views/search/{index,_filters,_result,_snippet}.html.haml`, `app/views/entities/_panel.html.haml` + `EntitiesController#panel` (`allow_guest :panel`), `app/javascript/controllers/search_controller.js`.
 - **Specs:** `spec/services/graph_search_spec.rb` (parity: same ids/order as `SearchTool#call` for the same args); `spec/tools/search_tool_spec.rb` unchanged and green; request specs per filter and for the vector-unavailable state; a guest panel spec (no "Open in Review", no edit links); a system spec query → filter → panel → Explore.
 - **Acceptance:** identical result order to the MCP tool; old `/search?q=&strategy=` links still work.
 - **Risks:** this touches the busiest MCP tool. The tool spec suite is the gate, and ranking doesn't change in this PR.
 
-### UI-4a [Claude]: change sets, merge snapshots, undo (backend) → **1.62.0**
+### UI-4a [Claude]: change sets, merge snapshots, undo (backend) → **1.57.0**
 - **Branch:** `claude/ui-4a-change-sets-undo`. **Prerequisite:** §6.D-3 (the F8 fix) merged.
 - **Files:** migrations `create_change_sets`, `add_change_set_id_to_audit_logs`; `app/models/change_set.rb`, `app/models/current.rb` (+`change_set`), `app/models/concerns/auditable.rb` (stamp `change_set_id`), `app/strategies/node_operations_strategy.rb` (`merge_into_once` writes the snapshot through the new `app/services/entity_merge_snapshot.rb`; keep the file under 500 lines by moving the merge helpers into `app/strategies/node_operations_strategy/merge.rb` if needed), new `app/services/entity_merge_preview.rb`, `app/services/entity_merge_service.rb`, `app/services/change_set_undo.rb` + `app/services/change_set_undo/{audit_inverse,merge}.rb`, `app/controllers/changes_controller.rb` (`POST /changes/:uuid/undo`, operator only), `app/jobs/change_set_prune_job.rb` + `config/recurring.yml`.
 - **Changes:** §5.3 exactly. Compaction auto-merges get a change set with actor `compaction:<run_id>`.
 - **Specs:** `spec/services/entity_merge_preview_spec.rb` (the preview matches the actual merge effects on a synthetic graph: counts of moved observations, re-pointed and destroyed relations, reparented children; the preview writes nothing: assert no audit rows or change sets); `spec/services/change_set_undo/merge_spec.rb` (round trip: merge → undo restores the same ids, names, aliases, observation owners, trust scores, relation endpoints, project_ids and the embedding bytes; refuses on a name collision; refuses when an observation moved after the merge; refuses after `undoable_until`; undo of undo = redo); `spec/services/change_set_undo/audit_inverse_spec.rb` (each inverse; refuses when changed since); `spec/requests/changes_spec.rb` (operator 200, guest 403, CSRF required); `spec/strategies/node_operations_strategy_merge_snapshot_spec.rb` (every caller path writes a snapshot; a failing snapshot write rolls the merge back). Plus a concurrency spec (`use_transactional_tests = false`, clean up after): an undo racing a write on the same target blocks on the membership lock and then refuses or succeeds, never a 500 or partial state. That's Steve's rule: block or queue, never race.
 - **Acceptance:** any merge made by any path can be undone from the Rails console with `ChangeSetUndo.call(uuid)` within its window; all existing merge specs stay green.
 
-### UI-4b [Claude]: Explore → **1.63.0**
+### UI-4b [Claude]: Explore → **1.61.0**
 - **Branch:** `claude/ui-4b-explore`.
 - **Files:** `app/controllers/explore_controller.rb` (`show`, guest-allowed), `app/controllers/explore/{entities,observations,relations,moves,merges}_controller.rb` (HTML/Turbo, CSRF on, operator only except `entities#panel`), JS: rewrite `controllers/graph_controller.js` into `explore_controller.js` (canvas only; emits `entity:selected`, listens for `graph:changed`; a `readOnly` value from the server disables drag actions and context-menu writes), `graph/drag_drop_manager.js` (Add relation · Move under parent · Merge into…), `graph/context_menu.js` (Edit in panel · Remove relation · Merge into… · Propose deletion; no hard delete, no dedupe), `app/views/explore/merges/_dialog.html.haml`. Delete the `/graph` page and its duplicated search form.
 - **Changes:** §2.4.
@@ -565,7 +560,7 @@ See `mcp-update-plan.md`. On the UI side, PR-0 adds only the Settings › Projec
 - **Acceptance:** Explore can't delete an entity or bulk-delete anything; every edit, including merges, appears in Activity with the operator actor and can be undone within 10 min from the toast.
 - **Risks:** this is the biggest JS change in the series. Keep the Cytoscape config/styles and only restructure the controller.
 
-### UI-5 [Claude]: Review & Fix → **1.64.0**
+### UI-5 [Claude]: Review & Fix → **1.58.0**
 - **Branch:** `claude/ui-5-review-fix`.
 - **Files:**
   - migration `add_grouping_to_maintenance_report_rows` (§2.5.1 columns, indexes, batch backfill; suppressions `expires_at`/`source`; signature rewrite for symmetric relates_to);
@@ -590,13 +585,13 @@ See `mcp-update-plan.md`. On the UI side, PR-0 adds only the Settings › Projec
 - **Acceptance:** with 1,000 synthetic rows (a factory script, not real data), the default view shows ≤ 10 decisions; the page's query count doesn't depend on queue size; policies are off/on exactly per §2.5.3 defaults; nothing destructive can be bulk- or auto-applied.
 - **Risks:** the backfill on a large `maintenance_report_rows` table (batch 1,000, no long transaction). Classifier weights are guesses, so they're constants with one spec table, easy to tune.
 
-### UI-6 [Claude]: Projects & Data → **1.65.0** (after PR-0)
+### UI-6 [Claude]: Projects & Data → **1.62.0** (after PR-0)
 - **Branch:** `claude/ui-6-projects-data`.
 - **Files:** `app/controllers/projects_controller.rb`, `app/controllers/projects/{scans,imports,exports}_controller.rb`, views under `app/views/projects/`, re-homed `data_exchange#import_*`/`export*` actions (keep the services), `app/javascript/controllers/path_check_controller.js` (live check via `GET /projects/scans/check_path`, which calls `ScanRootPolicy.resolve`), and the merged `ProjectScansController`/`ProjectScanSkillsController` forms.
 - **Specs:** request specs (path check: ok / outside filter / denylisted / not mounted; scan create normal + guided; import upload → review → execute → report under the new routes; guest 403 everywhere); a system spec: new scan with dry run → detail page progress (stubbed job).
 - **Acceptance:** the Maintenance hub and dashboard scan cards are gone; every scan/import/export is reachable from Projects & Data with history.
 
-### UI-7 [Claude]: System → **1.66.0**
+### UI-7 [Claude]: System → **1.63.0**
 - **Branch:** `claude/ui-7-system`.
 - **Files:** `app/controllers/system/{health,settings,backups,access,policies,activity,diagnostics}_controller.rb`; move `operator/{embeddings,telemetry,audit_logs}` under `system/` (routes + views); `app/services/settings_schema.rb` (a single source: group, label, type, validation, help; it renders all fields generically and removes bespoke tab partials where possible); the backups page with typed confirmation; delete `dashboard.css`.
 - **Specs:** a request spec per page; every `AppSettings.defined_fields` key appears in exactly one group (the spec iterates the schema); backup restore requires the typed filename (422 otherwise); the health JSON shape; Access shows guest state correctly for each of not configured / available / turned off, and the toggle is operator-only (guest 403).
@@ -606,6 +601,7 @@ See `mcp-update-plan.md`. On the UI side, PR-0 adds only the Settings › Projec
 Command palette [Claude], saved searches [Claude], dark mode [Claude], keyboard help overlay [Devin-simple once the shortcut list exists], activity feed filters [Devin-simple]. Each is a small PR.
 
 ### 6.D Devin-simple chores (no design decisions; `## [Unreleased]` CHANGELOG line, no version bump)
+**Oct 26:** D-1, D-2 and D-3 ship together as **one PR, graph_mem 1.55.3** (with a version bump), done by Claude from `docs/plans/chores-d1-d3-plan.md`, which has the re-verified file:line references. The step lists below are the original brief; where they differ, the chores plan wins.
 Each item: branch `devin/ui-d<n>-<slug>` off `main`, the listed spec green, the full suite run alone, test DB truncated before and after, and nothing else touched.
 
 - **[Devin-simple] D-1. Review button labels (F5).** In `app/views/data_exchange/_compaction_review_item.html.haml`, lines 196-202: replace each `submit_tag "<Label>", name: "review_action", value: "<value>", …` with `button_tag "<Label>", type: "submit", name: "review_action", value: "<value>", …`, keeping the existing `class:`, `form:` and `data:` options unchanged. (`submit_tag`'s `value:` option overwrites the label, which is why the buttons read `edit/apply/dismiss/…`.) Spec: in `spec/requests/data_exchange_spec.rb`, assert the four labels render and the posted values are unchanged. *Can merge any time; UI-5 later replaces the view.*
@@ -614,6 +610,8 @@ Each item: branch `devin/ui-d<n>-<slug>` off `main`, the listed spec green, the 
 - **[Devin-simple] D-4. Remove dead UI code** (after UI-4b and UI-5 have merged; `graph/data_manage.js` is already gone, deleted in #106): the `dm-*` rules in `app/assets/stylesheets/graph.css`, `app/views/data_exchange/_compaction_review_confirm.html.haml`, `app/views/pwa/*` and `test/`. `git add` untracked files before deleting them (repo rule). Spec: the full suite green, plus `rg -n "dm-" app/assets app/views` → nothing.
 - **[Devin-simple] D-5. Docs refresh** after each UI PR: update `docs/operator/*.md` screenshots (synthetic data) and the page names in README. Follow the list in the PR's "Docs" section; no wording decisions beyond renames.
 - **[Devin-simple] D-6. Drop the transition shims** one release after UI-7: remove the 301 redirects for old paths and the legacy `session[:operator_signed_in]` read. Spec: remove the redirect specs and assert the old paths 404.
+- **[Devin-simple] D-7. Query length cap (was M-D1, dropped Oct 26).** The old branch targeted fast-mcp and six tools, three of which (`search_entities`, `search_subgraph`, `get_entity`) no longer exist as separate tools. Redo it on `main`: a `MAX_QUERY_LENGTH = 2_048` constant and a guard that raises `GraphMem::InvalidArgumentsError` ("Query is too long (max 2048 characters).") for the `query` argument of `search_tool.rb`, `get_entities_tool.rb`, `rank_observations_tool.rb` and `summarize_tool.rb`, plus `maxLength: 2048` in each advertised input schema if the vendored schema DSL (`lib/graph_mem/mcp_schema/`) emits it; otherwise the runtime guard only. The `tools/list` snapshot spec will need re-recording; say so in the PR. Spec: a 2,049-char query returns the tool error envelope; a 2,048-char one passes. *Ship any time; low priority (the 4 MiB body cap already bounds it).*
+- **[Devin-simple] D-8. Tool description length spec (was M-D2, dropped Oct 26).** `spec/lib/graph_mem/mcp_instructions_spec.rb` already caps the server `instructions` at 2,048 chars, so only the tool half is left: a spec asserting every registered tool's `description.length <= 2048` for every profile. *Ship any time.*
 
 ---
 
@@ -637,4 +635,4 @@ Each item: branch `devin/ui-d<n>-<slug>` off `main`, the listed spec green, the 
 
 None. Everything asked so far is answered (§0.2, decisions 1–10). Two items depend on Steve's own commits, not on a decision:
 - Add the `guest:` entry (`username`, `password`) to Rails credentials (decision 8). Until then guest login stays disabled, which is the intended safe state.
-- If you'd rather have the UI series before the migration finishes, say so and the versions swap (§0.3); otherwise the train runs as written.
+- ~~If you'd rather have the UI series before the migration finishes~~ moot: the migration is done (Oct 26), and the order is set in §0.3.

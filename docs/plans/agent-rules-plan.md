@@ -1,5 +1,7 @@
 # graph_mem agent-facing text plan: rules, skill, prompts, tool descriptions, server instructions, eval
 
+**Status (2026-10-26):** AR-D1, AR-D2, AR-D3 and AR-T shipped in graph_mem **1.53.0** (#107). Still open and not scheduled: **AR-E** (the eval harness; nothing under `eval/` yet), **AR-F** (only if the eval asks for it) and **AR-D4** (Devin-simple docs follow-ups, §D). The active plan is `ui-dashboard-plan.md` (§0.3 has the order).
+
 **Version 2, 2026-10-22 b (Europe/Rome)**, after Steve's 10:44 answers. Version 1 is `agent-rules-plan.2026-10-22-b.md`. What changed: the rewrite ships **as soon as possible** as graph_mem **1.53.0**, on one Claude branch; the eval no longer gates it and becomes post-release validation; embeddings are on for the real comparison; the memory homes are approved; there's no contact with Letta. Written for Steve, for **Claude** to implement locally, with simple step lists for Devin.
 **Oct 22-c update** (17:15; `agent-rules-plan.2026-10-22-c.md` is the version before it):
 - **UI-0 is done** in graph_mem PR #106, which wrote `## [Unreleased]` › Security without a version bump. So the 1.53.0 release commit (commit 5) also releases UI-0. No version number moved.
