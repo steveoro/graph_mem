@@ -133,7 +133,7 @@ class CompactionReviewService
         signatures = suppression_signatures(row)
         if signatures.any?
           scope = MaintenanceReportSuppression.where(report_type: row.report_type, signature: signatures)
-          deleted = scope.map { |suppression| suppression.attributes.as_json }
+          deleted = scope.map { |suppression| ChangeSet.snapshot_attributes(suppression) }
           scope.delete_all
           note_suppressions(deleted: deleted)
         end

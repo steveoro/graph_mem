@@ -110,6 +110,10 @@ Rails.application.routes.draw do
   resources :project_scans, only: [ :create ]
   resources :project_scan_skills, only: [ :create, :update ]
   get "maintenance", to: "maintenance#index"
+  # UI-4a: operator-only undo of a recorded change set.
+  resources :changes, only: [], param: :uuid do
+    post :undo, on: :member
+  end
 
   namespace :operator do
     get "login", to: "sessions#new", as: :login

@@ -62,6 +62,14 @@ class ChangeSet < ApplicationRecord
     Current.set(change_set: context) { yield context }
   end
 
+  # A record's columns as snapshot JSON, keeping times at microsecond precision (plain as_json
+  # rounds them to milliseconds).
+  # @param record [ActiveRecord::Base]
+  # @return [Hash{String => Object}]
+  def self.snapshot_attributes(record)
+    record.attributes.transform_values { |value| value.acts_like?(:time) ? value.utc.iso8601(6) : value.as_json }
+  end
+
   # @param now [Time]
   # @return [Boolean] true while the set can still be undone
   def undoable?(now = Time.current)

@@ -36,7 +36,7 @@ class CompactionReviewService
 
     # @return [Hash{String => Object}] JSON-ready review fields
     def review_fields(row)
-      REVIEW_FIELDS.to_h { |field| [ field, row.public_send(field) ] }.as_json
+      ChangeSet.snapshot_attributes(row).slice(*REVIEW_FIELDS)
     end
 
     def review_anchor(row)
