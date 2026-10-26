@@ -28,8 +28,8 @@ RSpec.describe "Content Security Policy in the browser", type: :system do
     {
       "Search" => "/search?q=SynthWidget",
       "Maintenance" => "/maintenance",
-      "Compaction review" => "/data_exchange/compaction_review",
-      "Scan review" => "/data_exchange/compaction_review?report_type=scan_review",
+      "Review & Fix" => "/review",
+      "Scan review" => "/review?view=scan",
       "Embeddings" => "/operator/embeddings",
       "Telemetry" => "/operator/telemetry",
       "Audit log" => "/operator/audit_logs",

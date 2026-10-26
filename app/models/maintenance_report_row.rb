@@ -31,6 +31,11 @@ class MaintenanceReportRow < ApplicationRecord
   scope :snoozed, -> { ignored.where.not(expires_at: nil) }
   scope :attention, ->(threshold) { active.where(priority: threshold.to_i..) }
   scope :by_group, ->(group_key) { where(group_key: group_key) }
+  # A Review page group: its group_key, or an unclassified row keyed "<kind>|row:<row_uuid>".
+  scope :in_group, lambda { |key|
+    uuid = key.to_s[/\|row:(.+)\z/, 1]
+    uuid ? where(group_key: key).or(where(group_key: nil, row_uuid: uuid)) : where(group_key: key)
+  }
   scope :by_project, ->(project_id) { where(project_id: project_id) }
 
   serialize :payload, coder: JSON
@@ -48,6 +53,11 @@ class MaintenanceReportRow < ApplicationRecord
 
   def expired?
     status == "expired"
+  end
+
+  # Active or ignored (snoozed): still waiting for a decision.
+  def pending?
+    %w[active ignored].include?(status)
   end
 
   def approved?

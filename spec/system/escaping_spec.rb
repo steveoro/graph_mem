@@ -15,7 +15,7 @@ require "rails_helper"
 #   3. renderObservationCards   (graph/observation_renderer.js)
 #   4. renderDuplicateWarning   (graph/observation_renderer.js)
 #   5. DragDropManager header   (graph/drag_drop_manager.js — via lib/dom directly)
-#   6. Compaction-review autocomplete select (controllers/compaction_review_controller.js)
+#   6. Review page entity autocomplete select (controllers/review_entity_picker_controller.js)
 RSpec.describe "XSS escaping in graph UI", type: :system do
   # A payload that, if injected via innerHTML, would create <img data-probe> in the DOM.
   PROBE = "<img src=x data-probe=1>"
@@ -150,9 +150,9 @@ RSpec.describe "XSS escaping in graph UI", type: :system do
   end
 
   # ───────────────────────────────────────────────────────────────────────────
-  # Sink 6: compaction-review autocomplete (entity search select)
+  # Sink 6: Review page autocomplete (entity search select)
   # ───────────────────────────────────────────────────────────────────────────
-  context "on the compaction review page" do
+  context "on the review page" do
     let!(:review_row) do
       MaintenanceReportRow.create!(
         report_type: "compaction_review",
@@ -171,8 +171,11 @@ RSpec.describe "XSS escaping in graph UI", type: :system do
       sign_in_operator!
       # Intercept the entity-search fetch BEFORE visiting the page so the mock
       # is in place when the search fires.
-      visit compaction_review_data_exchange_index_path
-      expect(page).to have_css('[data-controller="compaction-review"]', wait: 5)
+      # The edit fields live in the row's detail pane: open its group, then the row.
+      visit review_path(view: "kind")
+      click_link "Review", match: :first, exact: true
+      find("##{ActionView::RecordIdentifier.dom_id(review_row)} .review-row__open", wait: 5).click
+      expect(page).to have_css('[data-controller="review-entity-picker"]', wait: 5)
       # Install a fetch spy that returns a probe entity name
       page.execute_script(<<~JS)
         window._origFetch = window.fetch;
@@ -207,7 +210,7 @@ RSpec.describe "XSS escaping in graph UI", type: :system do
       # Wait for debounce (200 ms) + promise resolution
       sleep 0.5
       expect(page).to have_text(PROBE, wait: 2)
-      no_probe!("compaction review autocomplete")
+      no_probe!("review autocomplete")
     end
   end
 end

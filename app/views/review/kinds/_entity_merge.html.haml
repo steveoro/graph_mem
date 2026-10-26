@@ -1,0 +1,6 @@
+- source_id = payload["source_id"] || payload.dig("entity_a", "entity_id")
+- target_id = payload["target_id"] || payload.dig("entity_b", "entity_id")
+- names = MemoryEntity.where(id: [ source_id, target_id ]).pluck(:id, :name).to_h
+%p= "Merge '#{names[source_id.to_i] || payload.dig('entity_a', 'name')}' into '#{names[target_id.to_i] || payload.dig('entity_b', 'name')}' (distance #{payload['cosine_distance'] || '—'})"
+= render "review/entity_search_select", row: row, field_name: "source_id", label_text: "Source", current_id: source_id, current_name: names[source_id.to_i]
+= render "review/entity_search_select", row: row, field_name: "target_id", label_text: "Target", current_id: target_id, current_name: names[target_id.to_i]

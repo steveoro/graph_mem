@@ -1,0 +1,6 @@
+- observation = MemoryObservation.find_by(id: payload["observation_id"])
+- target_id = payload["target_entity_id"] || payload["target_id"]
+%p= observation ? "##{observation.id}: #{observation.content.to_s.truncate(300)}" : "Observation ##{payload['observation_id']} is gone."
+%p.review-hint= payload["reason"]
+= render "review/entity_search_select", row: row, field_name: "target_entity_id", label_text: "Target entity", current_id: target_id,
+  current_name: MemoryEntity.where(id: target_id).pick(:name) || payload["target_name"]

@@ -4,6 +4,12 @@
 # separate so the queue/listing service stays under the file-size rule.
 class CompactionReviewApplier
   class << self
+    # What apply would do, without writing (see Preview).
+    # @return [Hash] `{ ok:, effects:, warnings:, undo: }`
+    def preview(row, action_params = {})
+      Preview.call(row, action_params)
+    end
+
     def apply(row, action_params)
       effective = row.effective_payload.with_indifferent_access
 

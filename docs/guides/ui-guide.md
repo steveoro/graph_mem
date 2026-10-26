@@ -1,6 +1,6 @@
 # GraphMem web UI guide
 
-A tour of the web UI for the **operator** (the graph's owner, full access) and the optional **read-only guest**, as of 1.57.0. It covers signing in, the app shell, each section, the guest account and the usual problems.
+A tour of the web UI for the **operator** (the graph's owner, full access) and the optional **read-only guest**, as of 1.58.0. It covers signing in, the app shell, each section, the guest account and the usual problems.
 
 The screenshots come from a test instance with synthetic data (`Alpha Service`, `SynthWidget`, `SynthGadget`). The image files are in [`docs/images/ui/`](../images/ui/).
 
@@ -45,8 +45,8 @@ The sidebar lists Home, Search and Explore at the top, then three groups (Review
 | — | **Home** | Operator dashboard: graph counts, compactor, garbage collector, embeddings, MCP clients, project scans |
 | — | **Search** | Text or vector search over entities |
 | — | **Explore** | The interactive graph (Cytoscape) |
-| Review & Fix | **Compaction review** | Suggestions from dream-state compaction. The badge shows how many are active (refreshed every 30 s) |
-| Review & Fix | **Scan review** | Suggestions from project scans |
+| Review & Fix | **Review queue** | Suggestions from compaction, scans and the stale-memory scan, grouped and ranked. The badge counts groups needing attention (refreshed every 30 s) |
+| Review & Fix | **Scan review** | The same page, project-scan suggestions only |
 | Projects & Data | **Maintenance** | Import, export and cleanup |
 | System | **Embeddings** | Vector coverage, connection test, backfill, ANN indexes |
 | System | **Telemetry** | MCP tool volume, errors, latency |
@@ -104,29 +104,37 @@ The graph starts in **Root View**, which shows the project roots. **Full Graph**
 
 ### Review & Fix
 
-**Compaction review** lists the suggestions that dream-state compaction queued for a decision: such as merges, orphan parents, relationship proposals and relation-integrity fixes. **Scan review** is the same page for project-scan suggestions.
+**Review & Fix** (`/review`) gathers the suggestions from dream-state compaction, project scans and the stale-memory scan, grouped (one group per entity or pair) and ranked by priority. Ranking uses impact, confidence and age; Project roots and well-connected entities weigh more.
 
-![Compaction review](../images/ui/compaction-review.png)
+![Needs attention](../images/ui/review-digest.png)
 
-**Finding rows:**
-- Filter by status (**All**, **Active**, **Ignored**, **Dismissed**, **Approved**) and by kind, or search the queue.
-- **Seed from Suggest Merges** imports fresh merge candidates (threshold, limit, entity type).
+**The rail (left):**
+- **Needs attention** (default): at most 10 groups at or above the attention threshold (Settings › Review policies, default 40), each a decision: **Apply high-confidence** (relationship proposals and stale memory only), **Review**, **Dismiss all**, **Snooze 30 days**. Below the cards: how many more groups sit under the threshold. With nothing above it you get **Inbox zero**, the policies' count for the week and the next compaction run.
+- **By kind**, **By project**, **Errors**, **Scan review**: the same groups as lines; **Review** opens a group's rows.
+- **Resolved**: approved, dismissed and expired suggestions with who resolved them, **Undo** while the change can be undone, otherwise **Restore** and the reason ("can't be undone: entity deleted").
+- **Policies**: the latest policy runs with one **Undo** per batch. **Run policies now** and **Import suggest-merges** sit under the rail.
 
-**Row buttons:**
-- **Save** keeps your edits to the row (for example a different merge target or relation type).
-- **Apply** carries out the suggestion. It asks for confirmation.
-- **Dismiss** rejects it. A dismissed suggestion stays suppressed, so compaction doesn't propose it again.
-- **Ignore** snoozes it for 30 days: the row comes back afterwards, and the suggestion isn't proposed again until then.
-- **Keep #N** (contradiction rows only): keeps that observation and marks the other one obsolete (undoable for 30 days). Dismiss when both are right.
-- **Restore** returns a dismissed or approved row to active.
+**A suggestion (detail pane, right):** what it is, its edit fields (merge targets, relation type, parent), and **If applied**: the exact effects and how long it stays undoable. **Apply…** opens a confirm card with the same effects. Merges, deletes, moves and reparents are applied one at a time; a deleted entity can't be undone, and the card says so.
 
-**Bulk actions:** **Apply selected** / **Dismiss selected** act on the ticked rows. Apply selected only applies relationship proposals and stale-memory rows; merges, deletes, moves and contradictions are applied one by one.
+**Contradictions:** the two observations side by side; **Keep this** on either side opens the confirm card (the other side is marked obsolete, undoable for 30 days). **Both are right** dismisses the pair for good.
+
+![A contradiction in the detail pane](../images/ui/review-contradiction.png)
+
+![Group preview](../images/ui/review-group-preview.png)
+
+**Group actions** always show a confirm card listing exactly which suggestions are included and which aren't (and why). Group apply takes only relationship proposals and stale-memory rows that aren't snoozed, at most 100, and refuses if the group changed since the card was shown. **Dismiss** suppresses a suggestion for good; **Snooze** hides it for 30 days.
+
+**Undo:** after each action the toast offers **Undo** (it doesn't time out), or says why the change can't be undone. Undo is also in **Resolved** and **Policies**, for 30 days (7 for merges).
+
+**Keyboard:** `j`/`k` next/previous, `Enter` open, `a` apply, `d` dismiss, `s` snooze, `e` save edits, `r` restore, `x` select, `/` search, `1`/`2` keep the first/second side of a contradiction (opens the confirm card), `?` help. Shortcuts don't fire while you type in a field, and `Enter` on a focused button or link presses it.
+
+**Settings › Review policies:** the nightly policies (dismiss dangling suggestions, dismiss stale memory no longer flagged, expire old low-confidence ones; auto-apply high-confidence relationships and expired validity, both off by default), the attention threshold and the backlog ceiling. Out-of-range values are refused; every change is in the audit log.
 
 **Pruning:** approved, dismissed, expired and ignored rows are deleted every day once they're older than the retention set in **Settings › Telemetry** (`compaction_review_row_retention_days`, 30 days by default); a snoozed row is kept until its snooze ends.
 
 ### Undo (1.57.0)
 
-Every graph write, merge (including compaction auto-merges) and review action is recorded as a change set. The operator can undo one with `POST /changes/:uuid/undo`: within 7 days for merges, 30 days for everything else. Sets that hard-delete an entity or observation, or mix a merge with other writes, are recorded but can't be undone. The answer is a toast: "Undone: …", or the reasons it can't be undone (for example, a record changed since). Undo buttons arrive with the Explore and Review pages (UI-4b, UI-5); until then, undo from the console with `ChangeSetUndo.call(uuid)` (the latest set is `ChangeSet.order(:id).last`), since a hand-made `POST` also needs a CSRF token. Guests can't undo (403).
+Every graph write, merge (including compaction auto-merges) and review action is recorded as a change set. The operator can undo one within 7 days for merges, 30 days for everything else: from the toast, from **Review › Resolved** or **Policies**, or with `POST /changes/:uuid/undo`. Sets that hard-delete an entity or observation, or mix a merge with other writes, are recorded but can't be undone. Guests can't undo (403).
 
 ### Projects & Data
 

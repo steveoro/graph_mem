@@ -1,0 +1,26 @@
+-# The detail pane (Turbo Frame "review-detail"): the row per kind, its edit fields, what applying does.
+- editable = ReviewHelper::EDITABLE_KINDS.include?(row.kind)
+= turbo_frame_tag "review-detail" do
+  %section.ui-card.review-detail__card{ data: { testid: "review-detail-card", kind: row.kind } }
+    %header
+      %span.ui-badge= row.kind.humanize
+      %strong= review_row_title(row)
+      %p.review-hint= "priority #{row.priority} · confidence #{row.confidence ? format('%.2f', row.confidence) : '—'} · #{row.status} · #{row.report_type.humanize}"
+    = form_with url: review_row_path(row.row_uuid), method: :patch, id: "review-edit-#{row.row_uuid}", class: "ui-form",
+      data: { controller: "review-entity-picker", turbo_frame: "_top" } do
+      = render "review/kinds/#{lookup_context.exists?(row.kind, [ 'review/kinds' ], true) ? row.kind : 'generic'}", row: row, payload: row.effective_payload
+      - if editable && row.pending?
+        = submit_tag "Save", class: "ui-btn", data: { review_keys_action: "edit" }
+    - unless row.kind == "contradiction"
+      = render "review/effects", preview: preview
+    .review-detail__actions
+      - if row.pending?
+        - unless row.kind == "contradiction"
+          = link_to "Apply…", review_row_preview_path(row.row_uuid), class: "ui-btn ui-btn-primary", data: { turbo_frame: "review-detail" }
+        = button_to (row.kind == "contradiction" ? "Both are right" : "Dismiss"), review_row_dismiss_path(row.row_uuid), class: "ui-btn",
+          data: { testid: "detail-dismiss" }
+        = button_to "Snooze 30 days", review_row_snooze_path(row.row_uuid), class: "ui-btn"
+      - else
+        = button_to "Restore", review_row_restore_path(row.row_uuid), class: "ui-btn", form: { data: { review_keys_action: "restore" } }
+      - if row.resolution_reason.present?
+        %p.review-hint= row.resolution_reason

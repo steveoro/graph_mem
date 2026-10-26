@@ -1,9 +1,9 @@
 -# Role-aware navigation (UI-1). Operator-only items sit inside `can_write?`; that is
 -# cosmetic, the server refuses guests on those routes anyway (RoleAuthorization).
 -# Route helpers go through main_app: the layout also renders inside Mission Control.
-- review_path = main_app.compaction_review_data_exchange_index_path
+- review_path = main_app.review_path
 - on_review = current_page?(review_path)
-- on_scan_review = on_review && params[:report_type] == "scan_review"
+- on_scan_review = on_review && params[:view] == "scan"
 %nav.ui-sidebar{ "aria-label": t("ui.nav.label"), data: { controller: "nav", action: "keydown.esc@window->nav#close" } }
   .ui-sidebar__top
     = link_to (can_write? ? main_app.root_path : main_app.search_path), class: "ui-sidebar__brand" do
@@ -23,7 +23,7 @@
       %ul.ui-sidebar__list
         %li= ui_nav_link t("ui.nav.compaction_review"), review_path, testid: "nav-review",
           badge: ui_review_backlog_count, current: on_review && !on_scan_review
-        %li= ui_nav_link t("ui.nav.scan_review"), main_app.compaction_review_data_exchange_index_path(report_type: "scan_review"),
+        %li= ui_nav_link t("ui.nav.scan_review"), main_app.review_path(view: "scan"),
           testid: "nav-scan-review", current: on_scan_review
       %h2.ui-sidebar__heading= t("ui.nav.groups.projects")
       %ul.ui-sidebar__list

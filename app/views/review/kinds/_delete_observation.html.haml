@@ -1,0 +1,3 @@
+- observation = MemoryObservation.find_by(id: payload["observation_id"] || payload.dig("payload", "observation_id"))
+%p= observation ? "##{observation.id} (#{observation.memory_entity&.name}): #{observation.content.to_s.truncate(300)}" : "The observation is gone."
+%p.review-hint= payload["reason"]

@@ -45,7 +45,8 @@ class ApplyMaintenanceReviewTool < ApplicationTool
         item_id: item_id,
         kind: row.kind,
         payload: row.effective_payload,
-        status: row.status
+        status: row.status,
+        preview: CompactionReviewApplier.preview(row, action_params || {})
       }
     end
 

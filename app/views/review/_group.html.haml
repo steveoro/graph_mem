@@ -1,0 +1,6 @@
+-# A group's pending rows (lazy Turbo Frame inside its card), 20 per page.
+- dom = "group-#{Digest::SHA256.hexdigest(key).first(12)}"
+= turbo_frame_tag "#{dom}-rows" do
+  = render partial: "review/row", collection: rows, as: :row
+  - if rows.total_pages > 1
+    = paginate rows, params: { key: key }

@@ -89,14 +89,13 @@
           %li.dashboard-scan-review{ data: { testid: "dashboard-scan-review-#{row.row_uuid}" } }
             .dashboard-scan-review__summary= scan_review_item_label(row)
             .dashboard-scan-review__actions
-              = form_with url: compaction_review_action_data_exchange_index_path, method: :post, local: true, html: { class: "dashboard-scan-review__form" } do
-                = hidden_field_tag :item_id, row.row_uuid
-                = hidden_field_tag :report_type, "scan_review"
-                = hidden_field_tag :return_to, "dashboard"
-                = hidden_field_tag :status, "active"
-                = button_tag "Approve", name: "review_action", value: "apply", type: :submit, class: "dashboard-btn dashboard-btn--primary dashboard-btn--small", data: { turbo_confirm: "Approve this suggestion?" }
-                = button_tag "Dismiss", name: "review_action", value: "dismiss", type: :submit, class: "dashboard-btn dashboard-btn--secondary dashboard-btn--small"
+              = button_to "Approve", review_row_apply_path(row.row_uuid), params: { return_to: "dashboard" },
+                class: "dashboard-btn dashboard-btn--primary dashboard-btn--small",
+                form: { class: "dashboard-scan-review__form", data: { turbo_confirm: "Approve this suggestion?" } }
+              = button_to "Dismiss", review_row_dismiss_path(row.row_uuid), params: { return_to: "dashboard" },
+                class: "dashboard-btn dashboard-btn--secondary dashboard-btn--small",
+                form: { class: "dashboard-scan-review__form" }
 
   .dashboard-card__actions
-    = link_to "Review scan suggestions", compaction_review_data_exchange_index_path(report_type: "scan_review"), class: "dashboard-btn dashboard-btn--secondary", id: "btn-project-scans-review"
+    = link_to "Review scan suggestions", review_path(view: "scan"), class: "dashboard-btn dashboard-btn--secondary", id: "btn-project-scans-review"
     = link_to "Refresh", root_path, class: "dashboard-btn dashboard-btn--secondary", id: "btn-project-scans-refresh"

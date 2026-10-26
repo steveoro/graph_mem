@@ -1,0 +1,10 @@
+-# Needs attention: at most 10 groups at or above the attention threshold, ranked by priority.
+- if @groups.empty?
+  = render "review/inbox_zero"
+- else
+  %h2.review-heading= "Needs attention (priority ≥ #{@digest.threshold})"
+  = render partial: "review/group_card", collection: @groups, as: :group
+  - if @below[:groups].positive?
+    %p.review-hint{ data: { testid: "review-below" } }
+      = "+ #{@below[:rows]} more in #{@below[:groups]} group#{'s' unless @below[:groups] == 1} (all below priority #{@digest.threshold}) · "
+      = link_to "By kind", review_path(view: "kind")

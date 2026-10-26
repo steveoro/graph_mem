@@ -1,0 +1,25 @@
+-# One group (ReviewDigest::Group): a decision on the digest, a line in the grouped lists.
+- dom = "group-#{Digest::SHA256.hexdigest(group.key).first(12)}"
+- safe = ReviewRowClassifier::SAFE_BULK_KINDS.include?(group.kind) && group.high_confidence.positive?
+%article.ui-card.review-group{ id: dom, data: { review_keys_target: "item", testid: "review-group" } }
+  %header.review-group__head
+    %span.ui-badge= group.kind.humanize
+    %strong= group.anchor_name || "##{group.anchor_id || '—'}"
+    %span.review-group__meta
+      = "#{group.count} suggestion#{'s' unless group.count == 1}"
+      - if group.high_confidence.positive?
+        = " · #{group.high_confidence} high confidence"
+      = " · priority #{group.max_priority}"
+      - if group.max_confidence
+        = " · confidence #{format('%.2f', group.max_confidence)}"
+      = " · oldest #{time_ago_in_words(group.oldest_at)} ago"
+  .review-group__actions
+    - if safe
+      = link_to "Apply high-confidence", review_group_preview_path(key: group.key, op: "apply", min_confidence: ReviewDigest::HIGH_CONFIDENCE),
+        class: "ui-btn ui-btn-primary", data: { turbo_frame: "review-detail", review_keys_action: "apply", testid: "group-apply" }
+    = link_to "Review", review_group_path(key: group.key), class: "ui-btn", data: { turbo_frame: "#{dom}-rows", review_keys_action: "open" }
+    = link_to "Dismiss all", review_group_preview_path(key: group.key, op: "dismiss"), class: "ui-btn",
+      data: { turbo_frame: "review-detail", review_keys_action: "dismiss", testid: "group-dismiss" }
+    = link_to "Snooze 30 days", review_group_preview_path(key: group.key, op: "snooze"), class: "ui-btn",
+      data: { turbo_frame: "review-detail", review_keys_action: "snooze", testid: "group-snooze" }
+  = turbo_frame_tag "#{dom}-rows"

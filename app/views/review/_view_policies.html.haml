@@ -1,0 +1,26 @@
+-# Policies: the latest review_policy_run reports, one Undo per change set.
+%h2.review-heading Policy runs
+%p.review-hint
+  Settings:
+  = link_to "Settings › Review policies", operator_settings_path(tab: "review_policies")
+- if @reports.empty?
+  %p.review-hint No policy run yet.
+- @reports.each do |report|
+  %article.ui-card.review-policy-run{ data: { testid: "policy-run" } }
+    %h3= "#{l(report.created_at, format: :short)} · #{report.data['trigger']}"
+    %ul
+      - Hash(report.data["policies"]).each do |policy, stats|
+        %li
+          %strong= policy.humanize
+          - if stats["error"]
+            %span.review-warning= "failed: #{stats['error']} #{stats['message']}"
+          - elsif stats["disabled"]
+            %span.review-hint off
+          - else
+            = " acted #{stats['acted'].to_i}, skipped #{stats['skipped'].to_i}#{", busy #{stats['busy']}" if stats['busy'].to_i.positive?}"
+            - Array(stats["change_sets"]).each do |uuid|
+              - set = @change_sets[uuid]
+              - if set&.undoable?
+                = button_to t("ui.changes.undo"), undo_change_path(uuid), class: "ui-btn", form: { data: { turbo: false } }
+              - elsif set&.undone_at
+                %span.review-hint undone

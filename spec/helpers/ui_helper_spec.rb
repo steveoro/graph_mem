@@ -88,20 +88,24 @@ RSpec.describe UiHelper, type: :helper do
 
     before { allow(Rails).to receive(:cache).and_return(cache) }
 
-    def create_row(uuid, status)
+    def create_row(uuid, status, priority: 80, group_key: "entity_merge|1-2")
       MaintenanceReportRow.create!(
-        report_type: "compaction_review", row_uuid: uuid, kind: "entity_merge", status: status,
-        signature: "entity_merge|#{uuid}", payload: { "entity_a" => { "entity_id" => 1 }, "entity_b" => { "entity_id" => 2 } }
+        report_type: "compaction_review", row_uuid: uuid, kind: "entity_merge", status: status, priority: priority,
+        group_key: group_key, signature: "entity_merge|#{uuid}",
+        payload: { "entity_a" => { "entity_id" => 1 }, "entity_b" => { "entity_id" => 2 } }
       )
     end
 
-    it "counts active rows and caches the count" do
+    # UI-5b: the badge counts groups needing attention (ReviewDigest), not rows.
+    it "counts attention groups and caches the count" do
       stub_role(operator: true)
       create_row("active-1", "active")
-      create_row("dismissed-1", "dismissed")
+      create_row("active-1b", "active")
+      create_row("low-1", "active", priority: 5, group_key: "entity_merge|3-4")
+      create_row("dismissed-1", "dismissed", group_key: "entity_merge|5-6")
 
       expect(helper.ui_review_backlog_count).to eq(1)
-      create_row("active-2", "active")
+      create_row("active-2", "active", group_key: "entity_merge|7-8")
       expect(helper.ui_review_backlog_count).to eq(1)
     end
 

@@ -1,0 +1,9 @@
+%div.review-effects{ data: { testid: "review-effects" } }
+  %h3 If applied
+  %ul
+    - preview[:effects].each do |effect|
+      %li= effect
+  - preview[:warnings].each do |warning|
+    %p.review-warning= warning
+  - if preview[:undo]
+    %p.review-hint= preview[:undo].start_with?("not undoable") ? "Can't be undone." : "Undoable for #{preview[:undo]}."

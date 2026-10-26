@@ -1,0 +1,8 @@
+- ids = Array(payload["observation_ids"])
+- observations = MemoryObservation.where(id: ids).index_by(&:id)
+%p
+  %span.ui-badge= payload["signal"].to_s.humanize
+  = "#{payload['entity_name'] || "##{payload['entity_id']}"}: #{ids.size} observation(s) flagged. #{payload['reason']}"
+%ul
+  - ids.first(10).each do |id|
+    %li= "##{id}: #{observations[id.to_i]&.content.to_s.truncate(120).presence || '(missing)'}"

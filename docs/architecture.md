@@ -222,7 +222,7 @@ A **change set** (`change_sets`, `ChangeSet`) groups the writes of one user-visi
 
 - **What records a set.** `ChangeSet.record(kind:)` wraps each entry point:
   - `graph_write` / `graph_edit` / `graph_delete` (MCP and services): `graph.write`, `graph.edit`, `graph.delete`;
-  - the review actions (`CompactionReviewService` apply, dismiss, restore, ignore, snooze and the bulk variants): `review.*`;
+  - the review actions (`CompactionReviewService` apply, dismiss, restore, ignore, snooze and the bulk variants): `review.*`; group actions on the Review page (`ReviewGroupActions`): `review.group_apply`, `review.group_dismiss`, `review.group_snooze`;
   - the review policies (`ReviewPolicyRunner`, actor `policy:<name>`): `policy.<name>`, one set per batch of 200 rows;
   - every merge path (`NodeOperationsStrategy#merge_into`): `merge`, or the caller's kind: `maintenance.merge_node`, `compaction.auto_merge` (actor `compaction:<run_id>`, one set per merge), `api.write` (every non-GET `/api/v1` request).
   - A set opened inside another one joins it: a merge in a `graph_delete` batch or a review apply belongs to the outer set.
@@ -256,7 +256,7 @@ A **change set** (`change_sets`, `ChangeSet`) groups the writes of one user-visi
 
 ## Review queue: classification, limits and policies (UI-5a)
 
-The review rows (`maintenance_report_rows`) that dream-state compaction, the stale scan, project scans and imports seed. The Review page that uses them is UI-5b; until then the old Compaction review page shows them.
+The review rows (`maintenance_report_rows`) that dream-state compaction, the stale scan, project scans and imports seed, shown on the Review & Fix page (`/review`, UI-5b; the old `/data_exchange/compaction_review` URL redirects there).
 
 - **Columns.** `group_key`, `anchor_entity_id`, `project_id`, `confidence` (0-1), `priority` (0-100), `expires_at` (a snooze's end), `resolved_by` (`operator`, `agent`, `policy:<name>`, `generator`) and `change_set_id` (the set that last changed the row, for undo). Status `expired` joins `active`, `ignored`, `approved`, `dismissed`. Suppressions gain `expires_at` (NULL = permanent) and `source` (`dismissed`, `snoozed`, `expired`, `policy`); an expired suppression no longer blocks its signature.
 - **Classification.** `ReviewRowClassifier` runs at seed time: the group key and anchor per kind (pairs collapse both directions; observation kinds key on the owner), a confidence per kind and `priority = 100 × (0.6 impact + 0.4 confidence) × age boost` (+ a bump for well-connected anchors; Project roots weigh more; errors never sort below 40). `ReviewRowClassifier.backfill!` (also `bin/rails review:backfill`) classifies older rows. It also orders symmetric `relates_to` signatures, so A→B and B→A are one suggestion.
@@ -276,3 +276,12 @@ The review rows (`maintenance_report_rows`) that dream-state compaction, the sta
   | `auto_apply_relationships` | off | high-band proposals ≥ 0.90 confidence, never `part_of` → applied (max 50) |
 
   Hard rule: a policy never applies a destructive or choice kind, whatever the settings say. Each run writes a `review_policy_run` report with the counts, the change-set uuids and the apply/dismiss rates per kind and score.
+
+### The Review & Fix page (UI-5b, 1.58.0)
+
+- **`ReviewController`** (operator only) serves `/review`: Needs attention, By kind, By project, Errors, Scan review, Resolved and Policies, plus row actions (`/review/rows/:uuid/…`), group actions (`/review/group/…`), "Run policies now" and "Import suggest-merges". `ReviewResponses` maps results to 200 (303 for HTML), 404 (the row is gone; a frame GET gets the message in its frame), 409 (a group changed since its preview), 422 (refused) and 503 (membership lock busy or a transient DB lock error), with **Undo** in the toast when the action's change set can be undone and the reason when it can't.
+- **Ranking.** `ReviewDigest` groups active compaction and scan review rows by `group_key` (an unclassified row is a group of one) and ranks by priority alone, in SQL with a constant query count: the 10 groups at or above `review_attention_threshold` are the default view, and the nav badge counts them. `CompactionReviewService.items` (MCP `list_maintenance_review`) keeps its root-first order (Decision 13).
+- **Preview.** `CompactionReviewApplier.preview(row, action_params)` runs apply's lookups without writing and returns the effects, warnings and the undo window ("not undoable: hard delete" for an entity delete). The confirm cards, the detail pane and MCP `apply_maintenance_review dry_run` use it.
+- **Group actions.** `ReviewGroupActions` previews, then applies, dismisses or snoozes a group's pending rows (highest priority first, at most 100) in one change set. Apply only takes active (not snoozed) `SAFE_BULK_KINDS` rows and needs the preview's token: if the eligible rows changed meanwhile it answers a conflict and writes nothing. Dismiss and snooze take any kind, pending rows only; a snooze never replaces a permanent suppression. Each row's action commits on its own: the action succeeds (with Undo) when at least one row was written, and its message counts the failed rows. A busy lock before the first write answers 503; after it, the run stops and the message says how many rows are left.
+- **Settings › Review policies** edits the policy toggles and limits; values outside `AppSettings::REVIEW_NUMBERS` are refused with 422, and each change writes an `AuditLog` row on the `AppSettings` record.
+

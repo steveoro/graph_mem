@@ -1,0 +1,3 @@
+- relation = MemoryRelation.find_by(id: payload["relation_id"] || payload.dig("payload", "relation_id"))
+%p= relation ? "#{relation.from_entity&.name} #{relation.relation_type} #{relation.to_entity&.name} (##{relation.id})" : "The relation is gone."
+%p.review-hint= payload["reason"]

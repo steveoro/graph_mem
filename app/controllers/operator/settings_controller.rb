@@ -2,6 +2,8 @@
 
 module Operator
   class SettingsController < BaseController
+    include ReviewPolicySettings
+
     before_action :load_backup_files, only: :index
 
     def index
@@ -50,6 +52,11 @@ module Operator
         end
       end
 
+      # Review policy settings are validated wherever they come from; out of range → 422, nothing saved.
+      review_error = review_policy_settings_error(settings)
+      return render_review_policy_error(review_error) if review_error
+
+      review_before = review_policy_values
       settings.each do |key, value|
         next unless AppSettings.defined_fields.map(&:key).include?(key)
 
@@ -64,6 +71,7 @@ module Operator
         results[:failed] << { key: key, error: e.message }
       end
 
+      audit_review_policy_changes(review_before)
       if results[:failed].empty?
         flash[:notice] = t("operator.settings.bulk_update.success", count: results[:success].count)
         EmbeddingService.reset_instance! if params[:tab] == "embeddings"
@@ -160,6 +168,10 @@ module Operator
         telemetry: {
           title: t("operator.settings.groups.telemetry"),
           settings: %w[tool_invocation_retention_days compaction_review_row_retention_days]
+        },
+        review_policies: {
+          title: t("operator.settings.groups.review_policies"),
+          settings: ReviewPolicySettings::KEYS
         }
       }
     end

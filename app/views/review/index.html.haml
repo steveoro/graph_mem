@@ -1,0 +1,19 @@
+- content_for :title, "Review & Fix"
+- content_for :page_header, ui_page_header("Review & Fix", subtitle: "Suggestions from compaction, scans and the stale-memory scan, ranked by priority.")
+
+.review-layout{ data: { controller: "review-keys" } }
+  = render "review/rail", view: @view, rail: @rail
+  %main.review-main{ data: { testid: "review-main" } }
+    = form_with url: review_path, method: :get, class: "review-search", data: { turbo_frame: "_top" } do
+      = hidden_field_tag :view, @view
+      = search_field_tag :q, @q, placeholder: "Search suggestions…", class: "ui-input", "aria-label": "Search suggestions",
+        data: { review_keys_target: "search", testid: "review-search" }
+    - if @q
+      %h2.review-heading= "Results for “#{@q}”"
+      - if @search_capped
+        %p.review-hint= "Only the #{CompactionReviewService::Queries::SEARCH_SCAN_CAP} highest-priority suggestions were searched."
+      = render partial: "review/row", collection: @rows, as: :row
+      = paginate @rows
+    - else
+      = render(%w[kind project errors scan].include?(@view) ? "review/grouped" : "review/view_#{@view}")
+  = turbo_frame_tag "review-detail", class: "review-detail", data: { testid: "review-detail" }

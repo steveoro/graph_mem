@@ -108,6 +108,20 @@ RSpec.describe "Navigation", type: :system do
       expect(evaluate_script(graph_controller_js("ctrl.dragDrop !== null"))).to be true
     end
 
+    it "shows attention groups (not rows) in the Review badge, and links the Review pages" do
+      2.times do |i|
+        MaintenanceReportRow.create!(report_type: "compaction_review", row_uuid: "synth-badge-#{i}", kind: "relationship_proposal",
+                                     status: "active", priority: 90, group_key: "relationship_proposal|1-2",
+                                     signature: "badge|#{i}", payload: {})
+      end
+      Rails.cache.delete(UiHelper::REVIEW_BACKLOG_CACHE_KEY)
+
+      visit root_path
+      expect(page).to have_css("[data-testid='nav-review-badge']", text: "1", visible: :all)
+      expect(page).to have_css("a[data-testid='nav-review'][href='/review']", visible: :all)
+      expect(page).to have_css("a[data-testid='nav-scan-review'][href='/review?view=scan']", visible: :all)
+    end
+
     it "shows a toast delivered by a Turbo Stream" do
       MaintenanceReportRow.create!(
         report_type: "compaction_review", row_uuid: "synth-merge-1", kind: "entity_merge", status: "active",
@@ -117,14 +131,16 @@ RSpec.describe "Navigation", type: :system do
         payload: { "entity_a" => { "entity_id" => widget.id, "name" => widget.name, "entity_type" => "Component" },
                    "entity_b" => { "entity_id" => gadget.id, "name" => gadget.name, "entity_type" => "Component" } }
       )
-      visit compaction_review_data_exchange_index_path
+      visit review_path(view: "kind")
       find(".ui-toast__dismiss", match: :first).click if page.has_css?(".ui-toast", wait: 0)
+      click_link "Review", match: :first, exact: true
+      expect(page).to have_css("[data-row-uuid='synth-merge-1']")
 
       # A marker on window survives only if the toast arrives without a page load.
       page.execute_script("window.__noReload = true")
-      click_button "Ignore"
+      within("[data-row-uuid='synth-merge-1']") { click_button "Snooze" }
 
-      expect(page).to have_css("#toasts .ui-toast--notice", text: "Suggestion ignored")
+      expect(page).to have_css("#toasts .ui-toast--undo", text: "Suggestion snoozed")
       expect(page.evaluate_script("window.__noReload")).to be(true)
     end
   end

@@ -1,7 +1,13 @@
 -# :error and :alert share the alert styling — several controllers set :error.
+-# flash[:undo] ({ "uuid", "label" }) turns the notice into an Undo toast that doesn't time out (UI-5b).
+- undo = flash[:undo].presence
 - messages = { notice: flash[:notice].presence, alert: flash[:alert].presence || flash[:error].presence }
 - messages.each do |kind, message|
   - next if message.blank?
-  .ui-toast{ class: "ui-toast--#{kind}", data: { toast_target: "item" } }
+  - toast_kind = kind == :notice && undo ? "undo" : kind
+  .ui-toast{ class: "ui-toast--#{toast_kind}", data: { toast_target: "item", testid: "toast-#{toast_kind}" } }
     %p.ui-toast__text= message
+    - if toast_kind == "undo"
+      = button_to t("ui.changes.undo"), main_app.undo_change_path(undo["uuid"] || undo[:uuid]), method: :post,
+        class: "ui-btn ui-toast__undo", form: { data: { turbo: false } }, data: { testid: "toast-undo-button" }
     %button.ui-toast__dismiss{ type: "button", "aria-label": t("ui.toasts.dismiss"), data: { action: "toast#dismiss" } } ×
