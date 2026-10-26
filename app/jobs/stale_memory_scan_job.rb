@@ -25,6 +25,7 @@ class StaleMemoryScanJob < ApplicationJob
         source_ref: started_at.to_i,
         items: items + contradiction_items
       )
+      ReviewPolicyJob.enqueue_if_seeded(trigger: "stale_scan", seeded: seeded)
     end
 
     MaintenanceReport.create!(

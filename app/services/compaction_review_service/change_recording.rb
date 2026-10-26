@@ -27,6 +27,23 @@ class CompactionReviewService
       end
     end
 
+    # For ReviewPolicies: changes a row the caller has locked, inside the open (policy) change set,
+    # like an operator action would: change_set_id, resolved_by and the undo notes.
+    # @param attrs [Hash] the row update (status, resolution_reason, …)
+    # @param suppression [Hash, nil] `{ reason:, source:, expires_at: }` to suppress the signature
+    # @param unsuppress [String, nil] delete the row's suppressions with this source first
+    def policy_change!(row, attrs, suppression: nil, unsuppress: nil)
+      if unsuppress
+        scope = MaintenanceReportSuppression.where(report_type: row.report_type, signature: suppression_signatures(row),
+                                                   source: unsuppress)
+        deleted = scope.map { |suppression_row| ChangeSet.snapshot_attributes(suppression_row) }
+        scope.delete_all
+        note_suppressions(deleted: deleted) if deleted.any?
+      end
+      suppress(row, **suppression) if suppression
+      track_review_row(row, attrs)
+    end
+
     private
 
     # Opens (or joins) the `review.<action>` change set. A hash result gains the undo handle:

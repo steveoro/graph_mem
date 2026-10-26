@@ -4,7 +4,7 @@ class ReviewRowClassifier
   # Brings rows seeded before UI-5a up to date, in short batches (each its own transaction), so it
   # can run from the nightly policy run (bounded) or `bin/rails review:backfill` and resume anywhere:
   # 1. classify rows with no group_key;
-  # 2. rewrite pending symmetric relationship proposals to the ordered signature; where two pending
+  # 2. rewrite pending symmetric relationship proposals (only those) to the ordered signature; where two pending
   #    rows now collide, the older stays and the newer is dismissed as its duplicate;
   # 3. give suppressions with an unordered symmetric signature an ordered twin, so a dismissed B→A
   #    keeps blocking A→B.
@@ -56,6 +56,8 @@ class ReviewRowClassifier
       MaintenanceReportRow.pending.where(kind: "relationship_proposal").in_batches(of: @batch_size) do |batch|
         MaintenanceReportRow.transaction do
           batch.order(:id).each do |row|
+            next unless RelationSemantics.symmetric?(row.effective_payload["relation_type"].to_s)
+
             signature = CompactionReviewService.signature_for(row.kind, row.effective_payload)
             next if signature.blank? || signature == row.signature
 

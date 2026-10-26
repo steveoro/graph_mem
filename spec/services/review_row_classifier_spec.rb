@@ -167,6 +167,14 @@ RSpec.describe ReviewRowClassifier do
       expect(described_class.backfill![:duplicates]).to eq(0)
     end
 
+    it "leaves directed proposals alone, whatever their stored signature" do
+      directed = row(kind: "relationship_proposal", signature: "relationship_proposal|legacy",
+                     payload: { "from_entity_id" => widget.id, "to_entity_id" => beta.id, "relation_type" => "depends_on" })
+
+      expect(described_class.backfill!).to include(rewritten: 0, duplicates: 0)
+      expect(directed.reload).to have_attributes(signature: "relationship_proposal|legacy", status: "active")
+    end
+
     it "twins an old unordered symmetric suppression so it still blocks the other direction" do
       low, high = [ widget.id, beta.id ].sort
       MaintenanceReportSuppression.create!(report_type: "compaction_review", signature: "relationship_proposal|#{high}|#{low}|relates_to",

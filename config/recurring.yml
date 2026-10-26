@@ -11,6 +11,10 @@ development:
     class: EmbeddingScheduledBackfillJob
     queue: low_priority
     schedule: every day at 4am
+  review_policy:
+    class: ReviewPolicyJob
+    queue: low_priority
+    schedule: at 5:00am every day
   maintenance_report_row_cleanup:
     class: MaintenanceReportRowCleanupJob
     queue: low_priority
@@ -46,6 +50,10 @@ production:
     class: EmbeddingScheduledBackfillJob
     queue: low_priority
     schedule: at 4am every day
+  review_policy:
+    class: ReviewPolicyJob
+    queue: low_priority
+    schedule: at 5:00am every day
   maintenance_report_row_cleanup:
     class: MaintenanceReportRowCleanupJob
     queue: low_priority

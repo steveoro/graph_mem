@@ -56,10 +56,34 @@ class AppSettings < RailsSettings::Base
   # the Settings panel for them arrives with UI-5b.
   field :review_backlog_ceiling, default: 300, type: :integer,
         validates: { numericality: { greater_than_or_equal_to: 50, less_than_or_equal_to: 5000 } }
+  field :review_attention_threshold, default: 40, type: :integer,
+        validates: { numericality: { greater_than_or_equal_to: 1, less_than_or_equal_to: 100 } }
+
+  # Review policies (UI-5a, ReviewPolicyRunner): hygiene policies start on, auto-apply starts off.
+  field :enable_review_policy_dangling, default: true, type: :boolean
+  field :enable_review_policy_no_longer_flagged, default: true, type: :boolean
+  field :enable_review_policy_expire_low_confidence, default: true, type: :boolean
+  field :review_expire_low_confidence_days, default: 30, type: :integer,
+        validates: { numericality: { greater_than_or_equal_to: 7, less_than_or_equal_to: 365 } }
+  field :enable_auto_apply_relationships, default: false, type: :boolean
+  field :auto_apply_relationship_min_confidence, default: 0.9, type: :float,
+        validates: { numericality: { greater_than_or_equal_to: 0.8, less_than_or_equal_to: 1.0 } }
+  field :enable_auto_apply_expired_validity, default: false, type: :boolean
 
   # Default and accepted range of each numeric review setting.
   REVIEW_NUMBERS = {
-    "review_backlog_ceiling" => [ 300, 50..5000 ]
+    "review_backlog_ceiling" => [ 300, 50..5000 ],
+    "review_attention_threshold" => [ 40, 1..100 ],
+    "review_expire_low_confidence_days" => [ 30, 7..365 ],
+    "auto_apply_relationship_min_confidence" => [ 0.9, 0.8..1.0 ]
+  }.freeze
+  # Each review policy's toggle and its default (snooze_expiry always runs).
+  REVIEW_POLICY_TOGGLES = {
+    "dangling" => [ "enable_review_policy_dangling", true ],
+    "no_longer_flagged" => [ "enable_review_policy_no_longer_flagged", true ],
+    "expire_low_confidence" => [ "enable_review_policy_expire_low_confidence", true ],
+    "auto_apply_relationships" => [ "enable_auto_apply_relationships", false ],
+    "auto_apply_expired_validity" => [ "enable_auto_apply_expired_validity", false ]
   }.freeze
 
   # MCP tool invocation retention (zero disables automatic pruning)
@@ -188,6 +212,14 @@ class AppSettings < RailsSettings::Base
     5
   end
 
+  # Uncached: a policy toggle takes effect on the next run.
+  # @param policy [String, Symbol] a key of REVIEW_POLICY_TOGGLES
+  # @return [Boolean]
+  def self.review_policy_enabled?(policy)
+    var, default = REVIEW_POLICY_TOGGLES.fetch(policy.to_s)
+    read_boolean_setting(var, default: default)
+  end
+
   # Uncached read of a numeric review setting, clamped to its range (a value written outside the
   # range, e.g. from the console, can't push a limit past it).
   # @param name [String, Symbol] a key of REVIEW_NUMBERS
@@ -197,7 +229,7 @@ class AppSettings < RailsSettings::Base
     raw = connection.select_value(sanitize_sql([ "SELECT value FROM #{table_name} WHERE var = ?", name.to_s ]))
     value = raw.nil? ? default : YAML.safe_load(raw.to_s)
     value = default unless value.is_a?(Numeric)
-    value = value.to_i if default.is_a?(Integer)
+    value = default.is_a?(Integer) ? value.to_i : value.to_f
     value.clamp(range.min, range.max)
   rescue StandardError
     default

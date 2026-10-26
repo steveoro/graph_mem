@@ -140,4 +140,34 @@ RSpec.describe AppSettings, type: :model do
       expect(config[:schedule_cron]).to be_a(String)
     end
   end
+  describe "review policy settings (UI-5a)" do
+    def write_past_validation(var, value)
+      setting = described_class.find_or_initialize_by(var: var)
+      setting.value = value
+      setting.save!(validate: false)
+    end
+
+    it "defaults to the hygiene policies on and both auto-apply toggles off" do
+      expect(described_class.review_policy_enabled?(:dangling)).to be(true)
+      expect(described_class.review_policy_enabled?(:no_longer_flagged)).to be(true)
+      expect(described_class.review_policy_enabled?(:expire_low_confidence)).to be(true)
+      expect(described_class.review_policy_enabled?(:auto_apply_relationships)).to be(false)
+      expect(described_class.review_policy_enabled?(:auto_apply_expired_validity)).to be(false)
+      expect(described_class::REVIEW_NUMBERS.keys.map { |name| described_class.review_number(name) }).to eq([ 300, 40, 30, 0.9 ])
+    end
+
+    it "clamps numbers written past validation to their range" do
+      write_past_validation("auto_apply_relationship_min_confidence", 0.5)
+      write_past_validation("review_attention_threshold", 500)
+      write_past_validation("review_expire_low_confidence_days", "soon")
+
+      expect(described_class.review_number(:auto_apply_relationship_min_confidence)).to eq(0.8)
+      expect(described_class.review_number(:review_attention_threshold)).to eq(100)
+      expect(described_class.review_number(:review_expire_low_confidence_days)).to eq(30)
+    end
+
+    it "validates the ranges on a normal save" do
+      expect { described_class.auto_apply_relationship_min_confidence = 1.01 }.to raise_error(ActiveRecord::RecordInvalid)
+    end
+  end
 end

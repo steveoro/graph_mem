@@ -36,6 +36,7 @@ class DreamStateCompactionJob < ApplicationJob
         self.class.perform_later(run.id)
       when :paused, :completed
         Rails.logger.info "[DreamState] run #{run.id} #{result}"
+        enqueue_review_policies(run) if result == :completed
       end
     end
   rescue StandardError => e
@@ -49,6 +50,13 @@ class DreamStateCompactionJob < ApplicationJob
   end
 
   private
+
+  # Policies run after a completed compaction run that seeded review rows (any flush or the sweep).
+  def enqueue_review_policies(run)
+    reports = MaintenanceReport.by_type("compaction_review").where("JSON_VALUE(data, '$.source_ref') = ?", run.id.to_s)
+    ReviewPolicyJob.enqueue_if_seeded(trigger: "compaction",
+                                      seeded: MaintenanceReportRow.where(maintenance_report_id: reports.select(:id)).exists?)
+  end
 
   def resolve_run(run_id)
     run_id ? CompactionRun.find_by(id: run_id) : CompactionRunner.acquire_run!
