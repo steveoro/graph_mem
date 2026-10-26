@@ -50,6 +50,13 @@ RSpec.describe "Role matrix", type: :request do
     end
   end.uniq(&:key)
 
+  # Mission Control's own routes (a mounted engine, so the walk above skips them). Its
+  # controllers inherit Operator::JobsDashboardController < ApplicationController.
+  jobs_cases = MissionControl::Jobs::Engine.routes.routes.flat_map do |route|
+    path = "/operator/jobs#{route.path.spec.to_s.gsub("(.:format)", "").gsub(/[:*]\w+/, "1")}".chomp("/")
+    route.verb.to_s.split("|").map { |verb| route_case_class.new(verb: verb, path: path, action_key: route.defaults[:controller]) }
+  end.uniq(&:key)
+
   let!(:entity) { MemoryEntity.create!(name: "SynthWidget", entity_type: "Component") }
   let!(:project) { MemoryEntity.create!(name: "Alpha Service", entity_type: "Project") }
 
@@ -70,6 +77,13 @@ RSpec.describe "Role matrix", type: :request do
 
   it "covers the whole route table" do
     expect(route_cases.size).to be > 60
+    expect(jobs_cases.size).to be > 20
+  end
+
+  it "lists only GET routes as guest API reads" do
+    reads = route_cases.select { |route_case| guest_api_reads.include?(route_case.action_key) }
+    expect(reads.map(&:action_key).uniq).to match_array(guest_api_reads)
+    expect(reads).to all(have_attributes(verb: "GET"))
   end
 
   it "keeps the skipped framework routes outside ApplicationController" do
@@ -120,10 +134,16 @@ RSpec.describe "Role matrix", type: :request do
       expect(response).to redirect_to(operator_login_path)
     end
 
-    it "gets 403 from Mission Control and 404 from /api-docs" do
-      get "/operator/jobs"
-      expect(response).to have_http_status(:forbidden)
+    jobs_cases.each do |route_case|
+      it "Mission Control #{route_case.key} (#{route_case.action_key}) is 403" do
+        perform(route_case)
 
+        expect(response).to have_http_status(:forbidden)
+        expect(response.body).to include('data-testid="guest-forbidden"')
+      end
+    end
+
+    it "gets 404 from /api-docs" do
       get "/api-docs/index.html"
       expect(response).to have_http_status(:not_found)
     end
