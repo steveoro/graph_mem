@@ -227,10 +227,6 @@
     .ui-sidebar__footer {
       margin-top: auto;
     }
-
-    .ui-toasts {
-      top: 1rem;
-    }
   }
 
   /* Toasts */
@@ -244,6 +240,13 @@
     flex-direction: column;
     gap: 0.5rem;
     max-width: min(26rem, calc(100vw - 2rem));
+  }
+
+  /* Must follow the base .ui-toasts rule: a media query adds no specificity. */
+  @media (min-width: 1024px) {
+    .ui-toasts {
+      top: 1rem;
+    }
   }
 
   .ui-toast {
