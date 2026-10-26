@@ -356,7 +356,7 @@ These tools perform structural graph queries. `direction` is one of `outgoing`
 - **Parameters:**
   - `item_id` (string, required): Maintenance report row UUID.
   - `report_type` (string, optional, default: `compaction_review`): Report type that owns the row.
-  - `dry_run` (boolean, optional, default: false): When true, validate and preview without applying.
+  - `dry_run` (boolean, optional, default: false): When true, validate and preview without applying. Since 1.58 the answer carries `preview`: `{ ok, effects, warnings, undo }`, what applying would do (the same lookups, no writes).
   - `action_params` (object, optional): Optional overrides for merge/relation/orphan endpoints; for a `contradiction` row, `keep_observation_id` (one of its two observations) is required: that one is kept and the other is marked obsolete.
 - **Response:** Apply result hash (`success`, `message`, kind-specific fields such as `deleted_relation_ids`, and since 1.58 `change_set_uuid`, `undoable`, `not_undoable_reason`), or a dry-run preview with `kind` and `payload`.
 
