@@ -1,22 +1,23 @@
-# UI-5 → graph_mem 1.58.0: Review & Fix (grouped queue, digest, group actions, policies, undo in the UI)
+# UI-5 → graph_mem 1.58.0: Review & Fix (grouped queue, digest, group actions, policies, contradictions, undo in the UI)
 
 **Written 2026-10-26 (Europe/Rome)** for Claude, from the 1.57.0 code (`e826476`, UI-4a / #127 merged and tagged).
+**Revised 2026-10-26 evening:** Steve's answers are in. `contradiction` rows are **in** UI-5 (A5, B2 moved to UI-5b to
+keep both PRs under the limit); the split, policy batch size, old URLs and `ignore` → snooze are confirmed.
 Every file:line below was checked against that commit. If a line has moved, find the code by the quoted text; if the
 code no longer matches the description, **stop and ask Steve** instead of improvising.
 
 Context: `ui-dashboard-plan.md` §2.5 (the Review & Fix design: model changes, page, policies, limits at the source),
 §5.1-§5.4 (guardrails, confirm levels, change sets, role matrix) and §6 UI-5. `ui-4a-plan.md` and
 `docs/architecture.md` "Change sets and undo (UI-4a, 1.57.0)" describe the undo API this PR builds on. This file
-**replaces** §6 UI-5 as the step list: where they differ, this file wins (the differences are listed under "Decisions
-(changeable)"). It is self-contained; read the other plans only for background.
+**replaces** §6 UI-5 as the step list: where they differ, this file wins (the differences are listed under "Decisions"). It is self-contained; read the other plans only for background.
 
 ## Brief
 
 | | |
 |---|---|
-| **Branches / PRs** | **Two PRs by default** (see "Size and split"; Steve may ask for one). **UI-5a** `claude/ui-5a-review-backend`, title `UI-5a: review data model, limits and policies`: steps A1-A4, B1-B2 and their docs; CHANGELOG under `## [Unreleased]`, **no version bump**. **UI-5b** `claude/ui-5-1.58.0` (off `main` after UI-5a merges), title `UI-5: Review & Fix (1.58.0)`: steps C1-C3, the rest of D, release R. Steve merges and tags; never merge, tag, push tags or run `rake release`. |
-| **Commits** | In this order: **A1** schema + models, **A2** classifier + seeding + backfill + symmetric dedupe, **A3** limits at the source + SQL pagination + expiring suppressions + cleanup, **A4** change-set links on rows (`resolved_by`, `change_set_id`, the undo handle), **B1** policy runner + job + schedule, **B2** Settings › Review policies (audited) — **end of UI-5a** — **C1** apply preview + group actions, **C2** `ReviewController`, routes, views, toasts with Undo, error mapping, **C3** keyboard, nav badge, removal of the old review actions, **D** docs, **R** release. Review fixes go in new commits; no force-push after review starts. |
-| **Scope** | §2.5 minus the items listed under "Out". New routes only under `/review` (operator only) plus the existing `/operator/settings`. **No MCP tool changes beyond keeping today's four review tools working, no `/api/v1` endpoint.** |
+| **Branches / PRs** | **Two PRs by default** (see "Size and split"; Steve may ask for one). **Two PRs** (Steve confirmed). **UI-5a** `claude/ui-5a-review-backend`, title `UI-5a: review data model, limits, policies and contradiction rows`: steps A1-A5, B1 and their docs; CHANGELOG under `## [Unreleased]`, **no version bump**. **UI-5b** `claude/ui-5-1.58.0` (off `main` after UI-5a merges), title `UI-5: Review & Fix (1.58.0)`: steps B2, C1-C3, the rest of D, release R. Steve merges and tags; never merge, tag, push tags or run `rake release`. |
+| **Commits** | In this order: **A1** schema + models, **A2** classifier + seeding + backfill + symmetric dedupe, **A3** limits at the source + SQL pagination + expiring suppressions + cleanup, **A4** change-set links on rows (`resolved_by`, `change_set_id`, the undo handle), **A5** `contradiction` rows (signature, classification, seeding from the stale scan, apply = keep one side, old-page buttons), **B1** policy runner + job + schedule + the policy settings fields — **end of UI-5a** — **B2** Settings › Review policies panel (audited), **C1** apply preview + group actions, **C2** `ReviewController`, routes, views, toasts with Undo, error mapping, **C3** keyboard, nav badge, removal of the old review actions, **D** docs, **R** release. Review fixes go in new commits; no force-push after review starts. |
+| **Scope** | §2.5 minus the items listed under "Out". New routes only under `/review` (operator only) plus the existing `/operator/settings`. **No MCP tool changes beyond keeping today's four review tools working** (plus the additive `keep_observation_id` in `apply_maintenance_review`'s `action_params`, A5), **no `/api/v1` endpoint.** `detect_contradictions` (MCP) and `POST …/detect_contradictions` (`/api/v1`) keep their behaviour: they never seed review rows. |
 | **Data** | Synthetic fixtures only (`SynthWidget`, `Alpha Service`, `Beta Service`, a factory script for the 1,000-row check). Never real data, real credentials or a production dump. |
 | **Read first** | `CLAUDE.md`, `AGENTS.md`, `.devin/rules/*`, `ui-dashboard-plan.md` §0.1 (implementer brief: spec hygiene, test-DB truncate, done criteria), `docs/architecture.md` "Change sets and undo". |
 
@@ -115,26 +116,55 @@ Context: `ui-dashboard-plan.md` §2.5 (the Review & Fix design: model changes, p
   (212-214), `dedupe_and_limit` (216-221); **no `MIN_QUEUE_SCORE`**. `RelationSemantics::SYMMETRIC_TYPES =
   %w[relates_to]` (8), `symmetric?` (27-29). `StaleMemoryScanner.still_flagged_ids` (177-192).
   `GraphifyRescan` dismisses rows directly at 314 and 381 (outside `CompactionReviewService`).
+- **Contradictions.** `app/services/contradiction_detector.rb` (138 lines): `Result = Struct(:observation_id_1,
+  :observation_id_2, :distance, :confidence)` (20); `detect(entity_id, …, persist: true)` (28-39) returns `[]` unless
+  `AppSettings.contradiction_detection_enabled?` and `EmbeddingService.vector_enabled?` (29-30), compares active
+  observations of the entity and its 1-hop neighbours (32, 43-55), de-duplicates `(a,b)`/`(b,a)` by sorted ids and
+  sorts by confidence (94-97); `contradiction_confidence` = `min((1 − distance) × 1.1, 0.99)` (113-117);
+  `create_report` (119-136) writes a `contradictions` `MaintenanceReport` (in `REPORT_TYPES`, `maintenance_report.rb:4`)
+  with the candidate ids only. **No review row, no signature, no apply path.** Callers: `StaleMemoryScanner.scan`
+  (53-59) → `detect_contradictions` (144-161: entities with observation activity since the watermark, best-effort,
+  returns the previous watermark on error); `DetectContradictionsTool` (`app/tools/detect_contradictions_tool.rb:34`);
+  `Api::V1::MemoryObservationsController#detect_contradictions` (39-46). `StaleMemoryScanJob` seeds `result[:items]`
+  into `compaction_review` (17-24) and writes `by_signal` (30).
+- **Retiring an observation is already undoable.** `MemoryObservation#mark_obsolete!` (`memory_observation.rb:78-88`,
+  no-op when inactive) is an `update!`; `Auditable#audit_update` (`app/models/concerns/auditable.rb:18-25`) writes the
+  `from`/`to` of `status`, `obsoleted_at`, `obsolescence_reason` into the open change set, and
+  `ChangeSetUndo::AuditInverse` writes them back (it only skips the derived columns in `IGNORED`, 9) after refusing
+  when the observation changed since (`check_later_changes!`, 34-50). `delete_observation` (applier 217-229) and
+  `stale_memory` (40-73) already rely on this. `supersede!` (97-114) is not usable for contradictions: it creates a
+  replacement and requires the same entity (151), while detector pairs span 1-hop neighbours.
+- **Review plumbing a new kind needs.** `signature_for` returns `nil` for unknown kinds (357-358), and `seed_report`
+  skips items without a signature (180-181), so a `contradiction` item is dropped today. `edit_item` (80-90) +
+  `validate_edits!` (540-560) accept **any** edit for kinds without a `when` branch. `apply_maintenance_review` takes a
+  free-form `action_params` hash (`apply_maintenance_review_tool.rb:28`); its description (16-21) is pinned by
+  `spec/mcp/tools_list_snapshot_spec.rb` (re-record per its line 9). The old page permits action params in
+  `compaction_action_params` (`data_exchange_controller.rb:764-767`) and renders kinds in two `case` blocks of
+  `_compaction_review_item.html.haml` (`stale_memory` details 119-129 and description 188-193; buttons 194-204).
 - **Jobs.** `config/recurring.yml`: production compaction 3:00, stale scan 4:30, embedding backfill 4:00, row cleanup
   5:15, change-set prune 5:30 (GMT). `MaintenanceReportRowCleanupJob` (25 lines) deletes approved/dismissed/ignored
   rows older than the retention (19-23); **suppressions are never pruned**.
 
 ## Scope
 
-In (UI-5a): the §2.5.1 columns and indexes, `expired` status, expiring suppressions with `source`;
+In (UI-5a): the §2.5.1 columns and indexes, `expired` status, expiring suppressions with `source`; **`contradiction`
+rows** (signature, classification, seeding from the stale scan, apply = keep one side, undo through the existing
+`review.apply` set, minimal buttons on the old page);
 `ReviewRowClassifier` (group key, anchor, project, confidence, priority, `RUN_CAPS`) called at seed time plus an
 idempotent backfill; symmetric `relates_to` dedupe; backlog ceiling, per-run caps, `MIN_QUEUE_SCORE` (default 0);
 SQL pagination; `resolved_by` / `change_set_id` on rows and the undo handle returned by review actions; a server-side
 safe-bulk whitelist; `ReviewPolicyRunner` + `ReviewPolicyJob` (hygiene policies on, auto-apply off) with
-`review_policy_run` reports; Settings › Review policies (audited, range-validated).
+`review_policy_run` reports and the policy `AppSettings` fields (defaults only; no panel yet).
 
-In (UI-5b): `CompactionReviewApplier.preview`; `ReviewGroupActions` (preview, apply safe-bulk groups, dismiss,
+In (UI-5b): Settings › Review policies (panel, range validation, audited); `CompactionReviewApplier.preview`
+(including `contradiction`); the contradiction detail pane; `ReviewGroupActions` (preview, apply safe-bulk groups, dismiss,
 snooze; cap 100); `ReviewDigest`; `ReviewController` and `/review` routes with the left rail, digest, grouped lists,
 detail pane, Resolved view with Undo/Restore and the "not undoable" reason, Policies view; Undo in toasts through
 `POST /changes/:uuid/undo`; keyboard shortcuts; nav badge = attention groups; removal of the `data_exchange`
 review actions and views (GET redirects to `/review`); release 1.58.0.
 
-Out (later PRs): **`contradiction` rows** (Decision 6); Home/Activity cards for policy runs (UI-2); the Explore merge
+Out (later PRs): contradiction detection itself (the polarity heuristic, thresholds and when it runs stay as they are);
+seeding from the MCP/API `detect_contradictions` calls; Home/Activity cards for policy runs (UI-2); the Explore merge
 dialog and `EntityMergePreview` (UI-4b); moving the settings panel under System (UI-7); the "Generate" panel's
 buttons beyond links to the existing maintenance actions; any MCP or `/api/v1` write path to the policy settings;
 undo of hard deletes.
@@ -173,7 +203,9 @@ undo of hard deletes.
    - **Anchor and group key** (§2.5.1): single-anchor kinds `orphan_parent`, `stale_memory`, `entity_error`,
      `embedding_backfill_failed`, `lifecycle_corruption`, `delete_entity`, `reparent_entity` → `"<kind>|<entity_id>"`;
      pair kinds `entity_merge`, `relationship_proposal`, `relation_integrity` → `"<kind>|<min>-<max>"` (both
-     directions collapse; anchor = the lower id); observation kinds `delete_observation`, `move_observation` →
+     directions collapse; anchor = the lower id); `contradiction` → `"contradiction|<min>-<max>"` over the **owner entities** of its two observations (`<id>-<id>` when
+     both belong to one entity; anchor = the lower owner id; owners come from the payload, A5.2); observation kinds
+     `delete_observation`, `move_observation` →
      `"<kind>|obs:<owner entity id>"` (owner looked up from `observation_id`); `delete_relation` → pair key of the
      relation's endpoints (looked up from `relation_id`; a missing relation gives `"<kind>|row:<id>"` and the
      `dangling` policy picks it up); `dismiss_compaction_review` → `"<kind>|<review_item_id>"`; unknown kinds →
@@ -183,14 +215,16 @@ undo of hard deletes.
    - **confidence** and **impact**: exactly the §2.5.1 table (constants `CONFIDENCE`, `IMPACT`, one spec table pins
      them). `relationship_proposal`: band high 0.9 / medium 0.6 / low 0.3, nudged by `score` inside the band (±0.05,
      never across bands). `entity_merge`: `min(score / 24, 1) × (1 − cosine_distance)`. `orphan_parent`: top
-     suggestion score ÷ the matcher's max. `stale_memory`: per signal. Errors: 1.0. Scan destructive kinds: 0.7.
+     suggestion score ÷ the matcher's max. `stale_memory`: per signal. Errors: 1.0. Scan destructive kinds: 0.7. `contradiction`: the detector's
+     `confidence` from the payload (already ≤ 0.99), impact 0.6 (the §2.5.1 row).
    - **priority** = `round(100 × (0.6 × impact + 0.4 × confidence) × age_boost)` clamped 0-100, `age_boost = 1 +
      min(age_days, 14) / 28`, plus `DEGREE_BUMP` when the anchor has > 20 relations (one COUNT per anchor, cached per
      call). Error kinds get at least `ATTENTION_FLOOR_ERRORS` (= the attention threshold) so they always surface.
-   - `RUN_CAPS = { "relationship_proposal" => 200, "entity_merge" => 100, "orphan_parent" => 100 }`.
+   - `RUN_CAPS = { "relationship_proposal" => 200, "entity_merge" => 100, "orphan_parent" => 100, "contradiction" => 100 }`.
    - `DESTRUCTIVE_KINDS = %w[entity_merge delete_entity delete_relation delete_observation reparent_entity
-     move_observation]`, `SAFE_BULK_KINDS = %w[relationship_proposal stale_memory]` (the one source of truth for
-     A3, B1 and C1).
+     move_observation]`, `SAFE_BULK_KINDS = %w[relationship_proposal stale_memory]`, `CHOICE_KINDS = %w[contradiction]` (apply
+     needs a per-row choice: never bulk-, group- or policy-applied, but dismiss and snooze work as for any kind). These
+     constants are the one source of truth for A3, A5, B1 and C1.
 2. `seed_report` (`compaction_review_service.rb:154-200`): classify each item before `create!` and write the five
    columns. Keep the ER_CHECKREAD retry and the absorb path exactly as they are (the r2-r5 concurrency specs must stay
    green unchanged); an absorbing `stale_memory` row is re-classified after the merge of observation ids.
@@ -260,6 +294,65 @@ undo of hard deletes.
    (Decision 5); `dismiss_maintenance_review action: ignore` keeps working and now snoozes. Rows already `ignored`
    (including absorbed `stale_memory` losers, 256) keep `expires_at NULL` and are never auto-restored.
 
+## A5. `contradiction` rows (backend; Steve's decision: in UI-5)
+
+The detector and its report stay as they are; A5 adds a review row per candidate pair found by the **scheduled** stale
+scan, an apply that keeps one observation and retires the other, and undo through what UI-4a already ships.
+
+1. **Signature (order-independent).** `signature_for` gets a `when "contradiction"` branch (before the `else`,
+   357-358): `ids = [payload[:observation_id_1], payload[:observation_id_2]].compact.map(&:to_i).uniq.sort`; `nil`
+   unless `ids.size == 2`; result `"contradiction|<low>-<high>"`. `(a,b)` and `(b,a)` give the same signature, so the
+   existing pending-duplicate check (`seed_report` 183) and suppressions (182) dedupe re-detections, and a dismissal
+   ("both are right") suppresses the pair for good. Spec both orders.
+2. **Payload.** `ContradictionDetector.review_item(result)` (new public class method, one query for both
+   observations): `{ kind: "contradiction", observation_id_1: low, observation_id_2: high, entity_id_1:, entity_id_2:,
+   entity_name_1:, entity_name_2:, content_1:, content_2:` (each truncated to 300 characters for display; apply always
+   re-reads the live observations) `, distance:, confidence:, detected_at: }`, ids normalised low → high whatever the
+   `Result` order. Returns `nil` when either observation is gone or inactive.
+3. **Seeding path (scheduled scan only).** `StaleMemoryScanner.detect_contradictions` (144-161) collects the `Result`s
+   that `ContradictionDetector.detect(entity_id)` already returns (154; `persist: true` stays, so the `contradictions`
+   report is still written) and maps them through `review_item`, de-duplicated by signature across entities. `scan`
+   (53-59) returns them under a **new key** `contradiction_items:` (the `items` array and its specs stay unchanged); on
+   error the pass returns `[]` with the previous watermark, as today. `StaleMemoryScanJob` (17-24) seeds `items +
+   contradiction_items` in the same `seed_report` call (same `source_ref`), and its report gains
+   `contradictions_seeded:` next to `by_signal` (30). MCP `detect_contradictions` and `/api/v1 …/detect_contradictions`
+   don't seed rows (they stay read-and-report tools).
+4. **Classification and limits.** A2's classifier handles the kind (group key over owner entities, confidence from the
+   payload, impact 0.6); `RUN_CAPS["contradiction"] = 100` and the A3 backlog ceiling apply like any kind.
+5. **Apply = keep one side.** `CompactionReviewApplier.apply` (7-36) dispatches `contradiction` to a new
+   `CompactionReviewApplier::Contradiction.apply(effective, action_params)` (new file
+   `app/services/compaction_review_applier/contradiction.rb`, keeps the applier small):
+   - `action_params[:keep_observation_id]` is required and must be one of the pair; otherwise `{ success: false,
+     error: "Choose which observation to keep (##{low} or ##{high})" }` (no write, no change set: `record_review`
+     only persists a set once a row or audit write happens).
+   - Re-check at apply time (the graph moves between scan and apply, as `apply_stale_memory` does): the kept
+     observation must exist and be active, else fail with "Observation #N is no longer active; dismiss this row or
+     restore it first". If the retired side is already inactive or gone, succeed without a write ("already
+     inactive") so the row is closed.
+   - Otherwise `retired.mark_obsolete!(reason: "Contradicted by observation ##{keep_id} (contradiction review)")`.
+     Nothing is created, re-parented or merged; the kept observation is not touched.
+   - Runs inside `apply_row` (376-406) exactly like every kind: membership lock first, then row lock + re-check.
+6. **Undo: no new kind.** The apply runs under the existing `record_review("apply", …)` → change set kind
+   **`review.apply`**, strategy **`audit`**, window **30 days**: the obsolete mark is one audited `update`
+   (`Auditable#audit_update`), so `ChangeSetUndo::AuditInverse` re-activates the observation (status, `obsoleted_at`,
+   `obsolescence_reason` back to their `from` values) and `ReviewRows` puts the row back to `active`. If the
+   observation was edited since, undo answers **409** with "changed since" (existing `check_later_changes!`), as for
+   `delete_observation`. An "already inactive" apply has only the row in its set; undo reopens the row. Dismiss =
+   `review.dismiss` (permanent suppression), snooze = `review.snooze` (A4.5), group dismiss/snooze in UI-5b =
+   `review.group_dismiss` / `review.group_snooze`. A spec applies, undoes and re-applies (redo) one row end to end.
+7. **Edits refused.** `validate_edits!` (540-560) gets a `when "contradiction"` branch that raises the same
+   invalid-edit error the other kinds use ("Contradiction rows can't be edited; choose which observation to keep"),
+   so `edited_payload` can never point the row at other observations.
+8. **MCP.** `apply_maintenance_review`'s description (16-21) and the `action_params` text (28) mention
+   `contradiction` rows and `keep_observation_id`; re-record the MCP list snapshots as
+   `spec/mcp/tools_list_snapshot_spec.rb` (line 9) asks and say so in the PR. `dry_run` keeps echoing the payload
+   until C1 adds the preview.
+9. **Old page (throwaway, removed in C3).** `compaction_action_params` (764-767) permits `:keep_observation_id`; the
+   item partial gets `when "contradiction"` in both `case` blocks (the two observations with their entities, distance,
+   confidence) and, for this kind only, replaces the single Apply (197) with **Keep #low** / **Keep #high** buttons
+   (`name: "keep_observation_id"`, same `turbo_confirm`) and hides Save. About 30 lines; keeps UI-5a usable on
+   today's page.
+
 ## B1. Policy runner, job and schedule
 
 1. New `app/services/review_policy_runner.rb` (< 300 lines; one small class per policy under
@@ -273,15 +366,16 @@ undo of hard deletes.
 
    | Policy | Default | Does | Change set |
    |---|---|---|---|
-   | `dangling` | on | active/ignored rows whose referenced entities, observations or relations are gone, or whose effect already holds (relation exists, observation obsolete, entity already under the parent) → `dismissed`, reason `"dangling: entity #12 gone"`, **no suppression** | `policy.dangling` |
+   | `dangling` | on | active/ignored rows whose referenced entities, observations or relations are gone, or whose effect already holds (relation exists, observation obsolete, entity already under the parent; for
+`contradiction`: either observation gone or no longer active) → `dismissed`, reason `"dangling: entity #12 gone"`, **no suppression** | `policy.dangling` |
    | `no_longer_flagged` | on | active `stale_memory` rows where `StaleMemoryScanner.still_flagged_ids` is empty → `dismissed`, no suppression | `policy.no_longer_flagged` |
    | `expire_low_confidence` | on, 30 days | active rows with `confidence < 0.4` and `updated_at` older than N days → `expired` + suppression `source "expired"`, `expires_at = now + 90 days` | `policy.expire_low_confidence` |
    | `auto_apply_relationships` | **off** | active `relationship_proposal`, band `high`, `confidence ≥ threshold` (default 0.90, 0.80-1.00), canonical type ≠ `part_of` → apply through `CompactionReviewService.apply`; max 50 per run | `policy.auto_apply_relationships` |
    | `auto_apply_expired_validity` | **off** | active `stale_memory` with signal `valid_until_elapsed` → apply (obsolete marks); max 100 per run | `policy.auto_apply_expired_validity` |
    | `snooze_expiry` | always | `ignored` rows with `expires_at` passed → `active`, `expires_at NULL`, delete the `snoozed` suppression | `policy.snooze_expiry` |
 
-4. **Hard rule:** before any apply, the runner refuses kinds in `ReviewRowClassifier::DESTRUCTIVE_KINDS` and any kind
-   not in `SAFE_BULK_KINDS`, whatever the settings say (a spec tampers with the settings and the kind list).
+4. **Hard rule:** before any apply, the runner refuses kinds in `ReviewRowClassifier::DESTRUCTIVE_KINDS` or
+   `CHOICE_KINDS` and any kind not in `SAFE_BULK_KINDS`, whatever the settings say (a spec tampers with the settings and the kind list).
 5. **Change sets.** One set per policy per batch of at most `POLICY_BATCH = 200` rows, actor `policy:<name>`, kind
    `policy.<name>` (already accepted by `KIND_PATTERNS`), summary like `"policy dangling: dismissed 37 rows"`. Rows get
    `resolved_by "policy:<name>"` and `change_set_id`. Hygiene policies only touch review rows and suppressions (strategy
@@ -297,15 +391,20 @@ undo of hard deletes.
    `at 5:00am every day`, before the 5:15 cleanup), and with `perform_later(trigger:)` at the end of
    `DreamStateCompactionJob`, `StaleMemoryScanJob` and a finished project scan (`ProjectScanner`), only when at least
    one row was seeded. Add a "Run policies now" button (operator, `POST /review/policies/run` in C2).
+8. **Settings fields (UI-5a; the panel is B2 in UI-5b).** `AppSettings` fields: `enable_review_policy_dangling` (true),
+   `enable_review_policy_no_longer_flagged` (true), `enable_review_policy_expire_low_confidence` (true),
+   `review_expire_low_confidence_days` (30, 7-365), `enable_auto_apply_relationships` (**false**),
+   `auto_apply_relationship_min_confidence` (0.90, float, 0.80-1.00), `enable_auto_apply_expired_validity` (**false**),
+   `review_backlog_ceiling` (300, 50-5,000; used by A3), `review_attention_threshold` (40, 1-100). Uncached readers via
+   `read_boolean_setting` (`app_settings.rb:181-189`) and a matching uncached numeric reader that clamps to the
+   range. Until UI-5b ships the panel they keep their defaults (Steve can change them from the Rails console); no
+   `/api/v1` or MCP write path.
 
-## B2. Settings › Review policies (operator only, audited)
+## B2. Settings › Review policies (UI-5b, first commit; operator only, audited)
 
-1. `AppSettings` fields: `enable_review_policy_dangling` (true), `enable_review_policy_no_longer_flagged` (true),
-   `enable_review_policy_expire_low_confidence` (true), `review_expire_low_confidence_days` (30, 7-365),
-   `enable_auto_apply_relationships` (**false**), `auto_apply_relationship_min_confidence` (0.90, float, 0.80-1.00),
-   `enable_auto_apply_expired_validity` (**false**), `review_backlog_ceiling` (300, 50-5,000),
-   `review_attention_threshold` (40, 1-100). Uncached readers via `read_boolean_setting` (181-189) and a matching
-   uncached numeric reader.
+Moved from UI-5a to UI-5b to make room for A5 (see "Size and split"). The fields already exist (B1.8).
+
+1. Nothing to add to `AppSettings`; the panel edits the B1.8 fields.
 2. `Operator::SettingsController#group_settings_by_category` (128-165): new tab `review_policies`; partial
    `app/views/operator/settings/_review_policies_panel.html.haml` (toggles, threshold, days, ceiling, threshold, one line
    per policy explaining what it does and how to reverse it; no inline JS).
@@ -325,7 +424,8 @@ undo of hard deletes.
    `relationship_proposal` (exists already? part_of membership effect), `orphan_parent`/`reparent_entity` (subtree
    size), `delete_relation`, `delete_observation` (obsolete mark), `delete_entity` (observations and relations that go,
    children left parentless, **"can't be undone"**), `stale_memory` (observations marked obsolete),
-   `relation_integrity`, `move_observation`. `apply_maintenance_review` `dry_run` returns `preview` too (additive key).
+   `relation_integrity`, `move_observation`, `contradiction` (with `keep_observation_id`: "#B marked obsolete, #A
+   kept, undoable 30 days"; without it: both outcomes; warns when either side is no longer active). `apply_maintenance_review` `dry_run` returns `preview` too (additive key).
 2. New `app/services/review_group_actions.rb`:
    - `preview(group_key:, op:, min_confidence: nil)` → rows included (≤ `GROUP_CAP = 100`, highest priority first),
      rows excluded with the reason (destructive kind, below confidence, not active, over the cap), and the summed
@@ -335,7 +435,8 @@ undo of hard deletes.
      set `review.group_apply` (add to `KINDS`) around per-row `CompactionReviewService.apply` calls.
    - `dismiss(group_key:, row_uuids:, reason:)` (any kind, writes suppressions; `review.group_dismiss`) and
      `snooze(group_key:, row_uuids:, days: 30)` (`review.group_snooze`).
-   - Destructive kinds have no group apply: `preview(op: "apply")` lists every such row as excluded.
+   - Destructive kinds and `CHOICE_KINDS` have no group apply: `preview(op: "apply")` lists every such row as excluded
+     ("choose a side per row" for `contradiction`). Group dismiss and snooze include them.
 
 ## C2. `ReviewController`, routes, views, toasts with Undo
 
@@ -378,7 +479,9 @@ undo of hard deletes.
 5. Views `app/views/review/`: `index` (left rail, digest cards or grouped list), `_digest_card`, `_group_row`,
    `_group` (frame), `_row`, `_detail` (frame) with per-kind partials `kinds/_<kind>.html.haml` split out of the
    204-line `_compaction_review_item.html.haml`, `_preview_card` (confirm card for destructive applies and group
-   actions), `_inbox_zero`, `_resolved`, `_policies`. Entity pickers reuse `_entity_search_select` and
+   actions), `kinds/_contradiction.html.haml` (the two observations side by side with entity, age, distance and
+   confidence; **Keep this** on each side posts `apply` with `keep_observation_id` through the preview card; Dismiss is
+   labelled "Both are right"; Snooze as usual), `_inbox_zero`, `_resolved`, `_policies`. Entity pickers reuse `_entity_search_select` and
    `compaction_review_controller.js` (rename to `review_entity_picker_controller.js`). Confirm levels per §5.2:
    `turbo_confirm` for dismiss/snooze group; a server-rendered preview card (no JS confirm) for destructive applies
    and group apply. Haml escaping only; no `!=`/`html_safe` on payload text.
@@ -386,7 +489,8 @@ undo of hard deletes.
 ## C3. Keyboard, nav badge, removal of the old review UI
 
 1. `app/javascript/controllers/review_keys_controller.js`: `j/k` next/previous, `Enter` open, `a` apply (opens the
-   preview card for destructive kinds), `d` dismiss, `s` snooze, `e` edit, `r` restore, `x` select, `/` search, `?`
+   preview card for destructive kinds), `d` dismiss, `s` snooze, `e` edit, `r` restore, `x` select, `/` search, `1`/`2` keep the first/second observation of a `contradiction` row (opens
+   the preview card, never applies directly), `?`
    help dialog (`<dialog>`, built with `lib/dom.js`, no `innerHTML`). Ignored inside inputs, textareas, selects and
    contenteditable; focus moves to the next item after an action. Pinned in `config/importmap.rb` by the
    controllers' existing pin.
@@ -395,7 +499,8 @@ undo of hard deletes.
    expiry; 0 → no badge.
 3. Remove `DataExchangeController#compaction_review`, `#compaction_review_action`, `#review_action_turbo_streams`,
    `#compaction_review_import_suggest_merges` and the helpers only they use (746-776), the five
-   `app/views/data_exchange/_compaction_review*` / `compaction_review.html.haml` views, and
+   `app/views/data_exchange/_compaction_review*` / `compaction_review.html.haml` views (with A5.9's contradiction
+   buttons and the `:keep_observation_id` permit), and
    `spec/requests/data_exchange_spec.rb` examples for them (move what still applies to `spec/requests/review_spec.rb`).
    Repoint the dashboard scan card forms (`_project_scans_card.html.haml:92-98`) to
    `POST /review/rows/:uuid/{apply,dismiss}` and the links (101; `_dream_state_compactor_card.html.haml:88`;
@@ -404,11 +509,13 @@ undo of hard deletes.
 ## D. Docs
 
 - `docs/architecture.md`: a "Review & Fix (UI-5)" section: columns, classifier, digest, limits, policies (table,
-  defaults, hard rule), change sets `policy.*`/`review.snooze`/`review.group_*`, what can't be undone and how the UI says
+  defaults, hard rule), change sets `policy.*`/`review.snooze`/`review.group_*`, `contradiction` rows (seeded by the
+  scheduled scan only, keep-one-side apply, undone as `review.apply`), what can't be undone and how the UI says
   so; update "What records a set".
 - `docs/guides/ui-guide.md`: the Review page (rail, digest, inbox zero, keyboard shortcuts, Undo/Restore, policies
   panel).
-- `docs/mcp_tools.md`: `ignore` now snoozes for 30 days; `list_maintenance_review` accepts `expired`; `dry_run` returns
+- `docs/mcp_tools.md`: `apply_maintenance_review` on `contradiction` rows needs `action_params.keep_observation_id`;
+  `detect_contradictions` unchanged (still no review rows); `ignore` now snoozes for 30 days; `list_maintenance_review` accepts `expired`; `dry_run` returns
   a preview.
 - `docs/garbage_collector.md` (or wherever retention is listed): expired rows and suppressions pruned; nightly policy
   run at 5:00.
@@ -440,15 +547,31 @@ All synthetic, test-DB truncate before and after (`ui-dashboard-plan.md` §0.1),
     a leftover lock.
   - `spec/jobs/review_policy_job_spec.rb` (no overlap; enqueued after compaction/stale scan/project scan only when
     rows were seeded); `spec/jobs/maintenance_report_row_cleanup_job_spec.rb` additions.
-  - `spec/requests/operator/review_policy_settings_spec.rb`: fresh install both auto-apply toggles off; each toggles
-    independently; threshold 0.79 / 1.01 → 422 and nothing saved, 0.85 → saved and used by the next run; guest 403,
-    signed out → login; each change writes an `AuditLog` row; the audit log page renders it.
+  - Contradictions (A5): `spec/services/compaction_review_service_spec.rb` (signature equal for both orders, `nil`
+    for one id; a re-detected pair is not seeded twice; a dismissed pair stays suppressed; edits refused);
+    `spec/services/contradiction_detector_spec.rb` (`review_item` normalises low → high, `nil` for an inactive side);
+    `spec/services/stale_memory_scanner_spec.rb` / `spec/jobs/stale_memory_scan_job_spec.rb` (with the detector stubbed
+    to return synthetic `Result`s: `contradiction_items` seeded with the scan's `source_ref`, `contradictions_seeded`
+    in the report, a detector error seeds nothing and keeps the watermark; `items` and `by_signal` unchanged);
+    `spec/services/compaction_review_applier/contradiction_spec.rb` (missing or foreign `keep_observation_id` → error,
+    nothing written; kept side inactive → error; retired side already inactive → success without a write; normal
+    apply marks only the other side obsolete); `spec/services/change_set_undo/contradiction_undo_spec.rb` (apply →
+    `review.apply` set, strategy `audit`, 30 days → undo re-activates the observation and reopens the row → redo;
+    an edit to the retired observation in between → 409 conflict); classifier table row and group key over owner
+    entities; `dangling` dismisses a pair with an inactive side; `bulk_apply` and the policy hard rule skip
+    `contradiction`; `spec/tools/apply_maintenance_review_tool_spec.rb` (`keep_observation_id` passes through);
+    the old page's Keep buttons in `spec/requests/data_exchange_spec.rb`; MCP list snapshots re-recorded.
+  - `spec/models/app_settings_spec.rb` additions: B1.8 defaults (both auto-apply toggles off) and numeric clamping.
   - `spec/requests/role_matrix_spec.rb`: add `MaintenanceReportSuppression.count` to `record_counts` (68-70).
 - UI-5b:
+  - `spec/requests/operator/review_policy_settings_spec.rb` (B2): fresh install both auto-apply toggles off; each
+    toggles independently; threshold 0.79 / 1.01 → 422 and nothing saved, 0.85 → saved and used by the next run; guest
+    403, signed out → login; each change writes an `AuditLog` row; the audit log page renders it.
   - `spec/services/compaction_review_applier_preview_spec.rb`: preview == apply effects for merge, reparent,
-    delete_relation, delete_observation, stale_memory, relationship_proposal; `delete_entity` says not undoable; the
+    delete_relation, delete_observation, stale_memory, relationship_proposal, contradiction (each side); `delete_entity` says not undoable; the
     preview writes nothing (no audit rows, change sets, row or suppression changes).
-  - `spec/services/review_group_actions_spec.rb`: destructive kinds excluded, nothing changed; cap 100; the preview
+  - `spec/services/review_group_actions_spec.rb`: destructive kinds and `contradiction` excluded from group apply, nothing changed;
+    group dismiss/snooze include `contradiction`; cap 100; the preview
     lists exactly the rows applied; token mismatch → conflict, nothing written; snooze writes an expiring suppression;
     one change set per group action, undoable.
   - `spec/services/review_digest_spec.rb`: top 10 groups by priority; inbox zero when nothing ≥ threshold; query count
@@ -457,7 +580,8 @@ All synthetic, test-DB truncate before and after (`ui-dashboard-plan.md` §0.1),
     (stub `LockTimeout` and a `TransientDbError.busy?` error); toast has Undo when undoable and the reason when not;
     guest 403 and signed out → login on every route; CSRF required; the old GET redirects with `view=scan`.
   - `spec/system/review_spec.rb`: digest → apply a high-confidence group (preview card) → Undo from the toast → inbox
-    zero; keyboard `j`/`d` moves focus and dismisses, and shortcuts don't fire inside the search field.
+    zero; keyboard `j`/`d` moves focus and dismisses, and shortcuts don't fire inside the search field; a
+    `contradiction` row: Keep this → preview card → applied → Undo from the toast brings the observation back.
   - `spec/system/navigation_spec.rb`: badge counts attention groups; guest sees no Review link.
   - `spec/javascript_sinks_spec.rb` stays green (no new `innerHTML` sinks).
 - All existing review, dream-state, scan and undo specs stay green **unchanged** (except adding assertions and moving
@@ -470,46 +594,56 @@ All synthetic, test-DB truncate before and after (`ui-dashboard-plan.md` §0.1),
   (`spec/docs/agent_text_sync_spec.rb` checks they match).
 - `CHANGELOG.md`: rename UI-5a's `## [Unreleased]` lines into `## [1.58.0] - <merge date>` with `### Added` (grouped
   Review & Fix page, digest and inbox zero, group actions with preview, apply preview, review policies and their
-  settings, Undo/Restore in the UI, keyboard shortcuts), `### Changed` (`ignore` snoozes for 30 days; queue sorted by
+  settings, `contradiction` review rows with keep-one-side apply, Undo/Restore in the UI, keyboard shortcuts), `### Changed` (`ignore` snoozes for 30 days; queue sorted by
   normalized priority; generation limits; symmetric `relates_to` dedupe; nav badge counts attention groups; old review
   URLs redirect), `### Removed` (the `data_exchange` review actions), `### Fixed` (bulk apply could include destructive
   kinds; a busy membership lock on a review apply returned 500; dismiss reason missing on the suppression).
 
 ## Size and split
 
-Estimate: **about 5,000-5,800 changed lines, roughly half specs** (A ≈ 1,500, B ≈ 1,200, C ≈ 2,300, D+R ≈ 250). For
-reference, UI-4a was estimated at 2,400-2,800 and landed at ~3,100 (`v1.56.0..v1.57.0`: 50 files, +2,994/−113).
-**Decision (changeable): two PRs.** One PR would be about twice the ~3,000-line review limit.
-- **UI-5a** (A1-A4, B1, B2, D for those parts), ≈ 2,800-3,100: data model, classifier, limits, expiring suppressions,
-  undo links, policies, settings. CHANGELOG under `## [Unreleased]`, **no version bump**. Branch
-  `claude/ui-5a-review-backend`. It works on today's page (the old page keeps working; rows simply get classified,
-  limited and cleaned up).
-- **UI-5b** (C1-C3, rest of D, R), ≈ 2,300-2,700: preview, group actions, digest, the page, keyboard, removal,
-  **1.58.0**. Branch `claude/ui-5-1.58.0`. Group actions and the preview move here because the page is their only
-  consumer (the same reasoning as UI-4a's Decision 2).
-If either PR passes ~3,500 lines, stop and propose moving B2 (settings panel) or C3 (keyboard + removal) into the next
-PR. If Steve asks for one PR, use `claude/ui-5-1.58.0` with the commit order above.
+Estimate (revised with `contradiction` rows): **about 5,900-6,600 changed lines, roughly half specs** (A1-A4 ≈ 1,500,
+A5 ≈ 550 (≈ 200 code incl. ~30 throwaway old-page lines, ≈ 350 specs), B1 ≈ 800, B2 ≈ 400, C ≈ 2,300 + ≈ 200 for the
+contradiction pane/preview/keys, D+R ≈ 280). For reference, UI-4a was estimated at 2,400-2,800 and landed at ~3,100
+(`v1.56.0..v1.57.0`: 50 files, +2,994/−113).
 
-## Decisions (changeable)
+**Two PRs (Steve confirmed).** With A5 added to the original UI-5a (A1-A4, B1, B2), UI-5a would be ≈ 3,350-3,650, past
+the ~3,500 stop line. **Move applied: B2 (the settings panel, its validation and the settings audit) goes to UI-5b**;
+its fields stay in UI-5a (B1.8) because the runner and the ceiling read them.
+- **UI-5a** (A1-A5, B1, D for those parts), **≈ 3,000-3,300**: data model, classifier, limits, expiring suppressions,
+  undo links, `contradiction` rows, policies with default settings. CHANGELOG under `## [Unreleased]`, **no version
+  bump**. Branch `claude/ui-5a-review-backend`. It works on today's page (rows get classified, limited and cleaned up;
+  contradiction rows get Keep buttons).
+- **UI-5b** (B2, C1-C3, rest of D, R), **≈ 2,900-3,300**: settings panel, preview, group actions, digest, the page,
+  keyboard, removal, **1.58.0**. Branch `claude/ui-5-1.58.0`. Group actions and the preview stay here because the page
+  is their only consumer (the same reasoning as UI-4a's Decision 2).
+If either PR still passes ~3,500 lines: from UI-5a, move A5.9 (old-page buttons) out and let contradiction rows wait for
+the new page; from UI-5b, move C3.1 (keyboard) to a follow-up. Stop and propose; don't move steps on your own.
 
-1. **Two PRs** (see "Size and split").
+## Decisions
+
+Steve answered on 2026-10-26: decisions marked **(Steve)** are his and are not to be changed in the PRs; the rest stay
+changeable defaults.
+
+1. **Two PRs (Steve, confirmed)**: UI-5a and UI-5b as in "Size and split" (B2 moved to UI-5b for size).
 2. **No new undo machinery.** Every UI-5 write goes through `ChangeSet.record` and is undone by the existing
    `ChangeSetUndo` + `ReviewRows`; UI-5 only adds kinds (`review.snooze`, `review.group_apply`,
    `review.group_dismiss`, `review.group_snooze`, plus `policy.*` already allowed) and review fields.
 3. **Backfill outside the migration.** The migration is schema-only; `ReviewRowClassifier.backfill!` runs from the
    policy runner (bounded per run) and `bin/rails review:backfill`. Migrations calling app code break later; a bounded
    job can't hold a long transaction.
-4. **Policy change sets: one per policy per batch of ≤ 200 rows**, so "Undo run" is one click and a set stays far under
+4. **Policy change sets: one per policy per batch of ≤ 200 rows (Steve, confirmed)**, so "Undo run" is one click and a set stays far under
    the 4 MB snapshot cap; undoing one batch is all-or-nothing for that batch.
-5. **`ignore` becomes snooze (30 days)** everywhere, including the MCP tool; existing `ignored` rows keep
+5. **`ignore` becomes snooze (30 days) (Steve, confirmed)** everywhere, including the MCP tool; existing `ignored` rows keep
    `expires_at NULL` and never auto-return. Row `expires_at` is only the snooze end; `expire_low_confidence` uses
    `updated_at`.
-6. **`contradiction` rows are deferred.** They need a new apply kind (retire one side), a signature and a seed path
-   from `ContradictionDetector` (`contradiction_detector.rb:119-135` writes a separate report); the classifier keeps a
-   reserved row in its table.
+6. **`contradiction` rows are in UI-5 (Steve, changed from "deferred").** Backend in UI-5a (A5: order-independent
+   signature `contradiction|<low obs id>-<high obs id>`, seeding from the scheduled stale scan only, apply = keep one
+   side via `keep_observation_id` and mark the other obsolete); page in UI-5b (detail pane, preview, keys). No new
+   change-set kind: the apply is a `review.apply` set with strategy `audit` (30 days), undone by the existing
+   `AuditInverse` + `ReviewRows`. Never bulk-, group- or policy-applied (`CHOICE_KINDS`).
 7. **Digest spans compaction and scan review**, ranked together by normalized priority; the Scan review view stays.
 8. **Search stays values-only**, in Ruby over at most 2,000 SQL-ordered rows (no new search column or full-text index).
-9. **Old URLs:** the old GET redirects to `/review` (301); the old POST and import routes are removed (only the app
+9. **Old URLs (Steve, confirmed):** the old GET redirects to `/review` (301); the old POST and import routes are removed (only the app
    used them); MCP tools are unchanged apart from Decision 5.
 10. **Settings panel in `/operator/settings`** (tab `review_policies`), audited as `AuditLog` rows on `AppSettings`;
     UI-7 moves it under System.
@@ -523,7 +657,10 @@ PR. If Steve asks for one PR, use `claude/ui-5-1.58.0` with the commit order abo
 
 - With 1,000 synthetic rows (factory script), `/review` shows ≤ 10 decisions by default; its query count doesn't
   depend on queue size; inbox zero appears when nothing is ≥ the threshold.
-- Nothing destructive can be bulk-, group- or policy-applied (server-side, specs try); `bulk_apply` skips non-safe kinds.
+- Nothing destructive or `contradiction` can be bulk-, group- or policy-applied (server-side, specs try); `bulk_apply`
+  skips non-safe kinds.
+- A contradiction pair found by the scheduled scan appears once (either order), applying "keep A" marks only B
+  obsolete, and Undo re-activates B and reopens the row; MCP/API `detect_contradictions` writes no review row.
 - Policies are on/off exactly per the B1 defaults on a fresh install; each action has a `policy.<name>` change set,
   `resolved_by` and `change_set_id`, and can be undone from the Policies view or restored per row.
 - Every review action's toast offers Undo when its set is undoable and says why when not (hard delete, mixed merge);
@@ -545,6 +682,8 @@ PR. If Steve asks for one PR, use `claude/ui-5-1.58.0` with the commit order abo
 - any quoted line no longer matches the code, or `main` isn't at 1.57.0 (UI-5a) / doesn't contain UI-5a (UI-5b) when
   you start;
 - a generator's payload shape doesn't let the classifier find an anchor without guessing;
+- the contradiction apply would need anything beyond an obsolete mark (a supersede, a new observation, a merge), undo of
+  it would need a new change-set kind or strategy, or the scanner change would alter the `items` its specs pin;
 - an existing review, dream-state, scan or undo spec needs changing (not just extending) to pass, especially the
   r2-r5 concurrency and `stale_memory` absorption specs;
 - the migration diff drops or rewrites a vector column, `VECTOR KEY` or trigger line;
