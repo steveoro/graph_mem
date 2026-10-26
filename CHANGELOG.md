@@ -5,9 +5,10 @@ All notable changes to GraphMem will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.58.0] - 2026-10-26
 
 UI-5a: review data model, limits, policies and contradiction rows (backend; the Review page is UI-5b).
+UI-5b: the Review & Fix page, group actions with Undo, and the Review policies settings panel.
 
 ### Added
 - Review rows carry a group key, anchor entity, project, normalized confidence and priority (`ReviewRowClassifier`, at seed time; `bin/rails review:backfill` for older rows), `resolved_by` and the `change_set_id` of the action that last changed them. A new `expired` status, and suppressions that can expire (`expires_at`, `source`).
@@ -16,6 +17,12 @@ UI-5a: review data model, limits, policies and contradiction rows (backend; the 
 - `contradiction` review rows: the scheduled stale scan seeds one per pair its contradiction pass finds (either order); applying keeps one observation (`action_params.keep_observation_id`) and marks the other obsolete, undoable for 30 days. The old review page shows Keep buttons.
 - Review policies (`ReviewPolicyRunner`, `ReviewPolicyJob`): nightly at 5:00 and after a compaction run, stale scan or project scan that seeded rows. Hygiene policies (`dangling`, `no_longer_flagged`, `expire_low_confidence`) are on, auto-apply (`auto_apply_relationships`, `auto_apply_expired_validity`) is off; each batch is an undoable `policy.<name>` change set and destructive kinds are never applied. Settings fields only (the panel comes with UI-5b). Each run writes a `review_policy_run` report.
 - Review actions return the undo handle (`change_set_uuid`, `undoable`, `not_undoable_reason`) with their usual keys.
+- Review & Fix page (`/review`, operator only): a rail (Needs attention, By kind, By project, Errors, Scan review, Resolved, Policies) and a digest of the top 10 groups at or above `review_attention_threshold`, ranked by priority alone, with an inbox-zero state. Groups open in place; the detail pane shows each kind's card, editable fields and an apply preview (effects, warnings, undo window). Contradictions show both sides with "Keep this" and "Both are right". Search matches row values only.
+- Group actions (apply high-confidence, dismiss, snooze) behind a confirm card: at most 100 rows, one change set each (`review.group_apply`, `review.group_dismiss`, `review.group_snooze`), and `409` when the group changed since its preview. Destructive kinds and contradictions have no group apply; group dismiss and snooze skip rows that aren't pending.
+- Toasts offer Undo (`POST /changes/:uuid/undo`) when the action's change set can be undone, and say why when it can't. Review actions answer 200 (303 for HTML), 404, 409, 422, or 503 when a lock is busy.
+- Keyboard shortcuts on /review: `j`/`k`, `Enter`, `a`, `d`, `s`, `e`, `r`, `x`, `/`, `1`/`2` (open the contradiction preview card) and `?` (help).
+- Settings › Review policies: thresholds, caps and policy toggles, range-checked (`422` when out of range), with one audit row per changed key.
+- `apply_maintenance_review` with `dry_run` returns a `preview` (effects, warnings, undo window).
 
 ### Changed
 - `ignore` snoozes for 30 days (MCP `dismiss_maintenance_review` too); rows ignored earlier stay ignored.
@@ -24,6 +31,11 @@ UI-5a: review data model, limits, policies and contradiction rows (backend; the 
 - Symmetric `relates_to` proposals have one signature for both directions.
 - `MaintenanceReportRowCleanupJob` also prunes `expired` rows and long-expired suppressions, and keeps a snoozed row until its snooze ends.
 - `list_maintenance_review` accepts `expired`; `apply_maintenance_review` describes contradiction rows.
+- The sidebar's "Review queue" and "Scan review" open /review; the badge counts groups that need attention. The dashboard's review cards link to /review, and the scan card's actions return to the dashboard.
+- `/data_exchange/compaction_review` redirects (301) to /review, and scan review to `/review?view=scan`.
+
+### Removed
+- The old compaction review page and its data_exchange actions, including UI-5a's Keep buttons. The suggest-merges import moved to /review.
 
 ### Fixed
 - Dismissing a row recorded the suppression without the dismissal reason.
