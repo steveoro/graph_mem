@@ -28,11 +28,10 @@ module Auditable
     write_audit("delete", auditable_snapshot)
   end
 
-  # Audit rows join the open change set (UI-4a); a failed audit row never blocks the write,
-  # it only marks the set as not undoable.
+  # Audit rows join the open change set (UI-4a). Neither a failed change set nor a failed audit
+  # row ever blocks the write; either one only marks the set as not undoable.
   def write_audit(action, changed_fields)
-    change_set = Current.change_set
-    change_set&.note_audit!(self, action)
+    change_set_id = change_set_id_for(action)
     AuditLog.create!(
       auditable_type: self.class.name,
       auditable_id: id,
@@ -40,11 +39,24 @@ module Auditable
       actor: Current.actor,
       changed_fields: changed_fields,
       reason: action == "delete" ? Current.deletion_reason : nil,
-      change_set_id: change_set&.persist!
+      change_set_id: change_set_id
     )
   rescue StandardError => e
     Rails.logger.warn "Audit write failed for #{self.class.name}##{id}: #{e.message}"
+    note_audit_failure(Current.change_set)
+  end
+
+  # @return [Integer, nil] the open set's id; nil when there is none or it can't be written
+  def change_set_id_for(action)
+    change_set = Current.change_set
+    return unless change_set
+
+    change_set.note_audit!(self, action)
+    change_set.persist!
+  rescue StandardError => e
+    Rails.logger.warn "Change set update failed for #{self.class.name}##{id}: #{e.message}"
     note_audit_failure(change_set)
+    nil
   end
 
   def note_audit_failure(change_set)

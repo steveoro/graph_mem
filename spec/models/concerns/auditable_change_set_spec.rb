@@ -39,8 +39,9 @@ RSpec.describe Auditable, "change sets", type: :model do
   it "still never blocks the write when the change set itself can't be written" do
     allow(ChangeSet).to receive(:create!).and_raise(ActiveRecord::StatementInvalid, "synthetic change set failure")
 
-    ChangeSet.record(kind: "graph.write") { MemoryEntity.create!(name: "SynthWidget", entity_type: "Component") }
+    entity = ChangeSet.record(kind: "graph.write") { MemoryEntity.create!(name: "SynthWidget", entity_type: "Component") }
 
     expect(MemoryEntity.where(name: "SynthWidget")).to exist
+    expect(AuditLog.for_record("MemoryEntity", entity.id).pluck(:action, :change_set_id)).to eq([ [ "create", nil ] ])
   end
 end
