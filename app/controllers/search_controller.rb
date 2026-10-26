@@ -1,7 +1,10 @@
 # frozen_string_literal: true
 
 class SearchController < ApplicationController
+  include GuestSearchThrottle
+
   allow_guest :results
+  throttle_guest_search :results
 
   RESULTS_PER_PAGE = 25
 

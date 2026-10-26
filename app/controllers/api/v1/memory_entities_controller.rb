@@ -5,7 +5,10 @@ require_dependency "memory_entity"
 module Api
   module V1
     class MemoryEntitiesController < BaseController
+      include GuestSearchThrottle
+
       before_action :set_entity, only: [ :show, :update, :destroy, :merge ]
+      throttle_guest_search :search
 
       # GET /api/v1/memory_entities
       def index
