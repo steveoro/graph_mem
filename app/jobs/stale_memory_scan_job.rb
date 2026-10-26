@@ -13,14 +13,19 @@ class StaleMemoryScanJob < ApplicationJob
     started_at = Time.current
     result = StaleMemoryScanner.scan
     items = result[:items]
+    contradiction_items = result[:contradiction_items] || []
 
-    unless items.empty?
-      CompactionReviewService.seed_report(
+    seeded = []
+    unless items.empty? && contradiction_items.empty?
+      # Contradiction pairs are seeded here only (the scheduled scan), never by the MCP/API
+      # detect_contradictions calls.
+      seeded = CompactionReviewService.seed_report(
         report_type: "compaction_review",
         source: "stale_memory_scan",
         source_ref: started_at.to_i,
-        items: items
+        items: items + contradiction_items
       )
+      ReviewPolicyJob.enqueue_if_seeded(trigger: "stale_scan", seeded: seeded)
     end
 
     MaintenanceReport.create!(
@@ -28,6 +33,7 @@ class StaleMemoryScanJob < ApplicationJob
       data: {
         items_seeded: items.size,
         by_signal: items.group_by { |item| item[:signal] }.transform_values(&:size),
+        contradictions_seeded: seeded.count { |row| row.kind == "contradiction" },
         started_at: started_at.iso8601,
         # Contradiction-pass watermark for the NEXT scan: advances only when
         # the pass completed (a failed pass re-scans the same window).

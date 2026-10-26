@@ -30,6 +30,8 @@ class CompactionReviewApplier
         dismiss_compaction_review(effective)
       when "stale_memory"
         apply_stale_memory(effective)
+      when "contradiction"
+        Contradiction.apply(effective, action_params)
       else
         { success: false, error: "Unknown review kind: #{row.kind}" }
       end

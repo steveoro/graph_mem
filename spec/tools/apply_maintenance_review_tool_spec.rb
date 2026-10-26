@@ -137,4 +137,26 @@ RSpec.describe ApplyMaintenanceReviewTool, type: :model do
       }.to raise_error(Timeout::Error, "execution expired")
     end
   end
+  describe "contradiction rows (UI-5a)" do
+    let!(:kept) { MemoryObservation.create!(memory_entity: source, content: "ApplySource is synthetic and active.") }
+    let!(:other) { MemoryObservation.create!(memory_entity: target, content: "ApplySource is not active.") }
+    let!(:row) do
+      MaintenanceReportRow.create!(maintenance_report: report, report_type: "compaction_review", row_uuid: "apply-contradiction-1",
+                                   kind: "contradiction", status: "active", signature: "contradiction|#{kept.id}-#{other.id}",
+                                   payload: { "observation_id_1" => kept.id, "observation_id_2" => other.id, "confidence" => 0.9 })
+    end
+
+    it "passes keep_observation_id through to the apply" do
+      result = tool.call(item_id: row.row_uuid, action_params: { "keep_observation_id" => kept.id })
+
+      expect(result).to include(success: true)
+      expect(other.reload.status).to eq("obsolete")
+      expect(kept.reload.status).to eq("active")
+    end
+
+    it "explains the missing choice" do
+      expect { tool.call(item_id: row.row_uuid) }.to raise_error(/Choose which observation to keep/)
+      expect(other.reload.status).to eq("active")
+    end
+  end
 end

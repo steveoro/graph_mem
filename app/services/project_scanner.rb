@@ -844,11 +844,12 @@ class ProjectScanner
   def seed_scan_review_items!
     return if @scan_review_items.empty?
 
-    CompactionReviewService.seed_report(
+    rows = CompactionReviewService.seed_report(
       report_type: "scan_review",
       source: "project_scan:#{@project_root}",
       items: @scan_review_items
     )
+    ReviewPolicyJob.enqueue_if_seeded(trigger: "project_scan", seeded: rows)
   end
 
   def update_progress!(phase:, message:, current: nil, total: nil)

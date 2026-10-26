@@ -5,6 +5,9 @@
 class RelationshipDiscoveryStrategy
   ALLOWED_RELATION_TYPES = %w[relates_to solves depends_on part_of calls inherits mixes_in].freeze
   MAX_PROPOSALS_PER_ENTITY = 3
+  # Proposals scoring below this aren't queued (UI-5a). 0 changes nothing; the policy-run stats
+  # record apply/dismiss rates per score so the floor can be raised on evidence.
+  MIN_QUEUE_SCORE = 0
   MIN_SHARED_CONTENT_LENGTH = 15
 
   ISSUE_MARKERS = %w[block blocks blocked blocking error fail failure problem issue].freeze
@@ -216,6 +219,7 @@ class RelationshipDiscoveryStrategy
     proposals
       .compact
       .uniq { |proposal| [ proposal[:from_entity_id], proposal[:to_entity_id], proposal[:relation_type] ] }
+      .select { |proposal| proposal[:score].to_i >= MIN_QUEUE_SCORE }
       .sort_by { |proposal| [ -proposal[:score].to_i, proposal[:from_entity_id], proposal[:to_entity_id], proposal[:relation_type] ] }
       .first(MAX_PROPOSALS_PER_ENTITY)
   end

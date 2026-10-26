@@ -144,6 +144,7 @@ merge with other writes, are recorded but can't be undone. Agents can't undo: th
   - `entity_id` (integer, required): The ID of the entity. Also accepts entity name (string).
   - `max_distance` (number, optional, default: 0.35): Maximum cosine distance threshold (smaller = stricter).
   - `max_results` (integer, optional, default: 20): Maximum candidate pairs to return.
+- **Review rows:** this tool only reports. Contradiction review rows come from the scheduled stale scan alone; apply one with `apply_maintenance_review` and `action_params.keep_observation_id`.
 
 ## Search & Query Tools (3 tools)
 
@@ -356,14 +357,14 @@ These tools perform structural graph queries. `direction` is one of `outgoing`
   - `item_id` (string, required): Maintenance report row UUID.
   - `report_type` (string, optional, default: `compaction_review`): Report type that owns the row.
   - `dry_run` (boolean, optional, default: false): When true, validate and preview without applying.
-  - `action_params` (object, optional): Optional overrides for merge/relation/orphan endpoints.
-- **Response:** Apply result hash (`success`, `message`, and kind-specific fields such as `deleted_relation_ids`), or a dry-run preview with `kind` and `payload`.
+  - `action_params` (object, optional): Optional overrides for merge/relation/orphan endpoints; for a `contradiction` row, `keep_observation_id` (one of its two observations) is required: that one is kept and the other is marked obsolete.
+- **Response:** Apply result hash (`success`, `message`, kind-specific fields such as `deleted_relation_ids`, and since 1.58 `change_set_uuid`, `undoable`, `not_undoable_reason`), or a dry-run preview with `kind` and `payload`.
 
 #### `list_maintenance_review`
-- **Description:** List paginated maintenance-review queue rows (including item_id) for later apply or dismiss. Pass optional `report_type` (string, default compaction_review), `status` (active, dismissed, approved, or ignored; default active), `kind` (string, e.g. entity_merge or orphan_parent), `page` (integer, default 1). per_page is not an input. Do not use for whole report documents; use `get_maintenance_reports` instead. Do not use to apply a row; use `apply_maintenance_review` instead. Do not use to dismiss, ignore, or restore a row; use `dismiss_maintenance_review` instead. Do not use to merge two known entity ids; use `merge_entities` instead.
+- **Description:** List paginated maintenance-review queue rows (including item_id) for later apply or dismiss. Pass optional `report_type` (string, default compaction_review), `status` (active, dismissed, approved, ignored, or expired; default active), `kind` (string, e.g. entity_merge or orphan_parent), `page` (integer, default 1). per_page is not an input. Do not use for whole report documents; use `get_maintenance_reports` instead. Do not use to apply a row; use `apply_maintenance_review` instead. Do not use to dismiss, ignore, or restore a row; use `dismiss_maintenance_review` instead. Do not use to merge two known entity ids; use `merge_entities` instead.
 - **Parameters:**
   - `report_type` (string, optional, default: `compaction_review`): Report type that owns the rows.
-  - `status` (string, optional, default: `active`): Row status filter: `active`, `dismissed`, `approved`, `ignored`.
+  - `status` (string, optional, default: `active`): Row status filter: `active`, `dismissed`, `approved`, `ignored`, `expired`.
   - `kind` (string, optional): Row kind filter, e.g. `entity_merge` or `orphan_parent`.
   - `page` (integer, optional, default: 1): 1-based page. Response `per_page` is fixed at 50.
 - **Response:** `{ report_type, status, kind, page, per_page, total_count, total_pages, items: [{ item_id, kind, status, payload, ... }] }`
@@ -372,7 +373,7 @@ These tools perform structural graph queries. `direction` is one of `outgoing`
 - **Description:** Dismiss, ignore, or restore a maintenance-review queue row without applying the suggestion. Pass required `item_id` (string UUID) and `action` (dismiss, ignore, or restore); optional `report_type` (string, default compaction_review), `reason` (string). Do not use to execute the suggestion; use `apply_maintenance_review` instead. Do not use to look up a row; use `list_maintenance_review` instead. Do not use to merge entities; use `merge_entities` instead.
 - **Parameters:**
   - `item_id` (string, required): Maintenance report row UUID.
-  - `action` (string, required): One of `dismiss`, `ignore`, `restore`.
+  - `action` (string, required): One of `dismiss`, `ignore`, `restore`. `ignore` snoozes an active row for 30 days: it comes back afterwards, and its suggestion isn't proposed again until then. A dismissed, approved or expired row can't be ignored (restore it first).
   - `report_type` (string, optional, default: `compaction_review`): Report type that owns the row.
   - `reason` (string, optional): Optional dismissal reason.
 - **Response:** Updated review-row status payload.

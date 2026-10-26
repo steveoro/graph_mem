@@ -214,6 +214,11 @@ retention in Settings › Telemetry. Suggestions you dismissed stay suppressed a
 gone (both the original and, if you edited it, the edited proposal); ignored ones can be proposed
 again. Rows a project rescan dismisses on its own record no suppression.
 
+The cleanup job also prunes `expired` rows, keeps a snoozed row until its snooze ends, and deletes
+suppressions that expired more than the retention ago. The review policies run nightly at 5:00 AM GMT
+(`ReviewPolicyJob`, before the cleanup) and after a compaction run that seeded rows; see
+[architecture](architecture.md#review-queue-classification-limits-and-policies-ui-5a).
+
 Change sets (UI-4a) are pruned by `ChangeSetPruneJob` (5:30 AM GMT): snapshots older than 30
 days are cleared (every undo window has passed), and sets older than 90 days that no audit row
 references are deleted. Compaction auto-merges are change sets too (actor `compaction:<run_id>`),

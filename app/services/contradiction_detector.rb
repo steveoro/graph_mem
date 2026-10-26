@@ -9,6 +9,8 @@
 class ContradictionDetector
   DEFAULT_MAX_DISTANCE = 0.35
   DEFAULT_MAX_RESULTS = 20
+  # Review rows show this much of each observation; apply always re-reads the live rows.
+  REVIEW_CONTENT_LIMIT = 300
 
   # Polarity markers are intentionally simple; they are heuristics, not NLP.
   NEGATIVE_MARKERS = %w[
@@ -36,6 +38,27 @@ class ContradictionDetector
       pairs = find_contradiction_pairs(observations, max_distance, max_results)
       create_report(entity_id, pairs, max_distance) if persist && pairs.any?
       pairs
+    end
+
+    # The review row payload for a detected pair (UI-5a): both observations with their owners,
+    # ids ordered low → high whatever the Result's order. One query for both observations.
+    # @param result [Result]
+    # @return [Hash, nil] nil when either observation is gone or no longer active
+    def review_item(result)
+      ids = [ result.observation_id_1, result.observation_id_2 ].map(&:to_i).sort
+      rows = MemoryObservation.joins(:memory_entity).where(id: ids, status: MemoryObservation::ACTIVE_STATUS)
+                              .pluck("memory_observations.id", "memory_observations.memory_entity_id",
+                                     "memory_entities.name", "memory_observations.content").index_by(&:first)
+      return nil unless rows.size == 2
+
+      sides = ids.each_with_index.to_h do |id, index|
+        _id, entity_id, name, content = rows[id]
+        n = index + 1
+        [ n, { "observation_id_#{n}": id, "entity_id_#{n}": entity_id, "entity_name_#{n}": name,
+               "content_#{n}": content.to_s.truncate(REVIEW_CONTENT_LIMIT) } ]
+      end
+      { kind: "contradiction", **sides[1], **sides[2], distance: result.distance, confidence: result.confidence,
+        detected_at: Time.current.iso8601 }
     end
 
     private

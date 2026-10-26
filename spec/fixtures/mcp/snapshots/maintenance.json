@@ -1187,7 +1187,7 @@
       },
       {
         "name": "list_maintenance_review",
-        "description": "List paginated maintenance-review queue rows (including item_id) for later apply or dismiss. Pass optional `report_type` (string, default compaction_review), `status` (active, dismissed, approved, or ignored; default active), `kind` (string, e.g. entity_merge or orphan_parent), `page` (integer, default 1). per_page is not an input. Do not use for whole report documents; use `get_maintenance_reports` instead. Do not use to apply a row; use `apply_maintenance_review` instead. Do not use to dismiss, ignore, or restore a row; use `dismiss_maintenance_review` instead. Do not use to merge two known entity ids; use `graph_delete` instead.",
+        "description": "List paginated maintenance-review queue rows (including item_id) for later apply or dismiss. Pass optional `report_type` (string, default compaction_review), `status` (active, dismissed, approved, ignored, or expired; default active), `kind` (string, e.g. entity_merge or orphan_parent), `page` (integer, default 1). per_page is not an input. Do not use for whole report documents; use `get_maintenance_reports` instead. Do not use to apply a row; use `apply_maintenance_review` instead. Do not use to dismiss, ignore, or restore a row; use `dismiss_maintenance_review` instead. Do not use to merge two known entity ids; use `graph_delete` instead.",
         "inputSchema": {
           "$schema": "https://json-schema.org/draft/2020-12/schema",
           "type": "object",
@@ -1200,7 +1200,7 @@
             "status": {
               "type": "string",
               "minLength": 1,
-              "description": "Row status filter: active, dismissed, approved, ignored."
+              "description": "Row status filter: active, dismissed, approved, ignored, expired."
             },
             "kind": {
               "type": "string",
@@ -2211,9 +2211,10 @@
                 "contradictions",
                 "scan_review",
                 "stale_memory_scan",
+                "review_policy_run",
                 null
               ],
-              "description": "Filter to one type: orphans, duplicates, compaction_review, embedding_maintenance, contradictions, scan_review, stale_memory_scan. Omit for the latest of each type."
+              "description": "Filter to one type: orphans, duplicates, compaction_review, embedding_maintenance, contradictions, scan_review, stale_memory_scan, review_policy_run. Omit for the latest of each type."
             },
             "limit": {
               "type": "integer",
@@ -2963,7 +2964,7 @@
       },
       {
         "name": "dismiss_maintenance_review",
-        "description": "Dismiss, ignore, or restore a maintenance-review queue row without applying the suggestion. Pass required `item_id` (string UUID) and `action` (dismiss, ignore, or restore); optional `report_type` (string, default compaction_review), `reason` (string). Do not use to execute the suggestion; use `apply_maintenance_review` instead. Do not use to look up a row; use `list_maintenance_review` instead. Do not use to merge entities; use `graph_delete` instead.",
+        "description": "Dismiss, ignore, or restore a maintenance-review queue row without applying the suggestion. Pass required `item_id` (string UUID) and `action` (dismiss, ignore, or restore); optional `report_type` (string, default compaction_review), `reason` (string). `ignore` snoozes an active row for 30 days: it comes back afterwards and isn't proposed again until then. Do not use to execute the suggestion; use `apply_maintenance_review` instead. Do not use to look up a row; use `list_maintenance_review` instead. Do not use to merge entities; use `graph_delete` instead.",
         "inputSchema": {
           "$schema": "https://json-schema.org/draft/2020-12/schema",
           "type": "object",
@@ -3043,7 +3044,7 @@
       },
       {
         "name": "apply_maintenance_review",
-        "description": "Apply a queued maintenance-review row (merge, relationship proposal, orphan parent, or relation integrity). Pass required `item_id` (string UUID); optional `report_type` (string, default compaction_review), `dry_run` (bool, default false), `action_params` (hash). Do not use without a queue item_id; use `list_maintenance_review` first. Do not use to skip, ignore, or restore without applying; use `dismiss_maintenance_review` instead. Do not use to merge two known entity ids outside the queue; use `graph_delete` instead.",
+        "description": "Apply a queued maintenance-review row (merge, relationship proposal, orphan parent, relation integrity, or contradiction). Pass required `item_id` (string UUID); optional `report_type` (string, default compaction_review), `dry_run` (bool, default false), `action_params` (hash). A contradiction row needs `action_params.keep_observation_id` (one of its two observation ids): that observation is kept and the other is marked obsolete. Do not use without a queue item_id; use `list_maintenance_review` first. Do not use to skip, ignore, or restore without applying; use `dismiss_maintenance_review` instead. Do not use to merge two known entity ids outside the queue; use `graph_delete` instead.",
         "inputSchema": {
           "$schema": "https://json-schema.org/draft/2020-12/schema",
           "type": "object",
@@ -3067,7 +3068,7 @@
             },
             "action_params": {
               "type": "object",
-              "description": "Optional overrides for merge/relation/orphan endpoints."
+              "description": "Optional overrides for merge/relation/orphan endpoints; keep_observation_id for a contradiction row."
             }
           },
           "required": [

@@ -144,6 +144,14 @@ CREATE TABLE `maintenance_report_rows` (
   `created_at` datetime(6) NOT NULL,
   `updated_at` datetime(6) NOT NULL,
   `stale_entity_id` bigint(20) GENERATED ALWAYS AS (case when `kind` = 'stale_memory' and coalesce(json_value(`edited_payload`,'$.entity_id'),json_value(`payload`,'$.entity_id')) regexp '^[0-9]{1,18}([.][0-9]+)?$' then floor(cast(coalesce(json_value(`edited_payload`,'$.entity_id'),json_value(`payload`,'$.entity_id')) as decimal(30,6))) else NULL end) VIRTUAL,
+  `group_key` varchar(191) DEFAULT NULL,
+  `anchor_entity_id` bigint(20) DEFAULT NULL,
+  `project_id` bigint(20) DEFAULT NULL,
+  `priority` int(11) NOT NULL DEFAULT 0,
+  `confidence` decimal(4,3) DEFAULT NULL,
+  `expires_at` datetime(6) DEFAULT NULL,
+  `resolved_by` varchar(64) DEFAULT NULL,
+  `change_set_id` bigint(20) DEFAULT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `index_maintenance_report_rows_on_report_and_uuid` (`maintenance_report_id`,`row_uuid`),
   KEY `index_maintenance_report_rows_on_report_type_and_signature` (`report_type`,`signature`),
@@ -152,6 +160,11 @@ CREATE TABLE `maintenance_report_rows` (
   KEY `index_maintenance_report_rows_on_dismissed_at` (`dismissed_at`),
   KEY `index_maintenance_report_rows_on_applied_at` (`applied_at`),
   KEY `index_mrr_stale_candidates` (`stale_entity_id`,`report_type`),
+  KEY `index_mrr_on_type_status_priority` (`report_type`,`status`,`priority`),
+  KEY `index_mrr_on_type_status_group` (`report_type`,`status`,`group_key`),
+  KEY `index_mrr_on_project_status` (`project_id`,`status`),
+  KEY `index_maintenance_report_rows_on_expires_at` (`expires_at`),
+  KEY `index_maintenance_report_rows_on_change_set_id` (`change_set_id`),
   CONSTRAINT `fk_rails_3c6f7987ba` FOREIGN KEY (`maintenance_report_id`) REFERENCES `maintenance_reports` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
@@ -167,10 +180,13 @@ CREATE TABLE `maintenance_report_suppressions` (
   `reason` text DEFAULT NULL,
   `created_at` datetime(6) NOT NULL,
   `updated_at` datetime(6) NOT NULL,
+  `expires_at` datetime(6) DEFAULT NULL,
+  `source` varchar(16) NOT NULL DEFAULT 'dismissed',
   PRIMARY KEY (`id`),
   UNIQUE KEY `index_mrs_on_report_type_and_signature` (`report_type`,`signature`),
   KEY `index_mrs_on_signature` (`signature`),
-  KEY `index_mrs_on_dismissed_at` (`dismissed_at`)
+  KEY `index_mrs_on_dismissed_at` (`dismissed_at`),
+  KEY `index_maintenance_report_suppressions_on_expires_at` (`expires_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `maintenance_reports`;
@@ -399,6 +415,7 @@ CREATE TABLE `tool_invocations` (
 /*M!100616 SET NOTE_VERBOSITY=@OLD_NOTE_VERBOSITY */;
 
 INSERT INTO `schema_migrations` (version) VALUES
+('20261026213000'),
 ('20261026120100'),
 ('20261026120000'),
 ('20261019120000'),

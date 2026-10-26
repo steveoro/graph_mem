@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+UI-5a: review data model, limits, policies and contradiction rows (backend; the Review page is UI-5b).
+
+### Added
+- Review rows carry a group key, anchor entity, project, normalized confidence and priority (`ReviewRowClassifier`, at seed time; `bin/rails review:backfill` for older rows), `resolved_by` and the `change_set_id` of the action that last changed them. A new `expired` status, and suppressions that can expire (`expires_at`, `source`).
+- Limits at the source: per-run caps per kind and a backlog ceiling (`review_backlog_ceiling`, default 300); skipped items are counted in the report.
+- Snooze (`CompactionReviewService.snooze`, kind `review.snooze`): a row leaves the queue until its snooze ends, with an expiring suppression.
+- `contradiction` review rows: the scheduled stale scan seeds one per pair its contradiction pass finds (either order); applying keeps one observation (`action_params.keep_observation_id`) and marks the other obsolete, undoable for 30 days. The old review page shows Keep buttons.
+- Review policies (`ReviewPolicyRunner`, `ReviewPolicyJob`): nightly at 5:00 and after a compaction run, stale scan or project scan that seeded rows. Hygiene policies (`dangling`, `no_longer_flagged`, `expire_low_confidence`) are on, auto-apply (`auto_apply_relationships`, `auto_apply_expired_validity`) is off; each batch is an undoable `policy.<name>` change set and destructive kinds are never applied. Settings fields only (the panel comes with UI-5b). Each run writes a `review_policy_run` report.
+- Review actions return the undo handle (`change_set_uuid`, `undoable`, `not_undoable_reason`) with their usual keys.
+
+### Changed
+- `ignore` snoozes for 30 days (MCP `dismiss_maintenance_review` too); rows ignored earlier stay ignored.
+- Bulk apply only applies relationship proposals and stale-memory rows; other kinds are skipped as "not bulk-applicable".
+- The review queue pages in SQL (root-first rows, then priority); a text search scans at most 2,000 rows.
+- Symmetric `relates_to` proposals have one signature for both directions.
+- `MaintenanceReportRowCleanupJob` also prunes `expired` rows and long-expired suppressions, and keeps a snoozed row until its snooze ends.
+- `list_maintenance_review` accepts `expired`; `apply_maintenance_review` describes contradiction rows.
+
+### Fixed
+- Dismissing a row recorded the suppression without the dismissal reason.
+
 ## [1.57.0] - 2026-10-26
 
 UI-4a: change sets, merge snapshots and undo (backend only).

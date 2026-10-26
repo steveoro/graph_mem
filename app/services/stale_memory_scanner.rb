@@ -45,17 +45,19 @@ class StaleMemoryScanner
   CONTRADICTION_LOOKBACK = 24.hours
   SCAN_REPORT_TYPE = "stale_memory_scan"
 
-  # Returns { items:, next_watermark: } — `next_watermark` is the bound the
+  # Returns { items:, contradiction_items:, next_watermark: } — `next_watermark` is the bound the
   # NEXT scan's contradiction pass should start from. It advances only when
   # the contradiction pass completed: a failed pass must not lose the
   # candidates it never visited (the report row is written regardless, so
   # keying the watermark off report created_at would silently skip them).
+  # `contradiction_items` are the review rows for the pairs that pass found (UI-5a).
   def self.scan
     items = []
     items.concat(expired_items)
     items.concat(addressed_items)
     items.concat(unrooted_items)
-    { items: items, next_watermark: detect_contradictions }
+    next_watermark, contradiction_items = detect_contradictions
+    { items: items, contradiction_items: contradiction_items, next_watermark: next_watermark }
   end
 
   # --- Detector 1: explicit expiry elapsed ---------------------------------
@@ -141,23 +143,27 @@ class StaleMemoryScanner
   # runs it only for entities with obs activity newer than the last scan —
   # keeps re-runs cheap and avoids duplicate reports. Gated by the same
   # AppSettings + vector flags the detector itself honors.
+  # @return [Array(Time, Array<Hash>)] the next watermark and one review item per pair found
+  #   (de-duplicated across entities)
   def self.detect_contradictions
     watermark = previous_watermark
-    return watermark unless AppSettings.contradiction_detection_enabled? && EmbeddingService.vector_enabled?
+    return [ watermark, [] ] unless AppSettings.contradiction_detection_enabled? && EmbeddingService.vector_enabled?
 
     cutoff = Time.current
-    MemoryEntity.joins(:memory_observations)
-                .where(memory_observations: { status: MemoryObservation::ACTIVE_STATUS })
-                .where("memory_observations.updated_at > ?", watermark)
-                .distinct
-                .pluck(:id)
-                .each { |entity_id| ContradictionDetector.detect(entity_id) }
-    cutoff
+    results = MemoryEntity.joins(:memory_observations)
+                          .where(memory_observations: { status: MemoryObservation::ACTIVE_STATUS })
+                          .where("memory_observations.updated_at > ?", watermark)
+                          .distinct
+                          .pluck(:id)
+                          .flat_map { |entity_id| Array(ContradictionDetector.detect(entity_id)) }
+    items = results.uniq { |result| [ result.observation_id_1, result.observation_id_2 ].map(&:to_i).sort }
+                   .filter_map { |result| ContradictionDetector.review_item(result) }
+    [ cutoff, items ]
   rescue StandardError => e
     # Vector work is best-effort inside a maintenance scan — log, never abort.
     # Return the PREVIOUS watermark so the failed window is retried next run.
     Rails.logger.warn "[StaleMemoryScanner] contradiction pass skipped: #{e.message}"
-    watermark
+    [ watermark, [] ]
   end
 
   # The scan watermark lives in the previous report's `data` (set by the job),

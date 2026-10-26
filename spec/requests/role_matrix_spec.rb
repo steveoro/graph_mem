@@ -66,7 +66,8 @@ RSpec.describe "Role matrix", type: :request do
   end
 
   def record_counts
-    [ MemoryEntity.count, MemoryObservation.count, MemoryRelation.count, AuditLog.count, MaintenanceReportRow.count, ChangeSet.count ]
+    [ MemoryEntity.count, MemoryObservation.count, MemoryRelation.count, AuditLog.count, MaintenanceReportRow.count, ChangeSet.count,
+      MaintenanceReportSuppression.count ]
   end
 
   def perform(route_case)

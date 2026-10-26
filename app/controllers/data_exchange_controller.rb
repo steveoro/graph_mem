@@ -763,7 +763,7 @@ class DataExchangeController < ApplicationController
 
   def compaction_action_params
     params.permit(:source_id, :target_id, :from_id, :to_id, :relation_type, :node_id, :parent_id,
-                  :observation_id, :target_entity_id, :entity_id, :reason)
+                  :observation_id, :target_entity_id, :entity_id, :reason, :keep_observation_id)
   end
 
   def compaction_edit_params

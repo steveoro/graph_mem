@@ -14,7 +14,7 @@
 class ChangeSet < ApplicationRecord
   KINDS = %w[
     merge compaction.auto_merge graph.write graph.edit graph.delete
-    review.apply review.bulk_apply review.dismiss review.bulk_dismiss review.restore review.ignore
+    review.apply review.bulk_apply review.dismiss review.bulk_dismiss review.restore review.ignore review.snooze
     api.write maintenance.merge_node undo redo
   ].freeze
   # Reserved for UI-5 policy runs and UI-4b Explore actions.
