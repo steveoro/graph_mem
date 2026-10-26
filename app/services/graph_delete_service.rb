@@ -68,6 +68,10 @@ class GraphDeleteService
   # @raise [GraphMem::InvalidArgumentsError] when validation fails
   # @raise [McpGraphMemErrors::Error] when an operation cannot be completed
   def call
+    ChangeSet.record(kind: "graph.delete") { delete_batch }
+  end
+
+  def delete_batch
     GraphMutationBatch.validate_operations!(
       @operations,
       allowed_types: TYPES,
@@ -115,6 +119,8 @@ class GraphDeleteService
     raise self.class.membership_collision_error(e)
   end
 
+  private :delete_batch
+
   private
 
   # Row counts read inside the transaction, so the delta is exactly this batch's deletes.
@@ -123,8 +129,10 @@ class GraphDeleteService
   end
 
   def execute_one(type, attributes)
-    ProjectMembership.with_membership_lock do
-      ActiveRecord::Base.transaction { dispatch(type, attributes) }
+    ChangeSet.record(kind: "graph.delete") do
+      ProjectMembership.with_membership_lock do
+        ActiveRecord::Base.transaction { dispatch(type, attributes) }
+      end
     end
   rescue ProjectMembership::LockTimeout => e
     raise self.class.lock_timeout_error(e)

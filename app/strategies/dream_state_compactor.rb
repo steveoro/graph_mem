@@ -248,7 +248,10 @@ class DreamStateCompactor
     # Near-identical embeddings plus composite lexical/shared evidence.
     if best.distance < AUTO_MERGE_DISTANCE && best.score >= EntityMergeEvidence::AUTO_SCORE
       merged, survivor = EntityMergeEvidence.pick_survivor(best.source, best.target)
-      result = @node_ops.merge_into(merged.id, survivor.id)
+      # One change set per auto-merge, attributed to the run (undoable for 7 days).
+      result = ChangeSet.record(kind: "compaction.auto_merge", actor: "compaction:#{@run.id}", subject: survivor) do
+        @node_ops.merge_into(merged.id, survivor.id)
+      end
       if result[:success]
         @run.increment_stat!("merges_auto")
         return

@@ -89,12 +89,14 @@ class NodeOperationsStrategy
   # - Deletes the source node
   # @param source_id [Integer] The source node to merge from
   # @param target_id [Integer] The target node to merge into
-  # @return [Hash] Result with :success and :message or :error
-  def merge_into(source_id, target_id)
+  # @param change_set_kind [String] the ChangeSet kind when no set is open (a set already open,
+  #   e.g. a graph_delete batch or a review apply, records the merge instead)
+  # @return [Hash] Result with :success and :message (plus :change_set_uuid) or :error
+  def merge_into(source_id, target_id, change_set_kind: "merge")
     attempts = 0
 
     begin
-      merge_into_once(source_id, target_id)
+      merge_into_once(source_id, target_id, change_set_kind: change_set_kind)
     rescue ActiveRecord::RecordNotUnique => e
       error_result("Failed to merge nodes: duplicate relation would be created (#{e.message})")
     rescue ActiveRecord::StatementInvalid => e
@@ -110,13 +112,14 @@ class NodeOperationsStrategy
     end
   end
 
-  def merge_into_once(source_id, target_id)
+  def merge_into_once(source_id, target_id, change_set_kind: "merge")
     return error_result("Cannot merge a node into itself") if source_id == target_id
 
     source_name = nil
     target_name = nil
     transferred_observations = 0
     result = nil
+    change_set_uuid = nil
 
     begin
       Current.deletion_reason = "duplicate"
@@ -155,31 +158,14 @@ class NodeOperationsStrategy
 
         # Explicit merges keep the caller-provided source→target direction.
         # Dream-state may call pick_survivor before invoking merge_into.
-
-        # Add source name and aliases to target aliases
-        merge_aliases(source, target)
-
-        # Transfer observations from source to target and recompute trust
-        transferred_observations = source.memory_observations.count
-        transfer_observations!(source, target)
-
-        reassign_outgoing_relations!(source_id, target_id)
-        reassign_incoming_relations!(source_id, target_id)
-
-        # Delete any relations that were directly between source and target
-        MemoryRelation.where(from_entity_id: source_id, to_entity_id: target_id).destroy_all
-        MemoryRelation.where(from_entity_id: target_id, to_entity_id: source_id).destroy_all
-
-        # Clean up duplicate relations that may have been created
-        cleanup_duplicate_relations(target_id)
-
-        # Update counter cache
-        target.update_column(:memory_observations_count, target.memory_observations.count)
-
-        # Delete the source entity
         source_name = source.name
         target_name = target.name
-        source.destroy!
+        summary = "merged '#{source_name}' into '#{target_name}'"
+        ChangeSet.record(kind: change_set_kind, subject: target, summary: summary) do |change_set|
+          change_set_uuid = change_set.uuid
+          transferred_observations = source.memory_observations.count
+          merge_locked!(source, target)
+        end
 
         @logger.info "NodeOperationsStrategy: Merged '#{source_name}' (#{source_id}) into '#{target_name}' (#{target_id}). Transferred #{transferred_observations} observations."
         end
@@ -190,7 +176,7 @@ class NodeOperationsStrategy
 
     return result if result
 
-    success_result("Successfully merged '#{source_name}' into '#{target_name}'")
+    success_result("Successfully merged '#{source_name}' into '#{target_name}'").merge(change_set_uuid: change_set_uuid)
   end
 
   # Delete a node
@@ -265,6 +251,30 @@ class NodeOperationsStrategy
 
   def error_result(error)
     { success: false, error: error }
+  end
+
+  # The merge itself, on rows locked by merge_into_once.
+  def merge_locked!(source, target)
+    # Add source name and aliases to target aliases
+    merge_aliases(source, target)
+    # Transfer observations from source to target and recompute trust
+    transfer_observations!(source, target)
+
+    reassign_outgoing_relations!(source.id, target.id)
+    reassign_incoming_relations!(source.id, target.id)
+
+    # Delete any relations that were directly between source and target
+    MemoryRelation.where(from_entity_id: source.id, to_entity_id: target.id).destroy_all
+    MemoryRelation.where(from_entity_id: target.id, to_entity_id: source.id).destroy_all
+
+    # Clean up duplicate relations that may have been created
+    cleanup_duplicate_relations(target.id)
+
+    # Update counter cache
+    target.update_column(:memory_observations_count, target.memory_observations.count)
+
+    # Delete the source entity
+    source.destroy!
   end
 
   def transient_merge_error?(error)

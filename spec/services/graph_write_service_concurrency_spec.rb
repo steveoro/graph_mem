@@ -16,6 +16,7 @@ RSpec.describe GraphWriteService, "concurrency" do
   ensure
     MemoryEntity.where("name LIKE ?", "SynthWidget %").destroy_all
     AuditLog.where(created_at: started_at..).delete_all # entity writes and this cleanup are audited
+    ChangeSet.where(created_at: started_at..).delete_all # each graph_write is a change set (UI-4a)
   end
 
   # Both writers pass the semantic check (outside the lock) before either takes the lock, so only

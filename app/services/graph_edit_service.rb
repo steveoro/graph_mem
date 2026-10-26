@@ -20,7 +20,9 @@ class GraphEditService
   # @param attributes [Hash] the target ID and mutable entity/observation fields
   # @return [Hash] the legacy-compatible updated record payload
   def self.execute_one(type, attributes)
-    new(operations: []).send(:dispatch, type.to_s, attributes.to_h.deep_symbolize_keys)
+    ChangeSet.record(kind: "graph.edit") do
+      new(operations: []).send(:dispatch, type.to_s, attributes.to_h.deep_symbolize_keys)
+    end
   end
 
   # @param operations [Array<Hash>] raw type-discriminated operation hashes
@@ -34,6 +36,12 @@ class GraphEditService
   # @raise [GraphMem::InvalidArgumentsError] when any edit is invalid
   # @raise [McpGraphMemErrors::Error] when any target cannot be updated
   def call
+    ChangeSet.record(kind: "graph.edit") { edit_batch }
+  end
+
+  private
+
+  def edit_batch
     GraphMutationBatch.validate_operations!(
       @operations,
       allowed_types: TYPES,
@@ -59,8 +67,6 @@ class GraphEditService
       summary: summary.merge(operations: @operations.size)
     }
   end
-
-  private
 
   def dispatch(type, attributes)
     case type

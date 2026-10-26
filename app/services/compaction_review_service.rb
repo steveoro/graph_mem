@@ -13,6 +13,8 @@ class CompactionReviewService
   # so a few attempts cover the residual same-entity race.
   CHECKREAD_MAX_ATTEMPTS = 3
 
+  extend ChangeRecording
+
   class << self
     def latest_report(report_type: "compaction_review")
       MaintenanceReport.by_type(report_type).recent.first
@@ -90,51 +92,28 @@ class CompactionReviewService
     def apply(item_id, action_params = {}, report_type: "compaction_review")
       row = find_item(item_id, report_type: report_type)
       return { success: false, error: "Suggestion not found" } unless row
-      # Dismissed/approved rows must never apply: rescan review relies on
-      # "dismissed = no longer actionable" to retire stale proposals safely.
-      unless row.status.in?(%w[active ignored])
-        return { success: false, error: "Suggestion is not actionable (status: #{row.status})" }
-      end
 
-      # Advisory membership lock FIRST (the advisory-first rule — part_of
-      # applies call sync! which takes it anyway, so hoisting keeps GET_LOCK
-      # outside every transaction), then the row lock + status re-check so
-      # a racing dismiss/rescan edit can never be overwritten by the apply.
-      # LockTimeout propagates: callers map it to the transient "retry
-      # shortly" concurrency envelope (tool category: concurrency, web
-      # flash "retry shortly") — never an operator escalation.
-      ProjectMembership.with_membership_lock do
-        row.with_lock do
-          row.reload
-          unless row.status.in?(%w[active ignored])
-            return { success: false, error: "Suggestion is not actionable (status: #{row.status})" }
-          end
-
-          result = CompactionReviewApplier.apply(row, action_params)
-          if result[:success]
-            row.update!(status: "approved", applied_at: Time.current)
-          else
-            row.update!(resolution_reason: result[:error])
-          end
-          result
-        end
-      end
+      record_review("apply", row) { apply_row(row, action_params) }
     end
 
     def dismiss(item_id, reason: nil, report_type: "compaction_review")
       row = find_item(item_id, report_type: report_type)
       return { success: false, error: "Suggestion not found" } unless row
 
-      suppress(row)
-      row.update!(status: "dismissed", dismissed_at: Time.current, resolution_reason: reason)
+      record_review("dismiss", row) do
+        suppress(row)
+        track_review_row(row) { row.update!(status: "dismissed", dismissed_at: Time.current, resolution_reason: reason) }
+      end
       { success: true, message: "Suggestion dismissed" }
     end
 
     def bulk_dismiss(item_ids, reason: nil, report_type: "compaction_review")
       rows = MaintenanceReportRow.by_report_type(report_type).where(row_uuid: item_ids)
-      rows.each do |row|
-        suppress(row)
-        row.update!(status: "dismissed", dismissed_at: Time.current, resolution_reason: reason)
+      record_review("bulk_dismiss") do
+        rows.each do |row|
+          suppress(row)
+          track_review_row(row) { row.update!(status: "dismissed", dismissed_at: Time.current, resolution_reason: reason) }
+        end
       end
       { success: true, message: "#{rows.size} suggestion(s) dismissed" }
     end
@@ -143,42 +122,24 @@ class CompactionReviewService
     # dismissed/approved) are skipped rather than failing the batch, and the
     # summary keeps per-row failures visible for the operator.
     def bulk_apply(item_ids, report_type: "compaction_review")
-      rows = MaintenanceReportRow.by_report_type(report_type).where(row_uuid: item_ids)
-      return { success: false, error: "No suggestions selected" } if rows.empty?
-
-      applied = 0
-      skipped = 0
-      failed = []
-      rows.each do |row|
-        unless row.status.in?(%w[active ignored])
-          skipped += 1
-          next
-        end
-
-        result = apply(row.row_uuid, {}, report_type: report_type)
-        if result[:success]
-          applied += 1
-        else
-          failed << "#{row.kind} #{row.row_uuid.to_s.first(8)}: #{result[:error]}"
-        end
-      end
-
-      message = "#{applied} suggestion(s) applied"
-      message += ", #{skipped} skipped (not actionable)" if skipped.positive?
-      message += "; #{failed.size} failed: #{failed.first(3).join('; ')}" if failed.any?
-      { success: failed.empty?, message: message }
+      record_review("bulk_apply") { bulk_apply_rows(item_ids, report_type) }
     end
 
     def restore(item_id, report_type: "compaction_review")
       row = find_item(item_id, report_type: report_type)
       return { success: false, error: "Suggestion not found" } unless row
 
-      signatures = suppression_signatures(row)
-      if signatures.any?
-        MaintenanceReportSuppression.where(report_type: row.report_type, signature: signatures).delete_all
-      end
+      record_review("restore", row) do
+        signatures = suppression_signatures(row)
+        if signatures.any?
+          scope = MaintenanceReportSuppression.where(report_type: row.report_type, signature: signatures)
+          deleted = scope.map { |suppression| suppression.attributes.as_json }
+          scope.delete_all
+          note_suppressions(deleted: deleted)
+        end
 
-      row.update!(status: "active", dismissed_at: nil, applied_at: nil, resolution_reason: nil)
+        track_review_row(row) { row.update!(status: "active", dismissed_at: nil, applied_at: nil, resolution_reason: nil) }
+      end
       { success: true, message: "Suggestion restored to active" }
     end
 
@@ -186,7 +147,7 @@ class CompactionReviewService
       row = find_item(item_id, report_type: report_type)
       return { success: false, error: "Suggestion not found" } unless row
 
-      row.update!(status: "ignored")
+      record_review("ignore", row) { track_review_row(row) { row.update!(status: "ignored") } }
       { success: true, message: "Suggestion ignored" }
     end
 
@@ -412,6 +373,65 @@ class CompactionReviewService
 
     private
 
+    def apply_row(row, action_params)
+      # Dismissed/approved rows must never apply: rescan review relies on
+      # "dismissed = no longer actionable" to retire stale proposals safely.
+      unless row.status.in?(%w[active ignored])
+        return { success: false, error: "Suggestion is not actionable (status: #{row.status})" }
+      end
+
+      # Advisory membership lock FIRST (the advisory-first rule — part_of
+      # applies call sync! which takes it anyway, so hoisting keeps GET_LOCK
+      # outside every transaction), then the row lock + status re-check so
+      # a racing dismiss/rescan edit can never be overwritten by the apply.
+      # LockTimeout propagates: callers map it to the transient "retry
+      # shortly" concurrency envelope (tool category: concurrency, web
+      # flash "retry shortly") — never an operator escalation.
+      ProjectMembership.with_membership_lock do
+        row.with_lock do
+          row.reload
+          unless row.status.in?(%w[active ignored])
+            return { success: false, error: "Suggestion is not actionable (status: #{row.status})" }
+          end
+
+          result = CompactionReviewApplier.apply(row, action_params)
+          if result[:success]
+            track_review_row(row) { row.update!(status: "approved", applied_at: Time.current) }
+          else
+            row.update!(resolution_reason: result[:error])
+          end
+          result
+        end
+      end
+    end
+
+    def bulk_apply_rows(item_ids, report_type)
+      rows = MaintenanceReportRow.by_report_type(report_type).where(row_uuid: item_ids)
+      return { success: false, error: "No suggestions selected" } if rows.empty?
+
+      applied = 0
+      skipped = 0
+      failed = []
+      rows.each do |row|
+        unless row.status.in?(%w[active ignored])
+          skipped += 1
+          next
+        end
+
+        result = apply(row.row_uuid, {}, report_type: report_type)
+        if result[:success]
+          applied += 1
+        else
+          failed << "#{row.kind} #{row.row_uuid.to_s.first(8)}: #{result[:error]}"
+        end
+      end
+
+      message = "#{applied} suggestion(s) applied"
+      message += ", #{skipped} skipped (not actionable)" if skipped.positive?
+      message += "; #{failed.size} failed: #{failed.first(3).join('; ')}" if failed.any?
+      { success: failed.empty?, message: message }
+    end
+
     # Locking read of the active stale_memory rows for this entity, in
     # deterministic id order. `stale_entity_id` is an indexed generated
     # column (COALESCE of edited/payload entity_id — same semantics as
@@ -586,8 +606,8 @@ class CompactionReviewService
     end
 
     def suppress(row)
-      suppression_signatures(row).each do |signature|
-        MaintenanceReportSuppression.create_or_find_by!(
+      created = suppression_signatures(row).filter_map do |signature|
+        suppression = MaintenanceReportSuppression.create_or_find_by!(
           report_type: row.report_type,
           signature: signature
         ) do |s|
@@ -595,7 +615,9 @@ class CompactionReviewService
           s.dismissed_at = Time.current
           s.reason = row.resolution_reason
         end
+        suppression if suppression.previously_new_record?
       end
+      note_suppressions(created: created)
     end
 
     # An edit can change the signature (relation_type, source/target ids), while
