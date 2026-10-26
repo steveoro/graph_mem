@@ -122,7 +122,7 @@ The graph starts in **Root View**, which shows the project roots. **Full Graph**
 
 **Bulk actions:** **Apply selected** / **Dismiss selected** act on the ticked rows. Apply selected only applies relationship proposals and stale-memory rows; merges, deletes, moves and contradictions are applied one by one.
 
-**Pruning:** approved, dismissed and ignored rows are deleted every day once they're older than the retention set in **Settings › Telemetry** (`compaction_review_row_retention_days`, 30 days by default).
+**Pruning:** approved, dismissed, expired and ignored rows are deleted every day once they're older than the retention set in **Settings › Telemetry** (`compaction_review_row_retention_days`, 30 days by default); a snoozed row is kept until its snooze ends.
 
 ### Undo (1.57.0)
 

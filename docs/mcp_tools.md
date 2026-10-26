@@ -361,7 +361,7 @@ These tools perform structural graph queries. `direction` is one of `outgoing`
 - **Response:** Apply result hash (`success`, `message`, kind-specific fields such as `deleted_relation_ids`, and since 1.58 `change_set_uuid`, `undoable`, `not_undoable_reason`), or a dry-run preview with `kind` and `payload`.
 
 #### `list_maintenance_review`
-- **Description:** List paginated maintenance-review queue rows (including item_id) for later apply or dismiss. Pass optional `report_type` (string, default compaction_review), `status` (active, dismissed, approved, or ignored; default active), `kind` (string, e.g. entity_merge or orphan_parent), `page` (integer, default 1). per_page is not an input. Do not use for whole report documents; use `get_maintenance_reports` instead. Do not use to apply a row; use `apply_maintenance_review` instead. Do not use to dismiss, ignore, or restore a row; use `dismiss_maintenance_review` instead. Do not use to merge two known entity ids; use `merge_entities` instead.
+- **Description:** List paginated maintenance-review queue rows (including item_id) for later apply or dismiss. Pass optional `report_type` (string, default compaction_review), `status` (active, dismissed, approved, ignored, or expired; default active), `kind` (string, e.g. entity_merge or orphan_parent), `page` (integer, default 1). per_page is not an input. Do not use for whole report documents; use `get_maintenance_reports` instead. Do not use to apply a row; use `apply_maintenance_review` instead. Do not use to dismiss, ignore, or restore a row; use `dismiss_maintenance_review` instead. Do not use to merge two known entity ids; use `merge_entities` instead.
 - **Parameters:**
   - `report_type` (string, optional, default: `compaction_review`): Report type that owns the rows.
   - `status` (string, optional, default: `active`): Row status filter: `active`, `dismissed`, `approved`, `ignored`, `expired`.
@@ -373,7 +373,7 @@ These tools perform structural graph queries. `direction` is one of `outgoing`
 - **Description:** Dismiss, ignore, or restore a maintenance-review queue row without applying the suggestion. Pass required `item_id` (string UUID) and `action` (dismiss, ignore, or restore); optional `report_type` (string, default compaction_review), `reason` (string). Do not use to execute the suggestion; use `apply_maintenance_review` instead. Do not use to look up a row; use `list_maintenance_review` instead. Do not use to merge entities; use `merge_entities` instead.
 - **Parameters:**
   - `item_id` (string, required): Maintenance report row UUID.
-  - `action` (string, required): One of `dismiss`, `ignore`, `restore`. `ignore` snoozes the row for 30 days: it comes back afterwards, and its suggestion isn't proposed again until then.
+  - `action` (string, required): One of `dismiss`, `ignore`, `restore`. `ignore` snoozes an active row for 30 days: it comes back afterwards, and its suggestion isn't proposed again until then. A dismissed, approved or expired row can't be ignored (restore it first).
   - `report_type` (string, optional, default: `compaction_review`): Report type that owns the row.
   - `reason` (string, optional): Optional dismissal reason.
 - **Response:** Updated review-row status payload.
