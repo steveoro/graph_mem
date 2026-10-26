@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 module AuditLogsHelper
-  AUDITABLE_TYPES = %w[MemoryEntity MemoryObservation MemoryRelation].freeze
+  AUDITABLE_TYPES = %w[MemoryEntity MemoryObservation MemoryRelation AppSettings].freeze
   AUDIT_ACTIONS = %w[create update delete].freeze
 
   def audit_log_since_days_options
@@ -68,6 +68,7 @@ module AuditLogsHelper
     when MemoryEntity then record.name
     when MemoryObservation then record.content.to_s.truncate(80)
     when MemoryRelation then "#{record.relation_type}: #{record.from_entity&.name} → #{record.to_entity&.name}"
+    when AppSettings then record.var
     else record.id.to_s
     end
   end

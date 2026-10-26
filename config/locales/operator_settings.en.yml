@@ -30,6 +30,18 @@ en:
         imports: "Imports"
         project_scans: "Project Scans"
         telemetry: "Telemetry"
+        review_policies: "Review policies"
+      review_policies:
+        intro: "Policies run nightly at 5:00 GMT and after a compaction run, stale scan or project scan that queued suggestions. Changes apply on the next run. Every policy action is an undoable change set (Review › Policies)."
+        range: "Accepted range: %{min}–%{max}."
+        out_of_range: "%{setting} must be between %{min} and %{max} (got %{value}). Nothing was saved."
+        snooze_expiry: "Snoozed suggestions always come back when their snooze ends (no toggle)."
+        policies:
+          dangling: "Dismisses suggestions that point at something deleted, or whose effect already holds. No suppression. Reverse: Undo the run, or Restore the row."
+          no_longer_flagged: "Dismisses stale-memory suggestions the scanner no longer flags. Reverse: Undo the run, or Restore."
+          expire_low_confidence: "Expires suggestions with confidence below 0.4 that nobody touched for the days below, and keeps them away for 90 days. Reverse: Undo, or Restore."
+          auto_apply_relationships: "Applies high-band relationship proposals at or above the confidence below (never part_of), at most 50 per run. Reverse: Undo the run (removes the relations)."
+          auto_apply_expired_validity: "Marks observations obsolete when their own valid_until has passed, at most 100 per run. Reverse: Undo the run."
       bulk_update:
         success: "Saved %{count} setting(s) successfully."
         partial: "Saved %{success} setting(s); %{failed} failed."
@@ -112,6 +124,28 @@ en:
         tool_invocation_retention_days:
           label: "Tool telemetry retention (days)"
           description: "Tool invocation rows older than this are deleted by daily garbage collection. Use 0 to disable automatic telemetry pruning."
+        enable_review_policy_dangling:
+          label: "Dismiss dangling suggestions"
+        enable_review_policy_no_longer_flagged:
+          label: "Dismiss stale-memory suggestions no longer flagged"
+        enable_review_policy_expire_low_confidence:
+          label: "Expire old low-confidence suggestions"
+        enable_auto_apply_relationships:
+          label: "Auto-apply high-confidence relationships"
+        enable_auto_apply_expired_validity:
+          label: "Auto-apply expired validity (stale memory)"
+        review_backlog_ceiling:
+          label: "Backlog ceiling per kind"
+          description: "Active suggestions per kind before new ones must beat the lowest priority to be queued (a soft limit)."
+        review_attention_threshold:
+          label: "Attention threshold"
+          description: "Suggestions at or above this priority show on the Review digest and count in the nav badge."
+        review_expire_low_confidence_days:
+          label: "Expire low-confidence after (days)"
+          description: "How long a low-confidence suggestion stays untouched before the expire policy closes it."
+        auto_apply_relationship_min_confidence:
+          label: "Auto-apply relationship confidence"
+          description: "Minimum confidence for auto-applying relationship proposals."
         compaction_review_row_retention_days:
           label: "Review rows retention (days)"
           description: "Approved, dismissed and ignored review rows older than this are pruned daily. Suggestions you dismissed stay suppressed; ignored ones may be proposed again. 0 uses the default (30)."
