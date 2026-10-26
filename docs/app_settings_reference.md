@@ -6,7 +6,7 @@ GraphMem stores operator-tunable runtime settings in the primary MariaDB `settin
 
 - **URL:** `/operator/settings`
 - **Auth:** session login at `/operator/login` (`OPERATOR_USERNAME` / `OPERATOR_PASSWORD`, or `credentials.operator.username` / `credentials.operator.password`)
-- **Tabs:** Feature Flags, Database Backup, Embeddings, Summaries, Imports, Project Scans
+- **Tabs:** Feature Flags, Database Backup, Embeddings, Summaries, Imports, Project Scans, Telemetry
 
 ## Feature Flags
 
