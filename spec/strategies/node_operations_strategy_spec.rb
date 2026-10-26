@@ -191,6 +191,28 @@ RSpec.describe NodeOperationsStrategy, type: :model do
       expect(target_node.memory_observations.count).to eq(3)
     end
 
+    it "does not re-embed moved observations when vectors are enabled" do
+      allow(EmbeddingService).to receive(:vector_enabled?).and_return(true)
+      allow(EmbeddingService).to receive(:embed_entity)
+      expect(EmbeddingService).not_to receive(:embed_observation)
+      observation_ids = source_with_data.memory_observations.pluck(:id)
+
+      result = strategy.merge_into(source_with_data.id, target_node.id)
+
+      expect(result[:success]).to be true
+      expect(MemoryObservation.where(id: observation_ids).pluck(:memory_entity_id).uniq).to eq([ target_node.id ])
+    end
+
+    it "merges when vectors are disabled" do
+      allow(EmbeddingService).to receive(:vector_enabled?).and_return(false)
+      observation_ids = source_with_data.memory_observations.pluck(:id)
+
+      result = strategy.merge_into(source_with_data.id, target_node.id)
+
+      expect(result[:success]).to be true
+      expect(MemoryObservation.where(id: observation_ids).pluck(:memory_entity_id).uniq).to eq([ target_node.id ])
+    end
+
     it "deletes the source node" do
       source_id = source_with_data.id
 

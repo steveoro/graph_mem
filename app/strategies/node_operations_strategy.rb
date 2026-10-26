@@ -291,7 +291,9 @@ class NodeOperationsStrategy
       observation.assign_attributes(memory_entity_id: target.id)
       observation.trust_score = ObservationTrustRanker.rank(observation)
       observation.save!
-      EmbeddingService.embed_observation(observation) if EmbeddingService.vector_enabled?
+      # No re-embedding: an observation's vector depends only on its content, source and tags
+      # (EmbeddingService#compose_observation_text), not on the owning entity. Calling the
+      # embedding service here would hold the membership lock and the row locks across HTTP calls.
     end
   end
 
