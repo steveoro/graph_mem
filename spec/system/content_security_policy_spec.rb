@@ -50,6 +50,20 @@ RSpec.describe "Content Security Policy in the browser", type: :system do
     expect_no_csp_errors("Explore")
   end
 
+  it "shows no CSP violations on the guest pages" do
+    enable_guest!
+    sign_in_through_form(username: "guest", password: OperatorAuthHelpers::TEST_GUEST_PASSWORD)
+    expect(page).to have_current_path(search_path, wait: 5)
+
+    visit "/search?q=SynthWidget"
+    wait_for_stimulus
+    expect_no_csp_errors("guest Search")
+
+    visit graph_path
+    expect(page).to have_css("[data-graph-target='container'] canvas", wait: 10)
+    expect_no_csp_errors("guest Explore")
+  end
+
   it "loads Swagger UI under rswag's own policy" do
     sign_in_through_form
     expect(page).to have_current_path(root_path, wait: 5)

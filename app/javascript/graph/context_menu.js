@@ -7,11 +7,15 @@ const RELATION_TYPES = [
   'authorizes', 'integrates_with', 'replaces'
 ];
 
+// Menu actions that change data; hidden when the menu is read-only (guests).
+const WRITE_ACTIONS = ['edit', 'edit-type', 'delete'];
+
 export class ContextMenuManager {
-  constructor(api, modal, { onRefreshGraph }) {
+  constructor(api, modal, { onRefreshGraph }, { readOnly = false } = {}) {
     this.api = api;
     this.modal = modal;
     this.onRefreshGraph = onRefreshGraph;
+    this.readOnly = readOnly;
     this.currentMenu = null;
   }
 
@@ -39,7 +43,7 @@ export class ContextMenuManager {
       { label: 'Delete', action: 'delete', danger: true }
     ];
 
-    menuItems.forEach(item => {
+    this.#visible(menuItems).forEach(item => {
       const itemEl = document.createElement('div');
       if (item.divider && !item.header) {
         itemEl.className = 'ctx-divider';
@@ -94,7 +98,7 @@ export class ContextMenuManager {
       { label: 'Delete Relation', action: 'delete', danger: true }
     ];
 
-    menuItems.forEach(item => {
+    this.#visible(menuItems).forEach(item => {
       const itemEl = document.createElement('div');
       if (item.divider && !item.staticHeader) {
         itemEl.className = 'ctx-divider';
@@ -183,12 +187,22 @@ export class ContextMenuManager {
 
       if (analysis.hasDuplicates) {
         const btn = document.getElementById('delete-dup-obs-btn');
-        if (btn) btn.onclick = () => this.#deleteDuplicateObservations(nodeData.id, cy);
+        if (btn && this.readOnly) btn.remove();
+        else if (btn) btn.onclick = () => this.#deleteDuplicateObservations(nodeData.id, cy);
       }
     } catch (error) {
       console.error('Error fetching observations:', error);
       alert('Failed to load observations.');
     }
+  }
+
+  #visible(menuItems) {
+    if (!this.readOnly) return menuItems;
+
+    const items = menuItems.filter(item => !WRITE_ACTIONS.includes(item.action));
+    // Drop a bare divider left at the end once the write actions are gone.
+    while (items.length && Object.keys(items[items.length - 1]).join() === 'divider') items.pop();
+    return items;
   }
 
   async #deleteDuplicateObservations(entityId, cy) {

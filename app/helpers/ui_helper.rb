@@ -9,8 +9,8 @@
 module UiHelper
   REVIEW_BACKLOG_CACHE_KEY = "ui/review_backlog_count"
 
-  # Whether to show write controls. Today only operators can sign in, so this is
-  # operator_signed_in?; UI-1b adds the guest role and the server-side refusal.
+  # Whether to show write controls. Cosmetic only: the server refuses guest writes
+  # regardless (RoleAuthorization for HTML, ApiAuthentication for /api/v1).
   #
   # @return [Boolean]
   def can_write?

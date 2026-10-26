@@ -1,11 +1,12 @@
--# Role-aware navigation (UI-1). Operator-only items sit inside `can_write?`, which today is
--# operator_signed_in?; UI-1b adds the guest role and the server-side refusal.
-- review_path = compaction_review_data_exchange_index_path
+-# Role-aware navigation (UI-1). Operator-only items sit inside `can_write?`; that is
+-# cosmetic, the server refuses guests on those routes anyway (RoleAuthorization).
+-# Route helpers go through main_app: the layout also renders inside Mission Control.
+- review_path = main_app.compaction_review_data_exchange_index_path
 - on_review = current_page?(review_path)
 - on_scan_review = on_review && params[:report_type] == "scan_review"
 %nav.ui-sidebar{ "aria-label": t("ui.nav.label"), data: { controller: "nav", action: "keydown.esc@window->nav#close" } }
   .ui-sidebar__top
-    = link_to (can_write? ? root_path : search_path), class: "ui-sidebar__brand" do
+    = link_to (can_write? ? main_app.root_path : main_app.search_path), class: "ui-sidebar__brand" do
       GraphMem
       %span.ui-sidebar__version v#{GraphMem::VERSION}
     %button.ui-sidebar__toggle{ type: "button", "aria-expanded": "false", "aria-controls": "ui-sidebar-menu",
@@ -14,31 +15,33 @@
   #ui-sidebar-menu.ui-sidebar__menu{ data: { nav_target: "menu" } }
     %ul.ui-sidebar__list
       - if can_write?
-        %li= ui_nav_link t("ui.nav.home"), root_path, testid: "nav-home"
-      %li= ui_nav_link t("ui.nav.search"), search_path, testid: "nav-search", icon: :search
-      %li= ui_nav_link t("ui.nav.explore"), graph_path, testid: "nav-explore"
+        %li= ui_nav_link t("ui.nav.home"), main_app.root_path, testid: "nav-home"
+      %li= ui_nav_link t("ui.nav.search"), main_app.search_path, testid: "nav-search", icon: :search
+      %li= ui_nav_link t("ui.nav.explore"), main_app.graph_path, testid: "nav-explore"
     - if can_write?
       %h2.ui-sidebar__heading= t("ui.nav.groups.review")
       %ul.ui-sidebar__list
         %li= ui_nav_link t("ui.nav.compaction_review"), review_path, testid: "nav-review",
           badge: ui_review_backlog_count, current: on_review && !on_scan_review
-        %li= ui_nav_link t("ui.nav.scan_review"), compaction_review_data_exchange_index_path(report_type: "scan_review"),
+        %li= ui_nav_link t("ui.nav.scan_review"), main_app.compaction_review_data_exchange_index_path(report_type: "scan_review"),
           testid: "nav-scan-review", current: on_scan_review
       %h2.ui-sidebar__heading= t("ui.nav.groups.projects")
       %ul.ui-sidebar__list
-        %li= ui_nav_link t("ui.nav.maintenance"), maintenance_path, testid: "nav-maintenance", icon: :maintenance
+        %li= ui_nav_link t("ui.nav.maintenance"), main_app.maintenance_path, testid: "nav-maintenance", icon: :maintenance
       %h2.ui-sidebar__heading= t("ui.nav.groups.system")
       %ul.ui-sidebar__list
-        %li= ui_nav_link t("ui.nav.embeddings"), operator_embeddings_path, testid: "nav-embeddings"
-        %li= ui_nav_link t("ui.nav.telemetry"), operator_telemetry_path, testid: "nav-telemetry"
-        %li= ui_nav_link t("ui.nav.audit_logs"), operator_audit_logs_path, testid: "nav-audit-logs"
-        %li= ui_nav_link t("ui.nav.settings"), operator_settings_path, testid: "nav-settings", icon: :settings
+        %li= ui_nav_link t("ui.nav.embeddings"), main_app.operator_embeddings_path, testid: "nav-embeddings"
+        %li= ui_nav_link t("ui.nav.telemetry"), main_app.operator_telemetry_path, testid: "nav-telemetry"
+        %li= ui_nav_link t("ui.nav.audit_logs"), main_app.operator_audit_logs_path, testid: "nav-audit-logs"
+        %li= ui_nav_link t("ui.nav.settings"), main_app.operator_settings_path, testid: "nav-settings", icon: :settings
         -# Mission Control and Swagger UI have their own layouts: skip Turbo Drive.
         %li= ui_nav_link t("ui.nav.jobs"), "/operator/jobs", testid: "nav-jobs", data: { turbo: false }
         %li= ui_nav_link t("ui.nav.api_docs"), "/api-docs/index.html", testid: "nav-api-docs", data: { turbo: false }
     .ui-sidebar__footer
       %p.ui-sidebar__user= t("ui.nav.signed_in_as", user: session[:user].presence || t("ui.nav.unknown_user"))
-      = button_to t("ui.nav.sign_out"), operator_logout_path,
+      - if guest_signed_in?
+        %span.ui-badge{ data: { testid: "nav-guest-badge" } }= t("ui.nav.guest_badge")
+      = button_to t("ui.nav.sign_out"), main_app.operator_logout_path,
         method: :delete,
         class: "ui-btn ui-sidebar__signout",
         id: "btn-operator-logout",

@@ -14,6 +14,7 @@ en:
       signed_out: "Signed out."
       invalid_credentials: "Invalid username or password."
       session_expired: "Your session has expired. Please sign in again."
+      guest_disabled: "Guest access is disabled."
       too_many_attempts: "Too many sign-in attempts. Please wait and try again."
     settings:
       title: "System Settings"
@@ -42,6 +43,9 @@ en:
         enable_garbage_collector:
           label: "Garbage collector"
           description: "When disabled, scheduled and manual garbage collection runs are skipped."
+        enable_guest_access:
+          label: "Guest access (read-only)"
+          description: "Lets the guest account sign in. Has no effect until a guest password is set in GRAPH_MEM_GUEST_PASSWORD or the Rails credentials (guest.password)."
         backup_folder_path:
           label: "Backup folder path"
           description: "Relative to Rails root or an absolute path. Docker deployments should mount this folder as a volume."
