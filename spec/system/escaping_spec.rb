@@ -20,10 +20,6 @@ RSpec.describe "XSS escaping in graph UI", type: :system do
   # A payload that, if injected via innerHTML, would create <img data-probe> in the DOM.
   PROBE = "<img src=x data-probe=1>"
 
-  before do
-    driven_by :selenium, using: :headless_chrome, screen_size: [ 1280, 800 ]
-  end
-
   def sign_in_operator!
     ENV["OPERATOR_USERNAME"] = OperatorAuthHelpers::TEST_OPERATOR_USERNAME
     ENV["OPERATOR_PASSWORD"] = OperatorAuthHelpers::TEST_OPERATOR_PASSWORD

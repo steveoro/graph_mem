@@ -1,7 +1,7 @@
 # Be sure to restart your server when you modify this file.
 #
-# UI-0: CSP enabled as report-only (F1 / §6 UI-0 §1.5).
-# Enforcement switches to enforced in UI-1 once inline handlers are removed.
+# Content Security Policy, enforced since UI-1 / 1.56.0 (report-only in UI-0, F1).
+# Violations are still reported to /csp-reports and logged.
 
 Rails.application.configure do
   config.content_security_policy do |policy|
@@ -14,12 +14,13 @@ Rails.application.configure do
     policy.img_src     :self, :data
     policy.object_src  :none
     policy.frame_ancestors :none
+    policy.base_uri    :self
+    policy.form_action :self
     policy.report_uri "/csp-reports"
   end
 
   config.content_security_policy_nonce_generator = ->(_request) { SecureRandom.base64(36) }
   config.content_security_policy_nonce_directives = %w[script-src]
 
-  # Report-only in 1.54.0; enforced in UI-1 once inline handlers are gone.
-  config.content_security_policy_report_only = true
+  # Enforced since UI-1 / 1.56.0 (no content_security_policy_report_only).
 end

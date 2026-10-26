@@ -22,3 +22,15 @@ Rswag::Ui::Middleware.class_eval do
     POLICY
   end
 end
+
+# Rack 3 header names are lowercase. rswag-ui 2.17 returns its index page with a
+# mixed-case "Content-Security-Policy" key, which Rails' CSP middleware doesn't
+# recognise, so it would add the app's enforced policy on top and block Swagger UI's
+# inline scripts. Lowercasing the keys lets Rails leave rswag's own policy alone.
+module RswagUiLowercaseHeaders
+  def call(env)
+    status, headers, body = super
+    [ status, headers.to_h.transform_keys { |key| key.to_s.downcase }, body ]
+  end
+end
+Rswag::Ui::Middleware.prepend(RswagUiLowercaseHeaders)
