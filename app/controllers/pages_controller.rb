@@ -1,7 +1,11 @@
 # frozen_string_literal: true
 
 class PagesController < ApplicationController
+  allow_guest :home, :graph
+
   def home
+    redirect_to search_path and return if guest_signed_in?
+
     @snapshot = MaintenanceDashboardSnapshot.call
     @compaction = @snapshot[:compaction]
     @graph_stats = @snapshot[:graph_stats]

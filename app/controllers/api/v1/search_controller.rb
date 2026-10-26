@@ -3,6 +3,10 @@
 module Api
   module V1
     class SearchController < BaseController
+      include GuestSearchThrottle
+
+      throttle_guest_search :subgraph
+
       # GET /api/v1/search/subgraph
       def subgraph
         query = params[:q]

@@ -3,19 +3,33 @@
 # Authenticates requests to /api/v1/*.
 #
 # Priority order:
-#   1. Operator browser session (session[:role] == "operator", or legacy key).
-#   2. Bearer token matching GRAPH_MEM_MCP_TOKEN + IP allowed by McpAccessPolicy.
-#      No token configured → session-only; the bearer path is disabled entirely.
+#   1. Operator browser session (session[:role] == "operator", or legacy key): full access.
+#   2. Bearer token matching GRAPH_MEM_MCP_TOKEN + IP allowed by McpAccessPolicy: full
+#      access. No token configured → the bearer path is disabled entirely.
+#   3. Guest browser session (UI-1): only GUEST_READ_ACTIONS; anything else is 403 JSON.
+#      An invalid or expired guest session is reset and treated as no session.
+#   Otherwise 401 (or 403 for a bearer from a disallowed IP).
 #
 # There is deliberately no anonymous loopback/private-range exemption: nothing
 # external uses /api/v1, and a blanket LAN exemption would re-open F2.
 module ApiAuthentication
   extend ActiveSupport::Concern
 
+  # The read endpoints the Explore and Search pages use, keyed by "controller_path#action".
+  GUEST_READ_ACTIONS = %w[
+    api/v1/graph_data#index
+    api/v1/memory_entities#index api/v1/memory_entities#show api/v1/memory_entities#search
+    api/v1/memory_observations#index api/v1/memory_observations#show
+    api/v1/memory_relations#index api/v1/memory_relations#show
+    api/v1/search#subgraph
+    api/v1/graph_traversal#traverse api/v1/graph_traversal#shortest_path
+  ].freeze
+
   included do
     # The HTML gate in ApplicationController redirects to login; API clients
-    # must never receive a redirect — replace it with the JSON 401.
-    skip_before_action :authenticate_operator!
+    # must never receive a redirect — replace it with the JSON 401/403.
+    skip_before_action :authenticate!
+    skip_before_action :authorize_role!
     before_action :authenticate_api_request!
   end
 
@@ -25,7 +39,11 @@ module ApiAuthentication
     return if operator_api_session?
     return if valid_bearer_token?
 
-    if @bearer_ip_forbidden
+    if guest_api_session?
+      return if GUEST_READ_ACTIONS.include?("#{controller_path}##{action_name}")
+
+      render json: { error: "forbidden", role: "guest" }, status: :forbidden
+    elsif @bearer_ip_forbidden
       render json: { error: "Forbidden" }, status: :forbidden
     else
       response.set_header("WWW-Authenticate", 'Bearer realm="graph_mem"')
@@ -33,26 +51,17 @@ module ApiAuthentication
     end
   end
 
+  # Honours the operator's session expiry for API requests too.
   def operator_api_session?
-    role = session[:role]
-    return false unless role == "operator" || session[:operator_signed_in] == true
+    operator_signed_in? && refresh_session!(**session_limits)
+  end
 
-    # Honour session expiry even for API requests.
-    last_seen = session[:last_seen_at]
-    signed_in = session[:signed_in_at]
-    now = Time.current.to_i
+  def guest_api_session?
+    return false unless guest_signed_in?
+    return refresh_session!(**session_limits) if guest_session_valid?
 
-    if last_seen && now - last_seen > ApplicationController::SESSION_IDLE_TIMEOUT.to_i
-      reset_session
-      return false
-    end
-    if signed_in && now - signed_in > ApplicationController::SESSION_ABSOLUTE_TIMEOUT.to_i
-      reset_session
-      return false
-    end
-
-    session[:last_seen_at] = now
-    true
+    reset_session
+    false
   end
 
   # Memoised: the CSRF check and the auth check both ask.

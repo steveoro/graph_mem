@@ -11,6 +11,9 @@ import { DragDropManager } from "graph/drag_drop_manager"
 // Connects to data-controller="graph"
 export default class extends Controller {
   static targets = ["container"]
+  // Read-only (guests): no edit items in the context menu and no drag-and-drop. Cosmetic;
+  // the API refuses guest writes anyway.
+  static values = { readOnly: Boolean }
 
   connect() {
     this.currentView = 'root';
@@ -22,8 +25,8 @@ export default class extends Controller {
     this.tooltip = new Tooltip();
 
     const refreshCallback = { onRefreshGraph: () => this.refreshGraph() };
-    this.contextMenu = new ContextMenuManager(this.api, this.modal, refreshCallback);
-    this.dragDrop = new DragDropManager(this.api, this.modal, refreshCallback);
+    this.contextMenu = new ContextMenuManager(this.api, this.modal, refreshCallback, { readOnly: this.readOnlyValue });
+    this.dragDrop = this.readOnlyValue ? null : new DragDropManager(this.api, this.modal, refreshCallback);
 
     this.containerTarget.style.position = 'relative';
     this.#addNavigationOverlay();
@@ -152,7 +155,7 @@ export default class extends Controller {
       this.containerTarget.innerHTML = "<p class='text-red-500'>Critical error during graph setup. See console.</p>";
     }
 
-    this.dragDrop.initialize(cy, this.containerTarget);
+    this.dragDrop?.initialize(cy, this.containerTarget);
     this.#addNavigationOverlay();
   }
 

@@ -199,9 +199,22 @@ The REST API is not anonymous. Every verb on every `/api/v1/*` endpoint requires
    the CSRF token.
    The token is normalised exactly as for `/mcp` (whitespace stripped, `Bearer` case-insensitive).
 
+3. **A read-only guest browser session** (UI-1, only when a guest password is configured), for
+   these read endpoints only: `GET /api/v1/graph_data`, `memory_entities` (index, show, search),
+   `memory_observations` (index, show), `memory_relations` (index, show), `search/subgraph`,
+   `graph/traverse` and `graph/shortest_path`. Every other endpoint answers a guest with `403`
+   `{"error":"forbidden","role":"guest"}`. A guest session together with a valid bearer token gets
+   full access (the token is the owner's machine credential). Guest searches
+   (`/search`, `memory_entities/search`, `search/subgraph`, and `memory_entities/:id` when it gets a
+   `query`) share a budget of 60 a minute per IP and 300 a minute across all guests (`429` with
+   `Retry-After` after that); requests with a valid bearer token aren't throttled.
+
+`/mcp*` never reads browser sessions: an operator or guest cookie grants no MCP access.
+
 With no token configured the bearer path is disabled and only sessions work. There is no
 loopback/private-range exemption. Failures return `401` (no or invalid credentials, with
-`WWW-Authenticate: Bearer realm="graph_mem"`) or `403` (valid token from a disallowed IP).
+`WWW-Authenticate: Bearer realm="graph_mem"`) or `403` (valid token from a disallowed IP, or a guest
+session on an endpoint outside the guest allowlist).
 `/csp-reports` is the one unauthenticated endpoint (rate-limited; it only logs reports).
 
 ## Limitations

@@ -7,20 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-UI-1a: the app shell and an enforced Content Security Policy. The read-only guest role (UI-1b) and the 1.56.0 release follow.
+## [1.56.0] - 2026-10-26
+
+UI-1: the app shell, a read-only guest role, and an enforced Content Security Policy (UI-1a and UI-1b).
 
 ### Added
 - App shell: a sidebar groups the existing pages (Home, Search, Explore; Review & Fix; Projects & Data; System), marks the current page, shows the number of active review rows on Compaction review, and collapses behind a toggle below 1024 px. Skip link, toasts for flash messages (notices dismiss themselves after 6 s, alerts stay), and a page-header slot.
 - A minimum design system: Tailwind v4 `@theme` tokens and `ui-*` component classes (buttons, inputs, badges, cards), `UiHelper`, and the Stimulus `nav` and `toast` controllers.
+- A read-only guest account, **disabled until a guest password is configured** (`GRAPH_MEM_GUEST_PASSWORD` or Rails credentials `guest.password`; username `GRAPH_MEM_GUEST_USERNAME` / `guest.username`, default `guest`). Guests sign in on the same form, see Search and Explore (no edit items, no drag-and-drop) and a read-only badge, and can read the graph through 11 `/api/v1` read endpoints. The guest's username and password must differ from the operator's. Guest sessions expire after 2 h idle or 24 h, and end when the password changes.
+- `enable_guest_access` (Settings › Feature Flags, default on): turning it off signs guests out on their next request.
+- Guest searches (HTML and API, including entity reads ranked by `query`) are limited to 60 a minute per IP and 300 a minute across all guests, since a vector query costs an embedding call; operators and bearer-token clients aren't limited.
 
 ### Changed
 - The layout no longer forces every page into a flex row; sign-in uses its own `auth` layout. The flash container (and Turbo Stream target) is now `toasts`.
 
 ### Security
 - The Content Security Policy is enforced (it was report-only), with `base-uri 'self'` and `form-action 'self'` added; violations are still reported to `/csp-reports`. `/api-docs` keeps rswag's own policy: rswag-ui sends its header under a mixed-case key that Rails didn't recognise, so once enforced Rails would have stacked the app policy on top and blocked Swagger UI.
+- Role checks are deny-by-default: a guest gets `403` on every page and `/api/v1` endpoint that isn't explicitly opted in, and a route-matrix spec walks every route to pin it. `/mcp*` ignores browser sessions, and ActionCable rejects guest sessions.
 
 ### Documentation
-- `docs/app_settings_reference.md` lists the Telemetry tab; `docs/operator/telemetry.md` points at the sidebar.
+- `docs/guides/ui-guide.md`: a web UI guide for the operator and the read-only guest, with screenshots in `docs/images/ui/`.
+- `docs/app_settings_reference.md` lists the Telemetry tab and the guest toggle; `docs/operator/telemetry.md` points at the sidebar; README, `docs/mcp_access_control.md` and `docs/architecture.md` describe the guest role and the enforced CSP.
 
 ## [1.55.3] - 2026-10-26
 

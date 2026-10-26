@@ -1,0 +1,5 @@
+- content_for :title, t("ui.forbidden.title")
+- content_for :page_header, ui_page_header(t("ui.forbidden.title"))
+.ui-card{ data: { testid: "guest-forbidden" } }
+  %p= t("ui.forbidden.body")
+  = link_to t("ui.forbidden.search_link"), main_app.search_path, class: "ui-btn ui-btn-primary"

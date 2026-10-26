@@ -1,0 +1,4 @@
+- content_for :title, t("ui.guest_search_throttled.title")
+- content_for :page_header, ui_page_header(t("ui.guest_search_throttled.title"))
+.ui-card{ data: { testid: "guest-search-throttled" } }
+  %p= t("ui.guest_search_throttled.body", limit: GuestSearchThrottle::LIMIT)
