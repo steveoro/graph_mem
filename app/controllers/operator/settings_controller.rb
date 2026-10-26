@@ -159,7 +159,7 @@ module Operator
         },
         telemetry: {
           title: t("operator.settings.groups.telemetry"),
-          settings: %w[tool_invocation_retention_days]
+          settings: %w[tool_invocation_retention_days compaction_review_row_retention_days]
         }
       }
     end

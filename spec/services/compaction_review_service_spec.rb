@@ -411,6 +411,20 @@ RSpec.describe CompactionReviewService, type: :service do
       expect(merge_row.status).to eq("dismissed")
       expect(MaintenanceReportSuppression.suppressed?("compaction_review", merge_row.signature)).to be true
     end
+
+    it "keeps an edited suggestion's original proposal suppressed after the row is pruned" do
+      original_payload = relation_row.payload
+      described_class.edit_item("relation-1", { "relation_type" => "part_of" })
+      described_class.dismiss("relation-1")
+      relation_row.reload.update_columns(updated_at: 31.days.ago)
+      AppSettings.compaction_review_row_retention_days = 30
+
+      MaintenanceReportRowCleanupJob.perform_now
+
+      expect(MaintenanceReportRow.find_by(row_uuid: "relation-1")).to be_nil
+      expect(described_class.suppressed?("relationship_proposal", original_payload)).to be true
+      expect(described_class.suppressed?("relationship_proposal", original_payload.merge("relation_type" => "part_of"))).to be true
+    end
   end
 
   describe ".restore" do
@@ -418,6 +432,15 @@ RSpec.describe CompactionReviewService, type: :service do
       described_class.dismiss("merge-1")
       expect(described_class.restore("merge-1")[:success]).to be true
       expect(described_class.find_item("merge-1").status).to eq("active")
+    end
+
+    it "clears the suppressions of both the original and the edited proposal" do
+      described_class.edit_item("relation-1", { "relation_type" => "part_of" })
+      described_class.dismiss("relation-1")
+
+      described_class.restore("relation-1")
+
+      expect(MaintenanceReportSuppression.where(report_type: "compaction_review")).not_to exist
     end
   end
 

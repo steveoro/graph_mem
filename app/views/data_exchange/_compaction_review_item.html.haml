@@ -193,12 +193,12 @@
           %p.text-xs.text-gray-500.mt-1= "Apply marks the flagged observations obsolete (audit trail kept)."
       .md:col-span-3.flex.flex-wrap.items-start.gap-2
         - if row.active? || row.ignored?
-          = submit_tag "Save", name: "review_action", value: "edit", class: "rounded bg-blue-600 px-2 py-1 text-xs text-white hover:bg-blue-700", form: form_id
-          = submit_tag "Apply", name: "review_action", value: "apply", class: "rounded bg-green-600 px-2 py-1 text-xs text-white hover:bg-green-700", form: form_id, data: { turbo_confirm: "Apply this suggestion?" }
-          = submit_tag "Dismiss", name: "review_action", value: "dismiss", class: "rounded bg-gray-500 px-2 py-1 text-xs text-white hover:bg-gray-600", form: form_id
+          = button_tag "Save", type: "submit", name: "review_action", value: "edit", class: "rounded bg-blue-600 px-2 py-1 text-xs text-white hover:bg-blue-700", form: form_id
+          = button_tag "Apply", type: "submit", name: "review_action", value: "apply", class: "rounded bg-green-600 px-2 py-1 text-xs text-white hover:bg-green-700", form: form_id, data: { turbo_confirm: "Apply this suggestion?" }
+          = button_tag "Dismiss", type: "submit", name: "review_action", value: "dismiss", class: "rounded bg-gray-500 px-2 py-1 text-xs text-white hover:bg-gray-600", form: form_id
         - if row.dismissed? || row.approved?
-          = submit_tag "Restore", name: "review_action", value: "restore", class: "rounded bg-yellow-500 px-2 py-1 text-xs text-white hover:bg-yellow-600", form: form_id
+          = button_tag "Restore", type: "submit", name: "review_action", value: "restore", class: "rounded bg-yellow-500 px-2 py-1 text-xs text-white hover:bg-yellow-600", form: form_id
         - if row.active?
-          = submit_tag "Ignore", name: "review_action", value: "ignore", class: "rounded bg-gray-200 px-2 py-1 text-xs text-gray-700 hover:bg-gray-300", form: form_id
+          = button_tag "Ignore", type: "submit", name: "review_action", value: "ignore", class: "rounded bg-gray-200 px-2 py-1 text-xs text-gray-700 hover:bg-gray-300", form: form_id
         - if row.resolution_reason.present?
           %p.text-xs.text-gray-500.w-full.mt-1= row.resolution_reason
