@@ -74,7 +74,7 @@ behaviour"; keep your own only where it matters to a client or to security.
 | D5 | CORS headers | `rack-cors`, or the transport's own | none | |
 | D6 | DNS-rebinding protection | an `Origin` check in the transport | `Host` **and** `Origin` checks, on by default; `allowed_hosts:` | **Keep it on.** List your LAN names in `allowed_hosts:` |
 | D7 | Body cap | yours | `max_request_bytes:` (+ a 64 KiB cap on `initialize`); stdio `max_line_bytes:` (a longer line ends the session) | |
-| D8 | Errors | tool errors → your error result; others logged | the gem calls `configuration.exception_reporter` on its `-32603` path only | |
+| D8 | Errors | tool errors → your error result; others logged | `exception_reporter` in two places: the server's `Configuration` (handler failures, the `-32603` path) and the global `MCP.configure` (every transport failure: stdio frames, HTTP requests, the session reaper) | set both |
 | D9 | Argument validation | dry-schema in `call_with_schema_validation!` | `validate_tool_call_arguments` (an `MCP::Configuration` option) and a `required` check before the tool runs | |
 | D10 | Wire edge cases | fast-mcp's or your transport's answers | the gem's answers | |
 | D11 | Hidden alias tools | callable but filtered out of `tools/list` | `tools/list` lists every registered tool | |
@@ -82,11 +82,12 @@ behaviour"; keep your own only where it matters to a client or to security.
 | D13 | MCP 2026-07-28 (`server/discover`, per-request lifecycle) | not supported | served next to `initialize` | |
 | D14 | Gem pin | | | `gem "mcp", "<exact>"`, one PR per upgrade |
 
-> **Example (graph_mem):** D1 accept the 503; D2 keep `GRAPH_MEM_MCP_MAX_SESSIONS` (256) and pass it;
+> **Example (graph_mem):** D1 accept the 503; D2 keep `GRAPH_MEM_MCP_MAX_SESSIONS` (256) and pass it to each profile's
+> transport (so the cap is per endpoint: three profiles allow up to 3 × 256 sessions);
 > D3 gem default (same 30 minutes); D4 a new `GRAPH_MEM_MCP_ALLOWED_ORIGINS`, empty by default; D5
 > `rack-cors` left as it was; D6 kept on, with a new `GRAPH_MEM_MCP_ALLOWED_HOSTS`; D7 keep the 4 MiB
 > setting for HTTP and stdio, accept the 64 KiB `initialize` cap; D8 the wrapper keeps the error
-> envelope, and `exception_reporter` calls `Rails.error.report`; D9 one shared configuration with
+> envelope, and both `exception_reporter`s call `Rails.error.report`; D9 one shared configuration with
 > `validate_tool_call_arguments: false` and a lenient input schema (§3); D10 accept all 16 changed
 > cases; D11 remove the 18 aliases (breaking); D12 remove `/mcp/sse` (breaking); D13 comes free with
 > the swap; D14 `gem "mcp", "1.8.1"`.
@@ -153,6 +154,7 @@ configuration.
 ```ruby
 CONFIG = MCP::Configuration.new(validate_tool_call_arguments: false,
                                 exception_reporter: ->(e, ctx) { Rails.error.report(e, handled: true, context: ctx.to_h) })
+MCP.configure { |config| config.exception_reporter = CONFIG.exception_reporter } # transport failures use the global one
 
 def self.server_for(profile)
   MCP::Server.new(
@@ -186,14 +188,19 @@ Rails.application.config.middleware.use(Router)         # path → that profile'
 MCP::Server::Transports::StreamableHTTPTransport.new(
   server_for(profile),
   enable_json_response: true,                  # JSON answers to POSTs, as most fast-mcp setups sent
-  max_sessions: Integer(ENV.fetch("MY_APP_MCP_MAX_SESSIONS", 256)),
+  max_sessions: Integer(ENV.fetch("MY_APP_MCP_MAX_SESSIONS", 256)), # per transport, so per endpoint; validate the env at boot
   max_request_bytes: 4 * 1024 * 1024,
-  allowed_hosts: ENV.fetch("MY_APP_MCP_ALLOWED_HOSTS", "").split(","),
-  allowed_origins: ENV.fetch("MY_APP_MCP_ALLOWED_ORIGINS", "").split(",")
+  allowed_hosts: ENV.fetch("MY_APP_MCP_ALLOWED_HOSTS", "").split(",").map(&:strip).reject(&:empty?),
+  allowed_origins: ENV.fetch("MY_APP_MCP_ALLOWED_ORIGINS", "").split(",").map(&:strip).reject(&:empty?)
 )
 ```
 
-The transport is a Rack app: the router calls `transport.call(env)`.
+The transport is a Rack app: the router calls `transport.call(env)`. Transports built on first use
+read the environment on the first request, so a malformed value would fail that request instead of
+the boot: build the options once in an `after_initialize` block to fail early.
+
+Every limit applies per transport. With one transport per endpoint, `max_sessions:` caps each
+endpoint separately, and a client refused on one endpoint can still open a session on another.
 
 **Per-request context.** Tool handlers don't see request headers. The only per-request value the
 transport forwards to them is `env["mcp.auth_info"]`, as `server_context[:auth_info]` (also when
@@ -224,7 +231,8 @@ as headers for the tool's constructor, or in thread-locals set around the call.
 **Auth.** Keep a static bearer token or an IP allowlist as Rack middleware in front of the
 transport. The gem's `token_verifier:` is for OAuth.
 
-> **Example (graph_mem):** `AccessGate` (37 lines) wraps the existing `McpAccessPolicy`;
+> **Example (graph_mem):** `config/initializers/mcp.rb` sets the global reporter and checks the
+> `GRAPH_MEM_MCP_*` numbers in `after_initialize`. `AccessGate` (37 lines) wraps the existing `McpAccessPolicy`;
 > `RequestContext` (58 lines) carries `X-MCP-Client`, the profile and the `Mcp-Session-Id`, and sets
 > the two thread-locals the tool base class reads; `Router` (41 lines) maps the three paths;
 > `Transports` (50 lines) builds the transports from `GRAPH_MEM_MCP_*` settings. The only change in
@@ -321,7 +329,10 @@ PipeStdioTransport.new(server_for(profile), output: mcp_out, max_line_bytes: 4 *
 - **Required-argument checks before your code runs** (§4).
 - **Capabilities advertised but never delivered.** Pass your own `capabilities:`.
 - **Hidden tools.** The gem lists every registered tool.
-- **Sessions don't cross endpoints**, and at the cap a new client gets `503` until sessions expire.
+- **Sessions don't cross endpoints**, the session cap is per endpoint, and at the cap a new client
+  gets `503` until sessions expire.
+- **Two exception reporters.** The server's `Configuration` reports handler failures; transport
+  failures go to the global `MCP.configure` one, a no-op unless you set it (§3).
 - **Schema drift.** The gem's 2020-12 validation, the added `$schema` key, annotation defaults.
 - **Autoloading.** Build the wrapper classes at boot from loaded tool classes; eager-load in
   development, or new tool files won't be served.
