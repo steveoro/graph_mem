@@ -3,8 +3,14 @@
 **Written 2026-10-26 (Europe/Rome)** for Claude, from the 1.57.0 code (`e826476`, UI-4a / #127 merged and tagged).
 **Revised 2026-10-26 evening:** Steve's answers are in. `contradiction` rows are **in** UI-5 (A5, B2 moved to UI-5b to
 keep both PRs under the limit); the split, policy batch size, old URLs and `ignore` → snooze are confirmed.
-Every file:line below was checked against that commit. If a line has moved, find the code by the quoted text; if the
-code no longer matches the description, **stop and ask Steve** instead of improvising.
+**Revised 2026-10-26 night (Steve, Oct 26):** sort order settled (root-first stays first for the old page and
+`list_maintenance_review`; the UI-5b digest and `/review` rank by priority alone; see A3.4 and Decision 13), and
+UI-5a is PR #128. "UI-5a as shipped" (before B2) lists what #128 actually built; UI-5b builds on that, not on the A
+steps' wording. File:line refs in that section and in B2-R are **as of #128 416e45b**; the "What the code looks like
+today" section below is the pre-UI-5a state (`e826476`).
+Every file:line in "What the code looks like today" and A1-B1 was checked against `e826476`. If a line has moved,
+find the code by the quoted text; if the code no longer matches the description, **stop and ask Steve** instead of
+improvising.
 
 Context: `ui-dashboard-plan.md` §2.5 (the Review & Fix design: model changes, page, policies, limits at the source),
 §5.1-§5.4 (guardrails, confirm levels, change sets, role matrix) and §6 UI-5. `ui-4a-plan.md` and
@@ -171,7 +177,9 @@ undo of hard deletes.
 
 ## A1. Schema and models
 
-1. Migration `add_review_grouping_to_maintenance_report_rows` (timestamp after `20261026120100`), reversible:
+1. Migration `add_review_grouping_to_maintenance_report_rows` (timestamp after `20261026120100`), reversible.
+   Shipped as `db/migrate/20261026213000_add_review_grouping_to_maintenance_report_rows.rb` (as of #128 416e45b);
+   UI-5b adds no migration unless a step below says so (none does):
    - `maintenance_report_rows`: `group_key` varchar(191) NULL, `anchor_entity_id` bigint NULL, `project_id` bigint
      NULL, `priority` int NOT NULL DEFAULT 0, `confidence` decimal(4,3) NULL, `expires_at` datetime(6) NULL,
      `resolved_by` varchar(64) NULL, `change_set_id` bigint NULL.
@@ -190,7 +198,9 @@ undo of hard deletes.
    `suppressed?` uses `in_force`; `self.replace!(report_type:, signature:, kind:, reason:, source:, expires_at:)`
    deletes any existing row for the pair and creates the new one, returning `[deleted_attrs, created]` so callers can
    `note_suppressions!(created:, deleted:)` (the unique key means an expired or snoozed suppression must be replaced,
-   never silently kept: see A4).
+   never silently kept: see A4). **As shipped** (#128 416e45b, `maintenance_report_suppression.rb:31-43`): `replace!`
+   locks the existing rows and **keeps a permanent suppression** when the new one would expire (returns `[[], nil]`),
+   so a snooze or expiry never downgrades a dismissal; callers handle `created = nil`.
 4. `MaintenanceReport::REPORT_TYPES` gains `review_policy_run`.
 5. `CompactionReviewService::STATUSES` follows the model; `list_maintenance_review` accepts `expired` in its
    description (`app/tools/list_maintenance_review_tool.rb:20, 29`); the four MCP review tools keep their arguments.
@@ -244,16 +254,23 @@ undo of hard deletes.
 1. **Backlog ceiling** (§2.5.4.1): in `seed_report`, per kind, if `active` count ≥ `AppSettings.review_backlog_ceiling`
    (new field, default 300, 50-5,000), seed an item only when its priority beats the current lowest active priority of
    that kind; count the rest as `skipped_backlog_full` in the report's `data`. One COUNT + one MIN per kind per seed
-   call, not per item.
+   call, not per item. **As shipped** (#128 416e45b, `compaction_review_service/seed_limits.rb:51-63`
+   `within_backlog`): the ceiling is **soft**: the best candidates fill the room left under it, the rest come in only
+   when they beat the lowest active priority of the kind, and nothing is evicted, so the active count can pass the
+   ceiling.
 2. **Per-run caps** (§2.5.4.2): `seed_report` keeps the top `RUN_CAPS[kind]` items per call by priority and records
    `skipped_run_cap`. `DreamStateCompactor#flush_review_queue!` (301-309) flushes several times per run, so the cap
    is tracked per `source_ref` (sum of earlier reports with the same `source_ref` and kind), not per call.
 3. **`RelationshipDiscoveryStrategy::MIN_QUEUE_SCORE = 0`** applied in `dedupe_and_limit` (216-221). No behaviour
    change at 0; the policy-run stats (B1) record apply/dismiss rates per kind and score so Steve can raise it later.
-4. **SQL pagination** for `items` (23-33): `scope.order(priority: :desc, id: :asc).page(page).per(PER_PAGE)`
-   (Kaminari on the relation, so `total_count`/`total_pages` keep working for `list_maintenance_review`). Keep
-   `root_first?` as a tie-breaker only through priority (Project roots get `IMPACT` bump in the classifier) and keep
-   `item_score` for MCP output compatibility. `q` stays a values-only search (Decision 8): apply it in Ruby to an
+4. **SQL pagination** for `items` (23-33): `scope.order(Arel.sql(ROOT_FIRST_SQL)).order(priority: :desc, id: :asc)
+   .page(page).per(PER_PAGE)` (Kaminari on the relation, so `total_count`/`total_pages` keep working for
+   `list_maintenance_review`). **Root-first stays the first sort key (Steve, Oct 26)** for the old page and
+   `list_maintenance_review`: sorting by priority alone broke the existing spec "paginates active items with root nodes
+   first" (`spec/services/compaction_review_service_spec.rb:120`), which stays unchanged. `ROOT_FIRST_SQL` is the SQL
+   form of `root_first?` (as of #128 416e45b: `compaction_review_service/queries.rb:13-27`, order at 33). Keep
+   `item_score` for MCP output compatibility. The UI-5b digest and `/review` lists rank by **priority alone** (C2;
+   Project roots still rank high through the classifier's impact bump). `q` stays a values-only search (Decision 8): apply it in Ruby to an
    SQL-ordered scope capped at `SEARCH_SCAN_CAP = 2_000` rows, then `Kaminari.paginate_array`; the page says when the
    cap was hit.
 5. **Expiring suppressions in the seed path.** `MaintenanceReportSuppression.suppressed?` honours `expires_at`
@@ -292,7 +309,11 @@ undo of hard deletes.
    `ChangeSet::KINDS` and `PAST_TENSE`): status `ignored`, `expires_at = now + days`, suppression `replace!` with
    `source: "snoozed"` and the same `expires_at`. `ignore` (146-152) becomes `snooze` with the default 30 days
    (Decision 5); `dismiss_maintenance_review action: ignore` keeps working and now snoozes. Rows already `ignored`
-   (including absorbed `stale_memory` losers, 256) keep `expires_at NULL` and are never auto-restored.
+   (including absorbed `stale_memory` losers, 256) keep `expires_at NULL` and are never auto-restored. **As shipped**
+   (#128 416e45b, `compaction_review_service.rb:94-110`): snooze and ignore **refuse rows that aren't pending**
+   (`active`/`ignored`) with "Only active or snoozed suggestions can be snoozed (this one is <status>)"; a resolved row
+   must be restored first. `dismiss_maintenance_review action: ignore` turns that refusal into an invalid-arguments
+   error (`app/tools/dismiss_maintenance_review_tool.rb:58-59`).
 
 ## A5. `contradiction` rows (backend; Steve's decision: in UI-5)
 
@@ -361,7 +382,12 @@ scan, an apply that keeps one observation and retires the other, and undo throug
    apply/dismiss rates per kind and score bucket (for `MIN_QUEUE_SCORE` tuning).
 2. Order per run: backfill step (A2.4) → priority refresh of active rows (batches of 1,000, `update_columns`, no
    change set: priority is derived data) → `snooze_expiry` → `dangling` → `no_longer_flagged` →
-   `expire_low_confidence` → `auto_apply_expired_validity` → `auto_apply_relationships`.
+   `expire_low_confidence` → `auto_apply_expired_validity` → `auto_apply_relationships`. **As shipped** (#128 416e45b,
+   `review_policy_runner.rb`): each step runs through `step(name)` (48-54), which logs and records
+   `{ "error" => class, "message" => first 200 chars }` in the report instead of failing the run, so one failing step
+   doesn't stop the others; the backfill (56-60) skips the symmetric-signature rewrite once a run reported
+   `backfill.symmetric_done` true (`symmetric_done?` 62-65 reads it from the latest `review_policy_run` report).
+   `ReviewPolicies::Base` batches of `POLICY_BATCH = 200`, `PER_RUN = 500` (`review_policies/base.rb:11-14`).
 3. Policies (each reads its `AppSettings` toggle **uncached** at the start of the run):
 
    | Policy | Default | Does | Change set |
@@ -400,6 +426,61 @@ scan, an apply that keeps one observation and retires the other, and undo throug
    range. Until UI-5b ships the panel they keep their defaults (Steve can change them from the Rails console); no
    `/api/v1` or MCP write path.
 
+## UI-5a as shipped (as of #128 416e45b)
+
+UI-5b starts from `main` with #128 merged. What it relies on, checked against #128 head `416e45b` (if `main` differs,
+find the code by the quoted text; if it no longer matches, stop and ask Steve):
+
+- **Migration** `20261026213000_add_review_grouping_to_maintenance_report_rows.rb` is the latest; `db/structure.sql`
+  lists `'20261026213000'` in its `schema_migrations` INSERT. UI-5b adds no migration.
+- **Rows** (`app/models/maintenance_report_row.rb`): `STATUSES` with `expired` (6), `RESOLVED_STATUSES` (7),
+  `RESOLVERS` (9); scopes `pending` (27), `resolved` (29), `snoozed` (31), `attention(threshold)` (32), `by_group`
+  (33), `by_project` (34).
+- **Suppressions** (`app/models/maintenance_report_suppression.rb`): `SOURCES` (9), `in_force` (17), `suppressed?`
+  (20), `replace!` (31-43) keeps a permanent suppression when the new one expires and then returns `[[], nil]`.
+- **Classifier** (`app/services/review_row_classifier.rb`): `DESTRUCTIVE_KINDS` (19), `SAFE_BULK_KINDS =
+  %w[relationship_proposal stale_memory]` (22), `CHOICE_KINDS = %w[contradiction]` (24), `RUN_CAPS` (29). Group apply
+  (C1) uses these constants; don't copy the lists.
+- **Service** (`app/services/compaction_review_service.rb`, 437 lines): `apply` (42), `dismiss` (49), `bulk_dismiss`
+  (59), `bulk_apply` (70), `restore` (74), `snooze(item_id, days: SNOOZE_DAYS, …)` (94-110; `SNOOZE_DAYS = 30`, 15)
+  refuses non-pending rows with `{ success: false, error: "Only active or snoozed suggestions can be snoozed (this one
+  is <status>)" }`, `ignore` (113) = snooze with change-set kind `review.ignore`. Every action returns
+  `change_set_uuid`, `undoable`, `not_undoable_reason` with its usual keys (`change_recording.rb` `undo_handle`, 62).
+  The ~500-line rule still applies: UI-5b's group actions and digest go in their own files.
+- **Queries** (`compaction_review_service/queries.rb`): `items` (28-41) orders by `ROOT_FIRST_SQL` (13-27), then
+  `priority DESC, id ASC` (33); `SEARCH_SCAN_CAP = 2_000` (8). **Don't change that order** (A3.4); `/review` builds its
+  own priority-only scopes.
+- **Limits** (`compaction_review_service/seed_limits.rb`): run caps (`within_run_cap`, 39) and the soft backlog
+  ceiling (`within_backlog`, 51-63). The digest must not assume active rows per kind ≤ `review_backlog_ceiling`.
+- **Policies**: `ReviewPolicyRunner` (`app/services/review_policy_runner.rb`: per-step errors in the report, 48-54;
+  `symmetric_done`, 56-65), `ReviewPolicies::Base` (`POLICY_BATCH = 200`, `PER_RUN = 500`, 11-14),
+  `ReviewPolicyJob` (`app/jobs/review_policy_job.rb`, `GET_LOCK` guard, `enqueue_if_seeded` 13), nightly at 5:00
+  (`config/recurring.yml:14-17`, `53-56`). "Run policies now" (C2) calls `ReviewPolicyJob.perform_later(trigger:
+  "manual")`; the Policies view reads `review_policy_run` reports, including a step's `error`/`message`.
+- **Settings** (`app/models/app_settings.rb`, 247 lines): the B1.8 fields (52-59), `REVIEW_NUMBERS` (74),
+  `REVIEW_POLICY_TOGGLES` (81), `review_policy_enabled?` (218), `review_number` (227, clamps),
+  `read_boolean_setting` (238). B2 validates against `REVIEW_NUMBERS`' ranges; don't add a second range table.
+- **MCP**: `dismiss_maintenance_review` (`app/tools/dismiss_maintenance_review_tool.rb:58-59`) raises
+  `GraphMem::InvalidArgumentsError` when ignore hits a non-pending row; `list_maintenance_review` accepts `expired`
+  (20, 29); `apply_maintenance_review` `dry_run` still only echoes the payload (`apply_maintenance_review_tool.rb:42-50`;
+  C1 adds `preview`).
+- **Old page, still there until C3**: `DataExchangeController` (921 lines) `compaction_review` (241-266),
+  `compaction_review_action` (267-333), `review_action_turbo_streams` (335-367),
+  `compaction_review_import_suggest_merges` (368-394), helpers 746-772 (`compaction_action_params` 764-767 permits
+  `:keep_observation_id`); routes `config/routes.rb:87-90`; `_compaction_review_item.html.haml` is **223** lines
+  (contradiction details 130, description 197, Keep buttons 209, action buttons 214-221). **`compaction_review_action`
+  still has no `ProjectMembership::LockTimeout` rescue** (a busy lock there is a 500); UI-5b resolves that by removing
+  the action (C3.3) and answering 503 from `ReviewController` (C2.3). Don't add a rescue to the old action.
+- **Unchanged by #128** (the "What the code looks like today" refs still hold): `ChangesController` `STATUSES` (7-10),
+  `config/routes.rb:113-116`, `ui.changes.*` (`config/locales/ui.en.yml:29-32`: `conflicts`, `not_found`, `busy`;
+  **no `undo` label yet**, C2.4 adds it), `ui/_sidebar.html.haml:4-27`, `ui_helper.rb` (10, 16, 55-59),
+  `toast_controller.js:13-16`, `Operator::SettingsController` (`bulk_update` 13-78, `group_settings_by_category`
+  128-165), `operator/settings/index.html.haml` (132), dashboard links (`_project_scans_card.html.haml:92`, 101;
+  `_dream_state_compactor_card.html.haml:88`; `_reports_details.html.haml:8`), `lib/graph_mem/version.rb:4` and
+  `skills/graph-mem-mcp-toolset/SKILL.md:18` (`1.57.0`), `config/importmap.rb:9` (`pin_all_from` controllers).
+- **CHANGELOG** `## [Unreleased]` holds UI-5a's Added/Changed/Fixed lines (bulk apply only applies safe kinds is under
+  Changed; the dismissal reason fix under Fixed). Release R folds them in; don't repeat them.
+
 ## B2. Settings › Review policies (UI-5b, first commit; operator only, audited)
 
 Moved from UI-5a to UI-5b to make room for A5 (see "Size and split"). The fields already exist (B1.8).
@@ -408,7 +489,8 @@ Moved from UI-5a to UI-5b to make room for A5 (see "Size and split"). The fields
 2. `Operator::SettingsController#group_settings_by_category` (128-165): new tab `review_policies`; partial
    `app/views/operator/settings/_review_policies_panel.html.haml` (toggles, threshold, days, ceiling, threshold, one line
    per policy explaining what it does and how to reverse it; no inline JS).
-3. `bulk_update` (13-78): `validate_review_policies_settings` rejects out-of-range values with **422** (re-render the
+3. `bulk_update` (13-78): `validate_review_policies_settings` rejects out-of-range values (ranges from
+   `AppSettings::REVIEW_NUMBERS`, plus 0.80-1.00 for `auto_apply_relationship_min_confidence`) with **422** (re-render the
    tab with the error, nothing saved), for this tab and for any request that carries these keys. After a successful
    save, write one `AuditLog` per changed key: `auditable_type "AppSettings"`, `auditable_id` = the settings row id,
    `action "update"`, `actor Current.actor`, `changed_fields { key => { from:, to: } }`. Make sure
@@ -425,7 +507,8 @@ Moved from UI-5a to UI-5b to make room for A5 (see "Size and split"). The fields
    size), `delete_relation`, `delete_observation` (obsolete mark), `delete_entity` (observations and relations that go,
    children left parentless, **"can't be undone"**), `stale_memory` (observations marked obsolete),
    `relation_integrity`, `move_observation`, `contradiction` (with `keep_observation_id`: "#B marked obsolete, #A
-   kept, undoable 30 days"; without it: both outcomes; warns when either side is no longer active). `apply_maintenance_review` `dry_run` returns `preview` too (additive key).
+   kept, undoable 30 days"; without it: both outcomes; warns when either side is no longer active). `apply_maintenance_review` `dry_run`
+   (`apply_maintenance_review_tool.rb:42-50`, as of #128 416e45b) returns `preview` too (additive key).
 2. New `app/services/review_group_actions.rb`:
    - `preview(group_key:, op:, min_confidence: nil)` → rows included (≤ `GROUP_CAP = 100`, highest priority first),
      rows excluded with the reason (destructive kind, below confidence, not active, over the cap), and the summed
@@ -434,7 +517,11 @@ Moved from UI-5a to UI-5b to make room for A5 (see "Size and split"). The fields
      the rows still eligible; a mismatch → `:conflict` (409) with the rows that changed, nothing written. One change
      set `review.group_apply` (add to `KINDS`) around per-row `CompactionReviewService.apply` calls.
    - `dismiss(group_key:, row_uuids:, reason:)` (any kind, writes suppressions; `review.group_dismiss`) and
-     `snooze(group_key:, row_uuids:, days: 30)` (`review.group_snooze`).
+     `snooze(group_key:, row_uuids:, days: 30)` (`review.group_snooze`). Both act on pending rows only: rows no longer
+     `active`/`ignored` are listed as excluded ("not pending"), matching `CompactionReviewService.snooze`, which
+     refuses them; a snooze over a permanently suppressed signature keeps the permanent suppression (`replace!`
+     returns `created = nil`; note nothing for it).
+   - Rows in a group are ordered by `priority DESC, id ASC` (no root-first key; Decision 13).
    - Destructive kinds and `CHOICE_KINDS` have no group apply: `preview(op: "apply")` lists every such row as excluded
      ("choose a side per row" for `contradiction`). Group dismiss and snooze include them.
 
@@ -451,6 +538,7 @@ Moved from UI-5a to UI-5b to make room for A5 (see "Size and split"). The fields
      `view=scan`); delete `POST /data_exchange/compaction_review_action` and the import route (`routes.rb:87-90`).
 2. `app/services/review_digest.rb`: SQL only, constant query count. Attention groups = active rows grouped by
    `COALESCE(group_key, …)` with `MAX(priority) ≥ review_attention_threshold`, ordered by max priority, `LIMIT 10`;
+   ranked by priority alone (Decision 13; don't reuse `CompactionReviewService.items`, which stays root-first);
    per group: kind, anchor (one `MemoryEntity.where(id:)` for the page), count, high-confidence count, max confidence,
    oldest `created_at`; plus "N more in M groups below the threshold", "policies resolved X this week" (from
    `review_policy_run` reports), next compaction time from `recurring.yml`. Spans `compaction_review` and `scan_review`.
@@ -461,14 +549,15 @@ Moved from UI-5a to UI-5b to make room for A5 (see "Size and split"). The fields
    |---|---|---|
    | success | 200 (Turbo Stream) / 303 redirect (HTML) | message + **Undo** button when `change_set_uuid` present and undoable; otherwise "can't be undone: <reason>" |
    | row not found | 404 | "That suggestion no longer exists." |
-   | not actionable (status changed), invalid edit, destructive kind in a group apply | 422 | the service's error |
+   | not actionable (status changed; snooze of a row that isn't pending), invalid edit, destructive kind in a group apply | 422 | the service's error |
    | group preview token mismatch | 409 | rows that changed; "Review the preview again" |
-   | `ProjectMembership::LockTimeout` or `TransientDbError.busy?` | 503 | `ui.changes.busy` |
+   | `ProjectMembership::LockTimeout` or `TransientDbError.busy?` | 503 | `ui.changes.busy` (the old `compaction_review_action` still answers 500 here as of #128 416e45b; C3.3 removes it) |
 
    Turbo Stream responses update `#toasts`, the row/group frame (replace or remove, as
    `review_action_turbo_streams` does today, 335-367) and the rail counts.
 4. **Undo in the toast and the Resolved view.** `layouts/_flash_messages` gains an optional undo entry
-   (`flash[:undo] = { "uuid" => …, "label" => … }`) rendered as `button_to t("ui.changes.undo"),
+   (`flash[:undo] = { "uuid" => …, "label" => … }`; `ui.changes.undo` is a new key next to `ui.changes.busy`,
+   `ui.en.yml:29-32`) rendered as `button_to t("ui.changes.undo"),
    undo_change_path(uuid), method: :post, form: { data: { turbo_frame: "_top" } }` (HTML path of `ChangesController`:
    redirect back with its flash, so the page shows the restored state). Undo toasts are not `ui-toast--notice`, so
    `toast_controller.js` doesn't auto-remove them (13-16). The **Resolved** view lists approved, dismissed and expired
@@ -478,7 +567,7 @@ Moved from UI-5a to UI-5b to make room for A5 (see "Size and split"). The fields
    set.
 5. Views `app/views/review/`: `index` (left rail, digest cards or grouped list), `_digest_card`, `_group_row`,
    `_group` (frame), `_row`, `_detail` (frame) with per-kind partials `kinds/_<kind>.html.haml` split out of the
-   204-line `_compaction_review_item.html.haml`, `_preview_card` (confirm card for destructive applies and group
+   223-line `_compaction_review_item.html.haml` (as of #128 416e45b), `_preview_card` (confirm card for destructive applies and group
    actions), `kinds/_contradiction.html.haml` (the two observations side by side with entity, age, distance and
    confidence; **Keep this** on each side posts `apply` with `keep_observation_id` through the preview card; Dismiss is
    labelled "Both are right"; Snooze as usual), `_inbox_zero`, `_resolved`, `_policies`. Entity pickers reuse `_entity_search_select` and
@@ -498,10 +587,13 @@ Moved from UI-5a to UI-5b to make room for A5 (see "Size and split"). The fields
    `ui_review_backlog_count` (`ui_helper.rb:55-59`) → `ReviewDigest.attention_group_count`, same cache key and 30 s
    expiry; 0 → no badge.
 3. Remove `DataExchangeController#compaction_review`, `#compaction_review_action`, `#review_action_turbo_streams`,
-   `#compaction_review_import_suggest_merges` and the helpers only they use (746-776), the five
+   `#compaction_review_import_suggest_merges` and the helpers only they use (746-772, as of #128 416e45b), the five
    `app/views/data_exchange/_compaction_review*` / `compaction_review.html.haml` views (with A5.9's contradiction
    buttons and the `:keep_observation_id` permit), and
    `spec/requests/data_exchange_spec.rb` examples for them (move what still applies to `spec/requests/review_spec.rb`).
+   This also resolves the missing `LockTimeout` → busy mapping of the old action (still a 500 as of #128 416e45b):
+   the replacement routes answer 503 (C2.3). `CompactionReviewService.items` and its root-first order stay (MCP
+   `list_maintenance_review` uses them).
    Repoint the dashboard scan card forms (`_project_scans_card.html.haml:92-98`) to
    `POST /review/rows/:uuid/{apply,dismiss}` and the links (101; `_dream_state_compactor_card.html.haml:88`;
    `_reports_details.html.haml:8`) to `/review`.
@@ -571,10 +663,12 @@ All synthetic, test-DB truncate before and after (`ui-dashboard-plan.md` §0.1),
     delete_relation, delete_observation, stale_memory, relationship_proposal, contradiction (each side); `delete_entity` says not undoable; the
     preview writes nothing (no audit rows, change sets, row or suppression changes).
   - `spec/services/review_group_actions_spec.rb`: destructive kinds and `contradiction` excluded from group apply, nothing changed;
-    group dismiss/snooze include `contradiction`; cap 100; the preview
+    group dismiss/snooze include `contradiction` and exclude rows that aren't pending; a group snooze over a
+    dismissed signature keeps the permanent suppression; cap 100; the preview
     lists exactly the rows applied; token mismatch → conflict, nothing written; snooze writes an expiring suppression;
     one change set per group action, undoable.
-  - `spec/services/review_digest_spec.rb`: top 10 groups by priority; inbox zero when nothing ≥ threshold; query count
+  - `spec/services/review_digest_spec.rb`: top 10 groups by priority alone (a Project-root row with a lower priority
+    ranks below a higher-priority non-root row); inbox zero when nothing ≥ threshold; query count
     constant from 10 to 1,000 rows (`ActiveSupport::Notifications` counter); unclassified rows show as single groups.
   - `spec/requests/review_spec.rb`: every route and action per kind; 200/404/409/422/503 as in the C2 table
     (stub `LockTimeout` and a `TransientDbError.busy?` error); toast has Undo when undoable and the reason when not;
@@ -585,19 +679,23 @@ All synthetic, test-DB truncate before and after (`ui-dashboard-plan.md` §0.1),
   - `spec/system/navigation_spec.rb`: badge counts attention groups; guest sees no Review link.
   - `spec/javascript_sinks_spec.rb` stays green (no new `innerHTML` sinks).
 - All existing review, dream-state, scan and undo specs stay green **unchanged** (except adding assertions and moving
-  the removed `data_exchange` examples).
+  the removed `data_exchange` examples), including UI-5a's (`compaction_review_service_ui5_spec`,
+  `contradiction_review_rows_spec`, `review_policy_runner_spec`, `review_policy_concurrency_spec`,
+  `review_row_classifier_spec`, `review_policy_job_spec`) and "paginates active items with root nodes first".
 
 ## Release: 1.58.0 (commit R, UI-5b)
 
 - `lib/graph_mem/version.rb:4`: `"1.57.0"` → `"1.58.0"`.
 - `skills/graph-mem-mcp-toolset/SKILL.md:18`: `graph-mem-version: "1.57.0"` → `"1.58.0"`
   (`spec/docs/agent_text_sync_spec.rb` checks they match).
-- `CHANGELOG.md`: rename UI-5a's `## [Unreleased]` lines into `## [1.58.0] - <merge date>` with `### Added` (grouped
-  Review & Fix page, digest and inbox zero, group actions with preview, apply preview, review policies and their
-  settings, `contradiction` review rows with keep-one-side apply, Undo/Restore in the UI, keyboard shortcuts), `### Changed` (`ignore` snoozes for 30 days; queue sorted by
-  normalized priority; generation limits; symmetric `relates_to` dedupe; nav badge counts attention groups; old review
-  URLs redirect), `### Removed` (the `data_exchange` review actions), `### Fixed` (bulk apply could include destructive
-  kinds; a busy membership lock on a review apply returned 500; dismiss reason missing on the suppression).
+- `CHANGELOG.md`: rename `## [Unreleased]` to `## [1.58.0] - <merge date>`, keep UI-5a's lines as they are (their
+  Added/Changed/Fixed already cover snooze, limits, policies, `contradiction` rows, the safe-bulk rule, SQL paging
+  with root-first, symmetric dedupe and the dismissal reason fix) and add UI-5b's: `### Added` (Review & Fix page
+  ranked by priority, digest and inbox zero, group actions with preview, apply preview incl. `dry_run`, the Review
+  policies settings panel (audited), the contradiction detail pane, Undo/Restore in the UI, keyboard shortcuts),
+  `### Changed` (nav badge counts attention groups; old review URLs redirect), `### Removed` (the `data_exchange`
+  review actions and views), `### Fixed` (a busy membership lock on a review action returned 500; the new actions
+  answer 503). Don't repeat UI-5a's lines.
 
 ## Size and split
 
@@ -652,6 +750,10 @@ changeable defaults.
 12. **Hygiene policies start on** (Steve's §2.5.3 decision) but drain gradually: per-run caps (`dangling` and
     `expire_low_confidence` ≤ 500 rows per run) so the first nightly run after deploy can't dismiss the whole queue
     at once; every batch is undoable for 30 days.
+13. **Sort order (Steve, Oct 26):** root-first stays the first sort key for the old page and
+    `list_maintenance_review` (`CompactionReviewService.items`), because sorting by priority alone broke the spec
+    "paginates active items with root nodes first". The UI-5b digest and `/review` rank by priority alone. Decision 7's
+    "ranked by normalized priority" means the digest.
 
 ## Acceptance criteria
 
