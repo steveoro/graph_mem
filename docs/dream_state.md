@@ -214,6 +214,11 @@ retention in Settings › Telemetry. Suggestions you dismissed stay suppressed a
 gone (both the original and, if you edited it, the edited proposal); ignored ones can be proposed
 again. Rows a project rescan dismisses on its own record no suppression.
 
+Change sets (UI-4a) are pruned by `ChangeSetPruneJob` (5:30 AM GMT): snapshots older than 30
+days are cleared (every undo window has passed), and sets older than 90 days that no audit row
+references are deleted. Compaction auto-merges are change sets too (actor `compaction:<run_id>`),
+so the operator can undo one for 7 days (see [architecture](architecture.md#change-sets-and-undo-ui-4a-1570)).
+
 ### Feature flag
 
 

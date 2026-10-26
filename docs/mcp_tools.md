@@ -123,6 +123,9 @@ The fix is always the same: give each agent its own `X-MCP-Client` header value.
 All three tools accept at most 50 logical operations and return `{ mode: "batch", status,
 results, summary }`. Any failed operation rolls back the full batch.
 
+Every batch (and every merge) is recorded as a change set, so the operator can undo it from the web
+UI or the console for 30 days (merges: 7). Agents can't undo: there is no MCP tool for it.
+
 ## Observation Management (2 tools)
 
 #### `rank_observations`
