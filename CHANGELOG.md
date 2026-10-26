@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.55.3] - 2026-10-26
+
+### Fixed
+- The compaction and scan review buttons show their labels (Save, Apply, Dismiss, Restore, Ignore) instead of the raw action values.
+- `MaintenanceReportRowCleanupJob` runs daily (5:15 AM GMT in production): approved, dismissed and ignored review rows older than the retention window are pruned. The retention (`compaction_review_row_retention_days`, default 30 days) is now in Settings › Telemetry.
+- Merging two entities no longer calls the embedding service for each moved observation inside the merge lock; observation vectors don't depend on the owning entity.
+
 ## [1.55.2] - 2026-10-25
 
 Completes the move to the official MCP Ruby SDK.
