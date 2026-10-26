@@ -14,9 +14,12 @@ class MaintenanceReportRowCleanupJob < ApplicationJob
 
     # Prune approved/dismissed/ignored review rows older than the retention window.
     # Active rows are left alone so operators can still review recent suggestions.
+    # Set-based deletes (no callbacks or dependents on the row) re-check the status
+    # and age in each DELETE, so a row restored mid-run is kept.
     MaintenanceReportRow
       .where(status: %w[approved dismissed ignored])
       .where("updated_at < ?", cutoff)
-      .find_each(&:destroy!)
+      .in_batches(of: 1_000)
+      .delete_all
   end
 end
