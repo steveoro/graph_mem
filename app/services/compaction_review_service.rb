@@ -171,6 +171,7 @@ class CompactionReviewService
             }
           )
 
+          classifier = ReviewRowClassifier.new
           created_rows = items.filter_map do |item|
             item = normalize_item(item)
             kind = item["kind"]
@@ -181,7 +182,7 @@ class CompactionReviewService
             next if signature.blank?
             next if MaintenanceReportSuppression.suppressed?(report_type, signature)
             next if MaintenanceReportRow.by_report_type(report_type).pending.where(signature: signature).exists?
-            next if absorb_stale_memory?(report_type, payload)
+            next if absorb_stale_memory?(report_type, payload, classifier)
 
             MaintenanceReportRow.create!(
               maintenance_report_id: report.id,
@@ -190,7 +191,8 @@ class CompactionReviewService
               kind: kind,
               status: "active",
               payload: payload,
-              signature: signature
+              signature: signature,
+              **classifier.classify(kind: kind, payload: payload, row_uuid: item["id"])
             )
           end
 
@@ -208,7 +210,7 @@ class CompactionReviewService
     # row the operator already set aside. A merged set that was suppressed
     # before is never resurrected (the row keeps its previous obs set).
     # Returns true when the item was absorbed — no new row is created.
-    def absorb_stale_memory?(report_type, payload)
+    def absorb_stale_memory?(report_type, payload, classifier = ReviewRowClassifier.new)
       return false unless payload[:kind] == "stale_memory"
 
       entity_id = payload[:entity_id].to_i
@@ -251,6 +253,8 @@ class CompactionReviewService
           keep.update!(signature: merged_sig, payload: merged_payload)
         end
       end
+      # The merged observation set changes the row's impact: classify it again.
+      keep.update_columns(classifier.classify(keep))
       # Pre-merge duplicates for the same diagnosis are retired into the
       # row that absorbed them (audit kept via the ignored status).
       (locked_rows - [ keep ]).each { |row| row.update!(status: "ignored") }
@@ -282,6 +286,8 @@ class CompactionReviewService
         relation_type = payload[:relation_type]
         return nil if from_id.blank? || to_id.blank? || relation_type.blank?
 
+        # A symmetric relation reads the same both ways: A→B and B→A are one suggestion.
+        from_id, to_id = [ from_id, to_id ].sort_by(&:to_i) if RelationSemantics.symmetric?(relation_type)
         [ "relationship_proposal", from_id, to_id, relation_type ].join("|")
       when "orphan_parent"
         entity_id = payload[:entity_id]
