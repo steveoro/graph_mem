@@ -181,6 +181,11 @@ RSpec.describe ChangeSet, type: :model do
       set = described_class.find(context.id)
       expect(set).to have_attributes(undo_strategy: "none", not_undoable_reason: "snapshot_too_large")
       expect(set.snapshot).to eq("v" => 1, "dropped" => { "merges" => 1 })
+
+      # Later entries are only counted.
+      context.add_merge_step!({ "source" => { "id" => 2 } })
+      context.note_redo_merges!([ { "source_id" => 1, "target_id" => 2 } ])
+      expect(set.reload.snapshot).to eq("v" => 1, "dropped" => { "merges" => 2, "redo_merges" => 1 })
     end
   end
 

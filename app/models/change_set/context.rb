@@ -34,6 +34,7 @@ class ChangeSet
       @strategy = "audit"
       @not_undoable_reason = nil
       @sections = {}
+      @dropped = {}
       @audit_failures = 0
       @non_merge_write = false
       @merge_seen = false
@@ -130,6 +131,7 @@ class ChangeSet
     def snapshot
       data = { "v" => ChangeSet::SNAPSHOT_VERSION }
       @sections.each { |name, entries| data[name] = entries if entries.any? }
+      data["dropped"] = @dropped.dup if @dropped.any?
       data["audit_failures"] = @audit_failures if @audit_failures.positive?
       data
     end
@@ -141,7 +143,8 @@ class ChangeSet
       bytes = data.to_json.bytesize
       if bytes > ChangeSet::MAX_SNAPSHOT_BYTES
         downgrade!("snapshot_too_large")
-        data = shrink(data)
+        drop_large_sections!
+        data = snapshot
         bytes = data.to_json.bytesize
       end
       {
@@ -156,14 +159,24 @@ class ChangeSet
       }
     end
 
-    # Over the cap: keep counts instead of the large sections. Once shrunk, the set is `none`.
-    def shrink(data)
-      dropped = LARGE_SECTIONS.filter_map { |name| [ name, data.delete(name).size ] if data.key?(name) }.to_h
-      data.merge("dropped" => dropped)
+    # Over the cap: keep counts instead of the large sections. Once shrunk, the set is `none`
+    # and later entries for those sections are only counted (see #append!).
+    def drop_large_sections!
+      LARGE_SECTIONS.each do |name|
+        next unless @sections.key?(name)
+
+        @dropped[name] = @dropped.fetch(name, 0) + @sections.delete(name).size
+      end
     end
 
     def append!(name, *entries)
-      mutate! { (@sections[name] ||= []).concat(entries) }
+      mutate! do
+        if @not_undoable_reason == "snapshot_too_large" && LARGE_SECTIONS.include?(name)
+          @dropped[name] = @dropped.fetch(name, 0) + entries.size
+        else
+          (@sections[name] ||= []).concat(entries)
+        end
+      end
       persist_or_flush!(true)
     end
 
@@ -222,7 +235,7 @@ class ChangeSet
     def capture_state
       {
         id: @id, persisted_at: @persisted_at, strategy: @strategy, reason: @not_undoable_reason,
-        subject: [ @subject_type, @subject_id ], sections: @sections.transform_values(&:dup),
+        subject: [ @subject_type, @subject_id ], sections: @sections.transform_values(&:dup), dropped: @dropped.dup,
         audit_failures: @audit_failures, non_merge_write: @non_merge_write, merge_seen: @merge_seen,
         version: @version
       }
@@ -237,6 +250,7 @@ class ChangeSet
       @not_undoable_reason = saved[:reason]
       @subject_type, @subject_id = saved[:subject]
       @sections = saved[:sections]
+      @dropped = saved[:dropped]
       @audit_failures = saved[:audit_failures]
       @non_merge_write = saved[:non_merge_write]
       @merge_seen = saved[:merge_seen]
