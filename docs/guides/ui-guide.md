@@ -122,11 +122,11 @@ The graph starts in **Root View**, which shows the project roots. **Full Graph**
 
 ![Group preview](../images/ui/review-group-preview.png)
 
-**Group actions** always show a confirm card listing exactly which suggestions are included and which aren't (and why). Group apply takes only relationship proposals and stale-memory rows, at most 100, and refuses if the group changed since the card was shown. **Dismiss** suppresses a suggestion for good; **Snooze** hides it for 30 days.
+**Group actions** always show a confirm card listing exactly which suggestions are included and which aren't (and why). Group apply takes only relationship proposals and stale-memory rows that aren't snoozed, at most 100, and refuses if the group changed since the card was shown. **Dismiss** suppresses a suggestion for good; **Snooze** hides it for 30 days.
 
 **Undo:** after each action the toast offers **Undo** (it doesn't time out), or says why the change can't be undone. Undo is also in **Resolved** and **Policies**, for 30 days (7 for merges).
 
-**Keyboard:** `j`/`k` next/previous, `Enter` open, `a` apply, `d` dismiss, `s` snooze, `e` save edits, `r` restore, `x` select, `/` search, `1`/`2` keep the first/second side of a contradiction (opens the confirm card), `?` help. Shortcuts don't fire while you type in a field.
+**Keyboard:** `j`/`k` next/previous, `Enter` open, `a` apply, `d` dismiss, `s` snooze, `e` save edits, `r` restore, `x` select, `/` search, `1`/`2` keep the first/second side of a contradiction (opens the confirm card), `?` help. Shortcuts don't fire while you type in a field, and `Enter` on a focused button or link presses it.
 
 **Settings › Review policies:** the nightly policies (dismiss dangling suggestions, dismiss stale memory no longer flagged, expire old low-confidence ones; auto-apply high-confidence relationships and expired validity, both off by default), the attention threshold and the backlog ceiling. Out-of-range values are refused; every change is in the audit log.
 
