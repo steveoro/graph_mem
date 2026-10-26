@@ -51,9 +51,42 @@ CREATE TABLE `audit_logs` (
   `changed_fields` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(`changed_fields`)),
   `created_at` datetime(6) NOT NULL,
   `reason` varchar(255) DEFAULT NULL,
+  `change_set_id` bigint(20) DEFAULT NULL,
   PRIMARY KEY (`id`),
   KEY `index_audit_logs_on_auditable_type_and_auditable_id` (`auditable_type`,`auditable_id`),
-  KEY `index_audit_logs_on_created_at` (`created_at`)
+  KEY `index_audit_logs_on_created_at` (`created_at`),
+  KEY `index_audit_logs_on_change_set_id` (`change_set_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+DROP TABLE IF EXISTS `change_sets`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `change_sets` (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT,
+  `uuid` varchar(36) NOT NULL,
+  `kind` varchar(64) NOT NULL,
+  `actor` varchar(255) DEFAULT NULL,
+  `summary` varchar(255) DEFAULT NULL,
+  `subject_type` varchar(32) DEFAULT NULL,
+  `subject_id` bigint(20) DEFAULT NULL,
+  `undo_strategy` varchar(16) NOT NULL DEFAULT 'audit',
+  `not_undoable_reason` varchar(64) DEFAULT NULL,
+  `snapshot` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(`snapshot`)),
+  `snapshot_bytes` int(11) DEFAULT NULL,
+  `undoable_until` datetime(6) DEFAULT NULL,
+  `undone_at` datetime(6) DEFAULT NULL,
+  `undone_by` varchar(255) DEFAULT NULL,
+  `undo_of_id` bigint(20) DEFAULT NULL,
+  `created_at` datetime(6) NOT NULL,
+  `updated_at` datetime(6) NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `index_change_sets_on_uuid` (`uuid`),
+  KEY `index_change_sets_on_undo_of_id` (`undo_of_id`),
+  KEY `index_change_sets_on_created_at` (`created_at`),
+  KEY `index_change_sets_on_subject_type_and_subject_id` (`subject_type`,`subject_id`),
+  KEY `index_change_sets_on_actor_and_created_at` (`actor`,`created_at`),
+  KEY `index_change_sets_on_kind_and_created_at` (`kind`,`created_at`),
+  CONSTRAINT `fk_rails_c11ef78ab6` FOREIGN KEY (`undo_of_id`) REFERENCES `change_sets` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 DROP TABLE IF EXISTS `compaction_runs`;
@@ -366,6 +399,8 @@ CREATE TABLE `tool_invocations` (
 /*M!100616 SET NOTE_VERBOSITY=@OLD_NOTE_VERBOSITY */;
 
 INSERT INTO `schema_migrations` (version) VALUES
+('20261026120100'),
+('20261026120000'),
 ('20261019120000'),
 ('20261016120000'),
 ('20261013120000'),
