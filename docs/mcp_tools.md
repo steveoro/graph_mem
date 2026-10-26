@@ -124,7 +124,8 @@ All three tools accept at most 50 logical operations and return `{ mode: "batch"
 results, summary }`. Any failed operation rolls back the full batch.
 
 Every batch (and every merge) is recorded as a change set, so the operator can undo it from the web
-UI or the console for 30 days (merges: 7). Agents can't undo: there is no MCP tool for it.
+UI or the console for 30 days (merges: 7). Batches that hard-delete an entity or observation, or mix a
+merge with other writes, are recorded but can't be undone. Agents can't undo: there is no MCP tool for it.
 
 ## Observation Management (2 tools)
 

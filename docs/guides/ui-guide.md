@@ -125,7 +125,7 @@ The graph starts in **Root View**, which shows the project roots. **Full Graph**
 
 ### Undo (1.57.0)
 
-Every graph write, merge (including compaction auto-merges) and review action is recorded as a change set. The operator can undo one with `POST /changes/:uuid/undo`: within 7 days for merges, 30 days for everything else. The answer is a toast: "Undone: …", or the reasons it can't be undone (for example, a record changed since). Undo buttons arrive with the Explore and Review pages (UI-4b, UI-5); until then the change set's uuid comes from the console (`ChangeSet.order(:id).last`). Guests can't undo (403).
+Every graph write, merge (including compaction auto-merges) and review action is recorded as a change set. The operator can undo one with `POST /changes/:uuid/undo`: within 7 days for merges, 30 days for everything else. Sets that hard-delete an entity or observation, or mix a merge with other writes, are recorded but can't be undone. The answer is a toast: "Undone: …", or the reasons it can't be undone (for example, a record changed since). Undo buttons arrive with the Explore and Review pages (UI-4b, UI-5); until then, undo from the console with `ChangeSetUndo.call(uuid)` (the latest set is `ChangeSet.order(:id).last`), since a hand-made `POST` also needs a CSRF token. Guests can't undo (403).
 
 ### Projects & Data
 
