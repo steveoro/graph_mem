@@ -9,6 +9,15 @@ module CspConsoleHelpers
     page.driver.browser.logs.get(:browser).map(&:message).grep(/Content Security Policy/i)
   end
 
+  # Waits until the app's Stimulus controllers have connected (every shell page mounts nav
+  # and toast), so violations raised while JavaScript boots reach the log before it's read.
+  def wait_for_stimulus
+    page.document.synchronize do
+      connected = page.evaluate_script("!!window.Stimulus && window.Stimulus.controllers.length > 0")
+      raise Capybara::ExpectationNotMet, "Stimulus not booted" unless connected
+    end
+  end
+
   # Signs in through the login form.
   # @param username [String]
   # @param password [String]
@@ -28,5 +37,6 @@ RSpec.configure do |config|
     driven_by :selenium, using: :headless_chrome, screen_size: [ 1280, 800 ] do |options|
       options.add_option("goog:loggingPrefs", { browser: "ALL" })
     end
+    Operator::SessionsController.cache_store.clear # the login rate limit counts every sign-in
   end
 end

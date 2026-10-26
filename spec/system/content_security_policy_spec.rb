@@ -22,6 +22,7 @@ RSpec.describe "Content Security Policy in the browser", type: :system do
   it "shows no CSP violations on any operator page" do
     sign_in_through_form
     expect(page).to have_current_path(root_path, wait: 5)
+    wait_for_stimulus
     expect_no_csp_errors("sign-in and Home")
 
     {
@@ -32,13 +33,17 @@ RSpec.describe "Content Security Policy in the browser", type: :system do
       "Embeddings" => "/operator/embeddings",
       "Telemetry" => "/operator/telemetry",
       "Audit log" => "/operator/audit_logs",
-      "Settings" => "/operator/settings",
-      "Jobs" => "/operator/jobs"
+      "Settings" => "/operator/settings"
     }.each do |label, path|
       visit path
-      expect(page).to have_css("body")
+      wait_for_stimulus
       expect_no_csp_errors(label)
     end
+
+    # Mission Control has its own layout and Stimulus instance: wait for its tabs instead.
+    visit "/operator/jobs"
+    expect(page).to have_link("Failed jobs")
+    expect_no_csp_errors("Jobs")
 
     visit graph_path
     expect(page).to have_css("[data-graph-target='container'] canvas", wait: 10)
