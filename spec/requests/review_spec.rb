@@ -119,6 +119,33 @@ RSpec.describe "Review & Fix", type: :request do
       expect(response.body).to include("That suggestion no longer exists.")
     end
 
+    it "answers 404 in the frame for a GET of a missing row" do
+      get review_row_path(SecureRandom.uuid), headers: { "Turbo-Frame" => "review-detail" }
+
+      expect(response).to have_http_status(:not_found)
+      expect(response.body).to include('<turbo-frame id="review-detail">', "That suggestion no longer exists.")
+    end
+
+    it "answers 422 with the applier's reason when the graph changed under the row" do
+      row = proposal
+      beta.destroy!
+
+      post review_row_apply_path(row.row_uuid), headers: turbo
+
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(response.body).not_to include("That suggestion no longer exists.")
+      expect(row.reload.status).to eq("active")
+    end
+
+    it "shows an alert when the suggest-merges import fails" do
+      allow_any_instance_of(SuggestMergesTool).to receive(:call).and_raise(StandardError, "synthetic outage")
+
+      post review_import_suggest_merges_path, headers: turbo
+
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(response.body).to include("Import failed: synthetic outage")
+    end
+
     it "answers 503 when the membership lock is busy or the database reports a transient lock error" do
       row = proposal
       allow(CompactionReviewService).to receive(:apply).and_raise(ProjectMembership::LockTimeout, "synthetic")

@@ -83,6 +83,7 @@ class ReviewGroupActions
 
     def exclusion(row, op, min_confidence)
       return nil unless op == "apply"
+      return "snoozed: restore it first" unless row.active?
       return "choose a side per row" if ReviewRowClassifier::CHOICE_KINDS.include?(row.kind)
       return "destructive: apply one by one" unless ReviewRowClassifier::SAFE_BULK_KINDS.include?(row.kind)
       return "below confidence #{min_confidence}" if min_confidence && row.confidence.to_f < min_confidence.to_f
@@ -95,19 +96,42 @@ class ReviewGroupActions
                           .order(priority: :desc, id: :asc).limit(GROUP_CAP).to_a
     end
 
-    # One change set for the whole group; each row's own action joins it.
+    # One change set for the whole group; each row's own action joins it (each commits on its own).
+    # Succeeds when at least one row was written, so the toast offers Undo for those. A busy lock
+    # before anything was written propagates (503); after that, the run stops and says how many
+    # rows are left.
     def run(op, rows)
       return { success: false, status: :unprocessable, error: "No pending suggestions selected in this group" } if rows.empty?
 
       ChangeSet.record(kind: KINDS.fetch(op), summary: "#{op} group: #{rows.size} suggestion(s)", subject: nil) do |context|
-        results = rows.map { |row| yield(row) }
-        failed = results.count { |result| !result[:success] }
-        message = "#{PAST.fetch(op)} #{rows.size - failed} suggestion(s)"
-        message += "; #{failed} failed" if failed.positive?
+        results = run_rows(rows) { |row| yield(row) }
+        done = results.count { |result| result[:success] }
+        message = run_message(op, done, results.size - done, rows.size - results.size)
         set = context.id && ChangeSet.find_by(id: context.id)
-        { success: failed.zero?, status: :ok, message: message, change_set_uuid: set&.uuid,
+        { success: done.positive?, status: :ok, message: message, error: (message if done.zero?), change_set_uuid: set&.uuid,
           undoable: set ? set.undoable? : false, not_undoable_reason: set&.not_undoable_reason }
       end
+    end
+
+    # @return [Array<Hash>] one result per row processed; fewer than `rows` when a busy lock stopped the run
+    def run_rows(rows)
+      results = []
+      rows.each do |row|
+        results << yield(row)
+      rescue ProjectMembership::LockTimeout, ActiveRecord::StatementInvalid => e
+        raise if results.none? { |result| result[:success] }
+        raise if e.is_a?(ActiveRecord::StatementInvalid) && !TransientDbError.busy?(e)
+
+        break
+      end
+      results
+    end
+
+    def run_message(op, done, failed, left)
+      message = "#{PAST.fetch(op)} #{done} suggestion(s)"
+      message += "; #{failed} failed" if failed.positive?
+      message += "; #{left} not processed (the database was busy: retry them)" if left.positive?
+      message
     end
 
     def describe(row)
@@ -117,7 +141,11 @@ class ReviewGroupActions
     def effects(rows, op)
       return [ "#{rows.size} suggestion(s) #{op == 'dismiss' ? 'dismissed (suppressed)' : 'snoozed for 30 days'}" ] unless op == "apply"
 
-      lines = rows.flat_map { |row| CompactionReviewApplier.preview(row)[:effects] }
+      # Stops once there are more lines than shown, so "…and N more" is a lower bound.
+      lines = rows.each_with_object([]) do |row, acc|
+        acc.concat(CompactionReviewApplier.preview(row)[:effects])
+        break acc if acc.size > MAX_EFFECTS
+      end
       lines.size > MAX_EFFECTS ? lines.first(MAX_EFFECTS) + [ "…and #{lines.size - MAX_EFFECTS} more" ] : lines
     end
 

@@ -60,6 +60,53 @@ RSpec.describe ReviewGroupActions do
       expect(ChangeSet.count).to eq(0)
     end
 
+    it "leaves snoozed rows out of apply (restore them first)" do
+      safe = proposal
+      snoozed = proposal(status: "ignored")
+
+      preview = described_class.preview(group_key: group, op: "apply")
+      described_class.apply(group_key: group, row_uuids: uuids(preview[:included]), token: preview[:token])
+
+      expect(preview[:excluded].sole).to include(row_uuid: snoozed.row_uuid, reason: "snoozed: restore it first")
+      expect([ safe.reload.status, snoozed.reload.status ]).to eq(%w[approved ignored])
+    end
+
+    it "succeeds with an undoable set when only some rows fail, and fails with an error when all do" do
+      kept = proposal(priority: 90)
+      broken = proposal(priority: 10)
+      preview = described_class.preview(group_key: group, op: "apply")
+      MemoryEntity.find(broken.payload["to_entity_id"]).destroy!
+
+      result = described_class.apply(group_key: group, row_uuids: uuids(preview[:included]), token: preview[:token])
+
+      expect(result).to include(success: true, message: "Applied 1 suggestion(s); 1 failed", undoable: true)
+      expect([ kept.reload.status, broken.reload.status ]).to eq(%w[approved active])
+
+      preview = described_class.preview(group_key: group, op: "apply")
+      failed = described_class.apply(group_key: group, row_uuids: uuids(preview[:included]), token: preview[:token])
+      expect(failed).to include(success: false, error: "Applied 0 suggestion(s); 1 failed")
+    end
+
+    it "stops on a busy lock after the first write and says how many rows are left; before any write it raises" do
+      rows = [ proposal(priority: 90), proposal(priority: 50), proposal(priority: 10) ]
+      preview = described_class.preview(group_key: group, op: "apply")
+      calls = 0
+      allow(CompactionReviewService).to receive(:apply).and_wrap_original do |original, *args, **kwargs|
+        (calls += 1) == 2 ? raise(ProjectMembership::LockTimeout, "synthetic") : original.call(*args, **kwargs)
+      end
+
+      result = described_class.apply(group_key: group, row_uuids: uuids(preview[:included]), token: preview[:token])
+
+      expect(result).to include(success: true, undoable: true,
+                                message: "Applied 1 suggestion(s); 2 not processed (the database was busy: retry them)")
+      expect(rows.map { |r| r.reload.status }).to eq(%w[approved active active])
+
+      allow(CompactionReviewService).to receive(:apply).and_raise(ProjectMembership::LockTimeout, "synthetic")
+      preview = described_class.preview(group_key: group, op: "apply")
+      expect { described_class.apply(group_key: group, row_uuids: uuids(preview[:included]), token: preview[:token]) }
+        .to raise_error(ProjectMembership::LockTimeout)
+    end
+
     it "refuses a group with nothing bulk-applicable" do
       row("delete_entity", { "entity_id" => widget.id })
       preview = described_class.preview(group_key: group, op: "apply")

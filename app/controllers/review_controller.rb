@@ -23,10 +23,10 @@ class ReviewController < ApplicationController
     send(:"load_#{@view}")
   end
 
-  # GET /review/group?key= (lazy Turbo Frame): one page of a group's pending rows.
+  # GET /review/group?key= (lazy Turbo Frame): one page of a group's active rows (snoozed ones return when the snooze ends).
   def group
     @key = params.require(:key)
-    @rows = MaintenanceReportRow.pending.where(report_type: REPORT_TYPES).in_group(@key)
+    @rows = MaintenanceReportRow.active.where(report_type: REPORT_TYPES).in_group(@key)
                                 .order(priority: :desc, id: :asc).page(params[:page]).per(ROWS_PER_GROUP_PAGE)
     render partial: "review/group", locals: { key: @key, rows: @rows }
   end
@@ -99,13 +99,16 @@ class ReviewController < ApplicationController
       items: result[:suggestions].map { |s| { id: SecureRandom.uuid, kind: "entity_merge", **s } }
     )
     respond_with_review({ success: true, message: t("ui.review.imported", count: rows.size) })
+  rescue StandardError => e
+    Rails.logger.error("import_suggest_merges failed: #{e.class}: #{e.message}")
+    respond_with_review({ success: false, error: "Import failed: #{e.message.truncate(200)}" })
   end
 
   private
 
   def load_row
     @row = MaintenanceReportRow.where(report_type: REPORT_TYPES).find_by(row_uuid: params[:uuid])
-    respond_with_review({ success: false, error: "Suggestion not found" }) unless @row
+    respond_with_review({ success: false, status: :not_found, error: "Suggestion not found" }) unless @row
   end
 
   def load_attention

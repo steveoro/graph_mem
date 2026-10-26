@@ -23,6 +23,8 @@ module ReviewResponses
   # @param result [Hash] a CompactionReviewService / ReviewGroupActions result
   # @param remove [Array<String>] DOM ids to remove on success (the acted-on row or group)
   def respond_with_review(result, remove: [])
+    return review_frame_not_found if request.get? && review_status(result) == :not_found
+
     kind = result[:success] ? :notice : :alert
     message = review_message(result)
     undo = review_undo(result)
@@ -50,7 +52,7 @@ module ReviewResponses
   def review_status(result)
     return :ok if result[:success]
     return :conflict if result[:status] == :conflict
-    return :not_found if result[:error].to_s.match?(/not found/i)
+    return :not_found if result[:status] == :not_found || result[:error] == "Suggestion not found"
 
     :unprocessable_content
   end
@@ -76,6 +78,13 @@ module ReviewResponses
     return root_path if back == "dashboard"
 
     back.start_with?("/review") && !back.start_with?("//") ? back : review_path
+  end
+
+  # A frame GET (detail, preview) for a missing row: the message in that frame, with 404.
+  def review_frame_not_found
+    frame = request.headers["Turbo-Frame"].presence || "review-detail"
+    render html: helpers.turbo_frame_tag(frame) { helpers.tag.p(t("ui.review.not_found"), class: "ui-muted", data: { testid: "review-not-found" }) },
+           status: :not_found
   end
 
   def review_busy(_error = nil)

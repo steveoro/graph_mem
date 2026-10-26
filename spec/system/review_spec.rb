@@ -111,6 +111,19 @@ RSpec.describe "Review & Fix", type: :system do
       expect([ kept.reload.status, other.reload.status ]).to eq(%w[active active])
     end
 
+    it "lets Enter press a focused button instead of opening the selected row" do
+      row = seed({ kind: "relationship_proposal", from_entity_id: widget.id, to_entity_id: beta.id, relation_type: "depends_on",
+                   confidence_band: "high", score: 14 }).sole
+
+      visit review_path(view: "kind")
+      wait_for_stimulus
+      click_link "Review", match: :first, exact: true
+      within("[data-testid='review-row']") { find_button("Snooze").send_keys(:enter) }
+
+      expect(page).to have_css("#toasts .ui-toast", text: "snoozed")
+      expect(row.reload.status).to eq("ignored")
+    end
+
     it "shows the help dialog with ?" do
       visit review_path
       wait_for_stimulus

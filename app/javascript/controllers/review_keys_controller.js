@@ -27,6 +27,8 @@ export default class extends Controller {
 
   keydown(event) {
     if (event.metaKey || event.ctrlKey || event.altKey || this.typing(event.target)) return
+    // Enter on a focused link or button presses it (keyboard users), not the selected row.
+    if (event.key === "Enter" && event.target.closest("a, button, summary, [role='button']")) return
 
     const handler = {
       j: () => this.move(1), k: () => this.move(-1), Enter: () => this.act("open"),
