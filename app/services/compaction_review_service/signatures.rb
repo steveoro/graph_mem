@@ -98,6 +98,12 @@ class CompactionReviewService
         return nil if entity_id.blank? || obs_ids.empty?
 
         [ "stale_memory", entity_id.to_i, obs_ids.join("-"), payload[:signal] ].join("|")
+      when "contradiction"
+        # Order-independent: (a, b) and (b, a) are one pair, and a dismissal suppresses both.
+        ids = [ payload[:observation_id_1], payload[:observation_id_2] ].compact.map(&:to_i).uniq.sort
+        return nil unless ids.size == 2
+
+        [ "contradiction", ids.join("-") ].join("|")
       else
         nil
       end

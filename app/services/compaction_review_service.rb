@@ -363,6 +363,11 @@ class CompactionReviewService
         validate_observation_id!(edits[:observation_id]) if edits[:observation_id].present?
       when "reparent_entity"
         validate_entity_ids!([ edits[:entity_id] || edits[:node_id], edits[:parent_id] ].compact)
+      when "contradiction"
+        # An edit could point the row at other observations; the choice is made at apply time.
+        record = MaintenanceReportRow.new
+        record.errors.add(:base, "Contradiction rows can't be edited; choose which observation to keep")
+        raise ActiveRecord::RecordInvalid.new(record)
       end
     end
 

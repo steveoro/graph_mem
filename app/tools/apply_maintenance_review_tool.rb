@@ -13,9 +13,12 @@ class ApplyMaintenanceReviewTool < ApplicationTool
     open_world_hint: false
   )
 
-  description "Apply a queued maintenance-review row (merge, relationship proposal, orphan parent, or relation integrity). " \
+  description "Apply a queued maintenance-review row (merge, relationship proposal, orphan parent, relation integrity, " \
+    "or contradiction). " \
     "Pass required `item_id` (string UUID); optional `report_type` (string, default compaction_review), " \
     "`dry_run` (bool, default false), `action_params` (hash). " \
+    "A contradiction row needs `action_params.keep_observation_id` (one of its two observation ids): " \
+    "that observation is kept and the other is marked obsolete. " \
     "Do not use without a queue item_id; use `list_maintenance_review` first. " \
     "Do not use to skip, ignore, or restore without applying; use `dismiss_maintenance_review` instead. " \
     "Do not use to merge two known entity ids outside the queue; use `graph_delete` instead."
@@ -24,7 +27,7 @@ class ApplyMaintenanceReviewTool < ApplicationTool
     required(:item_id).filled(:string).description("Maintenance report row UUID.")
     optional(:report_type).filled(:string).description('Report type. Defaults to "compaction_review".')
     optional(:dry_run).filled(:bool).description("When true, validate and preview without applying.")
-    optional(:action_params).hash.description("Optional overrides for merge/relation/orphan endpoints.")
+    optional(:action_params).hash.description("Optional overrides for merge/relation/orphan endpoints; keep_observation_id for a contradiction row.")
   end
 
   def call(item_id:, report_type: "compaction_review", dry_run: false, action_params: {})
@@ -81,7 +84,7 @@ class ApplyMaintenanceReviewTool < ApplicationTool
             "#{message}. Dismissed or approved suggestions are not actionable — " \
             "call `list_maintenance_review` to inspect the queue; restore a dismissed " \
             "suggestion only if it is still valid (a stale or approved row must not be re-applied)."
-    elsif message.match?(/required|invalid|cannot|protected|different types|into itself|cycle/i)
+    elsif message.match?(/required|invalid|cannot|protected|different types|into itself|cycle|choose which observation|no longer active/i)
       raise GraphMem::InvalidArgumentsError,
             "#{message}. Correct the review payload or `action_params` and retry `apply_maintenance_review`, " \
             "or call `dismiss_maintenance_review` to skip."

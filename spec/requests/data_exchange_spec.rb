@@ -1138,6 +1138,36 @@ RSpec.describe 'DataExchange', type: :request do
     end
   end
 
+  # UI-5a A5.9: a stopgap on the old page until the Review page (UI-5b) replaces it.
+  describe 'contradiction rows on the old review page' do
+    let!(:kept) { MemoryObservation.create!(memory_entity: task1, content: 'Task One ships on Friday.') }
+    let!(:other) { MemoryObservation.create!(memory_entity: project1, content: 'Task One does not ship on Friday.') }
+    let!(:row) do
+      MaintenanceReportRow.create!(report_type: 'compaction_review', row_uuid: 'kf-contradiction', kind: 'contradiction',
+                                   status: 'active', signature: "contradiction|#{[ kept.id, other.id ].min}-#{[ kept.id, other.id ].max}",
+                                   payload: { 'observation_id_1' => kept.id, 'observation_id_2' => other.id,
+                                              'entity_name_1' => 'Task One', 'entity_name_2' => 'Project Alpha',
+                                              'distance' => 0.08, 'confidence' => 0.95 })
+    end
+
+    it 'shows both sides with a Keep button each and no Save or Apply' do
+      get compaction_review_data_exchange_index_path
+
+      expect(response.body).to include('Task One ships on Friday.', 'Task One does not ship on Friday.')
+      expect(response.body).to include("keep-observation-#{kept.id}", "keep-observation-#{other.id}")
+      expect(response.body).not_to include('value="edit"') # the only row on the page has no Save
+    end
+
+    it 'keeps the chosen observation and marks the other obsolete' do
+      post compaction_review_action_data_exchange_index_path(review_action: 'apply'),
+           params: { item_id: row.row_uuid, keep_observation_id: kept.id }
+
+      expect(other.reload.status).to eq('obsolete')
+      expect(kept.reload.status).to eq('active')
+      expect(row.reload.status).to eq('approved')
+    end
+  end
+
   describe 'GET /data_exchange/compaction_review' do
     let!(:compaction_report) do
       MaintenanceReport.create!(report_type: 'compaction_review', data: { 'source' => 'test' })

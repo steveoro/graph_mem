@@ -127,6 +127,15 @@
             %p.text-xs.text-gray-500.mb-1= "##{obs_id}: #{obs ? obs.content.to_s.truncate(90) : '(missing)'}"
           - if Array(payload["observation_ids"]).size > 5
             %p.text-xs.text-gray-400= "…and #{Array(payload['observation_ids']).size - 5} more"
+        - when "contradiction"
+          -# UI-5a stopgap until the Review page (UI-5b): the two sides, read live.
+          - sides = MemoryObservation.where(id: [ payload["observation_id_1"], payload["observation_id_2"] ]).index_by(&:id)
+          - [ 1, 2 ].each do |n|
+            - obs = sides[payload["observation_id_#{n}"].to_i]
+            %p.text-xs.mb-1
+              %strong= "##{payload["observation_id_#{n}"]} #{payload["entity_name_#{n}"]}"
+              %span.text-gray-500= obs ? " (#{obs.status})" : " (missing)"
+            %p.text-xs.text-gray-600.mb-2= (obs&.content || payload["content_#{n}"]).to_s.truncate(300)
         - when "dismiss_compaction_review"
           %p.text-sm.mb-2
             %strong Dismiss compaction review
@@ -185,6 +194,9 @@
             %p.text-xs.text-gray-500= payload["reason"]
         - when "dismiss_compaction_review"
           %p.text-xs= "Dismiss a conflicting compaction review item."
+        - when "contradiction"
+          %p.text-xs= "Two observations seem to contradict each other (distance #{payload["distance"]}, confidence #{payload["confidence"]})."
+          %p.text-xs.text-gray-500.mt-1= "Keep one: the other is marked obsolete (undoable). Dismiss if both are right."
         - when "stale_memory"
           %p.text-xs
             %span.inline-flex.items-center.rounded.bg-amber-100.px-2.py-0.5.text-amber-800= payload["signal"].to_s.humanize
@@ -192,9 +204,16 @@
             %p.text-xs.text-gray-500.mt-1= payload["reason"]
           %p.text-xs.text-gray-500.mt-1= "Apply marks the flagged observations obsolete (audit trail kept)."
       .md:col-span-3.flex.flex-wrap.items-start.gap-2
-        - if row.active? || row.ignored?
+        - if (row.active? || row.ignored?) && row.kind == "contradiction"
+          - [ payload["observation_id_1"], payload["observation_id_2"] ].map(&:to_i).sort.each do |keep_id|
+            = button_tag "Keep ##{keep_id}", type: "submit", name: "keep_observation_id", value: keep_id, form: form_id,
+              formaction: compaction_review_action_data_exchange_index_path(review_action: "apply"),
+              class: "rounded bg-green-600 px-2 py-1 text-xs text-white hover:bg-green-700",
+              data: { turbo_confirm: "Keep observation ##{keep_id} and mark the other obsolete?", testid: "keep-observation-#{keep_id}" }
+        - elsif row.active? || row.ignored?
           = button_tag "Save", type: "submit", name: "review_action", value: "edit", class: "rounded bg-blue-600 px-2 py-1 text-xs text-white hover:bg-blue-700", form: form_id
           = button_tag "Apply", type: "submit", name: "review_action", value: "apply", class: "rounded bg-green-600 px-2 py-1 text-xs text-white hover:bg-green-700", form: form_id, data: { turbo_confirm: "Apply this suggestion?" }
+        - if row.active? || row.ignored?
           = button_tag "Dismiss", type: "submit", name: "review_action", value: "dismiss", class: "rounded bg-gray-500 px-2 py-1 text-xs text-white hover:bg-gray-600", form: form_id
         - if row.dismissed? || row.approved?
           = button_tag "Restore", type: "submit", name: "review_action", value: "restore", class: "rounded bg-yellow-500 px-2 py-1 text-xs text-white hover:bg-yellow-600", form: form_id
