@@ -591,6 +591,7 @@ Sign in at `/operator/login`. Default operator credentials: `operator` / `change
 
 ## Documentation
 
+* [Web UI guide](docs/guides/ui-guide.md) (operator and read-only guest, with screenshots)
 * [Operator embeddings guide](docs/operator/embeddings.md)
 * [MCP Tools Reference](docs/mcp_tools.md)
 * [App Settings Reference](docs/app_settings_reference.md)

@@ -26,6 +26,7 @@ UI-1: the app shell, a read-only guest role, and an enforced Content Security Po
 - Role checks are deny-by-default: a guest gets `403` on every page and `/api/v1` endpoint that isn't explicitly opted in, and a route-matrix spec walks every route to pin it. `/mcp*` ignores browser sessions, and ActionCable rejects guest sessions.
 
 ### Documentation
+- `docs/guides/ui-guide.md`: a web UI guide for the operator and the read-only guest, with screenshots in `docs/images/ui/`.
 - `docs/app_settings_reference.md` lists the Telemetry tab and the guest toggle; `docs/operator/telemetry.md` points at the sidebar; README, `docs/mcp_access_control.md` and `docs/architecture.md` describe the guest role and the enforced CSP.
 
 ## [1.55.3] - 2026-10-26
