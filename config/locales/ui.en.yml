@@ -1,0 +1,27 @@
+en:
+  ui:
+    skip_link: "Skip to content"
+    nav:
+      label: "Main navigation"
+      toggle: "Toggle navigation"
+      home: "Home"
+      search: "Search"
+      explore: "Explore"
+      compaction_review: "Compaction review"
+      scan_review: "Scan review"
+      maintenance: "Maintenance (import, export, cleanup)"
+      embeddings: "Embeddings"
+      telemetry: "Telemetry"
+      audit_logs: "Audit log"
+      settings: "Settings"
+      jobs: "Jobs"
+      api_docs: "API docs"
+      sign_out: "Sign out"
+      signed_in_as: "Signed in as %{user}"
+      unknown_user: "unknown"
+      groups:
+        review: "Review & Fix"
+        projects: "Projects & Data"
+        system: "System"
+    toasts:
+      dismiss: "Dismiss"

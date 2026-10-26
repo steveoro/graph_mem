@@ -1,8 +1,4 @@
 en:
   dashboard:
-    topnav:
-      search: "Search"
-      maintenance: "Maintenance"
-      settings: "Settings"
     maintenance:
       choose_file: "Choose JSON file"

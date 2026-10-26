@@ -1,0 +1,7 @@
+!!!
+%html{ lang: "en" }
+  %head
+    = render "layouts/head"
+  %body.ui-body.ui-auth
+    = render "ui/toasts"
+    %main#main.ui-auth__main= yield

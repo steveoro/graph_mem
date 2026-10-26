@@ -1,5 +1,7 @@
-- if flash[:notice].present?
-  .dashboard-flash.dashboard-flash--notice= flash[:notice]
 -# :error and :alert share the alert styling — several controllers set :error.
-- if flash[:alert].present? || flash[:error].present?
-  .dashboard-flash.dashboard-flash--alert= flash[:alert].presence || flash[:error]
+- messages = { notice: flash[:notice].presence, alert: flash[:alert].presence || flash[:error].presence }
+- messages.each do |kind, message|
+  - next if message.blank?
+  .ui-toast{ class: "ui-toast--#{kind}", data: { toast_target: "item" } }
+    %p.ui-toast__text= message
+    %button.ui-toast__dismiss{ type: "button", "aria-label": t("ui.toasts.dismiss"), data: { action: "toast#dismiss" } } ×

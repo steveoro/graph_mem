@@ -233,19 +233,6 @@ module DashboardHelper
     end
   end
 
-  def dashboard_topnav_icon_link(path, icon:, label:, testid:)
-    link_to path,
-      class: "dashboard-topnav__link dashboard-topnav__link--icon",
-      title: label,
-      aria: { label: label },
-      data: { testid: testid } do
-      safe_join([
-        dashboard_icon(icon, css_class: "dashboard-topnav__icon"),
-        content_tag(:span, label, class: "dashboard-sr-only")
-      ])
-    end
-  end
-
   def format_dashboard_time(time)
     return "—" if time.blank?
 

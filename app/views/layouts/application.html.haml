@@ -1,43 +1,15 @@
 !!!
-%html
+%html{ lang: "en" }
   %head
-    %title= content_for(:title) || "Graph Mem"
-    %meta{name: "viewport", content: "width=device-width,initial-scale=1"}
-    %meta{name: "apple-mobile-web-app-capable", content: "yes"}
-    %meta{name: "mobile-web-app-capable", content: "yes"}
-    = csrf_meta_tags
-    = csp_meta_tag
-    = yield :head
-    %link{rel: "icon", href: "/icon.png", type: "image/png"}
-    %link{rel: "icon", href: "/icon.svg", type: "image/svg+xml"}
-    %link{rel: "apple-touch-icon", href: "/icon.png"}
-    = stylesheet_link_tag :app, "data-turbo-track": "reload"
-    = stylesheet_link_tag "graph", "data-turbo-track": "reload"
-    = stylesheet_link_tag "dashboard", "data-turbo-track": "reload"
-    = javascript_importmap_tags
-  %body
-    - if operator_signed_in?
-      %header.dashboard-topnav
-        .dashboard-topnav__inner
-          = link_to root_path, class: "dashboard-topnav__brand" do
-            GraphMem
-            %span.dashboard-topnav__version v#{GraphMem::VERSION}
-          %nav.dashboard-topnav__links
-            = link_to "Dashboard", root_path, class: "dashboard-topnav__link"
-            = dashboard_topnav_icon_link search_path, icon: :search, label: t("dashboard.topnav.search"), testid: "topnav-search"
-            = link_to "Graph", graph_path, class: "dashboard-topnav__link"
-            = dashboard_topnav_icon_link maintenance_path, icon: :maintenance, label: t("dashboard.topnav.maintenance"), testid: "topnav-maintenance"
-            = link_to t("operator.telemetry.title"), operator_telemetry_path, class: "dashboard-topnav__link", data: { testid: "topnav-telemetry" }
-            = dashboard_topnav_icon_link operator_settings_path, icon: :settings, label: t("dashboard.topnav.settings"), testid: "topnav-settings"
-            = link_to "Jobs", "/operator/jobs", class: "dashboard-topnav__link"
-            = button_to "Sign out",
-              operator_logout_path,
-              method: :delete,
-              class: "dashboard-topnav__link dashboard-topnav__link--button",
-              id: "btn-operator-logout",
-              data: { testid: "btn-operator-logout" }
-    -# turbo_stream updates this container so in-frame actions surface flash.
-    #flash-messages
-      = render "layouts/flash_messages"
-    %main.container.mx-auto.mt-8.px-5.flex
-      = yield
+    = render "layouts/head"
+  %body.ui-body
+    %a.ui-skip-link{ href: "#main" }= t("ui.skip_link")
+    -# Signed out (e.g. a 403 page after the session expired) there is no sidebar.
+    .ui-shell{ class: ("ui-shell--bare" unless signed_in?) }
+      - if signed_in?
+        = render "ui/sidebar"
+      .ui-shell__content
+        = render "ui/toasts"
+        %main#main.ui-main{ tabindex: "-1" }
+          = yield(:page_header) if content_for?(:page_header)
+          = yield
