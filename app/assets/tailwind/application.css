@@ -1,1 +1,414 @@
 @import "tailwindcss";
+
+/*
+ * Design tokens and shell components (UI-1). Every class here starts with `ui-` so nothing
+ * collides with the older dashboard.css / graph.css rules. Dark mode and the palette are UI-8.
+ */
+@theme {
+  --color-ui-bg: #f6f7f9;
+  --color-ui-surface: #ffffff;
+  --color-ui-surface-muted: #f1f3f6;
+  --color-ui-border: #dfe3e8;
+  --color-ui-text: #1f2933;
+  --color-ui-text-muted: #5f6b7a;
+  --color-ui-accent: #2563eb;
+  --color-ui-accent-strong: #1d4ed8;
+  --color-ui-accent-soft: #e8efff;
+  --color-ui-ok: #15803d;
+  --color-ui-ok-soft: #e7f6ec;
+  --color-ui-warn: #b45309;
+  --color-ui-warn-soft: #fdf3e2;
+  --color-ui-danger: #b91c1c;
+  --color-ui-danger-soft: #fdecec;
+  --color-ui-focus: #2563eb;
+  --radius-ui: 0.5rem;
+  --spacing-ui-sidebar: 15rem;
+}
+
+@layer components {
+  .ui-body {
+    margin: 0;
+    min-height: 100vh;
+    background: var(--color-ui-bg);
+    color: var(--color-ui-text);
+  }
+
+  .ui-skip-link {
+    position: absolute;
+    left: 0.75rem;
+    top: -3rem;
+    z-index: 60;
+    padding: 0.5rem 0.75rem;
+    border-radius: var(--radius-ui);
+    background: var(--color-ui-accent);
+    color: #fff;
+  }
+
+  .ui-skip-link:focus {
+    top: 0.75rem;
+  }
+
+  :where(.ui-body) :focus-visible {
+    outline: 2px solid var(--color-ui-focus);
+    outline-offset: 2px;
+  }
+
+  /* Shell: sidebar + content. Below 1024px the sidebar becomes a top bar with a toggle. */
+  .ui-shell {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+  }
+
+  .ui-shell__content {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .ui-main {
+    max-width: 90rem;
+    margin: 0 auto;
+    padding: 1.5rem 1.25rem 3rem;
+  }
+
+  .ui-main:focus {
+    outline: none;
+  }
+
+  .ui-sidebar {
+    background: var(--color-ui-surface);
+    border-bottom: 1px solid var(--color-ui-border);
+  }
+
+  .ui-sidebar__top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.75rem 1rem;
+  }
+
+  .ui-sidebar__brand {
+    font-weight: 700;
+    color: var(--color-ui-text);
+    text-decoration: none;
+  }
+
+  .ui-sidebar__version {
+    margin-left: 0.375rem;
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: var(--color-ui-text-muted);
+  }
+
+  .ui-sidebar__toggle {
+    padding: 0.25rem 0.625rem;
+    border: 1px solid var(--color-ui-border);
+    border-radius: var(--radius-ui);
+    background: var(--color-ui-surface);
+    font-size: 1.125rem;
+    line-height: 1.5;
+    cursor: pointer;
+  }
+
+  .ui-sidebar__menu {
+    display: none;
+    padding: 0 0.75rem 1rem;
+  }
+
+  .ui-sidebar--open .ui-sidebar__menu {
+    display: block;
+  }
+
+  .ui-sidebar__heading {
+    margin: 1rem 0.5rem 0.25rem;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--color-ui-text-muted);
+  }
+
+  .ui-sidebar__list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .ui-sidebar__link {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.4375rem 0.5rem;
+    border-radius: var(--radius-ui);
+    font-size: 0.875rem;
+    color: var(--color-ui-text);
+    text-decoration: none;
+  }
+
+  .ui-sidebar__link:hover {
+    background: var(--color-ui-surface-muted);
+  }
+
+  .ui-sidebar__link[aria-current="page"] {
+    background: var(--color-ui-accent-soft);
+    color: var(--color-ui-accent-strong);
+    font-weight: 600;
+  }
+
+  .ui-sidebar__icon {
+    width: 1rem;
+    height: 1rem;
+    flex: none;
+  }
+
+  .ui-sidebar__label {
+    flex: 1 1 auto;
+  }
+
+  .ui-sidebar__badge {
+    min-width: 1.5rem;
+    padding: 0 0.375rem;
+    border-radius: 999px;
+    background: var(--color-ui-warn-soft);
+    color: var(--color-ui-warn);
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-align: center;
+  }
+
+  .ui-sidebar__footer {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin-top: 1.25rem;
+    padding: 0.75rem 0.5rem 0;
+    border-top: 1px solid var(--color-ui-border);
+  }
+
+  .ui-sidebar__user {
+    margin: 0;
+    font-size: 0.8125rem;
+    color: var(--color-ui-text-muted);
+    overflow-wrap: anywhere;
+  }
+
+  .ui-sidebar__signout {
+    width: 100%;
+  }
+
+  @media (min-width: 1024px) {
+    .ui-shell:not(.ui-shell--bare) {
+      flex-direction: row;
+    }
+
+    .ui-sidebar {
+      position: sticky;
+      top: 0;
+      display: flex;
+      flex-direction: column;
+      flex: none;
+      width: var(--spacing-ui-sidebar);
+      height: 100vh;
+      overflow-y: auto;
+      border-bottom: 0;
+      border-right: 1px solid var(--color-ui-border);
+    }
+
+    .ui-sidebar__toggle {
+      display: none;
+    }
+
+    .ui-sidebar__menu {
+      display: flex;
+      flex: 1 1 auto;
+      flex-direction: column;
+    }
+
+    .ui-sidebar__footer {
+      margin-top: auto;
+    }
+  }
+
+  /* Toasts */
+  /* Below 1024px the toasts sit under the top bar, so they never cover the menu toggle. */
+  .ui-toasts {
+    position: fixed;
+    top: 4.5rem;
+    right: 1rem;
+    z-index: 50;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    max-width: min(26rem, calc(100vw - 2rem));
+  }
+
+  /* Must follow the base .ui-toasts rule: a media query adds no specificity. */
+  @media (min-width: 1024px) {
+    .ui-toasts {
+      top: 1rem;
+    }
+  }
+
+  .ui-toast {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    padding: 0.75rem 0.875rem;
+    border: 1px solid var(--color-ui-border);
+    border-left-width: 4px;
+    border-radius: var(--radius-ui);
+    background: var(--color-ui-surface);
+    box-shadow: 0 8px 24px rgb(15 23 42 / 0.12);
+    font-size: 0.875rem;
+  }
+
+  .ui-toast--notice {
+    border-left-color: var(--color-ui-ok);
+  }
+
+  .ui-toast--alert {
+    border-left-color: var(--color-ui-danger);
+  }
+
+  .ui-toast__text {
+    flex: 1 1 auto;
+    margin: 0;
+  }
+
+  .ui-toast__dismiss {
+    border: 0;
+    background: transparent;
+    color: var(--color-ui-text-muted);
+    font-size: 1.125rem;
+    line-height: 1;
+    cursor: pointer;
+  }
+
+  /* Page header */
+  .ui-page-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .ui-page-header__title {
+    margin: 0;
+    font-size: 1.5rem;
+    font-weight: 700;
+  }
+
+  .ui-page-header__subtitle {
+    margin: 0.25rem 0 0;
+    color: var(--color-ui-text-muted);
+  }
+
+  .ui-page-header__actions {
+    display: flex;
+    gap: 0.5rem;
+  }
+
+  /* Sign-in layout */
+  .ui-auth {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .ui-auth__main {
+    width: 100%;
+    max-width: 28rem;
+    padding: 2rem 1rem;
+  }
+
+  .ui-auth__card {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  /* Forms */
+  .ui-form {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    margin-top: 0.5rem;
+  }
+
+  .ui-field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.375rem;
+  }
+
+  .ui-label {
+    font-size: 0.875rem;
+    font-weight: 600;
+  }
+
+  /* Basic controls */
+  .ui-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.375rem;
+    padding: 0.4375rem 0.875rem;
+    border: 1px solid var(--color-ui-border);
+    border-radius: var(--radius-ui);
+    background: var(--color-ui-surface);
+    color: var(--color-ui-text);
+    font-size: 0.875rem;
+    font-weight: 500;
+    text-decoration: none;
+    cursor: pointer;
+  }
+
+  .ui-btn:hover {
+    background: var(--color-ui-surface-muted);
+  }
+
+  .ui-btn-primary {
+    border-color: var(--color-ui-accent);
+    background: var(--color-ui-accent);
+    color: #fff;
+  }
+
+  .ui-btn-primary:hover {
+    background: var(--color-ui-accent-strong);
+  }
+
+  .ui-btn-danger {
+    border-color: var(--color-ui-danger);
+    background: var(--color-ui-danger);
+    color: #fff;
+  }
+
+  .ui-input {
+    width: 100%;
+    padding: 0.4375rem 0.625rem;
+    border: 1px solid var(--color-ui-border);
+    border-radius: var(--radius-ui);
+    background: var(--color-ui-surface);
+    color: var(--color-ui-text);
+  }
+
+  .ui-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.125rem 0.5rem;
+    border-radius: 999px;
+    background: var(--color-ui-surface-muted);
+    color: var(--color-ui-text-muted);
+    font-size: 0.75rem;
+    font-weight: 600;
+  }
+
+  .ui-card {
+    padding: 1.25rem;
+    border: 1px solid var(--color-ui-border);
+    border-radius: var(--radius-ui);
+    background: var(--color-ui-surface);
+  }
+}

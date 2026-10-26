@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+UI-1a: the app shell and an enforced Content Security Policy. The read-only guest role (UI-1b) and the 1.56.0 release follow.
+
+### Added
+- App shell: a sidebar groups the existing pages (Home, Search, Explore; Review & Fix; Projects & Data; System), marks the current page, shows the number of active review rows on Compaction review, and collapses behind a toggle below 1024 px. Skip link, toasts for flash messages (notices dismiss themselves after 6 s, alerts stay), and a page-header slot.
+- A minimum design system: Tailwind v4 `@theme` tokens and `ui-*` component classes (buttons, inputs, badges, cards), `UiHelper`, and the Stimulus `nav` and `toast` controllers.
+
+### Changed
+- The layout no longer forces every page into a flex row; sign-in uses its own `auth` layout. The flash container (and Turbo Stream target) is now `toasts`.
+
+### Security
+- The Content Security Policy is enforced (it was report-only), with `base-uri 'self'` and `form-action 'self'` added; violations are still reported to `/csp-reports`. `/api-docs` keeps rswag's own policy: rswag-ui sends its header under a mixed-case key that Rails didn't recognise, so once enforced Rails would have stacked the app policy on top and blocked Swagger UI.
+
+### Documentation
+- `docs/app_settings_reference.md` lists the Telemetry tab; `docs/operator/telemetry.md` points at the sidebar.
+
 ## [1.55.3] - 2026-10-26
 
 ### Fixed

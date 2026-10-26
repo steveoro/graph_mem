@@ -1,0 +1,7 @@
+%header.ui-page-header
+  .ui-page-header__text
+    %h1.ui-page-header__title= title
+    - if subtitle.present?
+      %p.ui-page-header__subtitle= subtitle
+  - if actions.present?
+    .ui-page-header__actions= actions

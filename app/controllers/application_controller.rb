@@ -9,7 +9,7 @@ class ApplicationController < ActionController::Base
   before_action :set_current_actor
   before_action :authenticate_operator!, unless: :operator_authentication_exempt?
 
-  helper_method :operator_signed_in?
+  helper_method :operator_signed_in?, :signed_in?
 
   SESSION_IDLE_TIMEOUT     = 24.hours
   SESSION_ABSOLUTE_TIMEOUT = 7.days
@@ -45,6 +45,10 @@ class ApplicationController < ActionController::Base
     return true if session[:role] == "operator"
     return true if session[:operator_signed_in] == true
     false
+  end
+
+  def signed_in?
+    operator_signed_in?
   end
 
   def authenticate_operator!

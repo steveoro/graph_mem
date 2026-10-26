@@ -333,7 +333,7 @@ class DataExchangeController < ApplicationController
   end
 
   def review_action_turbo_streams(action, item_id)
-    streams = [ turbo_stream.update("flash-messages", partial: "layouts/flash_messages") ]
+    streams = [ turbo_stream.update("toasts", partial: "layouts/flash_messages") ]
 
     # Refresh tab/kind counts under the same filters the row form echoed —
     # otherwise "Active (4)" still reads 4 after the row is removed.

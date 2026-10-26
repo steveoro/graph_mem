@@ -2,6 +2,8 @@
 
 module Operator
   class SessionsController < ApplicationController
+    layout "auth"
+
     rate_limit to: 10, within: 3.minutes, only: :create,
                with: -> {
                  flash.now[:alert] = t("operator.sessions.too_many_attempts")

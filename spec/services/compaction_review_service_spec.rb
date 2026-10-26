@@ -931,6 +931,8 @@ RSpec.describe CompactionReviewService, type: :service do
     uses_transaction "a seed waiting on an apply's row lock commits cleanly (C2)"
 
     before(:context) do
+      # Committed creates and deletes below are audited; remember where to cut.
+      @audit_log_floor = AuditLog.maximum(:id).to_i
       @entity_a = MemoryEntity.create!(name: "RaceEntA", entity_type: "Issue")
       @entity_b = MemoryEntity.create!(name: "RaceEntB", entity_type: "Issue")
       @entity_c = MemoryEntity.create!(name: "RaceEntC", entity_type: "Issue")
@@ -962,6 +964,8 @@ RSpec.describe CompactionReviewService, type: :service do
       MaintenanceReport.where(report_type: "stale_memory_scan").delete_all
       MemoryEntity.where(id: [ @entity_a.id, @entity_b.id, @entity_c.id ]).destroy_all
       MemoryEntity.where(name: "RacePad").destroy_all
+      # The committed fixtures (and the C2 example's own cleanup) wrote audit rows.
+      AuditLog.where("id > ?", @audit_log_floor).delete_all
     end
 
     def seeded_stale_row(entity, obs, uuid)

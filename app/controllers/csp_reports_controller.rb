@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-# Receives Content-Security-Policy violation reports (report-only in UI-0).
+# Receives Content-Security-Policy violation reports (CSP enforced since 1.56.0).
 # Logs at warn level; rate-limited to prevent log flooding.
 class CspReportsController < ActionController::API
   rate_limit to: 100, within: 1.minute

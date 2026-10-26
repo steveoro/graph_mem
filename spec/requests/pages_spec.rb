@@ -24,14 +24,11 @@ RSpec.describe "Operator dashboard pages", type: :request do
       expect(response.body).to include('id="btn-dream-state-refresh"')
       expect(response.body).to include('id="btn-compaction-review"')
       expect(response.body).to include("Review suggestions")
-      expect(response.body).to include('data-testid="topnav-search"')
-      expect(response.body).to include('data-testid="topnav-maintenance"')
-      expect(response.body).to include('data-testid="topnav-telemetry"')
-      expect(response.body).to include('data-testid="topnav-settings"')
-      expect(response.body).to include('class="dashboard-topnav__link dashboard-topnav__link--icon"')
-      expect(response.body).to include('aria-label="Search"')
-      expect(response.body).to include('aria-label="Maintenance"')
-      expect(response.body).to include('aria-label="Settings"')
+      sidebar = Nokogiri::HTML(response.body).at_css("nav.ui-sidebar")
+      %w[nav-search nav-maintenance nav-telemetry nav-settings].each do |testid|
+        expect(sidebar.at_css("a[data-testid='#{testid}']")).to be_present
+      end
+      expect(sidebar.css("a[aria-current='page']").map { |link| link["data-testid"] }).to eq([ "nav-home" ])
     end
 
     it "links the audit logs stat chip to the audit log browse page" do

@@ -1587,7 +1587,7 @@ RSpec.describe 'DataExchange', type: :request do
       expect(response.media_type).to eq('text/vnd.turbo-stream.html')
       dom = ActionView::RecordIdentifier.dom_id(delete_row)
       expect(response.body).to include("action=\"remove\" target=\"#{dom}\"")
-      expect(response.body).to include('target="flash-messages"')
+      expect(response.body).to include('target="toasts"')
       expect(delete_row.reload.status).to eq('approved')
       expect(MemoryEntity.find_by(id: task1.id)).to be_nil
     end

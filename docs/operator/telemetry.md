@@ -6,7 +6,7 @@ client activity, and privacy-safe argument signatures.
 ## Open the dashboard
 
 1. Sign in at `/operator/login`.
-2. Open **Tool Telemetry** in the operator navigation.
+2. Open **Telemetry** (under **System**) in the sidebar.
 3. Select a 24-hour, 7-day, 30-day, or 90-day window.
 4. Optionally filter by exact tool name, client ID, outcome, or error category.
 
