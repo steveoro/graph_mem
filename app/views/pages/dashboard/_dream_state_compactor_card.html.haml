@@ -85,7 +85,7 @@
       = button_to "Start / Resume", operator_start_compaction_path, method: :post, class: "dashboard-btn dashboard-btn--primary", id: "btn-dream-state-resume"
     - if compaction[:error].present?
       = button_to "Repair relation duplicates", operator_repair_relations_path, method: :post, class: "dashboard-btn dashboard-btn--warning", id: "btn-repair-relations", data: { turbo_confirm: "Remove duplicate and conflicting relations (keeps oldest row per tuple)? Then use Start / Resume to retry compaction." }
-    = link_to "Review suggestions", compaction_review_data_exchange_index_path, class: "dashboard-btn dashboard-btn--secondary", id: "btn-compaction-review"
+    = link_to "Review suggestions", review_path, class: "dashboard-btn dashboard-btn--secondary", id: "btn-compaction-review"
     = link_to "Refresh", root_path, class: "dashboard-btn dashboard-btn--secondary", id: "btn-dream-state-refresh"
 
   %details.dashboard-card__details

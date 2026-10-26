@@ -7,7 +7,7 @@
       %strong= review_row_title(row)
       %p.review-hint= "priority #{row.priority} · confidence #{row.confidence ? format('%.2f', row.confidence) : '—'} · #{row.status} · #{row.report_type.humanize}"
     = form_with url: review_row_path(row.row_uuid), method: :patch, id: "review-edit-#{row.row_uuid}", class: "ui-form",
-      data: { controller: "compaction-review", turbo_frame: "_top" } do
+      data: { controller: "review-entity-picker", turbo_frame: "_top" } do
       = render "review/kinds/#{lookup_context.exists?(row.kind, [ 'review/kinds' ], true) ? row.kind : 'generic'}", row: row, payload: row.effective_payload
       - if editable && row.pending?
         = submit_tag "Save", class: "ui-btn", data: { review_keys_action: "edit" }

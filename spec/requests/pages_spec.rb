@@ -85,7 +85,7 @@ RSpec.describe "Operator dashboard pages", type: :request do
       expect(response.body).to include("graph-mem")
       expect(response.body).to include("Completed")
       expect(response.body).to include("initial")
-      expect(response.body).to include(compaction_review_data_exchange_index_path(report_type: "scan_review"))
+      expect(response.body).to include(review_path(view: "scan"))
     end
 
     it "wires active project scan rows for live progress updates" do

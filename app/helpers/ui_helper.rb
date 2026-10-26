@@ -48,13 +48,13 @@ module UiHelper
     render "ui/page_header", title: title, subtitle: subtitle, actions: (capture(&actions) if actions)
   end
 
-  # Active review rows, for the sidebar badge. Cached for 30 s; 0 without a query for
-  # visitors who can't act on reviews.
+  # Review groups needing attention (ReviewDigest), for the sidebar badge. Cached for 30 s; 0
+  # without a query for visitors who can't act on reviews.
   #
   # @return [Integer]
   def ui_review_backlog_count
     return 0 unless can_write?
 
-    Rails.cache.fetch(REVIEW_BACKLOG_CACHE_KEY, expires_in: 30.seconds) { MaintenanceReportRow.active.count }
+    Rails.cache.fetch(REVIEW_BACKLOG_CACHE_KEY, expires_in: 30.seconds) { ReviewDigest.attention_group_count }
   end
 end

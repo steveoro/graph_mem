@@ -1,7 +1,7 @@
 - content_for :title, "Review & Fix"
 - content_for :page_header, ui_page_header("Review & Fix", subtitle: "Suggestions from compaction, scans and the stale-memory scan, ranked by priority.")
 
-.review-layout
+.review-layout{ data: { controller: "review-keys" } }
   = render "review/rail", view: @view, rail: @rail
   %main.review-main{ data: { testid: "review-main" } }
     = form_with url: review_path, method: :get, class: "review-search", data: { turbo_frame: "_top" } do

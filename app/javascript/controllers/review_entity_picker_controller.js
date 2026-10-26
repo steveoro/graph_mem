@@ -1,16 +1,11 @@
 import { Controller } from "@hotwired/stimulus"
 
-// Supports inline entity search/autocomplete and bulk selection for the compaction review UI.
+// Entity search/autocomplete for the Review page's edit fields (UI-5b; was compaction_review_controller).
 export default class extends Controller {
-  static targets = ["selectAll", "rowCheckbox", "search", "select", "hidden", "display"]
+  static targets = ["search", "select", "hidden", "display"]
 
   connect() {
     this.searchDebounce = null
-  }
-
-  toggleAll(event) {
-    const checked = event.target.checked
-    this.rowCheckboxTargets.forEach((checkbox) => { checkbox.checked = checked })
   }
 
   searchEntity(event) {

@@ -11,6 +11,7 @@ RSpec.describe "Review & Fix", type: :system do
     ENV["OPERATOR_USERNAME"] = OperatorAuthHelpers::TEST_OPERATOR_USERNAME
     ENV["OPERATOR_PASSWORD"] = OperatorAuthHelpers::TEST_OPERATOR_PASSWORD
     sign_in_through_form
+    expect(page).to have_css("nav.ui-sidebar") # signed in before the first visit
   end
 
   def seed(*items)
@@ -69,5 +70,55 @@ RSpec.describe "Review & Fix", type: :system do
     expect(page).to have_css(".ui-toast--notice", text: "Undone")
     expect(other.reload.status).to eq("active")
     expect(csp_console_errors).to be_empty
+  end
+  describe "keyboard" do
+    it "moves with j, dismisses with d, and ignores shortcuts while typing in the search field" do
+      rows = seed(*Array.new(2) do |i|
+        target = MemoryEntity.create!(name: "Alpha Service #{i}", entity_type: "Component")
+        { kind: "relationship_proposal", from_entity_id: widget.id, to_entity_id: target.id, relation_type: "depends_on",
+          confidence_band: "high", score: 14 }
+      end)
+
+      visit review_path(view: "kind")
+      wait_for_stimulus
+      find("[data-testid='review-search']").send_keys("dj")
+      expect(page).to have_field("q", with: "dj")
+      expect(rows.map { |row| row.reload.status }).to eq(%w[active active])
+
+      # Open the first group: items are then [group 1, its row, group 2]; j j focuses the row.
+      click_link "Review", match: :first
+      expect(page).to have_css("[data-testid='review-row']")
+      find("body").send_keys("j", "j")
+      expect(page).to have_css("[data-testid='review-row'].review-item--focused")
+      find("body").send_keys("d")
+      expect(page).to have_css("#toasts .ui-toast", text: "Suggestion dismissed")
+      expect(MaintenanceReportRow.where(status: "dismissed").count).to eq(1)
+    end
+
+    it "opens the contradiction preview card with 1, without applying" do
+      kept = MemoryObservation.create!(memory_entity: widget, content: "SynthWidget supports dark mode.")
+      other = MemoryObservation.create!(memory_entity: beta, content: "SynthWidget does not support dark mode.")
+      row = seed({ kind: "contradiction", observation_id_1: kept.id, observation_id_2: other.id, confidence: 0.95 }).sole
+
+      visit review_path(view: "kind")
+      wait_for_stimulus
+      click_link "Review"
+      within("##{ActionView::RecordIdentifier.dom_id(row)}") { click_link "Choose a side" }
+      expect(page).to have_css("[data-testid='contradiction-sides']")
+      find("body").send_keys("1")
+
+      expect(page).to have_css("[data-testid='review-preview-card']", text: "Keep ##{kept.id}")
+      expect([ kept.reload.status, other.reload.status ]).to eq(%w[active active])
+    end
+
+    it "shows the help dialog with ?" do
+      visit review_path
+      wait_for_stimulus
+      # ChromeDriver sends "?" as Shift + "_"; a real keyboard's keydown carries key "?".
+      page.execute_script("document.body.dispatchEvent(new KeyboardEvent('keydown', { key: '?', bubbles: true }))")
+
+      expect(page).to have_css("dialog#review-keys-help[open]", text: "Keyboard shortcuts")
+      expect(csp_console_errors).to be_empty
+    end
   end
 end

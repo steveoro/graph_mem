@@ -84,10 +84,7 @@ Rails.application.routes.draw do
       get :import_report
       delete :import_cancel
 
-      # Compaction review routes
-      get :compaction_review
-      post :compaction_review_action
-      post :compaction_review_import_suggest_merges
+      # Entity autocomplete for the Review page's edit fields
       get :entity_search
 
       # Cleanup routes
@@ -110,7 +107,9 @@ Rails.application.routes.draw do
   resources :project_scans, only: [ :create ]
   resources :project_scan_skills, only: [ :create, :update ]
   get "maintenance", to: "maintenance#index"
-  # UI-5b: Review & Fix (operator only).
+  # UI-5b: Review & Fix (operator only). The old review page's URL redirects (301).
+  get "data_exchange/compaction_review",
+      to: redirect(status: 301) { |_params, request| request.params[:report_type] == "scan_review" ? "/review?view=scan" : "/review" }
   get "review", to: "review#index", as: :review
   scope "review", controller: "review", as: "review" do
     get "group", action: :group, as: :group
