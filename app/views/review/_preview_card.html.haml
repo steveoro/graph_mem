@@ -1,0 +1,11 @@
+-# Server-rendered confirm card for one row (no JS confirm): what applying does, then Apply.
+= turbo_frame_tag "review-detail" do
+  %section.ui-card.review-preview{ data: { testid: "review-preview-card" } }
+    %h2= "Apply: #{review_row_title(row)}"
+    = render "review/effects", preview: preview
+    .review-detail__actions
+      - if preview[:ok]
+        = button_to "Apply", review_row_apply_path(row.row_uuid), class: "ui-btn ui-btn-primary",
+          params: keep_id.present? ? { keep_observation_id: keep_id } : {}, form: { data: { turbo_frame: "_top" } },
+          data: { testid: "preview-confirm" }
+      = link_to "Cancel", review_row_path(row.row_uuid), class: "ui-btn", data: { turbo_frame: "review-detail" }

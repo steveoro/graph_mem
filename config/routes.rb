@@ -110,6 +110,24 @@ Rails.application.routes.draw do
   resources :project_scans, only: [ :create ]
   resources :project_scan_skills, only: [ :create, :update ]
   get "maintenance", to: "maintenance#index"
+  # UI-5b: Review & Fix (operator only).
+  get "review", to: "review#index", as: :review
+  scope "review", controller: "review", as: "review" do
+    get "group", action: :group, as: :group
+    get "group/preview", action: :group_preview, as: :group_preview
+    post "group/apply", action: :group_apply, as: :group_apply
+    post "group/dismiss", action: :group_dismiss, as: :group_dismiss
+    post "group/snooze", action: :group_snooze, as: :group_snooze
+    post "policies/run", action: :run_policies, as: :run_policies
+    post "import_suggest_merges", action: :import_suggest_merges, as: :import_suggest_merges
+    get "rows/:uuid", action: :show, as: :row
+    patch "rows/:uuid", action: :update
+    get "rows/:uuid/preview", action: :preview, as: :row_preview
+    post "rows/:uuid/apply", action: :apply, as: :row_apply
+    post "rows/:uuid/dismiss", action: :dismiss, as: :row_dismiss
+    post "rows/:uuid/snooze", action: :snooze, as: :row_snooze
+    post "rows/:uuid/restore", action: :restore, as: :row_restore
+  end
   # UI-4a: operator-only undo of a recorded change set.
   resources :changes, only: [], param: :uuid do
     post :undo, on: :member

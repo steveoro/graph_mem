@@ -1,0 +1,14 @@
+-# The two sides of a contradiction, read live. Keep this → preview card → Apply; Dismiss = "Both are right".
+- ids = [ payload["observation_id_1"], payload["observation_id_2"] ].map(&:to_i)
+- sides = MemoryObservation.where(id: ids).includes(:memory_entity).index_by(&:id)
+%p.review-hint= "Distance #{payload['distance']} · confidence #{payload['confidence']}"
+.review-contradiction{ data: { testid: "contradiction-sides" } }
+  - ids.each_with_index do |id, index|
+    - observation = sides[id]
+    .ui-card.review-contradiction__side{ data: { testid: "contradiction-side-#{index + 1}" } }
+      %h4= "##{id} · #{observation&.memory_entity&.name || payload["entity_name_#{index + 1}"]}"
+      %p= (observation&.content || payload["content_#{index + 1}"]).to_s.truncate(300)
+      %p.review-hint= observation ? "#{observation.status} · #{time_ago_in_words(observation.created_at)} old" : "gone"
+      - if observation&.active? && row.pending?
+        = link_to "Keep this", review_row_preview_path(row.row_uuid, keep_observation_id: id), class: "ui-btn ui-btn-primary",
+          data: { turbo_frame: "review-detail", review_keys_keep: index + 1, testid: "keep-this-#{index + 1}" }

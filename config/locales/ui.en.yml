@@ -27,9 +27,17 @@ en:
     toasts:
       dismiss: "Dismiss"
     changes:
+      undo: "Undo"
       conflicts: "%{message}: %{conflicts}"
       not_found: "That change no longer exists."
       busy: "Another merge, import or undo is running. Retry shortly."
+    review:
+      not_found: "That suggestion no longer exists."
+      review_again: "Review the preview again."
+      cant_undo: "can't be undone: %{reason}"
+      saved: "Suggestion updated."
+      policies_queued: "Review policies queued; results show under Policies."
+      imported: "Imported %{count} new merge suggestion(s)."
     guest_search_throttled:
       title: "Too many searches"
       body: "Guests can run up to %{limit} searches a minute. Please wait a moment and try again."

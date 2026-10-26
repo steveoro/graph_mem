@@ -1,0 +1,21 @@
+-# Left rail: the views of the Review page with their counts.
+- items = [ [ "attention", "Needs attention", rail["attention"] ], [ "kind", "By kind", rail["kind"] ], [ "project", "By project", nil ],
+  [ "errors", "Errors", rail["errors"] ], [ "scan", "Scan review", rail["scan"] ], [ "resolved", "Resolved", nil ], [ "policies", "Policies", nil ] ]
+%nav.review-rail{ "aria-label": "Review views", id: "review-rail" }
+  %ul
+    - items.each do |key, label, count|
+      %li
+        = link_to review_path(view: key), class: "review-rail__link", "aria-current": (key == view ? "page" : nil),
+          data: { testid: "review-view-#{key}" } do
+          = label
+          - if count&.positive?
+            %span.ui-badge= count
+  .review-rail__actions
+    = button_to "Run policies now", review_run_policies_path, method: :post, class: "ui-btn", data: { testid: "review-run-policies" }
+    %details
+      %summary Import suggest-merges
+      = form_with url: review_import_suggest_merges_path, method: :post, class: "ui-form" do
+        = number_field_tag :threshold, nil, step: 0.01, min: 0, max: 1, placeholder: "threshold (0.3)", class: "ui-input"
+        = number_field_tag :limit, nil, min: 1, placeholder: "limit (20)", class: "ui-input"
+        = text_field_tag :entity_type, nil, placeholder: "entity type", class: "ui-input"
+        = submit_tag "Import", class: "ui-btn"

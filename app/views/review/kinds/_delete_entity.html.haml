@@ -1,0 +1,3 @@
+- entity = MemoryEntity.find_by(id: payload["entity_id"] || payload.dig("payload", "entity_id"))
+%p= entity ? "Delete '#{entity.name}' (#{entity.entity_type} ##{entity.id})." : "The entity is gone."
+%p.review-hint= payload["reason"]

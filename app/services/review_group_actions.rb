@@ -65,7 +65,7 @@ class ReviewGroupActions
 
     # Pending rows of the group, highest priority first (no root-first key: Decision 13).
     def group_rows(group_key)
-      MaintenanceReportRow.pending.by_group(group_key).order(priority: :desc, id: :asc).limit(GROUP_CAP * 2).to_a
+      MaintenanceReportRow.pending.in_group(group_key).order(priority: :desc, id: :asc).limit(GROUP_CAP * 2).to_a
     end
 
     # @return [Array(Array<MaintenanceReportRow>, Array<Array(MaintenanceReportRow, String)>)]
@@ -91,7 +91,7 @@ class ReviewGroupActions
     end
 
     def pending_rows(group_key, row_uuids)
-      MaintenanceReportRow.pending.by_group(group_key).where(row_uuid: Array(row_uuids))
+      MaintenanceReportRow.pending.in_group(group_key).where(row_uuid: Array(row_uuids))
                           .order(priority: :desc, id: :asc).limit(GROUP_CAP).to_a
     end
 

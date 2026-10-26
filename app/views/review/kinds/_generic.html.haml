@@ -1,0 +1,5 @@
+-# Kinds without their own partial (errors, dismiss_compaction_review, …): the payload's readable fields.
+%dl.review-payload
+  - payload.except("id", "kind", "payload").each do |key, value|
+    %dt= key.humanize
+    %dd= value.is_a?(Hash) || value.is_a?(Array) ? value.to_json.truncate(200) : value.to_s.truncate(300)

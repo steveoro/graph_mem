@@ -1,0 +1,19 @@
+-# Resolved: approved, dismissed and expired rows, with Undo while their change set allows it.
+%h2.review-heading Resolved
+- if @rows.empty?
+  %p.review-hint Nothing resolved yet.
+- @rows.each do |row|
+  - set = @change_sets[row.change_set_id]
+  %div.review-row{ id: dom_id(row), data: { review_keys_target: "item", testid: "resolved-row" } }
+    = link_to review_row_path(row.row_uuid), class: "review-row__open", data: { turbo_frame: "review-detail" } do
+      %span.ui-badge= row.status
+      %span= review_row_title(row)
+      %span.review-row__meta= "#{row.resolved_by || 'unknown'} · #{time_ago_in_words(row.updated_at)} ago"
+    .review-row__actions
+      - if set&.undoable?
+        = button_to t("ui.changes.undo"), undo_change_path(set.uuid), class: "ui-btn", form: { data: { turbo: false } }, data: { testid: "resolved-undo" }
+      - else
+        - if set&.undo_strategy == "none"
+          %span.review-hint{ data: { testid: "resolved-not-undoable" } }= t("ui.review.cant_undo", reason: ReviewResponses::NOT_UNDOABLE.fetch(set.not_undoable_reason.to_s, "not undoable"))
+        = button_to "Restore", review_row_restore_path(row.row_uuid), class: "ui-btn", form: { data: { review_keys_action: "restore" } }
+= paginate @rows

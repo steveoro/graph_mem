@@ -1,0 +1,9 @@
+- from_id = payload["from_id"] || payload["from_entity_id"]
+- to_id = payload["to_id"] || payload["to_entity_id"]
+- names = MemoryEntity.where(id: [ from_id, to_id ]).pluck(:id, :name).to_h
+%p= "#{payload['confidence_band'].to_s.humanize} band, score #{payload['score'] || '—'}. #{payload['explanation']}"
+= render "review/entity_search_select", row: row, field_name: "from_id", label_text: "From", current_id: from_id, current_name: names[from_id.to_i] || payload["from_name"]
+= render "review/entity_search_select", row: row, field_name: "to_id", label_text: "To", current_id: to_id, current_name: names[to_id.to_i] || payload["to_name"]
+= label_tag "relation-type-#{row.row_uuid}", "Relation type", class: "ui-label"
+= select_tag "relation_type", options_for_select(RelationshipDiscoveryStrategy::ALLOWED_RELATION_TYPES | [ payload["relation_type"].to_s ].reject(&:blank?), payload["relation_type"]),
+  id: "relation-type-#{row.row_uuid}", class: "ui-input"

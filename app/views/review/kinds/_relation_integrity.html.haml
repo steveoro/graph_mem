@@ -1,0 +1,2 @@
+- issue = payload["payload"].is_a?(Hash) ? payload["payload"] : payload
+%p= "#{issue['kind'] || payload['issue_kind']}: keep relation ##{issue['keep_id']}, remove #{(Array(issue['delete_ids']).presence || [ issue['delete_id'] ]).compact.map { |id| "##{id}" }.join(', ')}"

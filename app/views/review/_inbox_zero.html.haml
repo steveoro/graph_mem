@@ -1,0 +1,13 @@
+- below = @digest.below
+- next_run = @digest.next_compaction_at
+%section.ui-card.review-inbox-zero{ data: { testid: "review-inbox-zero" } }
+  %h2 Inbox zero ✓
+  %ul
+    %li
+      = "#{below[:rows]} low-priority suggestion#{'s' unless below[:rows] == 1} parked · "
+      = link_to "view", review_path(view: "kind")
+    %li
+      = "Policies resolved #{@digest.policies_resolved_this_week} this week · "
+      = link_to "view", review_path(view: "policies")
+    - if next_run
+      %li= "Next compaction run #{l(next_run, format: :short)}"

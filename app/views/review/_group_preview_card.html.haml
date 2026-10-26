@@ -1,0 +1,23 @@
+-# Confirm card for a group action: exactly which rows are included, which are not and why.
+- labels = { "apply" => "Apply", "dismiss" => "Dismiss", "snooze" => "Snooze 30 days" }
+- url = { "apply" => review_group_apply_path, "dismiss" => review_group_dismiss_path, "snooze" => review_group_snooze_path }[preview[:op]]
+= turbo_frame_tag "review-detail" do
+  %section.ui-card.review-preview{ data: { testid: "group-preview-card" } }
+    %h2= "#{labels[preview[:op]]}: #{preview[:included].size} suggestion#{'s' unless preview[:included].size == 1}"
+    %ul.review-effects
+      - preview[:effects].each do |effect|
+        %li= effect
+    - if preview[:excluded].any?
+      %details{ open: preview[:included].empty? }
+        %summary= "#{preview[:excluded].size} not included"
+        %ul
+          - preview[:excluded].each do |row|
+            %li= "#{row[:kind].humanize} (priority #{row[:priority]}): #{row[:reason]}"
+    - if preview[:included].any?
+      = form_with url: url, method: :post, data: { turbo_frame: "_top" } do
+        = hidden_field_tag :key, preview[:group_key]
+        = hidden_field_tag :token, preview[:token]
+        = hidden_field_tag :min_confidence, preview[:min_confidence] if preview[:min_confidence]
+        - preview[:included].each do |row|
+          = hidden_field_tag "row_uuids[]", row[:row_uuid], id: nil
+        = submit_tag labels[preview[:op]], class: "ui-btn ui-btn-primary", data: { testid: "group-preview-confirm" }

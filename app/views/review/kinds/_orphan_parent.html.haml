@@ -1,0 +1,8 @@
+- best = Array(payload["suggested_parents"]).first || {}
+- parent_id = payload["parent_id"] || best["project_id"]
+%p= "'#{payload['entity_name']}' (#{payload['entity_type']} ##{payload['entity_id']}) has no parent."
+%ul
+  - Array(payload["suggested_parents"]).each do |parent|
+    %li= "#{parent['project_name']} (score #{parent['score']})"
+= render "review/entity_search_select", row: row, field_name: "parent_id", label_text: "Parent", current_id: parent_id,
+  current_name: MemoryEntity.where(id: parent_id).pick(:name) || best["project_name"]

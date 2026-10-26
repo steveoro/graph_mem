@@ -1,0 +1,5 @@
+- entity_id = payload["entity_id"] || payload["node_id"] || payload.dig("payload", "entity_id")
+- parent_id = payload["parent_id"] || payload.dig("payload", "parent_id")
+%p= "Move '#{MemoryEntity.where(id: entity_id).pick(:name) || "##{entity_id}"}' under a new parent. #{payload['reason']}"
+= render "review/entity_search_select", row: row, field_name: "parent_id", label_text: "Parent", current_id: parent_id,
+  current_name: MemoryEntity.where(id: parent_id).pick(:name)
