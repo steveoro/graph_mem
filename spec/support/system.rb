@@ -9,11 +9,15 @@ module CspConsoleHelpers
     page.driver.browser.logs.get(:browser).map(&:message).grep(/Content Security Policy/i)
   end
 
-  # Waits until the app's Stimulus controllers have connected (every shell page mounts nav
-  # and toast), so violations raised while JavaScript boots reach the log before it's read.
+  # Waits until every data-controller on the page has a connected Stimulus controller, so
+  # violations raised while JavaScript boots reach the log before it's read.
   def wait_for_stimulus
     page.document.synchronize do
-      connected = page.evaluate_script("!!window.Stimulus && window.Stimulus.controllers.length > 0")
+      connected = page.evaluate_script(<<~JS)
+        !!window.Stimulus && [...document.querySelectorAll("[data-controller]")].every((el) =>
+          el.dataset.controller.split(/\s+/).filter(Boolean)
+            .every((id) => window.Stimulus.getControllerForElementAndIdentifier(el, id)))
+      JS
       raise Capybara::ExpectationNotMet, "Stimulus not booted" unless connected
     end
   end

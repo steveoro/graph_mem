@@ -57,9 +57,11 @@ RSpec.describe "Navigation", type: :system do
       expect(toggle["aria-expanded"]).to eq("false")
       toggle.click
       expect(toggle["aria-expanded"]).to eq("true")
-      expect(page).to have_css("a[data-testid='nav-settings']")
+      # The class, not visibility: CI doesn't build the Tailwind stylesheet.
+      expect(page).to have_css("nav.ui-sidebar.ui-sidebar--open")
       find("body").send_keys(:escape)
       expect(toggle["aria-expanded"]).to eq("false")
+      expect(page).to have_no_css("nav.ui-sidebar.ui-sidebar--open")
       toggle.click
       toggle.click
       expect(toggle["aria-expanded"]).to eq("false")
@@ -79,10 +81,12 @@ RSpec.describe "Navigation", type: :system do
       visit compaction_review_data_exchange_index_path
       find(".ui-toast__dismiss", match: :first).click if page.has_css?(".ui-toast", wait: 0)
 
+      # A marker on window survives only if the toast arrives without a page load.
+      page.execute_script("window.__noReload = true")
       click_button "Ignore"
 
       expect(page).to have_css("#toasts .ui-toast--notice", text: "Suggestion ignored")
-      expect(page).to have_current_path(compaction_review_data_exchange_index_path)
+      expect(page.evaluate_script("window.__noReload")).to be(true)
     end
   end
 end
