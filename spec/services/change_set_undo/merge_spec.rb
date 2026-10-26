@@ -145,10 +145,11 @@ RSpec.describe ChangeSetUndo::Merge do
       MemoryEntity.create!(name: "SynthWidget", entity_type: "Component", project_id: project.id)
       MemoryEntity.create!(name: "SynthGadget", entity_type: "Component")
 
-      conflicts = undo(uuid).conflicts
-      expect(conflicts).to include("Can't undo: an entity named 'SynthWidget' exists again in its scope",
-                                   "Can't undo: an entity named 'SynthGadget' exists again in its scope")
-      expect(conflicts).to include(a_string_matching(/merged away later in this change/))
+      expect(undo(uuid).conflicts).to contain_exactly(
+        "Can't undo: an entity named 'SynthWidget' exists again in its scope",
+        "Can't undo: the merge target ##{source.id} was merged away later in this change, which couldn't be undone",
+        "Can't undo: an entity named 'SynthGadget' exists again in its scope"
+      )
     end
   end
 

@@ -128,12 +128,27 @@ RSpec.describe ChangeSetUndo::AuditInverse do
     expect(widget.reload.description).to eq("original")
   end
 
-  it "answers a deadlock or a lock-wait timeout as busy" do
+  def checkread_error
+    mysql_error = Mysql2::Error.new("Record has changed since last read in table 'memory_entities'")
+    allow(mysql_error).to receive(:error_number).and_return(TransientDbError::CHECKREAD_ERRNO)
+    error = ActiveRecord::StatementInvalid.new(mysql_error.message)
+    allow(error).to receive(:cause).and_return(mysql_error)
+    error
+  end
+
+  it "answers a deadlock, a lock-wait timeout or a stale read (ER_CHECKREAD) as busy" do
     uuid = recorded("graph.edit") { GraphEditService.call(operations: [ { type: "update_entity", entity_id: widget.id, description: "x" } ]) }
-    [ ActiveRecord::Deadlocked, ActiveRecord::LockWaitTimeout ].each do |error|
-      allow(ChangeSet).to receive(:lock).and_raise(error, "synthetic")
+    [ ActiveRecord::Deadlocked.new("synthetic"), ActiveRecord::LockWaitTimeout.new("synthetic"), checkread_error ].each do |error|
+      allow(ChangeSet).to receive(:lock).and_raise(error)
       expect(undo(uuid)).to have_attributes(status: :busy, message: "Busy, retry shortly")
     end
+  end
+
+  it "still raises an unrelated statement error" do
+    uuid = recorded("graph.edit") { GraphEditService.call(operations: [ { type: "update_entity", entity_id: widget.id, description: "x" } ]) }
+    allow(ChangeSet).to receive(:lock).and_raise(ActiveRecord::StatementInvalid, "synthetic syntax error")
+
+    expect { undo(uuid) }.to raise_error(ActiveRecord::StatementInvalid, /syntax error/)
   end
 
   it "re-embeds the restored text after the lock (best effort)" do

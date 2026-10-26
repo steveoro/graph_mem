@@ -79,8 +79,14 @@ class ChangeSetUndo
   # Every failure is a readable result, never a 500: the transaction has rolled back.
   rescue ActiveRecord::RecordInvalid, ActiveRecord::RecordNotDestroyed, ActiveRecord::RecordNotUnique => e
     conflict([ "Can't undo: #{failure_reason(e)}" ])
-  rescue ProjectMembership::LockTimeout, ActiveRecord::Deadlocked, ActiveRecord::LockWaitTimeout
-    Result.new(status: :busy, message: "Busy, retry shortly", conflicts: [], change_set: nil)
+  rescue ProjectMembership::LockTimeout
+    busy
+  rescue ActiveRecord::StatementInvalid => e
+    # Deadlocks, lock-wait timeouts and ER_CHECKREAD (a row changed under a concurrent writer that
+    # doesn't take the membership lock, e.g. graph_edit): the undo rolled back; try again shortly.
+    raise unless TransientDbError.busy?(e)
+
+    busy
   end
 
   private
@@ -119,16 +125,24 @@ class ChangeSetUndo
     nil
   end
 
+  def busy
+    Result.new(status: :busy, message: "Busy, retry shortly", conflicts: [], change_set: nil)
+  end
+
   def conflict(conflicts)
     Result.new(status: :conflict, message: "Can't undo: #{conflicts.size} conflict(s)", conflicts: conflicts, change_set: nil)
   end
 
   def failure_reason(error)
     case error
-    when ActiveRecord::RecordInvalid then "#{error.record.class.name} ##{error.record.id}: #{error.record.errors.full_messages.to_sentence}"
-    when ActiveRecord::RecordNotDestroyed then "#{error.record.class.name} ##{error.record.id} can't be deleted"
+    when ActiveRecord::RecordInvalid then "#{record_label(error.record)}: #{error.record.errors.full_messages.to_sentence}"
+    when ActiveRecord::RecordNotDestroyed then "#{record_label(error.record)} can't be deleted"
     else "a row it would restore exists again"
     end
+  end
+
+  def record_label(record)
+    [ record.class.name, record.id && "##{record.id}" ].compact.join(" ")
   end
 
   def refusal(status, message)

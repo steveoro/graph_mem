@@ -100,8 +100,9 @@ class NodeOperationsStrategy
     rescue ActiveRecord::RecordNotUnique => e
       error_result("Failed to merge nodes: duplicate relation would be created (#{e.message})")
     rescue ActiveRecord::StatementInvalid => e
-      # Inside a caller's transaction (a graph_delete batch, an undo's redo) InnoDB has already
-      # rolled the whole transaction back: a retry can't redo the earlier work, so the caller decides.
+      # Inside a caller's transaction (a graph_delete batch, a review apply under the row lock, an
+      # undo's redo) a retry can't help: a deadlock has rolled the whole transaction back, and
+      # ER_CHECKREAD would fail again against the same read view. The caller decides.
       raise unless transient_merge_error?(e) && attempts < MAX_MERGE_RETRIES && !ActiveRecord::Base.current_transaction.open?
 
       attempts += 1

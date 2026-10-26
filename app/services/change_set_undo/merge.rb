@@ -71,6 +71,9 @@ class ChangeSetUndo
       conflicts << target_gone(step.dig("target", "id")) unless target
       conflicts << "Can't undo: an entity with id #{source['id']} exists again" if MemoryEntity.exists?(id: source["id"])
       conflicts.concat(scope_refusals(source))
+      # With the target gone, its observations and edges went with it; target_gone already says why.
+      return conflicts unless target
+
       owned = MemoryObservation.where(id: step["observation_ids"], memory_entity_id: step.dig("target", "id")).lock.count
       if owned < step["observation_ids"].size
         conflicts << "Can't undo: #{step['observation_ids'].size - owned} observation(s) moved or deleted since the merge"
