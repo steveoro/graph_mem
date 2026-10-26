@@ -15,7 +15,7 @@
 # A "same" row whose case still has a `divergence` note is labelled "same (stale divergence note)":
 # it passes, but the note should go.
 # The ruby_sdk target (rsdk_server.rb, the official `mcp` gem) has no expectations: its rows only
-# say whether it answers like graph_mem, as input for the migration (MG-0), and never fail.
+# say whether it answers like graph_mem (it has since 1.55.0, which runs on the same gem), and never fail.
 # Exit 1 on a failed expectation or an "unexpected" row. See README.md for the commands.
 
 require "net/http"

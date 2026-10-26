@@ -8,10 +8,10 @@ This document provides an overview of GraphMem's architecture, explaining how th
 ┌─────────────────────────────────────────────────────────────────┐
 │  MCP Clients (Cursor, etc.)          REST / Web UI Clients      │
 │         │                                    │                  │
-│   JSON-RPC/SSE                          HTTP/JSON               │
+│  JSON-RPC (HTTP/stdio)                  HTTP/JSON               │
 │         │                                    │                  │
 │  ┌──────▼──────────┐              ┌──────────▼───────────┐      │
-│  │  FastMcp Server │              │  Rails Controllers   │      │
+│  │  MCP::Server    │              │  Rails Controllers   │      │
 │  │  (22 MCP Tools) │              │  (api/v1/*)          │      │
 │  └────────┬────────┘              └──────────┬───────────┘      │
 │           │                                  │                  │
@@ -38,7 +38,7 @@ This document provides an overview of GraphMem's architecture, explaining how th
 
 GraphMem follows a layered architecture that separates concerns between:
 
-1. **MCP Interface Layer** - 22 advertised tools and 3 prompts accessed via JSON-RPC/SSE
+1. **MCP Interface Layer** - 22 tools and 3 prompts over JSON-RPC (Streamable HTTP and stdio)
 2. **REST API Layer** - Traditional RESTful endpoints mirroring MCP capabilities
 3. **Application Logic Layer** - Search strategies, context scoping, embedding service
 4. **Data Access Layer** - ActiveRecord models with vector extensions
@@ -48,36 +48,31 @@ GraphMem follows a layered architecture that separates concerns between:
 
 ### 1. MCP Interface Layer (22 advertised tools)
 
-Tools are Ruby classes in `app/tools/` that inherit from `ApplicationTool`
-(which inherits from `FastMcp::Tool`). `McpToolRegistry` registers 40 callable
-classes plus `orient`, `recall`, and `persist` prompts (the fork provides the
-`FastMcp::Prompt` API; `McpToolRegistry` calls `register_prompts`).
-Over HTTP a `filter_prompts` block applies the same connection profiles to
-prompts (`persist` declares only the default and maintenance profiles, so the
-readonly profile neither lists nor renders it). Over stdio the profile is
-applied at registration time since there is no Rack request.
-GraphMem installs its `ToolError` envelope through FastMCP's
-`error_formatter`. FastMCP applies connection profiles in place from the Rack
-request carried in per-request context, so tool classes remain bound to one
-server under concurrent requests.
+Tools are Ruby classes in `app/tools/` that inherit from `ApplicationTool`,
+written in the `arguments do … end` dry-schema DSL of `GraphMem::McpSchema::ToolApi`
+(`lib/graph_mem/mcp_schema/`, vendored MIT code; source and licence in `NOTICE.md`). Prompts
+(`orient`, `recall`, `persist`) and resource templates use the sibling `PromptApi` and
+`ResourceApi`. `McpToolRegistry` loads all three kinds, and `McpProfile` selects what each
+connection profile serves (`persist` declares only the default and maintenance profiles, so the
+readonly profile neither lists nor renders it).
 
-#### fast-mcp feature map
+The protocol itself is served by the official MCP Ruby SDK (`mcp` gem, pinned to 1.8.1), through
+the adapter in `lib/graph_mem/official_mcp/`. The tool classes don't depend on the gem: the
+adapter wraps them.
 
-GraphMem depends on the steveoro fork of fast-mcp, pinned to `1.8.0` in the `Gemfile`
-(`McpServerPatch::EXPECTED_FORK_VERSION` must match). What each side owns:
+#### Official MCP SDK feature map
 
-| Feature | fast-mcp 1.8.0 | GraphMem |
+| Feature | `mcp` gem 1.8.1 | GraphMem |
 |---|---|---|
-| Tool, resource and prompt classes, input/output schemas, dispatch | `FastMcp::Tool`, `FastMcp::Resource`, `FastMcp::Prompt`, `FastMcp::Server` | `ApplicationTool`, `app/resources`, `app/prompts`; registered by `McpToolRegistry` |
-| `initialize` version negotiation (2024-11-05 … 2025-11-25) | `Server#negotiate_protocol_version` | — |
-| Strict JSON-RPC 2.0 (null ids, id-less requests) | `FastMcp::Server` | the same checks before dispatch, as HTTP 400s (`McpStreamableHttp::RequestChecks`) |
-| `instructions` and `capabilities` in `initialize` | `Server.new(instructions:, capabilities:)` | per-profile texts and capability flags (`McpServerOptions`, `McpInstructions`) |
-| Per-request tool and prompt filtering | `filter_tools`, `filter_prompts` | connection profiles (`McpProfile`) |
-| Error formatting | `error_formatter` hook | `ToolError` envelope (`McpErrorFormatter`) |
-| Streamable HTTP transport (`/mcp`, `/mcp/readonly`, `/mcp/maintenance`) | — | `McpStreamableHttpTransport` and `mcp_streamable_http/`: sessions, SSE streams, body and session caps, `MCP-Protocol-Version` check, CORS |
-| Legacy SSE transport (`/mcp/sse`, `/mcp/messages`) | `Transports::RackTransport`: body cap, CORS allowlist, required server-issued session id | delegated to by `McpStreamableHttpTransport` |
-| Access control (token, IP allowlist) | — | `McpAccessPolicy`, applied to both transports ([mcp_access_control.md](mcp_access_control.md)) |
-| stdio transport | `Transports::StdioTransport` | `bin/mcp_stdio_runner.rb`: stdout for JSON-RPC only, logs to stderr |
+| JSON-RPC dispatch, `initialize` negotiation (2024-11-05 … 2025-11-25), `server/discover` and the 2026-07-28 per-request lifecycle | `MCP::Server` | — |
+| Tool, prompt and resource-template classes | `MCP::Tool`, `MCP::Prompt`, `MCP::ResourceTemplate` | generated from `ApplicationTool` / `ApplicationPrompt` / `ApplicationResource` by `ToolWrapper`, `PromptWrapper` and `ResourceCatalog` |
+| One server per profile, with `instructions` and `capabilities` | `MCP::Server.new(instructions:, capabilities:)` | `ServerFactory.for(profile)`: the profile's tools and prompts, `McpInstructions`, and explicit capabilities (no `subscribe` or `listChanged`) |
+| Argument validation | `validate_tool_call_arguments` (turned off) | the tool validates after `ParameterNormalizer` (aliases for required keys) |
+| Error formatting | `-32603` for unhandled errors, `exception_reporter` | `ToolWrapper` turns every tool error into the `ToolError` envelope as an `isError` result; gem-side errors go to `Rails.error` |
+| Streamable HTTP transport (`/mcp`, `/mcp/readonly`, `/mcp/maintenance`) | `StreamableHTTPTransport`: sessions, JSON responses, SSE streams, body and session caps, `MCP-Protocol-Version` check, DNS-rebinding protection (`Host` and `Origin`) | `Transports` (one per profile, options from `GRAPH_MEM_MCP_*`), `Router` (path → profile; other `/mcp/*` paths are 404) |
+| Per-request context (`X-MCP-Client`, profile, session id) | `env["mcp.auth_info"]` reaches the tool as `server_context[:auth_info]` | `RequestContext` carries it in an `MCP::Server::OAuth::AccessToken`'s claims |
+| Access control (token, IP allowlist) | — | `AccessGate` applies `McpAccessPolicy` before anything else ([mcp_access_control.md](mcp_access_control.md)) |
+| stdio transport | `StdioTransport`: line cap, one message per line | `OfficialMcp::StdioTransport` writes to the saved real stdout; `bin/mcp_stdio_runner.rb` points `$stdout` at stderr |
 | Resource subscriptions | per-session subscriptions | not advertised (`subscribe: false`): GraphMem never sends `resources/updated` |
 
 Tool categories:
@@ -115,9 +110,9 @@ Controllers in `app/controllers/api/v1/` provide REST equivalents for all MCP op
 #### Search Strategies (`app/strategies/`)
 
 - **EntitySearchStrategy** - Text-based search with token matching and relevance scoring
-- **VectorSearchStrategy** - Semantic search using MariaDB VECTOR cosine distance, with a quality gate that filters results above a maximum cosine distance threshold. Supports an optional `entity_type` filter to restrict results to a specific type (used by `CreateEntityTool` dedup and other type-aware callers)
+- **VectorSearchStrategy** - Semantic search using MariaDB VECTOR cosine distance, with a quality gate that filters results above a maximum cosine distance threshold. Supports an optional `entity_type` filter to restrict results to a specific type (used by `graph_write`'s duplicate check on `create_entity` and other type-aware callers)
 - **HybridSearchStrategy** - Combines text and vector via weighted Reciprocal Rank Fusion (RRF), then applies post-fusion relevance boosts: exact name matching, entity type priority, structural importance (relation count), and graduated context boosting
-- **SearchRelevanceBooster** - Shared module providing boost constants and a `rank_entity_ids` method used by both `HybridSearchStrategy` and `SearchSubgraphTool`
+- **SearchRelevanceBooster** - Shared module providing boost constants and a `rank_entity_ids` method used by both `HybridSearchStrategy` and `SubgraphSearchService` (`search` in subgraph mode)
 
 #### Context Scoping (`app/models/graph_mem_context.rb`)
 
@@ -131,7 +126,7 @@ bucket for backward compatibility. When set:
 - `GraphMemContext.scoped_entity_ids` remains the backward-compatible ID array (`nil` when no context is active).
 - Context/search/summarize responses expose `scope_truncated` and `scope_max_entities` wherever scope counts are reported.
 - `HybridSearchStrategy` applies a graduated context boost (stronger for the root project entity, lighter for its children)
-- `SearchSubgraphTool` ranks results using `SearchRelevanceBooster` with context-aware scoring
+- `search` in subgraph mode (`SubgraphSearchService`) ranks results using `SearchRelevanceBooster` with context-aware scoring
 - `AgentContextsSnapshot` exposes active clients, current projects, and recent tool activity to the operator dashboard
 
 #### Embedding configuration (`app/services/embedding_config.rb`)
@@ -173,15 +168,15 @@ Observation lifecycle transitions retain historical rows. User deletion marks a 
 
 A typical MCP request flows through:
 
-1. MCP client sends JSON-RPC request via SSE or STDIO transport
-2. `FastMcp::Server` routes to the appropriate tool class
+1. MCP client sends a JSON-RPC request over Streamable HTTP or stdio; over HTTP, `AccessGate`, `RequestContext` and `Router` run first
+2. The profile's `MCP::Server` routes it to the tool's `ToolWrapper` class, which calls the `ApplicationTool` subclass
 3. `ApplicationTool` resolves the caller's MCP client ID from request headers and records activity in `agent_contexts`
 4. `ApplicationTool#call_with_schema_validation!` normalizes incoming parameters via `ParameterNormalizer` (camelCase to snake_case, entity name to ID resolution, and canonical graph mutation operations)
 5. Tool validates normalized parameters (via Dry::Schema `arguments` block)
 6. Tool executes business logic using ActiveRecord models and search strategies
 7. `ToolSuccessResponse` adds version, `next_move`, context, and `_meta`
 8. Schema-enabled tools emit matching `structuredContent` and JSON text
-9. FastMCP request context routes the response to the active transport
+9. `ToolWrapper` returns the result (or the `ToolError` envelope) to the gem, which answers on the request's transport
 
 ### Parameter Normalization
 

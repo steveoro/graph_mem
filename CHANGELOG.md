@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.55.2] - 2026-10-25
+
+Completes the move to the official MCP Ruby SDK (`docs/plans/mg-streamlined-plan.md`, PR C).
+
+### Documentation
+- `docs/guides/migrating-fast-mcp-to-mcp-gem.md`: a guide for any Rails app moving from fast-mcp to the `mcp` gem, written from graph_mem's migration. It covers the inventory, the decisions to make, the wrapper and server-per-profile pattern, a mapping table checked against `mcp` 1.8.1, the pitfalls, and the gates for the engine swap and the removal.
+- `docs/protocol_compat.md` refreshed on 1.55.1: `compare.rb` passes with no unexpected difference (16 stdio and 27 HTTP cases), and graph_mem now answers every case as the plain `mcp` 1.8.1 server does; `clients.sh` passes 12 of 12, with every `auto` client on 2026-07-28. The Claude Code results are those of the automated check.
+- README, `AGENTS.md`, `docs/architecture.md` (an SDK feature map), `docs/mcp_tools.md`, `docs/development.md` and `docs/troubleshooting.md` describe the `mcp` gem instead of fast-mcp, drop `/mcp/sse`, and explain `GRAPH_MEM_MCP_ALLOWED_HOSTS` for clients on other machines (they get `403` without it).
+
+### Changed
+- `ToolMutationPolicy::COMPACTION_VALVE_TOOLS` lists only registered tools (the alias names removed in 1.55.0 are gone); a spec keeps it that way. No behaviour change.
+
 ## [1.55.1] - 2026-10-25
 
 ### Added

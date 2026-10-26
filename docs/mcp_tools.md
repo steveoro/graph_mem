@@ -4,7 +4,7 @@ Detailed reference for GraphMem's 22 Model Context Protocol (MCP) tools.
 
 ## Overview
 
-MCP tools in GraphMem are Ruby classes that implement operations on the knowledge graph. Each tool is accessed via JSON-RPC calls from an MCP client. Tools auto-register via `ApplicationTool` inheritance.
+MCP tools in GraphMem are Ruby classes that implement operations on the knowledge graph. Each tool is accessed via JSON-RPC calls from an MCP client. The protocol is served by the official MCP Ruby SDK (`mcp` gem); tools auto-register via `ApplicationTool` inheritance, and each profile's server wraps them (see [architecture.md](architecture.md#1-mcp-interface-layer-22-advertised-tools)).
 
 ## Connection Profiles
 
@@ -14,8 +14,8 @@ GraphMem registers 22 tool classes and filters the catalog by connection URL:
 - `/mcp/readonly` — 9 canonical context and read tools
 - `/mcp/maintenance` — all 22 canonical tools
 
-Profiles govern call eligibility; calling a tool outside the selected profile returns `Tool not
-found`. The 18 hidden compatibility aliases were removed in 1.55.0 (use the canonical tools).
+Profiles govern call eligibility; calling a tool outside the selected profile returns the JSON-RPC
+error `-32602` (`data`: `Tool not found: <name>`). The 18 hidden compatibility aliases were removed in 1.55.0 (use the canonical tools).
 Profiles are selected when connecting and are not authorization boundaries.
 Every tool also publishes the standard MCP `readOnlyHint`, `destructiveHint`,
 `idempotentHint`, and `openWorldHint` annotations.
@@ -462,7 +462,7 @@ Some errors add a `code` naming the exact reason, for agents that branch on it: 
 Exception mapping:
 
 - `McpGraphMemErrors::ResourceNotFound` → `not_found`
-- `FastMcp::Tool::InvalidArgumentsError` and Dry-schema failures → `validation`, except entity-name misses (`Entity not found by name`) → `not_found`
+- `GraphMem::InvalidArgumentsError` (argument validation failures) → `validation`, except entity-name misses (`Entity not found by name`) → `not_found`
 - `McpGraphMemErrors::OperationFailed` → `system_error` unless the call site sets `category: "validation"` for a caller-correctable policy
 - `McpGraphMemErrors::InternalServerError` and unknown `StandardError` → `system_error` (generic message; original exception is logged server-side)
 - `Timeout::Error` / `Net::OpenTimeout` / `Net::ReadTimeout` → `timeout`
@@ -501,9 +501,9 @@ Solid Queue runs `DreamStateCompactionJob` on a schedule (`config/recurring.yml`
 2. **Tree-walk phase** -- walks each project subtree; deduplicates identical observations; auto-merges entities with cosine distance &lt; 0.10
 3. **Review queue** -- writes lower-confidence items to `maintenance_reports` (`compaction_review`), readable via `get_maintenance_reports`
 
-Mutating and heavy search tools cooperatively **pause** an active compaction run (`CompactionValve`) so live MCP traffic takes priority. Paused runs resume from `cursor_entity_id` on the next trigger.
+Mutating tools and the heavy maintenance tools (`summarize`, `suggest_merges`, `detect_contradictions`, the review apply/dismiss) cooperatively **pause** an active compaction run (`CompactionValve`) so live MCP traffic takes priority. Paused runs resume from `cursor_entity_id` on the next trigger.
 
-To close the loop on the review queue: call `list_maintenance_review`, inspect the suggested merges/parents, and apply the good ones with `apply_maintenance_review` (or `merge_entities` when both entity ids are already known).
+To close the loop on the review queue: call `list_maintenance_review`, inspect the suggested merges/parents, and apply the good ones with `apply_maintenance_review` (or the `graph_delete` `merge_entities` operation when both entity ids are already known).
 
 ## Best Practices
 

@@ -102,6 +102,8 @@ Companion plans: `ui-dashboard-plan.md` and, since Oct 22, `agent-rules-plan.md`
 | 14 | ~~**MG-6** drop fast-mcp + **MG-D1** docs~~ **Superseded** by [`mg-streamlined-plan.md`](mg-streamlined-plan.md) | graph_mem **1.58.0** | [Claude] + [Devin-simple] | MG-5 |
 | 15+ | UI series UI-1 … UI-7 | graph_mem 1.59.0 … 1.66.0 | [Claude] | 1.58.0 |
 
+**MG track: done (2026-10-25).** Rows 7–14 shipped as 1.55.0–1.55.2 through [`mg-streamlined-plan.md`](mg-streamlined-plan.md); see §MG.
+
 **Why the rules rewrite is 1.53.0.** It's the next graph_mem release and it's ready long before the hardening bundle, which waits for the fast-mcp 1.8.0 tag. S-7 rules out a v1.52.2. AR-D2 adds fields to two tool schemas, which is a minor change. The hardening bundle keeps its content and becomes 1.54.0.
 
 **Why UI-0 had to precede the mount (met: #106 merged first, D-25):** PR-0 mounts the operator's whole home folder. With today's unauthenticated `/api/v1`, any LAN host could `POST /api/v1/scan` a folder and read the results back through `GET /api/v1/memory_entities`. Scanned text would also reach the graph UI's `innerHTML` sinks (UI plan F1/F2). So API auth and escaping are **preconditions of the mount**: PR-0 must not merge before UI-0 (done). The scan-path checks themselves are PR-0 (one `ScanRootPolicy` for UI, API, MCP and job start). CSP is report-only since #106 and enforced in UI-1 (1.59.0).
@@ -1000,6 +1002,10 @@ The fixtures could drift from real clients. Mitigation: the client matrix uses t
 > **Superseded (2026-10-25).** Steve approved [`mg-streamlined-plan.md`](mg-streamlined-plan.md), which replaces this
 > section and rows 7–14 of the release table: PR A (engine swap, 1.55.0), PR B (drop fast-mcp, 1.55.1) and PR C
 > (docs and the migration guide, 1.55.2). What follows is kept for history.
+>
+> **Done (2026-10-25).** All three shipped: PR A as 1.55.0 (#118), PR B as 1.55.1 (#120) and PR C as 1.55.2.
+> graph_mem runs on the `mcp` gem alone; the guide is
+> [`docs/guides/migrating-fast-mcp-to-mcp-gem.md`](../guides/migrating-fast-mcp-to-mcp-gem.md).
 
 **Goal.** graph_mem runs on the official MCP Ruby SDK (the `mcp` gem, 1.8.1 at the time of writing). It keeps every wire behaviour PR-3 pins and gets 2026-07-28 from the gem. Until then, fast-mcp 1.8.0 (PR-1) is graph_mem's bug-fix release. The old PR-4a/4b design (dual era built into fast-mcp 1.9.0) is in `mcp-update-plan.2026-10-22-b.md`; MG-5 reuses its acceptance rows.
 

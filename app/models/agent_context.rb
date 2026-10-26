@@ -34,8 +34,8 @@ class AgentContext < ApplicationRecord
   # moments ago. Both sessions share this one row, so whichever calls
   # set_context last silently rescopes the other.
   #
-  # Always false on the legacy /mcp/sse endpoint, which carries no session id —
-  # use #context_conflict_with? to detect clobbering there.
+  # Always false on stdio, which carries no session id — use
+  # #context_conflict_with? to detect clobbering there.
   def concurrent_session?(session_id)
     return false if session_id.blank? || last_session_id.blank?
     return false if last_session_id == session_id

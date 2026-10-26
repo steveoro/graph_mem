@@ -136,9 +136,9 @@ Before executing, these MCP tools call `CompactionValve.request_pause_if_running
 Canonical mutation tools `graph_write`, `graph_edit`, and `graph_delete`, plus
 maintenance/heavy-read tools `summarize`, `suggest_merges`,
 `detect_contradictions`, `apply_maintenance_review`, and
-`dismiss_maintenance_review`. Hidden legacy mutation and search aliases remain
-covered until they are retired; `ToolMutationPolicy::COMPACTION_VALVE_TOOLS` is
-the source of truth.
+`dismiss_maintenance_review`. Reads through `search`, `get_entities` and the
+other context and read tools don't pause it. `ToolMutationPolicy::COMPACTION_VALVE_TOOLS`
+is the source of truth.
 
 When a compaction run is `running`:
 

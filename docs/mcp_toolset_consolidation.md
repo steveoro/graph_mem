@@ -1,5 +1,10 @@
 # MCP Toolset Consolidation Plan
 
+> **History.** This plan was written and carried out on fast-mcp. Since 1.55.0 graph_mem runs on the
+> official MCP Ruby SDK (`mcp` gem), and the 18 hidden aliases are gone; the fast-mcp details below
+> (`FastMcp::*`, `config/initializers/fast_mcp.rb`, `/mcp/sse`) describe that earlier stack. Current
+> layout: [architecture.md](architecture.md#official-mcp-sdk-feature-map).
+
 ## Overview
 
 GraphMem exposes 35 flat MCP tools. This document plans a reduction to **12 tools in the default

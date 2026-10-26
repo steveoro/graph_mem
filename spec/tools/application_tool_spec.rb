@@ -155,7 +155,7 @@ RSpec.describe ApplicationTool do
     it "requests compaction pause for valve-enabled tools" do
       valve_tool_class = Class.new(ApplicationTool) do
         def self.tool_name
-          "create_entity"
+          "graph_write"
         end
 
         arguments do
@@ -176,6 +176,13 @@ RSpec.describe ApplicationTool do
       expect(%w[graph_write graph_edit graph_delete]).to all(
         satisfy { |tool_name| ToolMutationPolicy.compaction_valve?(tool_name) }
       )
+    end
+
+    it "lists only registered tools behind the compaction valve" do
+      GraphMem::McpToolRegistry.load_all!
+      registered = GraphMem::McpToolRegistry.tool_classes.map(&:tool_name)
+
+      expect(ToolMutationPolicy::COMPACTION_VALVE_TOOLS - registered).to be_empty
     end
 
     it "normalizes parameters before validation and dispatch" do

@@ -20,18 +20,19 @@ This guide addresses common issues you might encounter when working with GraphMe
 2. **Wrong Connection URL**
    - Verify you're using the correct protocol, host, and port
    - Default URLs are:
-     - Streamable HTTP (2024-11-05 … 2025-11-25, recommended): `http://localhost:3000/mcp`
-     - Legacy SSE (2024-11-05; deprecated in MCP 2026-07-28; kept for older clients): `http://localhost:3000/mcp/sse`
-     - Legacy messages: `http://localhost:3000/mcp/messages`
+     - Streamable HTTP (2024-11-05 … 2026-07-28): `http://localhost:3000/mcp` (also `/mcp/readonly`
+       and `/mcp/maintenance`)
+     - The legacy HTTP+SSE endpoints (`/mcp/sse`, `/mcp/messages`) were removed in 1.55.0 and answer `404`
 
-3. **CORS Issues (Browser Clients Only)**
-   - Check browser console for CORS errors
-   - Configure CORS in `config/initializers/fast_mcp.rb` to include your client domain
-   - Add the following headers to your requests:
-     ```
-     Access-Control-Allow-Origin: *
-     Content-Type: application/json
-     ```
+3. **`403` on Every Request (Host or Origin Check)**
+   - The MCP endpoint's DNS-rebinding protection accepts only `localhost`, `127.0.0.1` and `::1`
+     in the `Host` header by default. A client reaching the server by another address or name
+     (another machine on the LAN, a container name) gets `403`: add that host to
+     `GRAPH_MEM_MCP_ALLOWED_HOSTS` (any port, or `host:port`).
+   - A browser-based client whose `Origin` is not the server's own gets `403` too: add its exact
+     `scheme://host:port` to `GRAPH_MEM_MCP_ALLOWED_ORIGINS`. Non-browser clients send no `Origin`.
+   - `403` with `Remote IP not allowed` is the IP allowlist instead (`GRAPH_MEM_MCP_ALLOWED_IPS`).
+     All three are described in [mcp_access_control.md](mcp_access_control.md).
 
 4. **Firewall Blocking Connections**
    - Check if your firewall is blocking the port
@@ -52,16 +53,17 @@ This guide addresses common issues you might encounter when working with GraphMe
      ```json
      {
        "jsonrpc": "2.0",
-       "method": "VersionTool",
+       "method": "tools/list",
        "params": {},
        "id": 1
      }
      ```
 
-2. **Unknown Method**
-   - Check the method name matches an existing tool
-   - Tool names are case-sensitive
-   - Use the full tool name (e.g., `CreateEntityTool` not `CreateEntity`)
+2. **Unknown Tool**
+   - `tools/call` with an unknown name answers `-32602` (`data`: `Tool not found: <name>`)
+   - Tool names are case-sensitive snake_case (`graph_write`, not `GraphWriteTool`); the 18 aliases
+     removed in 1.55.0 (`create_entity`, `search_entities`, …) are unknown now
+   - The tool must also be in the profile you connected to (`/mcp`, `/mcp/readonly` or `/mcp/maintenance`)
 
 3. **Invalid Parameters**
    - Ensure all required parameters are provided
@@ -69,13 +71,13 @@ This guide addresses common issues you might encounter when working with GraphMe
    - Refer to the [MCP Tools Documentation](mcp_tools.md) for parameter requirements
 
 4. **Entity Not Found**
-   - Error code `-32002` indicates a requested resource wasn't found
+   - The tool returns an `isError` result whose JSON envelope has `category: "not_found"`
    - Verify entity IDs exist in the database
-   - Use `SearchEntitiesTool` to find valid entity IDs
+   - Use `search` to find valid entity IDs
 
 5. **Operation Failed**
-   - Error code `-32003` indicates an operation failed
-   - Check the error message for specific details
+   - The envelope has `category: "system_error"` (or `validation` for a refusal you can correct);
+     read `message`, `code` and `next_move` ([mcp_tools.md](mcp_tools.md), Error Handling)
    - Verify the database is accessible and not corrupted
 
 ### Problem: HTTP 413, 503, 409 or 400 from `/mcp`
@@ -85,11 +87,11 @@ These come from the transport's request checks, before any tool runs
 
 - **413** — the body is over `GRAPH_MEM_MCP_MAX_REQUEST_BYTES` (4 MiB). Split the batch, or raise
   the limit.
-- **503 "Too many sessions"** — `GRAPH_MEM_MCP_MAX_SESSIONS` (256) sessions are open and every one
-  is busy (a request in flight or an open stream); idle ones are evicted first. Raise the limit, or
-  find the client holding that many streams open.
-- **404 "Session not found" on a session that worked before** — the server restarted, or the
-  session was evicted as the least recently active idle one at the session cap. Start a new session.
+- **503 "Too many sessions"** — `GRAPH_MEM_MCP_MAX_SESSIONS` (256, per profile path) sessions are
+  open. A new `initialize` first reaps expired sessions; live ones are never evicted. Wait for idle
+  sessions to expire (30 minutes), raise the limit, or find the client holding that many sessions.
+- **404 "Session not found" on a session that worked before** — the server restarted, the session
+  expired, or it was opened on another profile path. Start a new session.
 - **409** — a second `GET` stream on the same session. Close the first one, or start a new session.
 - **400 "Unsupported protocol version"** — the `MCP-Protocol-Version` header names a version the
   server doesn't support. Send the version `initialize` returned.
@@ -115,7 +117,8 @@ script that prints to stdout before starting it.
    - Ask the user to click the refresh tools button in the Windsurf UI
 
 2. **Check Server Configuration**
-   - Verify tools are properly registered in `config/initializers/fast_mcp.rb`
+   - Verify the tool is in the profile you connected to (`/mcp`, `/mcp/readonly` or
+     `/mcp/maintenance`); a tool outside it answers `Tool not found`
    - Ensure the `tool_name` method is correctly implemented in each tool
 
 3. **Server Log Analysis**
@@ -205,45 +208,12 @@ script that prints to stdout before starting it.
    - Use partial serialization for large objects
    - Avoid including unnecessary data in responses
 
-### Problem: Monkey-Patch Related Issues
-
-**Symptoms:**
-- Errors in `FastMcp::Server#handle_tools_call`
-- Incorrect response formatting
-
-**Solutions:**
-
-1. **Check Patch Application**
-   - Ensure `config/initializers/zzz_fast_mcp_patches.rb` is loaded after all other initializers
-   - Verify the patch matches the installed gem version
-
-2. **Response Format**
-   - Ensure the response format matches what Cascade expects:
-     ```ruby
-     {
-       jsonrpc: "2.0",
-       id: id,
-       result: {
-         content: [
-           {
-             type: "json",
-             json: actual_tool_data.to_json
-           }
-         ]
-       }
-     }
-     ```
-
-3. **Debug Logging**
-   - Add logging around the monkey-patch
-   - Compare raw response with expected format
-
 ## Tool-Specific Issues
 
 ### Problem: Entity Creation Fails
 
 **Symptoms:**
-- Error when calling `CreateEntityTool`
+- Error from `graph_write` with a `create_entity` operation
 - Entity not saved in database
 
 **Solutions:**
@@ -260,18 +230,18 @@ script that prints to stdout before starting it.
 ### Problem: Relation Creation Fails
 
 **Symptoms:**
-- Error when calling `CreateRelationTool`
+- Error from `graph_write` with a `create_relation` operation
 - Relation not saved in database
 
 **Solutions:**
 
 1. **Entity Existence**
    - Verify both source and target entities exist
-   - Check entity IDs with `GetEntityTool`
+   - Check entity IDs with `get_entities`
 
 2. **Duplicate Relations**
    - Check if the relation already exists
-   - Use `FindRelationsTool` to verify existing relations
+   - Use `traverse_graph` to verify existing relations
 
 ## API versus MCP Issues
 
@@ -365,11 +335,10 @@ For troubleshooting complex issues:
      ```
 
 3. **MCP Request Logging**
-   - Log incoming and outgoing MCP messages:
-     ```ruby
-     # In config/initializers/fast_mcp.rb
-     FastMcp.logger.level = Logger::DEBUG
-     ```
+   - Over HTTP the requests are in the Rails log like any other request; tool errors and
+     gem-side failures are reported through `Rails.error`.
+   - Over stdio every log goes to stderr (stdout carries JSON-RPC only): read it from the
+     client's MCP log view, or redirect stderr when running `bin/mcp_stdio_runner.rb` by hand.
 
 ### Use Interactive Debugging
 
@@ -377,8 +346,8 @@ For troubleshooting complex issues:
    - Test operations interactively:
      ```ruby
      entity = MemoryEntity.create(name: "Test", entity_type: "Debug")
-     tool = CreateObservationTool.new
-     tool.call(entity_id: entity.id, text_content: "Test observation")
+     tool = GraphWriteTool.new
+     tool.call_with_schema_validation!(observations: [ { entity_id: entity.id, text_content: "Test observation" } ])
      ```
 
 2. **Database Inspection**
