@@ -173,7 +173,7 @@ RSpec.describe "XSS escaping in graph UI", type: :system do
       # is in place when the search fires.
       # The edit fields live in the row's detail pane: open its group, then the row.
       visit review_path(view: "kind")
-      click_link "Review", match: :first
+      click_link "Review", match: :first, exact: true
       find("##{ActionView::RecordIdentifier.dom_id(review_row)} .review-row__open", wait: 5).click
       expect(page).to have_css('[data-controller="review-entity-picker"]', wait: 5)
       # Install a fetch spy that returns a probe entity name

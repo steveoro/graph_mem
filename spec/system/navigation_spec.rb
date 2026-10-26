@@ -133,7 +133,7 @@ RSpec.describe "Navigation", type: :system do
       )
       visit review_path(view: "kind")
       find(".ui-toast__dismiss", match: :first).click if page.has_css?(".ui-toast", wait: 0)
-      click_link "Review", match: :first
+      click_link "Review", match: :first, exact: true
       expect(page).to have_css("[data-row-uuid='synth-merge-1']")
 
       # A marker on window survives only if the toast arrives without a page load.

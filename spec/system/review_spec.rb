@@ -86,7 +86,7 @@ RSpec.describe "Review & Fix", type: :system do
       expect(rows.map { |row| row.reload.status }).to eq(%w[active active])
 
       # Open the first group: items are then [group 1, its row, group 2]; j j focuses the row.
-      click_link "Review", match: :first
+      click_link "Review", match: :first, exact: true
       expect(page).to have_css("[data-testid='review-row']")
       find("body").send_keys("j", "j")
       expect(page).to have_css("[data-testid='review-row'].review-item--focused")
