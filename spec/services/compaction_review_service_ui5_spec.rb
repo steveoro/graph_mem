@@ -129,4 +129,58 @@ RSpec.describe CompactionReviewService, "UI-5a" do
       expect(found.search_capped?).to be(true)
     end
   end
+  describe "undo links and snooze" do
+    let!(:row) { seed([ proposal(widget, beta) ]).sole }
+
+    after { Current.reset }
+
+    it "records who resolved a row and the change set that did it" do
+      { "operator:steve@127.0.0.1" => "operator", "mcp:dismiss_maintenance_review" => "agent", "api:synthetic" => "agent",
+        "policy:dangling" => "policy:dangling", nil => "generator" }.each do |actor, resolver|
+        Current.actor = actor
+        result = described_class.dismiss(row.row_uuid, reason: "synthetic")
+
+        expect(row.reload).to have_attributes(resolved_by: resolver, change_set_id: ChangeSet.find_by!(uuid: result[:change_set_uuid]).id)
+        described_class.restore(row.row_uuid)
+        expect(row.reload.resolved_by).to be_nil
+      end
+    end
+
+    it "returns the undo handle with the action's usual keys" do
+      result = described_class.apply(row.row_uuid)
+
+      expect(result).to include(success: true, undoable: true, not_undoable_reason: nil)
+      expect(ChangeSet.find_by!(uuid: result[:change_set_uuid])).to have_attributes(kind: "review.apply")
+      expect(described_class.apply("no-such-row")).to eq(success: false, error: "Suggestion not found")
+    end
+
+    it "snoozes with an expiring suppression; ignore does the same for 30 days" do
+      freeze_time = Time.current
+      result = described_class.snooze(row.row_uuid, days: 7)
+
+      expect(result).to include(success: true, undoable: true)
+      expect(row.reload).to have_attributes(status: "ignored")
+      expect(row.expires_at).to be_within(1.minute).of(freeze_time + 7.days)
+      expect(MaintenanceReportSuppression.sole).to have_attributes(source: "snoozed")
+      expect(ChangeSet.find_by!(uuid: result[:change_set_uuid]).kind).to eq("review.snooze")
+
+      described_class.restore(row.row_uuid)
+      described_class.ignore(row.row_uuid)
+      expect(row.reload.expires_at).to be_within(1.minute).of(30.days.from_now)
+    end
+
+    it "makes a snoozed signature permanent on dismiss, and undo brings the snooze back" do
+      described_class.snooze(row.row_uuid)
+      described_class.restore(row.row_uuid)
+      described_class.snooze(row.row_uuid)
+      dismissed = described_class.dismiss(row.row_uuid, reason: "never")
+
+      expect(MaintenanceReportSuppression.sole).to have_attributes(source: "dismissed", expires_at: nil, reason: "never")
+
+      expect(ChangeSetUndo.call(dismissed[:change_set_uuid], actor: "operator:steve@127.0.0.1")).to be_ok
+      expect(MaintenanceReportSuppression.sole).to have_attributes(source: "snoozed")
+      expect(row.reload).to have_attributes(status: "ignored", resolved_by: nil)
+      expect(row.expires_at).to be_present
+    end
+  end
 end

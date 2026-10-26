@@ -12,6 +12,7 @@ class CompactionReviewService
   # index-narrowed candidate lock makes cross-entity collisions impossible,
   # so a few attempts cover the residual same-entity race.
   CHECKREAD_MAX_ATTEMPTS = 3
+  SNOOZE_DAYS = 30
 
   extend ChangeRecording
   extend Queries
@@ -50,21 +51,17 @@ class CompactionReviewService
       return { success: false, error: "Suggestion not found" } unless row
 
       record_review("dismiss", row) do
-        suppress(row)
-        track_review_row(row) { row.update!(status: "dismissed", dismissed_at: Time.current, resolution_reason: reason) }
+        dismiss_row(row, reason)
+        { success: true, message: "Suggestion dismissed" }
       end
-      { success: true, message: "Suggestion dismissed" }
     end
 
     def bulk_dismiss(item_ids, reason: nil, report_type: "compaction_review")
       rows = MaintenanceReportRow.by_report_type(report_type).where(row_uuid: item_ids)
       record_review("bulk_dismiss") do
-        rows.each do |row|
-          suppress(row)
-          track_review_row(row) { row.update!(status: "dismissed", dismissed_at: Time.current, resolution_reason: reason) }
-        end
+        rows.each { |row| dismiss_row(row, reason) }
+        { success: true, message: "#{rows.size} suggestion(s) dismissed" }
       end
-      { success: true, message: "#{rows.size} suggestion(s) dismissed" }
     end
 
     # Bulk-apply iterates `apply` per row: non-actionable rows (already
@@ -87,17 +84,29 @@ class CompactionReviewService
           note_suppressions(deleted: deleted)
         end
 
-        track_review_row(row) { row.update!(status: "active", dismissed_at: nil, applied_at: nil, resolution_reason: nil) }
+        track_review_row(row, status: "active", dismissed_at: nil, applied_at: nil, resolution_reason: nil, expires_at: nil)
+        { success: true, message: "Suggestion restored to active" }
       end
-      { success: true, message: "Suggestion restored to active" }
     end
 
-    def ignore(item_id, report_type: "compaction_review")
+    # Snoozes a row: it leaves the queue until `days` from now, and its signature can't be
+    # proposed again until then (an expiring suppression). The snooze_expiry policy brings it back.
+    def snooze(item_id, days: SNOOZE_DAYS, report_type: "compaction_review", action: "snooze")
       row = find_item(item_id, report_type: report_type)
       return { success: false, error: "Suggestion not found" } unless row
 
-      record_review("ignore", row) { track_review_row(row) { row.update!(status: "ignored") } }
-      { success: true, message: "Suggestion ignored" }
+      until_time = days.to_i.clamp(1, 365).days.from_now
+      record_review(action, row) do
+        suppress(row, reason: "snoozed until #{until_time.to_date}", source: "snoozed", expires_at: until_time)
+        track_review_row(row, status: "ignored", expires_at: until_time)
+        { success: true, message: "Suggestion snoozed until #{until_time.to_date}" }
+      end
+    end
+
+    # `ignore` snoozes for SNOOZE_DAYS since UI-5a (the MCP tool and the old page call it); its
+    # change set keeps the kind review.ignore.
+    def ignore(item_id, report_type: "compaction_review")
+      snooze(item_id, report_type: report_type, action: "ignore")
     end
 
     def seed_report(report_type:, source:, source_ref: nil, items:)
@@ -250,7 +259,7 @@ class CompactionReviewService
 
           result = CompactionReviewApplier.apply(row, action_params)
           if result[:success]
-            track_review_row(row) { row.update!(status: "approved", applied_at: Time.current) }
+            track_review_row(row, status: "approved", applied_at: Time.current)
           else
             row.update!(resolution_reason: result[:error])
           end
@@ -403,19 +412,9 @@ class CompactionReviewService
       hash.deep_stringify_keys.with_indifferent_access.compact_blank
     end
 
-    def suppress(row)
-      created = suppression_signatures(row).filter_map do |signature|
-        suppression = MaintenanceReportSuppression.create_or_find_by!(
-          report_type: row.report_type,
-          signature: signature
-        ) do |s|
-          s.kind = row.kind
-          s.dismissed_at = Time.current
-          s.reason = row.resolution_reason
-        end
-        suppression if suppression.previously_new_record?
-      end
-      note_suppressions(created: created)
+    def dismiss_row(row, reason)
+      suppress(row, reason: reason)
+      track_review_row(row, status: "dismissed", dismissed_at: Time.current, resolution_reason: reason, expires_at: nil)
     end
 
     # An edit can change the signature (relation_type, source/target ids), while

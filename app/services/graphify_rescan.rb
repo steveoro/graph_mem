@@ -311,7 +311,7 @@ module GraphifyRescan
       next unless row.kind == "reparent_entity" && row.status == "active"
       next unless fresh_reparent_ids.include?(item_field(row, "entity_id").to_i)
 
-      row.update!(status: "dismissed", dismissed_at: Time.current,
+      row.update!(status: "dismissed", dismissed_at: Time.current, resolved_by: "generator",
                   resolution_reason: "superseded by a newer rescan proposal")
     end
   end
@@ -378,7 +378,7 @@ module GraphifyRescan
       end
       next unless stale
 
-      row.update!(status: "dismissed", dismissed_at: Time.current,
+      row.update!(status: "dismissed", dismissed_at: Time.current, resolved_by: "generator",
                   resolution_reason: "stale in #{source} rescan")
     end
   end

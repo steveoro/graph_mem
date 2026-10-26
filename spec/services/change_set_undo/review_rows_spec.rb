@@ -74,4 +74,26 @@ RSpec.describe ChangeSetUndo::ReviewRows do
     row.destroy!
     expect(undo(restore_uuid).message).to include("was deleted")
   end
+  it "restores resolved_by, change_set_id and expires_at" do
+    CompactionReviewService.snooze(row.row_uuid, days: 10)
+    snoozed = row.reload.attributes.slice("expires_at", "change_set_id")
+    CompactionReviewService.dismiss(row.row_uuid, reason: "synthetic")
+    expect(row.reload).to have_attributes(resolved_by: "generator", expires_at: nil)
+
+    expect(undo(latest_uuid)).to be_ok
+    expect(row.reload).to have_attributes(status: "ignored", resolved_by: nil, change_set_id: snoozed["change_set_id"])
+    expect(row.expires_at).to be_within(0.001).of(snoozed["expires_at"])
+  end
+
+  it "still undoes a set recorded by 1.57.0 (review fields without the UI-5a keys)" do
+    set = ChangeSet.record(kind: "review.dismiss") do |context|
+      row.update!(status: "dismissed", dismissed_at: Time.current, resolved_by: "operator")
+      context.note_review_row!(row, before: { "status" => "active", "applied_at" => nil, "dismissed_at" => nil, "resolution_reason" => nil },
+                                    after: { "status" => "dismissed" })
+      context.uuid
+    end
+
+    expect(undo(set)).to be_ok
+    expect(row.reload).to have_attributes(status: "active", dismissed_at: nil, resolved_by: "operator")
+  end
 end
