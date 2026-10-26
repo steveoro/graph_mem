@@ -61,8 +61,8 @@ class ReviewRowClassifier
 
   # Classifies rows seeded before UI-5a and dedupes symmetric proposals; see Backfill.
   # @return [Hash] counts per step
-  def self.backfill!(batch_size: 1_000, limit: nil, progress: nil)
-    Backfill.call(batch_size: batch_size, limit: limit, progress: progress)
+  def self.backfill!(batch_size: 1_000, limit: nil, progress: nil, symmetric: true)
+    Backfill.call(batch_size: batch_size, limit: limit, progress: progress, symmetric: symmetric)
   end
 
   # One classifier can classify many rows; entity, degree and owner lookups are cached.

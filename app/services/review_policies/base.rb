@@ -49,18 +49,22 @@ module ReviewPolicies
 
     def verb = "resolved"
 
+    # The set's uuid and summary are recorded even when the batch stops early (e.g. a lock
+    # timeout in auto-apply), so every row a policy changed is reachable from the run report.
     def run_batch(batch)
       acted_before = @stats["acted"]
-      uuid = Current.set(actor: "policy:#{policy_name}") do
-        ChangeSet.record(kind: "policy.#{policy_name}") do |context|
+      context = nil
+      Current.set(actor: "policy:#{policy_name}") do
+        ChangeSet.record(kind: "policy.#{policy_name}") do |change_set|
+          context = change_set
           batch.each { |row| with_locked_row(row) }
-          next unless context.id
-
-          ChangeSet.where(id: context.id).update_all(summary: "policy #{policy_name}: #{verb} #{@stats['acted'] - acted_before} rows")
-          context.uuid
         end
       end
-      @stats["change_sets"] << uuid if uuid
+    ensure
+      if context&.id
+        ChangeSet.where(id: context.id).update_all(summary: "policy #{policy_name}: #{verb} #{@stats['acted'] - acted_before} rows")
+        @stats["change_sets"] << context.uuid
+      end
     end
 
     def with_locked_row(row)

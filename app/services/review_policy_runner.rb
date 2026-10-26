@@ -29,19 +29,40 @@ class ReviewPolicyRunner
     @trigger = trigger.to_s
   end
 
+  # Each step is rescued on its own: a failing step records its error and the run carries on, so
+  # the later policies still run and the report is always written.
   def call
     summary = {
       "trigger" => @trigger,
-      "backfill" => ReviewRowClassifier.backfill!(limit: BACKFILL_PER_RUN).stringify_keys,
-      "priorities_refreshed" => refresh_priorities,
-      "policies" => POLICIES.to_h { |policy| [ policy.policy_name, policy.new.call ] },
-      "rates" => rates
+      "backfill" => step("backfill") { backfill },
+      "priorities_refreshed" => step("priorities") { refresh_priorities },
+      "policies" => POLICIES.to_h { |policy| [ policy.policy_name, step(policy.policy_name) { policy.new.call } ] },
+      "rates" => step("rates") { rates }
     }
     report = MaintenanceReport.create!(report_type: "review_policy_run", data: summary)
     summary.merge("report_id" => report.id)
   end
 
   private
+
+  def step(name)
+    yield
+  rescue StandardError => e
+    Rails.logger.error "[ReviewPolicyRunner] #{name} failed: #{e.class}: #{e.message}"
+    { "error" => e.class.name, "message" => e.message.to_s.truncate(200) }
+  end
+
+  # The symmetric-signature steps stop once a full pass found nothing (flag carried in the reports).
+  def backfill
+    done = symmetric_done?
+    counts = ReviewRowClassifier.backfill!(limit: BACKFILL_PER_RUN, symmetric: !done).stringify_keys
+    counts.merge("symmetric_done" => done || counts.values_at("rewritten", "duplicates", "twins").sum.zero?)
+  end
+
+  def symmetric_done?
+    MaintenanceReport.by_type("review_policy_run").recent.limit(1)
+                     .pick(Arel.sql("JSON_VALUE(data, '$.backfill.symmetric_done')")).to_s.in?(%w[1 true]) # MariaDB answers "1"
+  end
 
   # Priority is derived data: written with update_columns, no change set.
   def refresh_priorities

@@ -183,4 +183,37 @@ RSpec.describe CompactionReviewService, "UI-5a" do
       expect(row.expires_at).to be_present
     end
   end
+  describe "review round 1" do
+    let!(:row) { seed([ proposal(widget, beta) ]).sole }
+
+    it "refuses to snooze or ignore a resolved row, so a dismissal stays permanent" do
+      described_class.dismiss(row.row_uuid, reason: "never")
+
+      expect(described_class.snooze(row.row_uuid)).to eq(success: false, error: "Only active or snoozed suggestions can be snoozed (this one is dismissed)")
+      expect(described_class.ignore(row.row_uuid)[:success]).to be(false)
+      expect(MaintenanceReportSuppression.pluck(:source).uniq).to eq([ "dismissed" ])
+      expect(MaintenanceReportSuppression.pluck(:expires_at).uniq).to eq([ nil ])
+    end
+
+    it "answers the MCP ignore of a resolved row with an invalid-arguments error" do
+      described_class.dismiss(row.row_uuid)
+
+      expect { DismissMaintenanceReviewTool.new.call(item_id: row.row_uuid, action: "ignore") }
+        .to raise_error(GraphMem::InvalidArgumentsError, /can be snoozed.*Restore the row first/)
+    end
+
+    it "fills the room under the backlog ceiling with the best items and gates only the rest" do
+      allow(AppSettings).to receive(:review_number).and_call_original
+      allow(AppSettings).to receive(:review_number).with(:review_backlog_ceiling).and_return(2)
+      targets = Array.new(3) { |i| MemoryEntity.create!(name: "SynthGadget #{i}", entity_type: "Component") }
+
+      rows = seed([ proposal(widget, targets[0], band: "low"), proposal(widget, targets[1], band: "high"),
+                    proposal(widget, targets[2], band: "low", score: 8) ])
+
+      # One active row (the let!) leaves room for one: the best (high) gets in; the low ones must
+      # beat the lowest active priority (the existing high row), and don't.
+      expect(rows.map { |r| r.payload["to_entity_id"] }).to eq([ targets[1].id ])
+      expect(MaintenanceReport.find(rows.first.maintenance_report_id).data["skipped_backlog_full"]).to eq("relationship_proposal" => 2)
+    end
+  end
 end

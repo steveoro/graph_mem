@@ -17,21 +17,26 @@ class ReviewRowClassifier
     # @param limit [Integer, nil] most rows to classify in this call (nil = all)
     # @param progress [#call, nil] called with a message after each batch
     # @return [Hash] counts per step
-    def self.call(batch_size: 1_000, limit: nil, progress: nil)
-      new(batch_size, limit, progress).call
+    # @param symmetric [Boolean] false skips steps 2 and 3 (the policy run does once a full pass
+    #   found nothing left: rows seeded since UI-5a already carry ordered signatures)
+    def self.call(batch_size: 1_000, limit: nil, progress: nil, symmetric: true)
+      new(batch_size, limit, progress, symmetric).call
     end
 
-    def initialize(batch_size, limit, progress)
+    def initialize(batch_size, limit, progress, symmetric)
       @batch_size = batch_size
       @limit = limit
       @progress = progress
+      @symmetric = symmetric
       @counts = { classified: 0, rewritten: 0, duplicates: 0, twins: 0 }
     end
 
     def call
       classify_unclassified
-      rewrite_symmetric_signatures
-      twin_symmetric_suppressions
+      if @symmetric
+        rewrite_symmetric_signatures
+        twin_symmetric_suppressions
+      end
       @counts
     end
 

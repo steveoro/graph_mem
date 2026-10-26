@@ -222,4 +222,46 @@ RSpec.describe ReviewPolicyRunner do
     expect(old.reload.group_key).to be_present
     expect(old.priority).to be > 0
   end
+  describe "review round 1" do
+    it "records a failing step and still runs the later policies and writes the report" do
+      allow_any_instance_of(ReviewPolicies::Dangling).to receive(:call).and_raise(ActiveRecord::StatementInvalid, "synthetic")
+      snoozed = proposal(widget, beta)
+      CompactionReviewService.snooze(snoozed.row_uuid, days: 3)
+      snoozed.reload.update_columns(expires_at: 1.minute.ago)
+
+      summary = run
+
+      expect(summary["policies"]["dangling"]).to eq("error" => "ActiveRecord::StatementInvalid", "message" => "synthetic")
+      expect(summary["policies"]["expire_low_confidence"]).to include("acted")
+      expect(MaintenanceReport.find(summary["report_id"]).data["policies"]["dangling"]).to include("error")
+    end
+
+    it "keeps the change-set uuid of a batch a lock timeout cut short" do
+      set_setting("enable_auto_apply_relationships", true)
+      proposal(widget, beta, confidence: 0.95, priority: 90)
+      proposal(widget, alpha, confidence: 0.95, priority: 80)
+      calls = 0
+      allow(CompactionReviewService).to receive(:apply).and_wrap_original do |original, *args, **kwargs|
+        calls += 1
+        raise ProjectMembership::LockTimeout, "synthetic" if calls == 2
+
+        original.call(*args, **kwargs)
+      end
+
+      stats = run["policies"]["auto_apply_relationships"]
+
+      expect(stats).to include("acted" => 1, "busy" => 1)
+      expect(ChangeSet.find_by!(uuid: stats["change_sets"].sole).kind).to eq("policy.auto_apply_relationships")
+    end
+
+    it "stops rescanning symmetric signatures once a pass found nothing" do
+      allow(ReviewRowClassifier).to receive(:backfill!).and_call_original
+
+      expect(run["backfill"]["symmetric_done"]).to be(true)
+      run
+
+      expect(ReviewRowClassifier).to have_received(:backfill!).with(hash_including(symmetric: true)).once
+      expect(ReviewRowClassifier).to have_received(:backfill!).with(hash_including(symmetric: false)).once
+    end
+  end
 end
