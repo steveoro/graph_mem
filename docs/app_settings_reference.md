@@ -5,7 +5,7 @@ GraphMem stores operator-tunable runtime settings in the primary MariaDB `settin
 ## Operator UI
 
 - **URL:** `/operator/settings`
-- **Auth:** session login at `/operator/login` (`OPERATOR_USERNAME` / `OPERATOR_PASSWORD`, or `credentials.operator.username` / `credentials.operator.password`)
+- **Auth:** session login at `/operator/login` (`OPERATOR_USERNAME` / `OPERATOR_PASSWORD`, or `credentials.operator.username` / `credentials.operator.password`). The same form signs in the optional read-only guest (see `enable_guest_access` below); guests can't open the settings.
 - **Tabs:** Feature Flags, Database Backup, Embeddings, Summaries, Imports, Project Scans, Telemetry
 
 ## Feature Flags
@@ -14,6 +14,7 @@ GraphMem stores operator-tunable runtime settings in the primary MariaDB `settin
 |---|---|---|
 | `enable_dream_state_compactor` | `true` | When `false`, `DreamStateCompactionJob` and manual compaction start are skipped. |
 | `enable_garbage_collector` | `true` | When `false`, `GarbageCollectionJob` and manual GC runs are skipped. |
+| `enable_guest_access` | `true` | Lets the read-only guest sign in. No effect until a guest password is set (`GRAPH_MEM_GUEST_PASSWORD` or credentials `guest.password`). When `false`, signed-in guests are signed out on their next request. |
 
 Boolean flags consumed by background workers use direct database reads so Solid Queue processes see UI changes without restart.
 

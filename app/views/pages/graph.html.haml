@@ -10,4 +10,5 @@
   %p.mt-6.text-sm.text-gray-600.text-center
     %i
       %small Interactive graph powered by Cytoscape.js and Stimulus.
-      = link_to "Back to dashboard", root_path, class: "dashboard-link"
+      - if can_write?
+        = link_to "Back to dashboard", root_path, class: "dashboard-link"

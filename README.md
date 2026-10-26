@@ -564,6 +564,8 @@ Scheduled backups run via Solid Queue (`DatabaseBackupJob`) when **Enable schedu
 
 Sign in at `/operator/login`. Default operator credentials: `operator` / `changeme`. In production the login returns 503 until the password is changed from `changeme` (the default username is fine). Override with `OPERATOR_USERNAME` / `OPERATOR_PASSWORD` or Rails credentials under `operator:`.
 
+**Read-only guest.** An optional second account can browse Search and Explore without changing anything. It is disabled until a guest password is set in `GRAPH_MEM_GUEST_PASSWORD` or Rails credentials `guest.password`; the username defaults to `guest` (`GRAPH_MEM_GUEST_USERNAME` or `guest.username`). The guest's username and password must both differ from the operator's, or the guest stays disabled. **Settings › Feature Flags › Guest access** turns it off at any time (signed-in guests are signed out on their next click). A guest can read all graph content (there is no per-project scoping), gets `403` on every other page and on every `/api/v1` write, and never gets MCP access: `/mcp*` ignores browser sessions. Guest sessions expire after 2 hours idle or 24 hours.
+
 
 ## Environment Variables
 
@@ -583,6 +585,8 @@ Sign in at `/operator/login`. Default operator credentials: `operator` / `change
 | `OPERATOR_PASSWORD` | `changeme` | Operator login password (production refuses to serve the login form while it is still `changeme`) |
 | `GRAPH_MEM_MCP_TOKEN` | -- | Shared bearer token for `/mcp` and `/api/v1`; without it `/api/v1` accepts operator sessions only |
 | `GRAPH_MEM_MCP_ALLOWED_IPS` | loopback + private ranges | IP allowlist applied to bearer-token requests on `/mcp` and `/api/v1` |
+| `GRAPH_MEM_GUEST_USERNAME` | `guest` | Username of the read-only guest account |
+| `GRAPH_MEM_GUEST_PASSWORD` | -- | Guest password; blank = guest login disabled. Must differ from the operator's |
 
 
 ## Documentation
