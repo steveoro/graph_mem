@@ -99,7 +99,8 @@ class CompactionReviewService
       record_review(action, row) do
         suppress(row, reason: "snoozed until #{until_time.to_date}", source: "snoozed", expires_at: until_time)
         track_review_row(row, status: "ignored", expires_at: until_time)
-        { success: true, message: "Suggestion snoozed until #{until_time.to_date}" }
+        label = action == "ignore" ? "ignored (snoozed until #{until_time.to_date})" : "snoozed until #{until_time.to_date}"
+        { success: true, message: "Suggestion #{label}" }
       end
     end
 
