@@ -7,7 +7,7 @@ en:
       home: "Home"
       search: "Search"
       explore: "Explore"
-      compaction_review: "Compaction review"
+      compaction_review: "Review queue"
       scan_review: "Scan review"
       maintenance: "Maintenance (import, export, cleanup)"
       embeddings: "Embeddings"

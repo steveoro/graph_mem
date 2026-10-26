@@ -510,6 +510,13 @@
     color: inherit;
   }
 
+  .review-heading,
+  .review-inbox-zero h2,
+  .review-preview h2,
+  .review-policy-run h3 {
+    font-weight: 600;
+  }
+
   .review-warning {
     color: var(--color-ui-danger);
   }

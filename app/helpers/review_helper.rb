@@ -14,6 +14,8 @@ module ReviewHelper
     when "relationship_proposal" then "#{payload['from_name'] || "##{payload['from_entity_id']}"} #{payload['relation_type']} #{payload['to_name'] || "##{payload['to_entity_id']}"}"
     when "contradiction" then "#{payload['entity_name_1']} ↔ #{payload['entity_name_2']}: ##{payload['observation_id_1']} vs ##{payload['observation_id_2']}"
     when "stale_memory" then "#{payload['entity_name'] || "##{payload['entity_id']}"}: #{Array(payload['observation_ids']).size} stale observation(s)"
+    when "delete_entity" then "Delete #{payload['entity_name'].presence || "entity ##{payload['entity_id']}"}"
+    when "delete_relation" then "Delete relation ##{payload['relation_id']}"
     else payload["entity_name"].presence || payload["reason"].presence || row.group_key.to_s
     end.to_s.truncate(140)
   end
