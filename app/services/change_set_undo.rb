@@ -103,7 +103,7 @@ class ChangeSetUndo
   def dispatch(original, context)
     case original.undo_strategy
     when "audit" then AuditInverse.new(original, @effects).call
-    when "merge" then raise Conflict, [ "Merge undo is not available yet" ]
+    when "merge" then Merge.new(original, context, @effects).call
     end
     ReviewRows.new(original, context, @effects).call
   end
