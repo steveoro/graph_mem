@@ -92,7 +92,7 @@ RSpec.describe MaintenanceReport, type: :model do
   describe "REPORT_TYPES" do
     it "contains the expected types" do
       expect(MaintenanceReport::REPORT_TYPES).to eq(%w[orphans duplicates compaction_review embedding_maintenance contradictions
-                                                     scan_review stale_memory_scan])
+                                                     scan_review stale_memory_scan review_policy_run])
     end
   end
 end

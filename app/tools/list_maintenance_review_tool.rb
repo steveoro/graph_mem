@@ -17,7 +17,7 @@ class ListMaintenanceReviewTool < ApplicationTool
 
   description "List paginated maintenance-review queue rows (including item_id) for later apply or dismiss. " \
     "Pass optional `report_type` (string, default compaction_review), " \
-    "`status` (active, dismissed, approved, or ignored; default active), " \
+    "`status` (active, dismissed, approved, ignored, or expired; default active), " \
     "`kind` (string, e.g. entity_merge or orphan_parent), `page` (integer, default 1). per_page is not an input. " \
     "Do not use for whole report documents; use `get_maintenance_reports` instead. " \
     "Do not use to apply a row; use `apply_maintenance_review` instead. " \
@@ -26,7 +26,7 @@ class ListMaintenanceReviewTool < ApplicationTool
 
   arguments do
     optional(:report_type).filled(:string).description('Report type. Defaults to "compaction_review".')
-    optional(:status).filled(:string).description("Row status filter: active, dismissed, approved, ignored.")
+    optional(:status).filled(:string).description("Row status filter: active, dismissed, approved, ignored, expired.")
     optional(:kind).filled(:string).description("Row kind filter, e.g. entity_merge or orphan_parent.")
     optional(:page).filled(:integer).description("Page number (1-based). Defaults to 1.")
   end
