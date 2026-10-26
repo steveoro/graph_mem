@@ -109,6 +109,7 @@ RSpec.describe "MCP structured output over stdio" do
     ensure
       MemoryEntity.where(id: project&.id).delete_all
       AuditLog.where(auditable_type: "MemoryEntity", auditable_id: project&.id).delete_all
+      ChangeSet.where(subject_type: "MemoryEntity", subject_id: project&.id).delete_all # the graph_delete is a change set (UI-4a)
     end
 
     it "ends the session on a line over GRAPH_MEM_MCP_MAX_REQUEST_BYTES without writing anything else" do
