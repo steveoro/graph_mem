@@ -227,12 +227,17 @@
     .ui-sidebar__footer {
       margin-top: auto;
     }
+
+    .ui-toasts {
+      top: 1rem;
+    }
   }
 
   /* Toasts */
+  /* Below 1024px the toasts sit under the top bar, so they never cover the menu toggle. */
   .ui-toasts {
     position: fixed;
-    top: 1rem;
+    top: 4.5rem;
     right: 1rem;
     z-index: 50;
     display: flex;
