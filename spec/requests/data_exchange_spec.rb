@@ -1519,24 +1519,35 @@ RSpec.describe 'DataExchange', type: :request do
       expect(response.body).not_to include('kf-delete')
     end
 
+    # UI-5a A3.6: bulk apply only applies safe kinds (relationship proposals, stale memory);
+    # destructive rows like kf-delete are skipped and stay active.
     it 'bulk-applies selected actionable rows and reports the summary' do
+      MaintenanceReportRow.create!(
+        maintenance_report: scan_report, report_type: 'scan_review',
+        row_uuid: 'kf-link', kind: 'relationship_proposal', status: 'active',
+        signature: "relationship_proposal|#{task1.id}|#{project2.id}|depends_on",
+        payload: { 'from_entity_id' => task1.id, 'to_entity_id' => project2.id, 'relation_type' => 'depends_on' }
+      )
       ghost_uuid = 'kf-ghost'
       MaintenanceReportRow.create!(
         maintenance_report: scan_report, report_type: 'scan_review',
-        row_uuid: ghost_uuid, kind: 'delete_relation', status: 'active',
-        signature: 'delete_relation|999998',
-        payload: { 'relation_id' => 999_998 }
+        row_uuid: ghost_uuid, kind: 'relationship_proposal', status: 'active',
+        signature: "relationship_proposal|999998|#{project2.id}|depends_on",
+        payload: { 'from_entity_id' => 999_998, 'to_entity_id' => project2.id, 'relation_type' => 'depends_on' }
       )
 
       post compaction_review_action_data_exchange_index_path,
            params: { review_action: 'bulk_apply', report_type: 'scan_review',
-                     item_ids: [ 'kf-delete', ghost_uuid ] }
+                     item_ids: [ 'kf-link', 'kf-delete', ghost_uuid ] }
 
       expect(response).to redirect_to(compaction_review_data_exchange_index_path(report_type: 'scan_review'))
       follow_redirect!
-      expect(response.body).to include('applied')
-      expect(MemoryEntity.find_by(id: task1.id)).to be_nil
-      expect(MaintenanceReportRow.find_by(row_uuid: 'kf-delete').status).to eq('approved')
+      expect(response.body).to include('applied', 'not bulk-applicable')
+      expect(MemoryRelation.where(from_entity_id: task1.id, to_entity_id: project2.id, relation_type: 'depends_on')).to exist
+      expect(MaintenanceReportRow.find_by(row_uuid: 'kf-link').status).to eq('approved')
+      # The destructive row is skipped: the entity stays and the row stays active.
+      expect(MemoryEntity.find_by(id: task1.id)).to be_present
+      expect(MaintenanceReportRow.find_by(row_uuid: 'kf-delete').status).to eq('active')
       # Failed row stays actionable with the error recorded.
       expect(MaintenanceReportRow.find_by(row_uuid: ghost_uuid).status).to eq('active')
     end

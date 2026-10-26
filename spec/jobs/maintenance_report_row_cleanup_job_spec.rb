@@ -95,4 +95,35 @@ RSpec.describe MaintenanceReportRowCleanupJob, type: :job do
   ensure
     AppSettings.compaction_review_row_retention_days = 30
   end
+  describe "UI-5a" do
+    def old_row(uuid, status, **attrs)
+      MaintenanceReportRow.create!(report_type: "compaction_review", row_uuid: uuid, kind: "relationship_proposal",
+                                   status: status, signature: "sig-#{uuid}", payload: {}, **attrs)
+                          .tap { |row| row.update_columns(updated_at: 31.days.ago) }
+    end
+
+    it "prunes old expired rows but keeps a snoozed row until its snooze ends" do
+      old_row("old-expired", "expired")
+      old_row("old-snoozed", "ignored", expires_at: 5.days.from_now)
+      old_row("old-snooze-over", "ignored", expires_at: 1.day.ago)
+
+      described_class.perform_now
+
+      expect(MaintenanceReportRow.pluck(:row_uuid)).to eq([ "old-snoozed" ])
+    end
+
+    it "deletes suppressions that expired more than the retention window ago" do
+      suppression = ->(signature, expires_at) do
+        MaintenanceReportSuppression.create!(report_type: "compaction_review", signature: signature, source: "expired", expires_at: expires_at)
+      end
+      suppression.call("long-gone", 31.days.ago)
+      suppression.call("recently-expired", 2.days.ago)
+      suppression.call("in-force", 10.days.from_now)
+      MaintenanceReportSuppression.create!(report_type: "compaction_review", signature: "permanent")
+
+      described_class.perform_now
+
+      expect(MaintenanceReportSuppression.pluck(:signature)).to contain_exactly("recently-expired", "in-force", "permanent")
+    end
+  end
 end

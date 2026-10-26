@@ -847,22 +847,35 @@ RSpec.describe CompactionReviewService, type: :service do
       expect(described_class.find_item("orphan-1").status).to eq("dismissed")
     end
 
+    # UI-5a A3.6: only safe kinds are bulk-applied, so the failing row is a relationship proposal
+    # whose endpoint is gone (it used to be a delete_entity row, which bulk apply now skips).
     it "reports per-row failures without aborting the batch" do
       MaintenanceReportRow.create!(
         maintenance_report: report,
         report_type: "compaction_review",
         row_uuid: "ghost-1",
-        kind: "delete_entity",
+        kind: "relationship_proposal",
         status: "active",
-        signature: "delete_entity|999999",
-        payload: { "entity_id" => 999_999, "entity_name" => "Ghost" }
+        signature: "relationship_proposal|999999|#{to_entity.id}|depends_on",
+        payload: { "from_entity_id" => 999_999, "to_entity_id" => to_entity.id, "relation_type" => "depends_on" }
       )
 
-      result = described_class.bulk_apply([ "merge-1", "ghost-1" ])
+      result = described_class.bulk_apply([ "relation-1", "ghost-1" ])
 
       expect(result[:success]).to be false
+      expect(result[:message]).to include("1 suggestion(s) applied")
       expect(result[:message]).to include("failed")
-      expect(result[:message]).to include("Entity not found")
+      expect(result[:message]).to include("Failed to create relation")
+      expect(described_class.find_item("relation-1").status).to eq("approved")
+    end
+
+    it "skips destructive kinds as not bulk-applicable and leaves them active" do
+      result = described_class.bulk_apply([ "merge-1", "relation-1" ])
+
+      expect(result[:success]).to be true
+      expect(result[:message]).to include("1 suggestion(s) applied", "1 skipped (not bulk-applicable")
+      expect(described_class.find_item("merge-1").status).to eq("active")
+      expect(MemoryEntity.exists?(source.id)).to be(true)
     end
 
     it "refuses an empty selection" do

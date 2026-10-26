@@ -116,10 +116,16 @@ RSpec.describe "Change set recording" do
       expect(review["after"]["status"]).to eq("approved")
     end
 
+    # Bulk apply only applies safe kinds since UI-5a, so it bulk-applies a relationship proposal.
     it "records bulk_apply as one review.bulk_apply set" do
-      CompactionReviewService.bulk_apply([ row.row_uuid ])
+      proposal = { id: "rel-1", kind: "relationship_proposal", from_entity_id: widget.id, to_entity_id: beta.id,
+                   relation_type: "depends_on", confidence_band: "high", score: 12 }
+      safe_row = CompactionReviewService.seed_report(report_type: "compaction_review", source: "test", items: [ proposal ]).first
+
+      CompactionReviewService.bulk_apply([ safe_row.row_uuid, row.row_uuid ])
 
       expect(ChangeSet.pluck(:kind)).to eq([ "review.bulk_apply" ])
+      expect(row.reload.status).to eq("active") # the merge row is skipped
     end
 
     it "records dismiss with the row change and the suppressions it created" do

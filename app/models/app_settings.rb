@@ -52,6 +52,16 @@ class AppSettings < RailsSettings::Base
   field :compaction_review_row_retention_days, default: 30, type: :integer,
         validates: { numericality: { greater_than_or_equal_to: 0, less_than_or_equal_to: 365 } }
 
+  # Review queue limits (UI-5a). Read uncached through review_number, clamped to REVIEW_NUMBERS;
+  # the Settings panel for them arrives with UI-5b.
+  field :review_backlog_ceiling, default: 300, type: :integer,
+        validates: { numericality: { greater_than_or_equal_to: 50, less_than_or_equal_to: 5000 } }
+
+  # Default and accepted range of each numeric review setting.
+  REVIEW_NUMBERS = {
+    "review_backlog_ceiling" => [ 300, 50..5000 ]
+  }.freeze
+
   # MCP tool invocation retention (zero disables automatic pruning)
   field :tool_invocation_retention_days, default: 90, type: :integer,
         validates: { numericality: { greater_than_or_equal_to: 0, less_than_or_equal_to: 3650 } }
@@ -176,6 +186,21 @@ class AppSettings < RailsSettings::Base
     YAML.safe_load(raw.to_s).to_i.clamp(0, 1000)
   rescue StandardError
     5
+  end
+
+  # Uncached read of a numeric review setting, clamped to its range (a value written outside the
+  # range, e.g. from the console, can't push a limit past it).
+  # @param name [String, Symbol] a key of REVIEW_NUMBERS
+  # @return [Numeric]
+  def self.review_number(name)
+    default, range = REVIEW_NUMBERS.fetch(name.to_s)
+    raw = connection.select_value(sanitize_sql([ "SELECT value FROM #{table_name} WHERE var = ?", name.to_s ]))
+    value = raw.nil? ? default : YAML.safe_load(raw.to_s)
+    value = default unless value.is_a?(Numeric)
+    value = value.to_i if default.is_a?(Integer)
+    value.clamp(range.min, range.max)
+  rescue StandardError
+    default
   end
 
   def self.read_boolean_setting(var_name, default: false)

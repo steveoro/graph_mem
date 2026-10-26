@@ -7,70 +7,19 @@ class CompactionReviewService
   STATUSES = MaintenanceReportRow::STATUSES
   # MariaDB ER_CHECKREAD — a locking read found a row changed since the
   # transaction's consistent read was taken (snapshot isolation).
-  CHECKREAD_ERRNO = 1020
+  CHECKREAD_ERRNO = TransientDbError::CHECKREAD_ERRNO
   # Bounded retries for a seed racing a concurrent apply/dismiss — the
   # index-narrowed candidate lock makes cross-entity collisions impossible,
   # so a few attempts cover the residual same-entity race.
   CHECKREAD_MAX_ATTEMPTS = 3
 
   extend ChangeRecording
+  extend Queries
+  extend Signatures
 
   class << self
     def latest_report(report_type: "compaction_review")
       MaintenanceReport.by_type(report_type).recent.first
-    end
-
-    def items(report: nil, report_type: "compaction_review", status: "active", kind: nil, page: 1, q: nil)
-      scope = MaintenanceReportRow.by_report_type(report_type)
-      scope = scope.where(maintenance_report_id: report.id) if report
-      scope = scope.by_status(status) if status.present?
-      scope = scope.by_kind(kind) if kind.present?
-
-      rows = scope.to_a
-      rows = filter_by_query(rows, q) if q.present?
-      sorted = sort_rows(rows)
-      Kaminari.paginate_array(sorted).page(page).per(PER_PAGE)
-    end
-
-    def active_count(report_type: "compaction_review")
-      MaintenanceReportRow.by_report_type(report_type).active.count
-    end
-
-    # Tab counts mirror what the list shows: status counts respect the kind
-    # filter, kind counts respect the status filter (otherwise the badge on
-    # a tab disagrees with the list it opens).
-    def status_counts(report_type: "compaction_review", kind: nil)
-      scope = MaintenanceReportRow.by_report_type(report_type)
-      scope = scope.by_kind(kind) if kind.present?
-      scope.group(:status).count
-    end
-
-    def kind_counts(report_type: "compaction_review", status: nil)
-      scope = MaintenanceReportRow.by_report_type(report_type)
-      scope = scope.by_status(status) if status.present?
-      scope.group(:kind).count
-    end
-
-    # For `delete_entity` rows on the page: how many children are queued
-    # for deletion themselves vs would be left parentless. entity.destroy!
-    # removes observations + relations via dependent: :destroy, but child
-    # ENTITIES keep living without a parent — applying one row NEVER
-    # cascades, by (possibly temporary) design choice: the operator
-    # approved one deletion, not a subtree wipe. If lone-seeded subtree
-    # deletions turn out common, revisit with a separate "apply with
-    # children" action rather than a default cascade.
-    def delete_children_info(report_type:, items:)
-      ids = items.filter_map { |row| row.kind == "delete_entity" ? delete_entity_target(row) : nil }.uniq
-      return {} if ids.empty?
-
-      queued = delete_entity_targets(report_type: report_type)
-      info = {}
-      MemoryRelation.where(relation_type: "part_of", to_entity_id: ids)
-                    .pluck(:to_entity_id, :from_entity_id).each do |parent_id, child_id|
-        slot = (info[parent_id] ||= { queued: 0, parentless: 0 })
-        queued.include?(child_id) ? slot[:queued] += 1 : slot[:parentless] += 1
-      end
-      info
     end
 
     def find_item(item_id, report_type: "compaction_review")
@@ -172,33 +121,39 @@ class CompactionReviewService
           )
 
           classifier = ReviewRowClassifier.new
-          created_rows = items.filter_map do |item|
-            item = normalize_item(item)
-            kind = item["kind"]
-            next if kind.blank?
-            payload = item.except("id")
-
-            signature = signature_for(kind, payload)
-            next if signature.blank?
-            next if MaintenanceReportSuppression.suppressed?(report_type, signature)
-            next if MaintenanceReportRow.by_report_type(report_type).pending.where(signature: signature).exists?
-            next if absorb_stale_memory?(report_type, payload, classifier)
-
-            MaintenanceReportRow.create!(
-              maintenance_report_id: report.id,
-              report_type: report_type,
-              row_uuid: item["id"] || SecureRandom.uuid,
-              kind: kind,
-              status: "active",
-              payload: payload,
-              signature: signature,
-              **classifier.classify(kind: kind, payload: payload, row_uuid: item["id"])
-            )
+          limits = SeedLimits.new(report_type: report_type, source: source, source_ref: source_ref)
+          candidates = seed_candidates(items, report_type, classifier)
+          created_rows = limits.admit(candidates).map do |candidate|
+            MaintenanceReportRow.create!(maintenance_report_id: report.id, report_type: report_type, status: "active",
+                                         **candidate.symbolize_keys)
           end
 
-          report.update!(data: report.data.merge(count: created_rows.size))
+          report.update!(data: report.data.merge(count: created_rows.size, **limits.stats))
           created_rows
         end
+      end
+    end
+
+    # The items that would become new rows, classified, in their original order. The checks run
+    # as they always have (suppressed, already pending, absorbed into a pending stale_memory row);
+    # a signature seen earlier in the same call counts as pending.
+    def seed_candidates(items, report_type, classifier)
+      seen = Set.new
+      items.filter_map do |item|
+        item = normalize_item(item)
+        kind = item["kind"]
+        next if kind.blank?
+
+        payload = item.except("id")
+        signature = signature_for(kind, payload)
+        next if signature.blank? || seen.include?(signature)
+        next if MaintenanceReportSuppression.suppressed?(report_type, signature)
+        next if MaintenanceReportRow.by_report_type(report_type).pending.where(signature: signature).exists?
+        next if absorb_stale_memory?(report_type, payload, classifier)
+
+        seen << signature
+        { "row_uuid" => item["id"] || SecureRandom.uuid, "kind" => kind, "payload" => payload, "signature" => signature }
+          .merge(classifier.classify(kind: kind, payload: payload, row_uuid: item["id"]).stringify_keys)
       end
     end
 
@@ -265,116 +220,9 @@ class CompactionReviewService
       signature = signature_for(kind, payload)
       return false if signature.blank?
 
+      # An expired row doesn't block on its own: its (expiring) suppression decides.
       MaintenanceReportSuppression.suppressed?(report_type, signature) ||
-        MaintenanceReportRow.by_report_type(report_type).where(signature: signature).exists?
-    end
-
-    def signature_for(kind, payload)
-      payload = payload.to_h.deep_stringify_keys.with_indifferent_access if payload.respond_to?(:to_h)
-
-      case kind.to_s
-      when "entity_merge"
-        ids = [ payload.dig("entity_a", "entity_id"), payload.dig("entity_b", "entity_id") ].compact
-        ids += [ payload[:source_id], payload[:target_id] ].compact if payload[:source_id] && payload[:target_id]
-        ids = ids.uniq.sort
-        return nil if ids.size < 2
-
-        [ "entity_merge", ids.join("-") ].join("|")
-      when "relationship_proposal"
-        from_id = payload[:from_entity_id] || payload[:from_id]
-        to_id = payload[:to_entity_id] || payload[:to_id]
-        relation_type = payload[:relation_type]
-        return nil if from_id.blank? || to_id.blank? || relation_type.blank?
-
-        # A symmetric relation reads the same both ways: A→B and B→A are one suggestion.
-        from_id, to_id = [ from_id, to_id ].sort_by(&:to_i) if RelationSemantics.symmetric?(relation_type)
-        [ "relationship_proposal", from_id, to_id, relation_type ].join("|")
-      when "orphan_parent"
-        entity_id = payload[:entity_id]
-        return nil if entity_id.blank?
-
-        [ "orphan_parent", entity_id ].join("|")
-      when "entity_error"
-        entity_id = payload[:entity_id]
-        phase = payload[:phase]
-        return nil if entity_id.blank?
-
-        [ "entity_error", entity_id, phase ].compact.join("|")
-      when "embedding_backfill_failed"
-        entity_id = payload[:entity_id]
-        return nil if entity_id.blank?
-
-        [ "embedding_backfill_failed", entity_id ].join("|")
-      when "lifecycle_corruption"
-        observation_id = payload[:observation_id]
-        return nil if observation_id.blank?
-
-        [ "lifecycle_corruption", observation_id ].join("|")
-      when "relation_integrity"
-        issue_kind = payload[:issue_kind] || payload.dig("payload", "kind")
-        keep_id = payload.dig(:payload, :keep_id) || payload[:keep_id]
-        delete_ids = payload.dig(:payload, :delete_ids) || payload[:delete_ids]
-        delete_ids ||= [ payload.dig(:payload, :delete_id) || payload[:delete_id] ]
-        delete_ids = Array(delete_ids).compact.map(&:to_i).sort
-        return nil if issue_kind.blank? || keep_id.blank? || delete_ids.empty?
-
-        [ "relation_integrity", issue_kind, keep_id, delete_ids.join("-") ].join("|")
-      when "delete_relation"
-        relation_id = payload[:relation_id] || payload.dig("payload", "relation_id")
-        return nil if relation_id.blank?
-
-        [ "delete_relation", relation_id.to_i ].join("|")
-      when "delete_observation"
-        observation_id = payload[:observation_id] || payload.dig("payload", "observation_id")
-        return nil if observation_id.blank?
-
-        [ "delete_observation", observation_id.to_i ].join("|")
-      when "delete_entity"
-        entity_id = payload[:entity_id] || payload.dig("payload", "entity_id")
-        return nil if entity_id.blank?
-
-        [ "delete_entity", entity_id.to_i ].join("|")
-      when "dismiss_compaction_review"
-        review_item_id = payload[:review_item_id] || payload.dig("payload", "review_item_id")
-        return nil if review_item_id.blank?
-
-        [ "dismiss_compaction_review", review_item_id.to_s ].join("|")
-      when "move_observation"
-        observation_id = payload[:observation_id] || payload.dig("payload", "observation_id")
-        target_entity_id = payload[:target_entity_id] || payload[:target_id] || payload.dig("payload", "target_entity_id")
-        return nil if observation_id.blank? || target_entity_id.blank?
-
-        [ "move_observation", observation_id.to_i, target_entity_id.to_i ].join("|")
-      when "reparent_entity"
-        entity_id = payload[:entity_id] || payload[:node_id] || payload.dig("payload", "entity_id")
-        parent_id = payload[:parent_id] || payload.dig("payload", "parent_id")
-        return nil if entity_id.blank? || parent_id.blank?
-
-        [ "reparent_entity", entity_id.to_i, parent_id.to_i ].join("|")
-      when "stale_memory"
-        # Dedupe on entity + observation set + SIGNAL: distinct diagnoses over
-        # the same obs (expiry vs addressed-edge) are different items — a
-        # dismissal must only suppress the signal it was taken on.
-        entity_id = payload[:entity_id]
-        obs_ids = Array(payload[:observation_ids]).compact.map(&:to_i).sort
-        return nil if entity_id.blank? || obs_ids.empty?
-
-        [ "stale_memory", entity_id.to_i, obs_ids.join("-"), payload[:signal] ].join("|")
-      else
-        nil
-      end
-    end
-
-    def root_first?(row)
-      payload = row.effective_payload.with_indifferent_access
-      return true if row.kind == "orphan_parent" && payload["suggested_parents"].present?
-
-      root_types = [ NodeOperationsStrategy::PROJECT_ENTITY_TYPE ]
-      entity_types(row).any? { |type| root_types.include?(type) }
-    end
-
-    def item_score(row)
-      row.effective_payload["score"].to_i
+        MaintenanceReportRow.by_report_type(report_type).where(signature: signature).where.not(status: "expired").exists?
     end
 
     private
@@ -417,10 +265,17 @@ class CompactionReviewService
 
       applied = 0
       skipped = 0
+      not_bulk = 0
       failed = []
       rows.each do |row|
         unless row.status.in?(%w[active ignored])
           skipped += 1
+          next
+        end
+        # Only safe kinds are applied in bulk: merges, deletes, moves and contradictions are
+        # applied one by one (and a merge mixed with other writes couldn't be undone).
+        unless ReviewRowClassifier::SAFE_BULK_KINDS.include?(row.kind)
+          not_bulk += 1
           next
         end
 
@@ -434,6 +289,7 @@ class CompactionReviewService
 
       message = "#{applied} suggestion(s) applied"
       message += ", #{skipped} skipped (not actionable)" if skipped.positive?
+      message += ", #{not_bulk} skipped (not bulk-applicable: apply one by one)" if not_bulk.positive?
       message += "; #{failed.size} failed: #{failed.first(3).join('; ')}" if failed.any?
       { success: failed.empty?, message: message }
     end
@@ -471,75 +327,11 @@ class CompactionReviewService
       begin
         yield
       rescue ActiveRecord::StatementInvalid => e
-        raise unless transient_lock_error?(e) && attempts < CHECKREAD_MAX_ATTEMPTS - 1
+        raise unless TransientDbError.retryable?(e) && attempts < CHECKREAD_MAX_ATTEMPTS - 1
 
         attempts += 1
         sleep(0.05 * attempts)
         retry
-      end
-    end
-
-    def transient_lock_error?(error)
-      error.is_a?(ActiveRecord::Deadlocked) || checkread?(error)
-    end
-
-    def checkread?(error)
-      cause = error.cause
-      cause.respond_to?(:error_number) && cause.error_number == CHECKREAD_ERRNO
-    end
-
-    def sort_rows(rows)
-      rows.sort_by.with_index do |row, idx|
-        [ root_first?(row) ? 0 : 1, -item_score(row), idx ]
-      end
-    end
-
-    # `q` hits payload VALUES (names, ids, explanations), not JSON keys —
-    # a raw `payload.to_json` haystack makes 'entity' or '_' match every
-    # row. The human-readable kind label is searchable too ("relationship
-    # proposal").
-    def filter_by_query(rows, q)
-      needle = q.to_s.downcase.strip
-      rows.select do |row|
-        values = [ row.kind, row.kind.tr("_", " ") ] +
-                 payload_values(row.payload) + payload_values(row.edited_payload)
-        values.compact.join(" ").downcase.include?(needle)
-      end
-    end
-
-    def payload_values(obj)
-      case obj
-      when Hash then obj.flat_map { |_k, v| payload_values(v) }
-      when Array then obj.flat_map { |v| payload_values(v) }
-      else [ obj.to_s ]
-      end
-    end
-
-    # All entity ids targeted by ACTIVE delete_entity rows in this queue —
-    # the "queued for deletion" set the children warning compares against.
-    def delete_entity_targets(report_type:)
-      MaintenanceReportRow.by_report_type(report_type).active.where(kind: "delete_entity")
-                          .filter_map { |row| delete_entity_target(row) }
-    end
-
-    def delete_entity_target(row)
-      payload = row.effective_payload.with_indifferent_access
-      target = payload[:entity_id] || payload.dig("payload", "entity_id")
-      target.to_i.positive? ? target.to_i : nil
-    end
-
-    def entity_types(row)
-      payload = row.effective_payload.with_indifferent_access
-      case row.kind
-      when "entity_merge"
-        [ payload.dig("entity_a", "entity_type"), payload.dig("entity_b", "entity_type") ].compact
-      when "relationship_proposal"
-        [ payload[:from_entity_type], payload[:to_entity_type] ].compact
-      when "orphan_parent"
-        parents = (payload["suggested_parents"] || []).map { |p| MemoryEntity.find_by(id: p["project_id"])&.entity_type }
-        [ payload[:entity_type], *parents ].compact
-      else
-        []
       end
     end
 
