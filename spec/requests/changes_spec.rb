@@ -85,6 +85,30 @@ RSpec.describe "POST /changes/:uuid/undo", type: :request do
     end
   end
 
+  it "answers 503 when the membership lock is busy" do
+    uuid = edit_set
+    sign_in_operator
+    allow(ProjectMembership).to receive(:with_membership_lock).and_raise(ProjectMembership::LockTimeout, "synthetic")
+
+    post undo_change_path(uuid), headers: turbo
+
+    expect(response).to have_http_status(:service_unavailable)
+    expect(response.body).to include("Retry shortly.")
+    expect(ChangeSet.find_by!(uuid: uuid).undone_at).to be_nil
+  end
+
+  it "doesn't let a Bearer client without a session undo (sign-in redirect)" do
+    uuid = edit_set
+    ENV["GRAPH_MEM_MCP_TOKEN"] = "synthetic-undo-token"
+
+    post undo_change_path(uuid), headers: turbo.merge("Authorization" => "Bearer synthetic-undo-token")
+
+    expect(response).to redirect_to(operator_login_path)
+    expect(ChangeSet.find_by!(uuid: uuid).undone_at).to be_nil
+  ensure
+    ENV.delete("GRAPH_MEM_MCP_TOKEN")
+  end
+
   it "answers a guest with 403 and writes nothing" do
     uuid = edit_set
     enable_guest!

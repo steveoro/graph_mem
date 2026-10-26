@@ -75,8 +75,11 @@ class ChangeSetUndo
     reembed_changed_text if result.ok?
     result
   rescue Conflict => e
-    Result.new(status: :conflict, message: "Can't undo: #{e.conflicts.size} conflict(s)", conflicts: e.conflicts, change_set: nil)
-  rescue ProjectMembership::LockTimeout
+    conflict(e.conflicts)
+  # Every failure is a readable result, never a 500: the transaction has rolled back.
+  rescue ActiveRecord::RecordInvalid, ActiveRecord::RecordNotDestroyed, ActiveRecord::RecordNotUnique => e
+    conflict([ "Can't undo: #{failure_reason(e)}" ])
+  rescue ProjectMembership::LockTimeout, ActiveRecord::Deadlocked, ActiveRecord::LockWaitTimeout
     Result.new(status: :busy, message: "Busy, retry shortly", conflicts: [], change_set: nil)
   end
 
@@ -114,6 +117,18 @@ class ChangeSetUndo
     return "The undo window passed on #{local_time(original.undoable_until)}" unless original.undoable?
 
     nil
+  end
+
+  def conflict(conflicts)
+    Result.new(status: :conflict, message: "Can't undo: #{conflicts.size} conflict(s)", conflicts: conflicts, change_set: nil)
+  end
+
+  def failure_reason(error)
+    case error
+    when ActiveRecord::RecordInvalid then "#{error.record.class.name} ##{error.record.id}: #{error.record.errors.full_messages.to_sentence}"
+    when ActiveRecord::RecordNotDestroyed then "#{error.record.class.name} ##{error.record.id} can't be deleted"
+    else "a row it would restore exists again"
+    end
   end
 
   def refusal(status, message)

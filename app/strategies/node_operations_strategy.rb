@@ -100,7 +100,9 @@ class NodeOperationsStrategy
     rescue ActiveRecord::RecordNotUnique => e
       error_result("Failed to merge nodes: duplicate relation would be created (#{e.message})")
     rescue ActiveRecord::StatementInvalid => e
-      raise unless transient_merge_error?(e) && attempts < MAX_MERGE_RETRIES
+      # Inside a caller's transaction (a graph_delete batch, an undo's redo) InnoDB has already
+      # rolled the whole transaction back: a retry can't redo the earlier work, so the caller decides.
+      raise unless transient_merge_error?(e) && attempts < MAX_MERGE_RETRIES && !ActiveRecord::Base.current_transaction.open?
 
       attempts += 1
       delay = MERGE_RETRY_BASE_DELAY * (2**(attempts - 1))

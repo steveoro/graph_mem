@@ -23,7 +23,11 @@ class ChangeSetUndo
       steps = @change_set.section(:merges)
       return redo_merges if steps.empty?
 
-      @context.within_merge_step { steps.reverse_each { |step| undo_step(step) } }
+      # Collect every step's refusals before raising, so the operator sees the whole list.
+      conflicts = []
+      @context.within_merge_step { steps.reverse_each { |step| conflicts.concat(undo_step(step)) } }
+      raise Conflict, conflicts if conflicts.any?
+
       @context.note_redo_merges!(steps.map { |step| { "source_id" => step.dig("source", "id"), "target_id" => step.dig("target", "id") } })
     end
 
@@ -33,20 +37,25 @@ class ChangeSetUndo
       @change_set.section(:redo_merges).each do |pair|
         result = NodeOperationsStrategy.new.merge_into(pair["source_id"], pair["target_id"], change_set_kind: "redo")
         raise Conflict, [ "Can't redo the merge: #{result[:error]}" ] unless result[:success]
+
+        # The redone merge cleared the target's embedded_at with inline embeds suppressed.
+        @effects.reembed << [ MemoryEntity, pair["target_id"] ]
       end
     end
 
+    # @return [Array<String>] this step's refusals (empty when it was undone)
     def undo_step(step)
       source = step["source"]
       target = lock_entities(step)[step.dig("target", "id")]
       conflicts = refusals(step, target)
-      raise Conflict, conflicts if conflicts.any?
+      return conflicts if conflicts.any?
 
       restored = restore_source(source)
       MemoryObservation.where(id: step["observation_ids"]).order(:id).each { |obs| obs.update!(memory_entity_id: restored.id) }
       restore_relations(step)
       remove_added_aliases(target, step["target"])
       finish(step, restored, target)
+      []
     end
 
     def lock_entities(step)
@@ -73,6 +82,9 @@ class ChangeSetUndo
       deletion = AuditLog.where(auditable_type: "MemoryEntity", auditable_id: target_id, action: "delete").order(:id).last
       later = deletion&.change_set
       return "Can't undo: the merge target ##{target_id} is gone" unless later
+      if later.id == @change_set.id
+        return "Can't undo: the merge target ##{target_id} was merged away later in this change, which couldn't be undone"
+      end
 
       "Can't undo: the merge target ##{target_id} was removed by change #{later.uuid} (#{later.kind}); undo #{later.uuid} first"
     end
@@ -121,6 +133,9 @@ class ChangeSetUndo
         if MemoryRelation.exists?(id: attrs["id"]) || MemoryRelation.exists?(attrs.slice("from_entity_id", "to_entity_id", "relation_type"))
           @effects.skipped << "relation ##{attrs['id']} (#{attrs['relation_type']}) exists again"
           next
+        end
+        if attrs["relation_type"] == "part_of" && RelationSemantics.would_create_cycle?(attrs["from_entity_id"], attrs["to_entity_id"])
+          raise Conflict, [ "Can't undo: restoring the part_of edges would create a cycle" ]
         end
         MemoryRelation.create!(attrs.slice(*MemoryRelation.column_names))
       end

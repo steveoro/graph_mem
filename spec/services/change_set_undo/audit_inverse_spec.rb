@@ -128,6 +128,14 @@ RSpec.describe ChangeSetUndo::AuditInverse do
     expect(widget.reload.description).to eq("original")
   end
 
+  it "answers a deadlock or a lock-wait timeout as busy" do
+    uuid = recorded("graph.edit") { GraphEditService.call(operations: [ { type: "update_entity", entity_id: widget.id, description: "x" } ]) }
+    [ ActiveRecord::Deadlocked, ActiveRecord::LockWaitTimeout ].each do |error|
+      allow(ChangeSet).to receive(:lock).and_raise(error, "synthetic")
+      expect(undo(uuid)).to have_attributes(status: :busy, message: "Busy, retry shortly")
+    end
+  end
+
   it "re-embeds the restored text after the lock (best effort)" do
     uuid = recorded("graph.edit") { GraphEditService.call(operations: [ { type: "update_entity", entity_id: widget.id, name: "SynthWidget 2" } ]) }
     allow(EmbeddingService).to receive(:embed_entity)

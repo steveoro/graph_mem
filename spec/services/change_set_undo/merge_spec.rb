@@ -114,6 +114,63 @@ RSpec.describe ChangeSetUndo::Merge do
     end
   end
 
+  # graph_delete refuses to touch one entity twice per batch, so open the set by hand: two merges
+  # recorded in one change set, the shape a policy run or a bulk action produces.
+  describe "a set with several merges (A -> B, then B -> C)" do
+    let!(:gadget) { MemoryEntity.create!(name: "SynthGadget", entity_type: "Component") }
+    let!(:gadget_fact) { MemoryObservation.create!(memory_entity: gadget, content: "SynthGadget is synthetic.") }
+
+    def batch!
+      ChangeSet.record(kind: "review.bulk_apply") do |context|
+        NodeOperationsStrategy.new.merge_into(gadget.id, source.id)
+        NodeOperationsStrategy.new.merge_into(source.id, target.id)
+        expect(ChangeSet.find(context.id).section(:merges).map { |step| step.dig("source", "id") }).to eq([ gadget.id, source.id ])
+        context.uuid
+      end
+    end
+
+    it "undoes the steps newest first and restores both sources" do
+      uuid = batch!
+      expect(MemoryEntity.where(id: [ gadget.id, source.id ])).to be_empty
+
+      expect(undo(uuid)).to be_ok
+      expect(gadget_fact.reload.memory_entity_id).to eq(gadget.id)
+      expect(observation.reload.memory_entity_id).to eq(source.id)
+      expect(MemoryEntity.find(source.id).aliases).to eq("Widget")
+      expect(target.reload.aliases).to eq("SW")
+    end
+
+    it "lists the refusals of every step at once" do
+      uuid = batch!
+      MemoryEntity.create!(name: "SynthWidget", entity_type: "Component", project_id: project.id)
+      MemoryEntity.create!(name: "SynthGadget", entity_type: "Component")
+
+      conflicts = undo(uuid).conflicts
+      expect(conflicts).to include("Can't undo: an entity named 'SynthWidget' exists again in its scope",
+                                   "Can't undo: an entity named 'SynthGadget' exists again in its scope")
+      expect(conflicts).to include(a_string_matching(/merged away later in this change/))
+    end
+  end
+
+  it "answers a validation failure as a conflict with its reason, not an error" do
+    uuid = merge!
+    invalid = MemoryRelation.new.tap { |relation| relation.errors.add(:base, "synthetic semantics failure") }
+    allow(MemoryRelation).to receive(:create!).and_raise(ActiveRecord::RecordInvalid.new(invalid))
+
+    result = undo(uuid)
+
+    expect(result.status).to eq(:conflict)
+    expect(result.conflicts.sole).to include("synthetic semantics failure")
+    expect(MemoryEntity.find_by(id: source.id)).to be_nil
+  end
+
+  it "refuses a destroyed part_of edge that would now close a cycle, with the friendly reason" do
+    uuid = merge!
+    allow(RelationSemantics).to receive(:would_create_cycle?).and_return(true)
+
+    expect(undo(uuid).conflicts).to eq([ "Can't undo: restoring the part_of edges would create a cycle" ])
+  end
+
   it "skips (and reports) a destroyed relation whose id is taken again" do
     uuid = merge!
     MemoryRelation.create!(id: duplicate_edge.id, from_entity: beta, to_entity: child, relation_type: "depends_on")
