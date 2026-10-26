@@ -59,6 +59,9 @@ readonly profile neither lists nor renders it).
 The protocol itself is served by the official MCP Ruby SDK (`mcp` gem, pinned to 1.8.1), through
 the adapter in `lib/graph_mem/official_mcp/`. The tool classes don't depend on the gem: the
 adapter wraps them.
+The decisions taken when moving from fast-mcp to the gem (D1–D14: session cap, allowed hosts and
+origins, body caps, argument validation, removed aliases and `/mcp/sse`, exact gem pin) are listed
+with graph_mem's answers in [the migration guide](guides/migrating-fast-mcp-to-mcp-gem.md) §2.
 
 #### Official MCP SDK feature map
 

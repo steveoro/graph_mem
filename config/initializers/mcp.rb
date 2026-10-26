@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 # MCP over Streamable HTTP, served by the official MCP Ruby SDK (`mcp` gem); see
-# docs/plans/mg-streamlined-plan.md and docs/mcp_access_control.md.
+# docs/guides/migrating-fast-mcp-to-mcp-gem.md and docs/mcp_access_control.md.
 #
 #   /mcp              default profile (12 tools)
 #   /mcp/readonly     context and read tools (9)

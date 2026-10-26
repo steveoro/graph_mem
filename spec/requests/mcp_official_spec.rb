@@ -2,7 +2,7 @@
 
 require "rails_helper"
 
-# MCP over Streamable HTTP on the official MCP Ruby SDK (docs/plans/mg-streamlined-plan.md, PR A):
+# MCP over Streamable HTTP on the official MCP Ruby SDK (docs/guides/migrating-fast-mcp-to-mcp-gem.md):
 # profile gating, access control, the tool error envelope, sessions and the success metadata.
 # Synthetic data only.
 RSpec.describe "MCP on the official SDK", type: :request do

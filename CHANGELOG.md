@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.55.2] - 2026-10-25
 
-Completes the move to the official MCP Ruby SDK (`docs/plans/mg-streamlined-plan.md`, PR C).
+Completes the move to the official MCP Ruby SDK.
 
 ### Documentation
 - `docs/guides/migrating-fast-mcp-to-mcp-gem.md`: a guide for any Rails app moving from fast-mcp to the `mcp` gem, written from graph_mem's migration. It covers the inventory, the decisions to make, the wrapper and server-per-profile pattern, a mapping table checked against `mcp` 1.8.1, the pitfalls, and the gates for the engine swap and the removal.
@@ -30,7 +30,7 @@ Completes the move to the official MCP Ruby SDK (`docs/plans/mg-streamlined-plan
 
 ## [1.55.0] - 2026-10-25
 
-MCP now runs on the official MCP Ruby SDK (`docs/plans/mg-streamlined-plan.md`, PR A).
+MCP now runs on the official MCP Ruby SDK.
 
 ### Changed
 - MCP is served by the official MCP Ruby SDK (`mcp` 1.8.1, pinned exactly) over Streamable HTTP (`/mcp`, `/mcp/readonly`, `/mcp/maintenance`) and stdio (`bin/mcp_stdio_runner.rb`). It includes the 2026-07-28 protocol: `server/discover` and the stateless per-request lifecycle, next to the `initialize` handshake (2024-11-05 … 2025-11-25). Tools, prompts, resource templates, profiles, the `ToolError` envelope (with `code`), `next_move` and telemetry are unchanged.

@@ -1,5 +1,7 @@
 # MCP update and hardening plan: steveoro/fast-mcp → steveoro/graph_mem (FINAL)
 
+**Status (2026-10-26): DONE.** Everything in this plan shipped in graph_mem 1.54.0–1.55.2 (PRs #111–#121), or was superseded or dropped. M-D1 (query cap) and M-D2 (description-length spec) were never merged; their branches are deleted and the work is carried as chores D-7 and D-8 in `ui-dashboard-plan.md` §6.D. fast-mcp is no longer a dependency (removed in 1.55.1). Kept for its decisions (D-nn), which `ui-dashboard-plan.md` cites; the active plan is `ui-dashboard-plan.md`.
+
 **Final version, 2026-10-21 (Europe/Rome)**, written for Steve, for **Claude** to implement locally, with simple step lists for Devin.
 **Oct 22-b update** (Steve's answers, 10:44): the rules rewrite ships first as graph_mem **1.53.0**; graph_mem migrates to the official `mcp` gem (track **MG**, replacing PR-4 and fast-mcp 1.9.0); D-17 is decided; the existing branches are kept. `mcp-update-plan.2026-10-22-b.md` is the version before this update. **Renumbering:** the hardening bundle (UI-0 + PR-0 + PR-2) is now **1.54.0**, PR-3 **1.54.1**, the migration **1.55.0–1.58.0** and the UI series **1.59.0–1.66.0**. Every version below uses the new numbers.
 **Oct 22-c update** (17:15; `mcp-update-plan.2026-10-22-c.md` is the version before it):
@@ -92,17 +94,17 @@ Companion plans: `ui-dashboard-plan.md` and, since Oct 22, `agent-rules-plan.md`
 | 5 | **PR-2** MCP hardening + fast-mcp 1.8.0 bump + the two high bugs + `instructions` wiring (§2.17) + the #106 leftovers and test hygiene (mcp §2.20–2.21); **bumps to 1.54.0** | graph_mem **1.54.0** | [Claude] | PR-1 tagged, PR-0 merged, 1.53.0 merged |
 | 6 | **PR-3** interop specs/scripts (+ docs); engine-agnostic, the migration's safety net | graph_mem **1.54.1** | [Claude] + [Devin-simple] | 1.54.0 |
 | D | **M-D1** query cap, **M-D2** description-length spec (D-23), **M-D3** docs line-refs (after PR-2; ✅ done by Claude in 1.54.3) | `[Unreleased]` | [Devin-simple] | as listed |
-| 7 | ~~**MG-0** migration design (reads `ruby_mcp` `a0ff088`); a written doc, no release~~ **Superseded** by [`mg-streamlined-plan.md`](mg-streamlined-plan.md) | n/a | [Claude] | PR-3 merged |
-| 8 | ~~**MG-1** adapter layer, `mcp` gem, engine switch (default fast-mcp), 3 pilot tools~~ **Superseded** by [`mg-streamlined-plan.md`](mg-streamlined-plan.md) | graph_mem **1.55.0** | [Claude] | MG-0 approved by Steve |
-| 9 | ~~**MG-2a** tools batch A: the 12 `/mcp` tools + parity-spec template~~ **Superseded** by [`mg-streamlined-plan.md`](mg-streamlined-plan.md) | graph_mem 1.55.1 | [Claude] | MG-1 |
-| 10 | ~~**MG-2b** tools batch B: the other 28 tool classes~~ **Superseded** by [`mg-streamlined-plan.md`](mg-streamlined-plan.md) | graph_mem 1.55.2 | [Devin-simple] | MG-2a |
-| 11 | ~~**MG-3** resources and prompts~~ **Superseded** by [`mg-streamlined-plan.md`](mg-streamlined-plan.md) | graph_mem 1.55.3 | [Claude] | MG-2a |
-| 12 | ~~**MG-4** transports and auth on the gem; the official engine becomes the default~~ **Superseded** by [`mg-streamlined-plan.md`](mg-streamlined-plan.md) | graph_mem **1.56.0** | [Claude] | MG-2b, MG-3 |
-| 13 | ~~**MG-5** 2026-07-28 dual era through the gem~~ **Superseded** by [`mg-streamlined-plan.md`](mg-streamlined-plan.md) | graph_mem **1.57.0** | [Claude] | MG-4 |
-| 14 | ~~**MG-6** drop fast-mcp + **MG-D1** docs~~ **Superseded** by [`mg-streamlined-plan.md`](mg-streamlined-plan.md) | graph_mem **1.58.0** | [Claude] + [Devin-simple] | MG-5 |
-| 15+ | UI series UI-1 … UI-7 | graph_mem 1.59.0 … 1.66.0 | [Claude] | 1.58.0 |
+| 7 | ~~**MG-0** migration design (reads `ruby_mcp` `a0ff088`); a written doc, no release~~ **Superseded** by the streamlined migration (PRs #118–#121) | n/a | [Claude] | PR-3 merged |
+| 8 | ~~**MG-1** adapter layer, `mcp` gem, engine switch (default fast-mcp), 3 pilot tools~~ **Superseded** by the streamlined migration (PRs #118–#121) | graph_mem **1.55.0** | [Claude] | MG-0 approved by Steve |
+| 9 | ~~**MG-2a** tools batch A: the 12 `/mcp` tools + parity-spec template~~ **Superseded** by the streamlined migration (PRs #118–#121) | graph_mem 1.55.1 | [Claude] | MG-1 |
+| 10 | ~~**MG-2b** tools batch B: the other 28 tool classes~~ **Superseded** by the streamlined migration (PRs #118–#121) | graph_mem 1.55.2 | [Devin-simple] | MG-2a |
+| 11 | ~~**MG-3** resources and prompts~~ **Superseded** by the streamlined migration (PRs #118–#121) | graph_mem 1.55.3 | [Claude] | MG-2a |
+| 12 | ~~**MG-4** transports and auth on the gem; the official engine becomes the default~~ **Superseded** by the streamlined migration (PRs #118–#121) | graph_mem **1.56.0** | [Claude] | MG-2b, MG-3 |
+| 13 | ~~**MG-5** 2026-07-28 dual era through the gem~~ **Superseded** by the streamlined migration (PRs #118–#121) | graph_mem **1.57.0** | [Claude] | MG-4 |
+| 14 | ~~**MG-6** drop fast-mcp + **MG-D1** docs~~ **Superseded** by the streamlined migration (PRs #118–#121) | graph_mem **1.58.0** | [Claude] + [Devin-simple] | MG-5 |
+| 15+ | Chores D-1–D-3, then the UI series (order and versions: `ui-dashboard-plan.md` §0.3, Oct 26) | graph_mem 1.55.3, then 1.56.0 … 1.63.0 | [Claude] | 1.55.2 |
 
-**MG track: done (2026-10-25).** Rows 7–14 shipped as 1.55.0–1.55.2 through [`mg-streamlined-plan.md`](mg-streamlined-plan.md); see §MG.
+**MG track: done (2026-10-25).** Rows 7–14 shipped as 1.55.0–1.55.2 (#118, #119, #120, #121) through the streamlined migration plan, now removed; its decisions D1–D14 and graph_mem's answers are in [`docs/guides/migrating-fast-mcp-to-mcp-gem.md`](../guides/migrating-fast-mcp-to-mcp-gem.md) §2. See §MG.
 
 **Why the rules rewrite is 1.53.0.** It's the next graph_mem release and it's ready long before the hardening bundle, which waits for the fast-mcp 1.8.0 tag. S-7 rules out a v1.52.2. AR-D2 adds fields to two tool schemas, which is a minor change. The hardening bundle keeps its content and becomes 1.54.0.
 
@@ -581,7 +583,7 @@ ScanRootPolicy.status          # for Settings / Home / health JSON
 - Both dashboard scan forms list the allowed folders under the path field. The Project Scans card shows the disabled state.
 - Health: `ScanRootPolicy.status` feeds the UI plan's Home pill.
 
-### 0.7 Docs: `docs/container_scan_mounts.md` (new; linked from README "Docker" and `docs/app_settings_reference.md`, which also fixes its dead `plans/project_scan.md` link → `plans/done/project_scan.md`)
+### 0.7 Docs: `docs/container_scan_mounts.md` (new; linked from README "Docker" and `docs/app_settings_reference.md`, which also fixes its dead `plans/project_scan.md` link; that link now points at `skills/project-scan/SKILL.md`)
 - **Linux Docker (tested):** the compose lines above. `docker run` equivalent: `-v "$HOME:$HOME:ro" -e GRAPH_MEM_SCAN_ROOTS="$HOME"`. Kamal: `volumes: ["/home/deploy:/home/deploy:ro"]` + `GRAPH_MEM_SCAN_ROOTS` (untested).
 - **Always `:ro`.** The scanner never writes, and read-only stops anything in the container from touching your home.
 - **UID/permissions:** the app runs as uid/gid 1000. If your host uid is 1000 (the usual first user), it reads your files as you. Otherwise grant read on the scanned subfolders only: `setfacl -m u:1000:x "$HOME"` (traverse only) plus `setfacl -R -m u:1000:rX -m d:u:1000:rX ~/Projects`, or a shared group via `group_add`. **Never** `chmod -R o+r $HOME`. Don't change the container `user:` (`storage/`, `log/`, `tmp/` are owned by 1000).
@@ -999,7 +1001,7 @@ The fixtures could drift from real clients. Mitigation: the client matrix uses t
 
 ## MG. Migrating graph_mem to the official `mcp` gem (new Oct 22-b, D-20; replaces the PR-4-0 spike and PR-4a/4b)
 
-> **Superseded (2026-10-25).** Steve approved [`mg-streamlined-plan.md`](mg-streamlined-plan.md), which replaces this
+> **Superseded (2026-10-25).** Steve approved the streamlined migration plan (now removed; decisions in [`docs/guides/migrating-fast-mcp-to-mcp-gem.md`](../guides/migrating-fast-mcp-to-mcp-gem.md) §2), which replaces this
 > section and rows 7–14 of the release table: PR A (engine swap, 1.55.0), PR B (drop fast-mcp, 1.55.1) and PR C
 > (docs and the migration guide, 1.55.2). What follows is kept for history.
 >

@@ -4,7 +4,7 @@ require "mcp"
 
 module GraphMem
   # graph_mem's MCP layer on the official MCP Ruby SDK (`mcp` gem); see
-  # docs/plans/mg-streamlined-plan.md.
+  # docs/guides/migrating-fast-mcp-to-mcp-gem.md.
   module OfficialMcp
     # Errors on the gem's own -32603 path (tool errors are answered by ToolWrapper instead).
     EXCEPTION_REPORTER = lambda do |exception, context|

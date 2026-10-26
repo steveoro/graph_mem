@@ -134,4 +134,3 @@ curl -X POST http://localhost:3000/api/v1/summarize \
 - [App settings reference](app_settings_reference.md)
 - [MCP tools](mcp_tools.md)
 - [REST API reference](api/rest_api_reference.md)
-- [Phase 5 plan](plans/phase_5_towards__a_knowledge_base.md)
