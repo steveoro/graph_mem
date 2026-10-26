@@ -1,5 +1,5 @@
--# Role-aware navigation (UI-1). Operator-only items sit inside `can_write?`; that is
--# cosmetic, the server refuses guests on those routes anyway (RoleAuthorization).
+-# Role-aware navigation (UI-1). Operator-only items sit inside `can_write?`, which today is
+-# operator_signed_in?; UI-1b adds the guest role and the server-side refusal.
 - review_path = compaction_review_data_exchange_index_path
 - on_review = current_page?(review_path)
 - on_scan_review = on_review && params[:report_type] == "scan_review"
@@ -33,8 +33,9 @@
         %li= ui_nav_link t("ui.nav.telemetry"), operator_telemetry_path, testid: "nav-telemetry"
         %li= ui_nav_link t("ui.nav.audit_logs"), operator_audit_logs_path, testid: "nav-audit-logs"
         %li= ui_nav_link t("ui.nav.settings"), operator_settings_path, testid: "nav-settings", icon: :settings
-        %li= ui_nav_link t("ui.nav.jobs"), "/operator/jobs", testid: "nav-jobs"
-        %li= ui_nav_link t("ui.nav.api_docs"), "/api-docs", testid: "nav-api-docs"
+        -# Mission Control and Swagger UI have their own layouts: skip Turbo Drive.
+        %li= ui_nav_link t("ui.nav.jobs"), "/operator/jobs", testid: "nav-jobs", data: { turbo: false }
+        %li= ui_nav_link t("ui.nav.api_docs"), "/api-docs/index.html", testid: "nav-api-docs", data: { turbo: false }
     .ui-sidebar__footer
       %p.ui-sidebar__user= t("ui.nav.signed_in_as", user: session[:user].presence || t("ui.nav.unknown_user"))
       = button_to t("ui.nav.sign_out"), operator_logout_path,

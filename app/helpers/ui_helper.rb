@@ -9,8 +9,8 @@
 module UiHelper
   REVIEW_BACKLOG_CACHE_KEY = "ui/review_backlog_count"
 
-  # Whether to show write controls. Cosmetic only: the server refuses guest writes
-  # regardless (RoleAuthorization for HTML, ApiAuthentication for /api/v1).
+  # Whether to show write controls. Today only operators can sign in, so this is
+  # operator_signed_in?; UI-1b adds the guest role and the server-side refusal.
   #
   # @return [Boolean]
   def can_write?
@@ -25,10 +25,11 @@ module UiHelper
   # @param icon [Symbol, nil] a DashboardHelper::DASHBOARD_ICONS key
   # @param badge [Integer, nil] count after the label; nothing is rendered for nil or 0
   # @param current [Boolean, nil] overrides current_page?(path) (links that differ only by query)
+  # @param data [Hash] extra data attributes, e.g. { turbo: false } for pages outside the shell
   # @return [ActiveSupport::SafeBuffer]
-  def ui_nav_link(label, path, testid:, icon: nil, badge: nil, current: nil)
+  def ui_nav_link(label, path, testid:, icon: nil, badge: nil, current: nil, data: {})
     current = current_page?(path) if current.nil?
-    link_to path, class: "ui-sidebar__link", aria: { current: (current ? "page" : nil) }, data: { testid: testid } do
+    link_to path, class: "ui-sidebar__link", aria: { current: (current ? "page" : nil) }, data: data.merge(testid: testid) do
       safe_join([
         (dashboard_icon(icon, css_class: "ui-sidebar__icon") if icon),
         tag.span(label, class: "ui-sidebar__label"),

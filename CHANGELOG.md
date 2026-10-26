@@ -17,7 +17,7 @@ UI-1a: the app shell and an enforced Content Security Policy. The read-only gues
 - The layout no longer forces every page into a flex row; sign-in uses its own `auth` layout. The flash container (and Turbo Stream target) is now `toasts`.
 
 ### Security
-- The Content Security Policy is enforced (it was report-only), with `base-uri 'self'` and `form-action 'self'` added; violations are still reported to `/csp-reports`. `/api-docs` keeps rswag's own policy: rswag-ui sends its header under a mixed-case key that Rails didn't recognise, so Rails stacked the app policy on top and blocked Swagger UI.
+- The Content Security Policy is enforced (it was report-only), with `base-uri 'self'` and `form-action 'self'` added; violations are still reported to `/csp-reports`. `/api-docs` keeps rswag's own policy: rswag-ui sends its header under a mixed-case key that Rails didn't recognise, so once enforced Rails would have stacked the app policy on top and blocked Swagger UI.
 
 ### Documentation
 - `docs/app_settings_reference.md` lists the Telemetry tab; `docs/operator/telemetry.md` points at the sidebar.
