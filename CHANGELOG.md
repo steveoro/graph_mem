@@ -20,7 +20,8 @@ UI-4a: change sets, merge snapshots and undo (backend only).
 ### Changed
 - Audit rows carry `change_set_id`.
 - Compaction auto-merges are now undoable for 7 days (actor `compaction:<run_id>`, one change set per merge).
-- `NodeOperationsStrategy#merge_into` takes `change_set_kind:` and returns `change_set_uuid` on success (MCP tool output is unchanged).
+- `NodeOperationsStrategy#merge_into` takes `change_set_kind:` and returns `change_set_uuid` on success (MCP tool output is unchanged). It no longer retries a deadlock, lock-wait timeout or stale read inside a caller's transaction (a `graph_delete` batch, a review apply, a redo); the error reaches the caller.
+- `graph_edit` (MCP and services): an edit refused because a concurrent writer (a merge, an undo, another edit) changed the same row is retried in a fresh transaction, up to 3 times. If it still can't land, or it runs inside a caller's transaction, it answers a retryable `concurrency` error (`code: "concurrent_write"`) instead of an internal error.
 
 ## [1.56.0] - 2026-10-26
 

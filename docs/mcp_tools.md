@@ -114,6 +114,7 @@ The fix is always the same: give each agent its own `X-MCP-Client` header value.
 #### `graph_edit`
 - **Description:** Atomically update entities and observations, including observation supersession.
 - **Operation types:** `update_entity`, `update_observation`.
+- **Concurrent writers:** if a merge, an undo or another edit changes a row this edit is waiting on, the edit is retried (up to 3 times) and lands after that writer. If it still can't, it fails with a retriable `concurrency` error (`code: "concurrent_write"`) and nothing is edited: retry shortly.
 
 #### `graph_delete`
 - **Description:** Atomically delete entities/relations, obsolete observations, or merge entities. Per-operation audit reasons remain enforced.

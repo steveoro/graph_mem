@@ -2,6 +2,9 @@
 
 class GraphEditService
   TYPES = %w[update_entity update_observation].freeze
+  # Attempts for an edit refused by a concurrent writer (see #with_concurrent_write_retry).
+  TRANSIENT_ATTEMPTS = 3
+  TRANSIENT_RETRY_DELAY = 0.05
 
   # Atomically applies entity and observation update operations.
   #
@@ -21,7 +24,8 @@ class GraphEditService
   # @return [Hash] the legacy-compatible updated record payload
   def self.execute_one(type, attributes)
     ChangeSet.record(kind: "graph.edit") do
-      new(operations: []).send(:dispatch, type.to_s, attributes.to_h.deep_symbolize_keys)
+      service = new(operations: [])
+      service.send(:with_concurrent_write_retry) { service.send(:dispatch, type.to_s, attributes.to_h.deep_symbolize_keys) }
     end
   end
 
@@ -49,14 +53,18 @@ class GraphEditService
     )
 
     results = []
-    summary = { entities_updated: 0, observations_updated: 0, observations_superseded: 0 }
-    ActiveRecord::Base.transaction do
-      @operations.each do |operation|
-        payload = GraphMutationBatch.execute(operation) do |attributes|
-          dispatch(operation[:type], attributes)
+    summary = nil
+    with_concurrent_write_retry do
+      results = []
+      summary = { entities_updated: 0, observations_updated: 0, observations_superseded: 0 }
+      ActiveRecord::Base.transaction do
+        @operations.each do |operation|
+          payload = GraphMutationBatch.execute(operation) do |attributes|
+            dispatch(operation[:type], attributes)
+          end
+          increment_summary(summary, operation, payload)
+          results << GraphMutationBatch.result(operation, payload)
         end
-        increment_summary(summary, operation, payload)
-        results << GraphMutationBatch.result(operation, payload)
       end
     end
 
@@ -68,7 +76,38 @@ class GraphEditService
     }
   end
 
+  # An edit that waited on a row another writer (a merge, an undo, another edit) then changed is
+  # refused by MariaDB's snapshot isolation (ER_CHECKREAD); a deadlock rolls it back. Either way a
+  # fresh transaction sees the committed state, so the edit is retried and lands after the other
+  # writer. Inside a caller's transaction, or after TRANSIENT_ATTEMPTS, it answers a retryable
+  # concurrency error instead of an internal one.
+  def with_concurrent_write_retry
+    attempts = 0
+    begin
+      attempts += 1
+      yield
+    rescue ActiveRecord::StatementInvalid => e
+      raise unless TransientDbError.busy?(e)
+
+      if TransientDbError.retryable?(e) && attempts < TRANSIENT_ATTEMPTS && !ActiveRecord::Base.current_transaction.open?
+        sleep(TRANSIENT_RETRY_DELAY * attempts)
+        retry
+      end
+      raise concurrent_write_error
+    end
+  end
+
+  def concurrent_write_error
+    McpGraphMemErrors::OperationFailed.new(
+      "Another write changed the same record at the same time; nothing was edited.",
+      category: "concurrency", retriable: true, code: "concurrent_write",
+      next_move: "Retry the same `graph_edit` shortly."
+    )
+  end
+
   def dispatch(type, attributes)
+    # The update helpers consume their hash (`delete(:entity_id)`); a retry needs the original.
+    attributes = attributes.deep_dup
     case type
     when "update_entity" then update_entity(attributes)
     when "update_observation" then update_observation(attributes)

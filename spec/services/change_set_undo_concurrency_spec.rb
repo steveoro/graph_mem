@@ -86,17 +86,16 @@ RSpec.describe ChangeSetUndo, "concurrency" do
   end
 
   # graph_edit reads the row before it waits, so once the undo commits MariaDB's snapshot isolation
-  # refuses the stale write (ER_CHECKREAD), as it does after any concurrent writer: queued, then
-  # refused, never interleaved.
-  it "makes a graph_edit (no membership lock) wait on the undo's row locks, then refuses its stale write" do
+  # refuses that stale write (ER_CHECKREAD); graph_edit retries in a fresh transaction and lands
+  # after the undo: queued, never interleaved.
+  it "makes a graph_edit (no membership lock) wait on the undo's row locks, then apply after it" do
     undo_result, edit = race_writer_against_undo(:finish) do
       GraphEditService.call(operations: [ { type: "update_entity", entity_id: target.id, description: "edited during the undo" } ])
     end
 
     expect(undo_result).to be_ok
-    expect(edit).to be_a(ActiveRecord::StatementInvalid)
-    expect(edit.message).to match(/Record has changed since last read/)
-    expect(target.reload).to have_attributes(description: nil, aliases: nil)
+    expect(edit).to include(status: "ok")
+    expect(target.reload).to have_attributes(description: "edited during the undo", aliases: nil)
     expect(MemoryEntity.exists?(source.id)).to be(true)
     expect(membership_lock_free?).to be(true)
   end
