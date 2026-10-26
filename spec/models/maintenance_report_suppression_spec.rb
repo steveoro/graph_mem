@@ -46,4 +46,24 @@ RSpec.describe MaintenanceReportSuppression, type: :model do
       expect(created).to be_persisted
     end
   end
+  describe ".replace! (review round 1)" do
+    it "keeps a permanent suppression when the new one would expire" do
+      permanent = described_class.create!(report_type: "compaction_review", signature: "sig-p", source: "dismissed")
+
+      deleted, created = described_class.replace!(report_type: "compaction_review", signature: "sig-p", kind: nil,
+                                                  reason: "snooze", source: "snoozed", expires_at: 30.days.from_now)
+
+      expect([ deleted, created ]).to eq([ [], nil ])
+      expect(described_class.sole).to eq(permanent)
+    end
+
+    it "is all-or-nothing: a failed insert keeps the old suppression" do
+      old = described_class.create!(report_type: "compaction_review", signature: "sig-o", source: "snoozed", expires_at: 2.days.from_now)
+      allow(described_class).to receive(:create!).and_raise(ActiveRecord::RecordNotUnique, "synthetic race")
+
+      expect { described_class.replace!(report_type: "compaction_review", signature: "sig-o", kind: nil, reason: nil, source: "dismissed") }
+        .to raise_error(ActiveRecord::RecordNotUnique)
+      expect(described_class.sole).to eq(old)
+    end
+  end
 end

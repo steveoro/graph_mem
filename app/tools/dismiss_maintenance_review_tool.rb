@@ -18,6 +18,7 @@ class DismissMaintenanceReviewTool < ApplicationTool
   description "Dismiss, ignore, or restore a maintenance-review queue row without applying the suggestion. " \
     "Pass required `item_id` (string UUID) and `action` (dismiss, ignore, or restore); optional " \
     "`report_type` (string, default compaction_review), `reason` (string). " \
+    "`ignore` snoozes an active row for 30 days: it comes back afterwards and isn't proposed again until then. " \
     "Do not use to execute the suggestion; use `apply_maintenance_review` instead. " \
     "Do not use to look up a row; use `list_maintenance_review` instead. " \
     "Do not use to merge entities; use `graph_delete` instead."
@@ -53,6 +54,9 @@ class DismissMaintenanceReviewTool < ApplicationTool
         message,
         next_move: "Call `list_maintenance_review` to get a valid item_id, then retry `dismiss_maintenance_review`."
       )
+    end
+    if message.match?(/can be snoozed/i)
+      raise GraphMem::InvalidArgumentsError, "#{message}. Restore the row first, or leave it resolved."
     end
 
     logger.error "DismissMaintenanceReviewTool operation failed: #{message}"

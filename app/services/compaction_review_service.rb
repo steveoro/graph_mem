@@ -94,6 +94,10 @@ class CompactionReviewService
     def snooze(item_id, days: SNOOZE_DAYS, report_type: "compaction_review", action: "snooze")
       row = find_item(item_id, report_type: report_type)
       return { success: false, error: "Suggestion not found" } unless row
+      # A dismissed, approved or expired row stays resolved: restore it first.
+      unless %w[active ignored].include?(row.status)
+        return { success: false, error: "Only active or snoozed suggestions can be snoozed (this one is #{row.status})" }
+      end
 
       until_time = days.to_i.clamp(1, 365).days.from_now
       record_review(action, row) do

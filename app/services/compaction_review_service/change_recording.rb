@@ -97,7 +97,7 @@ class CompactionReviewService
         deleted, created = MaintenanceReportSuppression.replace!(report_type: row.report_type, signature: signature,
                                                                  kind: row.kind, reason: reason, source: source,
                                                                  expires_at: expires_at)
-        note_suppressions(created: [ created ], deleted: deleted)
+        note_suppressions(created: Array(created), deleted: deleted)
       end
     end
   end

@@ -23,16 +23,21 @@ class MaintenanceReportSuppression < ApplicationRecord
 
   # Replaces whatever suppression the pair has with a new one. The unique key allows one row per
   # pair, so an expiring suppression must be replaced, never silently kept, when the new one is
-  # permanent (or the other way round).
+  # permanent. An expiring write never replaces a permanent suppression: that one is kept (a
+  # dismissal can't quietly become a snooze or an expiry). Delete and insert are one transaction.
   #
-  # @return [Array(Array<Hash>, MaintenanceReportSuppression)] the deleted rows' attributes (for
-  #   ChangeSet::Context#note_suppressions!) and the created row
+  # @return [Array(Array<Hash>, MaintenanceReportSuppression, nil)] the deleted rows' attributes (for
+  #   ChangeSet::Context#note_suppressions!) and the created row (nil when a permanent one was kept)
   def self.replace!(report_type:, signature:, kind:, reason:, source:, expires_at: nil)
-    existing = where(report_type: report_type, signature: signature).to_a
-    deleted = existing.map { |suppression| ChangeSet.snapshot_attributes(suppression) }
-    where(id: existing.map(&:id)).delete_all if existing.any?
-    created = create!(report_type: report_type, signature: signature, kind: kind, reason: reason,
-                      source: source, expires_at: expires_at, dismissed_at: Time.current)
-    [ deleted, created ]
+    transaction do
+      existing = where(report_type: report_type, signature: signature).lock.to_a
+      next [ [], nil ] if expires_at && existing.any? { |suppression| suppression.expires_at.nil? }
+
+      deleted = existing.map { |suppression| ChangeSet.snapshot_attributes(suppression) }
+      where(id: existing.map(&:id)).delete_all if existing.any?
+      created = create!(report_type: report_type, signature: signature, kind: kind, reason: reason,
+                        source: source, expires_at: expires_at, dismissed_at: Time.current)
+      [ deleted, created ]
+    end
   end
 end
