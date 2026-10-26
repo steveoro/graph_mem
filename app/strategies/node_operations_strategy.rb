@@ -163,8 +163,11 @@ class NodeOperationsStrategy
         summary = "merged '#{source_name}' into '#{target_name}'"
         ChangeSet.record(kind: change_set_kind, subject: target, summary: summary) do |change_set|
           change_set_uuid = change_set.uuid
-          transferred_observations = source.memory_observations.count
-          merge_locked!(source, target)
+          # The undo snapshot (UI-4a): a failed snapshot write raises and rolls the merge back.
+          before = EntityMergeSnapshot.capture_before(source, target)
+          transferred_observations = before["observation_ids"].size
+          change_set.within_merge_step { merge_locked!(source, target) }
+          change_set.add_merge_step!(EntityMergeSnapshot.complete(before, target))
         end
 
         @logger.info "NodeOperationsStrategy: Merged '#{source_name}' (#{source_id}) into '#{target_name}' (#{target_id}). Transferred #{transferred_observations} observations."
