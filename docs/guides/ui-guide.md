@@ -38,7 +38,7 @@ Every page sits in the same shell:
 
 ![Operator shell at 1440 px](../images/ui/operator-shell.png)
 
-The sidebar groups the pages into five sections and highlights the page you're on.
+The sidebar lists Home, Search and Explore at the top, then three groups (Review & Fix, Projects & Data, System), and highlights the page you're on.
 
 | Section | Item | What it is |
 |---|---|---|
@@ -166,12 +166,12 @@ In **Explore**, the guest can browse, open neighbourhoods, toggle relations and 
 
 ![Explore as guest: read-only node menu](../images/ui/guest-explore.png)
 
-Every other page answers with **Operator only** (HTTP 403), including Home, Review, Maintenance, Settings, Jobs and the Audit log. API docs answers 404.
+Every other page answers with **Operator only** (HTTP 403), including Review, Maintenance, Settings, Jobs and the Audit log. Home sends a guest to Search, and API docs answers 404.
 
 ![The 403 page a guest sees](../images/ui/guest-forbidden.png)
 
 **Guest limits:**
-- **Search rate:** up to 60 searches a minute per IP, page and API combined. After that, a "Too many searches" page or a `429`.
+- **Search rate:** up to 60 searches a minute per IP, page and API combined, and 300 a minute across all guests. After that, a "Too many searches" page or a `429` with `Retry-After`.
 - **API:** only the read endpoints that Search and Explore use. Every other `/api/v1` endpoint returns `403`. The list is in [mcp_access_control.md](../mcp_access_control.md#http-api-apiv1).
 - **No MCP:** `/mcp*` ignores browser sessions, so a guest cookie never grants MCP access.
 - **No project scoping:** a guest can read all graph content.
@@ -201,7 +201,7 @@ Turn **Guest access** off in Settings, or change or remove the guest password an
 | Production shows "Configuration required" (503) | The operator password is still `changeme`. Set `OPERATOR_PASSWORD` (or credentials `operator.password`) and restart. |
 | `guest` + password says "Invalid username or password" | No guest password is configured, the guest clashes with the operator, or Guest access is off. Check the `[guest access]` boot log line and the Settings toggle. |
 | A guest is signed out with "Guest access is disabled." | The toggle was turned off, or the guest password changed. |
-| A guest sees "Too many searches" | More than 60 searches a minute from that IP. Wait a minute. |
+| A guest sees "Too many searches" | More than 60 searches a minute from that IP, or 300 across all guests. Wait a minute. |
 | A guest sees "Operator only" | Expected for every page except Search and Explore. |
 | Something on a page doesn't work and the browser console shows "Refused to …" | A Content Security Policy violation. Look for `[CSP] violation report` in the Rails log and report it: new pages must not use inline scripts or `on…=` attributes. |
 | The Review badge seems out of date | It's cached for 30 seconds. |
