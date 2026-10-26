@@ -1170,6 +1170,33 @@ RSpec.describe 'DataExchange', type: :request do
       expect(response.body).to include('entity_merge')
     end
 
+    it 'renders the review actions as labelled buttons that post review_action' do
+      get compaction_review_data_exchange_index_path
+
+      doc = Nokogiri::HTML(response.body)
+      buttons = doc.css("##{ActionView::RecordIdentifier.dom_id(merge_row)} button[name='review_action']")
+      labels = buttons.to_h { |button| [ button.text.strip, button['value'] ] }
+
+      expect(labels).to eq(
+        'Save' => 'edit', 'Apply' => 'apply', 'Dismiss' => 'dismiss', 'Ignore' => 'ignore'
+      )
+      expect(buttons.map { |button| button['type'] }.uniq).to eq([ 'submit' ])
+      expect(buttons.map { |button| button['form'] }.uniq).to eq([ 'row-form-review-1' ])
+      apply = buttons.find { |button| button['value'] == 'apply' }
+      expect(apply['data-turbo-confirm']).to eq('Apply this suggestion?')
+      expect(doc.css("input[type='submit'][name='review_action']")).to be_empty
+    end
+
+    it 'renders a Restore button for a dismissed row' do
+      merge_row.update!(status: 'dismissed')
+
+      get compaction_review_data_exchange_index_path, params: { status: 'dismissed' }
+
+      doc = Nokogiri::HTML(response.body)
+      buttons = doc.css("##{ActionView::RecordIdentifier.dom_id(merge_row)} button[name='review_action']")
+      expect(buttons.map { |button| [ button.text.strip, button['value'] ] }).to eq([ [ 'Restore', 'restore' ] ])
+    end
+
     it 'renders an empty review page when there are no suggestions' do
       compaction_report.maintenance_report_rows.destroy_all
       compaction_report.destroy!
