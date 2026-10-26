@@ -114,6 +114,7 @@ The fix is always the same: give each agent its own `X-MCP-Client` header value.
 #### `graph_edit`
 - **Description:** Atomically update entities and observations, including observation supersession.
 - **Operation types:** `update_entity`, `update_observation`.
+- **Concurrent writers:** if a merge, an undo or another edit changes a row this edit is waiting on, the edit is retried (up to 3 times) and lands after that writer. If it still can't, it fails with a retriable `concurrency` error (`code: "concurrent_write"`) and nothing is edited: retry shortly.
 
 #### `graph_delete`
 - **Description:** Atomically delete entities/relations, obsolete observations, or merge entities. Per-operation audit reasons remain enforced.
@@ -122,6 +123,10 @@ The fix is always the same: give each agent its own `X-MCP-Client` header value.
 
 All three tools accept at most 50 logical operations and return `{ mode: "batch", status,
 results, summary }`. Any failed operation rolls back the full batch.
+
+Every batch (and every merge) is recorded as a change set, so the operator can undo it from the web
+UI or the console for 30 days (merges: 7). Batches that hard-delete an entity or observation, or mix a
+merge with other writes, are recorded but can't be undone. Agents can't undo: there is no MCP tool for it.
 
 ## Observation Management (2 tools)
 

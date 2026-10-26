@@ -77,6 +77,10 @@ class GraphWriteService
   # @raise [GraphMem::InvalidArgumentsError, McpGraphMemErrors::Error]
   #   when any operation fails; the transaction is rolled back
   def call
+    ChangeSet.record(kind: "graph.write") { write_batch }
+  end
+
+  def write_batch
     GraphMutationBatch.validate_operations!(@operations, allowed_types: TYPES, tool_name: "graph_write")
     semantic = skip_mode? ? semantic_candidates : semantic_duplicate_response
     return semantic if semantic.is_a?(Hash) && semantic[:status] == "possible_duplicate"
@@ -109,6 +113,8 @@ class GraphWriteService
     # retryable, not "escalate to a human".
     raise lock_timeout_error(e)
   end
+
+  private :write_batch
 
   private
 
@@ -177,6 +183,10 @@ class GraphWriteService
 
   # The single-operation path runs the same two duplicate layers as #call (§2.7).
   def execute_one
+    ChangeSet.record(kind: "graph.write") { write_one }
+  end
+
+  def write_one
     duplicate = semantic_duplicate_response
     return duplicate if duplicate
 

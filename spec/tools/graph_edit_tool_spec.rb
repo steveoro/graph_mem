@@ -23,6 +23,14 @@ RSpec.describe GraphEditTool, type: :model do
     expect(entity.reload.description).to eq("Changed")
   end
 
+  it "passes a concurrent-write refusal through as a retryable concurrency error, not an internal one" do
+    entity = MemoryEntity.create!(name: "SynthWidget", entity_type: "Component")
+    allow(GraphEditService).to receive(:call).and_raise(GraphEditService.new(operations: []).send(:concurrent_write_error))
+
+    expect { tool.call(operations: [ { type: "update_entity", entity_id: entity.id, description: "x" } ]) }
+      .to raise_error(McpGraphMemErrors::OperationFailed) { |error| expect(error).to have_attributes(category: "concurrency", retriable: true) }
+  end
+
   it "normalizes nested MCP fields before editing" do
     entity = MemoryEntity.create!(name: "Normalized edit", entity_type: "Task")
 

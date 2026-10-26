@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.57.0] - 2026-10-26
+
+UI-4a: change sets, merge snapshots and undo (backend only).
+
+### Added
+- Change sets (`change_sets`): every `graph_write`, `graph_edit` and `graph_delete` batch, every merge (MCP, review apply, `/api/v1/memory_entities/:id/merge_into/:target_id`, the maintenance merge, compaction auto-merges), every `/api/v1` write and every review action (apply, dismiss, restore, ignore and the bulk variants) is recorded as one change set, with its actor and the entity it is about.
+- Merge snapshots: each merge stores what the audit trail lacks (the source's columns and exact vector bytes, the moved observations, re-pointed and destroyed edges, the target's aliases before and after).
+- Operator-only undo of merges (7 days), and of edits, creates, relation changes, observation obsolete marks and review actions (30 days): `ChangeSetUndo.call(uuid)` from the console or `POST /changes/:uuid/undo` (Turbo Stream toast). Refusals are all-or-nothing and say why (changed since, by whom and when; name or id taken; moved observations or edges). An undo is itself a change set; undoing it redoes the change. Sets with a hard delete of an entity or observation, or mixing merges with other writes, are recorded but not undoable. Guests get `403`; there is no MCP tool or `/api/v1` endpoint for undo.
+- `ChangeSetPruneJob` (daily, 5:30 AM GMT): clears snapshots after 30 days and deletes sets older than 90 days that no audit row references.
+
+### Changed
+- Audit rows carry `change_set_id`.
+- Compaction auto-merges are now undoable for 7 days (actor `compaction:<run_id>`, one change set per merge).
+- `NodeOperationsStrategy#merge_into` takes `change_set_kind:` and returns `change_set_uuid` on success (MCP tool output is unchanged). It no longer retries a deadlock, lock-wait timeout or stale read inside a caller's transaction (a `graph_delete` batch, a review apply, a redo); the error reaches the caller.
+- `graph_edit` (MCP and services): an edit refused because a concurrent writer (a merge, an undo, another edit) changed the same row is retried in a fresh transaction, up to 3 times. If it still can't land, or it runs inside a caller's transaction, it answers a retryable `concurrency` error (`code: "concurrent_write"`) instead of an internal error.
+
 ## [1.56.0] - 2026-10-26
 
 UI-1: the app shell, a read-only guest role, and an enforced Content Security Policy (UI-1a and UI-1b).

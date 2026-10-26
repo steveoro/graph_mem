@@ -15,6 +15,10 @@ development:
     class: MaintenanceReportRowCleanupJob
     queue: low_priority
     schedule: at 5:15am every day
+  change_set_prune:
+    class: ChangeSetPruneJob
+    queue: low_priority
+    schedule: at 5:30am every day
 
 production:
   garbage_collection:
@@ -46,3 +50,7 @@ production:
     class: MaintenanceReportRowCleanupJob
     queue: low_priority
     schedule: at 5:15am every day
+  change_set_prune:
+    class: ChangeSetPruneJob
+    queue: low_priority
+    schedule: at 5:30am every day

@@ -2,6 +2,8 @@
 
 class AuditLog < ApplicationRecord
   belongs_to :auditable, polymorphic: true, optional: true
+  # UI-4a: the change set this row belongs to (nil for writes outside ChangeSet.record).
+  belongs_to :change_set, optional: true
 
   serialize :changed_fields, coder: JSON
 

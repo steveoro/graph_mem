@@ -5,6 +5,9 @@ module Api
     class BaseController < ApplicationController
       include ApiAuthentication
 
+      # Every write through /api/v1 is one change set (UI-4a); reads record nothing.
+      around_action :record_change_set, unless: -> { request.get? || request.head? }
+
       rescue_from ActiveRecord::RecordNotFound do |e|
         render json: { error: e.message }, status: :not_found
       end
@@ -18,6 +21,10 @@ module Api
       end
 
       private
+
+      def record_change_set
+        ChangeSet.record(kind: "api.write") { yield }
+      end
 
       # CSRF is skipped for a valid Bearer token, and for any Bearer header on a
       # request with no session (authentication then refuses it with 401/403

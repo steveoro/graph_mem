@@ -539,7 +539,7 @@ class DataExchangeController < ApplicationController
     end
 
     strategy = NodeOperationsStrategy.new
-    result = strategy.merge_into(source_id, target_id)
+    result = ChangeSet.record(kind: "maintenance.merge_node") { strategy.merge_into(source_id, target_id) }
 
     if result[:success]
       render json: { success: true, message: result[:message] }

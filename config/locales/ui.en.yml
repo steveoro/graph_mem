@@ -26,6 +26,10 @@ en:
         system: "System"
     toasts:
       dismiss: "Dismiss"
+    changes:
+      conflicts: "%{message}: %{conflicts}"
+      not_found: "That change no longer exists."
+      busy: "Another merge, import or undo is running. Retry shortly."
     guest_search_throttled:
       title: "Too many searches"
       body: "Guests can run up to %{limit} searches a minute. Please wait a moment and try again."

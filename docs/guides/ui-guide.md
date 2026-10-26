@@ -1,6 +1,6 @@
 # GraphMem web UI guide
 
-A tour of the web UI for the **operator** (the graph's owner, full access) and the optional **read-only guest**, as of 1.56.0. It covers signing in, the app shell, each section, the guest account and the usual problems.
+A tour of the web UI for the **operator** (the graph's owner, full access) and the optional **read-only guest**, as of 1.57.0. It covers signing in, the app shell, each section, the guest account and the usual problems.
 
 The screenshots come from a test instance with synthetic data (`Alpha Service`, `SynthWidget`, `SynthGadget`). The image files are in [`docs/images/ui/`](../images/ui/).
 
@@ -122,6 +122,10 @@ The graph starts in **Root View**, which shows the project roots. **Full Graph**
 **Bulk actions:** **Apply selected** / **Dismiss selected** act on the ticked rows.
 
 **Pruning:** approved, dismissed and ignored rows are deleted every day once they're older than the retention set in **Settings › Telemetry** (`compaction_review_row_retention_days`, 30 days by default).
+
+### Undo (1.57.0)
+
+Every graph write, merge (including compaction auto-merges) and review action is recorded as a change set. The operator can undo one with `POST /changes/:uuid/undo`: within 7 days for merges, 30 days for everything else. Sets that hard-delete an entity or observation, or mix a merge with other writes, are recorded but can't be undone. The answer is a toast: "Undone: …", or the reasons it can't be undone (for example, a record changed since). Undo buttons arrive with the Explore and Review pages (UI-4b, UI-5); until then, undo from the console with `ChangeSetUndo.call(uuid)` (the latest set is `ChangeSet.order(:id).last`), since a hand-made `POST` also needs a CSRF token. Guests can't undo (403).
 
 ### Projects & Data
 

@@ -215,3 +215,40 @@ GraphMem includes a web UI (served by Rails) for browsing and managing the knowl
 - **Shell.** Every page renders inside `layouts/application` (a sidebar from `ui/_sidebar`, toasts, a page-header slot); sign-in uses `layouts/auth`. Shell helpers live in `UiHelper`, the `ui-*` classes in `app/assets/tailwind/application.css`.
 - **Roles.** `SessionAuthentication` resolves the session's role: `operator` (full access) or `guest` (read-only, disabled until a guest password is configured; `GraphMem::GuestCredentials`). `ApplicationController#authenticate!` handles sign-in and per-role expiry; `RoleAuthorization#authorize_role!` is deny-by-default: guests may run only actions a controller lists with `allow_guest` (Search, Explore, the Home redirect, Sign out) and get `403` elsewhere. `ApiAuthentication::GUEST_READ_ACTIONS` is the API's guest allowlist. `spec/requests/role_matrix_spec.rb` walks every route to pin this. `/mcp*` (Rack middleware) and ActionCable never accept a guest.
 - **CSP.** Enforced (`config/initializers/content_security_policy.rb`): nonce-based `script-src`, `style-src 'self' 'unsafe-inline'`, `base-uri`/`form-action 'self'`, `frame-ancestors`/`object-src 'none'`, violations reported to `/csp-reports`. `/api-docs` keeps rswag's own policy.
+
+## Change sets and undo (UI-4a, 1.57.0)
+
+A **change set** (`change_sets`, `ChangeSet`) groups the writes of one user-visible change so the operator can undo them together. Audit rows point at it through `audit_logs.change_set_id`.
+
+- **What records a set.** `ChangeSet.record(kind:)` wraps each entry point:
+  - `graph_write` / `graph_edit` / `graph_delete` (MCP and services): `graph.write`, `graph.edit`, `graph.delete`;
+  - the review actions (`CompactionReviewService` apply, dismiss, restore, ignore and the bulk variants): `review.*`;
+  - every merge path (`NodeOperationsStrategy#merge_into`): `merge`, or the caller's kind: `maintenance.merge_node`, `compaction.auto_merge` (actor `compaction:<run_id>`, one set per merge), `api.write` (every non-GET `/api/v1` request).
+  - A set opened inside another one joins it: a merge in a `graph_delete` batch or a review apply belongs to the outer set.
+  - Imports, scans, observation dedupe and garbage collection are not recorded (their audit rows keep `change_set_id` NULL).
+- **Lazy rows, no new locks.** `ChangeSet.record` opens no transaction and takes no lock. It only sets `Current.change_set`. The row is inserted by the first write that needs it, inside that write's transaction, so a set without changes never exists and a rolled-back write takes its set (and its snapshot entries) with it.
+- **Snapshot.** One versioned JSON column holds what the audit trail lacks:
+  - `merges`: one step per merge, from `EntityMergeSnapshot`: every source column, its vector as `HEX(embedding)`, the target's aliases before and after, the moved observation ids, and the source's edges (re-pointed or destroyed);
+  - `review_rows`: the review fields before and after;
+  - `suppressions_created` / `suppressions_deleted`;
+  - `redo_merges`: on the undo of a merge, the merges to re-run.
+- **Strategies and windows.**
+
+  | Strategy | Set | Window |
+  |---|---|---|
+  | `merge` | merges only | 7 days |
+  | `audit` | everything else | 30 days |
+  | `none` | not undoable | — |
+
+  A set becomes `none` with a reason: `mixed_merge` (merges plus other writes), `hard_delete` (an entity or observation deleted outside a merge), `audit_incomplete` (an audit row failed) or `snapshot_too_large` (over 4 MB; the merge still runs). Relation deletes and observation obsolete marks stay undoable.
+- **Undo.** `ChangeSetUndo.call(uuid, actor:)`, from the console or `POST /changes/:uuid/undo` (operator only).
+  - **Audit sets** invert their audit rows newest first:
+    - a create is destroyed;
+    - an update gets its `from` values back;
+    - a deleted relation is re-inserted with its original id.
+  - **Merge sets** re-insert the source with its original id and vector bytes, move its observations and edges back, and remove only the aliases the merge added.
+  - **Review rows and suppressions** are written back when the row is still in its "after" status; rows changed or pruned since are skipped and listed.
+  - **Refusals are all-or-nothing.** A record changed since (the message names the actor and time), a name or id taken, a moved observation or edge, or a deleted target (naming the change to undo first) rolls everything back.
+  - **The undo is itself a set** (`undo`), and undoing it is a `redo`, undoable in turn. Undoing a create deletes rows, so that undo is `hard_delete` and can't be redone.
+- **Lock order and embeddings.** The undo takes the membership lock, then suppresses inline embeds, then opens the transaction, then takes row locks: the advisory-first rule, so it serializes with merges, imports, the backfill and review applies. The restored source keeps its old vector and `embedded_at`; text the undo changed (the target's aliases, restored names) is re-embedded after the lock is released (at most 50 inline, the rest by the daily backfill). Trust scores are recomputed, never restored.
+- **Retention.** `ChangeSetPruneJob` (daily, 5:30 AM GMT) clears snapshots older than 30 days and deletes sets older than 90 days that no audit row references.
