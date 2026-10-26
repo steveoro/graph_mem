@@ -173,9 +173,9 @@ class CompactionReviewService
       row = find_item(item_id, report_type: report_type)
       return { success: false, error: "Suggestion not found" } unless row
 
-      signature = signature_for(row.kind, row.effective_payload)
-      if signature.present?
-        MaintenanceReportSuppression.where(report_type: row.report_type, signature: signature).delete_all
+      signatures = suppression_signatures(row)
+      if signatures.any?
+        MaintenanceReportSuppression.where(report_type: row.report_type, signature: signatures).delete_all
       end
 
       row.update!(status: "active", dismissed_at: nil, applied_at: nil, resolution_reason: nil)
@@ -586,17 +586,23 @@ class CompactionReviewService
     end
 
     def suppress(row)
-      signature = signature_for(row.kind, row.effective_payload)
-      return if signature.blank?
-
-      MaintenanceReportSuppression.create_or_find_by!(
-        report_type: row.report_type,
-        signature: signature
-      ) do |s|
-        s.kind = row.kind
-        s.dismissed_at = Time.current
-        s.reason = row.resolution_reason
+      suppression_signatures(row).each do |signature|
+        MaintenanceReportSuppression.create_or_find_by!(
+          report_type: row.report_type,
+          signature: signature
+        ) do |s|
+          s.kind = row.kind
+          s.dismissed_at = Time.current
+          s.reason = row.resolution_reason
+        end
       end
+    end
+
+    # An edit can change the signature (relation_type, source/target ids), while
+    # row.signature keeps the generator's original. Suppress both, so the original
+    # proposal stays blocked after MaintenanceReportRowCleanupJob prunes the row.
+    def suppression_signatures(row)
+      [ signature_for(row.kind, row.effective_payload), row.signature ].compact_blank.uniq
     end
   end
 end

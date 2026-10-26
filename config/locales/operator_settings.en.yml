@@ -110,7 +110,7 @@ en:
           description: "Tool invocation rows older than this are deleted by daily garbage collection. Use 0 to disable automatic telemetry pruning."
         compaction_review_row_retention_days:
           label: "Review rows retention (days)"
-          description: "Approved, dismissed and ignored review rows older than this are pruned daily. Dismissed suggestions stay suppressed. 0 uses the default (30)."
+          description: "Approved, dismissed and ignored review rows older than this are pruned daily. Suggestions you dismissed stay suppressed; ignored ones may be proposed again. 0 uses the default (30)."
       backup:
         actions_title: "Manual backup"
         list_title: "Available backups"
