@@ -101,7 +101,10 @@ module GraphMem
     # @param password [String]
     # @return [Boolean]
     def matches?(username, password)
-      usable = available?
+      # Every check runs unconditionally (no short-circuit), so the work doesn't reveal
+      # whether a guest is configured.
+      enabled = AppSettings.guest_access_enabled?
+      usable = configured? & !collides_with_operator? & enabled
       expected_user = usable ? @username : SecureRandom.hex(32)
       expected_password = usable ? @password : SecureRandom.hex(32)
       (same?(username, expected_user) & same?(password, expected_password)) && usable
