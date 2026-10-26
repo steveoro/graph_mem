@@ -48,6 +48,59 @@ RSpec.describe ChangeSetUndo, "concurrency" do
     undo.value
   end
 
+  # Pauses the undo inside its lock and transaction (in `method` of ChangeSetUndo::Merge), starts
+  # `write` on another connection, checks it waits, then lets both finish.
+  def race_writer_against_undo(method, &write)
+    paused = Queue.new
+    release = Queue.new
+    allow_any_instance_of(ChangeSetUndo::Merge).to receive(method).and_wrap_original do |original, *args|
+      paused << true
+      release.pop
+      original.call(*args)
+    end
+    undo = Thread.new { ActiveRecord::Base.connection_pool.with_connection { described_class.call(uuid, actor: "operator:test") } }
+    paused.pop
+    writer = Thread.new { ActiveRecord::Base.connection_pool.with_connection(&write) }
+    writer.report_on_exception = false
+    expect(writer.join(0.5)).to be_nil # waiting on the undo
+    release << true
+    [ undo.value, begin
+      writer.value
+    rescue StandardError => e
+      e
+    end ]
+  end
+
+  it "makes a graph_write part_of create wait on the undo's membership lock, then see the restored source" do
+    undo_result, = race_writer_against_undo(:call) do
+      GraphWriteService.call(operations: [
+        { type: "create_entity", name: "SynthWidget part #{tag}", entity_type: "Component" },
+        { type: "create_relation", from_entity: "SynthWidget part #{tag}", to_entity_id: source.id, relation_type: "part_of" }
+      ])
+    end
+
+    expect(undo_result).to be_ok
+    part = MemoryEntity.find_by!(name: "SynthWidget part #{tag}")
+    expect(MemoryRelation.where(from_entity_id: part.id, to_entity_id: source.id, relation_type: "part_of")).to exist
+    expect(membership_lock_free?).to be(true)
+  end
+
+  # graph_edit reads the row before it waits, so once the undo commits MariaDB's snapshot isolation
+  # refuses the stale write (ER_CHECKREAD), as it does after any concurrent writer: queued, then
+  # refused, never interleaved.
+  it "makes a graph_edit (no membership lock) wait on the undo's row locks, then refuses its stale write" do
+    undo_result, edit = race_writer_against_undo(:finish) do
+      GraphEditService.call(operations: [ { type: "update_entity", entity_id: target.id, description: "edited during the undo" } ])
+    end
+
+    expect(undo_result).to be_ok
+    expect(edit).to be_a(ActiveRecord::StatementInvalid)
+    expect(edit.message).to match(/Record has changed since last read/)
+    expect(target.reload).to have_attributes(description: nil, aliases: nil)
+    expect(MemoryEntity.exists?(source.id)).to be(true)
+    expect(membership_lock_free?).to be(true)
+  end
+
   it "waits for a concurrent alias edit on the target, then undoes the merge and keeps the new alias" do
     result = race_undo_against do
       GraphEditService.call(operations: [ { type: "update_entity", entity_id: target.id, aliases: "#{target.reload.aliases},Later" } ])
