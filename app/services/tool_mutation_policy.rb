@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
-# Central policy for compaction valve coverage and heavy read tools.
+# Which MCP tools pause a running dream-state compaction: the mutation tools and the
+# maintenance tools that read or rewrite large parts of the graph. `search` is not one of them
+# (see docs/dream_state.md, Cooperative pause).
 class ToolMutationPolicy
   COMPACTION_VALVE_TOOLS = %w[
     graph_write graph_edit graph_delete

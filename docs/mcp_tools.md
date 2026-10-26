@@ -501,9 +501,9 @@ Solid Queue runs `DreamStateCompactionJob` on a schedule (`config/recurring.yml`
 2. **Tree-walk phase** -- walks each project subtree; deduplicates identical observations; auto-merges entities with cosine distance &lt; 0.10
 3. **Review queue** -- writes lower-confidence items to `maintenance_reports` (`compaction_review`), readable via `get_maintenance_reports`
 
-Mutating and heavy search tools cooperatively **pause** an active compaction run (`CompactionValve`) so live MCP traffic takes priority. Paused runs resume from `cursor_entity_id` on the next trigger.
+Mutating tools and the heavy maintenance tools (`summarize`, `suggest_merges`, `detect_contradictions`, the review apply/dismiss) cooperatively **pause** an active compaction run (`CompactionValve`) so live MCP traffic takes priority. Paused runs resume from `cursor_entity_id` on the next trigger.
 
-To close the loop on the review queue: call `list_maintenance_review`, inspect the suggested merges/parents, and apply the good ones with `apply_maintenance_review` (or `merge_entities` when both entity ids are already known).
+To close the loop on the review queue: call `list_maintenance_review`, inspect the suggested merges/parents, and apply the good ones with `apply_maintenance_review` (or the `graph_delete` `merge_entities` operation when both entity ids are already known).
 
 ## Best Practices
 
