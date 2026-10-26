@@ -315,6 +315,31 @@
     padding: 2rem 1rem;
   }
 
+  .ui-auth__card {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  /* Forms */
+  .ui-form {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    margin-top: 0.5rem;
+  }
+
+  .ui-field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.375rem;
+  }
+
+  .ui-label {
+    font-size: 0.875rem;
+    font-weight: 600;
+  }
+
   /* Basic controls */
   .ui-btn {
     display: inline-flex;
