@@ -47,6 +47,7 @@ RSpec.describe "Operator settings", type: :request do
       expect(response).to have_http_status(:ok)
       expect(response.body).to include('data-testid="operator-settings-tab-telemetry"')
       expect(response.body).to include('data-testid="setting-tool_invocation_retention_days"')
+      expect(response.body).to include('data-testid="setting-compaction_review_row_retention_days"')
     end
   end
 
@@ -64,6 +65,19 @@ RSpec.describe "Operator settings", type: :request do
       expect(AppSettings.tool_invocation_retention_days).to eq(120)
     ensure
       AppSettings.tool_invocation_retention_days = 90
+    end
+
+    it "updates review row retention" do
+      patch operator_settings_bulk_update_path,
+            params: {
+              tab: "telemetry",
+              settings: { compaction_review_row_retention_days: "45" }
+            }
+
+      expect(response).to redirect_to(operator_settings_path(tab: "telemetry"))
+      expect(AppSettings.compaction_review_row_retention_days).to eq(45)
+    ensure
+      AppSettings.compaction_review_row_retention_days = 30
     end
 
     it "updates feature flags" do

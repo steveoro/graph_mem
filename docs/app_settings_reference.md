@@ -83,6 +83,15 @@ See [summarization guide](summarization.md).
 
 Every scan entry point (dashboard, `POST /api/v1/scan`, MCP `scan_project`, job start) resolves the path through `ScanRootPolicy`: the scan root comes from `GRAPH_MEM_SCAN_ROOTS` (in Docker, the read-only home mount) or natively `Dir.home`; `PROJECT_SCAN_ROOTS` is gone. See [container scan mounts](container_scan_mounts.md) and the [project scan skill](../skills/project-scan/SKILL.md) for the scan workflow.
 
+## Retention
+
+Both settings are on the **Telemetry** tab.
+
+| Setting | Default | Effect |
+|---|---|---|
+| `compaction_review_row_retention_days` | `30` | Range 0-365. `MaintenanceReportRowCleanupJob` (daily, 5:15 AM GMT in production) deletes approved, dismissed and ignored review rows older than this; active rows are kept. `0` uses the default (30). |
+| `tool_invocation_retention_days` | `90` | See [operator tool telemetry](operator/telemetry.md#retention-and-pruning). |
+
 ## Mission Control Jobs
 
 - **URL:** `/operator/jobs`

@@ -207,6 +207,12 @@ To action a queued relationship proposal: inspect the evidence, then call
 
 Times are GMT as noted in `config/recurring.yml`.
 
+Resolved review rows are pruned by a separate daily job, `MaintenanceReportRowCleanupJob`
+(5:15 AM GMT in production, after compaction): approved, dismissed and ignored rows older than
+`compaction_review_row_retention_days` (default 30) are deleted; active rows are kept. Set the
+retention in Settings › Telemetry. Dismissed suggestions stay suppressed after their row is gone;
+ignored ones can be proposed again.
+
 ### Feature flag
 
 

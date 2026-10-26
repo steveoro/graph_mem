@@ -41,4 +41,31 @@ RSpec.describe MaintenanceReportRowCleanupJob, type: :job do
     expect(MaintenanceReportRow.find_by(row_uuid: "old-approved")).to be_nil
     expect(MaintenanceReportRow.find_by(row_uuid: "recent-dismissed")).to be_present
   end
+
+  it "prunes ignored rows older than the retention window" do
+    AppSettings.compaction_review_row_retention_days = 30
+
+    old_ignored = MaintenanceReportRow.create!(
+      report_type: "compaction_review",
+      row_uuid: "old-ignored",
+      kind: "entity_merge",
+      status: "ignored",
+      signature: "entity_merge|7-8",
+      payload: { "entity_a" => { "entity_id" => 7 }, "entity_b" => { "entity_id" => 8 } }
+    )
+    old_ignored.update_columns(updated_at: 31.days.ago)
+
+    described_class.perform_now
+
+    expect(MaintenanceReportRow.find_by(row_uuid: "old-ignored")).to be_nil
+  end
+
+  it "is scheduled daily in development and production" do
+    recurring = YAML.load_file(Rails.root.join("config/recurring.yml"))
+
+    %w[development production].each do |env|
+      expect(recurring.dig(env, "maintenance_report_row_cleanup", "class")).to eq("MaintenanceReportRowCleanupJob")
+      expect(recurring.dig(env, "maintenance_report_row_cleanup", "queue")).to eq("low_priority")
+    end
+  end
 end
