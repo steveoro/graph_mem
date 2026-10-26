@@ -5,8 +5,9 @@ class CompactionReviewService
   # - per-run caps (ReviewRowClassifier::RUN_CAPS): at most N rows of a kind per run, counting
   #   earlier reports with the same source_ref (DreamStateCompactor flushes several times per run);
   #   the best by priority are kept;
-  # - the backlog ceiling (AppSettings review_backlog_ceiling): once a kind has that many active
-  #   rows, a new one is seeded only when its priority beats the lowest active one.
+  # - the backlog ceiling (AppSettings review_backlog_ceiling): the room left under it is filled
+  #   with the best candidates; beyond it, a candidate is seeded only when its priority beats the
+  #   lowest active one (a soft ceiling: nothing is evicted).
   # One COUNT and one MIN per kind per call, not per item.
   class SeedLimits
     # @param report_type [String]
@@ -45,14 +46,20 @@ class CompactionReviewService
       ranked.first(room)
     end
 
+    # The best candidates fill the room left under the ceiling; the rest must beat the lowest
+    # active priority (the ceiling is soft: rows that beat it still come in, nothing is evicted).
     def within_backlog(kind, list)
       active = MaintenanceReportRow.by_report_type(@report_type).active.where(kind: kind)
-      return list if active.count < AppSettings.review_number(:review_backlog_ceiling)
+      room = [ AppSettings.review_number(:review_backlog_ceiling) - active.count, 0 ].max
+      ranked = list.sort_by.with_index { |candidate, index| [ -candidate["priority"], index ] }
+      free = ranked.first(room)
+      rest = ranked.drop(room)
+      return free if rest.empty?
 
-      floor = active.minimum(:priority).to_i
-      admitted, refused = list.partition { |candidate| candidate["priority"] > floor }
+      floor = active.minimum(:priority) || free.map { |candidate| candidate["priority"] }.min || 0
+      admitted, refused = rest.partition { |candidate| candidate["priority"] > floor }
       @skipped["skipped_backlog_full"][kind] += refused.size
-      admitted
+      free + admitted
     end
 
     def earlier_in_run(kind)
