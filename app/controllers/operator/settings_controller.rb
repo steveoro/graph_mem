@@ -129,7 +129,7 @@ module Operator
       {
         feature_flags: {
           title: t("operator.settings.groups.feature_flags"),
-          settings: %w[enable_dream_state_compactor enable_garbage_collector enable_stale_memory_scan]
+          settings: %w[enable_dream_state_compactor enable_garbage_collector enable_stale_memory_scan enable_guest_access]
         },
         database_backup: {
           title: t("operator.settings.groups.database_backup"),
