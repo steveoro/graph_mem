@@ -6,8 +6,8 @@ classes, so the same cases kept working through the migration to the official `m
 is synthetic and read-only. Run it against a local dev or test instance, never production.
 
 The cases live in `spec/fixtures/mcp/handshakes/` (`stdio.json`, `http.json`). Each case gives the
-messages and headers and the expected answer per target: `graph_mem`, and `reference` (the v2.0.0
-reference servers: Memory over stdio, Everything over HTTP). A `divergence` explains every place
+messages and headers and the expected answer per target: `graph_mem`, and `reference` (the
+reference servers: Memory 2.0.0 over stdio, Everything 2.0.1 over HTTP). A `divergence` explains every place
 where graph_mem answers differently, and an optional `changes_in` names the plan step that will
 change it (no case carries one since 1.55.0).
 
@@ -75,14 +75,15 @@ machine, and keep Everything at 2.0.1 or later (2.0.0 has open CORS, GHSA-mvf5-2
 
 ## Expected results
 
-At 1.55.1 (2026-10-25; reference servers at 2.0.0 with SDK 2.3.1, on Node 22):
+At 1.58.1 (2026-10-27; reference servers Memory 2.0.0, Everything 2.0.1, SDK 2.3.1, on Node 24.11.1):
 
-- `compare.rb`: 0 failed expectations, 0 unexpected differences (16 stdio and 27 HTTP cases). The
-  `ruby_sdk` column (`mcp` 1.8.1, informational) answers every case exactly like graph_mem, which
+- `compare.rb`: 0 failed expectations, 0 unexpected differences (17 stdio and 28 HTTP cases). The
+  `ruby_sdk` column (`mcp` 1.8.2, informational) answers every case exactly like graph_mem, which
   runs on the same gem since 1.55.0.
-- `clients.sh`: 12 of 12 OK. Every `auto` row negotiates 2026-07-28, every `legacy` row 2025-11-25.
-  The TS stdio `auto` row takes about 1.3 s longer than `legacy` (the `server/discover` probe runs in
-  a sibling process); the Ruby SDK's `auto` costs nothing extra.
+- `clients.sh`: 12 of 12 OK (TS 2.3.1, Ruby SDK 1.8.1 and 1.8.2). Every `auto` row negotiates
+  2026-07-28, every `legacy` row 2025-11-25. The TS stdio `auto` row takes about 1.0 s longer than
+  `legacy` (the `server/discover` probe runs in a sibling process); the Ruby SDK's `auto` costs
+  nothing extra.
 
 Results, tables and the remaining divergences from the reference: [`docs/protocol_compat.md`](../../docs/protocol_compat.md).
 
