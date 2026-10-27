@@ -19,6 +19,7 @@ Editable MCP allowlists and `bin/up` LAN detection.
 ### Security
 - Project scans no longer follow a symlinked child to test whether it's a directory.
 - Settings › MCP access can add public IP ranges only while `GRAPH_MEM_MCP_TOKEN` is set, as ENV can; without a token they are refused and stop applying.
+- The MCP IP allowlist (on `/mcp` and bearer `/api/v1`) checks the connecting address as well as the one derived from `X-Forwarded-For`, so a client on another private address can no longer pass a narrowed list by forging that header.
 
 ## [1.58.2] - 2026-10-27
 

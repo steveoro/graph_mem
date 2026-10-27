@@ -182,6 +182,24 @@ RSpec.describe "MCP on the official SDK", type: :request do
       end
     end
 
+    it "judges the peer address too: a forwarded allowed address doesn't get another private client in" do
+      with_env("GRAPH_MEM_MCP_ALLOWED_IPS" => "127.0.0.0/8,::1,192.168.0.0/24", "GRAPH_MEM_MCP_TOKEN" => "synthetic-token") do
+        bearer = { "HTTP_AUTHORIZATION" => "Bearer synthetic-token" }
+        spoofed = bearer.merge("REMOTE_ADDR" => "10.9.9.9", "HTTP_X_FORWARDED_FOR" => "192.168.0.21")
+
+        initialize_session("/mcp", headers: spoofed)
+        expect(response).to have_http_status(:forbidden)
+        expect(response.parsed_body.dig("error", "message")).to eq("Forbidden: Remote IP not allowed")
+        get "/api/v1/memory_entities", headers: spoofed
+        expect(response).to have_http_status(:forbidden)
+
+        direct = bearer.merge("REMOTE_ADDR" => "192.168.0.21")
+        expect(initialize_session("/mcp", headers: direct)).to be_present
+        get "/api/v1/memory_entities", headers: direct
+        expect(response).to have_http_status(:ok)
+      end
+    end
+
     it "answers a foreign Host or Origin with 403, and accepts a host listed in GRAPH_MEM_MCP_ALLOWED_HOSTS" do
       host! "rebinding.example"
       initialize_session("/mcp")

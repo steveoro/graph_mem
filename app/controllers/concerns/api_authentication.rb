@@ -83,7 +83,7 @@ module ApiAuthentication
     return false unless ActiveSupport::SecurityUtils.secure_compare(provided_token, configured_token)
 
     policy = GraphMem::OfficialMcp.access_policy
-    unless policy.network_allowed?(request.remote_ip)
+    unless policy.request_allowed?(request, client_ip: request.remote_ip)
       @bearer_ip_forbidden = true
       return false
     end

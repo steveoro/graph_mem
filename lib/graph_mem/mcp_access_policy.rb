@@ -88,6 +88,24 @@ module GraphMem
       @allowed_ips.any? { |range| range.include?(candidate) }
     end
 
+    # Whether a request's addresses are allowed: the peer that connected (REMOTE_ADDR) and the
+    # client address derived from X-Forwarded-For (+client_ip+) must both be. Rack and Rails trust
+    # X-Forwarded-For from any private address, so the derived address alone would let one private
+    # client claim another's address and get past a narrowed list; the peer alone would let a
+    # future reverse proxy admit every client it forwards. Without a proxy both are the same
+    # address unless the header is forged, and then the forged value can only refuse.
+    #
+    # @param request [Rack::Request, ActionDispatch::Request]
+    # @param client_ip [String] the derived address (`request.ip`, or `request.remote_ip` in Rails)
+    # @return [Boolean]
+    def request_allowed?(request, client_ip: request.ip)
+      return true if network_unrestricted?
+
+      peer = request.get_header("REMOTE_ADDR").to_s
+      # No peer address (a Unix socket): only the derived one can be checked.
+      (peer.empty? || network_allowed?(peer)) && network_allowed?(client_ip)
+    end
+
     # Compares the request's bearer token against the configured secret in
     # constant time. Always true when no token is configured.
     def authenticated?(request)

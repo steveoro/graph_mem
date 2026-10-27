@@ -279,10 +279,15 @@ Know what this does **not** give you.
 access. `X-MCP-Client` is self-asserted and is a namespacing key, not a credential — an agent can
 claim any client id and read another agent's context.
 
-**`request.ip` is spoofable behind a proxy.** Rack derives it from `X-Forwarded-For`, which a
-client can set. Once GraphMem sits behind a reverse proxy (Kamal's included), the IP allowlist is
-advisory and the token is the real control. Configure the proxy to overwrite `X-Forwarded-For`, or
-rely on the token.
+**Client addresses and `X-Forwarded-For`.** Rack and Rails derive the client address from
+`X-Forwarded-For` whenever the connecting peer is a private address, and any client can set that
+header. So the IP check (on `/mcp` and bearer `/api/v1`) requires **both** the connecting peer
+(`REMOTE_ADDR`) and the derived address to be allowed. Without a reverse proxy, which is how
+graph_mem runs, both are the client's own address, and a forged header can only get a request
+refused. Behind a reverse proxy (Kamal's included), the proxy's own address must be in the list
+(the Docker bridge range `172.16.0.0/12` usually is), and the client address it forwards is checked
+as well. Configure the proxy to overwrite `X-Forwarded-For`; an IP list is still no substitute for
+the token there.
 
 **No transport encryption by itself.** The token crosses the network in a header. On a LAN that is
 usually acceptable; over a VPN the tunnel protects it; on a public VM put TLS in front.

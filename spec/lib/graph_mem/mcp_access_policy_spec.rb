@@ -309,6 +309,42 @@ RSpec.describe GraphMem::McpAccessPolicy do
     end
   end
 
+  describe "#request_allowed?" do
+    def rack_request(remote_addr, forwarded_for = nil)
+      env = { "REMOTE_ADDR" => remote_addr }
+      env["HTTP_X_FORWARDED_FOR"] = forwarded_for if forwarded_for
+      Rack::Request.new(env)
+    end
+
+    let(:policy) { described_class.new(allowed_ips: "127.0.0.0/8,::1,192.168.0.0/24", logger: logger) }
+
+    it "allows a direct client in the list" do
+      expect(policy.request_allowed?(rack_request("192.168.0.21"))).to be(true)
+    end
+
+    it "refuses a private client that forwards an allowed address it doesn't have" do
+      request = rack_request("10.9.9.9", "192.168.0.21")
+
+      expect(request.ip).to eq("192.168.0.21") # what Rack would have judged on its own
+      expect(policy.request_allowed?(request)).to be(false)
+    end
+
+    it "refuses a forwarded address outside the list, whatever the peer" do
+      expect(policy.request_allowed?(rack_request("127.0.0.1", "203.0.113.5"))).to be(false)
+      expect(policy.request_allowed?(rack_request("127.0.0.1", "192.168.0.21"))).to be(true)
+    end
+
+    it "matches an IPv4-mapped peer as IPv4" do
+      expect(policy.request_allowed?(rack_request("::ffff:192.168.0.21"))).to be(true)
+    end
+
+    it "allows everything when the network is unrestricted" do
+      open_policy = described_class.new(token: token, allowed_ips: "any", logger: logger)
+
+      expect(open_policy.request_allowed?(rack_request("203.0.113.5", "198.51.100.7"))).to be(true)
+    end
+  end
+
   describe "#describe" do
     it "summarises an unauthenticated posture" do
       expect(described_class.new(logger: logger).describe)

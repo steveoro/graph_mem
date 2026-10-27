@@ -15,7 +15,7 @@ module GraphMem
 
         request = Rack::Request.new(env)
         policy = @policy || OfficialMcp.access_policy
-        return error(403, "Forbidden: Remote IP not allowed") unless policy.network_allowed?(request.ip)
+        return error(403, "Forbidden: Remote IP not allowed") unless policy.request_allowed?(request)
         # CORS preflights carry no Authorization header.
         return unauthorized unless env["REQUEST_METHOD"] == "OPTIONS" || policy.authenticated?(request)
 
