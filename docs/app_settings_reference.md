@@ -90,7 +90,7 @@ Additive parts of the three MCP allowlists (UI-2a). Each adds to its ENV variabl
 
 | Setting | Default | Effect |
 |---|---|---|
-| `mcp_extra_allowed_ips` | `""` | Addresses or CIDR ranges appended to the effective `GRAPH_MEM_MCP_ALLOWED_IPS` list (the defaults when unset). `any`/`all`/`*` refused; public ranges only with `GRAPH_MEM_MCP_TOKEN`, and inactive while it is unset. Ignored when ENV allows any IP. |
+| `mcp_extra_allowed_ips` | `""` | Addresses or CIDR ranges appended to the effective `GRAPH_MEM_MCP_ALLOWED_IPS` list (the defaults when unset). `any`/`all`/`*` and a `/0` refused; public ranges only with `GRAPH_MEM_MCP_TOKEN`, and inactive while it is unset. Ignored when ENV allows any IP. |
 | `mcp_extra_allowed_hosts` | `""` | Host names, IPv4 or IPv6 addresses, with an optional `:port`, added to `GRAPH_MEM_MCP_ALLOWED_HOSTS`. Loopback names are always accepted and not stored. |
 | `mcp_extra_allowed_origins` | `""` | Exact `http(s)://host[:port]` origins added to `GRAPH_MEM_MCP_ALLOWED_ORIGINS`: accepted by the transport and granted CORS on `/mcp`. |
 

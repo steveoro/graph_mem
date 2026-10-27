@@ -58,8 +58,9 @@ which is shown as read-only text beside the editable part and can't be removed t
 on the next request, without a restart, and each changed list writes an audit row.
 
 - The same validation as ENV, stricter where the UI can refuse: an unparseable entry is refused
-  (ENV only warns), and so are `any`, `all` and `*` (lifting the IP restriction stays an ENV
-  decision, made with a token).
+  (ENV only warns), and so are `any`, `all`, `*` and a `/0` such as `0.0.0.0/0` or `::/0` (lifting
+  the IP restriction stays an ENV decision, made with a token). An IPv4-mapped entry
+  (`::ffff:a.b.c.d`) is saved in plain IPv4 form, the form client addresses are compared in.
 - A public IP range is accepted only while `GRAPH_MEM_MCP_TOKEN` is set, and saved with a warning.
   It is re-checked every time the policy is built: if the token is later removed, the entry stops
   applying (logged, and shown as inactive) instead of staying silently active.
