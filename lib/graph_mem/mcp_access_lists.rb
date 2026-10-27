@@ -8,6 +8,8 @@ module GraphMem
   #
   #   McpAccessLists.entries(:hosts)        # => ["synth-lan.test", "lan-box.test"] (ENV first)
   #   McpAccessLists.extra_entries(:ips)    # => ["10.8.0.0/24"] (settings only, unfiltered)
+  #   McpAccessLists.validate(:origins, "HTTP://Synth-UI.localhost:3002/")[:entries]
+  #   # => ["http://synth-ui.localhost:3002"]
   module McpAccessLists
     # ENV variable of each list.
     KINDS = {
@@ -52,6 +54,20 @@ module GraphMem
       # @return [Array<String>]
       def entries(kind, env: ENV)
         (env_entries(kind, env: env) + extra_entries(kind)).uniq(&:downcase)
+      end
+
+      # Checks and normalizes an additive list before it is saved (see Validator).
+      #
+      # @param kind [Symbol]
+      # @param raw [String, nil] comma- or newline-separated input
+      # @return [Hash] `{ entries:, errors:, warnings:, duplicates: }`
+      def validate(kind, raw, env: ENV)
+        Validator.new(kind, env: env).call(raw)
+      end
+
+      # @return [Array<String>] ENV entries of +kind+ that can never match (shown, not refused)
+      def env_warnings(kind, env: ENV)
+        Validator.env_warnings(kind, env: env)
       end
 
       # @param raw [String, Array, nil] comma- or newline-separated entries
