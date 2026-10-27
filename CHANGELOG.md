@@ -5,6 +5,19 @@ All notable changes to GraphMem will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.58.2] - 2026-10-27
+
+CORS for /mcp from `GRAPH_MEM_MCP_ALLOWED_ORIGINS`.
+
+### Fixed
+- A browser client on an origin listed in `GRAPH_MEM_MCP_ALLOWED_ORIGINS` gets the CORS headers it needs on /mcp; before, only localhost and private-IP `http://` origins did, whether listed or not.
+
+### Security
+- /mcp grants CORS only to `GRAPH_MEM_MCP_ALLOWED_ORIGINS` (the transport's Origin list), no longer to every localhost port and private-network origin. /api is unchanged.
+
+### Added
+- Tests: /mcp preflight specs for listed, host-name and unlisted origins, an /api CORS regression guard, and two compat cases (a foreign Origin, another localhost port).
+
 ## [1.58.1] - 2026-10-27
 
 `mcp` gem 1.8.2 and the Everything 2.0.1 compat harness.
