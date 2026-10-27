@@ -34,8 +34,8 @@ gem install mcp -v 1.8.0 && gem install mcp -v 1.8.1 && gem install faraday rack
 (cd script/mcp_compat/tsclient && npm ci)   # Node >= 20
 ```
 
-Reference servers (Node; `engines` says >= 24, but they also ran on Node 22). `refservers/`
-pins Memory and Everything 2.0.0, with the SDK's `server` and `core` packages overridden to 2.3.1
+Reference servers (Node >= 24, the `engines` of both servers). `refservers/`
+pins Memory 2.0.0 and Everything 2.0.1, with the SDK's `server` and `core` packages overridden to 2.3.1
 (`node` 2.1.2 and `server-legacy` 2.4.0 declare newer `server`/`core` ranges but run against the
 overrides), and its committed `package-lock.json` pins every transitive dependency:
 
@@ -69,6 +69,9 @@ script/mcp_compat/clients.sh http://127.0.0.1:3999/mcp
 
 Any subset of the `--…` targets works: graph_mem alone just checks graph_mem. Stop the servers
 afterwards. No case runs a tool, so the test DB stays empty.
+
+Everything listens on all interfaces (it has no host option), so run the harness only on a trusted
+machine, and keep Everything at 2.0.1 or later (2.0.0 has open CORS, GHSA-mvf5-2qqv-rg3c).
 
 ## Expected results
 
