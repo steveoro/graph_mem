@@ -83,7 +83,7 @@ Answered and dropped from the open questions: all four Oct 20 UI questions (acco
 | 15 | ✅ **UI-1** app shell, design system, roles incl. guest, CSP enforced, as UI-1a (#123) and UI-1b (#124). Step list: `docs/plans/ui-1-plan.md` | graph_mem **1.56.0** | [Claude] | done |
 | 16 | ✅ **UI-4a** change sets, merge snapshots, undo (backend) (#127). Step list: `docs/plans/ui-4a-plan.md` | graph_mem **1.57.0** | [Claude] | done |
 | 17 | **UI-5** Review & Fix, as UI-5a (data model, limits, policies; no bump) + UI-5b (page, release). Step list: `docs/plans/ui-5-plan.md` | **1.58.0** | [Claude] | UI-1 ✅, UI-4a ✅; **next up** |
-| 18 | **UI-2** Home, as UI-2a (editable MCP allowlists + `bin/up`; no bump) + UI-2b (Home, release). Step list: `docs/plans/ui-2-plan.md` | **1.59.0** | [Claude] | UI-1 |
+| 18 | **UI-2** as UI-2a (editable MCP allowlists + `bin/up`, **1.58.3**) + UI-2b (Home, **1.59.0**). Step list: `docs/plans/ui-2-plan.md` | **1.58.3** + **1.59.0** | [Claude] | UI-1 |
 | 19 | **UI-3** Search | **1.60.0** | [Claude] | UI-1 |
 | 20 | **UI-4b** Explore | **1.61.0** | [Claude] | UI-3 (panel), UI-4a |
 | 21 | **UI-6** Projects & Data | **1.62.0** | [Claude] | PR-0 ✅, UI-1 |
@@ -538,7 +538,7 @@ See `mcp-update-plan.md`. On the UI side, PR-0 adds only the Settings › Projec
 - **Risks:** CSS collisions with `dashboard.css` (scope new classes `.ui-*` until UI-7 deletes the old file).
 
 ### UI-2 [Claude]: Home → **1.59.0**
-- **Step list:** `docs/plans/ui-2-plan.md` (Oct 27, verified at `2cf8dad`). It wins where the two differ: two PRs, **UI-2a** `claude/ui-2a-mcp-access` (runtime-editable, additive MCP allowlists on the settings page + `bin/up` LAN detection; `[Unreleased]`, no bump; added by Steve on Oct 27) and **UI-2b** `claude/ui-2-1.59.0` (this Home scope, unchanged, + release).
+- **Step list:** `docs/plans/ui-2-plan.md` (Oct 27, verified at `2cf8dad`). It wins where the two differ: two PRs, **UI-2a** `claude/ui-2a-mcp-access` (runtime-editable, additive MCP allowlists on the settings page + `bin/up` LAN detection; released as **1.58.3**; added by Steve on Oct 27) and **UI-2b** `claude/ui-2-1.59.0` (this Home scope, unchanged, + release).
 - **Branch:** `claude/ui-2-home`.
 - **Files:** `app/controllers/pages_controller.rb`, new `app/services/home_snapshot.rb` (composes `MaintenanceDashboardSnapshot`, `EmbeddingStatusSnapshot`, `AgentContextsSnapshot`, review digest, recent jobs from `OperationProgress`, recent change sets, `ScanRootPolicy.status`), `app/views/pages/home.html.haml`, `app/views/home/_*.html.haml` (lazy Turbo Frames); remove `pages/dashboard/*` partials as their content moves.
 - **Changes:** §2.2. No forms except quick search. Until UI-5/UI-6 land, the removed buttons link to the old pages.

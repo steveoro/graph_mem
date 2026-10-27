@@ -1,6 +1,8 @@
-# UI-2 → graph_mem 1.59.0: editable MCP allowlists, `bin/up` LAN detection, Home
+# UI-2 → graph_mem 1.58.3 + 1.59.0: editable MCP allowlists, `bin/up` LAN detection (UI-2a, 1.58.3), Home (UI-2b, 1.59.0)
 
 **Written 2026-10-27 (Europe/Rome)** for Claude, from `main` at `2cf8dad` (1.58.2 tagged, #131 and #132 merged).
+**Updated 2026-10-27 evening** with Steve's answers: Decision 3 (public ranges allowed with a token) and Decision 8
+(UI-2a ships as **1.58.3**) changed; Decisions 4 and 6 kept.
 Every file:line in "What the code looks like today" was checked against `2cf8dad`. If a line has moved, find the code
 by the quoted text; if the code no longer matches the description, **stop and ask Steve** instead of improvising.
 Only code was read while writing this plan. **No spec was run**: the PRs are checked by running the suite locally and
@@ -24,8 +26,8 @@ request). A1–A4 below do that.
 
 | | |
 |---|---|
-| **Branches / PRs** | **Two PRs**, UI-2b off `main` after UI-2a merges. **UI-2a** `claude/ui-2a-mcp-access`, title `MCP access: editable allowlists and bin/up LAN detection`: steps A1–A6, CHANGELOG under `## [Unreleased]`, **no version bump**. **UI-2b** `claude/ui-2-1.59.0`, title `Home (1.59.0)`: steps H1–H3 + release R. Steve merges and tags; never merge, tag, push tags or run `rake release`. |
-| **Commits** | UI-2a: **A1** merged sources + refresh, **A2** validation, **A3** settings panel, **A4** specs, **A5** `bin/up`, **A6** docs. UI-2b: **H1** `HomeSnapshot`, **H2** page + partials, **H3** specs, **R** release. Review fixes go in new commits; no force-push after review starts. |
+| **Branches / PRs** | **Two PRs**, UI-2b off `main` after UI-2a merges. **UI-2a** `claude/ui-2a-mcp-access`, title `MCP access: editable allowlists and bin/up LAN detection (1.58.3)`: steps A1–A6 + release **RA** (**1.58.3**, Decision 8). **UI-2b** `claude/ui-2-1.59.0`, title `Home (1.59.0)`: steps H1–H3 + release R. Steve merges and tags; never merge, tag, push tags or run `rake release`. |
+| **Commits** | UI-2a: **A1** merged sources + refresh, **A2** validation, **A3** settings panel, **A4** specs, **A5** `bin/up`, **A6** docs, **RA** release 1.58.3. UI-2b: **H1** `HomeSnapshot`, **H2** page + partials, **H3** specs, **R** release. Review fixes go in new commits; no force-push after review starts. |
 | **Scope** | UI-2a: no change to the ENV semantics of the three variables, to `McpAccessPolicy`'s invariant (never unauthenticated *and* public), to the gem's DNS-rebinding protection (stays on) or to `/api/*` CORS. No secret goes into the settings table (`GRAPH_MEM_MCP_TOKEN` stays ENV-only). UI-2b: exactly `ui-dashboard-plan.md` §2.2 and §6 UI-2. |
 | **Data** | Synthetic fixtures only (documentation ranges `192.0.2.0/24`, `198.51.100.0/24`, `203.0.113.0/24`; `*.test`/`*.localhost` names; temp dirs and fake `ip`/`ifconfig`/`route`/`hostname` binaries on a temp `PATH` for `bin/up`). Never real data, real credentials, real host names or a production dump. |
 | **Read first** | `CLAUDE.md`, `AGENTS.md`, `.devin/rules/*`, `ui-dashboard-plan.md` §0.1 (spec hygiene, test-DB truncate, done criteria), §2.2, §5.4; `docs/mcp_access_control.md`. |
@@ -86,7 +88,7 @@ request). A1–A4 below do that.
   `OperationProgress`, `ScanRootPolicy.status` (`scan_root_policy.rb:107`) and change sets (UI-4a) all exist;
   `/review` exists (`routes.rb:113`). No `HomeSnapshot` and no `spec/services/home_snapshot_spec.rb` yet.
 
-## UI-2a → `[Unreleased]`: editable MCP allowlists and `bin/up`
+## UI-2a → 1.58.3: editable MCP allowlists and `bin/up`
 
 ### A1. One merged source per list, and the refresh
 - New `lib/graph_mem/mcp_access_lists.rb` (`GraphMem::McpAccessLists`), the **only** place that knows both sources:
@@ -104,9 +106,11 @@ request). A1–A4 below do that.
 - **IPs: additive on the effective ENV list.** `McpAccessPolicy` gets `extra_ips:` (`from_env(env:, logger:,
   extra_ips: [])`, `initialize(…, extra_ips: nil)`). The ENV part resolves exactly as today (defaults when unset);
   then each extra is parsed and appended, de-duplicated. Rules: if the ENV part resolved to **unrestricted** (`[]`),
-  extras are ignored (appending would *narrow* it); extras never contain a sentinel and never reach beyond
-  `DEFAULT_RANGES` (Decision 3), and both rules are re-checked here, not only at save time (a value written from the
-  console or restored from a backup goes through the same filter, warn + skip). `describe` (81-85) adds
+  extras are ignored (appending would *narrow* it); extras never contain a sentinel; a public extra (outside
+  `DEFAULT_RANGES`) is kept **only while a token is configured**, exactly like an ENV entry: without a token it goes
+  through the same `narrow_to_defaults` filter (warn + skip), so removing the token later deactivates it on the next
+  build instead of leaving it silently active (Decision 3). All these rules are re-checked here, not only at save
+  time (a value written from the console or restored from a backup goes through the same filter). `describe` (81-85) adds
   "(+N from settings)" when extras are in use.
 - `OfficialMcp.access_policy` (25-27) passes `extra_ips: McpAccessLists.extra_entries(:ips)`. New
   `OfficialMcp.refresh_access!(transports:)`: clears `@access_policy`; calls `Transports.reset!` only when
@@ -121,7 +125,10 @@ comma- or newline-separated; whitespace stripped; blanks dropped; an entry alrea
 under `duplicates` ("already set in ENV").
 - **IPs:** each entry must parse as `IPAddr` (address or CIDR). **Refused (422):** `any`, `all`, `*` (lifting the
   restriction stays an ENV + token decision); anything unparseable (named in the message; ENV only warns, the UI can
-  refuse); any range not inside `DEFAULT_RANGES` (public addresses), **whatever the token state** (Decision 3).
+  refuse); a range not inside `DEFAULT_RANGES` (public addresses) **when no token is configured** (same rule as
+  ENV; the message says a token is required). **With a token, a public range is accepted** and saved, with a
+  warning in the flash and beside the entry: "Public range: reachable from outside your network, protected only by
+  the bearer token. If the token is removed, this entry stops applying." (Decision 3).
   Normalize to `IPAddr#to_range`-safe text (`addr/prefix`, e.g. `192.168.0.18/24` → `192.168.0.0/24`) and warn when
   the host bits were masked. Warning, not an error: "already covered by the ENV/default ranges" when the ENV part
   contains the range (e.g. any private range with the ENV unset); the entry is kept but has no effect.
@@ -150,7 +157,9 @@ under `duplicates` ("already set in ENV").
     or "unset (default: loopback + private ranges)" / "unset (loopback names only)" / "unset"; for IPs with an
     unrestricted ENV: "ENV allows any IP (token set); additions have no effect", with the input disabled;
   - beside it, the **editable additive part** (text input, comma-separated);
-  - the effective merged list below (read from `McpAccessLists.entries` / `access_policy`), and the A2 warnings.
+  - the effective merged list below (read from `McpAccessLists.entries` / `access_policy`), and the A2 warnings;
+    a stored public extra is marked "public (token required)" and, when no token is configured now, "inactive: no
+    token" (it is listed but not in the effective list).
   - Help text: "Adds to the ENV value; it can't remove ENV entries. Not a secret. Operator pages and the operator
     login aren't behind these lists, so a mistake here can't lock you out."
   - A notice on the form: "**Saving a change to allowed hosts or origins closes every open MCP session.** Clients
@@ -169,10 +178,14 @@ under `duplicates` ("already set in ENV").
   appended, case-insensitive de-dupe; `extra_entries` returns `[]` when the settings read raises.
 - `spec/lib/graph_mem/mcp_access_policy_spec.rb` additions: extras extend the defaults when the ENV is unset; extras
   extend a custom ENV list (`127.0.0.0/8,::1,192.168.0.0/24` + `10.8.0.0/24` → both allowed); extras are ignored
-  when ENV is unrestricted (`any` + token stays unrestricted); a stored sentinel or public range in extras is skipped
-  with a warning (with and without a token); `describe` shows the extras count.
+  when ENV is unrestricted (`any` + token stays unrestricted); a stored sentinel in extras is skipped with a warning
+  (with and without a token); a public extra (`198.51.100.0/24`) is allowed with a token and skipped with a warning
+  without one; **token removed later:** the same stored public extra, policy rebuilt with no token → the range is
+  refused and a warning is logged (it doesn't stay active); `describe` shows the extras count.
 - `spec/requests/operator/mcp_access_settings_spec.rb`: operator saves each list (200/redirect, stored normalized
-  value, one `AuditLog` row per changed key); each refused input → 422 and nothing stored; guest → 403, signed out →
+  value, one `AuditLog` row per changed key); each refused input → 422 and nothing stored; a public range →
+  422 without a token, saved with the public-range warning shown with a token; `any`/`all`/`*` → 422 with a token
+  too; guest → 403, signed out →
   login redirect (role matrix stays green); the ENV prefix renders as read-only text and is not a submitted param;
   saving IPs only calls `refresh_access!(transports: false)`, saving hosts or origins calls it with `true` (spy).
 - `spec/requests/mcp_official_spec.rb` additions (under `with_env`, and reset the settings rows after each example):
@@ -234,7 +247,8 @@ script next to `bin/docker-mcp`.
   follow-up symptom: "after setting `GRAPH_MEM_MCP_ALLOWED_IPS` to a subnet, `localhost` stops working": include
   `127.0.0.0/8,::1` (and `172.16.0.0/12` in Docker), or let `bin/up` build the list.
 - `docs/mcp_access_control.md`: in "Configuration" (40-51) a paragraph on the settings panel (additive, ENV entries
-  can't be removed, same validation, no `any`/public ranges from the UI, not secrets, no lockout because operator
+  can't be removed, same validation, public ranges only with a token (and inactive if the token is removed), no
+  `any` from the UI, not secrets, no lockout because operator
   pages aren't behind the lists, hosts/origins changes close open MCP sessions); a "Starting with `bin/up`" recipe
   with an example `--print` output (synthetic values).
 - `.env.example`: comment out `:35` (`# GRAPH_MEM_MCP_ALLOWED_IPS=127.0.0.0/8,::1,172.16.0.0/12,192.168.0.0/24`) and
@@ -243,12 +257,24 @@ script next to `bin/docker-mcp`.
 - `README.md:174` and `:186`: `bin/up` (`bin/up --build` for the update line), with one sentence that `docker compose
   up -d` still works and uses the built-in defaults.
 - `docs/app_settings_reference.md`: the three new fields.
-- CHANGELOG `## [Unreleased]`:
+- CHANGELOG (these go under `## [1.58.3]` in RA):
   - **Added:** "Settings › MCP access: add allowed IPs, hosts and origins at runtime, on top of the ENV values (which
     can't be removed there). Changes apply without a restart; changing hosts or origins closes open MCP sessions."
   - **Added:** "`bin/up` starts the stack with the host's LAN subnet and host names as the MCP allowlist defaults
     (loopback and the Docker bridge range always kept); ENV and `.env` values override it."
   - **Changed:** "`/api/v1` bearer requests use the same merged IP allowlist as `/mcp`."
+
+### RA. Release 1.58.3
+- `lib/graph_mem/version.rb:4` → `VERSION = "1.58.3"`; `skills/graph-mem-mcp-toolset/SKILL.md:18` →
+  `graph-mem-version: "1.58.3"`. Check with `rg -n '1\.58\.2' -g '!CHANGELOG.md' -g '!docs/plans/**' -g '!Gemfile.lock'`:
+  the only other hits are the recorded runs in `docs/protocol_compat.md:27, 61, 63` and
+  `script/mcp_compat/README.md:78` ("at 1.58.2 …"). They record when the compat suite was last run; leave them
+  unless you re-run it (UI-2a changes no protocol behaviour).
+- CHANGELOG: rename `## [Unreleased]` to `## [1.58.3] - <merge date>` with a one-line summary ("Editable MCP
+  allowlists and `bin/up` LAN detection."). It **absorbs the existing Security line from PR-C** ("Project scans no
+  longer follow a symlinked child to test whether it's a directory.") plus the A6 entries. Add a
+  **Security** line: "Settings › MCP access can add public IP ranges only while `GRAPH_MEM_MCP_TOKEN` is set, as
+  ENV can; without a token they are refused and stop applying."
 
 ## UI-2b → 1.59.0: Home
 
@@ -273,21 +299,21 @@ so scan and import buttons still link to the old pages.
   Home → digest → Review.
 
 ### R. Release 1.59.0
-- `lib/graph_mem/version.rb`, `skills/graph-mem-mcp-toolset/SKILL.md` and the CHANGELOG to **1.59.0**; the
-  `[Unreleased]` entries (PR-C's Security line and UI-2a's) move under `## [1.59.0] - <merge date>`.
+- `lib/graph_mem/version.rb`, `skills/graph-mem-mcp-toolset/SKILL.md` and the CHANGELOG to **1.59.0**
+  (`## [1.59.0] - <merge date>`, with any `[Unreleased]` entries added after 1.58.3).
 
 ## Specs (summary)
 
 | PR | New / changed |
 |---|---|
-| UI-2a | `mcp_access_lists_spec.rb` (validation, merge); `mcp_access_policy_spec.rb` (extras); `operator/mcp_access_settings_spec.rb` (save, 422, audit, roles, refresh vs reset); `mcp_official_spec.rb` (refresh on change, CORS ⇔ transport after a change, sessions dropped only by hosts/origins changes, IP extras on `/mcp` and `/api/v1`); `operator/settings_spec.rb` (restore refresh); `spec/bin/up_spec.rb` (detection, overrides, fallback). |
-| UI-2b | `pages_spec.rb`, `home_snapshot_spec.rb`, a Home → digest → Review system spec. |
+| UI-2a (1.58.3) | `mcp_access_lists_spec.rb` (validation, merge); `mcp_access_policy_spec.rb` (extras, public extras with/without a token, token removed later → re-filtered); `operator/mcp_access_settings_spec.rb` (save, 422, public range 422 without a token / saved + warning with one, sentinel always 422, audit, roles, refresh vs reset); `mcp_official_spec.rb` (refresh on change, CORS ⇔ transport after a change, sessions dropped only by hosts/origins changes, IP extras on `/mcp` and `/api/v1`); `operator/settings_spec.rb` (restore refresh); `spec/bin/up_spec.rb` (detection, overrides, fallback). |
+| UI-2b (1.59.0) | `pages_spec.rb`, `home_snapshot_spec.rb`, a Home → digest → Review system spec. |
 
 ## Size and split
 
 | PR | Version | Estimate | Diff size (guess) |
 |---|---|---|---|
-| UI-2a | `[Unreleased]` (ships in 1.59.0) | ~1 day | ~600 lines (half specs; `bin/up` ~150) |
+| UI-2a | **1.58.3** | ~1 day | ~600 lines (half specs; `bin/up` ~150) |
 | UI-2b | **1.59.0** | ~1–1.5 days | ~700 lines, mostly views/partials |
 
 UI-2a goes first: it's independent of Home, fixes Steve's LAN set-up, and Home's MCP pill reads its result.
@@ -297,8 +323,11 @@ UI-2a goes first: it's independent of Home, fixes Steve's LAN set-up, and Home's
 1. **Two PRs** (UI-2a allowlists + `bin/up`, UI-2b Home + release), like UI-1a/1b and UI-5a/5b.
 2. **Storage:** three `AppSettings` string fields. These lists aren't secrets, so the settings table (which is in
    every backup and export) is fine; the token never goes there.
-3. **No public ranges and no `any` from the UI, even with a token.** Exposing `/mcp` beyond loopback/private stays an
-   ENV decision. (Alternative: allow public ranges from the UI when a token is set.)
+3. **Public ranges from the UI only with a token, as in ENV** (Steve, Oct 27). Without a token: 422. With one:
+   saved, with a warning. Re-filtered on every policy build, so if the token is removed the public extras stop
+   applying (logged, shown as inactive) instead of staying silently active. `any`/`all`/`*` stay **refused from the
+   UI** even with a token: in ENV the sentinel lifts the whole restriction, which is a deployment decision, not an
+   addition, and the additive model can't express it (appending to an unrestricted list would narrow it).
 4. **Only hosts/origins changes call `Transports.reset!`.** The transport caches hosts and origins at build time,
    not IPs, so an IPs-only change just clears the memoized policy and keeps sessions open. (Alternative: always
    `OfficialMcp.reset!`, simpler, but every IP edit drops sessions.)
@@ -308,18 +337,21 @@ UI-2a goes first: it's independent of Home, fixes Steve's LAN set-up, and Home's
 6. **`bin/up` doesn't set `GRAPH_MEM_MCP_ALLOWED_ORIGINS`** (the server can't guess a browser client's origin).
 7. **`bin/up` passes an ENV/`.env` value through unchanged** rather than merging it with the detection, so an explicit
    list always means exactly what it says. The Settings panel is where additions go.
-8. **No version bump in UI-2a**; 1.59.0 ships with UI-2b. The UI train numbers don't move.
+8. **UI-2a ships as 1.58.3** (Steve, Oct 27), so `bin/up` and the panel reach the LAN set-up before Home; it also
+   releases PR-C's `[Unreleased]` Security line. UI-2b stays **1.59.0**; the UI train numbers don't move.
 
 ## Acceptance criteria
 
-- UI-2a: an operator can add a host, an origin and an IP range in Settings and a LAN client uses them on its next
+- UI-2a (1.58.3): an operator can add a host, an origin and an IP range in Settings and a LAN client uses them on its next
   request with no restart; ENV entries are shown as a read-only prefix and can't be removed; every refused input is
-  a 422 with nothing stored; CORS and the transport accept exactly the same origins after any change; a hosts/origins
+  a 422 with nothing stored; a public range is refused without a token, accepted with a warning with one, and stops
+  applying when the token is removed; `any`/`all`/`*` are always refused from the UI; CORS and the transport accept exactly the same origins after any change; a hosts/origins
   change closes sessions and says so beforehand, an IPs-only change doesn't; `/api/v1` bearer and `/mcp` agree on
   IPs; guests get 403 on the panel; `bin/up --print` on Linux gives hosts `<name>,<name>.local,<ip>` and IPs with
   loopback, `::1`, `172.16.0.0/12` and the detected subnet; an ENV or `.env` value wins; a failed detection leaves
-  today's defaults; `docker compose up -d` without `bin/up` behaves as before.
-- UI-2b: as in `ui-dashboard-plan.md` §6 UI-2 (Home fits in ~1.5 screens at 1440×900 with synthetic data and renders
+  today's defaults; `docker compose up -d` without `bin/up` behaves as before; version text and CHANGELOG read
+  1.58.3 (`## [1.58.3]` includes PR-C's Security line; no `## [Unreleased]` left).
+- UI-2b (1.59.0): as in `ui-dashboard-plan.md` §6 UI-2 (Home fits in ~1.5 screens at 1440×900 with synthetic data and renders
   in < 300 ms with the embedding service unreachable, `OLLAMA_URL=http://127.0.0.1:9`; lazy frames).
 - Both: full suite green locally and on CI (rspec, rubocop, brakeman, lint, scan_ruby, scan_js); 0 rows left in the
   test DB; `git diff db/structure.sql` empty (no migration is needed: `AppSettings` rows only); CHANGELOG entries;
@@ -333,6 +365,8 @@ UI-2a goes first: it's independent of Home, fixes Steve's LAN set-up, and Home's
 - `Transports.reset!` blocks noticeably (the gem joins its reaper thread on `close`) or an in-flight request on a
   closed transport answers 500 in the specs.
 - Supporting the additive IP list needs a change to `McpAccessPolicy`'s invariant or to how the ENV part resolves.
+- Keeping `any`/`all`/`*` refused from the UI turns out inconsistent with how ENV and the extras combine (e.g. a
+  case where the ENV rule would honour a sentinel the UI can't represent); keep it refused and ask.
 - The gem's host matching doesn't accept a form A2 allows (e.g. bracketed IPv6 with a port), or accepts one it
   refuses.
 - `bin/up` needs anything beyond bash and the standard `ip`/`route`/`ifconfig`/`hostname` tools, or detection would
