@@ -31,6 +31,7 @@ en:
         project_scans: "Project Scans"
         telemetry: "Telemetry"
         review_policies: "Review policies"
+        mcp_access: "MCP access"
       review_policies:
         intro: "Policies run nightly at 5:00 GMT and after a compaction run, stale scan or project scan that queued suggestions. Changes apply on the next run. Every policy action is an undoable change set (Review › Policies)."
         range: "Accepted range: %{min}–%{max}."
@@ -42,6 +43,31 @@ en:
           expire_low_confidence: "Expires suggestions with confidence below 0.4 that nobody touched for the days below, and keeps them away for 90 days. Reverse: Undo, or Restore."
           auto_apply_relationships: "Applies high-band relationship proposals at or above the confidence below (never part_of), at most 50 per run. Reverse: Undo the run (removes the relations)."
           auto_apply_expired_validity: "Marks observations obsolete when their own valid_until has passed, at most 100 per run. Reverse: Undo the run."
+      mcp_access:
+        intro: "Who may reach /mcp (and bearer requests on /api/v1): allowed client IPs, Host names and browser origins. Each list adds to its ENV value, which is shown first and can't be removed here. Changes apply without a restart."
+        sessions_notice_title: "Saving a change to allowed hosts or origins closes every open MCP session."
+        sessions_notice: "Clients get 404 Session not found on their next call and must start a new session (most reconnect on their own). Changing only the allowed IPs keeps sessions open."
+        help: "Adds to the ENV value; it can't remove ENV entries. Not a secret. Operator pages and the operator login aren't behind these lists, so a mistake here can't lock you out."
+        unset:
+          ips: "unset (default: loopback + private ranges)"
+          hosts: "unset (loopback names only)"
+          origins: "unset"
+        placeholder:
+          ips: "10.8.0.0/24, 192.168.1.20"
+          hosts: "graphmem.lan, 192.168.1.10:3030"
+          origins: "http://graphmem-ui.lan:3001"
+        unrestricted: "ENV allows any IP (token set); additions have no effect."
+        env_never_matches: "ENV value never matches: %{warning}"
+        effective: "In effect:"
+        effective_none:
+          ips: "none"
+          hosts: "none"
+          origins: "same-origin pages only"
+        public_entry: "%{entry}: public (token required)."
+        inactive_no_token: "Inactive: no token is configured, so this entry doesn't apply."
+        duplicate: "%{entry}: already set in ENV, not saved again"
+        not_saved: "MCP access not saved: %{errors}."
+        saved_with_warnings: "Check: %{warnings}."
       bulk_update:
         success: "Saved %{count} setting(s) successfully."
         partial: "Saved %{success} setting(s); %{failed} failed."
@@ -49,6 +75,15 @@ en:
         greater_than: "Must be greater than %{value}."
         less_than_or_equal_to: "Must be at most %{value}."
       fields:
+        mcp_extra_allowed_ips:
+          label: "Allowed client IPs"
+          description: "Addresses or CIDR ranges (GRAPH_MEM_MCP_ALLOWED_IPS). Public ranges need GRAPH_MEM_MCP_TOKEN; any/all/* can only be set in ENV."
+        mcp_extra_allowed_hosts:
+          label: "Allowed hosts"
+          description: "Host names or IPs that clients use in the URL, with an optional :port (GRAPH_MEM_MCP_ALLOWED_HOSTS). localhost, 127.0.0.1 and ::1 are always accepted."
+        mcp_extra_allowed_origins:
+          label: "Allowed browser origins"
+          description: "Exact scheme://host[:port] of a browser-based MCP client (GRAPH_MEM_MCP_ALLOWED_ORIGINS). Same-origin pages need no entry."
         enable_dream_state_compactor:
           label: "Dream state / compactor"
           description: "When disabled, scheduled and manual dream-state compaction jobs are skipped."
