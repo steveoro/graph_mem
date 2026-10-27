@@ -196,6 +196,20 @@
         "reference": {"replies": 2, "messages": [{"id": 1, "result": {}}, {"id": 2, "result": {}}]}
       },
       "divergence": "graph_mem refuses invalid UTF-8 with -32700 (like the Ruby SDK 1.8.1); Node decodes the byte as U+FFFD and answers the ping. Both keep serving."
+    },
+    {
+      "name": "tools/call with an invalid UTF-8 tool name, then a ping",
+      "send": [
+        {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "2025-11-25", "capabilities": {}, "clientInfo": {"name": "mcp-compat", "version": "0"}}},
+        {"jsonrpc": "2.0", "method": "notifications/initialized"},
+        {"raw_bytes_hex": "7b226a736f6e727063223a22322e30222c226964223a34322c226d6574686f64223a22746f6f6c732f63616c6c222c22706172616d73223a7b226e616d65223a2273796e74682dff222c22617267756d656e7473223a7b7d7d7d"},
+        {"jsonrpc": "2.0", "id": 5, "method": "ping"}
+      ],
+      "expect": {
+        "graph_mem": {"replies": 3, "messages": [{"id": 1, "result_has": ["protocolVersion"]}, {"id": 42, "error_code": -32603}, {"id": 5, "result": {}}]},
+        "reference": {"replies": 3, "messages": [{"id": 1, "result_has": ["protocolVersion"]}, {"id": 42, "error_code": -32602}, {"id": 5, "result": {}}]}
+      },
+      "divergence": "graph_mem can't echo the invalid name back and answers -32603 with the id (Ruby SDK 1.8.2, #629); Node decodes the byte as U+FFFD and answers -32602 \"Tool synth-\uFFFD not found\". Both keep serving."
     }
   ]
 }

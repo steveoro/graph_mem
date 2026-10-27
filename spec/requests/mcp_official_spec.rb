@@ -283,6 +283,26 @@ RSpec.describe "MCP on the official SDK", type: :request do
     end
   end
 
+  # mcp 1.8.2 (#629): a reply that can't be generated as JSON gets -32603 with the request id, not HTTP 500.
+  # The gem echoes the tool name in "Tool not found", so an invalid UTF-8 byte in it is a one-request trigger.
+  describe "a reply that can't be encoded as JSON" do
+    # Built as bytes: to_json would refuse the raw 0xFF in the tool name.
+    let(:body) { %({"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"synth-\xFF","arguments":{}}}).b }
+
+    %w[/mcp /mcp/readonly].each do |path|
+      it "answers -32603 with the id on #{path} and reports the JSON::GeneratorError" do
+        allow(Rails.error).to receive(:report).and_call_original
+        session_id = initialize_session(path)
+
+        post path, params: body, headers: request_headers.merge("Mcp-Session-Id" => session_id)
+
+        expect(response).to have_http_status(:ok)
+        expect(response.parsed_body).to include("id" => 7, "error" => include("code" => -32_603))
+        expect(Rails.error).to have_received(:report).with(an_instance_of(JSON::GeneratorError), any_args).at_least(:once)
+      end
+    end
+  end
+
   describe "CORS preflight (rack-cors)" do
     %w[/mcp /mcp/readonly /mcp/maintenance].each do |path|
       it "answers a preflight on #{path}" do

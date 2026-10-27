@@ -218,6 +218,16 @@
       "divergence": "graph_mem refuses invalid UTF-8 with -32700 (like the Ruby SDK 1.8.1); Node decodes the byte as U+FFFD and answers the ping."
     },
     {
+      "name": "tools/call with an invalid UTF-8 tool name",
+      "session": "new",
+      "request": {"body_hex": "7b226a736f6e727063223a22322e30222c226964223a34322c226d6574686f64223a22746f6f6c732f63616c6c222c22706172616d73223a7b226e616d65223a2273796e74682dff222c22617267756d656e7473223a7b7d7d7d"},
+      "expect": {
+        "graph_mem": {"status": 200, "id": 42, "error_code": -32603},
+        "reference": {"status": 200, "id": 42, "error_code": -32602}
+      },
+      "divergence": "graph_mem can't echo the invalid name back and answers -32603 with the id (Ruby SDK 1.8.2, #629); Node decodes the byte as U+FFFD and answers -32602 \"Tool synth-\uFFFD not found\"."
+    },
+    {
       "name": "a JSON array (batch) body",
       "session": "new",
       "request": {"body": [{"jsonrpc": "2.0", "id": 36, "method": "ping"}]},
