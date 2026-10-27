@@ -24,7 +24,7 @@ Moving another Rails app from fast-mcp to the `mcp` gem:
 
 ## Client matrix
 
-`script/mcp_compat/clients.sh` at 1.58.1 (2026-10-27, Node 24.11.1): 12 of 12 OK. Every `auto` row
+`script/mcp_compat/clients.sh` at 1.58.2 (2026-10-27, Node 24.11.1): 12 of 12 OK. Every `auto` row
 negotiates 2026-07-28, every `legacy` row 2025-11-25.
 
 | Client | Mode | Transport | OK | Protocol | Timing note |
@@ -58,9 +58,9 @@ MCP.
 
 ## Handshake comparison
 
-`script/mcp_compat/compare.rb`, 2026-10-27: graph_mem 1.58.1, reference servers Memory 2.0.0 and
+`script/mcp_compat/compare.rb`, 2026-10-27: graph_mem 1.58.2, reference servers Memory 2.0.0 and
 Everything 2.0.1 with SDK 2.3.1, on Node 24.11.1. 0 failed expectations, 0 unexpected differences;
-every case recorded at 1.55.1 (Everything 2.0.0) answers the same on Everything 2.0.1. Outlines show
+every case recorded at 1.58.1 answers the same, and 1.58.2 adds the two `Origin` cases. Outlines show
 `[status, id, result or error code]` (HTTP) or the replies as `[id, result or error code]` (stdio);
 the cases are in `spec/fixtures/mcp/handshakes/`. The reference is Memory on stdio and Everything on
 HTTP. `compare.rb`'s informational Ruby SDK target (`rsdk_server.rb`, a one-tool server on `mcp`
@@ -92,7 +92,7 @@ HTTP. `compare.rb`'s informational Ruby SDK target (`rsdk_server.rb`, a one-tool
 
 ### Streamable HTTP
 
-28 cases: 14 same, 12 documented divergences, 2 graph_mem only.
+30 cases: 14 same, 14 documented divergences, 2 graph_mem only.
 
 | Case | graph_mem | Everything 2.0.1 | Verdict |
 | --- | --- | --- | --- |
@@ -124,6 +124,13 @@ HTTP. `compare.rb`'s informational Ruby SDK target (`rsdk_server.rb`, a one-tool
 | a second GET stream on one session | `[409, nil, -32600]` | `[409, nil, -32000]` | documented divergence |
 | an unknown session | `[404, nil, -32600]` | `[404, 40, -32001]` | documented divergence |
 | a request other than initialize, with no session | `[400, nil, -32600]` | `[400, nil, -32000]` | documented divergence |
+| an initialize from a foreign Origin | `[403, nil, -32600]` | `[403, nil, -32000]` | documented divergence |
+| an initialize from another localhost port | `[403, nil, -32600]` | `[200, 44, "result"]` | documented divergence |
+
+Browser origins: graph_mem accepts same-origin requests and the exact origins in
+`GRAPH_MEM_MCP_ALLOWED_ORIGINS`, and grants CORS on `/mcp` to that same list. It answers every
+preflight 200 (rack-cors) and leaves out the CORS headers for an unlisted origin, where Everything
+answers 403; the browser blocks the request either way.
 
 ## Known divergences
 
@@ -183,6 +190,11 @@ Each bullet is one `divergence` text from the fixture files, with the cases it c
   id. Clients start a new session on 404 either way. — *an unknown session*
 - Both refuse it with 400 and no id; graph_mem (the official SDK) uses -32600, the TS SDK -32000
   "Server not initialized". — *a request other than initialize, with no session*
+- Same status; graph_mem (the official SDK) uses -32600 without the id, Everything 2.0.1 -32000
+  "Invalid Origin". — *an initialize from a foreign Origin*
+- Everything 2.0.1 accepts any localhost origin; graph_mem accepts only same-origin and
+  GRAPH_MEM_MCP_ALLOWED_ORIGINS (exact scheme://host:port). — *an initialize from another localhost
+  port*
 - Server-specific: Everything implements subscriptions, list-changed notifications and logging;
   graph_mem doesn't. — *initialize capabilities: no subscribe or listChanged; instructions present*
 - Server-specific: Everything implements resource subscriptions; graph_mem advertises subscribe:

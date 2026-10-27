@@ -1,7 +1,8 @@
 # frozen_string_literal: true
 
-# CORS configuration for cross-origin API and MCP access.
-# The transport also emits headers for raw hijacked SSE responses.
+# CORS for /api, /api-docs and /mcp. /mcp grants only the origins in GRAPH_MEM_MCP_ALLOWED_ORIGINS,
+# the same list the MCP transport's Origin check accepts (same-origin pages need no CORS). The
+# transport itself sends no CORS headers.
 
 Rails.application.config.middleware.insert_before 0, Rack::Cors do
   allow do
@@ -14,12 +15,6 @@ Rails.application.config.middleware.insert_before 0, Rack::Cors do
       headers: :any,
       methods: %i[get post put patch delete options head],
       expose: %w[X-Total-Count X-Page X-Per-Page],
-      max_age: 86_400
-
-    resource "/mcp/*",
-      headers: :any,
-      methods: %i[get post delete options],
-      expose: %w[Mcp-Session-Id],
       max_age: 86_400
 
     resource "/api-docs*",
@@ -42,15 +37,20 @@ Rails.application.config.middleware.insert_before 0, Rack::Cors do
       expose: %w[X-Total-Count X-Page X-Per-Page],
       max_age: 86_400
 
+    resource "/api-docs*",
+      headers: :any,
+      methods: %i[get options],
+      max_age: 86_400
+  end
+
+  # MCP: the transport's own allowlist (OfficialMcp::Transports.allowed_origins), checked per request.
+  allow do
+    origins ->(source, _env) { GraphMem::OfficialMcp::Transports.allowed_origin?(source) }
+
     resource "/mcp/*",
       headers: :any,
       methods: %i[get post delete options],
       expose: %w[Mcp-Session-Id],
-      max_age: 86_400
-
-    resource "/api-docs*",
-      headers: :any,
-      methods: %i[get options],
       max_age: 86_400
   end
 end
