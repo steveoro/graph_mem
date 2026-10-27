@@ -33,7 +33,7 @@ gem "solid_cable"
 gem "tailwindcss-rails", "~> 4.3"
 
 # The official MCP Ruby SDK serves MCP (docs/guides/migrating-fast-mcp-to-mcp-gem.md). Exact pin: one PR per upgrade (D14).
-gem "mcp", "1.8.1"
+gem "mcp", "1.8.2"
 # The tool `arguments` DSL (lib/graph_mem/mcp_schema) and resource URI templates.
 gem "dry-schema", "~> 1.14"
 gem "addressable", "~> 2.8"

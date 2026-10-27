@@ -78,7 +78,7 @@ The server exposes three Streamable HTTP profiles:
 - `/mcp/readonly` — 9 advertised context and read tools
 - `/mcp/maintenance` — all 22 canonical tools
 
-MCP is served by the official MCP Ruby SDK (`mcp` gem, pinned to 1.8.1) through the adapter in
+MCP is served by the official MCP Ruby SDK (`mcp` gem, pinned to 1.8.2) through the adapter in
 `lib/graph_mem/official_mcp/` ([architecture.md](architecture.md#official-mcp-sdk-feature-map)).
 Streamable HTTP and stdio speak 2026-07-28 (`server/discover`) and 2024-11-05 … 2025-11-25 (the
 `initialize` handshake). Each profile has its own server and transport, and a session belongs to

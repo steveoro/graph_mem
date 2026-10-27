@@ -5,6 +5,22 @@ All notable changes to GraphMem will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.58.1] - 2026-10-27
+
+`mcp` gem 1.8.2 and the Everything 2.0.1 compat harness.
+
+### Security
+- The compatibility harness runs `@modelcontextprotocol/server-everything` 2.0.1 (GHSA-mvf5-2qqv-rg3c: open CORS on 2.0.0).
+
+### Changed
+- `mcp` gem 1.8.2.
+
+### Fixed
+- A reply that can't be encoded as JSON (e.g. an invalid UTF-8 tool name echoed in its error) gets -32603 with the request id instead of HTTP 500 (mcp 1.8.2).
+
+### Added
+- Tests: a regression spec for the -32603 answer on `/mcp` and `/mcp/readonly`, and one compat case each in `http.json` and `stdio.json` (the stdio session keeps serving).
+
 ## [1.58.0] - 2026-10-26
 
 UI-5a: review data model, limits, policies and contradiction rows (backend; the Review page is UI-5b).

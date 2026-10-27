@@ -6,8 +6,8 @@ classes, so the same cases kept working through the migration to the official `m
 is synthetic and read-only. Run it against a local dev or test instance, never production.
 
 The cases live in `spec/fixtures/mcp/handshakes/` (`stdio.json`, `http.json`). Each case gives the
-messages and headers and the expected answer per target: `graph_mem`, and `reference` (the v2.0.0
-reference servers: Memory over stdio, Everything over HTTP). A `divergence` explains every place
+messages and headers and the expected answer per target: `graph_mem`, and `reference` (the
+reference servers: Memory 2.0.0 over stdio, Everything 2.0.1 over HTTP). A `divergence` explains every place
 where graph_mem answers differently, and an optional `changes_in` names the plan step that will
 change it (no case carries one since 1.55.0).
 
@@ -16,11 +16,11 @@ change it (no case carries one since 1.55.0).
 | `spec/requests/mcp_protocol_compat_spec.rb` | Runs in the normal suite and asserts graph_mem's expectations: HTTP through the Rails app, stdio through `bin/mcp_stdio_runner.rb` subprocesses. Needs no Node. |
 | `compare.rb` | Replays the cases against running servers, checks each target's expectations, and compares graph_mem with the reference by shape and code: "same", "documented divergence", "graph_mem only" or "unexpected" (exit 1); a "same" row that still carries a `divergence` note is labelled stale. Plain Ruby. |
 | `handshake_cases.rb` | Loads and checks the cases; shared by the spec and `compare.rb`. |
-| `rsdk_server.rb <stdio\|http PORT>` | A one-tool server on the official Ruby SDK (`mcp` 1.8.1), for `compare.rb`'s informational `ruby_sdk` column. |
-| `rsdk_client.rb <stdio\|http> <auto\|legacy> <url \| -- cmd…>` | Connects the Ruby SDK client (`RSDK_VERSION`, default 1.8.1) and lists tools. |
+| `rsdk_server.rb <stdio\|http PORT>` | A one-tool server on the official Ruby SDK (`mcp` 1.8.2), for `compare.rb`'s informational `ruby_sdk` column. |
+| `rsdk_client.rb <stdio\|http> <auto\|legacy> <url \| -- cmd…>` | Connects the Ruby SDK client (`RSDK_VERSION`, default 1.8.2) and lists tools. |
 | `tsclient/tsclient.mjs <stdio\|http> <auto\|legacy> <url \| -- cmd…>` | Connects the TS client (`@modelcontextprotocol/client` 2.3.1) and lists tools. |
-| `refservers/` | `package.json` + `package-lock.json` for the reference servers (Memory and Everything 2.0.0, SDK 2.3.1). |
-| `clients.sh <url>` | The client matrix: TS 2.3.1 and Ruby SDK 1.8.0 and 1.8.1, × auto and legacy, × stdio and HTTP (12 rows). |
+| `refservers/` | `package.json` + `package-lock.json` for the reference servers (Memory 2.0.0, Everything 2.0.1, SDK 2.3.1). |
+| `clients.sh <url>` | The client matrix: TS 2.3.1 and Ruby SDK 1.8.1 and 1.8.2, × auto and legacy, × stdio and HTTP (12 rows). |
 | `claude_client_check.rb` | Claude Code as the client: the automated `docs/plans/claude-mcp-client-check.md` (below). |
 
 ## Setup (once)
@@ -30,12 +30,12 @@ The SDK clients and servers run outside graph_mem's bundle:
 ```bash
 source "$HOME/.rvm/scripts/rvm"
 rvm gemset create mcp_compat && rvm use ruby-3.4.1@mcp_compat
-gem install mcp -v 1.8.0 && gem install mcp -v 1.8.1 && gem install faraday rack rackup webrick
+gem install mcp -v 1.8.1 && gem install mcp -v 1.8.2 && gem install faraday rack rackup webrick
 (cd script/mcp_compat/tsclient && npm ci)   # Node >= 20
 ```
 
-Reference servers (Node; `engines` says >= 24, but they also ran on Node 22). `refservers/`
-pins Memory and Everything 2.0.0, with the SDK's `server` and `core` packages overridden to 2.3.1
+Reference servers (Node >= 24, the `engines` of both servers). `refservers/`
+pins Memory 2.0.0 and Everything 2.0.1, with the SDK's `server` and `core` packages overridden to 2.3.1
 (`node` 2.1.2 and `server-legacy` 2.4.0 declare newer `server`/`core` ranges but run against the
 overrides), and its committed `package-lock.json` pins every transitive dependency:
 
@@ -70,16 +70,20 @@ script/mcp_compat/clients.sh http://127.0.0.1:3999/mcp
 Any subset of the `--…` targets works: graph_mem alone just checks graph_mem. Stop the servers
 afterwards. No case runs a tool, so the test DB stays empty.
 
+Everything listens on all interfaces (it has no host option), so run the harness only on a trusted
+machine, and keep Everything at 2.0.1 or later (2.0.0 has open CORS, GHSA-mvf5-2qqv-rg3c).
+
 ## Expected results
 
-At 1.55.1 (2026-10-25; reference servers at 2.0.0 with SDK 2.3.1, on Node 22):
+At 1.58.1 (2026-10-27; reference servers Memory 2.0.0, Everything 2.0.1, SDK 2.3.1, on Node 24.11.1):
 
-- `compare.rb`: 0 failed expectations, 0 unexpected differences (16 stdio and 27 HTTP cases). The
-  `ruby_sdk` column (`mcp` 1.8.1, informational) answers every case exactly like graph_mem, which
+- `compare.rb`: 0 failed expectations, 0 unexpected differences (17 stdio and 28 HTTP cases). The
+  `ruby_sdk` column (`mcp` 1.8.2, informational) answers every case exactly like graph_mem, which
   runs on the same gem since 1.55.0.
-- `clients.sh`: 12 of 12 OK. Every `auto` row negotiates 2026-07-28, every `legacy` row 2025-11-25.
-  The TS stdio `auto` row takes about 1.3 s longer than `legacy` (the `server/discover` probe runs in
-  a sibling process); the Ruby SDK's `auto` costs nothing extra.
+- `clients.sh`: 12 of 12 OK (TS 2.3.1, Ruby SDK 1.8.1 and 1.8.2). Every `auto` row negotiates
+  2026-07-28, every `legacy` row 2025-11-25. The TS stdio `auto` row takes about 1.0 s longer than
+  `legacy` (the `server/discover` probe runs in a sibling process); the Ruby SDK's `auto` costs
+  nothing extra.
 
 Results, tables and the remaining divergences from the reference: [`docs/protocol_compat.md`](../../docs/protocol_compat.md).
 
