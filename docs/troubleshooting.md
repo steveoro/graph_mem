@@ -31,6 +31,9 @@ This guide addresses common issues you might encounter when working with GraphMe
      `GRAPH_MEM_MCP_ALLOWED_HOSTS` (any port, or `host:port`).
    - A browser-based client whose `Origin` is not the server's own gets `403` too: add its exact
      `scheme://host:port` to `GRAPH_MEM_MCP_ALLOWED_ORIGINS`. Non-browser clients send no `Origin`.
+   - A browser client blocked by CORS (the console reports a missing `Access-Control-Allow-Origin`
+     on `/mcp`) needs the same: its exact origin in `GRAPH_MEM_MCP_ALLOWED_ORIGINS`. Nothing else
+     grants `/mcp` CORS.
    - `403` with `Remote IP not allowed` is the IP allowlist instead (`GRAPH_MEM_MCP_ALLOWED_IPS`).
      All three are described in [mcp_access_control.md](mcp_access_control.md).
 

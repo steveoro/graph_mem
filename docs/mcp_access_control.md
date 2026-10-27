@@ -42,7 +42,7 @@ Both variables are optional. The defaults are safe for a laptop or a home/office
 | `GRAPH_MEM_MCP_TOKEN` | unset | Shared secret. When set, every request must send `Authorization: Bearer <token>`. When unset, no token is required. |
 | `GRAPH_MEM_MCP_ALLOWED_IPS` | loopback + private (RFC1918, IPv6 ULA and link-local) | Comma-separated addresses or CIDR ranges. `any` (also `all`, `*`) lifts the restriction entirely — **only honoured when a token is set**. |
 | `GRAPH_MEM_MCP_ALLOWED_HOSTS` | empty (`localhost`, `127.0.0.1` and `::1` are always accepted) | Comma-separated `Host` names (any port) or `host:port` values clients use to reach the server, e.g. `192.168.0.10,graphmem.lan`. **Set it when clients on other machines connect**: any other `Host` gets `403`. |
-| `GRAPH_MEM_MCP_ALLOWED_ORIGINS` | empty | Comma-separated exact `scheme://host:port` origins accepted from browser-based clients, beyond same-origin requests. Requests without an `Origin` header (non-browser MCP clients) are not affected. |
+| `GRAPH_MEM_MCP_ALLOWED_ORIGINS` | empty | Comma-separated exact `scheme://host:port` origins accepted from browser-based clients, beyond same-origin requests. Requests without an `Origin` header (non-browser MCP clients) are not affected. The same list is the only one granted CORS on `/mcp`. |
 
 Default ranges: `127.0.0.0/8`, `::1`, `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`,
 `fc00::/7`, `fe80::/10`.
@@ -151,8 +151,10 @@ A rejected request is explicit about the fix:
 returned as `401` with `WWW-Authenticate: Bearer realm="graph_mem"`. A `403` means the client's IP
 is outside the allowlist, or the `Host` or `Origin` check failed.
 
-CORS preflight (`OPTIONS`) is answered by `rack-cors` (`config/initializers/cors.rb`) before the
-token check, so browser-based clients can send credentials.
+CORS preflight (`OPTIONS`) on `/mcp` is answered by `rack-cors` (`config/initializers/cors.rb`)
+before the token check, with CORS headers only for an origin in `GRAPH_MEM_MCP_ALLOWED_ORIGINS`, so a
+listed browser-based client can send credentials. An unlisted origin's preflight gets `200` without
+those headers, and the browser blocks the request. `/api` CORS is configured separately.
 
 ## Request limits and protocol checks
 
