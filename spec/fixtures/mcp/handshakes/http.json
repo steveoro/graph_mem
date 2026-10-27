@@ -295,6 +295,32 @@
         "reference": {"status": 400, "id": null, "error_code": -32000}
       },
       "divergence": "Both refuse it with 400 and no id; graph_mem (the official SDK) uses -32600, the TS SDK -32000 \"Server not initialized\"."
+    },
+    {
+      "name": "an initialize from a foreign Origin",
+      "session": "none",
+      "request": {
+        "headers": {"Origin": "http://evil.example"},
+        "body": {"jsonrpc": "2.0", "id": 43, "method": "initialize", "params": {"protocolVersion": "2025-11-25", "capabilities": {}, "clientInfo": {"name": "mcp-compat", "version": "0"}}}
+      },
+      "expect": {
+        "graph_mem": {"status": 403},
+        "reference": {"status": 403}
+      },
+      "divergence": "Same status; graph_mem (the official SDK) uses -32600 without the id, Everything 2.0.1 -32000 \"Invalid Origin\"."
+    },
+    {
+      "name": "an initialize from another localhost port",
+      "session": "none",
+      "request": {
+        "headers": {"Origin": "http://localhost:5173"},
+        "body": {"jsonrpc": "2.0", "id": 44, "method": "initialize", "params": {"protocolVersion": "2025-11-25", "capabilities": {}, "clientInfo": {"name": "mcp-compat", "version": "0"}}}
+      },
+      "expect": {
+        "graph_mem": {"status": 403},
+        "reference": {"status": 200, "id": 44, "result_has": ["protocolVersion"]}
+      },
+      "divergence": "Everything 2.0.1 accepts any localhost origin; graph_mem accepts only same-origin and GRAPH_MEM_MCP_ALLOWED_ORIGINS (exact scheme://host:port)."
     }
   ]
 }

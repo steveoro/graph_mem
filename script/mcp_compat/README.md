@@ -75,9 +75,9 @@ machine, and keep Everything at 2.0.1 or later (2.0.0 has open CORS, GHSA-mvf5-2
 
 ## Expected results
 
-At 1.58.1 (2026-10-27; reference servers Memory 2.0.0, Everything 2.0.1, SDK 2.3.1, on Node 24.11.1):
+At 1.58.2 (2026-10-27; reference servers Memory 2.0.0, Everything 2.0.1, SDK 2.3.1, on Node 24.11.1):
 
-- `compare.rb`: 0 failed expectations, 0 unexpected differences (17 stdio and 28 HTTP cases). The
+- `compare.rb`: 0 failed expectations, 0 unexpected differences (17 stdio and 30 HTTP cases). The
   `ruby_sdk` column (`mcp` 1.8.2, informational) answers every case exactly like graph_mem, which
   runs on the same gem since 1.55.0.
 - `clients.sh`: 12 of 12 OK (TS 2.3.1, Ruby SDK 1.8.1 and 1.8.2). Every `auto` row negotiates

@@ -303,16 +303,55 @@ RSpec.describe "MCP on the official SDK", type: :request do
     end
   end
 
+  # /mcp CORS comes from GRAPH_MEM_MCP_ALLOWED_ORIGINS, the transport's own Origin list (mcp-sdk-1.8.2 plan B1).
+  # rack-cors answers every preflight 200 and sends the CORS headers only for a listed origin.
   describe "CORS preflight (rack-cors)" do
-    %w[/mcp /mcp/readonly /mcp/maintenance].each do |path|
-      it "answers a preflight on #{path}" do
-        options path, headers: { "HTTP_ORIGIN" => "http://localhost:3001", "HTTP_ACCESS_CONTROL_REQUEST_METHOD" => "POST",
-                                 "HTTP_ACCESS_CONTROL_REQUEST_HEADERS" => "content-type,mcp-session-id,x-mcp-client" }
+    def preflight(path, origin)
+      options path, headers: { "HTTP_ORIGIN" => origin, "HTTP_ACCESS_CONTROL_REQUEST_METHOD" => "POST",
+                               "HTTP_ACCESS_CONTROL_REQUEST_HEADERS" => "content-type,mcp-session-id,x-mcp-client" }
+    end
 
-        expect(response).to have_http_status(:ok)
-        expect(response.headers["access-control-allow-methods"]).to include("POST")
-        expect(response.headers["access-control-expose-headers"]).to include("Mcp-Session-Id")
+    %w[/mcp /mcp/readonly /mcp/maintenance].each do |path|
+      it "grants a listed origin CORS on #{path}" do
+        with_env("GRAPH_MEM_MCP_ALLOWED_ORIGINS" => "http://localhost:3001") do
+          preflight(path, "http://localhost:3001")
+
+          expect(response).to have_http_status(:ok)
+          expect(response.headers["access-control-allow-origin"]).to eq("http://localhost:3001")
+          expect(response.headers["access-control-allow-methods"]).to include("POST")
+          expect(response.headers["access-control-expose-headers"]).to include("Mcp-Session-Id")
+        end
       end
+    end
+
+    it "lets a listed host-name origin complete the preflight and open a session" do
+      with_env("GRAPH_MEM_MCP_ALLOWED_ORIGINS" => "http://synth-ui.localhost:3001") do
+        preflight("/mcp", "http://synth-ui.localhost:3001")
+        expect(response.headers["access-control-allow-origin"]).to eq("http://synth-ui.localhost:3001")
+
+        expect(initialize_session("/mcp", headers: { "HTTP_ORIGIN" => "http://synth-ui.localhost:3001" })).to be_present
+        expect(response.headers["access-control-allow-origin"]).to eq("http://synth-ui.localhost:3001")
+      end
+    end
+
+    %w[http://localhost:5173 http://192.168.1.20:3000].each do |origin|
+      it "grants an unlisted #{origin} no CORS, and the POST gets 403" do
+        with_env("GRAPH_MEM_MCP_ALLOWED_ORIGINS" => "http://synth-ui.localhost:3001") do
+          preflight("/mcp", origin)
+          expect(response).to have_http_status(:ok)
+          expect(response.headers).not_to have_key("access-control-allow-origin")
+
+          initialize_session("/mcp", headers: { "HTTP_ORIGIN" => origin })
+          expect(response).to have_http_status(:forbidden)
+        end
+      end
+    end
+
+    it "leaves /api CORS as it was: localhost on any port still gets its headers" do
+      preflight("/api/v1/memory_entities", "http://localhost:5173")
+
+      expect(response.headers["access-control-allow-origin"]).to eq("http://localhost:5173")
+      expect(response.headers["access-control-expose-headers"]).to include("X-Total-Count")
     end
   end
 end
