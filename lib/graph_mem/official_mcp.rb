@@ -25,7 +25,10 @@ module GraphMem
     # @return [GraphMem::McpAccessPolicy]
     def self.access_policy
       @access_policy ||= GraphMem::McpAccessPolicy.from_env(logger: Rails.logger,
-                                                            extra_ips: McpAccessLists.extra_entries(:ips))
+                                                            extra_ips: McpAccessLists.extra_entries!(:ips))
+    rescue McpAccessLists::ReadError
+      # ENV only, and not cached: the next request reads the settings again.
+      GraphMem::McpAccessPolicy.from_env(logger: Rails.logger)
     end
 
     # Rebuilds the access policy and the transports from the current environment on next use.

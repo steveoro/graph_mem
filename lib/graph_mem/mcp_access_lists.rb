@@ -25,6 +25,9 @@ module GraphMem
       origins: "mcp_extra_allowed_origins"
     }.freeze
 
+    # The stored entries couldn't be read (no database, a missing table): see extra_entries!.
+    class ReadError < StandardError; end
+
     @warned = false
 
     class << self
@@ -41,19 +44,46 @@ module GraphMem
       # @param kind [Symbol]
       # @return [Array<String>]
       def extra_entries(kind)
-        split(AppSettings.uncached_string(SETTING_KEYS.fetch(kind)))
-      rescue StandardError => e
-        warn_once("Couldn't read the MCP allowlist settings (#{e.class}); using the ENV values only.")
+        extra_entries!(kind)
+      rescue ReadError
         []
+      end
+
+      # Like {extra_entries}, but raises ReadError when the settings can't be read, so a caller
+      # that caches its result can tell "none stored" from "not read" and retry later. Warns once
+      # per outage: a successful read re-arms the warning.
+      #
+      # @param kind [Symbol]
+      # @return [Array<String>]
+      # @raise [ReadError]
+      def extra_entries!(kind)
+        key = SETTING_KEYS.fetch(kind)
+        begin
+          stored = AppSettings.uncached_string(key)
+        rescue StandardError => e
+          warn_once("Couldn't read the MCP allowlist settings (#{e.class}); using the ENV values only until they can be read.")
+          raise ReadError, e.message
+        end
+        @warned = false
+        split(stored)
       end
 
       # ENV entries, then the additive ones, de-duplicated case-insensitively. Used for hosts and
       # origins; the IP list is resolved by McpAccessPolicy, which re-checks every extra.
       #
       # @param kind [Symbol]
-      # @return [Array<String>]
+      # @return [Array<String>] the ENV entries alone when the settings can't be read
       def entries(kind, env: ENV)
-        (env_entries(kind, env: env) + extra_entries(kind)).uniq(&:downcase)
+        entries!(kind, env: env)
+      rescue ReadError
+        env_entries(kind, env: env)
+      end
+
+      # Like {entries}, but raises ReadError when the settings can't be read.
+      #
+      # @raise [ReadError]
+      def entries!(kind, env: ENV)
+        (env_entries(kind, env: env) + extra_entries!(kind)).uniq(&:downcase)
       end
 
       # Checks and normalizes an additive list before it is saved (see Validator).

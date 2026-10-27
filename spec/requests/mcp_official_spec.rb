@@ -311,6 +311,39 @@ RSpec.describe "MCP on the official SDK", type: :request do
       end
     end
 
+    it "answers CORS from the transports' snapshot, with no settings query per request" do
+      AppSettings.mcp_extra_allowed_origins = "http://synth-ui.localhost:3002"
+      allow(AppSettings).to receive(:uncached_string).and_call_original
+
+      3.times { expect(preflight("http://synth-ui.localhost:3002")).to eq("http://synth-ui.localhost:3002") }
+      expect(initialize_session("/mcp", headers: { "HTTP_ORIGIN" => "http://synth-ui.localhost:3002" })).to be_present
+
+      expect(AppSettings).to have_received(:uncached_string).with("mcp_extra_allowed_origins").once
+    end
+
+    it "doesn't keep a failed settings read: the policy and the transports pick the entries up once it works" do
+      AppSettings.mcp_extra_allowed_hosts = "synth-lan.test"
+      AppSettings.mcp_extra_allowed_ips = "10.8.0.0/24"
+      failing = true
+      allow(AppSettings).to receive(:uncached_string).and_wrap_original do |original, *args|
+        raise ActiveRecord::ConnectionNotEstablished, "synthetic outage" if failing
+
+        original.call(*args)
+      end
+
+      with_env("GRAPH_MEM_MCP_ALLOWED_IPS" => "127.0.0.1") do
+        host! "synth-lan.test"
+        initialize_session("/mcp")
+        expect(response).to have_http_status(:forbidden) # the transport was built from ENV alone
+        initialize_session("/mcp", headers: { "REMOTE_ADDR" => "10.8.0.5" })
+        expect(response).to have_http_status(:forbidden)
+
+        failing = false
+        expect(initialize_session("/mcp")).to be_present
+        expect(initialize_session("/mcp", headers: { "REMOTE_ADDR" => "10.8.0.5" })).to be_present
+      end
+    end
+
     it "closes open sessions on a hosts or origins change, and keeps them on an IPs-only change" do
       kept = initialize_session("/mcp")
       save_mcp_access(mcp_extra_allowed_ips: "10.8.0.0/24")

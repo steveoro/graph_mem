@@ -25,11 +25,32 @@ RSpec.describe GraphMem::McpAccessLists do
       expect(described_class.extra_entries(:origins)).to eq([ "http://synth-ui.localhost:3003" ])
     end
 
-    it "reads the stored part as empty when the settings can't be read" do
+    it "reads the stored part as empty when the settings can't be read, and the bang forms raise" do
       allow(AppSettings).to receive(:uncached_string).and_raise(ActiveRecord::ConnectionNotEstablished)
 
       expect(described_class.extra_entries(:ips)).to eq([])
       expect(described_class.entries(:hosts, env: { "GRAPH_MEM_MCP_ALLOWED_HOSTS" => "env-host.test" })).to eq(%w[env-host.test])
+      expect { described_class.extra_entries!(:ips) }.to raise_error(described_class::ReadError)
+      expect { described_class.entries!(:hosts) }.to raise_error(described_class::ReadError)
+    end
+
+    it "warns once per outage: a successful read re-arms the warning" do
+      described_class.extra_entries(:ips) # an earlier example may have left the warning disarmed
+      outage = true
+      allow(AppSettings).to receive(:uncached_string).and_wrap_original do |original, *args|
+        raise ActiveRecord::ConnectionNotEstablished if outage
+
+        original.call(*args)
+      end
+      allow(Rails.logger).to receive(:warn)
+
+      2.times { described_class.extra_entries(:ips) }
+      outage = false
+      described_class.extra_entries(:ips)
+      outage = true
+      described_class.extra_entries(:ips)
+
+      expect(Rails.logger).to have_received(:warn).with(/Couldn't read the MCP allowlist settings/).twice
     end
   end
 
