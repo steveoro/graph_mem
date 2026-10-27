@@ -153,8 +153,9 @@ is outside the allowlist, or the `Host` or `Origin` check failed.
 
 CORS preflight (`OPTIONS`) on `/mcp` is answered by `rack-cors` (`config/initializers/cors.rb`)
 before the token check, with CORS headers only for an origin in `GRAPH_MEM_MCP_ALLOWED_ORIGINS`, so a
-listed browser-based client can send credentials. An unlisted origin's preflight gets `200` without
-those headers, and the browser blocks the request. `/api` CORS is configured separately.
+listed browser-based client can send its `Authorization: Bearer` header (no
+`Access-Control-Allow-Credentials` is sent, so no cookies). An unlisted origin's preflight gets `200`
+without those headers, and the browser blocks the request. `/api` CORS is configured separately.
 
 ## Request limits and protocol checks
 
