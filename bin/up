@@ -1,0 +1,172 @@
+#!/usr/bin/env bash
+# Starts the Docker stack (docker compose up -d) with the host's LAN address, subnet and host names
+# as the MCP allowlist defaults, so LAN clients work out of the box. Runs on the host, not in the
+# container: the container can't see the host's LAN address reliably (Docker Desktop runs it in a
+# VM), and compose needs the values before it substitutes ${...}. See docs/mcp_access_control.md.
+set -euo pipefail
+
+usage() {
+  cat <<'USAGE'
+Usage: bin/up [--print] [compose args...]
+
+Detects the host's LAN address, subnet and host names, then runs
+`docker compose up -d [compose args...]` with:
+
+  GRAPH_MEM_MCP_ALLOWED_HOSTS  <name>,<name>.local,<lan-ip>
+  GRAPH_MEM_MCP_ALLOWED_IPS    127.0.0.0/8,::1,172.16.0.0/12,<lan-subnet>
+                               (only for a private address with a /16-/30 prefix)
+
+GRAPH_MEM_MCP_ALLOWED_ORIGINS is never set: a browser client's origin can't be guessed.
+A non-empty value in the environment, or a KEY=value line in .env, is passed through
+unchanged instead of the detected one. If detection fails, the variables stay unset and
+graph_mem uses its built-in defaults (loopback + private ranges, loopback host names).
+
+  --print   print the values and where each comes from, then exit without running compose
+  --help    show this help
+USAGE
+}
+
+print_only=false
+case "${1:-}" in
+  --print) print_only=true; shift ;;
+  -h | --help) usage; exit 0 ;;
+esac
+
+cd "$(dirname "${BASH_SOURCE[0]}")/.."
+
+note() { printf 'bin/up: %s\n' "$*" >&2; }
+
+# --- Detection --------------------------------------------------------------------------------
+
+lan_ip="" lan_prefix="" host_name="" detect_error=""
+
+ip_to_int() {
+  local IFS=.
+  local -a octets
+  read -r -a octets <<<"$1"
+  [[ ${#octets[@]} -eq 4 ]] || return 1
+  local octet
+  for octet in "${octets[@]}"; do
+    [[ $octet =~ ^[0-9]{1,3}$ && $octet -le 255 ]] || return 1
+  done
+  echo $(((octets[0] << 24) | (octets[1] << 16) | (octets[2] << 8) | octets[3]))
+}
+
+int_to_ip() {
+  echo "$((($1 >> 24) & 255)).$((($1 >> 16) & 255)).$((($1 >> 8) & 255)).$(($1 & 255))"
+}
+
+detect_linux() {
+  command -v ip >/dev/null || { detect_error="no ip command"; return 1; }
+  local route dev cidr
+  # No traffic is sent: the kernel only reports the route it would use.
+  route=$(ip -4 route get 1.1.1.1 2>/dev/null) || { detect_error="no default route"; return 1; }
+  lan_ip=$(sed -n 's/.* src \([0-9.]*\).*/\1/p' <<<"$route" | head -n 1)
+  dev=$(sed -n 's/.* dev \([^ ]*\).*/\1/p' <<<"$route" | head -n 1)
+  [[ -n $lan_ip && -n $dev ]] || { detect_error="unexpected ip route output"; return 1; }
+  cidr=$(ip -o -4 addr show dev "$dev" 2>/dev/null | awk -v ip="$lan_ip" '{ for (i = 1; i <= NF; i++) if ($i == "inet") { split($(i + 1), a, "/"); if (a[1] == ip) print $(i + 1) } }' | head -n 1)
+  [[ $cidr == */* ]] || { detect_error="no address/prefix for $lan_ip on $dev"; return 1; }
+  lan_prefix=${cidr#*/}
+  host_name=$(hostname -s 2>/dev/null || true)
+}
+
+detect_macos() {
+  command -v route >/dev/null || { detect_error="no route command"; return 1; }
+  local iface mask
+  iface=$(route -n get default 2>/dev/null | awk '$1 == "interface:" { print $2 }' | head -n 1)
+  [[ -n $iface ]] || { detect_error="no default route"; return 1; }
+  lan_ip=$(ipconfig getifaddr "$iface" 2>/dev/null || true)
+  [[ -n $lan_ip ]] || { detect_error="no address on $iface"; return 1; }
+  mask=$(ifconfig "$iface" 2>/dev/null | awk -v ip="$lan_ip" '$1 == "inet" && $2 == ip { for (i = 1; i <= NF; i++) if ($i == "netmask") print $(i + 1) }' | head -n 1)
+  [[ $mask =~ ^0x[0-9a-fA-F]{8}$ ]] || { detect_error="unexpected netmask for $iface"; return 1; }
+  local bits=$((16#${mask#0x})) count=0
+  while ((bits & 0x80000000)); do
+    count=$((count + 1))
+    bits=$(((bits << 1) & 0xffffffff))
+  done
+  ((bits == 0)) || { detect_error="non-contiguous netmask $mask"; return 1; }
+  lan_prefix=$count
+  host_name=$(scutil --get LocalHostName 2>/dev/null || hostname -s 2>/dev/null || true)
+}
+
+detect() {
+  case "$(uname -s 2>/dev/null || true)" in
+    Linux) detect_linux ;;
+    Darwin) detect_macos ;;
+    *) detect_error="unsupported or unknown OS"; return 1 ;;
+  esac || return 1
+  ip_to_int "$lan_ip" >/dev/null || { detect_error="address $lan_ip doesn't parse"; return 1; }
+  [[ $lan_prefix =~ ^[0-9]+$ && $lan_prefix -le 32 ]] || { detect_error="prefix /$lan_prefix doesn't parse"; return 1; }
+}
+
+detected_hosts="" detected_ips="" ips_reason=""
+
+if detect; then
+  host_name=$(tr '[:upper:]' '[:lower:]' <<<"$host_name")
+  [[ $host_name =~ ^[a-z0-9]([a-z0-9-]*[a-z0-9])?$ ]] || host_name=""
+  detected_hosts=${host_name:+$host_name,$host_name.local,}$lan_ip
+
+  addr=$(ip_to_int "$lan_ip")
+  in_range() { (((addr & $2) == $(ip_to_int "$1"))); }
+  if ! in_range 10.0.0.0 0xff000000 && ! in_range 172.16.0.0 0xfff00000 && ! in_range 192.168.0.0 0xffff0000; then
+    ips_reason="$lan_ip is not a private address"
+  elif ((lan_prefix < 16 || lan_prefix > 30)); then
+    ips_reason="prefix /$lan_prefix is outside /16-/30"
+  else
+    network=$(int_to_ip $((addr & ((0xffffffff << (32 - lan_prefix)) & 0xffffffff))))
+    # Loopback and the Docker bridge range stay: a custom list replaces the built-in defaults.
+    detected_ips="127.0.0.0/8,::1,172.16.0.0/12,$network/$lan_prefix"
+  fi
+else
+  note "LAN detection failed: $detect_error; using the built-in defaults"
+  ips_reason="detection failed"
+fi
+
+# --- Per variable: ENV, then .env, then detection ---------------------------------------------
+
+env_file_value() {
+  [[ -f .env ]] || return 1
+  local line
+  line=$(grep -E "^[[:space:]]*(export[[:space:]]+)?$1=" .env | tail -n 1) || return 1
+  line=${line#*=}
+  line=${line%\"}
+  line=${line#\"}
+  line=${line%\'}
+  printf '%s' "${line#\'}"
+}
+
+resolve() {
+  local key=$1 detected=$2 reason=$3 value
+  if [[ -n ${!key:-} ]]; then
+    report "$key" "${!key}" "ENV"
+  elif value=$(env_file_value "$key"); then
+    unset "$key" # an empty shell value would override .env in compose
+    report "$key" "$value" ".env"
+  elif [[ -n $detected ]]; then
+    export "$key=$detected"
+    report "$key" "$detected" "detected"
+  else
+    unset "$key"
+    report "$key" "" "$reason"
+  fi
+}
+
+report() {
+  if [[ -n $2 || $3 == ".env" ]]; then
+    printf '%s=%s (%s)\n' "$1" "$2" "$3"
+  else
+    printf '%s unset (built-in default: %s)\n' "$1" "$3"
+  fi
+}
+
+# --print reports on stdout; a real start reports on stderr, beside compose's own output.
+out=2
+$print_only && out=1
+{
+  resolve GRAPH_MEM_MCP_ALLOWED_HOSTS "$detected_hosts" "detection failed"
+  resolve GRAPH_MEM_MCP_ALLOWED_IPS "$detected_ips" "$ips_reason"
+  resolve GRAPH_MEM_MCP_ALLOWED_ORIGINS "" "never detected; same-origin pages need no entry"
+} >&"$out"
+
+$print_only && exit 0
+exec docker compose up -d "$@"
