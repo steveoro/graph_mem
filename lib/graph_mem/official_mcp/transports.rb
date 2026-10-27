@@ -31,8 +31,28 @@ module GraphMem
             max_sessions: Integer(ENV.fetch("GRAPH_MEM_MCP_MAX_SESSIONS", 256)),
             max_request_bytes: OfficialMcp.max_request_bytes,
             allowed_hosts: list(ENV["GRAPH_MEM_MCP_ALLOWED_HOSTS"]),
-            allowed_origins: list(ENV["GRAPH_MEM_MCP_ALLOWED_ORIGINS"])
+            allowed_origins: allowed_origins
           }
+        end
+
+        # The browser origins allowed on /mcp besides same-origin pages: GRAPH_MEM_MCP_ALLOWED_ORIGINS,
+        # exact `scheme://host:port` values. The one source for both the transport's Origin check (read
+        # when a transport is built) and /mcp CORS (config/initializers/cors.rb, read per request), so
+        # replacing this method changes both.
+        #
+        # @return [Array<String>] the configured origins, as written
+        def allowed_origins
+          list(ENV["GRAPH_MEM_MCP_ALLOWED_ORIGINS"])
+        end
+
+        # Whether +origin+ is in {allowed_origins}, compared case-insensitively as the transport does.
+        #
+        # @param origin [String, nil] a request's `Origin` header
+        # @return [Boolean]
+        def allowed_origin?(origin)
+          return false if origin.nil?
+
+          allowed_origins.any? { |allowed| allowed.casecmp?(origin) }
         end
 
         private
