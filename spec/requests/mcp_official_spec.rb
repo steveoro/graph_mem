@@ -343,6 +343,8 @@ RSpec.describe "MCP on the official SDK", type: :request do
 
           initialize_session("/mcp", headers: { "HTTP_ORIGIN" => origin })
           expect(response).to have_http_status(:forbidden)
+          expect(response.headers).not_to have_key("access-control-allow-origin")
+          expect(response.headers["vary"]).to include("Origin")
         end
       end
     end
