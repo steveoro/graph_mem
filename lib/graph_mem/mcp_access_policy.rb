@@ -29,23 +29,45 @@ module GraphMem
 
     BEARER_PREFIX = /\ABearer\s+/i
 
-    attr_reader :token, :allowed_ips
+    # Label of the additive entries in log messages.
+    EXTRA_IPS_SOURCE = "Settings › MCP access"
+
+    attr_reader :token, :allowed_ips, :extra_ips_count
 
     class << self
       # Builds the policy from the environment. `env` is injectable for specs.
-      def from_env(env: ENV, logger: nil)
+      #
+      # @param extra_ips [Array<String>] additive entries (Settings › MCP access)
+      def from_env(env: ENV, logger: nil, extra_ips: [])
         token = env[TOKEN_ENV].to_s.strip.presence
-        new(token: token, allowed_ips: env[ALLOWED_IPS_ENV], logger: logger)
+        new(token: token, allowed_ips: env[ALLOWED_IPS_ENV], logger: logger, extra_ips: extra_ips)
+      end
+
+      # Whether +range+ lies inside the loopback and private ranges, the reach allowed without a token.
+      #
+      # @param range [IPAddr]
+      # @return [Boolean]
+      def within_defaults?(range)
+        default_ranges.any? { |allowed| allowed.family == range.family && allowed.include?(range) }
+      end
+
+      # @return [Array<IPAddr>] DEFAULT_RANGES, parsed
+      def default_ranges
+        @default_ranges ||= DEFAULT_RANGES.map { |entry| IPAddr.new(entry) }.freeze
       end
     end
 
     # @param token [String, nil] shared secret; when nil no token is required
     # @param allowed_ips [String, Array, nil] comma-separated list, array, or an
     #   UNRESTRICTED sentinel. Entries may be addresses or CIDR ranges.
-    def initialize(token: nil, allowed_ips: nil, logger: nil)
+    # @param extra_ips [String, Array, nil] entries appended to the resolved list, checked by the
+    #   same rules on every build (no sentinel; public ranges only with a token); ignored when the
+    #   list is unrestricted, since appending would narrow it.
+    def initialize(token: nil, allowed_ips: nil, logger: nil, extra_ips: nil)
       @logger = logger
       @token = token.to_s.strip.presence
       @allowed_ips = resolve_allowed_ips(allowed_ips)
+      @extra_ips_count = append_extra_ips(extra_ips)
     end
 
     def token_required?
@@ -80,6 +102,7 @@ module GraphMem
     # One-line posture summary for boot logging. Never includes the secret.
     def describe
       network = network_unrestricted? ? "any IP" : "#{@allowed_ips.size} allowed range(s)"
+      network += " (+#{@extra_ips_count} from settings)" if @extra_ips_count.positive?
       auth = token_required? ? "bearer token required" : "no token (unauthenticated)"
       "#{auth}, #{network}"
     end
@@ -114,29 +137,43 @@ module GraphMem
       parsed.empty? ? default_ranges : parsed
     end
 
+    # Appends the additive entries to the resolved list and returns how many were added. Every
+    # rule is re-checked here, whatever wrote the stored value, so a public extra stops applying
+    # as soon as the token is removed.
+    def append_extra_ips(raw)
+      entries = split_entries(raw)
+      return 0 if entries.empty? || network_unrestricted?
+
+      sentinels, entries = entries.partition { |entry| UNRESTRICTED.include?(entry.downcase) }
+      sentinels.each { |entry| warn("#{EXTRA_IPS_SOURCE} entry #{entry.inspect} can't lift the IP restriction. Ignoring it.") }
+      parsed = parse_ranges(entries, source: EXTRA_IPS_SOURCE)
+      parsed = narrow_to_defaults(parsed, source: EXTRA_IPS_SOURCE) unless token_required?
+      added = parsed.reject { |range| @allowed_ips.any? { |known| same_range?(known, range) } }.uniq { |range| [ range.to_s, range.prefix ] }
+      @allowed_ips += added
+      added.size
+    end
+
     # Without a token the allowlist may only narrow the default ranges, never
     # widen them: an explicit public range such as 0.0.0.0/0 is as unsafe as the
     # UNRESTRICTED sentinel, and parses cleanly, so it has to be caught here.
-    def narrow_to_defaults(ranges)
+    def narrow_to_defaults(ranges, source: ALLOWED_IPS_ENV)
       ranges.select do |range|
-        next true if within_defaults?(range)
+        next true if self.class.within_defaults?(range)
 
         warn(
-          "#{ALLOWED_IPS_ENV} entry #{range} reaches beyond the loopback and private ranges, " \
+          "#{source} entry #{range} reaches beyond the loopback and private ranges, " \
           "which requires #{TOKEN_ENV}. Ignoring it."
         )
         false
       end
     end
 
-    def within_defaults?(range)
-      default_ranges.any? do |allowed|
-        allowed.family == range.family && allowed.include?(range)
-      end
+    def same_range?(left, right)
+      left.family == right.family && left.to_s == right.to_s && left.prefix == right.prefix
     end
 
     def default_ranges
-      @default_ranges ||= parse_ranges(DEFAULT_RANGES)
+      self.class.default_ranges
     end
 
     def split_entries(raw)
@@ -147,11 +184,11 @@ module GraphMem
       end
     end
 
-    def parse_ranges(entries)
+    def parse_ranges(entries, source: ALLOWED_IPS_ENV)
       entries.filter_map do |entry|
         IPAddr.new(entry)
       rescue IPAddr::Error
-        warn("Ignoring unparseable #{ALLOWED_IPS_ENV} entry: #{entry.inspect}")
+        warn("Ignoring unparseable #{source} entry: #{entry.inspect}")
         nil
       end
     end

@@ -90,6 +90,12 @@ class AppSettings < RailsSettings::Base
   field :tool_invocation_retention_days, default: 90, type: :integer,
         validates: { numericality: { greater_than_or_equal_to: 0, less_than_or_equal_to: 3650 } }
 
+  # Additive MCP allowlists (UI-2a); not secrets. ENV entries can't be removed here. Read uncached
+  # through GraphMem::McpAccessLists and applied with OfficialMcp.refresh_access!.
+  field :mcp_extra_allowed_ips, default: "", type: :string
+  field :mcp_extra_allowed_hosts, default: "", type: :string
+  field :mcp_extra_allowed_origins, default: "", type: :string
+
   def self.embedding_backfill_schedule_cron
     yaml = YAML.safe_load_file(
       Rails.root.join("config", "recurring.yml"),
@@ -129,6 +135,16 @@ class AppSettings < RailsSettings::Base
     YAML.safe_load(raw.to_s).to_s
   rescue StandardError
     "Projects"
+  end
+
+  # A string setting read straight from the table, bypassing the cache. Raises when the database
+  # is unreachable; callers that run at boot rescue.
+  #
+  # @param var [String] the setting key
+  # @return [String] the stored value, or "" when unset
+  def self.uncached_string(var)
+    raw = connection.select_value(sanitize_sql([ "SELECT value FROM #{table_name} WHERE var = ?", var ]))
+    raw.nil? ? "" : YAML.safe_load(raw.to_s).to_s
   end
 
   # A stored pre-1.54 project_scan_roots value that is now ignored, or nil.
