@@ -135,6 +135,10 @@ Desktop. Windows paths need a path map, which graph_mem doesn't have yet.
 A project folder whose realpath leaves the scan root, or lands in a hidden or protected folder, is
 refused. Inside a project, a file whose realpath leaves the project, or matches the in-project
 denylist above, is never read; scanners read the realpath they checked, not the link.
+A symlinked child folder isn't followed either: the scan names the link like a file and never lists its target.
+
+On a case-insensitive filesystem (native macOS) the containment check compares real paths
+as strings; it relies on `File.realpath` returning the on-disk case. Containers and Linux are unaffected.
 
 ## Native installs (`bin/dev`)
 
