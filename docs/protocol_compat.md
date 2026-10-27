@@ -2,7 +2,7 @@
 
 ## Summary
 
-Since 1.55.0 graph_mem is served by the official MCP Ruby SDK (`mcp` gem, pinned to 1.8.1) over
+Since 1.55.0 graph_mem is served by the official MCP Ruby SDK (`mcp` gem, pinned to 1.8.2) over
 Streamable HTTP and stdio. It speaks MCP 2024-11-05 through 2025-11-25 through the `initialize`
 handshake, and 2026-07-28 natively: `server/discover` and the stateless per-request lifecycle. A
 supported `initialize` version is echoed; anything else (2026-07-28, a future date, garbage) gets
@@ -140,9 +140,9 @@ Each bullet is one `divergence` text from the fixture files, with the cases it c
 - graph_mem (the official SDK) answers malformed lines with JSON-RPC errors and serves a
   one-element batch; the TS SDK drops them silently. Both keep serving. — *malformed lines: parse
   error, batch, missing jsonrpc, primitive*
-- Neither runs it: graph_mem answers -32600 (like the Ruby SDK 1.8.1); the TS SDK drops the line
+- Neither runs it: graph_mem answers -32600 (like the Ruby SDK 1.8.2); the TS SDK drops the line
   silently. — *tools/call with "id": null is refused, not run*
-- graph_mem refuses invalid UTF-8 with -32700 (like the Ruby SDK 1.8.1); Node decodes the byte as
+- graph_mem refuses invalid UTF-8 with -32700 (like the Ruby SDK 1.8.2); Node decodes the byte as
   U+FFFD and answers the ping. Both keep serving. — *an invalid UTF-8 object key, then a ping*
 - Server-specific: Memory implements resource subscriptions and list-changed notifications;
   graph_mem doesn't. — *initialize capabilities: no subscribe or listChanged; instructions present*
@@ -161,7 +161,7 @@ Each bullet is one `divergence` text from the fixture files, with the cases it c
   2026-07-28*
 - Neither runs it; graph_mem (the official SDK) answers -32600 with HTTP 200, the TS SDK -32700
   with 400. — *tools/call with "id": null is refused, not run*
-- graph_mem refuses invalid UTF-8 with -32700 (like the Ruby SDK 1.8.1); Node decodes the byte as
+- graph_mem refuses invalid UTF-8 with -32700 (like the Ruby SDK 1.8.2); Node decodes the byte as
   U+FFFD and answers the ping. — *an invalid UTF-8 object key*
 - graph_mem refuses batches (removed in 2025-06-18, and an array body was a high bug before
   1.54.0); the TS SDK still accepts them on the 2025 transport. — *a JSON array (batch) body*

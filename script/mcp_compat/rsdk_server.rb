@@ -1,7 +1,7 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
-# A minimal server on the official Ruby MCP SDK (gem `mcp`, RSDK_VERSION, default 1.8.1), for
+# A minimal server on the official Ruby MCP SDK (gem `mcp`, RSDK_VERSION, default 1.8.2), for
 # compare.rb's informational `ruby_sdk` column (mcp-update-plan PR-3 §3.1, Oct 22 additions):
 # how the gem graph_mem migrates to (MG-1) answers the same handshake cases. One synthetic,
 # read-only tool, `get_current_time`, so the tools/call cases name a tool that exists.
@@ -12,7 +12,7 @@
 # Run it with the ruby-3.4.1@mcp_compat gemset (mcp, plus rack, rackup and webrick for http),
 # NOT graph_mem's bundle. Loopback only.
 
-gem "mcp", ENV.fetch("RSDK_VERSION", "1.8.1")
+gem "mcp", ENV.fetch("RSDK_VERSION", "1.8.2")
 require "mcp"
 require "time"
 

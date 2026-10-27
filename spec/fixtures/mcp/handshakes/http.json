@@ -215,7 +215,7 @@
         "graph_mem": {"status": 400, "error_code": -32700},
         "reference": {"status": 200, "id": 35, "result": {}}
       },
-      "divergence": "graph_mem refuses invalid UTF-8 with -32700 (like the Ruby SDK 1.8.1); Node decodes the byte as U+FFFD and answers the ping."
+      "divergence": "graph_mem refuses invalid UTF-8 with -32700 (like the Ruby SDK 1.8.2); Node decodes the byte as U+FFFD and answers the ping."
     },
     {
       "name": "tools/call with an invalid UTF-8 tool name",

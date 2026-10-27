@@ -16,11 +16,11 @@ change it (no case carries one since 1.55.0).
 | `spec/requests/mcp_protocol_compat_spec.rb` | Runs in the normal suite and asserts graph_mem's expectations: HTTP through the Rails app, stdio through `bin/mcp_stdio_runner.rb` subprocesses. Needs no Node. |
 | `compare.rb` | Replays the cases against running servers, checks each target's expectations, and compares graph_mem with the reference by shape and code: "same", "documented divergence", "graph_mem only" or "unexpected" (exit 1); a "same" row that still carries a `divergence` note is labelled stale. Plain Ruby. |
 | `handshake_cases.rb` | Loads and checks the cases; shared by the spec and `compare.rb`. |
-| `rsdk_server.rb <stdio\|http PORT>` | A one-tool server on the official Ruby SDK (`mcp` 1.8.1), for `compare.rb`'s informational `ruby_sdk` column. |
-| `rsdk_client.rb <stdio\|http> <auto\|legacy> <url \| -- cmd…>` | Connects the Ruby SDK client (`RSDK_VERSION`, default 1.8.1) and lists tools. |
+| `rsdk_server.rb <stdio\|http PORT>` | A one-tool server on the official Ruby SDK (`mcp` 1.8.2), for `compare.rb`'s informational `ruby_sdk` column. |
+| `rsdk_client.rb <stdio\|http> <auto\|legacy> <url \| -- cmd…>` | Connects the Ruby SDK client (`RSDK_VERSION`, default 1.8.2) and lists tools. |
 | `tsclient/tsclient.mjs <stdio\|http> <auto\|legacy> <url \| -- cmd…>` | Connects the TS client (`@modelcontextprotocol/client` 2.3.1) and lists tools. |
-| `refservers/` | `package.json` + `package-lock.json` for the reference servers (Memory and Everything 2.0.0, SDK 2.3.1). |
-| `clients.sh <url>` | The client matrix: TS 2.3.1 and Ruby SDK 1.8.0 and 1.8.1, × auto and legacy, × stdio and HTTP (12 rows). |
+| `refservers/` | `package.json` + `package-lock.json` for the reference servers (Memory 2.0.0, Everything 2.0.1, SDK 2.3.1). |
+| `clients.sh <url>` | The client matrix: TS 2.3.1 and Ruby SDK 1.8.1 and 1.8.2, × auto and legacy, × stdio and HTTP (12 rows). |
 | `claude_client_check.rb` | Claude Code as the client: the automated `docs/plans/claude-mcp-client-check.md` (below). |
 
 ## Setup (once)
@@ -30,7 +30,7 @@ The SDK clients and servers run outside graph_mem's bundle:
 ```bash
 source "$HOME/.rvm/scripts/rvm"
 rvm gemset create mcp_compat && rvm use ruby-3.4.1@mcp_compat
-gem install mcp -v 1.8.0 && gem install mcp -v 1.8.1 && gem install faraday rack rackup webrick
+gem install mcp -v 1.8.1 && gem install mcp -v 1.8.2 && gem install faraday rack rackup webrick
 (cd script/mcp_compat/tsclient && npm ci)   # Node >= 20
 ```
 
