@@ -5,6 +5,11 @@ All notable changes to GraphMem will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Security
+- Project scans no longer follow a symlinked child to test whether it's a directory.
+
 ## [1.58.2] - 2026-10-27
 
 CORS for /mcp from `GRAPH_MEM_MCP_ALLOWED_ORIGINS`.

@@ -158,4 +158,51 @@ RSpec.describe ProjectScanSkill, type: :service do
       expect(MemoryEntity.where("name LIKE ?", "%secret_widget%")).to be_empty
     end
   end
+
+  describe "symlinked children" do
+    it "names a symlinked source child without following it" do
+      with_scan_project do |root, home|
+        create_project_files(root)
+        outside = File.join(home, "elsewhere").tap { |dir| FileUtils.mkdir_p(File.join(dir, "secret_widget")) }
+        FileUtils.mkdir_p(File.join(root, "lib"))
+        File.symlink(outside, File.join(root, "lib", "outside"))
+        listed = []
+        allow(Dir).to receive(:children).and_wrap_original do |original, path, *args, **opts|
+          listed << path.to_s
+          original.call(path, *args, **opts)
+        end
+
+        described_class.process!(create_operation(root, depths: %w[architecture]))
+
+        expect(MemoryEntity.where(name: "outside", entity_type: "Component")).to be_empty
+        expect(MemoryEntity.where("name LIKE ?", "%secret_widget%")).to be_empty
+        expect(listed).not_to include(outside, File.join(root, "lib", "outside"))
+      end
+    end
+
+    it "keeps a real source subdirectory as a Component" do
+      with_scan_project do |root|
+        create_project_files(root)
+        FileUtils.mkdir_p(File.join(root, "lib", "synth_widget"))
+
+        described_class.process!(create_operation(root, depths: %w[architecture]))
+
+        expect(MemoryEntity.where(name: "synth_widget", entity_type: "Component")).to exist
+      end
+    end
+
+    it "leaves a top-level symlink to an outside folder out of the top-level directories" do
+      with_scan_project do |root, home|
+        create_project_files(root)
+        outside = File.join(home, "elsewhere").tap { |dir| FileUtils.mkdir_p(dir) }
+        File.symlink(outside, File.join(root, "linked_alpha"))
+        skill = described_class.new(create_operation(root, depths: %w[birds_eye]))
+
+        dirs = skill.send(:top_level_directories)
+
+        expect(dirs).to include("app", "docs")
+        expect(dirs).not_to include("linked_alpha")
+      end
+    end
+  end
 end
