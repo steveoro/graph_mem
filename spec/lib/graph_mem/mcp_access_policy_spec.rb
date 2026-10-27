@@ -223,14 +223,14 @@ RSpec.describe GraphMem::McpAccessPolicy do
       policy = described_class.new(token: token, extra_ips: [ "192.0.2.0/24" ], logger: logger)
 
       expect(policy.network_allowed?("127.0.0.1")).to be(true)
-      expect(policy.network_allowed?("192.168.0.18")).to be(true)
+      expect(policy.network_allowed?("192.168.0.21")).to be(true)
       expect(policy.network_allowed?("192.0.2.7")).to be(true)
     end
 
     it "extends a custom ENV list" do
       policy = described_class.new(allowed_ips: "127.0.0.0/8,::1,192.168.0.0/24", extra_ips: "10.8.0.0/24", logger: logger)
 
-      expect(policy.network_allowed?("192.168.0.18")).to be(true)
+      expect(policy.network_allowed?("192.168.0.21")).to be(true)
       expect(policy.network_allowed?("10.8.0.5")).to be(true)
       expect(policy.network_allowed?("10.9.0.5")).to be(false)
     end
@@ -274,6 +274,25 @@ RSpec.describe GraphMem::McpAccessPolicy do
       expect(rebuilt.network_allowed?("198.51.100.7")).to be(false)
       expect(rebuilt.extra_ips_count).to eq(0)
       expect(logger).to have_received(:warn).with(/198\.51\.100\.0 reaches beyond/)
+    end
+
+    it "adds no broad or IPv6 public extra without a token" do
+      policy = described_class.new(allowed_ips: "127.0.0.0/8", extra_ips: %w[0.0.0.0/1 ::/0 2000::/3], logger: logger)
+
+      expect(policy.extra_ips_count).to eq(0)
+      expect(policy.network_allowed?("203.0.113.5")).to be(false)
+      expect(policy.network_allowed?("2001:db8::5")).to be(false)
+    end
+
+    it "skips a stored /0 even with a token, and matches a mapped extra in native form" do
+      policy = described_class.new(token: token, allowed_ips: "127.0.0.0/8", extra_ips: %w[0.0.0.0/0 ::/0 ::ffff:10.8.0.0/120], logger: logger)
+
+      expect(policy.network_unrestricted?).to be(false)
+      expect(policy.network_allowed?("203.0.113.5")).to be(false)
+      expect(policy.network_allowed?("10.8.0.5")).to be(true)
+      expect(policy.network_allowed?("::ffff:10.8.0.5")).to be(true)
+      expect(policy.extra_ips_count).to eq(1)
+      expect(logger).to have_received(:warn).with(%r{entry 0\.0\.0\.0/0 can't lift the IP restriction})
     end
 
     it "skips unparseable extras and ranges already in the list" do

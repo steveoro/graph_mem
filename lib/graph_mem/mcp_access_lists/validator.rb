@@ -73,8 +73,17 @@ module GraphMem
         range = parse_ip(entry)
         return error(entry, "isn't an IP address or a CIDR range") unless range
 
+        masked = entry.include?("/") && parse_ip(entry.split("/").first).to_s != range.to_s
+        # Client addresses are matched in native IPv4 form, so a mapped entry would never match.
+        range = range.native if range.ipv4_mapped?
+        return error(entry, "can't be added here: a /0 lifts the IP restriction, which is an ENV decision (with GRAPH_MEM_MCP_TOKEN)") if range.prefix.zero?
+
         text = ip_text(range)
-        warn(entry, "host bits masked, saved as #{text}") if entry.include?("/") && parse_ip(entry.split("/").first).to_s != range.to_s
+        if masked
+          warn(entry, "host bits masked, saved as #{text}")
+        elsif text != entry.downcase
+          warn(entry, "saved as #{text}")
+        end
         return duplicate(text) if env_ranges.any? { |known| same_range?(known, range) }
 
         if McpAccessPolicy.within_defaults?(range)

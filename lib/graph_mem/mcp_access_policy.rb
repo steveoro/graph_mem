@@ -139,14 +139,21 @@ module GraphMem
 
     # Appends the additive entries to the resolved list and returns how many were added. Every
     # rule is re-checked here, whatever wrote the stored value, so a public extra stops applying
-    # as soon as the token is removed.
+    # as soon as the token is removed. A sentinel or a /0 (which equals one) is skipped; an
+    # IPv4-mapped entry is used in native form, the form client addresses are matched in.
     def append_extra_ips(raw)
       entries = split_entries(raw)
       return 0 if entries.empty? || network_unrestricted?
 
       sentinels, entries = entries.partition { |entry| UNRESTRICTED.include?(entry.downcase) }
       sentinels.each { |entry| warn("#{EXTRA_IPS_SOURCE} entry #{entry.inspect} can't lift the IP restriction. Ignoring it.") }
-      parsed = parse_ranges(entries, source: EXTRA_IPS_SOURCE)
+      parsed = parse_ranges(entries, source: EXTRA_IPS_SOURCE).map { |range| range.ipv4_mapped? ? range.native : range }
+      parsed = parsed.reject do |range|
+        next false unless range.prefix.zero?
+
+        warn("#{EXTRA_IPS_SOURCE} entry #{range}/0 can't lift the IP restriction. Ignoring it.")
+        true
+      end
       parsed = narrow_to_defaults(parsed, source: EXTRA_IPS_SOURCE) unless token_required?
       added = parsed.reject { |range| @allowed_ips.any? { |known| same_range?(known, range) } }.uniq { |range| [ range.to_s, range.prefix ] }
       @allowed_ips += added

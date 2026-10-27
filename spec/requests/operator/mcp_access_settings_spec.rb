@@ -29,7 +29,7 @@ RSpec.describe "Settings › MCP access", type: :request do
     before { sign_in_operator }
 
     it "saves each list normalized, with one audit row per changed key" do
-      save(mcp_extra_allowed_ips: "192.168.0.18/24\n10.8.0.0/24", mcp_extra_allowed_hosts: "Synth-LAN.test, [fd00::1], localhost",
+      save(mcp_extra_allowed_ips: "192.168.0.21/24\n10.8.0.0/24", mcp_extra_allowed_hosts: "Synth-LAN.test, [fd00::1], localhost",
            mcp_extra_allowed_origins: "HTTP://Synth-UI.localhost:3002/")
 
       expect(response).to redirect_to(operator_settings_path(tab: "mcp_access"))

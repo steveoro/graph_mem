@@ -61,10 +61,33 @@ RSpec.describe GraphMem::McpAccessLists do
 
     context "with IPs" do
       it "normalizes ranges and warns when host bits are masked" do
-        result = validate(:ips, "192.168.0.18/24, 10.8.0.5, fd00::1/64", token_env.merge("GRAPH_MEM_MCP_ALLOWED_IPS" => "127.0.0.0/8"))
+        result = validate(:ips, "192.168.0.21/24, 10.8.0.5, fd00::1/64", token_env.merge("GRAPH_MEM_MCP_ALLOWED_IPS" => "127.0.0.0/8"))
 
         expect(result).to include(entries: %w[192.168.0.0/24 10.8.0.5 fd00::/64], errors: [])
-        expect(result[:warnings]).to include("192.168.0.18/24: host bits masked, saved as 192.168.0.0/24")
+        expect(result[:warnings]).to include("192.168.0.21/24: host bits masked, saved as 192.168.0.0/24")
+      end
+
+      it "refuses broad and IPv6 public ranges without a token" do
+        %w[0.0.0.0/1 0.0.0.0/0 ::/0 2000::/3 ::ffff:0:0/96 2001:db8::/32].each do |entry|
+          result = validate(:ips, entry)
+          expect(result[:errors].size).to eq(1), entry
+          expect(result[:entries]).to be_empty
+        end
+      end
+
+      it "refuses a /0 even with a token, since it lifts the restriction like any" do
+        %w[0.0.0.0/0 ::/0 ::ffff:0:0/96].each do |entry|
+          expect(validate(:ips, entry, token_env)[:errors].sole).to include("a /0 lifts the IP restriction"), entry
+        end
+        expect(validate(:ips, "0.0.0.0/1", token_env)).to include(entries: [ "0.0.0.0/1" ], errors: [])
+      end
+
+      it "stores an IPv4-mapped entry in native form, the form client addresses are matched in" do
+        result = validate(:ips, "::ffff:10.8.0.0/120, ::FFFF:10.8.0.5", "GRAPH_MEM_MCP_ALLOWED_IPS" => "127.0.0.0/8")
+
+        expect(result).to include(entries: %w[10.8.0.0/24 10.8.0.5], errors: [])
+        expect(result[:warnings]).to eq([ "::ffff:10.8.0.0/120: saved as 10.8.0.0/24", "::FFFF:10.8.0.5: saved as 10.8.0.5" ])
+        expect(validate(:ips, "::ffff:198.51.100.0/120")[:errors].sole).to start_with("198.51.100.0/24: is a public range")
       end
 
       it "refuses any, all and *, with or without a token" do
