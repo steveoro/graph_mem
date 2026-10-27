@@ -37,8 +37,8 @@ module GraphMem
 
         # The browser origins allowed on /mcp besides same-origin pages: GRAPH_MEM_MCP_ALLOWED_ORIGINS,
         # exact `scheme://host:port` values. The one source for both the transport's Origin check (read
-        # when a transport is built) and /mcp CORS (config/initializers/cors.rb, read per request), so
-        # replacing this method changes both.
+        # once, when a transport is built) and /mcp CORS (config/initializers/cors.rb, read per request):
+        # a source that changes at runtime must also call {reset!}, or the two disagree until it does.
         #
         # @return [Array<String>] the configured origins, as written
         def allowed_origins
