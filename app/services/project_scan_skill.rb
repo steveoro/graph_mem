@@ -410,7 +410,8 @@ class ProjectScanSkill
 
     Dir.children(@project_root).select do |child|
       full = File.join(@project_root, child)
-      File.directory?(full) && !child.start_with?(".") && !skip_directory?(child)
+      # lstat: a symlinked entry is never followed, so it isn't listed as a directory.
+      File.lstat(full).directory? && !child.start_with?(".") && !skip_directory?(child)
     end
   rescue SystemCallError
     []
@@ -435,6 +436,8 @@ class ProjectScanSkill
     text.squish.truncate(max_bytes, separator: /\s/)
   end
 
+  # Reads the realpath kept_path checked. A component swapped after that check could still redirect the read; that
+  # needs write access to the scanned tree (scan mounts are read-only in the container).
   def safe_read(file, max_bytes = MAX_FILE_BYTES)
     return "" unless File.readable?(file)
 
@@ -475,13 +478,16 @@ class ProjectScanSkill
 
   def architecture_child_name_and_type(full_child, parent_type, parent_dir)
     child = File.basename(full_child)
-    if File.directory?(full_child)
+    # lstat: a symlinked child is named like a file, never followed to test whether it's a directory.
+    if File.lstat(full_child).directory?
       [ child, "Component" ]
     else
       name = File.basename(child, File.extname(child)).camelize
       type = infer_architecture_file_type(child, parent_type, parent_dir)
       [ name, type ]
     end
+  rescue SystemCallError
+    [ nil, nil ] # removed mid-scan: skipped by the caller
   end
 
   def infer_architecture_file_type(filename, parent_type, parent_dir)
