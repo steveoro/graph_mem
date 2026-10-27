@@ -5,10 +5,20 @@ All notable changes to GraphMem will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.58.3] - 2026-10-27
+
+Editable MCP allowlists and `bin/up` LAN detection.
+
+### Added
+- Settings › MCP access: add allowed IPs, hosts and origins at runtime, on top of the ENV values (which can't be removed there). Changes apply without a restart; changing hosts or origins closes open MCP sessions.
+- `bin/up` starts the stack with the host's LAN subnet and host names as the MCP allowlist defaults (loopback and the Docker bridge range always kept); ENV and `.env` values override it.
+
+### Changed
+- `/api/v1` bearer requests use the same merged IP allowlist as `/mcp`.
 
 ### Security
 - Project scans no longer follow a symlinked child to test whether it's a directory.
+- Settings › MCP access can add public IP ranges only while `GRAPH_MEM_MCP_TOKEN` is set, as ENV can; without a token they are refused and stop applying.
 
 ## [1.58.2] - 2026-10-27
 
