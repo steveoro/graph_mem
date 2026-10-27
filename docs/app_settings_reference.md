@@ -6,7 +6,7 @@ GraphMem stores operator-tunable runtime settings in the primary MariaDB `settin
 
 - **URL:** `/operator/settings`
 - **Auth:** session login at `/operator/login` (`OPERATOR_USERNAME` / `OPERATOR_PASSWORD`, or `credentials.operator.username` / `credentials.operator.password`). The same form signs in the optional read-only guest (see `enable_guest_access` below); guests can't open the settings.
-- **Tabs:** Feature Flags, Database Backup, Embeddings, Summaries, Imports, Project Scans, Telemetry
+- **Tabs:** Feature Flags, Database Backup, Embeddings, Summaries, Imports, Project Scans, Telemetry, Review policies, MCP access
 
 ## Feature Flags
 
@@ -83,6 +83,16 @@ See [summarization guide](summarization.md).
 | `project_scan_subfolders` | `Projects` | Comma- or newline-separated folders, relative to the scan root, that may be scanned (e.g. `Projects, work/clients`). Read uncached on every scan request and at job start, so a change applies at once in every process. Blank = the whole scan root (hidden folders and secret files stay blocked). Replaces `project_scan_roots`, which is ignored and can be cleared from Settings. |
 
 Every scan entry point (dashboard, `POST /api/v1/scan`, MCP `scan_project`, job start) resolves the path through `ScanRootPolicy`: the scan root comes from `GRAPH_MEM_SCAN_ROOTS` (in Docker, the read-only home mount) or natively `Dir.home`; `PROJECT_SCAN_ROOTS` is gone. See [container scan mounts](container_scan_mounts.md) and the [project scan skill](../skills/project-scan/SKILL.md) for the scan workflow.
+
+## MCP Access
+
+Additive parts of the three MCP allowlists (UI-2a). Each adds to its ENV variable, which the tab shows as read-only text and which can't be removed here. Read uncached by `GraphMem::McpAccessLists`; a save applies at once through `OfficialMcp.refresh_access!` (a hosts or origins change also closes open MCP sessions). Validated on save (any refused entry: `422`, nothing saved) and audited per changed key. Not secrets. See [MCP access control](mcp_access_control.md#adding-entries-at-runtime-settings--mcp-access).
+
+| Setting | Default | Effect |
+|---|---|---|
+| `mcp_extra_allowed_ips` | `""` | Addresses or CIDR ranges appended to the effective `GRAPH_MEM_MCP_ALLOWED_IPS` list (the defaults when unset). `any`/`all`/`*` refused; public ranges only with `GRAPH_MEM_MCP_TOKEN`, and inactive while it is unset. Ignored when ENV allows any IP. |
+| `mcp_extra_allowed_hosts` | `""` | Host names, IPv4 or IPv6 addresses, with an optional `:port`, added to `GRAPH_MEM_MCP_ALLOWED_HOSTS`. Loopback names are always accepted and not stored. |
+| `mcp_extra_allowed_origins` | `""` | Exact `http(s)://host[:port]` origins added to `GRAPH_MEM_MCP_ALLOWED_ORIGINS`: accepted by the transport and granted CORS on `/mcp`. |
 
 ## Retention
 
