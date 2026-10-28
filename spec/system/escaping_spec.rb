@@ -213,4 +213,27 @@ RSpec.describe "XSS escaping in graph UI", type: :system do
       no_probe!("review autocomplete")
     end
   end
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # Sink 7: Search results, snippets and the entity panel (UI-3)
+  # ───────────────────────────────────────────────────────────────────────────
+  context "on the search page" do
+    let!(:probe_entity) { MemoryEntity.create!(name: "Synth #{PROBE}", entity_type: "Component", aliases: PROBE, description: PROBE) }
+
+    before do
+      MemoryObservation.create!(memory_entity: probe_entity, content: "synth #{PROBE} tiles")
+      sign_in_operator!
+    end
+
+    it "shows names, snippets and the panel as text, with only <mark> added" do
+      visit search_path(q: "synth tiles")
+      expect(page).to have_css("[data-testid='search-snippet'] mark", text: "synth")
+      expect(page).to have_text(PROBE)
+      no_probe!("search results")
+
+      click_link "Synth #{PROBE}"
+      expect(page).to have_css("turbo-frame#entity-panel h2", text: "Synth #{PROBE}")
+      no_probe!("entity panel")
+    end
+  end
 end
