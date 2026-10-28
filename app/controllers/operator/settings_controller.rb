@@ -3,6 +3,7 @@
 module Operator
   class SettingsController < BaseController
     include ReviewPolicySettings
+    include McpAccessSettings
 
     before_action :load_backup_files, only: :index
 
@@ -56,7 +57,12 @@ module Operator
       review_error = review_policy_settings_error(settings)
       return render_review_policy_error(review_error) if review_error
 
+      # MCP allowlists likewise: any refused entry → 422, nothing saved.
+      mcp_errors = mcp_access_settings_errors(settings)
+      return render_mcp_access_error(mcp_errors) if mcp_errors
+
       review_before = review_policy_values
+      mcp_before = mcp_access_values
       settings.each do |key, value|
         next unless AppSettings.defined_fields.map(&:key).include?(key)
 
@@ -72,8 +78,9 @@ module Operator
       end
 
       audit_review_policy_changes(review_before)
+      apply_mcp_access_changes(mcp_before)
       if results[:failed].empty?
-        flash[:notice] = t("operator.settings.bulk_update.success", count: results[:success].count)
+        flash[:notice] = [ t("operator.settings.bulk_update.success", count: results[:success].count), mcp_access_warnings_notice ].compact.join(" ")
         EmbeddingService.reset_instance! if params[:tab] == "embeddings"
         SummaryGenerationClient.reset_instance! if params[:tab] == "summaries"
       else
@@ -111,6 +118,8 @@ module Operator
 
     def restore_backup
       BackupFileService.new.restore!(params[:filename])
+      # The restored settings may carry other MCP allowlists: apply them now, not at the next restart.
+      GraphMem::OfficialMcp.refresh_access!(transports: true)
       flash[:notice] = t("operator.settings.backup.restore_success", filename: params[:filename])
     rescue StandardError => e
       flash[:alert] = t("operator.settings.backup.restore_failed", error: e.message)
@@ -172,6 +181,10 @@ module Operator
         review_policies: {
           title: t("operator.settings.groups.review_policies"),
           settings: ReviewPolicySettings::KEYS
+        },
+        mcp_access: {
+          title: t("operator.settings.groups.mcp_access"),
+          settings: McpAccessSettings::KEYS
         }
       }
     end

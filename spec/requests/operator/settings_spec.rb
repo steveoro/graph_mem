@@ -369,6 +369,29 @@ RSpec.describe "Operator settings", type: :request do
     end
   end
 
+  describe "POST /operator/settings/backup/restore" do
+    before { sign_in_operator }
+
+    # UI-2a: a restored settings table may carry other MCP allowlists; they apply at once.
+    it "re-reads the MCP allowlists after a successful restore, and not after a failed one" do
+      service = instance_double(BackupFileService, list: [])
+      allow(service).to receive(:restore!).with("202601011200_synth.sql.bz2")
+      allow(service).to receive(:restore!).with("missing.sql.bz2").and_raise(ArgumentError, "not found")
+      allow(BackupFileService).to receive(:new).and_return(service)
+      allow(GraphMem::OfficialMcp).to receive(:refresh_access!)
+
+      post operator_restore_backup_path, params: { filename: "202601011200_synth.sql.bz2" }
+
+      expect(response).to redirect_to(operator_settings_path(tab: "database_backup"))
+      expect(GraphMem::OfficialMcp).to have_received(:refresh_access!).with(transports: true).once
+
+      post operator_restore_backup_path, params: { filename: "missing.sql.bz2" }
+
+      expect(flash[:alert]).to include("not found")
+      expect(GraphMem::OfficialMcp).to have_received(:refresh_access!).once
+    end
+  end
+
   describe "DELETE /operator/settings/backup" do
     before { sign_in_operator }
 

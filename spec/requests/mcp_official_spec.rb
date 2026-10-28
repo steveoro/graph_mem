@@ -182,6 +182,24 @@ RSpec.describe "MCP on the official SDK", type: :request do
       end
     end
 
+    it "judges the peer address too: a forwarded allowed address doesn't get another private client in" do
+      with_env("GRAPH_MEM_MCP_ALLOWED_IPS" => "127.0.0.0/8,::1,192.168.0.0/24", "GRAPH_MEM_MCP_TOKEN" => "synthetic-token") do
+        bearer = { "HTTP_AUTHORIZATION" => "Bearer synthetic-token" }
+        spoofed = bearer.merge("REMOTE_ADDR" => "10.9.9.9", "HTTP_X_FORWARDED_FOR" => "192.168.0.21")
+
+        initialize_session("/mcp", headers: spoofed)
+        expect(response).to have_http_status(:forbidden)
+        expect(response.parsed_body.dig("error", "message")).to eq("Forbidden: Remote IP not allowed")
+        get "/api/v1/memory_entities", headers: spoofed
+        expect(response).to have_http_status(:forbidden)
+
+        direct = bearer.merge("REMOTE_ADDR" => "192.168.0.21")
+        expect(initialize_session("/mcp", headers: direct)).to be_present
+        get "/api/v1/memory_entities", headers: direct
+        expect(response).to have_http_status(:ok)
+      end
+    end
+
     it "answers a foreign Host or Origin with 403, and accepts a host listed in GRAPH_MEM_MCP_ALLOWED_HOSTS" do
       host! "rebinding.example"
       initialize_session("/mcp")
@@ -260,6 +278,141 @@ RSpec.describe "MCP on the official SDK", type: :request do
         "version" => GraphMem::VERSION, "next_move" => include("timestamp"), "context" => include("status" => "none")
       )
       expect(result["_meta"]).to eq("graphMemVersion" => GraphMem::VERSION, "contextStatus" => "none")
+    end
+  end
+
+  # UI-2a: Settings › MCP access additions reach the access policy, the transport and CORS on the
+  # next request, with no restart. The settings rows roll back with the example's transaction.
+  describe "allowlist changes from Settings › MCP access" do
+    def save_mcp_access(**settings)
+      sign_in_operator
+      patch operator_settings_bulk_update_path, params: { tab: "mcp_access", settings: settings.transform_keys(&:to_s) }
+      expect(response).to redirect_to(operator_settings_path(tab: "mcp_access"))
+    end
+
+    def preflight(origin)
+      options "/mcp", headers: { "HTTP_ORIGIN" => origin, "HTTP_ACCESS_CONTROL_REQUEST_METHOD" => "POST",
+                                 "HTTP_ACCESS_CONTROL_REQUEST_HEADERS" => "content-type" }
+      response.headers["access-control-allow-origin"]
+    end
+
+    it "accepts an added host on the next initialize" do
+      host! "synth-lan.test"
+      initialize_session("/mcp")
+      expect(response).to have_http_status(:forbidden)
+      expect(response.parsed_body.dig("error", "message")).to eq("Forbidden: Invalid Host header")
+
+      host! "localhost"
+      save_mcp_access(mcp_extra_allowed_hosts: "synth-lan.test")
+
+      host! "synth-lan.test"
+      expect(initialize_session("/mcp")).to be_present
+    end
+
+    it "keeps CORS and the transport in agreement when an origin is added and removed" do
+      added = "http://synth-ui.localhost:3002"
+      with_env("GRAPH_MEM_MCP_ALLOWED_ORIGINS" => "http://localhost:3001") do
+        initialize_session("/mcp", headers: { "HTTP_ORIGIN" => added }) # builds the transport before the change
+        expect(response).to have_http_status(:forbidden)
+
+        save_mcp_access(mcp_extra_allowed_origins: added)
+        expect(preflight(added)).to eq(added)
+        expect(initialize_session("/mcp", headers: { "HTTP_ORIGIN" => added })).to be_present
+
+        save_mcp_access(mcp_extra_allowed_origins: "")
+        expect(preflight(added)).to be_nil
+        initialize_session("/mcp", headers: { "HTTP_ORIGIN" => added })
+        expect(response).to have_http_status(:forbidden)
+
+        expect(preflight("http://localhost:3001")).to eq("http://localhost:3001")
+        expect(initialize_session("/mcp", headers: { "HTTP_ORIGIN" => "http://localhost:3001" })).to be_present
+      end
+    end
+
+    it "answers CORS from the transports' snapshot, with no settings query per request" do
+      AppSettings.mcp_extra_allowed_origins = "http://synth-ui.localhost:3002"
+      allow(AppSettings).to receive(:uncached_string).and_call_original
+
+      3.times { expect(preflight("http://synth-ui.localhost:3002")).to eq("http://synth-ui.localhost:3002") }
+      expect(initialize_session("/mcp", headers: { "HTTP_ORIGIN" => "http://synth-ui.localhost:3002" })).to be_present
+
+      expect(AppSettings).to have_received(:uncached_string).with("mcp_extra_allowed_origins").once
+    end
+
+    it "doesn't keep a failed settings read: the policy and the transports pick the entries up once it works" do
+      AppSettings.mcp_extra_allowed_hosts = "synth-lan.test"
+      AppSettings.mcp_extra_allowed_ips = "10.8.0.0/24"
+      failing = true
+      allow(AppSettings).to receive(:uncached_string).and_wrap_original do |original, *args|
+        raise ActiveRecord::ConnectionNotEstablished, "synthetic outage" if failing
+
+        original.call(*args)
+      end
+
+      with_env("GRAPH_MEM_MCP_ALLOWED_IPS" => "127.0.0.1") do
+        host! "synth-lan.test"
+        initialize_session("/mcp")
+        expect(response).to have_http_status(:forbidden) # the transport was built from ENV alone
+        initialize_session("/mcp", headers: { "REMOTE_ADDR" => "10.8.0.5" })
+        expect(response).to have_http_status(:forbidden)
+
+        failing = false
+        expect(initialize_session("/mcp")).to be_present
+        expect(initialize_session("/mcp", headers: { "REMOTE_ADDR" => "10.8.0.5" })).to be_present
+      end
+    end
+
+    it "rebuilds a transport whose hosts read failed even when the origins read right after it works" do
+      AppSettings.mcp_extra_allowed_hosts = "synth-lan.test"
+      failures = { "mcp_extra_allowed_hosts" => 1 }
+      allow(AppSettings).to receive(:uncached_string).and_wrap_original do |original, key|
+        if failures[key].to_i.positive?
+          failures[key] -= 1
+          raise ActiveRecord::ConnectionNotEstablished, "synthetic outage"
+        end
+
+        original.call(key)
+      end
+
+      host! "synth-lan.test"
+      initialize_session("/mcp")
+      expect(response).to have_http_status(:forbidden)
+
+      expect(initialize_session("/mcp")).to be_present
+    end
+
+    it "closes open sessions on a hosts or origins change, and keeps them on an IPs-only change" do
+      kept = initialize_session("/mcp")
+      save_mcp_access(mcp_extra_allowed_ips: "10.8.0.0/24")
+      rpc("/mcp", kept, "tools/list")
+      expect(response).to have_http_status(:ok)
+
+      save_mcp_access(mcp_extra_allowed_hosts: "synth-lan.test")
+      rpc("/mcp", kept, "tools/list")
+      expect(response).to have_http_status(:not_found)
+
+      dropped = initialize_session("/mcp")
+      save_mcp_access(mcp_extra_allowed_origins: "http://synth-ui.localhost:3002")
+      rpc("/mcp", dropped, "tools/list")
+      expect(response).to have_http_status(:not_found)
+    end
+
+    it "applies added IPs to /mcp and to bearer /api/v1 requests alike" do
+      with_env("GRAPH_MEM_MCP_ALLOWED_IPS" => "127.0.0.1", "GRAPH_MEM_MCP_TOKEN" => "synthetic-token") do
+        bearer = { "HTTP_AUTHORIZATION" => "Bearer synthetic-token", "REMOTE_ADDR" => "10.8.0.5" }
+        initialize_session("/mcp", headers: bearer)
+        expect(response).to have_http_status(:forbidden)
+        get "/api/v1/memory_entities", headers: bearer
+        expect(response).to have_http_status(:forbidden)
+
+        save_mcp_access(mcp_extra_allowed_ips: "10.8.0.0/24")
+        reset! # drop the operator session: the /api/v1 call below must go through the bearer path
+        host! "localhost"
+
+        expect(initialize_session("/mcp", headers: bearer)).to be_present
+        get "/api/v1/memory_entities", headers: bearer
+        expect(response).to have_http_status(:ok)
+      end
     end
   end
 

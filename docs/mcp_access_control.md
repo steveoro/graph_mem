@@ -48,7 +48,33 @@ Default ranges: `127.0.0.0/8`, `::1`, `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.
 `fc00::/7`, `fe80::/10`.
 
 An explicit allowlist replaces these defaults rather than extending them. Include
-`127.0.0.0/8` and `::1` when clients on the server host use `localhost`.
+`127.0.0.0/8` and `::1` when clients on the server host use `localhost` (and `172.16.0.0/12` in
+Docker, where local clients can arrive from a bridge address). `bin/up` builds such a list for you.
+
+### Adding entries at runtime (Settings › MCP access)
+
+The operator's Settings › MCP access tab adds IPs, hosts and origins **on top of** each ENV value,
+which is shown as read-only text beside the editable part and can't be removed there. Changes apply
+on the next request, without a restart, and each changed list writes an audit row.
+
+- The same validation as ENV, stricter where the UI can refuse: an unparseable entry is refused
+  (ENV only warns), and so are `any`, `all`, `*` and a `/0` such as `0.0.0.0/0` or `::/0` (lifting
+  the IP restriction stays an ENV decision, made with a token). An IPv4-mapped entry
+  (`::ffff:a.b.c.d`) is saved in plain IPv4 form, the form client addresses are compared in.
+- A public IP range is accepted only while `GRAPH_MEM_MCP_TOKEN` is set, and saved with a warning.
+  It is re-checked every time the policy is built: if the token is later removed, the entry stops
+  applying (logged, and shown as inactive) instead of staying silently active.
+- Added IPs extend the effective ENV list (the defaults when unset); they have no effect when ENV
+  allows any IP. They apply to bearer `/api/v1` requests too.
+- **Saving a change to allowed hosts or origins closes every open MCP session** (the transport is
+  rebuilt with the new lists); clients get `404 Session not found` and start a new one. Changing only
+  the allowed IPs keeps sessions open.
+- The lists aren't secrets: they live in the settings table, so backups and exports include them,
+  and restoring a backup applies its lists at once. The token never goes there.
+- No lockout: the operator pages and `/operator/login` aren't behind any of these lists, and an
+  operator session on `/api/v1` isn't IP-checked.
+- graph_mem runs one Puma process; with several workers, a change would reach the others only at
+  their next restart.
 
 ### DNS-rebinding protection (always on)
 
@@ -64,7 +90,32 @@ The active posture is logged once at boot:
 [McpAccessPolicy] /mcp access: no token (unauthenticated), 7 allowed range(s)
 ```
 
+A change from Settings › MCP access logs the new posture, e.g.
+`[McpAccessPolicy] /mcp access changed by operator:admin: no token (unauthenticated), 8 allowed range(s) (+1 from settings)`.
+
 ## Recipes
+
+### Starting with `bin/up`
+
+`bin/up` runs `docker compose up -d` (extra arguments are passed on, e.g. `bin/up --build`) after
+detecting the host's LAN address, subnet and host name, and passes them as the defaults:
+
+```console
+$ bin/up --print
+GRAPH_MEM_MCP_ALLOWED_HOSTS=synth-box,synth-box.local,10.9.8.18 (detected)
+GRAPH_MEM_MCP_ALLOWED_IPS=127.0.0.0/8,::1,172.16.0.0/12,10.9.8.0/24 (detected)
+GRAPH_MEM_MCP_ALLOWED_ORIGINS unset (built-in default: never detected; same-origin pages need no entry)
+```
+
+- Loopback and the Docker bridge range are always in the IP list. The subnet is used only for a
+  private address with a `/16`–`/30` prefix; otherwise the IP list stays unset (built-in defaults).
+- Origins are never detected: a browser client's origin is its own `scheme://host:port`.
+- A non-empty value in the environment, or a `KEY=value` line in `.env`, wins and is passed through
+  unchanged. Leave the lines unset in `.env` to use the detection.
+- Detection runs on the host (Linux: `ip`; macOS, best effort: `route`, `ipconfig`, `ifconfig`). If
+  it fails, `bin/up` prints one line and starts with today's defaults.
+
+Plain `docker compose up -d` still works and uses the built-in defaults.
 
 ### Laptop only
 
@@ -228,10 +279,15 @@ Know what this does **not** give you.
 access. `X-MCP-Client` is self-asserted and is a namespacing key, not a credential — an agent can
 claim any client id and read another agent's context.
 
-**`request.ip` is spoofable behind a proxy.** Rack derives it from `X-Forwarded-For`, which a
-client can set. Once GraphMem sits behind a reverse proxy (Kamal's included), the IP allowlist is
-advisory and the token is the real control. Configure the proxy to overwrite `X-Forwarded-For`, or
-rely on the token.
+**Client addresses and `X-Forwarded-For`.** Rack and Rails derive the client address from
+`X-Forwarded-For` whenever the connecting peer is a private address, and any client can set that
+header. So the IP check (on `/mcp` and bearer `/api/v1`) requires **both** the connecting peer
+(`REMOTE_ADDR`) and the derived address to be allowed. Without a reverse proxy, which is how
+graph_mem runs, both are the client's own address, and a forged header can only get a request
+refused. Behind a reverse proxy (Kamal's included), the proxy's own address must be in the list
+(the Docker bridge range `172.16.0.0/12` usually is), and the client address it forwards is checked
+as well. Configure the proxy to overwrite `X-Forwarded-For`; an IP list is still no substitute for
+the token there.
 
 **No transport encryption by itself.** The token crosses the network in a header. On a LAN that is
 usually acceptable; over a VPN the tunnel protects it; on a public VM put TLS in front.

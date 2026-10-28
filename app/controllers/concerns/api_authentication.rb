@@ -82,8 +82,8 @@ module ApiAuthentication
     provided_token = match[1].strip
     return false unless ActiveSupport::SecurityUtils.secure_compare(provided_token, configured_token)
 
-    policy = GraphMem::McpAccessPolicy.from_env(logger: Rails.logger)
-    unless policy.network_allowed?(request.remote_ip)
+    policy = GraphMem::OfficialMcp.access_policy
+    unless policy.request_allowed?(request, client_ip: request.remote_ip)
       @bearer_ip_forbidden = true
       return false
     end

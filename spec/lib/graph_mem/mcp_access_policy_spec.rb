@@ -217,6 +217,134 @@ RSpec.describe GraphMem::McpAccessPolicy do
     end
   end
 
+  # UI-2a: the Settings › MCP access entries, appended to the resolved ENV list on every build.
+  describe "additive entries (extra_ips)" do
+    it "extends the defaults when the ENV list is unset" do
+      policy = described_class.new(token: token, extra_ips: [ "192.0.2.0/24" ], logger: logger)
+
+      expect(policy.network_allowed?("127.0.0.1")).to be(true)
+      expect(policy.network_allowed?("192.168.0.21")).to be(true)
+      expect(policy.network_allowed?("192.0.2.7")).to be(true)
+    end
+
+    it "extends a custom ENV list" do
+      policy = described_class.new(allowed_ips: "127.0.0.0/8,::1,192.168.0.0/24", extra_ips: "10.8.0.0/24", logger: logger)
+
+      expect(policy.network_allowed?("192.168.0.21")).to be(true)
+      expect(policy.network_allowed?("10.8.0.5")).to be(true)
+      expect(policy.network_allowed?("10.9.0.5")).to be(false)
+    end
+
+    it "is ignored when the ENV list is unrestricted, which stays unrestricted" do
+      policy = described_class.new(token: token, allowed_ips: "any", extra_ips: [ "10.8.0.0/24" ], logger: logger)
+
+      expect(policy.network_unrestricted?).to be(true)
+      expect(policy.network_allowed?("203.0.113.9")).to be(true)
+      expect(policy.extra_ips_count).to eq(0)
+    end
+
+    [ nil, "with a token" ].each do |with_token|
+      it "skips a stored sentinel with a warning#{" (#{with_token})" if with_token}" do
+        policy = described_class.new(token: with_token && token, allowed_ips: "127.0.0.0/8", extra_ips: %w[any 10.8.0.0/24], logger: logger)
+
+        expect(policy.network_unrestricted?).to be(false)
+        expect(policy.network_allowed?("203.0.113.9")).to be(false)
+        expect(policy.network_allowed?("10.8.0.5")).to be(true)
+        expect(logger).to have_received(:warn).with(/Settings › MCP access entry "any" can't lift the IP restriction/)
+      end
+    end
+
+    it "keeps a public extra only while a token is configured" do
+      with_token = described_class.new(token: token, extra_ips: [ "198.51.100.0/24" ], logger: logger)
+      without = described_class.new(extra_ips: [ "198.51.100.0/24" ], logger: logger)
+
+      expect(with_token.network_allowed?("198.51.100.7")).to be(true)
+      expect(without.network_allowed?("198.51.100.7")).to be(false)
+      expect(logger).to have_received(:warn).with(/Settings › MCP access entry 198\.51\.100\.0 reaches beyond .* requires GRAPH_MEM_MCP_TOKEN/)
+    end
+
+    it "stops applying a stored public extra when the policy is rebuilt after the token is removed" do
+      stored = [ "198.51.100.0/24" ]
+      env = { described_class::TOKEN_ENV => token }
+      expect(described_class.from_env(env: env, extra_ips: stored, logger: logger).network_allowed?("198.51.100.7")).to be(true)
+
+      env.delete(described_class::TOKEN_ENV)
+      rebuilt = described_class.from_env(env: env, extra_ips: stored, logger: logger)
+
+      expect(rebuilt.network_allowed?("198.51.100.7")).to be(false)
+      expect(rebuilt.extra_ips_count).to eq(0)
+      expect(logger).to have_received(:warn).with(/198\.51\.100\.0 reaches beyond/)
+    end
+
+    it "adds no broad or IPv6 public extra without a token" do
+      policy = described_class.new(allowed_ips: "127.0.0.0/8", extra_ips: %w[0.0.0.0/1 ::/0 2000::/3], logger: logger)
+
+      expect(policy.extra_ips_count).to eq(0)
+      expect(policy.network_allowed?("203.0.113.5")).to be(false)
+      expect(policy.network_allowed?("2001:db8::5")).to be(false)
+    end
+
+    it "skips a stored /0 even with a token, and matches a mapped extra in native form" do
+      policy = described_class.new(token: token, allowed_ips: "127.0.0.0/8", extra_ips: %w[0.0.0.0/0 ::/0 ::ffff:10.8.0.0/120], logger: logger)
+
+      expect(policy.network_unrestricted?).to be(false)
+      expect(policy.network_allowed?("203.0.113.5")).to be(false)
+      expect(policy.network_allowed?("10.8.0.5")).to be(true)
+      expect(policy.network_allowed?("::ffff:10.8.0.5")).to be(true)
+      expect(policy.extra_ips_count).to eq(1)
+      expect(logger).to have_received(:warn).with(%r{entry 0\.0\.0\.0/0 can't lift the IP restriction})
+    end
+
+    it "skips unparseable extras and ranges already in the list" do
+      policy = described_class.new(allowed_ips: "127.0.0.0/8,10.8.0.0/24", extra_ips: "nonsense, 10.8.0.0/24, 10.9.0.0/24", logger: logger)
+
+      expect(policy.extra_ips_count).to eq(1)
+      expect(logger).to have_received(:warn).with(/Ignoring unparseable Settings › MCP access entry: "nonsense"/)
+    end
+
+    it "shows the extras count in describe" do
+      policy = described_class.new(allowed_ips: "127.0.0.0/8,::1", extra_ips: [ "10.8.0.0/24", "192.168.1.20" ], logger: logger)
+
+      expect(policy.describe).to eq("no token (unauthenticated), 4 allowed range(s) (+2 from settings)")
+    end
+  end
+
+  describe "#request_allowed?" do
+    def rack_request(remote_addr, forwarded_for = nil)
+      env = { "REMOTE_ADDR" => remote_addr }
+      env["HTTP_X_FORWARDED_FOR"] = forwarded_for if forwarded_for
+      Rack::Request.new(env)
+    end
+
+    let(:policy) { described_class.new(allowed_ips: "127.0.0.0/8,::1,192.168.0.0/24", logger: logger) }
+
+    it "allows a direct client in the list" do
+      expect(policy.request_allowed?(rack_request("192.168.0.21"))).to be(true)
+    end
+
+    it "refuses a private client that forwards an allowed address it doesn't have" do
+      request = rack_request("10.9.9.9", "192.168.0.21")
+
+      expect(request.ip).to eq("192.168.0.21") # what Rack would have judged on its own
+      expect(policy.request_allowed?(request)).to be(false)
+    end
+
+    it "refuses a forwarded address outside the list, whatever the peer" do
+      expect(policy.request_allowed?(rack_request("127.0.0.1", "203.0.113.5"))).to be(false)
+      expect(policy.request_allowed?(rack_request("127.0.0.1", "192.168.0.21"))).to be(true)
+    end
+
+    it "matches an IPv4-mapped peer as IPv4" do
+      expect(policy.request_allowed?(rack_request("::ffff:192.168.0.21"))).to be(true)
+    end
+
+    it "allows everything when the network is unrestricted" do
+      open_policy = described_class.new(token: token, allowed_ips: "any", logger: logger)
+
+      expect(open_policy.request_allowed?(rack_request("203.0.113.5", "198.51.100.7"))).to be(true)
+    end
+  end
+
   describe "#describe" do
     it "summarises an unauthenticated posture" do
       expect(described_class.new(logger: logger).describe)

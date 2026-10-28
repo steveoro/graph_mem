@@ -10,8 +10,9 @@
 # Request order for /mcp paths: the access policy (IP allowlist, optional bearer token), then
 # the request context (X-MCP-Client, profile, session id for the tools), then that profile's
 # transport. Each transport is built on first use from GRAPH_MEM_MCP_MAX_SESSIONS,
-# GRAPH_MEM_MCP_MAX_REQUEST_BYTES, GRAPH_MEM_MCP_ALLOWED_HOSTS and GRAPH_MEM_MCP_ALLOWED_ORIGINS,
-# with the gem's DNS-rebinding protection (Host and Origin checks) on.
+# GRAPH_MEM_MCP_MAX_REQUEST_BYTES, GRAPH_MEM_MCP_ALLOWED_HOSTS and GRAPH_MEM_MCP_ALLOWED_ORIGINS
+# (plus the Settings › MCP access additions, GraphMem::McpAccessLists), with the gem's
+# DNS-rebinding protection (Host and Origin checks) on.
 require_relative "../../lib/graph_mem/version"
 require_relative "../../lib/graph_mem/mcp_profile"
 require_relative "../../lib/graph_mem/mcp_access_policy"

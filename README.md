@@ -170,8 +170,9 @@ cd graph_mem
 cp .env.example .env
 # Edit .env: set RAILS_MASTER_KEY (from config/master.key) and DB_PASSWORD
 
-# Start the stack (MariaDB 11.8 + Rails in production mode)
-docker compose up -d
+# Start the stack (MariaDB 11.8 + Rails in production mode), with the host's LAN
+# address and names as the MCP allowlist defaults (bin/up --print shows them)
+bin/up
 
 # Seed canonical entity types
 docker compose exec app bin/rails db:seed
@@ -183,8 +184,11 @@ docker compose exec app bin/rails embeddings:check
 docker compose exec app bin/rails embeddings:backfill
 
 # Update the container after a repository pull
-docker compose down && docker compose up -d --build
+docker compose down && bin/up --build
 ```
+
+`docker compose up -d` still works and uses the built-in MCP allowlist defaults (loopback and private
+ranges, loopback host names); see [MCP access control](docs/mcp_access_control.md#starting-with-binup).
 
 The app is available at `http://localhost:3030`. Swagger API docs at `http://localhost:3030/api-docs`.
 
@@ -230,7 +234,9 @@ shared token on the server:
 ```bash
 # in .env on the GraphMem host
 GRAPH_MEM_MCP_TOKEN=$(openssl rand -hex 32)
-GRAPH_MEM_MCP_ALLOWED_IPS=192.168.0.0/24
+# A custom list replaces the defaults: keep loopback and the Docker bridge range
+# (or leave it unset and let bin/up add your LAN subnet)
+GRAPH_MEM_MCP_ALLOWED_IPS=127.0.0.0/8,::1,172.16.0.0/12,192.168.0.0/24
 ```
 
 and add it to every client config alongside the `X-MCP-Client` header:

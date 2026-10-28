@@ -1190,3 +1190,30 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* Settings › MCP access: the ENV value as a read-only prefix beside the editable part. */
+.mcp-access-field {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: stretch;
+}
+
+.mcp-access-field__prefix {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: #f1f5f9;
+  color: #475569;
+  font-size: 0.85rem;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.mcp-access-field__input {
+  flex: 1 1 16rem;
+  width: auto;
+}
