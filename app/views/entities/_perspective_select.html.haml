@@ -1,0 +1,3 @@
+= form.label :perspective, t("explore.panel.perspective"), class: "ui-label"
+= form.select :perspective, MemoryObservation::PERSPECTIVES.map { |value| [ t("search.form.perspectives.#{value}"), value ] },
+  { include_blank: t("explore.panel.no_perspective"), selected: selected }, class: "ui-input"

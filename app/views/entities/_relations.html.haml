@@ -1,0 +1,26 @@
+-# Relations both ways, grouped by type; the operator can remove one (turbo_confirm, undoable).
+- { outgoing: :to_entity, incoming: :from_entity }.each do |direction, other|
+  - groups = panel.relations[direction]
+  %section.entity-panel__section{ data: { testid: "entity-panel-#{direction}" } }
+    %h3.entity-panel__heading= t("entity_panel.#{direction}")
+    - if groups.empty?
+      %p.entity-panel__empty= t("entity_panel.no_relations")
+    - groups.each do |relation_type, relations|
+      %h4.entity-panel__subheading
+        = relation_type
+        %span.entity-panel__meta= "(#{panel.relation_counts[direction][relation_type]})"
+      %ul.entity-panel__list
+        - relations.each do |relation|
+          - target = relation.public_send(other)
+          - label = direction == :outgoing ? "#{panel.entity.name} #{relation_type} #{target.name}" : "#{target.name} #{relation_type} #{panel.entity.name}"
+          %li.entity-panel__relation{ data: { testid: "entity-panel-relation-row", relation_id: relation.id } }
+            = link_to target.name, entity_panel_path(target), data: { testid: "entity-panel-relation" }
+            %span.entity-panel__meta= target.entity_type
+            - if can_write?
+              = button_to t("explore.panel.remove_relation"), explore_relation_path(relation), method: :delete,
+                class: "ui-btn entity-panel__inline-action",
+                form: { data: { turbo_stream: true, turbo_confirm: t("explore.panel.remove_relation_confirm", relation: label) } },
+                data: { testid: "entity-panel-remove-relation" }
+      - hidden = panel.relation_counts[direction][relation_type].to_i - relations.size
+      - if hidden.positive?
+        %p.entity-panel__meta= t("entity_panel.more_relations", count: hidden)

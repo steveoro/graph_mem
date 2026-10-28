@@ -2,7 +2,7 @@
 
 require "rails_helper"
 
-# UI-3 P4: the read-only entity panel. Synthetic data only.
+# UI-3 P4: the entity panel; UI-4b W5 adds the operator's edit forms. Synthetic data only.
 RSpec.describe "Entity panel", type: :request do
   let!(:alpha) { MemoryEntity.create!(name: "Alpha Service", entity_type: "Project") }
   let!(:widget) do
@@ -24,8 +24,8 @@ RSpec.describe "Entity panel", type: :request do
   def html = Nokogiri::HTML(response.body)
   def observations = html.css("[data-testid='entity-panel-observation']").map { |item| item.at_css("span").text }
 
-  shared_examples "a read-only panel" do
-    it "shows the entity, its observations by trust and its relations, with no form or edit link" do
+  shared_examples "a panel" do
+    it "shows the entity, its observations by trust and its relations" do
       get entity_panel_path(widget), headers: frame
 
       expect(response).to have_http_status(:ok)
@@ -35,7 +35,6 @@ RSpec.describe "Entity panel", type: :request do
       expect(html.css("[data-testid='entity-panel-relation']").map { |link| [ link.text, link["href"] ] })
         .to eq([ [ "Synth Router", entity_panel_path(router) ], [ "Synth Router", entity_panel_path(router) ] ])
       expect(html.at_css("[data-testid='entity-panel-explore']")["href"]).to eq(explore_path(entity_id: widget.id))
-      expect(html.css("form")).to be_empty
       expect(html.css("a").map { |link| link["href"] }).to all(satisfy { |href| !href.to_s.match?(%r{/edit|/operator/}) })
       expect(html.at_css("ui-sidebar, nav.ui-sidebar")).to be_nil # no layout inside a frame request
     end
@@ -60,6 +59,47 @@ RSpec.describe "Entity panel", type: :request do
       expect(observations.size).to eq(3)
     end
 
+    it "bounds the page: past the end is the last page, anything else is page 1" do
+      11.times { |i| widget.memory_observations.create!(content: "Fact #{i}") }
+
+      get entity_panel_path(widget, page: 999_999_999), headers: frame
+      expect(observations.size).to eq(3)
+      %w[0 -3 abc].each do |page|
+        get entity_panel_path(widget, page: page), headers: frame
+        expect(observations.size).to eq(10)
+        expect(html.at_css("a[href='#{entity_panel_path(widget, page: 2)}']")).to be_present
+      end
+    end
+
+    it "never asks for an offset past the last page" do
+      offsets = []
+      callback = ->(*, payload) { offsets << payload[:sql][/OFFSET (\d+)/, 1].to_i if payload[:sql].include?("OFFSET") }
+
+      ActiveSupport::Notifications.subscribed(callback, "sql.active_record") do
+        get entity_panel_path(widget, page: 999_999_999), headers: frame
+      end
+
+      expect(offsets.max.to_i).to be <= EntityPanel::OBSERVATIONS_PER_PAGE
+    end
+
+    it "runs a fixed number of queries as relations and observations grow" do
+      count = lambda do
+        queries = 0
+        counter = ->(*, payload) { queries += 1 unless payload[:name] == "SCHEMA" || payload[:cached] }
+        ActiveSupport::Notifications.subscribed(counter, "sql.active_record") { get entity_panel_path(widget), headers: frame }
+        queries
+      end
+      before_count = count.call
+      5.times do |i|
+        other = MemoryEntity.create!(name: "Synth Peer #{i}", entity_type: "Service")
+        MemoryRelation.create!(from_entity: widget, to_entity: other, relation_type: "depends_on")
+        MemoryRelation.create!(from_entity: other, to_entity: widget, relation_type: "calls")
+        widget.memory_observations.create!(content: "Peer fact #{i}")
+      end
+
+      expect(count.call).to eq(before_count)
+    end
+
     it "answers 404 for an unknown entity" do
       get entity_panel_path(id: 0), headers: frame
 
@@ -77,8 +117,39 @@ RSpec.describe "Entity panel", type: :request do
 
   context "as the operator" do
     before { sign_in_operator }
+    after { ActionController::Base.allow_forgery_protection = false }
 
-    it_behaves_like "a read-only panel"
+    it_behaves_like "a panel"
+
+    it "has the edit forms, each a Turbo Stream form with the CSRF token, and Recent changes" do
+      ChangeSet.record(kind: "explore.entity_edit", subject: widget, summary: "edited 'SynthWidget'") { widget.update!(description: "Synthetic") }
+      ActionController::Base.allow_forgery_protection = true
+
+      get entity_panel_path(widget), headers: frame
+
+      forms = html.css("form")
+      expect(forms.map { |form| form["action"] }).to include(
+        explore_entity_path(widget), explore_entity_observations_path(widget), propose_deletion_explore_entity_path(widget)
+      )
+      expect(forms).to all(satisfy { |form| form.at_css("input[name='authenticity_token']") })
+      expect(forms.reject { |form| form["action"].start_with?("/changes/") || form["method"] == "get" })
+        .to all(satisfy { |form| form["data-turbo-stream"] == "true" })
+      expect(html.css("[data-testid='entity-panel-remove-relation']").size).to eq(2)
+      expect(html.css("[data-testid='entity-panel-retire']").size).to eq(2)
+      expect(html.at_css("[data-testid='entity-panel-merge']")["href"]).to eq(new_explore_merge_path(source_id: widget.id))
+      change = html.at_css("[data-testid='entity-panel-change']")
+      expect(change.text).to include("explore.entity_edit", "edited 'SynthWidget'")
+      expect(change.at_css("[data-testid='entity-panel-change-undo']")).to be_present
+    end
+
+    it "offers a project root only Rename (name and description), no merge or deletion" do
+      get entity_panel_path(alpha), headers: frame
+
+      form = html.at_css("[data-testid='entity-panel-edit-form']")
+      expect(form.css("input[type='text'], textarea").map { |field| field["name"] }).to eq([ "entity[name]", "entity[description]" ])
+      expect(html.at_css("[data-testid='entity-panel-merge']")).to be_nil
+      expect(html.at_css("[data-testid='entity-panel-propose-deletion']")).to be_nil
+    end
 
     it "links to Review for the entity" do
       get entity_panel_path(widget), headers: frame
@@ -93,7 +164,17 @@ RSpec.describe "Entity panel", type: :request do
       sign_in_guest
     end
 
-    it_behaves_like "a read-only panel"
+    it_behaves_like "a panel"
+
+    it "has no form, no write affordance and no Recent changes" do
+      ChangeSet.record(kind: "explore.entity_edit", subject: widget, summary: "edited 'SynthWidget'") { widget.update!(description: "Synthetic") }
+
+      get entity_panel_path(widget), headers: frame
+
+      expect(html.css("form, button, details, textarea, input")).to be_empty
+      expect(html.at_css("[data-testid='entity-panel-recent-changes']")).to be_nil
+      expect(response.body).not_to include("/explore/")
+    end
 
     it "has no Open in Review link" do
       get entity_panel_path(widget), headers: frame
