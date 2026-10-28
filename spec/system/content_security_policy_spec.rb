@@ -45,8 +45,8 @@ RSpec.describe "Content Security Policy in the browser", type: :system do
     expect(page).to have_link("Failed jobs")
     expect_no_csp_errors("Jobs")
 
-    visit graph_path
-    expect(page).to have_css("[data-graph-target='container'] canvas", wait: 10)
+    visit explore_path
+    expect(page).to have_css("[data-explore-target='canvas'] canvas", wait: 10)
     expect_no_csp_errors("Explore")
   end
 
@@ -59,8 +59,8 @@ RSpec.describe "Content Security Policy in the browser", type: :system do
     wait_for_stimulus
     expect_no_csp_errors("guest Search")
 
-    visit graph_path
-    expect(page).to have_css("[data-graph-target='container'] canvas", wait: 10)
+    visit explore_path
+    expect(page).to have_css("[data-explore-target='canvas'] canvas", wait: 10)
     expect_no_csp_errors("guest Explore")
   end
 

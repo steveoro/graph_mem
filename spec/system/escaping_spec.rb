@@ -5,17 +5,15 @@ require "rails_helper"
 # UI-0 (F1): runtime XSS guard — verify the DOM-construction helpers in lib/dom.js
 # produce text nodes, not parsed HTML, even when the payload is raw HTML injection.
 #
-# Strategy: boot the graph page (which loads all importmap JS via Stimulus), then
+# Strategy: boot Explore (which loads all importmap JS via Stimulus), then
 # drive each rendering path via execute_script / evaluate_async_script so we can
 # assert against the live DOM without flaky Cytoscape canvas interactions.
 #
-# Six sinks covered:
+# Sinks covered:
 #   1. Tooltip.show             (graph/tooltip.js)
-#   2. ContextMenuManager       (graph/context_menu.js — header + labels)
-#   3. renderObservationCards   (graph/observation_renderer.js)
-#   4. renderDuplicateWarning   (graph/observation_renderer.js)
-#   5. DragDropManager header   (graph/drag_drop_manager.js — via lib/dom directly)
-#   6. Review page entity autocomplete select (controllers/review_entity_picker_controller.js)
+#   2. ContextMenuManager       (graph/context_menu.js — node header and labels, edge labels)
+#   3. DragDropManager header   (graph/drag_drop_manager.js — via lib/dom directly)
+#   4. Review page entity autocomplete select (controllers/review_entity_picker_controller.js)
 RSpec.describe "XSS escaping in graph UI", type: :system do
   # A payload that, if injected via innerHTML, would create <img data-probe> in the DOM.
   PROBE = "<img src=x data-probe=1>"
@@ -37,21 +35,21 @@ RSpec.describe "XSS escaping in graph UI", type: :system do
   end
 
   # ───────────────────────────────────────────────────────────────────────────
-  # Sinks 1-5: graph page  (loads all importmap modules via Stimulus)
+  # Sinks 1-3: Explore  (loads all importmap modules via Stimulus)
   # ───────────────────────────────────────────────────────────────────────────
-  context "on the graph page" do
+  context "on Explore" do
     before do
       sign_in_operator!
-      visit graph_path
-      # Wait for Stimulus to boot the graph controller
-      expect(page).to have_css('[data-controller="graph"]', wait: 10)
+      visit explore_path
+      # Wait for Stimulus to boot the explore controller
+      expect(page).to have_css('[data-explore-target="canvas"] canvas', wait: 10)
     end
 
     it "Tooltip does not parse HTML in entity label/type/aliases" do
       page.execute_script(<<~JS)
         (function() {
-          const container = document.querySelector('[data-controller="graph"]');
-          const ctrl = window.Stimulus.getControllerForElementAndIdentifier(container, 'graph');
+          const container = document.querySelector('[data-controller="explore"]');
+          const ctrl = window.Stimulus.getControllerForElementAndIdentifier(container, 'explore');
           if (!ctrl || !ctrl.tooltip) return;
           ctrl.tooltip.show(
             { data: function() {
@@ -76,8 +74,8 @@ RSpec.describe "XSS escaping in graph UI", type: :system do
     it "ContextMenuManager does not parse HTML in node header and labels" do
       page.execute_script(<<~JS)
         (function() {
-          const container = document.querySelector('[data-controller="graph"]');
-          const ctrl = window.Stimulus.getControllerForElementAndIdentifier(container, 'graph');
+          const container = document.querySelector('[data-controller="explore"]');
+          const ctrl = window.Stimulus.getControllerForElementAndIdentifier(container, 'explore');
           if (!ctrl || !ctrl.contextMenu) return;
           ctrl.contextMenu.showNodeMenu({
             target: { data: function() {
@@ -101,29 +99,22 @@ RSpec.describe "XSS escaping in graph UI", type: :system do
       no_probe!("context menu")
     end
 
-    it "renderObservationCards and renderDuplicateWarning do not parse HTML in observation content" do
-      page.evaluate_async_script(<<~JS)
-        (async function(done) {
-          const { analyzeObservations, renderDuplicateWarning, renderObservationCards } =
-            await import('graph/observation_renderer');
-          const { ModalManager } = await import('graph/modal_manager');
-          const payload = #{PROBE.to_json};
-          // Two identical observations → duplicate warning is also rendered
-          const obs = [
-            { id: 1, content: payload, created_at: new Date().toISOString() },
-            { id: 2, content: payload, created_at: new Date().toISOString() }
-          ];
-          const analysis = analyzeObservations(obs);
-          const frag = document.createDocumentFragment();
-          const warn = renderDuplicateWarning(analysis);
-          if (warn) frag.appendChild(warn);
-          frag.appendChild(renderObservationCards(obs, analysis));
-          new ModalManager().show('Observations', frag);
-          done();
-        })(arguments[0]);
+    it "ContextMenuManager does not parse HTML in edge endpoints and type" do
+      page.execute_script(<<~JS)
+        (function() {
+          const container = document.querySelector('[data-controller="explore"]');
+          const ctrl = window.Stimulus.getControllerForElementAndIdentifier(container, 'explore');
+          ctrl.contextMenu.showEdgeMenu({
+            target: { data: function() {
+                return { from_entity_name: #{PROBE.to_json}, to_entity_name: #{PROBE.to_json}, label: #{PROBE.to_json}, relation_id: 1 };
+              }
+            },
+            renderedPosition: { x: 100, y: 100 }
+          }, { container: function() { return document.createElement('div'); } });
+        })();
       JS
       expect(page).to have_text(PROBE, wait: 2)
-      no_probe!("observation modal (cards + duplicate warning)")
+      no_probe!("edge menu")
     end
 
     it "DragDropManager action-menu header does not parse HTML in source/target name" do
