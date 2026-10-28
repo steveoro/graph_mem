@@ -1,0 +1,12 @@
+-# Health strip: one pill per subsystem (HomeSnapshot::Health). The value says the status in words.
+= turbo_frame_tag "home-#{section}" do
+  %section.ui-card.home-card{ "aria-labelledby": "home-health-title" }
+    %h2#home-health-title.home-card__title= t("home.health.title")
+    %ul.home-health{ data: { testid: "home-health" } }
+      - data.each do |pill|
+        %li
+          = link_to pill[:href], class: "home-pill home-pill--#{pill[:status]}",
+            data: { testid: "home-pill-#{pill[:key]}", status: pill[:status], turbo_frame: "_top", turbo: (false if pill[:key] == :jobs) } do
+            %span.home-pill__label= pill[:label]
+            %span.home-pill__value= pill[:value]
+            %span.home-pill__status= t("home.health.status.#{pill[:status]}")

@@ -28,7 +28,6 @@ module ReviewResponses
     kind = result[:success] ? :notice : :alert
     message = review_message(result)
     undo = review_undo(result)
-    return review_redirect(kind, message, undo) if params[:return_to] == "dashboard"
 
     respond_to do |format|
       format.turbo_stream do
@@ -42,7 +41,7 @@ module ReviewResponses
     end
   end
 
-  # 303 back (Turbo follows it): the dashboard's scan card, or HTML requests.
+  # 303 back (Turbo follows it), for HTML requests.
   def review_redirect(kind, message, undo)
     flash[kind] = message
     flash[:undo] = undo if undo
@@ -72,11 +71,9 @@ module ReviewResponses
     { "uuid" => result[:change_set_uuid], "label" => result[:message].to_s }
   end
 
-  # Back to the page the action came from: a review page, or the dashboard's scan card.
+  # Back to the review page the action came from, or /review.
   def review_return_path
     back = params[:return_to].to_s
-    return root_path if back == "dashboard"
-
     back.start_with?("/review") && !back.start_with?("//") ? back : review_path
   end
 

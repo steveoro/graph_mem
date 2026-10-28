@@ -11,7 +11,7 @@
         .project-scan-form__field
           = label_tag :project_root, "Project root"
           = text_field_tag :project_root, nil, placeholder: "/path/to/project", required: true, class: "project-scan-form__input"
-          = render "pages/dashboard/scan_folders_hint"
+          = render "maintenance/scan_folders_hint"
         .project-scan-form__field
           = label_tag :project_name, "Project name (optional)"
           = text_field_tag :project_name, nil, placeholder: "Project name", class: "project-scan-form__input"
@@ -88,14 +88,7 @@
         - scan_reviews[:items].each do |row|
           %li.dashboard-scan-review{ data: { testid: "dashboard-scan-review-#{row.row_uuid}" } }
             .dashboard-scan-review__summary= scan_review_item_label(row)
-            .dashboard-scan-review__actions
-              = button_to "Approve", review_row_apply_path(row.row_uuid), params: { return_to: "dashboard" },
-                class: "dashboard-btn dashboard-btn--primary dashboard-btn--small",
-                form: { class: "dashboard-scan-review__form", data: { turbo_confirm: "Approve this suggestion?" } }
-              = button_to "Dismiss", review_row_dismiss_path(row.row_uuid), params: { return_to: "dashboard" },
-                class: "dashboard-btn dashboard-btn--secondary dashboard-btn--small",
-                form: { class: "dashboard-scan-review__form" }
 
   .dashboard-card__actions
     = link_to "Review scan suggestions", review_path(view: "scan"), class: "dashboard-btn dashboard-btn--secondary", id: "btn-project-scans-review"
-    = link_to "Refresh", root_path, class: "dashboard-btn dashboard-btn--secondary", id: "btn-project-scans-refresh"
+    = link_to "Refresh", maintenance_path(anchor: "project-scans"), class: "dashboard-btn dashboard-btn--secondary", id: "btn-project-scans-refresh"

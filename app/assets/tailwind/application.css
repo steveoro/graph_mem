@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "./home.css";
 
 /*
  * Design tokens and shell components (UI-1). Every class here starts with `ui-` so nothing

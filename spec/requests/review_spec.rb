@@ -199,12 +199,12 @@ RSpec.describe "Review & Fix", type: :request do
       expect([ scan.reload.status, compaction.reload.status ]).to eq(%w[active active])
     end
 
-    it "returns the dashboard's scan-card actions to the dashboard" do
+    it "sends an HTML action back to /review when return_to isn't a review page" do
       row = proposal
 
-      post review_row_dismiss_path(row.row_uuid), params: { return_to: "dashboard" }, headers: turbo
+      post review_row_dismiss_path(row.row_uuid), params: { return_to: "dashboard" }
 
-      expect(response).to redirect_to(root_path)
+      expect(response).to redirect_to(review_path)
       expect(row.reload.status).to eq("dismissed")
     end
 

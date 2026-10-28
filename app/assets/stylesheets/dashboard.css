@@ -123,12 +123,6 @@
   margin: 0.25rem 0 0;
 }
 
-.dashboard-header__refreshed {
-  color: #64748b;
-  font-size: 0.85rem;
-}
-
-.dashboard-health-strip,
 .dashboard-stat-chips {
   display: flex;
   flex-wrap: wrap;
@@ -709,17 +703,6 @@
   .dashboard-settings-field {
     grid-template-columns: 1fr;
   }
-}
-
-.dashboard-stat-chip--link {
-  text-decoration: none;
-  color: inherit;
-  transition: background 0.15s ease, box-shadow 0.15s ease;
-}
-
-.dashboard-stat-chip--link:hover {
-  background: #f1f5f9;
-  box-shadow: 0 0 0 1px #cbd5e1;
 }
 
 .audit-logs-filters {

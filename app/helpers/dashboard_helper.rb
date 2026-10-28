@@ -32,15 +32,6 @@ module DashboardHelper
     end
   end
 
-  def dashboard_stat_chip_link(label, value, path, **html_options)
-    link_to path, class: "dashboard-stat-chip dashboard-stat-chip--link", **html_options.except(:class) do
-      safe_join([
-        content_tag(:span, value, class: "dashboard-stat-chip__value"),
-        content_tag(:span, label, class: "dashboard-stat-chip__label")
-      ])
-    end
-  end
-
   def compaction_phase_label(phase)
     case phase.to_s
     when "orphans" then "Orphan parenting"

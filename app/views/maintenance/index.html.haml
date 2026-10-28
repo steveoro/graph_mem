@@ -2,8 +2,8 @@
   %header.dashboard-header
     %div
       %h1.dashboard-header__title Maintenance Hub
-      %p.dashboard-header__subtitle Import, export, and cleanup graph data
-    = link_to "Back to dashboard", root_path, class: "dashboard-btn dashboard-btn--secondary"
+      %p.dashboard-header__subtitle Import, export, cleanup, background jobs and project scans
+    = link_to "Back to Home", root_path, class: "dashboard-btn dashboard-btn--secondary"
 
   %section.dashboard-actions-grid
     .dashboard-card
@@ -40,8 +40,26 @@
         Orphan entities: #{@graph_stats[:orphan_count]}.
       %p.dashboard-card__hint
         Use the graph explorer context menu for per-node merge, move, and relation edits.
-        Run garbage-collection diagnostics from the
-        = link_to "dashboard", root_path, class: "dashboard-link"
+        Run garbage-collection diagnostics under
+        = link_to "Background jobs", maintenance_path(anchor: "background-jobs"), class: "dashboard-link"
         for orphan and duplicate observation reports.
       .dashboard-card__actions
         = link_to "Open graph explorer", graph_path, class: "dashboard-btn dashboard-btn--secondary", id: "btn-maintenance-graph"
+
+  - snapshot = @snapshot
+  %section#background-jobs.dashboard-state-grid.dashboard-state-grid--2x2{ "aria-label": "Background jobs" }
+    = render "maintenance/dream_state_compactor_card", compaction: snapshot[:compaction], cursor_entity: snapshot[:cursor_entity],
+      schedules: snapshot[:schedules], latest_reports: snapshot[:latest_reports]
+    = render "maintenance/garbage_collector_card", latest_reports: snapshot[:latest_reports], schedules: snapshot[:schedules],
+      operation: snapshot.dig(:operations, :garbage_collection)
+
+  %section#project-scans.dashboard-state-grid.dashboard-state-grid--2x2{ "aria-label": "Project scans" }
+    = render "maintenance/project_scans_card", project_scans: snapshot.dig(:operations, :project_scans) || [],
+      scan_reviews: snapshot[:scan_reviews] || { count: 0, items: [] }
+    = render "maintenance/project_scan_skill_companion_card", project_scan_skills: snapshot.dig(:operations, :project_scan_skills) || []
+
+  %section#mcp-clients.dashboard-state-grid{ "aria-label": "MCP clients" }
+    = render "maintenance/agent_contexts_card", agent_contexts: snapshot[:agent_contexts]
+
+  %section.dashboard-details
+    = render "maintenance/reports_details", latest_reports: snapshot[:latest_reports], compaction: snapshot[:compaction]

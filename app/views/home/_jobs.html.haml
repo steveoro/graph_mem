@@ -1,0 +1,36 @@
+-# Running and recent jobs (OperationProgress). Running ones update live through the
+-# operation-progress controller; the controls are on the maintenance hub.
+= turbo_frame_tag "home-#{section}" do
+  %section.ui-card.home-card{ "aria-labelledby": "home-jobs-title" }
+    %h2#home-jobs-title.home-card__title= t("home.jobs.title")
+    %p.home-card__lead= t("home.jobs.compaction", state: data[:compaction][:dream_state].to_s.humanize.downcase)
+    %h3.home-card__subtitle= t("home.jobs.running")
+    - if data[:running].empty?
+      %p.home-card__empty= t("home.jobs.none_running")
+    - else
+      %ul.home-list
+        - data[:running].each do |job|
+          %li.home-list__item{ data: { testid: "home-job-running", controller: "operation-progress",
+            operation_progress_operation_id_value: job[:operation_id], operation_progress_id: job[:operation_id] } }
+            %span.home-list__main= job[:operation].to_s.humanize
+            %span.ui-badge{ data: { progress_status: true } }= job[:status]
+            %span.home-list__meta{ data: { progress_phase: true } }= job[:phase]
+            %span.home-list__meta
+              %span{ data: { progress_percentage: true } }= "#{job[:percentage]}%"
+            %progress{ max: 100, value: job[:percentage], "aria-label": job[:operation].to_s.humanize }
+    %h3.home-card__subtitle= t("home.jobs.recent")
+    - if data[:recent].empty?
+      %p.home-card__empty= t("home.jobs.none_recent")
+    - else
+      %ul.home-list
+        - data[:recent].each do |job|
+          %li.home-list__item{ data: { testid: "home-job-recent" } }
+            %span.home-list__main= job[:operation].to_s.humanize
+            %span.ui-badge{ class: ("home-badge--danger" if job[:status] == "failed") }= job[:status]
+            - if job[:finished_at]
+              %span.home-list__meta= "#{time_ago_in_words(Time.zone.parse(job[:finished_at]))} ago"
+            - if job[:error]
+              %span.home-list__meta= job[:error].truncate(80)
+    .home-card__footer
+      = link_to t("home.jobs.controls"), maintenance_path(anchor: "background-jobs"), data: { turbo_frame: "_top" }
+      = link_to t("home.jobs.all_jobs"), "/operator/jobs", data: { turbo: false }

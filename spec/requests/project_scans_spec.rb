@@ -11,7 +11,7 @@ RSpec.describe "Project scans", type: :request do
   end
 
   describe "POST /project_scans" do
-    it "queues a project scan for the resolved realpath and redirects to the dashboard" do
+    it "queues a project scan for the resolved realpath and redirects to the maintenance hub" do
       with_scan_project do |project|
         expect {
           post project_scans_path, params: { project_root: project, mode: "initial", dry_run: "1" }
@@ -21,7 +21,7 @@ RSpec.describe "Project scans", type: :request do
         operation = OperationProgress.order(created_at: :desc).first
         expect(operation).to have_attributes(status: "pending", operation_type: "project_scan")
         expect(operation.details["project_root"]).to eq(project)
-        expect(response).to redirect_to(root_path)
+        expect(response).to redirect_to(maintenance_path(anchor: "project-scans"))
         expect(flash_text).to include("Project scan queued for #{project}")
       end
     end
@@ -55,7 +55,7 @@ RSpec.describe "Project scans", type: :request do
           file_globs: "README*, package.json"
         }
 
-        expect(response).to redirect_to(root_path)
+        expect(response).to redirect_to(maintenance_path(anchor: "project-scans"))
         expect(ProjectScanJob).to have_been_enqueued.with(anything, project, "graph-mem", "gm, graph-mem", "rescan",
                                                           false, %w[README* package.json])
       end

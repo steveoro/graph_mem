@@ -4,33 +4,33 @@ module Operator
   class MaintenanceController < ApplicationController
     def start_compaction
       unless AppSettings.dream_state_compactor_enabled?
-        redirect_to root_path, alert: t("operator.maintenance.compactor_disabled")
+        redirect_to maintenance_path(anchor: "background-jobs"), alert: t("operator.maintenance.compactor_disabled")
         return
       end
 
       run = CompactionRunner.start_or_resume!
-      redirect_to root_path, notice: "Dream-state compaction started (run ##{run.id})."
+      redirect_to maintenance_path(anchor: "background-jobs"), notice: "Dream-state compaction started (run ##{run.id})."
     end
 
     def pause_compaction
       run = CompactionRun.current
       if run&.running?
         run.request_pause!
-        redirect_to root_path, notice: "Pause requested for dream-state compaction (run ##{run.id})."
+        redirect_to maintenance_path(anchor: "background-jobs"), notice: "Pause requested for dream-state compaction (run ##{run.id})."
       else
-        redirect_to root_path, alert: "No running compaction to pause."
+        redirect_to maintenance_path(anchor: "background-jobs"), alert: "No running compaction to pause."
       end
     end
 
     def run_garbage_collection
       unless AppSettings.garbage_collector_enabled?
-        redirect_to root_path, alert: t("operator.maintenance.gc_disabled")
+        redirect_to maintenance_path(anchor: "background-jobs"), alert: t("operator.maintenance.gc_disabled")
         return
       end
 
       result = GarbageCollectionRunner.call
       counts = result[:reports].map { |r| "#{r[:report_type]}: #{r[:count]}" }.join(", ")
-      redirect_to root_path,
+      redirect_to maintenance_path(anchor: "background-jobs"),
                   notice: "Garbage collection completed. #{counts}. Pruned #{result[:audit_logs_pruned]} audit logs."
     end
 
@@ -38,7 +38,7 @@ module Operator
       # Operator "Repair" is an explicit destructive cleanup; ambiguous issues are deleted.
       result = RelationIntegrityRepairer.call(dry_run: false, review_ambiguous: false)
       message = relation_repair_notice(result)
-      redirect_to root_path, notice: message
+      redirect_to maintenance_path(anchor: "background-jobs"), notice: message
     end
 
     private

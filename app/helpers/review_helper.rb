@@ -5,6 +5,14 @@ module ReviewHelper
   # Kinds whose targets can be edited before applying (the detail pane shows entity pickers).
   EDITABLE_KINDS = %w[entity_merge relationship_proposal orphan_parent reparent_entity move_observation].freeze
 
+  # The DOM id of a group's card on /review, so other pages can link straight to it (Home's digest).
+  #
+  # @param key [String] a ReviewDigest::Group key
+  # @return [String]
+  def review_group_dom_id(key)
+    "group-#{Digest::SHA256.hexdigest(key.to_s).first(12)}"
+  end
+
   # @param row [MaintenanceReportRow]
   # @return [String] a one-line description of the suggestion
   def review_row_title(row)

@@ -29,7 +29,7 @@ RSpec.describe "Operator sessions", type: :request do
 
       expect(response).to redirect_to(root_path)
       follow_redirect!
-      expect(response.body).to include("Operator Dashboard")
+      expect(response.body).to include(%(<h1 class="ui-page-header__title">Home</h1>))
     end
 
     it "rotates the session id on sign-in (session fixation protection)" do
@@ -99,7 +99,7 @@ RSpec.describe "Operator sessions", type: :request do
       get root_path
 
       expect(response).to have_http_status(:ok)
-      expect(response.body).to include("Operator Dashboard")
+      expect(response.body).to include(%(<h1 class="ui-page-header__title">Home</h1>))
     end
   end
 

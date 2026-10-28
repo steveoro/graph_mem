@@ -1,0 +1,21 @@
+-# The latest change sets, two short lines each (the full text is in the title). Status only: undo stays
+-# on the pages that own the change (Review › Resolved).
+= turbo_frame_tag "home-#{section}" do
+  %section.ui-card.home-card{ "aria-labelledby": "home-activity-title" }
+    %h2#home-activity-title.home-card__title= t("home.activity.title")
+    - if data.empty?
+      %p.home-card__empty= t("home.activity.empty")
+    - else
+      %ul.home-list
+        - data.each do |set|
+          - line = "#{set.actor || 'unknown'}: #{set.summary.presence || set.kind.humanize}"
+          - state = set.undone_at ? t("home.activity.undone") : (t("home.activity.undoable_until", time: l(set.undoable_until, format: :short)) if set.undoable?)
+          %li.home-list__item.home-list__item--stacked{ title: [line, state].compact.join(" · "), data: { testid: "home-activity-row" } }
+            %span.home-list__main= line
+            %span.home-list__meta
+              = "#{set.kind} · #{t('home.activity.ago', time: time_ago_in_words(set.created_at).delete_prefix('about '))}"
+              - if state
+                ·
+                %span{ class: ("home-list__undoable" if set.undoable?) }= set.undone_at ? state : t("home.activity.undoable")
+    .home-card__footer
+      = link_to t("home.activity.audit_log"), operator_audit_logs_path, data: { turbo_frame: "_top" }
