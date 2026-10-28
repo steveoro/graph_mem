@@ -1,0 +1,18 @@
+-# Merge into…: pick the survivor among entities of the same type (text search, no embedding call).
+.explore-dialog__body{ data: { testid: "explore-merge-picker" } }
+  %h2#explore-dialog-title.explore-dialog__title= t("explore.merges.pick_title", name: source.name)
+  = form_with url: new_explore_merge_path, method: :get, class: "explore-dialog__body", data: { turbo_frame: "explore-dialog" } do
+    = hidden_field_tag :source_id, source.id, id: nil
+    = label_tag "explore-merge-q", t("explore.merges.pick_label", type: source.entity_type), class: "ui-label"
+    = search_field_tag :q, query, id: "explore-merge-q", class: "ui-input", autofocus: true, autocomplete: "off",
+      maxlength: GraphSearch::Page::MAX_QUERY_LENGTH, data: { testid: "explore-merge-q" }
+    = submit_tag t("search.form.submit"), class: "ui-btn", name: nil
+  - if query.present?
+    - if candidates.empty?
+      %p.entity-panel__empty= t("explore.merges.no_candidates")
+    - else
+      %ul.explore-dialog__list{ data: { testid: "explore-merge-candidates" } }
+        - candidates.each do |candidate|
+          %li= link_to candidate.name, new_explore_merge_path(source_id: source.id, target_id: candidate.id), data: { testid: "explore-merge-candidate" }
+  .explore-dialog__actions
+    %button.ui-btn{ type: "button", data: { action: "explore-dialog#close" } }= t("explore.dialog.cancel")

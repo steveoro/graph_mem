@@ -1,0 +1,5 @@
+= turbo_frame_tag "explore-dialog" do
+  - if @preview
+    = render "explore/merges/dialog", preview: @preview
+  - else
+    = render "explore/merges/picker", source: @source, query: @query, candidates: @candidates

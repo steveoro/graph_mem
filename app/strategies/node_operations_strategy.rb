@@ -91,12 +91,15 @@ class NodeOperationsStrategy
   # @param target_id [Integer] The target node to merge into
   # @param change_set_kind [String] the ChangeSet kind when no set is open (a set already open,
   #   e.g. a graph_delete batch or a review apply, records the merge instead)
+  # @param before_merge [#call, nil] called with (source, target) inside the lock, after the checks
+  #   and before anything is written; a String it returns refuses the merge with status :conflict
+  #   (Explore's preview digest check). nil (the default) changes nothing.
   # @return [Hash] Result with :success and :message (plus :change_set_uuid) or :error
-  def merge_into(source_id, target_id, change_set_kind: "merge")
+  def merge_into(source_id, target_id, change_set_kind: "merge", before_merge: nil)
     attempts = 0
 
     begin
-      merge_into_once(source_id, target_id, change_set_kind: change_set_kind)
+      merge_into_once(source_id, target_id, change_set_kind: change_set_kind, before_merge: before_merge)
     rescue ActiveRecord::RecordNotUnique => e
       error_result("Failed to merge nodes: duplicate relation would be created (#{e.message})")
     rescue ActiveRecord::StatementInvalid => e
@@ -115,7 +118,7 @@ class NodeOperationsStrategy
     end
   end
 
-  def merge_into_once(source_id, target_id, change_set_kind: "merge")
+  def merge_into_once(source_id, target_id, change_set_kind: "merge", before_merge: nil)
     return error_result("Cannot merge a node into itself") if source_id == target_id
 
     source_name = nil
@@ -156,6 +159,11 @@ class NodeOperationsStrategy
             "Cannot merge entities of different types: " \
             "'#{source.entity_type}' into '#{target.entity_type}'"
           )
+          next
+        end
+
+        if before_merge && (refusal = before_merge.call(source, target))
+          result = { success: false, status: :conflict, error: refusal }
           next
         end
 
@@ -245,6 +253,19 @@ class NodeOperationsStrategy
     error_result(PROJECT_ROOT_PROTECTED_ERROR)
   end
 
+
+  # The target's aliases after a merge, without writing anything (also used by EntityMergePreview):
+  # the target's, then the source's and the source's name (unless it equals the target's name).
+  # @param source [MemoryEntity]
+  # @param target [MemoryEntity]
+  # @return [String] comma-separated
+  def merged_aliases(source, target)
+    source_aliases = parse_aliases(source.aliases)
+    source_aliases << source.name unless source.name.downcase == target.name.downcase
+
+    (parse_aliases(target.aliases) + source_aliases).map(&:strip).reject(&:blank?).uniq.join(",")
+  end
+
   private
 
   def project_root?(entity)
@@ -290,16 +311,7 @@ class NodeOperationsStrategy
 
   # Merge aliases from source to target
   def merge_aliases(source, target)
-    existing_aliases = parse_aliases(target.aliases)
-    source_aliases = parse_aliases(source.aliases)
-
-    # Add source name as an alias if it's different from target name
-    source_aliases << source.name unless source.name.downcase == target.name.downcase
-
-    # Combine and deduplicate
-    all_aliases = (existing_aliases + source_aliases).map(&:strip).reject(&:blank?).uniq
-
-    target.update!(aliases: all_aliases.join(","))
+    target.update!(aliases: merged_aliases(source, target))
   end
 
   def transfer_observations!(source, target)
