@@ -35,6 +35,8 @@ This guide addresses common issues you might encounter when working with GraphMe
      on `/mcp`) needs the same: its exact origin in `GRAPH_MEM_MCP_ALLOWED_ORIGINS`. Nothing else
      grants `/mcp` CORS.
    - `403` with `Remote IP not allowed` is the IP allowlist instead (`GRAPH_MEM_MCP_ALLOWED_IPS`).
+     Both the connecting address and the one derived from `X-Forwarded-For` must be listed, so
+     behind a reverse proxy, list the proxy's own address too (e.g. `172.16.0.0/12` in Docker).
      All three are described in [mcp_access_control.md](mcp_access_control.md).
 
 4. **`-32600 Forbidden: Invalid Host header` from another machine on the LAN**
