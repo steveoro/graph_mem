@@ -5,6 +5,20 @@ All notable changes to GraphMem will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.59.0] - 2026-10-28
+
+Home: a status-only page in lazy widgets.
+
+### Added
+- Home is status only: a health strip (database, embeddings, summaries, jobs, last backup, scan mounts, MCP access mode, guest access; each pill links to its page and says its status in words), graph counts, the review digest (top 5 groups, each opening the same group on Review, plus the inbox state), running and recent jobs with live progress, the last 15 change sets, active MCP clients, and a quick search (`/` focuses it). Each widget is a lazy Turbo Frame, so a slow embedding service never holds up the page.
+
+### Changed
+- The compactor, garbage collector and relation-repair controls, the project-scan and guided-scan forms, the full MCP clients table and the raw maintenance reports moved from Home to the maintenance hub (`/maintenance`), until Review › Generate and the Projects page arrive; their actions redirect there.
+- The sidebar's Maintenance item reads "Maintenance (jobs, scans, data)".
+
+### Removed
+- The Approve/Dismiss buttons on the old Home scan-review list (Review has them) and the old Home Embeddings card (the Embeddings pill and `/operator/embeddings` cover it).
+
 ## [1.58.3] - 2026-10-27
 
 Editable MCP allowlists and `bin/up` LAN detection.
