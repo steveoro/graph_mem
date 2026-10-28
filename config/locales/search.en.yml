@@ -25,6 +25,7 @@ en:
         zero: "Any type"
         one: "1 type"
         other: "%{count} types"
+      types_limit: "(up to %{max})"
       match: "Match in"
       match_fields:
         name: "Name"

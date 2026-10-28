@@ -42,12 +42,14 @@
             %span.search-chip__label= t("search.form.match_fields.#{field}")
 
   %details.search-filters__details{ open: filters[:types].any? }
-    %summary= "#{t('search.form.types')}: #{t('search.form.types_summary', count: filters[:types].size)}"
+    %summary= "#{t('search.form.types')}: #{t('search.form.types_summary', count: filters[:types].size)} #{t('search.form.types_limit', max: SearchFilter::MAX_ENTITY_TYPES)}"
     .search-chips{ data: { testid: "search-types" } }
       - (GraphSearch::Page.type_options | filters[:types]).each_with_index do |type, index|
-        %label.search-chip
+        -# The filter allows SearchFilter::MAX_ENTITY_TYPES; at the cap the unticked chips are disabled.
+        - full = filters[:types].size >= SearchFilter::MAX_ENTITY_TYPES && !filters[:types].include?(type)
+        %label.search-chip{ class: ("search-chip--disabled" if full) }
           = check_box_tag "types[]", type, filters[:types].include?(type), id: "search-type-#{index}", class: "search-chip__input",
-            data: { action: "change->search#submit" }
+            disabled: full, data: { action: "change->search#submit" }
           %span.search-chip__label= type
 
   %details.search-filters__details{ open: more_open }
