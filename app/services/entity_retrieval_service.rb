@@ -6,9 +6,12 @@ class EntityRetrievalService
     # @param ambient_context [Boolean] false skips the fallback to the "default" client bucket's
     #   context when none is passed (the Search page ignores agents' context)
     # @param text [Boolean] false skips the text channel (the Search page's Semantic mode)
+    # @param filter [SearchFilter, nil] project/type/field filter applied inside every channel;
+    #   reported as `retrieval.filters` when it narrows anything
     # @return [Hash] `{ results: Array<HybridSearchStrategy::SearchResult>, retrieval: Hash }`
     def search(query, limit: 50, semantic: true, context_entity_ids: nil, scope_entity_ids: nil,
-               context_scope: nil, temporal_window: nil, perspective: nil, ambient_context: true, text: true)
+               context_scope: nil, temporal_window: nil, perspective: nil, ambient_context: true, text: true,
+               filter: nil)
       extraction = TemporalQueryParser.apply(query, temporal_window: temporal_window)
       window = extraction.window
       strategy = HybridSearchStrategy.new
@@ -29,7 +32,8 @@ class EntityRetrievalService
         temporal_window: window,
         temporal_only: extraction.temporal_only?,
         perspective: perspective,
-        text: text
+        text: text,
+        filter: filter
       )
 
       # A windowed query whose residual terms match nothing falls back to a
@@ -45,7 +49,8 @@ class EntityRetrievalService
           temporal_window: window,
           temporal_only: true,
           perspective: perspective,
-          text: text
+          text: text,
+          filter: filter
         )
         fallback = true
       end
@@ -61,6 +66,7 @@ class EntityRetrievalService
           result_count: results.size,
           semantic: semantic
         }.merge(temporal_diagnostic.present? ? { temporal: temporal_diagnostic } : {})
+         .merge(filter&.diagnostic ? { filters: filter.diagnostic } : {})
       }
     end
   end

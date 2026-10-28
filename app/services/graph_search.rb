@@ -21,6 +21,8 @@ class GraphSearch
   # @param occurred_after [String, nil] ISO 8601 bounds; `as_of` excludes the other two
   # @param max_tokens [Integer, nil] estimated token budget for the page
   # @param perspective [String, nil] "world" or "experience"
+  # @param project_id [Integer, nil] only this Project root and its members (SearchFilter)
+  # @param entity_types [Array<String>, nil] only these entity types (SearchFilter)
   # @param context_scope [ProjectSubtree::Result, nil] the caller's active context (a boost, never a filter)
   # @param semantic [Boolean] page only: false ranks without the vector channels (no embedding call)
   # @param ambient_context [Boolean] page only: false ignores the "default" bucket's context when
@@ -33,8 +35,8 @@ class GraphSearch
 
   def initialize(query:, context_scope:, include: [], page: nil, per_page: nil, limit: nil,
                  search_in_name: true, search_in_type: true, search_in_aliases: true,
-                 search_in_observations: true, occurred_after: nil, occurred_before: nil,
-                 as_of: nil, max_tokens: nil, perspective: nil, logger: Rails.logger,
+                 search_in_observations: true, project_id: nil, entity_types: nil, occurred_after: nil,
+                 occurred_before: nil, as_of: nil, max_tokens: nil, perspective: nil, logger: Rails.logger,
                  semantic: true, ambient_context: true, text: true)
     @query = query
     @context_scope = context_scope
@@ -43,6 +45,7 @@ class GraphSearch
     @per_page = per_page || limit
     @search_fields = { search_in_name: search_in_name, search_in_type: search_in_type,
                        search_in_aliases: search_in_aliases, search_in_observations: search_in_observations }
+    @filter_arguments = { project_id: project_id, entity_types: entity_types }
     @temporal_bounds = { occurred_after: occurred_after, occurred_before: occurred_before, as_of: as_of }
     @max_tokens = max_tokens
     @perspective = perspective
@@ -64,13 +67,23 @@ class GraphSearch
         raise GraphMem::InvalidArgumentsError, "include, temporal bounds and max_tokens require a query."
       end
 
+      if !@filter_arguments[:project_id].nil? || Array(@filter_arguments[:entity_types]).any?
+        raise GraphMem::InvalidArgumentsError, "project_id and entity_types require a query."
+      end
+
       return { mode: "catalog" }.merge(EntityCatalogService.call(page: page, per_page: per_page))
     end
     raise GraphMem::InvalidArgumentsError, "Query term cannot be blank." if @query.blank?
 
+    filter = SearchFilter.build(**@filter_arguments, **@search_fields)
+    # A default filter narrows nothing: pass nil so the unfiltered code path runs unchanged.
     options = { page: page, per_page: per_page, temporal_window: temporal_window, max_tokens: max_tokens,
-                perspective: @perspective }
-    projections.any? ? subgraph_result(projections, **options) : Summary.call(@query, context_scope: @context_scope, retrieval_options: @retrieval_options, **options)
+                perspective: @perspective, filter: (filter unless filter.default?) }
+    if projections.any?
+      subgraph_result(projections, **options)
+    else
+      Summary.call(@query, context_scope: @context_scope, retrieval_options: @retrieval_options, **options)
+    end
   end
 
   private

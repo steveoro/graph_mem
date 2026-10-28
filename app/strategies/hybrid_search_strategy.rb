@@ -42,28 +42,36 @@ class HybridSearchStrategy
   # @param temporal_only [Boolean] When true (the query is nothing but a temporal phrase), the temporal
   #   channel IS the base result set and text/vector channels are skipped
   # @param text [Boolean] When false, skip the text channel (semantic-only ranking)
+  # @param filter [SearchFilter, nil] project/type/field filter applied inside every channel
+  #   before fusion; nil is the unfiltered path
   # @return [Array<SearchResult>]
   def search(query, limit: 50, semantic: true, context_entity_ids: nil, scope_entity_ids: nil,
-             temporal_window: nil, temporal_only: false, perspective: nil, text: true)
+             temporal_window: nil, temporal_only: false, perspective: nil, text: true, filter: nil)
     @query = query.to_s.strip
 
     scoped_ids = scope_entity_ids || context_entity_ids
+    entity_scope = filter&.entity_scope
+    # The entity embedding is built from type, name, aliases and description, so the text and
+    # entity-vector channels run unless every entity field is off; observations have their own.
+    entity_text = filter.nil? || filter.entity_text?
+    observations = filter.nil? || filter.observations?
 
     if temporal_only && temporal_window.present?
       text_results = []
       vector_results = []
       observation_entity_ids = []
     else
-      text_results = text ? @text_strategy.search(query, limit: limit * 2) : []
+      text_results = text && entity_text ? text_channel(query, limit * 2, filter) : []
 
-      vector_results = if semantic
-        @vector_strategy.search(query, limit: limit * 2)
+      vector_results = if semantic && entity_text
+        @vector_strategy.search(query, limit: limit * 2, **scope_option(entity_scope))
       else
         []
       end
 
-      observation_entity_ids = if semantic
-        ids = @vector_strategy.search_observations(query, limit: limit * 2, perspective: perspective)
+      observation_entity_ids = if semantic && observations
+        ids = @vector_strategy.search_observations(query, limit: limit * 2, perspective: perspective,
+                                                          **scope_option(entity_scope))
         scoped_ids.present? ? ids & scoped_ids : ids
       else
         []
@@ -80,7 +88,7 @@ class HybridSearchStrategy
         []
       elsif temporal_only
         @temporal_strategy.search(temporal_window, limit: limit * 2, entity_ids: scope_entity_ids,
-                                  perspective: perspective)
+                                  perspective: perspective, **scope_option(entity_scope))
       else
         candidates = (text_results.map { |result| result.entity.id } +
                       vector_results.map { |result| result.entity.id } +
@@ -109,6 +117,17 @@ class HybridSearchStrategy
   end
 
   private
+
+  def text_channel(query, limit, filter)
+    return @text_strategy.search(query, limit: limit) unless filter
+
+    @text_strategy.search(query, limit: limit, fields: filter.text_fields, scope: filter.entity_scope)
+  end
+
+  # Channels get `scope:` only when a filter narrows entities, so unfiltered calls are unchanged.
+  def scope_option(entity_scope)
+    entity_scope ? { scope: entity_scope } : {}
+  end
 
   # Build initial score maps from text and vector results using weighted RRF.
   # Text scores are preserved as weights on the RRF contribution so that

@@ -13,7 +13,7 @@ class SubgraphSearchService
   def initialize(query:, context_scope: nil, logger: Rails.logger, page: nil, per_page: nil,
                  search_in_name: true, search_in_type: true, search_in_observations: true,
                  search_in_aliases: true, include_observations: true, include_relations: true,
-                 temporal_window: nil, max_tokens: nil, perspective: nil)
+                 temporal_window: nil, max_tokens: nil, perspective: nil, filter: nil)
     @query = query
     @context_scope = context_scope
     @logger = logger
@@ -34,6 +34,10 @@ class SubgraphSearchService
     # C3a: hard filter on observation perspective — `world` surfaces only
     # factual obs, `experience` only work-log obs, nil everything.
     @perspective = perspective
+    # Project/type filter (SearchFilter), applied in every candidate query; the search_in_* flags
+    # above keep choosing the lexical fields. nil is the unfiltered path.
+    @filter = filter
+    @entity_scope = filter&.entity_scope
   end
 
   def call
@@ -144,7 +148,7 @@ class SubgraphSearchService
   # via retrieval.temporal.candidates_truncated.
   def temporal_candidate_ids(context_ids)
     ids = TemporalSearchStrategy.new.search(
-      @temporal_window, limit: MAX_TEMPORAL_CANDIDATES + 1, entity_ids: context_ids
+      @temporal_window, limit: MAX_TEMPORAL_CANDIDATES + 1, entity_ids: context_ids, **scope_option
     )
     @temporal_candidates_truncated = ids.size > MAX_TEMPORAL_CANDIDATES
     ids.first(MAX_TEMPORAL_CANDIDATES)
@@ -152,6 +156,7 @@ class SubgraphSearchService
 
   def text_matching_ids(term = nil)
     base_query = MemoryEntity.distinct
+    base_query = base_query.merge(@entity_scope) if @entity_scope
     conditions = []
     params = { like_query_term: "%#{(term || @effective_query).downcase}%" }
 
@@ -175,10 +180,11 @@ class SubgraphSearchService
   def merge_vector_ids(matching_ids)
     strategy = VectorSearchStrategy.new
     if @perspective.present?
-      vector_ids = strategy.search_observations(@effective_query, limit: @per_page * 2, perspective: @perspective)
+      vector_ids = strategy.search_observations(@effective_query, limit: @per_page * 2, perspective: @perspective,
+                                                                  **scope_option)
       (matching_ids + vector_ids).uniq
     else
-      vector_ids = strategy.search(@effective_query, limit: @per_page * 2).map { |result| result.entity.id }
+      vector_ids = strategy.search(@effective_query, limit: @per_page * 2, **scope_option).map { |result| result.entity.id }
       (matching_ids + vector_ids).uniq
     end
   rescue *ToolError::TIMEOUT_CLASSES
@@ -186,6 +192,11 @@ class SubgraphSearchService
   rescue StandardError => e
     @logger.debug "SubgraphSearchService: vector search unavailable, using text only — #{e.message}"
     matching_ids
+  end
+
+  # Strategies get `scope:` only when the filter narrows entities, so unfiltered calls are unchanged.
+  def scope_option
+    @entity_scope ? { scope: @entity_scope } : {}
   end
 
   def entities_for(entity_ids)
@@ -288,6 +299,7 @@ class SubgraphSearchService
       scope_truncated: @context_scope&.truncated == true,
       scope_max_entities: @context_scope&.max_entities
     }.merge(@temporal_window.present? ? { temporal: temporal_diagnostic } : {})
+     .merge(@filter&.diagnostic ? { filters: @filter.diagnostic } : {})
   end
 
   def temporal_diagnostic
