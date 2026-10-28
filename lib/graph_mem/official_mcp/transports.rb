@@ -32,14 +32,15 @@ module GraphMem
         # Transport options from the environment (D2, D4, D6, D7). DNS-rebinding protection (Host
         # and Origin checks) stays at the gem's default: on.
         #
+        # @param lists [Hash] the {access_lists} to build with (read once per build)
         # @return [Hash]
-        def options
+        def options(lists = access_lists)
           {
             enable_json_response: true,
             max_sessions: Integer(ENV.fetch("GRAPH_MEM_MCP_MAX_SESSIONS", 256)),
             max_request_bytes: OfficialMcp.max_request_bytes,
-            allowed_hosts: allowed_hosts,
-            allowed_origins: allowed_origins
+            allowed_hosts: lists[:hosts],
+            allowed_origins: lists[:origins]
           }
         end
 
@@ -64,7 +65,8 @@ module GraphMem
         # The allowed hosts and origins, read together and kept until {reset!}, so the transports and
         # /mcp CORS share one snapshot and CORS costs no settings query per request. A runtime change
         # goes through OfficialMcp.refresh_access!(transports: true). When the settings can't be read
-        # the ENV entries are returned and nothing is kept, so the next call reads them again.
+        # the ENV entries are returned and nothing is kept, so the next call reads them again; only
+        # the kept snapshot is frozen, which tells the two apart.
         #
         # @return [Hash{Symbol => Array<String>}] `{ hosts:, origins: }`
         def access_lists
@@ -85,9 +87,12 @@ module GraphMem
 
         private
 
+        # Reads the lists once, so a transport is flagged exactly when it was built without the
+        # settings, even if the snapshot is filled in meanwhile (a concurrent CORS request).
         def build(profile)
-          transport = MCP::Server::Transports::StreamableHTTPTransport.new(ServerFactory.for(profile), **options)
-          @built_without_settings = true if @access_lists.nil?
+          lists = access_lists
+          transport = MCP::Server::Transports::StreamableHTTPTransport.new(ServerFactory.for(profile), **options(lists))
+          @built_without_settings = true unless lists.frozen?
           transport
         end
 

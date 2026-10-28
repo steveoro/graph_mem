@@ -362,6 +362,25 @@ RSpec.describe "MCP on the official SDK", type: :request do
       end
     end
 
+    it "rebuilds a transport whose hosts read failed even when the origins read right after it works" do
+      AppSettings.mcp_extra_allowed_hosts = "synth-lan.test"
+      failures = { "mcp_extra_allowed_hosts" => 1 }
+      allow(AppSettings).to receive(:uncached_string).and_wrap_original do |original, key|
+        if failures[key].to_i.positive?
+          failures[key] -= 1
+          raise ActiveRecord::ConnectionNotEstablished, "synthetic outage"
+        end
+
+        original.call(key)
+      end
+
+      host! "synth-lan.test"
+      initialize_session("/mcp")
+      expect(response).to have_http_status(:forbidden)
+
+      expect(initialize_session("/mcp")).to be_present
+    end
+
     it "closes open sessions on a hosts or origins change, and keeps them on an IPs-only change" do
       kept = initialize_session("/mcp")
       save_mcp_access(mcp_extra_allowed_ips: "10.8.0.0/24")
