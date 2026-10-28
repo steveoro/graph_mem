@@ -10,11 +10,15 @@ export class GraphApiClient {
     return h;
   }
 
-  async fetchGraphData(rootOnly = false, entityId = null, { scopedEntityId = null } = {}) {
+  // ids: a comma-separated entity id list ("Show as graph" from Search): those entities and the
+  // relations among them.
+  async fetchGraphData(rootOnly = false, entityId = null, { scopedEntityId = null, ids = null } = {}) {
     let url = '/api/v1/graph_data';
     const params = new URLSearchParams();
 
-    if (scopedEntityId) {
+    if (ids) {
+      params.append('ids', ids);
+    } else if (scopedEntityId) {
       params.append('scoped_entity_id', scopedEntityId);
     } else if (entityId) {
       params.append('entity_id', entityId);

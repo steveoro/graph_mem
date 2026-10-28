@@ -8,10 +8,13 @@ require "rails_helper"
 #
 # The tables are block locals (not constants), so nothing leaks to Object.
 RSpec.describe "Role matrix", type: :request do
-  # "VERB /path" (dummy segments filled in) => expected guest status.
+  # "VERB /path" (dummy segments filled in) => expected guest status (or the statuses allowed).
   guest_allowed = {
     "GET /search" => 200,
     "GET /graph" => 200,
+    # The read-only entity panel (UI-3). The walk's dummy id 1 can be a real entity right after
+    # the test DB is truncated, so either answer is fine; never 403.
+    "GET /entities/1/panel" => [ 200, 404 ],
     "GET /" => 302,
     "DELETE /operator/logout" => 302,
     "GET /operator/login" => 302, # a signed-in guest is sent on to /search
@@ -112,7 +115,7 @@ RSpec.describe "Role matrix", type: :request do
         if !route_case.defined
           expect(response).to have_http_status(:not_found)
         elsif guest_allowed.key?(route_case.key)
-          expect(response.status).to eq(guest_allowed[route_case.key])
+          expect(Array(guest_allowed[route_case.key])).to include(response.status)
         elsif guest_api_reads.include?(route_case.action_key)
           expect(response.status).not_to be_in([ 401, 403 ])
         else

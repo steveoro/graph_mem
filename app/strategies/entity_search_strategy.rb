@@ -43,12 +43,21 @@ class EntitySearchStrategy
     @logger = Rails.logger
   end
 
+  # All matchable fields, in scoring order; `fields:` narrows them (SearchFilter#text_fields)
+  FIELDS = %i[name entity_type aliases].freeze
+
   # Main search method
   # @param query [String] The search query to process
   # @param limit [Integer] Maximum number of results to return (default: 50)
+  # @param fields [Array<Symbol>] which of FIELDS the query is matched and scored against
+  # @param scope [ActiveRecord::Relation, nil] MemoryEntity relation candidates must belong to
+  #   (SearchFilter#entity_scope), applied in the query
   # @return [Array<SearchResult>] Array of search results ordered by relevance
-  def search(query, limit: 50)
+  def search(query, limit: 50, fields: FIELDS, scope: nil)
     return [] if query.blank?
+
+    fields = FIELDS & fields
+    return [] if fields.empty?
 
     tokens = tokenize_query(query)
     return [] if tokens.empty?
@@ -56,10 +65,11 @@ class EntitySearchStrategy
     @logger.info "EntitySearchStrategy: Searching for tokens: #{tokens.inspect}"
 
     # Get all potential matches
-    entities = fetch_candidate_entities(tokens)
+    entities = fetch_candidate_entities(tokens, fields)
+    entities = entities.and(scope) if scope
 
     # Score and rank results
-    scored_results = score_and_rank_entities(entities, tokens)
+    scored_results = score_and_rank_entities(entities, tokens, fields)
 
     # Filter by minimum score and limit results
     scored_results
@@ -83,28 +93,26 @@ class EntitySearchStrategy
   # Fetch entities that potentially match any of the tokens
   # Uses LIKE queries for broad matching, then scores in Ruby for precision
   # @param tokens [Array<String>] The search tokens
+  # @param fields [Array<Symbol>] enabled columns (subset of FIELDS)
   # @return [ActiveRecord::Relation] Entities that might match
-  def fetch_candidate_entities(tokens)
-    conditions = []
-    params = []
-
-    tokens.each do |token|
-      like_token = "%#{token}%"
-      conditions << "(LOWER(name) LIKE ? OR LOWER(entity_type) LIKE ? OR LOWER(aliases) LIKE ?)"
-      params += [ like_token, like_token, like_token ]
+  def fetch_candidate_entities(tokens, fields = FIELDS)
+    table = MemoryEntity.arel_table
+    # LOWER(<field>) LIKE '%token%' for every token and enabled field, ORed; built as Arel nodes
+    # so no SQL text is interpolated.
+    conditions = tokens.flat_map do |token|
+      fields.map { |field| Arel::Nodes::NamedFunction.new("LOWER", [ table[field] ]).matches("%#{token}%") }
     end
 
-    where_clause = conditions.join(" OR ")
-    MemoryEntity.where(where_clause, *params)
+    MemoryEntity.where(conditions.reduce(:or))
   end
 
   # Score and rank entities based on token matches
   # @param entities [ActiveRecord::Relation] Candidate entities
   # @param tokens [Array<String>] Search tokens
   # @return [Array<SearchResult>] Scored and ranked results
-  def score_and_rank_entities(entities, tokens)
+  def score_and_rank_entities(entities, tokens, fields = FIELDS)
     results = entities.map do |entity|
-      score, matched_fields = calculate_entity_score(entity, tokens)
+      score, matched_fields = calculate_entity_score(entity, tokens, fields)
       SearchResult.new(entity, score, matched_fields)
     end
 
@@ -115,14 +123,15 @@ class EntitySearchStrategy
   # Calculate relevance score for a single entity
   # @param entity [MemoryEntity] The entity to score
   # @param tokens [Array<String>] Search tokens
+  # @param fields [Array<Symbol>] enabled fields: a disabled field neither scores nor counts as a match
   # @return [Array<Float, Array<String>>] Score and list of matched fields
-  def calculate_entity_score(entity, tokens)
+  def calculate_entity_score(entity, tokens, fields = FIELDS)
     score = 0.0
     matched_fields = []
 
-    name_lower = entity.name.to_s.downcase
-    entity_type_lower = entity.entity_type.to_s.downcase
-    aliases_lower = entity.aliases.to_s.downcase
+    name_lower = fields.include?(:name) ? entity.name.to_s.downcase : ""
+    entity_type_lower = fields.include?(:entity_type) ? entity.entity_type.to_s.downcase : ""
+    aliases_lower = fields.include?(:aliases) ? entity.aliases.to_s.downcase : ""
 
     tokens.each do |token|
       # Check entity_type matches (highest priority)

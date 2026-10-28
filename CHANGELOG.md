@@ -5,6 +5,21 @@ All notable changes to GraphMem will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.60.0] - 2026-10-28
+
+Search: one page for every mode of the agents' search tool, with filters the tool and REST search share.
+
+### Added
+- The Search page (`/search`), for the operator and the guest: Auto, Text, Semantic and Exact modes; Project, Match in, Types, perspective and date filters, all in the URL; results with the breadcrumb, score, matched fields, relation count and highlighted observation snippets (no embedding call). For the same arguments it lists the same entities in the same order as the `search` tool, and agents' context never reorders it. Old `/search?q=&strategy=` links still work.
+- A read-only entity panel beside the results (`/entities/:id/panel`): aliases, description, observations by trust with Show obsolete, relations both ways by type, Open in Explore, and Open in Review for the operator.
+- "Show as graph": opens `/graph?ids=` with the page's results and the relations among them, through the new `GET /api/v1/graph_data?ids=` (1 to 100 ids).
+- `search` tool and `GET /api/v1/memory_entities/search`: optional `project_id` and `entity_types` filters, applied before ranking. The tool's `tools/list` entry changes accordingly (new properties and descriptions); invalid filters are a validation error (REST: `422`).
+
+### Changed
+- `search_in_*` now also apply in summary mode (default true; omitting them changes nothing).
+- The search tool's logic moved to `GraphSearch` (shared by the tool and the Search page); with the new arguments omitted, results are unchanged.
+- Docs: the 300-a-minute guest search budget is shared by every guest, so one busy guest can use it up for all of them until the minute passes.
+
 ## [1.59.0] - 2026-10-28
 
 Home: a status-only page in lazy widgets.

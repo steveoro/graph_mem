@@ -1,0 +1,333 @@
+/* Search (UI-3): the filter form, the results list and the entity panel beside it. Imported by
+   application.css. The old page's search-* rules stay in graph.css for /graph's form. */
+@layer components {
+  .search-page {
+    display: grid;
+    gap: 1rem;
+  }
+
+  .search-filters {
+    display: grid;
+    gap: 0.75rem;
+  }
+
+  .search-filters__row {
+    display: flex;
+    gap: 0.5rem;
+  }
+
+  .search-filters__row .ui-input {
+    flex: 1 1 auto;
+  }
+
+  .search-filters__columns {
+    display: grid;
+    gap: 0.75rem;
+    grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  }
+
+  .search-filters__group {
+    display: grid;
+    gap: 0.25rem;
+    align-content: start;
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+  }
+
+  .search-filters__legend {
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--color-ui-text-muted);
+  }
+
+  .search-filters__hint {
+    font-size: 0.8125rem;
+    color: var(--color-ui-text-muted);
+  }
+
+  .search-filters__details summary {
+    cursor: pointer;
+    font-size: 0.875rem;
+    font-weight: 600;
+  }
+
+  .search-filters__details[open] > summary {
+    margin-bottom: 0.5rem;
+  }
+
+  .search-filters__check {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    margin-top: 0.5rem;
+    font-size: 0.875rem;
+  }
+
+  .search-filters__clear {
+    justify-self: start;
+    font-size: 0.875rem;
+    color: var(--color-ui-accent);
+  }
+
+  .search-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.375rem;
+  }
+
+  .search-chip {
+    display: inline-flex;
+    position: relative;
+    cursor: pointer;
+  }
+
+  /* The real input stays in the page (keyboard and screen readers); the label text is the chip. */
+  .search-chip__input {
+    position: absolute;
+    opacity: 0;
+    inset: 0;
+    margin: 0;
+    cursor: pointer;
+  }
+
+  .search-chip__label {
+    padding: 0.25rem 0.625rem;
+    border: 1px solid var(--color-ui-border);
+    border-radius: 999px;
+    background: var(--color-ui-surface);
+    font-size: 0.8125rem;
+  }
+
+  .search-chip__input:checked + .search-chip__label {
+    border-color: var(--color-ui-accent);
+    background: var(--color-ui-accent-soft);
+    color: var(--color-ui-accent-strong);
+    font-weight: 600;
+  }
+
+  .search-chip__input:focus-visible + .search-chip__label {
+    outline: 2px solid var(--color-ui-focus);
+    outline-offset: 2px;
+  }
+
+  .search-chip--disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+  }
+
+  .search-layout {
+    display: grid;
+    gap: 1rem;
+    align-items: start;
+  }
+
+  @media (min-width: 1100px) {
+    .search-layout {
+      grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+    }
+
+    .search-panel {
+      position: sticky;
+      top: 1rem;
+      max-height: calc(100vh - 2rem);
+      overflow-y: auto;
+    }
+  }
+
+  .search-results {
+    display: grid;
+    gap: 0.75rem;
+    min-width: 0;
+  }
+
+  .search-results__bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+  }
+
+  .search-results__page,
+  .search-results__empty,
+  .search-panel__hint {
+    color: var(--color-ui-text-muted);
+    font-size: 0.875rem;
+  }
+
+  .search-results__list {
+    display: grid;
+    gap: 0.5rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .search-result {
+    display: grid;
+    gap: 0.375rem;
+    padding: 0.75rem 0.875rem;
+    border: 1px solid var(--color-ui-border);
+    border-radius: var(--radius-ui);
+    background: var(--color-ui-surface);
+  }
+
+  .search-result--selected {
+    border-color: var(--color-ui-accent);
+    box-shadow: 0 0 0 1px var(--color-ui-accent);
+  }
+
+  .search-result__head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .search-result__name {
+    font-weight: 600;
+    color: var(--color-ui-accent);
+    overflow-wrap: anywhere;
+  }
+
+  .search-result__meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem 0.75rem;
+    font-size: 0.75rem;
+    color: var(--color-ui-text-muted);
+  }
+
+  .search-result__snippets {
+    display: grid;
+    gap: 0.25rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .search-result__snippet {
+    font-size: 0.875rem;
+    overflow-wrap: anywhere;
+  }
+
+  .search-result__snippet mark,
+  .entity-panel mark {
+    background: var(--color-ui-warn-soft);
+    color: inherit;
+    border-radius: 2px;
+  }
+
+  .search-result__obsolete {
+    margin-left: 0.375rem;
+  }
+
+  .search-result__explore {
+    justify-self: start;
+    font-size: 0.8125rem;
+    color: var(--color-ui-accent);
+  }
+
+  .search-pager {
+    display: flex;
+    gap: 0.5rem;
+  }
+
+  .search-error {
+    border-left: 4px solid var(--color-ui-danger);
+    background: var(--color-ui-danger-soft);
+  }
+
+  .search-error__title {
+    font-weight: 600;
+  }
+
+  .search-panel {
+    min-width: 0;
+  }
+}
+
+/* The read-only entity panel (UI-3 P4), beside the results or as its own page. */
+@layer components {
+  .entity-panel {
+    display: grid;
+    gap: 0.75rem;
+    overflow-wrap: anywhere;
+  }
+
+  .entity-panel__header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .entity-panel__name {
+    font-size: 1.125rem;
+    font-weight: 600;
+  }
+
+  .entity-panel__crumb {
+    flex-basis: 100%;
+    font-size: 0.8125rem;
+    color: var(--color-ui-text-muted);
+  }
+
+  .entity-panel__label {
+    font-weight: 600;
+    margin-right: 0.25rem;
+  }
+
+  .entity-panel__actions,
+  .entity-panel__pager {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    font-size: 0.875rem;
+  }
+
+  .entity-panel__pager a {
+    color: var(--color-ui-accent);
+  }
+
+  .entity-panel__section {
+    display: grid;
+    gap: 0.375rem;
+  }
+
+  .entity-panel__heading {
+    font-size: 0.9375rem;
+    font-weight: 600;
+  }
+
+  .entity-panel__subheading {
+    font-size: 0.8125rem;
+    font-weight: 600;
+  }
+
+  .entity-panel__list {
+    display: grid;
+    gap: 0.25rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    font-size: 0.875rem;
+  }
+
+  .entity-panel__list a {
+    color: var(--color-ui-accent);
+  }
+
+  .entity-panel__observation {
+    display: grid;
+    gap: 0.125rem;
+  }
+
+  .entity-panel__meta,
+  .entity-panel__empty {
+    font-size: 0.75rem;
+    color: var(--color-ui-text-muted);
+  }
+}

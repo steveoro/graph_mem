@@ -28,6 +28,20 @@ RSpec.describe "Guest search throttle", type: :request do
       expect(response.headers["Retry-After"]).to eq(GuestSearchThrottle::PERIOD.to_i.to_s)
     end
 
+    it "counts a Search page view once, with filters, and not its panel or Show as graph data" do
+      (limit - 1).times { get search_path, params: { q: "SynthWidget" } }
+      get search_path, params: { q: "SynthWidget", types: [ "Component" ], match: [ "", "name" ] }
+      expect(response).to have_http_status(:ok)
+
+      get entity_panel_path(widget), headers: { "Turbo-Frame" => "entity-panel" }
+      expect(response).to have_http_status(:ok)
+      get "/api/v1/graph_data", params: { ids: widget.id.to_s }, headers: json
+      expect(response).to have_http_status(:ok)
+
+      get search_path, params: { q: "SynthWidget" }
+      expect(response).to have_http_status(:too_many_requests)
+    end
+
     it "counts entity reads ranked by a query, but not plain entity reads" do
       limit.times { get search_path, params: { q: "SynthWidget" } }
 

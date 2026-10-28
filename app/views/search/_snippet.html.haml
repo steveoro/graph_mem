@@ -1,0 +1,4 @@
+%li.search-result__snippet{ data: { testid: "search-snippet" } }
+  = highlight_snippet(observation.content, tokens)
+  - unless observation.status == MemoryObservation::ACTIVE_STATUS
+    %span.ui-badge.search-result__obsolete= t("search.results.obsolete")

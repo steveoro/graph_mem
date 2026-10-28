@@ -348,4 +348,17 @@ RSpec.describe HybridSearchStrategy do
       expect(by_id[obs_only.id].matched_fields).not_to include("semantic")
     end
   end
+
+  describe "text: false (the Search page's Semantic mode)" do
+    it "ranks the vector channels only and never calls the text channel" do
+      allow_any_instance_of(EntitySearchStrategy).to receive(:search).and_raise("text channel called")
+      allow_any_instance_of(VectorSearchStrategy).to receive(:search).and_return([ vector_result(entity_b) ])
+      allow_any_instance_of(VectorSearchStrategy).to receive(:search_observations).and_return([ entity_c.id ])
+
+      results = strategy.search("task", text: false)
+
+      expect(results.map { |result| result.entity.id }).to eq([ entity_b.id, entity_c.id ])
+      expect(results.map(&:matched_fields)).to eq([ [ "semantic" ], [ "observation_semantic" ] ])
+    end
+  end
 end

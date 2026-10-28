@@ -110,6 +110,11 @@ Controllers in `app/controllers/api/v1/` provide REST equivalents for all MCP op
 
 `GraphTraversalService` performs bounded breadth-first expansion and hop-count shortest-path searches. It queries one frontier at a time, supports incoming/outgoing/bidirectional traversal, canonical relation-type filters, cycle protection, deterministic ordering, and result caps. MCP tools, REST endpoints, and `MemoryGraphResource` share this implementation.
 
+#### Search service (`app/services/graph_search.rb`, `app/services/search_filter.rb`)
+
+- **GraphSearch** - The MCP `search` tool's logic (catalog, summary and subgraph modes, paging, temporal bounds, `max_tokens`), extracted from `SearchTool#call` in 1.60.0. The tool, and the operator/guest Search page through `GraphSearch::Page`, call it with the same arguments, so they return the same entities in the same order. The page passes `context_scope: nil` and `ambient_context: false` (agents' context never reorders it) and, for its Text and Semantic modes, `semantic: false` or `text: false`; none of these are tool arguments. `GraphSearch::Page` adds per-row snippets (`GraphSearch::Snippets`: one query, no embedding call), project names and relation counts; `EntityPanel` backs the read-only entity panel.
+- **SearchFilter** - One frozen value object for `project_id` (a Project root and its members), `entity_types` and the `search_in_*` fields, validated once per request by `GraphSearch`, `GET /api/v1/memory_entities/search` and the page. Every channel applies it before ranking: `EntitySearchStrategy` (`fields:`, `scope:`), both `VectorSearchStrategy` queries and `TemporalSearchStrategy` (`scope:`), and `SubgraphSearchService` (`filter:`). The vector queries are exact scans, so the `WHERE` loses no recall. A default filter is passed as `nil`, which runs the unfiltered code path.
+
 #### Search Strategies (`app/strategies/`)
 
 - **EntitySearchStrategy** - Text-based search with token matching and relevance scoring

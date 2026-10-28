@@ -3,12 +3,21 @@
 # Shared entity search used by MCP and REST so ranking and context behavior match.
 class EntityRetrievalService
   class << self
+    # @param ambient_context [Boolean] false skips the fallback to the "default" client bucket's
+    #   context when none is passed (the Search page ignores agents' context)
+    # @param text [Boolean] false skips the text channel (the Search page's Semantic mode)
+    # @param filter [SearchFilter, nil] project/type/field filter applied inside every channel;
+    #   reported as `retrieval.filters` when it narrows anything
+    # @return [Hash] `{ results: Array<HybridSearchStrategy::SearchResult>, retrieval: Hash }`
     def search(query, limit: 50, semantic: true, context_entity_ids: nil, scope_entity_ids: nil,
-               context_scope: nil, temporal_window: nil, perspective: nil)
+               context_scope: nil, temporal_window: nil, perspective: nil, ambient_context: true, text: true,
+               filter: nil)
       extraction = TemporalQueryParser.apply(query, temporal_window: temporal_window)
       window = extraction.window
       strategy = HybridSearchStrategy.new
-      context_scope ||= GraphMemContext.scoped_entity_scope if scope_entity_ids.blank? && context_entity_ids.blank?
+      if ambient_context && scope_entity_ids.blank? && context_entity_ids.blank?
+        context_scope ||= GraphMemContext.scoped_entity_scope
+      end
       scoped_ids = scope_entity_ids || context_entity_ids || context_scope&.entity_ids
       # Context ids (argument or ambient GraphMemContext) go to the strategy as
       # the boost channel; only an explicitly-requested scope_entity_ids may
@@ -22,7 +31,9 @@ class EntityRetrievalService
         scope_entity_ids: scope_entity_ids,
         temporal_window: window,
         temporal_only: extraction.temporal_only?,
-        perspective: perspective
+        perspective: perspective,
+        text: text,
+        filter: filter
       )
 
       # A windowed query whose residual terms match nothing falls back to a
@@ -37,7 +48,9 @@ class EntityRetrievalService
           scope_entity_ids: scope_entity_ids,
           temporal_window: window,
           temporal_only: true,
-          perspective: perspective
+          perspective: perspective,
+          text: text,
+          filter: filter
         )
         fallback = true
       end
@@ -53,6 +66,7 @@ class EntityRetrievalService
           result_count: results.size,
           semantic: semantic
         }.merge(temporal_diagnostic.present? ? { temporal: temporal_diagnostic } : {})
+         .merge(filter&.diagnostic ? { filters: filter.diagnostic } : {})
       }
     end
   end

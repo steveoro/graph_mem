@@ -14,19 +14,22 @@ class TemporalSearchStrategy
   #   only counts observations of these entities (scope applied inside the query,
   #   not after the global top-N). `nil` means unscoped; an empty array is an
   #   explicit "no candidates" and returns nothing (never the whole graph).
+  # @param scope [ActiveRecord::Relation, nil] MemoryEntity relation the entities must belong to
+  #   (SearchFilter#entity_scope), applied in the query
   # @return [Array<Integer>] entity ids ordered by in-window observation count
-  def search(window, limit: 50, entity_ids: nil, perspective: nil)
+  def search(window, limit: 50, entity_ids: nil, perspective: nil, scope: nil)
     return [] if entity_ids && entity_ids.empty?
 
     sql, binds = window.observation_predicate
-    scope = MemoryObservation.active.where(sql, **binds)
-    scope = scope.where(memory_entity_id: entity_ids) if entity_ids
-    scope = scope.where(perspective: perspective) if perspective.present?
+    observations = MemoryObservation.active.where(sql, **binds)
+    observations = observations.where(memory_entity_id: entity_ids) if entity_ids
+    observations = observations.where(memory_entity_id: scope.select(:id)) if scope
+    observations = observations.where(perspective: perspective) if perspective.present?
 
-    scope = scope
+    observations = observations
       .group(:memory_entity_id)
       .order(Arel.sql("COUNT(*) DESC, memory_entity_id ASC"))
-    scope = scope.limit(limit) if limit
-    scope.pluck(:memory_entity_id)
+    observations = observations.limit(limit) if limit
+    observations.pluck(:memory_entity_id)
   end
 end

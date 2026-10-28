@@ -647,7 +647,7 @@
       },
       {
         "name": "search",
-        "description": "Recall what earlier sessions learned before you act. Call before choosing a convention (version bump, changelog, docs or test style, config location, release step) and before first editing a file or component named in the task; query by the task's project, file paths and component names, not only by topic. Search or page graph entities through one uniform response envelope. Omit `query` for catalog mode; pass `query` alone for ranked summary mode; add `include` values observations and/or relations for subgraph mode. Pass optional `page` (default 1), `per_page` (default 20, max 100), legacy alias `limit`, subgraph `search_in_name`, `search_in_type`, `search_in_aliases`, `search_in_observations` flags, and `max_tokens` (integer) to pack ranked results under an estimated token budget. Temporal recall: pass `occurred_after`, `occurred_before`, and/or `as_of` (ISO 8601) to weight and filter facts by occurred time; temporal phrases in the query itself (\"in October 2026\", \"during 2024\", \"last week\") are also understood. Active context boosts query matches rather than filtering them. Do not use to load known entity IDs; use `get_entities` instead. Do not use for multi-hop expansion; use `traverse_graph` instead. Do not use for synthesized prose; use `summarize` instead.",
+        "description": "Recall what earlier sessions learned before you act. Call before choosing a convention (version bump, changelog, docs or test style, config location, release step) and before first editing a file or component named in the task; query by the task's project, file paths and component names, not only by topic. Search or page graph entities through one uniform response envelope. Omit `query` for catalog mode; pass `query` alone for ranked summary mode; add `include` values observations and/or relations for subgraph mode. Pass optional `page` (default 1), `per_page` (default 20, max 100), legacy alias `limit`, `search_in_name`, `search_in_type`, `search_in_aliases`, `search_in_observations` flags (which fields the query matches, both modes), `project_id` and `entity_types` filters (applied before ranking), and `max_tokens` (integer) to pack ranked results under an estimated token budget. Temporal recall: pass `occurred_after`, `occurred_before`, and/or `as_of` (ISO 8601) to weight and filter facts by occurred time; temporal phrases in the query itself (\"in October 2026\", \"during 2024\", \"last week\") are also understood. Active context boosts query matches rather than filtering them. Do not use to load known entity IDs; use `get_entities` instead. Do not use for multi-hop expansion; use `traverse_graph` instead. Do not use for synthesized prose; use `summarize` instead.",
         "inputSchema": {
           "$schema": "https://json-schema.org/draft/2020-12/schema",
           "type": "object",
@@ -670,25 +670,43 @@
               "type": "boolean",
               "not": {
                 "type": "null"
-              }
+              },
+              "description": "Match the query against entity names (default true; summary and subgraph modes)."
             },
             "search_in_type": {
               "type": "boolean",
               "not": {
                 "type": "null"
-              }
+              },
+              "description": "Match the query against entity types (default true; summary and subgraph modes)."
             },
             "search_in_aliases": {
               "type": "boolean",
               "not": {
                 "type": "null"
-              }
+              },
+              "description": "Match the query against entity aliases (default true; summary and subgraph modes)."
             },
             "search_in_observations": {
               "type": "boolean",
               "not": {
                 "type": "null"
-              }
+              },
+              "description": "Match the query against observations (default true; summary and subgraph modes)."
+            },
+            "project_id": {
+              "type": "integer",
+              "not": {
+                "type": "null"
+              },
+              "description": "Only entities in this Project (the Project entity itself and its members)."
+            },
+            "entity_types": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Only entities of these types (1-20, exact, case-insensitive)."
             },
             "page": {
               "type": "integer",

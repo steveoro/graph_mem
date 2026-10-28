@@ -7,6 +7,8 @@ module Api
     class MemoryEntitiesController < BaseController
       include GuestSearchThrottle
 
+      SEARCH_FLAGS = %i[search_in_name search_in_type search_in_aliases search_in_observations].freeze
+
       before_action :set_entity, only: [ :show, :update, :destroy, :merge ]
       throttle_guest_search :search, :show
 
@@ -106,7 +108,9 @@ module Api
             context_entity_ids: context_scope&.entity_ids,
             scope_entity_ids: context_scope&.entity_ids,
             context_scope: context_scope,
-            temporal_window: temporal_window_from_params
+            temporal_window: temporal_window_from_params,
+            # Applied inside every channel; it intersects the context hard-filter above.
+            filter: search_filter_from_params
           )
           results = payload[:results].map(&:to_h)
           max_tokens = TokenBudget.validate_max_tokens!(params[:max_tokens]) if params.key?(:max_tokens)
@@ -130,7 +134,7 @@ module Api
         else
           render json: []
         end
-      rescue ArgumentError => e
+      rescue ArgumentError, GraphMem::InvalidArgumentsError => e
         render_error(e.message)
       end
 
@@ -186,6 +190,19 @@ module Api
           occurred_before: params[:occurred_before],
           as_of: params[:as_of]
         )
+      end
+
+      # The search tool's filters: project_id, entity_types (entity_types[]= or comma-separated),
+      # search_in_*=false. nil when nothing is narrowed, so the default path is unchanged.
+      def search_filter_from_params
+        types = params[:entity_types]
+        types = types.split(",") if types.is_a?(String)
+        filter = SearchFilter.build(
+          project_id: params[:project_id].presence,
+          entity_types: types.is_a?(Array) ? types.map(&:to_s) : types,
+          **SEARCH_FLAGS.index_with { |flag| params[flag].to_s != "false" }
+        )
+        filter unless filter.default?
       end
 
       def set_entity

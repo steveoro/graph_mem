@@ -315,6 +315,14 @@ RSpec.describe 'API V1 Memory Entities', type: :request do
       operationId 'searchMemoryEntities'
       produces 'application/json'
       parameter name: :q, in: :query, type: :string, required: true, description: 'Search query for entity name (case-insensitive)'
+      parameter name: :project_id, in: :query, type: :integer, required: false,
+                description: 'Only entities in this Project (the Project entity itself and its members)'
+      parameter name: :entity_types, in: :query, type: :string, required: false,
+                description: 'Only entities of these types (1-20, exact, case-insensitive), comma-separated or entity_types[]='
+      %w[name type aliases observations].each do |field|
+        parameter name: :"search_in_#{field}", in: :query, type: :boolean, required: false,
+                  description: "Match the query against #{field == 'name' ? 'entity names' : field == 'type' ? 'entity types' : field} (default true)"
+      end
 
       response(200, 'successful') do
         schema type: :array, items: { '$ref' => '#/components/schemas/MemoryEntitySearchResult' }
@@ -359,6 +367,25 @@ RSpec.describe 'API V1 Memory Entities', type: :request do
             data = JSON.parse(response.body)
             expect(data.size).to eq(0)
           end
+        end
+
+        context 'when filtered by entity type' do
+          let(:q) { 'apple' }
+          let(:entity_types) { 'drink' }
+          run_test! do |response|
+            expect(JSON.parse(response.body).pluck('entity_id')).to eq([ entity_apple_juice.id ])
+          end
+        end
+      end
+
+      response(422, 'invalid filter') do
+        schema '$ref' => '#/components/schemas/error_response'
+        let!(:entity_apple) { MemoryEntity.create!(name: 'Apple Pie', entity_type: 'Dessert') }
+        let(:q) { 'apple' }
+        let(:project_id) { entity_apple.id }
+
+        run_test! do |response|
+          expect(JSON.parse(response.body)).to eq('error' => 'project_id must be the id of a Project entity.')
         end
       end
 

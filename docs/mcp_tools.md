@@ -156,7 +156,9 @@ merge with other writes, are recorded but can't be undone. Agents can't undo: th
   - `page` (integer, optional, default: 1): Page number.
   - `per_page` (integer, optional, default: 20, max: 100): Results per page.
   - `limit` (integer, optional): Legacy alias for `per_page`; ignored when `per_page` is present.
-  - `search_in_name`, `search_in_type`, `search_in_aliases`, `search_in_observations` (boolean, optional): Subgraph search fields.
+  - `search_in_name`, `search_in_type`, `search_in_aliases`, `search_in_observations` (boolean, optional, default: true): Which fields the query is matched against, in both summary and subgraph modes (summary mode used to ignore them). At least one must stay on. In summary mode, turning off name, type and aliases also skips the entity-vector channel (the entity embedding is built from those fields); turning off observations skips the observation-vector channel.
+  - `project_id` (integer, optional): Only entities in this Project: the Project entity itself and its members. Must be the id of a Project root.
+  - `entity_types` (array of strings, optional): Only entities of these types: 1-20, exact and case-insensitive; an unknown type matches nothing; `[]` is the same as omitting it.
   - `occurred_after` / `occurred_before` (string, optional): ISO 8601 bounds enabling the temporal recall channel (see [Temporal recall](#temporal-recall)).
   - `as_of` (string, optional): ISO 8601 point-in-time window; cannot be combined with `occurred_after`/`occurred_before`.
   - `perspective` (string, optional): Observation perspective hard filter — `world` surfaces only factual observations, `experience` only work-log entries; omitted returns both.
@@ -165,6 +167,7 @@ merge with other writes, are recorded but can't be undone. Agents can't undo: th
   - Summary: `{ mode: "summary", results, pagination, retrieval }`
   - Subgraph: `{ mode: "subgraph", entities, pagination, retrieval, relations? }`; observations are included on entities only when requested.
   - Catalog: `{ mode: "catalog", entities, pagination }`
+- **Filters:** `project_id`, `entity_types` and `search_in_*` apply inside every channel before ranking (text, entity vectors, observation vectors, the temporal channel and its fallback, and subgraph candidates), so `page`/`per_page` page through the filtered ranking, `perspective` stays an independent observation filter, a temporal window ranks within the filtered entities and `max_tokens` packs the filtered page. They are hard filters, unlike the active context, which only boosts. When any of them narrows something, `retrieval.filters` echoes `{ project_id, entity_types, search_in }`; with all of them omitted the response is exactly as before. Errors (`category: "validation"`): `project_id must be the id of a Project entity.`, `entity_types must be a list of 1 to 20 non-blank entity types.`, `At least one search field (name, type, aliases, observations) must be enabled.`, and, in catalog mode (no `query`), `project_id and entity_types require a query.`
 - **Temporal diagnostics:** when a temporal window applies (explicit params or parsed from `query`), `retrieval.temporal` reports the resolved `occurred_after`/`occurred_before`/`as_of`; `retrieval.token_budget` reports `{ max_tokens, estimated_tokens, truncated }` when `max_tokens` is passed.
 
 #### `get_entities`

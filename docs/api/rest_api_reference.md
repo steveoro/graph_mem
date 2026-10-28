@@ -75,6 +75,16 @@ Required: `name`, `entity_type`.
 
 Returns relevance-ranked results with `relevance_score` and `matched_fields`. Context-aware when a project context is active; retrieval diagnostics report `scope_truncated` and `scope_max_entities` when the bounded context subtree is partial.
 
+Optional filters, the same as the MCP `search` tool's, applied inside every channel before ranking (without them the response is unchanged):
+
+| Parameter | Meaning |
+|---|---|
+| `project_id` | Only this Project entity and its members. Must be a Project root's id. |
+| `entity_types[]=` (or `entity_types=A,B`) | Only these entity types: 1-20, exact, case-insensitive. An unknown type matches nothing. |
+| `search_in_name`, `search_in_type`, `search_in_aliases`, `search_in_observations` | `false` stops matching the query against that field (default `true`). At least one must stay on. |
+
+When a project context is active, the filters intersect it. With `include_retrieval=true`, `retrieval.filters` echoes them. An invalid filter answers `422` with `{ "error": "..." }`, e.g. `"project_id must be the id of a Project entity."`.
+
 ### Merge Entity
 
 `POST /api/v1/memory_entities/:id/merge_into/:target_id`
