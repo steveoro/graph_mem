@@ -5,14 +5,34 @@ All notable changes to GraphMem will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.61.0] - 2026-10-28
+
+Explore: edit the graph from the canvas and the panel, merge with a preview, undo every change.
+
+### Added
+- Explore (`/explore`), for the operator and the guest: the graph canvas with a toolbar (scope: root view, full graph, a project, a neighbourhood or "from search"; layout; depth 1 or 2; entity-type and relation-type filters; fit) and the entity panel beside it. The scope is kept in the URL.
+- Operator edits, each in its own `explore.*` change set with the operator as actor, shown in Home's recent activity and the panel's new Recent changes, with Undo in the toast for 10 minutes: rename and edit an entity (project roots: rename only), add an observation (exact duplicates refused, similar ones flagged with "Add anyway"; without embeddings the similarity check is skipped and the toast says so), edit one (superseding it, history kept), retire one, add a relation from a type picker, remove one, and move an entity under another parent with a confirm card (subtree size and project change; project roots can't move).
+- Merges from Explore: drop a node on another of the same type, or "Merge into…", opens a dialog with a server-side preview (observations, relations re-pointed and dropped, aliases, children and project moves) and Swap direction; the merge is refused (409, nothing written) when the graph changed since the preview. `NodeOperationsStrategy#merge_into` takes an optional `before_merge:` check, default `nil`.
+- Propose deletion: seeds a Review & Fix delete suggestion (source "operator") and links to it.
+- `GET /api/v1/graph_data`: `project_id=` (a project and its `part_of` subtree) and `depth=1|2` with `entity_id`; invalid values are a `422`.
 
 ### Changed
 - Ruby 3.4.12 (GitHub Actions' runners no longer offer 3.4.1). Re-create local RVM gemsets for the new version.
+- `/graph` and `/graph?…` redirect (301) to `/explore` with the query string; Search's "Show as graph", "Open in Explore" and every other graph link open Explore.
+- The entity panel shows the operator its edit forms and Recent changes; the guest's panel is unchanged.
+
+### Removed
+- The `/graph` page and its duplicate search form.
+- The graph's hard Delete, "Delete All Duplicates" and the observation modal; deletes are proposals in Review & Fix.
+- Every browser call to an `/api/v1` write endpoint and to `/data_exchange` `update_relation`, `delete_relation` and `delete_duplicate_relations` (the endpoints stay for agents and other callers).
 
 ### Fixed
 - Errors reported to `Rails.error` (MCP internal errors, a failing Home widget) are logged.
 - Exact search finds an exact name even when more than 1,000 aliases match first.
+
+### Security
+- `GET /api/v1/graph_data` (guest-readable) returns at most 2,000 entities per view, with `truncated` and `total` when the cap applies; it no longer loads every entity and relation, and its query count no longer grows with the graph.
+- The entity panel's observation page is bounded (past the end shows the last page), so a huge `page` no longer becomes a huge `OFFSET`.
 
 ## [1.60.0] - 2026-10-28
 
