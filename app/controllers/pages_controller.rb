@@ -22,7 +22,9 @@ class PagesController < ApplicationController
   rescue StandardError => e
     # One broken source (a DB error in a snapshot) shows in its own widget, not as Turbo's blank
     # "Content missing"; the other widgets are separate requests and render as usual.
+    # Rails.error has no subscriber here, so log it too (the card says the error is in the log).
     Rails.error.report(e, handled: true, context: { home_section: section })
+    Rails.logger.error("Home widget #{section} failed: #{e.class}: #{e.message}")
     render partial: "home/unavailable", locals: { section: section }
   end
 

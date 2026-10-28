@@ -1,6 +1,7 @@
 -# Home (UI-2b, ui-dashboard-plan.md §2.2): operator only and status only. Its one form is the
--# quick search; every action lives on the page a widget links to. Each widget is a lazy Turbo
--# Frame (PagesController#home_section), so a slow check never holds up the page.
+-# quick search; every action lives on the page a widget links to. Each widget is its own Turbo
+-# Frame (PagesController#home_section), so a slow check never holds up the page. The health
+-# strip, at the top, loads eagerly; the rest load as they come into view.
 - content_for :title, t("home.title")
 - content_for :page_header, ui_page_header(t("home.title"), subtitle: t("home.subtitle"))
 
@@ -14,7 +15,7 @@
 
   .home-grid
     - @sections.each do |section|
-      = turbo_frame_tag "home-#{section}", src: home_section_path(section), loading: :lazy,
+      = turbo_frame_tag "home-#{section}", src: home_section_path(section), loading: (section == :health ? :eager : :lazy),
         class: "home-widget home-widget--#{section}", data: { testid: "home-frame-#{section}" } do
         %section.ui-card.home-card
           %p.home-card__loading{ "aria-live": "polite" }= t("home.loading")

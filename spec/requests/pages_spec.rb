@@ -32,7 +32,7 @@ RSpec.describe "Home", type: :request do
       frames = main.css("turbo-frame")
       expect(frames.map { |frame| frame["id"] }).to eq(HomeSnapshot::SECTIONS.map { |section| "home-#{section}" })
       expect(frames.map { |frame| frame["src"] }).to eq(HomeSnapshot::SECTIONS.map { |section| home_section_path(section) })
-      expect(frames.map { |frame| frame["loading"] }).to all(eq("lazy"))
+      expect(frames.map { |frame| frame["loading"] }).to eq([ "eager" ] + ([ "lazy" ] * (HomeSnapshot::SECTIONS.size - 1)))
       sidebar = Nokogiri::HTML(response.body).at_css("nav.ui-sidebar")
       expect(sidebar.css("a[aria-current='page']").map { |link| link["data-testid"] }).to eq([ "nav-home" ])
     end
@@ -159,11 +159,13 @@ RSpec.describe "Home", type: :request do
       allow(HomeSnapshot).to receive(:section).and_call_original
       allow(HomeSnapshot).to receive(:section).with(:digest).and_raise(ActiveRecord::StatementInvalid, "synthetic failure")
       allow(Rails.error).to receive(:report)
+      allow(Rails.logger).to receive(:error).and_call_original
 
       doc = section_doc(:digest)
 
       expect(doc.at_css("turbo-frame#home-digest [data-testid='home-unavailable-digest']").text).to include("Review digest: unavailable")
       expect(Rails.error).to have_received(:report).with(an_instance_of(ActiveRecord::StatementInvalid), hash_including(handled: true))
+      expect(Rails.logger).to have_received(:error).with("Home widget digest failed: ActiveRecord::StatementInvalid: synthetic failure")
       expect(section_doc(:health).at_css("[data-testid='home-health']")).to be_present
     end
 
