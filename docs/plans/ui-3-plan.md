@@ -1,5 +1,7 @@
 # UI-3 → graph_mem 1.60.0: Search (one page, every mode, filters shared with the MCP `search` tool, "Show as graph")
 
+**✅ DONE (Oct 28):** shipped in #135 as **1.60.0** (merged as `5e17353` and tagged). Optional follow-ups left from the #135 review, none blocking: a request spec that `page=0`, a negative and a non-numeric `page` are treated as page 1; a `page_spec` case for the backslash in Exact mode's `sanitize_sql_like` escaping (only `%` and `_` are pinned today); and a separate exact-name lookup (`LOWER(name) = needle`, its own query) so the 1,000-row `EXACT_SCAN_LIMIT` on the alias-substring scan can't drop an exact match on a large graph.
+
 **Written 2026-10-28 (Europe/Rome), revised the same day with Steve's decisions** for Claude, from `main` at `487804e`
 (1.59.0 tagged, #134 merged). Every file:line in "What the code looks like today" was checked against that commit.
 If a line has moved, find the code by the quoted text; if the code no longer matches the description, **stop and ask
