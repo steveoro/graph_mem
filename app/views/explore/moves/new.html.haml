@@ -1,0 +1,21 @@
+-# Move under… (the drag menu): the confirm card. A project change is shown in amber; a blocker
+-# (a project root, a cycle) replaces the button.
+- card = @card
+- name_of = ->(project) { project ? project.name : t("explore.moves.global") }
+= turbo_frame_tag "explore-dialog" do
+  .explore-dialog__body{ data: { testid: "explore-move-card" } }
+    %h2#explore-dialog-title.explore-dialog__title= t("explore.moves.title", node: @node.name, parent: @parent.name)
+    - if card.blocker
+      %p.explore-dialog__blocker{ role: "alert", data: { testid: "explore-move-blocker" } }= card.blocker
+    - else
+      %p{ data: { testid: "explore-move-subtree" } }= t("explore.moves.subtree", count: card.subtree_label, node: @node.name)
+      - if card.project_change?
+        %p.explore-dialog__warn{ data: { testid: "explore-move-project-change" } }
+          = t("explore.moves.project_change", from: name_of.call(card.current_project), to: name_of.call(card.new_project))
+      - else
+        %p= t("explore.moves.same_project", project: name_of.call(card.current_project))
+    .explore-dialog__actions
+      %button.ui-btn{ type: "button", data: { action: "explore-dialog#close" } }= t("explore.dialog.cancel")
+      - unless card.blocker
+        = button_to t("explore.moves.submit"), explore_moves_path, method: :post, params: { node_id: @node.id, parent_id: @parent.id },
+          class: "ui-btn ui-btn-primary", form: { data: { turbo_stream: true } }, data: { testid: "explore-move-submit" }
