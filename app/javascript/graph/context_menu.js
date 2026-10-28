@@ -1,7 +1,10 @@
-// The canvas's right-click menus (UI-4b). Every label is set with textContent. Read items only
-// for now: Show in panel, Open neighbourhood, Toggle relations (edges: the endpoints).
+// The canvas's right-click menus (UI-4b). Every label is set with textContent. Read items for
+// everyone (Show in panel, Open neighbourhood, Toggle relations); for the operator also Edit in
+// panel, Merge into… and Propose deletion on nodes, and Remove relation on edges. Read-only (the
+// guest), the write items are never built. No hard delete, no dedupe, no alert()/confirm().
 export class ContextMenuManager {
-  // actions: { select(id), openNeighbourhood(id) }
+  // actions: { select(id), openNeighbourhood(id), editInPanel(id), mergeInto(id),
+  //            proposeDeletion(id), removeRelation(edgeData) }
   constructor(actions, { readOnly = true } = {}) {
     this.actions = actions;
     this.readOnly = readOnly;
@@ -19,6 +22,15 @@ export class ContextMenuManager {
       { label: 'Open neighbourhood', testid: 'ctx-neighbourhood', run: () => this.actions.openNeighbourhood(data.id) },
       { label: 'Toggle relations', testid: 'ctx-toggle-relations', run: () => this.#toggleRelations(cy, data.id) }
     ];
+    if (!this.readOnly) {
+      const root = data.type === 'Project';
+      items.push({ divider: true });
+      items.push({ label: 'Edit in panel', testid: 'ctx-edit', run: () => this.actions.editInPanel(data.id) });
+      if (!root) {
+        items.push({ label: 'Merge into\u2026', testid: 'ctx-merge', run: () => this.actions.mergeInto(data.id) });
+        items.push({ label: 'Propose deletion', testid: 'ctx-propose-deletion', danger: true, run: () => this.actions.proposeDeletion(data.id) });
+      }
+    }
     this.#show(event, cy, 'contextual-menu', items);
   }
 
@@ -29,6 +41,10 @@ export class ContextMenuManager {
       { label: String(data.from_entity_name || data.source || '') + ' → ' + String(data.to_entity_name || data.target || '') },
       { label: 'Type: ' + (data.label || '') }
     ];
+    if (!this.readOnly && data.relation_id) {
+      items.push({ divider: true });
+      items.push({ label: 'Remove relation', testid: 'ctx-remove-relation', danger: true, run: () => this.actions.removeRelation(data) });
+    }
     this.#show(event, cy, 'contextual-menu edge-menu', items);
   }
 
