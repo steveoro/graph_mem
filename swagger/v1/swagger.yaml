@@ -241,6 +241,49 @@ paths:
         description: Search query (case-insensitive, tokenized)
         schema:
           type: string
+      - name: project_id
+        in: query
+        required: false
+        description: Only entities in this Project (the Project entity itself and its members)
+        schema:
+          type: integer
+      - name: entity_types[]
+        in: query
+        required: false
+        description: Only entities of these types (1-20, exact, case-insensitive); a comma-separated entity_types=
+          is accepted too
+        schema:
+          type: array
+          items:
+            type: string
+      - name: search_in_name
+        in: query
+        required: false
+        description: Match the query against entity names (false turns it off)
+        schema:
+          type: boolean
+          default: true
+      - name: search_in_type
+        in: query
+        required: false
+        description: Match the query against entity types (false turns it off)
+        schema:
+          type: boolean
+          default: true
+      - name: search_in_aliases
+        in: query
+        required: false
+        description: Match the query against entity aliases (false turns it off)
+        schema:
+          type: boolean
+          default: true
+      - name: search_in_observations
+        in: query
+        required: false
+        description: Match the query against observations (false turns it off)
+        schema:
+          type: boolean
+          default: true
       responses:
         '200':
           description: Relevance-ranked results
@@ -250,6 +293,12 @@ paths:
                 type: array
                 items:
                   "$ref": "#/components/schemas/search_result"
+        '422':
+          description: Invalid filter or temporal parameters
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/error_response"
 
   "/api/v1/memory_entities/{id}/merge_into/{target_id}":
     parameters:
