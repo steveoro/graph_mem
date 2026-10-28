@@ -17,6 +17,14 @@ class GraphSearch
     MATCH_FLAGS = { "name" => :search_in_name, "aliases" => :search_in_aliases, "type" => :search_in_type,
                     "observations" => :search_in_observations }.freeze
     PER_PAGE = 20
+    # Bounds for this guest-reachable page: ranks are fetched as offset + per_page, so a huge
+    # page would turn into huge LIMITs on every channel (50 pages = 1,000 ranks).
+    MAX_PAGE = 50
+    MAX_QUERY_LENGTH = 500
+    # Exact mode loads at most this many LIKE candidates before its exact Ruby check.
+    EXACT_SCAN_LIMIT = 1_000
+    # The columns a result row shows (never the embedding).
+    ROW_COLUMNS = %i[id name entity_type aliases description project_id memory_observations_count created_at updated_at].freeze
     TYPE_OPTIONS_LIMIT = 50
 
     Row = Struct.new(:entity, :relevance_score, :matched_fields, :snippets, :project_name, :relation_count,
@@ -26,7 +34,7 @@ class GraphSearch
 
     Result = Struct.new(:query, :mode, :page, :per_page, :rows, :filters, :error, :semantic_available,
                         keyword_init: true) do
-      def next_page? = rows.size == per_page
+      def next_page? = rows.size == per_page && page < MAX_PAGE
       def searched? = query.present?
     end
 
@@ -89,10 +97,18 @@ class GraphSearch
     end
 
     def search
+      validate_bounds!
       hits = @mode == "exact" ? exact_hits : ranked_hits
       [ build_rows(hits), nil ]
     rescue GraphMem::InvalidArgumentsError => e
       [ [], e.message ]
+    end
+
+    def validate_bounds!
+      raise GraphMem::InvalidArgumentsError, "page must be between 1 and #{MAX_PAGE}." if @page > MAX_PAGE
+      return if @query.length <= MAX_QUERY_LENGTH
+
+      raise GraphMem::InvalidArgumentsError, "The query must be at most #{MAX_QUERY_LENGTH} characters."
     end
 
     # match[] absent = every field on (the tool's defaults); present = exactly the listed fields.
@@ -121,8 +137,11 @@ class GraphSearch
       candidates = filter.entity_scope || MemoryEntity.all
       table = MemoryEntity.arel_table
       lower = ->(column) { Arel::Nodes::NamedFunction.new("LOWER", [ table[column] ]) }
-      candidates = candidates.where(lower.call(:name).eq(needle).or(lower.call(:aliases).matches("%#{needle}%")))
-      matches = candidates.order(:name, :id).filter_map do |entity|
+      # The query is escaped for LIKE: % and _ in it are literal, not wildcards.
+      like = "%#{MemoryEntity.sanitize_sql_like(needle)}%"
+      candidates = candidates.where(lower.call(:name).eq(needle).or(lower.call(:aliases).matches(like)))
+                             .select(*ROW_COLUMNS).order(:name, :id).limit(EXACT_SCAN_LIMIT)
+      matches = candidates.filter_map do |entity|
         if entity.name.to_s.downcase == needle then [ entity, "name" ]
         elsif alias_list(entity).include?(needle) then [ entity, "aliases" ]
         end

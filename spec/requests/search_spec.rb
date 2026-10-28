@@ -81,6 +81,53 @@ RSpec.describe "Search page", type: :request do
     end
   end
 
+  it "refuses a page past MAX_PAGE and an over-long query with 422 (guest-reachable bounds)" do
+    get search_path, params: { q: "synth", page: GraphSearch::Page::MAX_PAGE + 1 }
+    expect(response).to have_http_status(:unprocessable_content)
+    expect(html.at_css("[data-testid='search-error']").text).to include("page must be between 1 and 50.")
+
+    get search_path, params: { q: "s" * (GraphSearch::Page::MAX_QUERY_LENGTH + 1) }
+    expect(response).to have_http_status(:unprocessable_content)
+    expect(html.at_css("[data-testid='search-error']").text).to include("The query must be at most 500 characters.")
+
+    get search_path, params: { q: "s" * GraphSearch::Page::MAX_QUERY_LENGTH }
+    expect(response).to have_http_status(:ok)
+  end
+
+  it "shows no Next link on the last allowed page" do
+    allow(GraphSearch).to receive(:call).and_return(results: Array.new(20) { |i| { entity_id: widget.id, relevance_score: 1.0 - (i / 100.0), matched_fields: [ "name" ] } })
+
+    get search_path, params: { q: "synth", page: GraphSearch::Page::MAX_PAGE }
+
+    expect(response).to have_http_status(:ok)
+    expect(html.at_css("[data-testid='search-next']")).to be_nil
+    expect(html.at_css("[data-testid='search-prev']")).to be_present
+  end
+
+  it "treats LIKE wildcards in an Exact query literally" do
+    MemoryEntity.create!(name: "Synth Dial", entity_type: "Component", aliases: "dial|knob")
+
+    %w[% _ %_%].each do |query|
+      get search_path, params: { q: query, mode: "exact" }
+
+      expect(response).to have_http_status(:ok)
+      expect(result_names).to eq([]), query
+    end
+  end
+
+  it "disables the unticked type chips once the 20-type cap is reached" do
+    types = Array.new(SearchFilter::MAX_ENTITY_TYPES) { |i| "Type#{i}" }
+
+    get search_path, params: { q: "synth", types: types }
+
+    expect(response).to have_http_status(:ok)
+    chips = html.css("input[name='types[]']")
+    expect(chips.select { |chip| chip["checked"] }.size).to eq(20)
+    expect(chips.reject { |chip| chip["checked"] }).to all(satisfy { |chip| chip["disabled"] == "disabled" })
+    expect(chips.reject { |chip| chip["checked"] }).not_to be_empty
+    expect(html.at_css("[data-testid='search-form'] summary").text).to include("(up to 20)")
+  end
+
   it "treats an unknown mode as auto and explains why Semantic is off" do
     get search_path, params: { q: "synth", mode: "bogus" }
 

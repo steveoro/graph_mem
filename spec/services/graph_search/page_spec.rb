@@ -117,6 +117,20 @@ RSpec.describe GraphSearch::Page do
       expect(described_class.call({ "q" => "gizmo", "mode" => "exact" }).rows.sole.matched_fields).to eq([ "aliases" ])
     end
 
+    it "escapes LIKE wildcards, bounds the scan and never loads the embedding" do
+      queries = []
+      callback = ->(*, payload) { queries << payload[:sql] if payload[:sql].include?("LIKE") }
+
+      ActiveSupport::Notifications.subscribed(callback, "sql.active_record") do
+        expect(described_class.call({ "q" => "%_", "mode" => "exact" }).rows).to eq([])
+      end
+
+      # The escaped pattern %\%\_% arrives in a quoted SQL string, so each backslash is doubled.
+      expect(queries.sole).to include(%q(LIKE '%\\\\%\\\\_%'))
+      expect(queries.sole).to include("LIMIT #{described_class::EXACT_SCAN_LIMIT}")
+      expect(queries.sole).not_to include("embedding")
+    end
+
     it "keeps to the project and type filters" do
       expect(ids(described_class.call({ "q" => "SynthWidget", "mode" => "exact", "project_id" => gadget.id.to_s }))).to eq([])
       expect(ids(described_class.call({ "q" => "SynthWidget", "mode" => "exact", "types" => [ "Component" ] }))).to eq([ widget.id ])
