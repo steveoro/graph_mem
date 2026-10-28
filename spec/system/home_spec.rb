@@ -23,11 +23,19 @@ RSpec.describe "Home", type: :system do
     expect(page).to have_css("nav.ui-sidebar")
   end
 
+  # Lazy frames load once they're in view; scroll to them so the spec doesn't depend on the layout
+  # (CI runs without the built Tailwind CSS, where the page is much longer).
+  def show_frame(id)
+    scroll_to(find("turbo-frame##{id}"))
+  end
+
   it "goes from the digest to the same group on Review" do
     visit root_path
 
+    show_frame("home-health")
     expect(page).to have_css("[data-testid='home-pill-database'][data-status='ok']")
     expect(page).to have_css("[data-testid='home-pill-embeddings'][data-status='danger']", text: "unreachable")
+    show_frame("home-digest")
     within("turbo-frame#home-digest") do
       expect(page).to have_css("[data-testid='home-digest-row']", text: "SynthWidget")
       click_link "Open"
@@ -43,6 +51,7 @@ RSpec.describe "Home", type: :system do
   it "focuses the quick search on / and searches from it" do
     visit root_path
     wait_for_stimulus
+    show_frame("home-health")
     expect(page).to have_css("turbo-frame#home-health [data-testid='home-health']")
 
     # Selenium's synthetic keys don't reach the window listener in headless Chrome; dispatch the
