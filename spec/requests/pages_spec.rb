@@ -158,14 +158,15 @@ RSpec.describe "Home", type: :request do
     it "shows a broken widget as unavailable in its own frame, and the others as usual" do
       allow(HomeSnapshot).to receive(:section).and_call_original
       allow(HomeSnapshot).to receive(:section).with(:digest).and_raise(ActiveRecord::StatementInvalid, "synthetic failure")
-      allow(Rails.error).to receive(:report)
-      allow(Rails.logger).to receive(:error).and_call_original
+      lines = []
+      allow(Rails.logger).to receive(:error).and_wrap_original { |original, *args| lines << args.first; original.call(*args) }
 
       doc = section_doc(:digest)
 
       expect(doc.at_css("turbo-frame#home-digest [data-testid='home-unavailable-digest']").text).to include("Review digest: unavailable")
-      expect(Rails.error).to have_received(:report).with(an_instance_of(ActiveRecord::StatementInvalid), hash_including(handled: true))
-      expect(Rails.logger).to have_received(:error).with("Home widget digest failed: ActiveRecord::StatementInvalid: synthetic failure")
+      # Logged once, by GraphMem::ErrorLogSubscriber.
+      expect(lines.grep(/synthetic failure/).size).to eq(1)
+      expect(lines.grep(/synthetic failure/).first).to include("ActiveRecord::StatementInvalid", "synthetic failure", "home_section")
       expect(section_doc(:health).at_css("[data-testid='home-health']")).to be_present
     end
 

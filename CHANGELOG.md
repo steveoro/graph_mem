@@ -10,6 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - Ruby 3.4.12 (GitHub Actions' runners no longer offer 3.4.1). Re-create local RVM gemsets for the new version.
 
+### Fixed
+- Errors reported to `Rails.error` (MCP internal errors, a failing Home widget) are logged.
+
 ## [1.60.0] - 2026-10-28
 
 Search: one page for every mode of the agents' search tool, with filters the tool and REST search share.
