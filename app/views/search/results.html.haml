@@ -20,6 +20,9 @@
       - else
         .search-results__bar
           %span.search-results__page= t("search.results.page", page: @search.page)
+          -# "Show as graph": this page's entities and the relations among them (UI-4b points it at Explore).
+          = link_to t("search.results.show_as_graph"), graph_path(ids: @search.rows.map(&:id).join(",")),
+            class: "ui-btn", title: t("search.results.show_as_graph_hint"), data: { turbo_frame: "_top", testid: "search-show-graph" }
         %ol.search-results__list{ start: ((@search.page - 1) * @search.per_page) + 1 }
           = render partial: "search/result", collection: @search.rows, as: :row,
             locals: { tokens: GraphSearch::Snippets.tokens_for(@search.query) }

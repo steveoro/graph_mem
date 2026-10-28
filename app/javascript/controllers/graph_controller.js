@@ -19,6 +19,7 @@ export default class extends Controller {
     this.currentView = 'root';
     this.currentEntityId = null;
     this.scopedEntityId = null;
+    this.searchIds = null;
 
     this.api = new GraphApiClient();
     this.modal = new ModalManager();
@@ -33,11 +34,18 @@ export default class extends Controller {
 
     const urlParams = new URLSearchParams(window.location.search);
     const scopedId = urlParams.get('scoped_entity_id');
+    const searchIds = urlParams.get('ids');
     if (scopedId) {
       this.scopedEntityId = scopedId;
       this.currentView = 'scoped';
       this.#updateNavigationButtons();
       this.fetchDataAndRenderGraph(false, null, { scopedEntityId: scopedId });
+    } else if (searchIds) {
+      // "Show as graph" from Search: exactly those entities and the relations among them.
+      this.searchIds = searchIds;
+      this.currentView = 'search';
+      this.#updateNavigationButtons();
+      this.fetchDataAndRenderGraph(false, null, { ids: searchIds });
     } else {
       this.fetchDataAndRenderGraph(true);
     }
@@ -46,6 +54,8 @@ export default class extends Controller {
   refreshGraph() {
     if (this.currentView === 'scoped') {
       this.fetchDataAndRenderGraph(false, null, { scopedEntityId: this.scopedEntityId });
+    } else if (this.currentView === 'search') {
+      this.fetchDataAndRenderGraph(false, null, { ids: this.searchIds });
     } else {
       this.fetchDataAndRenderGraph(this.currentView === 'root', this.currentEntityId);
     }
@@ -75,12 +85,18 @@ export default class extends Controller {
     backBtn.className = 'graph-nav-btn graph-nav-btn--back graph-hidden';
     backBtn.onclick = () => this.#switchView('root');
 
+    const searchLabel = document.createElement('span');
+    searchLabel.textContent = 'From search';
+    searchLabel.className = 'graph-nav-btn graph-nav-btn--active graph-hidden';
+    searchLabel.dataset.testid = 'graph-from-search';
+
     navDiv.appendChild(rootBtn);
     navDiv.appendChild(fullBtn);
+    navDiv.appendChild(searchLabel);
     navDiv.appendChild(backBtn);
     this.containerTarget.appendChild(navDiv);
 
-    this.navControls = { rootBtn, fullBtn, backBtn };
+    this.navControls = { rootBtn, fullBtn, backBtn, searchLabel };
     this.#updateNavigationButtons();
   }
 
@@ -88,6 +104,7 @@ export default class extends Controller {
     this.currentView = view;
     this.currentEntityId = entityId;
     this.scopedEntityId = null;
+    this.searchIds = null;
     this.#updateNavigationButtons();
 
     if (view === 'root') {
@@ -100,10 +117,11 @@ export default class extends Controller {
   }
 
   #updateNavigationButtons() {
-    const { rootBtn, fullBtn, backBtn } = this.navControls;
+    const { rootBtn, fullBtn, backBtn, searchLabel } = this.navControls;
 
     rootBtn.className = 'graph-nav-btn';
     fullBtn.className = 'graph-nav-btn';
+    searchLabel.classList.toggle('graph-hidden', this.currentView !== 'search');
 
     if (this.currentView === 'root') {
       rootBtn.classList.add('graph-nav-btn--active');
@@ -111,7 +129,7 @@ export default class extends Controller {
     } else if (this.currentView === 'full') {
       fullBtn.classList.add('graph-nav-btn--active');
       backBtn.classList.add('graph-hidden');
-    } else if (this.currentView === 'scoped' || this.currentView === 'subgraph') {
+    } else if (['scoped', 'subgraph', 'search'].includes(this.currentView)) {
       backBtn.className = 'graph-nav-btn graph-nav-btn--back';
     }
   }

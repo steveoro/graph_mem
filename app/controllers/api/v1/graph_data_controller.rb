@@ -3,13 +3,19 @@
 module Api
   module V1
     class GraphDataController < BaseController
-      # GET /api/v1/graph_data
+      # "Show as graph" (UI-3) sends one page of search results; UI-4b's Explore reuses it.
+      MAX_IDS = 100
+      IDS_ERROR = "ids must be 1 to #{MAX_IDS} comma-separated entity ids.".freeze
+
+      # GET /api/v1/graph_data(?ids=1,2,3 | ?scoped_entity_id= | ?entity_id= | ?root_only=true)
       def index
         entity_id = params[:entity_id]
         scoped_entity_id = params[:scoped_entity_id]
         root_only = params[:root_only] == "true"
 
-        if scoped_entity_id.present?
+        if params.key?(:ids)
+          render_ids_graph(params[:ids])
+        elsif scoped_entity_id.present?
           render_scoped_subgraph(scoped_entity_id)
         elsif entity_id.present?
           render_subgraph(entity_id)
@@ -21,6 +27,29 @@ module Api
       end
 
       private
+
+      # The given entities and the relations among them only (no hop expansion); unknown ids
+      # are skipped. 422 unless ids is 1 to MAX_IDS positive integers, comma-separated.
+      def render_ids_graph(raw)
+        ids = parse_ids(raw)
+        return render_error(IDS_ERROR) unless ids
+
+        entities = MemoryEntity.where(id: ids).includes(:active_memory_observations).order(:id)
+        found = entities.map(&:id)
+        relations = MemoryRelation.where(from_entity_id: found, to_entity_id: found).includes(:from_entity, :to_entity).order(:id)
+        render_graph_data(entities, relations, { focus_entity_ids: found.map(&:to_s) })
+      end
+
+      # @return [Array<Integer>, nil] de-duplicated ids, or nil when the list is invalid
+      def parse_ids(raw)
+        return nil unless raw.is_a?(String)
+
+        parts = raw.split(",", -1).map(&:strip)
+        return nil unless parts.all? { |part| part.match?(/\A[1-9]\d{0,18}\z/) }
+
+        ids = parts.map(&:to_i).uniq
+        ids if ids.size.between?(1, MAX_IDS)
+      end
 
       def render_full_graph
         entities = MemoryEntity.all.includes(:active_memory_observations)
