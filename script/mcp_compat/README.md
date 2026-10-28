@@ -29,7 +29,7 @@ The SDK clients and servers run outside graph_mem's bundle:
 
 ```bash
 source "$HOME/.rvm/scripts/rvm"
-rvm gemset create mcp_compat && rvm use ruby-3.4.1@mcp_compat
+rvm gemset create mcp_compat && rvm use ruby-3.4.12@mcp_compat
 gem install mcp -v 1.8.1 && gem install mcp -v 1.8.2 && gem install faraday rack rackup webrick
 (cd script/mcp_compat/tsclient && npm ci)   # Node >= 20
 ```
@@ -47,8 +47,8 @@ overrides), and its committed `package-lock.json` pins every transitive dependen
 
 ```bash
 export RAILS_ENV=test OLLAMA_URL=http://127.0.0.1:9   # no real Ollama, ever
-W="$HOME/.rvm/wrappers/ruby-3.4.1@graph_mem"
-C="$HOME/.rvm/wrappers/ruby-3.4.1@mcp_compat"
+W="$HOME/.rvm/wrappers/ruby-3.4.12@graph_mem"
+C="$HOME/.rvm/wrappers/ruby-3.4.12@mcp_compat"
 R=script/mcp_compat/refservers/node_modules/@modelcontextprotocol
 
 # HTTP servers on loopback: graph_mem, Everything, and (optionally) the Ruby SDK
@@ -93,7 +93,7 @@ Results, tables and the remaining divergences from the reference: [`docs/protoco
 checkout with the graph_mem Ruby, and the `claude` CLI (2.1.296 or later) logged in:
 
 ```bash
-source "$HOME/.rvm/scripts/rvm" && rvm use ruby-3.4.1@graph_mem
+source "$HOME/.rvm/scripts/rvm" && rvm use ruby-3.4.12@graph_mem
 bundle exec ruby script/mcp_compat/claude_client_check.rb                 # both negotiation modes
 bundle exec ruby script/mcp_compat/claude_client_check.rb --only legacy --model haiku --budget 1
 ```

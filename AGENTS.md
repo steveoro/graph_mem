@@ -1,6 +1,6 @@
 # AGENTS.md
 
-GraphMem is a Rails 8.1 app (Ruby 3.4.1, MariaDB 11.8+) that serves a
+GraphMem is a Rails 8.1 app (Ruby 3.4.12, MariaDB 11.8+) that serves a
 graph-based agent memory over MCP, plus a REST API and an operator web UI.
 This file is the one set of rules for every coding agent in this repo (Claude
 Code reads it through `CLAUDE.md`'s `@AGENTS.md` import).
@@ -21,7 +21,7 @@ Without the skill: call `search` before deciding, and `graph_write` before the f
 ### Commands
 
 Ruby is pinned to its own RVM gemset (see "Ruby commands (RVM)" below), so every
-command runs as `source "$HOME/.rvm/scripts/rvm" && rvm use ruby-3.4.1@graph_mem && bundle exec <command>`.
+command runs as `source "$HOME/.rvm/scripts/rvm" && rvm use ruby-3.4.12@graph_mem && bundle exec <command>`.
 
 - Lint: `bundle exec rubocop` (autofix: `-a`)
 - All tests: `bundle exec rspec` (needs a real MariaDB 11.8+; specs use real instances, not doubles)
@@ -76,7 +76,7 @@ Never run `bundle`, `rails`, `rake`, `rspec`, `rubocop`, `gem` or a generator fr
 shell. Select the gemset first, in the same command:
 
 ```bash
-source "$HOME/.rvm/scripts/rvm" && rvm use ruby-3.4.1@graph_mem && bundle exec <command>
+source "$HOME/.rvm/scripts/rvm" && rvm use ruby-3.4.12@graph_mem && bundle exec <command>
 ```
 
 `source` is required: `rvm` is a shell function, absent from non-interactive shells.

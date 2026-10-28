@@ -8,7 +8,7 @@
 #
 # Env:
 #   STDIO_CMD  stdio server command (default: graph_mem's runner through its RVM gemset wrapper)
-#   RSDK_RUBY      Ruby with gems mcp + faraday (default: the ruby-3.4.1@mcp_compat RVM wrapper)
+#   RSDK_RUBY      Ruby with gems mcp + faraday (default: the ruby-3.4.12@mcp_compat RVM wrapper)
 #   RSDK_VERSIONS  Ruby SDK versions to run (default: "1.8.1 1.8.2")
 #   MCP_TOKEN  bearer token for the HTTP rows, if the server requires one
 # The stdio rows inherit RAILS_ENV/OLLAMA_URL; the defaults below keep them off real services.
@@ -17,8 +17,8 @@ set -uo pipefail
 URL="${1:?usage: clients.sh <mcp-url>}"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 export RAILS_ENV="${RAILS_ENV:-test}" OLLAMA_URL="${OLLAMA_URL:-http://127.0.0.1:9}"
-STDIO_CMD="${STDIO_CMD:-$HOME/.rvm/wrappers/ruby-3.4.1@graph_mem/bundle exec ruby bin/mcp_stdio_runner.rb}"
-RSDK_RUBY="${RSDK_RUBY:-$HOME/.rvm/wrappers/ruby-3.4.1@mcp_compat/ruby}"
+STDIO_CMD="${STDIO_CMD:-$HOME/.rvm/wrappers/ruby-3.4.12@graph_mem/bundle exec ruby bin/mcp_stdio_runner.rb}"
+RSDK_RUBY="${RSDK_RUBY:-$HOME/.rvm/wrappers/ruby-3.4.12@mcp_compat/ruby}"
 RSDK_VERSIONS="${RSDK_VERSIONS:-1.8.1 1.8.2}"
 FAILS=0
 ROWS=0

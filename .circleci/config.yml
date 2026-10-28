@@ -4,7 +4,7 @@ orbs:
   browser-tools: circleci/browser-tools@2.4.2
 
 ruby: &ruby
-  image: cimg/ruby:3.4.1
+  image: cimg/ruby:3.4.12
   environment:
     RAILS_ENV: test
     BUNDLE_JOBS: 2
@@ -47,7 +47,7 @@ jobs:
     docker:
       # System specs need Chrome, so only this job uses the -browsers image.
       - <<: *ruby
-        image: cimg/ruby:3.4.1-browsers
+        image: cimg/ruby:3.4.12-browsers
       - image: cimg/mariadb:11.8.6
         environment:
           MARIADB_ROOT_PASSWORD: Password123!

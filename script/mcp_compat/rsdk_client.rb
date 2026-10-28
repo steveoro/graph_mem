@@ -8,7 +8,7 @@
 #   ruby rsdk_client.rb http  legacy http://127.0.0.1:3999/mcp
 #
 # Run it with a Ruby that has `mcp` and `faraday` installed, NOT graph_mem's bundle, e.g.
-#   rvm use ruby-3.4.1@mcp_compat   (gem install mcp -v 1.8.1; gem install mcp -v 1.8.2; gem install faraday)
+#   rvm use ruby-3.4.12@mcp_compat   (gem install mcp -v 1.8.1; gem install mcp -v 1.8.2; gem install faraday)
 # Env: RSDK_VERSION (the `mcp` gem version to load), MCP_TOKEN (HTTP bearer),
 #      MCP_CLIENT (X-MCP-Client header, default mcp-compat-rsdk).
 # Prints one result line; exit 1 when connect or tools/list fails.
