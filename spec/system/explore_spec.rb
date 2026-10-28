@@ -43,6 +43,104 @@ RSpec.describe "Explore", type: :system do
       expect(csp_console_errors).to be_empty
     end
 
+    it "adds an observation from the panel, shows the toast, and undoes it" do
+      visit explore_path(entity_id: widget.id)
+      wait_for_nodes(3)
+      execute_script(explore_js("ctrl.select(#{widget.id.to_s.to_json})"))
+
+      within("turbo-frame#entity-panel") do
+        find("[data-testid='entity-panel-add-observation'] summary").click
+        fill_in "Text", with: "SynthWidget caches synthetic tiles."
+        click_button "Add"
+      end
+
+      expect(page).to have_css("#toasts .ui-toast--undo", text: "Observation added")
+      within("turbo-frame#entity-panel") { expect(page).to have_text("SynthWidget caches synthetic tiles.") }
+      expect(ChangeSet.sole.kind).to eq("explore.observation_add")
+
+      within("#toasts") { click_button "Undo" }
+      expect(page).to have_css("#toasts .ui-toast--notice", text: "Undone")
+      expect(page).to have_current_path(explore_path(entity_id: widget.id))
+      expect(MemoryObservation.where(content: "SynthWidget caches synthetic tiles.").pluck(:status)).not_to include("active")
+      expect(csp_console_errors).to be_empty
+    end
+
+    it "drops the Undo button once ten minutes have passed" do
+      visit explore_path(entity_id: widget.id)
+      wait_for_nodes(3)
+      execute_script(explore_js("ctrl.select(#{widget.id.to_s.to_json})"))
+      within("turbo-frame#entity-panel") { find("[data-testid='entity-panel-add-observation'] summary").click }
+      # The toast reads the clock when it appears: move the page's clock past the 10 minutes.
+      execute_script("const realNow = Date.now; Date.now = () => realNow() + 601000;")
+
+      within("turbo-frame#entity-panel") do
+        fill_in "Text", with: "SynthWidget renders late tiles."
+        click_button "Add"
+      end
+
+      expect(page).to have_css("#toasts [data-testid='toast-undo-later']", text: "Undo it later from Home › Recent activity.")
+      expect(page).to have_no_css("#toasts [data-testid='toast-undo-button']")
+    end
+
+    it "drops a node on another, adds a relation from the type picker, and the canvas shows it" do
+      record_fetches!
+      visit explore_path(scope: "full")
+      wait_for_nodes(3)
+
+      execute_script(explore_js("ctrl.dragDrop.showMenu(ctrl.cy.$id(#{router.id.to_s.to_json}), ctrl.cy.$id(#{alpha.id.to_s.to_json}))"))
+      expect(page).to have_css("[data-testid='explore-drop-menu']")
+      expect(page).to have_no_css("[data-testid='drop-merge']") # different types
+      find("[data-testid='drop-add-relation']").click
+
+      within("dialog[open] [data-testid='explore-relation-dialog']") do
+        expect(page).to have_text("Synth Router")
+        select "relates_to", from: "Relation type"
+        click_button "Add relation"
+      end
+
+      expect(page).to have_css("#toasts .ui-toast--undo", text: "Added 'Synth Router relates_to Alpha Service'.")
+      expect(page).to have_no_css("dialog[open]")
+      expect(MemoryRelation.where(from_entity_id: router.id, to_entity_id: alpha.id, relation_type: "relates_to")).to exist
+      page.document.synchronize do
+        edges = evaluate_script(explore_js("ctrl.cy.edges().length"))
+        raise Capybara::ExpectationNotMet, "edge not drawn yet" unless edges == 3
+      end
+      writes = recorded_fetches.grep(%r{\A(?!GET )\S+ /api/v1/|/data_exchange/(update_relation|delete_relation|delete_duplicate_relations)})
+      expect(writes).to be_empty
+      expect(recorded_fetches).to include("POST /explore/relations")
+      expect(csp_console_errors).to be_empty
+    end
+
+    it "merges from the context menu through the dialog, then undoes the merge" do
+      twin = MemoryEntity.create!(name: "SynthWidget Twin", entity_type: "Component")
+      MemoryObservation.create!(memory_entity: twin, content: "SynthWidget Twin is a synthetic duplicate.")
+      visit explore_path(scope: "full")
+      wait_for_nodes(4)
+
+      items = node_menu_items("SynthWidget Twin")
+      expect(items).to include("Edit in panel", "Merge into…", "Propose deletion")
+      expect(items).not_to include("Delete", "Delete duplicates")
+      find(".contextual-menu [data-testid='ctx-merge']").click
+
+      within("dialog[open]") do
+        fill_in "explore-merge-q", with: "SynthWidget"
+        click_button "Search"
+        click_link "SynthWidget"
+        expect(page).to have_css("[data-testid='explore-merge-dialog']", text: "Merge SynthWidget Twin (source, will be removed) into SynthWidget (survivor)")
+        expect(page).to have_css("[data-testid='explore-merge-observations']", text: "1 observation moves")
+      end
+      expect(csp_console_errors).to be_empty
+      within("dialog[open]") { click_button "Merge" }
+
+      expect(page).to have_css("#toasts .ui-toast--undo", text: "Merged 'SynthWidget Twin' into 'SynthWidget'.")
+      wait_for_nodes(3)
+      expect(MemoryEntity.exists?(twin.id)).to be(false)
+
+      within("#toasts") { click_button "Undo" }
+      expect(page).to have_css("#toasts .ui-toast--notice", text: "Undone")
+      expect(MemoryEntity.find(twin.id).memory_observations.count).to eq(1)
+    end
+
     it "filters by type locally and shows read items in the context menu" do
       visit explore_path(scope: "full")
       expect(page).to have_css("[data-explore-target='canvas'] canvas", wait: 10)
@@ -69,8 +167,21 @@ RSpec.describe "Explore", type: :system do
 
       items = node_menu_items("SynthWidget")
       expect(items).to include("Show in panel", "Toggle relations")
-      expect(items).not_to include("Edit in panel", "Merge into…", "Propose deletion")
+      expect(items).not_to include("Edit in panel", "Merge into…", "Propose deletion", "Remove relation")
       expect(evaluate_script(explore_js("ctrl.readOnlyValue"))).to be(true)
+      expect(evaluate_script(explore_js("ctrl.dragDrop"))).to be_nil
+      expect(page).to have_no_css("dialog[data-controller='explore-dialog']", visible: :all)
+
+      # Dragging only moves the node locally: no menu, no request.
+      execute_script(explore_js("(() => { const n = ctrl.cy.$id(#{widget.id.to_s.to_json}); n.position({ x: 5, y: 5 }); n.emit('free'); })()"))
+      expect(page).to have_no_css("[data-testid='explore-drop-menu']")
+
+      find("body").send_keys(:escape)
+      execute_script(explore_js("ctrl.select(#{widget.id.to_s.to_json})"))
+      within("turbo-frame#entity-panel") do
+        expect(page).to have_css("h2", text: "SynthWidget")
+        expect(page).to have_no_css("form, details, button")
+      end
       expect(csp_console_errors).to be_empty
     end
   end

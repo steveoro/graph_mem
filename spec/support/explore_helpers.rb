@@ -31,6 +31,32 @@ module ExploreHelpers
     end
   end
 
+  # Records every fetch() the page makes (method and URL) in window.__fetches, from the next
+  # navigation on. Injected through DevTools, so the page's CSP is untouched.
+  def record_fetches!
+    page.driver.browser.execute_cdp("Page.addScriptToEvaluateOnNewDocument", source: <<~'JS')
+      window.__fetches = [];
+      const original = window.fetch;
+      window.fetch = function (input, init) {
+        const url = typeof input === "string" ? input : (input && input.url) || String(input);
+        const method = ((init && init.method) || (input && input.method) || "GET").toUpperCase();
+        window.__fetches.push(method + " " + new URL(url, location.href).pathname);
+        return original.apply(this, arguments);
+      };
+    JS
+  end
+
+  # @return [Array<String>] "METHOD /path" for each fetch since the page loaded
+  def recorded_fetches = evaluate_script("window.__fetches || []")
+
+  # Waits for the canvas to show `count` nodes.
+  def wait_for_nodes(count)
+    page.document.synchronize do
+      shown = evaluate_script(explore_js("ctrl && ctrl.cy ? ctrl.cy.nodes().length : -1"))
+      raise Capybara::ExpectationNotMet, "canvas shows #{shown} nodes, not #{count}" unless shown == count
+    end
+  end
+
   # Right-clicks the node labelled `label`; returns the menu item texts.
   def node_menu_items(label)
     page.driver.browser.action.move_to_location(*settled_node_position(label)).context_click.perform

@@ -48,6 +48,11 @@ RSpec.describe "Content Security Policy in the browser", type: :system do
     visit explore_path
     expect(page).to have_css("[data-explore-target='canvas'] canvas", wait: 10)
     expect_no_csp_errors("Explore")
+
+    twin = MemoryEntity.create!(name: "SynthWidget Twin", entity_type: "Component")
+    execute_script("document.getElementById('explore-dialog').src = #{new_explore_merge_path(source_id: twin.id, target_id: widget.id).to_json}")
+    expect(page).to have_css("dialog[open] [data-testid='explore-merge-dialog']", wait: 10)
+    expect_no_csp_errors("Explore with the merge dialog open")
   end
 
   it "shows no CSP violations on the guest pages" do
