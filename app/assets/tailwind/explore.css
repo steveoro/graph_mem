@@ -75,6 +75,8 @@
 /* Explore's dialog (relation type picker, move card, merge dialog). */
 @layer components {
   .explore-dialog {
+    /* Tailwind's preflight zeroes the margin that centres a modal <dialog>. */
+    margin: auto;
     width: min(40rem, calc(100vw - 2rem));
     max-height: calc(100vh - 4rem);
     padding: 1.25rem;
@@ -91,6 +93,10 @@
   .explore-dialog__body {
     display: grid;
     gap: 0.75rem;
+  }
+
+  .explore-dialog__body > .ui-btn {
+    justify-self: start;
   }
 
   .explore-dialog__title {
