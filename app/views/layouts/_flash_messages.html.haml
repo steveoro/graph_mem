@@ -1,12 +1,18 @@
 -# :error and :alert share the alert styling — several controllers set :error.
 -# flash[:undo] ({ "uuid", "label" }) turns the notice into an Undo toast that doesn't time out (UI-5b).
+-# With "until" (Explore's edits, UI-4b) toast_controller.js drops the button when that time passes.
 - undo = flash[:undo].presence
+-# flash[:link] ({ "href", "label" }): one same-site link in the notice (Explore's Propose deletion).
+- link = flash[:link].presence
 - messages = { notice: flash[:notice].presence, alert: flash[:alert].presence || flash[:error].presence }
 - messages.each do |kind, message|
   - next if message.blank?
   - toast_kind = kind == :notice && undo ? "undo" : kind
-  .ui-toast{ class: "ui-toast--#{toast_kind}", data: { toast_target: "item", testid: "toast-#{toast_kind}" } }
+  - undo_until = toast_kind == "undo" ? (undo["until"] || undo[:until]) : nil
+  .ui-toast{ class: "ui-toast--#{toast_kind}", data: { toast_target: "item", testid: "toast-#{toast_kind}", undo_until: undo_until } }
     %p.ui-toast__text= message
+    - if kind == :notice && link && link["href"].to_s.start_with?("/") && !link["href"].to_s.start_with?("//")
+      = link_to link["label"], link["href"], class: "ui-toast__link", data: { turbo_frame: "_top", testid: "toast-link" }
     - if toast_kind == "undo"
       = button_to t("ui.changes.undo"), main_app.undo_change_path(undo["uuid"] || undo[:uuid]), method: :post,
         class: "ui-btn ui-toast__undo", form: { data: { turbo: false } }, data: { testid: "toast-undo-button" }

@@ -9,6 +9,10 @@
   explore_entity_id_value: @explore[:entity_id], explore_project_id_value: @explore[:project_id],
   explore_ids_value: @explore[:ids], explore_depth_value: @explore[:depth],
   explore_panel_url_value: entity_panel_path(id: "ENTITY_ID"),
+  explore_new_relation_url_value: (new_explore_relation_path(from_id: "FROM", to_id: "TO") if can_write?),
+  explore_new_move_url_value: (new_explore_move_path(node_id: "NODE", parent_id: "PARENT") if can_write?),
+  explore_new_merge_url_value: (new_explore_merge_path(source_id: "SOURCE", target_id: "TARGET") if can_write?),
+  explore_relation_url_value: (explore_relation_path(id: "RELATION") if can_write?),
   action: "graph:changed@document->explore#refresh" } }
   .explore-toolbar.ui-card{ role: "toolbar", "aria-label": t("explore.toolbar.label"), data: { testid: "explore-toolbar" } }
     .explore-toolbar__group
@@ -55,3 +59,4 @@
     .explore-canvas.ui-card{ style: "height: 70vh;", data: { explore_target: "canvas", testid: "explore-canvas" } }
     = turbo_frame_tag "entity-panel", class: "explore-panel", data: { explore_target: "panel", testid: "entity-panel" } do
       %p.search-panel__hint= t("explore.panel_hint")
+= render "explore/dialog_host"

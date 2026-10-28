@@ -107,6 +107,19 @@ Rails.application.routes.draw do
   get "entities/:id/panel", to: "entities#panel", as: :entity_panel
   # UI-4b: Explore replaced /graph; old links (scoped_entity_id=, ids=) keep working until §6.D-6.
   get "explore", to: "explore#show", as: :explore
+  # Explore's edits (operator only): HTML/Turbo forms, each in an explore.* change set.
+  namespace :explore do
+    resources :entities, only: [ :update ] do
+      post :propose_deletion, on: :member
+      resources :observations, only: [ :create ]
+    end
+    resources :observations, only: [ :update ] do
+      post :retire, on: :member
+    end
+    resources :relations, only: [ :new, :create, :destroy ]
+    resources :moves, only: [ :new, :create ]
+    resources :merges, only: [ :new, :create ]
+  end
   get "graph", to: redirect(status: 301) { |_params, request| "/explore#{"?#{request.query_string}" if request.query_string.present?}" }
   resources :project_scans, only: [ :create ]
   resources :project_scan_skills, only: [ :create, :update ]

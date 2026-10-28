@@ -71,3 +71,102 @@
     min-width: 0;
   }
 }
+
+/* Explore's dialog (relation type picker, move card, merge dialog). */
+@layer components {
+  .explore-dialog {
+    width: min(40rem, calc(100vw - 2rem));
+    max-height: calc(100vh - 4rem);
+    padding: 1.25rem;
+    border: 1px solid var(--color-ui-border);
+    border-radius: 0.75rem;
+    background: var(--color-ui-surface);
+    color: var(--color-ui-text);
+  }
+
+  .explore-dialog::backdrop {
+    background: rgb(15 23 42 / 0.45);
+  }
+
+  .explore-dialog__body {
+    display: grid;
+    gap: 0.75rem;
+  }
+
+  .explore-dialog__title {
+    font-size: 1.125rem;
+    font-weight: 600;
+  }
+
+  .explore-dialog__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    justify-content: flex-end;
+  }
+
+  .explore-dialog__warn {
+    padding: 0.5rem 0.75rem;
+    border-radius: 0.5rem;
+    background: var(--color-ui-warn-soft);
+    color: var(--color-ui-warn);
+  }
+
+  .explore-dialog__blocker {
+    padding: 0.5rem 0.75rem;
+    border-radius: 0.5rem;
+    background: var(--color-ui-danger-soft);
+    color: var(--color-ui-danger);
+  }
+
+  .explore-dialog__list {
+    display: grid;
+    gap: 0.25rem;
+    margin: 0;
+    padding-left: 1.25rem;
+    font-size: 0.875rem;
+  }
+}
+
+/* The entity panel's edit forms (operator only, UI-4b W5). */
+@layer components {
+  .entity-panel__edit summary {
+    cursor: pointer;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--color-ui-accent-strong);
+  }
+
+  .entity-panel__form {
+    display: grid;
+    gap: 0.375rem;
+    margin-top: 0.5rem;
+  }
+
+  .entity-panel__form-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .entity-panel__error {
+    padding: 0.375rem 0.5rem;
+    border-radius: 0.375rem;
+    background: var(--color-ui-danger-soft);
+    color: var(--color-ui-danger);
+    font-size: 0.875rem;
+  }
+
+  .entity-panel__relation,
+  .entity-panel__change {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.375rem;
+    align-items: center;
+  }
+
+  .entity-panel__inline-action {
+    padding: 0.125rem 0.5rem;
+    font-size: 0.75rem;
+  }
+}

@@ -127,6 +127,14 @@ class ChangeSet
       append!("redo_merges", *pairs) if pairs.any?
     end
 
+    # What a toast needs to offer Undo, read back from the stored row (nil uuid when nothing was
+    # written, so no set exists).
+    # @return [Hash] `{ change_set_uuid:, undoable:, not_undoable_reason: }`
+    def undo_handle
+      set = @id && ChangeSet.find_by(id: @id)
+      { change_set_uuid: set&.uuid, undoable: set ? set.undoable? : false, not_undoable_reason: set&.not_undoable_reason }
+    end
+
     # @return [Hash] the snapshot as stored ("v" plus the non-empty sections)
     def snapshot
       data = { "v" => ChangeSet::SNAPSHOT_VERSION }

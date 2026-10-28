@@ -1,16 +1,32 @@
 import { Controller } from "@hotwired/stimulus"
+import { Turbo } from "@hotwired/turbo-rails"
 import cytoscape from "cytoscape"
 
 import { GraphApiClient } from "graph/api_client"
 import { GRAPH_STYLES, LAYOUT_OPTIONS } from "graph/cytoscape_config"
 import { Tooltip } from "graph/tooltip"
 import { ContextMenuManager } from "graph/context_menu"
+import { DragDropManager } from "graph/drag_drop_manager"
+import { submitTurboForm } from "lib/turbo_form"
 
 const LAYOUTS = {
   cose: LAYOUT_OPTIONS,
   breadthfirst: { name: "breadthfirst", directed: true, padding: 30, spacingFactor: 1.2, animate: false },
   concentric: { name: "concentric", padding: 30, minNodeSpacing: 30, animate: false },
   grid: { name: "grid", padding: 30, avoidOverlap: true, animate: false }
+}
+
+// <turbo-stream action="graph_changed"><template>{"removed":[…],"changed":[…]}</template>: sent by
+// every Explore edit. The payload is read as text (never markup) and re-sent as `graph:changed`.
+Turbo.StreamActions.graph_changed = function () {
+  let detail = { removed: [], changed: [] }
+  try {
+    const parsed = JSON.parse(this.templateContent.textContent || "{}")
+    detail = { removed: Array.from(parsed.removed || [], String), changed: Array.from(parsed.changed || [], String) }
+  } catch (error) {
+    console.error("graph_changed: unreadable payload", error)
+  }
+  document.dispatchEvent(new CustomEvent("graph:changed", { detail }))
 }
 
 // Explore's canvas (UI-4b): owns the Cytoscape instance (`this.cy`, public: the system specs drive
@@ -25,16 +41,28 @@ export default class extends Controller {
   static targets = ["canvas", "panel", "status", "scope", "layout", "depth", "typeFilter", "relationFilter"]
   static values = {
     readOnly: Boolean, scope: { type: String, default: "root" }, entityId: Number, projectId: Number,
-    ids: String, depth: { type: Number, default: 1 }, panelUrl: String
+    ids: String, depth: { type: Number, default: 1 }, panelUrl: String,
+    // Operator only (absent for the guest): URL templates for the dialogs and Remove relation.
+    newRelationUrl: String, newMoveUrl: String, newMergeUrl: String, relationUrl: String
   }
 
   connect() {
     this.api = new GraphApiClient()
     this.tooltip = new Tooltip()
-    this.contextMenu = new ContextMenuManager(
-      { select: (id) => this.select(id), openNeighbourhood: (id) => this.openNeighbourhood(id) },
-      { readOnly: this.readOnlyValue }
-    )
+    this.contextMenu = new ContextMenuManager({
+      select: (id) => this.select(id),
+      openNeighbourhood: (id) => this.openNeighbourhood(id),
+      editInPanel: (id) => this.#openInPanel(id, "entity-panel-edit"),
+      proposeDeletion: (id) => this.#openInPanel(id, "entity-panel-propose-deletion"),
+      mergeInto: (id) => this.#openDialog(this.newMergeUrlValue, { SOURCE: id }),
+      removeRelation: (edge) => this.#removeRelation(edge)
+    }, { readOnly: this.readOnlyValue })
+    // Read-only (the guest): no drop menu, dragging only moves a node locally.
+    this.dragDrop = this.readOnlyValue ? null : new DragDropManager({
+      addRelation: (fromId, toId) => this.#openDialog(this.newRelationUrlValue, { FROM: fromId, TO: toId }),
+      move: (nodeId, parentId) => this.#openDialog(this.newMoveUrlValue, { NODE: nodeId, PARENT: parentId }),
+      merge: (sourceId, targetId) => this.#openDialog(this.newMergeUrlValue, { SOURCE: sourceId, TARGET: targetId })
+    })
     this.hideMenus = () => this.contextMenu.hide()
     document.addEventListener("click", this.hideMenus)
     this.#syncToolbar()
@@ -45,6 +73,7 @@ export default class extends Controller {
     document.removeEventListener("click", this.hideMenus)
     this.tooltip.hide()
     this.contextMenu.hide()
+    this.dragDrop?.hideMenu()
     this.cy?.destroy()
     this.cy = null
   }
@@ -164,6 +193,7 @@ export default class extends Controller {
     this.cy?.destroy()
     this.cy = cytoscape({ container: this.canvasTarget, elements: data.elements, style: GRAPH_STYLES, layout: { name: "preset" } })
     this.#bindEvents()
+    this.dragDrop?.initialize(this.cy, this.canvasTarget)
     this.#runLayout(this.cy.elements())
     this.applyFilters()
     this.#showTruncation(data)
@@ -197,6 +227,36 @@ export default class extends Controller {
     this.cy.on("cxttap", "node", (event) => this.contextMenu.showNodeMenu(event, this.cy))
     this.cy.on("cxttap", "edge", (event) => this.contextMenu.showEdgeMenu(event, this.cy))
     this.cy.on("tap", (event) => { if (event.target === this.cy) this.contextMenu.hide() })
+  }
+
+  // Opens the panel, then the given section of it (an edit form) once the frame has loaded.
+  #openInPanel(id, testid) {
+    if (!this.hasPanelTarget) return
+    this.panelTarget.addEventListener("turbo:frame-load", () => {
+      const section = this.panelTarget.querySelector(`[data-testid="${testid}"]`)
+      if (section) {
+        section.open = true
+        section.querySelector("input, textarea, select")?.focus()
+      }
+    }, { once: true })
+    this.select(id)
+  }
+
+  // Loads a server-rendered dialog (type picker, move card, merge dialog) into the dialog frame.
+  #openDialog(template, replacements) {
+    const frame = document.getElementById("explore-dialog")
+    if (!template || !frame) return
+    let url = template
+    if (!("TARGET" in replacements)) url = url.replace(/[?&]target_id=TARGET/, "")
+    Object.entries(replacements).forEach(([key, value]) => { url = url.replace(key, encodeURIComponent(String(value))) })
+    frame.src = url
+  }
+
+  #removeRelation(edge) {
+    if (!this.relationUrlValue || !edge.relation_id) return
+    const label = `${edge.from_entity_name || edge.source} ${edge.label} ${edge.to_entity_name || edge.target}`
+    submitTurboForm(this.relationUrlValue.replace("RELATION", encodeURIComponent(String(edge.relation_id))), "delete", {},
+      { confirm: `Remove the relation \u201c${label}\u201d? You can undo it from the toast.` })
   }
 
   #showTruncation(data) {

@@ -55,13 +55,8 @@ class CompactionReviewService
       summary = row ? "#{PAST_TENSE.fetch(action)} #{row.kind} suggestion" : "#{PAST_TENSE.fetch(action)} suggestions"
       ChangeSet.record(kind: "review.#{action}", summary: summary, subject: row && review_anchor(row)) do |context|
         result = yield
-        result.is_a?(Hash) ? result.merge(undo_handle(context)) : result
+        result.is_a?(Hash) ? result.merge(context.undo_handle) : result
       end
-    end
-
-    def undo_handle(context)
-      set = context.id && ChangeSet.find_by(id: context.id)
-      { change_set_uuid: set&.uuid, undoable: set ? set.undoable? : false, not_undoable_reason: set&.not_undoable_reason }
     end
 
     # Updates the row with `attrs` plus its change set and resolver, and notes the review fields
