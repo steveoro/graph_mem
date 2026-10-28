@@ -1297,14 +1297,35 @@ paths:
     get:
       operationId: getGraphData
       summary: Graph visualization data (Cytoscape format)
+      description: At most 2,000 entities per view (the lowest ids, the focus kept) and only the relations
+        among them; over the cap the body adds truncated and total.
       tags: [Graph Data]
       parameters:
+      - name: ids
+        in: query
+        required: false
+        description: 1 to 100 comma-separated entity ids; those entities and the relations among them
+        schema:
+          type: string
+      - name: project_id
+        in: query
+        required: false
+        description: A project root and its part_of subtree
+        schema:
+          type: integer
       - name: entity_id
         in: query
         required: false
         description: Show subgraph centered on this entity
         schema:
           type: integer
+      - name: depth
+        in: query
+        required: false
+        description: With entity_id, 1 (default) or 2 hops
+        schema:
+          type: integer
+          enum: [1, 2]
       - name: scoped_entity_id
         in: query
         required: false
@@ -1331,8 +1352,20 @@ paths:
                       type: object
                   options:
                     type: object
+                  truncated:
+                    type: boolean
+                    description: Present (true) only when the 2,000-entity cap applied
+                  total:
+                    type: integer
+                    description: Present only with truncated; the entities in the full view
         '404':
           description: Referenced entity not found
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/error_response"
+        '422':
+          description: Invalid ids, depth or project_id
           content:
             application/json:
               schema:
