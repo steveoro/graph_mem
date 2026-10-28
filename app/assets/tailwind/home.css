@@ -20,19 +20,36 @@
     flex: 1 1 auto;
   }
 
+  /* One column on small screens; from 1100 px: health across, then the activity list down the
+     right-hand column beside the counts, the digest, jobs and clients. */
   .home-grid {
     display: grid;
     gap: 1rem;
-    grid-template-columns: repeat(auto-fit, minmax(22rem, 1fr));
   }
 
-  .home-widget--health,
-  .home-widget--counts {
-    grid-column: 1 / -1;
+  @media (min-width: 1100px) {
+    .home-grid {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      grid-template-areas:
+        "health health health"
+        "counts counts activity"
+        "digest jobs activity"
+        "digest clients activity";
+      align-items: start;
+    }
+
+    .home-widget--health { grid-area: health; }
+    .home-widget--counts { grid-area: counts; }
+    .home-widget--clients { grid-area: clients; }
+    .home-widget--digest { grid-area: digest; }
+    .home-widget--jobs { grid-area: jobs; }
+    .home-widget--activity { grid-area: activity; }
   }
 
   .home-card {
     display: grid;
+    grid-template-columns: minmax(0, 1fr); /* lets long rows truncate instead of overflowing */
+    align-content: start;
     gap: 0.625rem;
     height: 100%;
     box-sizing: border-box;
@@ -70,13 +87,16 @@
   .home-health {
     display: grid;
     gap: 0.5rem;
-    grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr));
   }
 
   .home-pill {
     display: grid;
+    align-content: start;
     gap: 0.125rem;
-    padding: 0.5rem 0.75rem;
+    height: 100%;
+    box-sizing: border-box;
+    padding: 0.375rem 0.625rem;
     border: 1px solid var(--color-ui-border);
     border-left-width: 4px;
     border-radius: var(--radius-ui);
@@ -124,6 +144,7 @@
 
   .home-list {
     display: grid;
+    grid-template-columns: minmax(0, 1fr);
     gap: 0.375rem;
   }
 
@@ -131,19 +152,40 @@
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 0.5rem;
-    padding: 0.375rem 0;
+    column-gap: 0.5rem;
+    row-gap: 0.125rem;
+    padding: 0.25rem 0;
     border-bottom: 1px solid var(--color-ui-border);
     font-size: 0.875rem;
+  }
+
+  .home-list__item--stacked {
+    display: grid;
+    row-gap: 0;
+  }
+
+  .home-list__item--stacked .home-list__meta {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .home-list__undoable {
+    color: var(--color-ui-ok);
   }
 
   .home-list__item progress {
     flex: 1 1 100%;
   }
 
+  /* One line per row: the name shrinks (ellipsis), badges, meta and the button don't. */
   .home-list__main {
+    flex: 1 1 6rem;
+    min-width: 0;
+    overflow: hidden;
     font-weight: 600;
-    overflow-wrap: anywhere;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .home-list__meta {
@@ -152,7 +194,8 @@
   }
 
   .home-list__item .ui-btn {
-    margin-left: auto;
+    padding: 0.125rem 0.625rem;
+    font-size: 0.8125rem;
   }
 
   .home-badge--danger {

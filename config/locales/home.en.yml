@@ -73,6 +73,8 @@ en:
       title: "Recent activity"
       empty: "No changes recorded yet."
       undoable_until: "undoable until %{time}"
+      undoable: "undoable"
+      ago: "%{time} ago"
       undone: "undone"
       audit_log: "Audit log"
     clients:

@@ -130,7 +130,8 @@ RSpec.describe "Home", type: :request do
       doc = section_doc(:activity)
 
       row = doc.at_css("[data-testid='home-activity-row']")
-      expect(row.text).to include("graph.write", "wrote 4 observations to SynthWidget", "agent:synth-client", "undoable until")
+      expect(row.text).to include("graph.write", "agent:synth-client: wrote 4 observations to SynthWidget", "undoable")
+      expect(row["title"]).to include("undoable until")
       expect(doc.css("form, button")).to be_empty
       expect(doc.at_css("a")["href"]).to eq(operator_audit_logs_path)
     end
