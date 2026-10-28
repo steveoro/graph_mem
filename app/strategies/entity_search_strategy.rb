@@ -96,17 +96,14 @@ class EntitySearchStrategy
   # @param fields [Array<Symbol>] enabled columns (subset of FIELDS)
   # @return [ActiveRecord::Relation] Entities that might match
   def fetch_candidate_entities(tokens, fields = FIELDS)
-    conditions = []
-    params = []
-
-    tokens.each do |token|
-      like_token = "%#{token}%"
-      conditions << "(#{fields.map { |field| "LOWER(#{field}) LIKE ?" }.join(' OR ')})"
-      params += [ like_token ] * fields.size
+    table = MemoryEntity.arel_table
+    # LOWER(<field>) LIKE '%token%' for every token and enabled field, ORed; built as Arel nodes
+    # so no SQL text is interpolated.
+    conditions = tokens.flat_map do |token|
+      fields.map { |field| Arel::Nodes::NamedFunction.new("LOWER", [ table[field] ]).matches("%#{token}%") }
     end
 
-    where_clause = conditions.join(" OR ")
-    MemoryEntity.where(where_clause, *params)
+    MemoryEntity.where(conditions.reduce(:or))
   end
 
   # Score and rank entities based on token matches
