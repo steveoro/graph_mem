@@ -168,4 +168,6 @@ Rails.application.routes.draw do
 
   # Defines the root path route ("/")
   root "pages#home"
+  # UI-2b: Home's lazy widgets (operator only, status only), one Turbo Frame each.
+  get "home/:section", to: "pages#home_section", as: :home_section
 end

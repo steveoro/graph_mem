@@ -1,44 +1,20 @@
-.dashboard-page
-  %header.dashboard-header
-    %div
-      %h1.dashboard-header__title Operator Dashboard
-      %p.dashboard-header__subtitle
-        GraphMem knowledge graph — #{Rails.env} environment
-    %div.dashboard-header__meta
-      %span.dashboard-header__refreshed
-        Refreshed #{l(@refreshed_at, format: :short)}
+-# Home (UI-2b, ui-dashboard-plan.md §2.2): operator only and status only. Its one form is the
+-# quick search; every action lives on the page a widget links to. Each widget is a lazy Turbo
+-# Frame (PagesController#home_section), so a slow check never holds up the page.
+- content_for :title, t("home.title")
+- content_for :page_header, ui_page_header(t("home.title"), subtitle: t("home.subtitle"))
 
-  %section.dashboard-health-strip
-    - totals = @graph_stats[:totals]
-    = dashboard_stat_chip("Entities", totals[:entities])
-    = dashboard_stat_chip("Observations", totals[:observations])
-    = dashboard_stat_chip("Relations", totals[:relations])
-    = dashboard_stat_chip("Orphans", @graph_stats[:orphan_count])
-    = dashboard_stat_chip_link(t("operator.audit_logs.label"), totals[:audit_logs], operator_audit_logs_path, id: "chip-audit-logs")
+.home{ data: { controller: "quick-search", action: "keydown@window->quick-search#focus" } }
+  = form_with url: search_path, method: :get, class: "home-search", role: "search", data: { testid: "home-quick-search", turbo_frame: "_top" } do
+    %label.ui-label{ for: "home-search-q" }= t("home.search.label")
+    .home-search__row
+      = search_field_tag :q, nil, id: "home-search-q", class: "ui-input", placeholder: t("home.search.placeholder"),
+        autocomplete: "off", data: { quick_search_target: "input" }
+      = submit_tag t("home.search.submit"), class: "ui-btn ui-btn-primary", name: nil
 
-  %section.dashboard-actions-grid
-    .dashboard-card.dashboard-card--action
-      %h2.dashboard-card__title Data Search & Node Graph
-      %p.dashboard-card__summary
-        Search entities with text or vector strategies, then explore relationships in the interactive Cytoscape graph.
-      .dashboard-card__actions
-        = link_to "Search entities", search_path, class: "dashboard-btn dashboard-btn--primary", id: "btn-dashboard-search"
-        = link_to "Open graph explorer", graph_path, class: "dashboard-btn dashboard-btn--secondary", id: "btn-dashboard-graph"
-
-    .dashboard-card.dashboard-card--action
-      %h2.dashboard-card__title Maintenance
-      %p.dashboard-card__summary
-        Import and export graph data, clean up orphans and duplicate relations, and review import reports.
-      .dashboard-card__actions
-        = link_to "Open maintenance hub", maintenance_path, class: "dashboard-btn dashboard-btn--primary", id: "btn-dashboard-maintenance"
-
-  %section.dashboard-state-grid.dashboard-state-grid--2x2
-    = render "pages/dashboard/dream_state_compactor_card", compaction: @compaction, cursor_entity: @cursor_entity, schedules: @schedules, latest_reports: @latest_reports
-    = render "pages/dashboard/garbage_collector_card", latest_reports: @latest_reports, schedules: @schedules, operation: @snapshot.dig(:operations, :garbage_collection)
-    = render "pages/dashboard/embeddings_card", embeddings: @embeddings
-    = render "pages/dashboard/agent_contexts_card", agent_contexts: @agent_contexts
-    = render "pages/dashboard/project_scans_card", project_scans: @project_scans, scan_reviews: @scan_reviews
-    = render "pages/dashboard/project_scan_skill_companion_card", project_scan_skills: @project_scan_skills
-
-  %section.dashboard-details
-    = render "pages/dashboard/reports_details", latest_reports: @latest_reports, compaction: @compaction
+  .home-grid
+    - @sections.each do |section|
+      = turbo_frame_tag "home-#{section}", src: home_section_path(section), loading: :lazy,
+        class: "home-widget home-widget--#{section}", data: { testid: "home-frame-#{section}" } do
+        %section.ui-card.home-card
+          %p.home-card__loading{ "aria-live": "polite" }= t("home.loading")

@@ -1,0 +1,11 @@
+= turbo_frame_tag "home-#{section}" do
+  %section.ui-card.home-card{ "aria-labelledby": "home-counts-title" }
+    %h2#home-counts-title.home-card__title= t("home.counts.title")
+    %dl.home-counts{ data: { testid: "home-counts" } }
+      - %i[entities observations relations orphans].each do |key|
+        %div
+          %dt= t("home.counts.#{key}")
+          %dd= number_with_delimiter(data[key])
+      %div
+        %dt= t("home.counts.coverage")
+        %dd= data[:vector_enabled] ? "#{data[:coverage_percent]}%" : t("home.counts.no_vectors")

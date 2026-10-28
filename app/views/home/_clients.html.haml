@@ -1,0 +1,18 @@
+= turbo_frame_tag "home-#{section}" do
+  %section.ui-card.home-card{ "aria-labelledby": "home-clients-title" }
+    %h2#home-clients-title.home-card__title= t("home.clients.title")
+    - summary = data[:summary]
+    %p.home-card__lead= t("home.clients.summary", recent: summary[:recent_count], total: summary[:total], with_context: summary[:with_context_count])
+    - if data[:clients].empty?
+      %p.home-card__empty= t("home.clients.empty")
+    - else
+      %ul.home-list
+        - data[:clients].each do |client|
+          %li.home-list__item{ data: { testid: "home-client-row" } }
+            %span.home-list__main= client[:client_id]
+            %span.ui-badge= client[:activity_status]
+            %span.home-list__meta= client[:project] ? client[:project][:name] : t("home.clients.no_project")
+            - if client[:last_seen_at]
+              %span.home-list__meta= "#{time_ago_in_words(client[:last_seen_at])} ago"
+    .home-card__footer
+      = link_to t("home.clients.all"), maintenance_path(anchor: "mcp-clients"), data: { turbo_frame: "_top" }

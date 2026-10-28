@@ -1,5 +1,5 @@
 -# One group (ReviewDigest::Group): a decision on the digest, a line in the grouped lists.
-- dom = "group-#{Digest::SHA256.hexdigest(group.key).first(12)}"
+- dom = review_group_dom_id(group.key)
 - safe = ReviewRowClassifier::SAFE_BULK_KINDS.include?(group.kind) && group.high_confidence.positive?
 %article.ui-card.review-group{ id: dom, data: { review_keys_target: "item", testid: "review-group" } }
   %header.review-group__head

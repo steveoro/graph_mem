@@ -3,21 +3,21 @@
 class PagesController < ApplicationController
   allow_guest :home, :graph
 
+  # Home (UI-2b): operator only, status only. Guests go to Search. The widgets load lazily, one
+  # Turbo Frame each (home_section), so a slow check never holds up the page.
   def home
     redirect_to search_path and return if guest_signed_in?
 
-    @snapshot = MaintenanceDashboardSnapshot.call
-    @compaction = @snapshot[:compaction]
-    @graph_stats = @snapshot[:graph_stats]
-    @latest_reports = @snapshot[:latest_reports]
-    @schedules = @snapshot[:schedules]
-    @cursor_entity = @snapshot[:cursor_entity]
-    @embeddings = @snapshot[:embeddings]
-    @agent_contexts = @snapshot[:agent_contexts]
-    @project_scans = @snapshot.dig(:operations, :project_scans) || []
-    @project_scan_skills = @snapshot.dig(:operations, :project_scan_skills) || []
-    @scan_reviews = @snapshot[:scan_reviews] || { count: 0, items: [] }
-    @refreshed_at = @snapshot[:refreshed_at]
+    @sections = HomeSnapshot::SECTIONS
+  end
+
+  # GET /home/:section (Turbo Frame): one Home widget, from HomeSnapshot.section; 404 for an
+  # unknown section (checked here, after the role check, so a guest still gets 403).
+  def home_section
+    section = params.require(:section)
+    return head :not_found unless HomeSnapshot::SECTIONS.map(&:to_s).include?(section)
+
+    render partial: "home/#{section}", locals: { data: HomeSnapshot.section(section), section: section }
   end
 
   def graph

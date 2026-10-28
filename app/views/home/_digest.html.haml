@@ -1,0 +1,27 @@
+-# Review digest: the top groups needing attention and the inbox state. No approve/dismiss here:
+-# "Open" goes to the same group on /review.
+= turbo_frame_tag "home-#{section}" do
+  %section.ui-card.home-card{ "aria-labelledby": "home-digest-title" }
+    %h2#home-digest-title.home-card__title= t("home.digest.title")
+    %p.home-card__lead{ data: { testid: "home-digest-state" } }
+      - if data[:attention_count].zero?
+        = t("home.digest.inbox_zero")
+      - else
+        = t("home.digest.attention", count: data[:attention_count])
+      = " · #{t('home.digest.below', rows: data[:below][:rows])}"
+      = " · "
+      - if data[:last_policy_run_at]
+        = t("home.digest.last_policy_run", age: time_ago_in_words(data[:last_policy_run_at]), count: data[:last_policy_run_resolved])
+      - else
+        = t("home.digest.no_policy_run")
+    - if data[:groups].any?
+      %ul.home-list
+        - data[:groups].each do |group|
+          %li.home-list__item{ data: { testid: "home-digest-row" } }
+            %span.ui-badge= group.kind.humanize
+            %span.home-list__main= group.anchor_name || "##{group.anchor_id || '—'}"
+            %span.home-list__meta= t("home.digest.suggestions", count: group.count)
+            = link_to t("home.digest.open"), review_path(anchor: review_group_dom_id(group.key)), class: "ui-btn",
+              data: { turbo_frame: "_top", testid: "home-digest-open" }
+    .home-card__footer
+      = link_to t("home.digest.open_review"), review_path, data: { turbo_frame: "_top" }
