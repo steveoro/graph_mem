@@ -41,9 +41,10 @@ class HybridSearchStrategy
   #   already matched another channel — the window never injects unrelated entities on its own
   # @param temporal_only [Boolean] When true (the query is nothing but a temporal phrase), the temporal
   #   channel IS the base result set and text/vector channels are skipped
+  # @param text [Boolean] When false, skip the text channel (semantic-only ranking)
   # @return [Array<SearchResult>]
   def search(query, limit: 50, semantic: true, context_entity_ids: nil, scope_entity_ids: nil,
-             temporal_window: nil, temporal_only: false, perspective: nil)
+             temporal_window: nil, temporal_only: false, perspective: nil, text: true)
     @query = query.to_s.strip
 
     scoped_ids = scope_entity_ids || context_entity_ids
@@ -53,7 +54,7 @@ class HybridSearchStrategy
       vector_results = []
       observation_entity_ids = []
     else
-      text_results = @text_strategy.search(query, limit: limit * 2)
+      text_results = text ? @text_strategy.search(query, limit: limit * 2) : []
 
       vector_results = if semantic
         @vector_strategy.search(query, limit: limit * 2)

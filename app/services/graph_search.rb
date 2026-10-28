@@ -22,6 +22,10 @@ class GraphSearch
   # @param max_tokens [Integer, nil] estimated token budget for the page
   # @param perspective [String, nil] "world" or "experience"
   # @param context_scope [ProjectSubtree::Result, nil] the caller's active context (a boost, never a filter)
+  # @param semantic [Boolean] page only: false ranks without the vector channels (no embedding call)
+  # @param ambient_context [Boolean] page only: false ignores the "default" bucket's context when
+  #   `context_scope` is nil
+  # @param text [Boolean] page only: false skips the text channel (Semantic mode)
   # @return [Hash] the tool's response envelope
   def self.call(query:, context_scope:, **options)
     new(query: query, context_scope: context_scope, **options).call
@@ -30,7 +34,8 @@ class GraphSearch
   def initialize(query:, context_scope:, include: [], page: nil, per_page: nil, limit: nil,
                  search_in_name: true, search_in_type: true, search_in_aliases: true,
                  search_in_observations: true, occurred_after: nil, occurred_before: nil,
-                 as_of: nil, max_tokens: nil, perspective: nil, logger: Rails.logger)
+                 as_of: nil, max_tokens: nil, perspective: nil, logger: Rails.logger,
+                 semantic: true, ambient_context: true, text: true)
     @query = query
     @context_scope = context_scope
     @include = include
@@ -42,6 +47,8 @@ class GraphSearch
     @max_tokens = max_tokens
     @perspective = perspective
     @logger = logger
+    # Only non-default values are passed on, so the tool's calls stay exactly as before.
+    @retrieval_options = { semantic: semantic, ambient_context: ambient_context, text: text }.reject { |_key, value| value }
   end
 
   # @return [Hash]
@@ -63,7 +70,7 @@ class GraphSearch
 
     options = { page: page, per_page: per_page, temporal_window: temporal_window, max_tokens: max_tokens,
                 perspective: @perspective }
-    projections.any? ? subgraph_result(projections, **options) : Summary.call(@query, context_scope: @context_scope, **options)
+    projections.any? ? subgraph_result(projections, **options) : Summary.call(@query, context_scope: @context_scope, retrieval_options: @retrieval_options, **options)
   end
 
   private

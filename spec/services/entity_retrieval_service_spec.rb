@@ -98,4 +98,27 @@ RSpec.describe EntityRetrievalService do
       end
     end
   end
+
+  describe "ambient_context: false (the Search page)" do
+    let(:strategy) { instance_double(HybridSearchStrategy, search: []) }
+
+    before do
+      allow(HybridSearchStrategy).to receive(:new).and_return(strategy)
+      GraphMemContext.current_project_id = entity.id
+    end
+
+    it "boosts by the default bucket's context when none is passed (today's default)" do
+      payload = described_class.search("Retrieval")
+
+      expect(strategy).to have_received(:search).with("Retrieval", hash_including(context_entity_ids: [ entity.id ]))
+      expect(payload[:retrieval][:scope_entity_count]).to eq(1)
+    end
+
+    it "ignores the default bucket's context" do
+      payload = described_class.search("Retrieval", ambient_context: false)
+
+      expect(strategy).to have_received(:search).with("Retrieval", hash_including(context_entity_ids: nil, text: true))
+      expect(payload[:retrieval][:scope_entity_count]).to be_nil
+    end
+  end
 end

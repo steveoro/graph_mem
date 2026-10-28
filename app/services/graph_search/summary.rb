@@ -16,19 +16,22 @@ class GraphSearch
     # @param temporal_window [TemporalWindow, nil]
     # @param max_tokens [Integer, nil] validated budget
     # @param perspective [String, nil]
+    # @param retrieval_options [Hash] page-only EntityRetrievalService options (`semantic:`,
+    #   `ambient_context:`, `text:`); the tool passes none, so today's defaults apply
     # @return [Hash] `{ mode: "summary", results:, pagination:, retrieval: }`
-    def self.call(query, page:, per_page:, context_scope:, temporal_window: nil, max_tokens: nil, perspective: nil)
+    def self.call(query, page:, per_page:, context_scope:, temporal_window: nil, max_tokens: nil, perspective: nil,
+                  retrieval_options: {})
       offset = (page - 1) * per_page
       payload = EntityRetrievalService.search(
         query,
         limit: offset + per_page,
-        semantic: true,
         # The ambient context is a ranking boost only — passing it as
         # scope_entity_ids would hard-filter temporal-only queries.
         context_entity_ids: context_scope&.entity_ids,
         context_scope: context_scope,
         temporal_window: temporal_window,
-        perspective: perspective
+        perspective: perspective,
+        **{ semantic: true }.merge(retrieval_options)
       )
       page_results = payload[:results].map(&:to_h).drop(offset).first(per_page)
       retrieval = payload[:retrieval].merge(result_count: page_results.size)
