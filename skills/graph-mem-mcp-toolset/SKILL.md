@@ -37,6 +37,7 @@ reading the repository, not instead of it.
 - Before choosing a convention: version bump, changelog, docs or test style,
   naming, config location, release steps.
 - Before first editing a file or component this session: search by its path and name.
+- To narrow a search, pass `project_id` (a Project entity's id) or `entity_types`: they filter before ranking.
 - After a test, CI or verifier failure: search the error text.
 - When the user says "like last time", "as usual" or "the way we do it".
 - Turn each relevant rule into a checklist item. If a rule depends on a value you

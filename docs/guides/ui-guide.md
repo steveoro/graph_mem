@@ -1,6 +1,6 @@
 # GraphMem web UI guide
 
-A tour of the web UI for the **operator** (the graph's owner, full access) and the optional **read-only guest**, as of 1.58.0. It covers signing in, the app shell, each section, the guest account and the usual problems.
+A tour of the web UI for the **operator** (the graph's owner, full access) and the optional **read-only guest**, as of 1.60.0. It covers signing in, the app shell, each section, the guest account and the usual problems.
 
 The screenshots come from a test instance with synthetic data (`Alpha Service`, `SynthWidget`, `SynthGadget`). The image files are in [`docs/images/ui/`](../images/ui/).
 
@@ -92,9 +92,26 @@ The scheduling and the meaning of each counter are in [dream_state.md](../dream_
 
 ### Search
 
-Type a query and pick **Text** or **Vector**.
-- **Vector** needs a working embedding service. It shows "(unavailable)" when vectors are off.
-- Each result links to the entity in Explore.
+Search (`/search`, 1.60.0) runs the same search as the agents' MCP `search` tool, so for the same query and filters it lists the same entities in the same order. Every filter lives in the URL: a search can be bookmarked or shared, and Back works. Press `/` to jump to the query box.
+
+![Search with a type filter and the entity panel](../images/ui/search.png)
+
+- **Modes:**
+  - **Auto** (default): text and semantic ranking together, as agents search.
+  - **Text**: names, types and aliases only, with no call to the embedding service.
+  - **Semantic**: meaning only, from the embeddings. It's greyed out, with the reason, when vectors aren't available.
+  - **Exact**: the name, or one whole alias, equal to the query, by name.
+- **Filters** (chips and selects submit straight away):
+  - **Project**: that Project and its members.
+  - **Match in**: name, aliases, type and observations. Clearing a field stops the query matching it; at least one must stay on.
+  - **Types**: one or more entity types.
+  - **More filters**: perspective (world facts or work log), occurred after / before, as of, and whether snippets may show obsolete observations.
+  - Agents' active project context never changes this page's order; the Project filter is the way to narrow it.
+  - An invalid filter or date shows its message above the results.
+- **Results**, 20 a page with Previous / Next: name, type, the project it belongs to (or "global"), score and the fields that matched, relation count, and up to two observation snippets with the query's words highlighted (the description when no observation matches). **Open in Explore** opens the entity's neighbourhood.
+- **The entity panel**: click a name and its details open beside the list, read-only: aliases, description, observations by trust (10 at a time, with **Show obsolete**), and relations both ways grouped by type. Relations open their own panel. The operator also gets **Open in Review**, which searches Review & Fix for the entity.
+- **Show as graph** opens Explore with exactly this page's results and the relations among them ("From search"; **Back to Root** returns to the usual view).
+- The old `/search?q=…&strategy=text|vector` links still work (`vector` is Semantic).
 
 ### Explore
 
@@ -186,7 +203,7 @@ The guest account lets someone else browse the graph without being able to chang
 
 ### What a guest sees
 
-The guest gets **Search** and **Explore**, a **Read-only guest** badge, and **Sign out**. After sign-in a guest always lands on Search.
+The guest gets **Search** and **Explore**, a **Read-only guest** badge, and **Sign out**. After sign-in a guest always lands on Search. On Search the guest gets the same results, panels and **Show as graph** as the operator, without **Open in Review**.
 
 ![Guest shell](../images/ui/guest-search.png)
 
@@ -199,7 +216,7 @@ Every other page answers with **Operator only** (HTTP 403), including Review, Ma
 ![The 403 page a guest sees](../images/ui/guest-forbidden.png)
 
 **Guest limits:**
-- **Search rate:** up to 60 searches a minute per IP, page and API combined, and 300 a minute across all guests. After that, a "Too many searches" page or a `429` with `Retry-After`.
+- **Search rate:** up to 60 searches a minute per IP, page and API combined, and 300 a minute across all guests. After that, a "Too many searches" page or a `429` with `Retry-After`. The 300 is shared: one busy guest can use it up for every guest until the minute passes. Opening a result's panel or "Show as graph" doesn't count.
 - **API:** only the read endpoints that Search and Explore use. Every other `/api/v1` endpoint returns `403`. The list is in [mcp_access_control.md](../mcp_access_control.md#http-api-apiv1).
 - **No MCP:** `/mcp*` ignores browser sessions, so a guest cookie never grants MCP access.
 - **No project scoping:** a guest can read all graph content.
@@ -229,7 +246,7 @@ Turn **Guest access** off in Settings, or change or remove the guest password an
 | Production shows "Configuration required" (503) | The operator password is still `changeme`. Set `OPERATOR_PASSWORD` (or credentials `operator.password`) and restart. |
 | `guest` + password says "Invalid username or password" | No guest password is configured, the guest clashes with the operator, or Guest access is off. Check the `[guest access]` boot log line and the Settings toggle. |
 | A guest is signed out with "Guest access is disabled." | The toggle was turned off, or the guest password changed. |
-| A guest sees "Too many searches" | More than 60 searches a minute from that IP, or 300 across all guests. Wait a minute. |
+| A guest sees "Too many searches" | More than 60 searches a minute from that IP, or 300 across all guests (one shared budget, so another guest's searches count too). Wait a minute. |
 | A guest sees "Operator only" | Expected for every page except Search and Explore. |
 | Something on a page doesn't work and the browser console shows "Refused to …" | A Content Security Policy violation. Look for `[CSP] violation report` in the Rails log and report it: new pages must not use inline scripts or `on…=` attributes. |
 | The Review badge seems out of date | It's cached for 30 seconds. |

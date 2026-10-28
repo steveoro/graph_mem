@@ -13,7 +13,7 @@ module CspConsoleHelpers
   # violations raised while JavaScript boots reach the log before it's read.
   def wait_for_stimulus
     page.document.synchronize do
-      connected = page.evaluate_script(<<~JS)
+      connected = page.evaluate_script(<<~'JS')
         !!window.Stimulus && [...document.querySelectorAll("[data-controller]")].every((el) =>
           el.dataset.controller.split(/\s+/).filter(Boolean)
             .every((id) => window.Stimulus.getControllerForElementAndIdentifier(el, id)))

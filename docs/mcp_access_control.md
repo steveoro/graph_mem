@@ -261,7 +261,10 @@ The REST API is not anonymous. Every verb on every `/api/v1/*` endpoint requires
    full access (the token is the owner's machine credential). Guest searches
    (`/search`, `memory_entities/search`, `search/subgraph`, and `memory_entities/:id` when it gets a
    `query`) share a budget of 60 a minute per IP and 300 a minute across all guests (`429` with
-   `Retry-After` after that); requests with a valid bearer token aren't throttled.
+   `Retry-After` after that); requests with a valid bearer token aren't throttled. The 300 a minute
+   is one budget shared by every guest, so one busy guest can use it up for all of them until the
+   minute passes. The read-only entity panel (`/entities/:id/panel`) and `graph_data` (including
+   Search's "Show as graph", `?ids=`) don't count.
 
 `/mcp*` never reads browser sessions: an operator or guest cookie grants no MCP access.
 
