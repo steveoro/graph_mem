@@ -23,12 +23,9 @@ class MaintenanceDashboardSnapshot
     }
   end
 
-  private
-
-  def compaction_snapshot
-    CompactionRunner.status_snapshot
-  end
-
+  # Graph totals and the orphan count (also read on its own by HomeSnapshot#counts).
+  #
+  # @return [Hash] `{ totals: { entities:, observations:, relations:, audit_logs: }, orphan_count: }`
   def graph_stats
     {
       totals: {
@@ -39,6 +36,12 @@ class MaintenanceDashboardSnapshot
       },
       orphan_count: orphan_count
     }
+  end
+
+  private
+
+  def compaction_snapshot
+    CompactionRunner.status_snapshot
   end
 
   def orphan_count
