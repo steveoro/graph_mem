@@ -66,4 +66,16 @@ RSpec.describe TemporalSearchStrategy do
     expect(described_class.new.search(window, entity_ids: [])).to eq([])
     expect(described_class.new.search(window, entity_ids: nil)).to include(entity_a.id)
   end
+
+  describe "scope: (SearchFilter#entity_scope)" do
+    it "counts only entities in the scope, inside the query" do
+      3.times { |i| add_observation(entity_a, content: "a#{i}") }
+      add_observation(entity_b, content: "b")
+      add_observation(entity_c, content: "c")
+
+      ids = strategy.search(window, limit: 1, scope: MemoryEntity.where(id: [ entity_b.id, entity_c.id ]))
+
+      expect(ids).to eq([ entity_b.id ])
+    end
+  end
 end

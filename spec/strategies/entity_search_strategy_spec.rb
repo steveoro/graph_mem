@@ -412,4 +412,34 @@ RSpec.describe EntitySearchStrategy, type: :model do
       expect(EntitySearchStrategy::MIN_SCORE_THRESHOLD).to eq(1)
     end
   end
+
+  describe "fields: and scope: (SearchFilter)" do
+    let!(:alpha) { MemoryEntity.create!(name: "Alpha Service", entity_type: "Project") }
+    let!(:by_name) { MemoryEntity.create!(name: "SynthWidget", entity_type: "Component", project_id: alpha.id) }
+    let!(:by_type) { MemoryEntity.create!(name: "Gauge", entity_type: "SynthPart") }
+    let!(:by_alias) { MemoryEntity.create!(name: "Dial", entity_type: "Component", aliases: "synth dial") }
+
+    def ids(results) = results.map { |result| result.entity.id }
+
+    it "matches and scores only the enabled fields" do
+      expect(ids(strategy.search("synth"))).to contain_exactly(by_name.id, by_type.id, by_alias.id)
+      expect(ids(strategy.search("synth", fields: %i[name]))).to eq([ by_name.id ])
+      expect(ids(strategy.search("synth", fields: %i[entity_type aliases]))).to contain_exactly(by_type.id, by_alias.id)
+
+      aliases_only = strategy.search("synth", fields: %i[aliases]).sole
+      expect(aliases_only.matched_fields).to eq([ "aliases" ])
+      expect(aliases_only.score).to eq(described_class::FIELD_WEIGHTS[:aliases] * 1.5)
+    end
+
+    it "returns nothing when no field is enabled" do
+      expect(strategy.search("synth", fields: [])).to eq([])
+    end
+
+    it "keeps candidates inside the scope" do
+      scope = MemoryEntity.where(id: alpha.id).or(MemoryEntity.where(project_id: alpha.id))
+
+      expect(ids(strategy.search("synth", scope: scope))).to eq([ by_name.id ])
+      expect(ids(strategy.search("synth", scope: MemoryEntity.where(entity_type: "Component")))).to contain_exactly(by_name.id, by_alias.id)
+    end
+  end
 end

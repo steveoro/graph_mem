@@ -246,4 +246,45 @@ RSpec.describe SearchTool, type: :model do
       expect(TokenBudget.estimate(wrapped)).to be <= 300
     end
   end
+
+  # UI-3 F3: the filter arguments. The examples above are unchanged.
+  describe "project_id, entity_types and search_in_* in summary mode" do
+    let!(:alpha) { MemoryEntity.create!(name: "Alpha Service", entity_type: "Project") }
+    let!(:widget) { MemoryEntity.create!(name: "SynthWidget", entity_type: "Component", project_id: alpha.id) }
+    let!(:router) { MemoryEntity.create!(name: "Synth Router", entity_type: "Service", aliases: "router") }
+
+    def names(result) = result[:results].pluck(:name)
+
+    it "passes the filters to GraphSearch with the caller's context" do
+      allow(GraphSearch).to receive(:call).and_return(mode: "summary")
+
+      tool.call(query: "synth", project_id: alpha.id, entity_types: [ "Component" ], search_in_aliases: false)
+
+      expect(GraphSearch).to have_received(:call).with(
+        hash_including(query: "synth", project_id: alpha.id, entity_types: [ "Component" ], search_in_aliases: false,
+                       context_scope: nil)
+      )
+    end
+
+    it "narrows the ranked results" do
+      expect(names(tool.call(query: "synth"))).to contain_exactly("SynthWidget", "Synth Router")
+      expect(names(tool.call(query: "synth", project_id: alpha.id))).to eq([ "SynthWidget" ])
+      expect(names(tool.call(query: "synth", entity_types: [ "service" ]))).to eq([ "Synth Router" ])
+      expect(names(tool.call(query: "router", search_in_name: false))).to eq([ "Synth Router" ])
+      expect(names(tool.call(query: "router", search_in_aliases: false, search_in_name: false))).to eq([])
+    end
+
+    it "raises the filter validation errors" do
+      expect { tool.call(query: "synth", project_id: widget.id) }
+        .to raise_error(GraphMem::InvalidArgumentsError, "project_id must be the id of a Project entity.")
+      expect { tool.call(query: "synth", entity_types: [ " " ]) }
+        .to raise_error(GraphMem::InvalidArgumentsError, /entity_types must be a list/)
+      expect { tool.call(project_id: alpha.id) }
+        .to raise_error(GraphMem::InvalidArgumentsError, "project_id and entity_types require a query.")
+      expect {
+        tool.call(query: "synth", search_in_name: false, search_in_type: false, search_in_aliases: false,
+                  search_in_observations: false)
+      }.to raise_error(GraphMem::InvalidArgumentsError, /At least one search field/)
+    end
+  end
 end

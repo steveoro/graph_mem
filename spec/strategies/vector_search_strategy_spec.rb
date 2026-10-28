@@ -204,6 +204,13 @@ RSpec.describe VectorSearchStrategy do
 
         expect(results.map { |result| result.entity.id }).to eq([ identical.id ])
       end
+
+      it "searches only inside scope: (a WHERE on the exact scan) and keeps entity_type working" do
+        scope = MemoryEntity.where(entity_type: %w[Project Issue])
+
+        expect(strategy.search("semantic query", scope: scope).map { |result| result.entity.id }).to eq([ near.id ])
+        expect(strategy.search("semantic query", scope: scope, entity_type: "Task")).to eq([])
+      end
     end
 
     describe "#search_observations" do
@@ -223,6 +230,13 @@ RSpec.describe VectorSearchStrategy do
 
       it "returns active entity ids ordered by observation distance" do
         expect(strategy.search_observations("semantic query")).to eq([ close_entity.id, far_entity.id ])
+      end
+
+      it "keeps observations of entities inside scope: only" do
+        scope = MemoryEntity.where(entity_type: "Project")
+
+        expect(strategy.search_observations("semantic query", scope: scope)).to eq([ far_entity.id ])
+        expect(strategy.search_observations("semantic query", scope: MemoryEntity.where(id: obsolete_entity.id))).to eq([])
       end
     end
   end

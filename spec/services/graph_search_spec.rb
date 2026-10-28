@@ -251,6 +251,124 @@ RSpec.describe "GraphSearch" do
     end
   end
 
+  # UI-3 F4: project_id, entity_types and the search_in_* flags in both modes. Added after the
+  # gate; the examples above are unchanged.
+  describe "filters" do
+    let(:alpha_names) { MemoryEntity.where(project_id: alpha.id).or(MemoryEntity.where(id: alpha.id)).pluck(:name) }
+    let(:gadget_names) { MemoryEntity.where(project_id: gadget.id).or(MemoryEntity.where(id: gadget.id)).pluck(:name) }
+
+    def search(**args) = GraphSearch.call(context_scope: nil, **args)
+
+    # The vector stubs honour scope: as the real WHERE does.
+    before do
+      in_scope = ->(names, scope) { scope ? names.select { |name| scope.where(name: name).exists? } : names }
+      allow(vector).to receive(:search) do |query, limit: 20, scope: nil, **|
+        next [] if query.include?("zzqx")
+
+        in_scope.call(entity_vector_names, scope).first(limit)
+                .map { |name| VectorSearchStrategy::SearchResult.new(entity: by_name(name), distance: 0.3) }
+      end
+      allow(vector).to receive(:search_observations) do |query, limit: 50, perspective: nil, scope: nil, **|
+        next [] if query.include?("zzqx")
+
+        in_scope.call(observation_vector_names.fetch(perspective), scope).first(limit).map { |name| by_name(name).id }
+      end
+    end
+
+    it "gives explicit default flags the same output as omitted ones, in both modes" do
+      defaults = { search_in_name: true, search_in_type: true, search_in_aliases: true, search_in_observations: true,
+                   entity_types: [], project_id: nil }
+
+      expect(search(query: "synth", per_page: 25, **defaults)).to eq(search(query: "synth", per_page: 25))
+      expect(search(query: "sensor", include: %w[observations], **defaults)).to eq(search(query: "sensor", include: %w[observations]))
+    end
+
+    it "keeps a project's root and members only, and pages through the filtered ranking" do
+      all = search(query: "synth", project_id: alpha.id, per_page: 25)
+      page2 = search(query: "synth", project_id: alpha.id, page: 2, per_page: 5)
+
+      expect(names(all[:results])).to all(be_in(alpha_names))
+      expect(names(all[:results])).to include("SynthWidget", "Synth Gauge", "Calibration Guide", "Synth Part 01", "Synth Part 09")
+      expect(names(page2[:results])).to eq(names(all[:results])[5, 5])
+      expect(all[:retrieval][:filters]).to eq(project_id: alpha.id, entity_types: [], search_in: %w[name type aliases observations])
+    end
+
+    it "keeps the listed types only, alone and combined with a project" do
+      expect(names(search(query: "synth", entity_types: [ "service" ])[:results])).to eq([ "Synth Router" ])
+
+      combined = search(query: "synth", project_id: alpha.id, entity_types: [ "Component" ], per_page: 25)
+      expect(names(combined[:results])).to contain_exactly("SynthWidget", "Synth Gauge", "Synth Part 02", "Synth Part 04",
+                                                           "Synth Part 06", "Synth Part 08")
+    end
+
+    it "filters subgraph mode's candidates and reports the filter" do
+      result = search(query: "sensor", include: %w[observations], project_id: alpha.id)
+
+      expect(names(result[:entities])).to eq([ "Sensor Hub", "SynthWidget", "Alpha Service", "Calibration Guide" ])
+      expect(result[:pagination]).to include(total_entities: 4)
+      expect(result[:retrieval][:filters]).to include(project_id: alpha.id)
+    end
+
+    it "combines with perspective and an occurred-time window" do
+      experience = search(query: "synth", perspective: "experience", project_id: gadget.id, per_page: 25)
+      windowed = search(query: "synth", occurred_after: "2026-09-01", project_id: gadget.id, per_page: 25)
+
+      expect(names(experience[:results])).to all(be_in(gadget_names)).and include("SynthDial")
+      expect(names(windowed[:results])).to all(be_in(gadget_names))
+      expect(windowed[:retrieval]).to include(:temporal, :filters)
+    end
+
+    it "filters a temporal-only query and its fallback" do
+      temporal_only = search(query: "in October 2026", project_id: alpha.id)
+      fallback = search(query: "zzqx in October 2026", project_id: alpha.id)
+
+      expect(names(temporal_only[:results])).to eq([ "SynthWidget", "Synth Gauge", "Synth Part 03" ])
+      expect(names(fallback[:results])).to eq([ "SynthWidget", "Synth Gauge", "Synth Part 03" ])
+      expect(fallback[:retrieval][:temporal]).to include(fallback: "temporal_only")
+    end
+
+    it "packs the filtered page under max_tokens" do
+      full = search(query: "synth", project_id: alpha.id, per_page: 10)
+      packed = search(query: "synth", project_id: alpha.id, per_page: 10, max_tokens: 600)
+
+      expect(names(packed[:results])).to eq(names(full[:results]).first(packed[:results].size))
+      expect(packed[:retrieval][:token_budget]).to include(truncated: true, items_before: 10)
+    end
+
+    it "runs only the observation channel when only observations are matched" do
+      allow_any_instance_of(EntitySearchStrategy).to receive(:search).and_raise("text channel called")
+
+      result = search(query: "synth", search_in_name: false, search_in_type: false, search_in_aliases: false, per_page: 25)
+
+      expect(vector).not_to have_received(:search)
+      expect(result[:results].pluck(:matched_fields)).to all(eq([ "observation_semantic" ]))
+      expect(names(result[:results])).to contain_exactly("Relay Board", "Synth Gauge", "SynthDial", "Calibration Guide")
+    end
+
+    it "skips the observation channel when observations aren't matched" do
+      result = search(query: "synth", search_in_type: false, search_in_aliases: false, search_in_observations: false, per_page: 25)
+
+      expect(vector).not_to have_received(:search_observations)
+      expect(result[:results].flat_map { |row| row[:matched_fields] }.uniq).to contain_exactly("name", "semantic")
+      expect(result[:retrieval][:filters]).to include(search_in: [ "name" ])
+    end
+
+    it "refuses project_id or entity_types in catalog mode" do
+      [ { project_id: alpha.id }, { entity_types: [ "Component" ] } ].each do |args|
+        expect { search(query: nil, **args) }
+          .to raise_error(GraphMem::InvalidArgumentsError, "project_id and entity_types require a query.")
+      end
+      expect(search(query: nil, entity_types: [])[:mode]).to eq("catalog")
+    end
+
+    it "reports retrieval.filters only when a filter is set" do
+      expect(search(query: "synth")[:retrieval]).not_to have_key(:filters)
+      expect(search(query: "sensor", include: %w[observations])[:retrieval]).not_to have_key(:filters)
+      expect(search(query: "synth", entity_types: [ "Note" ])[:retrieval][:filters])
+        .to eq(project_id: nil, entity_types: [ "Note" ], search_in: %w[name type aliases observations])
+    end
+  end
+
   # Recorded from SearchTool#call at 8ef3c04, before GraphSearch existed.
   let(:recorded) do
     {
