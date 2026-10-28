@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - Errors reported to `Rails.error` (MCP internal errors, a failing Home widget) are logged.
+- Exact search finds an exact name even when more than 1,000 aliases match first.
 
 ## [1.60.0] - 2026-10-28
 

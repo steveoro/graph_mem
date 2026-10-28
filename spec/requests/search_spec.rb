@@ -94,6 +94,16 @@ RSpec.describe "Search page", type: :request do
     expect(response).to have_http_status(:ok)
   end
 
+  %w[0 -3 abc].each do |page|
+    it "renders page 1 for page=#{page}" do
+      get search_path, params: { q: "synth", page: page }
+
+      expect(response).to have_http_status(:ok)
+      expect(result_names.first).to eq(GraphSearch::Page.call({ "q" => "synth" }).rows.first.entity.name)
+      expect(html.at_css("[data-testid='search-prev']")).to be_nil
+    end
+  end
+
   it "shows no Next link on the last allowed page" do
     allow(GraphSearch).to receive(:call).and_return(results: Array.new(20) { |i| { entity_id: widget.id, relevance_score: 1.0 - (i / 100.0), matched_fields: [ "name" ] } })
 

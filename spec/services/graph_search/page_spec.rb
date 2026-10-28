@@ -131,6 +131,33 @@ RSpec.describe GraphSearch::Page do
       expect(queries.sole).not_to include("embedding")
     end
 
+    it "finds an exact name even when more than EXACT_SCAN_LIMIT alias candidates sort before it" do
+      now = Time.current
+      MemoryEntity.insert_all!(Array.new(described_class::EXACT_SCAN_LIMIT + 1) do |i|
+        { name: format("Aaa Synth %04d", i), entity_type: "Note", aliases: "SynthWidget helper", created_at: now, updated_at: now }
+      end)
+
+      result = described_class.call({ "q" => "SynthWidget", "mode" => "exact" })
+
+      expect(ids(result)).to eq([ widget.id ])
+      expect(result.rows.sole.matched_fields).to eq([ "name" ])
+    end
+
+    it "matches a backslash in an alias literally" do
+      slashed = MemoryEntity.create!(name: "Synth Slash", entity_type: "Note", aliases: 'a\\b')
+      MemoryEntity.create!(name: "Synth Plain", entity_type: "Note", aliases: "ab")
+      queries = []
+      callback = ->(*, payload) { queries << payload[:sql] if payload[:sql].include?("LIKE") }
+
+      result = ActiveSupport::Notifications.subscribed(callback, "sql.active_record") do
+        described_class.call({ "q" => 'a\\b', "mode" => "exact" })
+      end
+
+      expect(ids(result)).to eq([ slashed.id ])
+      # sanitize_sql_like doubles the backslash and quoting doubles both: four in the SQL (eight in %q).
+      expect(queries.sole).to include(%q(LIKE '%a\\\\\\\\b%'))
+    end
+
     it "keeps to the project and type filters" do
       expect(ids(described_class.call({ "q" => "SynthWidget", "mode" => "exact", "project_id" => gadget.id.to_s }))).to eq([])
       expect(ids(described_class.call({ "q" => "SynthWidget", "mode" => "exact", "types" => [ "Component" ] }))).to eq([ widget.id ])
