@@ -33,9 +33,16 @@ RSpec.describe HomeSnapshot do
 
       let(:ready) { true }
 
-      it "is red when it doesn't answer (the unroutable OLLAMA_URL)" do
-        expect(health.embedding_reachable?).to be(false)
+      it "is red when it doesn't answer" do
         expect(pill(:embeddings)).to include(status: :danger, value: "unreachable")
+      end
+
+      it "probes the service with one GET, false for an unroutable or non-HTTP URL" do
+        allow(described_class::Health).to receive(:embedding_reachable?).and_call_original
+
+        expect(described_class::Health.embedding_reachable?("http://127.0.0.1:9")).to be(false)
+        expect(described_class::Health.embedding_reachable?("ftp://127.0.0.1:9")).to be(false)
+        expect(described_class::Health.embedding_reachable?("")).to be(false)
       end
 
       it "is green when it answers and vector search is ready" do

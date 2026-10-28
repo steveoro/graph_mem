@@ -19,16 +19,13 @@ class HomeSnapshot
     BACKUP_STALE = 7.days
     QUEUE_LATENCY_WARN = 5.minutes
 
-    # @return [Array<Hash>] `{ key:, label:, status:, value:, href: }` per pill
-    def pills
-      %i[database embeddings summaries jobs backup scans mcp guest].map { |key| send(:"#{key}_pill") }
-    end
-
-    # Whether the embedding service answers HTTP at its base URL (no embedding is requested).
+    # Whether the embedding service answers HTTP at +url+ (no embedding is requested). The
+    # service boundary: specs stub it (spec/support/home_snapshot_helpers.rb).
     #
+    # @param url [String] the service's base URL
     # @return [Boolean]
-    def embedding_reachable?
-      uri = URI(EmbeddingService.config_snapshot[:url].to_s)
+    def self.embedding_reachable?(url = EmbeddingService.config_snapshot[:url])
+      uri = URI(url.to_s)
       return false unless uri.is_a?(URI::HTTP) && uri.host.present?
 
       Net::HTTP.start(uri.host, uri.port, use_ssl: uri.scheme == "https", open_timeout: PROBE_TIMEOUT, read_timeout: PROBE_TIMEOUT) do |http|
@@ -37,6 +34,16 @@ class HomeSnapshot
       true
     rescue StandardError
       false
+    end
+
+    # @return [Array<Hash>] `{ key:, label:, status:, value:, href: }` per pill
+    def pills
+      %i[database embeddings summaries jobs backup scans mcp guest].map { |key| send(:"#{key}_pill") }
+    end
+
+    # @return [Boolean] see {.embedding_reachable?}
+    def embedding_reachable?
+      self.class.embedding_reachable?
     end
 
     # @return [Hash] `{ failed:, latency: }` (seconds), or nil when the queue can't be read
