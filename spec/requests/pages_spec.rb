@@ -155,6 +155,38 @@ RSpec.describe "Home", type: :request do
       expect(text).to include("Entities", "Observations", "Relations", "Orphans", "Embedding coverage")
     end
 
+    it "shows a broken widget as unavailable in its own frame, and the others as usual" do
+      allow(HomeSnapshot).to receive(:section).and_call_original
+      allow(HomeSnapshot).to receive(:section).with(:digest).and_raise(ActiveRecord::StatementInvalid, "synthetic failure")
+      allow(Rails.error).to receive(:report)
+
+      doc = section_doc(:digest)
+
+      expect(doc.at_css("turbo-frame#home-digest [data-testid='home-unavailable-digest']").text).to include("Review digest: unavailable")
+      expect(Rails.error).to have_received(:report).with(an_instance_of(ActiveRecord::StatementInvalid), hash_including(handled: true))
+      expect(section_doc(:health).at_css("[data-testid='home-health']")).to be_present
+    end
+
+    it "escapes markup in entity names and change-set summaries" do
+      allow(AppSettings).to receive(:review_number).and_call_original
+      allow(AppSettings).to receive(:review_number).with(:review_attention_threshold).and_return(1)
+      marked = MemoryEntity.create!(name: "<b>Synth</b>Widget", entity_type: "Component")
+      other = MemoryEntity.create!(name: "<b>Synth</b>Gadget", entity_type: "Component") # either may anchor the group
+      CompactionReviewService.seed_report(report_type: "compaction_review", source: "test", items: [
+        { id: SecureRandom.uuid, kind: "relationship_proposal", from_entity_id: marked.id, to_entity_id: other.id,
+          relation_type: "depends_on", confidence_band: "high", score: 14 }
+      ])
+      ChangeSet.create!(uuid: SecureRandom.uuid, kind: "graph.write", actor: "agent:synth", summary: "<script>synth()</script> wrote 1 observation")
+
+      digest_row = section_doc(:digest).at_css("[data-testid='home-digest-row']")
+      activity_row = section_doc(:activity).at_css("[data-testid='home-activity-row']")
+
+      expect(digest_row.at_css("b")).to be_nil
+      expect(digest_row.text).to match(%r{<b>Synth</b>(Widget|Gadget)})
+      expect(activity_row.at_css("script")).to be_nil
+      expect(activity_row.text).to include("<script>synth()</script> wrote 1 observation")
+    end
+
     it "answers 404 for an unknown widget" do
       get home_section_path("bogus")
 

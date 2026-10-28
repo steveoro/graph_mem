@@ -83,6 +83,17 @@ en:
       empty: "No MCP client seen yet."
       no_project: "no project context"
       all: "All clients"
+    unavailable:
+      title: "%{widget}: unavailable"
+      body: "This widget couldn't be loaded; the error is in the log. The rest of Home is unaffected."
+      reload: "Reload Home"
+      widgets:
+        health: "Health"
+        counts: "Graph"
+        digest: "Review digest"
+        jobs: "Jobs"
+        activity: "Recent activity"
+        clients: "Active MCP clients"
     search:
       label: "Quick search"
       placeholder: "Search the graph (press / to focus)"

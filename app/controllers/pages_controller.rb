@@ -19,6 +19,11 @@ class PagesController < ApplicationController
     return head :not_found unless section
 
     render partial: "home/#{section}", locals: { data: HomeSnapshot.section(section), section: section }
+  rescue StandardError => e
+    # One broken source (a DB error in a snapshot) shows in its own widget, not as Turbo's blank
+    # "Content missing"; the other widgets are separate requests and render as usual.
+    Rails.error.report(e, handled: true, context: { home_section: section })
+    render partial: "home/unavailable", locals: { section: section }
   end
 
   def graph
