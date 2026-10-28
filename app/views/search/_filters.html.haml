@@ -1,0 +1,76 @@
+-# The Search form: one GET, every filter in the URL. Chips and mode radios submit on change
+-# (search_controller.js); without JavaScript the Search button does the same.
+- filters = search.filters
+- match = filters[:match] || GraphSearch::Page::MATCH_FLAGS.keys
+- more_open = [ filters[:perspective], filters[:occurred_after], filters[:occurred_before], filters[:as_of] ].any?(&:present?) || filters[:include_obsolete]
+= form_with url: search_path, method: :get, class: "search-form ui-card", role: "search",
+  data: { search_target: "form", turbo_frame: "_top", testid: "search-form" } do
+  %label.ui-label{ for: "search-q" }= t("search.form.label")
+  .search-form__row
+    = search_field_tag :q, search.query, id: "search-q", class: "ui-input", placeholder: t("search.form.placeholder"),
+      autocomplete: "off", autofocus: search.query.blank?, data: { search_target: "query" }
+    = submit_tag t("search.form.submit"), class: "ui-btn ui-btn-primary", name: nil
+
+  %fieldset.search-form__group
+    %legend.search-form__legend= t("search.form.mode")
+    .search-chips
+      - GraphSearch::Page::MODES.each do |mode|
+        - disabled = mode == "semantic" && !search.semantic_available
+        %label.search-chip{ class: ("search-chip--disabled" if disabled), title: (disabled ? t("search.form.semantic_unavailable") : t("search.form.mode_hints.#{mode}")) }
+          = radio_button_tag :mode, mode, search.mode == mode, disabled: disabled, class: "search-chip__input",
+            data: { action: "change->search#submit", testid: "search-mode-#{mode}" }
+          %span.search-chip__label= t("search.form.modes.#{mode}")
+    - unless search.semantic_available
+      %p.search-form__hint{ data: { testid: "search-semantic-unavailable" } }= t("search.form.semantic_unavailable")
+
+  .search-form__columns
+    .search-form__group
+      %label.search-form__legend{ for: "search-project" }= t("search.form.project")
+      = select_tag :project_id, options_for_select(GraphSearch::Page.project_options, filters[:project_id]&.to_i),
+        include_blank: t("search.form.any_project"), id: "search-project", class: "ui-input",
+        data: { action: "change->search#submit", testid: "search-project" }
+
+    %fieldset.search-form__group
+      %legend.search-form__legend= t("search.form.match")
+      -# Present even with every box cleared, so "no field" reaches the server (and is refused there).
+      = hidden_field_tag "match[]", "", id: nil
+      .search-chips
+        - GraphSearch::Page::MATCH_FLAGS.each_key do |field|
+          %label.search-chip
+            = check_box_tag "match[]", field, match.include?(field), id: "search-match-#{field}", class: "search-chip__input",
+              data: { action: "change->search#submit", testid: "search-match-#{field}" }
+            %span.search-chip__label= t("search.form.match_fields.#{field}")
+
+  %details.search-form__details{ open: filters[:types].any? }
+    %summary= "#{t('search.form.types')}: #{t('search.form.types_summary', count: filters[:types].size)}"
+    .search-chips{ data: { testid: "search-types" } }
+      - (GraphSearch::Page.type_options | filters[:types]).each_with_index do |type, index|
+        %label.search-chip
+          = check_box_tag "types[]", type, filters[:types].include?(type), id: "search-type-#{index}", class: "search-chip__input",
+            data: { action: "change->search#submit" }
+          %span.search-chip__label= type
+
+  %details.search-form__details{ open: more_open }
+    %summary= t("search.form.more")
+    .search-form__columns
+      .search-form__group
+        %label.search-form__legend{ for: "search-perspective" }= t("search.form.perspective")
+        = select_tag :perspective, options_for_select(MemoryObservation::PERSPECTIVES.map { |value| [ t("search.form.perspectives.#{value}"), value ] }, filters[:perspective]),
+          include_blank: t("search.form.any_perspective"), id: "search-perspective", class: "ui-input",
+          data: { action: "change->search#submit" }
+      .search-form__group
+        %label.search-form__legend{ for: "search-occurred-after" }= t("search.form.occurred_after")
+        = date_field_tag :occurred_after, filters[:occurred_after], id: "search-occurred-after", class: "ui-input"
+      .search-form__group
+        %label.search-form__legend{ for: "search-occurred-before" }= t("search.form.occurred_before")
+        = date_field_tag :occurred_before, filters[:occurred_before], id: "search-occurred-before", class: "ui-input"
+      .search-form__group
+        %label.search-form__legend{ for: "search-as-of" }= t("search.form.as_of")
+        = date_field_tag :as_of, filters[:as_of], id: "search-as-of", class: "ui-input"
+    %label.search-form__check
+      = check_box_tag :include_obsolete, "1", filters[:include_obsolete], id: "search-include-obsolete",
+        data: { action: "change->search#submit" }
+      = t("search.form.include_obsolete")
+
+  - if search.query.present?
+    = link_to t("search.form.clear"), search_path(q: search.query), class: "search-form__clear", data: { testid: "search-clear" }

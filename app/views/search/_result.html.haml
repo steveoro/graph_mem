@@ -1,0 +1,23 @@
+-# One Search result. The name opens the read-only panel in the "entity-panel" frame; the link
+-# has a real href, so it also works as a plain page (and in a new tab).
+- entity = row.entity
+%li.search-result{ id: "search-result-#{entity.id}", data: { testid: "search-result", entity_id: entity.id, search_target: "result" } }
+  .search-result__head
+    = link_to entity.name, entity_panel_path(entity), class: "search-result__name",
+      data: { turbo_frame: "entity-panel", action: "click->search#select", testid: "search-result-link" }
+    %span.ui-badge.search-result__type= entity.entity_type
+  %p.search-result__meta
+    %span.search-result__crumb{ data: { testid: "search-result-crumb" } }
+      = row.project_name || (entity.entity_type == NodeOperationsStrategy::PROJECT_ENTITY_TYPE ? entity.name : t("search.results.global"))
+    - if row.relevance_score
+      %span= t("search.results.score", score: row.relevance_score)
+    - if row.matched_fields.present?
+      %span= t("search.results.matched", fields: row.matched_fields.join(", "))
+    %span= t("search.results.relations", count: row.relation_count.to_i)
+  - if row.snippets.any?
+    %ul.search-result__snippets
+      = render partial: "search/snippet", collection: row.snippets, as: :observation, locals: { tokens: tokens }
+  - elsif entity.description.present?
+    %p.search-result__snippet= highlight_snippet(entity.description, tokens)
+  = link_to t("search.results.open_explore"), graph_path(scoped_entity_id: entity.id), class: "search-result__explore",
+    data: { turbo_frame: "_top" }
