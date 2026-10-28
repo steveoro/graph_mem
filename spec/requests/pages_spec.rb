@@ -53,7 +53,7 @@ RSpec.describe "Home", type: :request do
 
     it "colours the health strip green, amber and red from the snapshot, with the status in words" do
       allow(HomeSnapshot).to receive(:section).and_call_original
-      allow(HomeSnapshot).to receive(:section).with("health")
+      allow(HomeSnapshot).to receive(:section).with(:health)
                                               .and_return([ pill(:database, :ok), pill(:backup, :warn), pill(:embeddings, :danger), pill(:guest, :neutral) ])
 
       pills = section_doc(:health).css("[data-testid^='home-pill-']")

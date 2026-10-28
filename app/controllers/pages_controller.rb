@@ -14,8 +14,9 @@ class PagesController < ApplicationController
   # GET /home/:section (Turbo Frame): one Home widget, from HomeSnapshot.section; 404 for an
   # unknown section (checked here, after the role check, so a guest still gets 403).
   def home_section
-    section = params.require(:section)
-    return head :not_found unless HomeSnapshot::SECTIONS.map(&:to_s).include?(section)
+    # The section comes from the allowlist, never from the request, so the render path is fixed.
+    section = HomeSnapshot::SECTIONS.find { |name| name.to_s == params[:section] }
+    return head :not_found unless section
 
     render partial: "home/#{section}", locals: { data: HomeSnapshot.section(section), section: section }
   end
