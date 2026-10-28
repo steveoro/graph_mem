@@ -1,0 +1,4 @@
+- content_for :title, t("entity_panel.missing")
+= turbo_frame_tag "entity-panel" do
+  .ui-card.entity-panel{ data: { testid: "entity-panel-missing" } }
+    %p= t("entity_panel.missing")

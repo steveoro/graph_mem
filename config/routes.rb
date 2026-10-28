@@ -103,6 +103,8 @@ Rails.application.routes.draw do
   end
 
   get "search", to: "search#results"
+  # UI-3: the read-only entity panel (Search's side frame; operators and guests).
+  get "entities/:id/panel", to: "entities#panel", as: :entity_panel
   get "graph", to: "pages#graph"
   resources :project_scans, only: [ :create ]
   resources :project_scan_skills, only: [ :create, :update ]
