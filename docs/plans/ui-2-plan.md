@@ -1,5 +1,7 @@
 # UI-2 → graph_mem 1.58.3 + 1.59.0: editable MCP allowlists, `bin/up` LAN detection (UI-2a, 1.58.3), Home (UI-2b, 1.59.0)
 
+**✅ DONE (Oct 28):** UI-2a shipped in #133 as **1.58.3** and UI-2b in #134 as **1.59.0** (both merged and tagged). The #134 review's one follow-up (MCP errors never reach the log) is `ui-dashboard-plan.md` §6.F **F-1**.
+
 **Written 2026-10-27 (Europe/Rome)** for Claude, from `main` at `2cf8dad` (1.58.2 tagged, #131 and #132 merged).
 **Updated 2026-10-27 evening** with Steve's answers: Decision 3 (public ranges allowed with a token) and Decision 8
 (UI-2a ships as **1.58.3**) changed; Decisions 4 and 6 kept.
