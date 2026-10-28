@@ -42,12 +42,12 @@ The sidebar lists Home, Search and Explore at the top, then three groups (Review
 
 | Section | Item | What it is |
 |---|---|---|
-| — | **Home** | Operator dashboard: graph counts, compactor, garbage collector, embeddings, MCP clients, project scans |
+| — | **Home** | Status only: the health strip, graph counts, the review digest, jobs, recent changes, MCP clients, and the quick search |
 | — | **Search** | Text or vector search over entities |
 | — | **Explore** | The interactive graph (Cytoscape) |
 | Review & Fix | **Review queue** | Suggestions from compaction, scans and the stale-memory scan, grouped and ranked. The badge counts groups needing attention (refreshed every 30 s) |
 | Review & Fix | **Scan review** | The same page, project-scan suggestions only |
-| Projects & Data | **Maintenance** | Import, export and cleanup |
+| Projects & Data | **Maintenance** | Import, export and cleanup; the compactor, garbage collector and relation repair; project scans; the full MCP clients table |
 | System | **Embeddings** | Vector coverage, connection test, backfill, ANN indexes |
 | System | **Telemetry** | MCP tool volume, errors, latency |
 | System | **Audit log** | Change history for entities, observations and relations |
@@ -67,13 +67,28 @@ The bottom of the sidebar shows who is signed in, and the **Sign out** button.
 
 ### Home
 
-The dashboard shows the graph's size and the state of the background work. Most cards have their own buttons:
-- **Start / Resume** the compactor;
-- **Run now** for the garbage collector;
-- **Manage embeddings**;
-- **Start scan** for a project.
+![Home at 1440 px (synthetic data)](../images/ui/home.png)
 
-The scheduling and the meaning of each counter are in [dream_state.md](../dream_state.md) and [garbage_collector.md](../garbage_collector.md).
+Home shows the state of the graph and its services, and changes nothing: its only form is the
+**quick search** (press `/` to focus it). Each widget loads on its own, so a slow check (the
+embedding service) never holds up the rest, and each links to the page where you act on it.
+- **Health strip:** database; embeddings (service reachable, vector search ready); summaries (LLM
+  on or off); jobs (failed count, queue latency); last backup; scan mounts; MCP access mode
+  (including Settings › MCP access additions); guest access. Green means fine, amber means check
+  it, red means a problem, grey is a choice rather than a problem. Each pill also says it in words.
+- **Graph:** entities, observations, relations, orphans and embedding coverage.
+- **Review digest:** the top 5 groups needing attention, each with **Open** (the same group on
+  Review), and the inbox state with the last policy run. There's no approve or dismiss on Home.
+- **Jobs:** what's running (with live progress) and the last finished or failed jobs.
+- **Recent activity:** the last 15 change sets, and whether each can still be undone (undo
+  itself is on the page that owns the change, such as Review › Resolved).
+- **Active MCP clients:** a compact list; the full table is on Maintenance.
+
+The controls that used to be on Home are on **Maintenance** until Review › Generate and the
+Projects page arrive: **Start / Resume** and **Pause** for the compactor, **Run now** for the
+garbage collector, **Repair relation duplicates**, and the project-scan and guided-scan forms.
+The scheduling and the meaning of each counter are in [dream_state.md](../dream_state.md) and
+[garbage_collector.md](../garbage_collector.md).
 
 ### Search
 

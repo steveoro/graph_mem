@@ -489,7 +489,7 @@ GraphMem host (see [LAN sharing](#lan-sharing)).
 
 ### Operator dashboard
 
-Sign in at `/operator/login`, then open **Embeddings** from the home dashboard or go to `/operator/embeddings`. The page shows coverage, index status, resolved configuration (with source badges: AppSettings / ENV / Default), connection test, backfill/regenerate jobs, and add/drop ANN index actions.
+Sign in at `/operator/login`, then open **Embeddings** from the sidebar (or the Embeddings pill on Home) or go to `/operator/embeddings`. The page shows coverage, index status, resolved configuration (with source badges: AppSettings / ENV / Default), connection test, backfill/regenerate jobs, and add/drop ANN index actions.
 
 Embedding service settings live under **System Settings → Embeddings** (`/operator/settings?tab=embeddings`). Configuration resolves in this order:
 
