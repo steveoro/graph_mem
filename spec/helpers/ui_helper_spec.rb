@@ -31,7 +31,7 @@ RSpec.describe UiHelper, type: :helper do
       visit_path("/search")
 
       current = Nokogiri::HTML.fragment(helper.ui_nav_link("Search", "/search", testid: "nav-search")).at_css("a")
-      other = Nokogiri::HTML.fragment(helper.ui_nav_link("Explore", "/graph", testid: "nav-explore")).at_css("a")
+      other = Nokogiri::HTML.fragment(helper.ui_nav_link("Explore", "/explore", testid: "nav-explore")).at_css("a")
 
       expect(current["aria-current"]).to eq("page")
       expect(current["data-testid"]).to eq("nav-search")
@@ -49,7 +49,7 @@ RSpec.describe UiHelper, type: :helper do
     it "escapes the label and renders the icon and a positive badge" do
       visit_path("/")
 
-      html = helper.ui_nav_link("<b>SynthWidget</b>", "/graph", testid: "nav-explore", icon: :search, badge: 3)
+      html = helper.ui_nav_link("<b>SynthWidget</b>", "/explore", testid: "nav-explore", icon: :search, badge: 3)
 
       expect(html).to include("&lt;b&gt;SynthWidget&lt;/b&gt;")
       expect(html).to include("<svg")

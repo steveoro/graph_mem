@@ -1,0 +1,73 @@
+/* Explore (UI-4b): the toolbar, the canvas (~65%) and the entity panel beside it (~35%).
+   Imported by application.css. The canvas menus and tooltip keep their rules in graph.css. */
+@layer components {
+  .explore-page {
+    display: grid;
+    gap: 0.75rem;
+  }
+
+  .explore-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    align-items: end;
+  }
+
+  .explore-toolbar__group {
+    display: grid;
+    gap: 0.25rem;
+    min-width: 10rem;
+  }
+
+  .explore-toolbar__label {
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--color-ui-text-muted);
+  }
+
+  .explore-toolbar__actions {
+    display: flex;
+    gap: 0.5rem;
+    margin-left: auto;
+  }
+
+  .explore-status {
+    min-height: 1.25rem;
+    font-size: 0.875rem;
+    color: var(--color-ui-text-muted);
+  }
+
+  .explore-status--error {
+    color: var(--color-ui-danger);
+  }
+
+  .explore-layout {
+    display: grid;
+    gap: 1rem;
+    align-items: start;
+  }
+
+  .explore-canvas {
+    position: relative;
+    min-height: 24rem;
+    padding: 0;
+    overflow: hidden;
+  }
+
+  @media (min-width: 1100px) {
+    .explore-layout {
+      grid-template-columns: minmax(0, 65fr) minmax(0, 35fr);
+    }
+
+    .explore-panel {
+      position: sticky;
+      top: 1rem;
+      max-height: calc(100vh - 2rem);
+      overflow-y: auto;
+    }
+  }
+
+  .explore-panel {
+    min-width: 0;
+  }
+}

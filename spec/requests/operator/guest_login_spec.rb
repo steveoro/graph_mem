@@ -42,10 +42,10 @@ RSpec.describe "Guest sign-in", type: :request do
       expect(sidebar.at_css("#btn-operator-logout")).to be_present
     end
 
-    it "honours a stored return path only under /search or /graph" do
-      get graph_path
+    it "honours a stored return path only under /search or /explore" do
+      get explore_path(entity_id: 7)
       sign_in_guest
-      expect(response).to redirect_to(graph_path)
+      expect(response).to redirect_to(explore_path(entity_id: 7))
 
       delete operator_logout_path
       get maintenance_path

@@ -220,14 +220,11 @@ RSpec.describe "Home", type: :request do
     expect(response).to redirect_to(operator_login_path)
   end
 
-  describe "GET /graph" do
-    before { sign_in_operator }
+  it "has no /graph page any more (it redirects to Explore)" do
+    sign_in_operator
 
-    it "renders the graph explorer with Stimulus hooks" do
-      get graph_path
+    get "/graph"
 
-      expect(response).to have_http_status(:ok)
-      expect(response.body).to include('data-controller="graph"', 'data-graph-target="container"')
-    end
+    expect(response).to redirect_to("/explore")
   end
 end

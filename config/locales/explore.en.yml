@@ -1,0 +1,30 @@
+en:
+  explore:
+    title: "Explore"
+    subtitle: "The graph around an entity, a project or a search. Select a node to open its panel; double-click it to open its neighbourhood."
+    panel_hint: "Select a node to see its details here."
+    toolbar:
+      label: "Graph view"
+      scope: "Scope"
+      layout: "Layout"
+      depth: "Depth"
+      entity_type: "Entity type"
+      relation_type: "Relation type"
+      all_types: "All types"
+      all_relations: "All relations"
+      fit: "Fit"
+      search: "Search"
+    scopes:
+      root: "Root view (projects)"
+      full: "Full graph"
+      search: "From search"
+      entity: "Neighbourhood"
+      projects: "Projects"
+    layouts:
+      cose: "Force (cose)"
+      breadthfirst: "Tree (breadth-first)"
+      concentric: "Concentric"
+      grid: "Grid"
+    depths:
+      d1: "1 hop"
+      d2: "2 hops"

@@ -34,7 +34,7 @@ RSpec.describe "Entity panel", type: :request do
       expect(observations).to eq([ "High-trust fact", "Low-trust note" ])
       expect(html.css("[data-testid='entity-panel-relation']").map { |link| [ link.text, link["href"] ] })
         .to eq([ [ "Synth Router", entity_panel_path(router) ], [ "Synth Router", entity_panel_path(router) ] ])
-      expect(html.at_css("[data-testid='entity-panel-explore']")["href"]).to eq(graph_path(scoped_entity_id: widget.id))
+      expect(html.at_css("[data-testid='entity-panel-explore']")["href"]).to eq(explore_path(entity_id: widget.id))
       expect(html.css("form")).to be_empty
       expect(html.css("a").map { |link| link["href"] }).to all(satisfy { |href| !href.to_s.match?(%r{/edit|/operator/}) })
       expect(html.at_css("ui-sidebar, nav.ui-sidebar")).to be_nil # no layout inside a frame request

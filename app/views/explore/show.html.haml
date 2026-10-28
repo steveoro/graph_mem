@@ -1,0 +1,57 @@
+-# Explore (UI-4b, ui-4b-plan.md E2): the graph canvas, its toolbar and the entity panel, for the
+-# operator and the guest. The toolbar's options come from the server as HTML; the starting view
+-# reaches explore_controller.js as data values (no inline JSON, no inline script).
+- content_for :title, t("explore.title")
+- content_for :page_header, ui_page_header(t("explore.title"), subtitle: t("explore.subtitle"))
+
+.explore-page{ data: { controller: "explore", testid: "explore-page",
+  explore_read_only_value: (!can_write?).to_s, explore_scope_value: @explore[:scope],
+  explore_entity_id_value: @explore[:entity_id], explore_project_id_value: @explore[:project_id],
+  explore_ids_value: @explore[:ids], explore_depth_value: @explore[:depth],
+  explore_panel_url_value: entity_panel_path(id: "ENTITY_ID"),
+  action: "graph:changed@document->explore#refresh" } }
+  .explore-toolbar.ui-card{ role: "toolbar", "aria-label": t("explore.toolbar.label"), data: { testid: "explore-toolbar" } }
+    .explore-toolbar__group
+      %label.explore-toolbar__label{ for: "explore-scope" }= t("explore.toolbar.scope")
+      %select#explore-scope.ui-input{ data: { explore_target: "scope", action: "change->explore#changeScope", testid: "explore-scope" } }
+        %option{ value: "root" }= t("explore.scopes.root")
+        %option{ value: "full" }= t("explore.scopes.full")
+        %option{ value: "search", disabled: @explore[:ids].blank? }= t("explore.scopes.search")
+        %option{ value: "entity", disabled: @explore[:entity_id].blank? }= t("explore.scopes.entity")
+        - if @project_options.any?
+          %optgroup{ label: t("explore.scopes.projects") }
+            - @project_options.each do |name, id|
+              %option{ value: "project:#{id}" }= name
+    .explore-toolbar__group
+      %label.explore-toolbar__label{ for: "explore-layout" }= t("explore.toolbar.layout")
+      %select#explore-layout.ui-input{ data: { explore_target: "layout", action: "change->explore#changeLayout", testid: "explore-layout" } }
+        - %w[cose breadthfirst concentric grid].each do |layout|
+          %option{ value: layout }= t("explore.layouts.#{layout}")
+    .explore-toolbar__group
+      %label.explore-toolbar__label{ for: "explore-depth" }= t("explore.toolbar.depth")
+      %select#explore-depth.ui-input{ data: { explore_target: "depth", action: "change->explore#changeDepth", testid: "explore-depth" } }
+        - [ 1, 2 ].each do |depth|
+          %option{ value: depth, selected: depth == @explore[:depth] }= t("explore.depths.d#{depth}")
+    .explore-toolbar__group
+      %label.explore-toolbar__label{ for: "explore-type-filter" }= t("explore.toolbar.entity_type")
+      %select#explore-type-filter.ui-input{ data: { explore_target: "typeFilter", action: "change->explore#applyFilters", testid: "explore-type-filter" } }
+        %option{ value: "" }= t("explore.toolbar.all_types")
+        - @type_options.each do |type|
+          %option{ value: type }= type
+    .explore-toolbar__group
+      %label.explore-toolbar__label{ for: "explore-relation-filter" }= t("explore.toolbar.relation_type")
+      %select#explore-relation-filter.ui-input{ data: { explore_target: "relationFilter", action: "change->explore#applyFilters", testid: "explore-relation-filter" } }
+        %option{ value: "" }= t("explore.toolbar.all_relations")
+        - @relation_type_options.each do |type|
+          %option{ value: type }= type
+    .explore-toolbar__actions
+      %button.ui-btn{ type: "button", data: { action: "explore#fit", testid: "explore-fit" } }= t("explore.toolbar.fit")
+      = link_to t("explore.toolbar.search"), search_path, class: "ui-btn", data: { testid: "explore-search-link" }
+
+  %p.explore-status{ role: "status", "aria-live": "polite", data: { explore_target: "status", testid: "explore-status" } }
+
+  .explore-layout
+    -# Inline height: the canvas needs one even where the Tailwind build is absent (CI).
+    .explore-canvas.ui-card{ style: "height: 70vh;", data: { explore_target: "canvas", testid: "explore-canvas" } }
+    = turbo_frame_tag "entity-panel", class: "explore-panel", data: { explore_target: "panel", testid: "entity-panel" } do
+      %p.search-panel__hint= t("explore.panel_hint")

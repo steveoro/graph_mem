@@ -19,5 +19,5 @@
       = render partial: "search/snippet", collection: row.snippets, as: :observation, locals: { tokens: tokens }
   - elsif entity.description.present?
     %p.search-result__snippet= highlight_snippet(entity.description, tokens)
-  = link_to t("search.results.open_explore"), graph_path(scoped_entity_id: entity.id), class: "search-result__explore",
+  = link_to t("search.results.open_explore"), explore_path(entity_id: entity.id), class: "search-result__explore",
     data: { turbo_frame: "_top" }

@@ -18,7 +18,7 @@
     - if entity.description.present?
       %p.entity-panel__description= entity.description
     .entity-panel__actions
-      = link_to t("search.results.open_explore"), graph_path(scoped_entity_id: entity.id), class: "ui-btn",
+      = link_to t("search.results.open_explore"), explore_path(entity_id: entity.id), class: "ui-btn",
         data: { turbo_frame: "_top", testid: "entity-panel-explore" }
       - if can_write?
         = link_to t("entity_panel.open_review"), review_path(q: entity.name), class: "ui-btn",

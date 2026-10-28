@@ -105,7 +105,9 @@ Rails.application.routes.draw do
   get "search", to: "search#results"
   # UI-3: the read-only entity panel (Search's side frame; operators and guests).
   get "entities/:id/panel", to: "entities#panel", as: :entity_panel
-  get "graph", to: "pages#graph"
+  # UI-4b: Explore replaced /graph; old links (scoped_entity_id=, ids=) keep working until §6.D-6.
+  get "explore", to: "explore#show", as: :explore
+  get "graph", to: redirect(status: 301) { |_params, request| "/explore#{"?#{request.query_string}" if request.query_string.present?}" }
   resources :project_scans, only: [ :create ]
   resources :project_scan_skills, only: [ :create, :update ]
   get "maintenance", to: "maintenance#index"

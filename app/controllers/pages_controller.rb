@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 class PagesController < ApplicationController
-  allow_guest :home, :graph
+  allow_guest :home
 
   # Home (UI-2b): operator only, status only. Guests go to Search. The widgets load lazily, one
   # Turbo Frame each (home_section), so a slow check never holds up the page.
@@ -25,9 +25,5 @@ class PagesController < ApplicationController
     # GraphMem::ErrorLogSubscriber logs it (the card says the error is in the log).
     Rails.error.report(e, handled: true, context: { home_section: section })
     render partial: "home/unavailable", locals: { section: section }
-  end
-
-  def graph
-    @vector_available = EmbeddingService.vector_enabled?
   end
 end

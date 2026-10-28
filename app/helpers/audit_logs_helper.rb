@@ -39,7 +39,7 @@ module AuditLogsHelper
     label = "#{log.auditable_type}##{log.auditable_id}"
 
     if log.auditable_type == "MemoryEntity" && MemoryEntity.exists?(log.auditable_id)
-      link_to label, graph_path(scoped_entity_id: log.auditable_id), class: "audit-logs-table__record-link"
+      link_to label, explore_path(entity_id: log.auditable_id), class: "audit-logs-table__record-link"
     elsif log.auditable.present?
       safe_join([ label, tag.br, content_tag(:span, audit_log_auditable_name(log.auditable), class: "audit-logs-table__record-meta") ])
     else

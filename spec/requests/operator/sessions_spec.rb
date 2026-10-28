@@ -156,14 +156,14 @@ RSpec.describe "Operator sessions", type: :request do
   end
 
   it "redirects to the originally requested page after login" do
-    get graph_path
+    get explore_path
     expect(response).to redirect_to(operator_login_path)
 
     post operator_session_path, params: {
       username: OperatorAuthHelpers::TEST_OPERATOR_USERNAME,
       password: OperatorAuthHelpers::TEST_OPERATOR_PASSWORD
     }
-    expect(response).to redirect_to(graph_path)
+    expect(response).to redirect_to(explore_path)
   end
 
   describe "production with default (fallback) credentials" do

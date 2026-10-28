@@ -32,7 +32,7 @@
                 %td
                   - if client[:project]
                     = link_to "#{client[:project][:name]} (#{client[:project][:entity_type]})",
-                      graph_path(scoped_entity_id: client[:project][:id]),
+                      explore_path(project_id: client[:project][:id]),
                       class: "dashboard-link",
                       id: "link-agent-context-project-#{client[:client_id]}"
                   - else

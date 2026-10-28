@@ -66,9 +66,9 @@ RSpec.describe "POST /changes/:uuid/undo", type: :request do
     it "redirects back with a flash for an HTML request" do
       uuid = edit_set
 
-      post undo_change_path(uuid), headers: { "HTTP_REFERER" => graph_path }
+      post undo_change_path(uuid), headers: { "HTTP_REFERER" => explore_path(entity_id: 1) }
 
-      expect(response).to redirect_to(graph_path)
+      expect(response).to redirect_to(explore_path(entity_id: 1))
       expect(flash[:notice]).to start_with("Undone: ")
     end
 
