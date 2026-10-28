@@ -2,188 +2,196 @@
 
 require "rails_helper"
 
-RSpec.describe "Operator dashboard pages", type: :request do
-  before { sign_in_operator }
+# Home (UI-2b, ui-dashboard-plan.md §2.2): operator only, status only, widgets in lazy Turbo
+# Frames, and its only form is the quick search. Synthetic data only.
+RSpec.describe "Home", type: :request do
+  include ReviewHelper
 
-  after do
-    CompactionRun.delete_all
-    AgentContext.delete_all
+  let(:widget) { MemoryEntity.create!(name: "SynthWidget", entity_type: "Component") }
+  let(:beta) { MemoryEntity.create!(name: "Beta Service", entity_type: "Component") }
+
+  def section_doc(section)
+    get home_section_path(section)
+    expect(response).to have_http_status(:ok), section.to_s
+    Nokogiri::HTML(response.body)
   end
 
-  describe "GET /" do
-    it "renders the operator dashboard" do
+  def pill(key, status)
+    { key: key, label: key.to_s.humanize, status: status, value: "synthetic #{status}", href: "/#{key}" }
+  end
+
+  context "as the operator" do
+    before { sign_in_operator }
+
+    it "renders the quick search and one lazy frame per widget" do
       get root_path
 
       expect(response).to have_http_status(:ok)
-      expect(response.body).to include("Operator Dashboard")
-      expect(response.body).to include("Dream State / Compactor Run")
-      expect(response.body).not_to include(">Compactor Run<")
-      expect(response.body).to include("Garbage Collector")
-      expect(response.body).to include('id="btn-dashboard-graph"')
-      expect(response.body).to include('id="btn-dream-state-resume"')
-      expect(response.body).to include('id="btn-dream-state-refresh"')
-      expect(response.body).to include('id="btn-compaction-review"')
-      expect(response.body).to include("Review suggestions")
+      main = Nokogiri::HTML(response.body).at_css("main")
+      expect(main.at_css("h1").text).to eq("Home")
+      frames = main.css("turbo-frame")
+      expect(frames.map { |frame| frame["id"] }).to eq(HomeSnapshot::SECTIONS.map { |section| "home-#{section}" })
+      expect(frames.map { |frame| frame["src"] }).to eq(HomeSnapshot::SECTIONS.map { |section| home_section_path(section) })
+      expect(frames.map { |frame| frame["loading"] }).to all(eq("lazy"))
       sidebar = Nokogiri::HTML(response.body).at_css("nav.ui-sidebar")
-      %w[nav-search nav-maintenance nav-telemetry nav-settings].each do |testid|
-        expect(sidebar.at_css("a[data-testid='#{testid}']")).to be_present
-      end
       expect(sidebar.css("a[aria-current='page']").map { |link| link["data-testid"] }).to eq([ "nav-home" ])
     end
 
-    it "links the audit logs stat chip to the audit log browse page" do
+    it "has no form but the quick search, on the page or in any widget" do
       get root_path
 
-      expect(response.body).to include('id="chip-audit-logs"')
-      expect(response.body).to include(operator_audit_logs_path)
+      forms = Nokogiri::HTML(response.body).css("main form")
+      expect(forms.size).to eq(1)
+      expect(forms.first["action"]).to eq(search_path)
+      expect(forms.first["method"]).to eq("get")
+      expect(forms.first.css("input[name]").map { |input| input["name"] }).to eq([ "q" ])
+
+      HomeSnapshot::SECTIONS.each do |section|
+        expect(section_doc(section).css("form, button")).to be_empty, section.to_s
+      end
     end
 
-    it "includes the embeddings dashboard card" do
-      get root_path
+    it "colours the health strip green, amber and red from the snapshot, with the status in words" do
+      allow(HomeSnapshot).to receive(:section).and_call_original
+      allow(HomeSnapshot).to receive(:section).with("health")
+                                              .and_return([ pill(:database, :ok), pill(:backup, :warn), pill(:embeddings, :danger), pill(:guest, :neutral) ])
 
-      expect(response.body).to include('id="btn-dashboard-embeddings"')
-      expect(response.body).to include(operator_embeddings_path)
+      pills = section_doc(:health).css("[data-testid^='home-pill-']")
+
+      expect(pills.map { |link| [ link["data-testid"], link["class"], link["href"] ] }).to eq([
+        [ "home-pill-database", "home-pill home-pill--ok", "/database" ],
+        [ "home-pill-backup", "home-pill home-pill--warn", "/backup" ],
+        [ "home-pill-embeddings", "home-pill home-pill--danger", "/embeddings" ],
+        [ "home-pill-guest", "home-pill home-pill--neutral", "/guest" ]
+      ])
+      expect(pills.map { |link| link.at_css(".home-pill__status").text }).to eq(%w[OK Check Problem Info])
+      expect(pills.map { |link| link["data-turbo-frame"] }).to all(eq("_top"))
     end
 
-    it "includes the MCP clients and project context card" do
-      project = MemoryEntity.create!(name: "AdminHub", entity_type: "Project")
-      AgentContext.create!(
-        client_id: "cursor-test",
-        current_project: project,
-        last_seen_at: 1.minute.ago,
-        last_tool_name: "set_context"
-      )
+    it "builds the real strip with the embedding service unreachable" do
+      pills = Dir.mktmpdir("home_backups") do |dir|
+        AppSettings.backup_folder_path = dir # an empty backup folder, never the repo's db/backup
+        section_doc(:health).css("[data-testid^='home-pill-']")
+      end
 
-      get root_path
-
-      expect(response.body).to include('data-testid="dashboard-agent-contexts-card"')
-      expect(response.body).to include("MCP Clients &amp; Project Context")
-      expect(response.body).to include("cursor-test")
-      expect(response.body).to include("AdminHub")
-      expect(response.body).to include("set_context")
+      expect(pills.map { |link| link["data-testid"].delete_prefix("home-pill-") }).to eq(%w[database embeddings summaries jobs backup scans mcp guest])
+      embeddings = pills.find { |link| link["data-testid"] == "home-pill-embeddings" }
+      expect(embeddings["data-status"]).to eq("danger")
+      expect(embeddings.text).to include("unreachable")
+      mcp = pills.find { |link| link["data-testid"] == "home-pill-mcp" }
+      expect(mcp["href"]).to eq(operator_settings_path(tab: "mcp_access"))
+      expect(mcp.text).to include(GraphMem::OfficialMcp.access_policy.describe)
     end
 
-    it "includes the project scans card with recent scans" do
-      project = MemoryEntity.create!(name: "graph-mem", entity_type: "Project")
-      OperationProgress.create!(
-        operation_type: "project_scan",
-        operation_id: SecureRandom.uuid,
-        status: "completed",
-        total_count: 5,
-        current_count: 5,
-        percentage: 100.0,
-        phase: "completed",
-        details: { "project_name" => "graph-mem", "mode" => "initial", "project_entity_id" => project.id, "fallback" => false }
-      )
+    it "links each digest row to its group on /review" do
+      allow(AppSettings).to receive(:review_number).and_call_original
+      allow(AppSettings).to receive(:review_number).with(:review_attention_threshold).and_return(1)
+      CompactionReviewService.seed_report(report_type: "compaction_review", source: "test", items: [
+        { id: SecureRandom.uuid, kind: "relationship_proposal", from_entity_id: widget.id, to_entity_id: beta.id,
+          relation_type: "depends_on", confidence_band: "high", score: 14 }
+      ])
+      group_key = MaintenanceReportRow.active.sole.group_key
 
-      get root_path
+      doc = section_doc(:digest)
 
-      expect(response.body).to include('data-testid="dashboard-project-scans-card"')
-      expect(response.body).to include('data-testid="dashboard-project-scan-trigger"')
-      expect(response.body).to include(project_scans_path)
-      expect(response.body).to include("Project Scans")
-      expect(response.body).to include("graph-mem")
-      expect(response.body).to include("Completed")
-      expect(response.body).to include("initial")
-      expect(response.body).to include(review_path(view: "scan"))
+      rows = doc.css("[data-testid='home-digest-row']")
+      expect(rows.size).to eq(1)
+      expect(rows.first.text).to include("Relationship proposal", "1 suggestion")
+      anchor = review_group_dom_id(group_key)
+      expect(rows.first.at_css("a[data-testid='home-digest-open']")["href"]).to eq(review_path(anchor: anchor))
+      expect(doc.at_css("[data-testid='home-digest-state']").text).to include("1 group needs attention")
+
+      get review_path
+      expect(Nokogiri::HTML(response.body).at_css("##{anchor}")).to be_present
     end
 
-    it "wires active project scan rows for live progress updates" do
-      OperationProgress.create!(
-        operation_type: "project_scan",
-        operation_id: SecureRandom.uuid,
-        status: "running",
-        total_count: 5,
-        current_count: 1,
-        percentage: 20.0,
-        phase: "discovering_files",
-        message: "Discovering project files",
-        details: { "project_name" => "graph-mem", "mode" => "initial" }
-      )
-
-      get root_path
-
-      expect(response.body).to include('data-controller="operation-progress"')
-      expect(response.body).to include('data-progress-status')
-      expect(response.body).to include('data-progress-phase')
-      expect(response.body).to include('data-progress-percentage')
+    it "says inbox zero when nothing needs attention" do
+      expect(section_doc(:digest).at_css("[data-testid='home-digest-state']").text).to include("Inbox zero ✓", "no policy run yet")
     end
 
-    it "shows pending scan reviews with approve and dismiss actions" do
-      entity = MemoryEntity.create!(name: "StaleTask", entity_type: "Task")
-      report = MaintenanceReport.create!(report_type: "scan_review", data: { "source" => "test" })
-      row = MaintenanceReportRow.create!(
-        maintenance_report: report,
-        report_type: "scan_review",
-        row_uuid: "scan-review-dashboard-1",
-        kind: "delete_entity",
-        status: "active",
-        signature: CompactionReviewService.signature_for("delete_entity", { entity_id: entity.id }),
-        payload: { "entity_id" => entity.id, "reason" => "not found in project scan" }
-      )
+    it "lists running and recent jobs, live-wired, and links to the controls" do
+      running = OperationProgress.start!(operation_type: "garbage_collection", total_count: 4, phase: "orphans")
+      OperationProgress.create!(operation_type: "project_scan", operation_id: SecureRandom.uuid, status: "failed",
+                                total_count: 1, current_count: 0, percentage: 0, finished_at: 2.minutes.ago, error_message: "synthetic failure")
 
-      get root_path
+      doc = section_doc(:jobs)
 
-      expect(response.body).to include('data-testid="dashboard-scan-reviews-section"')
-      expect(response.body).to include("StaleTask")
-      expect(response.body).to include(row.row_uuid)
-      expect(response.body).to include("Approve")
-      expect(response.body).to include("Dismiss")
+      live = doc.at_css("[data-testid='home-job-running']")
+      expect(live["data-controller"]).to eq("operation-progress")
+      expect(live["data-operation-progress-operation-id-value"]).to eq(running.operation_id)
+      expect(doc.at_css("[data-testid='home-job-recent']").text).to include("Project scan", "failed", "synthetic failure")
+      expect(doc.css("a").map { |link| link["href"] }).to include(maintenance_path(anchor: "background-jobs"), "/operator/jobs")
     end
 
-    it "shows repair action when compaction failed with a relation error" do
-      CompactionRun.create!(
-        status: "failed",
-        phase: "tree_walk",
-        stats: {
-          "error" => "Duplicate entry '266-211-part_of' for key 'index_memory_relations_uniqueness'",
-          "entities_processed" => 40
-        },
-        started_at: 1.hour.ago,
-        finished_at: 30.minutes.ago
-      )
+    it "lists the latest change sets, status only" do
+      ChangeSet.create!(uuid: SecureRandom.uuid, kind: "graph.write", actor: "agent:synth-client", summary: "wrote 4 observations to SynthWidget",
+                        undo_strategy: "audit", undoable_until: 1.day.from_now)
 
-      get root_path
+      doc = section_doc(:activity)
 
-      expect(response.body).to include('id="btn-repair-relations"')
-      expect(response.body).to include("Repair relation duplicates")
+      row = doc.at_css("[data-testid='home-activity-row']")
+      expect(row.text).to include("graph.write", "wrote 4 observations to SynthWidget", "agent:synth-client", "undoable until")
+      expect(doc.css("form, button")).to be_empty
+      expect(doc.at_css("a")["href"]).to eq(operator_audit_logs_path)
+    end
+
+    it "shows the active MCP clients, compact" do
+      AgentContext.create!(client_id: "synth-client", current_project: MemoryEntity.create!(name: "Alpha Service", entity_type: "Project"),
+                           last_seen_at: 1.minute.ago, last_tool_name: "search")
+
+      doc = section_doc(:clients)
+
+      expect(doc.at_css("[data-testid='home-client-row']").text).to include("synth-client", "active", "Alpha Service")
+      expect(doc.text).to include("1 active of 1")
+      expect(doc.at_css("a")["href"]).to eq(maintenance_path(anchor: "mcp-clients"))
+    end
+
+    it "shows the graph counts and embedding coverage" do
+      MemoryObservation.create!(memory_entity: widget, content: "SynthWidget renders synthetic tiles.")
+
+      text = section_doc(:counts).at_css("[data-testid='home-counts']").text
+
+      expect(text).to include("Entities", "Observations", "Relations", "Orphans", "Embedding coverage")
+    end
+
+    it "answers 404 for an unknown widget" do
+      get home_section_path("bogus")
+
+      expect(response).to have_http_status(:not_found)
     end
   end
 
+  context "as the guest" do
+    before do
+      enable_guest!
+      sign_in_guest
+    end
+
+    it "sends Home to Search and refuses the widgets" do
+      get root_path
+      expect(response).to redirect_to(search_path)
+
+      get home_section_path("health")
+      expect(response).to have_http_status(:forbidden)
+    end
+  end
+
+  it "sends a signed-out visitor to the sign-in page" do
+    get root_path
+    expect(response).to redirect_to(operator_login_path)
+
+    get home_section_path("health")
+    expect(response).to redirect_to(operator_login_path)
+  end
+
   describe "GET /graph" do
+    before { sign_in_operator }
+
     it "renders the graph explorer with Stimulus hooks" do
       get graph_path
 
       expect(response).to have_http_status(:ok)
-      expect(response.body).to include('data-controller="graph"')
-      expect(response.body).to include('data-graph-target="container"')
-    end
-  end
-
-  describe "GET /maintenance" do
-    it "renders the maintenance hub" do
-      MemoryEntity.create!(name: "ExportRoot", entity_type: "Project")
-
-      get maintenance_path
-
-      expect(response).to have_http_status(:ok)
-      expect(response.body).to include("Maintenance Hub")
-      expect(response.body).to include('id="btn-maintenance-import"')
-      expect(response.body).to include('id="btn-maintenance-export"')
-      expect(response.body).to include('id="btn-maintenance-choose-file"')
-      expect(response.body).to include('data-testid="btn-maintenance-choose-file"')
-      expect(response.body).to include("Choose JSON file")
-      expect(response.body).to include('id="maintenance-import-file"')
-    end
-
-    it "renders export form with Turbo disabled for direct file download" do
-      MemoryEntity.create!(name: "ExportRoot", entity_type: "Project")
-
-      get maintenance_path
-
-      expect(response.body).to include('class="maintenance-export-form"')
-      expect(response.body).to include('data-turbo="false"')
-      expect(response.body).to include(export_data_exchange_index_path)
+      expect(response.body).to include('data-controller="graph"', 'data-graph-target="container"')
     end
   end
 end

@@ -13,18 +13,6 @@ RSpec.describe DashboardHelper, type: :helper do
     end
   end
 
-  describe "#dashboard_stat_chip_link" do
-    it "renders a linked stat chip" do
-      html = helper.dashboard_stat_chip_link("Audit logs", 12, "/operator/audit_logs", id: "chip-audit-logs")
-
-      expect(html).to include('href="/operator/audit_logs"')
-      expect(html).to include('id="chip-audit-logs"')
-      expect(html).to include('class="dashboard-stat-chip dashboard-stat-chip--link"')
-      expect(html).to include("12")
-      expect(html).to include("Audit logs")
-    end
-  end
-
   describe "#agent_context_activity_badge" do
     it "renders a localized activity badge" do
       html = helper.agent_context_activity_badge("active")

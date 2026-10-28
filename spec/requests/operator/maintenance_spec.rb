@@ -15,7 +15,7 @@ RSpec.describe "Operator maintenance controls", type: :request do
 
       post operator_start_compaction_path
 
-      expect(response).to redirect_to(root_path)
+      expect(response).to redirect_to(maintenance_path(anchor: "background-jobs"))
       follow_redirect!
       expect(response.body).to include("disabled")
     end
@@ -25,7 +25,7 @@ RSpec.describe "Operator maintenance controls", type: :request do
         post operator_start_compaction_path
       }.to have_enqueued_job(DreamStateCompactionJob)
 
-      expect(response).to redirect_to(root_path)
+      expect(response).to redirect_to(maintenance_path(anchor: "background-jobs"))
       follow_redirect!
       expect(response.body).to include("Dream-state compaction started")
     end
@@ -37,14 +37,14 @@ RSpec.describe "Operator maintenance controls", type: :request do
 
       post operator_pause_compaction_path
 
-      expect(response).to redirect_to(root_path)
+      expect(response).to redirect_to(maintenance_path(anchor: "background-jobs"))
       expect(run.reload.pause_requested).to be true
     end
 
     it "alerts when no running compaction exists" do
       post operator_pause_compaction_path
 
-      expect(response).to redirect_to(root_path)
+      expect(response).to redirect_to(maintenance_path(anchor: "background-jobs"))
       follow_redirect!
       expect(response.body).to include("No running compaction")
     end
@@ -56,7 +56,7 @@ RSpec.describe "Operator maintenance controls", type: :request do
 
       post operator_run_garbage_collection_path
 
-      expect(response).to redirect_to(root_path)
+      expect(response).to redirect_to(maintenance_path(anchor: "background-jobs"))
       follow_redirect!
       expect(response.body).to include("disabled")
     end
@@ -66,7 +66,7 @@ RSpec.describe "Operator maintenance controls", type: :request do
 
       post operator_run_garbage_collection_path
 
-      expect(response).to redirect_to(root_path)
+      expect(response).to redirect_to(maintenance_path(anchor: "background-jobs"))
       follow_redirect!
       expect(response.body).to include("Garbage collection completed")
       expect(MaintenanceReport.count).to eq(2)
@@ -82,7 +82,7 @@ RSpec.describe "Operator maintenance controls", type: :request do
 
       post operator_repair_relations_path
 
-      expect(response).to redirect_to(root_path)
+      expect(response).to redirect_to(maintenance_path(anchor: "background-jobs"))
       follow_redirect!
       expect(response.body).to include("Relation repair completed")
       expect(MemoryRelation.count).to eq(1)
