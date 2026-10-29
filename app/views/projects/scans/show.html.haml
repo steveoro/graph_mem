@@ -1,0 +1,56 @@
+- scan = @scan
+- details = scan.details || {}
+- counters = scan.counters || {}
+- live = scan.status.in?(%w[pending running paused])
+- content_for :title, t("projects.scans.show.title", name: projects_operation_title(scan))
+- content_for :page_header, ui_page_header(t("projects.scans.show.title", name: projects_operation_title(scan)), subtitle: projects_scan_kind(scan))
+
+-# operation_progress_controller.js follows a live scan over OperationProgressChannel.
+.projects-page{ data: { testid: "scan-detail", operation_progress_id: scan.operation_id,
+  controller: ("operation-progress" if live), operation_progress_operation_id_value: (scan.operation_id if live) } }
+  .ui-card.projects-grid
+    %dl
+      %dt.ui-label= t("projects.scans.show.status")
+      %dd= dashboard_status_badge(scan.status, data: { progress_status: true, testid: "scan-status" })
+      %dt.ui-label= t("projects.scans.show.phase")
+      %dd{ data: { progress_phase: true } }= scan.operation_type == "project_scan" ? project_scan_phase_label(scan.phase) : project_scan_skill_depth_label(scan.phase)
+      %dt.ui-label= t("projects.scans.show.folder")
+      %dd
+        %code= details["project_root"]
+      - if details["dry_run"]
+        %dd.projects-hint= t("projects.scans.show.dry_run")
+    %div
+      %progress.projects-progress{ max: 100, value: scan.percentage.to_f }
+      %p
+        %span{ data: { progress_percentage: true } }= "#{scan.percentage.to_f}%"
+        %span.projects-muted{ data: { progress_message: true } }= scan.message
+      %p.projects-hint= t("projects.scans.show.started", time: l(scan.created_at, format: :short))
+      - if scan.operation_type == "project_scan_skill"
+        = render "projects/scans/guided_controls", scan: scan
+
+  - if scan.error_message.present?
+    %p.projects-error{ role: "alert", data: { testid: "scan-error" } }= scan.error_message
+  - if details["fallback"]
+    %p.ui-card{ data: { testid: "scan-fallback" } }
+      %strong= t("projects.scans.show.fallback")
+      = details["fallback_reason"]
+
+  - if counters.any?
+    .ui-card
+      %h2.ui-label= t("projects.scans.show.counters")
+      .projects-stats{ data: { testid: "scan-counters" } }
+        - counters.each do |name, value|
+          .projects-stat{ data: { testid: "scan-counter-#{name}" } }
+            %span.projects-stat__value= number_with_delimiter(value)
+            %span.projects-stat__label= name.to_s.humanize
+
+  .projects-actions
+    - if @project_id
+      = link_to t("projects.index.open_in_explore"), explore_path(project_id: @project_id), class: "ui-btn"
+      - if @review_groups.positive?
+        = link_to t("projects.scans.show.review", count: @review_groups), review_path(view: "scan", project_id: @project_id),
+          class: "ui-btn ui-btn-primary", data: { testid: "scan-review-link" }
+      - else
+        %span.projects-muted= t("projects.scans.show.no_review")
+    = link_to t("projects.scans.index.title"), projects_scans_path, class: "ui-btn"
+    = link_to t("projects.scans.show.again"), new_projects_scan_path(project_root: details["project_root"]), class: "ui-btn"

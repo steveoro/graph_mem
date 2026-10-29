@@ -1,0 +1,19 @@
+-# The folders a scan may read (ScanRootPolicy.status), as chips that fill the path field, or why
+-# scans are off (was maintenance/_scan_folders_hint).
+- if status[:enabled]
+  .projects-chips{ data: { testid: "scan-folders" } }
+    %span.projects-hint= t("projects.scans.form.folders")
+    - status[:allowed_roots].each do |root|
+      %button.projects-chip{ type: "button", data: { action: "path-check#pick", path_check_path_param: root, testid: "scan-folder-chip" } }= root
+    - if status[:allowed_roots].empty?
+      %span.projects-hint= t("projects.scans.form.no_folders")
+    = link_to t("projects.scans.form.settings"), operator_settings_path(tab: "project_scans"), class: "projects-hint"
+- else
+  %p.projects-error{ data: { testid: "scans-disabled-hint" } }
+    - if !status[:scans_switch]
+      = t("projects.scans.form.disabled_switch")
+    - elsif status[:mode] == "container"
+      = t("projects.scans.form.disabled_container")
+    - else
+      = t("projects.scans.form.disabled_other", reason: status[:hard_roots].filter_map { |root| root[:error] }.join("; ").presence || t("projects.scans.form.no_root"))
+    = link_to t("projects.scans.form.settings"), operator_settings_path(tab: "project_scans")

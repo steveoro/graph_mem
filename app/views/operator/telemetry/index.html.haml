@@ -222,3 +222,6 @@
         = paginate @tool_invocations
     - else
       %p.dashboard-card__empty= t("operator.telemetry.empty")
+
+  %section#mcp-clients{ "aria-label": t("operator.agent_contexts.title") }
+    = render "operator/telemetry/agent_contexts_card", agent_contexts: @agent_contexts

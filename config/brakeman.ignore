@@ -137,6 +137,29 @@
         89
       ],
       "note": ""
+    },
+    {
+      "warning_type": "File Access",
+      "warning_code": 16,
+      "fingerprint": "9d7f3e04fd0207d2673bf04b90be440e7b7ef44a871268a881b43eb9af0eadfb",
+      "check_name": "SendFile",
+      "message": "Parameter value used in file name",
+      "file": "app/controllers/projects/exports_controller.rb",
+      "line": 47,
+      "link": "https://brakemanscanner.org/docs/warning_types/file_access/",
+      "code": "send_file(ExportJob.download_path(find_operation!(params[:operation_id], \"export\").operation_id), :type => \"application/json\", :disposition => \"attachment\", :filename => (\"graph_mem_export_#{find_operation!(params[:operation_id], \"export\").created_at.strftime(\"%Y%m%d_%H%M%S\")}.json\"))",
+      "render_path": null,
+      "location": {
+        "type": "method",
+        "class": "Projects::ExportsController",
+        "method": "download"
+      },
+      "user_input": "params[:operation_id]",
+      "confidence": "Weak",
+      "cwe_id": [
+        22
+      ],
+      "note": "UI-6 exports download: the path is ExportJob.download_path of an operation id that find_operation! checked as a UUID and loaded from OperationProgress (operation_type export); nothing from params reaches the path."
     }
   ],
   "brakeman_version": "8.1.0"

@@ -23,6 +23,11 @@ development:
     class: ChangeSetPruneJob
     queue: low_priority
     schedule: at 5:30am every day
+  # ExportJob writes tmp/exports/export_<id>.json; Projects › Exports answers 410 once it's gone.
+  export_cleanup:
+    command: "ExportJob.cleanup_old_exports"
+    queue: low_priority
+    schedule: every hour
 
 production:
   garbage_collection:
@@ -62,3 +67,8 @@ production:
     class: ChangeSetPruneJob
     queue: low_priority
     schedule: at 5:30am every day
+  # ExportJob writes tmp/exports/export_<id>.json; Projects › Exports answers 410 once it's gone.
+  export_cleanup:
+    command: "ExportJob.cleanup_old_exports"
+    queue: low_priority
+    schedule: every hour

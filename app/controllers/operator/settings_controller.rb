@@ -96,7 +96,7 @@ module Operator
     # would do with a path, without queueing anything.
     def check_scan_path
       @scan_path_result = params[:path].present? ? ScanRootPolicy.resolve(params[:path]) : nil
-      render partial: "operator/settings/scan_path_check", locals: { result: @scan_path_result, path: params[:path] }
+      render partial: "projects/scans/path_check", locals: { result: @scan_path_result }
     end
 
     # DELETE /operator/settings/project_scans/legacy_roots: drop the ignored pre-1.54 value.

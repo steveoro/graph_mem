@@ -50,6 +50,24 @@ class EntityPanel
     @observations.first(OBSERVATIONS_PER_PAGE)
   end
 
+  # The page `observation` sits on in this panel's ordering (trust desc, confidence desc with
+  # NULLs last, id asc): one COUNT of the observations ahead of it, compared in SQL so the float
+  # columns are never round-tripped through Ruby.
+  #
+  # @param observation [MemoryObservation] one of this entity's observations, in the panel's scope
+  # @return [Integer] 1-based page
+  def page_of(observation)
+    target = MemoryObservation.sanitize_sql_array([ "INNER JOIN memory_observations target ON target.id = ?", observation.id ])
+    ahead = observation_scope.joins(target).where(<<~SQL.squish).count
+      memory_observations.trust_score > target.trust_score
+      OR (memory_observations.trust_score = target.trust_score AND (
+        (target.confidence IS NULL AND memory_observations.confidence IS NOT NULL)
+        OR memory_observations.confidence > target.confidence
+        OR (memory_observations.confidence <=> target.confidence AND memory_observations.id < target.id)))
+    SQL
+    (ahead / OBSERVATIONS_PER_PAGE) + 1
+  end
+
   # @return [Boolean] whether another observation page follows
   def more_observations?
     observations

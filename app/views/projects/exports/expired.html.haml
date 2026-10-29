@@ -1,0 +1,5 @@
+- content_for :title, t("projects.exports.expired")
+- content_for :page_header, ui_page_header(t("projects.exports.expired"))
+%p.ui-card{ data: { testid: "export-expired-page" } }
+  = t("projects.exports.expired_body")
+  = link_to t("projects.exports.index.title"), projects_exports_path

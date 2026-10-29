@@ -1,41 +1,16 @@
 # frozen_string_literal: true
 
+# The Maintenance hub's scan form endpoint, kept until §6.D-6: it starts the scan through
+# ProjectScanLauncher (like Projects::ScansController#create) and redirects to the new pages.
 class ProjectScansController < ApplicationController
-  include ScanRootResolution
-
   def create
-    resolution = resolve_scan_root(params[:project_root])
-    return redirect_to maintenance_path(anchor: "project-scans"), alert: resolution.message unless resolution.ok?
+    result = ProjectScanLauncher.call(params.permit(:project_root, :project_name, :aliases, :mode, :file_globs, :dry_run))
+    return redirect_to new_projects_scan_path, alert: result.error unless result.ok?
 
-    real_root = resolution.path
-
-    mode = params[:mode].to_s.downcase.presence || "initial"
-    unless ScanProjectTool::MODES.include?(mode)
-      return redirect_to maintenance_path(anchor: "project-scans"), alert: "Mode must be one of: #{ScanProjectTool::MODES.join(', ')}"
-    end
-
-    scan_id = SecureRandom.uuid
-    ProjectScanJob.enqueue(
-      scan_id: scan_id,
-      project_root: real_root,
-      project_name: params[:project_name].to_s.presence,
-      aliases: params[:aliases].to_s.presence,
-      mode: mode,
-      dry_run: params[:dry_run] == "1",
-      file_globs: file_globs_param
-    )
-
-    redirect_to maintenance_path(anchor: "project-scans"), notice: "Project scan queued for #{real_root}. Scan ID: #{scan_id}." \
-                                   "#{scan_root_warning_suffix(resolution)}"
+    redirect_to projects_scan_path(result.operation_id),
+                notice: "Project scan queued for #{result.path}. Scan ID: #{result.operation_id}.#{result.warnings}"
   rescue StandardError => e
     Rails.logger.error "Project scan trigger failed: #{e.message}\n#{e.backtrace.first(5).join("\n")}"
-    redirect_to maintenance_path(anchor: "project-scans"), alert: "Failed to queue project scan: #{e.message}"
-  end
-
-  private
-
-  def file_globs_param
-    globs = params[:file_globs].to_s.split(/[\r\n,]+/).map(&:strip).reject(&:blank?)
-    globs.presence
+    redirect_to new_projects_scan_path, alert: "Failed to queue project scan: #{e.message}"
   end
 end

@@ -1,0 +1,6 @@
+-# One import's counts from its OperationProgress details ("summary"), or a dash for a rake import.
+- if summary.present?
+  %span= t("projects.imports.summary_line", created: summary["entities_created"].to_i, merged: summary["entities_merged"].to_i,
+    skipped: summary["entities_skipped"].to_i, errors: summary["errors"].to_i)
+- else
+  %span.projects-muted —

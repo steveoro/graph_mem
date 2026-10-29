@@ -5,7 +5,7 @@ require "rails_helper"
 # The UI-1 shell in a browser: the sidebar, aria-current, the small-screen toggle and toasts.
 RSpec.describe "Navigation", type: :system do
   let(:operator_nav) do
-    %w[nav-home nav-search nav-explore nav-review nav-scan-review nav-maintenance
+    %w[nav-home nav-search nav-explore nav-review nav-scan-review nav-projects nav-scans nav-imports nav-exports nav-background-jobs
        nav-embeddings nav-telemetry nav-audit-logs nav-settings nav-jobs nav-api-docs]
   end
   let!(:widget) { MemoryEntity.create!(name: "SynthWidget", entity_type: "Component") }
@@ -120,7 +120,7 @@ RSpec.describe "Navigation", type: :system do
     end
 
     it "shows the 403 page for an operator-only URL" do
-      visit maintenance_path
+      visit projects_path
 
       expect(page).to have_css("[data-testid='guest-forbidden']")
       expect(page).to have_css("h1", text: "Operator only")

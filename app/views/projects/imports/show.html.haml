@@ -1,0 +1,72 @@
+- content_for :title, t("projects.imports.show.title")
+- content_for :page_header, ui_page_header(t("projects.imports.show.title"),
+  subtitle: t("projects.imports.show.subtitle", file: @meta[:file_name].presence || "—", producer: @meta[:producer].presence || "graph_mem"))
+- stat = ->(key) { @stats[key] || @stats[key.to_s] || 0 }
+
+.projects-page
+  .ui-card.projects-stats{ data: { testid: "import-review-stats" } }
+    - %i[total root_nodes high_confidence low_confidence new skip add_relation].each do |key|
+      .projects-stat
+        %span.projects-stat__value= stat.call(key)
+        %span.projects-stat__label= t("projects.imports.show.stats.#{key}")
+
+  -# Root nodes carry the operator's decision (decisions[i][…]); child decisions come from the stored matches.
+  - root_index = 0
+  = form_with url: execute_projects_import_path(params[:id]), method: :post, data: { controller: "import-decision", testid: "import-review-form" } do
+    %table.projects-table
+      %thead
+        %tr
+          %th= t("projects.imports.show.node")
+          %th= t("projects.imports.show.match")
+          %th= t("projects.scans.index.status")
+          %th= t("projects.imports.show.action")
+      %tbody
+        - @items.each do |match|
+          - match = match.with_indifferent_access
+          - node = match[:import_node] || {}
+          - is_root = !match[:is_child]
+          - parent_name = match[:import_parent_name]
+          %tr{ data: { testid: "import-node-#{match[:node_path]}" } }
+            %td
+              %strong= node[:name]
+              %span.projects-muted= "(#{node[:entity_type]})"
+              - if !is_root && parent_name.present?
+                %span.projects-hint= t("projects.imports.show.child_of", name: parent_name)
+              - if node[:observations_count].to_i.positive? || node[:children_count].to_i.positive?
+                %p.projects-hint= t("projects.imports.show.counts", observations: node[:observations_count].to_i, children: node[:children_count].to_i)
+              - if is_root
+                = hidden_field_tag "decisions[#{root_index}][node_path]", match[:node_path]
+            %td
+              - if !is_root
+                - exact = match[:exact_match]
+                = exact ? "#{exact[:name]} (#{exact[:entity_type]})" : t("projects.imports.show.no_match_new")
+              - elsif match[:matches].present?
+                - selected = match[:selected_match_id].to_s
+                = select_tag "decisions[#{root_index}][target_id]",
+                  options_for_select([ [ t("projects.imports.show.create_new"), "" ] ] + match[:matches].map { |m| [ "#{m[:name]} (#{m[:entity_type]}) - score #{m[:score]}", m[:entity_id] ] }, selected),
+                  class: "ui-input match-select", data: { index: root_index, action: "change->import-decision#sync" }
+                = hidden_field_tag "decisions[#{root_index}][action]", selected.present? ? "merge" : "create", class: "action-input", data: { index: root_index }
+              - else
+                %span.projects-muted= t("projects.imports.show.no_matches")
+                = hidden_field_tag "decisions[#{root_index}][action]", "create", class: "action-input", data: { index: root_index }
+            %td
+              %span.ui-badge= t("projects.imports.show.status.#{match[:status].presence || 'new'}", default: match[:status].to_s.humanize)
+            %td
+              - if !is_root
+                = t("projects.imports.show.child_action.#{match[:child_action].presence || 'create'}", name: parent_name)
+                - if match[:will_add_observations]
+                  %span.projects-hint= t("projects.imports.show.adds_observations")
+              - elsif @available_parents.present?
+                = select_tag "decisions[#{root_index}][parent_id]",
+                  options_for_select([ [ t("projects.imports.show.no_parent"), "" ] ] + @available_parents.map { |parent| [ t("projects.imports.show.child_of_parent", name: parent.name), parent.id ] }),
+                  class: "ui-input"
+                - if @available_parents.size >= ExportStrategy::ROOT_NODES_LIMIT
+                  %p.projects-hint{ data: { testid: "import-parents-capped" } }= t("projects.imports.show.parents_capped", count: ExportStrategy::ROOT_NODES_LIMIT)
+              - else
+                %span.projects-muted= t("projects.imports.show.root")
+          - root_index += 1 if is_root
+    = paginate @items
+    .projects-actions
+      = submit_tag t("projects.imports.show.execute"), class: "ui-btn ui-btn-primary", data: { testid: "import-execute" }
+      = link_to t("projects.imports.show.cancel"), projects_import_path(params[:id]), class: "ui-btn",
+        data: { turbo_method: :delete, turbo_confirm: t("projects.imports.show.cancel_confirm"), testid: "import-cancel" }

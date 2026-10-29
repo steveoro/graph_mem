@@ -112,7 +112,7 @@
     = text_field_tag :path, nil, placeholder: "/home/you/Projects/app", class: "dashboard-settings-field__input",
       data: { testid: "scan-check-path-input" }
     = submit_tag t("operator.settings.project_scans.check_button"), class: "dashboard-btn dashboard-btn--secondary"
-  = render "operator/settings/scan_path_check", result: nil, path: nil
+  = render "projects/scans/path_check", result: nil
 
 .dashboard-settings-field{ data: { testid: "scan-always-blocked" } }
   %h3.dashboard-settings-field__label= t("operator.settings.project_scans.blocked_title")

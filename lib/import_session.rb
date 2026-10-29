@@ -11,8 +11,9 @@ class ImportSession
     # @param matches [Array] The serialized match results
     # @param stats [Hash] Import statistics
     # @param version [String] Import format version
+    # @param meta [Hash] what the upload was (file_name, producer, project_name), for the history
     # @return [String] The session ID
-    def create(import_data:, matches:, stats:, version:)
+    def create(import_data:, matches:, stats:, version:, meta: {})
       session_id = SecureRandom.uuid
       ensure_temp_dir
 
@@ -20,6 +21,7 @@ class ImportSession
       write_file(session_id, "matches", matches)
       write_file(session_id, "stats", stats)
       write_file(session_id, "version", { version: version })
+      write_file(session_id, "meta", meta)
 
       session_id
     end
@@ -62,6 +64,13 @@ class ImportSession
       data&.dig(:version) || data&.dig("version")
     end
 
+    # Load what the upload was (file_name, producer, project_name)
+    # @param session_id [String] The session ID
+    # @return [Hash] empty for a session written before the meta file existed
+    def load_meta(session_id)
+      read_file(session_id, "meta") || {}
+    end
+
     # Store the import report
     # @param session_id [String] The session ID
     # @param report [Hash] The import report
@@ -91,7 +100,7 @@ class ImportSession
     def cleanup(session_id)
       return if session_id.blank?
 
-      %w[data matches stats version report].each do |suffix|
+      %w[data matches stats version meta report].each do |suffix|
         FileUtils.rm_f(path_for(session_id, suffix))
       end
     end

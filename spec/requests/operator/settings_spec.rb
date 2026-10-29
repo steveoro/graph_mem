@@ -347,7 +347,7 @@ RSpec.describe "Operator settings", type: :request do
         }.each do |path, code|
           get operator_check_scan_path_path(path: path)
 
-          expect(response.body).to include('<turbo-frame id="scan-path-check">', %(data-code="#{code}"))
+          expect(response.body).to include('id="scan-path-check"', %(data-code="#{code}"))
         end
       end
     end

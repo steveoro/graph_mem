@@ -1,0 +1,5 @@
+- content_for :title, t("projects.not_found.title")
+- content_for :page_header, ui_page_header(t("projects.not_found.title"))
+%p.ui-card{ data: { testid: "projects-not-found" } }
+  = t("projects.not_found.body")
+  = link_to t("projects.nav.projects"), projects_path

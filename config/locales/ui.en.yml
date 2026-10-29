@@ -9,7 +9,6 @@ en:
       explore: "Explore"
       compaction_review: "Review queue"
       scan_review: "Scan review"
-      maintenance: "Maintenance (jobs, scans, data)"
       embeddings: "Embeddings"
       telemetry: "Telemetry"
       audit_logs: "Audit log"

@@ -42,6 +42,18 @@ RSpec.describe "Explore observation edits", type: :request do
       expect(panel.at_css("#observation-#{fact.id}")).to be_present
     end
 
+    it "links a duplicate on another panel page to that page" do
+      ahead = Array.new(EntityPanel::OBSERVATIONS_PER_PAGE) { |i| MemoryObservation.create!(memory_entity: widget, content: "SynthWidget fact #{i}.") }
+      ahead.each { |observation| observation.update_column(:trust_score, 0.9) }
+      fact.update_column(:trust_score, 0.1)
+
+      add("SynthWidget renders synthetic tiles.")
+
+      link = turbo_stream_for("update", "entity-panel").at_css("[data-testid='entity-panel-duplicate-link']")
+      expect(link["href"]).to eq(entity_panel_path(widget, page: 2, anchor: "observation-#{fact.id}"))
+      expect(link["data-turbo-frame"]).to eq("entity-panel")
+    end
+
     it "warns about a similar observation and adds it anyway with force=1" do
       similar = ImportObservationDuplicateDetector::Result.new(duplicate: true, observation: fact, distance: 0.05, exact_match: false)
       allow_any_instance_of(ImportObservationDuplicateDetector).to receive(:find_duplicate).and_return(similar)

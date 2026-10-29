@@ -118,6 +118,16 @@ RSpec.describe ExportStrategy, type: :model do
 
       expect(non_projects.first.name).to eq('Orphan Node')
     end
+
+    it 'is one query, filtered by name and capped' do
+      queries = []
+      callback = ->(*, payload) { queries << payload[:sql] unless payload[:name] == 'SCHEMA' }
+      roots = ActiveSupport::Notifications.subscribed(callback, 'sql.active_record') { strategy.root_nodes(query: 'beta') }
+
+      expect(roots.map(&:name)).to eq([ 'Project Beta' ])
+      expect(queries.size).to eq(1)
+      expect(strategy.root_nodes(limit: 1).map(&:name)).to eq([ 'Project Alpha' ])
+    end
   end
 
   describe '#export' do

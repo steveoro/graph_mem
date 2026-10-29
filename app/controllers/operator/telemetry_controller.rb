@@ -15,6 +15,8 @@ module Operator
                                         .page(params[:page])
                                         .per(ToolInvocation::PER_PAGE)
       @filter_options = filter_options
+      # The full MCP clients table (moved here from the Maintenance hub in UI-6).
+      @agent_contexts = AgentContextsSnapshot.call
     end
 
     # Deletes rows outside the configured retention window.

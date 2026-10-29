@@ -1,0 +1,16 @@
+- content_for :title, t("projects.jobs.title")
+- content_for :page_header, ui_page_header(t("projects.jobs.title"), subtitle: t("projects.jobs.subtitle"))
+- snapshot = @snapshot
+- totals = snapshot.dig(:graph_stats, :totals)
+
+.projects-page{ data: { testid: "background-jobs" } }
+  %p.projects-hint{ data: { testid: "background-jobs-totals" } }
+    = t("projects.jobs.totals", entities: number_with_delimiter(totals[:entities]), observations: number_with_delimiter(totals[:observations]),
+      relations: number_with_delimiter(totals[:relations]), orphans: number_with_delimiter(snapshot.dig(:graph_stats, :orphan_count)))
+  %section#background-jobs.dashboard-state-grid.dashboard-state-grid--2x2{ "aria-label": t("projects.jobs.title") }
+    = render "projects/jobs/dream_state_compactor_card", compaction: snapshot[:compaction], cursor_entity: snapshot[:cursor_entity],
+      schedules: snapshot[:schedules], latest_reports: snapshot[:latest_reports]
+    = render "projects/jobs/garbage_collector_card", latest_reports: snapshot[:latest_reports], schedules: snapshot[:schedules],
+      operation: snapshot.dig(:operations, :garbage_collection)
+  %section.dashboard-details
+    = render "projects/jobs/reports_details", latest_reports: snapshot[:latest_reports], compaction: snapshot[:compaction]

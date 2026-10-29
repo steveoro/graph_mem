@@ -1,6 +1,6 @@
 # GraphMem web UI guide
 
-A tour of the web UI for the **operator** (the graph's owner, full access) and the optional **read-only guest**, as of 1.61.0. It covers signing in, the app shell, each section, the guest account and the usual problems.
+A tour of the web UI for the **operator** (the graph's owner, full access) and the optional **read-only guest**, as of 1.62.0. It covers signing in, the app shell, each section, the guest account and the usual problems.
 
 The screenshots come from a test instance with synthetic data (`Alpha Service`, `SynthWidget`, `SynthGadget`). The image files are in [`docs/images/ui/`](../images/ui/).
 
@@ -47,9 +47,13 @@ The sidebar lists Home, Search and Explore at the top, then three groups (Review
 | — | **Explore** | The interactive graph (Cytoscape) with the entity panel; the operator edits from both |
 | Review & Fix | **Review queue** | Suggestions from compaction, scans and the stale-memory scan, grouped and ranked. The badge counts groups needing attention (refreshed every 30 s) |
 | Review & Fix | **Scan review** | The same page, project-scan suggestions only |
-| Projects & Data | **Maintenance** | Import, export and cleanup; the compactor, garbage collector and relation repair; project scans; the full MCP clients table |
+| Projects & Data | **Projects** | Every Project root with its last scan, last import and pending scan-review groups |
+| Projects & Data | **Scans** | The scan history, one form for a normal or guided scan (with a live path check), and a page per scan |
+| Projects & Data | **Imports** | Upload a GraphMem export or a Graphify `graph.json`, review, import; the import history |
+| Projects & Data | **Exports** | Export roots in the background, with progress and a download; past exports |
+| Projects & Data | **Background jobs** | The compactor, the garbage collector and relation repair |
 | System | **Embeddings** | Vector coverage, connection test, backfill, ANN indexes |
-| System | **Telemetry** | MCP tool volume, errors, latency |
+| System | **Telemetry** | MCP tool volume, errors, latency, and the full MCP clients table |
 | System | **Audit log** | Change history for entities, observations and relations |
 | System | **Settings** | Feature flags, backups, embeddings, summaries, imports, project scans, telemetry/retention |
 | System | **Jobs** | Mission Control for the Solid Queue jobs (its own layout) |
@@ -82,12 +86,12 @@ embedding service) never holds up the rest, and each links to the page where you
 - **Jobs:** what's running (with live progress) and the last finished or failed jobs.
 - **Recent activity:** the last 15 change sets, and whether each can still be undone (undo
   itself is on the page that owns the change, such as Review › Resolved).
-- **Active MCP clients:** a compact list; the full table is on Maintenance.
+- **Active MCP clients:** a compact list; the full table is on **System › Telemetry**.
 
-The controls that used to be on Home are on **Maintenance** until Review › Generate and the
-Projects page arrive: **Start / Resume** and **Pause** for the compactor, **Run now** for the
-garbage collector, **Repair relation duplicates**, and the project-scan and guided-scan forms.
-The scheduling and the meaning of each counter are in [dream_state.md](../dream_state.md) and
+The controls that used to be on Home are under **Projects & Data** since 1.62.0 (the Maintenance
+hub that held them is gone, and `/maintenance` redirects to `/projects`): **Start / Resume** and
+**Pause** for the compactor, **Run now** for the garbage collector and **Repair relation
+duplicates** are on **Background jobs**, and the scan form is **Scans › New scan**. The scheduling and the meaning of each counter are in [dream_state.md](../dream_state.md) and
 [garbage_collector.md](../garbage_collector.md).
 
 ### Search
@@ -174,12 +178,19 @@ Search (`/search`, 1.60.0) runs the same search as the agents' MCP `search` tool
 
 Every graph write, merge (including compaction auto-merges), review action and Explore edit is recorded as a change set. The operator can undo one within 7 days for merges, 30 days for everything else: from the toast (Explore's toasts offer it for 10 minutes), from **Review › Resolved** or **Policies**, from an entity panel's **Recent changes**, or with `POST /changes/:uuid/undo`. Sets that hard-delete an entity or observation, or mix a merge with other writes, are recorded but can't be undone. Guests can't undo (403).
 
-### Projects & Data
+### Projects & Data (1.62.0)
 
-**Maintenance** has three cards:
-- **Export**: tick root entities and download them, with their descendants, as JSON.
-- **Import**: upload a GraphMem JSON export. You get a review page with a match/create decision per node, then a report.
-- **Cleanup**: orphan counts and pointers to the garbage-collector diagnostics.
+Operator only; a guest gets 403 from every page.
+- **Projects** (`/projects`): one row per Project root with its last scan (kind, status, age), its last import and its pending scan-review groups (a link into Review › Scan review for that project), plus **Open in Explore**. With no projects yet it links to **New scan** and **Import**.
+- **Scans** (`/projects/scans`): every scan, newest first. **New scan** is one form for both kinds:
+  - the project folder, checked as you type: the line under the field is what `ScanRootPolicy` would do with the path (the same check as **Settings › Project scans**). The scannable folders are chips; click one to fill the field;
+  - project name, aliases, mode, file globs and **Dry run**;
+  - **Guided (step by step)** swaps mode and globs for the steps of a guided scan.
+
+  A path the policy refuses comes back on the form with its message, and nothing is queued. A scan's page (`/projects/scans/<id>`) follows its progress live and shows its counters (including files skipped outside the root or as denylisted), the fallback reason, any error, **Continue** / **Stop** and the steps for a guided scan, and its project's scan-review groups.
+- **Imports** (`/projects/imports`): upload a GraphMem JSON export or a Graphify `graph.json` (up to 64 MB). A `graph.json` needs the name of the Project it describes; it's translated the way `rails graphify:translate` does and goes through the same review. The review has a match/create decision per root node; children follow their stored match. **Proceed with import** runs it and opens the report. Upload errors stay on the upload form. The history lists every import, the command-line ones included, and any past report can be opened again.
+- **Exports** (`/projects/exports`): tick roots (Projects first; up to 500 listed, filter by name for the rest) and **Export selected**. The export runs in the background; its page shows progress and then **Download**. Files are deleted after an hour, and an expired download says so (HTTP 410). The JSON `GET /data_exchange/export` still downloads directly, for scripts.
+- **Background jobs** (`/projects/jobs`): the compactor, garbage collector and relation-repair cards, and the graph totals.
 
 ### System
 
@@ -217,7 +228,7 @@ In **Explore**, the guest gets the same canvas, toolbar and panel: browse, pick 
 
 ![Explore as guest: read-only node menu](../images/ui/guest-explore.png)
 
-Every other page answers with **Operator only** (HTTP 403), including Review, Maintenance, Settings, Jobs and the Audit log. Home sends a guest to Search, and API docs answers 404.
+Every other page answers with **Operator only** (HTTP 403), including Review, Projects & Data, Settings, Jobs and the Audit log. Home sends a guest to Search, and API docs answers 404.
 
 ![The 403 page a guest sees](../images/ui/guest-forbidden.png)
 

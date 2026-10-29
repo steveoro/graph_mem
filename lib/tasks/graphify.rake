@@ -30,7 +30,7 @@ namespace :graphify do
     puts "Wrote #{out}"
     puts "Stats: #{result.stats.to_json}"
     puts "Ambiguous relations withheld for review: #{result.ambiguous_relations.size}"
-    puts "Upload #{out} via Data Exchange → Import to review and apply; " \
+    puts "Upload #{out} via Projects & Data › Imports (/projects/imports) to review and apply; " \
          "ambiguous edges are queued to scan_review after a successful execute."
   end
 

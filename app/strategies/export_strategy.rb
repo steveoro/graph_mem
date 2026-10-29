@@ -25,26 +25,22 @@ class ExportStrategy
     @logger = Rails.logger
   end
 
-  # Get all root nodes for selection in the export UI
-  # Returns Projects first (sorted by name), then other orphan nodes (sorted by name)
-  # @return [Array<MemoryEntity>] Array of root entities
-  def root_nodes
-    # Find entities that have no incoming "part_of" or "depends_on" relations
-    child_entity_ids = MemoryRelation
-      .where(relation_type: CHILD_RELATION_TYPES)
-      .pluck(:from_entity_id)
-      .uniq
+  # The export picker's list caps here; the picker's filter narrows by name.
+  ROOT_NODES_LIMIT = 500
 
-    root_entities = MemoryEntity.where.not(id: child_entity_ids)
-
-    # Separate Projects from other entities
-    # Note that 'Projects' are considered root entities regardless of whether they have incoming relations or not
-    # (as projects can be children of other projects).
-    projects = MemoryEntity.where(entity_type: "Project").order(:name)
-    others = root_entities.where.not(entity_type: "Project").order(:name)
-
-    # Projects first, then others
-    projects.to_a + others.to_a
+  # Root nodes for the export picker (and the import review's parent choice): Projects (they are
+  # roots even when part of another Project), then entities with no outgoing part_of/depends_on
+  # relation, each group by name. One query (NOT EXISTS), capped at `limit`.
+  #
+  # @param query [String, nil] keep only names containing this text
+  # @param limit [Integer]
+  # @return [Array<MemoryEntity>]
+  def root_nodes(query: nil, limit: ROOT_NODES_LIMIT)
+    children = MemoryRelation.where(relation_type: CHILD_RELATION_TYPES).where("memory_relations.from_entity_id = memory_entities.id")
+    scope = MemoryEntity.where("memory_entities.entity_type = ? OR NOT EXISTS (#{children.select(1).to_sql})", PROJECT_ENTITY_TYPE)
+    scope = scope.where("memory_entities.name LIKE ?", "%#{MemoryEntity.sanitize_sql_like(query.to_s.strip)}%") if query.present?
+    scope.order(Arel.sql(MemoryEntity.sanitize_sql_array([ "memory_entities.entity_type = ? DESC", PROJECT_ENTITY_TYPE ])), :name)
+         .limit(limit).to_a
   end
 
   # Export selected root nodes with all their children to JSON format

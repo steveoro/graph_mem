@@ -90,7 +90,7 @@ Answered and dropped from the open questions: all four Oct 20 UI questions (acco
 | 18 | ✅ **UI-2** as UI-2a (#133: editable MCP allowlists + `bin/up`, **1.58.3**) + UI-2b (#134: Home, **1.59.0**). Step list: `docs/plans/ui-2-plan.md` | graph_mem **1.58.3** + **1.59.0** | [Claude] | done |
 | 19 | ✅ **UI-3** Search, one PR (#135): `GraphSearch` extraction, project/type/match-in filters on the MCP `search` tool and REST search, the Search page and panel, "Show as graph". Step list: `docs/plans/ui-3-plan.md` | graph_mem **1.60.0** | [Claude] | done |
 | 20 | ✅ **UI-4b** Explore, one PR (#136, merged as `05aa5c1`; tag pending), with F-1, F-2 and the UI-3 leftovers folded in. Step list: `docs/plans/ui-4b-plan.md` | graph_mem **1.61.0** | [Claude] | done |
-| 21 | **UI-6** Projects & Data, one PR, with the #136 leftovers (step L). Step list: `docs/plans/ui-6-plan.md` | **1.62.0** | [Claude] | PR-0 ✅, UI-1 ✅ (next) |
+| 21 | ✅ **UI-6** Projects & Data, one PR (#137), with the #136 leftovers (step L). Step list: `docs/plans/ui-6-plan.md` | graph_mem **1.62.0** | [Claude] | done |
 | 22 | **UI-7** System (settings schema, backups, access) | **1.63.0** | [Claude] | UI-1 |
 | FS | **Fact supersede**: source facts propose (and, if allowed, apply) supersedes of the observations they contradict, per project, never by age. Step list: `docs/plans/fact-supersede-plan.md` (Oct 29) | **1.64.0** (TBD if before UI-7) | [Claude] | UI-4a ✅, UI-5 ✅, UI-4b ✅ |
 | UD | The other Devin-simple chores (§6.D: D-4 … D-8) | `[Unreleased]` | [Devin-simple] | as listed |

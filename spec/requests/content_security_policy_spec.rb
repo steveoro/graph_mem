@@ -30,8 +30,8 @@ RSpec.describe "Content Security Policy", type: :request do
   context "when signed in as operator" do
     before { sign_in_operator }
 
-    [ "/", "/search?q=SynthWidget", "/explore", "/maintenance", "/operator/settings",
-      "/operator/telemetry", "/review" ].each do |path|
+    [ "/", "/search?q=SynthWidget", "/explore", "/projects", "/projects/scans/new", "/projects/imports/new", "/projects/exports",
+      "/projects/jobs", "/operator/settings", "/operator/telemetry", "/review" ].each do |path|
       it "enforces the policy and nonces every script on #{path}" do
         get path
 
@@ -43,16 +43,15 @@ RSpec.describe "Content Security Policy", type: :request do
     it "enforces the policy and nonces every script through the import review and report" do
       export = { version: "1.0", root_nodes: [ { name: "Alpha Service", entity_type: "Project", observations: [], children: [] } ] }
       upload = Rack::Test::UploadedFile.new(StringIO.new(export.to_json), "application/json", original_filename: "synthetic.json")
-      post import_upload_data_exchange_index_path, params: { file: upload }
+      post projects_imports_path, params: { file: upload }
+      review = response.location
 
-      get import_review_data_exchange_index_path
+      get review
       expect(response).to have_http_status(:ok)
       expect_scripts_nonced(expect_enforced_policy)
 
-      post import_execute_data_exchange_index_path,
-           params: { decisions: { "0" => { node_path: "0", action: "create", target_id: "", parent_id: "" } } }
-      expect(response).to redirect_to(import_report_data_exchange_index_path)
-      get import_report_data_exchange_index_path
+      post "#{review}/execute", params: { decisions: { "0" => { node_path: "0", action: "create", target_id: "", parent_id: "" } } }
+      get response.location
       expect(response).to have_http_status(:ok)
       expect_scripts_nonced(expect_enforced_policy)
     end

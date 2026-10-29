@@ -1,5 +1,5 @@
 -# Running and recent jobs (OperationProgress). Running ones update live through the
--# operation-progress controller; the controls are on the maintenance hub.
+-# operation-progress controller; the controls are on Projects & Data › Background jobs.
 = turbo_frame_tag "home-#{section}" do
   %section.ui-card.home-card{ "aria-labelledby": "home-jobs-title" }
     %h2#home-jobs-title.home-card__title= t("home.jobs.title")
@@ -32,5 +32,5 @@
             - if job[:error]
               %span.home-list__meta= job[:error].truncate(80)
     .home-card__footer
-      = link_to t("home.jobs.controls"), maintenance_path(anchor: "background-jobs"), data: { turbo_frame: "_top" }
+      = link_to t("home.jobs.controls"), projects_jobs_path, data: { turbo_frame: "_top" }
       = link_to t("home.jobs.all_jobs"), "/operator/jobs", data: { turbo: false }

@@ -26,8 +26,15 @@
         %li= ui_nav_link t("ui.nav.scan_review"), main_app.review_path(view: "scan"),
           testid: "nav-scan-review", current: on_scan_review
       %h2.ui-sidebar__heading= t("ui.nav.groups.projects")
+      -# Projects & Data pages name their entry (Projects::BaseController.nav_section).
+      - section = controller.class.try(:nav_section)
       %ul.ui-sidebar__list
-        %li= ui_nav_link t("ui.nav.maintenance"), main_app.maintenance_path, testid: "nav-maintenance", icon: :maintenance
+        %li= ui_nav_link t("projects.nav.projects"), main_app.projects_path, testid: "nav-projects", icon: :maintenance,
+          current: section == :projects
+        %li= ui_nav_link t("projects.nav.scans"), main_app.projects_scans_path, testid: "nav-scans", current: section == :scans
+        %li= ui_nav_link t("projects.nav.imports"), main_app.projects_imports_path, testid: "nav-imports", current: section == :imports
+        %li= ui_nav_link t("projects.nav.exports"), main_app.projects_exports_path, testid: "nav-exports", current: section == :exports
+        %li= ui_nav_link t("projects.nav.jobs"), main_app.projects_jobs_path, testid: "nav-background-jobs", current: section == :jobs
       %h2.ui-sidebar__heading= t("ui.nav.groups.system")
       %ul.ui-sidebar__list
         %li= ui_nav_link t("ui.nav.embeddings"), main_app.operator_embeddings_path, testid: "nav-embeddings"

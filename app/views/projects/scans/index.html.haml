@@ -1,0 +1,25 @@
+- content_for :title, t("projects.scans.index.title")
+- content_for :page_header, ui_page_header(t("projects.scans.index.title"), subtitle: t("projects.scans.index.subtitle"))
+
+.projects-page
+  .projects-actions
+    = link_to t("projects.index.new_scan"), new_projects_scan_path, class: "ui-btn ui-btn-primary", data: { testid: "scans-new" }
+    = link_to t("projects.scans.index.review"), review_path(view: "scan"), class: "ui-btn"
+  - if @scans.empty?
+    %p.ui-card.projects-empty{ data: { testid: "scans-empty" } }= t("projects.scans.index.empty")
+  - else
+    %table.projects-table{ data: { testid: "scans-table" } }
+      %thead
+        %tr
+          %th= t("projects.scans.index.project")
+          %th= t("projects.scans.index.kind")
+          %th= t("projects.scans.index.status")
+          %th= t("projects.scans.index.started")
+      %tbody
+        - @scans.each do |scan|
+          %tr{ data: { testid: "scan-row-#{scan.operation_id}" } }
+            %td= link_to projects_operation_title(scan), projects_scan_path(scan.operation_id)
+            %td= projects_scan_kind(scan)
+            %td= dashboard_status_badge(scan.status)
+            %td.projects-muted= t("projects.ago", time: time_ago_in_words(scan.created_at))
+    = paginate @scans

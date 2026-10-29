@@ -15,4 +15,4 @@
             - if client[:last_seen_at]
               %span.home-list__meta= "#{time_ago_in_words(client[:last_seen_at])} ago"
     .home-card__footer
-      = link_to t("home.clients.all"), maintenance_path(anchor: "mcp-clients"), data: { turbo_frame: "_top" }
+      = link_to t("home.clients.all"), operator_telemetry_path(anchor: "mcp-clients"), data: { turbo_frame: "_top" }

@@ -1,0 +1,43 @@
+- content_for :title, t("projects.scans.new.title")
+- content_for :page_header, ui_page_header(t("projects.scans.new.title"), subtitle: t("projects.scans.new.subtitle"))
+- values = @values || {}
+- guided = values[:guided].to_s == "1"
+- depths = Array(values[:depths]).presence || ProjectScanSkill::DEPTH_ORDER
+
+= form_with url: projects_scans_path, method: :post, class: "ui-card ui-form projects-scan-form",
+  data: { controller: "path-check", path_check_url_value: check_path_projects_scans_path, testid: "scan-form" } do
+  - if @error
+    %p.projects-error{ role: "alert", data: { testid: "scan-form-error" } }= @error
+  .ui-field
+    = label_tag :project_root, t("projects.scans.form.path"), class: "ui-label"
+    = text_field_tag :project_root, values[:project_root], class: "ui-input", required: true, autocomplete: "off",
+      placeholder: "/path/to/project", data: { path_check_target: "input", action: "input->path-check#check", testid: "scan-path" }
+    = render "projects/scans/path_check", result: @path_result
+    = render "projects/scans/folders", status: ScanRootPolicy.status
+  .ui-field
+    = label_tag :project_name, t("projects.scans.form.name"), class: "ui-label"
+    = text_field_tag :project_name, values[:project_name], class: "ui-input", data: { testid: "scan-name" }
+  .ui-field
+    = label_tag :aliases, t("projects.scans.form.aliases"), class: "ui-label"
+    = text_field_tag :aliases, values[:aliases], class: "ui-input", placeholder: "alias1, alias2"
+  %label.projects-checks
+    = check_box_tag :guided, "1", guided, class: "projects-scan-form__toggle", data: { testid: "scan-guided" }
+    = t("projects.scans.form.guided")
+  .ui-field.projects-scan-form__normal
+    = label_tag :mode, t("projects.scans.form.mode"), class: "ui-label"
+    = select_tag :mode, options_for_select(ScanProjectTool::MODES, values[:mode].presence || "initial"), class: "ui-input"
+  .ui-field.projects-scan-form__normal
+    = label_tag :file_globs, t("projects.scans.form.globs"), class: "ui-label"
+    = text_area_tag :file_globs, values[:file_globs], rows: 2, class: "ui-input", placeholder: "README*, package.json, ..."
+  %fieldset.projects-checks.projects-scan-form__guided{ data: { testid: "scan-depths" } }
+    %legend.ui-label= t("projects.scans.form.depths")
+    - ProjectScanSkill::DEPTH_ORDER.each do |depth|
+      %label
+        = check_box_tag "depths[]", depth, depths.include?(depth), id: "depth_#{depth}"
+        = project_scan_skill_depth_label(depth)
+  %label.projects-checks
+    = check_box_tag :dry_run, "1", values[:dry_run].to_s == "1", data: { testid: "scan-dry-run" }
+    = t("projects.scans.form.dry_run")
+  .projects-actions
+    = submit_tag t("projects.scans.form.submit"), class: "ui-btn ui-btn-primary", data: { testid: "scan-submit" }
+    = link_to t("projects.scans.index.title"), projects_scans_path, class: "ui-btn"

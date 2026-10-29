@@ -166,6 +166,24 @@ RSpec.describe "API V1 Graph Data", type: :request do
       expect(walk.size).to eq(2) # the walk stopped after the first hop
     end
 
+    it "keeps a capped neighbourhood's lowest ids, whatever order its relations were written in" do
+      hub = MemoryEntity.create!(name: "Synth Hub", entity_type: "Service")
+      spokes = Array.new(8) { |i| MemoryEntity.create!(name: "Synth Spoke #{i}", entity_type: "Note") }
+      spokes.reverse_each { |spoke| MemoryRelation.create!(from_entity: spoke, to_entity: hub, relation_type: "depends_on") }
+      stub_const("Api::V1::GraphDataController::MAX_NODES", 3)
+      walk = []
+      callback = ->(*, payload) { walk << payload[:sql] if payload[:sql].match?(/SELECT DISTINCT .*FROM `memory_relations`/) }
+
+      ActiveSupport::Notifications.subscribed(callback, "sql.active_record") do
+        get "/api/v1/graph_data", params: { entity_id: hub.id }
+      end
+
+      expect(node_ids).to contain_exactly(hub.id, spokes[0].id, spokes[1].id)
+      # A small table may already come back in order; the ORDER BY is what holds on a big one.
+      expect(walk.size).to eq(2)
+      expect(walk).to all(match(/ORDER BY `memory_relations`.`(to|from)_entity_id` ASC LIMIT 4/))
+    end
+
     it "counts the real total for a capped root view and a capped children view" do
       3.times { |i| MemoryEntity.create!(name: "Synth Project #{i}", entity_type: "Project") }
       3.times { |i| MemoryRelation.create!(from_entity: MemoryEntity.create!(name: "Synth Child #{i}", entity_type: "Note"), to_entity: widget, relation_type: "part_of") }
