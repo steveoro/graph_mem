@@ -32,6 +32,7 @@ class AppSettings < RailsSettings::Base
   field :summary_provider, default: "", type: :string
   field :summary_timeout, default: 0, type: :integer
   field :summary_max_tokens, default: 0, type: :integer
+  field :summary_num_ctx, default: 0, type: :integer
   field :summary_observations_per_entity, default: 3, type: :integer
   field :enable_llm_summarization, default: false, type: :boolean
 

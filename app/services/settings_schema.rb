@@ -134,6 +134,7 @@ class SettingsSchema
                                     fallback: :summarization_settings_fallback_hint, hint: :provider),
           define_field("summary_timeout", validator: :summary_timeout, fallback: :summarization_settings_fallback_hint, hint: :timeout),
           define_field("summary_max_tokens", validator: :summary_max_tokens, fallback: :summarization_settings_fallback_hint, hint: :max_tokens),
+          define_field("summary_num_ctx", validator: :summary_num_ctx, fallback: :summarization_settings_fallback_hint, hint: :num_ctx),
           define_field("summary_observations_per_entity", validator: :summary_observations_per_entity)
         ], partial: "system/settings/summaries_panel"),
         define_group(:imports, [ define_field("import_observation_duplicate_max_distance", validator: :import_distance, input: :slider) ]),

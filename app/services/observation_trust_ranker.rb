@@ -47,9 +47,10 @@ class ObservationTrustRanker
     def source_factor(observation)
       return 1.0 if observation.source.blank?
 
-      normalized = observation.source.to_s.downcase.strip
-      return HIGH_SOURCE_MULTIPLIER if HIGH_TRUST_SOURCES.any? { |s| normalized.include?(s) }
-      return LOW_SOURCE_MULTIPLIER if LOW_TRUST_SOURCES.any? { |s| normalized.include?(s) }
+      # Whole tokens only: "docs:README.md" is a doc source, "docker-compose" isn't.
+      tokens = observation.source.to_s.downcase.split(/[^a-z0-9]+/).to_set
+      return HIGH_SOURCE_MULTIPLIER if HIGH_TRUST_SOURCES.intersect?(tokens)
+      return LOW_SOURCE_MULTIPLIER if LOW_TRUST_SOURCES.intersect?(tokens)
 
       1.0
     end

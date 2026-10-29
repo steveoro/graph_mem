@@ -22,6 +22,9 @@ class ProjectScanner
     .devin/blueprint.yaml
     docs/**/*.md
   ].freeze
+  # Never read, whatever the globs: plans describe work that hasn't happened yet, so a scan
+  # would store them as fact.
+  EXCLUDED_FILE_GLOBS = %w[docs/plans/**/*].freeze
   MAX_FILES = 50
   MAX_FILE_BYTES = 50_000
   MAX_TOTAL_INPUT_BYTES = 200_000
@@ -279,8 +282,8 @@ class ProjectScanner
     )
   end
 
-  # Globs under the root, keeping only files inside it that aren't denylisted (PR-0 §0.5),
-  # sorted before the max_files cap so the selected set doesn't depend on filesystem order.
+  # Globs under the root, keeping only files inside it that aren't denylisted (PR-0 §0.5) or
+  # excluded (EXCLUDED_FILE_GLOBS), sorted before the max_files cap so the selected set doesn't depend on filesystem order.
   # Returns the realpaths that were checked, so the read can't follow a different link.
   def discover_files
     glob_files = readable_files(@file_globs.flat_map { |g| @file_filter.glob(g) })
@@ -296,8 +299,13 @@ class ProjectScanner
       next unless File.file?(path)
 
       real = @file_filter.kept_path(path)
-      real if real && File.readable?(real) && !binary?(real)
+      real if real && !excluded_file?(real) && File.readable?(real) && !binary?(real)
     end.uniq
+  end
+
+  def excluded_file?(path)
+    relative = Pathname.new(path).relative_path_from(@file_filter.root).to_s
+    EXCLUDED_FILE_GLOBS.any? { |glob| File.fnmatch?(glob, relative, File::FNM_PATHNAME | File::FNM_DOTMATCH) }
   end
 
   def binary?(path)

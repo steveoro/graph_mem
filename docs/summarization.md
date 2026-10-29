@@ -27,6 +27,7 @@ Configure under **System › Settings › Summaries** (`/system/settings?tab=sum
 | `summary_provider` | `SUMMARY_PROVIDER` | `ollama` or `openai_compatible` |
 | `summary_timeout` | `SUMMARY_TIMEOUT` | HTTP timeout in seconds |
 | `summary_max_tokens` | `SUMMARY_MAX_TOKENS` | Output token cap |
+| `summary_num_ctx` | `SUMMARY_NUM_CTX` | Ollama context window (`options.num_ctx`), default `8192`, 2048-131072; ignored by `openai_compatible` |
 
 The embedding model used for retrieval is **separate** from the summary model. Do not reuse `nomic-embed-text` or other embedding-only models for synthesis.
 

@@ -246,6 +246,18 @@ RSpec.describe ProjectScanner, type: :service do
       end
     end
 
+    it "never reads docs/plans, which describes work that hasn't happened yet" do
+      FileUtils.mkdir_p(File.join(@project_root, "docs/plans/nested"))
+      File.write(File.join(@project_root, "docs/guide.md"), "# SynthWidget guide")
+      File.write(File.join(@project_root, "docs/plans/x.md"), "# Planned: SynthWidget moves to Gadget")
+      File.write(File.join(@project_root, "docs/plans/nested/y.md"), "# Planned too")
+
+      files = ProjectScanner.new(project_root: @project_root).send(:discover_files)
+
+      expect(files).to include(File.join(@project_root, "docs/guide.md"))
+      expect(files.grep(%r{/docs/plans/})).to be_empty
+    end
+
     it "sorts before applying max_files, so the kept set is deterministic" do
       %w[c.md a.md b.md].each { |name| File.write(File.join(@project_root, name), "# #{name}") }
       scanner = ProjectScanner.new(project_root: @project_root, file_globs: %w[*.md], max_files: 2)
