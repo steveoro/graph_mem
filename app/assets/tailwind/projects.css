@@ -1,0 +1,132 @@
+/* Projects & Data (UI-6): the projects list, scans, imports, exports and the background-job page.
+   Imported by application.css. */
+@layer components {
+  .projects-page {
+    display: grid;
+    gap: 1rem;
+  }
+
+  .projects-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: center;
+  }
+
+  .projects-table {
+    width: 100%;
+    border-collapse: collapse;
+    border: 1px solid var(--color-ui-border);
+    border-radius: var(--radius-ui);
+    background: var(--color-ui-surface);
+    font-size: 0.875rem;
+  }
+
+  .projects-table th,
+  .projects-table td {
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--color-ui-border);
+    text-align: left;
+    vertical-align: top;
+  }
+
+  .projects-table th {
+    background: var(--color-ui-surface-muted);
+    font-weight: 600;
+  }
+
+  .projects-op {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 0.375rem;
+    align-items: center;
+  }
+
+  .projects-muted {
+    color: var(--color-ui-text-muted);
+  }
+
+  .projects-empty {
+    color: var(--color-ui-text-muted);
+  }
+
+  .projects-grid {
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr));
+  }
+
+  .projects-stats {
+    display: grid;
+    gap: 0.5rem;
+    grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  }
+
+  .projects-stat {
+    padding: 0.625rem;
+    border-radius: var(--radius-ui);
+    background: var(--color-ui-surface-muted);
+  }
+
+  .projects-stat__value {
+    display: block;
+    font-size: 1.25rem;
+    font-weight: 700;
+  }
+
+  .projects-stat__label {
+    color: var(--color-ui-text-muted);
+    font-size: 0.75rem;
+  }
+
+  .projects-error {
+    padding: 0.625rem 0.75rem;
+    border-radius: var(--radius-ui);
+    background: var(--color-ui-danger-soft);
+    color: var(--color-ui-danger);
+  }
+
+  .projects-hint {
+    color: var(--color-ui-text-muted);
+    font-size: 0.8125rem;
+  }
+
+  .projects-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.375rem;
+  }
+
+  .projects-chip {
+    padding: 0.125rem 0.625rem;
+    border: 1px solid var(--color-ui-border);
+    border-radius: 999px;
+    background: var(--color-ui-surface-muted);
+    font-family: ui-monospace, monospace;
+    font-size: 0.75rem;
+    cursor: pointer;
+  }
+
+  .projects-checks {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+  }
+
+  /* The scan form: depths show only for a guided scan, mode and globs only for a normal one. */
+  .projects-scan-form .projects-scan-form__guided {
+    display: none;
+  }
+
+  .projects-scan-form:has(.projects-scan-form__toggle:checked) .projects-scan-form__guided {
+    display: flex;
+  }
+
+  .projects-scan-form:has(.projects-scan-form__toggle:checked) .projects-scan-form__normal {
+    display: none;
+  }
+
+  .projects-progress {
+    width: 100%;
+  }
+}

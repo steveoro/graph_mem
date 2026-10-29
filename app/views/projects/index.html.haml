@@ -1,0 +1,49 @@
+- content_for :title, t("projects.index.title")
+- content_for :page_header, ui_page_header(t("projects.index.title"), subtitle: t("projects.index.subtitle"))
+
+-# Old /maintenance#… bookmarks arrive here through the 301; forward them (legacy_anchor_controller.js).
+.projects-page{ data: { controller: "legacy-anchor", testid: "projects-page",
+  legacy_anchor_targets_value: { "background-jobs" => projects_jobs_path, "project-scans" => projects_scans_path,
+    "mcp-clients" => operator_telemetry_path(anchor: "mcp-clients") }.to_json } }
+  .projects-actions
+    = link_to t("projects.index.new_scan"), new_projects_scan_path, class: "ui-btn ui-btn-primary", data: { testid: "projects-new-scan" }
+    = link_to t("projects.index.import"), new_projects_import_path, class: "ui-btn", data: { testid: "projects-import" }
+  - if @rows.empty?
+    %p.ui-card.projects-empty{ data: { testid: "projects-empty" } }= t("projects.index.empty")
+  - else
+    %table.projects-table{ data: { testid: "projects-table" } }
+      %thead
+        %tr
+          %th= t("projects.index.project")
+          %th= t("projects.index.last_scan")
+          %th= t("projects.index.last_import")
+          %th= t("projects.index.review")
+          %th
+      %tbody
+        - @rows.each do |row|
+          %tr{ data: { testid: "project-row-#{row.project.id}" } }
+            %td
+              %strong= row.project.name
+            %td
+              - if (scan = row.last_scan)
+                = link_to projects_scan_path(scan.operation_id), class: "projects-op" do
+                  = dashboard_status_badge(scan.status)
+                  %span= scan.details&.dig("mode") || t("projects.scans.guided")
+                  %span.projects-muted= t("projects.ago", time: time_ago_in_words(scan.created_at))
+              - else
+                %span.projects-muted= t("projects.index.never")
+            %td
+              - if (import = row.last_import)
+                = link_to report_projects_import_path(import.operation_id), class: "projects-op" do
+                  = dashboard_status_badge(import.status)
+                  %span.projects-muted= t("projects.ago", time: time_ago_in_words(import.created_at))
+              - else
+                %span.projects-muted= t("projects.index.never")
+            %td
+              - if row.review_groups.positive?
+                = link_to t("projects.index.review_groups", count: row.review_groups), review_path(view: "scan", project_id: row.project.id),
+                  data: { testid: "project-review-#{row.project.id}" }
+              - else
+                %span.projects-muted= t("projects.index.no_review")
+            %td= link_to t("projects.index.open_in_explore"), explore_path(project_id: row.project.id), class: "ui-btn"
+    = paginate @overview.projects
