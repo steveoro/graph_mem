@@ -8,7 +8,7 @@ module System
 
     self.nav_section = :embeddings
 
-    # The words typed to confirm (ui-dashboard-plan.md §5.2).
+    # The words typed to confirm (the UI plan §5.2).
     REGENERATE_WORD = "REGENERATE"
     DROP_WORD = "DROP"
 

@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-# Runs the review policies (UI-5a, `ui-dashboard-plan.md` §2.5.3) and writes one
+# Runs the review policies (UI-5a, the UI plan §2.5.3) and writes one
 # `review_policy_run` MaintenanceReport per run. Order: classify rows seeded before UI-5a (bounded),
 # refresh the priority of active rows (age raises it), then the policies below. Each policy reads
 # its toggle uncached at the start, acts in batches of 200 rows (one undoable change set each,

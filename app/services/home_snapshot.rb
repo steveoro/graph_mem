@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-# What Home shows (UI-2b, docs/plans/ui-dashboard-plan.md §2.2), one section per lazy Turbo Frame
+# What Home shows (UI-2b, the UI plan (docs/plans) §2.2), one section per lazy Turbo Frame
 # so a slow check (the embedding service) never holds up the rest. Status only: nothing here
 # changes data. Composes MaintenanceDashboardSnapshot, EmbeddingStatusSnapshot,
 # AgentContextsSnapshot, ReviewDigest, OperationProgress, ChangeSet and ScanRootPolicy.status.

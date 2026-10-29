@@ -7,7 +7,7 @@ RSpec.describe DashboardHelper, type: :helper do
     it "renders an accessible search icon" do
       html = helper.dashboard_icon(:search)
 
-      expect(html).to include('class="dashboard-icon"')
+      expect(html).to include('class="ui-icon"')
       expect(html).to include('aria-hidden="true"')
       expect(html).to include("<svg")
     end
@@ -18,7 +18,7 @@ RSpec.describe DashboardHelper, type: :helper do
       html = helper.agent_context_activity_badge("active")
 
       expect(html).to include("Active")
-      expect(html).to include("dashboard-badge--running")
+      expect(html).to include("ui-badge--running")
     end
   end
 

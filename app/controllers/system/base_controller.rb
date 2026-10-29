@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 module System
-  # System (UI-7, ui-dashboard-plan.md §2.7): health, settings, backups, access, activity, audit
+  # System (UI-7, the UI plan §2.7): health, settings, backups, access, activity, audit
   # log, telemetry, embeddings, background jobs and the Mission Control queue. Operator only: no
   # subclass calls allow_guest, so a guest gets 403 from every action (RoleAuthorization), and
   # every write keeps ApplicationController's CSRF check.
