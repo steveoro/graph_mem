@@ -1,5 +1,7 @@
 # UI-7 → graph_mem 1.63.0: System (health, one settings schema, backups with a typed restore, access, activity, jobs), plus the #137 leftover
 
+**Status (Oct 29): DONE.** Shipped as UI-7a (#138) and UI-7b (#140, split at S4 and merged into #138), merged to `main` as `501f5d5` and tagged **1.63.0**. The only leftover is §6.D-6 (drop the transition shims, UI-7's included; listed in `ui-dashboard-plan.md` §6.D-6), a separate PR after 1.63.0. Next: fact supersede, `docs/plans/fact-supersede-plan.md` (1.64.0).
+
 **Written 2026-10-29 (Europe/Rome)** for Claude, from `main` at `dddad69` (#137 merged and **tagged 1.62.0**). Every
 file:line in "What the code looks like today" was checked against that commit. If a line has moved, find the code by
 the quoted text. If the code no longer matches the description, **stop and ask Steve** instead of improvising. Only

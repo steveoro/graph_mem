@@ -1,4 +1,15 @@
-# Fact supersede → graph_mem 1.64.0 (TBD): source facts that retire the observations they contradict, per project, never by age
+# Fact supersede → graph_mem 1.64.0: source facts that retire the observations they contradict, per project, never by age
+
+**1.63.0 update (Oct 29, after UI-7).** UI-7 shipped as 1.63.0 (`501f5d5`), so the version is **1.64.0** and FS is
+next. Re-checked against `501f5d5`: of the files this plan cites, only the header comments of
+`review_policy_runner.rb` and `review_row_classifier.rb` and one `describe` in `mcp_official_spec.rb` changed, with
+no line shifts, so every file:line below still holds. What UI-7 changes for this plan:
+- Settings now render from **`SettingsSchema`** (`app/services/settings_schema.rb`), on **System › Settings**, and
+  `spec/services/settings_schema_spec.rb` requires every `AppSettings` field to be in exactly one group. So
+  `summary_num_ctx` goes in the `:summaries` group with a validator (step S), and `fact_supersede_enabled` in
+  `:feature_flags` (F4). The auto-apply toggle and number join `REVIEW_POLICY_TOGGLES` / `REVIEW_NUMBERS`, which
+  the `:review_policies` group picks up by itself. "Settings › Summaries" below means System › Settings › Summaries.
+- The tool counts are unchanged: 22 classes; default 12, readonly 9, maintenance 22.
 
 **Written 2026-10-29 (Europe/Rome)** for Claude, from `main` at `8b91cc7` (UI-6 / #137 not merged yet; nothing here
 depends on it). Every file:line in "What the code looks like today" was checked against that commit. If a line has
@@ -22,10 +33,10 @@ contradiction is checked per pair.
 |---|---|
 | Branch / PR | `claude/fact-supersede`, **one PR**, titled "Fact supersede (1.64.0)". Natural split point after F4 (see "Size and split") |
 | Commits | S → F1 … F6 → T → D → R, one commit per step (more is fine, fewer is not; S stays its own commit) |
-| Version | **1.64.0** if it ships after UI-7 (1.63.0 in `ui-dashboard-plan.md` §0.3). If Steve schedules it before UI-7, the number is **TBD**: Steve picks it; Claude doesn't renumber UI-7 |
+| Version | **1.64.0** (UI-7 shipped as 1.63.0 on Oct 29) |
 | Data | synthetic only (`SynthWidget`, `Alpha Service`, `Gadget Project`, a "Legacy Gadget" project as the legacy case); never a real graph, never a copy of one, never a real project folder |
 | Read first | `CLAUDE.md`, `AGENTS.md`, `.devin/rules/*`, `docs/plans/ui-dashboard-plan.md` §0.1, §2.5, §5.3; `docs/plans/ui-5-plan.md` (review kinds, policies); `docs/architecture.md` "Change sets and undo" |
-| Depends on | UI-4a (change sets) ✅, UI-5 (review kinds, policies) ✅, UI-4b (Explore panel) ✅. Not on UI-6 or UI-7 |
+| Depends on | UI-4a (change sets) ✅, UI-5 (review kinds, policies) ✅, UI-4b (Explore panel) ✅. Not on UI-6 or UI-7 (both shipped; branch from `main` after 1.63.0) |
 
 ## Goal
 
