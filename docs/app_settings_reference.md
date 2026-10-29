@@ -16,8 +16,11 @@ GraphMem stores operator-tunable runtime settings in the primary MariaDB `settin
 | `enable_garbage_collector` | `true` | When `false`, `GarbageCollectionJob` and manual GC runs are skipped. |
 | `enable_stale_memory_scan` | `true` | **Stale memory scan.** When `false`, the scheduled scan that flags stale observations for review is skipped. |
 | `enable_contradiction_detection` | `true` | **Contradiction detection.** When `false`, the contradiction detector (in the stale memory scan and the `detect_contradictions` endpoint) finds no pairs. |
+| `fact_supersede_enabled` | `true` | **Source fact supersede** (1.64.0). When `true`, a new or changed source fact queues `FactSupersedeJob`, which proposes "Outdated by a fact" review rows in the fact's project. Proposals only; applying on its own needs `enable_auto_apply_fact_supersede` (Review policies, off by default). |
 
 `enable_guest_access` is on **System › Access** (see [MCP Access](#mcp-access)).
+
+**Review policies** (System › Settings › Review policies) gain in 1.64.0: `fact_supersede_max_distance` (0.45, 0.2-0.6: how close an observation must be to a source fact to be checked against it), `enable_auto_apply_fact_supersede` (`false`) and `auto_apply_fact_supersede_min_confidence` (0.9, 0.8-0.99). See `docs/architecture.md` "Source facts and fact supersede".
 
 Boolean flags consumed by background workers use direct database reads so Solid Queue processes see UI changes without restart.
 

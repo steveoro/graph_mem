@@ -276,7 +276,7 @@ The review rows (`maintenance_report_rows`) that dream-state compaction, the sta
 - **Columns.** `group_key`, `anchor_entity_id`, `project_id`, `confidence` (0-1), `priority` (0-100), `expires_at` (a snooze's end), `resolved_by` (`operator`, `agent`, `policy:<name>`, `generator`) and `change_set_id` (the set that last changed the row, for undo). Status `expired` joins `active`, `ignored`, `approved`, `dismissed`. Suppressions gain `expires_at` (NULL = permanent) and `source` (`dismissed`, `snoozed`, `expired`, `policy`); an expired suppression no longer blocks its signature.
 - **Classification.** `ReviewRowClassifier` runs at seed time: the group key and anchor per kind (pairs collapse both directions; observation kinds key on the owner), a confidence per kind and `priority = 100 × (0.6 impact + 0.4 confidence) × age boost` (+ a bump for well-connected anchors; Project roots weigh more; errors never sort below 40). `ReviewRowClassifier.backfill!` (also `bin/rails review:backfill`) classifies older rows. It also orders symmetric `relates_to` signatures, so A→B and B→A are one suggestion.
 - **Limits at the source.** Per kind and run: `RUN_CAPS` (relationship 200, merge 100, orphan 100, contradiction 100; counted across one run's flushes, best priority kept). The backlog ceiling (`review_backlog_ceiling` active rows of a kind, default 300) is soft: the room left under it is filled with the best items, and beyond it an item comes in only when it beats the lowest active priority (nothing is evicted). The report's data records `skipped_run_cap` / `skipped_backlog_full`. The queue pages in SQL (root-first rows, then priority); a text search scans at most 2,000 rows.
-- **What can be applied in bulk.** Only `relationship_proposal` and `stale_memory` (`SAFE_BULK_KINDS`). Merges, deletes, moves and reparents (`DESTRUCTIVE_KINDS`) and contradictions (`CHOICE_KINDS`) are applied one by one; bulk apply skips them.
+- **What can be applied in bulk.** Only `relationship_proposal` and `stale_memory` (`SAFE_BULK_KINDS`). Merges, deletes, moves and reparents (`DESTRUCTIVE_KINDS`) and contradictions and fact supersedes (`CHOICE_KINDS`) are applied one by one; bulk apply skips them.
 - **Snooze.** `CompactionReviewService.snooze` (and `ignore`, which now snoozes for 30 days): status `ignored` until `expires_at`, with a matching "snoozed" suppression. Dismissing a snoozed signature makes the suppression permanent; undo brings the snooze back.
 - **Contradictions.** The scheduled stale scan seeds one `contradiction` row per pair its contradiction pass finds (signature `contradiction|<low>-<high>`, either order). Applying needs `keep_observation_id`: that observation is kept and the other is marked obsolete, a `review.apply` set (30 days) undone like any obsolete mark. MCP/API `detect_contradictions` still seed nothing.
 - **Policies.** `ReviewPolicyJob` runs `ReviewPolicyRunner` nightly at 5:00 GMT and after a compaction run, stale scan or project scan that seeded rows (never two at once). Each policy reads its `AppSettings` toggle uncached, acts on at most 500 rows per run, in batches of 200, each batch one undoable `policy.<name>` set:
@@ -289,6 +289,7 @@ The review rows (`maintenance_report_rows`) that dream-state compaction, the sta
   | `expire_low_confidence` | on, 30 days | confidence < 0.4, untouched for N days → expired + 90-day suppression |
   | `auto_apply_expired_validity` | off | stale_memory `valid_until_elapsed` → applied (max 100) |
   | `auto_apply_relationships` | off | high-band proposals ≥ 0.90 confidence, never `part_of` → applied (max 50) |
+  | `auto_apply_fact_supersede` | off | `fact_supersede` rows judged superseded ≥ 0.90, unguarded, scoped, operator-confirmed fact → applied (max 100) |
 
   Hard rule: a policy never applies a destructive or choice kind, whatever the settings say. Each run writes a `review_policy_run` report with the counts, the change-set uuids and the apply/dismiss rates per kind and score.
 
@@ -300,3 +301,56 @@ The review rows (`maintenance_report_rows`) that dream-state compaction, the sta
 - **Group actions.** `ReviewGroupActions` previews, then applies, dismisses or snoozes a group's pending rows (highest priority first, at most 100) in one change set. Apply only takes active (not snoozed) `SAFE_BULK_KINDS` rows and needs the preview's token: if the eligible rows changed meanwhile it answers a conflict and writes nothing. Dismiss and snooze take any kind, pending rows only; a snooze never replaces a permanent suppression. Each row's action commits on its own: the action succeeds (with Undo) when at least one row was written, and its message counts the failed rows. A busy lock before the first write answers 503; after it, the run stops and the message says how many rows are left.
 - **Settings › Review policies** edits the policy toggles and limits; values outside `AppSettings::REVIEW_NUMBERS` are refused with 422, and each change writes an `AuditLog` row on the `AppSettings` record.
 
+## Source facts and fact supersede (1.64.0)
+
+An authoritative statement, such as an updated README line, can retire the older observations of
+**its own project** that it contradicts. Old is not wrong: nothing here filters or scores by age,
+and nothing acts across projects. Step list: `docs/plans/fact-supersede-plan.md`.
+
+- **Source facts.** An active observation tagged `source-fact` (`SourceFact::SOURCE_FACT_TAG`) on
+  an entity inside a project, or on the Project root; a tagged row outside any project is invalid.
+  Optional `replaces:<term>` tags are search hints. The operator marks one in Explore
+  (`explore.fact_mark`, undoable); agents write the tag with `graph_write` / `graph_edit`. A fact
+  is **operator-confirmed** when the latest audit row that added the tag has an `operator:` actor.
+  Source facts count as high-trust sources in `ObservationTrustRanker`.
+- **`memory_observations.outdated_by_id`** (nullable, FK `ON DELETE SET NULL`): the fact that
+  retired or superseded the row, set by `mark_obsolete!(outdated_by:)` / `supersede!(…, outdated_by:)`
+  and allowed only on inactive rows, never on itself, and only for a fact of the same project.
+  The panel shows "Outdated by: <fact>"; undo restores it from the audit row.
+- **Candidates** (`FactSupersede::Candidates`, no LLM call): the fact's project's observations
+  (members and root; the fact and other facts excluded), found by one `VEC_DISTANCE_COSINE`
+  query within `fact_supersede_max_distance` (0.45) and an escaped `LIKE` per term (at most 5).
+  A polarity flip adds 0.1. Related entities without a project come back as **unscoped**: shown
+  with a warning, applied by hand only (without `outdated_by`), never auto-applied.
+- **Legacy guard** (`FactSupersede::LegacyGuard`, again at apply): `keep` (never proposed) when the
+  text names another project by name or alias; `context` (proposed, never auto-applied, the
+  judge is told) for a version, an environment or branch word the fact doesn't name, or an
+  `experience` row.
+- **Judge** (`FactSupersede::Judge`): one Ollama call per 8 candidates through
+  `SummaryGenerationClient.generate(…, options: { num_ctx:, num_predict:, format: "json" })`. The
+  prompt says the fact is authoritative for this project only and that age is not evidence; the
+  statements are passed as JSON data. The answer is parsed strictly; anything missing, repeated
+  or invalid leaves the candidate `unjudged`. `context` candidates are capped at 0.7.
+- **Proposals** (`FactSupersede::Proposals`): `FactSupersedeJob` (queued by the observation's
+  `after_commit` for a new fact, a fact's new text or a new tag, when `fact_supersede_enabled`;
+  one job per fact via Solid Queue's `limits_concurrency`) seeds `fact_supersede` rows
+  ("Outdated by a fact") for `superseded` and `unjudged` verdicts only. Signature
+  `fact:<fact>|obs:<observation>`, so a dismissal suppresses that pair alone; run cap 100. The
+  kind is a choice kind (never bulk or group applied). `CompactionReviewApplier::FactSupersede`
+  supersedes (a replacement text) or retires inside `review.apply`, after re-checking the fact,
+  the observation, the project and the guard. `detect_contradictions` with
+  `mode: "outdated_by_fact"` runs the same pipeline for agents on `/mcp/maintenance`.
+- **Fallbacks.** No embeddings: term match only (the job needs `replaces:` terms, else it
+  records "nothing to search"). No LLM: every row is `unjudged` at confidence ≤ 0.5. Both down:
+  the Find & supersede page still matches text and supersedes or retires by hand.
+- **Auto-apply** (`ReviewPolicies::AutoApplyFactSupersede`, `enable_auto_apply_fact_supersede`,
+  **off** by default): rows the judge marked `superseded` at or above
+  `auto_apply_fact_supersede_min_confidence` (0.9), with no guard, a scoped entity and an
+  operator-confirmed fact; at most 100 per run, in `policy.*` change sets. It lifts the AutoApply
+  hard rule for this kind only.
+- **Find & supersede** (`/review/supersede`, `Review::SupersedeController`, operator only): an
+  escaped text search in one project (or all projects, view only), inactive rows on request
+  (view only), optionally with a source fact's candidates, guards and pending verdicts.
+  `FactSupersede::Bulk` supersedes (one text, or the fact's text) or retires at most 200 rows of
+  that project in one `explore.bulk_supersede` change set; rows that changed in between are
+  skipped and counted.

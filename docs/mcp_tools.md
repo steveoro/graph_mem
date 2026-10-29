@@ -144,7 +144,13 @@ merge with other writes, are recorded but can't be undone. Agents can't undo: th
   - `entity_id` (integer, required): The ID of the entity. Also accepts entity name (string).
   - `max_distance` (number, optional, default: 0.35): Maximum cosine distance threshold (smaller = stricter).
   - `max_results` (integer, optional, default: 20): Maximum candidate pairs to return.
-- **Review rows:** this tool only reports. Contradiction review rows come from the scheduled stale scan alone; apply one with `apply_maintenance_review` and `action_params.keep_observation_id`.
+  - `mode` (string, optional, 1.64.0): `contradictions` (default; the answer is unchanged) or `outdated_by_fact`.
+  - `fact_observation_id` (integer, `outdated_by_fact` only, required there): an active source fact (tag `source-fact`) of `entity_id`.
+  - `terms` (array of strings, `outdated_by_fact` only): up to 5 search terms, 2-100 characters each, besides the fact's `replaces:` tags.
+  - `seed_review` (boolean, `outdated_by_fact` only, default: true): seed the proposals as `fact_supersede` review rows.
+  - In `outdated_by_fact` mode `max_results` is at most 50 and `max_distance` is ignored. Any of the three fact arguments without the mode, or a fact that isn't an active source fact of the entity, is an argument error with a `next_move`.
+- **Review rows:** the default mode only reports. Contradiction review rows come from the scheduled stale scan alone; apply one with `apply_maintenance_review` and `action_params.keep_observation_id`.
+- **`outdated_by_fact` response:** `mode`, `entity_id`, `name`, `fact_observation_id`, `searched` (false: no vectors and no terms), `judged`, `candidate_count`, `kept_by_guard`, `proposal_count`, `seeded_count` and `proposals` (`observation_id`, `entity_id`, `entity_name`, `project_id` (null when the entity has no project), `content`, `verdict` (`superseded` or `unjudged`), `confidence`, `reason`, `replacement`, `guard`, `guard_reason`, `signals`, `review_row_id`). It searches the fact's project only and never writes observations; apply a row with `apply_maintenance_review`.
 
 ## Search & Query Tools (3 tools)
 
@@ -360,7 +366,7 @@ These tools perform structural graph queries. `direction` is one of `outgoing`
   - `item_id` (string, required): Maintenance report row UUID.
   - `report_type` (string, optional, default: `compaction_review`): Report type that owns the row.
   - `dry_run` (boolean, optional, default: false): When true, validate and preview without applying. Since 1.58 the answer carries `preview`: `{ ok, effects, warnings, undo }`, what applying would do (the same lookups, no writes).
-  - `action_params` (object, optional): Optional overrides for merge/relation/orphan endpoints; for a `contradiction` row, `keep_observation_id` (one of its two observations) is required: that one is kept and the other is marked obsolete.
+  - `action_params` (object, optional): Optional overrides for merge/relation/orphan endpoints; for a `contradiction` row, `keep_observation_id` (one of its two observations) is required: that one is kept and the other is marked obsolete. For a `fact_supersede` row (1.64.0): `fact_action` (`supersede` or `retire`) and `replacement` (text); without them it supersedes with the judge's replacement, or retires when there is none. The apply re-checks the fact, the project and the legacy guard, and records `outdated_by`.
 - **Response:** Apply result hash (`success`, `message`, kind-specific fields such as `deleted_relation_ids`, and since 1.58 `change_set_uuid`, `undoable`, `not_undoable_reason`), or a dry-run preview with `kind` and `payload`.
 
 #### `list_maintenance_review`

@@ -94,7 +94,7 @@ Answered and dropped from the open questions: all four Oct 20 UI questions (acco
 | 20 | ✅ **UI-4b** Explore, one PR (#136, merged as `05aa5c1`; tag pending), with F-1, F-2 and the UI-3 leftovers folded in. Step list: `docs/plans/ui-4b-plan.md` | graph_mem **1.61.0** | [Claude] | done |
 | 21 | ✅ **UI-6** Projects & Data, one PR (#137, merged as `dddad69`, tagged), with the #136 leftovers (step L). Step list: `docs/plans/ui-6-plan.md` | graph_mem **1.62.0** | [Claude] | done |
 | 22 | ✅ **UI-7** System (settings schema, backups, access), with the #137 leftover (step L). Step list: `docs/plans/ui-7-plan.md`. Split at S4 (Oct 29, Steve): UI-7a #138, UI-7b #140 (merged into #138); merged as `501f5d5`, tagged | graph_mem **1.63.0** | [Claude] | done |
-| FS | **Fact supersede**: source facts propose (and, if allowed, apply) supersedes of the observations they contradict, per project, never by age. Step list: `docs/plans/fact-supersede-plan.md` (Oct 29, decisions settled; re-checked at `501f5d5`). No new MCP tool | **1.64.0** | [Claude] | UI-4a ✅, UI-5 ✅, UI-4b ✅ (next) |
+| FS | ✅ **Fact supersede**: source facts propose (and, if allowed, apply) supersedes of the observations they contradict, per project, never by age. Step list: `docs/plans/fact-supersede-plan.md` (Oct 29, decisions settled; re-checked at `501f5d5`). No new MCP tool. One PR (#141) | **1.64.0** | [Claude] | done |
 | UD | The other Devin-simple chores (§6.D: D-4 … D-8) | `[Unreleased]` | [Devin-simple] | as listed |
 | F | Small follow-ups (§6.F: F-1, MCP errors never reach the log; F-2, GitHub Actions Ruby setup on `ubuntu-26.04`) | folded into UI-4b (**1.61.0**), Oct 28 | [Claude] | ✅ #136 (with row 20) |
 
