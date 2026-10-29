@@ -92,6 +92,7 @@ Answered and dropped from the open questions: all four Oct 20 UI questions (acco
 | 20 | ✅ **UI-4b** Explore, one PR (#136, merged as `05aa5c1`; tag pending), with F-1, F-2 and the UI-3 leftovers folded in. Step list: `docs/plans/ui-4b-plan.md` | graph_mem **1.61.0** | [Claude] | done |
 | 21 | **UI-6** Projects & Data, one PR, with the #136 leftovers (step L). Step list: `docs/plans/ui-6-plan.md` | **1.62.0** | [Claude] | PR-0 ✅, UI-1 ✅ (next) |
 | 22 | **UI-7** System (settings schema, backups, access) | **1.63.0** | [Claude] | UI-1 |
+| FS | **Fact supersede**: source facts propose (and, if allowed, apply) supersedes of the observations they contradict, per project, never by age. Step list: `docs/plans/fact-supersede-plan.md` (Oct 29) | **1.64.0** (TBD if before UI-7) | [Claude] | UI-4a ✅, UI-5 ✅, UI-4b ✅ |
 | UD | The other Devin-simple chores (§6.D: D-4 … D-8) | `[Unreleased]` | [Devin-simple] | as listed |
 | F | Small follow-ups (§6.F: F-1, MCP errors never reach the log; F-2, GitHub Actions Ruby setup on `ubuntu-26.04`) | folded into UI-4b (**1.61.0**), Oct 28 | [Claude] | ✅ #136 (with row 20) |
 
@@ -653,6 +654,8 @@ Each item: branch `devin/ui-d<n>-<slug>` off `main`, the listed spec green, the 
   - **Fix B (stopgap): pin `runs-on: ubuntu-24.04`** on the three jobs (and the commented-out job at the bottom of `ci.yml`, if it is ever re-enabled). Smaller, but it only lasts until that image is retired, and Ruby stays on an old patch.
   - **Check:** the three Actions jobs green on the PR; CircleCI still green; `docker build` still works with the new `RUBY_VERSION`.
   - **Size:** folded into UI-4b (**1.61.0**) as its first commit, Fix A with **3.4.12** (Steve, Oct 28). Steps in `docs/plans/ui-4b-plan.md` "F-2" (the list there adds `.versions.conf`, `docs/development.md` and `docs/troubleshooting.md`).
+
+- **[Claude] F-3. Project scan input that fits the model's context** (found Oct 29, while planning fact supersede). `ProjectScanner#build_context` (`app/services/project_scanner.rb:319-338`) joins up to `MAX_TOTAL_INPUT_BYTES = 200_000` (27) into one prompt, and `SummaryGenerationClient#request_ollama` (84-98) sends no `num_ctx`, so Ollama cuts the prompt to the model's default window without saying so. `fact-supersede-plan.md` step S adds the `summary_num_ctx` setting and skips `docs/plans/**`; F-3 is the rest: split the input into chunks that fit `num_ctx` (minus the prompt and `num_predict`), extract per chunk, and merge the results by entity name before reconcile. Spec with a `Dir.mktmpdir` tree larger than one chunk and stubbed HTTP: two calls, one merged result. *Its own small PR, after fact supersede's step S.*
 
 ---
 
