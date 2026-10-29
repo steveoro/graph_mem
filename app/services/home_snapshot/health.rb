@@ -105,7 +105,7 @@ class HomeSnapshot
 
     def backup_pill
       at = last_backup_at
-      href = system_settings_path(tab: "database_backup")
+      href = system_backups_path
       return pill(:backup, :warn, I18n.t("home.health.values.no_backup"), href) unless at
 
       age = Time.current - at
@@ -128,13 +128,13 @@ class HomeSnapshot
 
     def mcp_pill
       policy = GraphMem::OfficialMcp.access_policy
-      pill(:mcp, policy.token_required? ? :ok : :neutral, policy.describe, system_settings_path(tab: "mcp_access"))
+      pill(:mcp, policy.token_required? ? :ok : :neutral, policy.describe, system_settings_path(tab: "access"))
     end
 
     def guest_pill
       status = GraphMem::GuestCredentials.current.status
       color = { available: :ok, conflict: :danger }.fetch(status, :neutral)
-      pill(:guest, color, I18n.t("home.health.values.guest.#{status}"), system_settings_path(tab: "feature_flags"))
+      pill(:guest, color, I18n.t("home.health.values.guest.#{status}"), system_settings_path(tab: "access"))
     end
   end
 end

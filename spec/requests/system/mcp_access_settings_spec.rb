@@ -2,7 +2,7 @@
 
 require "rails_helper"
 
-# UI-2a A3: Settings › MCP access (operator only, validated, audited, applied without a restart).
+# UI-2a A3: Settings › Access, the MCP allowlists (operator only, validated, audited, applied without a restart).
 # Synthetic values only: documentation IP ranges, *.test / *.localhost names.
 RSpec.describe "Settings › MCP access", type: :request do
   env_keys = %w[GRAPH_MEM_MCP_ALLOWED_IPS GRAPH_MEM_MCP_ALLOWED_HOSTS GRAPH_MEM_MCP_ALLOWED_ORIGINS GRAPH_MEM_MCP_TOKEN]
@@ -18,7 +18,7 @@ RSpec.describe "Settings › MCP access", type: :request do
   end
 
   def save(**settings)
-    patch system_settings_path, params: { tab: "mcp_access", settings: settings.transform_keys(&:to_s) }
+    patch system_settings_path, params: { tab: "access", settings: settings.transform_keys(&:to_s) }
   end
 
   def stored(key) = AppSettings.uncached_string(key)
@@ -32,7 +32,7 @@ RSpec.describe "Settings › MCP access", type: :request do
       save(mcp_extra_allowed_ips: "192.168.0.21/24\n10.8.0.0/24", mcp_extra_allowed_hosts: "Synth-LAN.test, [fd00::1], localhost",
            mcp_extra_allowed_origins: "HTTP://Synth-UI.localhost:3002/")
 
-      expect(response).to redirect_to(system_settings_path(tab: "mcp_access"))
+      expect(response).to redirect_to(system_settings_path(tab: "access"))
       expect(stored("mcp_extra_allowed_ips")).to eq("192.168.0.0/24,10.8.0.0/24")
       expect(stored("mcp_extra_allowed_hosts")).to eq("synth-lan.test,fd00::1")
       expect(stored("mcp_extra_allowed_origins")).to eq("http://synth-ui.localhost:3002")
@@ -89,7 +89,7 @@ RSpec.describe "Settings › MCP access", type: :request do
       ENV["GRAPH_MEM_MCP_TOKEN"] = "synthetic-token"
       save(mcp_extra_allowed_ips: "198.51.100.0/24")
 
-      expect(response).to redirect_to(system_settings_path(tab: "mcp_access"))
+      expect(response).to redirect_to(system_settings_path(tab: "access"))
       expect(stored("mcp_extra_allowed_ips")).to eq("198.51.100.0/24")
       expect(flash[:notice]).to include("public range: reachable from outside your network")
       follow_redirect!
@@ -103,7 +103,7 @@ RSpec.describe "Settings › MCP access", type: :request do
       ENV.delete("GRAPH_MEM_MCP_TOKEN")
       GraphMem::OfficialMcp.refresh_access!(transports: false)
 
-      get system_settings_path(tab: "mcp_access")
+      get system_settings_path(tab: "access")
 
       body = Nokogiri::HTML(response.body)
       expect(body.at_css("[data-testid='mcp-access-note-ips']").text).to include("Inactive: no token")
@@ -114,14 +114,15 @@ RSpec.describe "Settings › MCP access", type: :request do
       ENV["GRAPH_MEM_MCP_ALLOWED_HOSTS"] = "env-host.test"
       ENV["GRAPH_MEM_MCP_ALLOWED_ORIGINS"] = "http://env-ui.test/"
 
-      get system_settings_path(tab: "mcp_access")
+      get system_settings_path(tab: "access")
 
       body = Nokogiri::HTML(response.body)
       expect(body.at_css("[data-testid='mcp-env-hosts']").text).to include("env-host.test")
       expect(body.at_css("[data-testid='mcp-env-ips']").text).to include("unset (default: loopback + private ranges)")
       form = body.at_css("form[action='#{system_settings_path}']")
       expect(form.css("input, textarea").filter_map { |input| input["name"] } - %w[_method authenticity_token commit tab])
-        .to contain_exactly("settings[mcp_extra_allowed_ips]", "settings[mcp_extra_allowed_hosts]", "settings[mcp_extra_allowed_origins]")
+        .to contain_exactly("settings[enable_guest_access]", "settings[enable_guest_access]", "settings[mcp_extra_allowed_ips]",
+                            "settings[mcp_extra_allowed_hosts]", "settings[mcp_extra_allowed_origins]")
       expect(body.at_css("[data-testid='mcp-effective-hosts']").text).to include("env-host.test")
       expect(response.body).to include("ENV value never matches: http://env-ui.test/")
       expect(body.at_css("[data-testid='mcp-access-sessions-notice']").text).to include("closes every open MCP session")
@@ -138,7 +139,7 @@ RSpec.describe "Settings › MCP access", type: :request do
       ENV["GRAPH_MEM_MCP_ALLOWED_IPS"] = "any"
       GraphMem::OfficialMcp.refresh_access!(transports: false)
 
-      get system_settings_path(tab: "mcp_access")
+      get system_settings_path(tab: "access")
 
       expect(Nokogiri::HTML(response.body).at_css("input[name='settings[mcp_extra_allowed_ips]']")["disabled"]).to be_present
       expect(response.body).to include("additions have no effect")
@@ -165,7 +166,7 @@ RSpec.describe "Settings › MCP access", type: :request do
     enable_guest!
     sign_in_guest
 
-    get system_settings_path(tab: "mcp_access")
+    get system_settings_path(tab: "access")
     expect(response).to have_http_status(:forbidden)
     save(mcp_extra_allowed_hosts: "synth-lan.test")
     expect(response).to have_http_status(:forbidden)
@@ -173,7 +174,7 @@ RSpec.describe "Settings › MCP access", type: :request do
   end
 
   it "sends a signed-out visitor to the sign-in page" do
-    get system_settings_path(tab: "mcp_access")
+    get system_settings_path(tab: "access")
 
     expect(response).to redirect_to(operator_login_path)
   end

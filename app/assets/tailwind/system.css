@@ -137,6 +137,23 @@
     white-space: pre-wrap;
   }
 
+  .system-prefixed {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: center;
+  }
+
+  .system-prefixed__prefix {
+    color: var(--color-ui-text-muted);
+    font-size: 0.8125rem;
+  }
+
+  .system-prefixed .ui-input {
+    flex: 1 1 16rem;
+    width: auto;
+  }
+
   .system-sr-only {
     position: absolute;
     width: 1px;

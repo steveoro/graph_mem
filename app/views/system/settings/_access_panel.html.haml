@@ -1,0 +1,8 @@
+-# Settings › Access: the guest toggle and the additive part of the three MCP allowlists (UI-2a A3).
+-# The ENV value is shown as read-only text (never a form field, so it is never submitted).
+%p.system-hint= t("system.settings.mcp_access.intro")
+%p.system-warning{ data: { testid: "mcp-access-sessions-notice" } }
+  %strong= t("system.settings.mcp_access.sessions_notice_title")
+  = t("system.settings.mcp_access.sessions_notice")
+= render "system/settings/form", group: group
+%p.system-hint= t("system.settings.mcp_access.help")

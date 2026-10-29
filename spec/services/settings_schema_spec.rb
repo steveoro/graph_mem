@@ -26,9 +26,8 @@ RSpec.describe SettingsSchema do
     end
   end
 
-  it "places the groups on Settings, Backups and Access" do
+  it "places the groups on Settings and Backups" do
     expect(described_class.groups(page: :backups).map(&:key)).to eq([ :backups ])
-    expect(described_class.groups(page: :access).map(&:key)).to eq([ :access ])
     expect(described_class.group(:access).writable_keys).to eq(%w[enable_guest_access] + McpAccessSettings::KEYS)
     expect(described_class.group(:feature_flags).writable_keys).not_to include("enable_guest_access")
     expect(described_class.groups.map(&:page).uniq).to match_array(described_class::PAGES)

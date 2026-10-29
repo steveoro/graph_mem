@@ -51,6 +51,56 @@ RSpec.describe "System › Settings", type: :request do
     end
   end
 
+  describe "every tab" do
+    before { sign_in_operator }
+
+    it "renders each Settings group from the schema, every field with its input" do
+      SettingsSchema.groups(page: :settings).each do |group|
+        get system_settings_path(tab: group.key)
+
+        expect(response).to have_http_status(:ok)
+        doc = Nokogiri::HTML(response.body)
+        expect(doc.at_css("[data-testid='operator-settings-tab-#{group.key}']")["aria-current"]).to eq("page")
+        group.fields.each { |field| expect(doc.at_css("[data-testid='setting-#{field.key}']")).to be_present, field.key }
+      end
+    end
+
+    it "makes enable_contradiction_detection reachable and saves it" do
+      patch system_settings_path, params: { tab: "feature_flags", settings: { enable_contradiction_detection: "0" } }
+
+      expect(response).to redirect_to(system_settings_path(tab: "feature_flags"))
+      expect(AppSettings.contradiction_detection_enabled?).to be(false)
+    ensure
+      AppSettings.where(var: "enable_contradiction_detection").delete_all
+    end
+
+    it "refuses an out-of-range value with 422, marks the field and saves nothing from the group" do
+      patch system_settings_path, params: { tab: "telemetry", settings: { tool_invocation_retention_days: "4000", compaction_review_row_retention_days: "12" } }
+
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(response.body).to include('data-testid="setting-error-tool_invocation_retention_days"', "between 0 and 3650 (got 4000)")
+      expect(AppSettings.where(var: %w[tool_invocation_retention_days compaction_review_row_retention_days])).to be_empty
+    end
+
+    it "never writes the legacy key or a read-only field" do
+      patch system_settings_path, params: { tab: "project_scans", settings: { project_scan_roots: "/srv/synth", enable_project_scan_validation: "1" } }
+      patch system_settings_path, params: { tab: "backups", settings: { backup_schedule_cron: "every minute" } }
+
+      expect(AppSettings.where(var: %w[project_scan_roots backup_schedule_cron])).to be_empty
+    end
+  end
+
+  it "answers 403 to a guest and changes nothing" do
+    enable_guest!
+    sign_in_guest
+
+    get system_settings_path
+    expect(response).to have_http_status(:forbidden)
+    patch system_settings_path, params: { tab: "access", settings: { enable_guest_access: "0" } }
+    expect(response).to have_http_status(:forbidden)
+    expect(AppSettings.guest_access_enabled?).to be(true)
+  end
+
   describe "PATCH /system/settings" do
     before { sign_in_operator }
 

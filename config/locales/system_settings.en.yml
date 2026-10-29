@@ -18,7 +18,7 @@ en:
         project_scans: "Project Scans"
         telemetry: "Telemetry & retention"
         review_policies: "Review policies"
-        access: "Access settings"
+        access: "Access"
       review_policies:
         intro: "Policies run nightly at 5:00 GMT and after a compaction run, stale scan or project scan that queued suggestions. Changes apply on the next run. Every policy action is an undoable change set (Review › Policies)."
         range: "Accepted range: %{min}–%{max}."

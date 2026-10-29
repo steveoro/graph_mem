@@ -116,7 +116,7 @@ RSpec.describe HomeSnapshot do
       allow(GraphMem::OfficialMcp).to receive(:access_policy).and_return(policy)
 
       expect(pill(:mcp)).to include(status: :neutral, value: "no token (unauthenticated), 2 allowed range(s) (+1 from settings)",
-                                    href: "/system/settings?tab=mcp_access")
+                                    href: "/system/settings?tab=access")
 
       allow(GraphMem::OfficialMcp).to receive(:access_policy).and_return(GraphMem::McpAccessPolicy.new(token: "synthetic-token"))
       expect(pill(:mcp)).to include(status: :ok, value: start_with("bearer token required"))

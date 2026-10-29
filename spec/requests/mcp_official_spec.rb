@@ -287,7 +287,7 @@ RSpec.describe "MCP on the official SDK", type: :request do
     def save_mcp_access(**settings)
       sign_in_operator
       patch system_settings_path, params: { tab: "mcp_access", settings: settings.transform_keys(&:to_s) }
-      expect(response).to redirect_to(system_settings_path(tab: "mcp_access"))
+      expect(response).to redirect_to(system_settings_path(tab: "access"))
     end
 
     def preflight(origin)

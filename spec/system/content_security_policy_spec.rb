@@ -37,7 +37,9 @@ RSpec.describe "Content Security Policy in the browser", type: :system do
       "Embeddings" => "/system/embeddings",
       "Telemetry" => "/system/telemetry",
       "Audit log" => "/system/audit_log",
-      "Settings" => "/system/settings"
+      "Settings" => "/system/settings",
+      "Settings › Access" => "/system/settings?tab=access",
+      "Backups" => "/system/backups"
     }.each do |label, path|
       visit path
       wait_for_stimulus

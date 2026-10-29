@@ -35,7 +35,7 @@ RSpec.describe "System › old routes", type: :request do
     post "/operator/telemetry/prune"
     expect(URI(response.location).path).to eq(system_telemetry_path)
 
-    post "/operator/audit_logs/prune"
+    post "/operator/audit_logs/prune", params: { confirmation: "0" }
     expect(URI(response.location).path).to eq(system_audit_log_path)
 
     AppSettings.enable_garbage_collector = false

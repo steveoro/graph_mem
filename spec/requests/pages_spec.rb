@@ -79,7 +79,7 @@ RSpec.describe "Home", type: :request do
       expect(embeddings["data-status"]).to eq("danger")
       expect(embeddings.text).to include("unreachable")
       mcp = pills.find { |link| link["data-testid"] == "home-pill-mcp" }
-      expect(mcp["href"]).to eq(system_settings_path(tab: "mcp_access"))
+      expect(mcp["href"]).to eq(system_settings_path(tab: "access"))
       expect(mcp.text).to include(GraphMem::OfficialMcp.access_policy.describe)
     end
 

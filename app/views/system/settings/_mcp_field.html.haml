@@ -1,0 +1,24 @@
+-# One MCP allowlist field (SettingsSchema partial): the ENV prefix, the editable additions, the
+-# notes and errors, and the list in effect. Locals: field, value (unused: mcp_access_rows reads it).
+- row = mcp_access_rows.find { |entry| entry[:key] == field.key }
+.ui-field{ data: { testid: "mcp-access-#{row[:kind]}" } }
+  %label.ui-label{ for: "setting_#{row[:key]}" }= t(field.label)
+  %p.system-hint{ id: "setting_#{row[:key]}_help" }= t(field.help)
+  .system-prefixed
+    %span.system-prefixed__prefix{ title: row[:env_var], data: { testid: "mcp-env-#{row[:kind]}" } }
+      %code= row[:env_var]
+      = row[:env_value] || t("system.settings.mcp_access.unset.#{row[:kind]}")
+    = text_field_tag "settings[#{row[:key]}]", row[:input], id: "setting_#{row[:key]}", class: "ui-input", disabled: row[:disabled],
+      placeholder: t("system.settings.mcp_access.placeholder.#{row[:kind]}"), aria: { describedby: "setting_#{row[:key]}_help" },
+      data: { testid: "setting-#{row[:key]}" }
+  - if row[:disabled]
+    %p.system-warning= t("system.settings.mcp_access.unrestricted")
+  - row[:env_warnings].each do |warning|
+    %p.system-warning= t("system.settings.mcp_access.env_never_matches", warning: warning)
+  - row[:errors].each do |error|
+    %p.system-error{ data: { testid: "mcp-access-error-#{row[:kind]}" } }= error
+  - row[:notes].each do |note|
+    %p.system-warning{ data: { testid: "mcp-access-note-#{row[:kind]}" } }= note
+  %p.system-hint{ data: { testid: "mcp-effective-#{row[:kind]}" } }
+    = t("system.settings.mcp_access.effective")
+    = row[:effective].any? ? row[:effective].join(", ") : t("system.settings.mcp_access.effective_none.#{row[:kind]}")
