@@ -104,6 +104,16 @@ RSpec.describe "Projects › Imports", type: :request do
       expect(response.body).to include("File too large")
     end
 
+    it "says when the review's parent choice is capped" do
+      stub_const("ExportStrategy::ROOT_NODES_LIMIT", 1)
+      MemoryEntity.create!(name: "Gadget Project", entity_type: "Project")
+      upload(export_json)
+
+      get projects_import_path(session_id_from_redirect)
+
+      expect(response.body).to include('data-testid="import-parents-capped"', "Only the first 1 roots")
+    end
+
     it "cancels a review" do
       upload(export_json)
       session_id = session_id_from_redirect

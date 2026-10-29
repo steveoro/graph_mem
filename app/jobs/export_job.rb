@@ -43,7 +43,7 @@ class ExportJob < ApplicationJob
       broadcast_operation(operation)
       broadcast_complete(export_id, {
         success: true,
-        download_path: "/data_exchange/download_export?export_id=#{export_id}",
+        download_path: Rails.application.routes.url_helpers.download_projects_export_path(export_id),
         message: "Export complete! #{current_count} nodes exported."
       })
 

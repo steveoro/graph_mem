@@ -110,6 +110,7 @@ en:
         no_parent: "-- None (root node) --"
         child_of_parent: "Make child of “%{name}”"
         root: "Root node"
+        parents_capped: "Only the first %{count} roots (Projects first) are offered; pick none and re-parent in Explore for another."
         adds_observations: "+ new observations"
         execute: "Proceed with import"
         cancel: "Cancel import"

@@ -60,6 +60,8 @@
                 = select_tag "decisions[#{root_index}][parent_id]",
                   options_for_select([ [ t("projects.imports.show.no_parent"), "" ] ] + @available_parents.map { |parent| [ t("projects.imports.show.child_of_parent", name: parent.name), parent.id ] }),
                   class: "ui-input"
+                - if @available_parents.size >= ExportStrategy::ROOT_NODES_LIMIT
+                  %p.projects-hint{ data: { testid: "import-parents-capped" } }= t("projects.imports.show.parents_capped", count: ExportStrategy::ROOT_NODES_LIMIT)
               - else
                 %span.projects-muted= t("projects.imports.show.root")
           - root_index += 1 if is_root

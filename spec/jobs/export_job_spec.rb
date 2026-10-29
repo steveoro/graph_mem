@@ -75,7 +75,7 @@ RSpec.describe ExportJob, type: :job do
 
       expect(ExportProgressChannel).to receive(:broadcast_complete).with(
         export_id,
-        hash_including(download_path: "/data_exchange/download_export?export_id=#{export_id}")
+        hash_including(download_path: "/projects/exports/#{export_id}/download")
       )
 
       described_class.new.perform(export_id, [ project.id ])
