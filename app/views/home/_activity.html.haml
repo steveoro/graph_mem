@@ -18,4 +18,4 @@
                 ·
                 %span{ class: ("home-list__undoable" if set.undoable?) }= set.undone_at ? state : t("home.activity.undoable")
     .home-card__footer
-      = link_to t("home.activity.audit_log"), operator_audit_logs_path, data: { turbo_frame: "_top" }
+      = link_to t("home.activity.all"), system_activity_path, data: { turbo_frame: "_top", testid: "home-activity-all" }

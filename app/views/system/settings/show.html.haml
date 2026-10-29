@@ -1,0 +1,15 @@
+- content_for :title, t("system.settings.title")
+- content_for :page_header, ui_page_header(t("system.settings.title"), subtitle: t("system.settings.subtitle"))
+
+.system-page
+  %nav.system-tabs{ "aria-label": t("system.settings.tabs_label") }
+    - SettingsSchema.groups(page: :settings).each do |group|
+      = link_to t(group.title), system_settings_path(tab: group.key), id: "settings-tab-#{group.key}", class: "system-tabs__tab",
+        aria: { current: ("page" if group == @group) }, data: { testid: "operator-settings-tab-#{group.key}" }
+  %section.ui-card.system-panel{ id: @group.key, "aria-labelledby": "settings-tab-#{@group.key}",
+    data: { testid: "operator-settings-panel-#{@group.key}" } }
+    - if @group.partial
+      = render @group.partial, group: @group
+    - else
+      = render "system/settings/form", group: @group
+  %p.system-hint= t("system.settings.footer_info")

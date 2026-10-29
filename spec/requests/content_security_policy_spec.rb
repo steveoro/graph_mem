@@ -31,7 +31,7 @@ RSpec.describe "Content Security Policy", type: :request do
     before { sign_in_operator }
 
     [ "/", "/search?q=SynthWidget", "/explore", "/projects", "/projects/scans/new", "/projects/imports/new", "/projects/exports",
-      "/projects/jobs", "/operator/settings", "/operator/telemetry", "/review" ].each do |path|
+      "/system/health", "/system/jobs", "/system/settings", "/system/backups", "/system/access", "/system/activity", "/system/telemetry", "/review" ].each do |path|
       it "enforces the policy and nonces every script on #{path}" do
         get path
 

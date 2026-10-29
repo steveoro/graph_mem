@@ -1,6 +1,6 @@
 # GraphMem web UI guide
 
-A tour of the web UI for the **operator** (the graph's owner, full access) and the optional **read-only guest**, as of 1.62.0. It covers signing in, the app shell, each section, the guest account and the usual problems.
+A tour of the web UI for the **operator** (the graph's owner, full access) and the optional **read-only guest**, as of 1.63.0. It covers signing in, the app shell, each section, the guest account and the usual problems.
 
 The screenshots come from a test instance with synthetic data (`Alpha Service`, `SynthWidget`, `SynthGadget`). The image files are in [`docs/images/ui/`](../images/ui/).
 
@@ -51,12 +51,16 @@ The sidebar lists Home, Search and Explore at the top, then three groups (Review
 | Projects & Data | **Scans** | The scan history, one form for a normal or guided scan (with a live path check), and a page per scan |
 | Projects & Data | **Imports** | Upload a GraphMem export or a Graphify `graph.json`, review, import; the import history |
 | Projects & Data | **Exports** | Export roots in the background, with progress and a download; past exports |
-| Projects & Data | **Background jobs** | The compactor, the garbage collector and relation repair |
-| System | **Embeddings** | Vector coverage, connection test, backfill, ANN indexes |
-| System | **Telemetry** | MCP tool volume, errors, latency, and the full MCP clients table |
+| System | **Health** | Every check in words (also `/system/health.json`), and the raw snapshots |
+| System | **Settings** | Feature flags, embeddings, summaries, imports, project scans, telemetry & retention, review policies |
+| System | **Backups** | Backup settings, a manual run, and restore (type the file name) or delete per file |
+| System | **Access** | Operator, guest and MCP token status; the guest toggle and the MCP allowlists |
+| System | **Activity** | Every change set, with Undo while it can still be undone |
 | System | **Audit log** | Change history for entities, observations and relations |
-| System | **Settings** | Feature flags, backups, embeddings, summaries, imports, project scans, telemetry/retention |
-| System | **Jobs** | Mission Control for the Solid Queue jobs (its own layout) |
+| System | **Telemetry** | MCP tool volume, errors, latency, and the full MCP clients table |
+| System | **Embeddings** | Vector coverage, connection test, backfill, ANN indexes |
+| System | **Background jobs** | The compactor, the garbage collector and relation repair |
+| System | **Queue** | Mission Control for the Solid Queue jobs (its own layout) |
 | System | **API docs** | Swagger UI for `/api/v1` (its own page) |
 
 The bottom of the sidebar shows who is signed in, and the **Sign out** button.
@@ -78,14 +82,14 @@ Home shows the state of the graph and its services, and changes nothing: its onl
 embedding service) never holds up the rest, and each links to the page where you act on it.
 - **Health strip:** database; embeddings (service reachable, vector search ready); summaries (LLM
   on or off); jobs (failed count, queue latency); last backup; scan mounts; MCP access mode
-  (including Settings › MCP access additions); guest access. Green means fine, amber means check
+  (including System › Access additions); guest access. Green means fine, amber means check
   it, red means a problem, grey is a choice rather than a problem. Each pill also says it in words.
 - **Graph:** entities, observations, relations, orphans and embedding coverage.
 - **Review digest:** the top 5 groups needing attention, each with **Open** (the same group on
   Review), and the inbox state with the last policy run. There's no approve or dismiss on Home.
 - **Jobs:** what's running (with live progress) and the last finished or failed jobs.
-- **Recent activity:** the last 15 change sets, and whether each can still be undone (undo
-  itself is on the page that owns the change, such as Review › Resolved).
+- **Recent activity:** the last 15 change sets, and whether each can still be undone. **All
+  activity** opens System › Activity, where Undo is.
 - **Active MCP clients:** a compact list; the full table is on **System › Telemetry**.
 
 The controls that used to be on Home are under **Projects & Data** since 1.62.0 (the Maintenance
@@ -190,15 +194,21 @@ Operator only; a guest gets 403 from every page.
   A path the policy refuses comes back on the form with its message, and nothing is queued. A scan's page (`/projects/scans/<id>`) follows its progress live and shows its counters (including files skipped outside the root or as denylisted), the fallback reason, any error, **Continue** / **Stop** and the steps for a guided scan, and its project's scan-review groups.
 - **Imports** (`/projects/imports`): upload a GraphMem JSON export or a Graphify `graph.json` (up to 64 MB). A `graph.json` needs the name of the Project it describes; it's translated the way `rails graphify:translate` does and goes through the same review. The review has a match/create decision per root node; children follow their stored match. **Proceed with import** runs it and opens the report. Upload errors stay on the upload form. The history lists every import, the command-line ones included, and any past report can be opened again.
 - **Exports** (`/projects/exports`): tick roots (Projects first; up to 500 listed, filter by name for the rest) and **Export selected**. The export runs in the background; its page shows progress and then **Download**. Files are deleted after an hour, and an expired download says so (HTTP 410). The JSON `GET /data_exchange/export` still downloads directly, for scripts.
-- **Background jobs** (`/projects/jobs`): the compactor, garbage collector and relation-repair cards, and the graph totals.
 
 ### System
 
 - **Embeddings**: see the [operator embeddings guide](../operator/embeddings.md).
 - **Telemetry**: see [operator tool telemetry](../operator/telemetry.md).
 - **Audit log**: browse changes by action, record type, actor, record id and time window.
-- **Settings**: every runtime setting is described in the [app settings reference](../app_settings_reference.md). Each tab has its own **Save** button.
-- **Jobs**: Mission Control shows queues, failed jobs (retry or discard), workers and recurring tasks. It opens as a full page with its own navigation; **Back to main app** returns to the shell.
+- **Health** (`/system/health`): one row per check, its status in words and a link to the page that fixes it: database, embedding service (with the probe's time), vector search, summaries, job queue (waiting and failed), last backup, backup folder (writable or not), scan mounts (each root, read-only or not), MCP access, guest access, version and pending migrations. **Raw snapshots** (collapsed) holds the diagnostics the old dashboard showed. `/system/health.json` returns the same checks as `{ version, status, generated_at, checks: [{ key, status, value }] }`, words only (no path, URL or host name), and needs the operator like the page; uptime monitors use `/up`.
+- **Access** (`/system/access`): whether the operator's credentials are configured (production refuses the default password), the guest's state (not configured, clashes with the operator, turned off, available), whether `/mcp` needs a bearer token, and the session lifetimes. Below: the guest toggle and the MCP allowlists ([MCP access control](../mcp_access_control.md)). Nothing on the page shows a password or token.
+- **Activity** (`/system/activity`): every change set, newest first, 50 a page, with who and when, and **Undo** while it can still be undone. The row-level history is the **Audit log**.
+- **Settings** (`/system/settings`): every runtime setting is described in the [app settings reference](../app_settings_reference.md). Each tab has its own **Save** button and saves only its own fields; a value out of range comes back marked (HTTP 422) and nothing in the tab is saved.
+- **Backups** (`/system/backups`): the backup settings, **Run backup now**, and the backup files. **Restore** opens a card that asks you to type the file name; the button stays disabled until it matches, and the server checks it again.
+- **Background jobs** (`/system/jobs`): the compactor, garbage collector and relation-repair cards, and the graph totals.
+- **Typed confirmations**: besides restore, **Regenerate all** and **Drop indexes** on Embeddings ask you to type `REGENERATE` / `DROP`, and pruning the audit log asks for the number of rows it will delete.
+- The old `/operator/settings`, `/operator/embeddings`, `/operator/telemetry`, `/operator/audit_logs`, `/operator/jobs` and `/projects/jobs` URLs redirect (301) to their System page until §6.D-6.
+- **Queue** (`/system/queue`): Mission Control shows queues, failed jobs (retry or discard), workers and recurring tasks. It opens as a full page with its own navigation; **Back to main app** returns to the shell.
 - **API docs**: Swagger UI for the REST API, with its own page.
 
 ## The read-only guest
@@ -216,7 +226,7 @@ The guest account lets someone else browse the graph without being able to chang
    - `[guest access] not configured (no guest password)` means no password was found.
    - `[guest access] disabled: guest username or password equals the operator's` means the guest clashes with the operator. The guest's username and password must both differ from the operator's.
 
-**Settings › Feature Flags › Guest access (read-only)** switches the guest on and off without a restart. It's on by default, but it has no effect until a password is set.
+**System › Access › Guest access (read-only)** switches the guest on and off without a restart. It's on by default, but it has no effect until a password is set.
 
 ### What a guest sees
 
@@ -228,7 +238,7 @@ In **Explore**, the guest gets the same canvas, toolbar and panel: browse, pick 
 
 ![Explore as guest: read-only node menu](../images/ui/guest-explore.png)
 
-Every other page answers with **Operator only** (HTTP 403), including Review, Projects & Data, Settings, Jobs and the Audit log. Home sends a guest to Search, and API docs answers 404.
+Every other page answers with **Operator only** (HTTP 403), including Review, Projects & Data and every System page (Health and its JSON, Settings, Backups, Access, Activity, Queue, the Audit log). Home sends a guest to Search, and API docs answers 404.
 
 ![The 403 page a guest sees](../images/ui/guest-forbidden.png)
 

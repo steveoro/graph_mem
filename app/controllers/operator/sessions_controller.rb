@@ -82,10 +82,9 @@ module Operator
       return_to
     end
 
-    # The default username ("operator") is public and documented; only the
-    # default password is a risk, so only that locks production out.
+    # The default password locks production out (GraphMem::OperatorCredentials).
     def production_fallback_credentials?
-      Rails.env.production? && self.class.operator_password == "changeme"
+      GraphMem::OperatorCredentials.production_fallback?
     end
   end
 end

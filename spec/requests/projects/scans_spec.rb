@@ -44,7 +44,7 @@ RSpec.describe "Projects › Scans", type: :request do
           get check_path_projects_scans_path(path: path)
 
           expect(response.body).to include('id="scan-path-check"', %(data-code="#{code}"))
-          get operator_check_scan_path_path(path: path)
+          get check_path_projects_scans_path(path: path)
           expect(response.body).to include(%(data-code="#{code}"))
         end
       end

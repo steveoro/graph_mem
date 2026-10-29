@@ -41,9 +41,31 @@ class HomeSnapshot
       %i[database embeddings summaries jobs backup scans mcp guest].map { |key| send(:"#{key}_pill") }
     end
 
+    # One pill by key (SystemHealth reuses them, without a second embedding probe).
+    #
+    # @param key [Symbol] :database, :summaries, :jobs, :backup, :scans, :mcp or :guest
+    # @return [Hash] see {#pills}
+    def pill_for(key)
+      send(:"#{key}_pill")
+    end
+
     # @return [Boolean] see {.embedding_reachable?}
     def embedding_reachable?
       self.class.embedding_reachable?
+    end
+
+    # EmbeddingStatusSnapshot, run once per instance (SystemHealth reads it too).
+    #
+    # @return [Hash] see EmbeddingStatusSnapshot.call
+    def embedding_status
+      @embedding_status ||= EmbeddingStatusSnapshot.call
+    end
+
+    # ScanRootPolicy.status, run once per instance (SystemHealth reads it too).
+    #
+    # @return [Hash] see ScanRootPolicy.status
+    def scan_status
+      @scan_status ||= ScanRootPolicy.status
     end
 
     # @return [Hash] `{ failed:, latency: }` (seconds), or nil when the queue can't be read
@@ -71,41 +93,41 @@ class HomeSnapshot
 
     def database_pill
       ActiveRecord::Base.connection.select_value("SELECT 1")
-      pill(:database, :ok, I18n.t("home.health.values.connected"), projects_jobs_path)
+      pill(:database, :ok, I18n.t("home.health.values.connected"), system_jobs_path)
     rescue StandardError
-      pill(:database, :danger, I18n.t("home.health.values.unreachable"), projects_jobs_path)
+      pill(:database, :danger, I18n.t("home.health.values.unreachable"), system_jobs_path)
     end
 
     def embeddings_pill
-      ready = EmbeddingStatusSnapshot.call[:vector_search_ready]
+      ready = embedding_status[:vector_search_ready]
       status, value =
         if !embedding_reachable? then [ :danger, "unreachable" ]
         elsif ready then [ :ok, "reachable_ready" ]
         else [ :warn, "reachable_not_ready" ]
         end
-      pill(:embeddings, status, I18n.t("home.health.values.#{value}"), operator_embeddings_path)
+      pill(:embeddings, status, I18n.t("home.health.values.#{value}"), system_embeddings_path)
     end
 
     def summaries_pill
       on = AppSettings.llm_summarization_enabled?
-      pill(:summaries, on ? :ok : :neutral, I18n.t("home.health.values.#{on ? 'on' : 'off'}"), operator_settings_path(tab: "summaries"))
+      pill(:summaries, on ? :ok : :neutral, I18n.t("home.health.values.#{on ? 'on' : 'off'}"), system_settings_path(tab: "summaries"))
     end
 
     def jobs_pill
       stats = queue_stats
-      return pill(:jobs, :neutral, I18n.t("home.health.values.unknown"), "/operator/jobs") unless stats
+      return pill(:jobs, :neutral, I18n.t("home.health.values.unknown"), mission_control_jobs_path) unless stats
 
       status = if stats[:failed].positive? then :danger
       elsif stats[:latency] > QUEUE_LATENCY_WARN then :warn
       else :ok
       end
       value = I18n.t("home.health.values.jobs", failed: stats[:failed], latency: ActiveSupport::Duration.build(stats[:latency]).inspect)
-      pill(:jobs, status, value, "/operator/jobs")
+      pill(:jobs, status, value, mission_control_jobs_path)
     end
 
     def backup_pill
       at = last_backup_at
-      href = operator_settings_path(tab: "database_backup")
+      href = system_backups_path
       return pill(:backup, :warn, I18n.t("home.health.values.no_backup"), href) unless at
 
       age = Time.current - at
@@ -117,8 +139,8 @@ class HomeSnapshot
     end
 
     def scans_pill
-      status = ScanRootPolicy.status
-      href = operator_settings_path(tab: "project_scans")
+      status = scan_status
+      href = system_settings_path(tab: "project_scans")
       return pill(:scans, :neutral, I18n.t("home.health.values.scans_off"), href) unless status[:scans_switch]
       return pill(:scans, :danger, I18n.t("home.health.values.nothing_mounted"), href) unless status[:enabled]
       return pill(:scans, :warn, I18n.t("home.health.values.writable"), href) if status[:warnings].include?(:mounted_read_write)
@@ -128,13 +150,13 @@ class HomeSnapshot
 
     def mcp_pill
       policy = GraphMem::OfficialMcp.access_policy
-      pill(:mcp, policy.token_required? ? :ok : :neutral, policy.describe, operator_settings_path(tab: "mcp_access"))
+      pill(:mcp, policy.token_required? ? :ok : :neutral, policy.describe, system_access_path)
     end
 
     def guest_pill
       status = GraphMem::GuestCredentials.current.status
       color = { available: :ok, conflict: :danger }.fetch(status, :neutral)
-      pill(:guest, color, I18n.t("home.health.values.guest.#{status}"), operator_settings_path(tab: "feature_flags"))
+      pill(:guest, color, I18n.t("home.health.values.guest.#{status}"), system_access_path)
     end
   end
 end

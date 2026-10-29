@@ -3,11 +3,11 @@
 module SummarizationHelper
   def summarization_settings_fallback_hint(key)
     fallback = SummarizationConfig.fallback_for(key)
-    content_tag(:p, class: "dashboard-settings-field__fallback", data: { testid: "summary-fallback-#{key}" }) do
+    content_tag(:p, class: "system-fallback", data: { testid: "summary-fallback-#{key}" }) do
       safe_join([
-        content_tag(:span, t("operator.settings.summaries.used_when_blank"), class: "dashboard-settings-field__fallback-label"),
+        content_tag(:span, t("system.settings.summaries.used_when_blank"), class: "system-fallback__label"),
         " ",
-        content_tag(:code, fallback[:value], class: "dashboard-settings-field__fallback-value"),
+        content_tag(:code, fallback[:value], class: "system-fallback__value"),
         " ",
         embedding_config_source_badge(fallback[:source])
       ])

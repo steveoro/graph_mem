@@ -1,0 +1,45 @@
+- snapshot = agent_contexts
+.ui-card.system-card--state{ data: { testid: "system-agent-contexts-card" } }
+  .system-card__header
+    %h2.system-card__title= t("operator.agent_contexts.title")
+    %span.system-hint= t("operator.agent_contexts.subtitle")
+
+  .system-card__body
+    .system-stats
+      = dashboard_stat_chip(t("operator.agent_contexts.summary.clients"), snapshot[:summary][:total])
+      = dashboard_stat_chip(t("operator.agent_contexts.summary.recent"), snapshot[:summary][:recent_count])
+      = dashboard_stat_chip(t("operator.agent_contexts.summary.with_context"), snapshot[:summary][:with_context_count])
+
+    - if snapshot[:summary][:default_bucket]
+      %p.system-hint{ data: { testid: "system-agent-contexts-default-hint" } }
+        = t("operator.agent_contexts.default_bucket_hint")
+
+    - if snapshot[:clients].any?
+      .system-table-wrap
+        %table.system-table
+          %thead
+            %tr
+              %th= t("operator.agent_contexts.columns.client")
+              %th= t("operator.agent_contexts.columns.activity")
+              %th= t("operator.agent_contexts.columns.project_context")
+              %th= t("operator.agent_contexts.columns.last_seen")
+              %th= t("operator.agent_contexts.columns.last_tool")
+          %tbody
+            - snapshot[:clients].each do |client|
+              %tr{ data: { testid: "agent-context-row-#{client[:client_id]}" } }
+                %td.system-mono= client[:client_id]
+                %td= agent_context_activity_badge(client[:activity_status])
+                %td
+                  - if client[:project]
+                    = link_to "#{client[:project][:name]} (#{client[:project][:entity_type]})",
+                      explore_path(project_id: client[:project][:id]),
+                      class: "system-link",
+                      id: "link-agent-context-project-#{client[:client_id]}"
+                  - else
+                    %span.system-hint= t("operator.agent_contexts.no_context")
+                %td= format_dashboard_time(client[:last_seen_at])
+                %td.system-mono
+                  = client[:last_tool_name].presence || "—"
+    - else
+      %p.system-hint{ data: { testid: "system-agent-contexts-empty" } }
+        = t("operator.agent_contexts.empty")

@@ -1,0 +1,8 @@
+-# Settings › Embeddings: the fields, then where the values come from and the live checks.
+= render "system/settings/form", group: group
+.system-panel__aside
+  %p.system-hint= t("system.settings.embeddings.priority_hint")
+  .system-actions
+    = link_to t("system.settings.embeddings.manage_link"), system_embeddings_path, class: "ui-btn", id: "link-settings-embeddings"
+    = button_to t("operator.embeddings.actions.test_connection"), system_test_embeddings_connection_path, method: :post, class: "ui-btn",
+      id: "btn-settings-embeddings-test", data: { testid: "btn-settings-embeddings-test" }

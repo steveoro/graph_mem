@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-# Classifies a review row (UI-5a, `ui-dashboard-plan.md` §2.5.1): the group it belongs to, the
+# Classifies a review row (UI-5a, the UI plan §2.5.1): the group it belongs to, the
 # entity it is about, that entity's project, a normalized confidence and a 0-100 priority that is
 # comparable across kinds. Called by CompactionReviewService.seed_report for every new row, by
 # ReviewRowClassifier::Backfill for rows seeded before UI-5a, and by the nightly policy run to

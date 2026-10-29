@@ -36,7 +36,10 @@ module Projects
       @stats = ImportSession.load_stats(@session_id) || {}
       @meta = ImportSession.load_meta(@session_id)
       @items = ImportReviewService.items(@matches, page: params[:page])
-      @available_parents = ExportStrategy.new.root_nodes
+      # One more than the cap, so the hint shows only when something was cut.
+      parents = ExportStrategy.new.root_nodes(limit: ExportStrategy::ROOT_NODES_LIMIT + 1)
+      @parents_capped = parents.size > ExportStrategy::ROOT_NODES_LIMIT
+      @available_parents = parents.first(ExportStrategy::ROOT_NODES_LIMIT)
     end
 
     # POST /projects/imports/:id/execute

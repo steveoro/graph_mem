@@ -59,7 +59,7 @@ RSpec.describe UiHelper, type: :helper do
     it "merges extra data attributes" do
       visit_path("/")
 
-      link = Nokogiri::HTML.fragment(helper.ui_nav_link("Jobs", "/operator/jobs", testid: "nav-jobs", data: { turbo: false })).at_css("a")
+      link = Nokogiri::HTML.fragment(helper.ui_nav_link("Jobs", "/system/queue", testid: "nav-jobs", data: { turbo: false })).at_css("a")
 
       expect(link["data-turbo"]).to eq("false")
       expect(link["data-testid"]).to eq("nav-jobs")

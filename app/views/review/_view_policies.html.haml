@@ -2,7 +2,7 @@
 %h2.review-heading Policy runs
 %p.review-hint
   Settings:
-  = link_to "Settings › Review policies", operator_settings_path(tab: "review_policies")
+  = link_to "Settings › Review policies", system_settings_path(tab: "review_policies")
 - if @reports.empty?
   %p.review-hint No policy run yet.
 - @reports.each do |report|

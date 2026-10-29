@@ -129,7 +129,6 @@ Rails.application.routes.draw do
   get "maintenance", to: redirect("/projects", status: 301), as: :maintenance
   get "projects", to: "projects#index", as: :projects
   namespace :projects do
-    get "jobs", to: "jobs#index", as: :jobs
     resources :scans, only: [ :index, :new, :create, :show ], param: :operation_id do
       get :check_path, on: :collection
     end
@@ -175,17 +174,26 @@ Rails.application.routes.draw do
     get "login", to: "sessions#new", as: :login
     post "login", to: "sessions#create", as: :session
     delete "logout", to: "sessions#destroy", as: :logout
+  end
 
-    post "maintenance/compaction/start", to: "maintenance#start_compaction", as: :start_compaction
-    post "maintenance/compaction/pause", to: "maintenance#pause_compaction", as: :pause_compaction
-    post "maintenance/garbage_collection/run", to: "maintenance#run_garbage_collection", as: :run_garbage_collection
-    post "maintenance/relations/repair", to: "maintenance#repair_relations", as: :repair_relations
+  # UI-7: System (operator only; System::BaseController).
+  get "system", to: redirect("/system/health", status: 301), as: :system
+  namespace :system do
+    get "health", to: "health#show", as: :health
+    get "settings", to: "settings#show", as: :settings
+    patch "settings", to: "settings#update"
+    delete "settings/legacy_scan_roots", to: "settings#clear_legacy_scan_roots", as: :clear_legacy_scan_roots
 
-    get "audit_logs", to: "audit_logs#index", as: :audit_logs
-    post "audit_logs/prune", to: "audit_logs#prune", as: :prune_audit_logs
+    get "backups", to: "backups#index", as: :backups
+    post "backups", to: "backups#create"
+    delete "backups", to: "backups#destroy"
+    patch "backups/settings", to: "backups#update_settings", as: :backup_settings
+    post "backups/restore", to: "backups#restore", as: :restore_backup
 
-    get "telemetry", to: "telemetry#index", as: :telemetry
-    post "telemetry/prune", to: "telemetry#prune", as: :prune_telemetry
+    get "access", to: "access#show", as: :access
+    patch "access", to: "access#update"
+
+    get "activity", to: "activity#index", as: :activity
 
     get "embeddings", to: "embeddings#index", as: :embeddings
     post "embeddings/test_connection", to: "embeddings#test_connection", as: :test_embeddings_connection
@@ -194,16 +202,58 @@ Rails.application.routes.draw do
     post "embeddings/add_indexes", to: "embeddings#add_indexes", as: :add_embeddings_indexes
     post "embeddings/drop_indexes", to: "embeddings#drop_indexes", as: :drop_embeddings_indexes
 
-    get "settings", to: "settings#index", as: :settings
-    patch "settings", to: "settings#bulk_update", as: :settings_bulk_update
-    post "settings/backup/run", to: "settings#run_backup", as: :run_backup
-    post "settings/backup/restore", to: "settings#restore_backup", as: :restore_backup
-    delete "settings/backup", to: "settings#destroy_backup", as: :destroy_backup
-    get "settings/project_scans/check_path", to: "settings#check_scan_path", as: :check_scan_path
-    delete "settings/project_scans/legacy_roots", to: "settings#clear_legacy_scan_roots", as: :clear_legacy_scan_roots
-  end
+    get "telemetry", to: "telemetry#index", as: :telemetry
+    post "telemetry/prune", to: "telemetry#prune", as: :prune_telemetry
 
-  mount MissionControl::Jobs::Engine, at: "/operator/jobs"
+    get "audit_log", to: "audit_log#index", as: :audit_log
+    post "audit_log/prune", to: "audit_log#prune", as: :prune_audit_log
+
+    get "jobs", to: "jobs#index", as: :jobs
+    post "jobs/compaction/start", to: "jobs#start_compaction", as: :start_compaction
+    post "jobs/compaction/pause", to: "jobs#pause_compaction", as: :pause_compaction
+    post "jobs/garbage_collection/run", to: "jobs#run_garbage_collection", as: :run_garbage_collection
+    post "jobs/relations/repair", to: "jobs#repair_relations", as: :repair_relations
+  end
+  # Mission Control (System › Queue). Its base controller is System::QueueDashboardController.
+  mount MissionControl::Jobs::Engine, at: "/system/queue"
+
+  # UI-7 shims, until §6.D-6 (drop them all in that PR):
+  # - GET 301s: /operator/settings (keeping its query; tab=database_backup → /system/backups, tab=mcp_access → /system/access), /operator/embeddings, /operator/telemetry,
+  #   /operator/audit_logs, /operator/settings/project_scans/check_path (→ /projects/scans/check_path),
+  #   /projects/jobs, /operator/jobs(/*rest) (→ /system/queue/*rest, keeping the query);
+  # - the old writes under /operator, routed to the System actions (no copy of the code), so an
+  #   open old tab still works.
+  keep_query = ->(target) { ->(_params, request) { "#{target}#{"?#{request.query_string}" if request.query_string.present?}" } }
+  legacy_settings_pages = { "database_backup" => "/system/backups", "mcp_access" => "/system/access" }
+  get "operator/settings", to: redirect(status: 301) { |_params, request|
+    legacy_settings_pages.fetch(request.params[:tab].to_s) { keep_query.call("/system/settings").call(nil, request) }
+  }, as: nil
+  get "operator/settings/project_scans/check_path", to: redirect(status: 301, &keep_query.call("/projects/scans/check_path")), as: nil
+  get "operator/embeddings", to: redirect("/system/embeddings", status: 301), as: nil
+  get "operator/telemetry", to: redirect(status: 301, &keep_query.call("/system/telemetry")), as: nil
+  get "operator/audit_logs", to: redirect(status: 301, &keep_query.call("/system/audit_log")), as: nil
+  get "projects/jobs", to: redirect("/system/jobs", status: 301), as: nil
+  get "operator/jobs(/*rest)", to: redirect(status: 301) { |params, request|
+    keep_query.call([ "/system/queue", params[:rest] ].compact.join("/")).call(nil, request)
+  }, as: nil
+  scope "operator", module: "system" do
+    post "maintenance/compaction/start", to: "jobs#start_compaction", as: nil
+    post "maintenance/compaction/pause", to: "jobs#pause_compaction", as: nil
+    post "maintenance/garbage_collection/run", to: "jobs#run_garbage_collection", as: nil
+    post "maintenance/relations/repair", to: "jobs#repair_relations", as: nil
+    post "audit_logs/prune", to: "audit_log#prune", as: nil
+    post "telemetry/prune", to: "telemetry#prune", as: nil
+    post "embeddings/test_connection", to: "embeddings#test_connection", as: nil
+    post "embeddings/backfill", to: "embeddings#backfill", as: nil
+    post "embeddings/regenerate", to: "embeddings#regenerate", as: nil
+    post "embeddings/add_indexes", to: "embeddings#add_indexes", as: nil
+    post "embeddings/drop_indexes", to: "embeddings#drop_indexes", as: nil
+    patch "settings", to: "settings#update", as: nil
+    post "settings/backup/run", to: "backups#create", as: nil
+    post "settings/backup/restore", to: "backups#restore", as: nil
+    delete "settings/backup", to: "backups#destroy", as: nil
+    delete "settings/project_scans/legacy_roots", to: "settings#clear_legacy_scan_roots", as: nil
+  end
 
   # Defines the root path route ("/")
   root "pages#home"

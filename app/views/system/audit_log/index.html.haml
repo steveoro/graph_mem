@@ -1,0 +1,71 @@
+- content_for :title, t("operator.audit_logs.title")
+- content_for :page_header, ui_page_header(t("operator.audit_logs.title"), subtitle: t("operator.audit_logs.subtitle"))
+
+.system-page
+
+  %section.system-stats
+    = dashboard_stat_chip(t("operator.audit_logs.summary.total"), @summary[:total])
+    = dashboard_stat_chip(t("operator.audit_logs.summary.filtered"), @summary[:filtered_count])
+    = dashboard_stat_chip(t("operator.audit_logs.summary.expired"), @summary[:expired_count])
+
+  .ui-card
+    = form_with url: system_audit_log_path, method: :get, local: true, class: "system-filters" do
+      .system-filters__row
+        .ui-field
+          %label.ui-label{ for: "audit_filter_log_action" }= t("operator.audit_logs.filters.action")
+          = select_tag :log_action, options_for_select(audit_log_action_options, @filters[:log_action]), id: "audit_filter_log_action", class: "ui-input"
+
+        .ui-field
+          %label.ui-label{ for: "audit_filter_auditable_type" }= t("operator.audit_logs.filters.auditable_type")
+          = select_tag :auditable_type, options_for_select(audit_log_auditable_type_options, @filters[:auditable_type]), id: "audit_filter_auditable_type", class: "ui-input"
+
+        .ui-field
+          %label.ui-label{ for: "audit_filter_actor" }= t("operator.audit_logs.filters.actor")
+          = text_field_tag :actor, @filters[:actor], id: "audit_filter_actor", class: "ui-input"
+
+        .ui-field
+          %label.ui-label{ for: "audit_filter_auditable_id" }= t("operator.audit_logs.filters.auditable_id")
+          = number_field_tag :auditable_id, @filters[:auditable_id], id: "audit_filter_auditable_id", class: "ui-input", min: 1
+
+        .ui-field
+          %label.ui-label{ for: "audit_filter_since_days" }= t("operator.audit_logs.filters.since_days")
+          = select_tag :since_days, options_for_select(audit_log_since_days_options, @filters[:since_days]), id: "audit_filter_since_days", class: "ui-input"
+
+      .system-actions
+        = submit_tag t("operator.audit_logs.filters.submit"), class: "ui-btn ui-btn-primary", id: "btn-audit-logs-filter"
+        = link_to t("operator.audit_logs.filters.reset"), system_audit_log_path, class: "ui-btn", id: "btn-audit-logs-reset"
+
+    - if @summary[:expired_count].positive?
+      .system-actions
+        = render "system/shared/typed_confirm", id: "prune-audit-log", url: system_prune_audit_log_path(request.query_parameters.except("confirmation")),
+          expected: @summary[:expired_count].to_s, summary: t("operator.audit_logs.prune_button"),
+          prompt: t("operator.audit_logs.prune_confirm", count: @summary[:expired_count]), button: t("operator.audit_logs.prune_button")
+
+    - if @audit_logs.any?
+      .system-table-wrap
+        %table.system-table
+          %thead
+            %tr
+              %th= t("operator.audit_logs.columns.time")
+              %th= t("operator.audit_logs.columns.action")
+              %th= t("operator.audit_logs.columns.reason")
+              %th= t("operator.audit_logs.columns.record")
+              %th= t("operator.audit_logs.columns.actor")
+              %th= t("operator.audit_logs.columns.changes")
+          %tbody
+            - @audit_logs.each do |log|
+              %tr{ id: "audit-log-#{log.id}" }
+                %td.system-nowrap= l(log.created_at, format: :short)
+                %td= audit_log_action_badge(log.action)
+                %td= audit_log_reason_label(log.reason)
+                %td= audit_log_record_label(log)
+                %td.system-mono= audit_log_actor_label(log.actor)
+                %td
+                  %details
+                    %summary= t("operator.audit_logs.changes_summary")
+                    %pre.system-code= audit_log_changed_fields_json(log)
+
+      .system-pagination
+        = paginate @audit_logs
+    - else
+      %p.system-hint= t("operator.audit_logs.empty")

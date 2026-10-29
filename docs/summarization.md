@@ -17,7 +17,7 @@ The feature uses a **hybrid design**:
 
 ## Configuration
 
-Configure under **Operator → System Settings → Summaries** (`/operator/settings?tab=summaries`).
+Configure under **System › Settings › Summaries** (`/system/settings?tab=summaries`).
 
 | Setting | ENV fallback | Notes |
 |---|---|---|

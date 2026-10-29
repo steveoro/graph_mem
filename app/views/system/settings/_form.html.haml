@@ -1,0 +1,11 @@
+-# One SettingsSchema group as a form (UI-7 S3). `url` is the page's update action; the reset link
+-# reloads the page. Every field renders through _field.
+- url = local_assigns.fetch(:url) { system_settings_path }
+- reset = local_assigns.fetch(:reset) { system_settings_path(tab: group.key) }
+= form_with url: url, method: :patch, class: "system-form", data: { testid: "settings-form-#{group.key}" } do
+  = hidden_field_tag :tab, group.key
+  - group.fields.each do |field|
+    = render "system/settings/field", field: field
+  .system-actions
+    = submit_tag t("system.settings.save_group"), class: "ui-btn ui-btn-primary", data: { testid: "operator-settings-save-btn-#{group.key}" }
+    = link_to t("system.settings.reset"), reset, class: "ui-btn", data: { testid: "operator-settings-reset-btn-#{group.key}" }

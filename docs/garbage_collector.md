@@ -90,17 +90,17 @@ Solid Queue must be running for scheduled invocations to fire.
 |---|---|---|
 | `enable_garbage_collector` | `true` | When `false`, both `GarbageCollectionJob` and manual runs are skipped |
 
-Toggle via **Operator → System Settings → Feature Flags** (`/operator/settings`). Workers read the flag directly from the database, so changes apply without restart.
+Toggle via **System › Settings › Feature Flags** (`/system/settings`). Workers read the flag directly from the database, so changes apply without restart.
 
 See [app_settings_reference.md](app_settings_reference.md) for details.
 
 ## Operator controls
 
-**Projects & Data › Background jobs** (`/projects/jobs`) includes a **Garbage Collector** card showing:
+**System › Background jobs** (`/system/jobs`) includes a **Garbage Collector** card showing:
 
 - Counts from the latest `orphans` and `duplicates` reports
 - Timestamps of the last run per report type
-- A **Run now** button (`POST /operator/maintenance/garbage_collection/run`)
+- A **Run now** button (`POST /system/jobs/garbage_collection/run`)
 
 Manual runs require operator sign-in and respect the `enable_garbage_collector` flag.
 

@@ -4,11 +4,11 @@
   - if result
     - if result.ok?
       %p{ data: { testid: "scan-check-result", code: result.code } }
-        %span.dashboard-badge.dashboard-badge--running ✓
+        %span.ui-badge.ui-badge--running ✓
         %code= result.path
         - if result.warnings.any?
-          %span.dashboard-alert--warning= ScanRootResolution.warning_suffix(result).strip
+          %span.system-warning= ScanRootResolution.warning_suffix(result).strip
     - else
       %p{ data: { testid: "scan-check-result", code: result.code } }
-        %span.dashboard-badge.dashboard-badge--failed= result.code
+        %span.ui-badge.ui-badge--failed= result.code
         = result.message

@@ -43,8 +43,8 @@ module Operator
       extras.filter_map do |entry|
         next unless GraphMem::McpAccessLists::Validator.public_ip?(entry)
 
-        note = t("operator.settings.mcp_access.public_entry", entry: entry)
-        policy.token_required? ? note : "#{note} #{t('operator.settings.mcp_access.inactive_no_token')}"
+        note = t("system.settings.mcp_access.public_entry", entry: entry)
+        policy.token_required? ? note : "#{note} #{t('system.settings.mcp_access.inactive_no_token')}"
       end
     end
   end

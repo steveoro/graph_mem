@@ -52,7 +52,10 @@ module Projects
 
     def load_index
       @query = params[:q].to_s.strip.presence
-      @roots = ExportStrategy.new.root_nodes(query: @query)
+      # One more than the cap, so the hint shows only when something was cut.
+      roots = ExportStrategy.new.root_nodes(query: @query, limit: ExportStrategy::ROOT_NODES_LIMIT + 1)
+      @roots_capped = roots.size > ExportStrategy::ROOT_NODES_LIMIT
+      @roots = roots.first(ExportStrategy::ROOT_NODES_LIMIT)
       @exports = OperationProgress.where(operation_type: "export").order(created_at: :desc, id: :desc).page(params[:page]).per(PER_PAGE)
     end
   end

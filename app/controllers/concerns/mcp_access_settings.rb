@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-# Settings › MCP access (UI-2a A3) for Operator::SettingsController: the additive part of the
+# System › Access (UI-2a A3; UI-7 SettingsGroupUpdate): the additive part of the
 # three MCP allowlists. Validated wherever they come from (any error → 422, nothing saved), stored
 # normalized, one AuditLog row per changed key, then applied without a restart through
 # OfficialMcp.refresh_access! (a hosts or origins change also closes open MCP sessions).
@@ -26,7 +26,7 @@ module McpAccessSettings
       result = GraphMem::McpAccessLists.validate(kind, settings[key])
       errors[kind] = result[:errors] if result[:errors].any?
       @mcp_access_warnings += result[:warnings]
-      @mcp_access_warnings += result[:duplicates].map { |entry| t("operator.settings.mcp_access.duplicate", entry: entry) }
+      @mcp_access_warnings += result[:duplicates].map { |entry| t("system.settings.mcp_access.duplicate", entry: entry) }
       settings[key] = result[:entries].join(",")
     end
     errors.presence
@@ -54,15 +54,6 @@ module McpAccessSettings
 
   # @return [String, nil] the warnings of the last validation, as one flash sentence
   def mcp_access_warnings_notice
-    t("operator.settings.mcp_access.saved_with_warnings", warnings: @mcp_access_warnings.join("; ")) if @mcp_access_warnings.present?
-  end
-
-  def render_mcp_access_error(errors)
-    AppSettings.clear_cache
-    @settings_by_group = group_settings_by_category
-    @active_tab = "mcp_access"
-    @mcp_access_errors = errors
-    flash.now[:alert] = t("operator.settings.mcp_access.not_saved", errors: errors.values.flatten.join("; "))
-    render :index, status: :unprocessable_content
+    t("system.settings.mcp_access.saved_with_warnings", warnings: @mcp_access_warnings.join("; ")) if @mcp_access_warnings.present?
   end
 end

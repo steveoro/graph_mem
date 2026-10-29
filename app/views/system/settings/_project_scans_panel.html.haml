@@ -1,0 +1,80 @@
+-# Settings › Project scans: the mounted scan folders, the fields, how each filter entry resolves,
+-# the legacy-roots clear button, the path check (GET /projects/scans/check_path) and the denylist.
+- status = ScanRootPolicy.status
+- legacy_roots = AppSettings.legacy_project_scan_roots
+
+.system-panel__aside{ data: { testid: "scan-folders" } }
+  %h3.ui-label= t("system.settings.project_scans.folders_title")
+  - unless status[:scans_switch]
+    %p.system-error{ data: { testid: "scans-switched-off" } }= t("system.settings.project_scans.switched_off")
+  - if status[:hard_roots].none? { |root| root[:error].nil? }
+    .system-error{ data: { testid: "scans-not-configured" } }
+      %p= t("system.settings.project_scans.nothing_mounted")
+      %pre.system-code= status[:compose_volume_line]
+      %p= t("system.settings.project_scans.docs_hint")
+  %table.system-table
+    %thead
+      %tr
+        %th= t("system.settings.project_scans.folder")
+        %th= t("system.settings.project_scans.mounted")
+        %th= t("system.settings.project_scans.access")
+        %th= t("system.settings.project_scans.readable")
+    %tbody
+      - status[:hard_roots].each do |root|
+        %tr{ data: { testid: "scan-folder-row" } }
+          %td
+            %code= root[:path]
+            - if root[:error]
+              %p.system-error= root[:error]
+          %td= status[:mode] == "container" ? (root[:mounted] ? "✓" : "✗") : t("system.settings.project_scans.native")
+          %td
+            - case root[:read_only]
+            - when true
+              %span.ui-badge.ui-badge--completed= t("system.settings.project_scans.read_only")
+            - when false
+              %span.ui-badge.ui-badge--paused= t("system.settings.project_scans.read_write")
+            - else
+              = "—"
+          %td= root[:readable] ? "✓" : "✗"
+  - if status[:warnings].include?(:running_as_root)
+    %p.system-warning= t("system.settings.project_scans.running_as_root")
+
+= render "system/settings/form", group: group
+
+.system-panel__aside
+  - if status[:warnings].include?(:whole_home_allowed)
+    %p.system-warning{ data: { testid: "whole-home-warning" } }= t("system.settings.project_scans.whole_home")
+  %ul.system-list{ data: { testid: "scan-subfolder-status" } }
+    - status[:subfolders].each do |entry|
+      %li
+        %code= entry[:input]
+        - if entry[:error]
+          %span.ui-badge.ui-badge--failed= t("system.settings.project_scans.rejected", reason: entry[:error])
+        - elsif entry[:exists]
+          %span.ui-badge.ui-badge--running= t("system.settings.project_scans.exists")
+        - else
+          %span.ui-badge.ui-badge--idle= t("system.settings.project_scans.missing")
+
+- if legacy_roots
+  .system-warning{ data: { testid: "legacy-scan-roots" } }
+    %p= t("system.settings.project_scans.legacy_ignored", value: legacy_roots)
+    = button_to t("system.settings.project_scans.legacy_clear"), system_clear_legacy_scan_roots_path, method: :delete, class: "ui-btn",
+      data: { testid: "clear-legacy-scan-roots" }
+
+.system-panel__aside{ data: { testid: "scan-check-path" } }
+  %h3.ui-label= t("system.settings.project_scans.check_title")
+  = form_with url: check_path_projects_scans_path, method: :get, class: "system-inline-form", data: { turbo_frame: "scan-path-check" } do
+    = label_tag :path, t("system.settings.project_scans.check_title"), class: "system-sr-only"
+    = text_field_tag :path, nil, placeholder: "/home/you/Projects/app", class: "ui-input", data: { testid: "scan-check-path-input" }
+    = submit_tag t("system.settings.project_scans.check_button"), class: "ui-btn"
+  = render "projects/scans/path_check", result: nil
+
+.system-panel__aside{ data: { testid: "scan-always-blocked" } }
+  %h3.ui-label= t("system.settings.project_scans.blocked_title")
+  %p.system-hint= t("system.settings.project_scans.blocked_hint")
+  %p
+    %strong= t("system.settings.project_scans.blocked_folders")
+    = status[:denylist][:root_folders].join(", ")
+  %p
+    %strong= t("system.settings.project_scans.blocked_files")
+    = (status[:denylist][:file_folders] + status[:denylist][:files]).join(", ")

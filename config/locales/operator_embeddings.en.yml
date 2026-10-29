@@ -3,7 +3,6 @@ en:
     embeddings:
       title: "Embeddings"
       subtitle: "Vector embedding coverage and maintenance"
-      back_to_dashboard: "Back to dashboard"
       manage: "Manage embeddings"
       vector_enabled: "Vector columns"
       vector_disabled: "Vector columns unavailable"

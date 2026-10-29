@@ -1,0 +1,7 @@
+-# Settings › Review policies (UI-5b B2): the policy toggles and the review limits. Out-of-range
+-# values answer 422; every change writes an audit row. The runs (with Undo) are on Review › Policies.
+%p.system-hint= t("system.settings.review_policies.intro")
+= render "system/settings/form", group: group
+.system-panel__aside
+  %p.system-hint= t("system.settings.review_policies.snooze_expiry")
+  = link_to t("system.settings.review_policies.runs_link"), review_path(view: "policies"), data: { testid: "review-policy-runs-link" }

@@ -1,0 +1,25 @@
+-# One SettingsSchema field: its label, input, help, accepted range, ENV fallback and, after a
+-# refused save (422), its error. A field with a `partial` renders its own input.
+- value = settings_field_value(field)
+- error = @settings_errors&.dig(field.key)
+- id = "setting_#{field.key}"
+.ui-field.system-field{ class: ("system-field--invalid" if error), data: { testid: "field-#{field.key}" } }
+  - if field.partial
+    = render field.partial, field: field, value: value
+  - elsif field.type == :boolean
+    .system-switch
+      = hidden_field_tag "settings[#{field.key}]", "0", id: nil
+      = check_box_tag "settings[#{field.key}]", "1", settings_field_checked?(field, value), id: id, class: "system-switch__input",
+        disabled: field.readonly, aria: { describedby: "#{id}_help" }, data: { testid: "setting-#{field.key}" }
+      %label.ui-label{ for: id }= t(field.label)
+  - else
+    %label.ui-label{ for: id }= t(field.label)
+    = settings_field_input(field, value)
+  - unless field.partial
+    %p.system-hint{ id: "#{id}_help" }= t(field.help)
+    - if field.range
+      %small.system-hint{ data: { testid: "setting-range-#{field.key}" } }= t("system.settings.validation.range", min: field.range.min, max: field.range.max)
+    - if field.fallback
+      = send(field.fallback, field.hint)
+  - if error
+    %p.system-error{ role: "alert", data: { testid: "setting-error-#{field.key}" } }= error

@@ -490,9 +490,9 @@ GraphMem host (see [LAN sharing](#lan-sharing)).
 
 ### Operator dashboard
 
-Sign in at `/operator/login`, then open **Embeddings** from the sidebar (or the Embeddings pill on Home) or go to `/operator/embeddings`. The page shows coverage, index status, resolved configuration (with source badges: AppSettings / ENV / Default), connection test, backfill/regenerate jobs, and add/drop ANN index actions.
+Sign in at `/operator/login`, then open **Embeddings** from the sidebar (or the Embeddings pill on Home) or go to `/system/embeddings`. The page shows coverage, index status, resolved configuration (with source badges: AppSettings / ENV / Default), connection test, backfill/regenerate jobs, and add/drop ANN index actions.
 
-Embedding service settings live under **System Settings → Embeddings** (`/operator/settings?tab=embeddings`). Configuration resolves in this order:
+Embedding service settings live under **System › Settings › Embeddings** (`/system/settings?tab=embeddings`). Configuration resolves in this order:
 
 | Priority | Source |
 |---|---|
@@ -545,7 +545,7 @@ docker compose exec app curl -sf http://localhost:11434/api/embed \
 To change the model (e.g. from `nomic-embed-text` to a different one):
 
 1. Pull the new model on the Ollama host: `ollama pull <model-name>`
-2. Update the model (and dimensions if different) in **System Settings → Embeddings** or via `EMBEDDING_MODEL` / `EMBEDDING_DIMS` in `.env`
+2. Update the model (and dimensions if different) in **System › Settings › Embeddings** or via `EMBEDDING_MODEL` / `EMBEDDING_DIMS` in `.env`
 3. Verify connectivity: `bin/rails embeddings:check` or the operator **Test connection** button
 4. Recompute all vectors: `bin/rails embeddings:regenerate` or the operator **Regenerate all** action
 
@@ -553,7 +553,7 @@ To change the model (e.g. from `nomic-embed-text` to a different one):
 
 ## Database Backup & Restore
 
-Backups are managed through **System Settings** (`/operator/settings`, session login) and rake tasks. Dumps are timestamped, environment-scoped, and retained according to `backup_keep_max`:
+Backups are managed through **System › Backups** (`/system/backups`, session login; restore asks you to type the file name) and rake tasks. Dumps are timestamped, environment-scoped, and retained according to `backup_keep_max`:
 
 ```bash
 # Dump current database to <backup_folder>/<YYYYMMDDHHMM>_<env>.sql.bz2
@@ -567,11 +567,11 @@ bin/rails db:restore
 FILE=202601011200_production.sql.bz2 bin/rails db:restore
 ```
 
-Scheduled backups run via Solid Queue (`DatabaseBackupJob`) when **Enable scheduled backups** is on in System Settings. Production schedule: 1pm and 5pm GMT (`config/recurring.yml`). Use the **Jobs** dashboard at `/operator/jobs` (same operator session) to inspect queue status.
+Scheduled backups run via Solid Queue (`DatabaseBackupJob`) when **Enable scheduled backups** is on in System › Backups. Production schedule: 1pm and 5pm GMT (`config/recurring.yml`). Use the **Queue** (Mission Control) at `/system/queue` (same operator session) to inspect queue status.
 
 Sign in at `/operator/login`. Default operator credentials: `operator` / `changeme`. In production the login returns 503 until the password is changed from `changeme` (the default username is fine). Override with `OPERATOR_USERNAME` / `OPERATOR_PASSWORD` or Rails credentials under `operator:`.
 
-**Read-only guest.** An optional second account can browse Search and Explore without changing anything. It is disabled until a guest password is set in `GRAPH_MEM_GUEST_PASSWORD` or Rails credentials `guest.password`; the username defaults to `guest` (`GRAPH_MEM_GUEST_USERNAME` or `guest.username`). The guest's username and password must both differ from the operator's, or the guest stays disabled. **Settings › Feature Flags › Guest access** turns it off at any time (signed-in guests are signed out on their next click). A guest can read all graph content (there is no per-project scoping), gets `403` on every other page and every other `/api/v1` endpoint (only the graph, entity, observation and relation reads, search subgraph and traversal are open), and never gets MCP access: `/mcp*` ignores browser sessions. Guests can run up to 60 searches a minute per IP and 300 a minute across all guests (HTML and API combined; `429` after that). Guest sessions expire after 2 hours idle or 24 hours.
+**Read-only guest.** An optional second account can browse Search and Explore without changing anything. It is disabled until a guest password is set in `GRAPH_MEM_GUEST_PASSWORD` or Rails credentials `guest.password`; the username defaults to `guest` (`GRAPH_MEM_GUEST_USERNAME` or `guest.username`). The guest's username and password must both differ from the operator's, or the guest stays disabled. **System › Access › Guest access** turns it off at any time (signed-in guests are signed out on their next click). A guest can read all graph content (there is no per-project scoping), gets `403` on every other page and every other `/api/v1` endpoint (only the graph, entity, observation and relation reads, search subgraph and traversal are open), and never gets MCP access: `/mcp*` ignores browser sessions. Guests can run up to 60 searches a minute per IP and 300 a minute across all guests (HTML and API combined; `429` after that). Guest sessions expire after 2 hours idle or 24 hours.
 
 
 ## Environment Variables

@@ -1,0 +1,27 @@
+- content_for :title, t("system.health.title")
+- content_for :page_header, ui_page_header(t("system.health.title"), subtitle: t("system.health.subtitle"))
+- overall = @health.status
+
+.system-page{ data: { testid: "system-health" } }
+  %p.system-health__overall{ data: { testid: "health-overall", status: overall } }
+    = t("system.health.overall")
+    %span.ui-badge{ class: "ui-badge--#{overall}" }= t("home.health.status.#{overall}")
+    = link_to t("system.health.json"), system_health_path(format: :json), data: { turbo: false }
+  %ul.system-health{ "aria-label": t("system.health.title") }
+    - @health.checks.each do |check|
+      %li.ui-card.system-health__row{ data: { testid: "health-#{check[:key]}", status: check[:status] } }
+        %span.system-health__label= check[:label]
+        %span.ui-badge{ class: "ui-badge--#{check[:status]}" }= t("home.health.status.#{check[:status]}")
+        %span.system-health__value= check[:value]
+        = link_to t("system.health.open"), check[:href], class: "system-health__link", "aria-label": t("system.health.open_label", check: check[:label])
+        - if check[:detail].present?
+          %ul.system-list.system-health__detail{ data: { testid: "health-#{check[:key]}-detail" } }
+            - check[:detail].each do |root|
+              %li
+                %code= root[:path]
+                = root[:error] || t("system.health.values.#{root[:read_only] ? 'root_read_only' : 'root_read_write'}")
+  %details.ui-card{ data: { testid: "health-raw-snapshots" } }
+    %summary.ui-label= t("system.health.raw_snapshots")
+    - @health.raw_snapshots.each do |name, snapshot|
+      %h3.ui-label= name
+      %pre.system-code= JSON.pretty_generate(snapshot.as_json)
