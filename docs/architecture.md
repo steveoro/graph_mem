@@ -139,11 +139,11 @@ bucket for backward compatibility. When set:
 
 #### Embedding configuration (`app/services/embedding_config.rb`)
 
-Resolves URL, model, provider, and dimensions with priority **AppSettings → ENV → defaults**. Used by `EmbeddingService`, rake tasks, and the operator embeddings UI. Operators can edit values under **System Settings → Embeddings**; workers pick up changes after save via `EmbeddingService.reset_instance!`.
+Resolves URL, model, provider, and dimensions with priority **AppSettings → ENV → defaults**. Used by `EmbeddingService`, rake tasks, and the operator embeddings UI. Operators can edit values under **System › Settings › Embeddings**; workers pick up changes after save via `EmbeddingService.reset_instance!`.
 
 #### Summarization configuration (`app/services/summarization_config.rb`)
 
-Resolves URL, model, provider, timeout, and output token limits with the same **AppSettings → ENV → defaults** priority. Used by `SummaryGenerationClient` and `SummarizerService`. Operators configure values under **System Settings → Summaries**; saving resets `SummaryGenerationClient` so subsequent summarize requests use the new settings.
+Resolves URL, model, provider, timeout, and output token limits with the same **AppSettings → ENV → defaults** priority. Used by `SummaryGenerationClient` and `SummarizerService`. Operators configure values under **System › Settings › Summaries**; saving resets `SummaryGenerationClient` so subsequent summarize requests use the new settings.
 
 #### Embedding Service (`app/services/embedding_service.rb`)
 

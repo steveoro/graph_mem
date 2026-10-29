@@ -35,7 +35,7 @@ classification, and the list of top-level argument keys.
 
 ## Retention and pruning
 
-The **Telemetry** System Settings tab controls
+The **Telemetry & retention** tab of System › Settings controls
 `tool_invocation_retention_days`. The default is 90 days; set it to `0` to
 disable automatic deletion.
 

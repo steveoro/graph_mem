@@ -146,7 +146,7 @@ When a compaction run is `running`:
 2. The compactor checks the flag after each entity in the current batch; if set, it flushes pending review items, pauses the run, and yields.
 3. The valve polls up to **3 seconds** for the run to reach `paused` status.
 
-Operators can also pause manually from **Projects & Data › Background jobs** (`/projects/jobs`, which posts to `POST /operator/maintenance/compaction/pause`).
+Operators can also pause manually from **System › Background jobs** (`/system/jobs`, which posts to `POST /system/jobs/compaction/pause`).
 
 Paused runs resume from `cursor_entity_id` on the next scheduled job or when an operator clicks **Start / Resume**.
 
@@ -232,11 +232,11 @@ so the operator can undo one for 7 days (see [architecture](architecture.md#chan
 | `enable_dream_state_compactor` | `true`  | When `false`, scheduled and manual compaction starts are skipped |
 
 
-Configure under **Operator → System Settings → Feature Flags**.
+Configure under **System › Settings › Feature Flags**.
 
 ## Operator controls
 
-The **Dream State / Compactor Run** card on **Projects & Data › Background jobs** (`/projects/jobs`; the Maintenance hub that held it until 1.62.0 is gone) shows:
+The **Dream State / Compactor Run** card on **System › Background jobs** (`/system/jobs`; the Maintenance hub that held it until 1.62.0 is gone) shows:
 
 - Run status badge (`idle`, `running`, `paused`, `completed`, `failed`)
 - Phase stepper (`orphans` → `tree_walk` → `relationship_discovery`)

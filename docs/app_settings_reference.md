@@ -4,9 +4,9 @@ GraphMem stores operator-tunable runtime settings in the primary MariaDB `settin
 
 ## Operator UI
 
-- **URL:** `/operator/settings`
+- **URL:** `/system/settings` (one tab per group); the backup group is on `/system/backups`. The groups, labels, types, ranges and validators all come from `SettingsSchema` (`app/services/settings_schema.rb`), and a save writes only the posted group's keys: an invalid value answers `422` with the field marked and nothing saved. `project_scan_roots` is the one legacy key in no group (`SettingsSchema::LEGACY_KEYS`). The old `/operator/settings` URL redirects (301) until §6.D-6.
 - **Auth:** session login at `/operator/login` (`OPERATOR_USERNAME` / `OPERATOR_PASSWORD`, or `credentials.operator.username` / `credentials.operator.password`). The same form signs in the optional read-only guest (see `enable_guest_access` below); guests can't open the settings.
-- **Tabs:** Feature Flags, Database Backup, Embeddings, Summaries, Imports, Project Scans, Telemetry, Review policies, MCP access
+- **Tabs:** Feature Flags, Embeddings, Summaries, Imports, Project Scans, Telemetry & retention, Review policies, Access. **Backups** has its own page.
 
 ## Feature Flags
 
@@ -14,11 +14,16 @@ GraphMem stores operator-tunable runtime settings in the primary MariaDB `settin
 |---|---|---|
 | `enable_dream_state_compactor` | `true` | When `false`, `DreamStateCompactionJob` and manual compaction start are skipped. |
 | `enable_garbage_collector` | `true` | When `false`, `GarbageCollectionJob` and manual GC runs are skipped. |
-| `enable_guest_access` | `true` | Lets the read-only guest sign in. No effect until a guest password is set (`GRAPH_MEM_GUEST_PASSWORD` or credentials `guest.password`). When `false`, signed-in guests are signed out on their next request. |
+| `enable_stale_memory_scan` | `true` | **Stale memory scan.** When `false`, the scheduled scan that flags stale observations for review is skipped. |
+| `enable_contradiction_detection` | `true` | **Contradiction detection.** When `false`, the contradiction detector (in the stale memory scan and the `detect_contradictions` endpoint) finds no pairs. |
+
+`enable_guest_access` is on the **Access** tab (see [MCP Access](#mcp-access)).
 
 Boolean flags consumed by background workers use direct database reads so Solid Queue processes see UI changes without restart.
 
 ## Database Backup
+
+On **System › Backups** (`/system/backups`), with **Run backup now** and the files. **Restore** asks you to type the file name again (checked on the server: a mismatch answers `422` and restores nothing); **Delete** asks for a confirmation.
 
 | Setting | Default | Effect |
 |---|---|---|
@@ -86,7 +91,9 @@ Every scan entry point (dashboard, `POST /api/v1/scan`, MCP `scan_project`, job 
 
 ## MCP Access
 
-Additive parts of the three MCP allowlists (UI-2a). Each adds to its ENV variable, which the tab shows as read-only text and which can't be removed here. Read uncached by `GraphMem::McpAccessLists`; a save applies at once through `OfficialMcp.refresh_access!` (a hosts or origins change also closes open MCP sessions). Validated on save (any refused entry: `422`, nothing saved) and audited per changed key. Not secrets. See [MCP access control](mcp_access_control.md#adding-entries-at-runtime-settings--mcp-access).
+On the **Access** tab, with `enable_guest_access` (`true`: lets the read-only guest sign in; no effect until a guest password is set in `GRAPH_MEM_GUEST_PASSWORD` or credentials `guest.password`; when `false`, signed-in guests are signed out on their next request).
+
+Additive parts of the three MCP allowlists (UI-2a). Each adds to its ENV variable, which the tab shows as read-only text and which can't be removed here. Read uncached by `GraphMem::McpAccessLists`; a save applies at once through `OfficialMcp.refresh_access!` (a hosts or origins change also closes open MCP sessions). Validated on save (any refused entry: `422`, nothing saved) and audited per changed key. Not secrets. See [MCP access control](mcp_access_control.md#adding-entries-at-runtime-settings--access).
 
 | Setting | Default | Effect |
 |---|---|---|
@@ -96,7 +103,7 @@ Additive parts of the three MCP allowlists (UI-2a). Each adds to its ENV variabl
 
 ## Retention
 
-Both settings are on the **Telemetry** tab.
+Both settings are on the **Telemetry & retention** tab.
 
 | Setting | Default | Effect |
 |---|---|---|
@@ -105,6 +112,6 @@ Both settings are on the **Telemetry** tab.
 
 ## Mission Control Jobs
 
-- **URL:** `/operator/jobs`
+- **URL:** `/system/queue` (System › Queue; `/operator/jobs` redirects until §6.D-6)
 - **Auth:** same operator session (sign in at `/operator/login`)
 - **Purpose:** inspect Solid Queue jobs, recurring tasks, and failures

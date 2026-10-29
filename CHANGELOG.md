@@ -5,6 +5,25 @@ All notable changes to GraphMem will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+UI-7a (#138), released with UI-7b as 1.63.0.
+
+### Added
+- **System › Backups** (`/system/backups`): the backup settings, **Run backup now**, and the files with Restore and Delete.
+- **Typed confirmations**, checked on the server (`422` and nothing done on a mismatch): backup restore (type the file name), **Regenerate all** embeddings (`REGENERATE`), **Drop indexes** (`DROP`) and audit-log prune (the row count). `typed_confirm_controller.js` only enables the button.
+- `SettingsSchema`: one list of every settings field (group, page, type, range, label, help, validator). The Settings page renders from it; `enable_contradiction_detection` and `enable_stale_memory_scan` get a label and help.
+
+### Changed
+- Settings, Embeddings, Telemetry, the Audit log and Background jobs move under `/system` (`System::` controllers, operator only). The old `/operator/settings`, `/operator/embeddings`, `/operator/telemetry`, `/operator/audit_logs` and `/projects/jobs` pages answer 301, and the old writes still work, until §6.D-6.
+- Mission Control moves to `/system/queue` (System › Queue); `/operator/jobs(/*)` answers 301.
+- A settings save writes only the posted tab's fields, and an invalid value answers `422` with the field marked and nothing saved (some tabs used to redirect with a flash, or save the valid keys).
+- The guest toggle and the MCP allowlists share the new **Access** tab; Home's backup, guest and MCP pills link to Backups and Access.
+
+### Fixed
+- The "capped" hints on Exports and the import review show only when a root was cut (#137 follow-up).
+- `enable_contradiction_detection` is reachable from Settings › Feature flags.
+
 ## [1.62.0] - 2026-10-29
 
 Projects & Data: projects, scans, imports and exports in one place, with history.

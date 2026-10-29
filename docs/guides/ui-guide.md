@@ -51,12 +51,13 @@ The sidebar lists Home, Search and Explore at the top, then three groups (Review
 | Projects & Data | **Scans** | The scan history, one form for a normal or guided scan (with a live path check), and a page per scan |
 | Projects & Data | **Imports** | Upload a GraphMem export or a Graphify `graph.json`, review, import; the import history |
 | Projects & Data | **Exports** | Export roots in the background, with progress and a download; past exports |
-| Projects & Data | **Background jobs** | The compactor, the garbage collector and relation repair |
-| System | **Embeddings** | Vector coverage, connection test, backfill, ANN indexes |
-| System | **Telemetry** | MCP tool volume, errors, latency, and the full MCP clients table |
+| System | **Settings** | Feature flags, embeddings, summaries, imports, project scans, telemetry & retention, review policies, access |
+| System | **Backups** | Backup settings, a manual run, and restore (type the file name) or delete per file |
 | System | **Audit log** | Change history for entities, observations and relations |
-| System | **Settings** | Feature flags, backups, embeddings, summaries, imports, project scans, telemetry/retention |
-| System | **Jobs** | Mission Control for the Solid Queue jobs (its own layout) |
+| System | **Telemetry** | MCP tool volume, errors, latency, and the full MCP clients table |
+| System | **Embeddings** | Vector coverage, connection test, backfill, ANN indexes |
+| System | **Background jobs** | The compactor, the garbage collector and relation repair |
+| System | **Queue** | Mission Control for the Solid Queue jobs (its own layout) |
 | System | **API docs** | Swagger UI for `/api/v1` (its own page) |
 
 The bottom of the sidebar shows who is signed in, and the **Sign out** button.
@@ -190,15 +191,18 @@ Operator only; a guest gets 403 from every page.
   A path the policy refuses comes back on the form with its message, and nothing is queued. A scan's page (`/projects/scans/<id>`) follows its progress live and shows its counters (including files skipped outside the root or as denylisted), the fallback reason, any error, **Continue** / **Stop** and the steps for a guided scan, and its project's scan-review groups.
 - **Imports** (`/projects/imports`): upload a GraphMem JSON export or a Graphify `graph.json` (up to 64 MB). A `graph.json` needs the name of the Project it describes; it's translated the way `rails graphify:translate` does and goes through the same review. The review has a match/create decision per root node; children follow their stored match. **Proceed with import** runs it and opens the report. Upload errors stay on the upload form. The history lists every import, the command-line ones included, and any past report can be opened again.
 - **Exports** (`/projects/exports`): tick roots (Projects first; up to 500 listed, filter by name for the rest) and **Export selected**. The export runs in the background; its page shows progress and then **Download**. Files are deleted after an hour, and an expired download says so (HTTP 410). The JSON `GET /data_exchange/export` still downloads directly, for scripts.
-- **Background jobs** (`/projects/jobs`): the compactor, garbage collector and relation-repair cards, and the graph totals.
 
 ### System
 
 - **Embeddings**: see the [operator embeddings guide](../operator/embeddings.md).
 - **Telemetry**: see [operator tool telemetry](../operator/telemetry.md).
 - **Audit log**: browse changes by action, record type, actor, record id and time window.
-- **Settings**: every runtime setting is described in the [app settings reference](../app_settings_reference.md). Each tab has its own **Save** button.
-- **Jobs**: Mission Control shows queues, failed jobs (retry or discard), workers and recurring tasks. It opens as a full page with its own navigation; **Back to main app** returns to the shell.
+- **Settings** (`/system/settings`): every runtime setting is described in the [app settings reference](../app_settings_reference.md). Each tab has its own **Save** button and saves only its own fields; a value out of range comes back marked (HTTP 422) and nothing in the tab is saved.
+- **Backups** (`/system/backups`): the backup settings, **Run backup now**, and the backup files. **Restore** opens a card that asks you to type the file name; the button stays disabled until it matches, and the server checks it again.
+- **Background jobs** (`/system/jobs`): the compactor, garbage collector and relation-repair cards, and the graph totals.
+- **Typed confirmations**: besides restore, **Regenerate all** and **Drop indexes** on Embeddings ask you to type `REGENERATE` / `DROP`, and pruning the audit log asks for the number of rows it will delete.
+- The old `/operator/settings`, `/operator/embeddings`, `/operator/telemetry`, `/operator/audit_logs`, `/operator/jobs` and `/projects/jobs` URLs redirect (301) to their System page until §6.D-6.
+- **Queue** (`/system/queue`): Mission Control shows queues, failed jobs (retry or discard), workers and recurring tasks. It opens as a full page with its own navigation; **Back to main app** returns to the shell.
 - **API docs**: Swagger UI for the REST API, with its own page.
 
 ## The read-only guest
@@ -216,7 +220,7 @@ The guest account lets someone else browse the graph without being able to chang
    - `[guest access] not configured (no guest password)` means no password was found.
    - `[guest access] disabled: guest username or password equals the operator's` means the guest clashes with the operator. The guest's username and password must both differ from the operator's.
 
-**Settings › Feature Flags › Guest access (read-only)** switches the guest on and off without a restart. It's on by default, but it has no effect until a password is set.
+**Settings › Access › Guest access (read-only)** switches the guest on and off without a restart. It's on by default, but it has no effect until a password is set.
 
 ### What a guest sees
 
@@ -228,7 +232,7 @@ In **Explore**, the guest gets the same canvas, toolbar and panel: browse, pick 
 
 ![Explore as guest: read-only node menu](../images/ui/guest-explore.png)
 
-Every other page answers with **Operator only** (HTTP 403), including Review, Projects & Data, Settings, Jobs and the Audit log. Home sends a guest to Search, and API docs answers 404.
+Every other page answers with **Operator only** (HTTP 403), including Review, Projects & Data and every System page (Settings, Backups, Queue, the Audit log). Home sends a guest to Search, and API docs answers 404.
 
 ![The 403 page a guest sees](../images/ui/guest-forbidden.png)
 
