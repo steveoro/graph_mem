@@ -5,6 +5,32 @@ All notable changes to GraphMem will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.62.0] - 2026-10-29
+
+Projects & Data: projects, scans, imports and exports in one place, with history.
+
+### Added
+- Projects (`/projects`): every Project root with its last scan, last import and pending scan-review groups (linking into Review › Scan review for that project), plus Open in Explore; a fixed number of queries per page.
+- Scans (`/projects/scans`): the history, and one New scan form for a normal or a guided scan ("Guided (step by step)"). The path is checked as you type (`GET /projects/scans/check_path`, the same result as Settings › Project scans), and the scannable folders are clickable chips. A scan's own page (`/projects/scans/<id>`) follows it live and shows counters (files skipped outside the root or denylisted included), the fallback reason, errors, Continue / Stop and the steps of a guided scan, and its project's scan-review groups.
+- Imports (`/projects/imports`): upload a GraphMem export or a Graphify `graph.json` (translated like `rails graphify:translate`, after asking for its project name) into the same review; the import history, command-line imports included, with every past report reopenable. Each import records its file, producer, project and result in its `OperationProgress`.
+- Exports (`/projects/exports`): pick roots (Projects first, a name filter, up to 500 listed), export in the background with live progress, then download.
+- Background jobs (`/projects/jobs`): the compactor, garbage-collector and relation-repair cards.
+- `ExportJob.cleanup_old_exports` runs hourly (`config/recurring.yml`, development and production).
+
+### Changed
+- The Maintenance hub's parts moved: scans, imports and exports to Projects & Data, the background-job cards to Background jobs, the full MCP clients table to System › Telemetry. `GET /maintenance` redirects (301) to `/projects` (old `#background-jobs` / `#mcp-clients` bookmarks are forwarded); `GET /data_exchange/import_review` and `import_report` redirect (301) to the new import pages. The old scan and import `POST`/`PATCH`/`DELETE` routes still work and redirect to the new pages until §6.D-6.
+- Import errors stay on the upload page (422 with the message) instead of redirecting to Home.
+- The sidebar's Projects & Data group lists Projects, Scans, Imports, Exports and Background jobs.
+- `ExportStrategy#root_nodes` is one bounded query (Projects first, then roots by name, at most 500).
+
+### Removed
+- The Maintenance hub page (`app/views/maintenance/`) and `MaintenanceController`.
+
+### Fixed
+- Explore's merge preview counts the entities that change project exactly below the cap: a child `part_of` two moving parents no longer uses up the walk's limit and hides another.
+- A capped neighbourhood in `GET /api/v1/graph_data` keeps its lowest ids, as documented.
+- "Show it" for a duplicate observation opens the panel page the duplicate is on.
+
 ## [1.61.0] - 2026-10-28
 
 Explore: edit the graph from the canvas and the panel, merge with a preview, undo every change.
