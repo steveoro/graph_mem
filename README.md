@@ -369,8 +369,9 @@ Assuming `graph_mem-app-1` is the running container name, edit `mcp_servers.json
                 "bash",
                 "-c",
                 "'bin/bundle exec ruby bin/mcp_stdio_runner.rb'"
-                // For development, change env below and replace the command with bash, first arg "-c" and second arg:
-                // "cd /home/steve/Projects/graph_mem && exec /usr/share/rvm/wrappers/ruby-3.4.12@graph_mem/bundle exec ruby bin/mcp_stdio_runner.rb"
+                // For development, change env below and replace the command with bash, first arg "-c" and second arg
+                // (use the full path to your Ruby manager's `bundle`, e.g. an RVM wrapper or rbenv shim, if it isn't on PATH):
+                // "cd /absolute/path/to/graph_mem && exec bundle exec ruby bin/mcp_stdio_runner.rb"
             ],
             "env": {
                 "RAILS_ENV": "production"
