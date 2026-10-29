@@ -30,6 +30,10 @@ module SourceFact
 
     validate :source_fact_is_in_a_project, if: -> { fact_tagged? && active? && (new_record? || will_save_change_to_tags?) }
     validate :outdated_by_is_consistent, if: -> { outdated_by_id.present? }
+
+    # A new fact, a fact's new text, or a newly added tag: propose what it outdates. A superseded
+    # fact's replacement keeps its tags, so editing a fact runs it again for the new text.
+    after_commit :enqueue_fact_supersede, on: %i[create update], if: :fact_supersede_trigger?
   end
 
   # @param terms [Array<String>, String, nil]
@@ -74,6 +78,19 @@ module SourceFact
   end
 
   private
+
+  def fact_supersede_trigger?
+    return false unless source_fact?
+    return true if previously_new_record? || saved_change_to_content?
+
+    saved_change_to_tags? && !Array(tags_before_last_save).include?(SOURCE_FACT_TAG)
+  end
+
+  def enqueue_fact_supersede
+    FactSupersedeJob.perform_later(id) if AppSettings.fact_supersede_enabled?
+  rescue StandardError => e
+    Rails.logger.warn "[SourceFact] FactSupersedeJob not queued for observation ##{id}: #{e.class}: #{e.message}"
+  end
 
   def added_fact_tag?(log)
     fields = log.changed_fields.to_h

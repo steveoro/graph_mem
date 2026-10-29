@@ -20,18 +20,20 @@ class ReviewRowClassifier
                          move_observation].freeze
   # The only kinds bulk apply, group apply and auto-apply policies may touch.
   SAFE_BULK_KINDS = %w[relationship_proposal stale_memory].freeze
-  # Apply needs a per-row choice (which observation to keep); dismiss and snooze work as usual.
-  CHOICE_KINDS = %w[contradiction].freeze
+  # Apply needs a per-row choice (which observation to keep; supersede or retire); dismiss and
+  # snooze work as usual. Only ReviewPolicies::AutoApplyFactSupersede may apply fact_supersede.
+  CHOICE_KINDS = %w[contradiction fact_supersede].freeze
   ERROR_KINDS = %w[entity_error embedding_backfill_failed lifecycle_corruption].freeze
   SCAN_KINDS = %w[delete_entity delete_relation delete_observation reparent_entity move_observation].freeze
 
   # Most rows one seed run (one source_ref) may add per kind; the best by priority are kept.
-  RUN_CAPS = { "relationship_proposal" => 200, "entity_merge" => 100, "orphan_parent" => 100, "contradiction" => 100 }.freeze
+  RUN_CAPS = { "relationship_proposal" => 200, "entity_merge" => 100, "orphan_parent" => 100, "contradiction" => 100,
+                "fact_supersede" => 100 }.freeze
 
   # §2.5.1: how much acting on a kind changes the graph (0-1) and fixed confidences.
   IMPACT = Hash.new(0.5).merge(
     "relationship_proposal" => 0.3, "entity_merge" => 0.8, "orphan_parent" => 0.5, "stale_memory" => 0.6,
-    "contradiction" => 0.6, "relation_integrity" => 0.4,
+    "contradiction" => 0.6, "fact_supersede" => 0.6, "relation_integrity" => 0.4,
     **ERROR_KINDS.index_with(0.7), **SCAN_KINDS.index_with(0.6)
   ).freeze
   CONFIDENCE = {
@@ -105,7 +107,7 @@ class ReviewRowClassifier
     when "entity_merge" then merge_confidence(payload)
     when "orphan_parent" then orphan_confidence(payload)
     when "stale_memory" then SIGNAL_CONFIDENCE.fetch(payload["signal"].to_s, 0.6)
-    when "contradiction" then payload["confidence"].to_f
+    when "contradiction", "fact_supersede" then payload["confidence"].to_f
     else CONFIDENCE.fetch(kind, 0.5)
     end
   end

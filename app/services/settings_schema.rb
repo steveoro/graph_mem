@@ -117,7 +117,8 @@ class SettingsSchema
 
     def build
       [
-        define_group(:feature_flags, %w[enable_dream_state_compactor enable_garbage_collector enable_stale_memory_scan enable_contradiction_detection]),
+        define_group(:feature_flags, %w[enable_dream_state_compactor enable_garbage_collector enable_stale_memory_scan enable_contradiction_detection
+                                        fact_supersede_enabled]),
         define_group(:embeddings, [
           define_field("embedding_url", validator: :http_url_embedding, fallback: :embedding_settings_fallback_hint, hint: :url),
           define_field("embedding_model", fallback: :embedding_settings_fallback_hint, hint: :model),

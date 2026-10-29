@@ -155,7 +155,7 @@ class ReviewController < ApplicationController
     }
   end
 
-  def action_params = params.permit(*EDIT_FIELDS, :keep_observation_id).to_h
+  def action_params = params.permit(*EDIT_FIELDS, :keep_observation_id, :fact_action, :replacement).to_h
   def snooze_days = (params[:days].presence || CompactionReviewService::SNOOZE_DAYS).to_i
   def min_confidence = params[:min_confidence].presence&.to_f
   def row_ids = [ helpers.dom_id(@row) ]

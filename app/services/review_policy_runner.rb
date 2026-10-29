@@ -11,7 +11,8 @@
 class ReviewPolicyRunner
   POLICIES = [
     ReviewPolicies::SnoozeExpiry, ReviewPolicies::Dangling, ReviewPolicies::NoLongerFlagged,
-    ReviewPolicies::ExpireLowConfidence, ReviewPolicies::AutoApplyExpiredValidity, ReviewPolicies::AutoApplyRelationships
+    ReviewPolicies::ExpireLowConfidence, ReviewPolicies::AutoApplyExpiredValidity, ReviewPolicies::AutoApplyRelationships,
+    ReviewPolicies::AutoApplyFactSupersede
   ].freeze
   BACKFILL_PER_RUN = 5_000
   REFRESH_BATCH = 1_000

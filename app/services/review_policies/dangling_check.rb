@@ -80,6 +80,13 @@ module ReviewPolicies
       inactive_observation([ payload["observation_id_1"], payload["observation_id_2"] ], any: true)
     end
 
+    # The fact or the observation is gone or inactive, or the fact lost its tag.
+    def fact_supersede_reason(payload, _field)
+      inactive_observation([ payload["fact_observation_id"], payload["observation_id"] ], any: true) ||
+        ("observation ##{payload['fact_observation_id']} is no longer a source fact" unless
+          MemoryObservation.fact_tagged.exists?(id: payload["fact_observation_id"].to_i))
+    end
+
     # @return [String, nil] the first referenced entity that no longer exists
     def gone_entity(*ids)
       ids = ids.compact.map(&:to_i)

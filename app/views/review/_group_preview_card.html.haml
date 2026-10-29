@@ -12,7 +12,7 @@
         %summary= "#{preview[:excluded].size} not included"
         %ul
           - preview[:excluded].each do |row|
-            %li= "#{row[:kind].humanize} (priority #{row[:priority]}): #{row[:reason]}"
+            %li= "#{review_kind_label(row[:kind])} (priority #{row[:priority]}): #{row[:reason]}"
     - if preview[:included].any?
       = form_with url: url, method: :post, data: { turbo_frame: "_top" } do
         = hidden_field_tag :key, preview[:group_key]

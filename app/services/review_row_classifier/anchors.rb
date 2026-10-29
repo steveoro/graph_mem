@@ -19,6 +19,8 @@ class ReviewRowClassifier
       when "delete_relation" then relation_pair(kind, payload, row_uuid)
       when *OBSERVATION_KINDS then observation_owner(kind, payload, row_uuid)
       when "dismiss_compaction_review" then [ "#{kind}|#{field(payload, :review_item_id)}", nil ]
+      # One group per fact; the anchor is the outdated observation's entity (its project).
+      when "fact_supersede" then [ "#{kind}|fact:#{integer(payload['fact_observation_id'])}", integer(payload["entity_id"]) ]
       when *PAIR_KINDS then pair(kind, pair_ids(kind, payload), row_uuid)
       else [ "#{kind}|row:#{row_uuid}", nil ]
       end

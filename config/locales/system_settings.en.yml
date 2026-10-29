@@ -31,6 +31,7 @@ en:
           expire_low_confidence: "Expires suggestions with confidence below 0.4 that nobody touched for the days below, and keeps them away for 90 days. Reverse: Undo, or Restore."
           auto_apply_relationships: "Applies high-band relationship proposals at or above the confidence below (never part_of), at most 50 per run. Reverse: Undo the run (removes the relations)."
           auto_apply_expired_validity: "Marks observations obsolete when their own valid_until has passed, at most 100 per run. Reverse: Undo the run."
+          auto_apply_fact_supersede: "Applies \"Outdated by a fact\" suggestions the judge marked superseded at or above the confidence below, only for facts an operator marked, never with a guard or for an entity outside the project, at most 100 per run. Reverse: Undo the run."
       mcp_access:
         intro: "Who may reach /mcp (and bearer requests on /api/v1): allowed client IPs, Host names and browser origins. Each list adds to its ENV value, which is shown first and can't be removed here. Changes apply without a restart."
         sessions_notice_title: "Saving a change to allowed hosts or origins closes every open MCP session."
@@ -169,6 +170,14 @@ en:
           label: "Auto-apply high-confidence relationships"
         enable_auto_apply_expired_validity:
           label: "Auto-apply expired validity (stale memory)"
+        enable_auto_apply_fact_supersede:
+          label: "Auto-apply source fact supersedes"
+        auto_apply_fact_supersede_min_confidence:
+          label: "Auto-apply source fact confidence"
+          description: "Minimum judge confidence for auto-applying an \"Outdated by a fact\" suggestion."
+        fact_supersede_enabled:
+          label: "Source fact supersede"
+          description: "When a source fact is added or changed, look for the observations of its project it outdates and propose them in Review & Fix (\"Outdated by a fact\"). Proposals only, unless the auto-apply policy is on."
         review_backlog_ceiling:
           label: "Backlog ceiling per kind"
           description: "Active suggestions per kind before new ones must beat the lowest priority to be queued (a soft limit)."

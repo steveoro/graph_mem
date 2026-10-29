@@ -38,6 +38,8 @@ class CompactionReviewApplier
         apply_stale_memory(effective)
       when "contradiction"
         Contradiction.apply(effective, action_params)
+      when "fact_supersede"
+        FactSupersede.apply(effective, action_params)
       else
         { success: false, error: "Unknown review kind: #{row.kind}" }
       end

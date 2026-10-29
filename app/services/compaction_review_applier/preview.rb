@@ -142,6 +142,10 @@ class CompactionReviewApplier
       result(pair.size == 2 && observations[sides.first]&.active?, effects: effects, warnings: warnings)
     end
 
+    def preview_fact_supersede(effective, params)
+      FactSupersede.preview(effective, params)
+    end
+
     def move_preview(node_id, parent_id)
       node = entity(node_id)
       parent = entity(parent_id)

@@ -3,12 +3,12 @@
 - confirm = choice || !ReviewRowClassifier::SAFE_BULK_KINDS.include?(row.kind)
 %div.review-row{ id: dom_id(row), data: { review_keys_target: "item", row_uuid: row.row_uuid, testid: "review-row" } }
   = link_to review_row_path(row.row_uuid), class: "review-row__open", data: { turbo_frame: "review-detail", review_keys_action: "open" } do
-    %span.ui-badge= row.kind.humanize
+    %span.ui-badge= review_kind_label(row.kind)
     %span= review_row_title(row)
     %span.review-row__meta= "priority #{row.priority}#{row.confidence ? " · #{format('%.2f', row.confidence)}" : ''} · #{row.status}"
   .review-row__actions
     - if choice
-      = link_to "Choose a side", review_row_path(row.row_uuid), class: "ui-btn", data: { turbo_frame: "review-detail", review_keys_action: "apply" }
+      = link_to (row.kind == "fact_supersede" ? "Supersede or retire…" : "Choose a side"), review_row_path(row.row_uuid), class: "ui-btn", data: { turbo_frame: "review-detail", review_keys_action: "apply" }
     - elsif confirm
       = link_to "Apply…", review_row_preview_path(row.row_uuid), class: "ui-btn", data: { turbo_frame: "review-detail", review_keys_action: "apply" }
     - else

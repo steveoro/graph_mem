@@ -1,0 +1,30 @@
+-# "Outdated by a fact": the source fact and the observation it may outdate, read live, with the
+-# judge's verdict and the legacy guard. Supersede… / Retire… → preview card → Apply; Dismiss = the
+-# fact doesn't outdate it (suppresses this pair only). Age is never shown: it is not evidence.
+- fact = MemoryObservation.includes(:memory_entity).find_by(id: payload["fact_observation_id"].to_i)
+- observation = MemoryObservation.includes(:memory_entity).find_by(id: payload["observation_id"].to_i)
+%p.review-hint{ data: { testid: "fact-supersede-verdict" } }
+  = "Judge: #{payload['verdict']} · confidence #{payload['confidence']}"
+  - if payload["reason"].present?
+    = "· #{payload['reason']}"
+- if payload["guard"].present?
+  %p.review-warning{ data: { testid: "fact-supersede-guard" } }= "Guard: #{payload['guard']} (#{payload['guard_reason']})"
+- if payload.dig("signals", "scoped") == false
+  %p.review-warning{ data: { testid: "fact-supersede-unscoped" } } The entity has no project: the fact isn't authoritative for it, and this is never auto-applied.
+.review-contradiction
+  .ui-card.review-contradiction__side{ data: { testid: "fact-supersede-fact" } }
+    %h4= "Source fact ##{payload['fact_observation_id']} · #{fact&.memory_entity&.name || payload['fact_entity_name']}"
+    %p= (fact&.content || payload["fact_content"]).to_s.truncate(300)
+    %p.review-hint= fact ? "#{fact.status} · #{fact.source}" : "gone"
+  .ui-card.review-contradiction__side{ data: { testid: "fact-supersede-observation" } }
+    %h4= "##{payload['observation_id']} · #{observation&.memory_entity&.name || payload['entity_name']} (#{payload['project_name'] || 'no project'})"
+    %p= (observation&.content || payload["content"]).to_s.truncate(300)
+    %p.review-hint= observation ? [ observation.status, observation.source, observation.perspective ].compact_blank.join(" · ") : "gone"
+- if payload["replacement"].present?
+  %p.review-hint= "Suggested replacement: #{payload['replacement'].to_s.truncate(300)}"
+- if observation&.active? && row.pending?
+  .review-detail__actions
+    = link_to "Supersede…", review_row_preview_path(row.row_uuid, fact_action: "supersede"), class: "ui-btn ui-btn-primary",
+      data: { turbo_frame: "review-detail", testid: "fact-supersede-supersede" }
+    = link_to "Retire…", review_row_preview_path(row.row_uuid, fact_action: "retire"), class: "ui-btn",
+      data: { turbo_frame: "review-detail", testid: "fact-supersede-retire" }

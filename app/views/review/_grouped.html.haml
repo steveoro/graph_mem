@@ -4,7 +4,7 @@
 - if @view == "kind"
   %nav.review-filters
     - (ReviewRowClassifier::IMPACT.keys + ReviewRowClassifier::ERROR_KINDS).uniq.sort.each do |kind|
-      = link_to kind.humanize, review_path(view: "kind", kind: kind), class: "review-filter", "aria-current": (params[:kind] == kind ? "true" : nil)
+      = link_to review_kind_label(kind), review_path(view: "kind", kind: kind), class: "review-filter", "aria-current": (params[:kind] == kind ? "true" : nil)
 - if @groups.empty?
   %p.review-hint Nothing here.
 - else
