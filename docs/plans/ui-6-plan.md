@@ -1,5 +1,7 @@
 # UI-6 → graph_mem 1.62.0: Projects & Data (projects list, one scan form with a live path check, scan detail, imports with history, async exports), plus the #136 leftovers
 
+**✅ DONE (Oct 29):** shipped in #137 as **1.62.0** (merged as `dddad69`, tagged `v1.62.0`). The one leftover from the #137 review (the "capped" hints show at exactly 500 roots, because the check is `>=`) is step **L** of `docs/plans/ui-7-plan.md`, and Decision 1's "UI-7 may move Background jobs under System" is that plan's Decision 1.
+
 **Written 2026-10-29 (Europe/Rome)** for Claude, from `main` at `9e51dd9` (#136 merged as `05aa5c1`, **1.61.0 not
 tagged yet**: Steve tags it). Every file:line in "What the code looks like today" was checked against that commit. If
 a line has moved, find the code by the quoted text. If the code no longer matches the description, **stop and ask
