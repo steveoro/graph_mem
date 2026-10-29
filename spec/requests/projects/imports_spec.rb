@@ -104,14 +104,21 @@ RSpec.describe "Projects › Imports", type: :request do
       expect(response.body).to include("File too large")
     end
 
-    it "says when the review's parent choice is capped" do
-      stub_const("ExportStrategy::ROOT_NODES_LIMIT", 1)
-      MemoryEntity.create!(name: "Gadget Project", entity_type: "Project")
+    it "says the review's parent choice is capped only when a root was cut" do
+      stub_const("ExportStrategy::ROOT_NODES_LIMIT", 3)
+      [ "Gadget Project", "Gadget Project Two", "Gadget Project Three" ].each { |name| MemoryEntity.create!(name: name, entity_type: "Project") }
       upload(export_json)
+      session_id = session_id_from_redirect
+      parent_options = -> { Nokogiri::HTML(response.body).css("select[name='decisions[0][parent_id]'] option").size - 1 }
 
-      get projects_import_path(session_id_from_redirect)
+      get projects_import_path(session_id)
+      expect(parent_options.call).to eq(3)
+      expect(response.body).not_to include('data-testid="import-parents-capped"')
 
-      expect(response.body).to include('data-testid="import-parents-capped"', "Only the first 1 roots")
+      MemoryEntity.create!(name: "SynthWidget Spare", entity_type: "Component")
+      get projects_import_path(session_id)
+      expect(parent_options.call).to eq(3)
+      expect(response.body).to include('data-testid="import-parents-capped"', "Only the first 3 roots")
     end
 
     it "cancels a review" do

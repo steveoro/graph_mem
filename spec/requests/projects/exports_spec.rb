@@ -49,6 +49,21 @@ RSpec.describe "Projects › Exports", type: :request do
       expect(response.body).not_to include("export-root-#{alpha.id}")
     end
 
+    it "says the list is capped only when a root was cut" do
+      stub_const("ExportStrategy::ROOT_NODES_LIMIT", 3)
+      MemoryEntity.create!(name: "Gadget Project", entity_type: "Project")
+      root_ids = -> { Nokogiri::HTML(response.body).css("[data-testid^='export-root-']").size }
+
+      get projects_exports_path
+      expect(root_ids.call).to eq(3)
+      expect(response.body).not_to include('data-testid="export-roots-capped"')
+
+      MemoryEntity.create!(name: "SynthWidget Two", entity_type: "Component")
+      get projects_exports_path
+      expect(root_ids.call).to eq(3)
+      expect(response.body).to include('data-testid="export-roots-capped"', "Only the first 3 roots")
+    end
+
     it "queues ExportJob under a pending operation and opens its progress page" do
       expect { post projects_exports_path, params: { ids: [ alpha.id.to_s, "bogus", widget.id ] } }
         .to have_enqueued_job(ExportJob).with(anything, [ alpha.id, widget.id ])
