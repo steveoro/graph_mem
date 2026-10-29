@@ -16,7 +16,8 @@ module SettingsGroupUpdate
   # @return [Boolean] true when saved (flash[:notice] set); false with @settings_errors,
   #   @posted_settings and flash.now[:alert] set for the 422 re-render
   def save_settings_group(group)
-    posted = params.fetch(:settings, {}).permit(*group.writable_keys).to_h
+    raw = params[:settings].is_a?(ActionController::Parameters) ? params[:settings] : ActionController::Parameters.new
+    posted = raw.permit(*group.writable_keys).to_h
     @posted_settings = posted
     @settings_errors = SettingsSchema.errors(group, posted)
     alert = @settings_errors.values.join(" ").presence || (send(group.check, posted) if group.check)
@@ -27,8 +28,18 @@ module SettingsGroupUpdate
     end
 
     write_settings(group, posted)
-    flash[:notice] = [ t("system.settings.bulk_update.success", count: posted.size), mcp_access_warnings_notice ].compact.join(" ")
+    flash[:notice] = [ t("system.settings.bulk_update.success", count: posted.size), mcp_access_warnings_notice,
+                       elsewhere_notice(group, raw.keys) ].compact.join(" ")
     true
+  end
+
+  # A stale tab can post a key that now lives in another group (until §6.D-6: enable_guest_access
+  # under Feature flags). It isn't saved here; say so instead of reporting it saved.
+  def elsewhere_notice(group, keys)
+    elsewhere = (keys.map(&:to_s) - group.fields.map(&:key)).filter_map { |key| SettingsSchema.field(key) }
+    return if elsewhere.empty?
+
+    t("system.settings.bulk_update.elsewhere", settings: elsewhere.map { |field| t(field.label) }.join(", "))
   end
 
   def write_settings(group, posted)

@@ -82,6 +82,19 @@ RSpec.describe "System › Settings", type: :request do
       expect(AppSettings.where(var: %w[tool_invocation_retention_days compaction_review_row_retention_days])).to be_empty
     end
 
+    it "says a key posted from a stale tab wasn't saved there (guest access under Feature flags)" do
+      patch system_settings_path, params: { tab: "feature_flags", settings: { enable_garbage_collector: "1", enable_guest_access: "0" } }
+
+      expect(flash[:notice]).to include("Saved 1 setting", "Not saved from this tab: Guest access (read-only)")
+      expect(AppSettings.guest_access_enabled?).to be(true)
+    end
+
+    it "answers a non-hash settings param without an error" do
+      patch system_settings_path, params: { tab: "telemetry", settings: "bogus" }
+
+      expect(response).to redirect_to(system_settings_path(tab: "telemetry"))
+    end
+
     it "never writes the legacy key or a read-only field" do
       patch system_settings_path, params: { tab: "project_scans", settings: { project_scan_roots: "/srv/synth", enable_project_scan_validation: "1" } }
       patch system_settings_path, params: { tab: "backups", settings: { backup_schedule_cron: "every minute" } }

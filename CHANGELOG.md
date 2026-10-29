@@ -15,7 +15,7 @@ UI-7a (#138), released with UI-7b as 1.63.0.
 - `SettingsSchema`: one list of every settings field (group, page, type, range, label, help, validator). The Settings page renders from it; `enable_contradiction_detection` and `enable_stale_memory_scan` get a label and help.
 
 ### Changed
-- Settings, Embeddings, Telemetry, the Audit log and Background jobs move under `/system` (`System::` controllers, operator only). The old `/operator/settings`, `/operator/embeddings`, `/operator/telemetry`, `/operator/audit_logs` and `/projects/jobs` pages answer 301, and the old writes still work, until §6.D-6.
+- Settings, Embeddings, Telemetry, the Audit log and Background jobs move under `/system` (`System::` controllers, operator only). The old `/operator/settings`, `/operator/embeddings`, `/operator/telemetry`, `/operator/audit_logs` and `/projects/jobs` pages answer 301, and the old writes still work, until §6.D-6. The exceptions are the four typed actions (restore, regenerate, drop indexes, audit-log prune): an old tab's form posts no `confirmation`, so it now answers `422`. A stale Feature flags tab's guest toggle isn't saved there either (the flash says so); it is on the Access tab.
 - Mission Control moves to `/system/queue` (System › Queue); `/operator/jobs(/*)` answers 301.
 - A settings save writes only the posted tab's fields, and an invalid value answers `422` with the field marked and nothing saved (some tabs used to redirect with a flash, or save the valid keys).
 - The guest toggle and the MCP allowlists share the new **Access** tab; Home's backup, guest and MCP pills link to Backups and Access.

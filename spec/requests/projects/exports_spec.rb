@@ -51,9 +51,13 @@ RSpec.describe "Projects › Exports", type: :request do
 
     it "says the list is capped only when a root was cut" do
       stub_const("ExportStrategy::ROOT_NODES_LIMIT", 3)
-      MemoryEntity.create!(name: "Gadget Project", entity_type: "Project")
       root_ids = -> { Nokogiri::HTML(response.body).css("[data-testid^='export-root-']").size }
+      MemoryEntity.delete_all
 
+      get projects_exports_path
+      expect(response.body).not_to include('data-testid="export-roots-capped"')
+
+      [ "Alpha Service", "Gadget Project", "SynthWidget" ].each { |name| MemoryEntity.create!(name: name, entity_type: "Project") }
       get projects_exports_path
       expect(root_ids.call).to eq(3)
       expect(response.body).not_to include('data-testid="export-roots-capped"')

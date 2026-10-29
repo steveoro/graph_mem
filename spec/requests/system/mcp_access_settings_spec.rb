@@ -45,6 +45,18 @@ RSpec.describe "Settings › MCP access", type: :request do
       expect(audited_keys.size).to eq(3)
     end
 
+    it "keeps the old mcp_access tab name working until §6.D-6" do
+      get system_settings_path(tab: "mcp_access")
+      expect(Nokogiri::HTML(response.body).at_css("[data-testid='operator-settings-tab-access']")["aria-current"]).to eq("page")
+
+      patch system_settings_path, params: { tab: "mcp_access", settings: { mcp_extra_allowed_hosts: "synth-lan.test" } }
+      expect(response).to redirect_to(system_settings_path(tab: "access"))
+      expect(stored("mcp_extra_allowed_hosts")).to eq("synth-lan.test")
+
+      get "/operator/settings?tab=mcp_access"
+      expect(response).to redirect_to("/system/settings?tab=mcp_access")
+    end
+
     it "refuses every invalid entry with 422 and stores nothing" do
       [
         [ :mcp_extra_allowed_ips, "10.8.0.0/24, not-an-ip", "not-an-ip: isn't an IP address" ],

@@ -214,7 +214,7 @@ Rails.application.routes.draw do
   # UI-7 shims, until §6.D-6 (drop them all in that PR):
   # - GET 301s: /operator/settings (keeping its query; tab=database_backup → /system/backups), /operator/embeddings, /operator/telemetry,
   #   /operator/audit_logs, /operator/settings/project_scans/check_path (→ /projects/scans/check_path),
-  #   /projects/jobs, /operator/jobs(/*rest) (→ /system/queue/*rest);
+  #   /projects/jobs, /operator/jobs(/*rest) (→ /system/queue/*rest, keeping the query);
   # - the old writes under /operator, routed to the System actions (no copy of the code), so an
   #   open old tab still works.
   keep_query = ->(target) { ->(_params, request) { "#{target}#{"?#{request.query_string}" if request.query_string.present?}" } }
@@ -227,7 +227,9 @@ Rails.application.routes.draw do
   get "operator/telemetry", to: redirect(status: 301, &keep_query.call("/system/telemetry")), as: nil
   get "operator/audit_logs", to: redirect(status: 301, &keep_query.call("/system/audit_log")), as: nil
   get "projects/jobs", to: redirect("/system/jobs", status: 301), as: nil
-  get "operator/jobs(/*rest)", to: redirect(status: 301) { |params, _request| [ "/system/queue", params[:rest] ].compact.join("/") }, as: nil
+  get "operator/jobs(/*rest)", to: redirect(status: 301) { |params, request|
+    keep_query.call([ "/system/queue", params[:rest] ].compact.join("/")).call(nil, request)
+  }, as: nil
   scope "operator", module: "system" do
     post "maintenance/compaction/start", to: "jobs#start_compaction", as: nil
     post "maintenance/compaction/pause", to: "jobs#pause_compaction", as: nil

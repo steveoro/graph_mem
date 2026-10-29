@@ -17,7 +17,8 @@ RSpec.describe "System › old routes", type: :request do
     "/operator/settings/project_scans/check_path?path=Projects" => "/projects/scans/check_path?path=Projects",
     "/projects/jobs" => "/system/jobs",
     "/operator/jobs" => "/system/queue",
-    "/operator/jobs/applications/1/jobs" => "/system/queue/applications/1/jobs"
+    "/operator/jobs/applications/1/jobs" => "/system/queue/applications/1/jobs",
+    "/operator/jobs/applications/1/jobs?status=failed" => "/system/queue/applications/1/jobs?status=failed"
   }.each do |old, new|
     it "redirects GET #{old} (301) to #{new}" do
       get old
