@@ -1,6 +1,10 @@
 -# Continue / Stop for a guided scan; operation_progress_controller.js shows the ones that fit the
 -# live status (data-progress-visible-for).
 - status = scan.status.to_s
+- skill = scan.snapshot
+%p.projects-chips{ data: { testid: "scan-steps" } }
+  - project_scan_skill_depths(skill).each do |depth|
+    %span{ class: "ui-badge projects-step--#{project_scan_skill_step_state(skill, depth)}" }= project_scan_skill_depth_label(depth)
 .projects-actions{ data: { testid: "scan-guided-controls" } }
   %span{ data: { progress_action: true, progress_visible_for: "paused" }, style: ("display: none" unless status == "paused") }
     = button_to t("projects.scans.show.continue"), projects_scan_skill_path(scan.operation_id, skill_action: "continue"), method: :patch,

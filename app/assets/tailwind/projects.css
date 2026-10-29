@@ -126,6 +126,16 @@
     display: none;
   }
 
+  .projects-step--complete {
+    background: var(--color-ui-ok-soft);
+    color: var(--color-ui-ok);
+  }
+
+  .projects-step--active {
+    background: var(--color-ui-accent-soft);
+    color: var(--color-ui-accent-strong);
+  }
+
   .projects-progress {
     width: 100%;
   }

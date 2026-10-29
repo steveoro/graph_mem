@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
-# Aggregates operator dashboard state from compaction runs, graph stats, and maintenance reports.
+# What Projects & Data › Background jobs shows (UI-6): compaction state, graph stats, the latest
+# maintenance reports, the garbage collector's last run and the recurring schedules. HomeSnapshot
+# also reads #graph_stats.
 class MaintenanceDashboardSnapshot
   SCHEDULE_PATH = Rails.root.join("config/recurring.yml").freeze
 
@@ -13,11 +15,8 @@ class MaintenanceDashboardSnapshot
       refreshed_at: Time.current,
       compaction: compaction_snapshot,
       graph_stats: graph_stats,
-      embeddings: EmbeddingStatusSnapshot.call,
-      agent_contexts: AgentContextsSnapshot.call,
       latest_reports: latest_reports_by_type,
       operations: operation_snapshots,
-      scan_reviews: scan_review_snapshot,
       schedules: schedule_hints,
       cursor_entity: cursor_entity
     }
@@ -55,16 +54,7 @@ class MaintenanceDashboardSnapshot
 
   def operation_snapshots
     {
-      garbage_collection: OperationProgress.where(operation_type: "garbage_collection").recent.first&.snapshot,
-      project_scans: OperationProgress.where(operation_type: "project_scan").recent.limit(5).map(&:snapshot),
-      project_scan_skills: OperationProgress.where(operation_type: "project_scan_skill").recent.limit(5).map(&:snapshot)
-    }
-  end
-
-  def scan_review_snapshot
-    {
-      count: CompactionReviewService.active_count(report_type: "scan_review"),
-      items: CompactionReviewService.items(report_type: "scan_review", status: "active", page: 1).take(5)
+      garbage_collection: OperationProgress.where(operation_type: "garbage_collection").recent.first&.snapshot
     }
   end
 

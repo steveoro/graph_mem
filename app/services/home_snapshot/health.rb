@@ -7,7 +7,7 @@ class HomeSnapshot
   # and the page that explains it. Colour is never the only signal: the value says it in words.
   #
   #   HomeSnapshot::Health.new.pills
-  #   # => [{ key: :database, label: "Database", status: :ok, value: "connected", href: "/maintenance" }, ...]
+  #   # => [{ key: :database, label: "Database", status: :ok, value: "connected", href: "/projects/jobs" }, ...]
   class Health
     include Rails.application.routes.url_helpers
 
@@ -71,9 +71,9 @@ class HomeSnapshot
 
     def database_pill
       ActiveRecord::Base.connection.select_value("SELECT 1")
-      pill(:database, :ok, I18n.t("home.health.values.connected"), maintenance_path)
+      pill(:database, :ok, I18n.t("home.health.values.connected"), projects_jobs_path)
     rescue StandardError
-      pill(:database, :danger, I18n.t("home.health.values.unreachable"), maintenance_path)
+      pill(:database, :danger, I18n.t("home.health.values.unreachable"), projects_jobs_path)
     end
 
     def embeddings_pill
