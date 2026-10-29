@@ -146,3 +146,21 @@ en:
           observations_created: "Observations created"
           relations_created: "Relations created"
           errors: "Errors"
+    exports:
+      pick_one: "Pick at least one root to export."
+      expired: "This export has expired"
+      expired_body: "Export files are kept for an hour. Start a new export to get a fresh file."
+      index:
+        title: "Exports"
+        subtitle: "Export roots and everything under them as a GraphMem JSON file, in the background."
+        filter: "Filter roots by name"
+        filter_button: "Filter"
+        roots: "Roots"
+        no_roots: "No roots match."
+        capped: "Only the first %{count} roots are listed; filter by name to find others."
+        submit: "Export selected"
+        history: "Past exports"
+        empty: "No exports yet."
+      show:
+        title: "Export"
+        download: "Download"

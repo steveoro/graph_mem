@@ -18,12 +18,7 @@ class ExportJob < ApplicationJob
     # Count total nodes first
     strategy = ExportStrategy.new
     total_count = count_total_nodes(entity_ids)
-    operation = OperationProgress.start!(
-      operation_type: "export",
-      operation_id: export_id,
-      total_count: total_count,
-      message: "Starting export"
-    )
+    operation = start_operation(export_id, total_count)
     broadcast_operation(operation)
     broadcast_progress(export_id, 0, total_count, "Starting export...")
 
@@ -61,6 +56,16 @@ class ExportJob < ApplicationJob
   end
 
   private
+
+  # Projects › Exports writes the pending row before queueing, so its progress page exists at once;
+  # the JSON export_async endpoint doesn't, and the job starts one.
+  def start_operation(export_id, total_count)
+    operation = OperationProgress.find_by(operation_id: export_id, operation_type: "export")
+    return OperationProgress.start!(operation_type: "export", operation_id: export_id, total_count: total_count, message: "Starting export") unless operation
+
+    operation.update!(status: "running", total_count: total_count, started_at: Time.current, message: "Starting export")
+    operation
+  end
 
   def ensure_temp_dir
     FileUtils.mkdir_p(TEMP_DIR)

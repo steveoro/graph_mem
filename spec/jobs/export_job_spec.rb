@@ -33,6 +33,27 @@ RSpec.describe ExportJob, type: :job do
       described_class.new.perform(export_id, [ project.id ])
     end
 
+    it "takes over the pending operation Projects › Exports wrote, details kept, and completes it" do
+      export_id = SecureRandom.uuid
+      OperationProgress.create!(operation_type: "export", operation_id: export_id, status: "pending",
+                                details: { "root_names" => [ "TestProject" ] })
+
+      expect { described_class.new.perform(export_id, [ project.id ]) }.not_to change(OperationProgress, :count)
+
+      expect(OperationProgress.sole).to have_attributes(status: "completed", details: { "root_names" => [ "TestProject" ] })
+      expect(OperationProgress.sole.started_at).to be_present
+    ensure
+      FileUtils.rm_f(described_class.download_path(export_id))
+    end
+
+    it "schedules ExportJob.cleanup_old_exports hourly in development and production" do
+      recurring = YAML.load_file(Rails.root.join("config/recurring.yml"))
+
+      %w[development production].each do |env|
+        expect(recurring.dig(env, "export_cleanup")).to include("command" => "ExportJob.cleanup_old_exports", "schedule" => "every hour")
+      end
+    end
+
     it "creates export file in tmp/exports directory" do
       export_id = SecureRandom.uuid
 

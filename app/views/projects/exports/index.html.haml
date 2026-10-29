@@ -1,0 +1,44 @@
+- content_for :title, t("projects.exports.index.title")
+- content_for :page_header, ui_page_header(t("projects.exports.index.title"), subtitle: t("projects.exports.index.subtitle"))
+
+.projects-page
+  = form_with url: projects_exports_path, method: :get, class: "projects-actions", data: { turbo_frame: "_top" } do
+    = search_field_tag :q, @query, class: "ui-input", placeholder: t("projects.exports.index.filter"), "aria-label": t("projects.exports.index.filter"),
+      data: { testid: "export-filter" }
+    = submit_tag t("projects.exports.index.filter_button"), class: "ui-btn", name: nil
+
+  = form_with url: projects_exports_path, method: :post, class: "ui-card ui-form", data: { testid: "export-form" } do
+    - if @error
+      %p.projects-error{ role: "alert", data: { testid: "export-form-error" } }= @error
+    - if @roots.empty?
+      %p.projects-empty= t("projects.exports.index.no_roots")
+    - else
+      %fieldset.projects-checks{ data: { testid: "export-roots" } }
+        %legend.ui-label= t("projects.exports.index.roots")
+        - @roots.each do |entity|
+          %label{ data: { testid: "export-root-#{entity.id}" } }
+            = check_box_tag "ids[]", entity.id, false, id: "export_root_#{entity.id}"
+            %strong= entity.name
+            %span.projects-muted= "(#{entity.entity_type}, #{entity.memory_observations_count} observations)"
+      - if @roots.size >= ExportStrategy::ROOT_NODES_LIMIT
+        %p.projects-hint= t("projects.exports.index.capped", count: ExportStrategy::ROOT_NODES_LIMIT)
+      .projects-actions
+        = submit_tag t("projects.exports.index.submit"), class: "ui-btn ui-btn-primary", data: { testid: "export-submit" }
+
+  %h2.ui-label= t("projects.exports.index.history")
+  - if @exports.empty?
+    %p.projects-empty{ data: { testid: "exports-empty" } }= t("projects.exports.index.empty")
+  - else
+    %table.projects-table{ data: { testid: "exports-table" } }
+      %thead
+        %tr
+          %th= t("projects.imports.index.when")
+          %th= t("projects.exports.index.roots")
+          %th= t("projects.scans.index.status")
+      %tbody
+        - @exports.each do |export|
+          %tr{ data: { testid: "export-row-#{export.operation_id}" } }
+            %td= link_to t("projects.ago", time: time_ago_in_words(export.created_at)), projects_export_path(export.operation_id)
+            %td= Array(export.details&.dig("root_names")).join(", ").presence || "—"
+            %td= dashboard_status_badge(export.status)
+    = paginate @exports

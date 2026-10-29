@@ -1,0 +1,27 @@
+- export = @export
+- live = export.status.in?(%w[pending running paused])
+- content_for :title, t("projects.exports.show.title")
+- content_for :page_header, ui_page_header(t("projects.exports.show.title"),
+  subtitle: Array(export.details&.dig("root_names")).join(", ").presence)
+
+-# operation_progress_controller.js follows a running export; the download link shows once it completes.
+.projects-page{ data: { testid: "export-detail", operation_progress_id: export.operation_id,
+  controller: ("operation-progress" if live), operation_progress_operation_id_value: (export.operation_id if live) } }
+  .ui-card
+    %p
+      = dashboard_status_badge(export.status, data: { progress_status: true, testid: "export-status" })
+      %span{ data: { progress_current: true } }= export.current_count
+      \/
+      %span{ data: { progress_total: true } }= export.total_count
+      %span.projects-muted{ data: { progress_message: true } }= export.message
+    %progress.projects-progress{ max: 100, value: export.percentage.to_f }
+    - if export.error_message.present?
+      %p.projects-error{ role: "alert" }= export.error_message
+  .projects-actions
+    %span{ data: { progress_action: true, progress_visible_for: "completed" }, style: ("display: none" unless export.status == "completed") }
+      - if live || @file_available
+        = link_to t("projects.exports.show.download"), download_projects_export_path(export.operation_id), class: "ui-btn ui-btn-primary",
+          data: { turbo: false, testid: "export-download" }
+      - else
+        %span.projects-muted{ data: { testid: "export-expired" } }= t("projects.exports.expired")
+    = link_to t("projects.exports.index.title"), projects_exports_path, class: "ui-btn"
