@@ -133,21 +133,31 @@ class GraphSearch
     # Name equal to the query, or one whole alias equal to it, within the filter's entities.
     def exact_hits
       filter = SearchFilter.build(project_id: @filters[:project_id], entity_types: @filters[:types].presence)
-      needle = @query.downcase
       candidates = filter.entity_scope || MemoryEntity.all
-      table = MemoryEntity.arel_table
-      lower = ->(column) { Arel::Nodes::NamedFunction.new("LOWER", [ table[column] ]) }
-      # The query is escaped for LIKE: % and _ in it are literal, not wildcards.
-      like = "%#{MemoryEntity.sanitize_sql_like(needle)}%"
-      candidates = candidates.where(lower.call(:name).eq(needle).or(lower.call(:aliases).matches(like)))
-                             .select(*ROW_COLUMNS).order(:name, :id).limit(EXACT_SCAN_LIMIT)
-      matches = candidates.filter_map do |entity|
-        if entity.name.to_s.downcase == needle then [ entity, "name" ]
-        elsif alias_list(entity).include?(needle) then [ entity, "aliases" ]
-        end
-      end
+      named = name_hits(candidates)
+      aliased = alias_hits(candidates).reject { |entity| named.any? { |hit| hit.id == entity.id } }
+      matches = (named.map { |entity| [ entity, "name" ] } + aliased.map { |entity| [ entity, "aliases" ] })
+                .sort_by { |entity, _field| [ entity.name.to_s.downcase, entity.id ] }
       matches.drop((@page - 1) * @per_page).first(@per_page)
              .map { |entity, field| { entity_id: entity.id, relevance_score: nil, matched_fields: [ field ], entity: entity } }
+    end
+
+    # Its own query, so no number of alias candidates can push an exact name out of the scan. The
+    # column's collation ignores case; the Ruby check keeps the match exact. At most one row per
+    # project scope (the unique key on project_scope and name).
+    def name_hits(candidates)
+      candidates.where(name: @query).select(*ROW_COLUMNS).order(:name, :id)
+                .select { |entity| entity.name.to_s.casecmp?(@query) }
+    end
+
+    # Entities with one whole alias equal to the query, from at most EXACT_SCAN_LIMIT LIKE candidates.
+    def alias_hits(candidates)
+      needle = @query.downcase
+      lower_aliases = Arel::Nodes::NamedFunction.new("LOWER", [ MemoryEntity.arel_table[:aliases] ])
+      # The query is escaped for LIKE: % and _ in it are literal, not wildcards.
+      like = "%#{MemoryEntity.sanitize_sql_like(needle)}%"
+      candidates.where(lower_aliases.matches(like)).select(*ROW_COLUMNS).order(:name, :id).limit(EXACT_SCAN_LIMIT)
+                .select { |entity| alias_list(entity).include?(needle) }
     end
 
     # Aliases are stored as one string separated by commas or pipes; each piece is a whole alias.

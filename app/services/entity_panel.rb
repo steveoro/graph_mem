@@ -1,26 +1,41 @@
 # frozen_string_literal: true
 
-# What the read-only entity panel shows (UI-3 P4): the entity, its project, its observations by
-# trust (paged; never an embedding call) and its relations both ways, grouped by type.
+# What the entity panel shows (UI-3 P4, editable for the operator since UI-4b): the entity, its
+# project, its observations by trust (paged; never an embedding call), its relations both ways,
+# grouped by type, and its recent change sets.
 #
 #   panel = EntityPanel.new(entity, include_obsolete: false, page: 1)
 #   panel.observations       # => first 10 active observations, highest trust first
 #   panel.relations[:outgoing] # => { "depends_on" => [<MemoryRelation>, ...] } (20 per type at most)
+#   panel.recent_changes     # => the last 5 change sets anchored on the entity
 class EntityPanel
   OBSERVATIONS_PER_PAGE = 10
   RELATIONS_PER_TYPE = 20
   # Relations loaded per direction before grouping; the counts still cover them all.
   RELATIONS_LOAD_LIMIT = 500
+  RECENT_CHANGES = 5
 
-  attr_reader :entity, :page, :include_obsolete
+  attr_reader :entity, :include_obsolete
 
   # @param entity [MemoryEntity]
   # @param include_obsolete [Boolean] also obsolete and superseded observations
-  # @param page [Integer] observation page, 1-based
+  # @param page [Integer, String] observation page, 1-based; anything else is 1, and past the end
+  #   it is the last page (so a huge page never becomes a huge OFFSET)
   def initialize(entity, include_obsolete: false, page: 1)
     @entity = entity
     @include_obsolete = include_obsolete
-    @page = [ page.to_i, 1 ].max
+    @requested_page = [ page.to_s.match?(/\A\d+\z/) ? page.to_i : 1, 1 ].max
+  end
+
+  # @return [Integer] the page shown, between 1 and the last page
+  def page
+    @page ||= [ @requested_page, last_page ].min
+  end
+
+  # @return [Array<ChangeSet>] the newest change sets anchored on this entity
+  def recent_changes
+    @recent_changes ||= ChangeSet.where(subject_type: "MemoryEntity", subject_id: entity.id)
+                                 .order(created_at: :desc, id: :desc).limit(RECENT_CHANGES).to_a
   end
 
   # @return [String, nil] the Project root's name for a member
@@ -63,6 +78,12 @@ class EntityPanel
   end
 
   private
+
+  def last_page
+    return @requested_page if @requested_page == 1
+
+    [ (observation_scope.count + OBSERVATIONS_PER_PAGE - 1) / OBSERVATIONS_PER_PAGE, 1 ].max
+  end
 
   def observation_scope
     include_obsolete ? entity.memory_observations : entity.memory_observations.active

@@ -288,8 +288,8 @@ script that prints to stdout before starting it.
 **Solutions:**
 
 1. **Ruby Version**
-   - Ensure you're using Ruby 3.4.1+
-   - Install with `rvm install 3.4.1` or `rbenv install 3.4.1`
+   - Ensure you're using Ruby 3.4.12+
+   - Install with `rvm install 3.4.12` or `rbenv install 3.4.12`
 
 2. **Bundle Install Errors**
    - Check for native extension errors

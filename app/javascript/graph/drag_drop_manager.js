@@ -1,264 +1,108 @@
 import { el, text } from 'lib/dom';
+import { bindMenuKeys } from 'lib/menu_keys';
 
+// Drop a node on another (UI-4b W7, operator only): a menu with Add relation…, Move under… (not
+// for a project root) and Merge A into B… (same type only, neither a project root). Each item
+// opens its server-rendered dialog through `actions`; nothing is written from here. Cancel (or
+// a click elsewhere, or Escape) puts the node back. Every label is set as text; arrow keys and
+// Enter work too (lib/menu_keys.js).
 export class DragDropManager {
-  constructor(api, modal, { onRefreshGraph }) {
-    this.api = api;
-    this.modal = modal;
-    this.onRefreshGraph = onRefreshGraph;
+  // actions: { addRelation(fromId, toId), move(nodeId, parentId), merge(sourceId, targetId) }
+  constructor(actions) {
+    this.actions = actions;
     this.currentMenu = null;
-    this.currentCloseHandler = null;
+    this.closeHandler = null;
   }
 
-  initialize(cy, containerTarget) {
+  initialize(cy, container) {
     this.cy = cy;
-    this.containerTarget = containerTarget;
-
+    this.container = container;
     cy.on('grab', 'node', (event) => {
       const node = event.target;
-      node.data('originalPosition', { x: node.position('x'), y: node.position('y') });
+      node.scratch('_explore_origin', { ...node.position() });
+    });
+    cy.on('free', 'node', (event) => this.handleDrop(event.target));
+  }
+
+  // Exposed for the system specs, which can't drag reliably headless.
+  handleDrop(dragged) {
+    const target = this.#overlapping(dragged);
+    if (target) this.showMenu(dragged, target);
+  }
+
+  showMenu(dragged, target) {
+    this.hideMenu();
+    const source = dragged.data();
+    const other = target.data();
+    const sourceRoot = source.type === 'Project';
+    const sameType = source.type === other.type && !sourceRoot && other.type !== 'Project';
+
+    const items = [
+      { label: 'Add relation…', testid: 'drop-add-relation', run: () => this.actions.addRelation(source.id, other.id) }
+    ];
+    if (!sourceRoot) {
+      items.push({ label: 'Move under “' + String(other.label ?? '') + '”…', testid: 'drop-move', run: () => this.actions.move(source.id, other.id) });
+    }
+    if (sameType) {
+      items.push({ label: 'Merge “' + String(source.label ?? '') + '” into “' + String(other.label ?? '') + '”…', testid: 'drop-merge', run: () => this.actions.merge(source.id, other.id) });
+    }
+    items.push({ label: 'Cancel', testid: 'drop-cancel', cancel: true, run: () => this.#restore(dragged) });
+
+    const menu = el('div', { className: 'node-action-menu', role: 'menu', 'data-testid': 'explore-drop-menu' },
+      el('div', { className: 'node-action-menu__header' },
+        el('div', { className: 'node-action-menu__title' }, 'Node-to-node action'),
+        el('div', { className: 'node-action-menu__subtitle' },
+          text('“' + String(source.label ?? '') + '” → “' + String(other.label ?? '') + '”'))
+      )
+    );
+    items.forEach((item) => {
+      const row = el('div', {
+        className: 'node-action-menu__item' + (item.cancel ? ' node-action-menu__item--cancel' : ''),
+        role: 'menuitem', 'data-testid': item.testid
+      }, el('span', { className: 'node-action-menu__item-name' }, item.label));
+      row.addEventListener('click', (event) => {
+        event.stopPropagation();
+        this.hideMenu();
+        if (!item.cancel) this.#restore(dragged);
+        item.run();
+      });
+      menu.appendChild(row);
     });
 
-    cy.on('free', 'node', (event) => this.#handleNodeDrop(event));
+    const rect = this.container.getBoundingClientRect();
+    const position = target.renderedPosition();
+    menu.style.left = Math.min(rect.left + window.scrollX + position.x + 10, window.scrollX + window.innerWidth - 260) + 'px';
+    menu.style.top = (rect.top + window.scrollY + position.y - 10) + 'px';
+    document.body.appendChild(menu);
+    this.currentMenu = menu;
+    bindMenuKeys(menu, { onClose: () => { this.hideMenu(); this.#restore(dragged); } });
 
-    cy.on('dragover', 'node', (event) => {
-      event.target.addClass('potential-drop-target');
-    });
-
-    cy.on('dragout', 'node', (event) => {
-      event.target.removeClass('potential-drop-target');
-    });
+    this.closeHandler = (event) => {
+      if (menu.contains(event.target)) return;
+      this.hideMenu();
+      this.#restore(dragged);
+    };
+    setTimeout(() => this.closeHandler && document.addEventListener('click', this.closeHandler), 100);
   }
 
   hideMenu() {
-    if (this.currentMenu) {
-      this.currentMenu.remove();
-      this.currentMenu = null;
-    }
+    if (this.closeHandler) document.removeEventListener('click', this.closeHandler);
+    this.closeHandler = null;
+    this.currentMenu?.remove();
+    this.currentMenu = null;
   }
 
-  #handleNodeDrop(event) {
-    const draggedNode = event.target;
-    let targetFound = null;
-
-    this.cy.nodes().not(draggedNode).forEach((potentialTarget) => {
-      if (targetFound) return;
-
-      const targetBB = potentialTarget.renderedBoundingBox();
-      const draggedBB = draggedNode.renderedBoundingBox();
-
-      const isOverlapping = (
-        draggedBB.x1 < targetBB.x2 &&
-        draggedBB.x2 > targetBB.x1 &&
-        draggedBB.y1 < targetBB.y2 &&
-        draggedBB.y2 > targetBB.y1
-      );
-
-      if (isOverlapping) targetFound = potentialTarget;
-    });
-
-    if (!targetFound) return;
-
-    const sourceId = draggedNode.id();
-    const targetId = targetFound.id();
-    const dropPosition = event.renderedPosition || event.position || targetFound.renderedPosition() || {
-      x: window.innerWidth / 2, y: window.innerHeight / 2
-    };
-
-    this.#showActionMenu({
-      sourceId,
-      targetId,
-      sourceName: draggedNode.data('label') || sourceId,
-      targetName: targetFound.data('label') || targetId,
-      sourceType: draggedNode.data('type'),
-      targetType: targetFound.data('type'),
-      draggedNode,
-      targetNode: targetFound,
-      dropPosition
-    });
+  #overlapping(dragged) {
+    const box = dragged.renderedBoundingBox();
+    return this.cy.nodes().not(dragged).toArray().find((node) => {
+      const other = node.renderedBoundingBox();
+      return box.x1 < other.x2 && box.x2 > other.x1 && box.y1 < other.y2 && box.y2 > other.y1;
+    }) || null;
   }
 
-  #showActionMenu(actionData) {
-    const { sourceName, targetName, sourceType, targetType, draggedNode, dropPosition } = actionData;
-
-    this.hideMenu();
-
-    const menu = document.createElement('div');
-    menu.className = 'node-action-menu';
-
-    const header = el('div', { className: 'node-action-menu__header' },
-      el('div', { className: 'node-action-menu__title' }, 'Node-to-Node Action'),
-      el('div', { className: 'node-action-menu__subtitle' },
-        text('\u201c' + String(sourceName ?? '') + '\u201d \u2192 \u201c' + String(targetName ?? '') + '\u201d')
-      )
-    );
-    menu.appendChild(header);
-
-    const typesMatch = (sourceType === targetType) ||
-                      (!sourceType && !targetType) ||
-                      (sourceType === null && targetType === null);
-
-    const actions = [
-      {
-        text: 'Merge Nodes',
-        description: 'Merge source into target (preserves target name as alias)',
-        action: 'merge',
-        enabled: typesMatch,
-        icon: '\uD83D\uDD17',
-        disabledReason: typesMatch ? null :
-          'Cannot merge different types: "' + (sourceType || 'N/A') + '" \u2260 "' + (targetType || 'N/A') + '"'
-      },
-      {
-        text: 'Create Relation',
-        description: 'Create a relationship between the nodes',
-        action: 'create-relation',
-        enabled: true,
-        icon: '\u2192'
-      },
-      {
-        text: 'Cancel',
-        description: 'Return source node to original position',
-        action: 'cancel',
-        enabled: true,
-        icon: '\u2715',
-        cancel: true
-      }
-    ];
-
-    actions.forEach(actionItem => {
-      const isEnabled = actionItem.enabled;
-      const isCancel = actionItem.cancel;
-
-      const itemEl = el('div', {
-        className: 'node-action-menu__item' +
-          (!isEnabled ? ' node-action-menu__item--disabled' : '') +
-          (isCancel ? ' node-action-menu__item--cancel' : '')
-      },
-        el('div', { className: 'node-action-menu__item-row' },
-          el('span', { className: 'node-action-menu__icon' }, actionItem.icon),
-          el('span', { className: 'node-action-menu__item-name' }, actionItem.text)
-        ),
-        el('div', { className: 'node-action-menu__desc' },
-          text(actionItem.disabledReason || actionItem.description)
-        )
-      );
-
-      if (isEnabled) {
-        itemEl.onclick = async (e) => {
-          if (this.currentCloseHandler) {
-            document.removeEventListener('click', this.currentCloseHandler);
-            this.currentCloseHandler = null;
-          }
-
-          e.preventDefault();
-          e.stopPropagation();
-          e.stopImmediatePropagation();
-          this.hideMenu();
-
-          if (actionItem.action === 'merge') {
-            const confirmMessage =
-              'Do you really want to merge these two nodes and their subgraphs into a single one?\n\n' +
-              'Source: "' + String(sourceName ?? '') + '" (type: ' + (sourceType || 'N/A') + ')\n' +
-              'Target: "' + String(targetName ?? '') + '" (type: ' + (targetType || 'N/A') + ')';
-            if (confirm(confirmMessage)) {
-              this.#mergeEntities(actionData).catch(err => console.error('Error in merge:', err));
-            } else {
-              draggedNode.position(draggedNode.data('originalPosition') || draggedNode.position());
-            }
-          } else if (actionItem.action === 'create-relation') {
-            this.#showCreateRelationModal(actionData);
-          } else if (actionItem.action === 'cancel') {
-            draggedNode.position(draggedNode.data('originalPosition') || draggedNode.position());
-          }
-
-          return false;
-        };
-      }
-
-      menu.appendChild(itemEl);
-    });
-
-    const containerRect = this.containerTarget.getBoundingClientRect();
-    const menuX = Math.min(containerRect.left + dropPosition.x + 10, window.innerWidth - 240);
-    const menuY = Math.min(containerRect.top + dropPosition.y - 10, window.innerHeight - 200);
-    menu.style.left = menuX + 'px';
-    menu.style.top = menuY + 'px';
-
-    document.body.appendChild(menu);
-    this.currentMenu = menu;
-
-    const closeHandler = (e) => {
-      if (!menu.contains(e.target)) {
-        this.hideMenu();
-        document.removeEventListener('click', closeHandler);
-        this.currentCloseHandler = null;
-      }
-    };
-    this.currentCloseHandler = closeHandler;
-    setTimeout(() => document.addEventListener('click', closeHandler), 100);
-  }
-
-  async #mergeEntities({ sourceId, targetId, targetName, draggedNode }) {
-    try {
-      if (targetName) {
-        await this.api.addTargetNameAsAlias(sourceId, targetName);
-      }
-
-      await this.api.mergeEntities(sourceId, targetId);
-
-      if (this.cy) {
-        const sourceNode = this.cy.$id(sourceId);
-        if (sourceNode.length > 0) this.cy.remove(sourceNode);
-      }
-      alert("'" + sourceId + "' merged into '" + targetId + "'.");
-    } catch (error) {
-      console.error('Error during merge:', error);
-      alert('Failed to merge: ' + error.message);
-    }
-  }
-
-  #showCreateRelationModal({ sourceId, targetId, sourceName, targetName }) {
-    const input = el('input', {
-      type: 'text', id: 'relation-type',
-      placeholder: 'e.g., depends_on, relates_to, part_of',
-      className: 'graph-form-input'
-    });
-
-    const form = el('form', { id: 'create-relation-form' },
-      el('h3', {}, 'Create Relation'),
-      el('p', {}, 'Create a relationship between:'),
-      el('div', { className: 'relation-info' },
-        el('strong', {}, '\u201c' + String(sourceName ?? '') + '\u201d'),
-        text(' \u2192 '),
-        el('strong', {}, '\u201c' + String(targetName ?? '') + '\u201d')
-      ),
-      el('div', { className: 'graph-form-group--lg' },
-        el('label', { className: 'graph-form-label' }, 'Relation Type:'),
-        input,
-        el('small', { className: 'graph-form-hint' }, 'Describe how the first node relates to the second')
-      ),
-      el('div', { className: 'graph-form-actions' },
-        el('button', { type: 'button', id: 'create-rel-cancel-btn', className: 'graph-btn graph-btn--secondary' }, 'Cancel'),
-        el('button', { type: 'submit', className: 'graph-btn graph-btn--primary' }, 'Create Relation')
-      )
-    );
-
-    this.modal.show('Create Relation', form);
-
-    document.getElementById('create-rel-cancel-btn').onclick = () => this.modal.close();
-    document.getElementById('create-relation-form').onsubmit = async (e) => {
-      e.preventDefault();
-      const relationType = document.getElementById('relation-type').value.trim();
-      if (!relationType) { alert('Relation type is required.'); return; }
-
-      try {
-        await this.api.createRelation(sourceId, targetId, relationType);
-        this.modal.close();
-        this.onRefreshGraph();
-        alert('Relation created successfully.');
-      } catch (error) {
-        console.error('Error creating relation:', error);
-        alert('Failed to create relation: ' + error.message);
-      }
-    };
+  // The node goes back where it was: a dialog decides what happens next.
+  #restore(node) {
+    const origin = node.scratch('_explore_origin');
+    if (origin) node.position(origin);
   }
 }

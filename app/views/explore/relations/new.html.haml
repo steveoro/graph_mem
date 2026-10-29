@@ -1,0 +1,16 @@
+-# Add relation (the drag menu): the type picker, suggestions first, with the direction as text.
+= turbo_frame_tag "explore-dialog" do
+  .explore-dialog__body{ data: { testid: "explore-relation-dialog" } }
+    %h2#explore-dialog-title.explore-dialog__title= t("explore.relations.title")
+    = form_with url: explore_relations_path, method: :post, class: "explore-dialog__body", data: { turbo_stream: true } do
+      = hidden_field_tag :from_id, @from.id, id: nil
+      = hidden_field_tag :to_id, @to.id, id: nil
+      %p{ data: { testid: "explore-relation-direction" } }= t("explore.relations.direction", from: @from.name, to: @to.name)
+      = label_tag "explore-relation-type", t("explore.relations.type"), class: "ui-label"
+      = select_tag :relation_type, grouped_options_for_select({ t("explore.relations.suggested") => @suggested, t("explore.relations.all") => @types - @suggested }.reject { |_label, list| list.empty? }),
+        id: "explore-relation-type", class: "ui-input", autofocus: true, data: { testid: "explore-relation-type" }
+      .explore-dialog__actions
+        = link_to t("explore.relations.swap"), new_explore_relation_path(from_id: @to.id, to_id: @from.id), class: "ui-btn",
+          data: { testid: "explore-relation-swap" }
+        %button.ui-btn{ type: "button", data: { action: "explore-dialog#close" } }= t("explore.dialog.cancel")
+        = submit_tag t("explore.relations.submit"), class: "ui-btn ui-btn-primary", name: nil, data: { testid: "explore-relation-submit" }

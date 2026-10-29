@@ -1,0 +1,14 @@
+-# Merge into… (the merge dialog's entity picker, same type only) and Propose deletion (a review
+-# row, never a delete). A project root can do neither.
+- unless root
+  .entity-panel__actions
+    = link_to t("explore.panel.merge_into"), new_explore_merge_path(source_id: entity.id), class: "ui-btn",
+      data: { turbo_frame: "explore-dialog", testid: "entity-panel-merge" }
+  %details.entity-panel__edit{ data: { testid: "entity-panel-propose-deletion" } }
+    %summary= t("explore.panel.propose_deletion")
+    = form_with url: propose_deletion_explore_entity_path(entity), method: :post, class: "entity-panel__form",
+      data: { turbo_stream: true } do
+      %p.entity-panel__meta= t("explore.panel.propose_deletion_hint")
+      = label_tag "reason-#{entity.id}", t("explore.panel.reason"), class: "ui-label"
+      = text_field_tag :reason, nil, id: "reason-#{entity.id}", class: "ui-input", maxlength: ExploreEdits::MAX_REASON_LENGTH
+      = submit_tag t("explore.panel.propose_deletion_submit"), class: "ui-btn", name: nil, data: { testid: "entity-panel-propose-deletion-submit" }

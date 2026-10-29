@@ -1,0 +1,51 @@
+-# The panel's body. Its links (relations, paging, the obsolete toggle) stay in the frame; links to
+-# other pages break out with _top. Write affordances render only for the operator (can_write?),
+-# never merely hidden; every form posts as a Turbo Stream (ExploreResponses), with its CSRF token.
+-# `state` carries a refused form's values and error ({ form:, values:, error:, similar:, duplicate_id: }).
+- entity = panel.entity
+- root = entity.entity_type == NodeOperationsStrategy::PROJECT_ENTITY_TYPE
+%article.ui-card.entity-panel{ data: { testid: "entity-panel-body", entity_id: entity.id } }
+  %header.entity-panel__header
+    %h2.entity-panel__name= entity.name
+    %span.ui-badge= entity.entity_type
+    %p.entity-panel__crumb
+      = panel.project_name || (root ? t("entity_panel.project_root") : t("search.results.global"))
+  - if entity.aliases.present?
+    %p.entity-panel__aliases
+      %span.entity-panel__label= t("entity_panel.aliases")
+      = entity.aliases
+  - if entity.description.present?
+    %p.entity-panel__description= entity.description
+  .entity-panel__actions
+    = link_to t("search.results.open_explore"), explore_path(entity_id: entity.id), class: "ui-btn",
+      data: { turbo_frame: "_top", testid: "entity-panel-explore" }
+    - if can_write?
+      = link_to t("entity_panel.open_review"), review_path(q: entity.name), class: "ui-btn",
+        data: { turbo_frame: "_top", testid: "entity-panel-review" }
+  - if can_write?
+    = render "entities/edit_entity", entity: entity, root: root, state: state
+    = render "entities/entity_actions", entity: entity, root: root
+
+  %section.entity-panel__section{ data: { testid: "entity-panel-observations" } }
+    %h3.entity-panel__heading= t("entity_panel.observations")
+    - if can_write?
+      = render "entities/add_observation", entity: entity, state: state
+    - if panel.observations.empty?
+      %p.entity-panel__empty= t("entity_panel.no_observations")
+    - else
+      %ul.entity-panel__list
+        = render partial: "entities/observation", collection: panel.observations, locals: { state: state }
+    .entity-panel__pager
+      - if panel.page > 1
+        = link_to t("search.results.previous"), entity_panel_path(entity, page: panel.page - 1, obsolete: (panel.include_obsolete ? "1" : nil))
+      - if panel.more_observations?
+        = link_to t("search.results.next"), entity_panel_path(entity, page: panel.page + 1, obsolete: (panel.include_obsolete ? "1" : nil))
+      - if panel.include_obsolete
+        = link_to t("entity_panel.hide_obsolete"), entity_panel_path(entity), data: { testid: "entity-panel-obsolete-toggle" }
+      - elsif panel.inactive_observation_count.positive?
+        = link_to t("entity_panel.show_obsolete", count: panel.inactive_observation_count), entity_panel_path(entity, obsolete: "1"),
+          data: { testid: "entity-panel-obsolete-toggle" }
+
+  = render "entities/relations", panel: panel
+  - if can_write?
+    = render "entities/recent_changes", panel: panel

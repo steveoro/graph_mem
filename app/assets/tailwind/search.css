@@ -1,5 +1,5 @@
 /* Search (UI-3): the filter form, the results list and the entity panel beside it. Imported by
-   application.css. The old page's search-* rules stay in graph.css for /graph's form. */
+   application.css. The old /graph form's search-* rules in graph.css are unused since UI-4b. */
 @layer components {
   .search-page {
     display: grid;

@@ -1,0 +1,178 @@
+/* Explore (UI-4b): the toolbar, the canvas (~65%) and the entity panel beside it (~35%).
+   Imported by application.css. The canvas menus and tooltip keep their rules in graph.css. */
+@layer components {
+  .explore-page {
+    display: grid;
+    gap: 0.75rem;
+  }
+
+  .explore-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    align-items: end;
+  }
+
+  .explore-toolbar__group {
+    display: grid;
+    gap: 0.25rem;
+    min-width: 10rem;
+  }
+
+  .explore-toolbar__label {
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--color-ui-text-muted);
+  }
+
+  .explore-toolbar__actions {
+    display: flex;
+    gap: 0.5rem;
+    margin-left: auto;
+  }
+
+  .explore-status {
+    min-height: 1.25rem;
+    font-size: 0.875rem;
+    color: var(--color-ui-text-muted);
+  }
+
+  .explore-status--error {
+    color: var(--color-ui-danger);
+  }
+
+  .explore-layout {
+    display: grid;
+    gap: 1rem;
+    align-items: start;
+  }
+
+  .explore-canvas {
+    position: relative;
+    min-height: 24rem;
+    padding: 0;
+    overflow: hidden;
+  }
+
+  @media (min-width: 1100px) {
+    .explore-layout {
+      grid-template-columns: minmax(0, 65fr) minmax(0, 35fr);
+    }
+
+    .explore-panel {
+      position: sticky;
+      top: 1rem;
+      max-height: calc(100vh - 2rem);
+      overflow-y: auto;
+    }
+  }
+
+  .explore-panel {
+    min-width: 0;
+  }
+}
+
+/* Explore's dialog (relation type picker, move card, merge dialog). */
+@layer components {
+  .explore-dialog {
+    /* Tailwind's preflight zeroes the margin that centres a modal <dialog>. */
+    margin: auto;
+    width: min(40rem, calc(100vw - 2rem));
+    max-height: calc(100vh - 4rem);
+    padding: 1.25rem;
+    border: 1px solid var(--color-ui-border);
+    border-radius: 0.75rem;
+    background: var(--color-ui-surface);
+    color: var(--color-ui-text);
+  }
+
+  .explore-dialog::backdrop {
+    background: rgb(15 23 42 / 0.45);
+  }
+
+  .explore-dialog__body {
+    display: grid;
+    gap: 0.75rem;
+  }
+
+  .explore-dialog__body > .ui-btn {
+    justify-self: start;
+  }
+
+  .explore-dialog__title {
+    font-size: 1.125rem;
+    font-weight: 600;
+  }
+
+  .explore-dialog__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    justify-content: flex-end;
+  }
+
+  .explore-dialog__warn {
+    padding: 0.5rem 0.75rem;
+    border-radius: 0.5rem;
+    background: var(--color-ui-warn-soft);
+    color: var(--color-ui-warn);
+  }
+
+  .explore-dialog__blocker {
+    padding: 0.5rem 0.75rem;
+    border-radius: 0.5rem;
+    background: var(--color-ui-danger-soft);
+    color: var(--color-ui-danger);
+  }
+
+  .explore-dialog__list {
+    display: grid;
+    gap: 0.25rem;
+    margin: 0;
+    padding-left: 1.25rem;
+    font-size: 0.875rem;
+  }
+}
+
+/* The entity panel's edit forms (operator only, UI-4b W5). */
+@layer components {
+  .entity-panel__edit summary {
+    cursor: pointer;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--color-ui-accent-strong);
+  }
+
+  .entity-panel__form {
+    display: grid;
+    gap: 0.375rem;
+    margin-top: 0.5rem;
+  }
+
+  .entity-panel__form-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .entity-panel__error {
+    padding: 0.375rem 0.5rem;
+    border-radius: 0.375rem;
+    background: var(--color-ui-danger-soft);
+    color: var(--color-ui-danger);
+    font-size: 0.875rem;
+  }
+
+  .entity-panel__relation,
+  .entity-panel__change {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.375rem;
+    align-items: center;
+  }
+
+  .entity-panel__inline-action {
+    padding: 0.125rem 0.5rem;
+    font-size: 0.75rem;
+  }
+}

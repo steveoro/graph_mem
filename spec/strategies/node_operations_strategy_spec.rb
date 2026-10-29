@@ -450,4 +450,40 @@ RSpec.describe NodeOperationsStrategy, type: :model do
       expect(child.reload.project_id).to be_nil
     end
   end
+
+  # UI-4b W6: Explore's digest check runs inside the merge's lock through before_merge:.
+  describe "#merge_into with before_merge:" do
+    let!(:source) { MemoryEntity.create!(name: "SynthWidget A #{SecureRandom.hex(3)}", entity_type: "Component") }
+    let!(:target) { MemoryEntity.create!(name: "SynthWidget B #{SecureRandom.hex(3)}", entity_type: "Component") }
+
+    before { MemoryObservation.create!(memory_entity: source, content: "SynthWidget A renders tiles.") }
+
+    it "writes nothing and answers :conflict when the hook returns a message" do
+      seen = nil
+      hook = lambda do |locked_source, locked_target|
+        seen = [ locked_source.id, locked_target.id ]
+        "synthetic refusal"
+      end
+
+      expect do
+        result = strategy.merge_into(source.id, target.id, before_merge: hook)
+        expect(result).to eq(success: false, status: :conflict, error: "synthetic refusal")
+      end.not_to change { [ MemoryEntity.count, ChangeSet.count, AuditLog.count, MemoryObservation.where(memory_entity_id: source.id).count ] }
+      expect(seen).to eq([ source.id, target.id ])
+    end
+
+    it "merges as before when the hook returns nil" do
+      result = strategy.merge_into(source.id, target.id, before_merge: ->(*) { nil })
+
+      expect(result[:success]).to be(true)
+      expect(MemoryEntity.exists?(source.id)).to be(false)
+    end
+
+    it "isn't called when the existing checks already refuse" do
+      other = MemoryEntity.create!(name: "Synth Router #{SecureRandom.hex(3)}", entity_type: "Service")
+      hook = ->(*) { raise "should not run" }
+
+      expect(strategy.merge_into(source.id, other.id, before_merge: hook)[:success]).to be(false)
+    end
+  end
 end

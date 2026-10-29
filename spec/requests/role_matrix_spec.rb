@@ -11,7 +11,7 @@ RSpec.describe "Role matrix", type: :request do
   # "VERB /path" (dummy segments filled in) => expected guest status (or the statuses allowed).
   guest_allowed = {
     "GET /search" => 200,
-    "GET /graph" => 200,
+    "GET /explore" => 200,
     # The read-only entity panel (UI-3). The walk's dummy id 1 can be a real entity right after
     # the test DB is truncated, so either answer is fine; never 403.
     "GET /entities/1/panel" => [ 200, 404 ],

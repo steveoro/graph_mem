@@ -4,7 +4,7 @@ GraphMem is a Ruby on Rails application implementing a Model Context Protocol (M
 
 [![Version](https://img.shields.io/badge/version-1.52.1-blue.svg)](lib/graph_mem/version.rb)
 [![Rails](https://img.shields.io/badge/rails-8.1.4-orange.svg)](Gemfile)
-[![Ruby](https://img.shields.io/badge/ruby-3.4.1-red.svg)](Gemfile)
+[![Ruby](https://img.shields.io/badge/ruby-3.4.12-red.svg)](Gemfile)
 
 ## Overview
 
@@ -66,7 +66,7 @@ The header is a cooperative scope key, **not** a credential: an agent can claim 
 
 ## Technology Stack
 
-* **Ruby**: 3.4.1+
+* **Ruby**: 3.4.12+
 * **Rails**: 8.1.4+
 * **MCP Implementation**: the official MCP Ruby SDK ([`mcp`](https://github.com/modelcontextprotocol/ruby-sdk) gem, pinned to 1.8.2) over Streamable HTTP and stdio (MCP 2024-11-05 … 2026-07-28). Moving another Rails app off fast-mcp: [`docs/guides/migrating-fast-mcp-to-mcp-gem.md`](docs/guides/migrating-fast-mcp-to-mcp-gem.md)
 * **Database**: MariaDB 11.8+ (VECTOR support required)
@@ -258,7 +258,7 @@ you can roll it out without downtime. Full reference in
 For local development, run the app natively with MariaDB on localhost.
 
 1. **Prerequisites:**
-   * Ruby 3.4.1+ (via RVM or rbenv)
+   * Ruby 3.4.12+ (via RVM or rbenv)
    * MariaDB 11.8+ (for vector search)
    * Ollama with an embedding model
 
@@ -370,7 +370,7 @@ Assuming `graph_mem-app-1` is the running container name, edit `mcp_servers.json
                 "-c",
                 "'bin/bundle exec ruby bin/mcp_stdio_runner.rb'"
                 // For development, change env below and replace the command with bash, first arg "-c" and second arg:
-                // "cd /home/steve/Projects/graph_mem && exec /usr/share/rvm/wrappers/ruby-3.4.1@graph_mem/bundle exec ruby bin/mcp_stdio_runner.rb"
+                // "cd /home/steve/Projects/graph_mem && exec /usr/share/rvm/wrappers/ruby-3.4.12@graph_mem/bundle exec ruby bin/mcp_stdio_runner.rb"
             ],
             "env": {
                 "RAILS_ENV": "production"

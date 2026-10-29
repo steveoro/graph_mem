@@ -1,6 +1,6 @@
 # GraphMem web UI guide
 
-A tour of the web UI for the **operator** (the graph's owner, full access) and the optional **read-only guest**, as of 1.60.0. It covers signing in, the app shell, each section, the guest account and the usual problems.
+A tour of the web UI for the **operator** (the graph's owner, full access) and the optional **read-only guest**, as of 1.61.0. It covers signing in, the app shell, each section, the guest account and the usual problems.
 
 The screenshots come from a test instance with synthetic data (`Alpha Service`, `SynthWidget`, `SynthGadget`). The image files are in [`docs/images/ui/`](../images/ui/).
 
@@ -44,7 +44,7 @@ The sidebar lists Home, Search and Explore at the top, then three groups (Review
 |---|---|---|
 | — | **Home** | Status only: the health strip, graph counts, the review digest, jobs, recent changes, MCP clients, and the quick search |
 | — | **Search** | Text or vector search over entities |
-| — | **Explore** | The interactive graph (Cytoscape) |
+| — | **Explore** | The interactive graph (Cytoscape) with the entity panel; the operator edits from both |
 | Review & Fix | **Review queue** | Suggestions from compaction, scans and the stale-memory scan, grouped and ranked. The badge counts groups needing attention (refreshed every 30 s) |
 | Review & Fix | **Scan review** | The same page, project-scan suggestions only |
 | Projects & Data | **Maintenance** | Import, export and cleanup; the compactor, garbage collector and relation repair; project scans; the full MCP clients table |
@@ -109,30 +109,36 @@ Search (`/search`, 1.60.0) runs the same search as the agents' MCP `search` tool
   - Agents' active project context never changes this page's order; the Project filter is the way to narrow it.
   - An invalid filter or date shows its message above the results.
 - **Results**, 20 a page with Previous / Next: name, type, the project it belongs to (or "global"), score and the fields that matched, relation count, and up to two observation snippets with the query's words highlighted (the description when no observation matches). **Open in Explore** opens the entity's neighbourhood.
-- **The entity panel**: click a name and its details open beside the list, read-only: aliases, description, observations by trust (10 at a time, with **Show obsolete**), and relations both ways grouped by type. Relations open their own panel. The operator also gets **Open in Review**, which searches Review & Fix for the entity.
-- **Show as graph** opens Explore with exactly this page's results and the relations among them ("From search"; **Back to Root** returns to the usual view).
+- **The entity panel**: click a name and its details open beside the list: aliases, description, observations by trust (10 at a time, with **Show obsolete**), and relations both ways grouped by type. Relations open their own panel. The operator also gets **Open in Review**, which searches Review & Fix for the entity, and the same edits as in Explore (below).
+- **Show as graph** opens Explore with exactly this page's results and the relations among them (the **From search** scope).
 - The old `/search?q=…&strategy=text|vector` links still work (`vector` is Semantic).
 
 ### Explore
 
-The graph starts in **Root View**, which shows the project roots. **Full Graph** shows every entity.
-- **Hover** a node for a tooltip.
-- **Double-click** a node to open its neighbourhood.
-- **Right-click** a node for its menu:
-  - **Observations: N** opens the observation cards. A **Delete All Duplicates** button appears when there are duplicates.
-  - **Edit data**;
-  - **Toggle relations**, **Toggle observations**;
-  - **Delete**.
-- **Right-click** an edge for **Edit Type** and **Delete Relation**.
+**Explore** (`/explore`) is the graph canvas, a toolbar above it and the entity panel beside it (the same panel as Search's). The old `/graph` links redirect here, query string included.
+
+- **Toolbar:** **Scope** (Root view: the project roots; Full graph; a project and everything under it; Neighbourhood; From search), **Layout** (force, tree, concentric, grid), **Depth** (1 or 2 hops for a neighbourhood), **Entity type** and **Relation type** filters (they only hide elements, nothing is reloaded), **Fit**, and a link to Search. The scope is kept in the URL, so a reload or a shared link opens the same view.
+- **At most 2,000 entities** are drawn at a time. A bigger scope says "Showing 2,000 of N entities; pick a project to see the rest." (a neighbourhood says "at least N": it stops counting at the cap).
+- **Click** a node to open its panel; **double-click** to open its neighbourhood; **hover** for a tooltip.
+- **Right-click** a node for **Show in panel**, **Open neighbourhood** and **Toggle relations**. The operator also gets **Edit in panel**, **Merge into…** and **Propose deletion** (not for a project root). **Right-click** an edge for its endpoints and type; the operator also gets **Remove relation**.
+- **Drag one node onto another** (operator): **Add relation…** opens the type picker (suggested types first, the direction spelled out, **Swap direction**); **Move under…** opens a card with how many entities move and, in amber, any project change; **Merge A into B…** (same type only) opens the merge dialog. **Cancel**, or a click elsewhere, puts the node back.
 
 ![Node context menu (operator)](../images/ui/explore-context-menu.png)
 
-**Drag one node onto another** to open the Node-to-Node Action menu:
-- **Merge Nodes** merges the dragged node into the target.
-- **Create Relation** creates a relationship between the nodes.
-- **Cancel** puts the node back.
-
 ![Drag-and-drop action menu](../images/ui/explore-drag-drop.png)
+
+**Editing from the panel (operator):** **Edit** (name, type, aliases, description; a project root only **Rename** and description), **Add observation** (text and perspective), per observation **Edit** (the old text is kept as superseded) and **Retire** (marks it obsolete), per relation **Remove**, **Merge into…**, **Propose deletion**, and **Recent changes**: the last five changes to the entity, each with **Undo** while it can still be undone.
+- An exact duplicate observation is refused. A similar one shows "Similar to: …" with **Add anyway**. Without embeddings the similarity check is skipped and the toast says "similarity not checked".
+- A name already used in the same project is refused, with the message in the form.
+- Project roots can be renamed but not retyped, given aliases, moved, merged or proposed for deletion.
+
+**The merge dialog:** "Merge **A** (source, will be removed) into **B** (survivor)", **Swap direction**, a hint about which one looks canonical, and what the merge will do: the observations that move, the relations re-pointed and dropped, the aliases B gains, the `part_of` children re-parented and any entities that change project, and the open review rows anchored on A (a merge doesn't close them). Different types or a project root disable **Merge** and say why. If the graph changes between the dialog and **Merge**, the merge is refused ("The graph changed since the preview, review it again.") and nothing is written.
+
+![The merge dialog](../images/ui/explore-merge-dialog.png)
+
+**Every edit is undoable.** Each one is recorded as one change set with you as the actor, shows in Home's recent activity and the panel's Recent changes, and the toast offers **Undo** for 10 minutes. After that the toast says "Undo it later from Home › Recent activity"; the change stays undoable for 30 days (7 for a merge).
+
+**Explore never deletes.** There is no delete and no "delete duplicates" here. **Propose deletion** adds a delete suggestion to **Review & Fix** (Scan review) with an optional reason and links to it; proposing the same entity again links to the pending suggestion.
 
 ### Review & Fix
 
@@ -166,7 +172,7 @@ The graph starts in **Root View**, which shows the project roots. **Full Graph**
 
 ### Undo (1.57.0)
 
-Every graph write, merge (including compaction auto-merges) and review action is recorded as a change set. The operator can undo one within 7 days for merges, 30 days for everything else: from the toast, from **Review › Resolved** or **Policies**, or with `POST /changes/:uuid/undo`. Sets that hard-delete an entity or observation, or mix a merge with other writes, are recorded but can't be undone. Guests can't undo (403).
+Every graph write, merge (including compaction auto-merges), review action and Explore edit is recorded as a change set. The operator can undo one within 7 days for merges, 30 days for everything else: from the toast (Explore's toasts offer it for 10 minutes), from **Review › Resolved** or **Policies**, from an entity panel's **Recent changes**, or with `POST /changes/:uuid/undo`. Sets that hard-delete an entity or observation, or mix a merge with other writes, are recorded but can't be undone. Guests can't undo (403).
 
 ### Projects & Data
 
@@ -207,7 +213,7 @@ The guest gets **Search** and **Explore**, a **Read-only guest** badge, and **Si
 
 ![Guest shell](../images/ui/guest-search.png)
 
-In **Explore**, the guest can browse, open neighbourhoods, toggle relations and observations, and read observation cards. There are no edit or delete items, no duplicate-delete button and no drag-and-drop.
+In **Explore**, the guest gets the same canvas, toolbar and panel: browse, pick a scope, open neighbourhoods, toggle relations and read the panel. There are no edit items in the menus, no edit forms in the panel, no Recent changes, and dragging a node only moves it on the screen. Every Explore write answers a guest with 403.
 
 ![Explore as guest: read-only node menu](../images/ui/guest-explore.png)
 

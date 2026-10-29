@@ -55,7 +55,7 @@
             %tr.project-scans-table__row{ data: row_data }
               %td.project-scans-table__project
                 - if project_entity_id
-                  = link_to project_scan_name(scan), graph_path(scoped_entity_id: project_entity_id), class: "dashboard-link", id: "link-project-scan-entity-#{scan[:operation_id]}"
+                  = link_to project_scan_name(scan), explore_path(project_id: project_entity_id), class: "dashboard-link", id: "link-project-scan-entity-#{scan[:operation_id]}"
                 - else
                   = project_scan_name(scan)
               %td= dashboard_status_badge(scan[:status], data: { progress_status: true })

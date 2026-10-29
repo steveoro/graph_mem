@@ -1,0 +1,24 @@
+-# Inline edit of name, type, aliases and description; a project root shows name and description
+-# only (ExploreEdits refuses the rest anyway).
+- mine = state[:form] == "entity"
+- values = mine ? state[:values].to_h.stringify_keys : {}
+%details.entity-panel__edit{ open: mine, data: { testid: "entity-panel-edit" } }
+  %summary= root ? t("explore.panel.rename") : t("explore.panel.edit")
+  = form_with url: explore_entity_path(entity), method: :patch, scope: :entity, class: "entity-panel__form",
+    data: { turbo_stream: true, testid: "entity-panel-edit-form" } do |form|
+    - if mine && state[:error]
+      %p.entity-panel__error{ role: "alert", data: { testid: "entity-panel-form-error" } }= state[:error]
+    = form.label :name, t("explore.panel.name"), class: "ui-label"
+    = form.text_field :name, value: values.fetch("name", entity.name), class: "ui-input", required: true, maxlength: ExploreEdits::MAX_NAME_LENGTH
+    - unless root
+      = form.label :entity_type, t("explore.panel.entity_type"), class: "ui-label"
+      = form.text_field :entity_type, value: values.fetch("entity_type", entity.entity_type), class: "ui-input", required: true,
+        list: "explore-entity-types-#{entity.id}"
+      %datalist{ id: "explore-entity-types-#{entity.id}" }
+        - GraphVocabulary::ENTITY_TYPES.each do |type|
+          %option{ value: type }
+      = form.label :aliases, t("explore.panel.aliases"), class: "ui-label"
+      = form.text_field :aliases, value: values.fetch("aliases", entity.aliases), class: "ui-input", placeholder: t("explore.panel.aliases_hint")
+    = form.label :description, t("explore.panel.description"), class: "ui-label"
+    = form.text_area :description, value: values.fetch("description", entity.description), class: "ui-input", rows: 3
+    = form.submit t("explore.panel.save"), class: "ui-btn ui-btn-primary", data: { testid: "entity-panel-save" }

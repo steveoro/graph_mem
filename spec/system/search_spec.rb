@@ -3,7 +3,7 @@
 require "rails_helper"
 
 # UI-3: Search in a browser (synthetic data): query, a chip, a result, its panel, Open in Explore,
-# and Show as graph on /graph?ids=. Enforced CSP, no violations.
+# and Show as graph on /explore?ids=. Enforced CSP, no violations.
 RSpec.describe "Search", type: :system do
   let!(:alpha) { MemoryEntity.create!(name: "Alpha Service", entity_type: "Project") }
   let!(:widget) { MemoryEntity.create!(name: "SynthWidget", entity_type: "Component", project_id: alpha.id) }
@@ -44,7 +44,7 @@ RSpec.describe "Search", type: :system do
     expect(page).to have_css("[data-testid='search-result'].search-result--selected", text: "Synth Router")
 
     within("turbo-frame#entity-panel") { click_link "Open in Explore" }
-    expect(page).to have_current_path(graph_path(scoped_entity_id: widget.id))
+    expect(page).to have_current_path(explore_path(entity_id: widget.id))
     expect(csp_console_errors).to be_empty
   end
 
@@ -52,15 +52,15 @@ RSpec.describe "Search", type: :system do
     visit search_path(q: "synth")
     click_link "Show as graph"
 
-    expect(page).to have_current_path(%r{\A/graph\?ids=})
+    expect(page).to have_current_path(%r{\A/explore\?ids=})
     shown_ids = Rack::Utils.parse_query(URI(page.current_url).query)["ids"].split(",")
     expect(shown_ids).to contain_exactly(widget.id.to_s, router.id.to_s)
-    expect(page).to have_css("[data-testid='graph-from-search']:not(.graph-hidden)")
+    expect(page).to have_select("explore-scope", selected: "From search")
     graph = lambda do
       page.evaluate_script(<<~'JS')
         (() => {
-          const el = document.querySelector('[data-controller="graph"]');
-          const ctrl = el && window.Stimulus.getControllerForElementAndIdentifier(el, 'graph');
+          const el = document.querySelector('[data-controller="explore"]');
+          const ctrl = el && window.Stimulus.getControllerForElementAndIdentifier(el, 'explore');
           if (!ctrl || !ctrl.cy) return null;
           return { nodes: ctrl.cy.nodes().map((n) => n.id()).sort(), edges: ctrl.cy.edges().length };
         })()

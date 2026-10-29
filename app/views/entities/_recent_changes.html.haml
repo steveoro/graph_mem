@@ -1,0 +1,18 @@
+-# Recent changes (operator only, Decision 4): the last change sets anchored on this entity, with
+-# Undo while the set is undoable (a full-page POST, like the toast's).
+- changes = panel.recent_changes
+%section.entity-panel__section{ data: { testid: "entity-panel-recent-changes" } }
+  %h3.entity-panel__heading= t("explore.panel.recent_changes")
+  - if changes.empty?
+    %p.entity-panel__empty= t("explore.panel.no_changes")
+  - else
+    %ul.entity-panel__list
+      - changes.each do |change|
+        %li.entity-panel__change{ data: { testid: "entity-panel-change" } }
+          %span.entity-panel__meta
+            = l(change.created_at.in_time_zone("Europe/Rome"), format: :short)
+            = "· #{change.kind}"
+          %span= change.summary
+          - if change.undoable?
+            = button_to t("ui.changes.undo"), undo_change_path(change.uuid), method: :post, class: "ui-btn entity-panel__inline-action",
+              form: { data: { turbo: false } }, data: { testid: "entity-panel-change-undo" }

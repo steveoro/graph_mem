@@ -329,11 +329,14 @@ Returns totals (entities, observations, relations, audit_logs), entity type dist
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| entity_id | integer | Show subgraph centered on this entity (1-hop) |
+| ids | string | 1 to 100 comma-separated entity ids: those entities and the relations among them (Search's "Show as graph") |
+| project_id | integer | A project root and its `part_of` subtree |
+| entity_id | integer | The neighbourhood of this entity |
+| depth | integer | With `entity_id`: `1` (default) or `2` hops |
 | scoped_entity_id | integer | Show scoped subgraph (entity + part_of children) |
 | root_only | boolean | Show only Project-type entities |
 
-Returns Cytoscape.js-compatible `{ elements: [...], options: {...} }`.
+Returns Cytoscape.js-compatible `{ elements: [...], options: {...} }`. Every view holds at most 2,000 entities (the lowest ids, the focus always included) and only the relations among them; when the cap applies the body also has `"truncated": true` and `"total": N`. No query reads more than 2,001 ids. A neighbourhood (`entity_id`) stops walking at the cap, so its `total` is a lower bound and the body adds `"total_is_minimum": true`. An invalid `ids`, `depth` or `project_id` is a `422` with a fixed message. Guest-readable.
 
 ---
 

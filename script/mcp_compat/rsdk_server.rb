@@ -9,7 +9,7 @@
 #   ruby rsdk_server.rb stdio
 #   ruby rsdk_server.rb http 3997      # serves http://127.0.0.1:3997/mcp
 #
-# Run it with the ruby-3.4.1@mcp_compat gemset (mcp, plus rack, rackup and webrick for http),
+# Run it with the ruby-3.4.12@mcp_compat gemset (mcp, plus rack, rackup and webrick for http),
 # NOT graph_mem's bundle. Loopback only.
 
 gem "mcp", ENV.fetch("RSDK_VERSION", "1.8.2")

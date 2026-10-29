@@ -6,7 +6,7 @@ module Operator
     allow_guest :destroy
 
     # A guest's stored return path is honoured only under these pages (they can reach them).
-    GUEST_RETURN_PATH = %r{\A/(search|graph)(?:[/?]|\z)}
+    GUEST_RETURN_PATH = %r{\A/(search|explore)(?:[/?]|\z)}
 
     rate_limit to: 10, within: 3.minutes, only: :create,
                with: -> {

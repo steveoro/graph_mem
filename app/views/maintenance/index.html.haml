@@ -44,7 +44,7 @@
         = link_to "Background jobs", maintenance_path(anchor: "background-jobs"), class: "dashboard-link"
         for orphan and duplicate observation reports.
       .dashboard-card__actions
-        = link_to "Open graph explorer", graph_path, class: "dashboard-btn dashboard-btn--secondary", id: "btn-maintenance-graph"
+        = link_to "Open graph explorer", explore_path, class: "dashboard-btn dashboard-btn--secondary", id: "btn-maintenance-graph"
 
   - snapshot = @snapshot
   %section#background-jobs.dashboard-state-grid.dashboard-state-grid--2x2{ "aria-label": "Background jobs" }

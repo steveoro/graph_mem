@@ -1,0 +1,7 @@
+-# Explore's dialog (UI-4b): the relation type picker, the move card and the merge dialog load into
+-# the "explore-dialog" frame. explore_dialog_controller.js opens the <dialog> when the frame gets
+-# content and closes it when an edit's stream empties it (Esc and Cancel close it too).
+- if can_write?
+  %dialog.explore-dialog{ "aria-labelledby": "explore-dialog-title",
+    data: { controller: "explore-dialog", action: "close->explore-dialog#closed", testid: "explore-dialog" } }
+    = turbo_frame_tag "explore-dialog", data: { explore_dialog_target: "frame" }

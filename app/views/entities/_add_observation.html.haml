@@ -1,0 +1,26 @@
+-# Add observation: text and perspective. An exact duplicate is refused; a similar one asks first
+-# ("Add anyway" resubmits with force=1).
+- mine = state[:form] == "observation_new"
+- values = mine ? state[:values].to_h.stringify_keys : {}
+%details.entity-panel__edit{ open: mine, data: { testid: "entity-panel-add-observation" } }
+  %summary= t("explore.panel.add_observation")
+  = form_with url: explore_entity_observations_path(entity), method: :post, scope: :observation, class: "entity-panel__form",
+    data: { turbo_stream: true, testid: "entity-panel-add-observation-form" } do |form|
+    - if mine && state[:error]
+      %p.entity-panel__error{ role: "alert", data: { testid: "entity-panel-form-error" } }= state[:error]
+      - if state[:duplicate_id] && (duplicate = MemoryObservation.find_by(id: state[:duplicate_id]))
+        %p.entity-panel__meta{ data: { testid: "entity-panel-duplicate" } }
+          = t("explore.panel.duplicate_of", content: duplicate.content.to_s.truncate(200))
+          -# The observations on this page carry their id as an anchor.
+          = link_to t("explore.panel.show_duplicate"), "#observation-#{duplicate.id}", data: { turbo: false, testid: "entity-panel-duplicate-link" }
+      - if state[:similar]
+        %p.entity-panel__meta{ data: { testid: "entity-panel-similar" } }= t("explore.panel.similar_to", content: state[:similar][:content].to_s.truncate(200))
+    = form.label :content, t("explore.panel.observation_text"), class: "ui-label"
+    = form.text_area :content, value: values["content"], class: "ui-input", rows: 3, required: true,
+      maxlength: ExploreEdits::Observations::MAX_OBSERVATION_LENGTH
+    = render "entities/perspective_select", form: form, selected: values["perspective"]
+    .entity-panel__form-actions
+      = form.submit t("explore.panel.add"), class: "ui-btn ui-btn-primary", data: { testid: "entity-panel-add-observation-submit" }
+      - if mine && state[:similar]
+        = form.button t("explore.panel.add_anyway"), type: "submit", name: "force", value: "1", class: "ui-btn",
+          data: { testid: "entity-panel-add-anyway" }

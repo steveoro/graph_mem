@@ -58,7 +58,7 @@ cd "$PROJECT_ROOT" || { echo "[RunnerLog] Error: Failed to cd to $PROJECT_ROOT" 
 echo "[RunnerLog] Current directory: $(pwd)" >&2
 
 # Use the project's RVM settings (.ruby-version, .ruby-gemset)
-EXPECTED_RUBY_VERSION="ruby-3.4.1"
+EXPECTED_RUBY_VERSION="ruby-3.4.12"
 EXPECTED_GEMSET="graph_mem"
 echo "[RunnerLog] Attempting to use RVM: ${EXPECTED_RUBY_VERSION}@${EXPECTED_GEMSET}" >&2
 

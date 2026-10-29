@@ -17,7 +17,7 @@
       - if can_write?
         %li= ui_nav_link t("ui.nav.home"), main_app.root_path, testid: "nav-home"
       %li= ui_nav_link t("ui.nav.search"), main_app.search_path, testid: "nav-search", icon: :search
-      %li= ui_nav_link t("ui.nav.explore"), main_app.graph_path, testid: "nav-explore"
+      %li= ui_nav_link t("ui.nav.explore"), main_app.explore_path, testid: "nav-explore"
     - if can_write?
       %h2.ui-sidebar__heading= t("ui.nav.groups.review")
       %ul.ui-sidebar__list

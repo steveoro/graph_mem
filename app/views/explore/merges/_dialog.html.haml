@@ -1,0 +1,49 @@
+-# The merge dialog: what merging A into B does (EntityMergePreview), Swap direction, the
+-# survivor hint, blockers (no button), and the preview's digest, which the merge checks again
+-# inside its lock (409 if the graph changed meanwhile).
+- source = preview.source
+- target = preview.target
+.explore-dialog__body{ data: { testid: "explore-merge-dialog" } }
+  %h2#explore-dialog-title.explore-dialog__title
+    = t("explore.merges.title_html", source: tag.strong(source&.name || "?"), target: tag.strong(target&.name || "?"))
+  - if source && target
+    = link_to t("explore.merges.swap"), new_explore_merge_path(source_id: target.id, target_id: source.id), class: "ui-btn",
+      data: { testid: "explore-merge-swap" }
+  - if preview.blocked?
+    - preview.blockers.each do |blocker|
+      %p.explore-dialog__blocker{ role: "alert", data: { testid: "explore-merge-blocker" } }= blocker
+  - if preview.digest
+    %p.entity-panel__meta{ data: { testid: "explore-merge-hint" } }
+      = preview.survivor_hint == :target ? t("explore.merges.hint_target", name: target.name) : t("explore.merges.hint_source", name: source.name)
+    %section{ data: { testid: "explore-merge-observations" } }
+      %h3.entity-panel__heading= t("explore.merges.observations", count: preview.observation_count)
+      %ul.explore-dialog__list
+        - preview.observation_sample.each do |observation|
+          %li= observation.content.to_s.truncate(160)
+    %section{ data: { testid: "explore-merge-repointed" } }
+      %h3.entity-panel__heading= t("explore.merges.repointed", count: preview.repointed.size)
+      %ul.explore-dialog__list
+        - preview.repointed.group_by { |entry| [ entry.direction, entry.relation_type ] }.each do |(direction, type), entries|
+          %li= t("explore.merges.repointed_group", direction: t("explore.merges.#{direction}"), type: type, count: entries.size)
+    - if preview.dropped.any?
+      %section{ data: { testid: "explore-merge-dropped" } }
+        %h3.entity-panel__heading= t("explore.merges.dropped", count: preview.dropped.size)
+        %ul.explore-dialog__list
+          - preview.dropped.each do |entry|
+            %li= entry.label
+    - if preview.aliases_gained.any?
+      %p{ data: { testid: "explore-merge-aliases" } }= t("explore.merges.aliases", aliases: preview.aliases_gained.join(", "))
+    - if preview.children.any?
+      %p{ data: { testid: "explore-merge-children" } }= t("explore.merges.children", count: preview.children.size, names: preview.children.first(5).map(&:name).join(", "))
+    - preview.project_moves.each do |move|
+      %p.explore-dialog__warn{ data: { testid: "explore-merge-project-move" } }
+        = t("explore.merges.project_move", count: move.count_label, from: move.from_name || t("explore.moves.global"), to: move.to_name || t("explore.moves.global"))
+    - if preview.review_row_count.positive?
+      %p.entity-panel__meta= t("explore.merges.review_rows", count: preview.review_row_count)
+  .explore-dialog__actions
+    %button.ui-btn{ type: "button", data: { action: "explore-dialog#close" } }= t("explore.dialog.cancel")
+    - if preview.digest
+      = button_to t("explore.merges.submit"), explore_merges_path, method: :post,
+        params: { source_id: source.id, target_id: target.id, digest: preview.digest },
+        disabled: preview.blocked?, class: "ui-btn ui-btn-primary", form: { data: { turbo_stream: true } },
+        data: { testid: "explore-merge-submit" }

@@ -32,7 +32,7 @@ RSpec.describe "Search page", type: :request do
     link = row.at_css("[data-testid='search-result-link']")
     expect(link["href"]).to eq(entity_panel_path(widget))
     expect(link["data-turbo-frame"]).to eq("entity-panel")
-    expect(row.at_css("a[href='#{graph_path(scoped_entity_id: widget.id)}']")).to be_present
+    expect(row.at_css("a[href='#{explore_path(entity_id: widget.id)}']")).to be_present
     expect(html.at_css("turbo-frame#entity-panel")).to be_present
   end
 
@@ -92,6 +92,16 @@ RSpec.describe "Search page", type: :request do
 
     get search_path, params: { q: "s" * GraphSearch::Page::MAX_QUERY_LENGTH }
     expect(response).to have_http_status(:ok)
+  end
+
+  %w[0 -3 abc].each do |page|
+    it "renders page 1 for page=#{page}" do
+      get search_path, params: { q: "synth", page: page }
+
+      expect(response).to have_http_status(:ok)
+      expect(result_names.first).to eq(GraphSearch::Page.call({ "q" => "synth" }).rows.first.entity.name)
+      expect(html.at_css("[data-testid='search-prev']")).to be_nil
+    end
   end
 
   it "shows no Next link on the last allowed page" do
@@ -172,7 +182,7 @@ RSpec.describe "Search page", type: :request do
     get search_path, params: { q: "synth" }
 
     ids = html.css("[data-testid='search-result']").map { |row| row["data-entity-id"] }
-    expect(html.at_css("[data-testid='search-show-graph']")["href"]).to eq(graph_path(ids: ids.join(",")))
+    expect(html.at_css("[data-testid='search-show-graph']")["href"]).to eq(explore_path(ids: ids.join(",")))
 
     get search_path, params: { q: "nothing-matches-this" }
     expect(html.at_css("[data-testid='search-show-graph']")).to be_nil

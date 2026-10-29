@@ -5,17 +5,16 @@ require "rails_helper"
 # UI-0 (F1): runtime XSS guard — verify the DOM-construction helpers in lib/dom.js
 # produce text nodes, not parsed HTML, even when the payload is raw HTML injection.
 #
-# Strategy: boot the graph page (which loads all importmap JS via Stimulus), then
+# Strategy: boot Explore (which loads all importmap JS via Stimulus), then
 # drive each rendering path via execute_script / evaluate_async_script so we can
 # assert against the live DOM without flaky Cytoscape canvas interactions.
 #
-# Six sinks covered:
+# Sinks covered:
 #   1. Tooltip.show             (graph/tooltip.js)
-#   2. ContextMenuManager       (graph/context_menu.js — header + labels)
-#   3. renderObservationCards   (graph/observation_renderer.js)
-#   4. renderDuplicateWarning   (graph/observation_renderer.js)
-#   5. DragDropManager header   (graph/drag_drop_manager.js — via lib/dom directly)
-#   6. Review page entity autocomplete select (controllers/review_entity_picker_controller.js)
+#   2. ContextMenuManager       (graph/context_menu.js — node header and labels, edge labels)
+#   3. DragDropManager menu     (graph/drag_drop_manager.js — labels)
+#   4. Explore dialogs and panel (merge dialog and picker, type picker, move card, Recent changes)
+#   5. Review page entity autocomplete select (controllers/review_entity_picker_controller.js)
 RSpec.describe "XSS escaping in graph UI", type: :system do
   # A payload that, if injected via innerHTML, would create <img data-probe> in the DOM.
   PROBE = "<img src=x data-probe=1>"
@@ -37,21 +36,21 @@ RSpec.describe "XSS escaping in graph UI", type: :system do
   end
 
   # ───────────────────────────────────────────────────────────────────────────
-  # Sinks 1-5: graph page  (loads all importmap modules via Stimulus)
+  # Sinks 1-3: Explore  (loads all importmap modules via Stimulus)
   # ───────────────────────────────────────────────────────────────────────────
-  context "on the graph page" do
+  context "on Explore" do
     before do
       sign_in_operator!
-      visit graph_path
-      # Wait for Stimulus to boot the graph controller
-      expect(page).to have_css('[data-controller="graph"]', wait: 10)
+      visit explore_path
+      # Wait for Stimulus to boot the explore controller
+      expect(page).to have_css('[data-explore-target="canvas"] canvas', wait: 10)
     end
 
     it "Tooltip does not parse HTML in entity label/type/aliases" do
       page.execute_script(<<~JS)
         (function() {
-          const container = document.querySelector('[data-controller="graph"]');
-          const ctrl = window.Stimulus.getControllerForElementAndIdentifier(container, 'graph');
+          const container = document.querySelector('[data-controller="explore"]');
+          const ctrl = window.Stimulus.getControllerForElementAndIdentifier(container, 'explore');
           if (!ctrl || !ctrl.tooltip) return;
           ctrl.tooltip.show(
             { data: function() {
@@ -76,8 +75,8 @@ RSpec.describe "XSS escaping in graph UI", type: :system do
     it "ContextMenuManager does not parse HTML in node header and labels" do
       page.execute_script(<<~JS)
         (function() {
-          const container = document.querySelector('[data-controller="graph"]');
-          const ctrl = window.Stimulus.getControllerForElementAndIdentifier(container, 'graph');
+          const container = document.querySelector('[data-controller="explore"]');
+          const ctrl = window.Stimulus.getControllerForElementAndIdentifier(container, 'explore');
           if (!ctrl || !ctrl.contextMenu) return;
           ctrl.contextMenu.showNodeMenu({
             target: { data: function() {
@@ -101,56 +100,73 @@ RSpec.describe "XSS escaping in graph UI", type: :system do
       no_probe!("context menu")
     end
 
-    it "renderObservationCards and renderDuplicateWarning do not parse HTML in observation content" do
-      page.evaluate_async_script(<<~JS)
-        (async function(done) {
-          const { analyzeObservations, renderDuplicateWarning, renderObservationCards } =
-            await import('graph/observation_renderer');
-          const { ModalManager } = await import('graph/modal_manager');
-          const payload = #{PROBE.to_json};
-          // Two identical observations → duplicate warning is also rendered
-          const obs = [
-            { id: 1, content: payload, created_at: new Date().toISOString() },
-            { id: 2, content: payload, created_at: new Date().toISOString() }
-          ];
-          const analysis = analyzeObservations(obs);
-          const frag = document.createDocumentFragment();
-          const warn = renderDuplicateWarning(analysis);
-          if (warn) frag.appendChild(warn);
-          frag.appendChild(renderObservationCards(obs, analysis));
-          new ModalManager().show('Observations', frag);
-          done();
-        })(arguments[0]);
+    it "ContextMenuManager does not parse HTML in edge endpoints and type" do
+      page.execute_script(<<~JS)
+        (function() {
+          const container = document.querySelector('[data-controller="explore"]');
+          const ctrl = window.Stimulus.getControllerForElementAndIdentifier(container, 'explore');
+          ctrl.contextMenu.showEdgeMenu({
+            target: { data: function() {
+                return { from_entity_name: #{PROBE.to_json}, to_entity_name: #{PROBE.to_json}, label: #{PROBE.to_json}, relation_id: 1 };
+              }
+            },
+            renderedPosition: { x: 100, y: 100 }
+          }, { container: function() { return document.createElement('div'); } });
+        })();
       JS
       expect(page).to have_text(PROBE, wait: 2)
-      no_probe!("observation modal (cards + duplicate warning)")
+      no_probe!("edge menu")
     end
 
-    it "DragDropManager action-menu header does not parse HTML in source/target name" do
-      # #showActionMenu is private; reproduce its exact DOM construction via lib/dom
-      # to confirm text() is used (not innerHTML) for source/target labels.
-      page.evaluate_async_script(<<~JS)
-        (async function(done) {
-          const { el, text } = await import('lib/dom');
-          const payload = #{PROBE.to_json};
-          const header = el('div', { className: 'node-action-menu__header' },
-            el('div', { className: 'node-action-menu__title' }, 'Node-to-Node Action'),
-            el('div', { className: 'node-action-menu__subtitle' },
-              text('\u201c' + payload + '\u201d \u2192 \u201c' + payload + '\u201d')
-            )
-          );
-          document.body.appendChild(header);
-          done();
-        })(arguments[0]);
+    it "DragDropManager's drop menu does not parse HTML in node labels" do
+      page.execute_script(<<~JS)
+        (function() {
+          const container = document.querySelector('[data-controller="explore"]');
+          const ctrl = window.Stimulus.getControllerForElementAndIdentifier(container, 'explore');
+          const fake = (id) => ({
+            data: function() { return { id: id, label: #{PROBE.to_json}, type: 'Component' }; },
+            renderedPosition: function() { return { x: 50, y: 50 }; },
+            scratch: function() { return null; }
+          });
+          ctrl.dragDrop.showMenu(fake('1'), fake('2'));
+        })();
       JS
-      expect(page).to have_text(PROBE, wait: 2)
-      no_probe!("drag-drop action menu header")
-      page.execute_script("document.querySelectorAll('.node-action-menu__header').forEach(n => n.remove())")
+      expect(page).to have_css("[data-testid='explore-drop-menu']", text: PROBE, wait: 2)
+      no_probe!("drop menu")
+      page.execute_script("document.querySelectorAll('.node-action-menu').forEach(n => n.remove())")
+    end
+  end
+
+  # Explore's server-rendered dialogs and the panel's Recent changes (Haml escapes; no html_safe).
+  context "in Explore's dialogs and panel" do
+    let!(:probe_a) { MemoryEntity.create!(name: "#{PROBE} A", entity_type: "Component", aliases: PROBE) }
+    let!(:probe_b) { MemoryEntity.create!(name: "#{PROBE} B", entity_type: "Component") }
+
+    before do
+      MemoryObservation.create!(memory_entity: probe_a, content: PROBE)
+      MemoryRelation.create!(from_entity: probe_a, to_entity: probe_b, relation_type: "relates_to")
+      ChangeSet.record(kind: "explore.entity_edit", subject: probe_a, summary: "edited '#{PROBE}'") { probe_a.update!(description: PROBE) }
+      sign_in_operator!
+    end
+
+    {
+      "the merge dialog" => -> { new_explore_merge_path(source_id: probe_a.id, target_id: probe_b.id) },
+      "the merge picker" => -> { new_explore_merge_path(source_id: probe_a.id, q: "img") },
+      "the type picker" => -> { new_explore_relation_path(from_id: probe_a.id, to_id: probe_b.id) },
+      "the move card" => -> { new_explore_move_path(node_id: probe_a.id, parent_id: probe_b.id) },
+      "the panel and its Recent changes" => -> { entity_panel_path(probe_a) }
+    }.each do |label, path|
+      it "renders names, aliases, observations and summaries as text in #{label}" do
+        visit instance_exec(&path)
+
+        expect(page).to have_text(PROBE)
+        no_probe!(label)
+      end
     end
   end
 
   # ───────────────────────────────────────────────────────────────────────────
-  # Sink 6: Review page autocomplete (entity search select)
+  # Sink 5: Review page autocomplete (entity search select)
   # ───────────────────────────────────────────────────────────────────────────
   context "on the review page" do
     let!(:review_row) do

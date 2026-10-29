@@ -6,7 +6,7 @@
   "terminals": [
     {
       "name": "dev",
-      "command": "source \"$HOME/.rvm/scripts/rvm\" && rvm use ruby-3.4.1@graph_mem && bin/dev",
+      "command": "source \"$HOME/.rvm/scripts/rvm\" && rvm use ruby-3.4.12@graph_mem && bin/dev",
       "description": "Runs bin/dev via foreman: Puma web server on http://localhost:3000, the Tailwind CSS watcher, and the SolidQueue jobs worker."
     }
   ],
