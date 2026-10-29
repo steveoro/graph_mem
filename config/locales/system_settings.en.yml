@@ -1,9 +1,12 @@
 en:
   system:
     settings:
-      title: "System Settings"
-      subtitle: "Configure feature flags, database backup, embedding service, summarization behavior, and project scan settings."
+      title: "Settings"
+      tabs_label: "Settings groups"
+      subtitle: "Feature flags, embeddings, summaries, imports, project scans, telemetry and review policies. Backups and access have their own pages."
       save_group: "Save changes"
+      blank_option: "— use ENV / default —"
+      blank_uses_env: "Leave blank to use ENV"
       reset: "Reset"
       footer_info: "Changes apply immediately: no need to restart the application. Scheduled backup times are defined in config/recurring.yml."
       groups:
@@ -21,6 +24,7 @@ en:
         range: "Accepted range: %{min}–%{max}."
         out_of_range: "%{setting} must be between %{min} and %{max} (got %{value}). Nothing was saved."
         snooze_expiry: "Snoozed suggestions always come back when their snooze ends (no toggle)."
+        runs_link: "See the policy runs (with Undo) on Review › Policies"
         policies:
           dangling: "Dismisses suggestions that point at something deleted, or whose effect already holds. No suppression. Reverse: Undo the run, or Restore the row."
           no_longer_flagged: "Dismisses stale-memory suggestions the scanner no longer flags. Reverse: Undo the run, or Restore."
@@ -138,16 +142,16 @@ en:
           description: "Maximum observations to include per entity before capping. 0 disables the cap. Set to 0 to use SUMMARY_OBSERVATIONS_PER_ENTITY from the environment or the default."
         import_observation_duplicate_max_distance:
           label: "Observation duplicate distance"
-          description: "Maximum semantic distance for treating imported observation text as an existing fact."
+          description: "Maximum semantic distance for treating imported observation text as an existing fact. 0.20 is strict and only skips very close paraphrases. 0.50 is broad and may suppress distinct facts. Imports requiring semantic checks are rejected if embeddings are unavailable."
         project_scan_subfolders:
           label: "Subfolder filter"
-          description: "Folders inside the scan folder that may be scanned, relative to it (for example: Projects, work/clients), separated by commas or newlines. An absolute path under the scan folder is stored relative."
+          description: "Folders inside the scan folder that may be scanned, relative to it (for example: Projects, work/clients), separated by commas or newlines. An absolute path under the scan folder is stored relative. Takes effect immediately for new scans, no restart. A folder that doesn't exist yet is saved and shown as missing."
         enable_project_scan_validation:
           label: "Enable project scan validation"
           description: "When enabled, every project scan finishes with an automatic facts-checking pass over the existing project subtree. Mis-assigned observations and stale relations are either repaired automatically or queued as scan_review items."
         project_scan_validation_batch_size:
           label: "Validation batch size"
-          description: "Maximum number of project subtree entities to validate in one batch. When the value is greater than 0, the validation pass pauses after each batch and can be resumed by re-running a validate scan. Use 0 to process all entities in a single run."
+          description: "Maximum number of project subtree entities to validate in one batch. When the value is greater than 0, the validation pass pauses after each batch and can be resumed by re-running a validate scan. Use 0 to process all entities in a single run. 0 disables batching (process the whole subtree in one run). A value of 5-10 lets an agent digest the review queue in small, resumable rounds."
         tool_invocation_retention_days:
           label: "Tool telemetry retention (days)"
           description: "Tool invocation rows older than this are deleted by daily garbage collection. Use 0 to disable automatic telemetry pruning."
@@ -198,9 +202,7 @@ en:
           modified: "Modified"
           actions: "Actions"
       embeddings:
-        blank_uses_env: "Leave blank to use ENV"
         used_when_blank: "Used when blank:"
-        provider_blank: "— use ENV / default —"
         priority_hint: "Configuration priority: AppSettings (this tab) → environment variables → built-in defaults. Workers pick up changes after save."
         manage_link: "Open embeddings dashboard"
         test_title: "Connection test"
@@ -208,9 +210,7 @@ en:
         invalid_dims: "Dimensions must be 0 (use ENV/default) or between 1 and 4096."
         invalid_url: "Embedding URL must be a valid http or https URL."
       summaries:
-        blank_uses_env: "Leave blank to use ENV"
         used_when_blank: "Used when blank:"
-        provider_blank: "— use ENV / default —"
         priority_hint: "Configuration priority: AppSettings (this tab) → environment variables → built-in defaults. Changes apply on the next summarize request."
         deterministic_hint: "When LLM summarization is disabled or unavailable, summarize returns deterministic extractive evidence with source IDs."
         invalid_provider: "Invalid summary provider. Use ollama or openai_compatible."
@@ -219,10 +219,8 @@ en:
         invalid_observations_per_entity: "Observations per entity must be 0 (use ENV/default) or between 0 and 100."
         invalid_url: "Summary URL must be a valid http or https URL."
       imports:
-        distance_hint: "0.20 is strict and only skips very close paraphrases. 0.50 is broad and may suppress distinct facts. Imports requiring semantic checks are rejected if embeddings are unavailable."
         invalid_observation_duplicate_max_distance: "Observation duplicate distance must be between 0.20 and 0.50."
       project_scans:
-        subfolders_hint: "Takes effect immediately for new scans, no restart. A folder that doesn't exist yet is saved and shown as missing."
         invalid_subfolders: "Subfolder filter not saved: %{errors}."
         whole_home: "The filter is blank, so the whole scan folder is scannable (hidden folders and secret files are still blocked)."
         folders_title: "Scan folders"
@@ -249,4 +247,3 @@ en:
         blocked_hint: "These can never be scanned, whatever the settings say."
         blocked_folders: "Folders:"
         blocked_files: "Files inside a project:"
-        batch_size_hint: "0 disables batching (process the whole subtree in one run). A value of 5-10 lets an agent digest the review queue in small, resumable rounds."

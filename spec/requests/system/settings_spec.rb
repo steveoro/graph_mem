@@ -36,7 +36,7 @@ RSpec.describe "System › Settings", type: :request do
       get system_settings_path
 
       expect(response).to have_http_status(:ok)
-      expect(response.body).to include("System Settings")
+      expect(response.body).to include("Settings", "Feature flags, embeddings")
       expect(response.body).to include("Dream state / compactor")
     end
 
@@ -142,8 +142,7 @@ RSpec.describe "System › Settings", type: :request do
               }
             }
 
-      expect(response).to redirect_to(system_settings_path(tab: "embeddings"))
-      follow_redirect!
+      expect(response).to have_http_status(:unprocessable_content)
       expect(response.body).to include("Invalid embedding provider")
     end
 
@@ -208,8 +207,7 @@ RSpec.describe "System › Settings", type: :request do
               }
             }
 
-      expect(response).to redirect_to(system_settings_path(tab: "summaries"))
-      follow_redirect!
+      expect(response).to have_http_status(:unprocessable_content)
       expect(response.body).to include("Invalid summary provider")
     end
 
@@ -222,8 +220,7 @@ RSpec.describe "System › Settings", type: :request do
               }
             }
 
-      expect(response).to redirect_to(system_settings_path(tab: "summaries"))
-      follow_redirect!
+      expect(response).to have_http_status(:unprocessable_content)
       expect(response.body).to include("Observations per entity must be")
     end
 
@@ -260,8 +257,7 @@ RSpec.describe "System › Settings", type: :request do
               }
             }
 
-      expect(response).to redirect_to(system_settings_path(tab: "imports"))
-      follow_redirect!
+      expect(response).to have_http_status(:unprocessable_content)
       expect(response.body).to include("Observation duplicate distance must be between 0.20 and 0.50")
     end
 
@@ -301,7 +297,7 @@ RSpec.describe "System › Settings", type: :request do
     it "rejects bad entries one by one and keeps the old value" do
       with_scan_home do
         save_subfolders("../x, /etc, .ssh, Projects/.git")
-        follow_redirect!
+        expect(response).to have_http_status(:unprocessable_content)
 
         expect(response.body).to include("../x contains", "/etc is outside the scan root", ".ssh is inside a hidden",
                                          "Projects/.git is inside a hidden")

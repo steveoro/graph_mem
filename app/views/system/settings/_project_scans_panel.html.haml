@@ -1,17 +1,18 @@
-- group_key = local_assigns.fetch(:group_key)
+-# Settings › Project scans: the mounted scan folders, the fields, how each filter entry resolves,
+-# the legacy-roots clear button, the path check (GET /projects/scans/check_path) and the denylist.
 - status = ScanRootPolicy.status
 - legacy_roots = AppSettings.legacy_project_scan_roots
 
-.dashboard-settings-field{ data: { testid: "scan-folders" } }
-  %h3.dashboard-settings-field__label= t("system.settings.project_scans.folders_title")
+.system-panel__aside{ data: { testid: "scan-folders" } }
+  %h3.ui-label= t("system.settings.project_scans.folders_title")
   - unless status[:scans_switch]
-    %p.dashboard-alert--danger{ data: { testid: "scans-switched-off" } }= t("system.settings.project_scans.switched_off")
+    %p.system-error{ data: { testid: "scans-switched-off" } }= t("system.settings.project_scans.switched_off")
   - if status[:hard_roots].none? { |root| root[:error].nil? }
-    .dashboard-alert--danger{ data: { testid: "scans-not-configured" } }
+    .system-error{ data: { testid: "scans-not-configured" } }
       %p= t("system.settings.project_scans.nothing_mounted")
-      %pre= status[:compose_volume_line]
+      %pre.system-code= status[:compose_volume_line]
       %p= t("system.settings.project_scans.docs_hint")
-  %table.project-scans-table
+  %table.system-table
     %thead
       %tr
         %th= t("system.settings.project_scans.folder")
@@ -24,99 +25,53 @@
           %td
             %code= root[:path]
             - if root[:error]
-              %p.dashboard-alert--danger= root[:error]
+              %p.system-error= root[:error]
           %td= status[:mode] == "container" ? (root[:mounted] ? "✓" : "✗") : t("system.settings.project_scans.native")
           %td
             - case root[:read_only]
             - when true
-              %span.dashboard-badge.dashboard-badge--completed= t("system.settings.project_scans.read_only")
+              %span.ui-badge.ui-badge--completed= t("system.settings.project_scans.read_only")
             - when false
-              %span.dashboard-badge.dashboard-badge--paused= t("system.settings.project_scans.read_write")
+              %span.ui-badge.ui-badge--paused= t("system.settings.project_scans.read_write")
             - else
               = "—"
           %td= root[:readable] ? "✓" : "✗"
   - if status[:warnings].include?(:running_as_root)
-    %p.dashboard-alert--warning= t("system.settings.project_scans.running_as_root")
+    %p.system-warning= t("system.settings.project_scans.running_as_root")
 
-= form_with url: system_settings_path, method: :patch, local: true, class: "dashboard-settings-form" do
-  = hidden_field_tag :tab, group_key
+= render "system/settings/form", group: group
 
-  .dashboard-settings-field
-    %label.dashboard-settings-field__label{ for: "setting_project_scan_subfolders" }
-      = t("system.settings.fields.project_scan_subfolders.label")
-    %p.dashboard-settings-field__hint= t("system.settings.fields.project_scan_subfolders.description")
-    = text_area_tag "settings[project_scan_subfolders]",
-      AppSettings.project_scan_subfolders_raw,
-      id: "setting_project_scan_subfolders",
-      rows: 3,
-      class: "dashboard-settings-field__input",
-      data: { testid: "setting-project_scan_subfolders" }
-    %p.dashboard-settings-field__hint= t("system.settings.project_scans.subfolders_hint")
-    - if status[:warnings].include?(:whole_home_allowed)
-      %p.dashboard-alert--warning{ data: { testid: "whole-home-warning" } }= t("system.settings.project_scans.whole_home")
-    %ul{ data: { testid: "scan-subfolder-status" } }
-      - status[:subfolders].each do |entry|
-        %li
-          %code= entry[:input]
-          - if entry[:error]
-            %span.dashboard-badge.dashboard-badge--failed= t("system.settings.project_scans.rejected", reason: entry[:error])
-          - elsif entry[:exists]
-            %span.dashboard-badge.dashboard-badge--running= t("system.settings.project_scans.exists")
-          - else
-            %span.dashboard-badge.dashboard-badge--idle= t("system.settings.project_scans.missing")
-
-  .dashboard-settings-field
-    .flex.items-center.gap-2
-      = hidden_field_tag "settings[enable_project_scan_validation]", "0", id: nil
-      = check_box_tag "settings[enable_project_scan_validation]",
-        "1",
-        AppSettings.enable_project_scan_validation?,
-        id: "setting_enable_project_scan_validation",
-        class: "dashboard-settings-field__input",
-        data: { testid: "setting-enable_project_scan_validation" }
-      %label.dashboard-settings-field__label{ for: "setting_enable_project_scan_validation" }= t("system.settings.fields.enable_project_scan_validation.label")
-    %p.dashboard-settings-field__hint= t("system.settings.fields.enable_project_scan_validation.description")
-
-  .dashboard-settings-field
-    %label.dashboard-settings-field__label{ for: "setting_project_scan_validation_batch_size" }
-      = t("system.settings.fields.project_scan_validation_batch_size.label")
-    %p.dashboard-settings-field__hint= t("system.settings.fields.project_scan_validation_batch_size.description")
-    = number_field_tag "settings[project_scan_validation_batch_size]",
-      AppSettings.project_scan_validation_batch_size,
-      min: 0,
-      max: 1000,
-      id: "setting_project_scan_validation_batch_size",
-      class: "dashboard-settings-field__input",
-      data: { testid: "setting-project_scan_validation_batch_size" }
-    %p.dashboard-settings-field__hint= t("system.settings.project_scans.batch_size_hint")
-
-  .dashboard-card__actions
-    = submit_tag t("system.settings.save_group"),
-      class: "dashboard-btn dashboard-btn--primary",
-      data: { testid: "operator-settings-save-btn-project_scans" }
-    = link_to t("system.settings.reset"),
-      system_settings_path(tab: group_key),
-      class: "dashboard-btn dashboard-btn--secondary",
-      data: { testid: "operator-settings-reset-btn-project_scans" }
+.system-panel__aside
+  - if status[:warnings].include?(:whole_home_allowed)
+    %p.system-warning{ data: { testid: "whole-home-warning" } }= t("system.settings.project_scans.whole_home")
+  %ul.system-list{ data: { testid: "scan-subfolder-status" } }
+    - status[:subfolders].each do |entry|
+      %li
+        %code= entry[:input]
+        - if entry[:error]
+          %span.ui-badge.ui-badge--failed= t("system.settings.project_scans.rejected", reason: entry[:error])
+        - elsif entry[:exists]
+          %span.ui-badge.ui-badge--running= t("system.settings.project_scans.exists")
+        - else
+          %span.ui-badge.ui-badge--idle= t("system.settings.project_scans.missing")
 
 - if legacy_roots
-  .dashboard-alert--warning{ data: { testid: "legacy-scan-roots" } }
+  .system-warning{ data: { testid: "legacy-scan-roots" } }
     %p= t("system.settings.project_scans.legacy_ignored", value: legacy_roots)
-    = button_to t("system.settings.project_scans.legacy_clear"), system_clear_legacy_scan_roots_path,
-      method: :delete, class: "dashboard-btn dashboard-btn--secondary",
+    = button_to t("system.settings.project_scans.legacy_clear"), system_clear_legacy_scan_roots_path, method: :delete, class: "ui-btn",
       data: { testid: "clear-legacy-scan-roots" }
 
-.dashboard-settings-field{ data: { testid: "scan-check-path" } }
-  %h3.dashboard-settings-field__label= t("system.settings.project_scans.check_title")
-  = form_with url: check_path_projects_scans_path, method: :get, data: { turbo_frame: "scan-path-check" } do
-    = text_field_tag :path, nil, placeholder: "/home/you/Projects/app", class: "dashboard-settings-field__input",
-      data: { testid: "scan-check-path-input" }
-    = submit_tag t("system.settings.project_scans.check_button"), class: "dashboard-btn dashboard-btn--secondary"
+.system-panel__aside{ data: { testid: "scan-check-path" } }
+  %h3.ui-label= t("system.settings.project_scans.check_title")
+  = form_with url: check_path_projects_scans_path, method: :get, class: "system-inline-form", data: { turbo_frame: "scan-path-check" } do
+    = label_tag :path, t("system.settings.project_scans.check_title"), class: "system-sr-only"
+    = text_field_tag :path, nil, placeholder: "/home/you/Projects/app", class: "ui-input", data: { testid: "scan-check-path-input" }
+    = submit_tag t("system.settings.project_scans.check_button"), class: "ui-btn"
   = render "projects/scans/path_check", result: nil
 
-.dashboard-settings-field{ data: { testid: "scan-always-blocked" } }
-  %h3.dashboard-settings-field__label= t("system.settings.project_scans.blocked_title")
-  %p.dashboard-settings-field__hint= t("system.settings.project_scans.blocked_hint")
+.system-panel__aside{ data: { testid: "scan-always-blocked" } }
+  %h3.ui-label= t("system.settings.project_scans.blocked_title")
+  %p.system-hint= t("system.settings.project_scans.blocked_hint")
   %p
     %strong= t("system.settings.project_scans.blocked_folders")
     = status[:denylist][:root_folders].join(", ")

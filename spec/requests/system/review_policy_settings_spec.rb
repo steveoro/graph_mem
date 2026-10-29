@@ -47,11 +47,12 @@ RSpec.describe "Settings › Review policies", type: :request do
       expect(AppSettings.review_number(:auto_apply_relationship_min_confidence)).to eq(0.85)
     end
 
-    it "validates review settings carried by another tab too" do
-      save(tab: "telemetry", "review_backlog_ceiling" => "10")
+    it "ignores review settings posted under another tab (only the posted group is saved)" do
+      save(tab: "telemetry", "review_backlog_ceiling" => "10", "tool_invocation_retention_days" => "40")
 
-      expect(response).to have_http_status(:unprocessable_content)
+      expect(response).to redirect_to(system_settings_path(tab: "telemetry"))
       expect(AppSettings.review_number(:review_backlog_ceiling)).to eq(300)
+      expect(AppSettings.uncached_string("tool_invocation_retention_days")).to eq("40")
     end
 
     it "writes one audit row per changed key, shown on the audit log page" do

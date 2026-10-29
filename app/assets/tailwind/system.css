@@ -1,0 +1,148 @@
+/* System (UI-7): settings, backups, health, access, activity, audit log, telemetry, embeddings and
+   background jobs. Replaces dashboard.css. Imported by application.css. */
+@layer components {
+  .system-page {
+    display: grid;
+    gap: 1rem;
+  }
+
+  .system-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+    border-bottom: 1px solid var(--color-ui-border);
+  }
+
+  .system-tabs__tab {
+    padding: 0.5rem 0.75rem;
+    border-bottom: 2px solid transparent;
+    color: var(--color-ui-text-muted);
+    font-size: 0.875rem;
+    font-weight: 500;
+    text-decoration: none;
+  }
+
+  .system-tabs__tab[aria-current="page"] {
+    border-bottom-color: var(--color-ui-accent);
+    color: var(--color-ui-text);
+  }
+
+  .system-panel,
+  .system-form {
+    display: grid;
+    gap: 1rem;
+  }
+
+  .system-panel__aside {
+    display: grid;
+    gap: 0.5rem;
+  }
+
+  .system-field--invalid .ui-input {
+    border-color: var(--color-ui-danger);
+  }
+
+  .system-switch {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+  }
+
+  .system-switch__input {
+    width: 1.125rem;
+    height: 1.125rem;
+  }
+
+  .system-slider {
+    display: flex;
+    gap: 0.75rem;
+    align-items: center;
+  }
+
+  .system-slider__value {
+    font-variant-numeric: tabular-nums;
+  }
+
+  .system-hint {
+    margin: 0;
+    color: var(--color-ui-text-muted);
+    font-size: 0.8125rem;
+  }
+
+  .system-error,
+  .system-warning {
+    margin: 0;
+    padding: 0.5rem 0.75rem;
+    border-radius: var(--radius-ui);
+    font-size: 0.875rem;
+  }
+
+  .system-error {
+    background: var(--color-ui-danger-soft);
+    color: var(--color-ui-danger);
+  }
+
+  .system-warning {
+    background: var(--color-ui-warn-soft);
+    color: var(--color-ui-warn);
+  }
+
+  .system-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: center;
+  }
+
+  .system-inline-form {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+  }
+
+  .system-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.875rem;
+  }
+
+  .system-table th,
+  .system-table td {
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--color-ui-border);
+    text-align: left;
+    vertical-align: top;
+  }
+
+  .system-table th {
+    background: var(--color-ui-surface-muted);
+    font-weight: 600;
+  }
+
+  .system-table-wrap {
+    overflow-x: auto;
+  }
+
+  .system-list {
+    margin: 0;
+    padding-left: 1.25rem;
+  }
+
+  .system-code {
+    overflow-x: auto;
+    padding: 0.75rem;
+    border-radius: var(--radius-ui);
+    background: var(--color-ui-surface-muted);
+    font-size: 0.8125rem;
+    white-space: pre-wrap;
+  }
+
+  .system-sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+  }
+}
