@@ -156,9 +156,10 @@ class EntityMergePreview
     seen = root_ids.uniq
     frontier = seen
     while frontier.any? && seen.size <= SUBTREE_CAP
-      children = MemoryRelation.where(relation_type: "part_of", to_entity_id: frontier)
-                               .limit(SUBTREE_CAP + 2 - seen.size).pluck(:from_entity_id)
-      frontier = children.uniq - seen
+      # Only ids not seen yet, once each, so the LIMIT counts new entities rather than rows (a
+      # child part_of two frontier parents, or seen a level up, would use it up otherwise).
+      frontier = MemoryRelation.where(relation_type: "part_of", to_entity_id: frontier).where.not(from_entity_id: seen)
+                               .distinct.limit(SUBTREE_CAP + 2 - seen.size).pluck(:from_entity_id)
       seen += frontier
     end
     [ seen.size, SUBTREE_CAP + 1 ].min

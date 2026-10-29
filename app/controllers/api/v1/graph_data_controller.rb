@@ -90,8 +90,8 @@ module Api
       end
 
       # An entity and its neighbours, one or two hops out. Each hop reads at most MAX_NODES + 1
-      # distinct ids per direction and the walk stops once past the cap, so a hub never loads its
-      # whole neighbourhood (and the second hop's IN list stays bounded).
+      # distinct ids per direction, lowest first, and the walk stops once past the cap, so a hub
+      # never loads its whole neighbourhood (and the second hop's IN list stays bounded).
       def render_subgraph(entity_id)
         focus = MemoryEntity.find(entity_id)
         ids = [ focus.id ]
@@ -106,7 +106,7 @@ module Api
       end
 
       def neighbour_ids(frontier, from_column, to_column)
-        MemoryRelation.where(from_column => frontier).distinct.limit(MAX_NODES + 1).pluck(to_column)
+        MemoryRelation.where(from_column => frontier).distinct.order(to_column).limit(MAX_NODES + 1).pluck(to_column)
       end
 
       # Keeps `keep` (the focus) and the lowest ids up to MAX_NODES.

@@ -29,7 +29,7 @@
   %section.entity-panel__section{ data: { testid: "entity-panel-observations" } }
     %h3.entity-panel__heading= t("entity_panel.observations")
     - if can_write?
-      = render "entities/add_observation", entity: entity, state: state
+      = render "entities/add_observation", entity: entity, panel: panel, state: state
     - if panel.observations.empty?
       %p.entity-panel__empty= t("entity_panel.no_observations")
     - else

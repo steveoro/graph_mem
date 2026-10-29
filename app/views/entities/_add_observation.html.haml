@@ -11,8 +11,14 @@
       - if state[:duplicate_id] && (duplicate = MemoryObservation.find_by(id: state[:duplicate_id]))
         %p.entity-panel__meta{ data: { testid: "entity-panel-duplicate" } }
           = t("explore.panel.duplicate_of", content: duplicate.content.to_s.truncate(200))
-          -# The observations on this page carry their id as an anchor.
-          = link_to t("explore.panel.show_duplicate"), "#observation-#{duplicate.id}", data: { turbo: false, testid: "entity-panel-duplicate-link" }
+          -# The observations carry their id as an anchor; a duplicate on another page opens that page in the panel.
+          - duplicate_page = panel.page_of(duplicate)
+          - if duplicate_page == panel.page
+            = link_to t("explore.panel.show_duplicate"), "#observation-#{duplicate.id}", data: { turbo: false, testid: "entity-panel-duplicate-link" }
+          - else
+            = link_to t("explore.panel.show_duplicate"),
+              entity_panel_path(entity, page: duplicate_page, obsolete: (panel.include_obsolete ? "1" : nil), anchor: "observation-#{duplicate.id}"),
+              data: { turbo_frame: "entity-panel", testid: "entity-panel-duplicate-link" }
       - if state[:similar]
         %p.entity-panel__meta{ data: { testid: "entity-panel-similar" } }= t("explore.panel.similar_to", content: state[:similar][:content].to_s.truncate(200))
     = form.label :content, t("explore.panel.observation_text"), class: "ui-label"

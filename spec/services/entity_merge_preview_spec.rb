@@ -80,6 +80,25 @@ RSpec.describe EntityMergePreview do
     expect(move.count_label).to eq("1+")
   end
 
+  it "counts new ids, not part_of rows, so a child with two moving parents can't hide another" do
+    stub_const("#{described_class}::SUBTREE_CAP", 10)
+    sibling = MemoryEntity.create!(name: "Synth Gear", entity_type: "Component", project_id: alpha.id)
+    MemoryRelation.create!(from_entity: sibling, to_entity: source, relation_type: "part_of")
+    shared = Array.new(5) { |i| MemoryEntity.create!(name: "Synth Shared #{i}", entity_type: "Component", project_id: alpha.id) }
+    shared.each { |entity| MemoryRelation.create!(from_entity: entity, to_entity: child, relation_type: "part_of") }
+    # A second part_of parent: the model refuses it now, but older rows can have one (ProjectSubtree allows it).
+    MemoryRelation.insert_all!(shared.map { |entity| { from_entity_id: entity.id, to_entity_id: sibling.id, relation_type: "part_of" } })
+    late = MemoryEntity.create!(name: "Synth Late", entity_type: "Component", project_id: alpha.id)
+    MemoryRelation.create!(from_entity: late, to_entity: sibling, relation_type: "part_of")
+
+    move = described_class.new(source.id, target.id).call.project_moves.sole
+
+    expect(move.count_label).to eq("9") # child, sibling, grandchild, 5 shared, late
+
+    stub_const("#{described_class}::SUBTREE_CAP", 5)
+    expect(described_class.new(source.id, target.id).call.project_moves.sole.count_label).to eq("5+")
+  end
+
   it "reports blockers" do
     expect(described_class.new(source.id, router.id).call.blockers.sole).to include("different types")
     expect(described_class.new(source.id, source.id).call.blockers).to eq([ "Cannot merge a node into itself" ])
