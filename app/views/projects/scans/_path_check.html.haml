@@ -1,4 +1,6 @@
-= turbo_frame_tag "scan-path-check" do
+-# What ScanRootPolicy would do with a path. Two callers show the same result: the scan form's
+-# live check (path_check_controller.js) and Settings › Project scans.
+= turbo_frame_tag "scan-path-check", data: { path_check_target: "frame" } do
   - if result
     - if result.ok?
       %p{ data: { testid: "scan-check-result", code: result.code } }

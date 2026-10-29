@@ -10,7 +10,13 @@ module Projects
   class BaseController < ApplicationController
     class_attribute :nav_section, instance_writer: false, default: :projects
 
+    rescue_from ActiveRecord::RecordNotFound, with: :render_not_found
+
     private
+
+    def render_not_found(_error = nil)
+      render "projects/not_found", status: :not_found
+    end
 
     # @return [Boolean] whether `raw` is a UUID (operation and import-session ids are), so it can
     #   be looked up or joined into a temp-file name safely

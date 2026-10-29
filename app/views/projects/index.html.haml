@@ -28,7 +28,7 @@
               - if (scan = row.last_scan)
                 = link_to projects_scan_path(scan.operation_id), class: "projects-op" do
                   = dashboard_status_badge(scan.status)
-                  %span= scan.details&.dig("mode") || t("projects.scans.guided")
+                  %span= projects_scan_kind(scan)
                   %span.projects-muted= t("projects.ago", time: time_ago_in_words(scan.created_at))
               - else
                 %span.projects-muted= t("projects.index.never")

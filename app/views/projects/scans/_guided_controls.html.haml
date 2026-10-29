@@ -1,0 +1,10 @@
+-# Continue / Stop for a guided scan; operation_progress_controller.js shows the ones that fit the
+-# live status (data-progress-visible-for).
+- status = scan.status.to_s
+.projects-actions{ data: { testid: "scan-guided-controls" } }
+  %span{ data: { progress_action: true, progress_visible_for: "paused" }, style: ("display: none" unless status == "paused") }
+    = button_to t("projects.scans.show.continue"), projects_scan_skill_path(scan.operation_id, skill_action: "continue"), method: :patch,
+      class: "ui-btn ui-btn-primary", data: { testid: "scan-continue" }
+  %span{ data: { progress_action: true, progress_visible_for: "running pending paused" }, style: ("display: none" unless status.in?(%w[running pending paused])) }
+    = button_to t("projects.scans.show.stop"), projects_scan_skill_path(scan.operation_id, skill_action: "stop"), method: :patch,
+      class: "ui-btn", data: { testid: "scan-stop", turbo_confirm: t("projects.scans.show.stop_confirm") }
