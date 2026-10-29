@@ -96,7 +96,7 @@ See [app_settings_reference.md](app_settings_reference.md) for details.
 
 ## Operator controls
 
-The maintenance hub (`/maintenance`, Background jobs) includes a **Garbage Collector** card showing:
+**Projects & Data › Background jobs** (`/projects/jobs`) includes a **Garbage Collector** card showing:
 
 - Counts from the latest `orphans` and `duplicates` reports
 - Timestamps of the last run per report type
@@ -111,7 +111,7 @@ Garbage collector output is readable through maintenance APIs:
 - **MCP:** `get_maintenance_reports` with `report_type: "orphans"` or `"duplicates"`
 - **REST:** `MaintenanceController` endpoints (see [api/rest_api_reference.md](api/rest_api_reference.md))
 
-There is no dedicated MCP tool to *trigger* garbage collection; use **Run now** on the maintenance hub or enqueue `GarbageCollectionJob` from the Rails console.
+There is no dedicated MCP tool to *trigger* garbage collection; use **Run now** on Background jobs or enqueue `GarbageCollectionJob` from the Rails console.
 
 ## Report retention
 
@@ -134,8 +134,8 @@ Use the garbage collector for periodic **visibility** into graph health. Use dre
 
 ## Typical operator workflow
 
-1. Review the Garbage Collector card's stat chips on the maintenance hub after the daily run (or click **Run now**).
-2. For orphan reports, inspect sample entities in the maintenance hub's reports panel or via `get_maintenance_reports`.
+1. Review the Garbage Collector card's stat chips on Background jobs after the daily run (or click **Run now**).
+2. For orphan reports, inspect sample entities in Background jobs' reports panel or via `get_maintenance_reports`.
 3. Decide whether to delete empty stray nodes (web UI / `delete_entity`) or attach them to a project (`merge_entities`, relation tools, or let dream-state handle high-confidence matches).
 4. For duplicate reports, the GC has already removed duplicates; review the report if any edge cases remain.
 5. Audit log pruning requires no action; it runs automatically every GC pass.

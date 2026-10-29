@@ -38,7 +38,7 @@ CompactionValve     ←── cooperative pause from MCP tools
 | ------------------------- | ----------------------------------------- | ------------------------------------------------------------------------- |
 | `DreamStateCompactionJob` | `app/jobs/dream_state_compaction_job.rb`  | Processes one batch per invocation; re-enqueues itself while work remains |
 | `DreamStateCompactor`     | `app/strategies/dream_state_compactor.rb` | Core compaction logic for each phase                                      |
-| `CompactionRunner`        | `app/services/compaction_runner.rb`       | Starts/resumes runs; exposes `status_snapshot` for MCP, Home and the maintenance hub      |
+| `CompactionRunner`        | `app/services/compaction_runner.rb`       | Starts/resumes runs; exposes `status_snapshot` for MCP, Home and Background jobs      |
 | `CompactionRun`           | `app/models/compaction_run.rb`            | Persists run state, cursor, and cumulative stats                          |
 | `CompactionTraversal`     | `app/strategies/compaction_traversal.rb`  | Deterministic entity ordering per phase                                   |
 | `CompactionValve`         | `app/services/compaction_valve.rb`        | Requests cooperative pause when MCP tools need the graph                  |
@@ -146,7 +146,7 @@ When a compaction run is `running`:
 2. The compactor checks the flag after each entity in the current batch; if set, it flushes pending review items, pauses the run, and yields.
 3. The valve polls up to **3 seconds** for the run to reach `paused` status.
 
-Operators can also pause manually from the maintenance hub (`POST /operator/maintenance/pause_compaction`).
+Operators can also pause manually from **Projects & Data › Background jobs** (`/projects/jobs`, which posts to `POST /operator/maintenance/compaction/pause`).
 
 Paused runs resume from `cursor_entity_id` on the next scheduled job or when an operator clicks **Start / Resume**.
 
@@ -165,7 +165,7 @@ Items that are not safe to apply automatically are batched into `MaintenanceRepo
 Reports are flushed at the end of each batch and when advancing phases. Read them via:
 
 - **MCP:** `get_maintenance_reports(report_type: "compaction_review")`
-- **Maintenance hub:** Dream State card → "Compaction review queue" details
+- **Projects & Data › Background jobs:** Dream State card → "Compaction review queue" details
 
 To action a queued merge: inspect the report, then call `graph_delete` with a
 `merge_entities` operation.
@@ -236,7 +236,7 @@ Configure under **Operator → System Settings → Feature Flags**.
 
 ## Operator controls
 
-The maintenance hub's **Dream State / Compactor Run** card (`/maintenance`, Background jobs) shows:
+The **Dream State / Compactor Run** card on **Projects & Data › Background jobs** (`/projects/jobs`; the Maintenance hub that held it until 1.62.0 is gone) shows:
 
 - Run status badge (`idle`, `running`, `paused`, `completed`, `failed`)
 - Phase stepper (`orphans` → `tree_walk` → `relationship_discovery`)
