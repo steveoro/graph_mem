@@ -4,9 +4,9 @@ GraphMem stores operator-tunable runtime settings in the primary MariaDB `settin
 
 ## Operator UI
 
-- **URL:** `/system/settings` (one tab per group); the backup group is on `/system/backups`. The groups, labels, types, ranges and validators all come from `SettingsSchema` (`app/services/settings_schema.rb`), and a save writes only the posted group's keys: an invalid value answers `422` with the field marked and nothing saved. `project_scan_roots` is the one legacy key in no group (`SettingsSchema::LEGACY_KEYS`). The old `/operator/settings` URL redirects (301) until §6.D-6.
+- **URL:** `/system/settings` (one tab per group); the backup group is on `/system/backups` and the access group on `/system/access`. The groups, labels, types, ranges and validators all come from `SettingsSchema` (`app/services/settings_schema.rb`), and a save writes only the posted group's keys: an invalid value answers `422` with the field marked and nothing saved. `project_scan_roots` is the one legacy key in no group (`SettingsSchema::LEGACY_KEYS`). The old `/operator/settings` URL redirects (301) until §6.D-6.
 - **Auth:** session login at `/operator/login` (`OPERATOR_USERNAME` / `OPERATOR_PASSWORD`, or `credentials.operator.username` / `credentials.operator.password`). The same form signs in the optional read-only guest (see `enable_guest_access` below); guests can't open the settings.
-- **Tabs:** Feature Flags, Embeddings, Summaries, Imports, Project Scans, Telemetry & retention, Review policies, Access. **Backups** has its own page.
+- **Tabs:** Feature Flags, Embeddings, Summaries, Imports, Project Scans, Telemetry & retention, Review policies. **Backups** and **Access** have their own pages.
 
 ## Feature Flags
 
@@ -17,7 +17,7 @@ GraphMem stores operator-tunable runtime settings in the primary MariaDB `settin
 | `enable_stale_memory_scan` | `true` | **Stale memory scan.** When `false`, the scheduled scan that flags stale observations for review is skipped. |
 | `enable_contradiction_detection` | `true` | **Contradiction detection.** When `false`, the contradiction detector (in the stale memory scan and the `detect_contradictions` endpoint) finds no pairs. |
 
-`enable_guest_access` is on the **Access** tab (see [MCP Access](#mcp-access)).
+`enable_guest_access` is on **System › Access** (see [MCP Access](#mcp-access)).
 
 Boolean flags consumed by background workers use direct database reads so Solid Queue processes see UI changes without restart.
 
@@ -91,9 +91,9 @@ Every scan entry point (dashboard, `POST /api/v1/scan`, MCP `scan_project`, job 
 
 ## MCP Access
 
-On the **Access** tab, with `enable_guest_access` (`true`: lets the read-only guest sign in; no effect until a guest password is set in `GRAPH_MEM_GUEST_PASSWORD` or credentials `guest.password`; when `false`, signed-in guests are signed out on their next request).
+On **System › Access** (`/system/access`), under the access status rows, with `enable_guest_access` (`true`: lets the read-only guest sign in; no effect until a guest password is set in `GRAPH_MEM_GUEST_PASSWORD` or credentials `guest.password`; when `false`, signed-in guests are signed out on their next request).
 
-Additive parts of the three MCP allowlists (UI-2a). Each adds to its ENV variable, which the tab shows as read-only text and which can't be removed here. Read uncached by `GraphMem::McpAccessLists`; a save applies at once through `OfficialMcp.refresh_access!` (a hosts or origins change also closes open MCP sessions). Validated on save (any refused entry: `422`, nothing saved) and audited per changed key. Not secrets. See [MCP access control](mcp_access_control.md#adding-entries-at-runtime-settings--access).
+Additive parts of the three MCP allowlists (UI-2a). Each adds to its ENV variable, which the tab shows as read-only text and which can't be removed here. Read uncached by `GraphMem::McpAccessLists`; a save applies at once through `OfficialMcp.refresh_access!` (a hosts or origins change also closes open MCP sessions). Validated on save (any refused entry: `422`, nothing saved) and audited per changed key. Not secrets. See [MCP access control](mcp_access_control.md#adding-entries-at-runtime-system--access).
 
 | Setting | Default | Effect |
 |---|---|---|

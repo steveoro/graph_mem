@@ -28,7 +28,7 @@ This guide addresses common issues you might encounter when working with GraphMe
    - The MCP endpoint's DNS-rebinding protection accepts only `localhost`, `127.0.0.1` and `::1`
      in the `Host` header by default. A client reaching the server by another address or name
      (another machine on the LAN, a container name) gets `403`: add that host to
-     `GRAPH_MEM_MCP_ALLOWED_HOSTS` (any port, or `host:port`) or in Settings › Access.
+     `GRAPH_MEM_MCP_ALLOWED_HOSTS` (any port, or `host:port`) or in System › Access.
    - A browser-based client whose `Origin` is not the server's own gets `403` too: add its exact
      `scheme://host:port` to `GRAPH_MEM_MCP_ALLOWED_ORIGINS`. Non-browser clients send no `Origin`.
    - A browser client blocked by CORS (the console reports a missing `Access-Control-Allow-Origin`
@@ -44,7 +44,7 @@ This guide addresses common issues you might encounter when working with GraphMe
      `http://192.168.1.10:3030/mcp`) isn't a loopback name and isn't listed, so the DNS-rebinding
      check refuses it.
    - Fixes, in order: start the stack with `bin/up`, which lists the host's name, `<name>.local` and
-     LAN address; or add the name or address in Settings › Access (applies at once, no
+     LAN address; or add the name or address in System › Access (applies at once, no
      restart); or set `GRAPH_MEM_MCP_ALLOWED_HOSTS` in `.env`.
    - Follow-up symptom: after setting `GRAPH_MEM_MCP_ALLOWED_IPS` to a subnet, `localhost` stops
      working. A custom IP list replaces the defaults: include `127.0.0.0/8,::1` (and
