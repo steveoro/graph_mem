@@ -10,6 +10,8 @@
           = label
           - if count&.positive?
             %span.ui-badge= count
+  %p
+    = link_to "Find & supersede", review_supersede_path, class: "review-rail__link", data: { testid: "review-find-supersede" }
   .review-rail__actions
     = button_to "Run policies now", review_run_policies_path, method: :post, class: "ui-btn", data: { testid: "review-run-policies" }
     %details

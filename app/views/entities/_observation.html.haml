@@ -32,6 +32,9 @@
     = button_to t("explore.panel.retire"), retire_explore_observation_path(observation), method: :post,
       class: "ui-btn entity-panel__inline-action", form: { data: { turbo_stream: true } },
       data: { testid: "entity-panel-retire" }
+    - if observation.fact_tagged?
+      = link_to t("explore.panel.find_outdated"), review_supersede_path(project_id: observation.fact_project_id, fact_id: observation.id),
+        class: "ui-btn entity-panel__inline-action", data: { turbo_frame: "_top", testid: "entity-panel-find-outdated" }
     - if observation.fact_tagged? || observation.fact_project_id
       = button_to (observation.fact_tagged? ? t("explore.panel.unmark_fact") : t("explore.panel.mark_fact")),
         fact_explore_observation_path(observation, mark: observation.fact_tagged? ? "0" : "1"), method: :post,

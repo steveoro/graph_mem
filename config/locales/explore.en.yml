@@ -59,6 +59,7 @@ en:
       unmark_fact: "Unmark source fact"
       source_fact: "Source fact"
       outdated_by: "Outdated by:"
+      find_outdated: "Find what this outdates"
       remove_relation: "Remove"
       remove_relation_confirm: "Remove the relation “%{relation}”? You can undo it from the toast."
       recent_changes: "Recent changes"

@@ -1,0 +1,31 @@
+- content_for :title, "Find & supersede"
+- content_for :page_header, ui_page_header("Find & supersede", subtitle: "Search observations in a project, pick, and supersede or retire them as one undoable change. A bulk change never crosses projects.")
+
+.system-page{ data: { testid: "supersede-page" } }
+  %p= link_to "← Review & Fix", review_path
+  = form_with url: review_supersede_path, method: :get, class: "ui-card ui-form", data: { turbo_frame: "_top", testid: "supersede-search" } do
+    = label_tag :q, "Search text", class: "ui-label"
+    = search_field_tag :q, @search.q, class: "ui-input", maxlength: SourceFact::TERM_LENGTH.max
+    = label_tag :project_id, "Project", class: "ui-label"
+    = select_tag :project_id, options_for_select([ [ "Choose a project", "" ], *@projects, [ "All projects (view only)", FactSupersede::Search::ALL_PROJECTS ] ],
+      params[:project_id]), class: "ui-input"
+    - if @search.project
+      = label_tag :fact_id, "Source fact (optional)", class: "ui-label"
+      = select_tag :fact_id, options_for_select([ [ "None: match the text only", "" ], *@search.facts.map { |fact| [ fact.content.truncate(90), fact.id ] } ],
+        @search.fact&.id), class: "ui-input"
+    %label
+      = check_box_tag :include_inactive, "1", @search.include_inactive
+      Include inactive (view only)
+    = submit_tag "Search", class: "ui-btn ui-btn-primary", name: nil
+
+  - if (missing = @search.missing)
+    %p.review-hint{ data: { testid: "supersede-missing" } }= missing
+  - else
+    - if @search.vector? == false
+      %p.review-hint{ data: { testid: "supersede-vector-off" } } Similarity search is off; matching text only.
+    - if @search.capped?
+      %p.review-hint= "Showing the first #{FactSupersede::Search::MAX_MATCHES} matches."
+    - if @entries.empty?
+      %p.review-hint{ data: { testid: "supersede-empty" } } Nothing matches.
+    - else
+      = render "review/supersede/results", search: @search, entries: @entries, rendered_at: @rendered_at
