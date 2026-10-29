@@ -136,13 +136,13 @@ class HomeSnapshot
 
     def mcp_pill
       policy = GraphMem::OfficialMcp.access_policy
-      pill(:mcp, policy.token_required? ? :ok : :neutral, policy.describe, system_settings_path(tab: "access"))
+      pill(:mcp, policy.token_required? ? :ok : :neutral, policy.describe, system_access_path)
     end
 
     def guest_pill
       status = GraphMem::GuestCredentials.current.status
       color = { available: :ok, conflict: :danger }.fetch(status, :neutral)
-      pill(:guest, color, I18n.t("home.health.values.guest.#{status}"), system_settings_path(tab: "access"))
+      pill(:guest, color, I18n.t("home.health.values.guest.#{status}"), system_access_path)
     end
   end
 end

@@ -9,6 +9,13 @@ RSpec.describe "System › Background jobs", type: :request do
 
   after { CompactionRun.delete_all; MaintenanceReport.delete_all }
 
+  it "shows the cards and links to the queue (Mission Control)" do
+    get system_jobs_path
+
+    expect(response).to have_http_status(:ok)
+    expect(response.body).to include('id="background-jobs"', 'data-testid="jobs-queue-link"', 'href="/system/queue"')
+  end
+
   describe "POST /system/jobs/compaction/start" do
     it "redirects when dream-state compactor is disabled" do
       AppSettings.enable_dream_state_compactor = false

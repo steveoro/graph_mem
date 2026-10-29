@@ -6,7 +6,7 @@ require "rails_helper"
 RSpec.describe "Navigation", type: :system do
   let(:operator_nav) do
     %w[nav-home nav-search nav-explore nav-review nav-scan-review nav-projects nav-scans nav-imports nav-exports
-       nav-settings nav-system-backups nav-audit-logs nav-telemetry nav-embeddings nav-system-background-jobs nav-jobs nav-api-docs]
+       nav-system-health nav-settings nav-system-backups nav-system-access nav-system-activity nav-audit-logs nav-telemetry nav-embeddings nav-system-background-jobs nav-jobs nav-api-docs]
   end
   let!(:widget) { MemoryEntity.create!(name: "SynthWidget", entity_type: "Component") }
   let!(:gadget) { MemoryEntity.create!(name: "SynthGadget", entity_type: "Component") }

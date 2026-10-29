@@ -1,5 +1,7 @@
 - content_for :title, t("system.jobs.title")
-- content_for :page_header, ui_page_header(t("system.jobs.title"), subtitle: t("system.jobs.subtitle"))
+- content_for :page_header do
+  = ui_page_header(t("system.jobs.title"), subtitle: t("system.jobs.subtitle")) do
+    = link_to t("system.jobs.queue_link"), mission_control_jobs_path, class: "ui-btn", data: { turbo: false, testid: "jobs-queue-link" }
 - snapshot = @snapshot
 - totals = snapshot.dig(:graph_stats, :totals)
 

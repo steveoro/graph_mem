@@ -53,6 +53,7 @@ module System
       case group.page
       when :settings then system_settings_path(tab: group.key)
       when :backups then system_backups_path
+      when :access then system_access_path
       else system_settings_path
       end
     end

@@ -61,3 +61,39 @@ en:
         root_read_write: "read-write (use :ro)"
         migrations_current: "up to date"
         migrations_pending: "pending: run db:migrate"
+    access:
+      title: "Access"
+      subtitle: "Who can sign in and reach /mcp. Credentials show only as configured or not, never their value."
+      status_label: "Access status"
+      rows:
+        operator: "Operator credentials"
+        guest: "Read-only guest"
+        mcp_token: "MCP bearer token"
+        sessions: "Session lifetimes"
+      operator:
+        configured: "configured"
+        fallback: "not configured: the default password is in use (refused in production)"
+        fallback_refused: "not configured: production refuses the default password, so nobody can sign in"
+      guest:
+        not_configured: "not configured: no guest password is set"
+        conflict: "turned off: the guest's username or password equals the operator's"
+        disabled: "configured, but turned off below"
+        available: "available: the guest can sign in"
+      mcp_token:
+        required: "configured: every /mcp request needs the bearer token"
+        not_required: "not configured: /mcp is unauthenticated (only the allowed IP ranges limit it)"
+      sessions_value: "operator %{operator_idle} idle / %{operator_absolute} in all; guest %{guest_idle} idle / %{guest_absolute} in all"
+    activity:
+      title: "Activity"
+      subtitle: "Every change set, newest first, with Undo while it can still be undone."
+      audit_log: "Audit log"
+      empty: "No change has been recorded yet."
+      ago: "%{time} ago"
+      unknown_actor: "unknown"
+      undone: "undone"
+      undoable_until: "until %{time}"
+      columns:
+        when: "When"
+        change: "Change"
+        actor: "Who"
+        undo: "Undo"

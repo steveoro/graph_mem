@@ -38,7 +38,9 @@ RSpec.describe "Content Security Policy in the browser", type: :system do
       "Telemetry" => "/system/telemetry",
       "Audit log" => "/system/audit_log",
       "Settings" => "/system/settings",
-      "Settings › Access" => "/system/settings?tab=access",
+      "Health" => "/system/health",
+      "Access" => "/system/access",
+      "Activity" => "/system/activity",
       "Backups" => "/system/backups"
     }.each do |label, path|
       visit path
