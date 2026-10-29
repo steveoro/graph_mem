@@ -37,7 +37,7 @@
       %p{ data: { testid: "explore-merge-children" } }= t("explore.merges.children", count: preview.children.size, names: preview.children.first(5).map(&:name).join(", "))
     - preview.project_moves.each do |move|
       %p.explore-dialog__warn{ data: { testid: "explore-merge-project-move" } }
-        = t("explore.merges.project_move", count: move.count, from: move.from_name || t("explore.moves.global"), to: move.to_name || t("explore.moves.global"))
+        = t("explore.merges.project_move", count: move.count_label, from: move.from_name || t("explore.moves.global"), to: move.to_name || t("explore.moves.global"))
     - if preview.review_row_count.positive?
       %p.entity-panel__meta= t("explore.merges.review_rows", count: preview.review_row_count)
   .explore-dialog__actions

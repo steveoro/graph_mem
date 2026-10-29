@@ -52,10 +52,32 @@ RSpec.describe EntityMergePreview do
   it "changes its digest when the graph does, and only then" do
     digest = described_class.new(source.id, target.id).call.digest
     expect(described_class.new(source.id, target.id).call.digest).to eq(digest)
+    expect(described_class.new(source.id, target.id).digest).to eq(digest) # the lean digest the merge lock checks
 
     MemoryObservation.create!(memory_entity: source, content: "SynthWidget A added later.")
+    changed = described_class.new(source.id, target.id).digest
+    expect(changed).not_to eq(digest)
 
-    expect(described_class.new(source.id, target.id).call.digest).not_to eq(digest)
+    source.update!(aliases: "widget a, widget alpha") # changes the aliases the target would gain
+    expect(described_class.new(source.id, target.id).digest).not_to eq(changed)
+  end
+
+  it "computes the lean digest without samples, counts or subtree walks" do
+    queries = []
+    callback = ->(*, payload) { queries << payload[:sql] unless payload[:name] == "SCHEMA" || payload[:cached] }
+
+    ActiveSupport::Notifications.subscribed(callback, "sql.active_record") { described_class.new(source.id, target.id).digest }
+
+    expect(queries.grep(/maintenance_report_rows|LIMIT 5\b/)).to be_empty
+    expect(queries.grep(/relation_type` = 'part_of'/)).to be_empty
+  end
+
+  it "walks each moving project group once and caps the count it shows" do
+    stub_const("#{described_class}::SUBTREE_CAP", 1)
+
+    move = described_class.new(source.id, target.id).call.project_moves.sole
+
+    expect(move.count_label).to eq("1+")
   end
 
   it "reports blockers" do

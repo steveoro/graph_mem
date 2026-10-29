@@ -41,6 +41,6 @@ class EntityMergeService
 
   # Runs inside merge_into_once's lock and transaction, on the locked rows.
   def check_digest(source, target)
-    EntityMergePreview.new(source.id, target.id).call.digest == @digest ? nil : CONFLICT_MESSAGE
+    EntityMergePreview.new(source.id, target.id).digest == @digest ? nil : CONFLICT_MESSAGE
   end
 end
