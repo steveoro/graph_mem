@@ -155,7 +155,7 @@ RSpec.describe 'DataExchange', type: :request do
       it 'redirects to import review page' do
         post import_upload_data_exchange_index_path, params: { file: uploaded_file }
 
-        expect(response).to redirect_to(import_review_data_exchange_index_path)
+        expect(response).to redirect_to(%r{/projects/imports/\h{8}-\h{4}-\h{4}-\h{4}-\h{12}\z})
       end
 
       it 'stores import data in session' do
@@ -171,9 +171,8 @@ RSpec.describe 'DataExchange', type: :request do
       it 'redirects with error' do
         post import_upload_data_exchange_index_path
 
-        expect(response).to redirect_to(root_path)
-        follow_redirect!
-        expect(flash[:error]).to eq('Please select a file to import')
+        expect(response).to redirect_to(new_projects_import_path)
+        expect(flash[:alert]).to eq('Please select a file to import')
       end
     end
 
@@ -191,21 +190,19 @@ RSpec.describe 'DataExchange', type: :request do
       it 'redirects with error' do
         post import_upload_data_exchange_index_path, params: { file: uploaded_file }
 
-        expect(response).to redirect_to(root_path)
-        follow_redirect!
-        expect(flash[:error]).to include('Invalid JSON file')
+        expect(response).to redirect_to(new_projects_import_path)
+        expect(flash[:alert]).to include('Invalid JSON file')
       end
     end
   end
 
   describe 'GET /data_exchange/import_review' do
     context 'with no session data' do
-      it 'redirects to root with error' do
+      it 'redirects (301) to the upload page' do
         get import_review_data_exchange_index_path
 
-        expect(response).to redirect_to(root_path)
-        follow_redirect!
-        expect(flash[:error]).to include('No import data found')
+        expect(response).to have_http_status(:moved_permanently)
+        expect(response).to redirect_to(new_projects_import_path)
       end
     end
 
@@ -228,11 +225,13 @@ RSpec.describe 'DataExchange', type: :request do
         post import_upload_data_exchange_index_path, params: { file: uploaded_file }
       end
 
-      it 'renders the review page' do
+      it 'redirects (301) to the review page' do
         get import_review_data_exchange_index_path
+        expect(response).to have_http_status(:moved_permanently)
+        follow_redirect!
 
         expect(response).to have_http_status(:ok)
-        expect(response.body).to include('Import Review')
+        expect(response.body).to include('Import review')
       end
     end
 
@@ -250,6 +249,7 @@ RSpec.describe 'DataExchange', type: :request do
 
       it 'renders every <script> with a nonce and wires the match select to Stimulus' do
         get import_review_data_exchange_index_path
+        follow_redirect!
 
         page = Nokogiri::HTML(response.body)
         expect(page.css('script')).not_to be_empty
@@ -265,9 +265,8 @@ RSpec.describe 'DataExchange', type: :request do
       it 'redirects to root with error' do
         post import_execute_data_exchange_index_path
 
-        expect(response).to redirect_to(root_path)
-        follow_redirect!
-        expect(flash[:error]).to include('No import data found')
+        expect(response).to redirect_to(new_projects_import_path)
+        expect(flash[:alert]).to include('No import data found')
       end
     end
 
@@ -304,7 +303,7 @@ RSpec.describe 'DataExchange', type: :request do
           }
         }.to change(MemoryEntity, :count).by(1)
 
-        expect(response).to redirect_to(import_report_data_exchange_index_path)
+        expect(response).to redirect_to(%r{/projects/imports/\h{8}-\h{4}-\h{4}-\h{4}-\h{12}/report\z})
       end
 
       it 'creates observations' do
@@ -407,7 +406,7 @@ RSpec.describe 'DataExchange', type: :request do
           }
         }
 
-        expect(response).to redirect_to(import_report_data_exchange_index_path)
+        expect(response).to redirect_to(%r{/projects/imports/\h{8}-\h{4}-\h{4}-\h{4}-\h{12}/report\z})
 
         # Should not create new entity
         expect(MemoryEntity.where(name: 'Imported Project')).not_to exist
@@ -467,7 +466,7 @@ RSpec.describe 'DataExchange', type: :request do
           }
         }.to change(MemoryEntity, :count).by(2)  # Parent + new child (existing task is merged/skipped)
 
-        expect(response).to redirect_to(import_report_data_exchange_index_path)
+        expect(response).to redirect_to(%r{/projects/imports/\h{8}-\h{4}-\h{4}-\h{4}-\h{12}/report\z})
       end
 
       it 'scopes the imported members under the merge TARGET project, not by payload name' do
@@ -565,12 +564,11 @@ RSpec.describe 'DataExchange', type: :request do
 
   describe 'GET /data_exchange/import_report' do
     context 'with no report in session' do
-      it 'redirects to root with error' do
+      it 'redirects (301) to the import history' do
         get import_report_data_exchange_index_path
 
-        expect(response).to redirect_to(root_path)
-        follow_redirect!
-        expect(flash[:error]).to include('No import report found')
+        expect(response).to have_http_status(:moved_permanently)
+        expect(response).to redirect_to(projects_imports_path)
       end
     end
 
@@ -598,17 +596,13 @@ RSpec.describe 'DataExchange', type: :request do
         }
       end
 
-      it 'renders the report page' do
+      it 'redirects (301) to the report page, with the import statistics' do
         get import_report_data_exchange_index_path
+        expect(response).to have_http_status(:moved_permanently)
+        follow_redirect!
 
         expect(response).to have_http_status(:ok)
-        expect(response.body).to include('Import Report')
-      end
-
-      it 'displays import statistics' do
-        get import_report_data_exchange_index_path
-
-        expect(response.body).to include('Entities Created')
+        expect(response.body).to include('Import report', 'Entities created')
       end
     end
   end
@@ -631,11 +625,10 @@ RSpec.describe 'DataExchange', type: :request do
       post import_upload_data_exchange_index_path, params: { file: uploaded_file }
     end
 
-    it 'clears session data and redirects to root' do
+    it 'clears session data and redirects to the import history' do
       delete import_cancel_data_exchange_index_path
 
-      expect(response).to redirect_to(root_path)
-      follow_redirect!
+      expect(response).to redirect_to(projects_imports_path)
       expect(flash[:notice]).to eq('Import cancelled')
     end
 
@@ -643,7 +636,7 @@ RSpec.describe 'DataExchange', type: :request do
       delete import_cancel_data_exchange_index_path
 
       get import_review_data_exchange_index_path
-      expect(response).to redirect_to(root_path)
+      expect(response).to redirect_to(new_projects_import_path)
     end
   end
 
@@ -1138,9 +1131,9 @@ RSpec.describe 'DataExchange', type: :request do
     end
   end
 
-  describe '#import_project_entity_id' do
+  describe 'ImportDecisions.project_entity_id (moved from the controller in UI-6)' do
     def scope_for(import_data, decisions)
-      DataExchangeController.new.send(:import_project_entity_id, import_data, decisions)
+      ImportDecisions.project_entity_id(import_data, decisions)
     end
 
     it 'pins the merged ROOT node, not a child merged into another project' do

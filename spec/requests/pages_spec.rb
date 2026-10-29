@@ -120,7 +120,7 @@ RSpec.describe "Home", type: :request do
       expect(live["data-controller"]).to eq("operation-progress")
       expect(live["data-operation-progress-operation-id-value"]).to eq(running.operation_id)
       expect(doc.at_css("[data-testid='home-job-recent']").text).to include("Project scan", "failed", "synthetic failure")
-      expect(doc.css("a").map { |link| link["href"] }).to include(maintenance_path(anchor: "background-jobs"), "/operator/jobs")
+      expect(doc.css("a").map { |link| link["href"] }).to include(projects_jobs_path, "/operator/jobs")
     end
 
     it "lists the latest change sets, status only" do
@@ -144,7 +144,7 @@ RSpec.describe "Home", type: :request do
 
       expect(doc.at_css("[data-testid='home-client-row']").text).to include("synth-client", "active", "Alpha Service")
       expect(doc.text).to include("1 active of 1")
-      expect(doc.at_css("a")["href"]).to eq(maintenance_path(anchor: "mcp-clients"))
+      expect(doc.at_css("a")["href"]).to eq(operator_telemetry_path(anchor: "mcp-clients"))
     end
 
     it "shows the graph counts and embedding coverage" do

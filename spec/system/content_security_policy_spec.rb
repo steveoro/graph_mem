@@ -27,7 +27,11 @@ RSpec.describe "Content Security Policy in the browser", type: :system do
 
     {
       "Search" => "/search?q=SynthWidget",
-      "Maintenance" => "/maintenance",
+      "Projects" => "/projects",
+      "New scan" => "/projects/scans/new",
+      "Import" => "/projects/imports/new",
+      "Exports" => "/projects/exports",
+      "Background jobs" => "/projects/jobs",
       "Review & Fix" => "/review",
       "Scan review" => "/review?view=scan",
       "Embeddings" => "/operator/embeddings",

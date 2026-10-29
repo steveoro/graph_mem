@@ -48,7 +48,7 @@ RSpec.describe "Guest sign-in", type: :request do
       expect(response).to redirect_to(explore_path(entity_id: 7))
 
       delete operator_logout_path
-      get maintenance_path
+      get projects_path
       sign_in_guest
       expect(response).to redirect_to(search_path)
     end

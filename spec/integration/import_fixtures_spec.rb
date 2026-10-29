@@ -70,9 +70,9 @@ RSpec.describe "Graph export import fixtures", :with_test_embeddings, type: :req
     )
     post import_upload_data_exchange_index_path, params: { file: file }
 
-    expect(response).to redirect_to(root_path)
+    expect(response).to redirect_to(new_projects_import_path)
     follow_redirect!
-    expect(flash[:error]).to include("requires the embedding service")
+    expect(flash[:alert]).to include("requires the embedding service")
   end
 
   private
@@ -140,12 +140,12 @@ RSpec.describe "Graph export import fixtures", :with_test_embeddings, type: :req
       original_filename: filename
     )
     post import_upload_data_exchange_index_path, params: { file: file }
-    expect(response).to redirect_to(import_review_data_exchange_index_path)
+    expect(response).to redirect_to(%r{/projects/imports/\h{8}-\h{4}-\h{4}-\h{4}-\h{12}\z})
   end
 
   def execute_import!
     post import_execute_data_exchange_index_path, params: { decisions: {} }
-    expect(response).to redirect_to(import_report_data_exchange_index_path)
+    expect(response).to redirect_to(%r{/projects/imports/\h{8}-\h{4}-\h{4}-\h{4}-\h{12}/report\z})
   end
 
   def expect_all_nodes_to_match_existing_graph(match_result)

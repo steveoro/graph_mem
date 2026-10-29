@@ -64,7 +64,7 @@ class ProjectsOverview
     details = operation.details || {}
     return details["project_entity_id"].to_s == project.id.to_s if details["project_entity_id"].present?
 
-    details["project_name"].to_s.casecmp?(project.name.to_s)
+    details["project_name"].to_s == project.name.to_s
   end
 
   # Pending scan-review groups per project (the Review page's grouping), in one grouped count.

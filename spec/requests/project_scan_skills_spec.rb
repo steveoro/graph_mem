@@ -11,7 +11,7 @@ RSpec.describe "Project scan skills", type: :request do
   end
 
   describe "POST /project_scan_skills" do
-    it "queues a guided project scan for the resolved realpath and redirects to the maintenance hub" do
+    it "queues a guided project scan for the resolved realpath and redirects to the new scan page" do
       with_scan_project do |project|
         expect {
           post project_scan_skills_path, params: { project_root: project, dry_run: "1" }
@@ -20,7 +20,7 @@ RSpec.describe "Project scan skills", type: :request do
         operation = OperationProgress.order(created_at: :desc).first
         expect(operation).to have_attributes(status: "pending", operation_type: "project_scan_skill")
         expect(operation.details).to include("depths" => ProjectScanSkill::DEPTH_ORDER, "project_root" => project)
-        expect(response).to redirect_to(maintenance_path(anchor: "project-scans"))
+        expect(response).to redirect_to(projects_scan_path(OperationProgress.order(:created_at, :id).last.operation_id))
         expect(flash_text).to include("Guided project scan queued for #{project}")
       end
     end
@@ -82,7 +82,7 @@ RSpec.describe "Project scan skills", type: :request do
       }.to have_enqueued_job(ProjectScanSkillJob)
 
       expect(operation.reload.status).to eq("running")
-      expect(response).to redirect_to(maintenance_path(anchor: "project-scans"))
+      expect(response).to redirect_to(projects_scan_path(operation.operation_id))
     end
 
     it "stops a guided scan" do
@@ -105,7 +105,7 @@ RSpec.describe "Project scan skills", type: :request do
       patch project_scan_skill_path(operation.operation_id), params: { skill_action: "stop" }
 
       expect(operation.reload.status).to eq("completed")
-      expect(response).to redirect_to(maintenance_path(anchor: "project-scans"))
+      expect(response).to redirect_to(projects_scan_path(operation.operation_id))
     end
   end
 end
