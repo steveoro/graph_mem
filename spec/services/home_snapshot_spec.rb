@@ -107,7 +107,8 @@ RSpec.describe HomeSnapshot do
       }.each do |status, (color, value)|
         allow(ScanRootPolicy).to receive(:status).and_return(status)
 
-        expect(pill(:scans)).to include(status: color, value: value)
+        # A fresh instance each time: Health runs ScanRootPolicy.status once per instance.
+        expect(described_class::Health.new.pill_for(:scans)).to include(status: color, value: value)
       end
     end
 
@@ -116,7 +117,7 @@ RSpec.describe HomeSnapshot do
       allow(GraphMem::OfficialMcp).to receive(:access_policy).and_return(policy)
 
       expect(pill(:mcp)).to include(status: :neutral, value: "no token (unauthenticated), 2 allowed range(s) (+1 from settings)",
-                                    href: "/system/settings?tab=access")
+                                    href: "/system/access")
 
       allow(GraphMem::OfficialMcp).to receive(:access_policy).and_return(GraphMem::McpAccessPolicy.new(token: "synthetic-token"))
       expect(pill(:mcp)).to include(status: :ok, value: start_with("bearer token required"))

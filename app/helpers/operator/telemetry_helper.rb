@@ -57,11 +57,11 @@ module Operator
     # @param outcome [String]
     # @return [ActiveSupport::SafeBuffer]
     def telemetry_outcome_badge(outcome)
-      css = outcome == "ok" ? "dashboard-badge--completed" : "dashboard-badge--failed"
+      css = outcome == "ok" ? "ui-badge--completed" : "ui-badge--failed"
       content_tag(
         :span,
         t("operator.telemetry.outcomes.#{outcome}"),
-        class: "dashboard-badge #{css}"
+        class: "ui-badge #{css}"
       )
     end
   end

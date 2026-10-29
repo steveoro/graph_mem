@@ -25,23 +25,23 @@ module AuditLogsHelper
 
   def audit_log_action_badge(action)
     css = case action.to_s
-    when "create" then "dashboard-badge--completed"
-    when "update" then "dashboard-badge--running"
-    when "delete" then "dashboard-badge--failed"
-    else "dashboard-badge--idle"
+    when "create" then "ui-badge--completed"
+    when "update" then "ui-badge--running"
+    when "delete" then "ui-badge--failed"
+    else "ui-badge--idle"
     end
 
     content_tag(:span, t("operator.audit_logs.actions.#{action}", default: action.to_s.humanize),
-                class: "dashboard-badge #{css}")
+                class: "ui-badge #{css}")
   end
 
   def audit_log_record_label(log)
     label = "#{log.auditable_type}##{log.auditable_id}"
 
     if log.auditable_type == "MemoryEntity" && MemoryEntity.exists?(log.auditable_id)
-      link_to label, explore_path(entity_id: log.auditable_id), class: "audit-logs-table__record-link"
+      link_to label, explore_path(entity_id: log.auditable_id), class: "system-link"
     elsif log.auditable.present?
-      safe_join([ label, tag.br, content_tag(:span, audit_log_auditable_name(log.auditable), class: "audit-logs-table__record-meta") ])
+      safe_join([ label, tag.br, content_tag(:span, audit_log_auditable_name(log.auditable), class: "system-hint") ])
     else
       label
     end

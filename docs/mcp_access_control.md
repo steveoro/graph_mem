@@ -51,9 +51,9 @@ An explicit allowlist replaces these defaults rather than extending them. Includ
 `127.0.0.0/8` and `::1` when clients on the server host use `localhost` (and `172.16.0.0/12` in
 Docker, where local clients can arrive from a bridge address). `bin/up` builds such a list for you.
 
-### Adding entries at runtime (Settings › Access)
+### Adding entries at runtime (System › Access)
 
-The operator's Settings › Access tab (`/system/settings?tab=access`) adds IPs, hosts and origins **on top of** each ENV value,
+The operator's System › Access page (`/system/access`) adds IPs, hosts and origins **on top of** each ENV value,
 which is shown as read-only text beside the editable part and can't be removed there. Changes apply
 on the next request, without a restart, and each changed list writes an audit row.
 
@@ -90,7 +90,7 @@ The active posture is logged once at boot:
 [McpAccessPolicy] /mcp access: no token (unauthenticated), 7 allowed range(s)
 ```
 
-A change from Settings › Access logs the new posture, e.g.
+A change from System › Access logs the new posture, e.g.
 `[McpAccessPolicy] /mcp access changed by operator:admin: no token (unauthenticated), 8 allowed range(s) (+1 from settings)`.
 
 ## Recipes

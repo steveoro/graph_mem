@@ -4,7 +4,6 @@ en:
       label: "Audit logs"
       title: "Audit Logs"
       subtitle: "Browse change history for entities, observations, and relations"
-      back_to_dashboard: "Back to dashboard"
       summary:
         total: "Total logs"
         filtered: "Matching filters"

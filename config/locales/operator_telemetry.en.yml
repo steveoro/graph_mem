@@ -3,7 +3,6 @@ en:
     telemetry:
       title: "Tool Telemetry"
       subtitle: "Inspect MCP tool volume, reliability, latency, clients, and privacy-safe argument signatures."
-      back_to_dashboard: "Back to dashboard"
       empty: "No tool invocation telemetry matches these filters."
       summary:
         aria_label: "Tool telemetry summary"

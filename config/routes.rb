@@ -177,8 +177,9 @@ Rails.application.routes.draw do
   end
 
   # UI-7: System (operator only; System::BaseController).
-  get "system", to: redirect("/system/settings", status: 301), as: :system
+  get "system", to: redirect("/system/health", status: 301), as: :system
   namespace :system do
+    get "health", to: "health#show", as: :health
     get "settings", to: "settings#show", as: :settings
     patch "settings", to: "settings#update"
     delete "settings/legacy_scan_roots", to: "settings#clear_legacy_scan_roots", as: :clear_legacy_scan_roots
@@ -188,6 +189,11 @@ Rails.application.routes.draw do
     delete "backups", to: "backups#destroy"
     patch "backups/settings", to: "backups#update_settings", as: :backup_settings
     post "backups/restore", to: "backups#restore", as: :restore_backup
+
+    get "access", to: "access#show", as: :access
+    patch "access", to: "access#update"
+
+    get "activity", to: "activity#index", as: :activity
 
     get "embeddings", to: "embeddings#index", as: :embeddings
     post "embeddings/test_connection", to: "embeddings#test_connection", as: :test_embeddings_connection
@@ -212,13 +218,13 @@ Rails.application.routes.draw do
   mount MissionControl::Jobs::Engine, at: "/system/queue"
 
   # UI-7 shims, until §6.D-6 (drop them all in that PR):
-  # - GET 301s: /operator/settings (keeping its query; tab=database_backup → /system/backups), /operator/embeddings, /operator/telemetry,
+  # - GET 301s: /operator/settings (keeping its query; tab=database_backup → /system/backups, tab=mcp_access → /system/access), /operator/embeddings, /operator/telemetry,
   #   /operator/audit_logs, /operator/settings/project_scans/check_path (→ /projects/scans/check_path),
   #   /projects/jobs, /operator/jobs(/*rest) (→ /system/queue/*rest, keeping the query);
   # - the old writes under /operator, routed to the System actions (no copy of the code), so an
   #   open old tab still works.
   keep_query = ->(target) { ->(_params, request) { "#{target}#{"?#{request.query_string}" if request.query_string.present?}" } }
-  legacy_settings_pages = { "database_backup" => "/system/backups" }
+  legacy_settings_pages = { "database_backup" => "/system/backups", "mcp_access" => "/system/access" }
   get "operator/settings", to: redirect(status: 301) { |_params, request|
     legacy_settings_pages.fetch(request.params[:tab].to_s) { keep_query.call("/system/settings").call(nil, request) }
   }, as: nil

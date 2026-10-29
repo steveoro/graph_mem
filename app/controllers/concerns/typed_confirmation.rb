@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-# Typed confirmation (UI-7, ui-dashboard-plan.md §5.2) for backup restore, drop indexes,
+# Typed confirmation (UI-7, the UI plan §5.2) for backup restore, drop indexes,
 # regenerate all embeddings and audit-log prune. The server check is the guard: a missing or
 # wrong `params[:confirmation]` → 422 and no side effect, whatever the page's JS did
 # (typed_confirm_controller.js only enables the button).

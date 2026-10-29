@@ -1,0 +1,36 @@
+- content_for :title, t("system.activity.title")
+- content_for :page_header do
+  = ui_page_header(t("system.activity.title"), subtitle: t("system.activity.subtitle")) do
+    = link_to t("system.activity.audit_log"), system_audit_log_path, class: "ui-btn", data: { testid: "activity-audit-log-link" }
+
+.system-page
+  - if @change_sets.empty?
+    %p.system-hint{ data: { testid: "activity-empty" } }= t("system.activity.empty")
+  - else
+    .system-table-wrap
+      %table.system-table{ data: { testid: "activity-table" } }
+        %thead
+          %tr
+            %th= t("system.activity.columns.when")
+            %th= t("system.activity.columns.change")
+            %th= t("system.activity.columns.actor")
+            %th= t("system.activity.columns.undo")
+        %tbody
+          - @change_sets.each do |set|
+            %tr{ data: { testid: "activity-row-#{set.uuid}" } }
+              %td
+                %time{ datetime: set.created_at.iso8601, title: l(set.created_at, format: :long) }= t("system.activity.ago", time: time_ago_in_words(set.created_at))
+              %td
+                = set.summary.presence || set.kind.humanize
+                %span.system-hint= set.kind
+              %td= set.actor || t("system.activity.unknown_actor")
+              %td
+                - if set.undoable?
+                  = button_to t("ui.changes.undo"), undo_change_path(set.uuid), method: :post, class: "ui-btn",
+                    data: { testid: "activity-undo-#{set.uuid}" }
+                  %span.system-hint= t("system.activity.undoable_until", time: l(set.undoable_until, format: :short))
+                - elsif set.undone_at
+                  = t("system.activity.undone")
+                - else
+                  = "—"
+    = paginate @change_sets

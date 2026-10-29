@@ -55,13 +55,13 @@ export default class extends Controller {
   }
 
   updateBadgeClass(node, status) {
-    if (!node.classList.contains("dashboard-badge")) return
+    if (!node.classList.contains("ui-badge")) return
 
     const statusClassMap = { running: "running", paused: "paused", completed: "completed", failed: "failed", pending: "idle" }
     const suffix = statusClassMap[status] || "idle"
     Array.from(node.classList).forEach((cssClass) => {
-      if (cssClass.startsWith("dashboard-badge--")) node.classList.remove(cssClass)
+      if (cssClass.startsWith("ui-badge--")) node.classList.remove(cssClass)
     })
-    node.classList.add(`dashboard-badge--${suffix}`)
+    node.classList.add(`ui-badge--${suffix}`)
   }
 }

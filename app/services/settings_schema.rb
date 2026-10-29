@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 # The one list of every AppSettings field the operator can change (UI-7 S2): the group it sits
-# in, the page that shows the group (Settings or Backups), its type and accepted range,
+# in, the page that shows the group (Settings, Backups or Access), its type and accepted range,
 # its label and help (`system.settings.fields.<key>.label` / `.description`) and its validator.
 # The pages render from it and their `update` saves only the posted group's keys.
 #
@@ -29,7 +29,7 @@ class SettingsSchema
   end
 
   # @!attribute key [Symbol] the group key (the Settings tab)
-  # @!attribute page [Symbol] :settings or :backups
+  # @!attribute page [Symbol] :settings, :backups or :access
   # @!attribute fields [Array<Field>]
   # @!attribute check [Symbol, nil] a controller method (SettingsGroupUpdate) that checks the whole
   #   group after the per-field validators, returning an alert message or nil
@@ -46,7 +46,7 @@ class SettingsSchema
   LEGACY_KEYS = %w[project_scan_roots].freeze
 
   # The pages that show groups.
-  PAGES = %i[settings backups].freeze
+  PAGES = %i[settings backups access].freeze
 
   class << self
     # @param page [Symbol, nil] only the groups of this page
@@ -144,8 +144,8 @@ class SettingsSchema
         define_group(:telemetry, %w[tool_invocation_retention_days compaction_review_row_retention_days]),
         define_group(:review_policies, review_policy_fields, check: :check_review_policies, partial: "system/settings/review_policies_panel"),
         define_group(:backups, %w[backup_folder_path backup_keep_max backup_schedule_cron enable_scheduled_backups], page: :backups),
-        define_group(:access, [ "enable_guest_access", *McpAccessSettings::KEYS.map { |key| define_field(key, partial: "system/settings/mcp_field") } ],
-                     check: :check_mcp_access, partial: "system/settings/access_panel")
+        define_group(:access, [ "enable_guest_access", *McpAccessSettings::KEYS.map { |key| define_field(key, partial: "system/access/mcp_field") } ],
+                     page: :access, check: :check_mcp_access)
       ]
     end
 

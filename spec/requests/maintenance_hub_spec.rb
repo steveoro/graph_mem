@@ -53,7 +53,7 @@ RSpec.describe "Maintenance hub (retired)", type: :request do
     get system_telemetry_path
 
     clients = Nokogiri::HTML(response.body).at_css("#mcp-clients")
-    expect(clients.at_css("[data-testid='dashboard-agent-contexts-card']")).to be_present
+    expect(clients.at_css("[data-testid='system-agent-contexts-card']")).to be_present
     expect(clients.text).to include("MCP Clients & Project Context", "synth-client", "Alpha Service", "set_context")
   end
 end

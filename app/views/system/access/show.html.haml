@@ -1,0 +1,21 @@
+- content_for :title, t("system.access.title")
+- content_for :page_header, ui_page_header(t("system.access.title"), subtitle: t("system.access.subtitle"))
+
+.system-page
+  %ul.system-health{ "aria-label": t("system.access.status_label") }
+    - @rows.each do |row|
+      %li.ui-card.system-health__row{ data: { testid: "access-#{row[:key]}", status: row[:status] } }
+        %span.system-health__label= t("system.access.rows.#{row[:key]}")
+        %span.ui-badge{ class: "ui-badge--#{row[:status]}" }= t("home.health.status.#{row[:status]}")
+        %span.system-health__value= row[:value]
+
+  %section.ui-card.system-panel{ "aria-labelledby": "access-settings-title", data: { testid: "access-settings" } }
+    %h2#access-settings-title.ui-label= t(@group.title)
+    -# The guest toggle and the additive part of the three MCP allowlists (UI-2a A3). The ENV value
+    -# is shown as read-only text (never a form field, so it is never submitted).
+    %p.system-hint= t("system.settings.mcp_access.intro")
+    %p.system-warning{ data: { testid: "mcp-access-sessions-notice" } }
+      %strong= t("system.settings.mcp_access.sessions_notice_title")
+      = t("system.settings.mcp_access.sessions_notice")
+    = render "system/settings/form", group: @group, url: system_access_path, reset: system_access_path
+    %p.system-hint= t("system.settings.mcp_access.help")

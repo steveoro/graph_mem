@@ -76,7 +76,7 @@ en:
       undoable: "undoable"
       ago: "%{time} ago"
       undone: "undone"
-      audit_log: "Audit log"
+      all: "All activity"
     clients:
       title: "Active MCP clients"
       summary: "%{recent} active of %{total} · %{with_context} with a project context"

@@ -2,32 +2,32 @@
 
 module DashboardHelper
   STATUS_BADGE_CLASSES = {
-    "running" => "dashboard-badge--running",
-    "paused" => "dashboard-badge--paused",
-    "completed" => "dashboard-badge--completed",
-    "failed" => "dashboard-badge--failed",
-    "idle" => "dashboard-badge--idle",
-    "active" => "dashboard-badge--running",
-    "stale" => "dashboard-badge--idle",
-    "unknown" => "dashboard-badge--idle"
+    "running" => "ui-badge--running",
+    "paused" => "ui-badge--paused",
+    "completed" => "ui-badge--completed",
+    "failed" => "ui-badge--failed",
+    "idle" => "ui-badge--idle",
+    "active" => "ui-badge--running",
+    "stale" => "ui-badge--idle",
+    "unknown" => "ui-badge--idle"
   }.freeze
 
   def dashboard_status_badge(status, **html_options)
-    css = STATUS_BADGE_CLASSES[status.to_s] || "dashboard-badge--idle"
-    content_tag(:span, status.to_s.humanize, class: "dashboard-badge #{css}", **html_options)
+    css = STATUS_BADGE_CLASSES[status.to_s] || "ui-badge--idle"
+    content_tag(:span, status.to_s.humanize, class: "ui-badge #{css}", **html_options)
   end
 
   def agent_context_activity_badge(status)
     label = t("operator.agent_contexts.activity.#{status}", default: status.to_s.humanize)
-    css = STATUS_BADGE_CLASSES[status.to_s] || "dashboard-badge--idle"
-    content_tag(:span, label, class: "dashboard-badge #{css}")
+    css = STATUS_BADGE_CLASSES[status.to_s] || "ui-badge--idle"
+    content_tag(:span, label, class: "ui-badge #{css}")
   end
 
   def dashboard_stat_chip(label, value)
-    content_tag(:div, class: "dashboard-stat-chip") do
+    content_tag(:div, class: "system-stat") do
       safe_join([
-        content_tag(:span, value, class: "dashboard-stat-chip__value"),
-        content_tag(:span, label, class: "dashboard-stat-chip__label")
+        content_tag(:span, value, class: "system-stat__value"),
+        content_tag(:span, label, class: "system-stat__label")
       ])
     end
   end
@@ -136,7 +136,7 @@ module DashboardHelper
     }
   }.freeze
 
-  def dashboard_icon(name, css_class: "dashboard-icon")
+  def dashboard_icon(name, css_class: "ui-icon")
     icon = DASHBOARD_ICONS.fetch(name.to_sym)
 
     tag.svg(

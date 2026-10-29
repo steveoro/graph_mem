@@ -79,7 +79,7 @@ RSpec.describe "Home", type: :request do
       expect(embeddings["data-status"]).to eq("danger")
       expect(embeddings.text).to include("unreachable")
       mcp = pills.find { |link| link["data-testid"] == "home-pill-mcp" }
-      expect(mcp["href"]).to eq(system_settings_path(tab: "access"))
+      expect(mcp["href"]).to eq(system_access_path)
       expect(mcp.text).to include(GraphMem::OfficialMcp.access_policy.describe)
     end
 
@@ -133,7 +133,7 @@ RSpec.describe "Home", type: :request do
       expect(row.text).to include("graph.write", "agent:synth-client: wrote 4 observations to SynthWidget", "undoable")
       expect(row["title"]).to include("undoable until")
       expect(doc.css("form, button")).to be_empty
-      expect(doc.at_css("a")["href"]).to eq(system_audit_log_path)
+      expect(doc.at_css("a")["href"]).to eq(system_activity_path)
     end
 
     it "shows the active MCP clients, compact" do
