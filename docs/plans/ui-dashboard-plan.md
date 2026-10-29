@@ -9,6 +9,7 @@
 **Oct 28 update.** **UI-5 is DONE** as UI-5a (#128, no bump) and UI-5b (#129, **1.58.0**), and **UI-2 is DONE** as UI-2a (#133, **1.58.3**) and UI-2b (#134, **1.59.0**). **UI-3 (Search, 1.60.0) is next**; its step list is `docs/plans/ui-3-plan.md` (Oct 28, revised with Steve's decisions: one PR, filters on the MCP tool and REST search too, "Show as graph" included). A small follow-up found in the #134 review, MCP errors that never reach the log, is §6.F **F-1**.
 **Oct 28-b update.** **UI-3 is DONE** in #135 (merged as `5e17353`, tagged **1.60.0**); its optional review leftovers are listed at the top of `docs/plans/ui-3-plan.md`. **UI-4b (Explore, 1.61.0) is next**; it has no step list yet (§6 UI-4b is the scope). New follow-up §6.F **F-2**: the GitHub Actions jobs fail at Ruby setup on the new `ubuntu-latest` image.
 **Oct 28-c update.** **UI-4b (Explore, 1.61.0)** now has a step list: `docs/plans/ui-4b-plan.md` (Oct 28, from `9c8d3bc`). Steve folded §6.F **F-1**, §6.F **F-2** (Ruby 3.4.12) and the UI-3 review leftovers into the same PR, each in its own commit, F-2 first so the Actions jobs turn green.
+**Oct 29 update.** **UI-4b is DONE** in #136 (merged as `05aa5c1`, **1.61.0**; the tag is pending, Steve tags it), with F-1 and F-2 done in the same PR. **UI-6 (Projects & Data, 1.62.0) is next**; its step list is `docs/plans/ui-6-plan.md` (Oct 29, from `9e51dd9`). It starts with step **L**, the optional #136 review leftovers, and has six open decisions with recommendations (the main one: where the Maintenance hub's compactor, garbage-collector and MCP-clients cards go).
 Previous drafts: `ui-dashboard-plan.2026-10-21-pre.md` (the Oct 20 draft with the open questions); `ui-dashboard-plan.2026-10-21-b.md` (Oct 21 morning, before Steve's 1:32 PM answers on guest credentials, auto-apply policies and PR-4).
 Base: `steveoro/graph_mem` `origin/main` @ `57d9524` (v1.52.1), re-checked on 2026-10-21 in a detached read-only worktree. `origin/main` hasn't moved.
 Method (Oct 20): I read every route, controller, view, partial, Stimulus/JS module and stylesheet, then booted the app against a throwaway DB seeded with **synthetic data only** (`ui-shots/seed_synthetic.rb`). The screenshots are in `ui-shots/`. Oct 21: I re-read the review queue, the proposal generators, the merge path, auditing and settings caching to ground §2.4, §2.5 and §5. Nothing was pushed, posted or opened on GitHub.
@@ -88,8 +89,8 @@ Answered and dropped from the open questions: all four Oct 20 UI questions (acco
 | 17 | ✅ **UI-5** Review & Fix, as UI-5a (#128: data model, limits, policies; no bump) + UI-5b (#129: page, release). Step list: `docs/plans/ui-5-plan.md` | graph_mem **1.58.0** | [Claude] | done |
 | 18 | ✅ **UI-2** as UI-2a (#133: editable MCP allowlists + `bin/up`, **1.58.3**) + UI-2b (#134: Home, **1.59.0**). Step list: `docs/plans/ui-2-plan.md` | graph_mem **1.58.3** + **1.59.0** | [Claude] | done |
 | 19 | ✅ **UI-3** Search, one PR (#135): `GraphSearch` extraction, project/type/match-in filters on the MCP `search` tool and REST search, the Search page and panel, "Show as graph". Step list: `docs/plans/ui-3-plan.md` | graph_mem **1.60.0** | [Claude] | done |
-| 20 | **UI-4b** Explore, one PR, with F-1, F-2 and the UI-3 leftovers folded in. Step list: `docs/plans/ui-4b-plan.md` | **1.61.0** | [Claude] | ✅ #136 |
-| 21 | **UI-6** Projects & Data | **1.62.0** | [Claude] | PR-0 ✅, UI-1 |
+| 20 | ✅ **UI-4b** Explore, one PR (#136, merged as `05aa5c1`; tag pending), with F-1, F-2 and the UI-3 leftovers folded in. Step list: `docs/plans/ui-4b-plan.md` | graph_mem **1.61.0** | [Claude] | done |
+| 21 | **UI-6** Projects & Data, one PR, with the #136 leftovers (step L). Step list: `docs/plans/ui-6-plan.md` | **1.62.0** | [Claude] | PR-0 ✅, UI-1 ✅ (next) |
 | 22 | **UI-7** System (settings schema, backups, access) | **1.63.0** | [Claude] | UI-1 |
 | UD | The other Devin-simple chores (§6.D: D-4 … D-8) | `[Unreleased]` | [Devin-simple] | as listed |
 | F | Small follow-ups (§6.F: F-1, MCP errors never reach the log; F-2, GitHub Actions Ruby setup on `ubuntu-26.04`) | folded into UI-4b (**1.61.0**), Oct 28 | [Claude] | ✅ #136 (with row 20) |
@@ -569,7 +570,7 @@ See `mcp-update-plan.md`. On the UI side, PR-0 adds only the Settings › Projec
 - **Acceptance:** any merge made by any path can be undone from the Rails console with `ChangeSetUndo.call(uuid)` within its window; all existing merge specs stay green.
 
 ### UI-4b [Claude]: Explore → **1.61.0** ✅ DONE
-- **Done:** PR #136 (`claude/ui-4b-explore`), with F-1, F-2 (Ruby 3.4.12) and the UI-3 leftovers (the exact-name query, the backslash and `page` specs).
+- **Done:** PR #136 (`claude/ui-4b-explore`, merged as `05aa5c1`; tag pending), with F-1, F-2 (Ruby 3.4.12) and the UI-3 leftovers (the exact-name query, the backslash and `page` specs).
 - **Builds on UI-3 (Oct 28):** UI-3 adds the read-only panel (`EntitiesController#panel`, Turbo Frame `entity-panel`), `GET /api/v1/graph_data?ids=` (≤ 100 ids, relations among them) and `/graph?ids=` for "Show as graph". Explore's "from search" scope reads the same `ids` parameter from the same endpoint; when this PR deletes `/graph`, redirect `/graph?…` to `/explore?…` with the query string and point Search's "Show as graph" at `explore_path(ids:)`. Reuse (or move under `explore/`) UI-3's panel instead of writing a second one.
 - **Step list:** `docs/plans/ui-4b-plan.md` (Oct 28, verified at `9c8d3bc`). It wins where the two differ, and also carries §6.F F-1, F-2 and the UI-3 leftovers (folded in by Steve, Oct 28).
 - **Branch:** `claude/ui-4b-explore`.
@@ -607,6 +608,7 @@ See `mcp-update-plan.md`. On the UI side, PR-0 adds only the Settings › Projec
 - **Risks:** the backfill on a large `maintenance_report_rows` table (batch 1,000, no long transaction). Classifier weights are guesses, so they're constants with one spec table, easy to tune.
 
 ### UI-6 [Claude]: Projects & Data → **1.62.0** (after PR-0)
+- **Step list:** `docs/plans/ui-6-plan.md` (Oct 29, from `9e51dd9`). It wins where the two differ. It also carries the #136 review leftovers (step L). Note: Home (UI-2b) has no scan cards any more, so "the dashboard scan cards are gone" below already holds; the Maintenance hub is what goes.
 - **Branch:** `claude/ui-6-projects-data`.
 - **Files:** `app/controllers/projects_controller.rb`, `app/controllers/projects/{scans,imports,exports}_controller.rb`, views under `app/views/projects/`, re-homed `data_exchange#import_*`/`export*` actions (keep the services), `app/javascript/controllers/path_check_controller.js` (live check via `GET /projects/scans/check_path`, which calls `ScanRootPolicy.resolve`), and the merged `ProjectScansController`/`ProjectScanSkillsController` forms.
 - **Specs:** request specs (path check: ok / outside filter / denylisted / not mounted; scan create normal + guided; import upload → review → execute → report under the new routes; guest 403 everywhere); a system spec: new scan with dry run → detail page progress (stubbed job).

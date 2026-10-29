@@ -1,5 +1,7 @@
 # UI-4b → graph_mem 1.61.0: Explore (canvas + editable panel, merges with a preview, every edit undoable), plus F-1, F-2 and the UI-3 leftovers
 
+**✅ DONE (Oct 29):** shipped in #136 as **1.61.0** (merged as `05aa5c1`; **tag pending**, Steve tags it). The optional follow-ups left from the #136 review are none of them blocking, and they are step **L** of `docs/plans/ui-6-plan.md`: `EntityMergePreview#subtree_size` limits relation rows, not new ids (`entity_merge_preview.rb:159-160`); the capped neighbourhood read in `graph_data` has no `ORDER` (`graph_data_controller.rb:109`); and the panel's "Show it" link is dead when the duplicate is on another panel page (`_add_observation.html.haml:15`).
+
 **Written 2026-10-28 (Europe/Rome)** for Claude, from `main` at `9c8d3bc` (1.60.0 tagged, #135 merged as `5e17353`).
 Every file:line in "What the code looks like today" was checked against that commit. If a line has moved, find the
 code by the quoted text; if the code no longer matches the description, **stop and ask Steve** instead of improvising.
