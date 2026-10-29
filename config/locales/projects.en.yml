@@ -1,0 +1,8 @@
+en:
+  projects:
+    nav:
+      projects: "Projects"
+      scans: "Scans"
+      imports: "Imports"
+      exports: "Exports"
+      jobs: "Background jobs"

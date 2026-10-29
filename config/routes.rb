@@ -121,9 +121,31 @@ Rails.application.routes.draw do
     resources :merges, only: [ :new, :create ]
   end
   get "graph", to: redirect(status: 301) { |_params, request| "/explore#{"?#{request.query_string}" if request.query_string.present?}" }
+  # The Maintenance hub's scan forms post here until §6.D-6; they redirect to the new scan pages.
   resources :project_scans, only: [ :create ]
   resources :project_scan_skills, only: [ :create, :update ]
-  get "maintenance", to: "maintenance#index"
+  # UI-6: Projects & Data (operator only). The Maintenance hub's page redirects (301) until §6.D-6;
+  # its #background-jobs / #mcp-clients anchors are forwarded by the projects page.
+  get "maintenance", to: redirect("/projects", status: 301), as: :maintenance
+  get "projects", to: "projects#index", as: :projects
+  namespace :projects do
+    get "jobs", to: "jobs#index", as: :jobs
+    resources :scans, only: [ :index, :new, :create, :show ], param: :operation_id do
+      get :check_path, on: :collection
+    end
+    resources :scan_skills, only: [ :update ], param: :operation_id
+    # :id is the upload's import session for show (review), execute and destroy (cancel), and the
+    # executed import's operation id for report.
+    resources :imports, only: [ :index, :new, :create, :show, :destroy ] do
+      member do
+        post :execute
+        get :report
+      end
+    end
+    resources :exports, only: [ :index, :create, :show ], param: :operation_id do
+      get :download, on: :member
+    end
+  end
   # UI-5b: Review & Fix (operator only). The old review page's URL redirects (301).
   get "data_exchange/compaction_review",
       to: redirect(status: 301) { |_params, request| request.params[:report_type] == "scan_review" ? "/review?view=scan" : "/review" }
