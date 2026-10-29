@@ -24,13 +24,18 @@ RSpec.describe SystemHealth do
     expect(HomeSnapshot::Health).to have_received(:embedding_reachable?).once
   end
 
-  it "says whether the backup folder exists and is writable, without its path" do
+  it "says whether the backup folder is writable or can be created, without its path" do
     Dir.mktmpdir("synth_backups") do |dir|
       AppSettings.backup_folder_path = dir
-      expect(check(:backup_folder)).to include(status: :ok, value: "exists and is writable", detail: nil)
+      expect(check(:backup_folder)).to include(status: :ok, value: "writable", detail: nil)
 
-      AppSettings.backup_folder_path = File.join(dir, "missing")
-      expect(described_class.new.checks.find { |entry| entry[:key] == :backup_folder }).to include(status: :danger)
+      # db:dump creates a missing folder, so one under a writable parent is fine.
+      AppSettings.backup_folder_path = File.join(dir, "missing", "nested")
+      expect(described_class.new.checks.find { |entry| entry[:key] == :backup_folder }).to include(status: :ok)
+
+      File.write(File.join(dir, "synth_file"), "")
+      AppSettings.backup_folder_path = File.join(dir, "synth_file")
+      expect(described_class.new.checks.find { |entry| entry[:key] == :backup_folder }).to include(status: :danger, value: "not writable")
     ensure
       AppSettings.where(var: "backup_folder_path").delete_all
       AppSettings.clear_cache
@@ -54,6 +59,26 @@ RSpec.describe SystemHealth do
     expect(healthy.status).to eq(:warn)
     allow(healthy).to receive(:checks).and_return([ { status: :neutral } ])
     expect(healthy.status).to eq(:ok)
+  end
+
+  it "runs the embedding snapshot and the scan root policy once per page" do
+    allow(EmbeddingStatusSnapshot).to receive(:call).and_call_original
+    allow(ScanRootPolicy).to receive(:status).and_call_original
+
+    health.checks
+    health.raw_snapshots
+
+    expect(EmbeddingStatusSnapshot).to have_received(:call).once
+    expect(ScanRootPolicy).to have_received(:status).once
+  end
+
+  it "shows a check it can't run as unknown instead of raising" do
+    allow(EmbeddingStatusSnapshot).to receive(:call).and_raise(ActiveRecord::ConnectionNotEstablished)
+    allow(ActiveRecord::Base.connection_pool).to receive(:migration_context).and_raise(ActiveRecord::ConnectionNotEstablished)
+
+    expect(check(:vector_search)).to include(status: :neutral, value: start_with("can't check"))
+    expect(check(:migrations)).to include(status: :neutral, value: start_with("can't check"))
+    expect(health.raw_snapshots["EmbeddingStatusSnapshot"]).to eq(error: "unavailable")
   end
 
   it "drops any user info from the embedding URL in the raw snapshots" do

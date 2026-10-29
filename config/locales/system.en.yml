@@ -52,8 +52,8 @@ en:
         vector_ready: "ready"
         vector_not_ready: "embeddings or indexes missing"
         queue: "%{backlog} waiting · %{failed} failed"
-        writable: "exists and is writable"
-        not_writable: "missing or not writable"
+        writable: "writable"
+        not_writable: "not writable"
         roots:
           one: "1 scan root"
           other: "%{count} scan roots"
@@ -61,6 +61,7 @@ en:
         root_read_write: "read-write (use :ro)"
         migrations_current: "up to date"
         migrations_pending: "pending: run db:migrate"
+        cant_check: "can't check (is the database up?)"
     access:
       title: "Access"
       subtitle: "Who can sign in and reach /mcp. Credentials show only as configured or not, never their value."

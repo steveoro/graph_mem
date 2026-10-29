@@ -107,7 +107,8 @@ RSpec.describe HomeSnapshot do
       }.each do |status, (color, value)|
         allow(ScanRootPolicy).to receive(:status).and_return(status)
 
-        expect(pill(:scans)).to include(status: color, value: value)
+        # A fresh instance each time: Health runs ScanRootPolicy.status once per instance.
+        expect(described_class::Health.new.pill_for(:scans)).to include(status: color, value: value)
       end
     end
 

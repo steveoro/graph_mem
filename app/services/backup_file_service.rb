@@ -41,9 +41,13 @@ class BackupFileService
     raise Error, "Backup failed with exit status #{e.status}"
   end
 
-  # @return [Boolean] whether the backup folder exists and the app can write to it (System › Health)
+  # db:dump creates a missing folder (mkdir_p), so a folder that can be created counts.
+  #
+  # @return [Boolean] whether the backup folder exists or can be created, and the app can write
+  #   to it (System › Health)
   def folder_writable?
     dir = resolve_backup_dir
+    dir = dir.parent until dir.exist? || dir.root?
     dir.directory? && File.writable?(dir)
   end
 

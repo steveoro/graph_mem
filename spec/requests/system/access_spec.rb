@@ -59,10 +59,29 @@ RSpec.describe "System › Access", type: :request do
 
       get system_access_path
 
+      expect(access_row(:operator)["data-status"]).to eq("ok")
       expect(access_row(:operator).text).to include("configured")
       expect(access_row(:mcp_token).text).to include("needs the bearer token")
       expect(access_row(:sessions).text).to include("24 hours", "7 days", "2 hours")
       expect(response.body).not_to include("synthetic-mcp-token", OperatorAuthHelpers::TEST_OPERATOR_PASSWORD)
+    end
+
+    it "warns when the operator password is the default, and when production refuses it" do
+      saved_password = ENV.delete("OPERATOR_PASSWORD")
+      allow(Rails.application.credentials).to receive(:dig).and_call_original
+      allow(Rails.application.credentials).to receive(:dig).with(:operator, :password).and_return(nil)
+
+      get system_access_path
+      expect(access_row(:operator)["data-status"]).to eq("danger")
+      expect(access_row(:operator).text).to include("the default password is in use")
+
+      allow(Rails.env).to receive(:production?).and_return(true)
+      get system_access_path
+      expect(access_row(:operator)["data-status"]).to eq("danger")
+      expect(access_row(:operator).text).to include("production refuses the default password")
+      expect(response.body).not_to include(GraphMem::OperatorCredentials::FALLBACK_PASSWORD)
+    ensure
+      ENV["OPERATOR_PASSWORD"] = saved_password
     end
 
     it "saves the guest toggle, and keeps the old tab URLs working" do

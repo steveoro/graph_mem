@@ -45,15 +45,28 @@ class SystemHealth
 
   # The raw snapshots the dashboard used to show (§2.7 "Diagnostics"), for the page only.
   #
+  # Each snapshot runs at most once per instance (shared with the checks); one that raises
+  # shows as `{ error: "unavailable" }` instead of failing the page.
+  #
   # @return [Hash{String => Hash}]
   def raw_snapshots
-    embedding = EmbeddingStatusSnapshot.call
-    embedding[:config] = embedding[:config].merge(url: without_userinfo(embedding.dig(:config, :url)))
-    { "MaintenanceDashboardSnapshot" => MaintenanceDashboardSnapshot.call, "EmbeddingStatusSnapshot" => embedding,
-      "ScanRootPolicy.status" => ScanRootPolicy.status }
+    {
+      "MaintenanceDashboardSnapshot" => snapshot { MaintenanceDashboardSnapshot.call },
+      "EmbeddingStatusSnapshot" => snapshot do
+        embedding = @health.embedding_status
+        embedding.merge(config: embedding[:config].merge(url: without_userinfo(embedding.dig(:config, :url))))
+      end,
+      "ScanRootPolicy.status" => snapshot { @health.scan_status }
+    }
   end
 
   private
+
+  def snapshot
+    yield
+  rescue StandardError
+    { error: "unavailable" }
+  end
 
   def check(key, status, value, href, detail = nil)
     { key: key, label: I18n.t("system.health.checks.#{key}"), status: status, value: value, href: href, detail: detail }
@@ -69,8 +82,10 @@ class SystemHealth
   end
 
   def vector_check
-    ready = EmbeddingStatusSnapshot.call[:vector_search_ready]
+    ready = @health.embedding_status[:vector_search_ready]
     check(:vector_search, ready ? :ok : :warn, I18n.t("system.health.values.#{ready ? 'vector_ready' : 'vector_not_ready'}"), system_embeddings_path)
+  rescue StandardError
+    check(:vector_search, :neutral, I18n.t("system.health.values.cant_check"), system_embeddings_path)
   end
 
   def queue_check
@@ -87,7 +102,7 @@ class SystemHealth
     check(:queue, :neutral, I18n.t("home.health.values.unknown"), mission_control_jobs_path)
   end
 
-  # Decision 6: no disk-free figure; whether the backup folder exists and is writable instead.
+  # Decision 6: no disk-free figure; whether the backup folder is writable (or can be created) instead.
   def backup_folder_check
     writable = BackupFileService.new.folder_writable?
     check(:backup_folder, writable ? :ok : :danger, I18n.t("system.health.values.#{writable ? 'writable' : 'not_writable'}"), system_backups_path)
@@ -97,7 +112,7 @@ class SystemHealth
 
   def scans_check
     pill = @health.pill_for(:scans)
-    roots = ScanRootPolicy.status[:hard_roots].map { |root| { path: root[:path], read_only: root[:read_only], error: root[:error] } }
+    roots = @health.scan_status[:hard_roots].map { |root| { path: root[:path], read_only: root[:read_only], error: root[:error] } }
     pill.merge(value: "#{pill[:value]} · #{I18n.t('system.health.values.roots', count: roots.size)}", detail: roots)
   end
 
@@ -108,6 +123,8 @@ class SystemHealth
   def migrations_check
     pending = ActiveRecord::Base.connection_pool.migration_context.needs_migration?
     check(:migrations, pending ? :danger : :ok, I18n.t("system.health.values.#{pending ? 'migrations_pending' : 'migrations_current'}"), system_health_path)
+  rescue StandardError
+    check(:migrations, :neutral, I18n.t("system.health.values.cant_check"), system_health_path)
   end
 
   def without_userinfo(url)

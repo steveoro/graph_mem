@@ -54,6 +54,20 @@ class HomeSnapshot
       self.class.embedding_reachable?
     end
 
+    # EmbeddingStatusSnapshot, run once per instance (SystemHealth reads it too).
+    #
+    # @return [Hash] see EmbeddingStatusSnapshot.call
+    def embedding_status
+      @embedding_status ||= EmbeddingStatusSnapshot.call
+    end
+
+    # ScanRootPolicy.status, run once per instance (SystemHealth reads it too).
+    #
+    # @return [Hash] see ScanRootPolicy.status
+    def scan_status
+      @scan_status ||= ScanRootPolicy.status
+    end
+
     # @return [Hash] `{ failed:, latency: }` (seconds), or nil when the queue can't be read
     def queue_stats
       return nil unless defined?(SolidQueue::FailedExecution) && defined?(SolidQueue::ReadyExecution)
@@ -85,7 +99,7 @@ class HomeSnapshot
     end
 
     def embeddings_pill
-      ready = EmbeddingStatusSnapshot.call[:vector_search_ready]
+      ready = embedding_status[:vector_search_ready]
       status, value =
         if !embedding_reachable? then [ :danger, "unreachable" ]
         elsif ready then [ :ok, "reachable_ready" ]
@@ -125,7 +139,7 @@ class HomeSnapshot
     end
 
     def scans_pill
-      status = ScanRootPolicy.status
+      status = scan_status
       href = system_settings_path(tab: "project_scans")
       return pill(:scans, :neutral, I18n.t("home.health.values.scans_off"), href) unless status[:scans_switch]
       return pill(:scans, :danger, I18n.t("home.health.values.nothing_mounted"), href) unless status[:enabled]

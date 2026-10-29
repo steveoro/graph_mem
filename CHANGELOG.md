@@ -10,7 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 System: health, one settings schema, backups with a typed restore, access and activity (UI-7a #138, UI-7b #140).
 
 ### Added
-- **System › Health** (`/system/health`): one row per check, its status in words. The checks: database, embedding service (with the probe time), vector search, summaries, job queue (waiting and failed), last backup, backup folder (writable or not), scan mounts (each root, read-only or not), MCP access, guest access, version and pending migrations. A collapsed **Raw snapshots** section holds the old dashboard's diagnostics.
+- **System › Health** (`/system/health`): one row per check, its status in words. The checks: database, embedding service (with the probe time), vector search, summaries, job queue (waiting and failed), last backup, backup folder (writable, or can be created by the first backup), scan mounts (each root, read-only or not), MCP access, guest access, version and pending migrations. A collapsed **Raw snapshots** section holds the old dashboard's diagnostics.
 - **`/system/health.json`**: `{ version, status, generated_at, checks: [{ key, status, value }] }`, words only, with no path, URL or host name. Operator only; monitors use `/up`. `/system` redirects to Health.
 - **System › Backups** (`/system/backups`): the backup settings, **Run backup now**, and the files with Restore and Delete.
 - **System › Access** (`/system/access`): operator credentials, the guest, the MCP token and the session lifetimes, each as configured / not configured, never a value. Below them, the guest toggle and the MCP allowlists.
