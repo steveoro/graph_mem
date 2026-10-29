@@ -3022,7 +3022,7 @@
       },
       {
         "name": "detect_contradictions",
-        "description": "Scan an entity's active observations and 1-hop related observations for semantically similar pairs with opposite polarity; returns candidates and stores a contradictions MaintenanceReport. Pass required `entity_id` (integer; also accepts entity name); optional `max_distance` (float, default 0.35), `max_results` (integer, default 20). Does not merge or delete. Do not use for trust ranking; use `rank_observations` instead. Do not use for duplicate entities; use `suggest_merges` instead. Do not use to read stored reports; use `get_maintenance_reports` instead. Do not use to resolve a conflicting fact; use `graph_edit` or `graph_delete` instead.",
+        "description": "Scan an entity's active observations and 1-hop related observations for semantically similar pairs with opposite polarity; returns candidates and stores a contradictions MaintenanceReport. Pass required `entity_id` (integer; also accepts entity name); optional `max_distance` (float, default 0.35), `max_results` (integer, default 20). With `mode: \"outdated_by_fact\"` it instead finds what one source fact (an observation tagged `source-fact`) outdates in the fact's own project: pass `entity_id` = the fact's entity, required `fact_observation_id`, optional `terms` (up to 5 strings), `seed_review` (bool, default true) and `max_results` (at most 50; `max_distance` is ignored); it returns proposals with their review row ids and never writes observations. Apply them with `apply_maintenance_review` (`action_params.fact_action` supersede or retire, optional `replacement`). Does not merge or delete. Do not use for trust ranking; use `rank_observations` instead. Do not use for duplicate entities; use `suggest_merges` instead. Do not use to read stored reports; use `get_maintenance_reports` instead. Do not use to resolve a conflicting fact; use `graph_edit` or `graph_delete` instead.",
         "inputSchema": {
           "$schema": "https://json-schema.org/draft/2020-12/schema",
           "type": "object",
@@ -3047,6 +3047,32 @@
                 "type": "null"
               },
               "description": "Maximum candidate pairs to return. Defaults to 20."
+            },
+            "mode": {
+              "type": "string",
+              "minLength": 1,
+              "description": "\"contradictions\" (default) or \"outdated_by_fact\"."
+            },
+            "fact_observation_id": {
+              "type": "integer",
+              "not": {
+                "type": "null"
+              },
+              "description": "outdated_by_fact only (required there): the source fact, an observation of entity_id."
+            },
+            "terms": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "outdated_by_fact only: up to 5 search terms (2-100 characters each) besides the fact's replaces: tags."
+            },
+            "seed_review": {
+              "type": "boolean",
+              "not": {
+                "type": "null"
+              },
+              "description": "outdated_by_fact only: seed the proposals as review rows. Defaults to true."
             }
           },
           "required": [
@@ -3062,7 +3088,7 @@
       },
       {
         "name": "apply_maintenance_review",
-        "description": "Apply a queued maintenance-review row (merge, relationship proposal, orphan parent, relation integrity, or contradiction). Pass required `item_id` (string UUID); optional `report_type` (string, default compaction_review), `dry_run` (bool, default false), `action_params` (hash). A contradiction row needs `action_params.keep_observation_id` (one of its two observation ids): that observation is kept and the other is marked obsolete. Do not use without a queue item_id; use `list_maintenance_review` first. Do not use to skip, ignore, or restore without applying; use `dismiss_maintenance_review` instead. Do not use to merge two known entity ids outside the queue; use `graph_delete` instead.",
+        "description": "Apply a queued maintenance-review row (merge, relationship proposal, orphan parent, relation integrity, contradiction, or fact_supersede). Pass required `item_id` (string UUID); optional `report_type` (string, default compaction_review), `dry_run` (bool, default false), `action_params` (hash). A contradiction row needs `action_params.keep_observation_id` (one of its two observation ids): that observation is kept and the other is marked obsolete. A fact_supersede row takes optional `action_params.fact_action` (supersede or retire) and `replacement` (text); without them it supersedes with the judge's replacement, or retires when there is none. Do not use without a queue item_id; use `list_maintenance_review` first. Do not use to skip, ignore, or restore without applying; use `dismiss_maintenance_review` instead. Do not use to merge two known entity ids outside the queue; use `graph_delete` instead.",
         "inputSchema": {
           "$schema": "https://json-schema.org/draft/2020-12/schema",
           "type": "object",
@@ -3086,7 +3112,7 @@
             },
             "action_params": {
               "type": "object",
-              "description": "Optional overrides for merge/relation/orphan endpoints; keep_observation_id for a contradiction row."
+              "description": "Optional overrides for merge/relation/orphan endpoints; keep_observation_id for a contradiction row; fact_action and replacement for a fact_supersede row."
             }
           },
           "required": [
