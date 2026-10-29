@@ -250,13 +250,28 @@ panel row as "Find what this outdates").
   choice and destructive kind. Policy change sets per batch of 200, as the other policies.
 
 ### 6. MCP
-A new tool **`find_outdated_observations`** in the `maintenance` profile (Decision 7): arguments
-`fact_observation_id` (required), `terms` (optional, ≤ 5), `seed_review` (default `true`), `limit` (≤ 50). It runs
-the candidates, the guard and (when available) the judge, and returns the proposals with their review row ids. It
-never writes observations: agents apply through the existing `apply_maintenance_review` with the row id, which goes
-through the same applier and checks. Read-only hint `false` (it seeds rows), destructive `false`. Not a `graph_edit`
-operation: `graph_edit` is an atomic batch of direct writes, and proposals aren't. The `tools/list` snapshot spec needs
-re-recording; say so in the PR.
+**No new tool (hard cap, Decision 7).** The server has 22 tool classes today (`spec/lib/graph_mem/mcp_tool_registry_spec.rb`):
+the default `/mcp` catalog advertises **12**, `/mcp/readonly` 9 and `/mcp/maintenance` 22. The default catalog must stay
+at **12 or fewer**, and this PR adds no tool class to any catalog, so all four counts stay as they are.
+
+The proposals come from the existing **`detect_contradictions`** (`app/tools/detect_contradictions_tool.rb`,
+`maintenance` profile). It already scans one entity's observations, persists a maintenance report and leaves the
+writes to other tools, and its hints already fit: read-only `false` (it seeds rows), destructive `false`. A new
+optional `mode` argument picks the scan:
+- `mode: "contradictions"` (the default): today's behaviour and output, unchanged. Existing callers see no difference.
+- `mode: "outdated_by_fact"`: `entity_id` is the fact's entity, plus `fact_observation_id` (required in this mode;
+  it must be an active source fact on that entity), `terms` (optional, ≤ 5) and `seed_review` (default `true`).
+  `max_results` caps the proposals (≤ 50), and `max_distance` is ignored in this mode. The tool runs the candidates, the
+  guard and (when available) the judge, and returns the proposals with their review row ids. A missing or wrong
+  `fact_observation_id`, or one of the new arguments without `mode: "outdated_by_fact"`, is an argument error with a
+  `next_move`.
+
+It never writes observations. Agents list the rows with `list_maintenance_review` (`kind` = the new kind) and apply
+them through the existing `apply_maintenance_review` with the row id, which goes through the same applier and checks.
+Not a `graph_edit` operation: `graph_edit` is an atomic batch of direct writes, and proposals aren't. Update the tool's
+description (both modes, and when to use which) and re-record the `tools/list` snapshot spec. Say so in the PR. If the
+mode can't be added without changing `detect_contradictions`' default output, **stop and ask Steve** instead of adding a
+tool.
 
 ### 7. When embeddings or Ollama are down
 - **No embeddings** (`EmbeddingService.vector_enabled?` false, or the fact has no `embedded_at`): term match only. The
@@ -318,8 +333,11 @@ restores it; CI green.
 - `Review::SupersedeController` (`index`, `create`), `app/services/fact_supersede/bulk.rb`, views under
   `app/views/review/supersede/`, the rail link, the panel link. Operator only (no `allow_guest`); CSRF on `create`.
 
-### F6. MCP tool
-- `app/tools/find_outdated_observations_tool.rb` (§6), registered in the `maintenance` profile; the toolset skill text.
+### F6. MCP: `detect_contradictions` mode
+- `app/tools/detect_contradictions_tool.rb` (§6): the `mode: "outdated_by_fact"` arguments and branch, delegating to the
+  F2/F3 services. No new file under `app/tools/` and no new tool class. The tool counts in `mcp_tool_registry_spec.rb`,
+  `mcp_official_spec.rb` and `mcp_structured_output_stdio_spec.rb` stay as they are (22 / 12 / 9 / 22). The toolset skill
+  text is updated too.
 
 ### T. Specs (beyond the ones per step)
 - `spec/models/memory_observation_spec.rb`: `outdated_by` validation; `source_fact?`; a fact outside a project is
@@ -342,7 +360,9 @@ restores it; CI green.
   `outdated_by_id`.
 - `spec/requests/review/supersede_spec.rb`: guest 403, signed-out → login; search escapes `%`/`_`; "all projects"
   disables actions; bulk supersede of 3 rows = one change set, undo restores all 3; 201 selected → 422.
-- `spec/tools/find_outdated_observations_tool_spec.rb` and the `tools/list` snapshot.
+- `spec/tools/detect_contradictions_tool_spec.rb`: the default mode answers exactly as before; `outdated_by_fact` seeds
+  rows (or not, with `seed_review: false`); argument errors for a missing or foreign `fact_observation_id`; the `tools/list`
+  snapshot (one tool, new arguments); the tool counts unchanged.
 - `role_matrix_spec`: no entry added to `guest_allowed`.
 - A system spec: mark a fact in Explore → (job run inline) → Review › By kind shows the row → Supersede → panel shows
   "Outdated by".
@@ -351,18 +371,18 @@ restores it; CI green.
 - `docs/architecture.md`: "Source facts and fact supersede" (scope rule, judge, fallbacks, auto-apply off by default).
 - `docs/guides/ui-guide.md`: Explore "Mark as source fact"; Review "Outdated by a fact"; the Find & supersede page.
 - `skills/graph-mem-mcp-toolset/SKILL.md`: when agents write a source fact and how to use
-  `find_outdated_observations`.
+  `detect_contradictions` with `mode: "outdated_by_fact"`, then `list_maintenance_review` / `apply_maintenance_review`.
 - `docs/plans/ui-dashboard-plan.md`: the "FS" row ✅ with the PR number.
 
 ### R. Release
 - `lib/graph_mem/version.rb` and `skills/graph-mem-mcp-toolset/SKILL.md:18` → the version from the Brief.
 - CHANGELOG `## [<version>] - <date>`: summary "Source facts: mark what's authoritative, and graph_mem proposes what it
-  outdates, per project"; Added (facts, candidates, judge, review kind, page, MCP tool, policy); Changed (`num_ctx`,
+  outdates, per project"; Added (facts, candidates, judge, review kind, page, the `detect_contradictions` mode, policy); Changed (`num_ctx`,
   token trust match, `docs/plans` skipped by scans); Fixed (the escaped content filter).
 - Don't tag, don't push tags, don't run `rake release`.
 
 ## Security checklist
-- **Auth:** the page and its writes are operator only; the MCP tool is in the `maintenance` profile and only seeds rows.
+- **Auth:** the page and its writes are operator only; the `detect_contradictions` mode is in the `maintenance` profile and only seeds rows.
 - **CSRF:** on for mark/unmark, bulk create and the review actions.
 - **Injection:** every `LIKE` term is escaped; ids are integers; the vector query uses bound values.
 - **LLM output:** parsed strictly, enumerated verdicts, length caps, HAML escaping; it can't name an observation
@@ -373,30 +393,34 @@ restores it; CI green.
 
 ## Size and split
 About **2,600-3,100 changed lines** (about 45% specs): S ~150, F1 ~350 (incl. migration), F2 ~300, F3 ~250, F4 ~500,
-F5 ~550, F6 ~180, T ~400 on top of the per-step specs, D ~120, R ~30. One PR in two checkpoints plus F5/F6. If the diff
+F5 ~550, F6 ~150, T ~400 on top of the per-step specs, D ~120, R ~30. One PR in two checkpoints plus F5/F6. If the diff
 passes ~3,500 lines, stop and ask Steve; the natural split is after F4 (backend and review queue first, the page and
-the MCP tool second).
+the `detect_contradictions` mode second).
 
-## Open decisions (each with a recommendation; Claude follows the recommendation unless Steve says otherwise)
-1. **What marks a source fact.** *Recommendation:* the `source-fact` tag on an observation in a project, with a `docs:` /
+## Decisions (settled 2026-10-29)
+Steve accepted all nine on their recommendations on 2026-10-29. Decision 7 came with a condition, the tool-count cap,
+so it now reads as below. These are no longer open: change one only if Steve says so.
+1. **What marks a source fact.** *Settled:* the `source-fact` tag on an observation in a project, with a `docs:` /
    `official:` / `operator` source by convention. No new column for the marker. Not "any `docs` source": too many scan
    and agent rows would qualify by accident.
-2. **The `outdated_by_id` column** (the only migration). *Recommendation:* yes. Without it the link lives only in the
+2. **The `outdated_by_id` column** (the only migration). *Settled:* yes. Without it the link lives only in the
    reason text and the change-set snapshot, which is pruned after its window.
-3. **Where proposals show.** *Recommendation:* a new kind in Review › By kind ("Outdated by a fact"), not a new tab.
+3. **Where proposals show.** *Settled:* a new kind in Review › By kind ("Outdated by a fact"), not a new tab.
    Contradictions are a kind too, and the Attention view ranks both by priority.
-4. **Ingest the README automatically on scan.** *Recommendation:* not in v1. Facts come from the operator and agents.
+4. **Ingest the README automatically on scan.** *Settled:* not in v1. Facts come from the operator and agents.
    Later: scans *propose* README statements as facts in Review; never self-mark.
-5. **Unscoped neighbours** (entities without a project, related to the fact's entity). *Recommendation:* list and
+5. **Unscoped neighbours** (entities without a project, related to the fact's entity). *Settled:* list and
    propose them with a warning, never auto-apply.
-6. **`experience` observations** (work-log entries). *Recommendation:* proposed with the `context` guard, never
+6. **`experience` observations** (work-log entries). *Settled:* proposed with the `context` guard, never
    auto-applied: a log entry was true when it was written.
-7. **MCP surface.** *Recommendation:* a separate `find_outdated_observations` tool that returns proposals and seeds
-   rows (apply via `apply_maintenance_review`), rather than a `graph_edit supersede_matching` operation, which would mix
-   proposals into an atomic write batch.
-8. **Auto-apply.** *Recommendation:* off by default; when on, threshold 0.9, operator-confirmed facts only, no guard,
+7. **MCP surface.** *Settled:* **no new tool.** A `mode: "outdated_by_fact"` on the existing `detect_contradictions`
+   returns proposals and seeds rows, and they are applied via `apply_maintenance_review` (§6). Not a
+   `graph_edit supersede_matching` operation, which would mix proposals into an atomic write batch. **Hard constraint:**
+   the default MCP catalog stays at 12 tools or fewer (12 today), and no tool class is added. If the work seems to need
+   a new tool, stop and ask Steve.
+8. **Auto-apply.** *Settled:* off by default; when on, threshold 0.9, operator-confirmed facts only, no guard,
    scoped entities only.
-9. **Version.** *Recommendation:* 1.64.0 after UI-7; if Steve wants it earlier, he picks the number.
+9. **Version.** *Settled:* 1.64.0 after UI-7; if Steve wants it earlier, he picks the number.
 
 ## Acceptance criteria
 - A source fact in `Gadget Project` saying "the MCP server uses the official `mcp` gem" yields a proposal for "the MCP
@@ -412,6 +436,7 @@ the MCP tool second).
   only the `outdated_by_id` column, index and FK. Synthetic data only.
 
 ## Stop and ask Steve if
+- Anything would add an MCP tool, or push the default `/mcp` catalog past 12 tools (Decision 7).
 - A quoted line no longer matches the code.
 - The design needs a second migration, a new gem or importmap pin, or a CSP change.
 - The judge can't be made reliable enough on the configured model for the synthetic acceptance cases (report the
