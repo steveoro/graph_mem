@@ -45,7 +45,7 @@ class EntityPanel
 
   # @return [Array<MemoryObservation>] this page, by trust (then confidence, then oldest first)
   def observations
-    @observations ||= observation_scope.order(trust_score: :desc, confidence: :desc, id: :asc)
+    @observations ||= observation_scope.includes(:memory_entity, :outdated_by).order(trust_score: :desc, confidence: :desc, id: :asc)
                                        .offset((page - 1) * OBSERVATIONS_PER_PAGE).limit(OBSERVATIONS_PER_PAGE + 1).to_a
     @observations.first(OBSERVATIONS_PER_PAGE)
   end

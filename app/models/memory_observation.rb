@@ -2,6 +2,7 @@
 
 class MemoryObservation < ApplicationRecord
   include Auditable
+  include SourceFact
 
   EMBEDDING_FIELDS = %w[content source tags].freeze
   ACTIVE_STATUS = "active"
@@ -75,14 +76,18 @@ class MemoryObservation < ApplicationRecord
     status == SUPERSEDED_STATUS
   end
 
-  def mark_obsolete!(reason: nil)
+  # @param reason [String, nil]
+  # @param outdated_by [MemoryObservation, nil] the source fact that retired it (same project)
+  # @return [MemoryObservation] self
+  def mark_obsolete!(reason: nil, outdated_by: nil)
     return self unless active?
 
     update!(
       status: OBSOLETE_STATUS,
       obsoleted_at: Time.current,
       obsolescence_reason: reason.presence,
-      superseded_by: nil
+      superseded_by: nil,
+      outdated_by: outdated_by
     )
     self
   end
@@ -94,7 +99,13 @@ class MemoryObservation < ApplicationRecord
     self
   end
 
-  def supersede!(attributes = nil, reason: nil, **extra_attributes)
+  # Creates the replacement on the same entity and points this row at it.
+  #
+  # @param attributes [Hash, nil] MUTABLE_FIELDS of the replacement (the rest is copied)
+  # @param reason [String, nil]
+  # @param outdated_by [MemoryObservation, nil] the source fact that outdated it (same project)
+  # @return [MemoryObservation] the replacement
+  def supersede!(attributes = nil, reason: nil, outdated_by: nil, **extra_attributes)
     replacement = nil
 
     self.class.transaction do
@@ -106,7 +117,8 @@ class MemoryObservation < ApplicationRecord
         status: SUPERSEDED_STATUS,
         obsoleted_at: Time.current,
         obsolescence_reason: reason.presence,
-        superseded_by: replacement
+        superseded_by: replacement,
+        outdated_by: outdated_by
       )
     end
 

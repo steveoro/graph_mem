@@ -115,6 +115,7 @@ Rails.application.routes.draw do
     end
     resources :observations, only: [ :update ] do
       post :retire, on: :member
+      post :fact, on: :member
     end
     resources :relations, only: [ :new, :create, :destroy ]
     resources :moves, only: [ :new, :create ]

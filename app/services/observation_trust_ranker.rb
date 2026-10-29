@@ -45,6 +45,8 @@ class ObservationTrustRanker
     end
 
     def source_factor(observation)
+      # A source fact is authoritative for its project, whatever its source says.
+      return HIGH_SOURCE_MULTIPLIER if observation.fact_tagged?
       return 1.0 if observation.source.blank?
 
       # Whole tokens only: "docs:README.md" is a doc source, "docker-compose" isn't.

@@ -2,7 +2,7 @@
 
 module Explore
   # The panel's observation forms: add (with the duplicate and similarity checks), edit
-  # (supersede, history kept) and retire (mark obsolete).
+  # (supersede, history kept), retire (mark obsolete) and mark / unmark as source fact.
   class ObservationsController < BaseController
     # POST /explore/entities/:entity_id/observations(?force=1)
     def create
@@ -24,6 +24,13 @@ module Explore
     def retire
       observation = find_observation
       result = edits.retire_observation(observation, reason: params[:reason])
+      respond_with_explore(result, entity: observation.memory_entity)
+    end
+
+    # POST /explore/observations/:id/fact (mark=1 marks the source fact, mark=0 unmarks it)
+    def fact
+      observation = find_observation
+      result = edits.mark_fact(observation, mark: params[:mark] == "1")
       respond_with_explore(result, entity: observation.memory_entity)
     end
 

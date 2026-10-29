@@ -1,4 +1,5 @@
--# One observation; the operator can edit it (supersede, history kept) or retire it (undoable).
+-# One observation; the operator can edit it (supersede, history kept), retire it, or mark it as
+-# its project's source fact (all undoable). An outdated row links the fact that outdated it.
 - mine = state[:form] == "observation_#{observation.id}"
 - values = mine ? state[:values].to_h.stringify_keys : {}
 - active = observation.status == MemoryObservation::ACTIVE_STATUS
@@ -10,6 +11,12 @@
       = "· #{observation.perspective}"
     - unless active
       %span.ui-badge= observation.status
+    - if active && observation.fact_tagged?
+      %span.ui-badge.ui-badge--ok{ data: { testid: "entity-panel-source-fact" } }= t("explore.panel.source_fact")
+  - if !active && (fact = observation.outdated_by)
+    %p.entity-panel__meta{ data: { testid: "entity-panel-outdated-by" } }
+      = t("explore.panel.outdated_by")
+      = link_to fact.content.truncate(80), entity_panel_path(fact.memory_entity_id, obsolete: (fact.active? ? nil : "1"), anchor: "observation-#{fact.id}")
   - if can_write? && active
     %details.entity-panel__edit{ open: mine }
       %summary= t("explore.panel.edit_observation")
@@ -25,3 +32,8 @@
     = button_to t("explore.panel.retire"), retire_explore_observation_path(observation), method: :post,
       class: "ui-btn entity-panel__inline-action", form: { data: { turbo_stream: true } },
       data: { testid: "entity-panel-retire" }
+    - if observation.fact_tagged? || observation.fact_project_id
+      = button_to (observation.fact_tagged? ? t("explore.panel.unmark_fact") : t("explore.panel.mark_fact")),
+        fact_explore_observation_path(observation, mark: observation.fact_tagged? ? "0" : "1"), method: :post,
+        class: "ui-btn entity-panel__inline-action", form: { data: { turbo_stream: true } },
+        data: { testid: observation.fact_tagged? ? "entity-panel-unmark-fact" : "entity-panel-mark-fact" }
