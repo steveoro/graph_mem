@@ -177,8 +177,9 @@ Rails.application.routes.draw do
   end
 
   # UI-7: System (operator only; System::BaseController).
-  get "system", to: redirect("/system/settings", status: 301), as: :system
+  get "system", to: redirect("/system/health", status: 301), as: :system
   namespace :system do
+    get "health", to: "health#show", as: :health
     get "settings", to: "settings#show", as: :settings
     patch "settings", to: "settings#update"
     delete "settings/legacy_scan_roots", to: "settings#clear_legacy_scan_roots", as: :clear_legacy_scan_roots

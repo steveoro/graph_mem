@@ -41,6 +41,14 @@ class HomeSnapshot
       %i[database embeddings summaries jobs backup scans mcp guest].map { |key| send(:"#{key}_pill") }
     end
 
+    # One pill by key (SystemHealth reuses them, without a second embedding probe).
+    #
+    # @param key [Symbol] :database, :summaries, :jobs, :backup, :scans, :mcp or :guest
+    # @return [Hash] see {#pills}
+    def pill_for(key)
+      send(:"#{key}_pill")
+    end
+
     # @return [Boolean] see {.embedding_reachable?}
     def embedding_reachable?
       self.class.embedding_reachable?

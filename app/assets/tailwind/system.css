@@ -176,6 +176,59 @@
     width: auto;
   }
 
+  .system-health {
+    display: grid;
+    gap: 0.5rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .system-health__row {
+    display: grid;
+    grid-template-columns: minmax(9rem, 12rem) auto 1fr auto;
+    gap: 0.75rem;
+    align-items: center;
+    padding: 0.75rem 1rem;
+  }
+
+  .system-health__label {
+    font-weight: 600;
+  }
+
+  .system-health__detail {
+    grid-column: 1 / -1;
+    font-size: 0.8125rem;
+  }
+
+  .system-health__overall {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    margin: 0;
+  }
+
+  @media (max-width: 40rem) {
+    .system-health__row {
+      grid-template-columns: 1fr auto;
+    }
+  }
+
+  .ui-badge--ok {
+    background: var(--color-ui-ok-soft);
+    color: var(--color-ui-ok);
+  }
+
+  .ui-badge--warn {
+    background: var(--color-ui-warn-soft);
+    color: var(--color-ui-warn);
+  }
+
+  .ui-badge--danger {
+    background: var(--color-ui-danger-soft);
+    color: var(--color-ui-danger);
+  }
+
   .system-sr-only {
     position: absolute;
     width: 1px;

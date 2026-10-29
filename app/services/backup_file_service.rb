@@ -41,6 +41,12 @@ class BackupFileService
     raise Error, "Backup failed with exit status #{e.status}"
   end
 
+  # @return [Boolean] whether the backup folder exists and the app can write to it (System › Health)
+  def folder_writable?
+    dir = resolve_backup_dir
+    dir.directory? && File.writable?(dir)
+  end
+
   private
 
   def resolve_backup_dir

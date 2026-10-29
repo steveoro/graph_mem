@@ -38,6 +38,7 @@
       -# System pages name their entry too (System::BaseController.nav_section). Mission Control and
       -# Swagger UI have their own layouts: skip Turbo Drive.
       %ul.ui-sidebar__list
+        %li= ui_nav_link t("system.nav.health"), main_app.system_health_path, testid: "nav-system-health", current: section == :health
         %li= ui_nav_link t("system.nav.settings"), main_app.system_settings_path, testid: "nav-settings", icon: :settings,
           current: section == :settings
         %li= ui_nav_link t("system.nav.backups"), main_app.system_backups_path, testid: "nav-system-backups", current: section == :backups
