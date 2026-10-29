@@ -44,7 +44,8 @@ class SummaryGenerationClient
   # @param prompt [String]
   # @param style [String] "concise" or "detailed" (sets the temperature)
   # @param options [Hash] Ollama only, merged over the defaults: `num_ctx:` (Integer, the context
-  #   window) and `format:` ("json" asks Ollama for JSON output); the OpenAI-compatible path ignores it
+  #   window), `num_predict:` (Integer, the output cap instead of max_tokens) and `format:` ("json"
+  #   asks Ollama for JSON output); the OpenAI-compatible path ignores it
   # @return [Hash] `{ ok:, text:, error:, latency_ms: }`
   def generate(prompt, style: "concise", options: {})
     return { ok: false, text: nil, error: "prompt is blank" } if prompt.blank?
@@ -97,7 +98,7 @@ class SummaryGenerationClient
       stream: false,
       options: {
         temperature: style == "concise" ? 0.1 : 0.3,
-        num_predict: @max_tokens,
+        num_predict: (options[:num_predict] || @max_tokens).to_i,
         num_ctx: (options[:num_ctx] || @num_ctx).to_i
       }
     }

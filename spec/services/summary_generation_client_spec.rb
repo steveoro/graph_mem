@@ -71,9 +71,9 @@ RSpec.describe SummaryGenerationClient do
       end
 
       it "merges the options keyword: num_ctx and format json" do
-        described_class.generate("Judge these facts.", options: { num_ctx: 4096, format: "json" })
+        described_class.generate("Judge these facts.", options: { num_ctx: 4096, num_predict: 1024, format: "json" })
 
-        expect(bodies.last["options"]["num_ctx"]).to eq(4096)
+        expect(bodies.last["options"]).to include("num_ctx" => 4096, "num_predict" => 1024)
         expect(bodies.last["format"]).to eq("json")
       end
 
