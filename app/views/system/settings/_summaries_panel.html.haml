@@ -5,8 +5,8 @@
 
   .dashboard-settings-field
     %label.dashboard-settings-field__label{ for: "setting_enable_llm_summarization" }
-      = t("operator.settings.fields.enable_llm_summarization.label")
-    %p.dashboard-settings-field__hint= t("operator.settings.fields.enable_llm_summarization.description")
+      = t("system.settings.fields.enable_llm_summarization.label")
+    %p.dashboard-settings-field__hint= t("system.settings.fields.enable_llm_summarization.description")
     .dashboard-settings-switch
       = hidden_field_tag "settings[enable_llm_summarization]", "0", id: nil
       = check_box_tag "settings[enable_llm_summarization]", "1",
@@ -17,43 +17,43 @@
 
   .dashboard-settings-field
     %label.dashboard-settings-field__label{ for: "setting_summary_url" }
-      = t("operator.settings.fields.summary_url.label")
-    %p.dashboard-settings-field__hint= t("operator.settings.fields.summary_url.description")
+      = t("system.settings.fields.summary_url.label")
+    %p.dashboard-settings-field__hint= t("system.settings.fields.summary_url.description")
     .dashboard-settings-field__input-group
       = text_field_tag "settings[summary_url]",
         AppSettings.summary_url,
         id: "setting_summary_url",
         class: "dashboard-settings-field__input",
-        placeholder: t("operator.settings.summaries.blank_uses_env"),
+        placeholder: t("system.settings.summaries.blank_uses_env"),
         data: { testid: "setting-summary_url" }
       = summarization_settings_fallback_hint(:url)
 
   .dashboard-settings-field
     %label.dashboard-settings-field__label{ for: "setting_summary_model" }
-      = t("operator.settings.fields.summary_model.label")
-    %p.dashboard-settings-field__hint= t("operator.settings.fields.summary_model.description")
+      = t("system.settings.fields.summary_model.label")
+    %p.dashboard-settings-field__hint= t("system.settings.fields.summary_model.description")
     .dashboard-settings-field__input-group
       = text_field_tag "settings[summary_model]",
         AppSettings.summary_model,
         id: "setting_summary_model",
         class: "dashboard-settings-field__input",
-        placeholder: t("operator.settings.summaries.blank_uses_env"),
+        placeholder: t("system.settings.summaries.blank_uses_env"),
         data: { testid: "setting-summary_model" }
       = summarization_settings_fallback_hint(:model)
 
   .dashboard-settings-field
     %label.dashboard-settings-field__label{ for: "setting_summary_provider" }
-      = t("operator.settings.fields.summary_provider.label")
-    %p.dashboard-settings-field__hint= t("operator.settings.fields.summary_provider.description")
+      = t("system.settings.fields.summary_provider.label")
+    %p.dashboard-settings-field__hint= t("system.settings.fields.summary_provider.description")
     .dashboard-settings-field__input-group
-      - provider_options = [[t("operator.settings.summaries.provider_blank"), ""], ["ollama", "ollama"], ["openai_compatible", "openai_compatible"]]
+      - provider_options = [[t("system.settings.summaries.provider_blank"), ""], ["ollama", "ollama"], ["openai_compatible", "openai_compatible"]]
       = select_tag "settings[summary_provider]", options_for_select(provider_options, AppSettings.summary_provider), id: "setting_summary_provider", class: "dashboard-settings-field__input", data: { testid: "setting-summary_provider" }
       = summarization_settings_fallback_hint(:provider)
 
   .dashboard-settings-field
     %label.dashboard-settings-field__label{ for: "setting_summary_timeout" }
-      = t("operator.settings.fields.summary_timeout.label")
-    %p.dashboard-settings-field__hint= t("operator.settings.fields.summary_timeout.description")
+      = t("system.settings.fields.summary_timeout.label")
+    %p.dashboard-settings-field__hint= t("system.settings.fields.summary_timeout.description")
     .dashboard-settings-field__input-group
       = number_field_tag "settings[summary_timeout]",
         AppSettings.summary_timeout,
@@ -65,8 +65,8 @@
 
   .dashboard-settings-field
     %label.dashboard-settings-field__label{ for: "setting_summary_max_tokens" }
-      = t("operator.settings.fields.summary_max_tokens.label")
-    %p.dashboard-settings-field__hint= t("operator.settings.fields.summary_max_tokens.description")
+      = t("system.settings.fields.summary_max_tokens.label")
+    %p.dashboard-settings-field__hint= t("system.settings.fields.summary_max_tokens.description")
     .dashboard-settings-field__input-group
       = number_field_tag "settings[summary_max_tokens]",
         AppSettings.summary_max_tokens,
@@ -77,14 +77,14 @@
       = summarization_settings_fallback_hint(:max_tokens)
 
   .dashboard-card__hint.embeddings-settings-priority
-    %p= t("operator.settings.summaries.priority_hint")
-    %p= t("operator.settings.summaries.deterministic_hint")
+    %p= t("system.settings.summaries.priority_hint")
+    %p= t("system.settings.summaries.deterministic_hint")
 
   .dashboard-card__actions
-    = submit_tag t("operator.settings.save_group"),
+    = submit_tag t("system.settings.save_group"),
       class: "dashboard-btn dashboard-btn--primary",
       data: { testid: "operator-settings-save-btn-summaries" }
-    = link_to t("operator.settings.reset"),
+    = link_to t("system.settings.reset"),
       system_settings_path(tab: group_key),
       class: "dashboard-btn dashboard-btn--secondary",
       data: { testid: "operator-settings-reset-btn-summaries" }

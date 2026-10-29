@@ -20,7 +20,7 @@ module EmbeddingsHelper
     fallback = EmbeddingConfig.fallback_for(key)
     content_tag(:p, class: "dashboard-settings-field__fallback", data: { testid: "embedding-fallback-#{key}" }) do
       safe_join([
-        content_tag(:span, t("operator.settings.embeddings.used_when_blank"), class: "dashboard-settings-field__fallback-label"),
+        content_tag(:span, t("system.settings.embeddings.used_when_blank"), class: "dashboard-settings-field__fallback-label"),
         " ",
         content_tag(:code, fallback[:value], class: "dashboard-settings-field__fallback-value"),
         " ",

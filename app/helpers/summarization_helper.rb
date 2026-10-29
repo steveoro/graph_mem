@@ -5,7 +5,7 @@ module SummarizationHelper
     fallback = SummarizationConfig.fallback_for(key)
     content_tag(:p, class: "dashboard-settings-field__fallback", data: { testid: "summary-fallback-#{key}" }) do
       safe_join([
-        content_tag(:span, t("operator.settings.summaries.used_when_blank"), class: "dashboard-settings-field__fallback-label"),
+        content_tag(:span, t("system.settings.summaries.used_when_blank"), class: "dashboard-settings-field__fallback-label"),
         " ",
         content_tag(:code, fallback[:value], class: "dashboard-settings-field__fallback-value"),
         " ",

@@ -5,43 +5,43 @@
 
   .dashboard-settings-field
     %label.dashboard-settings-field__label{ for: "setting_embedding_url" }
-      = t("operator.settings.fields.embedding_url.label")
-    %p.dashboard-settings-field__hint= t("operator.settings.fields.embedding_url.description")
+      = t("system.settings.fields.embedding_url.label")
+    %p.dashboard-settings-field__hint= t("system.settings.fields.embedding_url.description")
     .dashboard-settings-field__input-group
       = text_field_tag "settings[embedding_url]",
         AppSettings.embedding_url,
         id: "setting_embedding_url",
         class: "dashboard-settings-field__input",
-        placeholder: t("operator.settings.embeddings.blank_uses_env"),
+        placeholder: t("system.settings.embeddings.blank_uses_env"),
         data: { testid: "setting-embedding_url" }
       = embedding_settings_fallback_hint(:url)
 
   .dashboard-settings-field
     %label.dashboard-settings-field__label{ for: "setting_embedding_model" }
-      = t("operator.settings.fields.embedding_model.label")
-    %p.dashboard-settings-field__hint= t("operator.settings.fields.embedding_model.description")
+      = t("system.settings.fields.embedding_model.label")
+    %p.dashboard-settings-field__hint= t("system.settings.fields.embedding_model.description")
     .dashboard-settings-field__input-group
       = text_field_tag "settings[embedding_model]",
         AppSettings.embedding_model,
         id: "setting_embedding_model",
         class: "dashboard-settings-field__input",
-        placeholder: t("operator.settings.embeddings.blank_uses_env"),
+        placeholder: t("system.settings.embeddings.blank_uses_env"),
         data: { testid: "setting-embedding_model" }
       = embedding_settings_fallback_hint(:model)
 
   .dashboard-settings-field
     %label.dashboard-settings-field__label{ for: "setting_embedding_provider" }
-      = t("operator.settings.fields.embedding_provider.label")
-    %p.dashboard-settings-field__hint= t("operator.settings.fields.embedding_provider.description")
+      = t("system.settings.fields.embedding_provider.label")
+    %p.dashboard-settings-field__hint= t("system.settings.fields.embedding_provider.description")
     .dashboard-settings-field__input-group
-      - provider_options = [[t("operator.settings.embeddings.provider_blank"), ""], ["ollama", "ollama"], ["openai_compatible", "openai_compatible"]]
+      - provider_options = [[t("system.settings.embeddings.provider_blank"), ""], ["ollama", "ollama"], ["openai_compatible", "openai_compatible"]]
       = select_tag "settings[embedding_provider]", options_for_select(provider_options, AppSettings.embedding_provider), id: "setting_embedding_provider", class: "dashboard-settings-field__input", data: { testid: "setting-embedding_provider" }
       = embedding_settings_fallback_hint(:provider)
 
   .dashboard-settings-field
     %label.dashboard-settings-field__label{ for: "setting_embedding_dims" }
-      = t("operator.settings.fields.embedding_dims.label")
-    %p.dashboard-settings-field__hint= t("operator.settings.fields.embedding_dims.description")
+      = t("system.settings.fields.embedding_dims.label")
+    %p.dashboard-settings-field__hint= t("system.settings.fields.embedding_dims.description")
     .dashboard-settings-field__input-group
       = number_field_tag "settings[embedding_dims]",
         AppSettings.embedding_dims,
@@ -53,8 +53,8 @@
 
   .dashboard-settings-field
     %label.dashboard-settings-field__label{ for: "setting_enable_scheduled_embedding_backfill" }
-      = t("operator.settings.fields.enable_scheduled_embedding_backfill.label")
-    %p.dashboard-settings-field__hint= t("operator.settings.fields.enable_scheduled_embedding_backfill.description")
+      = t("system.settings.fields.enable_scheduled_embedding_backfill.label")
+    %p.dashboard-settings-field__hint= t("system.settings.fields.enable_scheduled_embedding_backfill.description")
     .dashboard-settings-switch
       = hidden_field_tag "settings[enable_scheduled_embedding_backfill]", "0", id: nil
       = check_box_tag "settings[enable_scheduled_embedding_backfill]", "1",
@@ -65,8 +65,8 @@
 
   .dashboard-settings-field
     %label.dashboard-settings-field__label{ for: "setting_embedding_backfill_schedule_cron" }
-      = t("operator.settings.fields.embedding_backfill_schedule_cron.label")
-    %p.dashboard-settings-field__hint= t("operator.settings.fields.embedding_backfill_schedule_cron.description")
+      = t("system.settings.fields.embedding_backfill_schedule_cron.label")
+    %p.dashboard-settings-field__hint= t("system.settings.fields.embedding_backfill_schedule_cron.description")
     = text_field_tag "settings[embedding_backfill_schedule_cron]",
       AppSettings.embedding_backfill_schedule_cron,
       id: "setting_embedding_backfill_schedule_cron",
@@ -75,21 +75,21 @@
       data: { testid: "setting-embedding_backfill_schedule_cron" }
 
   .dashboard-card__hint.embeddings-settings-priority
-    %p= t("operator.settings.embeddings.priority_hint")
+    %p= t("system.settings.embeddings.priority_hint")
     %p
-      = link_to t("operator.settings.embeddings.manage_link"), system_embeddings_path, id: "link-settings-embeddings"
+      = link_to t("system.settings.embeddings.manage_link"), system_embeddings_path, id: "link-settings-embeddings"
 
   .dashboard-card__actions
-    = submit_tag t("operator.settings.save_group"),
+    = submit_tag t("system.settings.save_group"),
       class: "dashboard-btn dashboard-btn--primary",
       data: { testid: "operator-settings-save-btn-embeddings" }
-    = link_to t("operator.settings.reset"),
+    = link_to t("system.settings.reset"),
       system_settings_path(tab: group_key),
       class: "dashboard-btn dashboard-btn--secondary",
       data: { testid: "operator-settings-reset-btn-embeddings" }
 
 .dashboard-settings-embeddings-actions
-  %h3.dashboard-details__subtitle= t("operator.settings.embeddings.test_title")
+  %h3.dashboard-details__subtitle= t("system.settings.embeddings.test_title")
   = button_to t("operator.embeddings.actions.test_connection"),
     system_test_embeddings_connection_path,
     method: :post,

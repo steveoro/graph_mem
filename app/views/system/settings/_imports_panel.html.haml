@@ -6,8 +6,8 @@
 
   .dashboard-settings-field{ data: { controller: "import-threshold" } }
     %label.dashboard-settings-field__label{ for: "setting_import_observation_duplicate_max_distance" }
-      = t("operator.settings.fields.import_observation_duplicate_max_distance.label")
-    %p.dashboard-settings-field__hint= t("operator.settings.fields.import_observation_duplicate_max_distance.description")
+      = t("system.settings.fields.import_observation_duplicate_max_distance.label")
+    %p.dashboard-settings-field__hint= t("system.settings.fields.import_observation_duplicate_max_distance.description")
     .dashboard-settings-field__input-group
       = range_field_tag "settings[import_observation_duplicate_max_distance]",
         duplicate_distance,
@@ -20,13 +20,13 @@
       %output.dashboard-settings-field__value{
         data: { import_threshold_target: "output", testid: "import-observation-duplicate-distance-value" }
       }= format("%.2f", duplicate_distance)
-    %p.dashboard-settings-field__hint= t("operator.settings.imports.distance_hint")
+    %p.dashboard-settings-field__hint= t("system.settings.imports.distance_hint")
 
   .dashboard-card__actions
-    = submit_tag t("operator.settings.save_group"),
+    = submit_tag t("system.settings.save_group"),
       class: "dashboard-btn dashboard-btn--primary",
       data: { testid: "operator-settings-save-btn-imports" }
-    = link_to t("operator.settings.reset"),
+    = link_to t("system.settings.reset"),
       system_settings_path(tab: group_key),
       class: "dashboard-btn dashboard-btn--secondary",
       data: { testid: "operator-settings-reset-btn-imports" }

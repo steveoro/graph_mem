@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-# Settings › Review policies (UI-5b B2) for System::SettingsController: range validation of the
+# Settings › Review policies (UI-5b B2; UI-7 SettingsGroupUpdate): range validation of the
 # review settings (from AppSettings::REVIEW_NUMBERS, for any request that carries them) and one
 # AuditLog row per changed key (auditable_type "AppSettings", the setting's own row).
 module ReviewPolicySettings
@@ -19,7 +19,7 @@ module ReviewPolicySettings
       value = Float(raw, exception: false)
       next if value && range.cover?(value)
 
-      return t("operator.settings.review_policies.out_of_range", setting: t("operator.settings.fields.#{key}.label"),
+      return t("system.settings.review_policies.out_of_range", setting: t("system.settings.fields.#{key}.label"),
                                                                  min: range.min, max: range.max, value: raw)
     end
     nil
@@ -41,14 +41,5 @@ module ReviewPolicySettings
       AuditLog.create!(auditable_type: "AppSettings", auditable_id: rows[key].id, action: "update", actor: Current.actor,
                        changed_fields: { key => { from: before[key], to: after[key] } })
     end
-  end
-
-  def render_review_policy_error(message)
-    AppSettings.clear_cache
-    @settings_by_group = group_settings_by_category
-    @active_tab = "review_policies"
-    @review_policy_error = message
-    flash.now[:alert] = message
-    render :show, status: :unprocessable_content
   end
 end

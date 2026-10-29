@@ -1,21 +1,5 @@
 en:
-  operator:
-    maintenance:
-      compactor_disabled: "Dream-state compaction is disabled in System Settings."
-      gc_disabled: "Garbage collection is disabled in System Settings."
-    sessions:
-      title: "Operator Sign In"
-      subtitle: "Sign in to access the GraphMem operator dashboard."
-      username_label: "Username"
-      password_label: "Password"
-      sign_in: "Sign in"
-      login_required: "Please sign in to continue."
-      signed_in: "Signed in successfully."
-      signed_out: "Signed out."
-      invalid_credentials: "Invalid username or password."
-      session_expired: "Your session has expired. Please sign in again."
-      guest_disabled: "Guest access is disabled."
-      too_many_attempts: "Too many sign-in attempts. Please wait and try again."
+  system:
     settings:
       title: "System Settings"
       subtitle: "Configure feature flags, database backup, embedding service, summarization behavior, and project scan settings."
@@ -24,14 +8,14 @@ en:
       footer_info: "Changes apply immediately: no need to restart the application. Scheduled backup times are defined in config/recurring.yml."
       groups:
         feature_flags: "Feature Flags"
-        database_backup: "Database Backup"
+        backups: "Backup settings"
         embeddings: "Embeddings"
         summaries: "Summaries"
         imports: "Imports"
         project_scans: "Project Scans"
-        telemetry: "Telemetry"
+        telemetry: "Telemetry & retention"
         review_policies: "Review policies"
-        mcp_access: "MCP access"
+        access: "Access settings"
       review_policies:
         intro: "Policies run nightly at 5:00 GMT and after a compaction run, stale scan or project scan that queued suggestions. Changes apply on the next run. Every policy action is an undoable change set (Review › Policies)."
         range: "Accepted range: %{min}–%{max}."
@@ -74,6 +58,8 @@ en:
       validation:
         greater_than: "Must be greater than %{value}."
         less_than_or_equal_to: "Must be at most %{value}."
+        out_of_range: "%{setting} must be between %{min} and %{max} (got %{value}). Nothing was saved."
+        range: "Accepted range: %{min}–%{max}."
       fields:
         mcp_extra_allowed_ips:
           label: "Allowed client IPs"
@@ -90,6 +76,12 @@ en:
         enable_garbage_collector:
           label: "Garbage collector"
           description: "When disabled, scheduled and manual garbage collection runs are skipped."
+        enable_stale_memory_scan:
+          label: "Stale memory scan"
+          description: "When disabled, the scheduled scan that flags stale observations for review is skipped."
+        enable_contradiction_detection:
+          label: "Contradiction detection"
+          description: "When disabled, the contradiction detector (the stale memory scan and the detect_contradictions endpoint) finds no contradicting observation pairs."
         enable_guest_access:
           label: "Guest access (read-only)"
           description: "Lets the guest account sign in. Has no effect until a guest password is set in GRAPH_MEM_GUEST_PASSWORD or the Rails credentials (guest.password)."
