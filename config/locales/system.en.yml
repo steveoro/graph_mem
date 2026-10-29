@@ -1,0 +1,19 @@
+en:
+  system:
+    nav:
+      health: "Health"
+      settings: "Settings"
+      backups: "Backups"
+      access: "Access"
+      activity: "Activity"
+      audit_log: "Audit log"
+      telemetry: "Telemetry"
+      embeddings: "Embeddings"
+      jobs: "Background jobs"
+      queue: "Queue"
+      api_docs: "API docs"
+    jobs:
+      title: "Background jobs"
+      subtitle: "The dream-state compactor, the garbage collector and relation repair."
+      totals: "The graph: %{entities} entities, %{observations} observations, %{relations} relations, %{orphans} orphans."
+      queue_link: "Open the queue (Mission Control)"

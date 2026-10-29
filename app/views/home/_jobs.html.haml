@@ -32,5 +32,5 @@
             - if job[:error]
               %span.home-list__meta= job[:error].truncate(80)
     .home-card__footer
-      = link_to t("home.jobs.controls"), projects_jobs_path, data: { turbo_frame: "_top" }
-      = link_to t("home.jobs.all_jobs"), "/operator/jobs", data: { turbo: false }
+      = link_to t("home.jobs.controls"), system_jobs_path, data: { turbo_frame: "_top" }
+      = link_to t("home.jobs.all_jobs"), mission_control_jobs_path, data: { turbo: false }

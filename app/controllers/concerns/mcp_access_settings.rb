@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-# Settings › MCP access (UI-2a A3) for Operator::SettingsController: the additive part of the
+# Settings › MCP access (UI-2a A3) for System::SettingsController: the additive part of the
 # three MCP allowlists. Validated wherever they come from (any error → 422, nothing saved), stored
 # normalized, one AuditLog row per changed key, then applied without a restart through
 # OfficialMcp.refresh_access! (a hosts or origins change also closes open MCP sessions).
@@ -63,6 +63,6 @@ module McpAccessSettings
     @active_tab = "mcp_access"
     @mcp_access_errors = errors
     flash.now[:alert] = t("operator.settings.mcp_access.not_saved", errors: errors.values.flatten.join("; "))
-    render :index, status: :unprocessable_content
+    render :show, status: :unprocessable_content
   end
 end

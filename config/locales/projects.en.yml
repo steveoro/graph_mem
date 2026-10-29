@@ -5,7 +5,6 @@ en:
       scans: "Scans"
       imports: "Imports"
       exports: "Exports"
-      jobs: "Background jobs"
     ago: "%{time} ago"
     index:
       title: "Projects"
@@ -165,7 +164,3 @@ en:
       show:
         title: "Export"
         download: "Download"
-    jobs:
-      title: "Background jobs"
-      subtitle: "The dream-state compactor, the garbage collector and relation repair."
-      totals: "The graph: %{entities} entities, %{observations} observations, %{relations} relations, %{orphans} orphans."

@@ -7,7 +7,7 @@
       %button.projects-chip{ type: "button", data: { action: "path-check#pick", path_check_path_param: root, testid: "scan-folder-chip" } }= root
     - if status[:allowed_roots].empty?
       %span.projects-hint= t("projects.scans.form.no_folders")
-    = link_to t("projects.scans.form.settings"), operator_settings_path(tab: "project_scans"), class: "projects-hint"
+    = link_to t("projects.scans.form.settings"), system_settings_path(tab: "project_scans"), class: "projects-hint"
 - else
   %p.projects-error{ data: { testid: "scans-disabled-hint" } }
     - if !status[:scans_switch]
@@ -16,4 +16,4 @@
       = t("projects.scans.form.disabled_container")
     - else
       = t("projects.scans.form.disabled_other", reason: status[:hard_roots].filter_map { |root| root[:error] }.join("; ").presence || t("projects.scans.form.no_root"))
-    = link_to t("projects.scans.form.settings"), operator_settings_path(tab: "project_scans")
+    = link_to t("projects.scans.form.settings"), system_settings_path(tab: "project_scans")

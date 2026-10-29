@@ -31,13 +31,13 @@ RSpec.describe "Content Security Policy in the browser", type: :system do
       "New scan" => "/projects/scans/new",
       "Import" => "/projects/imports/new",
       "Exports" => "/projects/exports",
-      "Background jobs" => "/projects/jobs",
       "Review & Fix" => "/review",
       "Scan review" => "/review?view=scan",
-      "Embeddings" => "/operator/embeddings",
-      "Telemetry" => "/operator/telemetry",
-      "Audit log" => "/operator/audit_logs",
-      "Settings" => "/operator/settings"
+      "Background jobs" => "/system/jobs",
+      "Embeddings" => "/system/embeddings",
+      "Telemetry" => "/system/telemetry",
+      "Audit log" => "/system/audit_log",
+      "Settings" => "/system/settings"
     }.each do |label, path|
       visit path
       wait_for_stimulus
@@ -45,7 +45,7 @@ RSpec.describe "Content Security Policy in the browser", type: :system do
     end
 
     # Mission Control has its own layout and Stimulus instance: wait for its tabs instead.
-    visit "/operator/jobs"
+    visit "/system/queue"
     expect(page).to have_link("Failed jobs")
     expect_no_csp_errors("Jobs")
 

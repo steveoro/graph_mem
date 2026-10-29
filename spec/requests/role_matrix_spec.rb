@@ -54,9 +54,9 @@ RSpec.describe "Role matrix", type: :request do
   end.uniq(&:key)
 
   # Mission Control's own routes (a mounted engine, so the walk above skips them). Its
-  # controllers inherit Operator::JobsDashboardController < ApplicationController.
+  # controllers inherit System::QueueDashboardController < ApplicationController.
   jobs_cases = MissionControl::Jobs::Engine.routes.routes.flat_map do |route|
-    path = "/operator/jobs#{route.path.spec.to_s.gsub("(.:format)", "").gsub(/[:*]\w+/, "1")}".chomp("/")
+    path = "/system/queue#{route.path.spec.to_s.gsub("(.:format)", "").gsub(/[:*]\w+/, "1")}".chomp("/")
     route.verb.to_s.split("|").map { |verb| route_case_class.new(verb: verb, path: path, action_key: route.defaults[:controller]) }
   end.uniq(&:key)
 
@@ -173,7 +173,7 @@ RSpec.describe "Role matrix", type: :request do
     before { sign_in_operator }
 
     it "reaches Mission Control and /api-docs" do
-      get "/operator/jobs"
+      get "/system/queue"
       expect(response).to have_http_status(:ok)
 
       get "/api-docs/index.html"

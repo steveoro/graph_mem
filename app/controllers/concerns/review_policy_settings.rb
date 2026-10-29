@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-# Settings › Review policies (UI-5b B2) for Operator::SettingsController: range validation of the
+# Settings › Review policies (UI-5b B2) for System::SettingsController: range validation of the
 # review settings (from AppSettings::REVIEW_NUMBERS, for any request that carries them) and one
 # AuditLog row per changed key (auditable_type "AppSettings", the setting's own row).
 module ReviewPolicySettings
@@ -49,6 +49,6 @@ module ReviewPolicySettings
     @active_tab = "review_policies"
     @review_policy_error = message
     flash.now[:alert] = message
-    render :index, status: :unprocessable_content
+    render :show, status: :unprocessable_content
   end
 end

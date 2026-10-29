@@ -1,0 +1,36 @@
+-# Settings › Review policies (UI-5b B2): the review policy toggles and the review limits. Values
+-# out of AppSettings::REVIEW_NUMBERS' ranges answer 422; every change writes an audit row.
+- group_key = local_assigns.fetch(:group_key)
+- toggles = AppSettings::REVIEW_POLICY_TOGGLES
+- numbers = AppSettings::REVIEW_NUMBERS
+
+= form_with url: system_settings_path, method: :patch, local: true, class: "dashboard-settings-form" do
+  = hidden_field_tag :tab, group_key
+  %p.dashboard-card__hint= t("operator.settings.review_policies.intro")
+
+  - toggles.each do |policy, (setting_key, _default)|
+    .dashboard-settings-field
+      %label.dashboard-settings-field__label{ for: "setting_#{setting_key}" }= t("operator.settings.fields.#{setting_key}.label")
+      %p.dashboard-settings-field__hint= t("operator.settings.review_policies.policies.#{policy}")
+      .dashboard-settings-switch
+        = hidden_field_tag "settings[#{setting_key}]", "0", id: nil
+        = check_box_tag "settings[#{setting_key}]", "1", AppSettings.review_policy_enabled?(policy),
+          id: "setting_#{setting_key}", class: "dashboard-settings-switch__input", data: { testid: "setting-#{setting_key}" }
+
+  - numbers.each do |setting_key, (default, range)|
+    .dashboard-settings-field
+      %label.dashboard-settings-field__label{ for: "setting_#{setting_key}" }= t("operator.settings.fields.#{setting_key}.label")
+      %p.dashboard-settings-field__hint= t("operator.settings.fields.#{setting_key}.description")
+      = number_field_tag "settings[#{setting_key}]", params.dig(:settings, setting_key) || AppSettings.review_number(setting_key),
+        id: "setting_#{setting_key}", class: "dashboard-settings-field__input",
+        min: range.min, max: range.max, step: default.is_a?(Integer) ? 1 : 0.01,
+        data: { testid: "setting-#{setting_key}" }
+      %small.dashboard-settings-field__validation= t("operator.settings.review_policies.range", min: range.min, max: range.max)
+
+  %p.dashboard-card__hint= t("operator.settings.review_policies.snooze_expiry")
+
+  .dashboard-card__actions
+    = submit_tag t("operator.settings.save_group"), class: "dashboard-btn dashboard-btn--primary",
+      data: { testid: "operator-settings-save-btn-review_policies" }
+    = link_to t("operator.settings.reset"), system_settings_path(tab: group_key), class: "dashboard-btn dashboard-btn--secondary",
+      data: { testid: "operator-settings-reset-btn-review_policies" }

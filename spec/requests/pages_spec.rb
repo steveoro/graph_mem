@@ -79,7 +79,7 @@ RSpec.describe "Home", type: :request do
       expect(embeddings["data-status"]).to eq("danger")
       expect(embeddings.text).to include("unreachable")
       mcp = pills.find { |link| link["data-testid"] == "home-pill-mcp" }
-      expect(mcp["href"]).to eq(operator_settings_path(tab: "mcp_access"))
+      expect(mcp["href"]).to eq(system_settings_path(tab: "mcp_access"))
       expect(mcp.text).to include(GraphMem::OfficialMcp.access_policy.describe)
     end
 
@@ -120,7 +120,7 @@ RSpec.describe "Home", type: :request do
       expect(live["data-controller"]).to eq("operation-progress")
       expect(live["data-operation-progress-operation-id-value"]).to eq(running.operation_id)
       expect(doc.at_css("[data-testid='home-job-recent']").text).to include("Project scan", "failed", "synthetic failure")
-      expect(doc.css("a").map { |link| link["href"] }).to include(projects_jobs_path, "/operator/jobs")
+      expect(doc.css("a").map { |link| link["href"] }).to include(system_jobs_path, "/system/queue")
     end
 
     it "lists the latest change sets, status only" do
@@ -133,7 +133,7 @@ RSpec.describe "Home", type: :request do
       expect(row.text).to include("graph.write", "agent:synth-client: wrote 4 observations to SynthWidget", "undoable")
       expect(row["title"]).to include("undoable until")
       expect(doc.css("form, button")).to be_empty
-      expect(doc.at_css("a")["href"]).to eq(operator_audit_logs_path)
+      expect(doc.at_css("a")["href"]).to eq(system_audit_log_path)
     end
 
     it "shows the active MCP clients, compact" do
@@ -144,7 +144,7 @@ RSpec.describe "Home", type: :request do
 
       expect(doc.at_css("[data-testid='home-client-row']").text).to include("synth-client", "active", "Alpha Service")
       expect(doc.text).to include("1 active of 1")
-      expect(doc.at_css("a")["href"]).to eq(operator_telemetry_path(anchor: "mcp-clients"))
+      expect(doc.at_css("a")["href"]).to eq(system_telemetry_path(anchor: "mcp-clients"))
     end
 
     it "shows the graph counts and embedding coverage" do
