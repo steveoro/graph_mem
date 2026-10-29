@@ -40,35 +40,6 @@ module System
       redirect_to system_settings_path(tab: "project_scans")
     end
 
-    def run_backup
-      BackupFileService.new.run_backup!
-      flash[:notice] = t("system.settings.backup.run_success")
-    rescue StandardError => e
-      flash[:alert] = t("system.settings.backup.run_failed", error: e.message)
-    ensure
-      redirect_to system_settings_path(tab: "database_backup")
-    end
-
-    def restore_backup
-      BackupFileService.new.restore!(params[:filename])
-      # The restored settings may carry other MCP allowlists: apply them now, not at the next restart.
-      GraphMem::OfficialMcp.refresh_access!(transports: true)
-      flash[:notice] = t("system.settings.backup.restore_success", filename: params[:filename])
-    rescue StandardError => e
-      flash[:alert] = t("system.settings.backup.restore_failed", error: e.message)
-    ensure
-      redirect_to system_settings_path(tab: "database_backup")
-    end
-
-    def destroy_backup
-      BackupFileService.new.delete!(params[:filename])
-      flash[:notice] = t("system.settings.backup.delete_success", filename: params[:filename])
-    rescue StandardError => e
-      flash[:alert] = t("system.settings.backup.delete_failed", error: e.message)
-    ensure
-      redirect_to system_settings_path(tab: "database_backup")
-    end
-
     private
 
     # @return [SettingsSchema::Group] the group named by `tab`, or the first Settings tab
@@ -81,6 +52,7 @@ module System
     def page_path(group)
       case group.page
       when :settings then system_settings_path(tab: group.key)
+      when :backups then system_backups_path
       else system_settings_path
       end
     end

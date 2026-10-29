@@ -33,7 +33,7 @@ RSpec.describe "System › Embeddings", type: :request do
         expect(response.body).to include("Embeddings")
         expect(response.body).to include('id="btn-embeddings-test"')
         expect(response.body).to include('id="btn-embeddings-backfill"')
-        expect(response.body).to include('id="btn-embeddings-regenerate"')
+        expect(response.body).to include('data-testid="typed-confirm-regenerate"', 'data-typed-confirm-expected-value="REGENERATE"')
         expect(response.body).to include('id="btn-embeddings-add-indexes"')
         expect(response.body).to include('data-testid="embedding-source-default"')
         expect(response.body).to include("Edit in System Settings")
@@ -99,8 +99,18 @@ RSpec.describe "System › Embeddings", type: :request do
       allow(EmbeddingsMaintenanceEnqueuer).to receive(:enqueue!).with("regenerate").and_return(:enqueued)
     end
 
-    it "enqueues a regenerate job" do
-      post system_regenerate_embeddings_path
+    it "answers 422 and enqueues nothing without the typed word" do
+      [ {}, { confirmation: "regenerate" }, { confirmation: "DROP" } ].each do |params|
+        post system_regenerate_embeddings_path, params: params
+
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(response.body).to include('data-testid="typed-confirm-error-regenerate"')
+      end
+      expect(EmbeddingsMaintenanceEnqueuer).not_to have_received(:enqueue!)
+    end
+
+    it "enqueues a regenerate job once REGENERATE is typed" do
+      post system_regenerate_embeddings_path, params: { confirmation: "REGENERATE" }
 
       expect(response).to redirect_to(system_embeddings_path)
       follow_redirect!
@@ -147,8 +157,16 @@ RSpec.describe "System › Embeddings", type: :request do
       )
     end
 
-    it "drops indexes and redirects with notice" do
-      post system_drop_embeddings_indexes_path
+    it "answers 422 and drops nothing without the typed word" do
+      post system_drop_embeddings_indexes_path, params: { confirmation: "drop" }
+
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(response.body).to include('data-testid="typed-confirm-error-drop-indexes"')
+      expect(EmbeddingIndexManager).not_to have_received(:drop_indexes!)
+    end
+
+    it "drops indexes and redirects with notice once DROP is typed" do
+      post system_drop_embeddings_indexes_path, params: { confirmation: "DROP" }
 
       expect(response).to redirect_to(system_embeddings_path)
       follow_redirect!

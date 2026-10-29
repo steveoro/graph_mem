@@ -17,3 +17,11 @@ en:
       subtitle: "The dream-state compactor, the garbage collector and relation repair."
       totals: "The graph: %{entities} entities, %{observations} observations, %{relations} relations, %{orphans} orphans."
       queue_link: "Open the queue (Mission Control)"
+    confirm:
+      type: "To confirm, type"
+      mismatch: "The text you typed doesn't match. Nothing was done."
+      not_done: "Not confirmed: nothing was done."
+    backups:
+      title: "Backups"
+      subtitle: "Database backups: the schedule and retention, a manual run, and restore or delete per file."
+      restore_button: "Restore this backup"

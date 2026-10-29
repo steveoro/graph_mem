@@ -39,12 +39,9 @@
 
     - if @summary[:expired_count].positive?
       .dashboard-card__actions
-        = button_to t("operator.audit_logs.prune_button"),
-          system_prune_audit_log_path(request.query_parameters),
-          method: :post,
-          class: "dashboard-btn dashboard-btn--secondary",
-          id: "btn-audit-logs-prune",
-          data: { turbo_confirm: t("operator.audit_logs.prune_confirm", count: @summary[:expired_count]) }
+        = render "system/shared/typed_confirm", id: "prune-audit-log", url: system_prune_audit_log_path(request.query_parameters.except("confirmation")),
+          expected: @summary[:expired_count].to_s, summary: t("operator.audit_logs.prune_button"),
+          prompt: t("operator.audit_logs.prune_confirm", count: @summary[:expired_count]), button: t("operator.audit_logs.prune_button")
 
     - if @audit_logs.any?
       .audit-logs-table-wrap

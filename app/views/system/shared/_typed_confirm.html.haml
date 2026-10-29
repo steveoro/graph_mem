@@ -1,0 +1,22 @@
+-# A typed-confirmation card (UI-7, §5.2): a collapsed ui-card whose form asks to type `expected`.
+-# Locals: id, url, expected, summary (the opening button), prompt, button, hidden ({} of params),
+-# method (:post). The card opens with its error after a refused submit (422).
+- error = @confirm_error&.dig(id)
+- method = local_assigns.fetch(:method, :post)
+- input_id = "confirm-#{id}"
+%details.ui-card.system-confirm{ open: error.present?, data: { testid: "typed-confirm-#{id}" } }
+  %summary.ui-btn.ui-btn-danger{ data: { testid: "typed-confirm-open-#{id}" } }= summary
+  = form_with url: url, method: method, class: "system-form",
+    data: { controller: "typed-confirm", typed_confirm_expected_value: expected, testid: "typed-confirm-form-#{id}" } do
+    - local_assigns.fetch(:hidden, {}).each do |name, value|
+      = hidden_field_tag name, value, id: nil
+    %p= prompt
+    .ui-field
+      %label.ui-label{ for: input_id }
+        = t("system.confirm.type")
+        %code= expected
+      = text_field_tag :confirmation, nil, id: input_id, class: "ui-input", autocomplete: "off", spellcheck: false,
+        data: { typed_confirm_target: "input", action: "input->typed-confirm#check", testid: "typed-confirm-input-#{id}" }
+    - if error
+      %p.system-error{ role: "alert", data: { testid: "typed-confirm-error-#{id}" } }= error
+    = submit_tag button, class: "ui-btn ui-btn-danger", data: { typed_confirm_target: "button", testid: "typed-confirm-submit-#{id}" }

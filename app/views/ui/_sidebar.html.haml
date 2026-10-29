@@ -40,6 +40,7 @@
       %ul.ui-sidebar__list
         %li= ui_nav_link t("system.nav.settings"), main_app.system_settings_path, testid: "nav-settings", icon: :settings,
           current: section == :settings
+        %li= ui_nav_link t("system.nav.backups"), main_app.system_backups_path, testid: "nav-system-backups", current: section == :backups
         %li= ui_nav_link t("system.nav.audit_log"), main_app.system_audit_log_path, testid: "nav-audit-logs", current: section == :audit_log
         %li= ui_nav_link t("system.nav.telemetry"), main_app.system_telemetry_path, testid: "nav-telemetry", current: section == :telemetry
         %li= ui_nav_link t("system.nav.embeddings"), main_app.system_embeddings_path, testid: "nav-embeddings", current: section == :embeddings

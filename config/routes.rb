@@ -183,6 +183,12 @@ Rails.application.routes.draw do
     patch "settings", to: "settings#update"
     delete "settings/legacy_scan_roots", to: "settings#clear_legacy_scan_roots", as: :clear_legacy_scan_roots
 
+    get "backups", to: "backups#index", as: :backups
+    post "backups", to: "backups#create"
+    delete "backups", to: "backups#destroy"
+    patch "backups/settings", to: "backups#update_settings", as: :backup_settings
+    post "backups/restore", to: "backups#restore", as: :restore_backup
+
     get "embeddings", to: "embeddings#index", as: :embeddings
     post "embeddings/test_connection", to: "embeddings#test_connection", as: :test_embeddings_connection
     post "embeddings/backfill", to: "embeddings#backfill", as: :backfill_embeddings
@@ -206,13 +212,16 @@ Rails.application.routes.draw do
   mount MissionControl::Jobs::Engine, at: "/system/queue"
 
   # UI-7 shims, until §6.D-6 (drop them all in that PR):
-  # - GET 301s: /operator/settings (keeping its query), /operator/embeddings, /operator/telemetry,
+  # - GET 301s: /operator/settings (keeping its query; tab=database_backup → /system/backups), /operator/embeddings, /operator/telemetry,
   #   /operator/audit_logs, /operator/settings/project_scans/check_path (→ /projects/scans/check_path),
   #   /projects/jobs, /operator/jobs(/*rest) (→ /system/queue/*rest);
   # - the old writes under /operator, routed to the System actions (no copy of the code), so an
   #   open old tab still works.
   keep_query = ->(target) { ->(_params, request) { "#{target}#{"?#{request.query_string}" if request.query_string.present?}" } }
-  get "operator/settings", to: redirect(status: 301, &keep_query.call("/system/settings")), as: nil
+  legacy_settings_pages = { "database_backup" => "/system/backups" }
+  get "operator/settings", to: redirect(status: 301) { |_params, request|
+    legacy_settings_pages.fetch(request.params[:tab].to_s) { keep_query.call("/system/settings").call(nil, request) }
+  }, as: nil
   get "operator/settings/project_scans/check_path", to: redirect(status: 301, &keep_query.call("/projects/scans/check_path")), as: nil
   get "operator/embeddings", to: redirect("/system/embeddings", status: 301), as: nil
   get "operator/telemetry", to: redirect(status: 301, &keep_query.call("/system/telemetry")), as: nil
@@ -232,9 +241,9 @@ Rails.application.routes.draw do
     post "embeddings/add_indexes", to: "embeddings#add_indexes", as: nil
     post "embeddings/drop_indexes", to: "embeddings#drop_indexes", as: nil
     patch "settings", to: "settings#update", as: nil
-    post "settings/backup/run", to: "settings#run_backup", as: :operator_run_backup
-    post "settings/backup/restore", to: "settings#restore_backup", as: :operator_restore_backup
-    delete "settings/backup", to: "settings#destroy_backup", as: :operator_destroy_backup
+    post "settings/backup/run", to: "backups#create", as: nil
+    post "settings/backup/restore", to: "backups#restore", as: nil
+    delete "settings/backup", to: "backups#destroy", as: nil
     delete "settings/project_scans/legacy_roots", to: "settings#clear_legacy_scan_roots", as: nil
   end
 

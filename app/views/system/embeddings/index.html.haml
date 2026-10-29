@@ -81,13 +81,12 @@
         id: "btn-embeddings-backfill",
         disabled: backfill_disabled
 
-      = button_to t("operator.embeddings.actions.regenerate"),
-        system_regenerate_embeddings_path,
-        method: :post,
-        class: "dashboard-btn dashboard-btn--secondary",
-        id: "btn-embeddings-regenerate",
-        disabled: !@status[:vector_enabled] || @status[:pending_job][:regenerate],
-        data: { turbo_confirm: t("operator.embeddings.regenerate_confirm") }
+      - if (@status[:vector_enabled] && !@status[:pending_job][:regenerate]) || @confirm_error&.key?("regenerate")
+        = render "system/shared/typed_confirm", id: "regenerate", url: system_regenerate_embeddings_path,
+          expected: System::EmbeddingsController::REGENERATE_WORD, summary: t("operator.embeddings.actions.regenerate"),
+          prompt: t("operator.embeddings.regenerate_confirm"), button: t("operator.embeddings.actions.regenerate")
+      - else
+        %button.dashboard-btn.dashboard-btn--secondary#btn-embeddings-regenerate{ type: "button", disabled: true }= t("operator.embeddings.actions.regenerate")
 
       - indexes_present = @status[:indexes][:memory_entities] && @status[:indexes][:memory_observations]
       - can_add_indexes = @status[:vector_enabled] && !indexes_present && @status[:entities_missing].zero? && @status[:observations_missing].zero?
@@ -99,13 +98,12 @@
         disabled: !can_add_indexes,
         data: { turbo_confirm: t("operator.embeddings.add_indexes_confirm") }
 
-      = button_to t("operator.embeddings.actions.drop_indexes"),
-        system_drop_embeddings_indexes_path,
-        method: :post,
-        class: "dashboard-btn dashboard-btn--secondary",
-        id: "btn-embeddings-drop-indexes",
-        disabled: !indexes_present,
-        data: { turbo_confirm: t("operator.embeddings.drop_indexes_confirm") }
+      - if indexes_present || @confirm_error&.key?("drop-indexes")
+        = render "system/shared/typed_confirm", id: "drop-indexes", url: system_drop_embeddings_indexes_path,
+          expected: System::EmbeddingsController::DROP_WORD, summary: t("operator.embeddings.actions.drop_indexes"),
+          prompt: t("operator.embeddings.drop_indexes_confirm"), button: t("operator.embeddings.actions.drop_indexes")
+      - else
+        %button.dashboard-btn.dashboard-btn--secondary#btn-embeddings-drop-indexes{ type: "button", disabled: true }= t("operator.embeddings.actions.drop_indexes")
 
       = link_to t("operator.embeddings.actions.view_jobs"), mission_control_jobs_path, class: "dashboard-btn dashboard-btn--secondary", id: "btn-embeddings-jobs"
 

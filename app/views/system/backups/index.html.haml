@@ -1,0 +1,39 @@
+- content_for :title, t("system.backups.title")
+- content_for :page_header, ui_page_header(t("system.backups.title"), subtitle: t("system.backups.subtitle"))
+
+.system-page
+  %section.ui-card.system-panel{ "aria-labelledby": "backup-settings-title", data: { testid: "backup-settings" } }
+    %h2#backup-settings-title.ui-label= t(@group.title)
+    = render "system/settings/form", group: @group, url: system_backup_settings_path, reset: system_backups_path
+
+  %section.ui-card.system-panel{ "aria-labelledby": "backup-files-title" }
+    .system-actions
+      %h2#backup-files-title.ui-label= t("system.settings.backup.list_title")
+      = button_to t("system.settings.backup.run_now"), system_backups_path, method: :post, class: "ui-btn ui-btn-primary",
+        id: "btn-backup-run-now", data: { turbo_confirm: t("system.settings.backup.run_confirm"), testid: "btn-backup-run-now" }
+    - if @backup_files.blank?
+      %p.system-hint{ data: { testid: "backup-files-empty" } }= t("system.settings.backup.empty")
+    - else
+      .system-table-wrap
+        %table.system-table{ data: { testid: "backup-files-table" } }
+          %thead
+            %tr
+              %th= t("system.settings.backup.columns.filename")
+              %th= t("system.settings.backup.columns.size")
+              %th= t("system.settings.backup.columns.modified")
+              %th= t("system.settings.backup.columns.actions")
+          %tbody
+            - @backup_files.each do |backup|
+              - filename = backup[:filename]
+              %tr{ data: { testid: "backup-row-#{filename}" } }
+                %td
+                  %code= filename
+                %td= "#{backup[:size_mb]} MB"
+                %td= l(backup[:modified_at], format: :short)
+                %td.system-actions
+                  = render "system/shared/typed_confirm", id: "restore-#{filename}", url: system_restore_backup_path, expected: filename,
+                    hidden: { filename: filename }, summary: t("system.settings.backup.restore"),
+                    prompt: t("system.settings.backup.restore_confirm", filename: filename), button: t("system.backups.restore_button")
+                  = button_to t("system.settings.backup.delete"), system_backups_path, method: :delete, params: { filename: filename },
+                    class: "ui-btn", id: "btn-backup-delete-#{filename}",
+                    data: { turbo_confirm: t("system.settings.backup.delete_confirm", filename: filename), testid: "btn-backup-delete-#{filename}" }

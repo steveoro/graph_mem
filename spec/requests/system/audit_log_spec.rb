@@ -79,7 +79,7 @@ RSpec.describe "System › Audit log", type: :request do
     context "when signed in" do
       before { sign_in_operator }
 
-      it "deletes only expired logs and preserves filters in redirect" do
+      it "deletes only expired logs once their count is typed, and preserves filters in redirect" do
         expired = AuditLog.create!(
           auditable_type: "MemoryEntity", auditable_id: entity.id,
           action: "create", changed_fields: {},
@@ -90,7 +90,12 @@ RSpec.describe "System › Audit log", type: :request do
           action: "update", changed_fields: {}
         )
 
-        post system_prune_audit_log_path(since_days: "all", log_action: "update")
+        post system_prune_audit_log_path(since_days: "all", log_action: "update"), params: { confirmation: "2" }
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(response.body).to include('data-testid="typed-confirm-error-prune-audit-log"')
+        expect(AuditLog.find_by(id: expired.id)).to be_present
+
+        post system_prune_audit_log_path(since_days: "all", log_action: "update"), params: { confirmation: "1" }
 
         expect(response).to redirect_to(system_audit_log_path(since_days: "all", log_action: "update"))
         follow_redirect!
@@ -102,7 +107,7 @@ RSpec.describe "System › Audit log", type: :request do
       it "shows the prune button only when expired logs exist" do
         get system_audit_log_path
 
-        expect(response.body).not_to include('id="btn-audit-logs-prune"')
+        expect(response.body).not_to include('data-testid="typed-confirm-prune-audit-log"')
 
         AuditLog.create!(
           auditable_type: "MemoryEntity", auditable_id: entity.id,
@@ -112,7 +117,7 @@ RSpec.describe "System › Audit log", type: :request do
 
         get system_audit_log_path
 
-        expect(response.body).to include('id="btn-audit-logs-prune"')
+        expect(response.body).to include('data-testid="typed-confirm-prune-audit-log"', 'data-typed-confirm-expected-value="1"')
       end
     end
   end

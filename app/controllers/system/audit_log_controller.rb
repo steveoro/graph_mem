@@ -1,9 +1,12 @@
 # frozen_string_literal: true
 
 module System
-  # System › Audit log: the filtered audit rows and the retention prune.
+  # System › Audit log: the filtered audit rows and the retention prune (typed confirmation: the
+  # number of expired rows).
   class AuditLogController < BaseController
     self.nav_section = :audit_log
+
+    include TypedConfirmation
 
     helper AuditLogsHelper
 
@@ -18,7 +21,14 @@ module System
       @audit_logs = scoped.page(params[:page]).per(AuditLog::PER_PAGE)
     end
 
+    # POST /system/audit_log/prune (confirmation= the expired row count shown on the page)
     def prune
+      unless typed_confirmation?(AuditLog.expired.count.to_s)
+        typed_confirmation_failed!("prune-audit-log")
+        index
+        return render :index, status: :unprocessable_content
+      end
+
       pruned = AuditLog.prune!
       redirect_to system_audit_log_path(filter_redirect_params),
                   notice: t("operator.audit_logs.prune_notice", count: pruned)

@@ -2,8 +2,18 @@
 
 module System
   # System › Embeddings: coverage, configuration, indexes and the maintenance jobs.
+  # Regenerate all and drop indexes need a typed word (TypedConfirmation: 422 on a mismatch).
   class EmbeddingsController < BaseController
+    include TypedConfirmation
+
     self.nav_section = :embeddings
+
+    # The words typed to confirm (ui-dashboard-plan.md §5.2).
+    REGENERATE_WORD = "REGENERATE"
+    DROP_WORD = "DROP"
+
+    before_action -> { require_typed_word!(REGENERATE_WORD, "regenerate") }, only: :regenerate
+    before_action -> { require_typed_word!(DROP_WORD, "drop-indexes") }, only: :drop_indexes
 
     def index
       @status = EmbeddingStatusSnapshot.call
@@ -54,6 +64,14 @@ module System
     end
 
     private
+
+    def require_typed_word!(word, card)
+      return if typed_confirmation?(word)
+
+      typed_confirmation_failed!(card)
+      index
+      render :index, status: :unprocessable_content
+    end
 
     def enqueue_maintenance!(mode)
       unless EmbeddingService.vector_enabled?
