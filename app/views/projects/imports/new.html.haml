@@ -1,0 +1,19 @@
+- content_for :title, t("projects.imports.new.title")
+- content_for :page_header, ui_page_header(t("projects.imports.new.title"), subtitle: t("projects.imports.new.subtitle"))
+- upload = @upload
+
+= form_with url: projects_imports_path, method: :post, multipart: true, class: "ui-card ui-form", data: { testid: "import-form" } do
+  - if upload&.error
+    %p.projects-error{ role: "alert", data: { testid: "import-form-error" } }= upload.error
+  .ui-field
+    = label_tag :file, t("projects.imports.new.file"), class: "ui-label"
+    = file_field_tag :file, accept: "application/json,.json", required: true, class: "ui-input", data: { testid: "import-file" }
+    %p.projects-hint= t("projects.imports.new.file_hint", size: ImportFlow::MAX_UPLOAD_BYTES / 1.megabyte)
+  .ui-field
+    = label_tag :project_name, t("projects.imports.new.project_name"), class: "ui-label"
+    = text_field_tag :project_name, params[:project_name].presence || upload&.suggested_name, class: "ui-input",
+      required: upload&.needs_project_name, data: { testid: "import-project-name" }
+    %p.projects-hint= t("projects.imports.new.project_name_hint")
+  .projects-actions
+    = submit_tag t("projects.imports.new.submit"), class: "ui-btn ui-btn-primary", data: { testid: "import-submit" }
+    = link_to t("projects.imports.index.title"), projects_imports_path, class: "ui-btn"

@@ -1,0 +1,32 @@
+- content_for :title, t("projects.imports.index.title")
+- content_for :page_header, ui_page_header(t("projects.imports.index.title"), subtitle: t("projects.imports.index.subtitle"))
+
+.projects-page
+  .projects-actions
+    = link_to t("projects.index.import"), new_projects_import_path, class: "ui-btn ui-btn-primary", data: { testid: "imports-new" }
+  - if @imports.empty?
+    %p.ui-card.projects-empty{ data: { testid: "imports-empty" } }= t("projects.imports.index.empty")
+  - else
+    %table.projects-table{ data: { testid: "imports-table" } }
+      %thead
+        %tr
+          %th= t("projects.imports.index.when")
+          %th= t("projects.imports.index.source")
+          %th= t("projects.scans.index.project")
+          %th= t("projects.scans.index.status")
+          %th= t("projects.imports.index.summary")
+      %tbody
+        - @imports.each do |import|
+          - details = import.details || {}
+          %tr{ data: { testid: "import-row-#{import.operation_id}" } }
+            %td= link_to t("projects.ago", time: time_ago_in_words(import.created_at)), report_projects_import_path(import.operation_id)
+            - if details["producer"].present?
+              %td
+                %code= details["file_name"]
+                %span.ui-badge= details["producer"]
+              %td= details["project_name"]
+            - else
+              %td.projects-muted{ colspan: 2 }= t("projects.imports.command_line")
+            %td= dashboard_status_badge(import.status)
+            %td= render "projects/imports/summary_line", summary: details["summary"]
+    = paginate @imports

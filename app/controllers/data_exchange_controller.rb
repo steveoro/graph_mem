@@ -85,157 +85,46 @@ class DataExchangeController < ApplicationController
     }
   end
 
+  # The import endpoints the Maintenance hub used, kept until §6.D-6: they run ImportFlow (like
+  # Projects::ImportsController) and redirect to the new pages; the GET pages answer 301.
+
   # POST /data_exchange/import_upload
-  # Receives JSON file, runs matching, stores in temp files, redirects to review
-  # Uploaded graph JSON is parsed + matched entirely in memory; a hard cap
-  # keeps a stray huge export from ballooning the request. 64 MB covers
-  # ~50k-node graphs with headroom — anything bigger should go through the
-  # headless rake import instead (by design choice, not a hard limit).
-  MAX_UPLOAD_BYTES = 64.megabytes
-
   def import_upload
-    unless params[:file].present?
-      flash[:error] = "Please select a file to import"
-      return redirect_to root_path
-    end
+    upload = ImportFlow.upload(params[:file], project_name: params[:project_name])
+    return redirect_to new_projects_import_path, alert: upload.error if upload.error
 
-    if params[:file].size > MAX_UPLOAD_BYTES
-      flash[:error] = "File too large (#{(params[:file].size / 1.megabyte.to_f).round(1)} MB > " \
-                      "#{MAX_UPLOAD_BYTES / 1.megabyte} MB). Use `rails graphify:import` or `rails_ast:import` instead."
-      return redirect_to root_path
-    end
-
-    begin
-      file_content = params[:file].read
-      json_data = JSON.parse(file_content)
-
-      strategy = ImportMatchingStrategy.new
-      match_result = strategy.match(json_data)
-
-      unless match_result[:success]
-        flash[:error] = match_result[:error]
-        return redirect_to root_path
-      end
-
-      # Store in temp files instead of session to avoid cookie overflow
-      import_session_id = ImportSession.create(
-        import_data: json_data,
-        matches: serialize_match_results(match_result[:match_results]),
-        stats: match_result[:stats],
-        version: match_result[:version]
-      )
-
-      # Only store the small session ID in the cookie
-      session[:import_session_id] = import_session_id
-
-      redirect_to import_review_data_exchange_index_path
-    rescue ImportObservationDuplicateDetector::UnavailableError => e
-      Rails.logger.error "Import upload requires embeddings: #{e.message}"
-      flash[:error] = "Import requires the embedding service for observation de-duplication: #{e.message}"
-      redirect_to root_path
-    rescue JSON::ParserError => e
-      flash[:error] = "Invalid JSON file: #{e.message}"
-      redirect_to root_path
-    rescue StandardError => e
-      Rails.logger.error "Import upload failed: #{e.message}\n#{e.backtrace.first(5).join("\n")}"
-      flash[:error] = "Import failed: #{e.message}"
-      redirect_to root_path
-    end
+    session[:import_session_id] = upload.session_id
+    redirect_to projects_import_path(upload.session_id)
   end
 
   # GET /data_exchange/import_review
-  # Shows matching results page with operator controls
   def import_review
     import_session_id = session[:import_session_id]
-
-    unless ImportSession.exists?(import_session_id)
-      flash[:error] = "No import data found. Please upload a file first."
-      return redirect_to root_path
-    end
-
-    @matches = ImportSession.load_matches(import_session_id)
-    @stats = ImportSession.load_stats(import_session_id)
-    @version = ImportSession.load_version(import_session_id)
-    @items = ImportReviewService.items(@matches, page: params[:page])
-
-    # Get available parent entities for the "Make children of" dropdown
-    @available_parents = ExportStrategy.new.root_nodes.map do |entity|
-      { id: entity.id, name: entity.name, entity_type: entity.entity_type }
-    end
+    target = ImportSession.exists?(import_session_id) ? projects_import_path(import_session_id) : new_projects_import_path
+    redirect_to target, status: :moved_permanently
   end
 
   # POST /data_exchange/import_execute
-  # Execute import based on operator decisions
-  # Root node decisions come from form params, child decisions from stored matches
   def import_execute
     import_session_id = session[:import_session_id]
+    return redirect_to new_projects_import_path, alert: "No import data found. Please upload a file first." unless ImportSession.exists?(import_session_id)
 
-    unless ImportSession.exists?(import_session_id)
-      flash[:error] = "No import data found. Please upload a file first."
-      return redirect_to root_path
-    end
-
-    import_data = ImportSession.load_data(import_session_id)
-    stored_matches = ImportSession.load_matches(import_session_id)
-
-    # Merge root decisions from form with child decisions from stored matches
-    decisions = build_merged_decisions(params[:decisions], stored_matches)
-
-    operation = OperationProgress.start!(
-      operation_type: "import",
-      total_count: 0,
-      message: "Starting import"
-    )
-    tracker = OperationProgressTracker.new(operation_progress: operation, total: 0, message: "Starting import")
-    strategy = ImportExecutionStrategy.new(progress_tracker: tracker)
-    report = strategy.execute(import_data, decisions)
-
-    # Graphify payloads carry withheld AMBIGUOUS edges; queue them for review
-    # only after the import succeeded so endpoints resolve to real entities.
-    if report.success && import_data[:ambiguous_relations].present?
-      GraphifyImporter.seed_ambiguous_relations(
-        import_data[:ambiguous_relations].map { |r| r.deep_stringify_keys },
-        project_name_for(import_data),
-        # load_data parses with symbolize_names — the producer tag is :producer.
-        source: GraphifyImporter::KNOWN_PRODUCERS.include?(import_data[:producer].to_s) ?
-                import_data[:producer].to_s : "graphify",
-        project_id: import_project_entity_id(import_data, decisions)
-      )
-    end
-
-    # Store report in temp file and clear import data files
-    ImportSession.store_report(import_session_id, report.to_h.merge(operation_id: operation.operation_id))
-
-    redirect_to import_report_data_exchange_index_path
+    operation = ImportFlow.execute(import_session_id, params[:decisions])
+    session.delete(:import_session_id)
+    session[:import_operation_id] = operation.operation_id
+    redirect_to report_projects_import_path(operation.operation_id)
   end
 
   # GET /data_exchange/import_report
-  # Shows the import results report
   def import_report
-    import_session_id = session[:import_session_id]
-
-    unless ImportSession.report_exists?(import_session_id)
-      flash[:error] = "No import report found."
-      return redirect_to root_path
-    end
-
-    @report = ImportSession.load_report(import_session_id)
-    @operation = OperationProgress.find_by(operation_id: @report[:operation_id] || @report["operation_id"])
+    operation_id = session[:import_operation_id]
+    redirect_to operation_id.present? ? report_projects_import_path(operation_id) : projects_imports_path, status: :moved_permanently
   end
 
   # DELETE /data_exchange/import_cancel
-  # Cancel the import and clear temp files
   def import_cancel
-    import_session_id = session[:import_session_id]
-
-    # Clean up temp files
-    ImportSession.cleanup(import_session_id)
-
-    # Clear session reference
-    session.delete(:import_session_id)
-
-    flash[:notice] = "Import cancelled"
-    redirect_to root_path
+    ImportSession.cleanup(session.delete(:import_session_id))
+    redirect_to projects_imports_path, notice: "Import cancelled"
   end
 
   # GET /data_exchange/entity_search?q=foo
@@ -538,56 +427,6 @@ class DataExchangeController < ApplicationController
     "#{error.message} — #{hint}."
   end
 
-  # Source reference for review rows seeded from an import payload — the first
-  # root node's name (the imported project) when present. ImportSession data
-  # is loaded symbolized, so probe both key styles.
-  def project_name_for(import_data)
-    roots = import_data["root_nodes"] || import_data[:root_nodes]
-    (roots.is_a?(Array) ? roots.first&.dig("name") || roots.first&.dig(:name) : nil).presence || "import"
-  end
-
-  # The Project entity the import resolved as its scope — the first
-  # Project-typed ROOT node the execution targeted (same rule as the
-  # strategies' @import_project_id, which only pins top-level paths).
-  # Resolved through the DECISIONS' target_id, not the payload name: a
-  # root merged into a renamed Project would otherwise look the name up
-  # and land on the wrong (or no) scope. Child decisions are skipped —
-  # a nested node merged into another Project must not hijack the
-  # import's scope. Falls back to a name lookup for a root created
-  # fresh by this run (no match target — the just-created row carries
-  # the payload's name).
-  def import_project_entity_id(import_data, decisions)
-    roots = import_data["root_nodes"] || import_data[:root_nodes]
-    project_roots = Array(roots).select do |root|
-      (root["entity_type"] || root[:entity_type]).to_s == NodeOperationsStrategy::PROJECT_ENTITY_TYPE
-    end
-    decision_by_path = Array(decisions).index_by do |decision|
-      (decision[:node_path] || decision["node_path"]).to_s
-    end
-
-    Array(roots).each_with_index do |root, index|
-      next unless (root["entity_type"] || root[:entity_type]).to_s ==
-                  NodeOperationsStrategy::PROJECT_ENTITY_TYPE
-
-      decision = decision_by_path[index.to_s]
-      target_id = decision && (decision[:target_id] || decision["target_id"])
-      next if target_id.blank?
-
-      entity = MemoryEntity.find_by(id: target_id)
-      return entity.id if entity
-    end
-
-    project_roots.each do |root|
-      found = MemoryEntity.find_by(
-        name: root["name"] || root[:name],
-        entity_type: NodeOperationsStrategy::PROJECT_ENTITY_TYPE,
-        project_id: nil
-      )
-      return found.id if found
-    end
-    nil
-  end
-
   # Find duplicate relation pairs (A→B and B→A with same type)
   # Returns the older relation (lower ID) to keep and newer to delete
   # @return [Array<Hash>] Array of duplicate pairs
@@ -636,103 +475,5 @@ class DataExchangeController < ApplicationController
     end
 
     duplicates
-  end
-
-  # Serialize match results for file storage
-  def serialize_match_results(results)
-    results.map(&:to_h)
-  end
-
-  # Build merged decisions array from form params (root nodes) and stored matches (child nodes)
-  # @param root_decisions_params [ActionController::Parameters, Hash] Form params for root decisions
-  # @param stored_matches [Array<Hash>] Stored match results containing child decisions
-  # @return [Array<Hash>] Complete decisions array for all nodes
-  def build_merged_decisions(root_decisions_params, stored_matches)
-    # Build lookup of submitted root decisions by node_path
-    submitted_decisions = build_submitted_decisions_lookup(root_decisions_params)
-
-    decisions = []
-
-    stored_matches.each do |match|
-      is_child = match[:is_child] || match["is_child"] || false
-      node_path = match[:node_path] || match["node_path"]
-
-      if is_child
-        # Child nodes: use pre-computed decision from stored match
-        decisions << build_child_decision(match)
-      else
-        # Root nodes: use operator's decision from form params
-        submitted = submitted_decisions[node_path]
-        decisions << build_root_decision(match, submitted)
-      end
-    end
-
-    decisions
-  end
-
-  # Build lookup hash of submitted decisions by node_path
-  # @param root_decisions_params [ActionController::Parameters, Hash] Form params
-  # @return [Hash] Map of node_path => decision hash
-  def build_submitted_decisions_lookup(root_decisions_params)
-    return {} if root_decisions_params.blank?
-
-    lookup = {}
-    root_decisions_params.each do |_index, decision|
-      node_path = decision[:node_path] || decision["node_path"]
-      next if node_path.blank?
-
-      lookup[node_path] = {
-        action: decision[:action] || decision["action"] || "create",
-        target_id: (decision[:target_id] || decision["target_id"]).presence&.to_i,
-        parent_id: (decision[:parent_id] || decision["parent_id"]).presence&.to_i
-      }
-    end
-    lookup
-  end
-
-  # Build decision for a child node from stored match data
-  # @param match [Hash] Stored match data
-  # @return [Hash] Decision for this child node
-  def build_child_decision(match)
-    node_path = match[:node_path] || match["node_path"]
-    child_action = match[:child_action] || match["child_action"] || "create"
-    exact_match = match[:exact_match] || match["exact_match"]
-
-    target_id = if exact_match
-      exact_match[:entity_id] || exact_match["entity_id"]
-    end
-
-    {
-      node_path: node_path,
-      action: child_action,
-      child_action: child_action,
-      target_id: target_id&.to_i
-    }
-  end
-
-  # Build decision for a root node from submitted form data
-  # @param match [Hash] Stored match data (for defaults)
-  # @param submitted [Hash, nil] Submitted form data
-  # @return [Hash] Decision for this root node
-  def build_root_decision(match, submitted)
-    node_path = match[:node_path] || match["node_path"]
-
-    if submitted
-      {
-        node_path: node_path,
-        action: submitted[:action] || "create",
-        target_id: submitted[:target_id],
-        parent_id: submitted[:parent_id]
-      }
-    else
-      # No submitted decision - use default from match
-      selected_match_id = match[:selected_match_id] || match["selected_match_id"]
-      {
-        node_path: node_path,
-        action: selected_match_id.present? ? "merge" : "create",
-        target_id: selected_match_id&.to_i,
-        parent_id: nil
-      }
-    end
   end
 end

@@ -1,0 +1,41 @@
+- operation = @operation
+- details = operation.details || {}
+- summary = details["summary"]
+- content_for :title, t("projects.imports.report.title")
+- content_for :page_header, ui_page_header(t("projects.imports.report.title"),
+  subtitle: t("projects.imports.report.subtitle", time: l(operation.created_at, format: :short)))
+
+.projects-page{ data: { testid: "import-report" } }
+  .ui-card
+    %p
+      = dashboard_status_badge(operation.status, data: { testid: "import-report-status" })
+      - if details["producer"].present?
+        %code= details["file_name"]
+        %span.ui-badge= details["producer"]
+        - if details["project_name"].present?
+          %span= t("projects.imports.report.into", name: details["project_name"])
+      - else
+        %span.projects-muted{ data: { testid: "import-report-command-line" } }= t("projects.imports.command_line")
+    - if operation.message.present?
+      %p.projects-hint= operation.message
+  - if operation.error_message.present?
+    %p.projects-error{ role: "alert" }= operation.error_message
+
+  - if summary.present?
+    .ui-card.projects-stats{ data: { testid: "import-report-summary" } }
+      - %w[entities_created entities_merged entities_skipped observations_created relations_created errors].each do |key|
+        .projects-stat
+          %span.projects-stat__value= summary[key].to_i
+          %span.projects-stat__label= t("projects.imports.report.stats.#{key}")
+  - if details["error_messages"].present?
+    .ui-card{ data: { testid: "import-report-errors" } }
+      %h2.ui-label= t("projects.imports.report.errors", count: summary&.dig("errors").to_i)
+      %ul
+        - details["error_messages"].each do |message|
+          %li= message
+
+  .projects-actions
+    - if details["project_entity_id"].present?
+      = link_to t("projects.index.open_in_explore"), explore_path(project_id: details["project_entity_id"]), class: "ui-btn ui-btn-primary"
+    = link_to t("projects.imports.index.title"), projects_imports_path, class: "ui-btn"
+    = link_to t("projects.index.import"), new_projects_import_path, class: "ui-btn"
