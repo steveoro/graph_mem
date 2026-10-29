@@ -8,8 +8,11 @@
     data: { turbo_stream: true, testid: "entity-panel-add-observation-form" } do |form|
     - if mine && state[:error]
       %p.entity-panel__error{ role: "alert", data: { testid: "entity-panel-form-error" } }= state[:error]
-      - if state[:duplicate_id]
-        %p.entity-panel__meta= t("explore.panel.duplicate_of", id: state[:duplicate_id])
+      - if state[:duplicate_id] && (duplicate = MemoryObservation.find_by(id: state[:duplicate_id]))
+        %p.entity-panel__meta{ data: { testid: "entity-panel-duplicate" } }
+          = t("explore.panel.duplicate_of", content: duplicate.content.to_s.truncate(200))
+          -# The observations on this page carry their id as an anchor.
+          = link_to t("explore.panel.show_duplicate"), "#observation-#{duplicate.id}", data: { turbo: false, testid: "entity-panel-duplicate-link" }
       - if state[:similar]
         %p.entity-panel__meta{ data: { testid: "entity-panel-similar" } }= t("explore.panel.similar_to", content: state[:similar][:content].to_s.truncate(200))
     = form.label :content, t("explore.panel.observation_text"), class: "ui-label"

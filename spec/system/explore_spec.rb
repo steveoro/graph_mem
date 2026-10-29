@@ -141,6 +141,24 @@ RSpec.describe "Explore", type: :system do
       expect(MemoryEntity.find(twin.id).memory_observations.count).to eq(1)
     end
 
+    it "works the context menu from the keyboard" do
+      visit explore_path(scope: "full")
+      wait_for_nodes(3)
+
+      node_menu_items("SynthWidget")
+      expect(evaluate_script("document.activeElement.textContent")).to eq("Show in panel")
+      page.driver.browser.action.send_keys(:arrow_down).perform
+      expect(evaluate_script("document.activeElement.textContent")).to eq("Open neighbourhood")
+      page.driver.browser.action.send_keys(:arrow_up, :enter).perform
+
+      within("turbo-frame#entity-panel") { expect(page).to have_css("h2", text: "SynthWidget") }
+      expect(page).to have_no_css(".contextual-menu")
+
+      node_menu_items("SynthWidget")
+      page.driver.browser.action.send_keys(:escape).perform
+      expect(page).to have_no_css(".contextual-menu")
+    end
+
     it "filters by type locally and shows read items in the context menu" do
       visit explore_path(scope: "full")
       expect(page).to have_css("[data-explore-target='canvas'] canvas", wait: 10)

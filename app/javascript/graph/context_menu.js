@@ -1,7 +1,10 @@
+import { bindMenuKeys } from 'lib/menu_keys';
+
 // The canvas's right-click menus (UI-4b). Every label is set with textContent. Read items for
 // everyone (Show in panel, Open neighbourhood, Toggle relations); for the operator also Edit in
 // panel, Merge into… and Propose deletion on nodes, and Remove relation on edges. Read-only (the
 // guest), the write items are never built. No hard delete, no dedupe, no alert()/confirm().
+// Arrow keys, Enter and Escape work too (lib/menu_keys.js).
 export class ContextMenuManager {
   // actions: { select(id), openNeighbourhood(id), editInPanel(id), mergeInto(id),
   //            proposeDeletion(id), removeRelation(edgeData) }
@@ -68,6 +71,7 @@ export class ContextMenuManager {
     menu.style.top = (rect.top + window.scrollY + position.y) + 'px';
     document.body.appendChild(menu);
     this.currentMenu = menu;
+    bindMenuKeys(menu, { onClose: () => this.hide() });
   }
 
   #item(item) {

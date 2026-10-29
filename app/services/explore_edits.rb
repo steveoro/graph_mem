@@ -18,12 +18,14 @@ class ExploreEdits
 
   ROOT_RENAME_ONLY = "Project roots can only be renamed."
   ROOT_MOVE = "Project roots can't be moved."
+  NO_NEW_ROOTS = "An entity can't become a project root from Explore."
   NOTHING_CHANGED = "Nothing changed."
   MAX_NAME_LENGTH = 255
   MAX_REASON_LENGTH = 500
   ENTITY_FIELDS = %i[name entity_type aliases description].freeze
 
-  # Name, type, aliases and description; a project root takes only name and description.
+  # Name, type, aliases and description; a project root takes only name and description, and no
+  # entity can be retyped to Project here (it would be a root that keeps its parent).
   #
   # @param entity [MemoryEntity]
   # @param attributes [Hash] any of ENTITY_FIELDS (strings)
@@ -31,6 +33,7 @@ class ExploreEdits
   def update_entity(entity, attributes)
     changes = entity_changes(entity, attributes.to_h.symbolize_keys.slice(*ENTITY_FIELDS))
     return refused(ROOT_RENAME_ONLY) if project_root?(entity) && changes.keys.intersect?(%i[entity_type aliases])
+    return refused(NO_NEW_ROOTS) if changes[:entity_type].to_s.casecmp?(NodeOperationsStrategy::PROJECT_ENTITY_TYPE)
     return refused(NOTHING_CHANGED) if changes.empty?
     return refused("Name can't be blank.") if changes.key?(:name) && changes[:name].blank?
     return refused("Name is too long (at most #{MAX_NAME_LENGTH} characters).") if changes[:name].to_s.length > MAX_NAME_LENGTH

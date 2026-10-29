@@ -36,7 +36,10 @@ RSpec.describe "Explore observation edits", type: :request do
 
       expect(response).to have_http_status(:unprocessable_content)
       expect(toast_text).to include("This observation already exists.")
-      expect(turbo_stream_for("update", "entity-panel").text).to include("It is observation ##{fact.id}.")
+      panel = turbo_stream_for("update", "entity-panel")
+      expect(panel.at_css("[data-testid='entity-panel-duplicate']").text).to include("SynthWidget renders synthetic tiles.")
+      expect(panel.at_css("[data-testid='entity-panel-duplicate-link']")["href"]).to eq("#observation-#{fact.id}")
+      expect(panel.at_css("#observation-#{fact.id}")).to be_present
     end
 
     it "warns about a similar observation and adds it anyway with force=1" do

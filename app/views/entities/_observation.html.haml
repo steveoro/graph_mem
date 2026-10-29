@@ -2,7 +2,7 @@
 - mine = state[:form] == "observation_#{observation.id}"
 - values = mine ? state[:values].to_h.stringify_keys : {}
 - active = observation.status == MemoryObservation::ACTIVE_STATUS
-%li.entity-panel__observation{ data: { testid: "entity-panel-observation", observation_id: observation.id } }
+%li.entity-panel__observation{ id: "observation-#{observation.id}", data: { testid: "entity-panel-observation", observation_id: observation.id } }
   %span= observation.content
   %span.entity-panel__meta
     = t("entity_panel.trust", trust: observation.trust_score.to_f.round(2))

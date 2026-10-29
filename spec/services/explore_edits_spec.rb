@@ -96,6 +96,9 @@ RSpec.describe ExploreEdits do
     expect(edits.update_entity(alpha, entity_type: "Component")).to include(success: false, error: described_class::ROOT_RENAME_ONLY)
     expect(edits.update_entity(alpha, aliases: "alpha")).to include(success: false, error: described_class::ROOT_RENAME_ONLY)
     expect(edits.move(alpha, gadget)).to include(success: false, error: described_class::ROOT_MOVE)
+    expect(edits.update_entity(widget, entity_type: "Project")).to include(success: false, error: described_class::NO_NEW_ROOTS)
+    expect(edits.update_entity(widget, entity_type: "project")).to include(success: false, error: described_class::NO_NEW_ROOTS)
+    expect(widget.reload.entity_type).to eq("Component")
     expect(ChangeSet.count).to eq(0)
   end
 end

@@ -1,9 +1,11 @@
 import { el, text } from 'lib/dom';
+import { bindMenuKeys } from 'lib/menu_keys';
 
 // Drop a node on another (UI-4b W7, operator only): a menu with Add relation…, Move under… (not
 // for a project root) and Merge A into B… (same type only, neither a project root). Each item
 // opens its server-rendered dialog through `actions`; nothing is written from here. Cancel (or
-// a click elsewhere) puts the node back. Every label is set as text.
+// a click elsewhere, or Escape) puts the node back. Every label is set as text; arrow keys and
+// Enter work too (lib/menu_keys.js).
 export class DragDropManager {
   // actions: { addRelation(fromId, toId), move(nodeId, parentId), merge(sourceId, targetId) }
   constructor(actions) {
@@ -73,6 +75,7 @@ export class DragDropManager {
     menu.style.top = (rect.top + window.scrollY + position.y - 10) + 'px';
     document.body.appendChild(menu);
     this.currentMenu = menu;
+    bindMenuKeys(menu, { onClose: () => { this.hideMenu(); this.#restore(dragged); } });
 
     this.closeHandler = (event) => {
       if (menu.contains(event.target)) return;
