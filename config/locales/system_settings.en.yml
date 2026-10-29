@@ -181,6 +181,9 @@ en:
         auto_apply_relationship_min_confidence:
           label: "Auto-apply relationship confidence"
           description: "Minimum confidence for auto-applying relationship proposals."
+        fact_supersede_max_distance:
+          label: "Source fact similarity distance"
+          description: "How close (cosine distance) an observation must be to a source fact to be checked against it. Smaller is stricter."
         compaction_review_row_retention_days:
           label: "Review rows retention (days)"
           description: "Approved, dismissed and ignored review rows older than this are pruned daily. Suggestions you dismissed stay suppressed; ignored ones may be proposed again. 0 uses the default (30)."

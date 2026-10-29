@@ -70,13 +70,18 @@ class AppSettings < RailsSettings::Base
   field :auto_apply_relationship_min_confidence, default: 0.9, type: :float,
         validates: { numericality: { greater_than_or_equal_to: 0.8, less_than_or_equal_to: 1.0 } }
   field :enable_auto_apply_expired_validity, default: false, type: :boolean
+  # Fact supersede (1.64.0): how close (cosine) an observation must be to a source fact to be a
+  # candidate. Wider than the contradiction 0.35: a supersede usually differs in its key term.
+  field :fact_supersede_max_distance, default: 0.45, type: :float,
+        validates: { numericality: { greater_than_or_equal_to: 0.2, less_than_or_equal_to: 0.6 } }
 
   # Default and accepted range of each numeric review setting.
   REVIEW_NUMBERS = {
     "review_backlog_ceiling" => [ 300, 50..5000 ],
     "review_attention_threshold" => [ 40, 1..100 ],
     "review_expire_low_confidence_days" => [ 30, 7..365 ],
-    "auto_apply_relationship_min_confidence" => [ 0.9, 0.8..1.0 ]
+    "auto_apply_relationship_min_confidence" => [ 0.9, 0.8..1.0 ],
+    "fact_supersede_max_distance" => [ 0.45, 0.2..0.6 ]
   }.freeze
   # Each review policy's toggle and its default (snooze_expiry always runs).
   REVIEW_POLICY_TOGGLES = {

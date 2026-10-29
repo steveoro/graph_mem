@@ -153,7 +153,7 @@ RSpec.describe AppSettings, type: :model do
       expect(described_class.review_policy_enabled?(:expire_low_confidence)).to be(true)
       expect(described_class.review_policy_enabled?(:auto_apply_relationships)).to be(false)
       expect(described_class.review_policy_enabled?(:auto_apply_expired_validity)).to be(false)
-      expect(described_class::REVIEW_NUMBERS.keys.map { |name| described_class.review_number(name) }).to eq([ 300, 40, 30, 0.9 ])
+      expect(described_class::REVIEW_NUMBERS.keys.map { |name| described_class.review_number(name) }).to eq([ 300, 40, 30, 0.9, 0.45 ])
     end
 
     it "clamps numbers written past validation to their range" do

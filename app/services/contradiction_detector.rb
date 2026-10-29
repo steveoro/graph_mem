@@ -61,6 +61,17 @@ class ContradictionDetector
         detected_at: Time.current.iso8601 }
     end
 
+    # Whether the text has one of NEGATIVE_MARKERS as a word (FactSupersede uses it as a boost).
+    #
+    # @param text [String, nil]
+    # @return [Boolean]
+    def negative?(text)
+      return false if text.blank?
+
+      words = text.downcase.scan(/\b[\w']+\b/)
+      NEGATIVE_MARKERS.any? { |marker| words.include?(marker) }
+    end
+
     private
 
     def related_entity_ids(entity_id)
@@ -124,13 +135,6 @@ class ContradictionDetector
       neg1 = negative?(text1)
       neg2 = negative?(text2)
       neg1 != neg2
-    end
-
-    def negative?(text)
-      return false if text.blank?
-
-      words = text.downcase.scan(/\b[\w']+\b/)
-      NEGATIVE_MARKERS.any? { |marker| words.include?(marker) }
     end
 
     def contradiction_confidence(distance)
