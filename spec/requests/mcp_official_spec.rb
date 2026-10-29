@@ -283,11 +283,11 @@ RSpec.describe "MCP on the official SDK", type: :request do
 
   # UI-2a: Settings › MCP access additions reach the access policy, the transport and CORS on the
   # next request, with no restart. The settings rows roll back with the example's transaction.
-  describe "allowlist changes from Settings › MCP access" do
+  describe "allowlist changes from System › Access" do
     def save_mcp_access(**settings)
       sign_in_operator
-      patch system_settings_path, params: { tab: "mcp_access", settings: settings.transform_keys(&:to_s) }
-      expect(response).to redirect_to(system_settings_path(tab: "access"))
+      patch system_access_path, params: { tab: "access", settings: settings.transform_keys(&:to_s) }
+      expect(response).to redirect_to(system_access_path)
     end
 
     def preflight(origin)
