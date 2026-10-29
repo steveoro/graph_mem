@@ -75,10 +75,16 @@ RSpec.describe SystemHealth do
   it "shows a check it can't run as unknown instead of raising" do
     allow(EmbeddingStatusSnapshot).to receive(:call).and_raise(ActiveRecord::ConnectionNotEstablished)
     allow(ActiveRecord::Base.connection_pool).to receive(:migration_context).and_raise(ActiveRecord::ConnectionNotEstablished)
+    allow(ScanRootPolicy).to receive(:status).and_raise(ActiveRecord::ConnectionNotEstablished, "synthetic outage")
+    allow(Rails.logger).to receive(:warn)
 
-    expect(check(:vector_search)).to include(status: :neutral, value: start_with("can't check"))
-    expect(check(:migrations)).to include(status: :neutral, value: start_with("can't check"))
+    %i[vector_search migrations scans].each do |key|
+      expect(check(key)).to include(status: :neutral, value: start_with("can't check"), detail: nil)
+    end
     expect(health.raw_snapshots["EmbeddingStatusSnapshot"]).to eq(error: "unavailable")
+    expect(health.raw_snapshots["ScanRootPolicy.status"]).to eq(error: "unavailable")
+    expect(health.as_json["checks"].to_s).not_to include("synthetic outage")
+    expect(Rails.logger).to have_received(:warn).with("[SystemHealth] ActiveRecord::ConnectionNotEstablished: synthetic outage").at_least(:once)
   end
 
   it "drops any user info from the embedding URL in the raw snapshots" do

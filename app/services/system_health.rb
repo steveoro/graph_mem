@@ -64,8 +64,20 @@ class SystemHealth
 
   def snapshot
     yield
-  rescue StandardError
+  rescue StandardError => e
+    log_failure(e)
     { error: "unavailable" }
+  end
+
+  # A check that raises reads "can't check" on the page and in the JSON; the error goes to the
+  # log only, so a real bug stays visible without leaking detail into the JSON.
+  def cant_check(key, href, error)
+    log_failure(error)
+    check(key, :neutral, I18n.t("system.health.values.cant_check"), href)
+  end
+
+  def log_failure(error)
+    Rails.logger.warn("[SystemHealth] #{error.class}: #{error.message}")
   end
 
   def check(key, status, value, href, detail = nil)
@@ -84,8 +96,8 @@ class SystemHealth
   def vector_check
     ready = @health.embedding_status[:vector_search_ready]
     check(:vector_search, ready ? :ok : :warn, I18n.t("system.health.values.#{ready ? 'vector_ready' : 'vector_not_ready'}"), system_embeddings_path)
-  rescue StandardError
-    check(:vector_search, :neutral, I18n.t("system.health.values.cant_check"), system_embeddings_path)
+  rescue StandardError => e
+    cant_check(:vector_search, system_embeddings_path, e)
   end
 
   def queue_check
@@ -98,7 +110,8 @@ class SystemHealth
     else :ok
     end
     check(:queue, status, I18n.t("system.health.values.queue", backlog: backlog, failed: stats[:failed]), mission_control_jobs_path)
-  rescue StandardError
+  rescue StandardError => e
+    log_failure(e)
     check(:queue, :neutral, I18n.t("home.health.values.unknown"), mission_control_jobs_path)
   end
 
@@ -106,7 +119,8 @@ class SystemHealth
   def backup_folder_check
     writable = BackupFileService.new.folder_writable?
     check(:backup_folder, writable ? :ok : :danger, I18n.t("system.health.values.#{writable ? 'writable' : 'not_writable'}"), system_backups_path)
-  rescue StandardError
+  rescue StandardError => e
+    log_failure(e)
     check(:backup_folder, :danger, I18n.t("system.health.values.not_writable"), system_backups_path)
   end
 
@@ -114,6 +128,8 @@ class SystemHealth
     pill = @health.pill_for(:scans)
     roots = @health.scan_status[:hard_roots].map { |root| { path: root[:path], read_only: root[:read_only], error: root[:error] } }
     pill.merge(value: "#{pill[:value]} · #{I18n.t('system.health.values.roots', count: roots.size)}", detail: roots)
+  rescue StandardError => e
+    cant_check(:scans, system_settings_path(tab: "project_scans"), e)
   end
 
   def version_check
@@ -123,8 +139,8 @@ class SystemHealth
   def migrations_check
     pending = ActiveRecord::Base.connection_pool.migration_context.needs_migration?
     check(:migrations, pending ? :danger : :ok, I18n.t("system.health.values.#{pending ? 'migrations_pending' : 'migrations_current'}"), system_health_path)
-  rescue StandardError
-    check(:migrations, :neutral, I18n.t("system.health.values.cant_check"), system_health_path)
+  rescue StandardError => e
+    cant_check(:migrations, system_health_path, e)
   end
 
   def without_userinfo(url)
