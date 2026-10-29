@@ -1,6 +1,28 @@
 /* System (UI-7): settings, backups, health, access, activity, audit log, telemetry, embeddings and
    background jobs. Replaces dashboard.css. Imported by application.css. */
 @layer components {
+  /* ui-badge status modifiers (UI-7, kept here so application.css stays small; DashboardHelper's status badges, operation_progress_controller.js).
+     The badge text says the status in words: colour is never the only signal. */
+  .ui-badge--running {
+    background: var(--color-ui-accent-soft);
+    color: var(--color-ui-accent-strong);
+  }
+
+  .ui-badge--completed {
+    background: var(--color-ui-ok-soft);
+    color: var(--color-ui-ok);
+  }
+
+  .ui-badge--paused {
+    background: var(--color-ui-warn-soft);
+    color: var(--color-ui-warn);
+  }
+
+  .ui-badge--failed {
+    background: var(--color-ui-danger-soft);
+    color: var(--color-ui-danger);
+  }
+
   .system-page {
     display: grid;
     gap: 1rem;
