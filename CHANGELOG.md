@@ -31,7 +31,7 @@ Explore: edit the graph from the canvas and the panel, merge with a preview, und
 - Exact search finds an exact name even when more than 1,000 aliases match first.
 
 ### Security
-- `GET /api/v1/graph_data` (guest-readable) returns at most 2,000 entities per view, with `truncated` and `total` when the cap applies; it no longer loads every entity and relation, and its query count no longer grows with the graph.
+- `GET /api/v1/graph_data` (guest-readable) returns at most 2,000 entities per view, with `truncated` and `total` when the cap applies; no view reads more than 2,001 ids per query any more (a neighbourhood stops walking at the cap and marks its total `total_is_minimum`), and its query count no longer grows with the graph.
 - The entity panel's observation page is bounded (past the end shows the last page), so a huge `page` no longer becomes a huge `OFFSET`.
 
 ## [1.60.0] - 2026-10-28

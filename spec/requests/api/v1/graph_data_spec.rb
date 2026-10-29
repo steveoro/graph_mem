@@ -146,6 +146,40 @@ RSpec.describe "API V1 Graph Data", type: :request do
       expect(response.parsed_body).to include("truncated" => true, "total" => 3)
     end
 
+    it "never reads a hub's whole neighbourhood: each hop is LIMITed, and total is a lower bound" do
+      hub = MemoryEntity.create!(name: "Synth Hub", entity_type: "Service")
+      8.times { |i| MemoryRelation.create!(from_entity: hub, to_entity: MemoryEntity.create!(name: "Synth Spoke #{i}", entity_type: "Note"), relation_type: "relates_to") }
+      stub_const("Api::V1::GraphDataController::MAX_NODES", 3)
+      relation_reads = []
+      callback = ->(*, payload) { relation_reads << payload[:sql] if payload[:sql].match?(/FROM `memory_relations`.*entity_id` (=|IN)/) && !payload[:sql].include?("COUNT") }
+
+      ActiveSupport::Notifications.subscribed(callback, "sql.active_record") do
+        get "/api/v1/graph_data", params: { entity_id: hub.id, depth: 2 }
+      end
+
+      expect(node_ids.size).to eq(3)
+      expect(node_ids).to include(hub.id)
+      expect(response.parsed_body).to include("truncated" => true, "total_is_minimum" => true)
+      expect(response.parsed_body["total"]).to be > 3
+      walk = relation_reads.reject { |sql| sql.include?("`from_entity_id` IN") && sql.include?("`to_entity_id` IN") }
+      expect(walk).to all(include("LIMIT 4"))
+      expect(walk.size).to eq(2) # the walk stopped after the first hop
+    end
+
+    it "counts the real total for a capped root view and a capped children view" do
+      3.times { |i| MemoryEntity.create!(name: "Synth Project #{i}", entity_type: "Project") }
+      3.times { |i| MemoryRelation.create!(from_entity: MemoryEntity.create!(name: "Synth Child #{i}", entity_type: "Note"), to_entity: widget, relation_type: "part_of") }
+      stub_const("Api::V1::GraphDataController::MAX_NODES", 2)
+
+      get "/api/v1/graph_data", params: { root_only: "true" }
+      expect(response.parsed_body).to include("truncated" => true, "total" => 5)
+      expect(response.parsed_body).not_to have_key("total_is_minimum")
+
+      get "/api/v1/graph_data", params: { scoped_entity_id: widget.id }
+      expect(response.parsed_body).to include("truncated" => true, "total" => 5) # widget, router and three notes
+      expect(node_ids).to include(widget.id)
+    end
+
     it "opens one or two hops" do
       get "/api/v1/graph_data", params: { entity_id: far.id }
       expect(node_ids).to contain_exactly(far.id, router.id)

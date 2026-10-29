@@ -1357,7 +1357,10 @@ paths:
                     description: Present (true) only when the 2,000-entity cap applied
                   total:
                     type: integer
-                    description: Present only with truncated; the entities in the full view
+                    description: Present only with truncated; the entities in the full view (a lower bound when total_is_minimum is set)
+                  total_is_minimum:
+                    type: boolean
+                    description: Present (true) only on a capped neighbourhood (entity_id), which stops reading at the cap
         '404':
           description: Referenced entity not found
           content:

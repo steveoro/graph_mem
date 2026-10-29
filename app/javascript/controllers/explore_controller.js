@@ -173,14 +173,18 @@ export default class extends Controller {
     this.#showTruncation(data)
   }
 
+  // Only the latest request renders: an older answer arriving late is dropped (null).
   async #fetch() {
+    const ticket = this.requestSeq = (this.requestSeq || 0) + 1
     this.#setStatus("")
     try {
-      return await this.api.fetchGraphData({
+      const data = await this.api.fetchGraphData({
         scope: this.scopeValue, entityId: this.entityIdValue || null, projectId: this.projectIdValue || null,
         ids: this.idsValue || null, depth: this.depthValue
       })
+      return ticket === this.requestSeq ? data : null
     } catch (error) {
+      if (ticket !== this.requestSeq) return null
       console.error("Could not load the graph:", error)
       this.#setStatus("The graph couldn't be loaded. Try again, or pick another scope.", true)
       return null
@@ -262,7 +266,8 @@ export default class extends Controller {
   #showTruncation(data) {
     if (data.truncated) {
       const shown = data.elements.filter((element) => element.group === "nodes").length
-      this.#setStatus(`Showing ${shown.toLocaleString("en-US")} of ${Number(data.total).toLocaleString("en-US")} entities; pick a project to see the rest.`)
+      const total = Number(data.total).toLocaleString("en-US")
+      this.#setStatus(`Showing ${shown.toLocaleString("en-US")} of ${data.total_is_minimum ? "at least " : ""}${total} entities; pick a project to see the rest.`)
     }
   }
 

@@ -5,7 +5,9 @@ module Api
     # The canvas's read endpoint (Explore, and Search's "Show as graph"); guest-readable. Every
     # branch returns at most MAX_NODES entities and only the relations among them, with a fixed
     # number of queries: the nodes, one grouped count of active observations, the relations.
-    # When the cap applies the body also carries "truncated": true and "total": N.
+    # Reads are bounded too: no branch plucks more than MAX_NODES + 1 ids per query. When the cap
+    # applies the body also carries "truncated": true and "total": N; a neighbourhood stops reading
+    # at the cap, so its total is a lower bound and the body adds "total_is_minimum": true.
     class GraphDataController < BaseController
       # "Show as graph" (UI-3) sends one page of search results; UI-4b's Explore reuses it.
       MAX_IDS = EntityIdList::MAX
@@ -62,8 +64,9 @@ module Api
       end
 
       def render_root_graph
-        ids = MemoryEntity.where(entity_type: [ NodeOperationsStrategy::PROJECT_ENTITY_TYPE, nil ]).order(:id).limit(MAX_NODES + 1).pluck(:id)
-        render_capped(ids)
+        scope = MemoryEntity.where(entity_type: [ NodeOperationsStrategy::PROJECT_ENTITY_TYPE, nil ])
+        ids = scope.order(:id).limit(MAX_NODES + 1).pluck(:id)
+        render_capped(ids, total: (scope.count if ids.size > MAX_NODES))
       end
 
       # A project root and its part_of subtree (ProjectSubtree's walk, bounded by MAX_NODES).
@@ -80,30 +83,39 @@ module Api
       # An entity and its direct part_of children.
       def render_scoped_subgraph(scoped_entity_id)
         root_entity = MemoryEntity.find(scoped_entity_id)
-        child_ids = MemoryRelation.where(relation_type: "part_of", to_entity_id: root_entity.id).order(:from_entity_id).pluck(:from_entity_id)
-        render_capped(([ root_entity.id ] + child_ids).uniq, options: { focus_entity_id: scoped_entity_id }, keep: root_entity.id)
+        children = MemoryRelation.where(relation_type: "part_of", to_entity_id: root_entity.id)
+        child_ids = children.order(:from_entity_id).limit(MAX_NODES + 1).pluck(:from_entity_id)
+        total = children.count + 1 if child_ids.size > MAX_NODES
+        render_capped(([ root_entity.id ] + child_ids).uniq, total: total, options: { focus_entity_id: scoped_entity_id }, keep: root_entity.id)
       end
 
-      # An entity and its neighbours, one or two hops out.
+      # An entity and its neighbours, one or two hops out. Each hop reads at most MAX_NODES + 1
+      # distinct ids per direction and the walk stops once past the cap, so a hub never loads its
+      # whole neighbourhood (and the second hop's IN list stays bounded).
       def render_subgraph(entity_id)
         focus = MemoryEntity.find(entity_id)
         ids = [ focus.id ]
         frontier = ids
         depth.times do
-          hop = MemoryRelation.where(from_entity_id: frontier).pluck(:to_entity_id) +
-                MemoryRelation.where(to_entity_id: frontier).pluck(:from_entity_id)
-          frontier = hop.uniq - ids
+          break if frontier.empty? || ids.size > MAX_NODES
+
+          frontier = (neighbour_ids(frontier, :from_entity_id, :to_entity_id) + neighbour_ids(frontier, :to_entity_id, :from_entity_id)).uniq - ids
           ids += frontier.sort
         end
-        render_capped(ids, options: { focus_entity_id: entity_id }, keep: focus.id)
+        render_capped(ids, options: { focus_entity_id: entity_id }, keep: focus.id, total_is_minimum: true)
+      end
+
+      def neighbour_ids(frontier, from_column, to_column)
+        MemoryRelation.where(from_column => frontier).distinct.limit(MAX_NODES + 1).pluck(to_column)
       end
 
       # Keeps `keep` (the focus) and the lowest ids up to MAX_NODES.
-      def render_capped(ids, total: nil, truncated: nil, options: {}, keep: nil)
+      def render_capped(ids, total: nil, truncated: nil, options: {}, keep: nil, total_is_minimum: false)
         truncated = ids.size > MAX_NODES if truncated.nil?
         capped = ids.sort
         capped = (keep ? [ keep ] + (capped - [ keep ]) : capped).first(MAX_NODES) if truncated
         extra = truncated ? { truncated: true, total: total || ids.size } : {}
+        extra[:total_is_minimum] = true if truncated && total_is_minimum
         render_graph_data(load_nodes(capped), options, **extra)
       end
 
