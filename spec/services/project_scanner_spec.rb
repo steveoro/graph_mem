@@ -221,6 +221,35 @@ RSpec.describe ProjectScanner, type: :service do
     expect(result.errors).to include(/Project root does not exist/)
   end
 
+  describe "top-level directories in the deterministic fallback" do
+    before { allow(SummarizationConfig).to receive(:llm_usable?).and_return(false) }
+
+    it "doesn't list a top-level symlink to an outside folder as a Component" do
+      Dir.mktmpdir("outside") do |outside|
+        FileUtils.mkdir_p(File.join(@project_root, "app"))
+        File.symlink(outside, File.join(@project_root, "linked_alpha"))
+
+        ProjectScanner.new(project_root: @project_root, project_name: "Gadget Project").call
+
+        expect(MemoryEntity.where(name: "app", entity_type: "Component")).to exist
+        expect(MemoryEntity.where(name: "linked_alpha")).to be_empty
+      end
+    end
+
+    it "leaves out one entry that vanishes before lstat and keeps the others" do
+      %w[app docs gone_widget].each { |dir| FileUtils.mkdir_p(File.join(@project_root, dir)) }
+      gone = File.join(@project_root, "gone_widget")
+      allow(File).to receive(:lstat).and_call_original
+      allow(File).to receive(:lstat).with(gone).and_raise(Errno::ENOENT)
+
+      dirs = ProjectScanner.new(project_root: @project_root).send(:top_level_directories)
+      # The temp folder's cleanup lstats every entry again.
+      allow(File).to receive(:lstat).and_call_original
+
+      expect(dirs).to contain_exactly("app", "docs")
+    end
+  end
+
   describe "staying inside the project root (PR-0 §0.5)" do
     %w[../outside/* /etc/*].each do |glob|
       it "fails without reading anything for file_globs #{glob.inspect}" do
