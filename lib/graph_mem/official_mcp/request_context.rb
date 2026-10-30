@@ -13,8 +13,9 @@ module GraphMem
       ENV_KEY = "mcp.auth_info"
       CLAIM = :graph_mem
 
-      # The per-request values.
-      Context = Data.define(:client_id, :profile, :session_id) do
+      # The per-request values; client_info is the MCP session's initialize clientInfo, added by
+      # ToolWrapper from the gem's server_context (nil over stdio, or when a client sends none).
+      Context = Data.define(:client_id, :profile, :session_id, :client_info) do
         # Headers in the shape ApplicationTool#current_client_id reads.
         #
         # @return [Hash{String => String}]
@@ -22,14 +23,15 @@ module GraphMem
           client_id.present? ? { ApplicationTool::MCP_CLIENT_HEADER => client_id } : {}
         end
 
-        # Runs the block with the thread-locals ApplicationTool reads for the profile and session.
+        # Runs the block with the thread-locals ApplicationTool reads for the profile, the session
+        # and the client info.
         def around_call
-          saved = [ Thread.current[:graph_mem_mcp_profile], Thread.current[:graph_mem_mcp_session_id] ]
-          Thread.current[:graph_mem_mcp_profile] = profile
-          Thread.current[:graph_mem_mcp_session_id] = session_id
+          keys = %i[graph_mem_mcp_profile graph_mem_mcp_session_id graph_mem_mcp_client_info]
+          saved = keys.map { |key| Thread.current[key] }
+          keys.zip([ profile, session_id, client_info ]).each { |key, value| Thread.current[key] = value }
           yield
         ensure
-          Thread.current[:graph_mem_mcp_profile], Thread.current[:graph_mem_mcp_session_id] = saved
+          keys.zip(saved).each { |key, value| Thread.current[key] = value }
         end
       end
 
@@ -38,7 +40,7 @@ module GraphMem
       def self.from_server_context(server_context)
         token = server_context.respond_to?(:[]) ? server_context[:auth_info] : nil
         carried = token.respond_to?(:claims) ? token.claims[CLAIM] : nil
-        carried.is_a?(Context) ? carried : Context.new(client_id: nil, profile: GraphMem::McpProfile.from_env, session_id: nil)
+        carried.is_a?(Context) ? carried : Context.new(client_id: nil, profile: GraphMem::McpProfile.from_env, session_id: nil, client_info: nil)
       end
 
       def initialize(app)
@@ -48,7 +50,8 @@ module GraphMem
       def call(env)
         profile = Router.profile_for(env["PATH_INFO"])
         if profile
-          context = Context.new(client_id: env["HTTP_X_MCP_CLIENT"].presence, profile: profile, session_id: env["HTTP_MCP_SESSION_ID"].presence)
+          context = Context.new(client_id: env["HTTP_X_MCP_CLIENT"].presence, profile: profile, session_id: env["HTTP_MCP_SESSION_ID"].presence,
+                                client_info: nil)
           env[ENV_KEY] = MCP::Server::OAuth::AccessToken.new(token: "graph_mem", claims: { CLAIM => context })
         end
         @app.call(env)

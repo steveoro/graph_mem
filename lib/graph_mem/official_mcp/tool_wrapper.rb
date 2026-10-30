@@ -38,9 +38,22 @@ module GraphMem
 
           define_singleton_method(:graph_mem_tool_class) { tool_class }
           define_singleton_method(:call) do |server_context: nil, **args|
-            wrapper.invoke(tool_class, args, RequestContext.from_server_context(server_context))
+            context = RequestContext.from_server_context(server_context).with(client_info: wrapper.client_info(server_context))
+            wrapper.invoke(tool_class, args, context)
           end
         end
+      end
+
+      # The MCP initialize clientInfo the gem keeps for the session (MCP::ServerContext#client_info),
+      # for the audit claim. Only a Hash is kept; nil over stdio or when the client sent none.
+      #
+      # @param server_context [MCP::ServerContext, Hash, nil]
+      # @return [Hash, nil]
+      def self.client_info(server_context)
+        info = server_context.respond_to?(:client_info) ? server_context.client_info : nil
+        info.is_a?(Hash) ? info : nil
+      rescue StandardError
+        nil
       end
 
       # Runs the tool as before (normaliser, validation, telemetry, next_move) and returns the

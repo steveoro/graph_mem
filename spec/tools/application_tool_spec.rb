@@ -396,7 +396,7 @@ RSpec.describe ApplicationTool do
     # The MCP request context sets the request path's profile for the duration of a tool call.
     def with_request(path, &block)
       profile = GraphMem::OfficialMcp::Router.profile_for(path)
-      GraphMem::OfficialMcp::RequestContext::Context.new(client_id: nil, profile: profile, session_id: nil).around_call(&block)
+      GraphMem::OfficialMcp::RequestContext::Context.new(client_id: nil, profile: profile, session_id: nil, client_info: nil).around_call(&block)
     end
 
     it "uses GRAPH_MEM_MCP_PROFILE when there is no HTTP request (stdio, direct calls)" do

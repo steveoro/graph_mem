@@ -75,6 +75,7 @@ class ApplicationTool
     # The server-side fact for every audit row and change set this call writes (each tool's own
     # #call doesn't call super, so this is the one place to set it).
     Current.actor = "mcp:#{tool_name}"
+    Current.actor_claim = ActorClaim.transport(client_id: current_client_id, client_info: current_client_info)
     raw_result = call(**normalized)
     result, success_metadata = ToolSuccessResponse.call(
       tool_name: tool_name,
@@ -99,6 +100,7 @@ class ApplicationTool
       argument_keys: argument_keys
     )
     Current.actor = nil
+    Current.actor_claim = nil
   end
 
   def logger
@@ -115,6 +117,14 @@ class ApplicationTool
 
   def graph_mem_context
     GraphMemContext.for(current_client_id)
+  end
+
+  # The MCP session's initialize clientInfo (`{ name:, version: }`), set by the MCP request context
+  # for the call; nil over stdio or for a client that sent none.
+  #
+  # @return [Hash, nil]
+  def current_client_info
+    Thread.current[:graph_mem_mcp_client_info]
   end
 
   # Profile serving this call: the request path's profile (/mcp, /mcp/readonly, /mcp/maintenance),

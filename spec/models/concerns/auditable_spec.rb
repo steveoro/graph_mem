@@ -125,4 +125,34 @@ RSpec.describe Auditable, type: :model do
       MemoryEntity.create!(name: "AuditFailLog", entity_type: "Project")
     end
   end
+
+  describe "the actor claim (audit actor, 1.65.0)" do
+    let(:widget) { MemoryEntity.create!(name: "SynthWidget", entity_type: "Component") }
+
+    def observe(source, actor:, claim: nil)
+      Current.set(actor: actor, actor_claim: claim) { MemoryObservation.create!(memory_entity: widget, content: "SynthWidget note #{SecureRandom.hex(3)}", source: source) }
+    end
+
+    def audit_for(record) = AuditLog.where(auditable_type: record.class.name, auditable_id: record.id).order(:id).last
+
+    it "joins the call's claim and the source's who for an MCP write" do
+      observation = observe("synth-agent/model-x: synthetic task", actor: "mcp:graph_write", claim: "client=synth-client-a · synth-agent/0.0.1")
+
+      expect(audit_for(observation)).to have_attributes(actor: "mcp:graph_write",
+                                                        actor_claim: "client=synth-client-a · synth-agent/0.0.1 · synth-agent/model-x")
+    end
+
+    it "keeps only the call's claim when the source doesn't parse, and none for an entity without one" do
+      expect(audit_for(observe("project_scan:7:reconcile", actor: "mcp:graph_write", claim: "client=synth-client-a")).actor_claim)
+        .to eq("client=synth-client-a")
+      expect(audit_for(observe("docs:README.md", actor: "mcp:graph_write")).actor_claim).to be_nil
+      entity = Current.set(actor: "mcp:graph_write", actor_claim: "synth-agent/0.0.1") { MemoryEntity.create!(name: "Alpha Service", entity_type: "Service") }
+      expect(audit_for(entity).actor_claim).to eq("synth-agent/0.0.1")
+    end
+
+    it "never claims for the web UI or REST, whatever the source says" do
+      expect(audit_for(observe("synth-agent/model-x: synthetic task", actor: "operator:synth@127.0.0.1")).actor_claim).to be_nil
+      expect(audit_for(observe("synth-agent/model-x: synthetic task", actor: "api:synth-client-a")).actor_claim).to be_nil
+    end
+  end
 end

@@ -20,13 +20,15 @@ class ChangeSet
 
     # @param kind [String] see ChangeSet::KINDS
     # @param actor [String, nil]
+    # @param actor_claim [String, nil] display only (ActorClaim)
     # @param summary [String, nil]
     # @param subject [ActiveRecord::Base, nil]
     # @param undo_of [ChangeSet, nil]
-    def initialize(kind:, actor:, summary: nil, subject: nil, undo_of: nil)
+    def initialize(kind:, actor:, actor_claim: nil, summary: nil, subject: nil, undo_of: nil)
       @uuid = SecureRandom.uuid
       @kind = kind
       @actor = actor
+      @actor_claim = actor_claim
       @undo_of_id = undo_of&.id
       @subject_type = subject&.class&.name
       @subject_id = subject&.id
@@ -50,7 +52,7 @@ class ChangeSet
 
       track_rollback!
       @persisted_at = Time.current
-      @id = ChangeSet.create!(row_attributes.merge(uuid: @uuid, kind: @kind, actor: @actor, undo_of_id: @undo_of_id)).id
+      @id = ChangeSet.create!(row_attributes.merge(uuid: @uuid, kind: @kind, actor: @actor, actor_claim: @actor_claim, undo_of_id: @undo_of_id)).id
     end
 
     # Called by Auditable before each audit row: picks the subject and moves the strategy.
