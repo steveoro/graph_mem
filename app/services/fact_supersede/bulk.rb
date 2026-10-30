@@ -14,8 +14,10 @@ module FactSupersede
     ACTIONS = %w[supersede retire].freeze
     MAX_ROWS = 200
     SKIP_LABELS = {
-      inactive: "no longer active", outside: "not in the project", changed: "changed since you looked", kept: "kept by the legacy guard"
+      inactive: "no longer active", outside: "not in the project", fact: "a source fact (unmark it in Explore first)",
+      changed: "changed since you looked", kept: "kept by the legacy guard"
     }.freeze
+    SETTLED_REASON = "observation changed in Find & supersede"
 
     # @param project [MemoryEntity] a Project root
     # @param observation_ids [Array<#to_i>] at most MAX_ROWS
@@ -46,14 +48,15 @@ module FactSupersede
       error = refusal
       return { success: false, error: error } if error
 
-      changed = 0
+      changed_ids = []
       result = ChangeSet.record(kind: "explore.bulk_supersede", subject: @project, summary: summary) do |context|
         MemoryObservation.transaction do
-          MemoryObservation.where(id: @ids).includes(:memory_entity).lock.order(:id).each { |observation| changed += 1 if change(observation) }
+          MemoryObservation.where(id: @ids).includes(:memory_entity).lock.order(:id).each { |observation| changed_ids << observation.id if change(observation) }
+          settle_review_rows(changed_ids)
         end
         { success: true }.merge(context.undo_handle)
       end
-      result.merge(changed: changed, skipped: @skipped.transform_keys(&:to_s), message: message(changed))
+      result.merge(changed: changed_ids.size, skipped: @skipped.transform_keys(&:to_s), message: message(changed_ids.size))
     end
 
     private
@@ -90,6 +93,7 @@ module FactSupersede
     def skip_reason(observation)
       return :inactive unless observation.active?
       return :outside unless observation.fact_project_id == @project.id
+      return :fact if observation.fact_tagged?
       return :changed if @rendered_at && observation.updated_at > @rendered_at
 
       :kept if @fact && guard.check(observation).first == LegacyGuard::KEEP
@@ -97,6 +101,17 @@ module FactSupersede
 
     def guard
       @guard ||= LegacyGuard.new(@fact)
+    end
+
+    # The pending "Outdated by a fact" rows of the observations just changed would only refuse
+    # on apply: dismiss them in this change set (no suppression, undone with it).
+    def settle_review_rows(observation_ids)
+      return if observation_ids.empty?
+
+      MaintenanceReportRow.pending.where(kind: Proposals::KIND)
+                          .where("CAST(JSON_VALUE(payload, '$.observation_id') AS UNSIGNED) IN (?)", observation_ids).find_each do |row|
+        CompactionReviewService.policy_change!(row, { status: "dismissed", dismissed_at: Time.current, resolution_reason: SETTLED_REASON, expires_at: nil })
+      end
     end
 
     def summary

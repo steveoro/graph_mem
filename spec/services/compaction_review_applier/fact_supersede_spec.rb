@@ -36,6 +36,15 @@ RSpec.describe CompactionReviewApplier::FactSupersede do
     expect(old.reload).to have_attributes(status: "obsolete", outdated_by_id: fact.id, superseded_by_id: nil)
   end
 
+  it "re-checks the row under its lock before retiring, so a concurrent edit isn't overwritten" do
+    stale = described_class.plan(row.effective_payload.with_indifferent_access, {})
+    replacement = old.supersede!({ content: "The MCP server runs on fast-mcp 2." })
+    allow(described_class).to receive(:plan).and_return(stale)
+
+    expect(apply).to include(success: false, error: include("no longer active"))
+    expect(old.reload).to have_attributes(status: "superseded", superseded_by_id: replacement.id, outdated_by_id: nil)
+  end
+
   it "supersedes with the fact's text when asked to supersede without one" do
     apply(fact_action: "supersede")
 

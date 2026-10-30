@@ -67,14 +67,16 @@ module SourceFact
   end
 
   # Only operator-confirmed facts may be auto-applied: the latest audit row that added the tag
-  # (on create or on an update) has an `operator:` actor. Agent-marked facts only ever propose.
+  # (on create or on an update) or changed the text in place has an `operator:` actor. An agent
+  # that marks a fact, or rewrites an operator's fact, makes it propose-only.
   #
   # @return [Boolean]
   def operator_confirmed_fact?
     return false unless source_fact?
 
-    added = AuditLog.where(auditable_type: "MemoryObservation", auditable_id: id).order(id: :desc).find { |log| added_fact_tag?(log) }
-    added&.actor.to_s.start_with?(OPERATOR_ACTOR_PREFIX)
+    latest = AuditLog.where(auditable_type: "MemoryObservation", auditable_id: id).order(id: :desc)
+                     .find { |log| added_fact_tag?(log) || changed_content?(log) }
+    latest&.actor.to_s.start_with?(OPERATOR_ACTOR_PREFIX)
   end
 
   private
@@ -90,6 +92,10 @@ module SourceFact
     FactSupersedeJob.perform_later(id) if AppSettings.fact_supersede_enabled?
   rescue StandardError => e
     Rails.logger.warn "[SourceFact] FactSupersedeJob not queued for observation ##{id}: #{e.class}: #{e.message}"
+  end
+
+  def changed_content?(log)
+    log.action == "update" && log.changed_fields.to_h.key?("content")
   end
 
   def added_fact_tag?(log)

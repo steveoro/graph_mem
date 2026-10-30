@@ -25,6 +25,26 @@ RSpec.describe FactSupersede::LegacyGuard do
     expect(check("Gadget runs on fast-mcp.").first).to eq("keep")
   end
 
+  it "keeps another project whose name contains the fact's project name" do
+    own = fs_project!("Gadget")
+    MemoryEntity.create!(name: "Gadget Mobile", entity_type: "Project")
+    nested = described_class.new(fs_fact!(own))
+
+    expect(nested.check(fs_observe!(own, "Gadget Mobile still runs on fast-mcp."))).to eq([ "keep", "names another project (Gadget Mobile)" ])
+    expect(nested.check(fs_observe!(own, "Gadget runs on fast-mcp."))).to eq([ nil, nil ])
+  end
+
+  it "looks the project names up once, whatever the number of statements" do
+    statements = Array.new(5) { |i| fs_observe!(widget, "Statement #{i} about fast-mcp.") }
+    guard.check(statements.first)
+    queries = 0
+    counter = ->(*, payload) { queries += 1 if payload[:sql].include?("memory_entities") }
+
+    ActiveSupport::Notifications.subscribed(counter, "sql.active_record") { statements.each { |statement| guard.check(statement) } }
+
+    expect(queries).to eq(0)
+  end
+
   it "puts a version, an environment word or a work-log entry in context" do
     expect(check("On v1.7 we pinned fast-mcp.")).to eq([ "context", "names a version the fact doesn't (v1.7)" ])
     expect(check("The staging server runs fast-mcp.").first).to eq("context")

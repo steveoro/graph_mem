@@ -44,7 +44,7 @@ class SummarizationConfig
         provider: resolve_string(:provider),
         timeout: resolve_integer(:timeout),
         max_tokens: resolve_integer(:max_tokens),
-        num_ctx: resolve_integer(:num_ctx),
+        num_ctx: resolve_integer(:num_ctx).clamp(NUM_CTX_RANGE.min, NUM_CTX_RANGE.max),
         observations_per_entity: resolve_integer(:observations_per_entity),
         llm_enabled: AppSettings.llm_summarization_enabled?
       }

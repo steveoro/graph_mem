@@ -278,7 +278,7 @@ The review rows (`maintenance_report_rows`) that dream-state compaction, the sta
 - **Limits at the source.** Per kind and run: `RUN_CAPS` (relationship 200, merge 100, orphan 100, contradiction 100; counted across one run's flushes, best priority kept). The backlog ceiling (`review_backlog_ceiling` active rows of a kind, default 300) is soft: the room left under it is filled with the best items, and beyond it an item comes in only when it beats the lowest active priority (nothing is evicted). The report's data records `skipped_run_cap` / `skipped_backlog_full`. The queue pages in SQL (root-first rows, then priority); a text search scans at most 2,000 rows.
 - **What can be applied in bulk.** Only `relationship_proposal` and `stale_memory` (`SAFE_BULK_KINDS`). Merges, deletes, moves and reparents (`DESTRUCTIVE_KINDS`) and contradictions and fact supersedes (`CHOICE_KINDS`) are applied one by one; bulk apply skips them.
 - **Snooze.** `CompactionReviewService.snooze` (and `ignore`, which now snoozes for 30 days): status `ignored` until `expires_at`, with a matching "snoozed" suppression. Dismissing a snoozed signature makes the suppression permanent; undo brings the snooze back.
-- **Contradictions.** The scheduled stale scan seeds one `contradiction` row per pair its contradiction pass finds (signature `contradiction|<low>-<high>`, either order). Applying needs `keep_observation_id`: that observation is kept and the other is marked obsolete, a `review.apply` set (30 days) undone like any obsolete mark. MCP/API `detect_contradictions` still seed nothing.
+- **Contradictions.** The scheduled stale scan seeds one `contradiction` row per pair its contradiction pass finds (signature `contradiction|<low>-<high>`, either order). Applying needs `keep_observation_id`: that observation is kept and the other is marked obsolete, a `review.apply` set (30 days) undone like any obsolete mark. MCP/API `detect_contradictions` in its default mode still seeds nothing (its `outdated_by_fact` mode seeds `fact_supersede` rows, below).
 - **Policies.** `ReviewPolicyJob` runs `ReviewPolicyRunner` nightly at 5:00 GMT and after a compaction run, stale scan or project scan that seeded rows (never two at once). Each policy reads its `AppSettings` toggle uncached, acts on at most 500 rows per run, in batches of 200, each batch one undoable `policy.<name>` set:
 
   | Policy | Default | Does |
@@ -338,8 +338,13 @@ and nothing acts across projects. Step list: `docs/plans/fact-supersede-plan.md`
   `fact:<fact>|obs:<observation>`, so a dismissal suppresses that pair alone; run cap 100. The
   kind is a choice kind (never bulk or group applied). `CompactionReviewApplier::FactSupersede`
   supersedes (a replacement text) or retires inside `review.apply`, after re-checking the fact,
-  the observation, the project and the guard. `detect_contradictions` with
-  `mode: "outdated_by_fact"` runs the same pipeline for agents on `/mcp/maintenance`.
+  the observation (under its row lock), the project and the guard. Pairs that already have a
+  pending row or a suppression are skipped before the judge. `detect_contradictions` with
+  `mode: "outdated_by_fact"` runs the same pipeline for agents on `/mcp/maintenance`, judging at
+  most 2 batches per call (the rest come back unjudged), so a call doesn't wait on many LLM calls.
+- **Operator-confirmed** means the latest audit row that added the tag or changed the fact's text
+  in place has an `operator:` actor, so an agent's rewrite of an operator's fact makes it
+  propose-only.
 - **Fallbacks.** No embeddings: term match only (the job needs `replaces:` terms, else it
   records "nothing to search"). No LLM: every row is `unjudged` at confidence ≤ 0.5. Both down:
   the Find & supersede page still matches text and supersedes or retires by hand.
@@ -352,5 +357,6 @@ and nothing acts across projects. Step list: `docs/plans/fact-supersede-plan.md`
   escaped text search in one project (or all projects, view only), inactive rows on request
   (view only), optionally with a source fact's candidates, guards and pending verdicts.
   `FactSupersede::Bulk` supersedes (one text, or the fact's text) or retires at most 200 rows of
-  that project in one `explore.bulk_supersede` change set; rows that changed in between are
-  skipped and counted.
+  that project in one `explore.bulk_supersede` change set; rows that changed in between, and
+  source facts, are skipped and counted. The changed observations' pending "Outdated by a fact"
+  rows are dismissed in the same set (no suppression).

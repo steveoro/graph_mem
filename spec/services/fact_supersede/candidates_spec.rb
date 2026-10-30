@@ -53,6 +53,9 @@ RSpec.describe FactSupersede::Candidates do
 
     expect(found(query: "100%")).to contain_exactly("SynthWidget is 100% done.")
     expect(found(terms: [ "a_b" ])).to contain_exactly("SynthWidget uses a_b.")
+    fs_observe!(widget, "SynthWidget uses a\\b.")
+    fs_observe!(widget, "SynthWidget uses ab.")
+    expect(found(terms: [ "a\\b" ])).to contain_exactly("SynthWidget uses a\\b.")
     expect(described_class.call(fact, query: "q1", terms: %w[q2 q3 q4 q5 q6]).terms.size).to eq(5)
   end
 

@@ -36,10 +36,11 @@ module FactSupersede
     # @param observation [MemoryObservation]
     # @return [Array(String, String), Array(nil, nil)] the guard and why
     def check(observation)
-      text = without_own_names(observation.content.to_s)
-      other = other_project_pattern && text[other_project_pattern]
+      content = observation.content.to_s
+      other = other_project_name(content)
       return [ KEEP, "names another project (#{other})" ] if other
 
+      text = without_own_names(content)
       versions = text.scan(VERSION_PATTERN).map(&:downcase) - @fact.content.to_s.scan(VERSION_PATTERN).map(&:downcase)
       return [ CONTEXT, "names a version the fact doesn't (#{versions.first})" ] if versions.any?
 
@@ -56,28 +57,40 @@ module FactSupersede
       text.downcase.scan(/[\p{Alnum}]+/).to_set
     end
 
-    # The fact's own project name and aliases are removed first, so "Gadget Project" in the text
-    # doesn't count as naming a project called "Gadget".
+    # One longest-first pass over the own and the other projects' names: "Gadget Project" in the
+    # text is the fact's own project even when another is called "Gadget", and "Gadget Mobile" is
+    # another project even when the fact's is called "Gadget".
+    def other_project_name(text)
+      return if other_names.empty?
+
+      text.scan(all_names_pattern).find { |hit| other_names_down.include?(hit.downcase) }
+    end
+
+    # The own names are removed only for the version and environment checks.
     def without_own_names(text)
-      own = names_of(MemoryEntity.where(id: @project_id))
-      own.empty? ? text : text.gsub(name_pattern(own), " ")
+      own_names.empty? ? text : text.gsub(own_names_pattern, " ")
     end
 
-    def other_project_pattern
-      return @other_project_pattern if defined?(@other_project_pattern)
-
-      names = names_of(MemoryEntity.where(entity_type: NodeOperationsStrategy::PROJECT_ENTITY_TYPE).where.not(id: @project_id))
-      @other_project_pattern = names.empty? ? nil : name_pattern(names)
+    def own_names
+      @own_names ||= names_of(MemoryEntity.where(id: @project_id))
     end
+
+    def other_names
+      @other_names ||= names_of(MemoryEntity.where(entity_type: NodeOperationsStrategy::PROJECT_ENTITY_TYPE).where.not(id: @project_id))
+    end
+
+    def other_names_down = @other_names_down ||= other_names.to_set(&:downcase)
+    def all_names_pattern = @all_names_pattern ||= name_pattern(own_names + other_names)
+    def own_names_pattern = @own_names_pattern ||= name_pattern(own_names)
 
     def names_of(scope)
       scope.pluck(:name, :aliases).flat_map { |name, aliases| [ name, *aliases.to_s.split(GraphMutationBatch::ALIAS_SEPARATOR) ] }
            .map(&:strip).select { |name| name.length >= MIN_NAME_LENGTH }.uniq
     end
 
-    # Longest first, so "Legacy Gadget" wins over "Gadget".
+    # Longest first, so "Legacy Gadget" wins over "Gadget". scan returns whole matches (no groups).
     def name_pattern(names)
-      alternatives = names.sort_by { |name| -name.length }.map { |name| Regexp.escape(name) }
+      alternatives = names.uniq.sort_by { |name| -name.length }.map { |name| Regexp.escape(name) }
       /(?<![\p{Alnum}])(?:#{alternatives.join('|')})(?![\p{Alnum}])/i
     end
   end

@@ -4,6 +4,8 @@ class DetectContradictionsTool < ApplicationTool
   MODES = %w[contradictions outdated_by_fact].freeze
   FACT_MODE_ARGUMENTS = %i[fact_observation_id terms seed_review].freeze
   FACT_MODE_MAX_RESULTS = 50
+  # The judge's batches one tool call may wait for (8 candidates each); the rest come back unjudged.
+  FACT_MODE_JUDGE_BATCHES = 2
 
   def self.tool_name
     "detect_contradictions"
@@ -23,7 +25,9 @@ class DetectContradictionsTool < ApplicationTool
     "With `mode: \"outdated_by_fact\"` it instead finds what one source fact (an observation tagged `source-fact`) outdates " \
     "in the fact's own project: pass `entity_id` = the fact's entity, required `fact_observation_id`, optional `terms` " \
     "(up to 5 strings), `seed_review` (bool, default true) and `max_results` (at most 50; `max_distance` is ignored); it " \
-    "returns proposals with their review row ids and never writes observations. Apply them with `apply_maintenance_review` " \
+    "returns new proposals with their review row ids (pairs already queued or dismissed are skipped) and never writes " \
+    "observations. With the LLM judge on it waits for at most 2 judge calls (16 candidates); the rest come back unjudged. " \
+    "Apply them with `apply_maintenance_review` " \
     "(`action_params.fact_action` supersede or retire, optional `replacement`). Does not merge or delete. " \
     "Do not use for trust ranking; use `rank_observations` instead. " \
     "Do not use for duplicate entities; use `suggest_merges` instead. " \
@@ -106,11 +110,13 @@ class DetectContradictionsTool < ApplicationTool
       invalid!("`terms` takes at most #{SourceFact::MAX_TERMS} strings of 2-100 characters.")
     end
 
-    result = FactSupersede::Proposals.call(fact, terms: terms, limit: max_results.to_i, seed: seed_review != false)
+    result = FactSupersede::Proposals.call(fact, terms: terms, limit: max_results.to_i, seed: seed_review != false,
+                                           max_batches: FACT_MODE_JUDGE_BATCHES)
     rows = result.rows.index_by { |row| row.payload["observation_id"].to_i }
     {
       mode: "outdated_by_fact", entity_id: entity.id, name: entity.name, fact_observation_id: fact.id, searched: result.searched,
-      judged: result.judged, candidate_count: result.candidates, kept_by_guard: result.kept, proposal_count: result.items.size,
+      judged: result.judged, candidate_count: result.candidates, kept_by_guard: result.kept, already_known: result.known,
+      proposal_count: result.items.size,
       seeded_count: result.rows.size, proposals: result.items.map { |item| proposal(item, rows) }
     }
   end

@@ -11,6 +11,7 @@ RSpec.describe "Review › Find & supersede", type: :request do
   let!(:fact) { fs_fact!(gadget, tags: [ "replaces:fast-mcp" ]) }
 
   def listed = Nokogiri::HTML(response.body).css("[data-testid='supersede-row']").map { |row| row["data-observation-id"].to_i }
+  def selectable = Nokogiri::HTML(response.body).css("input[name='observation_ids[]']").map { |box| box["value"].to_i }
 
   def bulk(ids, **params)
     post review_supersede_path, params: { project_id: gadget.id, observation_ids: ids, bulk_action: "retire" }.merge(params)
@@ -47,7 +48,7 @@ RSpec.describe "Review › Find & supersede", type: :request do
 
       get review_supersede_path(project_id: gadget.id, q: "fast-mcp", include_inactive: "1")
       expect(listed).to contain_exactly(ours.id, retired.id)
-      expect(response.body).not_to include("value=\"#{retired.id}\"")
+      expect(selectable).to eq([ ours.id ])
     end
 
     it "with a fact: shows the candidates, the guard and the pending verdict, and says similarity is off" do
@@ -59,7 +60,7 @@ RSpec.describe "Review › Find & supersede", type: :request do
 
       expect(listed).to contain_exactly(old.id, kept.id)
       expect(response.body).to include('data-testid="supersede-vector-off"', "unjudged", ">keep<")
-      expect(response.body).not_to include("value=\"#{kept.id}\"")
+      expect(selectable).to eq([ old.id ])
     end
 
     it "retires three rows in one change set, and undo restores all three" do
@@ -92,6 +93,39 @@ RSpec.describe "Review › Find & supersede", type: :request do
 
       bulk([ second.id ], bulk_action: "supersede", replacement: "SynthWidget talks to the mcp gem.")
       expect(second.reload.superseded_by.content).to eq("SynthWidget talks to the mcp gem.")
+    end
+
+    it "never changes a source fact, and dismisses the changed rows' pending proposals in the same change" do
+      old = fs_observe!(widget, "The MCP server runs on fast-mcp.")
+      other_fact = fs_fact!(widget, "SynthWidget is built on the mcp gem.")
+      FactSupersedeJob.perform_now(fact.id)
+      row = MaintenanceReportRow.find_by!(kind: "fact_supersede")
+
+      get review_supersede_path(project_id: gadget.id, q: "mcp")
+      expect(listed).to include(other_fact.id)
+      expect(selectable).not_to include(other_fact.id)
+      expect(response.body).to include("source fact")
+
+      bulk([ old.id, fact.id, other_fact.id ], fact_id: fact.id)
+
+      expect(flash[:notice]).to eq("Retired 1 observation. 2 skipped: a source fact (unmark it in Explore first).")
+      expect([ fact, other_fact ].map { |entry| entry.reload.status }).to all(eq("active"))
+      expect(row.reload).to have_attributes(status: "dismissed", resolution_reason: "observation changed in Find & supersede")
+      expect(MaintenanceReportSuppression.count).to eq(0)
+
+      post undo_change_path(ChangeSet.find_by!(kind: "explore.bulk_supersede").uuid), headers: { "HTTP_REFERER" => review_supersede_path }
+      expect([ old.reload.status, row.reload.status ]).to eq(%w[active active])
+    end
+
+    it "keeps the form's fields out of the page links after a refused POST" do
+      51.times { |i| fs_observe!(widget, "fast-mcp note #{i}.") }
+
+      bulk([], q: "fast-mcp", bulk_action: "supersede", replacement: "synthetic replacement", reason: "synthetic reason")
+
+      expect(response).to have_http_status(:unprocessable_content)
+      links = Nokogiri::HTML(response.body).css("nav.pagination a, .pagination a").map { |link| link["href"] }
+      expect(links).not_to be_empty
+      expect(links.join).not_to include("replacement", "reason", "bulk_action", "observation_ids")
     end
 
     it "refuses 201 rows, a missing replacement and all projects with 422" do

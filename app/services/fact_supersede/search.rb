@@ -92,7 +92,7 @@ module FactSupersede
       observations.map do |observation|
         project_id = observation.fact_project_id
         Entry.new(observation: observation, project_id: project_id, project_name: names[project_id], scoped: !project_id.nil?,
-                  changeable: !@all && observation.active?)
+                  changeable: !@all && observation.active? && !observation.fact_tagged?)
       end.sort_by { |entry| [ entry.project_name.to_s, entry.observation.id ] }
     end
 

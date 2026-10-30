@@ -55,6 +55,9 @@ RSpec.describe FactSupersedeJob do
   it "doesn't duplicate on a re-run, and a dismissed pair stays suppressed" do
     2.times { described_class.perform_now(fact.id) }
     expect(rows.count).to eq(1)
+    allow(FactSupersede::Judge).to receive(:call).and_call_original
+    expect(described_class.perform_now(fact.id)).to have_attributes(known: 1)
+    expect(FactSupersede::Judge).to have_received(:call).with(fact, [], max_batches: nil)
 
     CompactionReviewService.dismiss(rows.sole.row_uuid, reason: "synthetic: still true")
     described_class.perform_now(fact.id)

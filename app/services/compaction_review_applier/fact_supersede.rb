@@ -42,6 +42,11 @@ class CompactionReviewApplier
         replacement = plan.observation.supersede!({ content: plan.replacement }, reason: reason, outdated_by: outdated_by)
         { success: true, message: "Superseded observation ##{plan.observation.id} with ##{replacement.id} (outdated by source fact ##{plan.fact.id})" }
       else
+        # supersede! locks and re-checks itself; retire does it here, so an edit that landed
+        # after the plan isn't overwritten.
+        plan.observation.lock!
+        return { success: false, error: "Observation is no longer active; dismiss this row or restore it first" } unless plan.observation.active?
+
         plan.observation.mark_obsolete!(reason: reason, outdated_by: outdated_by)
         { success: true, message: "Retired observation ##{plan.observation.id} (outdated by source fact ##{plan.fact.id})" }
       end

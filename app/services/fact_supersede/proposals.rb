@@ -22,39 +22,57 @@ module FactSupersede
     # @!attribute searched [Boolean] false when there was nothing to search (no vectors and no terms)
     # @!attribute candidates [Integer] candidates found
     # @!attribute kept [Integer] candidates the guard kept ("keep")
+    # @!attribute known [Integer] candidates skipped before the judge: their pair already has a
+    #   pending row or a suppression (a dismissal), so judging them again would change nothing
     # @!attribute judged [Boolean] whether any verdict came from the LLM
-    Result = Data.define(:items, :rows, :searched, :candidates, :kept, :judged)
+    Result = Data.define(:items, :rows, :searched, :candidates, :kept, :known, :judged)
 
     # @param fact [MemoryObservation] an active source fact
     # @param terms [Array<String>] extra search terms (≤ SourceFact::MAX_TERMS in all)
     # @param limit [Integer] most proposals (the review run cap)
     # @param seed [Boolean] seed review rows
+    # @param max_batches [Integer, nil] judge at most this many batches (Judge), nil for all
     # @return [Result]
-    def self.call(fact, terms: [], limit: ReviewRowClassifier::RUN_CAPS.fetch(KIND), seed: true)
-      new(fact, terms: terms, limit: limit, seed: seed).call
+    def self.call(fact, terms: [], limit: ReviewRowClassifier::RUN_CAPS.fetch(KIND), seed: true, max_batches: nil)
+      new(fact, terms: terms, limit: limit, seed: seed, max_batches: max_batches).call
     end
 
-    def initialize(fact, terms:, limit:, seed:)
+    def initialize(fact, terms:, limit:, seed:, max_batches:)
       @fact = fact
       @terms = terms
       @limit = limit
       @seed = seed
+      @max_batches = max_batches
     end
 
     # @see .call
     def call
       found = Candidates.call(@fact, terms: @terms, limit: @limit)
-      return Result.new(items: [], rows: [], searched: false, candidates: 0, kept: 0, judged: false) if !found.vector && found.terms.empty?
+      return Result.new(items: [], rows: [], searched: false, candidates: 0, kept: 0, known: 0, judged: false) if !found.vector && found.terms.empty?
 
       guarded = LegacyGuard.new(@fact).apply(found.candidates)
-      kept, judged_candidates = guarded.partition { |candidate| candidate.guard == LegacyGuard::KEEP }
-      verdicts = Judge.call(@fact, judged_candidates)
+      kept, rest = guarded.partition { |candidate| candidate.guard == LegacyGuard::KEEP }
+      known_ids = known_observation_ids(rest)
+      fresh = rest.reject { |candidate| known_ids.include?(candidate.observation.id) }
+      verdicts = Judge.call(@fact, fresh, max_batches: @max_batches)
       items = verdicts.select { |verdict| PROPOSAL_VERDICTS.include?(verdict.verdict) }.first(@limit).map { |verdict| item(verdict) }
       rows = @seed && items.any? ? CompactionReviewService.seed_report(report_type: REPORT_TYPE, source: SOURCE, source_ref: "fact:#{@fact.id}", items: items) : []
-      Result.new(items: items, rows: rows, searched: true, candidates: found.candidates.size, kept: kept.size, judged: verdicts.any?(&:judged))
+      Result.new(items: items, rows: rows, searched: true, candidates: found.candidates.size, kept: kept.size, known: known_ids.size,
+                 judged: verdicts.any?(&:judged))
     end
 
     private
+
+    # The candidates whose pair (signature fact:<id>|obs:<id>) already has a pending row or an
+    # in-force suppression: seed_report would skip them anyway.
+    def known_observation_ids(candidates)
+      signatures = candidates.to_h { |candidate| [ "fact:#{@fact.id}|obs:#{candidate.observation.id}", candidate.observation.id ] }
+      return Set.new if signatures.empty?
+
+      pending = MaintenanceReportRow.by_report_type(REPORT_TYPE).pending.where(signature: signatures.keys).pluck(:signature)
+      suppressed = MaintenanceReportSuppression.in_force.where(report_type: REPORT_TYPE, signature: signatures.keys).pluck(:signature)
+      (pending + suppressed).to_set { |signature| signatures[signature] }
+    end
 
     def item(verdict)
       candidate = verdict.candidate

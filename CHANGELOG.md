@@ -15,8 +15,8 @@ Source facts: mark what's authoritative, and graph_mem proposes what it outdates
 - **Candidates and the legacy guard**: a fact's candidates come from its own project only (vector similarity within `fact_supersede_max_distance`, 0.45, plus escaped term match). Related entities without a project are listed apart and never auto-applied. Statements that name another project are kept. A version, an environment or a work-log entry puts the row in context, so it is never auto-applied.
 - **The judge**: the local LLM rules superseded / still valid / unrelated, 8 candidates per call in JSON mode, parsed strictly. Age is not evidence. Without the LLM every row is `unjudged` at confidence ≤ 0.5.
 - **"Outdated by a fact"** review kind (Review › By kind): `FactSupersedeJob` runs when a fact is added, its text changes or the tag is added (`fact_supersede_enabled`, on). Supersede (with an editable replacement) or Retire, undoable. Dismissing suppresses that pair only.
-- **Find & supersede** (`/review/supersede`, operator only): search a project's observations (or all projects, view only), optionally with a fact's candidates. Supersede or retire up to 200 rows in one undoable change.
-- **`detect_contradictions` `mode: "outdated_by_fact"`** (no new MCP tool; `/mcp/maintenance`): `fact_observation_id`, `terms`, `seed_review`; returns proposals with their review row ids. `apply_maintenance_review` takes `action_params.fact_action` (supersede / retire) and `replacement`. The tool counts are unchanged (22; default 12, readonly 9, maintenance 22).
+- **Find & supersede** (`/review/supersede`, operator only): search a project's observations (or all projects, view only), optionally with a fact's candidates. Supersede or retire up to 200 rows in one undoable change; source facts are never selectable there.
+- **`detect_contradictions` `mode: "outdated_by_fact"`** (no new MCP tool; `/mcp/maintenance`): `fact_observation_id`, `terms`, `seed_review`; returns new proposals with their review row ids, judging at most 16 candidates per call. `apply_maintenance_review` takes `action_params.fact_action` (supersede / retire) and `replacement`. The tool counts are unchanged (22; default 12, readonly 9, maintenance 22).
 - **Auto-apply source fact supersedes** policy, **off** by default: only rows judged superseded at ≥ 0.9 (`auto_apply_fact_supersede_min_confidence`), unguarded, in the project, of facts an operator marked.
 
 ### Changed
@@ -25,7 +25,7 @@ Source facts: mark what's authoritative, and graph_mem proposes what it outdates
 - Project scans never read `docs/plans/**`: plans describe work that hasn't happened yet.
 
 ### Fixed
-- The `memory_observations` resource's `content` filter escapes `%` and `_` (they used to act as wildcards).
+- The `memory_observations` resource's `content` filter escapes `%`, `_` and `\` (they used to act as wildcards or escapes).
 
 ## [1.63.0] - 2026-10-29
 

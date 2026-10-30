@@ -14,5 +14,9 @@ RSpec.describe MemoryObservationResource, type: :model do
 
     expect(contents_for(content: "100%")).to contain_exactly("SynthWidget 100% done")
     expect(contents_for(content: "a_b")).to contain_exactly("SynthWidget a_b")
+
+    MemoryObservation.create!(memory_entity: widget, content: "SynthWidget a\\b")
+    MemoryObservation.create!(memory_entity: widget, content: "SynthWidget ab")
+    expect(contents_for(content: "a\\b")).to contain_exactly("SynthWidget a\\b")
   end
 end

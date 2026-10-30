@@ -25,7 +25,10 @@
             %td
               - if actions && entry.changeable
                 = check_box_tag "observation_ids[]", observation.id, false, id: "observation-#{observation.id}", "aria-label": "Select ##{observation.id}"
-            %td= observation.content.truncate(300)
+            %td
+              = observation.content.truncate(300)
+              - if observation.fact_tagged?
+                %span.ui-badge.ui-badge--ok source fact
             %td= observation.memory_entity.name
             %td
               = entry.project_name || "no project"
@@ -38,7 +41,8 @@
                 - if entry.guard
                   %span.ui-badge{ title: entry.guard_reason }= entry.guard
               %td= entry.verdict ? "#{entry.verdict} (#{entry.confidence})" : "—"
-  = paginate entries, params: { rendered_at: nil }
+  -# A refused POST re-renders this page: keep the form's fields out of the page links.
+  = paginate entries, params: { rendered_at: nil, observation_ids: nil, bulk_action: nil, replacement: nil, use_fact_text: nil, reason: nil }
   - if actions
     %fieldset.ui-card{ data: { testid: "supersede-actions" } }
       %legend= "Selected rows (at most #{FactSupersede::Bulk::MAX_ROWS}), in #{search.project.name}"

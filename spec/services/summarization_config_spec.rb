@@ -82,6 +82,13 @@ RSpec.describe SummarizationConfig do
 
       AppSettings.summary_num_ctx = 4096
       expect(described_class.resolved_config[:num_ctx]).to eq(4096)
+      AppSettings.summary_num_ctx = 0
+      ENV["SUMMARY_NUM_CTX"] = "999999"
+      expect(described_class.resolved_config[:num_ctx]).to eq(131_072)
+      ENV["SUMMARY_NUM_CTX"] = "512"
+      expect(described_class.resolved_config[:num_ctx]).to eq(2048)
+      ENV["SUMMARY_NUM_CTX"] = "32768"
+      AppSettings.summary_num_ctx = 4096
       expect(described_class.fallback_for(:num_ctx)).to eq(value: 32_768, source: :env)
     end
 

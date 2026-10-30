@@ -1,6 +1,6 @@
 # GraphMem web UI guide
 
-A tour of the web UI for the **operator** (the graph's owner, full access) and the optional **read-only guest**, as of 1.63.0. It covers signing in, the app shell, each section, the guest account and the usual problems.
+A tour of the web UI for the **operator** (the graph's owner, full access) and the optional **read-only guest**, as of 1.64.0. It covers signing in, the app shell, each section, the guest account and the usual problems.
 
 The screenshots come from a test instance with synthetic data (`Alpha Service`, `SynthWidget`, `SynthGadget`). The image files are in [`docs/images/ui/`](../images/ui/).
 

@@ -81,6 +81,17 @@ RSpec.describe SourceFact, type: :model do
     expect(plain.operator_confirmed_fact?).to be false
   end
 
+  it "stops counting as operator-confirmed once an agent rewrites the text in place" do
+    fact = Current.set(actor: "operator:synth@127.0.0.1") { fact_on(widget) }
+    expect(fact.operator_confirmed_fact?).to be true
+
+    Current.set(actor: "api:synth-agent") { fact.update_active!(content: "The MCP server uses a forked mcp gem.") }
+    expect(fact.operator_confirmed_fact?).to be false
+
+    Current.set(actor: "operator:synth@127.0.0.1") { fact.update_active!(content: "The MCP server uses the official mcp gem.") }
+    expect(fact.operator_confirmed_fact?).to be true
+  end
+
   it "ranks a source fact as a high-trust source" do
     plain = observe(widget, "SynthWidget uses Ruby.", confidence: 0.8)
     fact = observe(widget, "SynthWidget uses Ruby 3.4.", confidence: 0.8, tags: [ "source-fact" ])

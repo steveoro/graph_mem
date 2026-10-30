@@ -7,8 +7,11 @@ module FactSupersede
   #
   # The output is parsed strictly. A candidate the answer leaves out, names twice or gets wrong
   # (an unknown verdict, a confidence outside 0-1) is `unjudged`; an id outside the batch is
-  # ignored. Observation text is untrusted data: it can only change its own verdict. Reasons and
-  # replacements are plain text, control characters removed and truncated (views escape them).
+  # ignored, so a statement can't bring another observation in. Observation text is untrusted
+  # data and shares the prompt with its batch, so it may sway the batch's verdicts: the limits
+  # are the legacy guard, the review queue (proposals only unless auto-apply is on, and then only
+  # for operator-confirmed facts) and undo. Reasons and replacements are plain text, control
+  # characters removed and truncated (views escape them).
   #
   #   verdicts = FactSupersede::Judge.call(fact, candidates)
   #   verdicts.first # => #<struct Verdict candidate=…, verdict="superseded", confidence=0.9, reason="…", replacement=nil, judged=true>
@@ -38,21 +41,26 @@ module FactSupersede
     # @param fact [MemoryObservation] the source fact
     # @param candidates [Array<Candidate>] guard set (LegacyGuard)
     # @param client [#generate] SummaryGenerationClient by default
+    # @param max_batches [Integer, nil] judge at most this many batches; the rest stay unjudged
+    #   (an MCP call must not wait on many LLM calls in a row)
     # @return [Array<Verdict>] one per candidate, in order
-    def self.call(fact, candidates, client: SummaryGenerationClient)
-      new(fact, client).call(candidates)
+    def self.call(fact, candidates, client: SummaryGenerationClient, max_batches: nil)
+      new(fact, client, max_batches).call(candidates)
     end
 
-    def initialize(fact, client)
+    def initialize(fact, client, max_batches = nil)
       @fact = fact
       @client = client
+      @max_batches = max_batches
     end
 
     # @see .call
     def call(candidates)
       return candidates.map { |candidate| unjudged(candidate) } unless SummarizationConfig.llm_usable?
 
-      candidates.each_slice(BATCH_SIZE).flat_map { |batch| judge_batch(batch) }
+      candidates.each_slice(BATCH_SIZE).with_index.flat_map do |batch, index|
+        @max_batches && index >= @max_batches ? batch.map { |candidate| unjudged(candidate) } : judge_batch(batch)
+      end
     end
 
     private
