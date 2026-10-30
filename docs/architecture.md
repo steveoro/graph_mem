@@ -232,6 +232,13 @@ GraphMem includes a web UI (served by Rails) for browsing and managing the knowl
 
 A **change set** (`change_sets`, `ChangeSet`) groups the writes of one user-visible change so the operator can undo them together. Audit rows point at it through `audit_logs.change_set_id`.
 
+- **Who and why (1.65.0).** Every audit row and change set has:
+  - **`actor`**, what the server knows: `mcp:<tool>` for MCP calls (set by `ApplicationTool#call_with_schema_validation!` around the tool's own `#call`), `operator:<user>@<ip>` / `guest:…` for the web UI, and `api:<X-MCP-Client>` (else `<ip|local>:<controller>`) for REST, all from `ApplicationController#set_current_actor`. Policies, compaction and jobs set their own (`policy:<name>`, `compaction:<run_id>`).
+  - **`actor_claim`**, MCP only: what the client and its model say about themselves. That is the `X-MCP-Client` (unless "default"), the MCP session's `initialize` `clientInfo` (`<name>/<version>`, from the gem's `MCP::ServerContext#client_info`) and, on rows of records with a `source`, the `<client>/<model>` part of a `"<client>/<model>: <task>"` source. `ActorClaim` parses and sanitizes it (one line, no control characters, 255 at most). It is self-reported: shown as "claimed: …", never used to authorize, credit (`resolver_for` reads `actor`), filter or decide a policy.
+  - **`reason`**, the first present of: a delete's `Current.deletion_reason`; an update's new `obsolescence_reason` (supersede, retire, soft delete); the `<task>` part of the record's source; else none. Entities and relations have no source.
+  - **Trust order:** the channel and tool (a server fact), then `X-MCP-Client` (client configuration), then `clientInfo` (client software), then the `source` prefix (model-written).
+  - **Backfill:** `rake audit:backfill_actors` (dry run unless `APPLY=1`) gives the `graph.*` sets that MCP wrote before 1.65.0, and their rows, `mcp:graph_*`, plus a `backfilled · <who>` claim and a reason from the stored source. Other nil-actor sets are left: MCP and jobs can't be told apart.
+
 - **What records a set.** `ChangeSet.record(kind:)` wraps each entry point:
   - `graph_write` / `graph_edit` / `graph_delete` (MCP and services): `graph.write`, `graph.edit`, `graph.delete`;
   - the review actions (`CompactionReviewService` apply, dismiss, restore, ignore, snooze and the bulk variants): `review.*`; group actions on the Review page (`ReviewGroupActions`): `review.group_apply`, `review.group_dismiss`, `review.group_snooze`;
