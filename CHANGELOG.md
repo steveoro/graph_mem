@@ -5,6 +5,29 @@ All notable changes to GraphMem will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.66.0] - 2026-10-30
+
+Project scans send their input in parts that fit the model's context window (#146, #147).
+
+### Added
+- Chunked scan extraction: the files go out in parts sized from `summary_num_ctx`, one request each (`num_ctx`, `num_predict`, `format: "json"`, `truncate: false`, no client-side cut), merged by entity before reconcile. A failed part is split in half once (#146).
+- Settings `project_scan_chunk_output_tokens` (2048), `project_scan_max_chunks` (16) and `project_scan_bytes_per_token` (3.0), under System › Settings › Project scans.
+- `counters.parts_total`, `parts_failed`, `files_too_large`, `files_over_budget` and `details.extraction` on scans (`scan_project_status`, `GET /api/v1/scan/:id`), and a "Partial extraction" card on the scan page.
+- `SummaryGenerationClient` options `truncate:`, `timeout:` and `max_output_length:`, and `prompt_tokens`, `done_reason` and (on a failed request) `http_status` in its result.
+
+### Fixed
+- A scan's prompt could be far larger than the model's window, so Ollama dropped its start (the instructions and the first files) without saying so.
+- The scan's answer was capped at `summary_max_tokens` (256 by default) and 8,192 characters, so it was usually cut and the scan fell back to the deterministic extraction.
+- A relation to an entity listed later in the answer was dropped on a first scan.
+- Files over 50 KB or past the 200 KB cap were left out silently.
+- Resuming a paused validation batch ran the whole LLM extraction again.
+- The validator's progress replaced the scan's `details` (project root, mode, dry run) with its own state; the state now lives under `details.validation_state`.
+- `ProjectScanner`'s fallback listed a top-level symlink as a directory, and one entry removed mid-scan emptied the top-level directory list (scanner and guided scan).
+- `openai_compatible` ignored a caller's `num_predict`; it is now sent as `max_tokens`.
+
+### Changed
+- A scan marks entities missing (and queues deletes) only when every discovered file was extracted; a partial scan creates and updates but never obsoletes, and its validator doesn't question usage relations.
+
 ## [1.65.0] - 2026-10-30
 
 Drop the transition shims; MCP writes record who made them (#142, #143).
