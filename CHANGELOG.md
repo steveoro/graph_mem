@@ -5,6 +5,15 @@ All notable changes to GraphMem will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Removed
+- The transition redirects: `/graph`, `/maintenance`, `/data_exchange/compaction_review`, `/data_exchange/import_review`, `/data_exchange/import_report`, `/operator/settings` (all tabs), `/operator/settings/project_scans/check_path`, `/operator/embeddings`, `/operator/telemetry`, `/operator/audit_logs`, `/operator/jobs(/*rest)` and `/projects/jobs`. Old URLs now answer 404 (#142).
+- The old write endpoints: those under `/operator/*` (System's actions answer at `/system/*`), `/project_scans`, `/project_scan_skills`, and the `/data_exchange` endpoints `import_upload`, `import_execute`, `import_cancel`, `export_async` and `download_export`. Their replacements are Projects › Scans, Imports and Exports.
+- `ExportProgressChannel` (export progress goes through the export's `OperationProgress`). Explore no longer reads `?scoped_entity_id=`; the REST `graph_data` parameter stays.
+- The legacy `operator_signed_in` session key: a session cookie from before the 1.53.0 login hardening must sign in again.
+- The "Not saved from this tab" notice for a stale pre-UI-7 settings tab.
+
 ## [1.64.0] - 2026-10-29
 
 Source facts: mark what's authoritative, and graph_mem proposes what it outdates, per project (#141).

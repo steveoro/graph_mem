@@ -4,7 +4,7 @@ GraphMem stores operator-tunable runtime settings in the primary MariaDB `settin
 
 ## Operator UI
 
-- **URL:** `/system/settings` (one tab per group); the backup group is on `/system/backups` and the access group on `/system/access`. The groups, labels, types, ranges and validators all come from `SettingsSchema` (`app/services/settings_schema.rb`), and a save writes only the posted group's keys: an invalid value answers `422` with the field marked and nothing saved. `project_scan_roots` is the one legacy key in no group (`SettingsSchema::LEGACY_KEYS`). The old `/operator/settings` URL redirects (301) until §6.D-6.
+- **URL:** `/system/settings` (one tab per group); the backup group is on `/system/backups` and the access group on `/system/access`. The groups, labels, types, ranges and validators all come from `SettingsSchema` (`app/services/settings_schema.rb`), and a save writes only the posted group's keys: an invalid value answers `422` with the field marked and nothing saved. `project_scan_roots` is the one legacy key in no group (`SettingsSchema::LEGACY_KEYS`).
 - **Auth:** session login at `/operator/login` (`OPERATOR_USERNAME` / `OPERATOR_PASSWORD`, or `credentials.operator.username` / `credentials.operator.password`). The same form signs in the optional read-only guest (see `enable_guest_access` below); guests can't open the settings.
 - **Tabs:** Feature Flags, Embeddings, Summaries, Imports, Project Scans, Telemetry & retention, Review policies. **Backups** and **Access** have their own pages.
 
@@ -116,6 +116,6 @@ Both settings are on the **Telemetry & retention** tab.
 
 ## Mission Control Jobs
 
-- **URL:** `/system/queue` (System › Queue; `/operator/jobs` redirects until §6.D-6)
+- **URL:** `/system/queue` (System › Queue)
 - **Auth:** same operator session (sign in at `/operator/login`)
 - **Purpose:** inspect Solid Queue jobs, recurring tasks, and failures
