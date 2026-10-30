@@ -80,6 +80,17 @@ RSpec.describe ProjectScanner::ChunkedExtraction do
     expect(outcome).to have_attributes(parts_total: 4, parts_done: 4, parts_failed: 0)
   end
 
+  it "stops after two rejected halves when the provider refuses every request" do
+    rejected = ->(_prompt) { { ok: false, text: nil, error: "provider_unavailable", http_status: 400 } }
+    stub_generate(%w[a.rb b.rb c.rb d.rb].index_with { rejected })
+
+    outcome = run([ chunk(1, block("a.rb"), block("b.rb")), chunk(2, block("c.rb"), block("d.rb")) ])
+
+    # The part, then its two halves; the second part is skipped without a request.
+    expect(prompts.size).to eq(3)
+    expect(outcome).to have_attributes(data: nil, parts_total: 3, parts_failed: 3, first_error: "prompt rejected by the provider (HTTP 400)")
+  end
+
   it "fails a part whose prompt was cut (prompt_eval_count at the window)" do
     stub_generate("a.rb" => ->(_prompt) { answer("a_rb").merge(prompt_tokens: 8192 - 2048) })
 

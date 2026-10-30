@@ -19,7 +19,7 @@ class ProjectScanner
     MAX_NAMES = 50
     MAX_PROVIDER_ERRORS = 2
     PROVIDER_ERROR = "provider_unavailable"
-    PROMPT_REJECTED = "prompt rejected by the provider (too long for the window)"
+    PROMPT_REJECTED = "prompt rejected by the provider"
     # The statuses Ollama refuses an over-long prompt with: split the part, it isn't an outage.
     PROMPT_REJECTED_STATUSES = [ 400, 413 ].freeze
 
@@ -58,7 +58,10 @@ class ProjectScanner
         end
 
         error = extract(unit, @done + @failed + 1)
-        provider_errors = error == PROVIDER_ERROR ? provider_errors + 1 : 0
+        # A rejected half (already split once) counts like an outage: a provider that refuses every
+        # request for another reason stops after two, instead of three tries per part.
+        outage = error == PROVIDER_ERROR || (error&.start_with?(PROMPT_REJECTED) && !unit.splittable)
+        provider_errors = outage ? provider_errors + 1 : 0
         next unless error
 
         halves = error == PROVIDER_ERROR || !unit.splittable ? nil : split(unit)
@@ -95,7 +98,7 @@ class ProjectScanner
     end
 
     def failure(result)
-      return PROMPT_REJECTED if !result[:ok] && PROMPT_REJECTED_STATUSES.include?(result[:http_status])
+      return "#{PROMPT_REJECTED} (HTTP #{result[:http_status]})" if !result[:ok] && PROMPT_REJECTED_STATUSES.include?(result[:http_status])
       return result[:error].presence || PROVIDER_ERROR unless result[:ok]
       return "answer cut at num_predict #{@num_predict} (done_reason: length)" if result[:done_reason] == "length"
 
