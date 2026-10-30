@@ -94,7 +94,7 @@ class ProjectScanner
 
   def initialize(project_root:, project_name: nil, aliases: nil, mode: "initial",
                  dry_run: false, file_globs: nil, operation_progress: nil,
-                 max_files: nil, max_total_input_bytes: nil, scan_id: nil)
+                 max_files: nil, max_total_input_bytes: nil, scan_id: nil, resuming: false)
     @project_root = File.expand_path(project_root.to_s)
     @project_name = project_name.to_s.strip.presence
     @aliases = Array(aliases).flat_map { |a| a.to_s.split(/[,|;]/).map(&:strip) }.reject(&:blank?)
@@ -105,6 +105,7 @@ class ProjectScanner
     @max_files = (max_files || MAX_FILES).to_i
     @max_total_input_bytes = (max_total_input_bytes || MAX_TOTAL_INPUT_BYTES).to_i
     @scan_id = scan_id || SecureRandom.uuid
+    @resuming = resuming == true
     @logger = Rails.logger
     @entities_by_path = {}
     @created_entity_ids = Set.new
@@ -140,6 +141,8 @@ class ProjectScanner
       return failed_result("file_globs entry #{bad_glob.inspect} must be relative to the project root, without '..'")
     end
 
+    return resume_validation if @resuming && reconciled_extraction
+
     update_progress!(phase: "discovering_files", message: "Discovering project files")
     @discovered_files = discover_files
     return failed_result("No readable files found in project root") if @discovered_files.empty?
@@ -151,7 +154,13 @@ class ProjectScanner
 
     update_progress!(phase: "reconciling_graph", message: partial? ? partial_message : "Reconciling with graph memory")
     reconcile(@extracted_data)
+    record_reconciled!(extracted)
+    validate_and_finish(extracted)
+  end
 
+  private
+
+  def validate_and_finish(extracted)
     unless @dry_run
       validate_project_subtree!
       seed_scan_review_items!
@@ -165,8 +174,6 @@ class ProjectScanner
     update_progress!(phase: "completed", message: partial? ? partial_message : "Project scan completed")
     scan_result(extracted, message: (partial_message if partial?))
   end
-
-  private
 
   include LlmExtraction
   include DeterministicExtraction

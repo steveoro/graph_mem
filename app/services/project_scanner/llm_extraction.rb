@@ -39,12 +39,17 @@ class ProjectScanner
     end
 
     def fallback_extraction(reason, message)
-      whole = ChunkPlanner.new(files: @discovered_files, root: @file_filter.root, input_budget: @max_total_input_bytes,
-                               max_chunks: 1, max_total_bytes: @max_total_input_bytes).call
+      whole = whole_plan
       @context_text = whole.context_text
       record_extraction(plan: whole, fallback: true)
       update_progress!(phase: "fallback_extraction", message: "#{message}; using deterministic fallback")
       { data: deterministic_extraction, fallback: true, fallback_reason: reason }
+    end
+
+    # Every file the caps allow, as one part: the validator's text when no part goes to the model.
+    def whole_plan
+      ChunkPlanner.new(files: @discovered_files, root: @file_filter.root, input_budget: @max_total_input_bytes,
+                       max_chunks: 1, max_total_bytes: @max_total_input_bytes).call
     end
 
     def plan_parts
@@ -109,6 +114,38 @@ class ProjectScanner
 
     def summarization_disabled_or_unavailable?
       !SummarizationConfig.llm_usable?
+    end
+
+    # Saved after reconcile so a resumed paused scan (C6) skips the model and reconcile: the
+    # project, the merged names for the validator and the extraction's outcome.
+    def record_reconciled!(extracted)
+      return if @dry_run || @project_entity.nil?
+
+      names = Array(@extracted_data["architecture"]).filter_map { |item| item.dig("entity", "name").to_s.strip.presence if item.is_a?(Hash) }
+      @extraction.merge!("reconciled" => true, "project_root" => @project_root, "project_entity_id" => @project_entity.id,
+                         "names" => names.uniq.first(500), "fallback" => extracted[:fallback] == true,
+                         "fallback_reason" => extracted[:fallback_reason]).compact!
+      save_extraction_details!
+    end
+
+    # @return [Hash, nil] the saved extraction of this scan when it was reconciled for this root
+    def reconciled_extraction
+      saved = @operation_progress&.details&.dig("extraction")
+      saved if saved.is_a?(Hash) && saved["reconciled"] == true && saved["project_root"] == @project_root
+    end
+
+    # A claimed paused scan whose extraction was reconciled: no model call and no second
+    # reconcile. The files are read again only for the validator's text.
+    def resume_validation
+      @extraction = reconciled_extraction
+      @project_entity = MemoryEntity.find_by(id: @extraction["project_entity_id"])
+      return failed_result("Project entity ##{@extraction['project_entity_id']} of the paused scan no longer exists") unless @project_entity
+
+      update_progress!(phase: "reading_files", message: "Resuming: reading the files again for validation (no model call)")
+      @discovered_files = discover_files
+      @context_text = whole_plan.context_text
+      @extracted_data = { "architecture" => Array(@extraction["names"]).map { |name| { "entity" => { "name" => name } } } }
+      validate_and_finish({ fallback: @extraction["fallback"] == true, fallback_reason: @extraction["fallback_reason"] })
     end
   end
 end
