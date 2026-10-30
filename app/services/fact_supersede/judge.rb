@@ -10,8 +10,8 @@ module FactSupersede
   # ignored, so a statement can't bring another observation in. Observation text is untrusted
   # data and shares the prompt with its batch, so it may sway the batch's verdicts: the limits
   # are the legacy guard, the review queue (proposals only unless auto-apply is on, and then only
-  # for operator-confirmed facts) and undo. Reasons and replacements are plain text, control
-  # characters removed and truncated (views escape them).
+  # for operator-confirmed facts) and undo. Reasons and replacements are plain text, control and
+  # format characters (bidi, zero-width) removed and truncated (views escape them).
   #
   #   verdicts = FactSupersede::Judge.call(fact, candidates)
   #   verdicts.first # => #<struct Verdict candidate=…, verdict="superseded", confidence=0.9, reason="…", replacement=nil, judged=true>
@@ -125,7 +125,7 @@ module FactSupersede
     def clean(value, limit)
       return unless value.is_a?(String)
 
-      value.gsub(/[[:cntrl:]]+/, " ").squish.truncate(limit).presence
+      value.gsub(/[[:cntrl:]\p{Cf}]+/, " ").squish.truncate(limit).presence
     end
 
     def prompt(batch)

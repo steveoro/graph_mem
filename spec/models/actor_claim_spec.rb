@@ -28,6 +28,8 @@ RSpec.describe ActorClaim do
     it "strips control characters and truncates the why" do
       expect(described_class.source_parts("synth-agent/model-x: a\u0007b\tc")).to eq([ "synth-agent/model-x", "a b c" ])
       expect(described_class.source_parts("synth-agent/model-x: #{'w' * 300}").last.length).to eq(255)
+      expect(described_class.source_parts("synth-agent/model-x: a\u202Eb\u200Bc\u2066d\uFEFFe")).to eq([ "synth-agent/model-x", "a b c d e" ])
+      expect(described_class.join("synth\u202Eagent")).to eq("synth agent")
     end
   end
 

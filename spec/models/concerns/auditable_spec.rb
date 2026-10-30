@@ -174,8 +174,23 @@ RSpec.describe Auditable, type: :model do
       expect(rows_for(observation).last.reason).to eq("Outdated by a synthetic fact")
 
       other = observe("synth-agent/model-x: synthetic task")
-      other.update_active!(confidence: 0.4)
+      Current.set(actor: "mcp:graph_edit") { other.update_active!(confidence: 0.4) }
       expect(rows_for(other).last.reason).to eq("synthetic task")
+    end
+
+    it "doesn't give an operator's or a job's update the creating agent's task" do
+      observation = observe("synth-agent/model-x: synthetic task")
+      Current.set(actor: "operator:synth@127.0.0.1") { observation.update_active!(confidence: 0.4) }
+      expect(rows_for(observation).last.reason).to be_nil
+
+      observation.update_active!(confidence: 0.5)
+      expect(rows_for(observation).last.reason).to be_nil
+
+      Current.set(actor: "operator:synth@127.0.0.1") { observation.update_active!(source: "synth-agent/model-y: a new task") }
+      expect(rows_for(observation).last.reason).to eq("a new task")
+
+      Current.set(actor: "operator:synth@127.0.0.1") { observation.destroy! }
+      expect(rows_for(observation).last.reason).to be_nil
     end
 
     it "keeps the delete reason first, and sanitizes and truncates what it derives" do

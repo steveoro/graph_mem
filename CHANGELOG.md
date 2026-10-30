@@ -23,7 +23,7 @@ Drop the transition shims; MCP writes record who made them (#142, #143).
 ### Fixed
 - MCP writes had no actor: the audit log showed none and Recent activity showed "unknown". They now record `mcp:<tool>` on the audit rows and the change set.
 - Reviews applied or dismissed through MCP were credited to "generator"; they are now "agent".
-- Create and update audit rows now take a reason from the `source` (`<task>`) or the new `obsolescence_reason`, not only deletes.
+- Audit rows now take a reason beyond deletes: an update's new `obsolescence_reason`, or the `source`'s `<task>` on a create, an update that set the source, or an MCP call.
 
 ### Changed
 - Recent activity and System › Activity label change set kinds in words ("Graph write" instead of "Graph.write").

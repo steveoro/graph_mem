@@ -60,8 +60,10 @@ module Auditable
   end
 
   # The first present of: a delete's Current.deletion_reason; an update's new obsolescence_reason
-  # (supersede, retire, soft delete); the `why` of the record's "<client>/<model>: <task>" source.
-  # The derived ones are sanitized and truncated (they can be model-written text).
+  # (supersede, retire, soft delete); the `why` of the record's "<client>/<model>: <task>" source,
+  # but only on a create, an update that set the source, or an MCP call: an operator's edit or a
+  # job's update of an agent-written record is not that agent's task. The derived ones are
+  # sanitized and truncated (they can be model-written text).
   #
   # @return [String, nil]
   def audit_reason(action, changed_fields)
@@ -72,7 +74,8 @@ module Auditable
       new_reason = change.is_a?(Hash) ? (change[:to] || change["to"]) : nil
       return ActorClaim.sanitize(new_reason) if new_reason.present?
     end
-    audit_source_parts&.last
+    source_set = action == "create" || (action == "update" && changed_fields.key?("source"))
+    audit_source_parts&.last if source_set || Current.actor.to_s.start_with?(MCP_ACTOR_PREFIX)
   end
 
   # @return [Array(String, String), nil] see ActorClaim.source_parts

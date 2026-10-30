@@ -2,8 +2,8 @@
 
 # What an MCP client says about itself (audit actor, 1.65.0), stored next to the server-side
 # `actor` as `actor_claim` and shown as "claimed: …". Self-reported and display-only: nothing
-# authorizes, credits, filters or decides a policy from it. Every part is sanitized (no control
-# characters, spaces squeezed) and the whole value is truncated to MAX_LENGTH.
+# authorizes, credits, filters or decides a policy from it. Every part is sanitized (no control or
+# format characters, spaces squeezed) and the whole value is truncated to MAX_LENGTH.
 #
 #   ActorClaim.transport(client_id: "synth-client-a", client_info: { name: "claude-code", version: "2.1.0" })
 #   # => "client=synth-client-a · claude-code/2.1.0"
@@ -51,9 +51,12 @@ module ActorClaim
   end
 
   # @param text [String, nil]
-  # @return [String] without control characters, spaces squeezed, at most MAX_LENGTH characters
+  # Control characters (Cc) and format characters (Cf: bidi overrides and isolates, zero-width
+  # characters), which could make a claim look like something else, become spaces.
+  #
+  # @return [String] without control or format characters, spaces squeezed, at most MAX_LENGTH characters
   def sanitize(text)
-    text.to_s.gsub(/[[:cntrl:]]+/, " ").squish.truncate(MAX_LENGTH, omission: "…")
+    text.to_s.gsub(/[[:cntrl:]\p{Cf}]+/, " ").squish.truncate(MAX_LENGTH, omission: "…")
   end
 
   def software(client_info)
