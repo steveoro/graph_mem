@@ -1,5 +1,7 @@
 # D-6 cleanup + audit actor → graph_mem 1.65.0: drop the transition shims, and record who wrote what through MCP
 
+**Status (Oct 30): DONE.** Split at checkpoint 1: Part A in #142 (merged as `e808274`, no bump), Part B in #143 (merged as `dc571a8`, tagged **1.65.0**). Next: §6.F F-3, `docs/plans/f3-scan-chunking-plan.md` (1.66.0).
+
 **Written 2026-10-30 (Europe/Rome)** for Claude, from `main` at `089ae2d` (#141 merged, **tagged `v1.64.0`**). Every
 file:line in "What the code looks like today" was checked against that commit. If a line has moved, find the code by
 the quoted text. If the code no longer matches the description, **stop and ask Steve** instead of improvising. Only
