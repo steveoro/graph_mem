@@ -1,5 +1,7 @@
 # Fact supersede → graph_mem 1.64.0: source facts that retire the observations they contradict, per project, never by age
 
+**Status (Oct 30): DONE.** Shipped as #141, merged to `main` as `089ae2d` and tagged **1.64.0**. Next: §6.D-6 plus the audit actor fix, `docs/plans/d6-cleanup-plan.md` (1.65.0).
+
 **1.63.0 update (Oct 29, after UI-7).** UI-7 shipped as 1.63.0 (`501f5d5`), so the version is **1.64.0** and FS is
 next. Re-checked against `501f5d5`: of the files this plan cites, only the header comments of
 `review_policy_runner.rb` and `review_row_classifier.rb` and one `describe` in `mcp_official_spec.rb` changed, with
