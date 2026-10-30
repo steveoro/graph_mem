@@ -3,9 +3,8 @@
 require_relative "../../lib/import_session"
 
 # The web import (UI-6 P4): upload → review → execute, for a GraphMem export or a Graphify
-# graph.json. Shared by Projects::ImportsController and the old /data_exchange endpoints (until
-# §6.D-6), on top of the existing services: ImportMatchingStrategy, ImportExecutionStrategy,
-# ImportSession and GraphifyImporter. The upload is parsed in memory, under MAX_UPLOAD_BYTES,
+# graph.json (Projects::ImportsController), on top of the existing services:
+# ImportMatchingStrategy, ImportExecutionStrategy, ImportSession and GraphifyImporter. The upload is parsed in memory, under MAX_UPLOAD_BYTES,
 # and never written to a path from the request (ImportSession names its files by a fresh UUID).
 #
 #   upload = ImportFlow.upload(params[:file], project_name: "Alpha Service")

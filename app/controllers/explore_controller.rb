@@ -6,7 +6,6 @@
 # one is ignored, so a bad link opens the root view instead of an error.
 #
 #   GET /explore?project_id=7 | ?entity_id=42&depth=2 | ?ids=1,2,3 | ?scope=full
-#   GET /explore?scoped_entity_id=42  (old /graph links) is read as entity_id
 class ExploreController < ApplicationController
   allow_guest :show
 
@@ -26,7 +25,7 @@ class ExploreController < ApplicationController
     depth = params[:depth].to_s == "2" ? 2 : 1
     ids = EntityIdList.parse(params[:ids])
     project_id = EntityIdList.id(params[:project_id])
-    entity_id = EntityIdList.id(params[:entity_id]) || EntityIdList.id(params[:scoped_entity_id])
+    entity_id = EntityIdList.id(params[:entity_id])
     scope = if ids then "search"
     elsif project_id then "project"
     elsif entity_id then "entity"
