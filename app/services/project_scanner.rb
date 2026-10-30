@@ -429,7 +429,7 @@ class ProjectScanner
     description = project_description_from_readme || "Project scanned from #{@project_root} (LLM summarization unavailable)"
     architecture = []
 
-    manifests = @discovered_files.select { |file| manifest_file?(file) }
+    manifests = @discovered_files.select { |file| ChunkPlanner.manifest_file?(file) }
     manifests.each do |file|
       relative = Pathname.new(file).relative_path_from(@file_filter.root).to_s
       next if relative.blank?
@@ -492,19 +492,6 @@ class ProjectScanner
 
     lines = safe_read(readme).lines.map(&:strip).reject { |line| line.blank? || line.start_with?("#") }
     lines.first(2).join(" ").presence
-  end
-
-  def manifest_file?(path)
-    name = File.basename(path).downcase
-    name == "package.json" ||
-      name == "gemfile" ||
-      name == "gemfile.lock" ||
-      name == "pyproject.toml" ||
-      name.start_with?("requirements") ||
-      name == "cargo.toml" ||
-      name == "go.mod" ||
-      name.start_with?("docker-compose") ||
-      name == ".devin"
   end
 
   def top_level_directories

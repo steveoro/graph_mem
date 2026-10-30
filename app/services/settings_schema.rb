@@ -141,7 +141,8 @@ class SettingsSchema
         define_group(:imports, [ define_field("import_observation_duplicate_max_distance", validator: :import_distance, input: :slider) ]),
         define_group(:project_scans, [
           define_field("project_scan_subfolders", validator: :project_scan_subfolders, input: :textarea),
-          "enable_project_scan_validation", "project_scan_validation_batch_size"
+          "enable_project_scan_validation", "project_scan_validation_batch_size",
+          "project_scan_chunk_output_tokens", "project_scan_max_chunks"
         ], partial: "system/settings/project_scans_panel"),
         define_group(:telemetry, %w[tool_invocation_retention_days compaction_review_row_retention_days]),
         define_group(:review_policies, review_policy_fields, check: :check_review_policies, partial: "system/settings/review_policies_panel"),

@@ -50,6 +50,11 @@ class AppSettings < RailsSettings::Base
   field :enable_project_scan_validation, default: true, type: :boolean
   field :project_scan_validation_batch_size, default: 5, type: :integer,
         validates: { numericality: { greater_than_or_equal_to: 0, less_than_or_equal_to: 1000 } }
+  # F-3: the answer budget of one scan part (sent as num_predict) and the most parts one scan sends.
+  field :project_scan_chunk_output_tokens, default: 2048, type: :integer,
+        validates: { numericality: { greater_than_or_equal_to: 512, less_than_or_equal_to: 8192 } }
+  field :project_scan_max_chunks, default: 16, type: :integer,
+        validates: { numericality: { greater_than_or_equal_to: 1, less_than_or_equal_to: 64 } }
 
   # Compaction review row retention (approved/dismissed rows are pruned after N days)
   field :compaction_review_row_retention_days, default: 30, type: :integer,

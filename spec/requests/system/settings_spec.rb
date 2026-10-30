@@ -332,6 +332,22 @@ RSpec.describe "System › Settings", type: :request do
       expect(response.body).to include('data-testid="import-observation-duplicate-distance-value"')
     end
 
+    it "saves the scan part settings and refuses an out-of-range answer budget" do
+      with_scan_home do
+        patch system_settings_path, params: { tab: "project_scans", settings: { project_scan_chunk_output_tokens: "100", project_scan_max_chunks: "8" } }
+
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(response.body).to include('data-testid="setting-error-project_scan_chunk_output_tokens"', "between 512 and 8192 (got 100)")
+
+        patch system_settings_path, params: { tab: "project_scans", settings: { project_scan_chunk_output_tokens: "4096", project_scan_max_chunks: "8" } }
+
+        expect(AppSettings.project_scan_chunk_output_tokens).to eq(4096)
+        expect(AppSettings.project_scan_max_chunks).to eq(8)
+      end
+    ensure
+      AppSettings.where(var: %w[project_scan_chunk_output_tokens project_scan_max_chunks]).delete_all
+    end
+
     it "renders the project scans tab: folders, filter, check-a-path and the always-blocked list" do
       with_scan_home do |home|
         get system_settings_path(tab: "project_scans")
