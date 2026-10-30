@@ -117,6 +117,18 @@ RSpec.describe "Review › Find & supersede", type: :request do
       expect([ old.reload.status, row.reload.status ]).to eq(%w[active active])
     end
 
+    it "takes the membership lock, and answers 503 with nothing changed when it's busy" do
+      old = fs_observe!(widget, "The MCP server runs on fast-mcp.")
+      allow(ProjectMembership).to receive(:with_membership_lock).and_raise(ProjectMembership::LockTimeout)
+
+      bulk([ old.id ])
+
+      expect(response).to have_http_status(:service_unavailable)
+      expect(response.body).to include("Another change is running")
+      expect(old.reload).to be_active
+      expect(ChangeSet.count).to eq(0)
+    end
+
     it "keeps the form's fields out of the page links after a refused POST" do
       51.times { |i| fs_observe!(widget, "fast-mcp note #{i}.") }
 

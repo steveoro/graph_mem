@@ -18,6 +18,7 @@ module FactSupersede
       changed: "changed since you looked", kept: "kept by the legacy guard"
     }.freeze
     SETTLED_REASON = "observation changed in Find & supersede"
+    BUSY = "Another change is running (an import, a merge or a review apply). Nothing was changed; try again."
 
     # @param project [MemoryEntity] a Project root
     # @param observation_ids [Array<#to_i>] at most MAX_ROWS
@@ -28,6 +29,7 @@ module FactSupersede
     # @param fact [MemoryObservation, nil] an active source fact of `project`
     # @param rendered_at [Time, nil] rows updated after it are skipped
     # @return [Hash] `{ success:, message:, changed:, skipped:, change_set_uuid:, undoable: }` or `{ success: false, error: }`
+    #   (`status: :service_unavailable` when the membership lock is busy)
     def self.call(project:, observation_ids:, action:, replacement: nil, use_fact_text: false, reason: nil, fact: nil, rendered_at: nil)
       new(project, observation_ids, action, replacement, use_fact_text, reason, fact, rendered_at).call
     end
@@ -49,14 +51,20 @@ module FactSupersede
       return { success: false, error: error } if error
 
       changed_ids = []
-      result = ChangeSet.record(kind: "explore.bulk_supersede", subject: @project, summary: summary) do |context|
-        MemoryObservation.transaction do
-          MemoryObservation.where(id: @ids).includes(:memory_entity).lock.order(:id).each { |observation| changed_ids << observation.id if change(observation) }
-          settle_review_rows(changed_ids)
+      # The membership lock first, like review applies and undo: they lock a review row, then its
+      # observation, and this locks observations, then their review rows.
+      result = ProjectMembership.with_membership_lock do
+        ChangeSet.record(kind: "explore.bulk_supersede", subject: @project, summary: summary) do |context|
+          MemoryObservation.transaction do
+            MemoryObservation.where(id: @ids).includes(:memory_entity).lock.order(:id).each { |observation| changed_ids << observation.id if change(observation) }
+            settle_review_rows(changed_ids)
+          end
+          { success: true }.merge(context.undo_handle)
         end
-        { success: true }.merge(context.undo_handle)
       end
       result.merge(changed: changed_ids.size, skipped: @skipped.transform_keys(&:to_s), message: message(changed_ids.size))
+    rescue ProjectMembership::LockTimeout
+      { success: false, error: BUSY, status: :service_unavailable }
     end
 
     private

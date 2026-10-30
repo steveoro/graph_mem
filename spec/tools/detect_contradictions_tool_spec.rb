@@ -104,6 +104,16 @@ RSpec.describe DetectContradictionsTool, type: :model do
       expect(run(terms: [ "fast-mcp" ])).to include(already_known: 1, proposal_count: 0, seeded_count: 0)
     end
 
+    it "says how many the cap left unjudged, and queues the job to judge them" do
+      16.times { |i| fs_observe!(widget, "fast-mcp note #{i}.") }
+      allow(SummarizationConfig).to receive(:llm_usable?).and_return(true)
+      allow(SummaryGenerationClient).to receive(:generate).and_return(ok: true, text: "[]")
+
+      expect { expect(run(terms: [ "fast-mcp" ])).to include(unjudged_over_cap: 1, judged: false) }
+        .to have_enqueued_job(FactSupersedeJob).with(fact.id)
+      expect(SummaryGenerationClient).to have_received(:generate).twice
+    end
+
     it "only proposes with seed_review false, and says when there was nothing to search" do
       expect(run(terms: [ "fast-mcp" ], seed_review: false)).to include(proposal_count: 1, seeded_count: 0)
       expect(run[:proposals].first&.dig("review_row_id")).to be_nil

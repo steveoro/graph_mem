@@ -339,9 +339,12 @@ and nothing acts across projects. Step list: `docs/plans/fact-supersede-plan.md`
   kind is a choice kind (never bulk or group applied). `CompactionReviewApplier::FactSupersede`
   supersedes (a replacement text) or retires inside `review.apply`, after re-checking the fact,
   the observation (under its row lock), the project and the guard. Pairs that already have a
-  pending row or a suppression are skipped before the judge. `detect_contradictions` with
+  pending row or a suppression are skipped before the judge, except pending `unjudged` rows while
+  the LLM is usable: a `superseded` verdict refreshes them, `still_valid` / `unrelated` dismisses
+  them (no suppression). `detect_contradictions` with
   `mode: "outdated_by_fact"` runs the same pipeline for agents on `/mcp/maintenance`, judging at
-  most 2 batches per call (the rest come back unjudged), so a call doesn't wait on many LLM calls.
+  most 2 batches per call (the rest come back unjudged and the job, queued then, judges them), so a
+  call doesn't wait on many LLM calls.
 - **Operator-confirmed** means the latest audit row that added the tag or changed the fact's text
   in place has an `operator:` actor, so an agent's rewrite of an operator's fact makes it
   propose-only.
@@ -359,4 +362,5 @@ and nothing acts across projects. Step list: `docs/plans/fact-supersede-plan.md`
   `FactSupersede::Bulk` supersedes (one text, or the fact's text) or retires at most 200 rows of
   that project in one `explore.bulk_supersede` change set; rows that changed in between, and
   source facts, are skipped and counted. The changed observations' pending "Outdated by a fact"
-  rows are dismissed in the same set (no suppression).
+  rows are dismissed in the same set (no suppression). It takes the membership lock first, like
+  review applies and undo, so their lock order matches.

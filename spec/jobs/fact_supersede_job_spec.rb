@@ -64,6 +64,28 @@ RSpec.describe FactSupersedeJob do
     expect(rows.active.count).to eq(0)
   end
 
+  it "judges pending unjudged rows once the LLM is usable: superseded refreshes, still valid dismisses" do
+    other = fs_observe!(widget, "fast-mcp is vendored for the docs site.")
+    described_class.perform_now(fact.id)
+    expect(rows.map { |row| row.payload["verdict"] }).to all(eq("unjudged"))
+
+    allow(SummarizationConfig).to receive(:llm_usable?).and_return(true)
+    allow(FactSupersede::Judge).to receive(:call) do |_fact, candidates|
+      candidates.map do |candidate|
+        verdict = candidate.observation.id == old.id ? [ "superseded", 0.95 ] : [ "still_valid", 0.9 ]
+        FactSupersede::Judge::Verdict.new(candidate: candidate, verdict: verdict[0], confidence: verdict[1], judged: true)
+      end
+    end
+
+    expect(described_class.perform_now(fact.id)).to have_attributes(rejudged: 2, rows: [])
+    refreshed = rows.find { |row| row.payload["observation_id"] == old.id }
+    expect(refreshed).to have_attributes(status: "active", confidence: 0.95)
+    expect(refreshed.payload).to include("verdict" => "superseded")
+    expect(rows.find { |row| row.payload["observation_id"] == other.id })
+      .to have_attributes(status: "dismissed", resolved_by: "generator", resolution_reason: "the judge found it still valid")
+    expect(MaintenanceReportSuppression.count).to eq(0)
+  end
+
   it "seeds rows for an agent-marked fact too" do
     agent_fact = fs_fact!(widget, "SynthWidget is served by the mcp gem.", actor: FactSupersedeHelpers::AGENT_ACTOR, tags: [ "replaces:fast-mcp" ])
 

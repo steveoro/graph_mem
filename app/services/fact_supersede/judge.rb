@@ -36,7 +36,8 @@ module FactSupersede
     # @!attribute reason [String, nil] ≤ REASON_LIMIT characters
     # @!attribute replacement [String, nil] a suggested rewrite of the candidate (superseded only)
     # @!attribute judged [Boolean] false when the LLM gave no usable answer for it
-    Verdict = Struct.new(:candidate, :verdict, :confidence, :reason, :replacement, :judged, keyword_init: true)
+    # @!attribute capped [Boolean] unjudged because max_batches cut it off (not because the LLM was off)
+    Verdict = Struct.new(:candidate, :verdict, :confidence, :reason, :replacement, :judged, :capped, keyword_init: true)
 
     # @param fact [MemoryObservation] the source fact
     # @param candidates [Array<Candidate>] guard set (LegacyGuard)
@@ -59,7 +60,7 @@ module FactSupersede
       return candidates.map { |candidate| unjudged(candidate) } unless SummarizationConfig.llm_usable?
 
       candidates.each_slice(BATCH_SIZE).with_index.flat_map do |batch, index|
-        @max_batches && index >= @max_batches ? batch.map { |candidate| unjudged(candidate) } : judge_batch(batch)
+        @max_batches && index >= @max_batches ? batch.map { |candidate| unjudged(candidate, capped: true) } : judge_batch(batch)
       end
     end
 
@@ -83,9 +84,9 @@ module FactSupersede
                   replacement: replacement, judged: true)
     end
 
-    def unjudged(candidate)
+    def unjudged(candidate, capped: false)
       Verdict.new(candidate: candidate, verdict: UNJUDGED, confidence: [ candidate.score.to_f, UNJUDGED_CONFIDENCE_CAP ].min.round(3),
-                  reason: nil, replacement: nil, judged: false)
+                  reason: nil, replacement: nil, judged: false, capped: capped)
     end
 
     # @return [Hash{Integer => Hash}] the valid answers for ids in the batch (an id answered twice is dropped)

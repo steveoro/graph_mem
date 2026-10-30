@@ -77,6 +77,17 @@ RSpec.describe FactSupersede::Judge do
     expect(bodies.sole["prompt"]).to include("names a version the fact doesn't")
   end
 
+  it "judges at most max_batches batches and marks the rest capped" do
+    list = candidates(*(1..17).map { |i| "fast-mcp statement #{i}." })
+    answers.push([], [])
+
+    verdicts = described_class.call(fact, list, max_batches: 2)
+
+    expect(bodies.size).to eq(2)
+    expect(verdicts.last).to have_attributes(verdict: "unjudged", capped: true, judged: false)
+    expect(verdicts.first(16).map(&:capped)).to all(be(false))
+  end
+
   it "batches by eight" do
     list = candidates(*(1..10).map { |i| "fast-mcp statement #{i}." })
     answers.push([], [])

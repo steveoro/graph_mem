@@ -17,7 +17,8 @@ class FactSupersedeJob < ApplicationJob
     progress = OperationProgress.start!(operation_type: "fact_supersede", total_count: 1, phase: "searching",
                                         message: "Looking for what source fact ##{fact.id} outdates", details: { fact_observation_id: fact.id })
     result = FactSupersede::Proposals.call(fact)
-    progress.complete!(message: summary(result), counters: { candidates: result.candidates, kept: result.kept, proposed: result.rows.size })
+    progress.complete!(message: summary(result), counters: { candidates: result.candidates, kept: result.kept, proposed: result.rows.size,
+                                                                       rejudged: result.rejudged })
     ReviewPolicyJob.enqueue_if_seeded(trigger: "fact_supersede", seeded: result.rows)
     result
   rescue StandardError => e

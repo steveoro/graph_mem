@@ -20,7 +20,7 @@ module Review
       result = FactSupersede::Bulk.call(project: @search.project, observation_ids: params[:observation_ids], action: params[:bulk_action],
                                         replacement: params[:replacement], use_fact_text: params[:use_fact_text] == "1",
                                         reason: params[:reason], fact: @search.fact, rendered_at: rendered_at)
-      return refused(result[:error]) unless result[:success]
+      return refused(result[:error], result[:status] || :unprocessable_content) unless result[:success]
 
       flash[:notice] = result[:message]
       flash[:undo] = { "uuid" => result[:change_set_uuid], "label" => result[:message], "until" => UNDO_TOAST_WINDOW.from_now.iso8601 } if result[:undoable]
@@ -37,9 +37,9 @@ module Review
       @rendered_at = Time.current
     end
 
-    def refused(error)
+    def refused(error, status)
       flash.now[:alert] = error
-      render :index, status: :unprocessable_content
+      render :index, status: status
     end
 
     def rendered_at
