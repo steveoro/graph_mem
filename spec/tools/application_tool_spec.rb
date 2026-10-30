@@ -315,15 +315,19 @@ RSpec.describe ApplicationTool do
     end
   end
 
-  describe "#call" do
-    it "sets Current.actor before calling super" do
+  describe "the actor" do
+    it "is mcp:<tool> while the tool's own #call runs, and nil afterwards" do
+      seen = nil
       tool = DslTestTool.new
-      begin
-        ApplicationTool.instance_method(:call).bind_call(tool, name: "test")
-      rescue NoMethodError
-        # Expected: the base API does not implement #call
+      allow(tool).to receive(:call).and_wrap_original do |original, **args|
+        seen = Current.actor
+        original.call(**args)
       end
-      expect(Current.actor).to eq("mcp:dsl_test")
+
+      tool.call_with_schema_validation!(name: "test")
+
+      expect(seen).to eq("mcp:dsl_test")
+      expect(Current.actor).to be_nil
     end
   end
 
@@ -392,7 +396,7 @@ RSpec.describe ApplicationTool do
     # The MCP request context sets the request path's profile for the duration of a tool call.
     def with_request(path, &block)
       profile = GraphMem::OfficialMcp::Router.profile_for(path)
-      GraphMem::OfficialMcp::RequestContext::Context.new(client_id: nil, profile: profile, session_id: nil).around_call(&block)
+      GraphMem::OfficialMcp::RequestContext::Context.new(client_id: nil, profile: profile, session_id: nil, client_info: nil).around_call(&block)
     end
 
     it "uses GRAPH_MEM_MCP_PROFILE when there is no HTTP request (stdio, direct calls)" do

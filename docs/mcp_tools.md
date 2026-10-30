@@ -104,6 +104,7 @@ The fix is always the same: give each agent its own `X-MCP-Client` header value.
 #### `graph_write`
 - **Description:** Atomically create up to 50 entities, observations, and relations through type-discriminated `operations`; the former three-array bulk format is also accepted.
 - **Operation types:** `create_entity`, `create_observation`, `create_relation`.
+- **Source convention:** `source` in the form `"<client>/<model>: <task>"` (e.g. `"claude-code/opus: release task"`). The audit log shows the prefix as part of the "claimed" identity and the task as the row's Reason (1.65.0); the actor is always `mcp:graph_write`.
 - **Duplicate policy:** Any possible entity or relation duplicate prevents the
   entire batch and returns `{ status: "possible_duplicate", kind,
   operation_index, submitted, candidates, next_move }`.

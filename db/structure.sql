@@ -52,6 +52,7 @@ CREATE TABLE `audit_logs` (
   `created_at` datetime(6) NOT NULL,
   `reason` varchar(255) DEFAULT NULL,
   `change_set_id` bigint(20) DEFAULT NULL,
+  `actor_claim` varchar(255) DEFAULT NULL,
   PRIMARY KEY (`id`),
   KEY `index_audit_logs_on_auditable_type_and_auditable_id` (`auditable_type`,`auditable_id`),
   KEY `index_audit_logs_on_created_at` (`created_at`),
@@ -79,6 +80,7 @@ CREATE TABLE `change_sets` (
   `undo_of_id` bigint(20) DEFAULT NULL,
   `created_at` datetime(6) NOT NULL,
   `updated_at` datetime(6) NOT NULL,
+  `actor_claim` varchar(255) DEFAULT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `index_change_sets_on_uuid` (`uuid`),
   KEY `index_change_sets_on_undo_of_id` (`undo_of_id`),
@@ -418,6 +420,7 @@ CREATE TABLE `tool_invocations` (
 /*M!100616 SET NOTE_VERBOSITY=@OLD_NOTE_VERBOSITY */;
 
 INSERT INTO `schema_migrations` (version) VALUES
+('20261030120000'),
 ('20261029180000'),
 ('20261026213000'),
 ('20261026120100'),

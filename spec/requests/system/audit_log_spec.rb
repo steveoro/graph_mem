@@ -37,6 +37,24 @@ RSpec.describe "System › Audit log", type: :request do
         expect(response.body).to include('id="audit_filter_since_days"')
       end
 
+      it "shows the actor, the claim on a second line and the reason, and filters on the actor only" do
+        log = AuditLog.create!(auditable_type: "MemoryObservation", auditable_id: 1, action: "create", changed_fields: {},
+                               actor: "mcp:graph_write", actor_claim: "client=synth-client-a · synth-agent/model-x", reason: "synthetic task")
+        AuditLog.create!(auditable_type: "MemoryEntity", auditable_id: entity.id, action: "update", changed_fields: {}, actor: "operator:synth@127.0.0.1")
+
+        get system_audit_log_path
+
+        row = Nokogiri::HTML(response.body).at_css("#audit-log-#{log.id}")
+        expect(row.text).to include("mcp:graph_write", "synthetic task")
+        expect(row.at_css("[data-testid='audit-log-claim']").text).to eq("claimed: client=synth-client-a · synth-agent/model-x")
+
+        get system_audit_log_path(actor: "mcp:graph_write")
+        expect(response.body).to include("audit-log-#{log.id}")
+        expect(response.body).not_to include("operator:synth@127.0.0.1")
+        get system_audit_log_path(actor: "synth-agent/model-x")
+        expect(response.body).not_to include("audit-log-#{log.id}")
+      end
+
       it "filters by action" do
         update_log = AuditLog.create!(
           auditable_type: "MemoryEntity", auditable_id: entity.id,

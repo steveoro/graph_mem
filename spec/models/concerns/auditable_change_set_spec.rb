@@ -17,6 +17,17 @@ RSpec.describe Auditable, "change sets", type: :model do
     expect(set).to have_attributes(kind: "graph.write", actor: "mcp:graph_write", subject_type: "MemoryEntity")
   end
 
+  it "takes the actor and the claim from Current by default" do
+    context = Current.set(actor: "mcp:graph_write", actor_claim: "client=synth-client-a · synth-agent/0.0.1") do
+      ChangeSet.record(kind: "graph.write") do |change_set|
+        MemoryEntity.create!(name: "SynthWidget", entity_type: "Component")
+        change_set
+      end
+    end
+
+    expect(ChangeSet.find_by!(uuid: context.uuid)).to have_attributes(actor: "mcp:graph_write", actor_claim: "client=synth-client-a · synth-agent/0.0.1")
+  end
+
   it "leaves change_set_id NULL outside a change set" do
     entity = MemoryEntity.create!(name: "SynthWidget", entity_type: "Component")
 

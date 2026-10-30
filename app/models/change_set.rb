@@ -51,14 +51,15 @@ class ChangeSet < ApplicationRecord
   # @param summary [String, nil] one line for the history ("merged 'A' into 'B'")
   # @param subject [ActiveRecord::Base, nil] anchor record; nil = the first entity written
   # @param actor [String, nil] defaults to Current.actor
+  # @param actor_claim [String, nil] defaults to Current.actor_claim (display only, see ActorClaim)
   # @param undo_of [ChangeSet, nil] the set this one undoes (kinds undo/redo)
   # @yieldparam context [ChangeSet::Context]
   # @return [Object] the block's value
-  def self.record(kind:, summary: nil, subject: nil, actor: Current.actor, undo_of: nil)
+  def self.record(kind:, summary: nil, subject: nil, actor: Current.actor, actor_claim: Current.actor_claim, undo_of: nil)
     return yield(Current.change_set) if Current.change_set
     raise ArgumentError, "unknown change set kind: #{kind}" unless valid_kind?(kind)
 
-    context = Context.new(kind: kind, summary: summary, subject: subject, actor: actor, undo_of: undo_of)
+    context = Context.new(kind: kind, summary: summary, subject: subject, actor: actor, actor_claim: actor_claim, undo_of: undo_of)
     Current.set(change_set: context) { yield context }
   end
 

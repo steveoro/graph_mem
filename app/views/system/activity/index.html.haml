@@ -21,9 +21,12 @@
               %td
                 %time{ datetime: set.created_at.iso8601, title: l(set.created_at, format: :long) }= t("system.activity.ago", time: time_ago_in_words(set.created_at))
               %td
-                = set.summary.presence || set.kind.humanize
+                = set.summary.presence || change_set_kind_label(set.kind)
                 %span.system-hint= set.kind
-              %td= set.actor || t("system.activity.unknown_actor")
+              %td
+                = change_set_actor_label(set, t("system.activity.unknown_actor"))
+                - if set.actor_claim.present?
+                  %div.system-hint{ data: { testid: "activity-claim" } }= actor_claim_label(set.actor_claim)
               %td
                 - if set.undoable?
                   = button_to t("ui.changes.undo"), undo_change_path(set.uuid), method: :post, class: "ui-btn",

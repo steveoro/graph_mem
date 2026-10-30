@@ -72,6 +72,7 @@ en:
     activity:
       title: "Recent activity"
       empty: "No changes recorded yet."
+      unknown_actor: "unknown"
       undoable_until: "undoable until %{time}"
       undoable: "undoable"
       ago: "%{time} ago"
