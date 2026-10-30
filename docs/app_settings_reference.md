@@ -90,6 +90,9 @@ See [summarization guide](summarization.md).
 | Setting | Default | Effect |
 |---|---|---|
 | `project_scan_subfolders` | `Projects` | Comma- or newline-separated folders, relative to the scan root, that may be scanned (e.g. `Projects, work/clients`). Read uncached on every scan request and at job start, so a change applies at once in every process. Blank = the whole scan root (hidden folders and secret files stay blocked). Replaces `project_scan_roots`, which is ignored and can be cleared from Settings. |
+| `project_scan_chunk_output_tokens` | `2048` | The answer budget of one part of an LLM scan, sent as `num_predict` (512-8192). Each part's files get `(summary_num_ctx − this − the prompt) × 0.9` tokens. See [summarization](summarization.md#project-scans). |
+| `project_scan_max_chunks` | `16` | The most parts (model requests) one LLM scan sends (1-64). Files past it aren't sent: they are counted and listed, and the scan is partial. |
+| `project_scan_bytes_per_token` | `3.0` | The scan's token estimate (2.0-6.0, no tokenizer). Lower it when parts come back cut or rejected (smaller, more parts); raise it for fewer, fuller parts. |
 
 Every scan entry point (dashboard, `POST /api/v1/scan`, MCP `scan_project`, job start) resolves the path through `ScanRootPolicy`: the scan root comes from `GRAPH_MEM_SCAN_ROOTS` (in Docker, the read-only home mount) or natively `Dir.home`; `PROJECT_SCAN_ROOTS` is gone. See [container scan mounts](container_scan_mounts.md) and the [project scan skill](../skills/project-scan/SKILL.md) for the scan workflow.
 

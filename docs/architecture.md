@@ -145,6 +145,10 @@ Resolves URL, model, provider, and dimensions with priority **AppSettings → EN
 
 Resolves URL, model, provider, timeout, and output token limits with the same **AppSettings → ENV → defaults** priority. Used by `SummaryGenerationClient` and `SummarizerService`. Operators configure values under **System › Settings › Summaries**; saving resets `SummaryGenerationClient` so subsequent summarize requests use the new settings.
 
+#### Project scans (`app/services/project_scanner.rb`, `app/services/project_scanner/`)
+
+`ProjectScanner` discovers the files (`ProjectScanFileFilter`: inside the root, denylist, `EXCLUDED_FILE_GLOBS`), extracts knowledge and reconciles it with the graph, then `ProjectScanValidator` checks the existing subtree in resumable batches. The LLM extraction (1.66.0): `ChunkPlanner` splits the files into parts sized from `summary_num_ctx` (`TokenEstimate`), `ChunkedExtraction` sends one request per part (`ExtractionPrompt`) and splits a failed part once, and `ExtractionMerger` merges the answers by entity before reconcile. Reconcile runs in two passes (entities and observations, then relations). Only a **complete** scan (every part succeeded, every file sent) runs `mark_missing_entities`, dismisses conflicting compaction reviews and hands the validator the scan text; a **partial** one creates and updates but never obsoletes or queues a delete. `details["extraction"]` records the parts and files, and `reconciled: true` lets a resumed paused batch skip the model and reconcile. The validator's state lives under `details["validation_state"]`. Without the LLM (or when the window is too small) `DeterministicExtraction` lists the manifests and top-level directories, as before. See [summarization](summarization.md#project-scans).
+
 #### Embedding Service (`app/services/embedding_service.rb`)
 
 Calls Ollama (or an OpenAI-compatible endpoint) to generate vectors from entity composite text. Uses `EmbeddingConfig.resolved_config`. Gracefully degrades when unavailable.

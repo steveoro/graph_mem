@@ -16,7 +16,8 @@ class ProjectScanner
 
       plan = plan_parts
       if plan.error == :window_too_small
-        return fallback_extraction("summary_num_ctx (#{scan_num_ctx}) leaves no room for project files; raise it to at least 4096",
+        return fallback_extraction("summary_num_ctx (#{scan_num_ctx}) leaves no room for project files; raise it to at least " \
+                                   "#{minimum_num_ctx}, or lower project_scan_chunk_output_tokens (#{scan_num_predict})",
                                    "The context window leaves no room for project files")
       end
 
@@ -55,11 +56,23 @@ class ProjectScanner
     end
 
     def plan_parts
-      bytes_per_token = AppSettings.project_scan_bytes_per_token.to_f.clamp(2.0, 6.0)
-      budget = TokenEstimate.input_budget(num_ctx: scan_num_ctx, num_predict: scan_num_predict,
-                                          prompt_tokens: ExtractionPrompt.overhead_tokens(prompt_project_name, bytes_per_token: bytes_per_token))
-      ChunkPlanner.new(files: @discovered_files, root: @file_filter.root, input_budget: budget, bytes_per_token: bytes_per_token,
+      budget = TokenEstimate.input_budget(num_ctx: scan_num_ctx, num_predict: scan_num_predict, prompt_tokens: prompt_overhead)
+      ChunkPlanner.new(files: @discovered_files, root: @file_filter.root, input_budget: budget, bytes_per_token: scan_bytes_per_token,
                        max_chunks: AppSettings.project_scan_max_chunks.to_i.clamp(1, 64), max_total_bytes: @max_total_input_bytes).call
+    end
+
+    def scan_bytes_per_token
+      AppSettings.project_scan_bytes_per_token.to_f.clamp(2.0, 6.0)
+    end
+
+    def prompt_overhead
+      ExtractionPrompt.overhead_tokens(prompt_project_name, bytes_per_token: scan_bytes_per_token)
+    end
+
+    # The smallest summary_num_ctx that leaves ChunkPlanner::MIN_INPUT_BUDGET for files at the
+    # current answer budget and prompt.
+    def minimum_num_ctx
+      scan_num_predict + prompt_overhead + (ChunkPlanner::MIN_INPUT_BUDGET / TokenEstimate::MARGIN).ceil
     end
 
     def prompt_project_name
