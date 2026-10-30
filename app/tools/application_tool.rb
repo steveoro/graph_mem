@@ -72,6 +72,9 @@ class ApplicationTool
     end
 
     record_client_activity!
+    # The server-side fact for every audit row and change set this call writes (each tool's own
+    # #call doesn't call super, so this is the one place to set it).
+    Current.actor = "mcp:#{tool_name}"
     raw_result = call(**normalized)
     result, success_metadata = ToolSuccessResponse.call(
       tool_name: tool_name,
@@ -96,11 +99,6 @@ class ApplicationTool
       argument_keys: argument_keys
     )
     Current.actor = nil
-  end
-
-  def call(...)
-    Current.actor = "mcp:#{tool_name}"
-    super
   end
 
   def logger
