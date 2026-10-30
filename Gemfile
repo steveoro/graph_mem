@@ -30,7 +30,7 @@ gem "solid_cache"
 gem "solid_queue"
 gem "solid_cable"
 
-gem "tailwindcss-rails", "~> 4.3"
+gem "tailwindcss-rails", "~> 4.7"
 
 # The official MCP Ruby SDK serves MCP (docs/guides/migrating-fast-mcp-to-mcp-gem.md). Exact pin: one PR per upgrade (D14).
 gem "mcp", "1.8.2"
