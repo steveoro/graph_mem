@@ -21,7 +21,10 @@ class ProjectScanner
     # Room for the "(part k of m)" label of a split file's piece.
     PIECE_LABEL_BYTES = 32
 
-    Chunk = Data.define(:index, :files, :text, :estimated_tokens)
+    # `pieces` are the "--- FILE: …" blocks; a failed part is split between them (ChunkedExtraction).
+    Chunk = Data.define(:index, :files, :pieces, :estimated_tokens) do
+      def text = pieces.join("\n")
+    end
     Plan = Data.define(:chunks, :context_text, :files_read, :files_too_large, :files_over_budget, :left_out,
                        :input_budget, :error)
 
@@ -41,15 +44,17 @@ class ProjectScanner
     # @param max_chunks [Integer] the most parts
     # @param max_file_bytes [Integer] larger files are skipped and counted
     # @param max_total_bytes [Integer] reading stops here; the rest is counted
+    # @param bytes_per_token [Numeric] the estimate (TokenEstimate)
     def initialize(files:, root:, input_budget:, max_chunks: 16, max_file_bytes: ProjectScanner::MAX_FILE_BYTES,
-                   max_total_bytes: ProjectScanner::MAX_TOTAL_INPUT_BYTES)
+                   max_total_bytes: ProjectScanner::MAX_TOTAL_INPUT_BYTES, bytes_per_token: TokenEstimate::BYTES_PER_TOKEN)
       @root = Pathname.new(root.to_s)
       @files = Array(files)
       @input_budget = input_budget.to_i
       @max_chunks = [ max_chunks.to_i, 1 ].max
       @max_file_bytes = max_file_bytes.to_i
       @max_total_bytes = max_total_bytes.to_i
-      @budget_bytes = TokenEstimate.bytes(@input_budget)
+      @bytes_per_token = bytes_per_token
+      @budget_bytes = TokenEstimate.bytes(@input_budget, bytes_per_token: bytes_per_token)
     end
 
     # @return [Plan] `error` is :window_too_small (and no chunks) when input_budget < MIN_INPUT_BUDGET
@@ -137,8 +142,8 @@ class ProjectScanner
     def close_open
       return unless @open
 
-      text = @open[:texts].join("\n")
-      @chunks << Chunk.new(index: @chunks.size + 1, files: @open[:files], text: text, estimated_tokens: TokenEstimate.tokens(text))
+      pieces = @open[:texts]
+      @chunks << Chunk.new(index: @chunks.size + 1, files: @open[:files], pieces: pieces, estimated_tokens: TokenEstimate.tokens(pieces.join("\n"), bytes_per_token: @bytes_per_token))
       @open = nil
     end
 

@@ -149,10 +149,12 @@ class ProjectScanJob < ApplicationJob
           counters: result.to_h.slice(
             :entities_created, :entities_updated, :observations_created, :observations_obsoleted,
             :observations_moved, :relations_created, :relations_deleted, :entities_reparented,
-            :dismissed_compaction_items, :skipped_outside_root, :skipped_denylisted
+            :dismissed_compaction_items, :skipped_outside_root, :skipped_denylisted,
+            :parts_total, :parts_failed, :files_too_large, :files_over_budget
           ).compact,
           details: operation.details&.merge(
             fallback: result.fallback,
+            partial: result.partial,
             fallback_reason: result.fallback_reason,
             project_entity_id: result.project_entity&.id,
             project_entity_name: result.project_entity&.name

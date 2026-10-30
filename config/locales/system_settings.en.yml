@@ -162,6 +162,9 @@ en:
         project_scan_max_chunks:
           label: "Scan parts at most"
           description: "The most parts (model requests) one project scan sends, 1-64. Files past it aren't sent: the scan counts and lists them, and is partial, so it marks nothing missing."
+        project_scan_bytes_per_token:
+          label: "Scan bytes per token"
+          description: "How many bytes of a scanned file count as one token when the scan sizes its parts, 2.0-6.0 (no tokenizer is used). Lower it if parts come back with the prompt cut (smaller parts, more of them); raise it for fewer, fuller parts."
         tool_invocation_retention_days:
           label: "Tool telemetry retention (days)"
           description: "Tool invocation rows older than this are deleted by daily garbage collection. Use 0 to disable automatic telemetry pruning."

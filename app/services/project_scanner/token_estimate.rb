@@ -1,8 +1,9 @@
 # frozen_string_literal: true
 
 class ProjectScanner
-  # The scan's token estimate (F-3): bytes, not characters, at 3 bytes per token, so source code
-  # (denser than prose) and non-ASCII text are over-counted, never under-counted. No tokenizer.
+  # The scan's token estimate (F-3): bytes, not characters, at 3 bytes per token by default
+  # (setting project_scan_bytes_per_token), so source code (denser than prose) and non-ASCII text
+  # are over-counted, never under-counted. No tokenizer.
   #
   #   ProjectScanner::TokenEstimate.tokens("x" * 3000)                               # => 1000
   #   ProjectScanner::TokenEstimate.input_budget(num_ctx: 8192, num_predict: 2048, prompt_tokens: 700) # => 4900
@@ -14,15 +15,17 @@ class ProjectScanner
     module_function
 
     # @param text [String, nil]
+    # @param bytes_per_token [Numeric]
     # @return [Integer] the estimated tokens
-    def tokens(text)
-      (text.to_s.bytesize / BYTES_PER_TOKEN.to_f).ceil
+    def tokens(text, bytes_per_token: BYTES_PER_TOKEN)
+      (text.to_s.bytesize / bytes_per_token.to_f).ceil
     end
 
     # @param tokens [Integer]
+    # @param bytes_per_token [Numeric]
     # @return [Integer] the bytes that estimate at most `tokens`
-    def bytes(tokens)
-      tokens.to_i * BYTES_PER_TOKEN
+    def bytes(tokens, bytes_per_token: BYTES_PER_TOKEN)
+      (tokens.to_i * bytes_per_token.to_f).floor
     end
 
     # floor((num_ctx − num_predict − prompt_tokens) × MARGIN), never below 0.

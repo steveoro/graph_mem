@@ -69,6 +69,23 @@ RSpec.describe ProjectScanner, type: :service do
     expect(relation).to be_present
   end
 
+  it "creates a relation to an entity listed later in the answer (two-pass reconcile)" do
+    allow(SummaryGenerationClient).to receive(:generate).and_return(
+      ok: true, done_reason: "stop", prompt_tokens: 100,
+      text: { project: { name: "TestProject" }, architecture: [
+        { entity: { name: "SynthWidget", type: "Component" }, relations: [ { to: "Alpha Service", type: "depends_on", confidence: 0.8 } ] },
+        { entity: { name: "Alpha Service", type: "Service" }, observations: [ "Alpha Service serves widgets." ] }
+      ] }.to_json
+    )
+
+    ProjectScanner.new(project_root: @project_root, project_name: "TestProject").call
+
+    widget = MemoryEntity.find_by!(name: "SynthWidget")
+    alpha = MemoryEntity.find_by!(name: "Alpha Service")
+    expect(MemoryRelation.where(from_entity_id: widget.id, to_entity_id: alpha.id, relation_type: "depends_on")).to exist
+    expect(SummaryGenerationClient).to have_received(:generate).once
+  end
+
   it "updates an existing project entity on rescan" do
     project = MemoryEntity.create!(
       name: "TestProject",
