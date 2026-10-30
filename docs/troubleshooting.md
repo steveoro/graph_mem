@@ -153,7 +153,7 @@ A scan is partial when a part failed or a file wasn't sent (over 50 KB, past the
 
 ### Problem: A scan falls back: "LLM response was not valid JSON"
 
-Every part failed to give a JSON object with an `architecture` array, so the scan used the deterministic fallback. Check that `summary_model` follows JSON instructions (scans send `format: "json"`), raise `project_scan_chunk_output_tokens` if answers are cut, and raise `summary_num_ctx` to the model's real window. "summary_num_ctx (N) leaves no room for project files" means the window minus the answer budget is too small: set it to at least 4096.
+Every part failed to give a JSON object with an `architecture` array, so the scan used the deterministic fallback. Check that `summary_model` follows JSON instructions (scans send `format: "json"`), raise `project_scan_chunk_output_tokens` if answers are cut, and raise `summary_num_ctx` to the model's real window. "summary_num_ctx (N) leaves no room for project files" means the window minus the answer budget and the prompt (about 1,000 tokens) leaves under 1,024 tokens for files. The message names the exact minimum for your settings: at the default `project_scan_chunk_output_tokens` (2048) that is about 4,150 (8192 is the default); on a smaller window, lower `project_scan_chunk_output_tokens` instead.
 
 ## Database Issues
 

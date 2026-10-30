@@ -10,7 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Project scans send their input in parts that fit the model's context window (#146, #147).
 
 ### Added
-- Chunked scan extraction: the files go out in parts sized from `summary_num_ctx`, one request each (`num_ctx`, `num_predict`, `format: "json"`, `truncate: false`, no client-side cut), merged by entity before reconcile. A failed part is split in half once (#146).
+- Chunked scan extraction: the files go out in parts sized from `summary_num_ctx`, one request each (`num_ctx`, `num_predict`, `format: "json"`, `truncate: false`, no client-side cut), merged by entity before reconcile. A failed part, including an HTTP 400/413 refusal ("prompt rejected by the provider (HTTP N)"), is split in half once; a rejected half counts toward the two-in-a-row stop (#146). When `summary_num_ctx` leaves no room for files, the fallback reason names the smallest window that would (#147).
 - Settings `project_scan_chunk_output_tokens` (2048), `project_scan_max_chunks` (16) and `project_scan_bytes_per_token` (3.0), under System › Settings › Project scans.
 - `counters.parts_total`, `parts_failed`, `files_too_large`, `files_over_budget` and `details.extraction` on scans (`scan_project_status`, `GET /api/v1/scan/:id`), and a "Partial extraction" card on the scan page.
 - `SummaryGenerationClient` options `truncate:`, `timeout:` and `max_output_length:`, and `prompt_tokens`, `done_reason` and (on a failed request) `http_status` in its result.
