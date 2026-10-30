@@ -5,7 +5,9 @@ All notable changes to GraphMem will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.65.0] - 2026-10-30
+
+Drop the transition shims; MCP writes record who made them (#142, #143).
 
 ### Removed
 - The transition redirects: `/graph`, `/maintenance`, `/data_exchange/compaction_review`, `/data_exchange/import_review`, `/data_exchange/import_report`, `/operator/settings` (all tabs), `/operator/settings/project_scans/check_path`, `/operator/embeddings`, `/operator/telemetry`, `/operator/audit_logs`, `/operator/jobs(/*rest)` and `/projects/jobs`. Old URLs now answer 404 (#142).
@@ -13,6 +15,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `ExportProgressChannel` (export progress goes through the export's `OperationProgress`). Explore no longer reads `?scoped_entity_id=`; the REST `graph_data` parameter stays.
 - The legacy `operator_signed_in` session key: a session cookie from before the 1.53.0 login hardening must sign in again.
 - The "Not saved from this tab" notice for a stale pre-UI-7 settings tab.
+
+### Added
+- `actor_claim` on audit rows and change sets (migration): what an MCP client and its model say about themselves. It holds the `X-MCP-Client`, the session's `clientInfo` name/version and the `<client>/<model>` part of a `"<client>/<model>: <task>"` source. It is shown as "claimed: …" on System › Audit log and System › Activity (Home: in the tooltip), and is never used to authorize, credit or filter.
+- `rake audit:backfill_actors`: gives the `graph.*` change sets that MCP wrote before 1.65.0, and their audit rows, an `mcp:graph_*` actor, a "backfilled" claim and a reason from the stored source. Dry run unless `APPLY=1`; idempotent; other nil-actor rows are left.
+
+### Fixed
+- MCP writes had no actor: the audit log showed none and Recent activity showed "unknown". They now record `mcp:<tool>` on the audit rows and the change set.
+- Reviews applied or dismissed through MCP were credited to "generator"; they are now "agent".
+- Create and update audit rows now take a reason from the `source` (`<task>`) or the new `obsolescence_reason`, not only deletes.
+
+### Changed
+- Recent activity and System › Activity label change set kinds in words ("Graph write" instead of "Graph.write").
 
 ## [1.64.0] - 2026-10-29
 
