@@ -77,6 +77,9 @@ RSpec.describe FactSupersedeJob do
       end
     end
 
+    FactSupersede::Proposals.call(fact, seed: false)
+    expect(FactSupersede::Judge).to have_received(:call).with(fact, [], max_batches: nil)
+
     expect(described_class.perform_now(fact.id)).to have_attributes(rejudged: 2, rows: [])
     refreshed = rows.find { |row| row.payload["observation_id"] == old.id }
     expect(refreshed).to have_attributes(status: "active", confidence: 0.95)

@@ -363,4 +363,5 @@ and nothing acts across projects. Step list: `docs/plans/fact-supersede-plan.md`
   that project in one `explore.bulk_supersede` change set; rows that changed in between, and
   source facts, are skipped and counted. The changed observations' pending "Outdated by a fact"
   rows are dismissed in the same set (no suppression). It takes the membership lock first, like
-  review applies and undo, so their lock order matches.
+  review applies and undo, so their lock order matches; a request waits at most 5 s for it, then
+  answers 503 with nothing changed.

@@ -18,6 +18,8 @@ module FactSupersede
       changed: "changed since you looked", kept: "kept by the legacy guard"
     }.freeze
     SETTLED_REASON = "observation changed in Find & supersede"
+    # A web request waits at most this long for the membership lock (the default is 60 s).
+    LOCK_WAIT_SECONDS = 5
     BUSY = "Another change is running (an import, a merge or a review apply). Nothing was changed; try again."
 
     # @param project [MemoryEntity] a Project root
@@ -53,7 +55,7 @@ module FactSupersede
       changed_ids = []
       # The membership lock first, like review applies and undo: they lock a review row, then its
       # observation, and this locks observations, then their review rows.
-      result = ProjectMembership.with_membership_lock do
+      result = ProjectMembership.with_membership_lock(timeout: LOCK_WAIT_SECONDS) do
         ChangeSet.record(kind: "explore.bulk_supersede", subject: @project, summary: summary) do |context|
           MemoryObservation.transaction do
             MemoryObservation.where(id: @ids).includes(:memory_entity).lock.order(:id).each { |observation| changed_ids << observation.id if change(observation) }

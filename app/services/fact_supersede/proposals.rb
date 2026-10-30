@@ -64,7 +64,7 @@ module FactSupersede
       to_judge = rest.reject { |candidate| known_ids.include?(candidate.observation.id) }
       verdicts = Judge.call(@fact, to_judge, max_batches: @max_batches)
       rejudged, verdicts = verdicts.partition { |verdict| rejudge_rows.key?(verdict.candidate.observation.id) }
-      refreshed = @seed ? rejudged.count { |verdict| refresh(rejudge_rows.fetch(verdict.candidate.observation.id), verdict) } : 0
+      refreshed = rejudged.count { |verdict| refresh(rejudge_rows.fetch(verdict.candidate.observation.id), verdict) }
       items = verdicts.select { |verdict| PROPOSAL_VERDICTS.include?(verdict.verdict) }.first(@limit).map { |verdict| item(verdict) }
       rows = @seed && items.any? ? CompactionReviewService.seed_report(report_type: REPORT_TYPE, source: SOURCE, source_ref: "fact:#{@fact.id}", items: items) : []
       Result.new(items: items, rows: rows, searched: true, candidates: found.candidates.size, kept: kept.size, known: known_ids.size,
@@ -84,7 +84,8 @@ module FactSupersede
       return [ Set.new, {} ] if signatures.empty?
 
       pending = MaintenanceReportRow.by_report_type(REPORT_TYPE).pending.where(kind: KIND, signature: signatures.keys).to_a
-      rejudge = SummarizationConfig.llm_usable? ? pending.select { |row| row.payload["verdict"] == Judge::UNJUDGED } : []
+      # Only a seeding run can refresh a row, so only it spends LLM calls on them.
+      rejudge = @seed && SummarizationConfig.llm_usable? ? pending.select { |row| row.payload["verdict"] == Judge::UNJUDGED } : []
       suppressed = MaintenanceReportSuppression.in_force.where(report_type: REPORT_TYPE, signature: signatures.keys).pluck(:signature)
       known = ((pending - rejudge).map(&:signature) + suppressed).to_set { |signature| signatures[signature] }
       [ known, rejudge.index_by { |row| signatures[row.signature] } ]

@@ -123,6 +123,7 @@ RSpec.describe "Review › Find & supersede", type: :request do
 
       bulk([ old.id ])
 
+      expect(ProjectMembership).to have_received(:with_membership_lock).with(timeout: FactSupersede::Bulk::LOCK_WAIT_SECONDS)
       expect(response).to have_http_status(:service_unavailable)
       expect(response.body).to include("Another change is running")
       expect(old.reload).to be_active
