@@ -105,6 +105,43 @@ RSpec.describe "Projects › Scans", type: :request do
       end
     end
 
+    # Ported from the removed /project_scans and /project_scan_skills specs (1.65.0).
+    it "passes the aliases through, and refuses a missing or nonexistent root with its message" do
+      with_scan_home do |home|
+        post projects_scans_path
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(response.body).to include("Give the path of the project folder to scan")
+
+        post projects_scans_path, params: { project_root: File.join(home, "Projects", "missing") }
+        expect(response.body).to include("was not found", "its parent #{home}/Projects exists")
+      end
+
+      with_scan_project do |project|
+        post projects_scans_path, params: { project_root: project, project_name: "Alpha Service", aliases: "alpha, synth-alpha", mode: "rescan" }
+        expect(ProjectScanJob).to have_been_enqueued.with(anything, project, "Alpha Service", "alpha, synth-alpha", "rescan", false, nil)
+      end
+    end
+
+    {
+      "/etc" => "visible to graph_mem: only",
+      "%{home}/.ssh" => "inside a hidden or protected folder",
+      "%{home}/Other/x" => "outside the scan filter (Projects)",
+      "%{home}/Projects/../.." => "Use a path without"
+    }.each do |template, message|
+      it "refuses #{template} for a normal and a guided scan, and queues nothing" do
+        with_scan_home do |home|
+          path = format(template, home: home)
+          FileUtils.mkdir_p(path) unless path.include?("..") || path == "/etc"
+
+          [ {}, { guided: "1", depths: %w[birds_eye] } ].each do |extra|
+            expect { post projects_scans_path, params: { project_root: path, mode: "initial", **extra } }.not_to have_enqueued_job
+            expect(response).to have_http_status(:unprocessable_content)
+            expect(response.body).to include(message)
+          end
+        end
+      end
+    end
+
     it "re-renders an unknown mode or step (422)" do
       with_scan_project do |project|
         post projects_scans_path, params: { project_root: project, mode: "bad" }

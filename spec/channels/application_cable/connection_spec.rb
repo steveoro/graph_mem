@@ -19,11 +19,10 @@ RSpec.describe ApplicationCable::Connection, type: :channel do
     end
   end
 
-  describe "with a legacy operator session (operator_signed_in key)" do
-    it "connects and identifies as 'operator'" do
+  describe "with only the legacy operator_signed_in key (removed in 1.65.0)" do
+    it "rejects the connection" do
       cookies.encrypted[session_key] = { value: { "operator_signed_in" => true } }
-      connect
-      expect(connection.operator).to eq("operator")
+      expect { connect }.to have_rejected_connection
     end
   end
 

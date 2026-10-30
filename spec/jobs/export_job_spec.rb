@@ -21,16 +21,15 @@ RSpec.describe ExportJob, type: :job do
   end
 
   describe "#perform" do
-    it "broadcasts progress updates" do
+    it "reports progress through its OperationProgress row and completes it" do
       export_id = SecureRandom.uuid
-
-      expect(ExportProgressChannel).to receive(:broadcast_progress).at_least(:once)
-      expect(ExportProgressChannel).to receive(:broadcast_complete).with(
-        export_id,
-        hash_including(success: true)
-      )
+      allow(OperationProgressBroadcaster).to receive(:call).and_call_original
 
       described_class.new.perform(export_id, [ project.id ])
+
+      expect(OperationProgress.find_by!(operation_id: export_id)).to have_attributes(operation_type: "export", status: "completed")
+      expect(OperationProgressBroadcaster).to have_received(:call).at_least(:twice)
+      FileUtils.rm_f(described_class.download_path(export_id))
     end
 
     it "takes over the pending operation Projects › Exports wrote, details kept, and completes it" do
@@ -57,28 +56,9 @@ RSpec.describe ExportJob, type: :job do
     it "creates export file in tmp/exports directory" do
       export_id = SecureRandom.uuid
 
-      allow(ExportProgressChannel).to receive(:broadcast_progress)
-      allow(ExportProgressChannel).to receive(:broadcast_complete)
-
       described_class.new.perform(export_id, [ project.id ])
 
       expect(File.exist?(described_class.download_path(export_id))).to be true
-
-      # Cleanup
-      FileUtils.rm_f(described_class.download_path(export_id))
-    end
-
-    it "includes download path in completion message" do
-      export_id = SecureRandom.uuid
-
-      allow(ExportProgressChannel).to receive(:broadcast_progress)
-
-      expect(ExportProgressChannel).to receive(:broadcast_complete).with(
-        export_id,
-        hash_including(download_path: "/projects/exports/#{export_id}/download")
-      )
-
-      described_class.new.perform(export_id, [ project.id ])
 
       # Cleanup
       FileUtils.rm_f(described_class.download_path(export_id))
@@ -105,21 +85,10 @@ RSpec.describe ExportJob, type: :job do
       )
 
       export_id = SecureRandom.uuid
-      totals = []
-      completion_message = nil
-
-      allow(ExportProgressChannel).to receive(:broadcast_progress) do |_id, payload|
-        totals << payload[:total]
-      end
-      allow(ExportProgressChannel).to receive(:broadcast_complete) do |_id, payload|
-        completion_message = payload[:message]
-      end
-
       described_class.new.perform(export_id, [ project.id ])
 
       # Selected root + shallow linked Project only (nested task excluded)
-      expect(totals).to all(eq(2))
-      expect(completion_message).to include("2 nodes exported")
+      expect(OperationProgress.find_by!(operation_id: export_id)).to have_attributes(total_count: 2, current_count: 2)
 
       exported = JSON.parse(File.read(described_class.download_path(export_id)))
       linked_child = exported["root_nodes"].first["children"].find { |child| child["name"] == linked_project.name }
@@ -129,19 +98,13 @@ RSpec.describe ExportJob, type: :job do
       FileUtils.rm_f(described_class.download_path(export_id))
     end
 
-    it "broadcasts error on failure" do
+    it "marks its OperationProgress failed on an error" do
       export_id = SecureRandom.uuid
-
-      # Force an error by passing invalid entity IDs that will cause issues
       allow_any_instance_of(ExportStrategy).to receive(:export_json_with_progress).and_raise(StandardError, "Test error")
 
-      expect(ExportProgressChannel).to receive(:broadcast_progress)
-      expect(ExportProgressChannel).to receive(:broadcast_error).with(
-        export_id,
-        "Export failed: Test error"
-      )
-
       described_class.new.perform(export_id, [ project.id ])
+
+      expect(OperationProgress.find_by!(operation_id: export_id)).to have_attributes(status: "failed", error_message: "Test error")
     end
   end
 

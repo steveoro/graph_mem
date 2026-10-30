@@ -82,10 +82,10 @@ RSpec.describe "System › Settings", type: :request do
       expect(AppSettings.where(var: %w[tool_invocation_retention_days compaction_review_row_retention_days])).to be_empty
     end
 
-    it "says a key posted from a stale tab wasn't saved there (guest access under Feature flags)" do
+    it "saves only the posted tab's keys (a key of another tab is ignored)" do
       patch system_settings_path, params: { tab: "feature_flags", settings: { enable_garbage_collector: "1", enable_guest_access: "0" } }
 
-      expect(flash[:notice]).to include("Saved 1 setting", "Not saved from this tab: Guest access (read-only)")
+      expect(flash[:notice]).to eq("Saved 1 setting(s) successfully.")
       expect(AppSettings.guest_access_enabled?).to be(true)
     end
 
@@ -161,7 +161,7 @@ RSpec.describe "System › Settings", type: :request do
     it "updates backup settings" do
       patch system_settings_path,
             params: {
-              tab: "database_backup",
+              tab: "backups",
               settings: {
                 backup_folder_path: "tmp/custom_backups",
                 backup_keep_max: "7",

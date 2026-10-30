@@ -148,5 +148,93 @@ RSpec.describe "Projects › Imports", type: :request do
       get report_projects_import_path(rake_import.operation_id)
       expect(response.body).to include('data-testid="import-report-command-line"', "Graphify import of Alpha Service")
     end
+
+    # Ported from the removed /data_exchange import specs (1.65.0), against these routes.
+    context "executing a review" do
+      def upload_tree(root)
+        upload({ version: "1.0", root_nodes: [ root ] }.to_json)
+        session_id_from_redirect
+      end
+
+      def execute(session_id, decisions = { "0" => { node_path: "0", action: "create", target_id: "", parent_id: "" } })
+        post execute_projects_import_path(session_id), params: { decisions: decisions }
+      end
+
+      let(:report_path) { %r{/projects/imports/\h{8}-\h{4}-\h{4}-\h{4}-\h{12}/report\z} }
+
+      it "nonces every script on the review page and wires the match select to Stimulus" do
+        MemoryEntity.create!(name: "Gadget Project", entity_type: "Project")
+        get projects_import_path(upload_tree({ name: "Gadget Project", entity_type: "Project", observations: [], children: [] }))
+
+        page = Nokogiri::HTML(response.body)
+        expect(page.css("script").map { |script| script["nonce"] }).to all(be_present).and(be_present)
+        expect(page.at_css('form[data-controller="import-decision"]')).to be_present
+        expect(page.at_css("select.match-select")["data-action"]).to eq("change->import-decision#sync")
+      end
+
+      it "creates the root with its observations, or merges it into an existing entity" do
+        root = { name: "Gadget Project", entity_type: "Project", aliases: "", observations: [ { content: "Gadget Project is synthetic." } ], children: [] }
+
+        expect { execute(upload_tree(root)) }.to change(MemoryEntity, :count).by(1).and change(MemoryObservation, :count).by(1)
+        expect(response).to redirect_to(report_path)
+
+        target = MemoryEntity.create!(name: "Alpha Service", entity_type: "Project")
+        execute(upload_tree(root.merge(name: "Gadget Project Two")), { "0" => { node_path: "0", action: "merge", target_id: target.id.to_s, parent_id: "" } })
+        expect(response).to redirect_to(report_path)
+        expect(MemoryEntity.where(name: "Gadget Project Two")).not_to exist
+      end
+
+      it "seeds ambiguous relations into scan review, labelled with the payload's producer" do
+        upload({ version: "1.0", producer: "rails_ast_extractor",
+                 ambiguous_relations: [ { from_name: "SynthWidget", from_type: "Class", to_name: "SynthGear", to_type: "Class",
+                                          relation_type: "calls", confidence: 0.5, properties: { source_file: "app/synth_widget.rb" } } ],
+                 root_nodes: [ { name: "Gadget Project", entity_type: "Project", aliases: "",
+                                 children: [ { name: "SynthWidget", entity_type: "Class", relation_type: "part_of", children: [] },
+                                             { name: "SynthGear", entity_type: "Class", relation_type: "part_of", children: [] } ] } ] }.to_json)
+
+        expect { execute(session_id_from_redirect) }.to change(MaintenanceReportRow.by_report_type("scan_review"), :count).by(1)
+
+        row = MaintenanceReportRow.by_report_type("scan_review").last
+        expect(row.payload).to include("kind" => "relationship_proposal", "relation_type" => "calls")
+        expect(row.payload["explanation"]).to include("Rails ast extractor AMBIGUOUS")
+        expect(row.maintenance_report.data["source"]).to eq("rails_ast_extractor")
+      end
+
+      context "with children (decided from the stored matches)" do
+        let!(:existing) { MemoryEntity.create!(name: "SynthGear", entity_type: "Task") }
+        let(:tree) do
+          { name: "Gadget Project", entity_type: "Project", aliases: "", observations: [],
+            children: [ { name: "SynthWidget", entity_type: "Task", aliases: "", relation_type: "part_of",
+                          observations: [ { content: "SynthWidget is a child." } ], children: [] },
+                        { name: "SynthGear", entity_type: "Task", aliases: "", relation_type: "part_of",
+                          observations: [ { content: "SynthGear gains an observation." } ], children: [] } ] }
+        end
+
+        it "creates the new child with its relation and observations from the root's decision alone" do
+          expect { execute(upload_tree(tree)) }.to change(MemoryEntity, :count).by(2)
+
+          root = MemoryEntity.find_by!(name: "Gadget Project")
+          child = MemoryEntity.find_by!(name: "SynthWidget")
+          expect(MemoryRelation.exists?(from_entity_id: child.id, to_entity_id: root.id, relation_type: "part_of")).to be(true)
+          expect(child.memory_observations.pluck(:content)).to include("SynthWidget is a child.")
+        end
+
+        it "scopes the children under the merge target's project, not the payload's name" do
+          target = MemoryEntity.create!(name: "Alpha Service", entity_type: "Project")
+
+          execute(upload_tree(tree), { "0" => { node_path: "0", action: "merge", target_id: target.id.to_s, parent_id: "" } })
+
+          expect(MemoryEntity.find_by!(name: "SynthWidget").project_id).to eq(target.id)
+        end
+      end
+
+      it "uses each stored default when the decisions are empty, and answers 404 for an unknown review" do
+        expect { execute(upload_tree({ name: "SynthUniqueRoot", entity_type: "SynthUniqueType", aliases: "", observations: [], children: [] }), {}) }
+          .to change(MemoryEntity, :count).by(1)
+
+        post execute_projects_import_path(SecureRandom.uuid), params: { decisions: {} }
+        expect(response).to have_http_status(:not_found)
+      end
+    end
   end
 end

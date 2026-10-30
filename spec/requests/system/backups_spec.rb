@@ -133,18 +133,5 @@ RSpec.describe "System › Backups", type: :request do
       expect(response).to redirect_to(system_backups_path)
       expect(File).not_to exist(path)
     end
-
-    it "keeps the old backup routes working until §6.D-6" do
-      write_backup
-      get "/operator/settings?tab=database_backup"
-      expect(response).to redirect_to("/system/backups")
-
-      delete "/operator/settings/backup", params: { filename: file_name }
-      expect(response).to redirect_to(system_backups_path)
-      expect(File).not_to exist(File.join(@backup_dir, file_name))
-
-      post "/operator/settings/backup/restore", params: { filename: file_name }
-      expect(response).to have_http_status(:unprocessable_content)
-    end
   end
 end
