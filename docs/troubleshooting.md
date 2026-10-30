@@ -141,6 +141,20 @@ script that prints to stdout before starting it.
    - Check the server logs for registration errors
    - Look for JSON-RPC parsing errors or exceptions
 
+## Project Scan Issues
+
+### Problem: A scan says "Partial"
+
+A scan is partial when a part failed or a file wasn't sent (over 50 KB, past the 200 KB input cap or past `project_scan_max_chunks`). It still created and updated what it saw, but it marked nothing missing and queued no delete. The scan page's "Partial extraction" card and `scan_project_status`'s `details.extraction` list the failed parts and the left-out files.
+
+- Parts failed with "answer cut" or "prompt cut" or "prompt rejected": the parts are too big for the model. Lower `project_scan_bytes_per_token` or raise `summary_num_ctx` (and check the model's real window). Very dense text (CJK docs, minified files) can stop a scan after about 3 calls.
+- Parts failed with `provider_unavailable`: the model server is down or slow; two in a row stop the scan. Check `summary_url` and `summary_timeout` (each part waits at least 120 s).
+- Files left out: narrow the scan with `file_globs`, or raise `project_scan_max_chunks`. Files over 50 KB are never sent.
+
+### Problem: A scan falls back: "LLM response was not valid JSON"
+
+Every part failed to give a JSON object with an `architecture` array, so the scan used the deterministic fallback. Check that `summary_model` follows JSON instructions (scans send `format: "json"`), raise `project_scan_chunk_output_tokens` if answers are cut, and raise `summary_num_ctx` to the model's real window. "summary_num_ctx (N) leaves no room for project files" means the window minus the answer budget is too small: set it to at least 4096.
+
 ## Database Issues
 
 ### Problem: `db:schema:dump` warns "dump came from a DB without the embedding indexes/triggers"

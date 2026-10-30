@@ -418,6 +418,7 @@ These tools perform structural graph queries. `direction` is one of `outgoing`
 - **Parameters:**
   - `scan_id` (string, required): The scan ID returned by `scan_project`.
 - **Response:** `{ scan_id, status, phase, message, progress, counters, details, fallback, fallback_reason, scan_review_items, started_at, finished_at, error }`
+- **Scan parts (1.66.0):** `counters.parts_total`, `parts_failed`, `files_too_large` and `files_over_budget`, and `details.extraction` (parts done and failed, files read and left out, the input budget, `num_ctx`, `num_predict`, `partial`). A partial scan marks nothing missing; see [summarization](summarization.md#project-scans).
 
 ## Entity Type Canonicalization
 
