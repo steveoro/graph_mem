@@ -20,6 +20,8 @@ class ProjectScanner
                                    "The context window leaves no room for project files")
       end
 
+      return fallback_extraction("no file fits the scan's input caps", "No file fits the input caps") if plan.chunks.empty?
+
       @context_text = plan.context_text
       record_extraction(plan: plan)
       outcome = ChunkedExtraction.new(

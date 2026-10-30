@@ -111,6 +111,37 @@ RSpec.describe ProjectScanJob, type: :job do
                                                          "num_predict" => 2048, "reconciled" => true, "names" => [ "SynthWidget" ])
     end
 
+    it "end to end: a ~40 KB tree at summary_num_ctx 8192 is 3 parts, 3 calls, one merged result and a cross-part relation" do
+      FileUtils.rm_f(File.join(@project_root, "README.md"))
+      FileUtils.mkdir_p(File.join(@project_root, "docs"))
+      %w[alpha beta gamma].each do |name|
+        File.write(File.join(@project_root, "docs", "#{name}.md"), "# #{name}\n" + ("The #{name} part of Gadget Project.\n" * 380))
+      end
+      prompts = []
+      allow(SummaryGenerationClient).to receive(:generate) do |prompt, **options|
+        prompts << [ prompt, options[:options] ]
+        name = prompt[%r{--- FILE: docs/(\w+)\.md}, 1]
+        relations = [ { to: "Gadget Project", type: "part_of", confidence: 0.9 } ]
+        relations << { to: "Alpha Store", type: "depends_on", confidence: 0.8 } if name == "gamma"
+        item = { entity: { name: "#{name.capitalize} Store", type: "Component" }, observations: [ "#{name.capitalize} Store is documented." ],
+                 relations: relations }
+        { ok: true, done_reason: "stop", prompt_tokens: 4000, text: { project: { name: "Gadget Project" }, architecture: [ item ] }.to_json }
+      end
+
+      run_scan
+
+      expect(prompts.size).to eq(3)
+      expect(prompts.map { |prompt, _| prompt[/This is part \d of \d/] }).to eq([ "This is part 1 of 3", "This is part 2 of 3", "This is part 3 of 3" ])
+      expect(prompts.last.first).to include("Entities already found (reuse these exact names when you mean the same thing): Alpha Store; Beta Store")
+      expect(prompts.map(&:last)).to all(include(num_ctx: 8192, num_predict: 2048, format: "json", truncate: false))
+      gamma, alpha = MemoryEntity.find_by!(name: "Gamma Store"), MemoryEntity.find_by!(name: "Alpha Store")
+      expect(MemoryRelation.where(from_entity_id: gamma.id, to_entity_id: alpha.id, relation_type: "depends_on")).to exist
+      status = ScanProjectStatusTool.new.call(scan_id: scan_id)
+      expect(status[:counters]).to include("parts_total" => 3, "parts_failed" => 0, "entities_created" => 4)
+      expect(status[:details]["extraction"]).to include("parts_total" => 3, "parts_done" => 3, "files_read" => 3, "reconciled" => true,
+                                                        "names" => [ "Alpha Store", "Beta Store", "Gamma Store" ])
+    end
+
     it "continues a paused scan's validation without a second extraction when it was reconciled" do
       operation = paused_first_batch
       expect(operation).to have_attributes(status: "paused")

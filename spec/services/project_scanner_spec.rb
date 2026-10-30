@@ -307,6 +307,66 @@ RSpec.describe ProjectScanner, type: :service do
       expect(result).to have_attributes(partial: false, parts_total: 3, parts_failed: 0)
       expect(fact.reload).not_to be_active
     end
+
+    it "makes fewer parts at summary_num_ctx 16384 than at 8192 for the same tree" do
+      write_part_files(*%w[a b c d e f g h].map { |name| "synth_#{name}" })
+      stub_parts
+      counts = [ 8192, 16_384 ].map do |num_ctx|
+        AppSettings.summary_num_ctx = num_ctx
+        AppSettings.clear_cache
+        scan.parts_total
+      end
+
+      expect(counts.first).to be > counts.last
+      expect(counts.last).to be >= 1
+    end
+
+    it "falls back as before, with the first part's reason, when every part fails" do
+      use_small_window
+      write_part_files("alpha", "beta")
+      stub_parts(failing: %w[alpha beta])
+
+      result = scan
+
+      expect(result).to have_attributes(fallback: true, fallback_reason: "provider_unavailable", partial: false)
+      expect(requests.size).to eq(2)
+    end
+
+    it "counts a file over 50 KB and the files past the 200 KB cap, and the scan is partial" do
+      write_part_files("alpha", "omega")
+      File.write(File.join(@project_root, "docs", "huge.md"), "x" * 60_000)
+      stub_parts
+
+      # alpha (4 KB) fits a 6 KB cap, huge is over 50 KB, and omega would pass the cap.
+      result = ProjectScanner.new(project_root: @project_root, project_name: "Gadget Project", max_total_input_bytes: 6000).call
+
+      expect(result).to have_attributes(files_too_large: 1, files_over_budget: 1, partial: true, parts_total: 1, fallback: false)
+      expect(result.message).to eq("Partial: 0 of 1 parts failed, 2 files left out; nothing was marked missing")
+    end
+
+    it "falls back without a model call when the window leaves no room for files" do
+      AppSettings.summary_num_ctx = 2048
+      AppSettings.project_scan_chunk_output_tokens = 2048
+      AppSettings.clear_cache
+      stub_parts
+
+      result = scan
+
+      expect(result).to have_attributes(fallback: true, fallback_reason: "summary_num_ctx (2048) leaves no room for project files; raise it to at least 4096")
+      expect(SummaryGenerationClient).not_to have_received(:generate)
+    end
+
+    it "hands the validator the text of every part" do
+      use_small_window
+      write_part_files("alpha", "beta", "gamma")
+      stub_parts
+      texts = []
+      allow(ProjectScanValidator).to receive(:new).and_wrap_original { |original, **args| texts << args[:context_text] and original.call(**args) }
+
+      scan
+
+      expect(texts.first).to include("--- FILE: docs/alpha.md", "--- FILE: docs/beta.md", "--- FILE: docs/gamma.md")
+    end
   end
 
   describe "top-level directories in the deterministic fallback" do
