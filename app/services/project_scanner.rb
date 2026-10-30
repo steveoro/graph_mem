@@ -560,7 +560,9 @@ class ProjectScanner
       project_entity: @project_entity,
       scan_id: @scan_id,
       created_entity_ids: @created_entity_ids,
-      context_text: @context_text,
+      # A partial scan didn't send every file: without the text, the validator questions no
+      # usage relation (so it queues no delete_relation for a target only a left-out file defines).
+      context_text: partial? ? "" : @context_text,
       extracted_data: @extracted_data,
       project_root: @project_root,
       dry_run: @dry_run,

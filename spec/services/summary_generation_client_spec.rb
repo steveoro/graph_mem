@@ -130,6 +130,15 @@ RSpec.describe SummaryGenerationClient do
         expect(described_class.generate("Extract these files.", options: { max_output_length: nil })[:text].length).to eq(20_000)
       end
 
+      it "keeps error provider_unavailable on an HTTP error and adds its status" do
+        response = instance_double(Net::HTTPBadRequest, code: "400", body: "{}")
+        allow(response).to receive(:is_a?).with(Net::HTTPSuccess).and_return(false)
+        allow(Net::HTTP).to receive(:new).and_return(http)
+        allow(http).to receive(:request).and_return(response)
+
+        expect(described_class.generate("Extract these files.")).to include(ok: false, error: "provider_unavailable", http_status: 400)
+      end
+
       it "passes prompt_eval_count and done_reason through" do
         answer_with(response: "{}", prompt_eval_count: 5000, done_reason: "length")
 

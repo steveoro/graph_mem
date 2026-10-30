@@ -4,8 +4,9 @@ class ProjectScanner
   # Sends a scan's parts to the model, one request each, and merges the answers (F-3).
   #
   # A part fails when the request fails, the answer was cut (`done_reason` "length"), the prompt
-  # was cut (Ollama's `prompt_eval_count` at or above num_ctx − num_predict) or the answer isn't a
-  # JSON object with an `architecture` array. A failed part is split in half once (between its
+  # was cut (Ollama's `prompt_eval_count` at or above num_ctx − num_predict, or an HTTP 400/413
+  # refusal of the prompt, which `truncate: false` asks for) or the answer isn't a JSON object with
+  # an `architecture` array. A failed part is split in half once (between its
   # file blocks, or between the lines of its only block) and both halves are sent; a half that
   # fails is final. A provider error isn't retried, and after MAX_PROVIDER_ERRORS in a row the
   # remaining parts are skipped as failed.
@@ -18,6 +19,9 @@ class ProjectScanner
     MAX_NAMES = 50
     MAX_PROVIDER_ERRORS = 2
     PROVIDER_ERROR = "provider_unavailable"
+    PROMPT_REJECTED = "prompt rejected by the provider (too long for the window)"
+    # The statuses Ollama refuses an over-long prompt with: split the part, it isn't an outage.
+    PROMPT_REJECTED_STATUSES = [ 400, 413 ].freeze
 
     Unit = Data.define(:pieces, :splittable)
     Outcome = Data.define(:data, :parts_total, :parts_done, :parts_failed, :first_error)
@@ -91,6 +95,7 @@ class ProjectScanner
     end
 
     def failure(result)
+      return PROMPT_REJECTED if !result[:ok] && PROMPT_REJECTED_STATUSES.include?(result[:http_status])
       return result[:error].presence || PROVIDER_ERROR unless result[:ok]
       return "answer cut at num_predict #{@num_predict} (done_reason: length)" if result[:done_reason] == "length"
 

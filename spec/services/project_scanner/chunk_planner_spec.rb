@@ -16,7 +16,7 @@ RSpec.describe ProjectScanner::ChunkPlanner do
   def write(relative, content)
     path = File.join(@root, relative)
     FileUtils.mkdir_p(File.dirname(path))
-    File.write(path, content)
+    File.binwrite(path, content)
     path
   end
 
@@ -72,6 +72,16 @@ RSpec.describe ProjectScanner::ChunkPlanner do
     expect(result.chunks.size).to be > 1
     expect(result.chunks.map(&:text)).to all(satisfy(&:valid_encoding?))
     expect(result.chunks.sum { |chunk| chunk.text.lines[1].count("é") }).to eq(4000)
+  end
+
+  it "scrubs invalid UTF-8 and still splits one long line containing it" do
+    file = write("docs/latin.md", ("caf\xE9 " * 3000).b)
+
+    result = plan([ file ])
+
+    expect(result.chunks.size).to be > 1
+    expect(result.chunks.map(&:text)).to all(satisfy(&:valid_encoding?))
+    expect(result.context_text).to include("caf\uFFFD ")
   end
 
   it "stops at max_chunks: the rest isn't sent, is counted and listed" do

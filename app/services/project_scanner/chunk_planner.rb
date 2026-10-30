@@ -103,7 +103,8 @@ class ProjectScanner
           next
         end
 
-        content = File.binread(path).force_encoding("UTF-8").encode("UTF-8", invalid: :replace, undef: :replace)
+        # scrub: encode to the same encoding leaves invalid bytes in place.
+        content = File.binread(path).force_encoding("UTF-8").scrub
         total += snippet(rel, content).bytesize
         total > @max_total_bytes ? leave_out(rel) : kept << [ rel, content ]
       end
@@ -159,7 +160,8 @@ class ProjectScanner
     # A file larger than one part: pieces at line boundaries (a single over-long line at the byte
     # limit, on a UTF-8 boundary), each labelled "(part k of m)".
     def split(rel, content)
-      limit = @budget_bytes - snippet(rel, "").bytesize - PIECE_LABEL_BYTES
+      # A floor, so a very long path can't leave no room for the body.
+      limit = [ @budget_bytes - snippet(rel, "").bytesize - PIECE_LABEL_BYTES, 256 ].max
       bodies = content.each_line.each_with_object([ +"" ]) do |line, acc|
         line_pieces(line, limit).each do |piece|
           acc << +"" if acc.last.bytesize + piece.bytesize > limit && !acc.last.empty?
@@ -174,7 +176,9 @@ class ProjectScanner
       rest = line
       while rest.bytesize > limit
         cut = limit
-        cut -= 1 until rest.byteslice(0, cut).valid_encoding?
+        # Never down to 0: a zero cut wouldn't move `rest` forward.
+        cut -= 1 until cut.zero? || rest.byteslice(0, cut).valid_encoding?
+        cut = limit if cut.zero?
         pieces << rest.byteslice(0, cut)
         rest = rest.byteslice(cut..)
       end

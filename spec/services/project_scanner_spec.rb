@@ -292,7 +292,7 @@ RSpec.describe ProjectScanner, type: :service do
       expect(result).to have_attributes(success: true, partial: true, parts_total: 3, parts_failed: 1, fallback: false)
       expect(result.message).to eq("Partial: 1 of 3 parts failed; nothing was marked missing")
       expect(fact.reload).to be_active
-      expect(result.scan_review_items.map { |item| item[:kind] }).not_to include("delete_entity")
+      expect(result.scan_review_items.map { |item| item[:kind] }).not_to include("delete_entity", "delete_relation")
       expect(MemoryEntity.where(name: %w[alpha gamma])).to exist
     end
 
@@ -366,6 +366,27 @@ RSpec.describe ProjectScanner, type: :service do
       scan
 
       expect(texts.first).to include("--- FILE: docs/alpha.md", "--- FILE: docs/beta.md", "--- FILE: docs/gamma.md")
+    end
+
+    it "hands the validator no text on a partial scan, so it questions no usage relation" do
+      use_small_window
+      write_part_files("alpha", "beta")
+      project = MemoryEntity.create!(name: "Gadget Project", entity_type: "Project")
+      user = MemoryEntity.create!(name: "Synth Client", entity_type: "Component", project_id: project.id)
+      target = MemoryEntity.create!(name: "Left Out Engine", entity_type: "Component", project_id: project.id)
+      MemoryRelation.create!(from_entity: user, to_entity: project, relation_type: "part_of")
+      MemoryRelation.create!(from_entity: target, to_entity: project, relation_type: "part_of")
+      MemoryRelation.create!(from_entity: user, to_entity: target, relation_type: "depends_on")
+      stub_parts(failing: %w[beta])
+      texts = []
+      allow(ProjectScanValidator).to receive(:new).and_wrap_original { |original, **args| texts << args[:context_text] and original.call(**args) }
+
+      result = scan
+
+      expect(result.partial).to be true
+      expect(texts).to eq([ "" ])
+      expect(MemoryRelation.where(from_entity_id: user.id, to_entity_id: target.id)).to exist
+      expect(result.scan_review_items.map { |item| item[:kind] }).not_to include("delete_relation")
     end
   end
 

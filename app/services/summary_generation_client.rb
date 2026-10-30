@@ -9,7 +9,16 @@ require "uri"
 class SummaryGenerationClient
   MAX_OUTPUT_LENGTH = 8_192
 
-  class GenerationError < StandardError; end
+  # @!attribute [r] http_status
+  #   @return [Integer, nil] the provider's HTTP status, when it answered with an error
+  class GenerationError < StandardError
+    attr_reader :http_status
+
+    def initialize(message = nil, http_status: nil)
+      super(message)
+      @http_status = http_status
+    end
+  end
 
   class << self
     def instance
@@ -53,7 +62,8 @@ class SummaryGenerationClient
   #   - `max_output_length:` (Integer, or nil for no cut) the characters kept, MAX_OUTPUT_LENGTH by default
   # @return [Hash] `{ ok:, text:, error:, latency_ms:, prompt_tokens:, done_reason: }`; `prompt_tokens`
   #   (Ollama's prompt_eval_count) and `done_reason` ("stop", "length", …) are nil when the provider
-  #   doesn't return them
+  #   doesn't return them. A failed request also gives `http_status:` (Integer, or nil without an
+  #   HTTP answer); `error:` stays "provider_unavailable"
   def generate(prompt, style: "concise", options: {})
     return { ok: false, text: nil, error: "prompt is blank" } if prompt.blank?
 
@@ -72,7 +82,8 @@ class SummaryGenerationClient
   rescue StandardError => e
     latency_ms = ((Process.clock_gettime(Process::CLOCK_MONOTONIC) - start) * 1000).round(1) if start
     @logger.warn "SummaryGenerationClient: generation failed — #{e.class}"
-    { ok: false, text: nil, error: "provider_unavailable", latency_ms: latency_ms }
+    { ok: false, text: nil, error: "provider_unavailable", latency_ms: latency_ms,
+      http_status: e.is_a?(GenerationError) ? e.http_status : nil }
   end
 
   # Smoke-test the generation endpoint. Returns { ok:, error:, latency_ms: }.
@@ -151,7 +162,7 @@ class SummaryGenerationClient
     response = http.request(request)
 
     unless response.is_a?(Net::HTTPSuccess)
-      raise GenerationError, "HTTP #{response.code}"
+      raise GenerationError.new("HTTP #{response.code}", http_status: response.code.to_i)
     end
 
     JSON.parse(response.body)

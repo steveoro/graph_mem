@@ -69,6 +69,17 @@ RSpec.describe ProjectScanner::ChunkedExtraction do
     expect(outcome).to have_attributes(data: nil, parts_total: 2, parts_failed: 2, first_error: "answer cut at num_predict 2048 (done_reason: length)")
   end
 
+  it "splits a part whose prompt the provider rejected (HTTP 400), without counting it as an outage" do
+    rejected = { ok: false, text: nil, error: "provider_unavailable", http_status: 400 }
+    stub_generate("a.rb" => ->(prompt) { prompt.include?("b.rb") ? rejected : answer("a_rb") },
+                  "c.rb" => ->(prompt) { prompt.include?("d.rb") ? rejected : answer("c_rb") })
+
+    outcome = run([ chunk(1, block("a.rb"), block("b.rb")), chunk(2, block("c.rb"), block("d.rb")) ])
+
+    expect(prompts.size).to eq(6)
+    expect(outcome).to have_attributes(parts_total: 4, parts_done: 4, parts_failed: 0)
+  end
+
   it "fails a part whose prompt was cut (prompt_eval_count at the window)" do
     stub_generate("a.rb" => ->(_prompt) { answer("a_rb").merge(prompt_tokens: 8192 - 2048) })
 
