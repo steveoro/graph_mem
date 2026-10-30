@@ -238,6 +238,77 @@ RSpec.describe ProjectScanner, type: :service do
     expect(result.errors).to include(/Project root does not exist/)
   end
 
+  describe "a scan in parts (F-3)" do
+    let(:prompts) { [] }
+    let(:requests) { [] }
+
+    # 4096-token window, 512-token answers: about 6.5 KB of files per part, so each 4 KB file is a part.
+    def use_small_window(num_ctx: 4096)
+      AppSettings.summary_num_ctx = num_ctx
+      AppSettings.project_scan_chunk_output_tokens = 512
+      AppSettings.clear_cache
+    end
+
+    def write_part_files(*names)
+      FileUtils.rm_f([ File.join(@project_root, "README.md"), File.join(@project_root, "package.json") ])
+      FileUtils.mkdir_p(File.join(@project_root, "docs"))
+      names.each { |name| File.write(File.join(@project_root, "docs", "#{name}.md"), "# #{name}\n" + ("#{name} detail line.\n" * 200)) }
+    end
+
+    # Each part names one Component after its file; `failing` files get a provider error and
+    # `relations` adds relations to a file's entity.
+    def stub_parts(failing: [], relations: {})
+      allow(SummaryGenerationClient).to receive(:generate) do |prompt, **options|
+        prompts << prompt
+        requests << options[:options]
+        name = prompt[%r{--- FILE: docs/(\w+)\.md}, 1]
+        next({ ok: false, text: nil, error: "provider_unavailable" }) if failing.include?(name)
+
+        item = { entity: { name: name, type: "Component" }, observations: [ "#{name} is documented." ],
+                 relations: [ { to: "Gadget Project", type: "part_of", confidence: 0.9 } ] + relations.fetch(name, []) }
+        { ok: true, done_reason: "stop", prompt_tokens: 1000, text: { project: { name: "Gadget Project" }, architecture: [ item ] }.to_json }
+      end
+    end
+
+    def scan
+      ProjectScanner.new(project_root: @project_root, project_name: "Gadget Project", mode: "rescan").call
+    end
+
+    def prior_scan_fact
+      project = MemoryEntity.create!(name: "Gadget Project", entity_type: "Project")
+      stale = MemoryEntity.create!(name: "Retired Widget", entity_type: "Component", project_id: project.id)
+      MemoryRelation.create!(from_entity: stale, to_entity: project, relation_type: "part_of")
+      MemoryObservation.create!(memory_entity: stale, content: "Retired Widget was scanned once.", source: "project_scan:old:reconcile")
+    end
+
+    it "marks nothing missing and queues no delete when a part failed (partial)" do
+      use_small_window
+      write_part_files("alpha", "beta", "gamma")
+      fact = prior_scan_fact
+      stub_parts(failing: %w[beta])
+
+      result = scan
+
+      expect(result).to have_attributes(success: true, partial: true, parts_total: 3, parts_failed: 1, fallback: false)
+      expect(result.message).to eq("Partial: 1 of 3 parts failed; nothing was marked missing")
+      expect(fact.reload).to be_active
+      expect(result.scan_review_items.map { |item| item[:kind] }).not_to include("delete_entity")
+      expect(MemoryEntity.where(name: %w[alpha gamma])).to exist
+    end
+
+    it "marks the prior-scan fact obsolete as before when every part succeeded" do
+      use_small_window
+      write_part_files("alpha", "beta", "gamma")
+      fact = prior_scan_fact
+      stub_parts
+
+      result = scan
+
+      expect(result).to have_attributes(partial: false, parts_total: 3, parts_failed: 0)
+      expect(fact.reload).not_to be_active
+    end
+  end
+
   describe "top-level directories in the deterministic fallback" do
     before { allow(SummarizationConfig).to receive(:llm_usable?).and_return(false) }
 

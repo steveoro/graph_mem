@@ -28,6 +28,10 @@ class ProjectScanner
         on_part: ->(part, parts) { part_progress!(part, parts) }
       ).call
       record_extraction(plan: plan, outcome: outcome)
+      if partial?
+        @extraction["partial"] = true
+        save_extraction_details!
+      end
       return { data: outcome.data } if outcome.data
 
       reason = outcome.first_error
@@ -74,10 +78,18 @@ class ProjectScanner
       save_extraction_details!
     end
 
+    # A scan is complete when every part succeeded and every discovered file was sent. The
+    # deterministic fallback is never partial (it keeps its old behaviour).
     def partial?
       return false if @extraction.empty? || @extraction["input_budget_tokens"].nil?
 
       @extraction.values_at("parts_failed", "files_too_large", "files_over_budget").any? { |count| count.to_i.positive? }
+    end
+
+    def partial_message
+      left_out = @extraction["files_too_large"].to_i + @extraction["files_over_budget"].to_i
+      parts = "#{@extraction['parts_failed'].to_i} of #{@extraction['parts_total'].to_i} parts failed"
+      "Partial: #{parts}#{", #{left_out} files left out" if left_out.positive?}; nothing was marked missing"
     end
 
     def part_progress!(part, parts)

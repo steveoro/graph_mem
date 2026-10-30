@@ -149,7 +149,7 @@ class ProjectScanner
     extracted = extract_knowledge
     @extracted_data = extracted[:data] || {}
 
-    update_progress!(phase: "reconciling_graph", message: "Reconciling with graph memory")
+    update_progress!(phase: "reconciling_graph", message: partial? ? partial_message : "Reconciling with graph memory")
     reconcile(@extracted_data)
 
     unless @dry_run
@@ -162,8 +162,8 @@ class ProjectScanner
       return scan_result(extracted, status: "paused", message: "Project scan validation paused for next batch")
     end
 
-    update_progress!(phase: "completed", message: "Project scan completed")
-    scan_result(extracted)
+    update_progress!(phase: "completed", message: partial? ? partial_message : "Project scan completed")
+    scan_result(extracted, message: (partial_message if partial?))
   end
 
   private
@@ -331,8 +331,11 @@ class ProjectScanner
       reconciled = architecture.filter_map { |item| reconcile_architecture_item(item) }
       reconciled.each { |entity, item| Array(item["relations"]).each { |rel| reconcile_relation(entity, rel) } }
 
-      mark_missing_entities unless @dry_run
-      dismiss_conflicting_compaction_reviews unless @dry_run
+      # Only a complete scan saw every file: a partial one never obsoletes or queues a delete.
+      unless @dry_run || partial?
+        mark_missing_entities
+        dismiss_conflicting_compaction_reviews
+      end
     end
   rescue StandardError => e
     @logger.error "ProjectScanner: reconciliation failed: #{e.message}"

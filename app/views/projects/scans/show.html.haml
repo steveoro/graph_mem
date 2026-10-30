@@ -35,6 +35,22 @@
       %strong= t("projects.scans.show.fallback")
       = details["fallback_reason"]
 
+  - extraction = details["extraction"].is_a?(Hash) ? details["extraction"] : {}
+  - if extraction["partial"]
+    -# File names come from the scanned folder: untrusted text, escaped by HAML.
+    .ui-card{ data: { testid: "scan-partial" } }
+      %h2.ui-label= t("projects.scans.show.partial.title")
+      %p= t("projects.scans.show.partial.parts", failed: extraction["parts_failed"].to_i, total: extraction["parts_total"].to_i)
+      - left_out = Array(extraction["left_out"])
+      - left_count = extraction["files_too_large"].to_i + extraction["files_over_budget"].to_i
+      - if left_count.positive?
+        %p= t("projects.scans.show.partial.left_out", count: left_count)
+        %ul{ data: { testid: "scan-partial-files" } }
+          - left_out.first(10).each do |path|
+            %li
+              %code= path
+      %p= t("projects.scans.show.partial.nothing_missing")
+
   - if counters.any?
     .ui-card
       %h2.ui-label= t("projects.scans.show.counters")

@@ -145,7 +145,7 @@ class ProjectScanJob < ApplicationJob
         OperationProgressBroadcaster.call(operation)
       else
         operation.complete!(
-          message: "Project scan completed",
+          message: result.message || "Project scan completed",
           counters: result.to_h.slice(
             :entities_created, :entities_updated, :observations_created, :observations_obsoleted,
             :observations_moved, :relations_created, :relations_deleted, :entities_reparented,
