@@ -61,6 +61,13 @@ en:
         submit: "Start scan"
       show:
         title: "Scan: %{name}"
+        partial:
+          title: "Partial extraction"
+          parts: "%{failed} of %{total} parts failed."
+          left_out:
+            one: "1 file was left out (over 50 KB, or past the input or part caps):"
+            other: "%{count} files were left out (over 50 KB, or past the input or part caps):"
+          nothing_missing: "Nothing was marked missing or queued for deletion."
         status: "Status"
         phase: "Phase"
         folder: "Folder"

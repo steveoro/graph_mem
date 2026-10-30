@@ -179,6 +179,27 @@ RSpec.describe "Projects › Scans", type: :request do
       expect(link["href"]).to eq(review_path(view: "scan", project_id: project.id))
     end
 
+    it "shows a partial extraction card with the escaped left-out files, and none on a complete scan" do
+      extraction = { "partial" => true, "parts_total" => 9, "parts_failed" => 2, "files_too_large" => 1, "files_over_budget" => 11,
+                     "left_out" => [ "docs/<b>synth</b>.md" ] + (1..11).map { |i| "lib/synth_widget_#{i}.rb" } }
+      partial = OperationProgress.create!(operation_type: "project_scan", operation_id: SecureRandom.uuid, status: "completed",
+                                          phase: "completed", details: { "project_root" => "/scan/alpha", "extraction" => extraction })
+      complete = OperationProgress.create!(operation_type: "project_scan", operation_id: SecureRandom.uuid, status: "completed",
+                                           phase: "completed", details: { "project_root" => "/scan/alpha", "extraction" => { "parts_total" => 3 } })
+
+      get projects_scan_path(partial.operation_id)
+
+      card = Nokogiri::HTML(response.body).at_css("[data-testid='scan-partial']")
+      expect(card.text).to include("2 of 9 parts failed.", "12 files were left out", "Nothing was marked missing or queued for deletion.")
+      expect(card.css("[data-testid='scan-partial-files'] li").map { |item| item.text.strip }).to eq([ "docs/<b>synth</b>.md" ] + (1..9).map { |i| "lib/synth_widget_#{i}.rb" })
+      expect(response.body).to include("docs/&lt;b&gt;synth&lt;/b&gt;.md")
+      expect(response.body).not_to include("<b>synth</b>")
+
+      get projects_scan_path(complete.operation_id)
+
+      expect(Nokogiri::HTML(response.body).at_css("[data-testid='scan-partial']")).to be_nil
+    end
+
     it "continues and stops a guided scan from its detail page" do
       scan = OperationProgress.create!(operation_type: "project_scan_skill", operation_id: SecureRandom.uuid, status: "paused",
                                        details: { "project_root" => "/scan/alpha", "depths" => %w[birds_eye] })

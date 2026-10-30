@@ -108,6 +108,9 @@ class ProjectScanJob < ApplicationJob
       }
     )
 
+    # A claimed paused validation batch (C6): its extraction may already be reconciled.
+    resuming = operation.details.is_a?(Hash) && operation.details.dig("validation_state", "paused") == true
+
     unless operation.status == "running"
       operation.resume!(message: "Resuming project scan") if operation.status == "paused"
       # A resumed scan keeps the first batch's started_at; a new scan's pending row has none yet.
@@ -126,6 +129,7 @@ class ProjectScanJob < ApplicationJob
     end
 
     scanner = ProjectScanner.new(
+      resuming: resuming,
       project_root: resolution.path,
       project_name: project_name,
       aliases: aliases,
@@ -145,14 +149,16 @@ class ProjectScanJob < ApplicationJob
         OperationProgressBroadcaster.call(operation)
       else
         operation.complete!(
-          message: "Project scan completed",
+          message: result.message || "Project scan completed",
           counters: result.to_h.slice(
             :entities_created, :entities_updated, :observations_created, :observations_obsoleted,
             :observations_moved, :relations_created, :relations_deleted, :entities_reparented,
-            :dismissed_compaction_items, :skipped_outside_root, :skipped_denylisted
+            :dismissed_compaction_items, :skipped_outside_root, :skipped_denylisted,
+            :parts_total, :parts_failed, :files_too_large, :files_over_budget
           ).compact,
           details: operation.details&.merge(
             fallback: result.fallback,
+            partial: result.partial,
             fallback_reason: result.fallback_reason,
             project_entity_id: result.project_entity&.id,
             project_entity_name: result.project_entity&.name

@@ -156,6 +156,15 @@ en:
         project_scan_validation_batch_size:
           label: "Validation batch size"
           description: "Maximum number of project subtree entities to validate in one batch. When the value is greater than 0, the validation pass pauses after each batch and can be resumed by re-running a validate scan. Use 0 to process all entities in a single run. 0 disables batching (process the whole subtree in one run). A value of 5-10 lets an agent digest the review queue in small, resumable rounds."
+        project_scan_chunk_output_tokens:
+          label: "Scan answer tokens per part"
+          description: "The longest answer the model may give for one part of a project scan (sent as num_predict), 512-8192. Each part's files get (summary_num_ctx − this − the prompt) × 0.9 tokens, estimated with Scan bytes per token."
+        project_scan_max_chunks:
+          label: "Scan parts at most"
+          description: "The most parts (model requests) one project scan sends, 1-64. Files past it aren't sent: the scan counts and lists them, and is partial, so it marks nothing missing."
+        project_scan_bytes_per_token:
+          label: "Scan bytes per token"
+          description: "How many bytes of a scanned file count as one token when the scan sizes its parts, 2.0-6.0 (no tokenizer is used). Lower it if parts come back with the prompt cut (smaller parts, more of them); raise it for fewer, fuller parts."
         tool_invocation_retention_days:
           label: "Tool telemetry retention (days)"
           description: "Tool invocation rows older than this are deleted by daily garbage collection. Use 0 to disable automatic telemetry pruning."

@@ -412,6 +412,9 @@ class ProjectScanSkill
       full = File.join(@project_root, child)
       # lstat: a symlinked entry is never followed, so it isn't listed as a directory.
       File.lstat(full).directory? && !child.start_with?(".") && !skip_directory?(child)
+    rescue SystemCallError
+      # Removed between Dir.children and lstat: leave that entry out, keep the others.
+      false
     end
   rescue SystemCallError
     []

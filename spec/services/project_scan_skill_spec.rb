@@ -175,6 +175,7 @@ RSpec.describe ProjectScanSkill, type: :service do
         described_class.process!(create_operation(root, depths: %w[architecture]))
 
         expect(MemoryEntity.where(name: "outside", entity_type: "Component")).to be_empty
+        expect(MemoryEntity.where(name: "Outside", entity_type: "Class")).to exist
         expect(MemoryEntity.where("name LIKE ?", "%secret_widget%")).to be_empty
         expect(listed).not_to include(outside, File.join(root, "lib", "outside"))
       end
@@ -202,6 +203,23 @@ RSpec.describe ProjectScanSkill, type: :service do
 
         expect(dirs).to include("app", "docs")
         expect(dirs).not_to include("linked_alpha")
+      end
+    end
+
+    it "leaves out one entry that vanishes before lstat and keeps the others" do
+      with_scan_project do |root|
+        create_project_files(root)
+        FileUtils.mkdir_p(File.join(root, "gone_widget"))
+        gone = File.join(root, "gone_widget")
+        allow(File).to receive(:lstat).and_call_original
+        allow(File).to receive(:lstat).with(gone).and_raise(Errno::ENOENT)
+
+        dirs = described_class.new(create_operation(root, depths: %w[birds_eye])).send(:top_level_directories)
+        # The temp folder's cleanup lstats every entry again.
+        allow(File).to receive(:lstat).and_call_original
+
+        expect(dirs).to include("app", "docs")
+        expect(dirs).not_to include("gone_widget")
       end
     end
   end

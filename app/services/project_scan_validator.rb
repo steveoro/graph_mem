@@ -467,7 +467,9 @@ class ProjectScanValidator
         relations_deleted: @relations_deleted,
         entities_reparented: @entities_reparented
       },
-      details: details || @operation_progress.details
+      # The state goes under "validation_state", next to the scan's other details (project_root,
+      # mode, extraction), which used to be replaced by it.
+      details: details ? (@operation_progress.details || {}).merge("validation_state" => details) : @operation_progress.details
     )
 
     OperationProgressBroadcaster.call(@operation_progress)
