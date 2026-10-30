@@ -1,7 +1,5 @@
 # frozen_string_literal: true
 
-require_relative "../../lib/import_session"
-
 class DataExchangeController < ApplicationController
   # GET /data_exchange/export?ids[]=1&ids[]=2
   # Returns JSON file with selected root nodes and all their children (sync/direct download)
@@ -23,50 +21,6 @@ class DataExchangeController < ApplicationController
               filename: filename
   end
 
-  # POST /data_exchange/export_async
-  # Starts an async export job with progress updates via ActionCable
-  def export_async
-    entity_ids = params[:ids]
-
-    if entity_ids.blank?
-      return render json: { error: "No entity IDs provided" }, status: :unprocessable_content
-    end
-
-    export_id = SecureRandom.uuid
-
-    # Enqueue the export job
-    ExportJob.perform_later(export_id, entity_ids)
-
-    render json: {
-      success: true,
-      export_id: export_id,
-      message: "Export started. Subscribe to the progress channel for updates."
-    }
-  end
-
-  # GET /data_exchange/download_export?export_id=xxx
-  # Download a completed async export file
-  def download_export
-    export_id = params[:export_id]
-
-    if export_id.blank?
-      return render json: { error: "No export ID provided" }, status: :unprocessable_content
-    end
-
-    filepath = ExportJob.download_path(export_id)
-
-    unless File.exist?(filepath)
-      return render json: { error: "Export file not found. It may have expired." }, status: :not_found
-    end
-
-    filename = "graph_mem_export_#{Time.current.strftime('%Y%m%d_%H%M%S')}.json"
-
-    send_file filepath,
-              type: "application/json",
-              disposition: "attachment",
-              filename: filename
-  end
-
   # GET /data_exchange/root_nodes
   # Returns list of root nodes for the export selection UI (JSON API)
   def root_nodes
@@ -83,48 +37,6 @@ class DataExchangeController < ApplicationController
         }
       end
     }
-  end
-
-  # The import endpoints the Maintenance hub used, kept until §6.D-6: they run ImportFlow (like
-  # Projects::ImportsController) and redirect to the new pages; the GET pages answer 301.
-
-  # POST /data_exchange/import_upload
-  def import_upload
-    upload = ImportFlow.upload(params[:file], project_name: params[:project_name])
-    return redirect_to new_projects_import_path, alert: upload.error if upload.error
-
-    session[:import_session_id] = upload.session_id
-    redirect_to projects_import_path(upload.session_id)
-  end
-
-  # GET /data_exchange/import_review
-  def import_review
-    import_session_id = session[:import_session_id]
-    target = ImportSession.exists?(import_session_id) ? projects_import_path(import_session_id) : new_projects_import_path
-    redirect_to target, status: :moved_permanently
-  end
-
-  # POST /data_exchange/import_execute
-  def import_execute
-    import_session_id = session[:import_session_id]
-    return redirect_to new_projects_import_path, alert: "No import data found. Please upload a file first." unless ImportSession.exists?(import_session_id)
-
-    operation = ImportFlow.execute(import_session_id, params[:decisions])
-    session.delete(:import_session_id)
-    session[:import_operation_id] = operation.operation_id
-    redirect_to report_projects_import_path(operation.operation_id)
-  end
-
-  # GET /data_exchange/import_report
-  def import_report
-    operation_id = session[:import_operation_id]
-    redirect_to operation_id.present? ? report_projects_import_path(operation_id) : projects_imports_path, status: :moved_permanently
-  end
-
-  # DELETE /data_exchange/import_cancel
-  def import_cancel
-    ImportSession.cleanup(session.delete(:import_session_id))
-    redirect_to projects_imports_path, notice: "Import cancelled"
   end
 
   # GET /data_exchange/entity_search?q=foo

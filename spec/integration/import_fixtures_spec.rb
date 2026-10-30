@@ -16,7 +16,7 @@ RSpec.describe "Graph export import fixtures", :with_test_embeddings, type: :req
   end
 
   after do
-    delete import_cancel_data_exchange_index_path
+    ImportSession.cleanup(@session_id) if @session_id
   end
 
   it "keeps the graph_mem export fixture import-compatible" do
@@ -68,11 +68,10 @@ RSpec.describe "Graph export import fixtures", :with_test_embeddings, type: :req
       "application/json",
       original_filename: "graph_mem_test_export_2.json"
     )
-    post import_upload_data_exchange_index_path, params: { file: file }
+    post projects_imports_path, params: { file: file }
 
-    expect(response).to redirect_to(new_projects_import_path)
-    follow_redirect!
-    expect(flash[:alert]).to include("requires the embedding service")
+    expect(response).to have_http_status(:unprocessable_content)
+    expect(response.body).to include("requires the embedding service")
   end
 
   private
@@ -125,7 +124,6 @@ RSpec.describe "Graph export import fixtures", :with_test_embeddings, type: :req
   def seed_baseline_fixture!
     upload_fixture!(baseline_fixture, "graph_mem_test_export.json")
     execute_import!
-    delete import_cancel_data_exchange_index_path
     # Imports defer embeddings to the maintenance backfill (inline embedding
     # is suppressed during execute). Run the backfill now — the deterministic
     # test embeddings make it instant — so subsequent imports can run
@@ -139,12 +137,13 @@ RSpec.describe "Graph export import fixtures", :with_test_embeddings, type: :req
       "application/json",
       original_filename: filename
     )
-    post import_upload_data_exchange_index_path, params: { file: file }
+    post projects_imports_path, params: { file: file }
     expect(response).to redirect_to(%r{/projects/imports/\h{8}-\h{4}-\h{4}-\h{4}-\h{12}\z})
+    @session_id = response.location[%r{/projects/imports/(\h{8}-\h{4}-\h{4}-\h{4}-\h{12})\z}, 1]
   end
 
   def execute_import!
-    post import_execute_data_exchange_index_path, params: { decisions: {} }
+    post execute_projects_import_path(@session_id), params: { decisions: {} }
     expect(response).to redirect_to(%r{/projects/imports/\h{8}-\h{4}-\h{4}-\h{4}-\h{12}/report\z})
   end
 

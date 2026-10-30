@@ -48,7 +48,6 @@ RSpec.describe "Explore page", type: :request do
   {
     { project_id: "PROJECT" } => [ "project", "data-explore-project-id-value" ],
     { entity_id: "WIDGET", depth: "2" } => [ "entity", "data-explore-entity-id-value" ],
-    { scoped_entity_id: "WIDGET" } => [ "entity", "data-explore-entity-id-value" ],
     { ids: "WIDGET,PROJECT" } => [ "search", "data-explore-ids-value" ],
     { scope: "full" } => [ "full", nil ]
   }.each do |params, (scope, attribute)|
@@ -76,18 +75,5 @@ RSpec.describe "Explore page", type: :request do
       expect(root_data["data-explore-scope-value"]).to eq("root")
       expect(root_data["data-explore-entity-id-value"]).to be_nil
     end
-  end
-
-  it "redirects /graph (with its query string) to /explore with 301" do
-    get "/graph?ids=1,2"
-    expect(response).to have_http_status(:moved_permanently)
-    expect(response.headers["Location"]).to end_with("/explore?ids=1,2")
-
-    get "/graph"
-    expect(response).to have_http_status(:moved_permanently)
-    expect(response.headers["Location"]).to end_with("/explore")
-
-    get "/graph?scoped_entity_id=#{widget.id}"
-    expect(response.headers["Location"]).to end_with("/explore?scoped_entity_id=#{widget.id}")
   end
 end

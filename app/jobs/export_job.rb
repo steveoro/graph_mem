@@ -1,12 +1,8 @@
 # frozen_string_literal: true
 
-# Background job for running exports with progress updates via ActionCable
-#
-# This job:
-# - Runs the export in the background
-# - Broadcasts progress updates to the ExportProgressChannel
-# - Saves the export result to a temp file
-# - Notifies completion with download path
+# Background job for Projects › Exports: runs the export, reports progress through its
+# OperationProgress row (OperationProgressChannel), and saves the result to a temp file that
+# Projects::ExportsController#download serves.
 class ExportJob < ApplicationJob
   queue_as :default
 
@@ -20,7 +16,6 @@ class ExportJob < ApplicationJob
     total_count = count_total_nodes(entity_ids)
     operation = start_operation(export_id, total_count)
     broadcast_operation(operation)
-    broadcast_progress(export_id, 0, total_count, "Starting export...")
 
     begin
       # Export with progress callback
@@ -29,7 +24,6 @@ class ExportJob < ApplicationJob
         current_count += 1
         operation.update_progress!(current: current_count, total: total_count, message: "Exporting: #{node_name}")
         broadcast_operation(operation)
-        broadcast_progress(export_id, current_count, total_count, "Exporting: #{node_name}")
       end
 
       json_content = strategy.export_json_with_progress(entity_ids, progress_callback)
@@ -41,24 +35,18 @@ class ExportJob < ApplicationJob
 
       operation.complete!(current: current_count, message: "Export complete")
       broadcast_operation(operation)
-      broadcast_complete(export_id, {
-        success: true,
-        download_path: Rails.application.routes.url_helpers.download_projects_export_path(export_id),
-        message: "Export complete! #{current_count} nodes exported."
-      })
 
     rescue StandardError => e
       Rails.logger.error "ExportJob failed: #{e.message}\n#{e.backtrace.first(5).join("\n")}"
       operation&.fail!(e)
       broadcast_operation(operation) if operation
-      broadcast_error(export_id, "Export failed: #{e.message}")
     end
   end
 
   private
 
   # Projects › Exports writes the pending row before queueing, so its progress page exists at once;
-  # the JSON export_async endpoint doesn't, and the job starts one.
+  # a job queued without one (a console run) starts it.
   def start_operation(export_id, total_count)
     operation = OperationProgress.find_by(operation_id: export_id, operation_type: "export")
     return OperationProgress.start!(operation_type: "export", operation_id: export_id, total_count: total_count, message: "Starting export") unless operation
@@ -116,22 +104,6 @@ class ExportJob < ApplicationJob
 
   def broadcast_operation(operation)
     OperationProgressBroadcaster.call(operation)
-  end
-
-  def broadcast_progress(export_id, current, total, message)
-    ExportProgressChannel.broadcast_progress(export_id, {
-      current: current,
-      total: total,
-      message: message
-    })
-  end
-
-  def broadcast_complete(export_id, result)
-    ExportProgressChannel.broadcast_complete(export_id, result)
-  end
-
-  def broadcast_error(export_id, error)
-    ExportProgressChannel.broadcast_error(export_id, error)
   end
 
   # Class method to get the download path for an export

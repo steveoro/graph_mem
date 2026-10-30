@@ -208,14 +208,6 @@ RSpec.describe "Review & Fix", type: :request do
       expect(row.reload.status).to eq("dismissed")
     end
 
-    it "redirects the old review URL (301), scan review to view=scan" do
-      get "/data_exchange/compaction_review"
-      expect(response).to have_http_status(:moved_permanently)
-      expect(response).to redirect_to("/review")
-      get "/data_exchange/compaction_review", params: { report_type: "scan_review" }
-      expect(response).to redirect_to("/review?view=scan")
-    end
-
     it "requires the CSRF token" do
       row = proposal
       ActionController::Base.allow_forgery_protection = true
@@ -244,14 +236,5 @@ RSpec.describe "Review & Fix", type: :request do
     get review_path
 
     expect(response).to redirect_to(operator_login_path)
-  end
-
-  it "sends a guest who follows the old review URL to the 403 page" do
-    enable_guest!
-    sign_in_guest
-
-    get "/data_exchange/compaction_review"
-    follow_redirect!
-    expect(response).to have_http_status(:forbidden)
   end
 end

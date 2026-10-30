@@ -13,7 +13,6 @@ RSpec.describe "DataExchange CSRF protection", type: :request do
   let!(:relation) { MemoryRelation.create!(from_entity: widget, to_entity: other_widget, relation_type: "relates_to") }
 
   writes = {
-    export_async: [ :post, -> { { ids: [ project.id ] } } ],
     move_node: [ :post, -> { { node_id: widget.id, parent_id: project.id } } ],
     merge_node: [ :post, -> { { source_id: widget.id, target_id: other_widget.id } } ],
     delete_node: [ :delete, -> { { node_id: widget.id } } ],

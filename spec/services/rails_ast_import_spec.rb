@@ -341,7 +341,7 @@ RSpec.describe "Rails AST extractor import" do
   end
 
   it "match is read-only: a Module payload must not retype a stored Class during preview" do
-    # import_upload runs matching before the operator confirms anything —
+    # The upload runs matching before the operator confirms anything —
     # writing here would let a cancelled upload rewrite entity_type.
     legacy = MemoryEntity.create!(name: "Billing", entity_type: "Class")
     Dir.mktmpdir do |dir|

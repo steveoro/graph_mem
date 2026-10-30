@@ -71,18 +71,9 @@ Rails.application.routes.draw do
   # Data Exchange routes for import/export and cleanup
   resources :data_exchange, only: [] do
     collection do
-      # Export routes (sync and async)
-      get :export              # Sync export (direct download)
-      post :export_async       # Async export with progress (starts job)
-      get :download_export     # Download completed async export
+      # Export (sync, a direct download) and the root list (JSON)
+      get :export
       get :root_nodes
-
-      # Import routes
-      post :import_upload
-      get :import_review
-      post :import_execute
-      get :import_report
-      delete :import_cancel
 
       # Entity autocomplete for the Review page's edit fields
       get :entity_search
@@ -105,7 +96,7 @@ Rails.application.routes.draw do
   get "search", to: "search#results"
   # UI-3: the read-only entity panel (Search's side frame; operators and guests).
   get "entities/:id/panel", to: "entities#panel", as: :entity_panel
-  # UI-4b: Explore replaced /graph; old links (scoped_entity_id=, ids=) keep working until §6.D-6.
+  # UI-4b: Explore (operators and guests).
   get "explore", to: "explore#show", as: :explore
   # Explore's edits (operator only): HTML/Turbo forms, each in an explore.* change set.
   namespace :explore do
@@ -121,13 +112,7 @@ Rails.application.routes.draw do
     resources :moves, only: [ :new, :create ]
     resources :merges, only: [ :new, :create ]
   end
-  get "graph", to: redirect(status: 301) { |_params, request| "/explore#{"?#{request.query_string}" if request.query_string.present?}" }
-  # The Maintenance hub's scan forms post here until §6.D-6; they redirect to the new scan pages.
-  resources :project_scans, only: [ :create ]
-  resources :project_scan_skills, only: [ :create, :update ]
-  # UI-6: Projects & Data (operator only). The Maintenance hub's page redirects (301) until §6.D-6;
-  # its #background-jobs / #mcp-clients anchors are forwarded by the projects page.
-  get "maintenance", to: redirect("/projects", status: 301), as: :maintenance
+  # UI-6: Projects & Data (operator only).
   get "projects", to: "projects#index", as: :projects
   namespace :projects do
     resources :scans, only: [ :index, :new, :create, :show ], param: :operation_id do
@@ -146,9 +131,7 @@ Rails.application.routes.draw do
       get :download, on: :member
     end
   end
-  # UI-5b: Review & Fix (operator only). The old review page's URL redirects (301).
-  get "data_exchange/compaction_review",
-      to: redirect(status: 301) { |_params, request| request.params[:report_type] == "scan_review" ? "/review?view=scan" : "/review" }
+  # UI-5b: Review & Fix (operator only).
   get "review", to: "review#index", as: :review
   # Fact supersede F5: Find & supersede (operator only).
   get "review/supersede", to: "review/supersede#index", as: :review_supersede
@@ -220,44 +203,6 @@ Rails.application.routes.draw do
   end
   # Mission Control (System › Queue). Its base controller is System::QueueDashboardController.
   mount MissionControl::Jobs::Engine, at: "/system/queue"
-
-  # UI-7 shims, until §6.D-6 (drop them all in that PR):
-  # - GET 301s: /operator/settings (keeping its query; tab=database_backup → /system/backups, tab=mcp_access → /system/access), /operator/embeddings, /operator/telemetry,
-  #   /operator/audit_logs, /operator/settings/project_scans/check_path (→ /projects/scans/check_path),
-  #   /projects/jobs, /operator/jobs(/*rest) (→ /system/queue/*rest, keeping the query);
-  # - the old writes under /operator, routed to the System actions (no copy of the code), so an
-  #   open old tab still works.
-  keep_query = ->(target) { ->(_params, request) { "#{target}#{"?#{request.query_string}" if request.query_string.present?}" } }
-  legacy_settings_pages = { "database_backup" => "/system/backups", "mcp_access" => "/system/access" }
-  get "operator/settings", to: redirect(status: 301) { |_params, request|
-    legacy_settings_pages.fetch(request.params[:tab].to_s) { keep_query.call("/system/settings").call(nil, request) }
-  }, as: nil
-  get "operator/settings/project_scans/check_path", to: redirect(status: 301, &keep_query.call("/projects/scans/check_path")), as: nil
-  get "operator/embeddings", to: redirect("/system/embeddings", status: 301), as: nil
-  get "operator/telemetry", to: redirect(status: 301, &keep_query.call("/system/telemetry")), as: nil
-  get "operator/audit_logs", to: redirect(status: 301, &keep_query.call("/system/audit_log")), as: nil
-  get "projects/jobs", to: redirect("/system/jobs", status: 301), as: nil
-  get "operator/jobs(/*rest)", to: redirect(status: 301) { |params, request|
-    keep_query.call([ "/system/queue", params[:rest] ].compact.join("/")).call(nil, request)
-  }, as: nil
-  scope "operator", module: "system" do
-    post "maintenance/compaction/start", to: "jobs#start_compaction", as: nil
-    post "maintenance/compaction/pause", to: "jobs#pause_compaction", as: nil
-    post "maintenance/garbage_collection/run", to: "jobs#run_garbage_collection", as: nil
-    post "maintenance/relations/repair", to: "jobs#repair_relations", as: nil
-    post "audit_logs/prune", to: "audit_log#prune", as: nil
-    post "telemetry/prune", to: "telemetry#prune", as: nil
-    post "embeddings/test_connection", to: "embeddings#test_connection", as: nil
-    post "embeddings/backfill", to: "embeddings#backfill", as: nil
-    post "embeddings/regenerate", to: "embeddings#regenerate", as: nil
-    post "embeddings/add_indexes", to: "embeddings#add_indexes", as: nil
-    post "embeddings/drop_indexes", to: "embeddings#drop_indexes", as: nil
-    patch "settings", to: "settings#update", as: nil
-    post "settings/backup/run", to: "backups#create", as: nil
-    post "settings/backup/restore", to: "backups#restore", as: nil
-    delete "settings/backup", to: "backups#destroy", as: nil
-    delete "settings/project_scans/legacy_roots", to: "settings#clear_legacy_scan_roots", as: nil
-  end
 
   # Defines the root path route ("/")
   root "pages#home"

@@ -1,10 +1,7 @@
 - content_for :title, t("projects.index.title")
 - content_for :page_header, ui_page_header(t("projects.index.title"), subtitle: t("projects.index.subtitle"))
 
--# Old /maintenance#… bookmarks arrive here through the 301; forward them (legacy_anchor_controller.js).
-.projects-page{ data: { controller: "legacy-anchor", testid: "projects-page",
-  legacy_anchor_targets_value: { "background-jobs" => system_jobs_path, "project-scans" => projects_scans_path,
-    "mcp-clients" => system_telemetry_path(anchor: "mcp-clients") }.to_json } }
+.projects-page{ data: { testid: "projects-page" } }
   .projects-actions
     = link_to t("projects.index.new_scan"), new_projects_scan_path, class: "ui-btn ui-btn-primary", data: { testid: "projects-new-scan" }
     = link_to t("projects.index.import"), new_projects_import_path, class: "ui-btn", data: { testid: "projects-import" }

@@ -91,8 +91,6 @@ RSpec.describe "System › Access", type: :request do
 
       get system_settings_path(tab: "access")
       expect(response).to redirect_to(system_access_path)
-      get "/operator/settings?tab=mcp_access"
-      expect(response).to redirect_to("/system/access")
     ensure
       AppSettings.where(var: "enable_guest_access").delete_all
     end
@@ -112,18 +110,6 @@ RSpec.describe "System › Access", type: :request do
       save(mcp_extra_allowed_ips: "192.168.0.0/24, 10.8.0.0/24", mcp_extra_allowed_hosts: "synth-lan.test,fd00::1",
            mcp_extra_allowed_origins: "http://synth-ui.localhost:3002")
       expect(audited_keys.size).to eq(3)
-    end
-
-    it "keeps the old mcp_access tab name working until §6.D-6" do
-      get system_settings_path(tab: "mcp_access")
-      expect(response).to redirect_to(system_access_path)
-
-      patch system_settings_path, params: { tab: "mcp_access", settings: { mcp_extra_allowed_hosts: "synth-lan.test" } }
-      expect(response).to redirect_to(system_access_path)
-      expect(stored("mcp_extra_allowed_hosts")).to eq("synth-lan.test")
-
-      get "/operator/settings?tab=mcp_access"
-      expect(response).to redirect_to("/system/access")
     end
 
     it "refuses every invalid entry with 422 and stores nothing" do

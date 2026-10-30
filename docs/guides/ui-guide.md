@@ -93,7 +93,7 @@ embedding service) never holds up the rest, and each links to the page where you
 - **Active MCP clients:** a compact list; the full table is on **System › Telemetry**.
 
 The controls that used to be on Home are under **Projects & Data** since 1.62.0 (the Maintenance
-hub that held them is gone, and `/maintenance` redirects to `/projects`): **Start / Resume** and
+hub that held them is gone): **Start / Resume** and
 **Pause** for the compactor, **Run now** for the garbage collector and **Repair relation
 duplicates** are on **Background jobs**, and the scan form is **Scans › New scan**. The scheduling and the meaning of each counter are in [dream_state.md](../dream_state.md) and
 [garbage_collector.md](../garbage_collector.md).
@@ -123,7 +123,7 @@ Search (`/search`, 1.60.0) runs the same search as the agents' MCP `search` tool
 
 ### Explore
 
-**Explore** (`/explore`) is the graph canvas, a toolbar above it and the entity panel beside it (the same panel as Search's). The old `/graph` links redirect here, query string included.
+**Explore** (`/explore`) is the graph canvas, a toolbar above it and the entity panel beside it (the same panel as Search's).
 
 - **Toolbar:** **Scope** (Root view: the project roots; Full graph; a project and everything under it; Neighbourhood; From search), **Layout** (force, tree, concentric, grid), **Depth** (1 or 2 hops for a neighbourhood), **Entity type** and **Relation type** filters (they only hide elements, nothing is reloaded), **Fit**, and a link to Search. The scope is kept in the URL, so a reload or a shared link opens the same view.
 - **At most 2,000 entities** are drawn at a time. A bigger scope says "Showing 2,000 of N entities; pick a project to see the rest." (a neighbourhood says "at least N": it stops counting at the cap).
@@ -212,7 +212,6 @@ Operator only; a guest gets 403 from every page.
 - **Backups** (`/system/backups`): the backup settings, **Run backup now**, and the backup files. **Restore** opens a card that asks you to type the file name; the button stays disabled until it matches, and the server checks it again.
 - **Background jobs** (`/system/jobs`): the compactor, garbage collector and relation-repair cards, and the graph totals.
 - **Typed confirmations**: besides restore, **Regenerate all** and **Drop indexes** on Embeddings ask you to type `REGENERATE` / `DROP`, and pruning the audit log asks for the number of rows it will delete.
-- The old `/operator/settings`, `/operator/embeddings`, `/operator/telemetry`, `/operator/audit_logs`, `/operator/jobs` and `/projects/jobs` URLs redirect (301) to their System page until §6.D-6.
 - **Queue** (`/system/queue`): Mission Control shows queues, failed jobs (retry or discard), workers and recurring tasks. It opens as a full page with its own navigation; **Back to main app** returns to the shell.
 - **API docs**: Swagger UI for the REST API, with its own page.
 

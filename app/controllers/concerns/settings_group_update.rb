@@ -28,18 +28,8 @@ module SettingsGroupUpdate
     end
 
     write_settings(group, posted)
-    flash[:notice] = [ t("system.settings.bulk_update.success", count: posted.size), mcp_access_warnings_notice,
-                       elsewhere_notice(group, raw.keys) ].compact.join(" ")
+    flash[:notice] = [ t("system.settings.bulk_update.success", count: posted.size), mcp_access_warnings_notice ].compact.join(" ")
     true
-  end
-
-  # A stale tab can post a key that now lives in another group (until §6.D-6: enable_guest_access
-  # under Feature flags). It isn't saved here; say so instead of reporting it saved.
-  def elsewhere_notice(group, keys)
-    elsewhere = (keys.map(&:to_s) - group.fields.map(&:key)).filter_map { |key| SettingsSchema.field(key) }
-    return if elsewhere.empty?
-
-    t("system.settings.bulk_update.elsewhere", settings: elsewhere.map { |field| t(field.label) }.join(", "))
   end
 
   def write_settings(group, posted)

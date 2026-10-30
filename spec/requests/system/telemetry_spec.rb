@@ -93,4 +93,19 @@ RSpec.describe "System › Telemetry", type: :request do
     expect(ToolInvocation.exists?(old.id)).to be(false)
     expect(ToolInvocation.exists?(recent.id)).to be(true)
   end
+
+  # From the removed maintenance_hub_spec.
+  it "shows the MCP clients card with each client's project and last tool" do
+    sign_in_operator
+    project = MemoryEntity.create!(name: "Alpha Service", entity_type: "Project")
+    AgentContext.create!(client_id: "synth-client-a", current_project: project, last_seen_at: 1.minute.ago, last_tool_name: "set_context")
+
+    get system_telemetry_path
+
+    clients = Nokogiri::HTML(response.body).at_css("#mcp-clients")
+    expect(clients.at_css("[data-testid='system-agent-contexts-card']")).to be_present
+    expect(clients.text).to include("MCP Clients & Project Context", "synth-client-a", "Alpha Service", "set_context")
+  ensure
+    AgentContext.delete_all
+  end
 end

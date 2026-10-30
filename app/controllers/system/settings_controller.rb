@@ -9,9 +9,6 @@ module System
 
     self.nav_section = :settings
 
-    # Tab names before UI-7, still posted by an open old tab until §6.D-6.
-    LEGACY_TABS = { "database_backup" => "backups", "mcp_access" => "access" }.freeze
-
     # GET /system/settings?tab=<group>
     def show
       AppSettings.clear_cache
@@ -45,7 +42,7 @@ module System
     # @return [SettingsSchema::Group] the group named by `tab`, or the first Settings tab
     def settings_group
       tab = params[:tab].to_s
-      SettingsSchema.group(LEGACY_TABS.fetch(tab, tab)) || SettingsSchema.groups(page: :settings).first
+      SettingsSchema.groups.find { |group| group.key.to_s == tab } || SettingsSchema.groups(page: :settings).first
     end
 
     # @return [String] the page showing `group`, on its tab

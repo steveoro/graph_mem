@@ -18,9 +18,7 @@ module ApplicationCable
     end
 
     def operator_session?(session_data)
-      role = session_data&.dig("role")
-      legacy = session_data&.dig("operator_signed_in")
-      return false unless role == "operator" || legacy == true
+      return false unless session_data&.dig("role") == "operator"
 
       now = Time.current.to_i
       last_seen = session_data&.dig("last_seen_at")

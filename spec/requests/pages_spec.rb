@@ -219,12 +219,4 @@ RSpec.describe "Home", type: :request do
     get home_section_path("health")
     expect(response).to redirect_to(operator_login_path)
   end
-
-  it "has no /graph page any more (it redirects to Explore)" do
-    sign_in_operator
-
-    get "/graph"
-
-    expect(response).to redirect_to("/explore")
-  end
 end

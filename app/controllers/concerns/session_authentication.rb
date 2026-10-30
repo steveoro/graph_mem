@@ -17,9 +17,9 @@ module SessionAuthentication
 
   private
 
-  # @return [String, nil] "operator" (role key or the legacy operator_signed_in key), "guest" or nil
+  # @return [String, nil] "operator", "guest" or nil, from the session's role key
   def current_role
-    return "operator" if session[:role] == "operator" || session[:operator_signed_in] == true
+    return "operator" if session[:role] == "operator"
     return "guest" if session[:role] == "guest"
 
     nil

@@ -7,7 +7,7 @@ class HomeSnapshot
   # and the page that explains it. Colour is never the only signal: the value says it in words.
   #
   #   HomeSnapshot::Health.new.pills
-  #   # => [{ key: :database, label: "Database", status: :ok, value: "connected", href: "/projects/jobs" }, ...]
+  #   # => [{ key: :database, label: "Database", status: :ok, value: "connected", href: "/system/jobs" }, ...]
   class Health
     include Rails.application.routes.url_helpers
 
