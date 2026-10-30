@@ -352,8 +352,18 @@ RSpec.describe ProjectScanner, type: :service do
 
       result = scan
 
-      expect(result).to have_attributes(fallback: true, fallback_reason: "summary_num_ctx (2048) leaves no room for project files; raise it to at least 4096")
+      expect(result.fallback).to be true
+      expect(result.fallback_reason).to match(/\Asummary_num_ctx \(2048\) leaves no room for project files; raise it to at least (\d+), or lower project_scan_chunk_output_tokens \(2048\)\z/)
       expect(SummaryGenerationClient).not_to have_received(:generate)
+
+      # The minimum the message names is exact: one less still falls back, the minimum scans.
+      minimum = result.fallback_reason[/at least (\d+)/, 1].to_i
+      expect(minimum).to be_between(4000, 4400)
+      [ [ minimum - 1, true ], [ minimum, false ] ].each do |num_ctx, fallback|
+        AppSettings.summary_num_ctx = num_ctx
+        AppSettings.clear_cache
+        expect(scan.fallback).to be(fallback), "summary_num_ctx #{num_ctx}"
+      end
     end
 
     it "hands the validator the text of every part" do
