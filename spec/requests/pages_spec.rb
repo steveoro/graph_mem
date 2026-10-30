@@ -136,6 +136,19 @@ RSpec.describe "Home", type: :request do
       expect(doc.at_css("a")["href"]).to eq(system_activity_path)
     end
 
+    it "labels an MCP-made set by its actor and kind, the claim in the title only, and a set without an actor from the locale" do
+      ChangeSet.create!(uuid: SecureRandom.uuid, kind: "graph.write", actor: "mcp:graph_write", actor_claim: "client=synth-client-a · synth-agent/0.0.1",
+                        undo_strategy: "audit", created_at: 1.minute.ago)
+      ChangeSet.create!(uuid: SecureRandom.uuid, kind: "review.apply", actor: nil, undo_strategy: "audit")
+
+      rows = section_doc(:activity).css("[data-testid='home-activity-row']")
+
+      expect(rows.last.at_css(".home-list__main").text).to eq("mcp:graph_write: Graph write")
+      expect(rows.last["title"]).to include("claimed: client=synth-client-a · synth-agent/0.0.1")
+      expect(rows.last.text).not_to include("claimed")
+      expect(rows.first.at_css(".home-list__main").text).to eq("unknown: Review apply")
+    end
+
     it "shows the active MCP clients, compact" do
       AgentContext.create!(client_id: "synth-client", current_project: MemoryEntity.create!(name: "Alpha Service", entity_type: "Project"),
                            last_seen_at: 1.minute.ago, last_tool_name: "search")

@@ -59,7 +59,10 @@
                 %td= audit_log_action_badge(log.action)
                 %td= audit_log_reason_label(log.reason)
                 %td= audit_log_record_label(log)
-                %td.system-mono= audit_log_actor_label(log.actor)
+                %td
+                  %span.system-mono= audit_log_actor_label(log.actor)
+                  - if log.actor_claim.present?
+                    %div.system-hint{ data: { testid: "audit-log-claim" } }= actor_claim_label(log.actor_claim)
                 %td
                   %details
                     %summary= t("operator.audit_logs.changes_summary")

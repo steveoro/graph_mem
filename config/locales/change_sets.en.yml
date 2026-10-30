@@ -1,0 +1,11 @@
+en:
+  change_sets:
+    # "claimed" = what an MCP client and its model say about themselves (not verified).
+    claimed: "claimed: %{claim}"
+    kinds:
+      api:
+        write: "API write"
+      compaction:
+        auto_merge: "Compaction auto-merge"
+      maintenance:
+        merge_node: "Merge (maintenance)"

@@ -40,6 +40,20 @@ RSpec.describe "System › Activity", type: :request do
       expect(doc.at_css("[data-testid='activity-audit-log-link']")["href"]).to eq(system_audit_log_path)
     end
 
+    it "shows the actor, the claim on a second line, and the kind in words" do
+      mcp = change_set(nil, actor: "mcp:graph_write", actor_claim: "client=synth-client-a · <b>synth</b>")
+      nameless = change_set(nil, kind: "review.apply", actor: nil)
+
+      get system_activity_path
+
+      doc = Nokogiri::HTML(response.body)
+      row = doc.at_css("[data-testid='activity-row-#{mcp.uuid}']")
+      expect(row.text).to include("Graph write", "graph.write", "mcp:graph_write")
+      expect(row.at_css("[data-testid='activity-claim']").text).to eq("claimed: client=synth-client-a · <b>synth</b>")
+      expect(row.at_css("b")).to be_nil
+      expect(doc.at_css("[data-testid='activity-row-#{nameless.uuid}']").text).to include("Review apply", "unknown")
+    end
+
     it "pages 50 change sets at a time" do
       ChangeSet.insert_all!(Array.new(51) do |index|
         { uuid: SecureRandom.uuid, kind: "graph.write", actor: "agent:synth-client", summary: "synthetic change #{index}",

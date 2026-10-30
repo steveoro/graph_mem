@@ -8,9 +8,9 @@
     - else
       %ul.home-list
         - data.each do |set|
-          - line = "#{set.actor || 'unknown'}: #{set.summary.presence || set.kind.humanize}"
+          - line = "#{change_set_actor_label(set, t('home.activity.unknown_actor'))}: #{set.summary.presence || change_set_kind_label(set.kind)}"
           - state = set.undone_at ? t("home.activity.undone") : (t("home.activity.undoable_until", time: l(set.undoable_until, format: :short)) if set.undoable?)
-          %li.home-list__item.home-list__item--stacked{ title: [line, state].compact.join(" · "), data: { testid: "home-activity-row" } }
+          %li.home-list__item.home-list__item--stacked{ title: [line, actor_claim_label(set.actor_claim), state].compact.join(" · "), data: { testid: "home-activity-row" } }
             %span.home-list__main= line
             %span.home-list__meta
               = "#{set.kind} · #{t('home.activity.ago', time: time_ago_in_words(set.created_at).delete_prefix('about '))}"
