@@ -14,11 +14,13 @@ class ApplyMaintenanceReviewTool < ApplicationTool
   )
 
   description "Apply a queued maintenance-review row (merge, relationship proposal, orphan parent, relation integrity, " \
-    "or contradiction). " \
+    "contradiction, or fact_supersede). " \
     "Pass required `item_id` (string UUID); optional `report_type` (string, default compaction_review), " \
     "`dry_run` (bool, default false), `action_params` (hash). " \
     "A contradiction row needs `action_params.keep_observation_id` (one of its two observation ids): " \
     "that observation is kept and the other is marked obsolete. " \
+    "A fact_supersede row takes optional `action_params.fact_action` (supersede or retire) and `replacement` (text); " \
+    "without them it supersedes with the judge's replacement, or retires when there is none. " \
     "Do not use without a queue item_id; use `list_maintenance_review` first. " \
     "Do not use to skip, ignore, or restore without applying; use `dismiss_maintenance_review` instead. " \
     "Do not use to merge two known entity ids outside the queue; use `graph_delete` instead."
@@ -27,7 +29,7 @@ class ApplyMaintenanceReviewTool < ApplicationTool
     required(:item_id).filled(:string).description("Maintenance report row UUID.")
     optional(:report_type).filled(:string).description('Report type. Defaults to "compaction_review".')
     optional(:dry_run).filled(:bool).description("When true, validate and preview without applying.")
-    optional(:action_params).hash.description("Optional overrides for merge/relation/orphan endpoints; keep_observation_id for a contradiction row.")
+    optional(:action_params).hash.description("Optional overrides for merge/relation/orphan endpoints; keep_observation_id for a contradiction row; fact_action and replacement for a fact_supersede row.")
   end
 
   def call(item_id:, report_type: "compaction_review", dry_run: false, action_params: {})

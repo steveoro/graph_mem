@@ -8,10 +8,13 @@ class SummarizationConfig
     provider: "ollama",
     timeout: 30,        # Slow systems/laptops: 120
     max_tokens: 256,    # detailed style: 1024
+    num_ctx: 8192,      # Ollama context window (tokens); without it a long prompt is cut silently
     observations_per_entity: 3
   }.freeze
 
   ALLOWED_PROVIDERS = %w[ollama openai_compatible].freeze
+  # The context windows summary_num_ctx / SUMMARY_NUM_CTX accept (tokens).
+  NUM_CTX_RANGE = (2048..131_072)
 
   ENV_KEYS = {
     url: "SUMMARY_URL",
@@ -19,6 +22,7 @@ class SummarizationConfig
     provider: "SUMMARY_PROVIDER",
     timeout: "SUMMARY_TIMEOUT",
     max_tokens: "SUMMARY_MAX_TOKENS",
+    num_ctx: "SUMMARY_NUM_CTX",
     observations_per_entity: "SUMMARY_OBSERVATIONS_PER_ENTITY"
   }.freeze
 
@@ -28,6 +32,7 @@ class SummarizationConfig
     provider: :summary_provider,
     timeout: :summary_timeout,
     max_tokens: :summary_max_tokens,
+    num_ctx: :summary_num_ctx,
     observations_per_entity: :summary_observations_per_entity
   }.freeze
 
@@ -39,6 +44,7 @@ class SummarizationConfig
         provider: resolve_string(:provider),
         timeout: resolve_integer(:timeout),
         max_tokens: resolve_integer(:max_tokens),
+        num_ctx: resolve_integer(:num_ctx).clamp(NUM_CTX_RANGE.min, NUM_CTX_RANGE.max),
         observations_per_entity: resolve_integer(:observations_per_entity),
         llm_enabled: AppSettings.llm_summarization_enabled?
       }
@@ -51,6 +57,7 @@ class SummarizationConfig
         provider: resolve_source(:provider),
         timeout: resolve_integer_source(:timeout),
         max_tokens: resolve_integer_source(:max_tokens),
+        num_ctx: resolve_integer_source(:num_ctx),
         observations_per_entity: resolve_integer_source(:observations_per_entity),
         llm_enabled: :app_settings
       }
@@ -59,7 +66,7 @@ class SummarizationConfig
     def fallback_for(key)
       key = key.to_sym
       case key
-      when :timeout, :max_tokens, :observations_per_entity
+      when :timeout, :max_tokens, :num_ctx, :observations_per_entity
         fallback_integer(key)
       when :url, :model, :provider
         fallback_string(key)

@@ -41,7 +41,8 @@ RSpec.describe "Content Security Policy in the browser", type: :system do
       "Health" => "/system/health",
       "Access" => "/system/access",
       "Activity" => "/system/activity",
-      "Backups" => "/system/backups"
+      "Backups" => "/system/backups",
+      "Find & supersede" => "/review/supersede?project_id=#{project.id}&q=SynthWidget"
     }.each do |label, path|
       visit path
       wait_for_stimulus

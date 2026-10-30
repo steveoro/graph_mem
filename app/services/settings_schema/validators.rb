@@ -35,6 +35,12 @@ class SettingsSchema
       [ (I18n.t("system.settings.summaries.invalid_max_tokens") if max_tokens.positive? && (max_tokens < 16 || max_tokens > 4096)), raw ]
     end
 
+    def summary_num_ctx(raw)
+      num_ctx = raw.to_i
+      invalid = num_ctx.positive? && !SummarizationConfig::NUM_CTX_RANGE.cover?(num_ctx)
+      [ (I18n.t("system.settings.summaries.invalid_num_ctx") if invalid), raw ]
+    end
+
     def summary_observations_per_entity(raw)
       per_entity = raw.to_s
       invalid = per_entity.present? && (per_entity.to_i.negative? || per_entity.to_i > 100)

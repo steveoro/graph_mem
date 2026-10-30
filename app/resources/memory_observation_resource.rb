@@ -59,8 +59,8 @@ class MemoryObservationResource < ApplicationResource
     # Filter by memory_entity_id
     query = query.where(memory_entity_id: params[:memory_entity_id]) if params[:memory_entity_id].present?
 
-    # Filter by content (partial match)
-    query = query.where("content LIKE ?", "%#{params[:content]}%") if params[:content].present?
+    # Filter by content (partial match; % and _ in the filter are literal)
+    query = query.where("content LIKE ?", "%#{MemoryObservation.sanitize_sql_like(params[:content])}%") if params[:content].present?
 
     # Date range filters for created_at
     query = query.where("created_at >= ?", Time.zone.parse(params[:created_after])) if params[:created_after].present?

@@ -1,0 +1,64 @@
+-# The matches; with one project chosen they sit in the bulk form (checkboxes on changeable rows),
+-# with "all projects" they're grouped by project and view-only.
+- actions = search.project.present?
+= form_with url: review_supersede_path, method: :post, class: "ui-form", data: { turbo_frame: "_top", testid: "supersede-bulk" } do
+  - %i[q project_id fact_id include_inactive].each do |key|
+    = hidden_field_tag key, params[key], id: nil if params[key].present?
+  = hidden_field_tag :rendered_at, rendered_at.utc.iso8601(6), id: nil
+  .system-table-wrap
+    %table.system-table{ data: { testid: "supersede-results" } }
+      %thead
+        %tr
+          %th
+          %th Observation
+          %th Entity
+          %th Project
+          %th Source
+          %th Status
+          - if search.fact
+            %th Guard
+            %th Verdict
+      %tbody
+        - entries.each do |entry|
+          - observation = entry.observation
+          %tr{ data: { testid: "supersede-row", observation_id: observation.id, changeable: entry.changeable.to_s } }
+            %td
+              - if actions && entry.changeable
+                = check_box_tag "observation_ids[]", observation.id, false, id: "observation-#{observation.id}", "aria-label": "Select ##{observation.id}"
+            %td
+              = observation.content.truncate(300)
+              - if observation.fact_tagged?
+                %span.ui-badge.ui-badge--ok source fact
+            %td= observation.memory_entity.name
+            %td
+              = entry.project_name || "no project"
+              - unless entry.scoped
+                %span.review-warning outside the project
+            %td= [ observation.source, observation.perspective ].compact_blank.join(" · ")
+            %td= observation.status
+            - if search.fact
+              %td
+                - if entry.guard
+                  %span.ui-badge{ title: entry.guard_reason }= entry.guard
+              %td= entry.verdict ? "#{entry.verdict} (#{entry.confidence})" : "—"
+  -# A refused POST re-renders this page: keep the form's fields out of the page links.
+  = paginate entries, params: { rendered_at: nil, observation_ids: nil, bulk_action: nil, replacement: nil, use_fact_text: nil, reason: nil }
+  - if actions
+    %fieldset.ui-card{ data: { testid: "supersede-actions" } }
+      %legend= "Selected rows (at most #{FactSupersede::Bulk::MAX_ROWS}), in #{search.project.name}"
+      %label
+        = radio_button_tag :bulk_action, "supersede", true
+        Supersede with
+      = text_area_tag :replacement, nil, class: "ui-input", rows: 2, maxlength: ExploreEdits::Observations::MAX_OBSERVATION_LENGTH, "aria-label": "Replacement text"
+      - if search.fact
+        %label
+          = check_box_tag :use_fact_text, "1", false
+          the fact's text
+      %label
+        = radio_button_tag :bulk_action, "retire"
+        Retire
+      = label_tag :reason, "Reason (optional)", class: "ui-label"
+      = text_field_tag :reason, nil, class: "ui-input", maxlength: ExploreEdits::MAX_REASON_LENGTH
+      = submit_tag "Apply to the selection", class: "ui-btn ui-btn-primary", data: { testid: "supersede-apply" }
+  - else
+    %p.review-hint{ data: { testid: "supersede-view-only" } } All projects: view only. Choose one project to change rows.

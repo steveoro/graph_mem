@@ -31,6 +31,7 @@ en:
           expire_low_confidence: "Expires suggestions with confidence below 0.4 that nobody touched for the days below, and keeps them away for 90 days. Reverse: Undo, or Restore."
           auto_apply_relationships: "Applies high-band relationship proposals at or above the confidence below (never part_of), at most 50 per run. Reverse: Undo the run (removes the relations)."
           auto_apply_expired_validity: "Marks observations obsolete when their own valid_until has passed, at most 100 per run. Reverse: Undo the run."
+          auto_apply_fact_supersede: "Applies \"Outdated by a fact\" suggestions the judge marked superseded at or above the confidence below, only for facts an operator marked, never with a guard or for an entity outside the project, at most 100 per run. Reverse: Undo the run."
       mcp_access:
         intro: "Who may reach /mcp (and bearer requests on /api/v1): allowed client IPs, Host names and browser origins. Each list adds to its ENV value, which is shown first and can't be removed here. Changes apply without a restart."
         sessions_notice_title: "Saving a change to allowed hosts or origins closes every open MCP session."
@@ -138,6 +139,9 @@ en:
         summary_max_tokens:
           label: "Summary max tokens"
           description: "Maximum output tokens for generated summaries. Set to 0 to use SUMMARY_MAX_TOKENS from the environment or the default."
+        summary_num_ctx:
+          label: "Summary context window (tokens)"
+          description: "Ollama's num_ctx for every generation request (summaries, project scans, the fact-supersede judge). Without it Ollama uses the model's default and silently cuts a long prompt. Set to 0 to use SUMMARY_NUM_CTX from the environment or the default (8192)."
         summary_observations_per_entity:
           label: "Observations per entity"
           description: "Maximum observations to include per entity before capping. 0 disables the cap. Set to 0 to use SUMMARY_OBSERVATIONS_PER_ENTITY from the environment or the default."
@@ -166,6 +170,14 @@ en:
           label: "Auto-apply high-confidence relationships"
         enable_auto_apply_expired_validity:
           label: "Auto-apply expired validity (stale memory)"
+        enable_auto_apply_fact_supersede:
+          label: "Auto-apply source fact supersedes"
+        auto_apply_fact_supersede_min_confidence:
+          label: "Auto-apply source fact confidence"
+          description: "Minimum judge confidence for auto-applying an \"Outdated by a fact\" suggestion."
+        fact_supersede_enabled:
+          label: "Source fact supersede"
+          description: "When a source fact is added or changed, look for the observations of its project it outdates and propose them in Review & Fix (\"Outdated by a fact\"). Proposals only, unless the auto-apply policy is on."
         review_backlog_ceiling:
           label: "Backlog ceiling per kind"
           description: "Active suggestions per kind before new ones must beat the lowest priority to be queued (a soft limit)."
@@ -178,6 +190,9 @@ en:
         auto_apply_relationship_min_confidence:
           label: "Auto-apply relationship confidence"
           description: "Minimum confidence for auto-applying relationship proposals."
+        fact_supersede_max_distance:
+          label: "Source fact similarity distance"
+          description: "How close (cosine distance) an observation must be to a source fact to be checked against it. Smaller is stricter."
         compaction_review_row_retention_days:
           label: "Review rows retention (days)"
           description: "Approved, dismissed and ignored review rows older than this are pruned daily. Suggestions you dismissed stay suppressed; ignored ones may be proposed again. 0 uses the default (30)."
@@ -217,6 +232,7 @@ en:
         invalid_provider: "Invalid summary provider. Use ollama or openai_compatible."
         invalid_timeout: "Timeout must be 0 (use ENV/default) or between 1 and 300 seconds."
         invalid_max_tokens: "Max tokens must be 0 (use ENV/default) or between 16 and 4096."
+        invalid_num_ctx: "Context window must be 0 (use ENV/default) or between 2048 and 131072 tokens."
         invalid_observations_per_entity: "Observations per entity must be 0 (use ENV/default) or between 0 and 100."
         invalid_url: "Summary URL must be a valid http or https URL."
       imports:

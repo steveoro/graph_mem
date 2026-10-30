@@ -117,7 +117,8 @@ class SettingsSchema
 
     def build
       [
-        define_group(:feature_flags, %w[enable_dream_state_compactor enable_garbage_collector enable_stale_memory_scan enable_contradiction_detection]),
+        define_group(:feature_flags, %w[enable_dream_state_compactor enable_garbage_collector enable_stale_memory_scan enable_contradiction_detection
+                                        fact_supersede_enabled]),
         define_group(:embeddings, [
           define_field("embedding_url", validator: :http_url_embedding, fallback: :embedding_settings_fallback_hint, hint: :url),
           define_field("embedding_model", fallback: :embedding_settings_fallback_hint, hint: :model),
@@ -134,6 +135,7 @@ class SettingsSchema
                                     fallback: :summarization_settings_fallback_hint, hint: :provider),
           define_field("summary_timeout", validator: :summary_timeout, fallback: :summarization_settings_fallback_hint, hint: :timeout),
           define_field("summary_max_tokens", validator: :summary_max_tokens, fallback: :summarization_settings_fallback_hint, hint: :max_tokens),
+          define_field("summary_num_ctx", validator: :summary_num_ctx, fallback: :summarization_settings_fallback_hint, hint: :num_ctx),
           define_field("summary_observations_per_entity", validator: :summary_observations_per_entity)
         ], partial: "system/settings/summaries_panel"),
         define_group(:imports, [ define_field("import_observation_duplicate_max_distance", validator: :import_distance, input: :slider) ]),

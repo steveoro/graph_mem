@@ -51,6 +51,23 @@ Read `references/maintenance.md` when connected to `/mcp/maintenance` or acting 
   "scan_review")` and apply `move_observation`, `reparent_entity`, `delete_relation`,
   `delete_entity`, or `delete_observation` actions just like compaction reviews.
 
+## Source facts: what a fact outdates
+
+- A source fact is an active observation tagged `source-fact` on an entity inside a project
+  (or the Project root). When one is written or its text changes, graph_mem looks in **that
+  project only** for observations it may outdate (similar text, the fact's `replaces:<term>`
+  tags), asks the local LLM judge when it is available, and queues `fact_supersede` review rows
+  ("Outdated by a fact"). Age is never evidence; statements about another project, a version,
+  an environment or a work log are kept or marked `context`.
+- To run it yourself on `/mcp/maintenance`: `detect_contradictions` with
+  `mode: "outdated_by_fact"`, `entity_id` = the fact's entity, `fact_observation_id`, optional
+  `terms` (up to 5) and `seed_review` (default true), `max_results` at most 50. It returns the
+  proposals with their review row ids and never writes observations.
+- Read the rows with `list_maintenance_review` (`kind: "fact_supersede"`) and apply one with
+  `apply_maintenance_review`: `action_params.fact_action` is `supersede` (with an optional
+  `replacement` text) or `retire`. The apply re-checks the fact, the project and the guard, and
+  is undoable. Dismiss a row when the fact doesn't outdate it: the pair stays suppressed.
+
 ## Dream-State Compaction Awareness
 
 - A background "dream-state" job periodically compacts the graph: it

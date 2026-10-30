@@ -34,16 +34,24 @@ class SummaryGenerationClient
     @provider = config[:provider].to_s
     @timeout = config[:timeout].to_i
     @max_tokens = config[:max_tokens].to_i
+    @num_ctx = (config[:num_ctx] || SummarizationConfig::DEFAULTS[:num_ctx]).to_i
     @logger = Rails.logger
   end
 
   # Generate summary text from a prompt.
   # Returns { ok:, text:, error: } — never raises.
-  def generate(prompt, style: "concise")
+  #
+  # @param prompt [String]
+  # @param style [String] "concise" or "detailed" (sets the temperature)
+  # @param options [Hash] Ollama only, merged over the defaults: `num_ctx:` (Integer, the context
+  #   window), `num_predict:` (Integer, the output cap instead of max_tokens) and `format:` ("json"
+  #   asks Ollama for JSON output); the OpenAI-compatible path ignores it
+  # @return [Hash] `{ ok:, text:, error:, latency_ms: }`
+  def generate(prompt, style: "concise", options: {})
     return { ok: false, text: nil, error: "prompt is blank" } if prompt.blank?
 
     start = Process.clock_gettime(Process::CLOCK_MONOTONIC)
-    text = request_generation(prompt, style: style)
+    text = request_generation(prompt, style: style, options: options.to_h)
     latency_ms = ((Process.clock_gettime(Process::CLOCK_MONOTONIC) - start) * 1000).round(1)
 
     if text.blank?
@@ -72,26 +80,29 @@ class SummaryGenerationClient
 
   private
 
-  def request_generation(prompt, style:)
+  def request_generation(prompt, style:, options:)
     case @provider
     when "openai_compatible"
       request_openai_compatible(prompt, style: style)
     else
-      request_ollama(prompt, style: style)
+      request_ollama(prompt, style: style, options: options)
     end
   end
 
-  def request_ollama(prompt, style:)
+  def request_ollama(prompt, style:, options:)
     uri = URI("#{@base_url}/api/generate")
+    options = options.symbolize_keys
     payload = {
       model: @model,
       prompt: prompt,
       stream: false,
       options: {
         temperature: style == "concise" ? 0.1 : 0.3,
-        num_predict: @max_tokens
+        num_predict: (options[:num_predict] || @max_tokens).to_i,
+        num_ctx: (options[:num_ctx] || @num_ctx).to_i
       }
     }
+    payload[:format] = options[:format].to_s if options[:format].present?
 
     body = perform_request(uri, payload)
     body["response"].to_s.strip.presence

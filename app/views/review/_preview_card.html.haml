@@ -4,7 +4,9 @@
     %h2= "Apply: #{review_row_title(row)}"
     = render "review/effects", preview: preview
     .review-detail__actions
-      - if preview[:ok]
+      - if preview[:ok] && row.kind == "fact_supersede"
+        = render "review/kinds/fact_supersede_apply", row: row
+      - elsif preview[:ok]
         = button_to "Apply", review_row_apply_path(row.row_uuid), class: "ui-btn ui-btn-primary",
           params: keep_id.present? ? { keep_observation_id: keep_id } : {}, form: { data: { turbo_frame: "_top" } },
           data: { testid: "preview-confirm" }

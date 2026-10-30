@@ -265,6 +265,7 @@ CREATE TABLE `memory_observations` (
   `trust_score` float NOT NULL DEFAULT 0,
   `embedded_at` datetime(6) DEFAULT NULL,
   `perspective` varchar(16) DEFAULT NULL,
+  `outdated_by_id` bigint(20) DEFAULT NULL,
   PRIMARY KEY (`id`),
   KEY `index_memory_observations_on_memory_entity_id` (`memory_entity_id`),
   KEY `index_memory_observations_on_source` (`source`),
@@ -277,7 +278,9 @@ CREATE TABLE `memory_observations` (
   KEY `index_memory_observations_temporal_cover` (`status`,`memory_entity_id`,`valid_from`,`valid_until`,`created_at`),
   KEY `idx_memory_observations_embedded_at` (`embedded_at`),
   KEY `index_memory_observations_on_perspective` (`perspective`),
+  KEY `index_memory_observations_on_outdated_by_id` (`outdated_by_id`),
   VECTOR KEY `idx_memory_observations_embedding` (`embedding`) `DISTANCE`='cosine',
+  CONSTRAINT `fk_rails_29fad01511` FOREIGN KEY (`outdated_by_id`) REFERENCES `memory_observations` (`id`) ON DELETE SET NULL,
   CONSTRAINT `fk_rails_59348732bc` FOREIGN KEY (`superseded_by_id`) REFERENCES `memory_observations` (`id`) ON DELETE SET NULL,
   CONSTRAINT `fk_rails_675e0d9a7a` FOREIGN KEY (`memory_entity_id`) REFERENCES `memory_entities` (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
@@ -415,6 +418,7 @@ CREATE TABLE `tool_invocations` (
 /*M!100616 SET NOTE_VERBOSITY=@OLD_NOTE_VERBOSITY */;
 
 INSERT INTO `schema_migrations` (version) VALUES
+('20261029180000'),
 ('20261026213000'),
 ('20261026120100'),
 ('20261026120000'),

@@ -104,6 +104,13 @@ class CompactionReviewService
         return nil unless ids.size == 2
 
         [ "contradiction", ids.join("-") ].join("|")
+      when "fact_supersede"
+        # Per pair: a dismissal suppresses this fact against this observation only.
+        fact_id = payload[:fact_observation_id]
+        observation_id = payload[:observation_id]
+        return nil if fact_id.blank? || observation_id.blank?
+
+        "fact:#{fact_id.to_i}|obs:#{observation_id.to_i}"
       else
         nil
       end

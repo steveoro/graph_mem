@@ -1,0 +1,10 @@
+-# The preview card's Apply for "Outdated by a fact": supersede with an editable replacement
+-# (the judge's suggestion, else the fact's text), or retire. The apply re-checks everything.
+- plan = CompactionReviewApplier::FactSupersede.plan(row.effective_payload.with_indifferent_access, params.permit(:fact_action, :replacement))
+= form_with url: review_row_apply_path(row.row_uuid), method: :post, class: "ui-form", data: { turbo_frame: "_top", testid: "fact-supersede-apply-form" } do
+  = hidden_field_tag :fact_action, plan.action, id: nil
+  - if plan.action == "supersede"
+    = label_tag "replacement-#{row.row_uuid}", "Replacement text", class: "ui-label"
+    = text_area_tag :replacement, plan.replacement, id: "replacement-#{row.row_uuid}", class: "ui-input", rows: 3, required: true,
+      maxlength: ExploreEdits::Observations::MAX_OBSERVATION_LENGTH
+  = submit_tag (plan.action == "supersede" ? "Supersede" : "Retire"), class: "ui-btn ui-btn-primary", data: { testid: "preview-confirm" }

@@ -37,6 +37,18 @@ RSpec.describe ObservationTrustRanker do
       expect(trusted.trust_score).to be > normal.trust_score
     end
 
+    it "matches sources by whole token, not substring" do
+      neutral = MemoryObservation.create!(memory_entity: entity, content: "neutral", confidence: 0.8, source: "some_blog")
+      readme = MemoryObservation.create!(memory_entity: entity, content: "readme", confidence: 0.8, source: "docs:README.md")
+      compose = MemoryObservation.create!(memory_entity: entity, content: "compose", confidence: 0.8, source: "docker-compose")
+      undocumented = MemoryObservation.create!(memory_entity: entity, content: "undocumented", confidence: 0.8, source: "undocumented")
+      unverified = MemoryObservation.create!(memory_entity: entity, content: "unverified", confidence: 0.8, source: "unverified")
+
+      expect(readme.trust_score).to be > neutral.trust_score
+      expect([ compose, undocumented ].map(&:trust_score)).to all(eq(neutral.trust_score))
+      expect(unverified.trust_score).to be < neutral.trust_score
+    end
+
     it "gives lower score to low-trust sources" do
       normal = MemoryObservation.create!(memory_entity: entity, content: "normal", confidence: 0.8, source: "docs")
       untrusted = MemoryObservation.create!(memory_entity: entity, content: "untrusted", confidence: 0.8, source: "hearsay")

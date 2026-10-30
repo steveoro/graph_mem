@@ -1,0 +1,138 @@
+# frozen_string_literal: true
+
+module FactSupersede
+  # The Find & supersede page's bulk action (fact supersede F5): supersede the selected
+  # observations with one replacement text (or the fact's text), or retire them, in one
+  # `explore.bulk_supersede` change set (undoable, like Explore's edits). Never across projects:
+  # every row must belong to the chosen project. With a source fact, each row records it in
+  # `outdated_by`, and rows the legacy guard keeps are skipped. Rows that are no longer active,
+  # or changed after the page was rendered, are skipped and counted.
+  #
+  #   FactSupersede::Bulk.call(project: gadget, observation_ids: [15, 16], action: "retire", fact: fact)
+  #   # => { success: true, message: "Retired 2 observations.", changed: 2, skipped: {}, change_set_uuid: "…", undoable: true }
+  class Bulk
+    ACTIONS = %w[supersede retire].freeze
+    MAX_ROWS = 200
+    SKIP_LABELS = {
+      inactive: "no longer active", outside: "not in the project", fact: "a source fact (unmark it in Explore first)",
+      changed: "changed since you looked", kept: "kept by the legacy guard"
+    }.freeze
+    SETTLED_REASON = "observation changed in Find & supersede"
+    # A web request waits at most this long for the membership lock (the default is 60 s).
+    LOCK_WAIT_SECONDS = 5
+    BUSY = "Another change is running (an import, a merge or a review apply). Nothing was changed; try again."
+
+    # @param project [MemoryEntity] a Project root
+    # @param observation_ids [Array<#to_i>] at most MAX_ROWS
+    # @param action [String] "supersede" or "retire"
+    # @param replacement [String, nil] the replacement text (supersede)
+    # @param use_fact_text [Boolean] supersede with the fact's text
+    # @param reason [String, nil] at most ExploreEdits::MAX_REASON_LENGTH characters
+    # @param fact [MemoryObservation, nil] an active source fact of `project`
+    # @param rendered_at [Time, nil] rows updated after it are skipped
+    # @return [Hash] `{ success:, message:, changed:, skipped:, change_set_uuid:, undoable: }` or `{ success: false, error: }`
+    #   (`status: :service_unavailable` when the membership lock is busy)
+    def self.call(project:, observation_ids:, action:, replacement: nil, use_fact_text: false, reason: nil, fact: nil, rendered_at: nil)
+      new(project, observation_ids, action, replacement, use_fact_text, reason, fact, rendered_at).call
+    end
+
+    def initialize(project, observation_ids, action, replacement, use_fact_text, reason, fact, rendered_at)
+      @project = project
+      @ids = Array(observation_ids).map(&:to_i).select(&:positive?).uniq
+      @action = action.to_s
+      @fact = fact
+      @replacement = (use_fact_text && fact ? fact.content : replacement).to_s.strip.presence
+      @reason = reason.to_s.strip.presence
+      @rendered_at = rendered_at
+      @skipped = Hash.new(0)
+    end
+
+    # @see .call
+    def call
+      error = refusal
+      return { success: false, error: error } if error
+
+      changed_ids = []
+      # The membership lock first, like review applies and undo: they lock a review row, then its
+      # observation, and this locks observations, then their review rows.
+      result = ProjectMembership.with_membership_lock(timeout: LOCK_WAIT_SECONDS) do
+        ChangeSet.record(kind: "explore.bulk_supersede", subject: @project, summary: summary) do |context|
+          MemoryObservation.transaction do
+            MemoryObservation.where(id: @ids).includes(:memory_entity).lock.order(:id).each { |observation| changed_ids << observation.id if change(observation) }
+            settle_review_rows(changed_ids)
+          end
+          { success: true }.merge(context.undo_handle)
+        end
+      end
+      result.merge(changed: changed_ids.size, skipped: @skipped.transform_keys(&:to_s), message: message(changed_ids.size))
+    rescue ProjectMembership::LockTimeout
+      { success: false, error: BUSY, status: :service_unavailable }
+    end
+
+    private
+
+    def refusal
+      return "Choose a project: a bulk change never crosses projects." unless @project&.entity_type == NodeOperationsStrategy::PROJECT_ENTITY_TYPE
+      return "Select at least one observation." if @ids.empty?
+      return "Select at most #{MAX_ROWS} observations per change (#{@ids.size} selected)." if @ids.size > MAX_ROWS
+      return "Choose supersede or retire." unless ACTIONS.include?(@action)
+      return "The source fact must be an active fact of this project." if @fact && !(@fact.source_fact? && @fact.fact_project_id == @project.id)
+      return "Give the replacement text, or supersede with the fact's text." if @action == "supersede" && @replacement.nil?
+      return "The replacement is too long." if @replacement.to_s.length > ExploreEdits::Observations::MAX_OBSERVATION_LENGTH
+
+      "The reason is too long (at most #{ExploreEdits::MAX_REASON_LENGTH} characters)." if @reason.to_s.length > ExploreEdits::MAX_REASON_LENGTH
+    end
+
+    # @return [Boolean] changed
+    def change(observation)
+      skip = skip_reason(observation)
+      if skip
+        @skipped[skip] += 1
+        return false
+      end
+
+      reason = @reason || (@fact ? "Outdated by source fact ##{@fact.id}" : "#{@action == 'retire' ? 'Retired' : 'Superseded'} in Find & supersede")
+      if @action == "supersede"
+        observation.supersede!({ content: @replacement }, reason: reason, outdated_by: @fact)
+      else
+        observation.mark_obsolete!(reason: reason, outdated_by: @fact)
+      end
+      true
+    end
+
+    def skip_reason(observation)
+      return :inactive unless observation.active?
+      return :outside unless observation.fact_project_id == @project.id
+      return :fact if observation.fact_tagged?
+      return :changed if @rendered_at && observation.updated_at > @rendered_at
+
+      :kept if @fact && guard.check(observation).first == LegacyGuard::KEEP
+    end
+
+    def guard
+      @guard ||= LegacyGuard.new(@fact)
+    end
+
+    # The pending "Outdated by a fact" rows of the observations just changed would only refuse
+    # on apply: dismiss them in this change set (no suppression, undone with it).
+    def settle_review_rows(observation_ids)
+      return if observation_ids.empty?
+
+      MaintenanceReportRow.pending.where(kind: Proposals::KIND)
+                          .where("CAST(JSON_VALUE(payload, '$.observation_id') AS UNSIGNED) IN (?)", observation_ids).find_each do |row|
+        CompactionReviewService.policy_change!(row, { status: "dismissed", dismissed_at: Time.current, resolution_reason: SETTLED_REASON, expires_at: nil })
+      end
+    end
+
+    def summary
+      "#{@action == 'retire' ? 'retired' : 'superseded'} #{@ids.size} observation(s) of '#{@project.name}'#{" (source fact ##{@fact.id})" if @fact}"
+    end
+
+    def message(changed)
+      verb = @action == "retire" ? "Retired" : "Superseded"
+      text = "#{verb} #{changed} observation#{'s' unless changed == 1}."
+      skipped = SKIP_LABELS.filter_map { |key, label| "#{@skipped[key]} skipped: #{label}" if @skipped[key].positive? }
+      skipped.empty? ? text : "#{text} #{skipped.join('; ')}."
+    end
+  end
+end

@@ -3,7 +3,7 @@
 - safe = ReviewRowClassifier::SAFE_BULK_KINDS.include?(group.kind) && group.high_confidence.positive?
 %article.ui-card.review-group{ id: dom, data: { review_keys_target: "item", testid: "review-group" } }
   %header.review-group__head
-    %span.ui-badge= group.kind.humanize
+    %span.ui-badge= review_kind_label(group.kind)
     %strong= group.anchor_name || "##{group.anchor_id || '—'}"
     %span.review-group__meta
       = "#{group.count} suggestion#{'s' unless group.count == 1}"

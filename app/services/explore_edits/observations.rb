@@ -8,6 +8,7 @@ class ExploreEdits
     DUPLICATE_OBSERVATION = "This observation already exists."
     SIMILAR_OBSERVATION = "A similar observation already exists."
     INACTIVE = "Only active observations can be changed."
+    FACT_NEEDS_PROJECT = "Only an observation inside a project can be a source fact."
 
     # The exact duplicate always blocks; a semantic match blocks unless `force`; with vectors
     # unavailable the semantic check is skipped and the message says so (Decision 3).
@@ -71,6 +72,26 @@ class ExploreEdits
       record("explore.observation_retire", entity, "retired an observation of '#{entity.name}'") do
         observation.mark_obsolete!(reason: reason.to_s.strip.presence || "retired in Explore")
         done("Observation retired.", entity)
+      end
+    end
+
+    # Marks (or unmarks) the observation as its project's source fact (the `source-fact` tag).
+    # The operator is the actor, so the fact counts as operator-confirmed (SourceFact).
+    #
+    # @param observation [MemoryObservation]
+    # @param mark [Boolean] true to mark, false to unmark
+    # @return [Hash]
+    def mark_fact(observation, mark:)
+      return refused(INACTIVE) unless observation.active?
+      return refused(NOTHING_CHANGED) if observation.fact_tagged? == mark
+      return refused(FACT_NEEDS_PROJECT) if mark && observation.fact_project_id.blank?
+
+      tags = mark ? Array(observation.tags) | [ SourceFact::SOURCE_FACT_TAG ] : Array(observation.tags) - [ SourceFact::SOURCE_FACT_TAG ]
+      entity = observation.memory_entity
+      summary = mark ? "marked a source fact of '#{entity.name}'" : "unmarked a source fact of '#{entity.name}'"
+      record("explore.fact_mark", entity, summary) do
+        observation.update_active!(tags: tags)
+        done(mark ? "Marked as source fact." : "No longer a source fact.", entity)
       end
     end
 

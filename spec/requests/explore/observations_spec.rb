@@ -16,6 +16,7 @@ RSpec.describe "Explore observation edits", type: :request do
   it_behaves_like "an operator-only Explore write", -> { add("Synthetic note.") }
   it_behaves_like "an operator-only Explore write", -> { patch explore_observation_path(fact), params: { observation: { content: "x" } }, headers: stream_headers }
   it_behaves_like "an operator-only Explore write", -> { post retire_explore_observation_path(fact), headers: stream_headers }
+  it_behaves_like "an operator-only Explore write", -> { post fact_explore_observation_path(fact, mark: "1"), headers: stream_headers }
 
   context "as the operator" do
     before { sign_in_operator }
@@ -99,6 +100,56 @@ RSpec.describe "Explore observation edits", type: :request do
       expect(response).to have_http_status(:unprocessable_content)
       patch explore_observation_path(fact), params: { observation: { content: "x" } }, headers: stream_headers
       expect(response).to have_http_status(:unprocessable_content)
+    end
+
+    context "with a source fact (fact supersede F1)" do
+      let!(:gadget) { MemoryEntity.create!(name: "Gadget Project", entity_type: "Project") }
+
+      before { widget.update!(project_id: gadget.id) }
+
+      it "marks and unmarks in explore.fact_mark change sets; undo removes the mark" do
+        post fact_explore_observation_path(fact, mark: "1"), headers: stream_headers
+
+        expect(response).to have_http_status(:ok)
+        expect(fact.reload).to be_source_fact
+        expect(fact).to be_operator_confirmed_fact
+        expect(response.body).to include("data-testid=\"entity-panel-source-fact\"", "Unmark source fact")
+        set = ChangeSet.sole
+        expect(set.kind).to eq("explore.fact_mark")
+
+        ChangeSetUndo.call(set.uuid, actor: "operator:synth@127.0.0.1")
+        expect(fact.reload).not_to be_fact_tagged
+
+        post fact_explore_observation_path(fact, mark: "1"), headers: stream_headers
+        post fact_explore_observation_path(fact, mark: "0"), headers: stream_headers
+        expect(fact.reload).not_to be_fact_tagged
+        expect(ChangeSet.where(kind: "explore.fact_mark").count).to eq(3)
+      end
+
+      it "refuses outside a project, an inactive row and a no-op" do
+        post fact_explore_observation_path(fact, mark: "0"), headers: stream_headers
+        expect(response).to have_http_status(:unprocessable_content)
+
+        widget.update!(project_id: nil)
+        post fact_explore_observation_path(fact, mark: "1"), headers: stream_headers
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(response.body).to include("Only an observation inside a project")
+
+        widget.update!(project_id: gadget.id)
+        fact.mark_obsolete!
+        post fact_explore_observation_path(fact, mark: "1"), headers: stream_headers
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(ChangeSet.count).to eq(0)
+      end
+
+      it "shows Outdated by on a row a fact retired" do
+        source = MemoryObservation.create!(memory_entity: gadget, content: "The MCP server uses the official mcp gem.", tags: [ "source-fact" ])
+        fact.mark_obsolete!(reason: "Outdated by source fact ##{source.id}", outdated_by: source)
+
+        get entity_panel_path(widget, obsolete: "1")
+
+        expect(response.body).to include("data-testid=\"entity-panel-outdated-by\"", "The MCP server uses the official mcp gem.")
+      end
     end
   end
 end

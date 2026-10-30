@@ -62,6 +62,10 @@ RSpec.describe SettingsSchema do
       expect(errors(:summaries, "summary_provider" => "bogus")).to include("summary_provider" => /Invalid summary provider/)
       expect(errors(:summaries, "summary_timeout" => "301")).to include("summary_timeout" => /Timeout must be 0/)
       expect(errors(:summaries, "summary_max_tokens" => "8")).to include("summary_max_tokens" => /Max tokens must be 0/)
+      expect(errors(:summaries, "summary_num_ctx" => "1024")).to include("summary_num_ctx" => /between 2048 and 131072/)
+      expect(errors(:summaries, "summary_num_ctx" => "200000")).to include("summary_num_ctx" => /between 2048 and 131072/)
+      expect(errors(:summaries, "summary_num_ctx" => "0")).to be_empty
+      expect(errors(:summaries, "summary_num_ctx" => "8192")).to be_empty
       expect(errors(:summaries, "summary_observations_per_entity" => "101")).to include("summary_observations_per_entity" => /between 0 and 100/)
       expect(errors(:summaries, "summary_observations_per_entity" => "-1")).to include("summary_observations_per_entity" => /between 0 and 100/)
       expect(errors(:summaries, "summary_url" => "not a url")).to include("summary_url" => /valid http or https URL/)

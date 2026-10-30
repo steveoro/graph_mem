@@ -115,6 +115,7 @@ Rails.application.routes.draw do
     end
     resources :observations, only: [ :update ] do
       post :retire, on: :member
+      post :fact, on: :member
     end
     resources :relations, only: [ :new, :create, :destroy ]
     resources :moves, only: [ :new, :create ]
@@ -149,6 +150,9 @@ Rails.application.routes.draw do
   get "data_exchange/compaction_review",
       to: redirect(status: 301) { |_params, request| request.params[:report_type] == "scan_review" ? "/review?view=scan" : "/review" }
   get "review", to: "review#index", as: :review
+  # Fact supersede F5: Find & supersede (operator only).
+  get "review/supersede", to: "review/supersede#index", as: :review_supersede
+  post "review/supersede", to: "review/supersede#create"
   scope "review", controller: "review", as: "review" do
     get "group", action: :group, as: :group
     get "group/preview", action: :group_preview, as: :group_preview

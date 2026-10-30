@@ -15,7 +15,7 @@ description: >-
 license: LGPL-3.0-or-later
 compatibility: Requires a reachable graph_mem MCP server (HTTP /mcp or stdio)
 metadata:
-  graph-mem-version: "1.63.0"
+  graph-mem-version: "1.64.0"
 ---
 
 # graph_mem: recall before you decide, persist what you learned
@@ -54,6 +54,11 @@ reading the repository, not instead of it.
 - Homes: "User Preferences" (Preference, global); "<Project> Conventions"
   (BestPractice, part_of the Project); environment facts on the entity they describe.
 - Follow `possible_duplicate` and `next_move`; never force a duplicate.
+- Right after you changed a README or doc that states how a project works, write one short
+  source fact per changed statement: `graph_write` create_observation on the project's entity
+  with `tags: ["source-fact"]` (plus `replaces:<old term>` when it replaces something) and a
+  `docs:<path>` or `official:<url>` source. graph_mem then proposes, in that project only, the
+  observations it outdates; an operator or a maintenance session applies them.
 
 ## Context and safety
 - Context is per `X-MCP-Client`; it boosts, not filters, search. `set_context(entity_id: null)` clears it.

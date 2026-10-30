@@ -3,7 +3,7 @@
 = turbo_frame_tag "review-detail" do
   %section.ui-card.review-detail__card{ data: { testid: "review-detail-card", kind: row.kind } }
     %header
-      %span.ui-badge= row.kind.humanize
+      %span.ui-badge= review_kind_label(row.kind)
       %strong= review_row_title(row)
       %p.review-hint= "priority #{row.priority} · confidence #{row.confidence ? format('%.2f', row.confidence) : '—'} · #{row.status} · #{row.report_type.humanize}"
     = form_with url: review_row_path(row.row_uuid), method: :patch, id: "review-edit-#{row.row_uuid}", class: "ui-form",
@@ -11,11 +11,12 @@
       = render "review/kinds/#{lookup_context.exists?(row.kind, [ 'review/kinds' ], true) ? row.kind : 'generic'}", row: row, payload: row.effective_payload
       - if editable && row.pending?
         = submit_tag "Save", class: "ui-btn", data: { review_keys_action: "edit" }
-    - unless row.kind == "contradiction"
+    - choice = ReviewRowClassifier::CHOICE_KINDS.include?(row.kind)
+    - unless choice
       = render "review/effects", preview: preview
     .review-detail__actions
       - if row.pending?
-        - unless row.kind == "contradiction"
+        - unless choice
           = link_to "Apply…", review_row_preview_path(row.row_uuid), class: "ui-btn ui-btn-primary", data: { turbo_frame: "review-detail" }
         = button_to (row.kind == "contradiction" ? "Both are right" : "Dismiss"), review_row_dismiss_path(row.row_uuid), class: "ui-btn",
           data: { testid: "detail-dismiss" }

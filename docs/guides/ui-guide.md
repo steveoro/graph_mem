@@ -1,6 +1,6 @@
 # GraphMem web UI guide
 
-A tour of the web UI for the **operator** (the graph's owner, full access) and the optional **read-only guest**, as of 1.63.0. It covers signing in, the app shell, each section, the guest account and the usual problems.
+A tour of the web UI for the **operator** (the graph's owner, full access) and the optional **read-only guest**, as of 1.64.0. It covers signing in, the app shell, each section, the guest account and the usual problems.
 
 The screenshots come from a test instance with synthetic data (`Alpha Service`, `SynthWidget`, `SynthGadget`). The image files are in [`docs/images/ui/`](../images/ui/).
 
@@ -136,6 +136,7 @@ Search (`/search`, 1.60.0) runs the same search as the agents' MCP `search` tool
 ![Drag-and-drop action menu](../images/ui/explore-drag-drop.png)
 
 **Editing from the panel (operator):** **Edit** (name, type, aliases, description; a project root only **Rename** and description), **Add observation** (text and perspective), per observation **Edit** (the old text is kept as superseded) and **Retire** (marks it obsolete), per relation **Remove**, **Merge into…**, **Propose deletion**, and **Recent changes**: the last five changes to the entity, each with **Undo** while it can still be undone.
+- **Mark as source fact** (1.64.0) on an observation of an entity inside a project tags it `source-fact`: it is authoritative for that project, shows a **Source fact** badge and **Find what this outdates**, and graph_mem proposes in Review & Fix the observations of the same project it may outdate (**Unmark** removes the tag; both are undoable). An observation a fact retired or superseded shows **Outdated by:** with a link to the fact.
 - An exact duplicate observation is refused. A similar one shows "Similar to: …" with **Add anyway**. Without embeddings the similarity check is skipped and the toast says "similarity not checked".
 - A name already used in the same project is refused, with the message in the form.
 - Project roots can be renamed but not retyped, given aliases, moved, merged or proposed for deletion.
@@ -166,6 +167,10 @@ Search (`/search`, 1.60.0) runs the same search as the agents' MCP `search` tool
 
 ![A contradiction in the detail pane](../images/ui/review-contradiction.png)
 
+**Outdated by a fact (1.64.0):** when a source fact is added or changed, the observations of the same project it may outdate show up under **By kind › Outdated by a fact**: the fact and the observation side by side, the judge's verdict and reason (or `unjudged` when the local LLM isn't available), and a guard badge when the text names a version, an environment or a work log. **Supersede…** opens the confirm card with the replacement text (the judge's suggestion, else the fact's text) to edit; **Retire…** marks it obsolete. Both record the fact ("Outdated by") and can be undone. **Dismiss** says the fact doesn't outdate it, for this pair only. Statements that name another project are never proposed.
+
+**Find & supersede** (`/review/supersede`, linked from the rail and from a source fact's panel row): search observation text in one project (or all projects, view only), optionally with a source fact to add its similar observations and their guard and verdict. Tick rows (at most 200, one project), then **Supersede with** one text (or the fact's text) or **Retire**, with an optional reason: one undoable change, with Undo in the toast for 10 minutes and later in System › Activity. Rows that changed since the page loaded are skipped and counted. Inactive rows can be shown but not selected.
+
 ![Group preview](../images/ui/review-group-preview.png)
 
 **Group actions** always show a confirm card listing exactly which suggestions are included and which aren't (and why). Group apply takes only relationship proposals and stale-memory rows that aren't snoozed, at most 100, and refuses if the group changed since the card was shown. **Dismiss** suppresses a suggestion for good; **Snooze** hides it for 30 days.
@@ -174,7 +179,7 @@ Search (`/search`, 1.60.0) runs the same search as the agents' MCP `search` tool
 
 **Keyboard:** `j`/`k` next/previous, `Enter` open, `a` apply, `d` dismiss, `s` snooze, `e` save edits, `r` restore, `x` select, `/` search, `1`/`2` keep the first/second side of a contradiction (opens the confirm card), `?` help. Shortcuts don't fire while you type in a field, and `Enter` on a focused button or link presses it.
 
-**Settings › Review policies:** the nightly policies (dismiss dangling suggestions, dismiss stale memory no longer flagged, expire old low-confidence ones; auto-apply high-confidence relationships and expired validity, both off by default), the attention threshold and the backlog ceiling. Out-of-range values are refused; every change is in the audit log.
+**Settings › Review policies:** the nightly policies (dismiss dangling suggestions, dismiss stale memory no longer flagged, expire old low-confidence ones; auto-apply high-confidence relationships, expired validity and source fact supersedes, all off by default; the last only ever applies facts an operator marked), the attention threshold and the backlog ceiling. Out-of-range values are refused; every change is in the audit log.
 
 **Pruning:** approved, dismissed, expired and ignored rows are deleted every day once they're older than the retention set in **Settings › Telemetry** (`compaction_review_row_retention_days`, 30 days by default); a snoozed row is kept until its snooze ends.
 

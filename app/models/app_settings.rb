@@ -10,6 +10,8 @@ class AppSettings < RailsSettings::Base
   field :enable_contradiction_detection, default: true, type: :boolean
   field :enable_stale_memory_scan, default: true, type: :boolean
   field :enable_guest_access, default: true, type: :boolean
+  # Fact supersede (1.64.0): a new or changed source fact queues FactSupersedeJob (proposals only).
+  field :fact_supersede_enabled, default: true, type: :boolean
 
   # Database backup settings
   field :backup_folder_path, default: "db/backup", type: :string
@@ -32,6 +34,7 @@ class AppSettings < RailsSettings::Base
   field :summary_provider, default: "", type: :string
   field :summary_timeout, default: 0, type: :integer
   field :summary_max_tokens, default: 0, type: :integer
+  field :summary_num_ctx, default: 0, type: :integer
   field :summary_observations_per_entity, default: 3, type: :integer
   field :enable_llm_summarization, default: false, type: :boolean
 
@@ -69,13 +72,23 @@ class AppSettings < RailsSettings::Base
   field :auto_apply_relationship_min_confidence, default: 0.9, type: :float,
         validates: { numericality: { greater_than_or_equal_to: 0.8, less_than_or_equal_to: 1.0 } }
   field :enable_auto_apply_expired_validity, default: false, type: :boolean
+  # Fact supersede (1.64.0): how close (cosine) an observation must be to a source fact to be a
+  # candidate. Wider than the contradiction 0.35: a supersede usually differs in its key term.
+  field :fact_supersede_max_distance, default: 0.45, type: :float,
+        validates: { numericality: { greater_than_or_equal_to: 0.2, less_than_or_equal_to: 0.6 } }
+  # Off by default; when on, only confident, unguarded, scoped rows of operator-confirmed facts.
+  field :enable_auto_apply_fact_supersede, default: false, type: :boolean
+  field :auto_apply_fact_supersede_min_confidence, default: 0.9, type: :float,
+        validates: { numericality: { greater_than_or_equal_to: 0.8, less_than_or_equal_to: 0.99 } }
 
   # Default and accepted range of each numeric review setting.
   REVIEW_NUMBERS = {
     "review_backlog_ceiling" => [ 300, 50..5000 ],
     "review_attention_threshold" => [ 40, 1..100 ],
     "review_expire_low_confidence_days" => [ 30, 7..365 ],
-    "auto_apply_relationship_min_confidence" => [ 0.9, 0.8..1.0 ]
+    "auto_apply_relationship_min_confidence" => [ 0.9, 0.8..1.0 ],
+    "fact_supersede_max_distance" => [ 0.45, 0.2..0.6 ],
+    "auto_apply_fact_supersede_min_confidence" => [ 0.9, 0.8..0.99 ]
   }.freeze
   # Each review policy's toggle and its default (snooze_expiry always runs).
   REVIEW_POLICY_TOGGLES = {
@@ -83,7 +96,8 @@ class AppSettings < RailsSettings::Base
     "no_longer_flagged" => [ "enable_review_policy_no_longer_flagged", true ],
     "expire_low_confidence" => [ "enable_review_policy_expire_low_confidence", true ],
     "auto_apply_relationships" => [ "enable_auto_apply_relationships", false ],
-    "auto_apply_expired_validity" => [ "enable_auto_apply_expired_validity", false ]
+    "auto_apply_expired_validity" => [ "enable_auto_apply_expired_validity", false ],
+    "auto_apply_fact_supersede" => [ "enable_auto_apply_fact_supersede", false ]
   }.freeze
 
   # MCP tool invocation retention (zero disables automatic pruning)
