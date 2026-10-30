@@ -6,7 +6,7 @@ class OperatorSessionConstraint
   def matches?(request)
     session_key = Rails.application.config.session_options[:key]
     session_data = request.cookie_jar.encrypted[session_key] || {}
-    session_data["role"] == "operator" || session_data["operator_signed_in"] == true
+    session_data["role"] == "operator"
   rescue StandardError
     false
   end

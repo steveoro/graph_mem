@@ -60,7 +60,6 @@ en:
       bulk_update:
         success: "Saved %{count} setting(s) successfully."
         partial: "Saved %{success} setting(s); %{failed} failed."
-        elsewhere: "Not saved from this tab: %{settings} (now on another tab or page; save it there)."
       validation:
         greater_than: "Must be greater than %{value}."
         less_than_or_equal_to: "Must be at most %{value}."

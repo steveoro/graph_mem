@@ -31,7 +31,7 @@ module Api
       # rather than a CSRF 422). With a session, a junk Authorization header
       # still needs the CSRF token.
       def verify_authenticity_token
-        return if valid_bearer_token? || (request.authorization.to_s.match?(/\ABearer\s/i) && session[:role].blank? && !session[:operator_signed_in])
+        return if valid_bearer_token? || (request.authorization.to_s.match?(/\ABearer\s/i) && session[:role].blank?)
         super
       end
 
