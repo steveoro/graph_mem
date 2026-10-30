@@ -41,7 +41,7 @@ module Auditable
       actor: Current.actor,
       actor_claim: audit_actor_claim,
       changed_fields: changed_fields,
-      reason: action == "delete" ? Current.deletion_reason : nil,
+      reason: audit_reason(action, changed_fields),
       change_set_id: change_set_id
     )
   rescue StandardError => e
@@ -57,6 +57,22 @@ module Auditable
     return unless Current.actor.to_s.start_with?(MCP_ACTOR_PREFIX)
 
     ActorClaim.join(Current.actor_claim, audit_source_parts&.first)
+  end
+
+  # The first present of: a delete's Current.deletion_reason; an update's new obsolescence_reason
+  # (supersede, retire, soft delete); the `why` of the record's "<client>/<model>: <task>" source.
+  # The derived ones are sanitized and truncated (they can be model-written text).
+  #
+  # @return [String, nil]
+  def audit_reason(action, changed_fields)
+    return Current.deletion_reason if action == "delete" && Current.deletion_reason.present?
+
+    if action == "update"
+      change = changed_fields["obsolescence_reason"]
+      new_reason = change.is_a?(Hash) ? (change[:to] || change["to"]) : nil
+      return ActorClaim.sanitize(new_reason) if new_reason.present?
+    end
+    audit_source_parts&.last
   end
 
   # @return [Array(String, String), nil] see ActorClaim.source_parts

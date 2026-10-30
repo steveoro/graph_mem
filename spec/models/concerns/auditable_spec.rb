@@ -155,4 +155,36 @@ RSpec.describe Auditable, type: :model do
       expect(audit_for(observe("synth-agent/model-x: synthetic task", actor: "api:synth-client-a")).actor_claim).to be_nil
     end
   end
+
+  describe "the reason (audit actor, 1.65.0)" do
+    let(:widget) { MemoryEntity.create!(name: "SynthWidget", entity_type: "Component") }
+
+    def observe(source) = MemoryObservation.create!(memory_entity: widget, content: "SynthWidget note #{SecureRandom.hex(3)}", source: source)
+    def rows_for(record) = AuditLog.where(auditable_type: record.class.name, auditable_id: record.id).order(:id)
+
+    it "takes the source's why on create, and nothing from a source that doesn't parse" do
+      expect(rows_for(observe("synth-agent/model-x: synthetic task")).last.reason).to eq("synthetic task")
+      expect(rows_for(observe("project_scan:7:reconcile")).last.reason).to be_nil
+      expect(rows_for(widget).last.reason).to be_nil
+    end
+
+    it "prefers an update's new obsolescence_reason, then the source's why" do
+      observation = observe("synth-agent/model-x: synthetic task")
+      observation.mark_obsolete!(reason: "Outdated by a synthetic fact")
+      expect(rows_for(observation).last.reason).to eq("Outdated by a synthetic fact")
+
+      other = observe("synth-agent/model-x: synthetic task")
+      other.update_active!(confidence: 0.4)
+      expect(rows_for(other).last.reason).to eq("synthetic task")
+    end
+
+    it "keeps the delete reason first, and sanitizes and truncates what it derives" do
+      observation = observe("synth-agent/model-x: synthetic task")
+      Current.set(deletion_reason: "synthetic cleanup") { observation.destroy! }
+      expect(rows_for(observation).last.reason).to eq("synthetic cleanup")
+
+      noisy = observe("synth-agent/model-x: line\u0007 #{'r' * 200}")
+      expect(rows_for(noisy).last.reason).to eq("line #{'r' * 200}")
+    end
+  end
 end
