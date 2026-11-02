@@ -36,7 +36,7 @@ gem "tailwindcss-rails", "~> 4.3"
 gem "mcp", "1.8.2"
 # The tool `arguments` DSL (lib/graph_mem/mcp_schema) and resource URI templates.
 gem "dry-schema", "~> 1.14"
-gem "addressable", "~> 2.8"
+gem "addressable", "~> 2.9"
 gem "haml-rails"
 gem "html2haml"
 gem "kaminari" # Pagination
