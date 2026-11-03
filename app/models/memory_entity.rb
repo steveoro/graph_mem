@@ -26,9 +26,14 @@ class MemoryEntity < ApplicationRecord
   # project_id may only point at a Project-typed entity — anything else would
   # detach the uniqueness scope from the part_of tree it mirrors.
   validate :project_is_project_type, if: -> { project_id.present? }
+  # cloud_allowed (agent-CLI PR2): whether a Project root's data, anonymized, may go to a cloud
+  # model. Only a Project root can have it; it is set only on the Projects page
+  # (Projects::CloudAccessController) and read by Llm::CloudGate.
+  validate :cloud_allowed_only_on_project_root, if: :cloud_allowed?
 
   after_initialize :set_default_counter_cache
   before_validation :canonicalize_entity_type
+  before_validation :drop_cloud_access_off_root
   after_create :set_initial_embedding
   after_commit :refresh_embedding, on: [ :update ], if: :embedding_fields_changed?
   before_update :invalidate_stale_embedding,
@@ -43,8 +48,16 @@ class MemoryEntity < ApplicationRecord
   scope :with_embedding, -> { where.not(embedded_at: nil) }
   scope :missing_embedding, -> { where(embedded_at: nil) }
 
+  # @param options [Hash] the usual serialization options
+  # @return [Hash] the attributes without the embedding and the cloud_allowed flag (REST output
+  #   stays as it was before the flag existed)
   def as_json(options = {})
-    super(options.merge(except: Array(options[:except]) | [ :embedding ]))
+    super(options.merge(except: Array(options[:except]) | %i[embedding cloud_allowed]))
+  end
+
+  # @return [Boolean] a Project root (entity_type Project, no project_id)
+  def project_root?
+    entity_type == NodeOperationsStrategy::PROJECT_ENTITY_TYPE && project_id.nil?
   end
 
   private
@@ -53,6 +66,16 @@ class MemoryEntity < ApplicationRecord
     return if project&.entity_type == NodeOperationsStrategy::PROJECT_ENTITY_TYPE
 
     errors.add(:project_id, "must reference a Project entity")
+  end
+
+  def cloud_allowed_only_on_project_root
+    errors.add(:cloud_allowed, "can only be set on a Project root") unless project_root?
+  end
+
+  # An allowed project that stops being a Project root (retyped, or given a project_id) loses the
+  # flag, so a graph_edit retype keeps working; setting it on a non-root is still refused.
+  def drop_cloud_access_off_root
+    self.cloud_allowed = false if cloud_allowed? && !will_save_change_to_cloud_allowed? && !project_root?
   end
 
   def set_default_counter_cache
