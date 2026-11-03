@@ -502,7 +502,7 @@ Spec on the fast-mcp side: every row's option is covered by a spec under `spec/m
     volumes:
       - ${DB_BACKUP_HOST_PATH:-./db/backup}:/rails/db/backup
       - graph_mem_storage:/rails/storage
-      # READ-ONLY. Same path in and out, so /home/steve/Projects/foo works as typed.
+      # READ-ONLY. Same path in and out, so /path/to/home/Projects/foo works as typed.
       - ${GRAPH_MEM_SCAN_HOME:-${HOME}}:${GRAPH_MEM_SCAN_HOME:-${HOME}}:ro
 ```
 - `Dockerfile`: `ENV GRAPH_MEM_IN_CONTAINER=1`. No `mkdir` is needed (the bind mount creates the mount point).
@@ -510,10 +510,10 @@ Spec on the fast-mcp side: every row's option is covered by a spec under `spec/m
 - **No path map in 1.54.0.** Identity mapping makes it unnecessary on Linux Docker/Podman. `ScanRootPolicy#map_host_path(input)` exists as a single seam returning `input` unchanged. A future non-identity host (Docker Desktop on Windows, Kamal to another box) adds `GRAPH_MEM_SCAN_PATH_MAP` there. The Oct 20 draft's `/scan` + map design is dropped.
 - **Hard roots** (`ScanRootPolicy.hard_roots`): container mode → `GRAPH_MEM_SCAN_ROOTS` (`:`-separated, realpath'd). Native mode (`bin/dev`, no `GRAPH_MEM_IN_CONTAINER`) → `GRAPH_MEM_SCAN_ROOTS` or `Dir.home`. That's the same "home is the boundary" semantics, so specs set `GRAPH_MEM_SCAN_ROOTS` to a tmpdir. `PROJECT_SCAN_ROOTS` is dropped (it was dead code; noted in the CHANGELOG).
 - **Overlap guard:** a hard root is rejected (`:not_configured`, logged at boot) if it is `/`, or equals/contains/is inside `/rails` (`Rails.root`), `/usr`, `/etc`, `/bin`, `/sbin`, `/lib*`, `/proc`, `/sys`, `/dev`, `/var`, `/boot`, `/home/rails` (the container user's own home). The last item covers a host user that happens to be called `rails`. Running compose as root makes the root `/root`: allowed, but with an amber "running as root" warning.
-- **Mount detection** (container mode): parse `/proc/self/mountinfo`. The root must be a mount point (field 5) or scans are disabled with `:not_configured` ("nothing is mounted at /home/steve: add the volume line"). If its options (field 6) contain `rw`, scans still work but Settings, Home and every scan result carry the amber **"mounted read-write, use :ro"** warning. Native mode skips detection.
+- **Mount detection** (container mode): parse `/proc/self/mountinfo`. The root must be a mount point (field 5) or scans are disabled with `:not_configured` ("nothing is mounted at /path/to/home: add the volume line"). If its options (field 6) contain `rw`, scans still work but Settings, Home and every scan result carry the amber **"mounted read-write, use :ro"** warning. Native mode skips detection.
 
 ### 0.2 Subfolder filter (runtime, no restart)
-- New `AppSettings` field `project_scan_subfolders`, string, default **`"Projects"`**. It accepts a comma/newline-separated list of paths **relative to the home root** (`Projects, work/clients, oss/rails`). An absolute path under a hard root is accepted on save and stored relative (so pasting `/home/steve/Projects` works).
+- New `AppSettings` field `project_scan_subfolders`, string, default **`"Projects"`**. It accepts a comma/newline-separated list of paths **relative to the home root** (`Projects, work/clients, oss/rails`). An absolute path under a hard root is accepted on save and stored relative (so pasting `/path/to/home/Projects` works).
 - It **replaces** `project_scan_roots`. The old field stays defined (read-only, hidden) for one release. If it holds a non-default value, Settings shows "Legacy scan roots value ignored: … [Clear]".
 - **Validation on save** (`Operator::SettingsController#validate_project_scans_settings`, :207-218), per entry with its own error: it must be relative (after conversion), with no `..`, no empty segment, no segment that is denylisted or starts with `.` (§0.3), and ≤ 512 chars; at most 20 entries. An entry whose folder doesn't exist **is saved** but shown as "missing", so folders can be pre-configured. **Blank = the whole home** (still minus the denylist), with an amber warning.
 - **Runtime read, uncached:** `AppSettings.project_scan_subfolders_raw` reads the row with a raw `SELECT` (the `read_boolean_setting` pattern, :141-148), so a change made in the web process is seen on the next call by **every** process (Puma, Solid Queue workers, the stdio runner). `ScanRootPolicy.allowed_roots` calls it on every invocation and never memoizes across calls.
@@ -525,7 +525,7 @@ Spec on the fast-mcp side: every row's option is covered by a spec under `spec/m
    - start with `.`. That covers `.ssh .gnupg .aws .azure .config .kube .docker .password-store .mozilla .thunderbird .local .cache .var .npm .gem .bundle .rvm .Trash` and every other dotfolder;
    - or be one of `snap` (snap app data, incl. browser profiles), `Library` (macOS), `AppData` (Windows), `Maildir`, `Mail`.
 
-   Error `:denied` ("`/home/steve/.config/x` is inside a hidden or protected folder; this can't be enabled"). A symlink from `~/Projects/foo` into `~/.local/src/foo` is denied through the realpath check.
+   Error `:denied` ("`/path/to/home/.config/x` is inside a hidden or protected folder; this can't be enabled"). A symlink from `~/Projects/foo` into `~/.local/src/foo` is denied through the realpath check.
 2. **Reading files inside a project** (`ProjectScanner#discover_files`, `ProjectScanSkill` file reads, `ProjectScanValidator` if it opens files): skip files and directories matching
    - directory segments `.git .ssh .gnupg .aws .kube .docker .password-store`;
    - files `.env .env.* *.pem *.key *.p12 *.pfx *.jks *.keystore *.kdbx id_rsa* id_dsa* id_ecdsa* id_ed25519* .netrc .npmrc .pypirc .git-credentials credentials credentials.* master.key *.tfstate *.tfstate.*`.
@@ -552,11 +552,11 @@ ScanRootPolicy.status          # for Settings / Home / health JSON
 3. Any `..` segment → `:invalid` ("use a path without '..'"); no attempt to clean it.
 4. `~` or `~/…` → the single hard root (only when exactly one exists). A relative path resolves against the single allowed root when exactly one exists; otherwise `:invalid` ("give the full path").
 5. `map_host_path` (identity in 1.54.0).
-6. Not under any hard root → `:not_mounted` ("only `/home/steve` is visible to graph_mem").
+6. Not under any hard root → `:not_mounted` ("only `/path/to/home` is visible to graph_mem").
 7. Lexical denylist → `:denied`.
 8. `File.realpath`: `ENOENT` → `:not_found` (the message names the path and says whether the parent exists); `EACCES` → `:not_readable` (with the uid-1000 hint, §0.7).
 9. The realpath isn't `contained?` in its hard root → `:outside_roots` (a symlink escape). A denylisted realpath → `:denied`.
-10. Not inside an allowed root → `:outside_filter` ("`/home/steve/Other/x` is outside the scan filter (`Projects`). Add `Other` in Settings › Project scans").
+10. Not inside an allowed root → `:outside_filter` ("`/path/to/home/Other/x` is outside the scan filter (`Projects`). Add `Other` in Settings › Project scans").
 11. Not a directory → `:not_directory`. Not readable+executable → `:not_readable`.
 12. `ok`, with `warnings` (e.g. `:mounted_read_write`, `:whole_home_allowed`, `:running_as_root`). The **realpath** is what gets stored and scanned.
 
@@ -579,12 +579,12 @@ ScanRootPolicy.status          # for Settings / Home / health JSON
 - **"Scan folders"**, read-only: each hard root with mounted ✓/✗, read-only ✓ / **amber "read-write: use :ro"**, readable. When nothing is mounted: a red "Scans are disabled: nothing is mounted" + the compose snippet + a docs link.
 - **"Subfolder filter"**, editable (default `Projects`), with per-entry status (✓ exists · missing · rejected: reason) and the hint "Takes effect immediately for new scans, no restart."
 - **"Always blocked"**, read-only: the denylist (§0.3).
-- **"Check a path"** (Turbo Frame, `GET /operator/settings/project_scans/check_path?path=`) shows the `Result`: ✓ `/home/steve/Projects/foo` (read-only), or the code + message.
+- **"Check a path"** (Turbo Frame, `GET /operator/settings/project_scans/check_path?path=`) shows the `Result`: ✓ `/path/to/home/Projects/foo` (read-only), or the code + message.
 - Both dashboard scan forms list the allowed folders under the path field. The Project Scans card shows the disabled state.
 - Health: `ScanRootPolicy.status` feeds the UI plan's Home pill.
 
 ### 0.7 Docs: `docs/container_scan_mounts.md` (new; linked from README "Docker" and `docs/app_settings_reference.md`, which also fixes its dead `plans/project_scan.md` link; that link now points at `skills/project-scan/SKILL.md`)
-- **Linux Docker (tested):** the compose lines above. `docker run` equivalent: `-v "$HOME:$HOME:ro" -e GRAPH_MEM_SCAN_ROOTS="$HOME"`. Kamal: `volumes: ["/home/deploy:/home/deploy:ro"]` + `GRAPH_MEM_SCAN_ROOTS` (untested).
+- **Linux Docker (tested):** the compose lines above. `docker run` equivalent: `-v "$HOME:$HOME:ro" -e GRAPH_MEM_SCAN_ROOTS="$HOME"`. Kamal: `volumes: ["<deploy home>:<deploy home>:ro"]` + `GRAPH_MEM_SCAN_ROOTS` (untested).
 - **Always `:ro`.** The scanner never writes, and read-only stops anything in the container from touching your home.
 - **UID/permissions:** the app runs as uid/gid 1000. If your host uid is 1000 (the usual first user), it reads your files as you. Otherwise grant read on the scanned subfolders only: `setfacl -m u:1000:x "$HOME"` (traverse only) plus `setfacl -R -m u:1000:rX -m d:u:1000:rX ~/Projects`, or a shared group via `group_add`. **Never** `chmod -R o+r $HOME`. Don't change the container `user:` (`storage/`, `log/`, `tmp/` are owned by 1000).
 - **Rootless Podman (best-effort, not CI-tested):** works with `podman compose` using the same file plus an override:
@@ -606,7 +606,7 @@ ScanRootPolicy.status          # for Settings / Home / health JSON
   EnvironmentFile=%h/.config/graph_mem/env
   ```
   **SELinux (Fedora/RHEL, Podman or Docker):** an unlabelled bind mount reads as "permission denied". **Never use `:z` or `:Z` on your home directory**: they relabel every file under it recursively, which breaks other confined programs, and `:Z` makes it private to this one container. Use `:ro` + `label=disable` (as above; weaker isolation for this container only), or mount individual project subfolders with `:ro,z` instead of the home **only** if those folders are dedicated to graph_mem (then set `GRAPH_MEM_SCAN_ROOTS` to them).
-- **Docker Desktop (macOS/Windows):** untested. Identity mapping should work on macOS (`/Users/steve`) once the folder is shared in Docker Desktop; Windows needs the future path map.
+- **Docker Desktop (macOS/Windows):** untested. Identity mapping should work on macOS (the user's home folder) once the folder is shared in Docker Desktop; Windows needs the future path map.
 - **Changing what's scannable:** the subfolder filter is runtime (Settings). Changing the **mount** (`GRAPH_MEM_SCAN_HOME`) needs `docker compose up -d` (it recreates `app`).
 - **Symlinks:** links that resolve outside the home root, or into a hidden folder, are skipped.
 
@@ -642,8 +642,8 @@ ScanRootPolicy.status          # for Settings / Home / health JSON
 Manual acceptance (PR description): `GRAPH_MEM_SCAN_HOME=$(mktemp -d)` containing a synthetic `Projects/demo` (two files plus a `.env` decoy), `docker compose config` (shows the resolved mount, `:ro`), `docker compose up -d --build`, then scan by host path from the UI and via MCP. Confirm `.env` was skipped, `…/.ssh` is refused, editing the filter takes effect without a restart, and with the volume removed scans report "nothing mounted".
 
 ### 0.9 Acceptance criteria
-- With the default compose and `HOME=/home/steve`, pasting `/home/steve/Projects/foo` in the dashboard, `POST /api/v1/scan` (authenticated) or MCP `scan_project` scans exactly that path.
-- `/etc`, `/rails`, `/home/steve/.ssh`, `/home/steve/Other/x` (outside the filter) and `foo/../../x` are rejected on **all three** entry points and at job start, with distinct, actionable messages, and nothing is enqueued.
+- With the default compose and `HOME=/path/to/home`, pasting `/path/to/home/Projects/foo` in the dashboard, `POST /api/v1/scan` (authenticated) or MCP `scan_project` scans exactly that path.
+- `/etc`, `/rails`, `/path/to/home/.ssh`, `/path/to/home/Other/x` (outside the filter) and `foo/../../x` are rejected on **all three** entry points and at job start, with distinct, actionable messages, and nothing is enqueued.
 - Editing the subfolder filter in Settings affects the next scan request and the next job start in every process, without a restart.
 - A symlink pointing outside the home or into a hidden folder is never read; `file_globs` can't escape the root or read denylisted files.
 - Settings shows mounts with read-only/read-write status, the filter, the denylist and "check a path". With no mount, scans are clearly disabled.
