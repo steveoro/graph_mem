@@ -14,7 +14,7 @@ Host bridge and lockdown gate for agent CLIs (#153).
 
 ### Changed
 - Typed-confirm buttons (Regenerate all, Drop ANN indexes, Prune expired logs, Restore) no longer sit in a bordered box until opened.
-- For cloud providers (none yet), people's names are masked wherever they are in the graph.
+- For cloud providers (none yet), people's names (Person and User entities) are masked by full name or alias wherever they are in the graph; first or last names on their own aren't matched.
 
 ## [1.68.0] - 2026-11-03
 

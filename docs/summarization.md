@@ -156,7 +156,7 @@ Every model call goes through one seam, `Llm::Router` (`app/services/llm/`), whi
   ```
   [llm] {"task":"scan","provider":"ollama","model":"qwen3:8b","inline":false,"prompt_chars":5236,"est_in_tokens":1309,"out_chars":225,"est_out_tokens":57,"latency_ms":9120.4,"outcome":"ok","prompt_tokens":1500}
   ```
-- **Host bridge (1.69.0):** `script/llm_bridge/` is a loopback-only HTTP bridge for agent CLIs (`claude`, `devin`), installed separately on the workstation. The app never starts it, and nothing calls it until PR4. Each profile needs a lockdown-gate PASS before the bridge serves it. For cloud providers, people's names (Person and User entities) are masked wherever they are in the graph (see below). Setup and the HTTP contract: [`script/llm_bridge/README.md`](../script/llm_bridge/README.md).
+- **Host bridge (1.69.0):** `script/llm_bridge/` is a loopback-only HTTP bridge for agent CLIs (`claude`, `devin`), installed separately on the workstation. The app never starts it, and nothing calls it until PR4. Each profile needs a lockdown-gate PASS before the bridge serves it. For cloud providers, people's names (Person and User entities) are masked by full name or alias wherever they are in the graph (see below for what isn't matched). Setup and the HTTP contract: [`script/llm_bridge/README.md`](../script/llm_bridge/README.md).
 - **What's next:** this is the first step of an opt-in second backend, an agent CLI on the operator's workstation behind a host-side HTTP bridge, with anonymized data and a per-project `cloud_allowed` gate that defaults to false. Ollama stays the default, and without new configuration nothing changes. Plan: [`docs/plans/agent-cli-backend-plan.md`](plans/agent-cli-backend-plan.md).
 - **Specs:** `spec/support/llm.rb` has a `FakeProvider` (`with_llm_provider(fake) { … }`) and a `SubprocessGuard` that fails a spec when code under `app/` or `lib/` starts a process (`lib/tasks/db_utils.rake`, which runs mariadb-dump for backups, is the one exception). `spec/services/llm/characterization_spec.rb` pins every prompt and request body against `spec/fixtures/llm/`.
 
@@ -177,7 +177,7 @@ Since 1.68.0 the Router can send a call to a **cloud** provider (one with `cloud
 - **What still leaks:** this is pseudonymization, not anonymity.
   - The structure of the code and text, domain vocabulary, numbers, dates and generic words go out as they are.
   - A name fused with other lowercase letters (`gadgetprojectcontroller`, `gadgetapp.example.com`) isn't matched; public hosts are left as they are unless they contain a matched name.
-  - People (Person and User entities) are masked wherever they are in the graph; a name that is in no entity goes out as written.
+  - People (Person and User entities) are masked by full name or alias, in any case or separator form and inside identifiers, wherever they are in the graph. A first or last name on its own, a reordered name (`Doe, Jane`), an unaccented spelling of an accented name, a person stored under another type (`Developer`, `Author`) and a name that is in no entity go out as written. People count toward the dictionary's 20,000-term cap, so a graph with many of them refuses cloud calls sooner.
   - Allow cloud access only for projects whose remaining text you are willing to share.
 
 ## Lifecycle interactions

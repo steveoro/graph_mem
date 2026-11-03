@@ -23,6 +23,16 @@ RSpec.describe Llm::Anonymizer::Dictionary do
     expect(masked.text.gsub(/⟦[^⟧]*⟧/, "")).not_to include("Ada", "Bea", "bea", "Cid") # token suffixes are hex and may spell "bea"
   end
 
+  it "gives people outside the scope the same forms as scope terms: case, separators, identifiers and aliases" do
+    other_user.update!(aliases: "Zq7 Cidney")
+    text = "ZQ7 BEA, zq7-bea and zq7_cid_helper met Zq7 Cidney."
+
+    masked = session.mask(Llm::Prompt.new.data(text))
+
+    expect(masked.text).to match(/\A⟦PER_\h{4}⟧, ⟦PER_\h{4}⟧ and ⟦PER_\h{4}⟧_helper met ⟦PER_\h{4}⟧\.\z/)
+    expect(session.unmask(masked.text).text).to eq(text)
+  end
+
   it "restores the answer exactly" do
     masked = session.mask(Llm::Prompt.new.data(text))
 

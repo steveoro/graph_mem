@@ -165,7 +165,8 @@ WARN for what it finds there.
 - Listen anywhere but `127.0.0.1`: never `0.0.0.0` or a LAN address. Any other `--listen` value refuses
   to start, and so does a token file that isn't the user's own regular 0600 file of 32 bytes or more.
 - Take a path, flag or URL from a request. argv is always a list.
-- Return stderr, retry, fall back, or keep a prompt or an answer.
+- Return stderr, retry or fall back. A prompt or an answer is kept only in a failed run's dir with
+  `AGENT_CLI_KEEP_FAILED=1` (0700, remove it yourself).
 - Log the prompt, the answer, stderr, the token or an env value. The log has one line per request on
   stderr: `run_id`, `profile`, `model`, `task`, `prompt_bytes`, `status`, `failure_class` and
   `latency_ms`.
@@ -173,6 +174,10 @@ WARN for what it finds there.
   itself.
 
 ## Run model
+
+With `devin`'s `arg` mode, up to 96 KiB of the (masked) prompt sits in the CLI's argv while it runs,
+readable by other local users through `ps` unless `/proc` is mounted with `hidepid`; the `file` mode
+keeps it in the 0700 run dir. Larger prompts already use `file`.
 
 By default, the bridge and the CLI run as your own user, with your CLI login. That gives up one thing:
 if every lockdown layer failed, the CLI could read your home. A dedicated low-privilege user with a
