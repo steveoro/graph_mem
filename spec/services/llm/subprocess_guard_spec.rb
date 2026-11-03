@@ -18,7 +18,18 @@ RSpec.describe SubprocessGuard do
     "Process.spawn" => 'Process.spawn("true")',
     "IO.popen" => 'IO.popen(%w[true]) { |io| io.read }',
     "Open3.capture2" => 'Open3.capture2("true")',
-    "Open3.popen3" => 'Open3.popen3("true") { |*| nil }'
+    "Open3.popen3" => 'Open3.popen3("true") { |*| nil }',
+    # A missing command: if the guard let these through they raise ENOENT instead of replacing
+    # or forking the spec process.
+    "exec" => 'exec("/nonexistent/synth-widget-cmd")',
+    "Process.exec" => 'Process.exec("/nonexistent/synth-widget-cmd")',
+    "fork" => "fork { exit!(0) }",
+    "Process.fork" => "Process.fork { exit!(0) }",
+    "PTY.spawn" => 'PTY.spawn("/nonexistent/synth-widget-cmd")',
+    "open(\"|cmd\")" => 'open("|/nonexistent/synth-widget-cmd")',
+    "IO.read(\"|cmd\")" => 'IO.read("|/nonexistent/synth-widget-cmd")',
+    "IO.readlines(\"|cmd\")" => 'IO.readlines("|/nonexistent/synth-widget-cmd")',
+    "IO.write(\"|cmd\")" => 'IO.write("|/nonexistent/synth-widget-cmd", "x")'
   }.each do |label, code|
     it "refuses #{label} called from a file under app/ or lib/" do
       expect { call_from("app/services/synth_widget_runner.rb", code) }
@@ -27,11 +38,30 @@ RSpec.describe SubprocessGuard do
     end
   end
 
-  it "lets specs, bin/ and the operator rake tasks under lib/tasks/ start a process" do
+  it "lets specs, bin/ and lib/tasks/db_utils.rake start a process, but not another rake file" do
     expect(system("true")).to be(true)
     expect(Open3.capture2("echo", "ok").first).to eq("ok\n")
     expect(call_from("bin/synth_tool", 'system("true")')).to be(true)
-    expect(call_from("lib/tasks/synth_widget.rake", 'system("true")')).to be(true)
+    expect(call_from("lib/tasks/db_utils.rake", 'system("true")')).to be(true)
+    expect { call_from("lib/tasks/synth_widget.rake", 'system("true")') }.to raise_error(SubprocessGuard::Blocked)
+  end
+
+  it "judges the nearest repo frame, so app code can't start a process through a gem's helper" do
+    Dir.mktmpdir("synth_gem") do |dir|
+      helper = File.join(dir, "synth_gem_helper.rb")
+      File.write(helper, "module SynthGemHelper\n  def self.run = system(\"true\")\nend\n")
+      load helper
+
+      expect { call_from("app/services/synth_widget_runner.rb", "SynthGemHelper.run") }
+        .to raise_error(SubprocessGuard::Blocked, %r{from app/services/synth_widget_runner\.rb:1})
+      expect(SynthGemHelper.run).to be(true)
+    ensure
+      Object.send(:remove_const, :SynthGemHelper) if defined?(SynthGemHelper)
+    end
+  end
+
+  it "checks open and IO.read only for a \"|cmd\" argument" do
+    expect(call_from("app/services/synth_widget_runner.rb", "IO.read(#{__FILE__.dump}).size")).to be_positive
   end
 
   it "keeps Kernel#system private and checks nothing outside an example" do
@@ -46,5 +76,6 @@ RSpec.describe SubprocessGuard do
     expect(described_class.guarded_path?("/path/to/gems/rake/lib/rake/file_utils.rb")).to be(false)
     expect(described_class.guarded_path?(Rails.root.join("spec/bin/up_spec.rb").to_s)).to be(false)
     expect(described_class.guarded_path?(Rails.root.join("app/jobs/project_scan_job.rb").to_s)).to be(true)
+    expect(described_class.guarded_path?(Rails.root.join("lib/tasks/db_utils.rake").to_s)).to be(false)
   end
 end

@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "open3"
+require "pty"
 
 # Agent-CLI train PR1, step A4: a fake LLM provider for specs, and a guard that fails any spec in
 # which app code starts a process.
@@ -86,19 +87,24 @@ module LlmSpecHelpers
 end
 
 # Fails the example when code under app/ or lib/ starts a process: the Rails app only talks HTTP
-# (agent-CLI plan, hard rule). It wraps Open3.*, Kernel#system / #spawn / #` (and Kernel.system
-# etc.), Process.spawn and IO.popen, and checks the immediate caller's file, so spec, bin/ and gem
-# callers pass (spec/bin/up_spec.rb, spec/docs/agent_text_sync_spec.rb, Capybara's drivers).
-# lib/tasks/ is exempt: the operator rake tasks there (db:dump, db:restore) run mariadb-dump,
-# also when DatabaseBackupJob invokes them; that predates the plan and stays as it is.
+# (agent-CLI plan, hard rule). It wraps Open3.*, Kernel#system / #spawn / #` / #exec / #fork (and
+# their Kernel.* forms), Process.spawn / exec / fork, PTY.spawn / getpty, IO.popen, and Kernel#open
+# and IO.read / readlines / write / foreach / binread / binwrite with a "|cmd" argument. It judges
+# the nearest caller frame inside this repo (vendor/ and this file skipped), so app code that
+# starts a process through a gem helper is caught too, while spec, bin/ and pure-gem callers pass
+# (spec/bin/up_spec.rb, spec/docs/agent_text_sync_spec.rb, Capybara's drivers).
+# lib/tasks/db_utils.rake is exempt: db:dump / db:restore run mariadb-dump, also when
+# DatabaseBackupJob invokes them; that predates the plan and stays as it is.
 module SubprocessGuard
   # Raised in place of a process start from app code.
   class Blocked < StandardError; end
 
   GUARDED_DIRS = %w[app/ lib/].freeze
-  EXEMPT_DIRS = %w[lib/tasks/].freeze
-  KERNEL_METHODS = %i[system spawn `].freeze
+  EXEMPT_PATHS = %w[lib/tasks/db_utils.rake].freeze
+  KERNEL_METHODS = %i[system spawn ` exec fork].freeze
   OPEN3_METHODS = %i[popen3 popen2 popen2e capture3 capture2 capture2e pipeline_rw pipeline_r pipeline_w pipeline_start pipeline].freeze
+  # Methods that start a process only when their first argument is "|cmd".
+  IO_PIPE_METHODS = %i[read readlines write foreach binread binwrite].freeze
 
   @active = false
 
@@ -107,47 +113,70 @@ module SubprocessGuard
     attr_accessor :active
 
     # @param path [String, nil] a caller's file
-    # @return [Boolean] true for a file under app/ or lib/ of this repo, lib/tasks/ excepted
+    # @return [Boolean] true for a file under app/ or lib/ of this repo, EXEMPT_PATHS excepted
     def guarded_path?(path)
-      root = "#{Rails.root}/"
-      return false unless path.to_s.start_with?(root)
+      relative = repo_relative(path)
+      return false unless relative
 
-      relative = path.to_s.delete_prefix(root)
-      GUARDED_DIRS.any? { |dir| relative.start_with?(dir) } && EXEMPT_DIRS.none? { |dir| relative.start_with?(dir) }
+      GUARDED_DIRS.any? { |dir| relative.start_with?(dir) } && EXEMPT_PATHS.none? { |exempt| relative.start_with?(exempt) }
     end
 
     # @param method [Symbol] the wrapped method
-    # @param location [Thread::Backtrace::Location, nil] its caller
+    # @param locations [Array<Thread::Backtrace::Location>] its callers, nearest first
     # @return [void]
-    # @raise [Blocked] when active and the caller is guarded
-    def check!(method, location)
-      path = location && (location.absolute_path || location.path)
-      return unless active && guarded_path?(path)
+    # @raise [Blocked] when active and the nearest repo frame is guarded
+    def check!(method, locations)
+      return unless active
 
-      raise Blocked, "#{method} called from #{path.delete_prefix("#{Rails.root}/")}:#{location.lineno}: " \
-                     "app code never starts a process; talk HTTP instead"
+      location = locations.find { |candidate| repo_frame?(candidate) }
+      path = location && path_of(location)
+      return unless guarded_path?(path)
+
+      raise Blocked, "#{method} called from #{repo_relative(path)}:#{location.lineno}: app code never starts a process; talk HTTP instead"
+    end
+
+    # @param value [Object] a method's first argument
+    # @return [Boolean] whether it is a "|cmd" pipe-open argument
+    def pipe?(value)
+      value.is_a?(String) && value.start_with?("|")
     end
 
     # @param methods [Array<Symbol>]
     # @param private_methods [Boolean] keep them private (Kernel's instance methods)
+    # @param pipe_only [Boolean] check only calls whose first argument is "|cmd"
     # @return [Module] a module to prepend that checks, then calls the original
-    def wrapper(methods, private_methods: false)
+    def wrapper(methods, private_methods: false, pipe_only: false)
       Module.new do
         methods.each do |name|
           define_method(name) do |*args, **kwargs, &block|
-            SubprocessGuard.check!(name, caller_locations(1, 1).first)
+            SubprocessGuard.check!(name, caller_locations(1)) if !pipe_only || SubprocessGuard.pipe?(args.first)
             super(*args, **kwargs, &block)
           end
           private name if private_methods
         end
       end
     end
+
+    private
+
+    def path_of(location) = location.absolute_path || location.path
+
+    def repo_relative(path)
+      root = "#{Rails.root}/"
+      path.to_s.start_with?(root) ? path.to_s.delete_prefix(root) : nil
+    end
+
+    def repo_frame?(location)
+      relative = repo_relative(path_of(location))
+      relative && !relative.start_with?("vendor/") && path_of(location) != __FILE__
+    end
   end
 
-  Kernel.prepend(wrapper(KERNEL_METHODS, private_methods: true))
-  Kernel.singleton_class.prepend(wrapper(KERNEL_METHODS))
-  Process.singleton_class.prepend(wrapper(%i[spawn]))
-  IO.singleton_class.prepend(wrapper(%i[popen]))
+  Kernel.prepend(wrapper(KERNEL_METHODS, private_methods: true), wrapper(%i[open], private_methods: true, pipe_only: true))
+  Kernel.singleton_class.prepend(wrapper(KERNEL_METHODS), wrapper(%i[open], pipe_only: true))
+  Process.singleton_class.prepend(wrapper(%i[spawn exec fork]))
+  PTY.singleton_class.prepend(wrapper(%i[spawn getpty]))
+  IO.singleton_class.prepend(wrapper(%i[popen]), wrapper(IO_PIPE_METHODS, pipe_only: true))
   Open3.singleton_class.prepend(wrapper(OPEN3_METHODS))
 end
 
