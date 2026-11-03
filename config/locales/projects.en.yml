@@ -22,6 +22,18 @@ en:
         one: "1 group"
         other: "%{count} groups"
       open_in_explore: "Open in Explore"
+      cloud: "Cloud"
+      cloud_on: "On"
+      cloud_off: "Off"
+      cloud_turn_on: "Allow"
+      cloud_turn_off: "Turn off"
+      cloud_confirm: "Allow this project's data, anonymized, to be sent to a cloud model once one is configured?"
+      cloud_note: "Cloud: whether a project's data, anonymized, may be sent to a cloud model. No cloud provider is configured yet, so the setting has no effect until one is."
+    cloud_access:
+      "on": "Cloud access is on for %{project}."
+      "off": "Cloud access is off for %{project}."
+      summary_on: "allowed cloud access for '%{project}'"
+      summary_off: "turned off cloud access for '%{project}'"
     not_found:
       title: "Not found"
       body: "There's no such scan, import or export (it may have been pruned)."

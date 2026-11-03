@@ -15,6 +15,7 @@
           %th= t("projects.index.last_scan")
           %th= t("projects.index.last_import")
           %th= t("projects.index.review")
+          %th= t("projects.index.cloud")
           %th
       %tbody
         - @rows.each do |row|
@@ -42,5 +43,14 @@
                   data: { testid: "project-review-#{row.project.id}" }
               - else
                 %span.projects-muted= t("projects.index.no_review")
+            %td{ data: { testid: "project-cloud-#{row.project.id}" } }
+              - if row.project.cloud_allowed
+                %span.ui-badge.ui-badge--warn= t("projects.index.cloud_on")
+                = button_to t("projects.index.cloud_turn_off"), projects_cloud_access_path(row.project, allowed: false), method: :patch, class: "ui-btn"
+              - else
+                %span.ui-badge= t("projects.index.cloud_off")
+                = button_to t("projects.index.cloud_turn_on"), projects_cloud_access_path(row.project, allowed: true), method: :patch, class: "ui-btn",
+                  form: { data: { turbo_confirm: t("projects.index.cloud_confirm") } }
             %td= link_to t("projects.index.open_in_explore"), explore_path(project_id: row.project.id), class: "ui-btn"
     = paginate @overview.projects
+    %p.projects-muted{ data: { testid: "projects-cloud-note" } }= t("projects.index.cloud_note")
