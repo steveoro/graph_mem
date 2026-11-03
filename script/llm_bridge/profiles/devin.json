@@ -1,0 +1,70 @@
+{
+  "name": "devin",
+  "cli_path": "devin",
+  "version_args": ["--version"],
+  "base_args": ["-p"],
+  "model_flag": "--model",
+  "model_pattern": "[A-Za-z0-9][A-Za-z0-9._:-]{0,63}",
+  "prompt": [
+    { "mode": "arg", "max_bytes": 98304 },
+    { "mode": "file", "flag": "--prompt-file" }
+  ],
+  "output": {
+    "format": "text"
+  },
+  "lockdown_args": ["--permission-mode", "normal", "--sandbox", "--config", "{run}/config.json", "--export", "{run}/transcript.atif"],
+  "config_files": [
+    {
+      "path": "{run}/config.json",
+      "content": {
+        "permissions": {
+          "allow": [],
+          "deny": ["read", "edit", "grep", "glob", "exec", "mcp__*", "Read(/**)", "Edit(/**)", "Exec(*)", "Fetch(*)"]
+        },
+        "subagents_enabled": false,
+        "read_config_from": {
+          "agents_md": false,
+          "claude_md": false,
+          "cursor_rules": false,
+          "mcp_json": false,
+          "user_config": false,
+          "project_config": false
+        },
+        "mcpServers": {},
+        "hooks": {
+          "PreToolUse": [
+            { "matcher": "*", "hooks": [{ "type": "command", "command": "{hook}" }] }
+          ]
+        }
+      }
+    }
+  ],
+  "trust_args": ["--respect-workspace-trust", "false"],
+  "max_turns_args": [],
+  "tools_fully_disabled": false,
+  "tool_trace": {
+    "hook_log": true,
+    "max_turns": null,
+    "export_path": "{run}/transcript.atif",
+    "stdout_pattern": null
+  },
+  "env": {
+    "home": "synthetic",
+    "xdg_data_home": "owner",
+    "pass": [],
+    "secret_env": {}
+  },
+  "failure_patterns": {
+    "prompt_too_long": "prompt is too long|context (length|window) exceeded|too many (input )?tokens",
+    "cli_quota": "usage limit|quota|limit reached|out of credits",
+    "cli_rate_limited": "rate[ _-]?limit|too many requests|overloaded|\\b429\\b",
+    "cli_auth": "not logged in|log ?in required|devin (auth )?login|authentication|unauthori[sz]ed|\\b401\\b",
+    "cli_model_unavailable": "model\\b.{0,80}\\b(not found|not available|does not exist|unsupported)|invalid model|unknown model",
+    "cli_payment_required": "payment required|billing|subscription|\\b402\\b",
+    "cli_config": "unknown (option|flag|config key)|unrecognized|invalid (option|argument|value|config)|workspace (is not )?trust",
+    "cli_sandbox": "sandbox",
+    "cli_truncated": "max[ _]tokens|output (was )?truncated",
+    "cli_turn_limit": "max(imum)? turns|turn limit"
+  },
+  "exit_codes": {}
+}

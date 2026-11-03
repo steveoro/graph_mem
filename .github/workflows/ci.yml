@@ -53,6 +53,26 @@ jobs:
       - name: Lint code for consistent style
         run: bin/rubocop -f github
 
+  # The host-side agent-CLI bridge (script/llm_bridge/): Python standard library and POSIX sh only,
+  # tested against a fake CLI (no real CLI, model, account or network beyond 127.0.0.1).
+  llm_bridge:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Python version
+        run: python3 --version
+
+      - name: Unit tests (fake CLI only)
+        run: python3 -m unittest discover -s script/llm_bridge/test -v
+
+      - name: Shell syntax
+        run: sh -n script/llm_bridge/*.sh
+
+      - name: ShellCheck
+        run: shellcheck script/llm_bridge/*.sh
+
   # [Steve, 2026-07-15] Superseded by CircleCI configuration, kept for future reference
   # test:
   #   runs-on: ubuntu-latest
