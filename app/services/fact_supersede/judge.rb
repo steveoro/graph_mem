@@ -2,7 +2,7 @@
 
 module FactSupersede
   # Asks the local LLM whether each candidate is superseded by the fact, still valid, or
-  # unrelated: one SummaryGenerationClient call per batch of BATCH_SIZE, in Ollama's JSON mode.
+  # unrelated: one Llm::Router call (task :judge) per batch of BATCH_SIZE, in Ollama's JSON mode.
   # Ollama is needed only here; without it every candidate is `unjudged`.
   #
   # The output is parsed strictly. A candidate the answer leaves out, names twice or gets wrong
@@ -67,11 +67,11 @@ module FactSupersede
 
     # @param fact [MemoryObservation] the source fact
     # @param candidates [Array<Candidate>] guard set (LegacyGuard)
-    # @param client [#generate] SummaryGenerationClient by default
+    # @param client [#generate] Llm::Router.client(:judge) by default (Proposals passes its inline flag)
     # @param max_batches [Integer, nil] judge at most this many batches; the rest stay unjudged
     #   (an MCP call must not wait on many LLM calls in a row)
     # @return [Array<Verdict>] one per candidate, in order
-    def self.call(fact, candidates, client: SummaryGenerationClient, max_batches: nil)
+    def self.call(fact, candidates, client: Llm::Router.client(:judge), max_batches: nil)
       new(fact, client, max_batches).call(candidates)
     end
 
@@ -83,7 +83,7 @@ module FactSupersede
 
     # @see .call
     def call(candidates)
-      return candidates.map { |candidate| unjudged(candidate) } unless SummarizationConfig.llm_usable?
+      return candidates.map { |candidate| unjudged(candidate) } unless Llm::Router.usable?(:judge)
 
       candidates.each_slice(BATCH_SIZE).with_index.flat_map do |batch, index|
         @max_batches && index >= @max_batches ? batch.map { |candidate| unjudged(candidate, capped: true) } : judge_batch(batch)

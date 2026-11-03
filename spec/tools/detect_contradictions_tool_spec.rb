@@ -100,7 +100,7 @@ RSpec.describe DetectContradictionsTool, type: :model do
       allow(FactSupersede::Proposals).to receive(:call).and_call_original
 
       run(terms: [ "fast-mcp" ])
-      expect(FactSupersede::Proposals).to have_received(:call).with(fact, terms: [ "fast-mcp" ], limit: 20, seed: true, max_batches: 2)
+      expect(FactSupersede::Proposals).to have_received(:call).with(fact, terms: [ "fast-mcp" ], limit: 20, seed: true, max_batches: 2, inline: true)
       expect(run(terms: [ "fast-mcp" ])).to include(already_known: 1, proposal_count: 0, seeded_count: 0)
     end
 

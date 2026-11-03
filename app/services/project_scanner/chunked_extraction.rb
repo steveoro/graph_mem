@@ -84,7 +84,7 @@ class ProjectScanner
       @on_part&.call(part, @total)
       prompt = ExtractionPrompt.text(unit.pieces.join("\n"), part: part, parts: @total, project_name: @project_name,
                                                              names: @merger.names(limit: MAX_NAMES))
-      result = SummaryGenerationClient.generate(prompt, style: "concise", options: request_options)
+      result = Llm::Router.generate(:scan, prompt, style: "concise", options: request_options)
       error = failure(result)
       return error if error
 

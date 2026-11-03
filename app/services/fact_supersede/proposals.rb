@@ -38,17 +38,20 @@ module FactSupersede
     # @param limit [Integer] most proposals (the review run cap)
     # @param seed [Boolean] seed review rows
     # @param max_batches [Integer, nil] judge at most this many batches (Judge), nil for all
+    # @param inline [Boolean] true when the judge runs inside an MCP request (detect_contradictions);
+    #   passed to the Router with each judge call
     # @return [Result]
-    def self.call(fact, terms: [], limit: ReviewRowClassifier::RUN_CAPS.fetch(KIND), seed: true, max_batches: nil)
-      new(fact, terms: terms, limit: limit, seed: seed, max_batches: max_batches).call
+    def self.call(fact, terms: [], limit: ReviewRowClassifier::RUN_CAPS.fetch(KIND), seed: true, max_batches: nil, inline: false)
+      new(fact, terms: terms, limit: limit, seed: seed, max_batches: max_batches, inline: inline).call
     end
 
-    def initialize(fact, terms:, limit:, seed:, max_batches:)
+    def initialize(fact, terms:, limit:, seed:, max_batches:, inline: false)
       @fact = fact
       @terms = terms
       @limit = limit
       @seed = seed
       @max_batches = max_batches
+      @inline = inline
     end
 
     # @see .call
@@ -62,7 +65,9 @@ module FactSupersede
       kept, rest = guarded.partition { |candidate| candidate.guard == LegacyGuard::KEEP }
       known_ids, rejudge_rows = known_pairs(rest)
       to_judge = rest.reject { |candidate| known_ids.include?(candidate.observation.id) }
-      verdicts = Judge.call(@fact, to_judge, max_batches: @max_batches)
+      # Judge's default client is the Router's non-inline :judge client; an inline call passes its own.
+      judge_options = @inline ? { client: Llm::Router.client(:judge, inline: true) } : {}
+      verdicts = Judge.call(@fact, to_judge, **judge_options, max_batches: @max_batches)
       rejudged, verdicts = verdicts.partition { |verdict| rejudge_rows.key?(verdict.candidate.observation.id) }
       refreshed = rejudged.count { |verdict| refresh(rejudge_rows.fetch(verdict.candidate.observation.id), verdict) }
       items = verdicts.select { |verdict| PROPOSAL_VERDICTS.include?(verdict.verdict) }.first(@limit).map { |verdict| item(verdict) }
@@ -85,7 +90,7 @@ module FactSupersede
 
       pending = MaintenanceReportRow.by_report_type(REPORT_TYPE).pending.where(kind: KIND, signature: signatures.keys).to_a
       # Only a seeding run can refresh a row, so only it spends LLM calls on them.
-      rejudge = @seed && SummarizationConfig.llm_usable? ? pending.select { |row| row.payload["verdict"] == Judge::UNJUDGED } : []
+      rejudge = @seed && Llm::Router.usable?(:judge) ? pending.select { |row| row.payload["verdict"] == Judge::UNJUDGED } : []
       suppressed = MaintenanceReportSuppression.in_force.where(report_type: REPORT_TYPE, signature: signatures.keys).pluck(:signature)
       known = ((pending - rejudge).map(&:signature) + suppressed).to_set { |signature| signatures[signature] }
       [ known, rejudge.index_by { |row| signatures[row.signature] } ]

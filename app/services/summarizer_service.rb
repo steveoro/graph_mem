@@ -419,13 +419,13 @@ class SummarizerService
   end
 
   def attempt_llm_synthesis(response, evidence)
-    unless SummarizationConfig.llm_usable?
+    unless Llm::Router.usable?(:summary)
       response[:fallback_reason] = fallback_reason_for_disabled
       return response
     end
 
     prompt = build_prompt(evidence)
-    result = SummaryGenerationClient.generate(prompt, style: @style)
+    result = Llm::Router.generate(:summary, prompt, style: @style)
 
     if result[:ok]
       response[:summary] = result[:text]
