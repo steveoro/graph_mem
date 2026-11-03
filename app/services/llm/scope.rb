@@ -50,6 +50,12 @@ module Llm
       project_ids.nil?
     end
 
+    # @return [Llm::Anonymizer::Session] this scope's session, built on first cloud use and kept
+    #   for the scope's life (one per summary or judge call, one per scan)
+    def session
+      @session ||= Anonymizer::Session.new(self)
+    end
+
     # @return [String] never the ids or names (scopes must not leak into logs or errors)
     def inspect
       "#<#{self.class.name}>"
