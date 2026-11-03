@@ -5,6 +5,17 @@ All notable changes to GraphMem will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.68.0] - 2026-11-03
+
+Anonymized prompts and per-project cloud access (#152).
+
+### Added
+- `Llm::Anonymizer`: typed reversible tokens for project and entity names, paths, hosts, URLs, e-mails, IPs and usernames; secrets redacted. Plus the cloud gate (`Llm::CloudGate`). Both are used only for cloud providers, and there is none yet.
+- `cloud_allowed` per project (default off), set in the new **Cloud** column of the Projects page (operator only, with a confirm, recorded as a `project.cloud_access` change set and audited).
+
+### Changed
+- Nothing visible with no cloud provider: requests, prompts, results and outputs are unchanged.
+
 ## [1.67.0] - 2026-11-03
 
 One internal seam for every LLM call (#151).
