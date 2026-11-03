@@ -8,8 +8,9 @@ read while writing this plan. **No spec was run.**
 Context: today every LLM call in graph_mem goes through `SummaryGenerationClient` to a local Ollama (or an
 OpenAI-compatible server). This train adds an **opt-in** second backend: an agent CLI (Claude Code, Devin, …) run on
 the operator's workstation behind a small host-side HTTP bridge, with the data anonymized and a per-project
-`cloud_allowed` gate. It is five PRs. **This plan details PR1 only** (a provider abstraction with no behaviour
-change); PR2–PR5 get one-paragraph scopes and will each get their own step list before they start.
+`cloud_allowed` gate. It is five PRs. **This plan details PR1** (a provider abstraction with no behaviour
+change; done, #151, 1.67.0) **and PR2** (the anonymizer and `cloud_allowed`, written Nov 3 from `d779aff`); PR3–PR5
+get one-paragraph scopes and will each get their own step list before they start.
 
 ## Hard rules (the whole train)
 - **No new MCP tool**, no new or changed tool argument or description; the default `/mcp` stays at **12** (readonly 9,
@@ -28,7 +29,7 @@ change); PR2–PR5 get one-paragraph scopes and will each get their own step lis
 
 | PR | Branch (suggested) | Scope | Depends on | Version |
 |---|---|---|---|---|
-| **PR1** | `claude/llm-provider-abstraction` | Provider abstraction, **no behaviour change**: `Llm::Provider`, `Llm::OllamaProvider`, `Llm::Router`, `Llm::Registry`, prompt parts, one usage log line per call, spec-side `FakeProvider` and `SubprocessGuard` | `main` (1.66.0) ✅ | **1.67.0** |
+| **PR1** | `claude/llm-provider-abstraction` | Provider abstraction, **no behaviour change**: `Llm::Provider`, `Llm::OllamaProvider`, `Llm::Router`, `Llm::Registry`, prompt parts, one usage log line per call, spec-side `FakeProvider` and `SubprocessGuard` | `main` (1.66.0) ✅ #151 | **1.67.0** |
 | **PR2** | `claude/llm-anonymizer` | Anonymizer (typed HMAC tokens) + `cloud_allowed` per project (default false) + the gate that refuses a cloud provider for a project that doesn't allow it | PR1 | **1.68.0** |
 | **PR3** | `claude/llm-bridge` | Host bridge + profile framework + `devin` and `claude` profiles + the per-profile lockdown gate, all under `script/llm_bridge/` (not loaded by Rails) | `main` only; can run **in parallel** with PR1–PR2 | **1.69.0** |
 | **PR4** | `claude/agent-cli-provider` | `Llm::AgentCliProvider` (HTTP to the bridge) + `Llm::ResponseNormalizer` + per-task fallback chains + settings + a probe | PR2, PR3 | **1.70.0** |
@@ -318,21 +319,392 @@ About **500–700 changed lines** (over half specs): P0 ~150, A1 ~200, A2 ~80, A
 - `SubprocessGuard` can't be scoped without breaking `up_spec` or `agent_text_sync_spec`.
 - The diff passes ~1,000 lines.
 
+## PR2: anonymizer + `cloud_allowed` → 1.68.0
+
+**Written 2026-11-03 (Europe/Rome)** from `main` at `d779aff` (#151 merged, **1.67.0**). Every file:line below was
+checked against that commit; if a line has moved, find it by the quoted text; if the code no longer matches, **stop
+and ask Steve**. Only code was read; **no spec was run**.
+
+### Brief
+| | |
+|---|---|
+| Branch / PR | `claude/llm-anonymizer`, **one PR**, titled "LLM anonymizer (1.68.0)" |
+| Commits | M → A1 → A2 → A3 → U → T → D → R, one commit per step (more is fine, fewer is not). **D and R are in this PR** |
+| Checkpoints | **push and continue**: push, get CI green, keep going; Steve reviews as it lands. Stop only for the conditions in "Stop and ask Steve if" |
+| Version | **1.68.0** (Decision 1) |
+| Data | synthetic only (`SynthWidget`, `Alpha Service`, `Gadget Project`, `Zq7Canary…` canaries); never a real model call |
+| Read first | `CLAUDE.md`, `AGENTS.md`; this plan (hard rules, PR1); `docs/summarization.md` ("LLM providers"); `app/services/llm/*`; `spec/support/llm.rb` |
+| MCP surface | **unchanged** (22 / 12 / 9 / 22; snapshots byte-identical); no tool gains or loses an argument |
+| Migration / settings | **one** migration (`cloud_allowed` on `memory_entities`) / **none** |
+
+### Goal
+- Before any prompt reaches a provider with `cloud?` true, the Router rewrites its **data** segments so that no
+  project or entity name, alias, path, host, URL, e-mail, IP, username or secret-looking string leaves the app, and
+  restores the answer before any caller sees it.
+- A per-project `cloud_allowed` flag (default **false**) that the Router checks on every cloud call; a refused call
+  never reaches the provider.
+- All of it provable today with a `FakeProvider` flagged as cloud (no cloud provider exists until PR4).
+- With no configuration, nothing changes: the only provider is still Ollama, `cloud?` false, and every request,
+  prompt, result, log line and REST/MCP output is **byte-identical** to 1.67.0's.
+
+### Non-goals
+- Any real cloud provider, the bridge, the fallback chain settings, budgets (PR3–PR5).
+- Settings for custom regex patterns or allow/deny lists (the detectors are built in; a setting group can come with
+  PR4 if Steve wants one).
+- A structural outline instead of raw code for scans (notes option 2); a stricter "keep scans local" switch beyond
+  `cloud_allowed` itself.
+- Any change to the Ollama path, `SummaryGenerationClient`, prompts' rendered text or the P0 goldens.
+
+### What the code looks like today (verified at `d779aff`)
+
+**The Router takes a String.** `app/services/llm/router.rb:39-47`:
+`def generate(task, prompt, style:, options: nil, inline: false)` → `provider = Registry.fetch(CHAIN.first)` →
+`provider.generate(prompt, style: style, options: options).merge(provider: provider.name)`, with
+`UsageLog.record(task:, provider:, inline:, prompt:, result:)` in an `ensure`. `CHAIN = %i[ollama]` (:17),
+`usable?(task)` (:53), `client(task, inline: false)` (:62) returns `Client = Data.define(:task, :inline)` whose
+`generate(prompt, style: "concise", options: nil)` (:26) calls `Router.generate`.
+
+**Every call site renders the Prompt before the Router sees it**, so today the segments are lost at the seam:
+- `summarizer_service.rb:490` `build_prompt(evidence)` builds an `Llm::Prompt` (`.data(@query)`, `.data(@style)`
+  twice, per evidence entry `.trusted("\n- [observation_id=…, entity_id=…, entity=").data(entity.name)` and
+  `.data(observation.content)`) and returns `prompt.to_s`; `:441-442` `prompt = build_prompt(evidence)` /
+  `Llm::Router.generate(:summary, prompt, style: @style)`.
+- `project_scanner/extraction_prompt.rb:59-65` `def text(files_text, part:, parts:, project_name:, names: [])`:
+  `.data(project_name)`, `prompt.trusted(NAMES_PREFIX).data(kept.join("; "))`, `.data(files_text)`, then `.to_s`.
+  `chunked_extraction.rb:85-87` calls `ExtractionPrompt.text(…, names: @merger.names(limit: MAX_NAMES))` and
+  `Llm::Router.generate(:scan, prompt, style: "concise", options: request_options)`; `ChunkedExtraction.new(chunks:,
+  project_name:, num_ctx:, num_predict:, timeout:, on_part: nil)` (:35) is built once per scan by
+  `llm_extraction.rb:28-31` with `project_name: prompt_project_name` (`@project_name || File.basename(@project_root)`,
+  :78-80). One `ChunkedExtraction` = one scan = up to 16 parts plus splits.
+- `fact_supersede/judge.rb:158-162` `def prompt(batch)`: `.data(project_name(@fact.memory_entity))`, `.data(fact)`
+  (JSON), `.data(JSON.generate(batch.map { |candidate| statement(candidate) }))`, then `.to_s`; `:96`
+  `@client.generate(prompt(batch), style: "concise", options: { …, format: "json" })`. `statement` (:164-171) puts
+  each candidate's `entity.name` and `project_name(entity)` (or `"(no project)"`) in the JSON. `project_name` (:174-178)
+  is the entity itself for a Project, else `entity.project&.name || "(no project)"`. Default client: `Judge.call(…,
+  client: Llm::Router.client(:judge))` (:74); `proposals.rb:69` passes `Llm::Router.client(:judge, inline: true)`.
+
+**`Llm::Prompt`** (`prompt.rb`): `initialize` takes no argument (:18), `trusted`/`data` return self, `segments` is a
+copy, `to_s` joins (:40). **`spec/services/llm/prompt_segments_spec.rb:12`** wraps `Llm::Prompt.new` with
+`and_wrap_original { |original, *args| … }` and reads `prompts.sole`: so `Prompt.new` must keep taking no keyword
+and each summary/judge/scan-part call must still build **exactly one** `Llm::Prompt` (the anonymizer must not build
+Prompts).
+
+**`Llm::Provider#cloud?`** (`provider.rb:34`) returns false; nothing reads it yet. **`Llm::UsageLog.record`**
+(`usage_log.rb:22`, fields at :29). **`Llm::Registry.override`** (`registry.rb:29-33`) raises outside the test env.
+
+**`FakeProvider`** (`spec/support/llm.rb:16`, `initialize(name: "fake", available: true, result: DEFAULT_RESULT,
+&answer)` at :34) has **no `cloud:` keyword**; `with_llm_provider(provider)` (:68) overrides `:ollama`.
+
+**Projects.** No `projects` table: a project is a `memory_entities` row with `entity_type` "Project" and `project_id`
+NULL (`node_operations_strategy.rb:14`, `memory_entity.rb:6-11`); members point at it via `project_id`. Columns
+(`db/structure.sql`, `CREATE TABLE memory_entities`): `name`, `entity_type`, `aliases` (text, comma list),
+`description`, `embedding`, `project_id`, `project_scope` (generated). Names are unique per scope, case-insensitive.
+
+**How an entity is written today** (none of these may set `cloud_allowed`):
+- MCP `graph_edit` → `GraphEditService#update_entity` (`graph_edit_service.rb:117-119`):
+  `attributes.slice(:name, :entity_type, :aliases, :description)`.
+- REST `api/v1/memory_entities_controller.rb:213`: `permit(:name, :entity_type, :aliases, :description)`; **but**
+  `:93` and `:153` `render json: @memory_entity`, i.e. `MemoryEntity#as_json` (`memory_entity.rb:46-48`, excepts
+  only `:embedding`), so a new column would **appear in REST output** unless excepted.
+- Explore UI `explore/entities_controller.rb:24`: `permit(:name, :entity_type, :aliases, :description)`.
+- Export `export_strategy.rb:147-148` lists fields explicitly; merge `node_operations_strategy.rb:98` `merge_into`.
+- Audit: `Auditable` (`after_update :audit_update`) records every changed column. `ChangeSet::KINDS`
+  (`change_set.rb:15-19`) is a closed list (plus `policy.*` / `explore.*` patterns).
+
+**The Projects page** is an index only (`config/routes.rb:116-117` `get "projects"` + `namespace :projects`;
+`ProjectsController#index`; `ProjectsOverview::Row = Data.define(:project, :last_scan, :last_import, :review_groups)`,
+`projects_overview.rb:14`; table in `app/views/projects/index.html.haml`; strings in `config/locales/projects.en.yml`).
+`Projects::BaseController` is operator only. There is **no project show page**: the toggle goes in the table.
+
+### Design
+
+#### 1. Prompts carry their scope; the Router gets the Prompt
+- `Llm::Prompt#scoped(scope)` → self (stores an `Llm::Scope`); `#scope` reader. `Prompt.new` and `to_s` unchanged.
+- The three call sites hand the Router the **Prompt object** instead of its String:
+  - `SummarizerService`: `build_llm_prompt(evidence)` returns the scoped Prompt; `build_prompt` stays as
+    `build_llm_prompt(evidence).to_s` only if something else calls it (today only :441 does; then fold it).
+  - `ExtractionPrompt.build(…)` returns the Prompt; `text(…)` stays as `build(…).to_s` (prompt_segments_spec and the
+    goldens call `text`). `ChunkedExtraction` calls `build(…).scoped(@llm_scope)`.
+  - `Judge#prompt` returns the scoped Prompt (drop the `.to_s`); `judge_batch` passes it to `@client.generate`.
+- `Router.generate` accepts a `String` or an `Llm::Prompt`. For a provider with `cloud?` false it does exactly what
+  it does today with `prompt.to_s` (a String's `to_s` is itself): same provider call, same Hash, same `[llm]` line.
+  `OllamaProvider` and every `SummaryGenerationClient` stub keep receiving a String.
+
+#### 2. `Llm::Scope`: which projects a prompt touches
+A small class (not `Data`: it memoizes), built **lazily** so the Ollama path runs no extra query:
+- `Scope.for_entities(entities)`: each entity's project is itself if it is a Project root, else `project_id`; any
+  entity with neither ⇒ `unscoped`. Summary: every evidence entity. Judge: the fact's entity **and every candidate's
+  entity** (a `"(no project)"` candidate makes the call unscoped).
+- `Scope.for_scan(project_name)`: the Project root whose name matches case-insensitively (`entity_type` "Project",
+  `project_id` NULL), resolved on first use; none (a first scan, before reconcile creates it) ⇒ `unscoped`.
+- `#session`: one `Llm::Anonymizer::Session`, built on first cloud use and kept for the Scope's life. Summary and
+  judge build one Scope per call (one session per call); `ChunkedExtraction` builds **one Scope per scan**
+  (`llm_scope:` keyword, default `Scope.for_scan(project_name)`), so every part and split of one scan shares one
+  mapping, and names restored from part 1 re-mask to the same tokens in part 2's names line.
+
+#### 3. `Llm::CloudGate`
+`allowed?(scope)`: true only if the scope is present, not unscoped, names at least one project, and **every** id is
+a Project root with `cloud_allowed` true (one `where(...).count` per call, never cached, so turning it off takes
+effect on the next call, mid-scan included). No timestamps are read.
+
+#### 4. Router cloud path (only when `provider.cloud?`)
+1. Not an `Llm::Prompt` ⇒ refuse `prompt_not_segmented`.
+2. `CloudGate.allowed?(prompt.scope)` false ⇒ refuse `cloud_not_allowed`.
+3. `scope.session.mask(prompt)` ⇒ masked String + counts, or refuse `anonymizer_refused` (collision, detector
+   timeout, dictionary over its cap, leftover hit).
+4. Prepend one trusted instruction (cloud path only): "Tokens like ⟦ENT_1a2b⟧ stand for names, paths or
+   addresses. Copy them exactly as written; never translate, split, merge or invent them."
+5. `provider.generate(masked, style:, options:)`.
+6. If `ok`: `session.unmask(text, json: options&.dig(:format) == "json")` ⇒ restored text, or the result becomes
+   `ok: false, text: nil, error: "anonymization_round_trip_failed"`.
+7. A refusal returns `{ ok: false, text: nil, error: <reason>, latency_ms: 0.0, provider: <name> }` **without calling
+   the provider**, and the Router moves on to the next provider in `CHAIN` (PR2's chain is `[:ollama]`, so in
+   production there is no cloud provider to refuse; PR4 fills the chain). Callers already handle `ok: false`:
+   the summarizer shows `fallback_reason`, a scan part counts as failed (and the scan falls back to the
+   deterministic extraction as today), the judge returns unjudged.
+The cloud path lives in its own file (`app/services/llm/cloud_call.rb`) so `router.rb` stays small.
+
+#### 5. `Llm::Anonymizer` (`app/services/llm/anonymizer/`: `session.rb`, `dictionary.rb`, `detectors.rb`, `tokens.rb`)
+**What is masked:** `data` segments only; `trusted` segments (instructions, labels, ids, the scope label) are never
+touched, so ids the summarizer's citation check and the judge's parser rely on survive.
+- **Dictionary** (built once per session, two `pluck` queries): every Project root's name and aliases (global: a
+  summary about one project may mention another) ⇒ `PRJ`; every member of the scope's projects (name, aliases) ⇒
+  `ENT`, or `PER` when `entity_type` is a person type ("Person", "User"). Aliases split as `NodeOperationsStrategy`
+  does (comma list). Terms shorter than 3 chars and a small built-in allow list of generic words (`Rails`, `User`,
+  `Service`, `Controller`, …) are skipped. Cap: **20,000 terms**; over it ⇒ refuse (fail closed).
+- **Variants** per term, all matched case-insensitively at Unicode word boundaries: separators (space, `-`, `_`,
+  none), CamelCase / camelCase / SCREAMING_SNAKE, possessive `'s`, plural `s`/`es` for terms ≥ 5 chars, and the
+  term's JSON-escaped form when it differs (a name with `"` or `\` inside the judge's JSON).
+- **Identifier-aware**: identifiers and path segments are split into words (camel/snake/kebab); a dictionary term
+  covering a word run is replaced inside the identifier (`GadgetProjectController` → `⟦PRJ_ab12⟧Controller`,
+  `lib/gadget_project/x.rb` → `lib/⟦PRJ_c3d4⟧/x.rb`). Repo-relative paths keep their shape (Decision 6).
+- **Detectors** (built-in regexes, each with `Regexp.new(…, timeout: 1.0)`; a timeout ⇒ refuse): in this order,
+  secrets first:
+  - `SECRET` (untyped `⟦SECRET⟧`, **not in the map**, never restorable): PEM blocks, `sk-…`, `ghp_`/`gho_`/
+    `github_pat_…`, `xox[abp]-…`, `AKIA…`, JWTs, the value in `password|secret|token|api[_-]?key` `=`/`:` contexts,
+    long high-entropy runs (≥ 32 chars of mixed base64/hex classes).
+  - `URL` (whole, git remotes `git@host:org/repo.git` included), `EMAIL`, `IP` (IPv4/IPv6, public too), `HOST`
+    (FQDNs outside URLs/e-mails only when they end in a private suffix: `.local`, `.lan`, `.internal`, `.home`,
+    `.corp`, `.intranet`, `.localdomain`; plain `a.b` method chains are not hosts), `PATH` (absolute Unix paths
+    with ≥ 2 segments, `~/…`, Windows drive paths; whole).
+  - `USER`: the owner segment of a home-directory path (the Linux, macOS and Windows forms) joins the session's
+    dictionary, so the same username elsewhere in the text is masked too.
+- **Tokens**: `⟦TYPE_hhhh⟧`, `hhhh` = the first 4 hex of `HMAC-SHA256(session salt, "TYPE\0surface")`, lengthened
+  to 6 then 8 on a clash within the session. The salt is `SecureRandom.bytes(32)` per session (Decision 4): stable
+  within one call or one scan, unlinkable across them. **One token per surface form** (Decision 5), so
+  `unmask(mask(x)) == x` exactly for every non-secret text.
+- **Matching**: one left-to-right pass over a word tokenization with a Hash of case-folded word n-grams (n ≤ the
+  longest term's word count, capped at 8), **longest match first**, leftmost wins; detectors run before the
+  dictionary on the raw text so a URL is one token, not a URL with tokens inside.
+- **Collision (input)**: a data segment that already contains `⟦`, `⟧` or a token-like `(PRJ|ENT|PER|PATH|HOST|URL|
+  EMAIL|IP|USER)_[0-9a-f]{4,8}` ⇒ refuse (Decision 7).
+- **Leftover check (input)**: after masking, the masked text is re-scanned with the dictionary, variants and
+  detectors; any hit ⇒ refuse. Nothing is sent on doubt.
+- **Unmask**: a tolerant regex accepts `⟦ENT_ab12⟧`, `⟦ ENT_ab12 ⟧`, `[[ENT_ab12]]`, and a bare `ENT_ab12` whose
+  suffix is in the map, with a trailing plural/possessive kept as written. A well-formed token not in the map (an
+  invented placeholder) ⇒ the whole answer is rejected (Decision 8). Any `⟦` or `⟧` left after restoring (a partial
+  de-anonymization) ⇒ rejected. `⟦SECRET⟧` is restored as the literal `[redacted]`. In JSON mode each restored
+  value is inserted JSON-escaped (`JSON.generate(value)[1...-1]`), so a name with a quote keeps the answer valid
+  and the callers' parsers run unchanged.
+- **Leftover check (output)**: an original masked term appearing in the answer is counted; for `:scan` (whose
+  answer writes to the graph) it rejects the answer; for `:summary` and `:judge` it is only counted.
+- **Lifetime**: the map is a Ruby object on the Scope; never persisted, logged, serialized, put in a review row,
+  an `OperationProgress`, a job argument or an exception message.
+
+#### 6. `cloud_allowed` on project entities
+- **Migration** `db/migrate/2026110…_add_cloud_allowed_to_memory_entities.rb`: `add_column :memory_entities,
+  :cloud_allowed, :boolean, null: false, default: false` (no index: Project roots are few). `db/structure.sql`
+  gains the column and the version row; nothing else in it changes.
+- **Model**: a validation that it can be true only on a Project root; a `before_validation` that resets it to false
+  when an entity stops being a Project root (retyped or given a `project_id`), so `graph_edit` retyping a project
+  keeps working; `as_json` excepts `cloud_allowed` alongside `embedding` (REST output byte-identical);
+  `EMBEDDING_FIELDS` unchanged (no re-embed). `merge_into` keeps the **target's** flag (never inherits the source's).
+- **How it is set** (Decision 3): **only** on the Projects page, by the operator. A "Cloud" column per row: a badge
+  (Off / On) and a `button_to` (`PATCH /projects/cloud_access/:id`, `allowed=true|false`) with a `turbo_confirm`
+  ("Allow this project's data, anonymized, to be sent to a cloud model once one is configured?"). A note under the
+  table says no cloud provider is configured yet, so the flag has no effect until one is.
+  `Projects::CloudAccessController#update` (< `Projects::BaseController`, so guests get 403; a non-Project id 404),
+  wrapped in `ChangeSet.record(kind: "project.cloud_access", subject: project, summary: …)` (new entry in
+  `ChangeSet::KINDS`), audited by `Auditable`, undoable like any audited change.
+- **Not settable** through REST (`permit` lists unchanged), MCP (`graph_edit`/`graph_write` slices unchanged; no tool
+  argument added), the Explore edit form, import (never read) or export (never written). Guard specs pin each.
+
+#### 7. Logging
+- Ollama (`cloud?` false) lines: **unchanged**, same keys, same values.
+- Cloud lines add: `anonymized` (true), `masked` (counts per type, e.g. `{"PRJ":1,"ENT":4,"PATH":2}`), `secrets`
+  (count), `round_trip` (`ok` / `failed`), `leftover_out` (count), and `refused` (the reason) for a refusal;
+  `prompt_chars`/`est_in_tokens` measure the **masked** text. Never a token, a mapping entry, an original value, a
+  name, a project id or the salt. `UsageLog` gets an allow list of keys and a spec greps a cloud line for every
+  canary.
+
+#### 8. Performance
+- Ollama path: zero added cost (no Scope resolution, no session, no query; spec'd by `not_to receive(:new)`).
+- Cloud path: two `pluck` queries per session (per call; per scan for scans), dictionary build O(terms × variants),
+  masking O(chars × n-gram length), detectors with timeouts. Target: a 200 KB scan part against 10,000 terms masks
+  in well under a second; a spec with a generous bound (3 s) catches quadratic blow-ups. Summary and judge prompts
+  are small.
+
+### Steps
+
+#### M. Migration, model, scope and gate
+- The migration and `db/structure.sql`; `MemoryEntity` validation, reset, `as_json` except; `ChangeSet::KINDS` +
+  `project.cloud_access`.
+- `Llm::Scope` (`for_entities`, `for_scan`, lazy resolution, `#session` placeholder until A1), `Llm::CloudGate`,
+  `Llm::Prompt#scoped` / `#scope`.
+- Specs: default false; true refused on a non-Project and on a member; reset on retype; REST show/create/update JSON
+  byte-identical (no `cloud_allowed` key); merge keeps the target's flag; scope resolution for each task shape
+  (members, roots, unscoped, unknown scan project); gate truth table.
+
+#### A1. Anonymizer core (not wired)
+- `Llm::Anonymizer::{Dictionary, Detectors, Tokens, Session}` as in Design §5.
+- Specs: every detector type, including negatives (`foo.bar` method chains, `Rails.logger`, version numbers are not
+  hosts/IPs); secrets ⇒ `⟦SECRET⟧`; variants; identifier-aware masking; longest match (`Gadget` vs `Gadget
+  Project`); a **property round trip** (seeded `Random`, a few hundred generated texts mixing terms in every variant,
+  paths, hosts, URLs, e-mails, IPs and noise ⇒ `unmask(mask(x)) == x`); same session ⇒ same token, new session ⇒
+  different tokens; clash lengthening; collision refusal; leftover refusal; regex timeout refusal; dictionary cap
+  refusal; unmask of tolerant forms; invented token rejected; partial restore rejected; JSON-mode escaping keeps
+  `JSON.parse` working.
+
+#### A2. Router cloud path
+- `Llm::CloudCall` (Design §4), `Router.generate` branching on `provider.cloud?`, String-or-Prompt, refusal results,
+  next-provider loop over `CHAIN`; `UsageLog` cloud fields with the key allow list.
+- `spec/support/llm.rb`: `FakeProvider` gains `cloud: false` (a new keyword, default false: no existing example
+  changes); `cloud?` returns it.
+- Specs: with a non-cloud `FakeProvider` the provider receives `prompt.to_s` (a String), the result Hash and the
+  `[llm]` line are identical to 1.67.0's, `Llm::Anonymizer::Session` and `Llm::Scope` resolution are never
+  instantiated; with `cloud: true`: refused for each reason without a provider call; masked prompt received;
+  answer restored; round-trip failure result; log fields present and canary-free. If `Registry.override` cannot
+  register a second name, test the next-provider loop with `stub_const("Llm::Router::CHAIN", …)` plus overrides,
+  with no test-only code in `app/`.
+
+**Checkpoint 1:** M–A2 pushed, CI green, open the **draft PR** (paste one cloud `[llm]` line and one masked synthetic
+prompt in its description). **Continue** with A3; don't wait for review.
+
+#### A3. Call sites hand over scoped Prompts
+- `SummarizerService` (`build_llm_prompt`, `Scope.for_entities(evidence entities)`), `ExtractionPrompt.build` +
+  `ChunkedExtraction` (`llm_scope:` keyword, one per scan) + `LlmExtraction` (passes `Scope.for_scan
+  (prompt_project_name)`), `Judge#prompt` (`Scope.for_entities([fact entity, *candidate entities])`).
+- **Leak specs with canaries**, one per call site, through a `FakeProvider(cloud: true)` that echoes the tokens back
+  in a plausible answer: seed an allowed project `Zq7Canary Project` (alias `Zq7cp`), members `Zq7CanaryWidget`,
+  `Zq7 Alpha Service`, observations carrying `ops@zq7canary.example`, `10.7.7.7`, `build.zq7canary.internal`,
+  a home-directory path for the user `zq7user`, `https://git.zq7canary.example/org/repo.git`, `sk-` + 40 random chars; for the scan a
+  `Dir.mktmpdir` tree with the canary in identifiers (Camel, snake, SCREAMING), path segments, comments, a
+  Gemfile and a config file. Assert **no canary in any variant** in any `FakeProvider` call's prompt, and the
+  caller's output carries the restored originals (summary text, scan entity names, judge `reason`).
+- **Session stability**: a two-part scan (plus one forced 413 split) uses the same token for the same name in every
+  part and in part 2's names line; two scans use different tokens.
+- **Gate at the call sites**: default false ⇒ summary `fallback_reason` `cloud_not_allowed`, scan falls back to the
+  deterministic extraction, judge returns unjudged, and the fake records **no** call; a summary spanning an
+  allowed and a disallowed project ⇒ refused; a judge candidate with no project ⇒ refused; turning the flag off
+  between two parts ⇒ the second part refused.
+- P0 goldens and every existing spec green **unchanged**.
+
+#### U. Projects page toggle
+- Route (`namespace :projects` → `resources :cloud_access, only: [ :update ]`), `Projects::CloudAccessController`,
+  the column and note in `index.html.haml`, strings in `projects.en.yml`, `ProjectsOverview` unchanged (the row's
+  `project` already has the column).
+- Request specs: operator toggles on and off (flash, change set of kind `project.cloud_access`, audit row); guest
+  403; a member or unknown id 404; a bad `allowed` value 422. Guard specs: `graph_edit` `update_entity` and
+  `graph_write` with a `cloud_allowed` key, the REST `PATCH` with `memory_entity[cloud_allowed]`, the Explore form and
+  an import file carrying it all leave the flag false; an export of an allowed project has no `cloud_allowed`.
+
+**Checkpoint 2:** A3–U pushed, CI green; paste the canary specs' output (example names) in the PR. **Continue.**
+
+#### T. Cross-cutting specs (new files only)
+- `spec/services/llm/cloud_architecture_spec.rb` (Prism/grep over `app/` and `lib/`, like
+  `architecture_spec.rb`): `Llm::Anonymizer` is referenced only under `app/services/llm/`; `cloud_allowed` is written
+  only by the migration, `MemoryEntity` and `Projects::CloudAccessController`, and read only by `Llm::CloudGate`, the
+  model and the projects view; nothing under `app/services/llm/anonymizer/` calls `Rails.logger`, `File`, `IO` or
+  `puts`; `CloudCall` is the only caller of `Session#mask`/`#unmask`.
+- Performance spec (Design §8). `SubprocessGuard` stays active (no spec shells out).
+- MCP surface: counts 22 / 12 / 9 / 22 unchanged; `spec/mcp/tools_list_snapshot_spec.rb` green without
+  re-recording; `git diff spec/fixtures/mcp/snapshots spec/fixtures/llm` empty; `git diff db/structure.sql` shows only
+  the column and the version.
+
+#### D. Docs
+- `docs/summarization.md`: "Anonymization and cloud access": what counts as data, the token types, one session per
+  call / per scan, what is never logged, the refusal reasons, the Projects page toggle (default off), what still
+  leaks (structure, domain vocabulary, numbers; pseudonymization, not anonymity), and that nothing leaves the
+  machine until a cloud provider exists (PR4).
+- `docs/architecture.md`: the anonymizer and gate inside the `app/services/llm/` layer.
+- `docs/plans/ui-dashboard-plan.md`: row AC2 ✅ with the PR number. Generic paths only.
+
+#### R. Release
+- `lib/graph_mem/version.rb` and `skills/graph-mem-mcp-toolset/SKILL.md:18` (`graph-mem-version:`) → **1.68.0**.
+- `CHANGELOG.md` `## [1.68.0] - <merge date>`, summary "Anonymized prompts and per-project cloud access":
+  - **Added:** `Llm::Anonymizer` (typed reversible tokens for names, paths, hosts, URLs, e-mails, IPs, usernames;
+    secrets redacted) and the cloud gate, both used only for cloud providers (none yet); `cloud_allowed` per project
+    (default off) on the Projects page.
+  - **Changed:** nothing visible with no cloud provider: requests, prompts, results and outputs are unchanged.
+- Don't tag, don't push tags, don't run `rake release`.
+
+**Checkpoint 3:** T, D, R pushed, CI green; mark the PR **ready for review**.
+
+### Security checklist
+- Nothing reaches a cloud provider without: a segmented Prompt, a scope whose every project allows cloud, a clean
+  mask (no collision, no timeout, no leftover).
+- The map, tokens, originals and salt never leave the process: not logged, persisted, serialized or raised.
+- Secrets are redacted, not tokenized: a model answer can't bring one back.
+- `cloud_allowed` can only be turned on by the operator on the Projects page; agents can't set it.
+- An answer with an unknown token or a leftover bracket is rejected, not guessed.
+
+### Size
+About **1,300–1,700 changed lines** (over half specs): M ~180, A1 ~550, A2 ~250, A3 ~300, U ~200, T ~150, D ~60,
+R ~20. **If the diff passes ~2,000 lines, stop and ask Steve.**
+
+### Decisions (open, with the recommended default)
+1. **Version.** *Default:* **1.68.0** (a migration, a new UI control, a new layer). Alternative: 1.67.1.
+2. **Where the flag lives.** *Default:* a `cloud_allowed` column on `memory_entities`, meaningful on Project roots
+   only. Alternative: a `project_policies` table (one more model, a join on every gate check).
+3. **How it is set.** *Default:* the Projects page only (operator, confirm, change set, audit); REST, MCP, Explore,
+   import and export can't set it. Alternative: also a REST `PATCH` param (an API key could then open a project to
+   the cloud). An MCP argument is ruled out by the hard rules.
+4. **Token key.** *Default:* a random salt **per session** (one session per call, one per scan): stable within a
+   scan, unlinkable across calls. Alternative (the earlier one-paragraph scope): an HMAC key derived per install
+   (stable across calls, so a provider could correlate the same project over time).
+5. **Token granularity.** *Default:* one token per **surface form** (`GadgetProject` and `Gadget Project` get
+   different tokens; exact round trip). Alternative: one token per term, restored in canonical form (the model
+   sees they are one thing, but identifiers can come back altered).
+6. **Code in scans.** *Default:* mask dictionary terms inside identifiers and path segments, absolute paths whole,
+   keep repo-relative paths' shape. Alternative: mask every relative path whole (safer, but the scan loses most
+   of its structure).
+7. **Input collision** (`⟦`, `⟧` or a token-like string already in the data). *Default:* refuse the cloud call.
+   Alternative: escape and restore (more code, one more way to get the round trip wrong).
+8. **Unknown or invented tokens in an answer.** *Default:* reject the whole answer (`anonymization_round_trip_failed`).
+   Alternative (the earlier scope): drop the unknown tokens and keep the rest.
+9. **Refusal shape.** *Default:* an `ok: false` Hash with the reason in `error`, no provider call, then the next
+   provider in `CHAIN` (none in PR2). Alternative: raise a `Llm::CloudRefused` (every caller would need a rescue).
+
+### Acceptance criteria
+- With no configuration: P0 goldens, every existing spec (only `FakeProvider` gains a defaulted `cloud:` keyword),
+  REST JSON and MCP outputs are byte-identical; the Ollama `[llm]` line is unchanged; no anonymizer code runs.
+- With `FakeProvider(cloud: true)`: no canary in any variant in any provider prompt for summary, scan and judge;
+  callers receive the restored originals; one mapping per scan, stable across parts and splits.
+- `cloud_allowed` defaults to false; with it false (or any project in scope false, or unscoped data) no cloud call is
+  made and each caller degrades as on any LLM error.
+- Invented tokens, partial restores, collisions, detector timeouts and leftovers all fail closed, each spec'd.
+- The flag is settable only on the Projects page (operator), audited, change-set recorded; guard specs for REST, MCP,
+  Explore, import, export.
+- MCP: 22 / 12 / 9 / 22, snapshots byte-identical; one migration; no setting; no gem.
+- Actions (lint, scan_ruby, scan_js) and CircleCI (rspec, rubocop, brakeman) green; files under ~500 lines, methods
+  under ~60. Synthetic data only.
+
+### Stop and ask Steve if
+Checkpoints are push-and-continue; stop **only** for these:
+- Anything would add an MCP tool, change a tool's arguments, description or output, or change an MCP snapshot.
+- An existing spec or fixture (P0 goldens included) has to be edited to pass. Adding the defaulted `cloud:` keyword
+  to `FakeProvider` and adding new spec files is planned and fine.
+- The design needs a migration other than `cloud_allowed`, or a new gem.
+- The diff passes ~2,000 lines.
+- A quoted line no longer matches the code (`Router.generate`, `build_prompt`, `ExtractionPrompt.text`,
+  `ChunkedExtraction#extract`, `Judge#prompt`, `GraphEditService#update_entity`, `MemoryEntity#as_json`,
+  `prompt_segments_spec`'s `Llm::Prompt.new` wrapper).
+
 ---
 
 ## Later PRs (scopes; each gets its own step list)
 
-**PR2: anonymizer + `cloud_allowed` (1.68.0).** There is no `projects` table: a project is a `memory_entities` row
-with `entity_type` "Project" (`node_operations_strategy.rb:14`). A migration adds `cloud_allowed` (boolean, default
-**false**, not null) to `memory_entities`, read only for Project entities and editable on the project page (operator
-only, a confirm); its plan decides how a task finds its project (scan: the scanned project; judge: the fact's
-project; summary: every project in the evidence must allow it). `Llm::Anonymizer` rewrites only the
-`data` segments of an `Llm::Prompt`: entity names, aliases, file paths, e-mail addresses, hosts, URLs and anything
-token-like become typed HMAC tokens (`⟦ENT_xxxx⟧`, `⟦PATH_xxxx⟧`, …) keyed by a per-install secret, and the answer is
-de-tokenized before any caller sees it; unknown tokens in an answer are dropped, never guessed. The Router refuses a
-provider with `cloud?` true when the task's project (or any project in a summary's evidence) doesn't allow cloud,
-and falls through to the next provider in the chain (in PR2 there is none, so nothing changes). Specs: round trips,
-no raw synthetic name in an anonymized prompt, the gate. No MCP change.
+**PR2: anonymizer + `cloud_allowed` (1.68.0).** Detailed above ("PR2: anonymizer + `cloud_allowed` → 1.68.0").
 
 **PR3: host bridge + profiles + lockdown gate (1.69.0).** Everything under `script/llm_bridge/`, outside the Rails
 load path, Python stdlib and POSIX shell only, no new gem. A **bridge** listening on `127.0.0.1` only, requiring an
