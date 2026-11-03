@@ -30,6 +30,7 @@ RSpec.describe Llm::Anonymizer::Session do
     expect(out.downcase.gsub(/[^a-z0-9]/, "")).not_to include("zq7")
     expect(out).to include("⟧Controller", "lib/⟦PRJ_", "⟧/x.rb", "⟧'s API")
     expect(out.scan(/⟦ENT_\h{4}⟧/).size).to eq(4) # two widget forms and both service names
+    expect(masked("config/zq7canary.yml and Zq7 Alpha")).to match(%r{\Aconfig/⟦PRJ_\h{4}⟧\.yml and ⟦ENT_\h{4}⟧\z})
   end
 
   it "keeps project names of other projects masked (PRJ) but not members of other projects" do

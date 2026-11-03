@@ -5,8 +5,8 @@ require "set"
 module Llm
   module Anonymizer
     # The names a session masks: every Project root's name and aliases (PRJ), and every member of
-    # the scope's projects (ENT, or PER for a person type), plus the usernames found in home
-    # paths (USER). Two pluck queries. Matching is by words: text and terms are split into word
+    # the scope's projects (ENT, or PER for a person type), each also without its trailing generic
+    # words ("Gadget Project" → "Gadget"), plus the usernames found in home paths (USER). Two pluck queries. Matching is by words: text and terms are split into word
     # pieces (letters and digits, then camel-case boundaries), and a run of pieces whose joined,
     # case-folded letters equal a term's matches when the pieces are joined by nothing, a space,
     # "-", "_" or a separator the term itself has (and its JSON-escaped form). So "Gadget
@@ -64,8 +64,10 @@ module Llm
       # @param aliases [String, nil] a comma (or | ;) list
       # @return [void]
       def add_entry(type, name, aliases = nil)
-        add(type, name)
-        aliases.to_s.split(/[,|;]/).each { |value| add(type, value) }
+        [ name, *aliases.to_s.split(/[,|;]/) ].each do |term|
+          add(type, term)
+          add(type, without_generic_tail(term.to_s))
+        end
       end
 
       # @param type [String]
@@ -114,6 +116,14 @@ module Llm
       def inspect = "#<#{self.class.name} #{size} terms>"
 
       private
+
+      # "Gadget Project" is also called "Gadget" (a repo, a folder, a gem): the name without its
+      # trailing generic words is a term too.
+      def without_generic_tail(term)
+        words = self.class.pieces(term).map { |start, stop| term[start...stop] }
+        words.pop while words.size > 1 && ALLOWED.include?(words.last.downcase)
+        words.join(" ")
+      end
 
       def longest_at(text, pieces, index)
         best = nil

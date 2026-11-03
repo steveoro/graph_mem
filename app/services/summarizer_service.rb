@@ -9,7 +9,7 @@ class SummarizerService
   DEFAULT_STYLE = "concise"
   SCOPES = %w[context global].freeze
   CONTEXT_SEARCH_OVERSAMPLE = 5
-  # The LLM prompt's instructions after "Write a <style>" (build_prompt).
+  # The LLM prompt's instructions after "Write a <style>" (build_llm_prompt).
   PROMPT_INSTRUCTIONS = [
     " summary using only the observations below.",
     "Use this structure:",
@@ -438,7 +438,7 @@ class SummarizerService
       return response
     end
 
-    prompt = build_prompt(evidence)
+    prompt = build_llm_prompt(evidence)
     result = Llm::Router.generate(:summary, prompt, style: @style)
 
     if result[:ok]
@@ -484,10 +484,11 @@ class SummarizerService
   end
 
   # The caller's query and style, entity names and observation text are `data` segments
-  # (Llm::Prompt); the instructions, the normalized scope, ids and labels are `trusted`.
+  # (Llm::Prompt); the instructions, the normalized scope, ids and labels are `trusted`. Scoped to
+  # the evidence's projects (only a cloud provider resolves it).
   #
-  # @return [String]
-  def build_prompt(evidence)
+  # @return [Llm::Prompt]
+  def build_llm_prompt(evidence)
     prompt = Llm::Prompt.new.trusted("Query: ").data(@query).trusted("\nStyle: ").data(@style)
                             .trusted("\nScope: #{@scope}\n\nWrite a ").data(@style).trusted(PROMPT_INSTRUCTIONS)
     if evidence.empty?
@@ -502,7 +503,7 @@ class SummarizerService
       end
     end
 
-    prompt.to_s
+    prompt.scoped(Llm::Scope.for_entities(evidence.map { |entry| entry[:entity] }))
   end
 
   def select_diverse_evidence(ranked)

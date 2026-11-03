@@ -154,12 +154,14 @@ module FactSupersede
       value.gsub(/[[:cntrl:]\p{Cf}]+/, " ").squish.truncate(limit).presence
     end
 
-    # The project name, the fact and the statements are `data` segments (Llm::Prompt).
+    # The project name, the fact and the statements are `data` segments (Llm::Prompt), scoped to
+    # the fact's and every candidate's project (a candidate without one leaves it unscoped).
     def prompt(batch)
       fact = JSON.generate(text: @fact.content.to_s.truncate(PROMPT_TEXT_LIMIT), source: @fact.source.to_s)
       Llm::Prompt.new.trusted(PROMPT_INTRO).data(project_name(@fact.memory_entity)).trusted(PROMPT_RULES).data(fact)
                  .trusted("\n\nSTATEMENTS:\n").data(JSON.generate(batch.map { |candidate| statement(candidate) }))
-                 .trusted(PROMPT_ANSWER).to_s
+                 .trusted(PROMPT_ANSWER)
+                 .scoped(Llm::Scope.for_entities([ @fact.memory_entity, *batch.map { |candidate| candidate.observation.memory_entity } ]))
     end
 
     def statement(candidate)

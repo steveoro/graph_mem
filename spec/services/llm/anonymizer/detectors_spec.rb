@@ -23,6 +23,8 @@ RSpec.describe Llm::Anonymizer::Detectors do
       expect(redacted).to eq(1)
     end
     expect(mask("password: #{random_string(12)} and api_key=#{random_string(10)}").first).to eq("password: ⟦SECRET⟧ and api_key=⟦SECRET⟧")
+    expect(mask("token: sk-#{random_string(30)}")).to eq([ "token: ⟦SECRET⟧", 1 ])
+    expect(described_class.hit?("token: ⟦SECRET⟧")).to be(false)
     expect(counts).to be_empty
   end
 

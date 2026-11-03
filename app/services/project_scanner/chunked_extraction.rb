@@ -32,13 +32,16 @@ class ProjectScanner
     # @param num_predict [Integer] the answer budget per part
     # @param timeout [Integer] seconds per request
     # @param on_part [#call, nil] called before each request with `(part, parts)`
-    def initialize(chunks:, project_name:, num_ctx:, num_predict:, timeout:, on_part: nil)
+    # @param llm_scope [Llm::Scope] the scan's scope, one for every part and split, so a cloud
+    #   provider's anonymizer keeps one mapping for the whole scan
+    def initialize(chunks:, project_name:, num_ctx:, num_predict:, timeout:, on_part: nil, llm_scope: Llm::Scope.for_scan(project_name))
       @queue = chunks.map { |chunk| Unit.new(pieces: chunk.pieces, splittable: true) }
       @project_name = project_name
       @num_ctx = num_ctx.to_i
       @num_predict = num_predict.to_i
       @timeout = timeout.to_i
       @on_part = on_part
+      @llm_scope = llm_scope
       @merger = ExtractionMerger.new
     end
 
@@ -60,11 +63,13 @@ class ProjectScanner
         error = extract(unit, @done + @failed + 1)
         # A rejected half (already split once) counts like an outage: a provider that refuses every
         # request for another reason stops after two, instead of three tries per part.
-        outage = error == PROVIDER_ERROR || (error&.start_with?(PROMPT_REJECTED) && !unit.splittable)
+        # A cloud refusal (no provider call) would refuse every half too.
+        refused = Llm::CloudCall::REFUSALS.include?(error)
+        outage = error == PROVIDER_ERROR || refused || (error&.start_with?(PROMPT_REJECTED) && !unit.splittable)
         provider_errors = outage ? provider_errors + 1 : 0
         next unless error
 
-        halves = error == PROVIDER_ERROR || !unit.splittable ? nil : split(unit)
+        halves = error == PROVIDER_ERROR || refused || !unit.splittable ? nil : split(unit)
         if halves
           @queue.unshift(*halves)
           @total += 1
@@ -82,8 +87,8 @@ class ProjectScanner
     # @return [String, nil] why the part failed
     def extract(unit, part)
       @on_part&.call(part, @total)
-      prompt = ExtractionPrompt.text(unit.pieces.join("\n"), part: part, parts: @total, project_name: @project_name,
-                                                             names: @merger.names(limit: MAX_NAMES))
+      prompt = ExtractionPrompt.build(unit.pieces.join("\n"), part: part, parts: @total, project_name: @project_name,
+                                                              names: @merger.names(limit: MAX_NAMES)).scoped(@llm_scope)
       result = Llm::Router.generate(:scan, prompt, style: "concise", options: request_options)
       error = failure(result)
       return error if error

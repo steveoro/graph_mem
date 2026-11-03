@@ -24,7 +24,7 @@ module Llm
         regex('\bAKIA[0-9A-Z]{16}\b'),
         regex('\beyJ[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}'),
         # The value after password / secret / token / api key, with = or :.
-        regex('\b(?:password|passwd|secret|token|api[_-]?key)\b["\']?\s*[:=]\s*["\']?\K[^\s"\',;)]{4,}', Regexp::IGNORECASE)
+        regex('\b(?:password|passwd|secret|token|api[_-]?key)\b["\']?\s*[:=]\s*["\']?\K[^\s"\',;)⟦⟧]{4,}', Regexp::IGNORECASE)
       ].freeze
       # A long run that looks random: upper, lower and digits switching often (an identifier has
       # long runs of one kind), or a long hex string.
