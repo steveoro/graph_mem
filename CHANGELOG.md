@@ -5,7 +5,16 @@ All notable changes to GraphMem will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.67.0] - 2026-11-03
+
+One internal seam for every LLM call (#151).
+
+### Added
+- `Llm::Router` and `Llm::OllamaProvider`: every summary, scan part and fact-supersede judgement goes through them (tasks `:summary`, `:scan`, `:judge`), so a later release can add a provider without touching the call sites.
+- One `[llm]` info log line per LLM call: task, provider, model, inline, prompt and answer sizes with token estimates, latency, outcome, and `prompt_tokens` when the provider reports it. Never the prompt, the answer, an error text or a project or entity name.
+
+### Changed
+- Nothing visible: requests, prompts and results are unchanged.
 
 ### Fixed
 - Compatibility with json 3: duplicate string and symbol keys in compaction review data.
