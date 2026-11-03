@@ -176,7 +176,7 @@ Since 1.68.0 the Router can send a call to a **cloud** provider (one with `cloud
 - **What still leaks:** this is pseudonymization, not anonymity.
   - The structure of the code and text, domain vocabulary, numbers, dates and generic words go out as they are.
   - A name fused with other lowercase letters (`gadgetprojectcontroller`, `gadgetapp.example.com`) isn't matched; public hosts are left as they are unless they contain a matched name.
-  - People are masked only when they are members of a project in scope: a global Person entity's name, or a name that is in no entity, goes out as written.
+  - People (Person and User entities) are masked wherever they are in the graph; a name that is in no entity goes out as written.
   - Allow cloud access only for projects whose remaining text you are willing to share.
 
 ## Lifecycle interactions

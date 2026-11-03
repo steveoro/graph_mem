@@ -4,9 +4,11 @@ require "set"
 
 module Llm
   module Anonymizer
-    # The names a session masks: every Project root's name and aliases (PRJ), and every member of
-    # the scope's projects (ENT, or PER for a person type), each also without its trailing generic
-    # words ("Gadget Project" → "Gadget"), plus the usernames found in home paths (USER). Two pluck queries. Matching is by words: text and terms are split into word
+    # The names a session masks: every Project root's name and aliases (PRJ), every member of the
+    # scope's projects (ENT, or PER for a person type), and every person (Person or User) anywhere
+    # in the graph (PER), each also without its trailing generic words ("Gadget Project" →
+    # "Gadget"), plus the usernames found in home paths (USER). Three pluck queries; the people
+    # count toward MAX_TERMS. Matching is by words: text and terms are split into word
     # pieces (letters and digits, then camel-case boundaries), and a run of pieces whose joined,
     # case-folded letters equal a term's matches when the pieces are joined by nothing, a space,
     # "-", "_" or a separator the term itself has (and its JSON-escaped form). So "Gadget
@@ -43,6 +45,11 @@ module Llm
             MemoryEntity.where(project_id: ids).pluck(:name, :aliases, :entity_type).each do |name, aliases, type|
               dictionary.add_entry(PERSON_TYPES.include?(type) ? "PER" : "ENT", name, aliases)
             end
+          end
+          # People wherever they are (global, or in a project outside the scope). After the scope's
+          # members, so a term keeps the type it got first and in-scope names mask as before.
+          MemoryEntity.where(entity_type: PERSON_TYPES).pluck(:name, :aliases).each do |name, aliases|
+            dictionary.add_entry("PER", name, aliases)
           end
         end
       end
