@@ -76,9 +76,10 @@ RSpec.describe "LLM cloud architecture" do
     )
   end
 
-  it "masks a 200 KB scan part against 10,000 terms in well under the bound" do
+  it "masks a 200 KB scan part against 10,000 terms in well under the bound, short pieces included" do
     dictionary = Llm::Anonymizer::Dictionary.new
     10_000.times { |i| dictionary.add("ENT", "Zq7Widget#{i}") }
+    dictionary.add("ENT", "Zq7 Canary Very Long Synthetic Service Name For Speed") # 49 letters
     allow(Llm::Anonymizer::Dictionary).to receive(:build).and_return(dictionary)
     line = "class Zq7Widget42Controller < Base # see /srv/zq7/app.rb and ops@zq7.example, zq7_widget_9001 plain words\n"
     text = line * (200_000 / line.length)
@@ -91,5 +92,10 @@ RSpec.describe "LLM cloud architecture" do
     expect(seconds).to be < 3.0
     expect(masked.text).not_to include("Zq7Widget42", "zq7_widget_9001", "ops@zq7.example")
     expect(session.unmask(masked.text).text).to eq(text)
+
+    short_pieces = "0 1 2 3 a-a-a-a " * (200_000 / 16)
+    started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+    session.mask(Llm::Prompt.new.data(short_pieces))
+    expect(Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).to be < 3.0
   end
 end

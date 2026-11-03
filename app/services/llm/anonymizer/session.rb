@@ -125,6 +125,8 @@ module Llm
 
           return match[0]
         end
+        # A URL can hold a redacted secret: it comes back as [redacted], never as a bracket.
+        original = original.gsub(Tokens::SECRET, REDACTED)
         json ? JSON.generate(original)[1...-1] : original
       end
 

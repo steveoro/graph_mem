@@ -11,8 +11,9 @@ module Llm
     # case-folded letters equal a term's matches when the pieces are joined by nothing, a space,
     # "-", "_" or a separator the term itself has (and its JSON-escaped form). So "Gadget
     # Project", "gadget-project", "GadgetProject", "GADGET_PROJECT" and "gadgetproject" all match
-    # one term, inside identifiers and path segments too; a plural "s"/"es" is matched for terms of
-    # 5 letters or more. The longest term wins, leftmost first.
+    # one term, inside identifiers and path segments too; a plural "s"/"es" or a trailing number is
+    # matched for terms of 5 letters or more. The longest term wins, leftmost first. A prefix set
+    # stops each attempt as soon as no term can match, so the cost stays linear in the text.
     class Dictionary
       MAX_TERMS = 20_000
       MIN_LENGTH = 3
@@ -56,6 +57,7 @@ module Llm
       def initialize
         @types = {}
         @separators = BASE_SEPARATORS.to_set
+        @prefixes = Set.new
         @longest = 0
       end
 
@@ -82,6 +84,8 @@ module Llm
 
         @types[key] = type
         raise Refused, :dictionary_cap if @types.size > MAX_TERMS
+
+        @prefixes.merge((1..key.length).map { |length| key[0, length] })
 
         @longest = [ @longest, key.length ].max
         offsets.each_cons(2) do |(_, stop), (start, _)|
@@ -136,19 +140,20 @@ module Llm
           break if joined.length > @longest + 2
           key = lookup(joined)
           best = [ last, @types[key], key ] if key
+          # No term starts like this: a longer run can't match either (keeps it linear).
+          break unless @prefixes.include?(joined)
         end
         best
       end
 
-      # @return [String, nil] the term key `joined` matches, a plural of a 5+ letter term included
+      # @return [String, nil] the term key `joined` matches, a plural or a trailing number of a 5+
+      #   letter term included ("Widgets", "Widget2")
       def lookup(joined)
         return joined.dup if @types.key?(joined) # `joined` keeps growing in the caller
 
-        %w[es s].each do |suffix|
-          stem = joined.delete_suffix(suffix)
-          return stem if stem != joined && stem.length >= 5 && @types.key?(stem)
+        [ joined.delete_suffix("es"), joined.delete_suffix("s"), joined.sub(/\d+\z/, "") ].find do |stem|
+          stem != joined && stem.length >= 5 && @types.key?(stem)
         end
-        nil
       end
     end
   end

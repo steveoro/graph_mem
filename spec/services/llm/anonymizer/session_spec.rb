@@ -31,6 +31,7 @@ RSpec.describe Llm::Anonymizer::Session do
     expect(out).to include("⟧Controller", "lib/⟦PRJ_", "⟧/x.rb", "⟧'s API")
     expect(out.scan(/⟦ENT_\h{4}⟧/).size).to eq(4) # two widget forms and both service names
     expect(masked("config/zq7canary.yml and Zq7 Alpha")).to match(%r{\Aconfig/⟦PRJ_\h{4}⟧\.yml and ⟦ENT_\h{4}⟧\z})
+    expect(masked("Zq7CanaryWidget2 and zq7canary2")).to match(/\A⟦ENT_\h{4}⟧ and ⟦PRJ_\h{4}⟧\z/)
   end
 
   it "keeps project names of other projects masked (PRJ) but not members of other projects" do
@@ -111,6 +112,12 @@ RSpec.describe Llm::Anonymizer::Session do
       answer = "#{token}, ⟦ ENT_#{suffix} ⟧, [[ENT_#{suffix}]], ENT_#{suffix}, #{token}s, ⟦SECRET⟧, ENT_ffff"
 
       expect(session.unmask(answer).text).to eq("Zq7CanaryWidget, Zq7CanaryWidget, Zq7CanaryWidget, Zq7CanaryWidget, Zq7CanaryWidgets, [redacted], ENT_ffff")
+    end
+
+    it "restores a URL holding a redacted secret with [redacted] in it" do
+      url = masked("https://u:token=#{SecureRandom.alphanumeric(20)}@zq7canary.example/x")
+
+      expect(session.unmask("see #{url}").text).to eq("see https://u:token=[redacted]")
     end
 
     it "rejects an invented token and a partial restore" do
