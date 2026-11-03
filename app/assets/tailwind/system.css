@@ -430,6 +430,17 @@
     margin-bottom: 0.75rem;
   }
 
+  /* Closed, a typed-confirm card is only its red button: no card box around it. */
+  .system-confirm:not([open]) {
+    padding: 0;
+    border: 0;
+    background: transparent;
+  }
+
+  .system-confirm summary::-webkit-details-marker {
+    display: none;
+  }
+
   /* Telemetry's trend chart: an inline SVG polyline per series. */
   .system-chart {
     display: block;
