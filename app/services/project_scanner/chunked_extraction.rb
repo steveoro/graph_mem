@@ -33,7 +33,8 @@ class ProjectScanner
     # @param timeout [Integer] seconds per request
     # @param on_part [#call, nil] called before each request with `(part, parts)`
     # @param llm_scope [Llm::Scope] the scan's scope, one for every part and split, so a cloud
-    #   provider's anonymizer keeps one mapping for the whole scan
+    #   provider's anonymizer keeps one mapping for the whole scan (the default knows no folder, so
+    #   Llm::CloudGate refuses it)
     def initialize(chunks:, project_name:, num_ctx:, num_predict:, timeout:, on_part: nil, llm_scope: Llm::Scope.for_scan(project_name))
       @queue = chunks.map { |chunk| Unit.new(pieces: chunk.pieces, splittable: true) }
       @project_name = project_name

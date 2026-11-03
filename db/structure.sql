@@ -221,6 +221,7 @@ CREATE TABLE `memory_entities` (
   `project_id` bigint(20) DEFAULT NULL,
   `project_scope` bigint(20) GENERATED ALWAYS AS (coalesce(`project_id`,0)) STORED,
   `cloud_allowed` tinyint(1) NOT NULL DEFAULT 0,
+  `cloud_root` text DEFAULT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `index_memory_entities_on_scope_name` (`project_scope`,`name`),
   KEY `index_memory_entities_on_entity_type` (`entity_type`),
@@ -421,6 +422,7 @@ CREATE TABLE `tool_invocations` (
 /*M!100616 SET NOTE_VERBOSITY=@OLD_NOTE_VERBOSITY */;
 
 INSERT INTO `schema_migrations` (version) VALUES
+('20261103160000'),
 ('20261103140000'),
 ('20261030120000'),
 ('20261029180000'),

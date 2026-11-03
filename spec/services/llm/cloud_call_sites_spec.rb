@@ -109,7 +109,7 @@ RSpec.describe "Cloud calls at the call sites" do
     end
 
     it "masks every canary in code, paths, the Gemfile and config, keeps one mapping across parts and splits, and restores the result" do
-      project.update!(cloud_allowed: true)
+      project.update!(cloud_allowed: true, cloud_root: @root)
 
       result = with_llm_provider(fake) { scan }
 
@@ -128,11 +128,13 @@ RSpec.describe "Cloud calls at the call sites" do
       expect(first_scan).to include(class_token)
     end
 
-    it "falls back to the deterministic extraction by default, and refuses the next part when the flag goes off mid-scan" do
+    it "falls back by default and for another folder than the recorded one, and refuses the next part when the flag goes off mid-scan" do
+      expect(with_llm_provider(fake) { scan }).to have_attributes(fallback: true)
+      project.update!(cloud_allowed: true, cloud_root: "/path/to/another/folder")
       expect(with_llm_provider(fake) { scan }).to have_attributes(fallback: true)
       expect(fake.calls).to be_empty
 
-      project.update!(cloud_allowed: true)
+      project.update!(cloud_root: @root)
       switch_off = FakeProvider.new(cloud: true) do |text, **|
         project.update!(cloud_allowed: false)
         fake.generate(text, style: "concise")

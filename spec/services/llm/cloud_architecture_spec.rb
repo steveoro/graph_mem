@@ -67,12 +67,13 @@ RSpec.describe "LLM cloud architecture" do
     expect(offenders).to be_empty
   end
 
-  it "keeps cloud_allowed to the migration, the model, the Projects page and the gate" do
-    files = Dir.glob(Rails.root.join("{app,lib,config,db/migrate}/**/*.{rb,rake,haml,erb,yml}")).select { |path| File.read(path).include?("cloud_allowed") }
+  it "keeps cloud_allowed and cloud_root to the migrations, the model, the Projects page and the gate" do
+    files = Dir.glob(Rails.root.join("{app,lib,config,db/migrate}/**/*.{rb,rake,haml,erb,yml}")).select { |path| File.read(path).match?(/cloud_(allowed|root)/) }
 
     expect(files.map { |path| relative(path) }).to contain_exactly(
       "app/models/memory_entity.rb", "app/controllers/projects/cloud_access_controller.rb", "app/services/llm/cloud_gate.rb",
-      "app/views/projects/index.html.haml", "db/migrate/20261103140000_add_cloud_allowed_to_memory_entities.rb"
+      "app/views/projects/index.html.haml", "db/migrate/20261103140000_add_cloud_allowed_to_memory_entities.rb",
+      "db/migrate/20261103160000_add_cloud_root_to_memory_entities.rb"
     )
   end
 

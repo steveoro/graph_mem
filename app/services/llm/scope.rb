@@ -21,18 +21,26 @@ module Llm
     end
 
     # @param project_name [String] the scanned project's name
+    # @param project_root [String, nil] the folder being scanned; Llm::CloudGate allows the scan only
+    #   when it is the folder recorded when Cloud was turned on (nil never matches)
     # @return [Scope] the Project root with that name (case-insensitive); unscoped when there is
     #   none yet (a first scan, before reconcile creates it)
-    def self.for_scan(project_name)
-      new(lambda do
+    def self.for_scan(project_name, project_root: nil)
+      resolver = lambda do
         id = MemoryEntity.where(entity_type: NodeOperationsStrategy::PROJECT_ENTITY_TYPE, project_id: nil, name: project_name.to_s).pick(:id)
         id && [ id ]
-      end)
+      end
+      new(resolver, scan_root: project_root ? File.expand_path(project_root.to_s) : "")
     end
 
+    # @return [String, nil] a scan's folder ("" when unknown); nil for a summary or judge scope
+    attr_reader :scan_root
+
     # @param resolver [#call] returns the project ids, or nil for unscoped data
-    def initialize(resolver)
+    # @param scan_root [String, nil] see #scan_root
+    def initialize(resolver, scan_root: nil)
       @resolver = resolver
+      @scan_root = scan_root
       @resolved = false
     end
 

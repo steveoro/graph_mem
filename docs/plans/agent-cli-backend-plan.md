@@ -685,7 +685,7 @@ R ~20. **If the diff passes ~2,000 lines, stop and ask Steve.**
 - Invented tokens, partial restores, collisions, detector timeouts and leftovers all fail closed, each spec'd.
 - The flag is settable only on the Projects page (operator), audited, change-set recorded; guard specs for REST, MCP,
   Explore, import, export.
-- MCP: 22 / 12 / 9 / 22, snapshots byte-identical; one migration; no setting; no gem.
+- MCP: 22 / 12 / 9 / 22, snapshots byte-identical; one migration (two in #152: `cloud_root` added with Steve's OK, so cloud scans come only from the folder recorded when Cloud was turned on); no setting; no gem.
 - Actions (lint, scan_ruby, scan_js) and CircleCI (rspec, rubocop, brakeman) green; files under ~500 lines, methods
   under ~60. Synthetic data only.
 

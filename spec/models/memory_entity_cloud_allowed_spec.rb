@@ -23,17 +23,18 @@ RSpec.describe MemoryEntity, "cloud_allowed" do
   end
 
   it "drops the flag when a project stops being a Project root, so the retype still saves" do
-    project.update!(cloud_allowed: true)
+    project.update!(cloud_allowed: true, cloud_root: "/path/to/gadget")
     project.update!(entity_type: "Component")
 
-    expect(project.reload.cloud_allowed).to be(false)
+    expect(project.reload).to have_attributes(cloud_allowed: false, cloud_root: nil)
+    expect(MemoryEntity.new(name: "Alpha Service", entity_type: "Service", cloud_root: "/path/to/x")).not_to be_valid
   end
 
   it "keeps the REST JSON as it was: no cloud_allowed (and no embedding) key" do
     project.update!(cloud_allowed: true)
 
-    expect(project.as_json.keys).to match_array(described_class.column_names - %w[embedding cloud_allowed])
-    expect(project.to_json).not_to include("cloud_allowed")
+    expect(project.as_json.keys).to match_array(described_class.column_names - %w[embedding cloud_allowed cloud_root])
+    expect(project.to_json).not_to include("cloud_allowed", "cloud_root")
   end
 
   it "can't move with a merge: Project roots are never merged" do
@@ -54,11 +55,11 @@ RSpec.describe "REST memory entity JSON without cloud_allowed", type: :request d
   it "show has no cloud_allowed key; create and update return the same keys as before the column" do
     project = MemoryEntity.create!(name: "Gadget Project", entity_type: "Project")
     project.update!(cloud_allowed: true)
-    expected = MemoryEntity.column_names - %w[embedding cloud_allowed]
+    expected = MemoryEntity.column_names - %w[embedding cloud_allowed cloud_root]
 
     get "/api/v1/memory_entities/#{project.id}", headers: { "Accept" => "application/json" }
     expect(response.parsed_body).to include("id" => project.id)
-    expect(response.body).not_to include("cloud_allowed")
+    expect(response.body).not_to include("cloud_allowed", "cloud_root")
 
     post "/api/v1/memory_entities", params: { memory_entity: { name: "SynthWidget", entity_type: "Component" } }, as: :json
     expect(response.parsed_body.keys).to match_array(expected)

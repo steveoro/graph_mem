@@ -153,11 +153,11 @@ Every LLM call goes through `Llm::Router.generate(task, prompt, style:, options:
 
 The Router walks `CHAIN`. A local provider gets `prompt.to_s`, exactly as before. A provider with `cloud?` true (none until PR4) goes through `Llm::CloudCall`, which works through these steps:
 1. The prompt must be a scoped `Llm::Prompt`: the three call sites hand over `SummarizerService#build_llm_prompt`, `ExtractionPrompt.build` (one `Llm::Scope.for_scan` per `ChunkedExtraction`, so a scan keeps one mapping) and `Judge#prompt`.
-2. `Llm::CloudGate` checks `memory_entities.cloud_allowed` on every project in scope (one count per call).
+2. `Llm::CloudGate` checks `memory_entities.cloud_allowed` on every project in scope (one count per call), and for a scan that its folder is the project's `cloud_root`. That column is recorded when Cloud is turned on, from the project's last completed scan.
 3. The scope's `Llm::Anonymizer::Session` (`Dictionary`, `Detectors`, `Tokens`) masks the data segments.
 4. The answer is restored before the caller sees it.
 
-A refusal returns `ok: false` without a provider call, and the Router tries the next provider. `cloud_allowed` (Project roots only, default false, excepted from `as_json`) is set only by `Projects::CloudAccessController`. See [summarization](summarization.md#anonymization-and-cloud-access).
+A refusal returns `ok: false` without a provider call, and the Router tries the next provider. `cloud_allowed` and `cloud_root` (Project roots only, `cloud_allowed` default false, both excepted from `as_json`) are set only by `Projects::CloudAccessController`. See [summarization](summarization.md#anonymization-and-cloud-access).
 
 #### Project scans (`app/services/project_scanner.rb`, `app/services/project_scanner/`)
 

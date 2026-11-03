@@ -70,9 +70,19 @@ RSpec.describe Llm::CloudGate do
     expect(allowed?(widget, gadget)).to be(true)
     expect(allowed?(widget, alpha)).to be(false)
 
-    scope = Llm::Scope.for_scan("Gadget Project")
+    gadget.update!(cloud_root: "/path/to/gadget")
+    scope = Llm::Scope.for_scan("Gadget Project", project_root: "/path/to/gadget")
     expect(described_class.allowed?(scope)).to be(true)
     gadget.update!(cloud_allowed: false)
     expect(described_class.allowed?(scope)).to be(false)
+  end
+
+  it "lets a scan out only from the project's cloud_root" do
+    gadget.update!(cloud_allowed: true, cloud_root: "/path/to/gadget")
+
+    expect(described_class.allowed?(Llm::Scope.for_scan("Gadget Project", project_root: "/path/to/other"))).to be(false)
+    expect(described_class.allowed?(Llm::Scope.for_scan("Gadget Project"))).to be(false)
+    gadget.update!(cloud_root: nil)
+    expect(described_class.allowed?(Llm::Scope.for_scan("Gadget Project", project_root: "/path/to/gadget"))).to be(false)
   end
 end
