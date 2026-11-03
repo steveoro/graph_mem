@@ -5,6 +5,17 @@ All notable changes to GraphMem will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.69.0] - 2026-11-03
+
+Host bridge and lockdown gate for agent CLIs (#153).
+
+### Added
+- `script/llm_bridge/`: a loopback HTTP bridge with a token file, the `claude` and `devin` profiles, and a per-profile lockdown test whose PASS the bridge requires; nothing in the app uses it yet.
+
+### Changed
+- Typed-confirm buttons (Regenerate all, Drop ANN indexes, Prune expired logs, Restore) no longer sit in a bordered box until opened.
+- For cloud providers (none yet), people's names are masked wherever they are in the graph.
+
 ## [1.68.0] - 2026-11-03
 
 Anonymized prompts and per-project cloud access (#152).
