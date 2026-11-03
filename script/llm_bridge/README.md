@@ -45,7 +45,10 @@ sh script/llm_bridge/lockdown_test.sh --profile devin --models <model>[,<model>â
 ```
 
 The gate runs the production `run_cli` path for every model and prompt form (`devin`: `arg`, and a
-`file` prompt padded past 96 KiB). It first checks that the CLI answers a plain prompt. Each report
+`file` prompt padded past 96 KiB). It first checks that the CLI answers a plain prompt, that its
+listener logs a request, and (`devin`) that `deny-hook.sh` denies and logs a call it makes itself; that
+check runs outside the CLI's sandbox, so it proves the hook and the state dir work, not that the CLI can
+reach them. Each report
 line ends with how the run ended (`[answered]` or its failure class), and a FAIL names the decoy files
 or MCP configs that were loaded. Then it sends
 judge-style prompts whose statement asks the CLI to do one of these things:

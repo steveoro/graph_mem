@@ -127,6 +127,13 @@ class SetupErrorTest(LockdownCase):
         self.assertFalse(os.path.exists(os.path.join(self.state, "gates", "devin.json")))
         self.assertEqual(os.listdir(self.canary_dir), [])
 
+    def test_a_hook_that_cannot_log_is_a_setup_error(self):
+        os.mkdir(os.path.join(self.state, "hook.log"))  # the append fails, as in a read-only state dir
+        with self.assertRaises(lockdown.SetupError):
+            self.gate("devin")
+        self.assertEqual(self.gate("claude")[0], "PASS")  # no hook in the claude profile
+        self.assertEqual(os.listdir(self.canary_dir), [])
+
 
 if __name__ == "__main__":
     unittest.main()
