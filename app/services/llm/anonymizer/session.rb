@@ -96,13 +96,14 @@ module Llm
       def replace_terms(chunk, counts)
         out = +""
         cursor = 0
+        # Byte offsets: a character index into non-ASCII text costs O(n) per slice.
         dictionary.matches(chunk).each do |start, stop, type, key|
-          out << chunk[cursor...start] << @tokens.for(type, chunk[start...stop])
+          out << chunk.byteslice(cursor, start - cursor) << @tokens.for(type, chunk.byteslice(start, stop - start))
           counts[type] += 1
           @masked_keys << key
           cursor = stop
         end
-        out << chunk[cursor..]
+        out << chunk.byteslice(cursor, chunk.bytesize - cursor)
       end
 
       # The text between tokens, scanned the way mask_data split it.

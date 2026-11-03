@@ -13,7 +13,8 @@ module Llm
     # Project", "gadget-project", "GadgetProject", "GADGET_PROJECT" and "gadgetproject" all match
     # one term, inside identifiers and path segments too; a plural "s"/"es" or a trailing number is
     # matched for terms of 5 letters or more. The longest term wins, leftmost first. A prefix set
-    # stops each attempt as soon as no term can match, so the cost stays linear in the text.
+    # stops each attempt as soon as no term can match, and offsets are bytes (a character index
+    # into non-ASCII text costs O(n) per slice), so the cost stays linear in the text.
     class Dictionary
       MAX_TERMS = 20_000
       MIN_LENGTH = 3
@@ -25,6 +26,8 @@ module Llm
       BASE_SEPARATORS = [ "", " ", "-", "_" ].freeze
       WORD = /[\p{L}\p{N}]+/
       CAMEL = /(?<=[\p{Ll}\p{N}])(?=\p{Lu})|(?<=\p{Lu})(?=\p{Lu}\p{Ll})/
+      INNER_CAPITAL = /.\p{Lu}/
+      STEM_END = /(?:s|\d)\z/
 
       # @param scope [Llm::Scope]
       # @return [Dictionary]
@@ -45,12 +48,16 @@ module Llm
       end
 
       # @param text [String]
-      # @return [Array<Array(Integer, Integer)>] the word pieces' [start, stop) offsets
+      # @return [Array<Array(Integer, Integer)>] the word pieces' [start, stop) byte offsets
       def self.pieces(text)
         text.to_enum(:scan, WORD).flat_map do
           match = Regexp.last_match
-          start = match.begin(0)
-          match[0].split(CAMEL).map { |piece| [ start, (start += piece.length) ] }
+          start = match.byteoffset(0).first
+          word = match[0]
+          # Only a capital after the first character can be a camel-case boundary.
+          next [ [ start, start + word.bytesize ] ] unless word.match?(INNER_CAPITAL)
+
+          word.split(CAMEL).map { |piece| [ start, (start += piece.bytesize) ] }
         end
       end
 
@@ -79,7 +86,7 @@ module Llm
       def add(type, term)
         term = term.to_s.strip
         offsets = self.class.pieces(term)
-        key = offsets.map { |start, stop| term[start...stop] }.join.downcase
+        key = offsets.map { |start, stop| term.byteslice(start, stop - start) }.join.downcase
         return if key.length < MIN_LENGTH || ALLOWED.include?(key) || @types.key?(key)
 
         @types[key] = type
@@ -89,7 +96,7 @@ module Llm
 
         @longest = [ @longest, key.length ].max
         offsets.each_cons(2) do |(_, stop), (start, _)|
-          separator = term[stop...start]
+          separator = term.byteslice(stop, start - stop)
           @separators << separator << JSON.generate(separator)[1...-1]
         end
       end
@@ -99,7 +106,7 @@ module Llm
 
       # @param text [String] text without tokens
       # @return [Array<Array(Integer, Integer, String, String)>] non-overlapping matches as
-      #   [start, stop, type, term key], leftmost first, longest term at each position
+      #   [start, stop, type, term key] (byte offsets), leftmost first, longest term at each position
       def matches(text)
         pieces = self.class.pieces(text)
         found = []
@@ -124,7 +131,7 @@ module Llm
       # "Gadget Project" is also called "Gadget" (a repo, a folder, a gem): the name without its
       # trailing generic words is a term too.
       def without_generic_tail(term)
-        words = self.class.pieces(term).map { |start, stop| term[start...stop] }
+        words = self.class.pieces(term).map { |start, stop| term.byteslice(start, stop - start) }
         words.pop while words.size > 1 && ALLOWED.include?(words.last.downcase)
         words.join(" ")
       end
@@ -133,9 +140,9 @@ module Llm
         best = nil
         joined = +""
         (index...pieces.size).each do |last|
-          break if last > index && !@separators.include?(text[pieces[last - 1][1]...pieces[last][0]])
+          break if last > index && !@separators.include?(text.byteslice(pieces[last - 1][1], pieces[last][0] - pieces[last - 1][1]))
 
-          joined << text[pieces[last][0]...pieces[last][1]].downcase
+          joined << text.byteslice(pieces[last][0], pieces[last][1] - pieces[last][0]).downcase
           # A plural adds at most two letters.
           break if joined.length > @longest + 2
           key = lookup(joined)
@@ -150,6 +157,8 @@ module Llm
       #   letter term included ("Widgets", "Widget2")
       def lookup(joined)
         return joined.dup if @types.key?(joined) # `joined` keeps growing in the caller
+        # A stem is 5+ letters and shorter than `joined`, which then ends in "s" or a digit.
+        return if joined.length < 6 || !joined.match?(STEM_END)
 
         [ joined.delete_suffix("es"), joined.delete_suffix("s"), joined.sub(/\d+\z/, "") ].find do |stem|
           stem != joined && stem.length >= 5 && @types.key?(stem)
