@@ -20,7 +20,7 @@ RSpec.describe Llm::Anonymizer::Dictionary do
 
     expect(masked.text).to match(/\A⟦PER_\h{4}⟧, ⟦PER_\h{4}⟧ \(⟦PER_\h{4}⟧\), ⟦PER_\h{4}⟧ and Zq7 Gizmo review ⟦ENT_\h{4}⟧\.\z/)
     expect(masked.counts).to eq("PER" => 4, "ENT" => 1)
-    expect(masked.text).not_to include("Ada", "Bea", "bea", "Cid")
+    expect(masked.text.gsub(/⟦[^⟧]*⟧/, "")).not_to include("Ada", "Bea", "bea", "Cid") # token suffixes are hex and may spell "bea"
   end
 
   it "restores the answer exactly" do
