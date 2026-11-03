@@ -486,6 +486,27 @@ RSpec.describe CompactionReviewService, type: :service do
       rows = described_class.seed_report(report_type: "compaction_review", source: "test", items: items)
       expect(rows).to be_empty
     end
+
+    it "updates the stored string-keyed count without a duplicate key (json 3)" do
+      items = [
+        {
+          id: "count-1",
+          kind: "entity_merge",
+          entity_a: { entity_id: seed_source.id, name: seed_source.name, entity_type: seed_source.entity_type },
+          entity_b: { entity_id: seed_target.id, name: seed_target.name, entity_type: seed_target.entity_type },
+          cosine_distance: 0.15,
+          score: 0.85
+        }
+      ]
+
+      rows = nil
+      expect { rows = described_class.seed_report(report_type: "compaction_review", source: "test", items: items) }.not_to raise_error
+
+      data = rows.sole.maintenance_report.reload.data
+      expect(data["count"]).to eq(1)
+      expect(data.keys).to all(be_a(String))
+      expect(JSON.generate(data)).to include('"count":1')
+    end
   end
 
   describe ".absorb_stale_memory?" do

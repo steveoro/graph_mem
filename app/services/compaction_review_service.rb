@@ -142,7 +142,8 @@ class CompactionReviewService
                                          **candidate.symbolize_keys)
           end
 
-          report.update!(data: report.data.merge(count: created_rows.size, **limits.stats))
+          # The JSON column reads back string keys: merge string keys, or json 3 rejects the duplicate "count".
+          report.update!(data: report.data.merge("count" => created_rows.size).merge(limits.stats))
           created_rows
         end
       end
@@ -210,7 +211,7 @@ class CompactionReviewService
                     Array(payload[:observation_ids]).map(&:to_i)).uniq.sort
       merged_payload = keep.effective_payload
                            .merge(payload.slice("entity_name", "reason"))
-                           .merge(observation_ids: merged_ids)
+                           .merge("observation_ids" => merged_ids)
       merged_sig = signature_for("stale_memory", merged_payload)
 
       if merged_sig.present? && merged_sig != keep.signature &&
