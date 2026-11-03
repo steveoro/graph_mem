@@ -27,14 +27,16 @@ class FakeProvider < Llm::Provider
   # @param name [String] the provider name the Router adds to results and the usage line
   # @param available [Boolean] what Llm::Router.usable? answers while it is in place
   # @param result [Hash] the answer to every call (ignored with a block)
+  # @param cloud [Boolean] act as a cloud provider (gate, anonymizer, restore)
   # @yieldparam prompt [String]
   # @yieldparam style [String]
   # @yieldparam options [Hash, nil]
   # @yieldreturn [Hash] the answer to that call
-  def initialize(name: "fake", available: true, result: DEFAULT_RESULT, &answer)
+  def initialize(name: "fake", available: true, result: DEFAULT_RESULT, cloud: false, &answer)
     super()
     @name = name
     @available = available
+    @cloud = cloud
     @result = result
     @answer = answer
     @calls = []
@@ -45,6 +47,9 @@ class FakeProvider < Llm::Provider
 
   # @return [Boolean]
   def available? = @available
+
+  # @return [Boolean] the `cloud:` given (default false): true sends calls through Llm::CloudCall
+  def cloud? = @cloud
 
   # @return [String] a synthetic model name for the usage line
   def model = "fake-model"

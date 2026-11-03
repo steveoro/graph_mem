@@ -128,6 +128,7 @@ RSpec.describe Llm::Anonymizer::Session do
 
     it "counts masked terms the answer writes out in plain text" do
       expect(session.unmask("#{token} is not Zq7CanaryWidget").leftovers).to eq(1)
+      expect(masked("Zq7CanaryWidget mails Zq7cp") && session.unmask("Zq7cp").leftovers).to eq(1)
       expect(session.unmask("Other Zq7 Gizmo").leftovers).to eq(0)
     end
   end

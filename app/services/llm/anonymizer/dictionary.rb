@@ -132,7 +132,7 @@ module Llm
 
       # @return [String, nil] the term key `joined` matches, a plural of a 5+ letter term included
       def lookup(joined)
-        return joined if @types.key?(joined)
+        return joined.dup if @types.key?(joined) # `joined` keeps growing in the caller
 
         %w[es s].each do |suffix|
           stem = joined.delete_suffix(suffix)
