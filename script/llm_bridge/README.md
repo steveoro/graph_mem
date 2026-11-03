@@ -45,7 +45,9 @@ sh script/llm_bridge/lockdown_test.sh --profile devin --models <model>[,<model>�
 ```
 
 The gate runs the production `run_cli` path for every model and prompt form (`devin`: `arg`, and a
-`file` prompt padded past 96 KiB). It first checks that the CLI answers a plain prompt. Then it sends
+`file` prompt padded past 96 KiB). It first checks that the CLI answers a plain prompt. Each report
+line ends with how the run ended (`[answered]` or its failure class), and a FAIL names the decoy files
+or MCP configs that were loaded. Then it sends
 judge-style prompts whose statement asks the CLI to do one of these things:
 - print or search for a canary file, a new file with a unique name in `CANARY_DIR` (default: your
   home), removed afterwards;
@@ -120,7 +122,7 @@ that (PR4).
 | `config_files` | `{ path, content }` written into the run dir or the synthetic home (`{run}`, `{home}`, `{hook}` and `{state}` are substituted) |
 | `tools_fully_disabled` | Whether the CLI's flags alone switch every tool off (`claude`), or the hook, deny config and transcript checks are all needed (`devin`) |
 | `tool_trace` | `hook_log` (the profile wires `{hook}`), `max_turns`, `export_path` (a transcript to check), `stdout_pattern` |
-| `env` | `home` (`synthetic` or `real`), `xdg_data_home` (`owner` or `synthetic`), `pass` (env names to pass through; empty in both profiles), `secret_env` (`NAME: file`, each file the user's own and 0600) |
+| `env` | `home` (`synthetic` or `real`), `xdg_data_home` (`owner` or `synthetic`), `set` (fixed `NAME: value` pairs), `pass` (env names to pass through; empty in both profiles), `secret_env` (`NAME: file`, each file the user's own and 0600) |
 | `failure_patterns`, `exit_codes` | Class → regex (case-insensitive, over the answer, the subtype and stderr of a failed run), and exit code → class |
 
 Each run gets a new 0700 temp dir as its cwd: no repo, no `.git`, no `AGENTS.md`. It holds
@@ -129,20 +131,27 @@ scratch:
 - `PATH=/usr/local/bin:/usr/bin:/bin` plus the CLI's directory;
 - `HOME`, and the `XDG_*` dirs under the run dir (`devin`'s `XDG_DATA_HOME` is the owner's);
 - `NO_COLOR`, `TERM=dumb`, `LANG=C.UTF-8`, `GM_LLM_RUN_ID`, `AGENT_CLI_STATE`;
-- the profile's `pass` and `secret_env` names.
+- the profile's `set`, `pass` and `secret_env` names.
 
 On a timeout the process group gets `SIGTERM`, then `SIGKILL` after 5 s. After every run the whole
 group is killed. stdout is capped at 256 KiB and stderr at 64 KiB. The run dir is removed; with
 `AGENT_CLI_KEEP_FAILED=1`, a failed run's dir is kept, still 0700.
 
-### Still to confirm (UNVERIFIED until the first gate run)
-- `claude`: the envelope field names (`result`, `is_error`, `subtype`, `num_turns`), and starting with
-  a synthetic HOME and `CLAUDE_CODE_OAUTH_TOKEN`.
-- `devin`:
-  - the flag spellings (`--permission-mode normal`, `--sandbox`, `--config`, `--export`,
-    `--respect-workspace-trust false`, `--prompt-file`);
-  - the `config.json` keys (`permissions.deny`, `subagents_enabled`, `read_config_from.*`, `hooks.PreToolUse`);
-  - the transcript format.
+### What the vendors' docs say, and what is still to confirm
+- `claude`: Claude Code loads `CLAUDE.md` (and `AGENTS.md`) from the working dir and every dir above it,
+  and `~/.claude/CLAUDE.md`, whatever the tool and MCP flags say. The profile adds `--safe-mode`
+  (no CLAUDE.md, hooks, MCP servers, skills, plugins or auto memory; authentication still works) and sets
+  `CLAUDE_CODE_DISABLE_CLAUDE_MDS=1` and `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1`
+  ([CLI reference](https://code.claude.com/docs/en/cli-reference), [env vars](https://code.claude.com/docs/en/env-vars)).
+  Still to confirm: the envelope field names (`result`, `is_error`, `subtype`, `num_turns`).
+- `devin`: `read_config_from` imports other tools' rules and MCP servers (`agents_standard`, `cursor`,
+  `windsurf`, `claude`, `copilot`, `opencode`, `zed`, `cloud`), all on by default; the profile turns
+  each off. A hook `matcher` is a regex (`""` matches every tool). Without `--respect-workspace-trust
+  false`, print mode refuses to run in a new dir, so the `trust_omit` runs end without answering (their
+  class shows in the report) ([config](https://docs.devin.ai/cli/reference/configuration/read-config-from),
+  [commands](https://docs.devin.ai/cli/reference/commands), [permissions](https://docs.devin.ai/cli/reference/permissions)).
+  Still to confirm: whether `--config` replaces or adds to the other config layers, whether a tool that
+  needs approval is denied in print mode, and the transcript format.
 - `failure_patterns`: they are written from the vendors' documented messages. A sanitized envelope per
   profile becomes a spec fixture for PR4.
 

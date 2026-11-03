@@ -44,7 +44,8 @@ OUTPUT = {"format": ("str", True), "text_path": ("str?", False), "error_path": (
 CONFIG_FILE = {"path": ("str", True), "content": ("content", True)}
 TOOL_TRACE = {"hook_log": ("bool", True), "max_turns": ("int?", True), "export_path": ("str?", True),
               "stdout_pattern": ("str?", True)}
-ENV = {"home": ("str", True), "xdg_data_home": ("str", True), "pass": ("strings", True), "secret_env": ("object", True)}
+ENV = {"home": ("str", True), "xdg_data_home": ("str", True), "set": ("object", True), "pass": ("strings", True),
+       "secret_env": ("object", True)}
 
 
 class ProfileError(ValueError):
@@ -101,11 +102,11 @@ def _check_sections(data):
     env = data["env"]
     if env["home"] not in ("synthetic", "real") or env["xdg_data_home"] not in ("owner", "synthetic"):
         raise ProfileError("env.home: synthetic|real; env.xdg_data_home: owner|synthetic")
-    names = list(env["pass"]) + list(env["secret_env"])
-    if any(not ENV_NAME_RE.fullmatch(name) or name in BUILT_ENV for name in names):
-        raise ProfileError("env: pass/secret_env names must be plain and not one the wrapper sets")
-    if not all(isinstance(path, str) for path in env["secret_env"].values()):
-        raise ProfileError("env.secret_env: values are file paths")
+    names = list(env["set"]) + list(env["pass"]) + list(env["secret_env"])
+    if len(set(names)) != len(names) or any(not ENV_NAME_RE.fullmatch(name) or name in BUILT_ENV for name in names):
+        raise ProfileError("env: set/pass/secret_env names must be plain, distinct and not one the wrapper sets")
+    if not all(isinstance(value, str) for value in list(env["set"].values()) + list(env["secret_env"].values())):
+        raise ProfileError("env.set values and env.secret_env file paths are strings")
     if set(data["failure_patterns"]) - set(PATTERN_CLASSES):
         raise ProfileError("failure_patterns: unknown class")
     if any(not code.isdigit() or cls not in CLASSES for code, cls in data["exit_codes"].items()):

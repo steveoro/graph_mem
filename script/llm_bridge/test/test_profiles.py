@@ -57,6 +57,9 @@ class ProfileLoadingTest(unittest.TestCase):
             lambda d: d["env"].update(home="mine"),
             lambda d: d["env"].update(**{"pass": ["PATH"]}),
             lambda d: d["env"]["secret_env"].update(HOME="{state}/x"),
+            lambda d: d["env"]["set"].update(CLAUDE_CODE_OAUTH_TOKEN="x"),
+            lambda d: d["env"]["set"].update(ZQ7_FLAG=1),
+            lambda d: d["env"].pop("set"),
             lambda d: d["exit_codes"].update(three="cli_error"),
             lambda d: d["tool_trace"].update(max_turns=True),
             lambda d: d["output"].update(format="yaml"),
@@ -83,7 +86,7 @@ class ArgvTest(unittest.TestCase):
         self.assertEqual(mode["mode"], "stdin")
         self.assertIsNone(agent_cli.choose_mode(profile, 10_000_001))
         self.assertEqual(agent_cli.build_argv(profile, "/bin/claude", "sonnet", mode, self.ctx), [
-            "/bin/claude", "-p", "--output-format", "json", "--max-turns", "1", "--tools", "", "--disallowedTools", "mcp__*",
+            "/bin/claude", "-p", "--output-format", "json", "--max-turns", "1", "--safe-mode", "--tools", "", "--disallowedTools", "mcp__*",
             "--strict-mcp-config", "--mcp-config", "/tmp/run/empty-mcp.json", "--model", "sonnet"])
 
     def test_devin_argv_for_arg_and_file_modes(self):
@@ -107,7 +110,7 @@ class EnvironmentAndRunDirTest(FakeCliCase):
     def test_the_env_holds_only_the_names_the_wrapper_sets(self):
         planted = {"DATABASE_URL": "mysql2://u:p@db.example/x", "RAILS_MASTER_KEY": "k" * 32, "SSH_AUTH_SOCK": "/tmp/agent.sock"}
         with mock.patch.dict(os.environ, planted):
-            for name, extra in (("claude", ["CLAUDE_CODE_OAUTH_TOKEN"]), ("devin", [])):
+            for name, extra in (("claude", ["CLAUDE_CODE_DISABLE_AUTO_MEMORY", "CLAUDE_CODE_DISABLE_CLAUDE_MDS", "CLAUDE_CODE_OAUTH_TOKEN"]), ("devin", [])):
                 result, _ = self.run_fake(name, "@fake echo_env\n")
                 self.assertEqual(result["text"].strip().split(","), sorted(list(agent_cli.BUILT_ENV) + extra))
 

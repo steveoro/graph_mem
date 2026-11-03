@@ -15,7 +15,7 @@
     "subtype_path": "subtype",
     "turns_path": "num_turns"
   },
-  "lockdown_args": ["--tools", "", "--disallowedTools", "mcp__*", "--strict-mcp-config", "--mcp-config", "{run}/empty-mcp.json"],
+  "lockdown_args": ["--safe-mode", "--tools", "", "--disallowedTools", "mcp__*", "--strict-mcp-config", "--mcp-config", "{run}/empty-mcp.json"],
   "config_files": [
     { "path": "{run}/empty-mcp.json", "content": { "mcpServers": {} } }
   ],
@@ -31,6 +31,7 @@
   "env": {
     "home": "synthetic",
     "xdg_data_home": "synthetic",
+    "set": { "CLAUDE_CODE_DISABLE_CLAUDE_MDS": "1", "CLAUDE_CODE_DISABLE_AUTO_MEMORY": "1" },
     "pass": [],
     "secret_env": { "CLAUDE_CODE_OAUTH_TOKEN": "{state}/claude.token" }
   },

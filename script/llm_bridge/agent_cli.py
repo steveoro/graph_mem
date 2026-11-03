@@ -185,6 +185,7 @@ def build_env(profile: Profile, found: Tuple[str, str], ctx: Dict[str, str], run
         "XDG_DATA_HOME": data_home, "NO_COLOR": "1", "TERM": "dumb", "LANG": "C.UTF-8",
         "GM_LLM_RUN_ID": run_id, "AGENT_CLI_STATE": ctx["state"],
     }
+    env.update(spec["set"])  # fixed values from the profile (e.g. switches that stop memory files loading)
     for name in spec["pass"]:
         if name in os.environ:
             env[name] = os.environ[name]

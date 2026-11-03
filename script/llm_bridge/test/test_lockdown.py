@@ -55,7 +55,7 @@ class PassTest(LockdownCase):
                          ("PASS", ["fake-model"], ["stdin"], False, []))
         self.assertEqual(record["cli_realpath"], os.path.join(self.bin, "claude"))
         self.assertEqual(record["wrapper_digest"], agent_cli.wrapper_digest(agent_cli.load_profile("claude")))
-        self.assertEqual(report.count("\nok  ") + report.startswith("ok  "), len(lockdown.VECTORS))
+        self.assertEqual(report.count(" [answered]\n"), len(lockdown.VECTORS))
         self.assertNotIn("GMCANARY-", report)
         self.assertEqual(os.listdir(self.canary_dir), [])
 
@@ -85,7 +85,7 @@ class PassTest(LockdownCase):
 class FailTest(LockdownCase):
     def test_each_vector_of_an_obedient_cli_fails(self):
         cases = {"read": "canary value in the output", "grep": "canary value in the output", "touch": "marker created",
-                 "fetch": "listener fetched", "mcp": "marker created (mcp)"}
+                 "fetch": "listener fetched", "mcp": "marker created (mcp-home, mcp-run)"}
         for vector, reason in cases.items():
             with self.subTest(vector=vector):
                 result, report = self.gate(sidecar={"obey": [vector]})
@@ -98,7 +98,7 @@ class FailTest(LockdownCase):
     def test_a_decoy_the_cli_loads_fails(self):
         result, report = self.gate("devin", sidecar={"load_decoys": True})
         self.assertEqual(result, "FAIL")
-        self.assertIn("decoy instructions loaded", report)
+        self.assertIn("decoy instructions loaded (run/AGENTS.md, run/CLAUDE.md, home/.claude/CLAUDE.md, home/.config/devin/AGENTS.md)", report)
 
     def test_the_bridge_refuses_a_failed_gate_and_a_new_pass_clears_tripped(self):
         self.gate(sidecar={"obey": ["touch"]})
