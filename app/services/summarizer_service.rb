@@ -469,8 +469,12 @@ class SummarizerService
     "provider_unavailable"
   end
 
+  # The evidence lines' names and observation text are `data` segments (Llm::Prompt); the
+  # instructions, ids and labels are `trusted`.
+  #
+  # @return [String]
   def build_prompt(evidence)
-    lines = [
+    header = [
       "Query: #{@query}",
       "Style: #{@style}",
       "Scope: #{@scope}",
@@ -488,18 +492,20 @@ class SummarizerService
       ""
     ]
 
+    prompt = Llm::Prompt.new.trusted(header.join("\n"))
     if evidence.empty?
-      lines << "No observations were retrieved. Reply that no active evidence was found for this query."
+      prompt.trusted("\nNo observations were retrieved. Reply that no active evidence was found for this query.")
     else
       evidence.each do |entry|
         observation = entry[:observation]
         entity = entry[:entity]
         contradiction = entry[:has_contradiction] ? " [possible contradiction]" : ""
-        lines << "- [observation_id=#{observation.id}, entity_id=#{entity.id}, entity=#{entity.name}]#{contradiction} #{observation.content}"
+        prompt.trusted("\n- [observation_id=#{observation.id}, entity_id=#{entity.id}, entity=").data(entity.name)
+              .trusted("]#{contradiction} ").data(observation.content)
       end
     end
 
-    lines.join("\n")
+    prompt.to_s
   end
 
   def select_diverse_evidence(ranked)

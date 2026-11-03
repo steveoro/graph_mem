@@ -2,8 +2,9 @@
 
 class ProjectScanner
   # The prompt of one scan part and the parsing of its answer (F-3; moved from ProjectScanner).
-  # File contents and the earlier-parts names are untrusted data inside the prompt: nothing from
-  # the answer is executed, used as a path or used to pick a file.
+  # File contents, the project name and the earlier-parts names are untrusted data inside the
+  # prompt (`data` segments of an Llm::Prompt): nothing from the answer is executed, used as a
+  # path or used to pick a file.
   #
   #   ProjectScanner::ExtractionPrompt.text(chunk.text, part: 2, parts: 3, project_name: "Gadget Project",
   #                                         names: ["SynthWidget"])
@@ -11,6 +12,7 @@ class ProjectScanner
   module ExtractionPrompt
     # The names line never takes more than this, so the prompt's size is known before the names are.
     NAMES_RESERVE_BYTES = 1500
+    NAMES_PREFIX = "Entities already found (reuse these exact names when you mean the same thing): "
 
     INSTRUCTIONS = <<~PROMPT
       You are a codebase knowledge extractor. Analyze the project files below and produce a single JSON object.
@@ -54,13 +56,12 @@ class ProjectScanner
     # @param names [Array<String>] entity names from earlier parts (cut to NAMES_RESERVE_BYTES)
     # @return [String]
     def text(files_text, part:, parts:, project_name:, names: [])
-      <<~PROMPT
-        #{INSTRUCTIONS}
-        This is part #{part} of #{parts} of one project (project name: #{project_name}). Other parts hold other files; describe only the files in this part.
-        #{names_line(names)}
-        Files:
-        #{files_text}
-      PROMPT
+      prompt = Llm::Prompt.new.trusted("#{INSTRUCTIONS}\nThis is part #{part} of #{parts} of one project (project name: ")
+                          .data(project_name)
+                          .trusted("). Other parts hold other files; describe only the files in this part.\n")
+      kept = kept_names(names)
+      prompt.trusted(NAMES_PREFIX).data(kept.join("; ")).trusted("\n") if kept.any?
+      prompt.trusted("\nFiles:\n").data(files_text).trusted("\n").to_s
     end
 
     # @param project_name [String]
@@ -83,15 +84,14 @@ class ProjectScanner
       nil
     end
 
-    def names_line(names)
-      return "" if names.blank?
-
-      line = +"Entities already found (reuse these exact names when you mean the same thing): "
-      kept = names.map { |name| name.to_s.squish }.reject(&:blank?).take_while do |name|
-        (line.bytesize + name.bytesize + 2) <= NAMES_RESERVE_BYTES && line << name << "; "
+    # The names that fit the names line ("prefix name1; name2", within NAMES_RESERVE_BYTES with
+    # room for a "; " after each).
+    def kept_names(names)
+      bytes = NAMES_PREFIX.bytesize
+      Array(names).map { |name| name.to_s.squish }.reject(&:blank?).take_while do |name|
+        (bytes + name.bytesize + 2) <= NAMES_RESERVE_BYTES && (bytes += name.bytesize + 2)
       end
-      kept.any? ? "#{line.delete_suffix('; ')}\n" : ""
     end
-    private_class_method :names_line
+    private_class_method :kept_names
   end
 end
