@@ -112,7 +112,7 @@ class DetectContradictionsTool < ApplicationTool
     end
 
     seed = seed_review != false
-    result = FactSupersede::Proposals.call(fact, terms: terms, limit: max_results.to_i, seed: seed, max_batches: FACT_MODE_JUDGE_BATCHES)
+    result = FactSupersede::Proposals.call(fact, terms: terms, limit: max_results.to_i, seed: seed, max_batches: FACT_MODE_JUDGE_BATCHES, inline: true)
     # The uncapped job judges what the cap left unjudged (it re-judges pending unjudged rows).
     FactSupersedeJob.perform_later(fact.id) if seed && result.capped.positive?
     rows = result.rows.index_by { |row| row.payload["observation_id"].to_i }

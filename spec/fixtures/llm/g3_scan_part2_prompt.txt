@@ -1,0 +1,48 @@
+You are a codebase knowledge extractor. Analyze the project files below and produce a single JSON object.
+
+Required JSON structure:
+{
+  "project": {
+    "name": "short project name",
+    "aliases": ["optional alias 1", "optional alias 2"],
+    "description": "one sentence description"
+  },
+  "architecture": [
+    {
+      "entity": {
+        "name": "entity name",
+        "type": "one of: Project, Component, Service, Class, Module, Configuration, Framework, DatabaseTable, APIEndpoint, Route, Migration, TestCase, BestPractice, Preference, Issue, PossibleSolution, Workflow, ApplicationStack, Model, User, Step, Task, Error",
+        "aliases": ["..."],
+        "description": "..."
+      },
+      "observations": ["factual statement 1", "factual statement 2"],
+      "relations": [
+        { "to": "target entity name or project name", "type": "part_of or depends_on or relates_to or implements or extends or configured_by or tested_by", "confidence": 0.9 }
+      ]
+    }
+  ]
+}
+
+Rules:
+- Only include facts that are directly supported by the file contents.
+- Do not invent files, directories, or entities not mentioned.
+- Use the project root as the top-level parent for "part_of" relations.
+- Keep the response valid JSON only, no markdown.
+
+This is part 2 of 2 of one project (project name: Gadget Project). Other parts hold other files; describe only the files in this part.
+Entities already found (reuse these exact names when you mean the same thing): Alpha Store
+
+Files:
+--- FILE: docs/beta.md
+# beta
+The beta part of Gadget Project. The beta part of Gadget Project. The beta part of Gadget Project. The beta part of Gadget Project. The beta part of Gadget Project. The beta part of Gadget Project. The beta part of Gadget Project. The beta part of Gadget Project. The beta part of Gadget Project. The beta part of Gadget Project. The beta part of Gadget Project. The beta part of Gadget Project. The beta part of Gadget Project. The beta part of Gadget Project.
+The beta part of Gadget Project. The beta part of Gadget Project. The beta part of Gadget Project. The beta part of Gadget Project. The beta part of Gadget Project. The beta part of Gadget Project. The beta part of Gadget Project. The beta part of Gadget Project. The beta part of Gadget Project. The beta part of Gadget Project. The beta part of Gadget Project. The beta part of Gadget Project. The beta part of Gadget Project. The beta part of Gadget Project.
+The beta part of Gadget Project. The beta part of Gadget Project. The beta part of Gadget Project. The beta part of Gadget Project. The beta part of Gadget Project. The beta part of Gadget Project. The beta part of Gadget Project. The beta part of Gadget Project. The beta part of Gadget Project. The beta part of Gadget Project. The beta part of Gadget Project. The beta part of Gadget Project. The beta part of Gadget Project. The beta part of Gadget Project.
+The beta part of Gadget Project. The beta part of Gadget Project. The beta part of Gadget Project. The beta part of Gadget Project. The beta part of Gadget Project. The beta part of Gadget Project. The beta part of Gadget Project. The beta part of Gadget Project. The beta part of Gadget Project. The beta part of Gadget Project. The beta part of Gadget Project. The beta part of Gadget Project. The beta part of Gadget Project. The beta part of Gadget Project.
+The beta part of Gadget Project. The beta part of Gadget Project. The beta part of Gadget Project. The beta part of Gadget Project. The beta part of Gadget Project. The beta part of Gadget Project. The beta part of Gadget Project. The beta part of Gadget Project. The beta part of Gadget Project. The beta part of Gadget Project. The beta part of Gadget Project. The beta part of Gadget Project. The beta part of Gadget Project. The beta part of Gadget Project.
+The beta part of Gadget Project. The beta part of Gadget Project. The beta part of Gadget Project. The beta part of Gadget Project. The beta part of Gadget Project. The beta part of Gadget Project. The beta part of Gadget Project. The beta part of Gadget Project. The beta part of Gadget Project. The beta part of Gadget Project. The beta part of Gadget Project. The beta part of Gadget Project. The beta part of Gadget Project. The beta part of Gadget Project.
+The beta part of Gadget Project. The beta part of Gadget Project. The beta part of Gadget Project. The beta part of Gadget Project. The beta part of Gadget Project. The beta part of Gadget Project. The beta part of Gadget Project. The beta part of Gadget Project. The beta part of Gadget Project. The beta part of Gadget Project. The beta part of Gadget Project. The beta part of Gadget Project. The beta part of Gadget Project. The beta part of Gadget Project.
+The beta part of Gadget Project. The beta part of Gadget Project. The beta part of Gadget Project. The beta part of Gadget Project. The beta part of Gadget Project. The beta part of Gadget Project. The beta part of Gadget Project. The beta part of Gadget Project. The beta part of Gadget Project. The beta part of Gadget Project. The beta part of Gadget Project. The beta part of Gadget Project. The beta part of Gadget Project. The beta part of Gadget Project.
+
+---
+

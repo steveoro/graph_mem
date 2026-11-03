@@ -9,6 +9,20 @@ class SummarizerService
   DEFAULT_STYLE = "concise"
   SCOPES = %w[context global].freeze
   CONTEXT_SEARCH_OVERSAMPLE = 5
+  # The LLM prompt's instructions after "Write a <style>" (build_prompt).
+  PROMPT_INSTRUCTIONS = [
+    " summary using only the observations below.",
+    "Use this structure:",
+    "1. One short overview paragraph.",
+    "2. Bullet points grouped by entity when helpful.",
+    "3. End with a Sources line listing observation_id values you used.",
+    "",
+    "Rules:",
+    "- Do not invent facts, acronym expansions, or entities.",
+    "- Mention uncertainty only when an observation is marked [possible contradiction].",
+    "- Do not ask follow-up questions.",
+    ""
+  ].join("\n").freeze
 
   class << self
     def call(**kwargs)
@@ -419,13 +433,13 @@ class SummarizerService
   end
 
   def attempt_llm_synthesis(response, evidence)
-    unless SummarizationConfig.llm_usable?
+    unless Llm::Router.usable?(:summary)
       response[:fallback_reason] = fallback_reason_for_disabled
       return response
     end
 
     prompt = build_prompt(evidence)
-    result = SummaryGenerationClient.generate(prompt, style: @style)
+    result = Llm::Router.generate(:summary, prompt, style: @style)
 
     if result[:ok]
       response[:summary] = result[:text]
@@ -469,37 +483,26 @@ class SummarizerService
     "provider_unavailable"
   end
 
+  # The caller's query and style, entity names and observation text are `data` segments
+  # (Llm::Prompt); the instructions, the normalized scope, ids and labels are `trusted`.
+  #
+  # @return [String]
   def build_prompt(evidence)
-    lines = [
-      "Query: #{@query}",
-      "Style: #{@style}",
-      "Scope: #{@scope}",
-      "",
-      "Write a #{@style} summary using only the observations below.",
-      "Use this structure:",
-      "1. One short overview paragraph.",
-      "2. Bullet points grouped by entity when helpful.",
-      "3. End with a Sources line listing observation_id values you used.",
-      "",
-      "Rules:",
-      "- Do not invent facts, acronym expansions, or entities.",
-      "- Mention uncertainty only when an observation is marked [possible contradiction].",
-      "- Do not ask follow-up questions.",
-      ""
-    ]
-
+    prompt = Llm::Prompt.new.trusted("Query: ").data(@query).trusted("\nStyle: ").data(@style)
+                            .trusted("\nScope: #{@scope}\n\nWrite a ").data(@style).trusted(PROMPT_INSTRUCTIONS)
     if evidence.empty?
-      lines << "No observations were retrieved. Reply that no active evidence was found for this query."
+      prompt.trusted("\nNo observations were retrieved. Reply that no active evidence was found for this query.")
     else
       evidence.each do |entry|
         observation = entry[:observation]
         entity = entry[:entity]
         contradiction = entry[:has_contradiction] ? " [possible contradiction]" : ""
-        lines << "- [observation_id=#{observation.id}, entity_id=#{entity.id}, entity=#{entity.name}]#{contradiction} #{observation.content}"
+        prompt.trusted("\n- [observation_id=#{observation.id}, entity_id=#{entity.id}, entity=").data(entity.name)
+              .trusted("]#{contradiction} ").data(observation.content)
       end
     end
 
-    lines.join("\n")
+    prompt.to_s
   end
 
   def select_diverse_evidence(ranked)

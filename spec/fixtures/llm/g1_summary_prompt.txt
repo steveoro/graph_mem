@@ -1,0 +1,17 @@
+Query: SynthWidget rendering
+Style: concise
+Scope: global
+
+Write a concise summary using only the observations below.
+Use this structure:
+1. One short overview paragraph.
+2. Bullet points grouped by entity when helpful.
+3. End with a Sources line listing observation_id values you used.
+
+Rules:
+- Do not invent facts, acronym expansions, or entities.
+- Mention uncertainty only when an observation is marked [possible contradiction].
+- Do not ask follow-up questions.
+
+- [observation_id=OBS1, entity_id=ENT1, entity=SynthWidget] SynthWidget renders gadget frames.
+- [observation_id=OBS2, entity_id=ENT1, entity=SynthWidget] SynthWidget caches frames in Alpha Service.

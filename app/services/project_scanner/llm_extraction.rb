@@ -128,7 +128,7 @@ class ProjectScanner
     end
 
     def summarization_disabled_or_unavailable?
-      !SummarizationConfig.llm_usable?
+      !Llm::Router.usable?(:scan)
     end
 
     # Saved after reconcile so a resumed paused scan (C6) skips the model and reconcile: the
