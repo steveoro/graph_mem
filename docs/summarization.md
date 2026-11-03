@@ -146,7 +146,7 @@ Every model call goes through one seam, `Llm::Router` (`app/services/llm/`), whi
 |---|---|---|
 | `:summary` | `SummarizerService` (MCP `summarize`, `POST /api/v1/summaries`) | none (the client's defaults, incl. the 8,192-character cut) |
 | `:scan` | `ProjectScanner::ChunkedExtraction`, one call per part | `num_ctx`, `num_predict`, `format: "json"`, `truncate: false`, the scan timeout, no cut |
-| `:judge` | `FactSupersede::Judge`, one call per batch (`FactSupersedeJob`, and inline from `detect_contradictions` with `mode: "outdated_by_fact"`) | `num_ctx`, `num_predict`, `format: "json"` |
+| `:judge` | `FactSupersede::Judge`, one call per batch (`FactSupersedeJob`, and inline from `detect_contradictions` with `mode: "outdated_by_fact"`) | `num_ctx`, `num_predict`, `format: "json"` (no `max_output_length`, so the 8,192-character cut applies) |
 
 - **One provider today:** `Llm::OllamaProvider` (named `ollama` for both transports, `openai_compatible` included) calls `SummaryGenerationClient.generate` with exactly the arguments the call site passes. Requests, prompts and results are what they were before 1.67.0; the result Hash only gains `provider: "ollama"`. `Llm::Router.usable?(task)` is today's "enabled and configured" check (`SummarizationConfig.llm_usable?`).
 - **Inline calls:** a call made inside an MCP request (the judge under `detect_contradictions`) is marked `inline`. Nothing treats it differently yet.
