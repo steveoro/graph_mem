@@ -75,7 +75,7 @@ class ClassesTest(FakeCliCase):
 
     def test_cli_bad_output(self):
         cases = {"claude": ["@fake raw=not json\n", "@fake no_result\n", '@fake raw={"result": 42}\n', "@fake answer=\n",
-                            "@fake answer=   \n"],
+                            "@fake answer=   \n", "@fake raw=%s\n" % ("[" * 100000)],
                  "devin": ["@fake answer=\n"]}
         for name, prompts in cases.items():
             for prompt in prompts:
@@ -132,7 +132,7 @@ class ToolUseTest(FakeCliCase):
         self.assertTrue(self.run_fake("claude", "@fake turns=1\n")[0]["ok"])
 
     def test_the_transcript_tool_step_garbage_and_absence(self):
-        for transcript in ("tool", "garbage", "none"):
+        for transcript in ("tool", "garbage", "none", "deep"):
             with self.subTest(transcript=transcript):
                 result, _ = self.run_fake("devin", "@fake transcript=%s\n" % transcript)
                 self.assertEqual(result["failure_class"], "cli_tool_use")

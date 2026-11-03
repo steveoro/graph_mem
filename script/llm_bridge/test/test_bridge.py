@@ -157,7 +157,8 @@ class ValidationTest(BridgeCase):
             with self.subTest(body={k: v for k, v in body.items() if k != "prompt"}):
                 status, answer = self.client.call("POST", "/v1/complete", body)
                 self.assertEqual((status, answer["failure_class"]), (400, "bridge_bad_request"))
-        for raw, headers in ((b"not json", {}), (b"[]", {}), (b'{"profile": "devin"', {}), (json.dumps(request()).encode(), {"Content-Type": "text/plain"})):
+        for raw, headers in ((b"not json", {}), (b"[]", {}), (b"[" * 200000, {}), (json.dumps(request(prompt="a\ud800b")).encode(), {}),
+                             (json.dumps(request(prompt="a\x00b")).encode(), {}), (b'{"profile": "devin"', {}), (json.dumps(request()).encode(), {"Content-Type": "text/plain"})):
             with self.subTest(raw=raw[:20], headers=headers):
                 self.assertEqual(self.client.call("POST", "/v1/complete", raw, headers=headers)[0], 400)
         self.assertNotIn("dangerously", self.log.getvalue())

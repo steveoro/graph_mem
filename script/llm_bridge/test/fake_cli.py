@@ -11,7 +11,7 @@ Two control channels:
 - ``@fake key=value`` lines in the prompt (wrapper and bridge tests): ``answer``, ``raw``, ``exit``,
   ``stderr``, ``is_error``, ``subtype``, ``turns``, ``no_result``, ``sleep``, ``ignore_term``,
   ``spawn_child=<pid file>``, ``flood=<bytes>``, ``hook=<tool>``, ``echo_env``, ``echo_argv``, ``echo_cwd_mode``,
-  ``transcript=none|tool|garbage``.
+  ``transcript=none|tool|garbage|deep``.
 - ``<this file>.json`` next to the copy (lockdown tests): ``{"obey": [...], "load_decoys": bool,
   "refuse_without_trust": bool}``. ``obey`` holds ``read``, ``grep``, ``touch``, ``fetch`` and ``mcp``:
   the fake then really reads the canary, touches the marker, fetches the listener or starts the
@@ -133,7 +133,8 @@ def write_transcript(argv, found, text):
     steps = [{"source": "agent", "message": text}]
     if found.get("transcript") == "tool":
         steps.append({"source": "agent", "tool_calls": [{"function_name": "exec", "arguments": {}}]})
-    body = "not json {" if found.get("transcript") == "garbage" else json.dumps({"schema_version": "ATIF-v1.2", "steps": steps})
+    body = {"garbage": "not json {", "deep": "[" * 100000 + "]" * 100000}.get(found.get("transcript"))
+    body = body or json.dumps({"schema_version": "ATIF-v1.2", "steps": steps})
     with open(argv[argv.index("--export") + 1], "w", encoding="utf-8") as handle:
         handle.write(body)
 

@@ -149,7 +149,7 @@ class Bridge:
         """The request as a dict if it has exactly the allowed keys with allowed values, else None."""
         try:
             request = json.loads(body.decode("utf-8"))
-        except (UnicodeDecodeError, ValueError):
+        except (UnicodeDecodeError, ValueError, RecursionError):  # RecursionError: very deep nesting
             return None
         if not isinstance(request, dict) or set(request) != KEYS:
             return None
@@ -158,7 +158,7 @@ class Bridge:
         checks = [
             profile is not None,
             isinstance(model, str) and not model.startswith("-") and bool(profile and profile.model_re.fullmatch(model)),
-            isinstance(request["prompt"], str) and request["prompt"] != "",
+            isinstance(request["prompt"], str) and request["prompt"] != "" and _plain_text(request["prompt"]),
             isinstance(timeout, int) and not isinstance(timeout, bool) and 1 <= timeout <= 600,
             request["task"] in TASKS,
             isinstance(request["run_id"], str) and _is_uuid(request["run_id"]),
@@ -189,6 +189,15 @@ class Bridge:
         """One line per request (validated fields only; never the prompt, answer, stderr, token or env)."""
         self.log_stream.write("[llm_bridge] %s\n" % json.dumps(fields, sort_keys=False))
         self.log_stream.flush()
+
+
+def _plain_text(value: str) -> bool:
+    """Encodable as UTF-8 (no lone surrogate) and without NUL (which can't go into argv)."""
+    try:
+        value.encode("utf-8")
+    except UnicodeEncodeError:
+        return False
+    return "\x00" not in value
 
 
 def _is_uuid(value: str) -> bool:

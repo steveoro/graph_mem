@@ -312,7 +312,7 @@ def unwrap(profile: Profile, stdout: str) -> dict:
         return {"valid": True, "text": stdout, "error": False, "subtype": "", "turns": None}
     try:
         doc = json.loads(stdout)
-    except ValueError:
+    except (ValueError, RecursionError):
         return {"valid": False, "text": None, "error": False, "subtype": "", "turns": None}
     pick = lambda key: _dig(doc, out[key]) if out.get(key) else None  # noqa: E731
     text, subtype = pick("text_path"), pick("subtype_path")
@@ -338,13 +338,13 @@ def transcript_shows_tools(text: Optional[str], exit_code) -> bool:
     if text is None:
         return exit_code == 0
     try:
-        docs = [json.loads(text)]
-    except ValueError:
         try:
-            docs = [json.loads(line) for line in text.splitlines() if line.strip()]
+            docs = [json.loads(text)]
         except ValueError:
-            return True
-    return _has_tool_step(docs)
+            docs = [json.loads(line) for line in text.splitlines() if line.strip()]
+        return _has_tool_step(docs)
+    except (ValueError, RecursionError):  # unreadable or too deep to walk: fail closed
+        return True
 
 
 def _hook_lines(state, offset, run_id):
@@ -408,6 +408,8 @@ def run_cli(profile: Profile, prompt: str, model: str, timeout_s: float, run_id:
     started = time.monotonic()
     if not isinstance(model, str) or model.startswith("-") or not profile.model_re.fullmatch(model):
         raise ValueError("model does not match the profile's model_pattern")
+    if "\x00" in prompt:
+        raise ValueError("the prompt holds a NUL")
     found = resolve_cli(profile)
     if not found:
         return _outcome(model, "cli_missing", started)
