@@ -94,7 +94,8 @@ module Llm
         chars = run.delete("/_+=-")
         return false if chars.length < 24
         return chars.match?(/\d/) && chars.match?(/[a-f]/i) if chars.match?(/\A(?:[0-9a-f]+|[0-9A-F]+)\z/)
-        return chars.count("0-9") * 5 >= chars.length if chars.match?(/\A[a-z0-9]+\z/)
+        # Base36 switches between letters and digits often; a date-stamped name has one or two digit blocks.
+        return chars.count("0-9") * 5 >= chars.length && chars.scan(/\d+|[a-z]+/).size >= chars.length * 0.25 if chars.match?(/\A[a-z0-9]+\z/)
 
         classes = chars.chars.map { |char| char.match?(/[A-Z]/) ? 0 : char.match?(/[a-z]/) ? 1 : 2 }
         # Names have lowercase words of 4+ letters; random base64 almost never does.

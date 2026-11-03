@@ -11,11 +11,18 @@ RSpec.describe Llm::Anonymizer::Detectors do
 
   def random_string(length, alphabet = [ *"a".."z", *"A".."Z", *"0".."9" ]) = Array.new(length) { alphabet.sample }.join
 
+  # Random but always over random?'s thresholds: one character of each alphabet per step.
+  def pairs(count, *alphabets) = Array.new(count) { alphabets.map(&:sample).join }.join
+
+  let(:upper) { [ *"A".."Z" ] }
+  let(:lower) { [ *"a".."z" ] }
+  let(:digits) { [ *"0".."9" ] }
+
   it "redacts secrets as an untyped ⟦SECRET⟧ that isn't in the map" do
     secrets = [
       "sk-#{random_string(40)}", "ghp_#{random_string(36)}", "github_pat_#{random_string(30)}", "xoxb-#{random_string(24)}",
       "AKIA#{random_string(16, [ *"A".."Z", *"0".."9" ])}", "eyJ#{random_string(12)}.#{random_string(20)}.#{random_string(20)}",
-      "-----BEGIN PRIVATE KEY-----\n#{random_string(40)}\n-----END PRIVATE KEY-----", "Aa1#{random_string(40)}"
+      "-----BEGIN PRIVATE KEY-----\n#{random_string(40)}\n-----END PRIVATE KEY-----", pairs(14, upper, lower, digits)
     ]
     secrets.each do |secret|
       text, redacted = mask("key #{secret} end")
@@ -33,13 +40,14 @@ RSpec.describe Llm::Anonymizer::Detectors do
     %w[DB_PASSWORD= POSTGRES_PASSWORD:\  GITHUB_TOKEN= OPENAI_API_KEY= aws_secret_access_key\ =\  STRIPE_SECRET_KEY= SECRET_KEY_BASE=].each do |name|
       expect(mask("#{name}#{value}").first).to eq("#{name}⟦SECRET⟧"), name
     end
-    [ random_string(64, [ *"0".."9", *"A".."F" ]), random_string(32, [ *"a".."z", *"0".."9" ]).sub(/\A\D{0,8}/) { |head| head.tr("a-z", "1-9") },
-      "#{random_string(20)}/#{random_string(20)}", "#{random_string(20)}-_#{random_string(20)}" ].each do |run|
+    [ random_string(64, [ *"0".."9", *"A".."F" ]), pairs(16, lower, digits),
+      "#{pairs(7, upper, lower, digits)}/#{pairs(7, upper, lower, digits)}", "#{pairs(7, upper, lower, digits)}-_#{pairs(7, upper, lower, digits)}" ].each do |run|
       expect(mask("key #{run} end").first).to eq("key ⟦SECRET⟧ end"), run
     end
 
     plain = "tokens = tokenize(x); token_count = 5; secretary: Ada; password=abc; supercalifragilisticexpialidocious_words; " \
-            "SomeVeryLongCamelCaseIdentifierName2; b=1-Zq7CanaryWidget-Zq7CanaryWidgets-Zq7Canary"
+            "SomeVeryLongCamelCaseIdentifierName2; b=1-Zq7CanaryWidget-Zq7CanaryWidgets-Zq7Canary; " \
+            "db/migrate/20261103140000_add_cloud_allowed_to_memory_entities.rb; backup_20261103_141857_gadget_v3.sql"
     expect(mask(plain)).to eq([ plain, 0 ])
   end
 
