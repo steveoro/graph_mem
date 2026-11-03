@@ -156,6 +156,7 @@ Every model call goes through one seam, `Llm::Router` (`app/services/llm/`), whi
   ```
   [llm] {"task":"scan","provider":"ollama","model":"qwen3:8b","inline":false,"prompt_chars":5236,"est_in_tokens":1309,"out_chars":225,"est_out_tokens":57,"latency_ms":9120.4,"outcome":"ok","prompt_tokens":1500}
   ```
+- **Host bridge (1.69.0):** `script/llm_bridge/` is a loopback-only HTTP bridge for agent CLIs (`claude`, `devin`), installed separately on the workstation. The app never starts it, and nothing calls it until PR4. Each profile needs a lockdown-gate PASS before the bridge serves it. For cloud providers, people's names (Person and User entities) are masked wherever they are in the graph (see below). Setup and the HTTP contract: [`script/llm_bridge/README.md`](../script/llm_bridge/README.md).
 - **What's next:** this is the first step of an opt-in second backend, an agent CLI on the operator's workstation behind a host-side HTTP bridge, with anonymized data and a per-project `cloud_allowed` gate that defaults to false. Ollama stays the default, and without new configuration nothing changes. Plan: [`docs/plans/agent-cli-backend-plan.md`](plans/agent-cli-backend-plan.md).
 - **Specs:** `spec/support/llm.rb` has a `FakeProvider` (`with_llm_provider(fake) { … }`) and a `SubprocessGuard` that fails a spec when code under `app/` or `lib/` starts a process (`lib/tasks/db_utils.rake`, which runs mariadb-dump for backups, is the one exception). `spec/services/llm/characterization_spec.rb` pins every prompt and request body against `spec/fixtures/llm/`.
 
