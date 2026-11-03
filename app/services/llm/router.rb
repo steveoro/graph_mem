@@ -5,7 +5,8 @@ module Llm
   # `:summary` (SummarizerService), `:scan` (a project scan part) or `:judge` (fact supersede).
   # PR1 sends every task to the `:ollama` provider and returns its result Hash unchanged except
   # for one added key, `provider:`; error strings are not rewritten (the summarizer shows them as
-  # `fallback_reason`). After each call it writes one UsageLog line.
+  # `fallback_reason`). After each call it writes one UsageLog line. A provider with `cloud?` true
+  # (none until PR4) goes through Llm::CloudCall: gate, anonymize, restore.
   #
   #   Llm::Router.usable?(:summary)                                   # => true
   #   Llm::Router.generate(:summary, prompt, style: "concise")
@@ -29,8 +30,12 @@ module Llm
     end
 
     class << self
+      # Tries the CHAIN's providers in order; a cloud provider's refusal (no provider call) moves on
+      # to the next one, any other result is returned.
+      #
       # @param task [Symbol] one of TASKS
-      # @param prompt [String]
+      # @param prompt [String, Llm::Prompt] a local provider gets `prompt.to_s`; a cloud provider
+      #   needs a scoped Llm::Prompt (see Llm::CloudCall)
       # @param style [String] "concise" or "detailed"
       # @param options [Hash, nil] the request options, passed on only when given
       # @param inline [Boolean] true when the call runs inside an MCP request (detect_contradictions)
@@ -38,13 +43,18 @@ module Llm
       # @raise [ArgumentError] for an unknown task
       def generate(task, prompt, style:, options: nil, inline: false)
         check_task!(task)
-        provider = Registry.fetch(CHAIN.first)
         result = nil
-        begin
-          result = provider.generate(prompt, style: style, options: options).merge(provider: provider.name)
-        ensure
-          UsageLog.record(task: task, provider: provider, inline: inline, prompt: prompt, result: result)
+        CHAIN.each do |name|
+          provider = Registry.fetch(name)
+          if provider.cloud?
+            result = CloudCall.new(task: task, provider: provider, prompt: prompt, style: style, options: options, inline: inline).call
+            next if CloudCall.refusal?(result)
+          else
+            result = local(task, provider, prompt.to_s, style, options, inline)
+          end
+          break
         end
+        result
       end
 
       # @param task [Symbol] one of TASKS
@@ -65,6 +75,15 @@ module Llm
       end
 
       private
+
+      def local(task, provider, prompt, style, options, inline)
+        result = nil
+        begin
+          result = provider.generate(prompt, style: style, options: options).merge(provider: provider.name)
+        ensure
+          UsageLog.record(task: task, provider: provider, inline: inline, prompt: prompt, result: result)
+        end
+      end
 
       def check_task!(task)
         raise ArgumentError, "unknown LLM task: #{task.inspect} (one of #{TASKS.join(', ')})" unless TASKS.include?(task)

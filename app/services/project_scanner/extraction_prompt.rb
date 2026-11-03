@@ -56,12 +56,18 @@ class ProjectScanner
     # @param names [Array<String>] entity names from earlier parts (cut to NAMES_RESERVE_BYTES)
     # @return [String]
     def text(files_text, part:, parts:, project_name:, names: [])
+      build(files_text, part: part, parts: parts, project_name: project_name, names: names).to_s
+    end
+
+    # @param (see .text)
+    # @return [Llm::Prompt] the same prompt as segments, for the Router (a cloud provider masks the data)
+    def build(files_text, part:, parts:, project_name:, names: [])
       prompt = Llm::Prompt.new.trusted("#{INSTRUCTIONS}\nThis is part #{part} of #{parts} of one project (project name: ")
                           .data(project_name)
                           .trusted("). Other parts hold other files; describe only the files in this part.\n")
       kept = kept_names(names)
       prompt.trusted(NAMES_PREFIX).data(kept.join("; ")).trusted("\n") if kept.any?
-      prompt.trusted("\nFiles:\n").data(files_text).trusted("\n").to_s
+      prompt.trusted("\nFiles:\n").data(files_text).trusted("\n")
     end
 
     # @param project_name [String]

@@ -9,3 +9,5 @@ en:
         auto_merge: "Compaction auto-merge"
       maintenance:
         merge_node: "Merge (maintenance)"
+      project:
+        cloud_access: "Cloud access"
