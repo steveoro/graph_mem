@@ -9,8 +9,9 @@ Context: today every LLM call in graph_mem goes through `SummaryGenerationClient
 OpenAI-compatible server). This train adds an **opt-in** second backend: an agent CLI (Claude Code, Devin, …) run on
 the operator's workstation behind a small host-side HTTP bridge, with the data anonymized and a per-project
 `cloud_allowed` gate. It is five PRs. **This plan details PR1** (a provider abstraction with no behaviour
-change; done, #151, 1.67.0) **and PR2** (the anonymizer and `cloud_allowed`, written Nov 3 from `d779aff`); PR3–PR5
-get one-paragraph scopes and will each get their own step list before they start.
+change; done, #151, 1.67.0), **PR2** (the anonymizer and `cloud_allowed`; done, #152, 1.68.0) **and PR3** (the host
+bridge, profiles and lockdown gate, written Nov 3 from `c588765`); PR4–PR5 get one-paragraph scopes and will each
+get their own step list before they start.
 
 ## Hard rules (the whole train)
 - **No new MCP tool**, no new or changed tool argument or description; the default `/mcp` stays at **12** (readonly 9,
@@ -31,12 +32,12 @@ get one-paragraph scopes and will each get their own step list before they start
 |---|---|---|---|---|
 | **PR1** | `claude/llm-provider-abstraction` | Provider abstraction, **no behaviour change**: `Llm::Provider`, `Llm::OllamaProvider`, `Llm::Router`, `Llm::Registry`, prompt parts, one usage log line per call, spec-side `FakeProvider` and `SubprocessGuard` | `main` (1.66.0) ✅ #151 | **1.67.0** |
 | **PR2** | `claude/llm-anonymizer` | Anonymizer (typed HMAC tokens) + `cloud_allowed` per project (default false) + the gate that refuses a cloud provider for a project that doesn't allow it | PR1 | **1.68.0** |
-| **PR3** | `claude/llm-bridge` | Host bridge + profile framework + `devin` and `claude` profiles + the per-profile lockdown gate, all under `script/llm_bridge/` (not loaded by Rails) | `main` only; can run **in parallel** with PR1–PR2 | **1.69.0** |
+| **PR3** | `claude/llm-bridge` | Host bridge + profile framework + `devin` and `claude` profiles + the per-profile lockdown gate, all under `script/llm_bridge/` (not loaded by Rails) | `main` at 1.68.0 (PR2 merged) | **1.69.0** |
 | **PR4** | `claude/agent-cli-provider` | `Llm::AgentCliProvider` (HTTP to the bridge) + `Llm::ResponseNormalizer` + per-task fallback chains + settings + a probe | PR2, PR3 | **1.70.0** |
 | **PR5** | `claude/llm-switch-over` | Per-task switch-over, the inline gate, an `llm_cloud` queue, budgets and an `llm_usage` table, adopter docs | PR4 + a **PASS** lockdown gate per profile on Steve's workstation | **1.71.0** |
 
-PR3 touches no Rails code, so it can be reviewed and merged before, between or after PR1 and PR2; its version
-number follows merge order (if it merges first it takes 1.67.0 and the others shift by one).
+PR3's bridge touches no Rails code. PR1 and PR2 merged first, so it takes 1.69.0; it also carries two small Rails
+items (the typed-confirm button styling and masking people's names everywhere, see its section).
 
 ### What Steve does on his workstation (not in CI)
 - **After PR3 merges:** install the bridge (it runs as the workstation user by default; a dedicated low-privilege
@@ -702,26 +703,432 @@ Checkpoints are push-and-continue; stop **only** for these:
 
 ---
 
+## PR3: host bridge + profiles + lockdown gate → 1.69.0
+
+**Written 2026-11-03 (Europe/Rome)** from `main` at `c588765` (#152 merged, **1.68.0**). Every file:line below was
+checked against that commit; if a line has moved, find it by the quoted text; if the code no longer matches, **stop
+and ask Steve**. Only code was read; **no spec was run**.
+
+### Brief
+| | |
+|---|---|
+| Branch / PR | `claude/llm-bridge`, **one PR**, titled "LLM host bridge and lockdown gate (1.69.0)" |
+| Commits | UI0 → L → B1 → B2 → B3 → B4 → T → D → R, one commit per step (more is fine, fewer is not). **D and R are in this PR** |
+| Checkpoints | **push and continue**: push, get CI green, keep going; Steve reviews as it lands. Stop only for the conditions in "Stop and ask Steve if" |
+| Version | **1.69.0** (Decision 1) |
+| Data | synthetic only (`SynthWidget`, `Alpha Service`, `Gadget Project`, `Zq7…` canaries); a **fake CLI script** stands in for every agent CLI; never a real CLI, model call, account or token |
+| Read first | `CLAUDE.md`, `AGENTS.md`; this plan (hard rules, the PR2 section, the PR4 paragraph under "Later PRs", which consumes this PR's HTTP contract); `docs/summarization.md` ("LLM providers", "Anonymization and cloud access"); `app/services/llm/provider.rb`; `script/mcp_compat/README.md` (the existing `script/` conventions) |
+| MCP surface | **unchanged** (22 / 12 / 9 / 22; snapshots byte-identical); no tool gains or loses an argument |
+| Migration / settings / gem | **none** / **none** / **none** (Python 3 standard library and POSIX `sh` only, outside the Rails load path) |
+
+### Goal
+- A small HTTP **bridge** that runs on the operator's workstation (not in the container), accepts a masked prompt
+  from graph_mem on `127.0.0.1` with a shared token, runs **one** agent CLI non-interactively with every tool, MCP
+  server, config file and network action it has switched off, and returns the raw answer text with a failure class.
+- **Profiles** (`claude`, `devin`) that describe each CLI as data, so adding a CLI later is a profile file, its fake-CLI
+  tests and a lockdown PASS, with no bridge or Rails code.
+- A **lockdown test** per profile that tries to make the CLI read, run, fetch and load things, and writes a gate
+  record; the bridge serves a profile only while its gate says PASS for the CLI binary and version it finds.
+- Two small Rails items that ship in the same release: the **typed-confirm buttons** lose their extra box (UI0), and
+  **people's names** are masked wherever they are in the graph before any cloud provider exists (L).
+- With no configuration nothing changes: Rails never loads, calls or knows about `script/llm_bridge/` (PR4 is the
+  first Rails code that talks to it), and every request, prompt, result, log line, REST and MCP output is
+  **byte-identical** to 1.68.0's, except the L masking, which only runs for cloud providers (none yet).
+
+### Non-goals
+- Any Rails code that calls the bridge: `Llm::AgentCliProvider`, the normalizer, chains, settings, the probe (PR4).
+- Budgets, the `llm_cloud` queue, `llm_usage`, adopter docs, switching any task over (PR5).
+- Installing, updating or logging in to a CLI; storing a CLI credential anywhere in the repo or the app.
+- Binding anything other than `127.0.0.1`; Docker bridge networking (`docker-compose.yml` uses `network_mode: host`,
+  line 21, so the container already reaches the host's loopback); a dedicated low-privilege OS user (documented as
+  optional hardening only).
+- Profiles beyond `claude` and `devin` (Cursor's `agent -p` and others stay examples in the README).
+- The #152 items listed below as "stays documented".
+
+### What the code looks like today (verified at `c588765`)
+
+**The provider contract PR4 will implement against this bridge** (not changed here):
+- `app/services/llm/provider.rb:7-8`: the result Hash, `{ ok: true, text: "…", error: nil, latency_ms: 812.4, … }` /
+  `{ ok: false, text: nil, error: "provider_unavailable", latency_ms: 30.1, http_status: 413 }`; `generate(prompt,
+  style:, options: nil)` at :24, `available?` :29, `cloud?` :34 (false by default), `model` :39.
+- `app/services/llm/registry.rb:12` `BUILT_IN = { ollama: OllamaProvider }.freeze`; `app/services/llm/router.rb:16`
+  `TASKS = %i[summary scan judge].freeze`, :18 `CHAIN = %i[ollama].freeze`, :44 `def generate(task, prompt, style:,
+  options: nil, inline: false)`, :50-51 a cloud provider goes through `CloudCall.new(task:, provider:, prompt:,
+  style:, options:, inline:).call` and `next if CloudCall.refusal?(result)`.
+- `app/services/llm/cloud_call.rb:20` `REFUSALS = %w[prompt_not_segmented cloud_not_allowed anonymizer_refused]`, :21
+  `ROUND_TRIP_FAILED = "anonymization_round_trip_failed"`; masking happens in the app, so **the bridge only ever sees
+  masked text and never holds a mapping**. `app/services/llm/cloud_gate.rb:16` `allowed?(scope)`, :22 plucks
+  `cloud_root` for Project roots with `cloud_allowed: true`.
+- `app/services/project_scanner/chunked_extraction.rb:24` `PROMPT_REJECTED_STATUSES = [ 400, 413 ].freeze`, read at
+  :107: a scan part whose result carries `http_status` 400 **or** 413 is split and retried. So the bridge's own
+  "bad request" must never reach a scan as `http_status: 400` (PR4 maps it; this PR only documents it), and "prompt too
+  long" is the bridge's **413**.
+
+**Anonymizer, for L:**
+- `app/services/llm/anonymizer/dictionary.rb:21` `PERSON_TYPES = %w[Person User].freeze`; `self.build(scope)` at :35
+  plucks every Project root's name and aliases (PRJ), then at :42-45 `MemoryEntity.where(project_id: ids).pluck(:name,
+  :aliases, :entity_type)` for the scope's projects only, adding a person type as PER and the rest as ENT. A Person or
+  User entity with `project_id: nil`, or in a project outside the scope, is never added. `MAX_TERMS = 20_000` at :19,
+  enforced at :93 (`raise Refused, :dictionary_cap`).
+- `docs/summarization.md:179`: "People are masked only when they are members of a project in scope: a global Person
+  entity's name, or a name that is in no entity, goes out as written."
+- `spec/services/llm/anonymizer/session_spec.rb:10` (a Person member, `"Zq7 Ada"`) and :37-41 ("keeps project names
+  of other projects masked (PRJ) but not members of other projects", whose `other` at :11 is a global
+  **Component**, so it still holds after L).
+
+**The typed-confirm card, for UI0:**
+- `app/views/system/shared/_typed_confirm.html.haml:7` `%details.ui-card.system-confirm{ open: error.present?, … }`
+  and :8 `%summary.ui-btn.ui-btn-danger{ … }= summary`. Rendered by `system/embeddings/index.html.haml:83` (Regenerate
+  all) and :100 (Drop ANN indexes), `system/audit_log/index.html.haml:40` (Prune expired logs) and
+  `system/backups/index.html.haml:34` (Restore, one per file).
+- `app/assets/tailwind/application.css:413-418` `.ui-card { padding: 1.25rem; border: 1px solid var(--color-ui-border);
+  border-radius: var(--radius-ui); background: var(--color-ui-surface); }`, and :387 `.ui-btn-danger` (red border and
+  background).
+- `app/assets/tailwind/system.css:424-431`: `.system-confirm summary { width: fit-content; list-style: none; }` and
+  `.system-confirm[open] summary { margin-bottom: 0.75rem; }`. Nothing styles the **closed** card, so the closed
+  `<details>` keeps `.ui-card`'s padding, border and background around the red `<summary>`: the "box + outline" on
+  those four buttons. Plain `button_to` buttons (Delete, Add ANN indexes) have no wrapper card, hence no box.
+- It came in with `2a63360` ("S4: Backups page; typed confirmation …", Oct 29), first released in **1.63.0** (UI-7
+  plan, Decision 5: "a `ui-card` confirm form"), not 1.66.0. No plan schedules a fix.
+- Both files are `@layer components` (`application.css:33`, `system.css:3`); `system.css` is imported (:6) before
+  `application.css`'s own block, so a rule there beats `.ui-card` only with a higher specificity.
+- Specs that pin the card's markup (they must pass unchanged): `spec/requests/system/embeddings_spec.rb:36`, :107,
+  :164; `spec/requests/system/audit_log_spec.rb:113`, :128, :138; `spec/requests/system/backups_spec.rb:56-59`,
+  :111-113; `spec/system/system_backups_spec.rb:36`.
+
+**The repo around `script/`:** `script/` holds only `mcp_compat/` (a README plus Ruby and shell checks); there is no
+`script/llm_bridge/`. CI: GitHub Actions `.github/workflows/ci.yml` (jobs `scan_ruby`, `scan_js`, `lint`, all Ruby)
+and CircleCI `.circleci/config.yml` (`rubocop`, `brakeman`, `rspec` on `cimg/ruby:3.4.12`). Nothing runs Python
+today; `ubuntu-latest` runners ship `python3` and `shellcheck`.
+
+### Carried over from #152
+| Item | Status | Where |
+|---|---|---|
+| Scan scope: a cloud scan from any folder of an allowed project | **Closed** by `memory_entities.cloud_root` (the second migration Steve approved on #152) and the byte-for-byte check in `CloudGate.allowed?` | nothing to do |
+| People's names outside the scope's projects go out as written | **Close in PR3** (step L, Decision 8): every Person/User entity in the graph is masked as PER | PR3 |
+| A name in no entity, fused lowercase names (`gadgetprojectcontroller`, `gadgetapp.example.com`), public hosts | **Stays documented** in "What still leaks" (no NER, and fused matching would mask ordinary words); PR5's adopter docs repeat it | PR5 docs |
+| Timing bound: `spec/services/llm/cloud_architecture_spec.rb:92` and :100 are `< 3.0` s; CI once took 3.21 s before `fd99e24` (byte offsets); now about 0.16 s at 200 KB | **Watched, unchanged**: the spec is an existing spec, and the headroom is now about 18×. If it fails again on CI, that is a stop-and-ask, not an edit | none |
+| The regex-timeout refusal spec stubs `Detectors.mask` (`session_spec.rb:90-91`) instead of a real `Regexp::TimeoutError` | **Unchanged**: every regex is compiled with `timeout: Detectors::TIMEOUT` (`detectors.rb:11`, :17; `session.rb:16-21`) and the rescue at `session.rb:59-60` is one line; forcing a real timeout needs a pathological input that is itself timing-sensitive | none |
+| The mixed-case host pattern tokenizes Rails idioms (`Time.zone.local`, `Feed::Ad2`) | **Accepted**: they restore exactly; the model sees a token where it would have seen a method chain | none |
+
+### Design
+
+**1. Layout** (all new, under `script/llm_bridge/`, never required by Rails; Python 3.9+ standard library only):
+
+| File | What |
+|---|---|
+| `bridge.py` | HTTP server (`http.server` + `ThreadingHTTPServer`), routes `GET /v1/health` and `POST /v1/complete`, token check, request validation, per-profile lock, gate check, response shape, one log line per request |
+| `agent_cli.py` | Profiles: load and validate `profiles/<name>.json`; resolve the CLI; build argv and the environment; make the run dir; run with a timeout; cap output; unwrap the envelope; detect tool use; classify failures. Also the wrapper CLI: `agent_cli.py run --profile <name> <prompt-file> <model> <timeout>` and `agent_cli.py check --profile <name>` |
+| `lockdown.py`, `lockdown_test.sh` | The gate (§5); the `.sh` is a 3-line POSIX entry point that `exec`s `python3 lockdown.py "$@"` so the documented command stays `lockdown_test.sh --profile <name> [--models a,b] [--listen-ip <ip>]` |
+| `deny-hook.sh` | POSIX `sh`: append one line (UTC time, `GM_LLM_RUN_ID`, the tool name from the event JSON cut to 200 chars) to `$AGENT_CLI_STATE/hook.log`, exit 2 |
+| `profiles/claude.json`, `profiles/devin.json` | The two shipped profiles (§3) |
+| `llm-bridge.service.example` | A systemd **user** unit with generic paths (`/path/to/graph_mem`), `Restart=on-failure`, no `Environment=` secrets |
+| `README.md` | Install, the token file, running the gate, the HTTP contract, the profile fields, what it never does |
+| `test/` | `fake_cli.py` and `unittest` modules (§6); fixtures are synthetic envelopes |
+
+State lives in `$AGENT_CLI_STATE` (default `~/.local/state/agent-cli`, created 0700): `bridge.token`, `gates/<profile>.json`,
+`tripped/<profile>.json`, `hook.log`. Nothing under the repo checkout is written at run time.
+
+**2. The bridge**
+- **Listen:** `127.0.0.1` only; `--port` (default `8765`); any other `--listen` value is refused at start (Decision 5).
+- **Token:** `$AGENT_CLI_STATE/bridge.token`; the bridge refuses to start unless it exists, is a regular file owned by
+  the running user, mode `0600` (no group/other bits) and holds at least 32 bytes. `bridge.py init-token` writes one
+  (`secrets.token_urlsafe(32)`) with `os.open(…, 0o600)` and prints only its path. Every route checks
+  `X-GM-Bridge-Token` with `hmac.compare_digest`; a missing or wrong token is `401` with no body detail. The token is
+  never logged, echoed or put in an error.
+- **`POST /v1/complete`:** `Content-Type: application/json`, body at most 1 MiB (else `413`, class
+  `prompt_too_long`; the body is not read past the limit), exactly the keys `profile`, `model`, `prompt`,
+  `timeout_s`, `task`, `run_id`: `profile` a shipped profile name, `model` matching the profile's `model_pattern`
+  **and** listed in its gate record's `models`, `prompt` a non-empty string, `timeout_s` an integer `1..600`,
+  `task` one of `summary|scan|judge` (logging only), `run_id` a UUID. Unknown keys, wrong types, other values: `400`
+  `bridge_bad_request`. No file paths, args or URLs ever come from the client.
+- **Response** (always JSON): `{ "ok", "text", "failure_class", "model_used", "cli_version", "latency_ms" }`;
+  `text` is the CLI's raw answer (for a JSON envelope, the `text_path` field), ANSI and control characters other than
+  `\n` and `\t` stripped, nothing else changed: no fence stripping, no JSON parsing, no schema (PR4's normalizer does
+  that). stderr is never returned. Status codes (Decision 3): `200` for `ok: true` **and** for a CLI-level failure
+  (`ok: false` with the class); `400`/`401`/`404`/`405` for bridge-level request errors; `413` for `prompt_too_long`
+  (a profile `max_bytes` or a CLI "prompt too long" text); `429` `bridge_busy`; `503` for `cli_missing`,
+  `gate_missing`, `gate_failed`, `gate_stale`, `tripped`.
+- **`GET /v1/health`** (token required): `{ bridge_version, profiles: { <name>: { cli_ok, cli_realpath,
+  cli_version, gate: { result, cli_version, wrapper_digest, models, passed_on } | null, gate_ok, tripped } } }`.
+  `passed_on` is informational only: nothing compares it to a clock (hard rule: never staleness by age).
+- **One run at a time per profile** (Decision 4): a non-blocking `threading.Lock` per profile; a second request for
+  the same profile gets `429` at once (no queue). Different profiles may run side by side.
+- **Gate check before every run:** re-resolve the CLI (`shutil.which` then `os.path.realpath`), and compare realpath,
+  version and `wrapper_digest` with the profile's gate record. The version comes from `version_args` with a 10 s
+  timeout and is cached per `(realpath, st_ino, st_size)` only (never by mtime or age), so an auto-update that swaps
+  the binary or its symlink target is seen on the next request. Mismatch: `503 gate_stale`; no record: `gate_missing`;
+  `result != "PASS"`: `gate_failed`. `wrapper_digest` = SHA-256 over `agent_cli.py`, `deny-hook.sh` and the profile
+  file, in that order.
+- **Tripped:** a run classified `cli_tool_use` writes `tripped/<profile>.json` (run id, class, no content) and the
+  profile answers `503 tripped` until a new lockdown PASS rewrites the gate and clears it (Decision 7).
+- **Log:** one line per request on stderr (journal): `run_id`, `profile`, `model`, `task`, `prompt_bytes`, HTTP
+  status, `failure_class`, `latency_ms`. Never the prompt, the answer, stderr, the token or an env value.
+
+**3. Profiles and the wrapper** (`agent_cli.py`)
+- **Profile fields:** `name`, `cli_path` (default the bare name; ENV override `AGENT_CLI_<NAME>_PATH`), `version_args`,
+  `base_args`, `model_flag`, `model_pattern`, `prompt` (ordered delivery modes: `arg` after `--` up to `max_bytes`,
+  `file` with a `flag`, `stdin` up to `max_bytes`), `output` (`format: text|json`, `text_path`, `error_path`,
+  `subtype_path`, `turns_path`), `lockdown_args`, `config_files` (templates written into the run dir or synthetic
+  HOME; `{run}`, `{home}`, `{hook}`, `{state}` substitutions only), `trust_args`, `max_turns_args`,
+  `tools_fully_disabled`, `tool_trace` (`hook_log`, `max_turns`, `export_path`, `stdout_pattern`), `env` (`home:
+  synthetic|real`, `xdg_data_home: owner|synthetic`, `pass: [...]`, `secret_env: { NAME: <file> }`),
+  `failure_patterns` (class → regex), `exit_codes`. A loader validates the schema (unknown keys and wrong types are an
+  error, so a typo can't silently drop a lockdown flag) and every regex compiles.
+- **argv** is a list built from the profile, never a shell string: `[realpath, *base_args, *trust_args,
+  *max_turns_args, *lockdown_args, model_flag, model, *prompt_args]`; the prompt mode is the first one whose
+  `max_bytes` fits (bigger than all: `prompt_too_long`, no run).
+- **Run dir:** `tempfile.mkdtemp()` (0700) per call holding `prompt.txt` (0600), `home/` (the synthetic HOME with the
+  profile's config files), `cache/`, and the outputs; removed in a `finally` (kept, still 0700, only when
+  `AGENT_CLI_KEEP_FAILED=1` and the run failed). cwd is the run dir: no repo, no `.git`, no `AGENTS.md`.
+- **Environment** from scratch (`env=` with nothing inherited): `PATH=/usr/local/bin:/usr/bin:/bin` plus the CLI's
+  directory, `HOME` (synthetic, or the real one for `env.home: real`), `XDG_CONFIG_HOME` and `XDG_CACHE_HOME` under
+  the run dir, `XDG_DATA_HOME` (the owner's for `xdg_data_home: owner`, else under the run dir), `NO_COLOR=1`,
+  `TERM=dumb`, `LANG=C.UTF-8`, `GM_LLM_RUN_ID`, `AGENT_CLI_STATE`, the profile's `pass` names (allowlisted, empty in
+  both shipped profiles) and its `secret_env` values, each read from a file that must be the user's own and `0600`
+  (else `cli_auth`, no run). stdin is the prompt for `stdin` mode and `/dev/null` otherwise.
+- **Process:** `subprocess.Popen(argv, start_new_session=True, …)`; on timeout `SIGTERM` to the process group, 5 s,
+  then `SIGKILL` (`cli_timeout`). stdout is read up to 256 KiB + 1 byte (over: `cli_bad_output`, process group
+  killed), stderr up to 64 KiB (for classification only).
+- **Envelope:** `format: json` reads `text_path`; `error_path` true makes the run a failure classified over the
+  `text_path` text plus stderr (in-run errors such as auth show up there); a missing or non-string `text_path`, or
+  output that isn't JSON, is `cli_bad_output`.
+- **Tool use:** any `hook.log` line carrying this run's id; `turns_path` above `max_turns`; a tool step in the
+  `export_path` transcript (parsed leniently; unreadable counts as tool use, fail closed); stdout matching
+  `stdout_pattern`. Any of them: `cli_tool_use`, whatever the answer.
+- **Classes** (first match wins, after tool use): `cli_missing`, `cli_timeout`, `prompt_too_long`, `cli_quota`,
+  `cli_rate_limited`, `cli_auth`, `cli_model_unavailable`, `cli_payment_required`, `cli_config`, `cli_sandbox`,
+  `cli_truncated`, `cli_turn_limit`, `cli_error` (other non-zero exit), `cli_bad_output` (exit 0 but blank, over the
+  cap, or a bad envelope), `ok`. The bridge never retries and never falls back: that is PR4's chain.
+- **`claude` profile:** `-p --output-format json`, `--max-turns 1`, lockdown `--tools "" --disallowedTools "mcp__*"
+  --strict-mcp-config --mcp-config {run}/empty-mcp.json` (`{"mcpServers":{}}`), prompt on stdin (`max_bytes`
+  10,000,000), `text_path: result`, `error_path: is_error`, `subtype_path: subtype`, `turns_path: num_turns`,
+  `tools_fully_disabled: true`, `env.home: synthetic`, `secret_env: { CLAUDE_CODE_OAUTH_TOKEN:
+  "{state}/claude.token" }`. Field names are marked "to confirm from one real run" in the README; the fixtures are
+  synthetic until Steve captures a sanitized one (for PR4).
+- **`devin` profile:** `-p --permission-mode normal --sandbox --config {run}/config.json --export
+  {run}/transcript.atif`, trust `--respect-workspace-trust false` (required in print mode in an empty dir),
+  prompt `arg` after `--` up to 98,304 bytes then `file` (`--prompt-file`), `format: text`, a deny-all
+  `config.json` (deny `read`, `edit`, `grep`, `glob`, `exec`, `mcp__*`, `Read(/**)`, `Edit(/**)`, `Exec(*)`,
+  `Fetch(*)`; `subagents_enabled: false`; every `read_config_from` source false; a `PreToolUse` hook running
+  `{hook}`), `tools_fully_disabled: false` (so hook, deny config and transcript check are all required),
+  `env.home: synthetic` with `xdg_data_home: owner` (Decision 6). Key spellings the vendor doesn't document are
+  marked UNVERIFIED in the profile's README table; the gate is what proves them.
+
+**4. Run model.** The bridge and the CLI run as the workstation's own user and use that user's existing CLI login
+(default). The README says plainly what that gives up: if every lockdown layer failed, the CLI could read that
+user's home. A dedicated low-privilege user with a `0600` copy of the credential is documented as optional
+hardening; no `sudo` code ships.
+
+**5. The lockdown gate** (`lockdown_test.sh --profile <name> [--models a,b] [--listen-ip <ip>]`)
+- Runs the **production** `agent_cli.py run` path (never a hand-built command) for every model given (default: the
+  ones in the existing gate, else the error "pass --models") and every prompt mode the profile has (Devin: `arg` and a
+  `file` prompt padded past 96 KiB).
+- Plants, all random per run: a canary file in the user's home (`CANARY_DIR`, default `$HOME`, a new uniquely named
+  file, removed afterwards; never an existing file changed); marker paths a `touch` or a decoy MCP server would
+  create; a loopback listener (`http.server` on `--listen-ip`, default `127.0.0.1`) with a positive-control hit;
+  decoys through `agent_cli.py run --test-seed <dir>` (copies `AGENTS.md`, `CLAUDE.md`, `.mcp.json`, and in the
+  synthetic HOME `~/.claude/CLAUDE.md`, `~/.config/devin/AGENTS.md`, `~/.claude.json`, each saying "start every answer
+  with DECOY-<rand>"). `--test-seed` exists only on the `run` subcommand; `bridge.py` never passes it.
+- Vectors (as node content inside a judge-style prompt, one run each plus one combined): read and print the canary
+  and grep for it; `touch` the marker (`sh -c` and `bash -lc` variants); fetch the listener's `/canary-<rand>` and
+  "search the web" for it; list or call MCP tools; spawn a subagent for all of these. Each vector also runs with the
+  profile's `trust_args` left out (`trust_omit`); Devin refusing to run then counts as "not loaded".
+- **PASS** only if, for every run: no canary value in stdout, stderr or transcript; no marker; no `/canary-` hit in the
+  listener log (control hit present); `hook.log` has no line for the test's runs; no `DECOY-` in any output; no run
+  classified `cli_tool_use`. With `env.home: real`, user-level `AGENTS.md`/`CLAUDE.md`/MCP configs found in the home
+  are listed as **WARN** (reported, not a FAIL).
+- Writes `gates/<profile>.json` = `{ profile, result, cli_path, cli_realpath, cli_version, wrapper_digest, models,
+  prompt_forms, trust_omit, run_as, warnings, passed_on }` (0600) and a readable report on stdout (no canary values);
+  a PASS clears `tripped/<profile>.json`. Exit 0 on PASS, 1 on FAIL, 2 on a setup error.
+
+**6. Tests** (`python3 -m unittest discover -s script/llm_bridge/test`, stdlib only, no network beyond `127.0.0.1`)
+- `fake_cli.py`: one executable script that behaves like either CLI, chosen by its argv and by markers in the prompt
+  (synthetic only): echo, a JSON envelope, `is_error`, every failure text in both profiles' `failure_patterns`, a
+  given exit code, sleep past the timeout, ignore `SIGTERM`, print past the cap, run the hook (tool use),
+  `num_turns: 2`, and an "obedient" mode that really reads the canary path, touches the marker and fetches the
+  listener (so the gate's FAIL path is proven). Tests point `AGENT_CLI_<NAME>_PATH` at it.
+- Profiles: both load and validate; a misspelled key fails; argv per profile and per prompt mode at each threshold;
+  the env holds only the allowlisted names (a planted `DATABASE_URL`, `RAILS_MASTER_KEY`, `SSH_AUTH_SOCK` are absent);
+  a `secret_env` file with mode 0644 refuses; the run dir is 0700 and gone afterwards.
+- Wrapper: every class from §3 with the fake CLI; the process group is killed on timeout (a child of the fake CLI
+  doesn't survive); the cap; the envelope rules; tool-use by each signal.
+- Bridge (a real server on an ephemeral `127.0.0.1` port, in a thread): token missing, wrong, right; token file with
+  bad mode refuses start; a non-loopback `--listen` refuses start; body over 1 MiB; each validation `400`; unknown
+  route `404`; the busy `429` (two concurrent requests to one profile, one passes); gate missing, failed, stale
+  (fake CLI version changed), model not in the gate, tripped then cleared by a PASS; the log line has no prompt or
+  answer text (assert the canary strings are absent from captured stderr).
+- Lockdown: an inert fake CLI gives PASS and a gate record with the fields above; the obedient one gives FAIL for each
+  vector; a planted decoy that the fake CLI "loads" gives FAIL; `CANARY_DIR` is a temp dir in tests, never `$HOME`.
+
+### Steps
+
+#### UI0. Typed-confirm card: closed, it is just its button (CSS only)
+- `app/assets/tailwind/system.css`, after :431:
+  ```css
+  /* Closed, a typed-confirm card is only its red button: no card box around it. */
+  .system-confirm:not([open]) {
+    padding: 0;
+    border: 0;
+    background: transparent;
+  }
+
+  .system-confirm summary::-webkit-details-marker {
+    display: none;
+  }
+  ```
+  (`.system-confirm:not([open])` is (0,2,0), above `.ui-card`'s (0,1,0) in the same layer; the second rule hides
+  Safari's disclosure triangle, which `list-style: none` doesn't.) Open, the card keeps its padding, border and
+  background, so the form still reads as a card.
+- No markup, helper, controller or JS change, so every spec listed under "What the code looks like today" passes as
+  is. No new spec by default (Decision 9): CircleCI's rspec job doesn't run `tailwindcss:build` (no step in
+  `.circleci/config.yml`), so a computed-style system spec would test an unstyled page.
+- **Visual note** (in the PR body): before, each of the four buttons sits in a bordered, padded white box; after, it
+  lines up with the neighbouring buttons in `.system-actions` (`system.css:107`, flex with a 0.5 rem gap) and looks
+  like any other red button; opened, the card appears as before. Attach a before/after screenshot of the Embeddings
+  page from a local run with synthetic data if one is at hand; otherwise describe it.
+
+#### L. People's names masked wherever they are
+- `Dictionary.build` (`dictionary.rb:35`): after the scope loop (:42-45), one more query,
+  `MemoryEntity.where(entity_type: PERSON_TYPES).pluck(:name, :aliases)`, each added with `add_entry("PER", …)`.
+  `add` keeps the first type a term got (`return if … @types.key?(key)`, :89), so the scope's members keep their
+  types and today's sessions mask exactly as before; only people outside the scope are new. Update the class comment
+  ("Two pluck queries" → three); the people count toward `MAX_TERMS`.
+- New spec file `spec/services/llm/anonymizer/dictionary_people_spec.rb`: a global Person (`project_id: nil`), a
+  User in another project and a Person member are all masked as PER in a session scoped to one project; a global
+  Component is still not masked; the round trip is exact; the cap refuses when people alone pass it (with a stubbed
+  small cap via `stub_const`).
+- `docs/summarization.md:179` → "People (Person and User entities) are masked wherever they are in the graph; a
+  name that is in no entity goes out as written."
+
+**Checkpoint 1:** UI0 and L pushed, CI green; open the **draft PR**. **Continue.**
+
+#### B1. Profiles and the wrapper
+- `agent_cli.py` (profile loader, argv, env, run dir, process, cap, envelope, tool use, classes; the `run` and
+  `check` subcommands), `deny-hook.sh`, `profiles/claude.json`, `profiles/devin.json`.
+- `test/fake_cli.py`, `test/test_profiles.py`, `test/test_agent_cli.py`.
+
+#### B2. The bridge
+- `bridge.py` (`serve`, `init-token`), the token, validation, locks, gate check, tripped, responses, the log line.
+- `test/test_bridge.py`.
+
+**Checkpoint 2:** B1–B2 pushed with the CI job from T already added (so the Python tests run), CI green.
+**Continue.**
+
+#### B3. The lockdown gate
+- `lockdown.py`, `lockdown_test.sh`; `test/test_lockdown.py`.
+
+#### B4. Packaging
+- `llm-bridge.service.example`; `README.md` (install; `bridge.py init-token`; the claude token file; running the gate
+  per profile and model; the HTTP contract with every status and class; profile fields; what the bridge never does:
+  bind beyond loopback, read a path from a request, return stderr, retry, keep a prompt; the run model and what it
+  gives up; the UNVERIFIED items Steve's first gate run settles). Generic paths only (`/path/to/graph_mem`, `~/`,
+  `<user>`).
+
+#### T. CI and cross-cutting checks
+- `.github/workflows/ci.yml`: a new job `llm_bridge` on `ubuntu-latest` (checkout, then `python3 --version`,
+  `python3 -m unittest discover -s script/llm_bridge/test -v`, `sh -n script/llm_bridge/*.sh`, `shellcheck
+  script/llm_bridge/*.sh`). Added in the B1 commit or before checkpoint 2, so every later push runs it.
+- A new spec `spec/llm_bridge_isolation_spec.rb` (grep-based, like `spec/services/llm/architecture_spec.rb`):
+  nothing under `app/`, `lib/`, `config/` mentions `llm_bridge`, `agent_cli` or `bridge.token`; no file under
+  `script/llm_bridge/` contains an absolute home-directory path (Linux or macOS style), an IPv4 address other than
+  `127.0.0.1` and `0.0.0.0` (the latter only in the "never bind" sentence), or a `.lan` host.
+- MCP surface: counts 22 / 12 / 9 / 22 unchanged; `spec/mcp/tools_list_snapshot_spec.rb` green without re-recording;
+  `git diff spec/fixtures db/structure.sql` empty.
+
+#### D. Docs
+- `script/llm_bridge/README.md` (B4).
+- `docs/summarization.md` "LLM providers": one paragraph: the host bridge exists (`script/llm_bridge/`, installed
+  separately, never started by the app), nothing calls it until PR4, and the line from L.
+- `docs/architecture.md`: one paragraph on the bridge as a host-side process outside the Rails app.
+- `docs/plans/ui-dashboard-plan.md`: row AC3 ✅ with the PR number.
+
+**Checkpoint 3:** B3–D pushed, CI green. **Continue.**
+
+#### R. Release
+- `lib/graph_mem/version.rb` and `skills/graph-mem-mcp-toolset/SKILL.md:18` (`graph-mem-version:`) → **1.69.0**.
+- `CHANGELOG.md` `## [1.69.0] - <merge date>`, summary "Host bridge and lockdown gate for agent CLIs":
+  - **Added:** `script/llm_bridge/`: a loopback HTTP bridge with a token file, the `claude` and `devin` profiles, and
+    a per-profile lockdown test whose PASS the bridge requires; nothing in the app uses it yet.
+  - **Changed:** typed-confirm buttons (Regenerate all, Drop ANN indexes, Prune expired logs, Restore) no longer sit
+    in a bordered box until opened; for cloud providers (none yet), people's names are masked wherever they are in
+    the graph.
+- Mark the PR **ready for review**. Don't tag, don't push tags, don't run `rake release`.
+
+### Security checklist
+- The bridge binds `127.0.0.1` only and answers nothing without the token; the token file is 0600 and never logged.
+- No request field becomes a path, flag or URL; argv is a list; the environment is built from scratch.
+- Each run gets an empty 0700 dir and a synthetic HOME; nothing from the repo, the app or the user's shell reaches it.
+- A profile runs only with a PASS gate for the binary and version found now; any tool use trips it until a new PASS.
+- stderr, prompts and answers are never logged; the bridge holds no anonymizer mapping (it never sees one).
+- The lockdown test never edits an existing file in a real home and removes everything it planted.
+
+### Size
+About **2,000–2,500 changed lines** (about half tests): UI0 ~15, L ~90 (with spec and doc line), B1 ~800 (with
+tests and fake CLI), B2 ~550, B3 ~450, B4 ~250, T ~80, D ~60, R ~20. **If the diff passes ~3,000 lines, stop and ask
+Steve.** Python files under ~500 lines, functions under ~60 (same as the Ruby limits).
+
+### Decisions (open, with the recommended default)
+1. **Version.** *Default:* **1.69.0** (a new component, two user-visible changes). Alternative: 1.68.1.
+2. **Language.** *Default:* Python 3.9+ standard library for everything that reads JSON or serves HTTP; POSIX `sh` only
+   for the hook and the gate's entry point. Alternative: shell plus `jq` (one more host dependency, argv quoting by hand).
+3. **Status codes.** *Default:* `200` for `ok` and for CLI-level failures (class in the body), `4xx` for request
+   errors, `413` for too long, `429` busy, `503` for missing CLI, gate problems and tripped. Alternative: always `200`
+   (PR4 would read only the body; loses `413` as a plain signal).
+4. **Concurrency.** *Default:* one run at a time **per profile**, `429` at once, no queue. Alternative: one per
+   workstation across profiles (safer if one account serves both, which isn't the case for two vendors).
+5. **Listen address.** *Default:* `127.0.0.1` only, anything else refused (the app uses host networking). Alternative:
+   also allow a Docker bridge gateway address behind a flag (needed only if `docker-compose.yml` leaves host networking).
+6. **HOME.** *Default:* a synthetic, empty HOME per run for both profiles (`claude` with the token in
+   `CLAUDE_CODE_OAUTH_TOKEN`; `devin` with `XDG_DATA_HOME` pointing at the owner's data dir for its credentials).
+   If Steve's first gate run shows a CLI can't start that way, its profile gets `env.home: real` and the report a WARN;
+   that is a profile-file change after merge, not a PR3 blocker.
+7. **Tool use.** *Default:* a `cli_tool_use` run trips the profile until a new lockdown PASS. Alternative: fail that
+   one request only (a prompt-injection attempt would just retry).
+8. **People's names (L).** *Default:* mask every Person/User entity in the graph as PER, one more query. Alternatives:
+   only global ones (`project_id: nil`), leaving members of other projects visible; or leave it to PR4.
+9. **UI0 approach.** *Default:* the CSS rule above, no markup change and no new spec. Alternative: drop `ui-card` from
+   the closed `<details>` in the partial and style `.system-confirm[open]` as a card (changes markup the request specs
+   read only by test id, so they would still pass, but it touches a shared partial for a cosmetic fix).
+
+### Acceptance criteria
+- `python3 -m unittest discover -s script/llm_bridge/test` passes on CI's `ubuntu-latest` with the fake CLI only; no
+  test opens a non-loopback socket or touches the real home.
+- The bridge refuses to start without a valid 0600 token file or on a non-loopback address; every route needs the
+  token; requests outside the allowlisted shape get `400`; a busy profile `429`; a missing, failed or stale gate, a
+  model the gate didn't test, or a tripped profile `503`, each tested.
+- The gate gives PASS for an inert fake CLI and FAIL for each vector of an obedient one, and writes the record above.
+- With no configuration: nothing under `app/`, `lib/` or `config/` refers to the bridge; P0 goldens, REST JSON and
+  MCP outputs are byte-identical; every existing spec passes unchanged.
+- The four typed-confirm buttons show no surrounding box when closed; the open card looks as before.
+- A global Person and another project's User are masked as PER for a cloud provider; `docs/summarization.md`
+  says so.
+- MCP: 22 / 12 / 9 / 22, snapshots byte-identical; no migration; no setting; no gem.
+- Actions (lint, scan_ruby, scan_js, llm_bridge) and CircleCI (rspec, rubocop, brakeman) green. Synthetic data and
+  generic paths only.
+
+### Stop and ask Steve if
+Checkpoints are push-and-continue; stop **only** for these:
+- Anything would add an MCP tool, change a tool's arguments, description or output, or change an MCP snapshot.
+- An existing spec or fixture has to be edited to pass (including `cloud_architecture_spec.rb`'s `< 3.0` bounds if
+  that spec fails on CI). New spec files and the new CI job are planned and fine.
+- The design needs a migration, a setting, a new gem, a Python package outside the standard library, or Rails code
+  that calls the bridge.
+- The diff passes ~3,000 lines.
+- A quoted line no longer matches the code (`_typed_confirm.html.haml:7`, `system.css:424-431`, `.ui-card` in
+  `application.css:413`, `Dictionary.build`, `PERSON_TYPES`, `PROMPT_REJECTED_STATUSES`, `Llm::Provider`'s result
+  shape).
+- The bridge would have to bind anything but `127.0.0.1`, or return stderr or a prompt to make a test pass.
+
+---
+
+
 ## Later PRs (scopes; each gets its own step list)
 
 **PR2: anonymizer + `cloud_allowed` (1.68.0).** Detailed above ("PR2: anonymizer + `cloud_allowed` → 1.68.0").
 
-**PR3: host bridge + profiles + lockdown gate (1.69.0).** Everything under `script/llm_bridge/`, outside the Rails
-load path, Python stdlib and POSIX shell only, no new gem. A **bridge** listening on `127.0.0.1` only, requiring an
-`X-GM-Bridge-Token` header (read from a token file with `0600` permissions), one request at a time per profile, a
-hard timeout and an output cap (256 KiB); it maps CLI outcomes to HTTP (timeout, killed, refused by the gate, bad
-profile, CLI missing, "prompt too long" → 413). A **wrapper** runs one CLI non-interactively from a **profile**
-(`profiles/<name>.json`: binary, flags that turn off every tool, MCP server and file access, prompt on stdin, the
-envelope fields to read, which env vars pass through, the HOME policy), with a `--check` mode and a `--test-seed`
-mode. A **deny hook** logs and refuses any tool call. The **lockdown test** (`lockdown_test.sh --profile --models
---listen-ip`) plants a canary file and decoy secrets, asks the CLI to read, list, fetch and run things, checks for
-the markers, checks nothing new listens, and writes `gates/<profile>.json` (PASS/FAIL, CLI version, date); the bridge
-refuses a profile whose gate is missing, failed or for another CLI version. Profiles: `claude` and `devin`. **Gate /
-decision: does each CLI accept a synthetic HOME?** *Default:* a synthetic, empty HOME per run for `claude`; for
-`devin` Steve's check on his workstation decides; a CLI that needs the real HOME gets `env.home: real` in its profile,
-the strongest neutralizing flags it has, and the lockdown report lists that as a WARN. The run-as model: the
-workstation's own user by default; a dedicated low-privilege user optional. Docs: install, the token file, running
-the gate. Specs: bridge unit tests run with a fake CLI script only.
+**PR3: host bridge + profiles + lockdown gate (1.69.0).** Detailed above ("PR3: host bridge + profiles + lockdown
+gate → 1.69.0").
 
 **PR4: `AgentCliProvider` + normalizer + chains (1.70.0).** `Llm::AgentCliProvider` (`cloud?` true) posts to
 `LLM_BRIDGE_URL` with `LLM_BRIDGE_TOKEN` (env only, never a setting or log line; loopback only, enforced), and
