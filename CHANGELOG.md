@@ -11,7 +11,7 @@ Anonymized prompts and per-project cloud access (#152).
 
 ### Added
 - `Llm::Anonymizer`: typed reversible tokens for project and entity names, paths, hosts, URLs, e-mails, IPs and usernames; secrets redacted. Plus the cloud gate (`Llm::CloudGate`). Both are used only for cloud providers, and there is none yet.
-- `cloud_allowed` per project (default off), set in the new **Cloud** column of the Projects page (operator only, with a confirm, recorded as a `project.cloud_access` change set and audited). Turning it on also records `cloud_root`, the folder of the project's last completed scan; cloud scans are allowed only from that folder.
+- `cloud_allowed` per project (default off), set in the new **Cloud** column of the Projects page (operator only, with a confirm, recorded as a `project.cloud_access` change set and audited). Turning it on also records `cloud_root`, the folder of the project's last completed scan; cloud scans are allowed only from that exact folder (case-sensitive). If a scan finished since the page was loaded, the toggle changes nothing and asks you to check again.
 
 ### Changed
 - No behaviour change without a cloud provider: requests, prompts, results and outputs are unchanged (the Projects page gains the Cloud column).

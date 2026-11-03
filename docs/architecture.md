@@ -153,7 +153,7 @@ Every LLM call goes through `Llm::Router.generate(task, prompt, style:, options:
 
 The Router walks `CHAIN`. A local provider gets `prompt.to_s`, exactly as before. A provider with `cloud?` true (none until PR4) goes through `Llm::CloudCall`, which works through these steps:
 1. The prompt must be a scoped `Llm::Prompt`: the three call sites hand over `SummarizerService#build_llm_prompt`, `ExtractionPrompt.build` (one `Llm::Scope.for_scan` per `ChunkedExtraction`, so a scan keeps one mapping) and `Judge#prompt`.
-2. `Llm::CloudGate` checks `memory_entities.cloud_allowed` on every project in scope (one count per call), and for a scan that its folder is the project's `cloud_root`. That column is recorded when Cloud is turned on, from the project's last completed scan.
+2. `Llm::CloudGate` checks `memory_entities.cloud_allowed` on every project in scope (one query per call), and for a scan that its folder is the project's `cloud_root`, compared byte for byte in Ruby (the column's collation ignores case). That column is recorded when Cloud is turned on, from the project's last completed scan, and only if it is still the folder the confirm showed.
 3. The scope's `Llm::Anonymizer::Session` (`Dictionary`, `Detectors`, `Tokens`) masks the data segments.
 4. The answer is restored before the caller sees it.
 

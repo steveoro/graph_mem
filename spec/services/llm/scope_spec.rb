@@ -81,6 +81,10 @@ RSpec.describe Llm::CloudGate do
     gadget.update!(cloud_allowed: true, cloud_root: "/path/to/gadget")
 
     expect(described_class.allowed?(Llm::Scope.for_scan("Gadget Project", project_root: "/path/to/other"))).to be(false)
+    # The column's collation ignores case and accents; folders don't.
+    %w[/path/to/Gadget /PATH/TO/GADGET /path/to/gädget].each do |variant|
+      expect(described_class.allowed?(Llm::Scope.for_scan("Gadget Project", project_root: variant))).to be(false)
+    end
     expect(described_class.allowed?(Llm::Scope.for_scan("Gadget Project"))).to be(false)
     gadget.update!(cloud_root: nil)
     expect(described_class.allowed?(Llm::Scope.for_scan("Gadget Project", project_root: "/path/to/gadget"))).to be(false)

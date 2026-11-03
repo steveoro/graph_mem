@@ -7,7 +7,12 @@ RSpec.describe "Projects › Cloud access", type: :request do
   let!(:project) { MemoryEntity.create!(name: "Gadget Project", entity_type: "Project") }
   let!(:widget) { MemoryEntity.create!(name: "SynthWidget", entity_type: "Component", project_id: project.id) }
 
-  def toggle(entity, allowed) = patch projects_cloud_access_path(entity), params: { allowed: allowed }
+  def toggle(entity, allowed, root: nil) = patch projects_cloud_access_path(entity), params: { allowed: allowed, root: root }.compact
+
+  def complete_scan(root, status: "completed")
+    OperationProgress.create!(operation_type: "project_scan", operation_id: SecureRandom.uuid, status: status,
+                              details: { "project_root" => root, "project_entity_id" => project.id })
+  end
 
   context "as the operator" do
     before { sign_in_operator }
@@ -35,15 +40,14 @@ RSpec.describe "Projects › Cloud access", type: :request do
     end
 
     it "records the folder of the project's last completed scan, shows it, and clears it when turned off" do
-      { "completed" => "/path/to/gadget", "failed" => "/path/to/other" }.each do |status, root|
-        OperationProgress.create!(operation_type: "project_scan", operation_id: SecureRandom.uuid, status: status,
-                                  details: { "project_root" => root, "project_entity_id" => project.id })
-      end
+      complete_scan("/path/to/gadget")
+      complete_scan("/path/to/other", status: "failed")
 
       get projects_path
-      expect(Nokogiri::HTML(response.body).at_css("[data-testid='project-cloud-#{project.id}'] form")["data-turbo-confirm"])
-        .to end_with("Cloud scans will be allowed only from /path/to/gadget.")
-      toggle(project, "true")
+      form = Nokogiri::HTML(response.body).at_css("[data-testid='project-cloud-#{project.id}'] form")
+      expect(form["data-turbo-confirm"]).to end_with("Cloud scans will be allowed only from /path/to/gadget.")
+      expect(Rack::Utils.parse_query(URI(form["action"]).query)).to include("allowed" => "true", "root" => "/path/to/gadget")
+      toggle(project, "true", root: "/path/to/gadget")
       expect(project.reload.cloud_root).to eq("/path/to/gadget")
       expect(flash[:notice]).to end_with("Cloud scans only from /path/to/gadget.")
       get projects_path
@@ -51,6 +55,20 @@ RSpec.describe "Projects › Cloud access", type: :request do
 
       toggle(project, "false")
       expect(project.reload).to have_attributes(cloud_allowed: false, cloud_root: nil)
+    end
+
+    it "changes nothing when a scan finished after the confirm showed the folder" do
+      complete_scan("/path/to/gadget")
+      get projects_path
+      complete_scan("/path/to/another/gadget")
+
+      expect { toggle(project, "true", root: "/path/to/gadget") }.not_to change(ChangeSet, :count)
+      expect(response).to redirect_to(projects_path)
+      expect(flash[:alert]).to start_with("Cloud access for Gadget Project was not changed")
+      expect(project.reload).to have_attributes(cloud_allowed: false, cloud_root: nil)
+
+      toggle(project, "true")
+      expect(project.reload.cloud_allowed).to be(false)
     end
 
     it "answers 404 for a member or an unknown id, and 422 for another value" do

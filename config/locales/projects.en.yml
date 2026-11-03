@@ -40,6 +40,7 @@ en:
       summary_off: "turned off cloud access for '%{project}'"
       root: "Cloud scans only from %{root}."
       no_root: "It has no completed scan yet, so its scans stay local."
+      root_changed: "Cloud access for %{project} was not changed: a scan finished since the page was loaded, so its folder changed. Check the folder and try again."
     not_found:
       title: "Not found"
       body: "There's no such scan, import or export (it may have been pruned)."

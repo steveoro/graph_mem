@@ -7,9 +7,11 @@ module Projects
   # operator only (BaseController), in a change set of kind
   # `project.cloud_access`, audited by Auditable and undoable like any audited change.
   class CloudAccessController < BaseController
-    # PATCH /projects/cloud_access/:id with allowed=true|false
-    # @return [void] redirects to the Projects page; 404 for anything but a Project root, 422 for
-    #   another `allowed` value
+    # PATCH /projects/cloud_access/:id with allowed=true|false; turning it on also sends root, the
+    # folder the confirm showed ("" for none)
+    # @return [void] redirects to the Projects page (with an alert, and no change, when a scan
+    #   finished since the confirm changed the folder); 404 for anything but a Project root, 422
+    #   for another `allowed` value
     def update
       project = MemoryEntity.find_by!(id: params[:id], entity_type: NodeOperationsStrategy::PROJECT_ENTITY_TYPE, project_id: nil)
       allowed = { "true" => true, "false" => false }[params[:allowed].to_s]
@@ -17,6 +19,9 @@ module Projects
 
       # Cloud scans must come from the folder of the project's last completed scan (nil: none yet).
       root = allowed ? project.last_scan_root : nil
+      # The folder must be the one the confirm showed: a scan finished since then needs a fresh look.
+      return redirect_to(projects_path, alert: t("projects.cloud_access.root_changed", project: project.name)) if allowed && params[:root].to_s != root.to_s
+
       state = allowed ? "on" : "off"
       ChangeSet.record(kind: "project.cloud_access", subject: project, summary: t("projects.cloud_access.summary_#{state}", project: project.name)) do
         project.update!(cloud_allowed: allowed, cloud_root: root)

@@ -50,8 +50,9 @@
                 = button_to t("projects.index.cloud_turn_off"), projects_cloud_access_path(row.project, allowed: false), method: :patch, class: "ui-btn"
               - else
                 %span.ui-badge= t("projects.index.cloud_off")
-                = button_to t("projects.index.cloud_turn_on"), projects_cloud_access_path(row.project, allowed: true), method: :patch, class: "ui-btn",
-                  form: { data: { turbo_confirm: t("projects.index.cloud_confirm", scans: (root = @scan_roots[row.project.id]) ? t("projects.index.cloud_confirm_root", root: root) : t("projects.index.cloud_confirm_no_root")) } }
+                - root = @scan_roots[row.project.id]
+                = button_to t("projects.index.cloud_turn_on"), projects_cloud_access_path(row.project, allowed: true, root: root.to_s), method: :patch, class: "ui-btn",
+                  form: { data: { turbo_confirm: t("projects.index.cloud_confirm", scans: root ? t("projects.index.cloud_confirm_root", root: root) : t("projects.index.cloud_confirm_no_root")) } }
             %td= link_to t("projects.index.open_in_explore"), explore_path(project_id: row.project.id), class: "ui-btn"
     = paginate @overview.projects
     %p.projects-muted{ data: { testid: "projects-cloud-note" } }= t("projects.index.cloud_note")
