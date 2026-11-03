@@ -14,7 +14,7 @@ Anonymized prompts and per-project cloud access (#152).
 - `cloud_allowed` per project (default off), set in the new **Cloud** column of the Projects page (operator only, with a confirm, recorded as a `project.cloud_access` change set and audited).
 
 ### Changed
-- Nothing visible with no cloud provider: requests, prompts, results and outputs are unchanged.
+- No behaviour change without a cloud provider: requests, prompts, results and outputs are unchanged (the Projects page gains the Cloud column).
 
 ## [1.67.0] - 2026-11-03
 
