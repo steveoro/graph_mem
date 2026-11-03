@@ -138,6 +138,27 @@ An LLM project scan (`ProjectScanner`, MCP `scan_project`) uses the same client 
 - **Resume:** resuming a paused validation batch doesn't call the model again: the extraction was reconciled in the first batch.
 - **`openai_compatible`:** there is no per-request window. The same budget is computed with `summary_num_ctx` as the assumed server window, so set the server's context length to that value; `num_predict` is sent as `max_tokens`.
 
+## LLM providers
+
+Every model call goes through one seam, `Llm::Router` (`app/services/llm/`), which picks a provider per **task**:
+
+| Task | Caller | Options |
+|---|---|---|
+| `:summary` | `SummarizerService` (MCP `summarize`, `POST /api/v1/summaries`) | none (the client's defaults, incl. the 8,192-character cut) |
+| `:scan` | `ProjectScanner::ChunkedExtraction`, one call per part | `num_ctx`, `num_predict`, `format: "json"`, `truncate: false`, the scan timeout, no cut |
+| `:judge` | `FactSupersede::Judge`, one call per batch (`FactSupersedeJob`, and inline from `detect_contradictions` with `mode: "outdated_by_fact"`) | `num_ctx`, `num_predict`, `format: "json"` |
+
+- **One provider today:** `Llm::OllamaProvider` (named `ollama` for both transports, `openai_compatible` included) calls `SummaryGenerationClient.generate` with exactly the arguments the call site passes. Requests, prompts and results are what they were before 1.67.0; the result Hash only gains `provider: "ollama"`. `Llm::Router.usable?(task)` is today's "enabled and configured" check (`SummarizationConfig.llm_usable?`).
+- **Inline calls:** a call made inside an MCP request (the judge under `detect_contradictions`) is marked `inline`. Nothing treats it differently yet.
+- **Prompt parts:** each prompt is built as an `Llm::Prompt` of `trusted` segments (our instructions, labels and ids) and `data` segments (the caller's query and style, names, observation text, the fact and statements, file contents), and rendered as the same string as before.
+- **Usage log:** one `info` line per call, also on failure, prefixed `[llm]`, with JSON fields `task`, `provider`, `model`, `inline`, `prompt_chars`, `est_in_tokens`, `out_chars`, `est_out_tokens` (4 characters per token), `latency_ms`, `outcome` (`ok` / `error`) and `prompt_tokens` when the provider reports it. It never contains the prompt, the answer, an error text or a project or entity name. For example:
+
+  ```
+  [llm] {"task":"scan","provider":"ollama","model":"qwen3:8b","inline":false,"prompt_chars":5236,"est_in_tokens":1309,"out_chars":225,"est_out_tokens":57,"latency_ms":9120.4,"outcome":"ok","prompt_tokens":1500}
+  ```
+- **What's next:** this is the first step of an opt-in second backend, an agent CLI on the operator's workstation behind a host-side HTTP bridge, with anonymized data and a per-project `cloud_allowed` gate that defaults to false. Ollama stays the default, and without new configuration nothing changes. Plan: [`docs/plans/agent-cli-backend-plan.md`](plans/agent-cli-backend-plan.md).
+- **Specs:** `spec/support/llm.rb` has a `FakeProvider` (`with_llm_provider(fake) { … }`) and a `SubprocessGuard` that fails a spec when code under `app/` or `lib/` starts a process (`lib/tasks/db_utils.rake`, which runs mariadb-dump for backups, is the one exception). `spec/services/llm/characterization_spec.rb` pins every prompt and request body against `spec/fixtures/llm/`.
+
 ## Lifecycle interactions
 
 - **Dream-state** and **garbage collection** may change which observations are active between requests; summarization does not duplicate their cleanup responsibilities.

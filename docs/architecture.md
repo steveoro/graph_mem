@@ -33,7 +33,7 @@ This document provides an overview of GraphMem's architecture, explaining how th
 │  └───────────────────────────────────────────────────────┘      │
 └─────────────────────────────────────────────────────────────────┘
         Ollama (external) ──► EmbeddingService (768-dim vectors)
-        Ollama (external) ──► SummaryGenerationClient (optional text synthesis)
+        Ollama (external) ──► Llm::Router ─► Llm::OllamaProvider ─► SummaryGenerationClient (optional text synthesis)
 ```
 
 GraphMem follows a layered architecture that separates concerns between:
@@ -144,6 +144,10 @@ Resolves URL, model, provider, and dimensions with priority **AppSettings → EN
 #### Summarization configuration (`app/services/summarization_config.rb`)
 
 Resolves URL, model, provider, timeout, and output token limits with the same **AppSettings → ENV → defaults** priority. Used by `SummaryGenerationClient` and `SummarizerService`. Operators configure values under **System › Settings › Summaries**; saving resets `SummaryGenerationClient` so subsequent summarize requests use the new settings.
+
+#### LLM layer (`app/services/llm/`, 1.67.0)
+
+Every LLM call goes through `Llm::Router.generate(task, prompt, style:, options:, inline:)`, with one of three tasks: `:summary` (`SummarizerService`), `:scan` (`ProjectScanner::ChunkedExtraction`, one call per part) and `:judge` (`FactSupersede::Judge`, by default through `Llm::Router.client(:judge)`; `FactSupersede::Proposals` passes an `inline: true` client when `detect_contradictions` calls it). `Llm::Router.usable?(task)` replaces the call sites' `SummarizationConfig.llm_usable?` checks. `Llm::Registry` maps provider names to providers. The only provider is `Llm::OllamaProvider` (`ollama`, both transports), which calls `SummaryGenerationClient.generate` at class level and returns its Hash, to which the Router adds `provider:`. The three prompt builders return an `Llm::Prompt` (`trusted` and `data` segments) rendered as a String. `Llm::UsageLog` writes one `[llm]` info line per call (sizes, latency and outcome only). An architecture spec checks that `SummaryGenerationClient` is reached only from the provider and that no code under `app/` or `lib/` starts a process (`lib/tasks/db_utils.rake` excepted). See [summarization](summarization.md#llm-providers).
 
 #### Project scans (`app/services/project_scanner.rb`, `app/services/project_scanner/`)
 
@@ -338,7 +342,7 @@ and nothing acts across projects. Step list: `docs/plans/fact-supersede-plan.md`
   judge is told) for a version, an environment or branch word the fact doesn't name, or an
   `experience` row.
 - **Judge** (`FactSupersede::Judge`): one Ollama call per 8 candidates through
-  `SummaryGenerationClient.generate(…, options: { num_ctx:, num_predict:, format: "json" })`. The
+  `Llm::Router` (task `:judge`, `options: { num_ctx:, num_predict:, format: "json" }`). The
   prompt says the fact is authoritative for this project only and that age is not evidence; the
   statements are passed as JSON data. The answer is parsed strictly; anything missing, repeated
   or invalid leaves the candidate `unjudged`. `context` candidates are capped at 0.7.
