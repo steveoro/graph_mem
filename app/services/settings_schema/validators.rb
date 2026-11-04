@@ -47,6 +47,24 @@ class SettingsSchema
       [ (I18n.t("system.settings.summaries.invalid_observations_per_entity") if invalid), raw ]
     end
 
+    # Agent-CLI PR4: one of Llm::Router::CHAIN_VALUES; blank stores the default, "ollama".
+    def llm_chain(raw)
+      value = raw.to_s.strip.presence || Llm::Router::DEFAULT_CHAIN
+      [ (I18n.t("system.settings.summaries.invalid_chain") unless Llm::Router::CHAIN_VALUES.include?(value)), value ]
+    end
+
+    # Agent-CLI PR4: blank, or a profile the bridge ships.
+    def llm_agent_cli_profile(raw)
+      value = raw.to_s.strip
+      [ (I18n.t("system.settings.summaries.invalid_agent_cli_profile") unless value.empty? || Llm::AgentCliProvider::PROFILES.include?(value)), value ]
+    end
+
+    # Agent-CLI PR4: blank, or a short model identifier (no leading dash: it would read as a flag).
+    def llm_agent_cli_model(raw)
+      value = raw.to_s.strip
+      [ (I18n.t("system.settings.summaries.invalid_agent_cli_model") unless value.empty? || value.match?(Llm::AgentCliProvider::MODEL_PATTERN)), value ]
+    end
+
     def http_url_summary(raw)
       [ (I18n.t("system.settings.summaries.invalid_url") unless blank_or_http_url?(raw)), raw ]
     end

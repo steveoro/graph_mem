@@ -11,7 +11,7 @@ the operator's workstation behind a small host-side HTTP bridge, with the data a
 `cloud_allowed` gate. It is five PRs. **This plan details PR1** (a provider abstraction with no behaviour
 change; done, #151, 1.67.0), **PR2** (the anonymizer and `cloud_allowed`; done, #152, 1.68.0), **PR3** (the host
 bridge, profiles and lockdown gate; done, #153, 1.69.0) and **PR4** (Rails wired to the bridge, written Nov 4 from
-`e708f3c`); PR5 gets a one-paragraph scope and its own step list before it starts.
+`e708f3c`; #154, 1.70.0); PR5 gets a one-paragraph scope and its own step list before it starts.
 
 ## Hard rules (the whole train)
 - **No new MCP tool**, no new or changed tool argument or description; the default `/mcp` stays at **12** (readonly 9,
@@ -33,7 +33,7 @@ bridge, profiles and lockdown gate; done, #153, 1.69.0) and **PR4** (Rails wired
 | **PR1** | `claude/llm-provider-abstraction` | Provider abstraction, **no behaviour change**: `Llm::Provider`, `Llm::OllamaProvider`, `Llm::Router`, `Llm::Registry`, prompt parts, one usage log line per call, spec-side `FakeProvider` and `SubprocessGuard` | `main` (1.66.0) ✅ #151 | **1.67.0** |
 | **PR2** | `claude/llm-anonymizer` | Anonymizer (typed HMAC tokens) + `cloud_allowed` per project (default false) + the gate that refuses a cloud provider for a project that doesn't allow it | PR1 | **1.68.0** |
 | **PR3** | `claude/llm-bridge` | Host bridge + profile framework + `devin` and `claude` profiles + the per-profile lockdown gate, all under `script/llm_bridge/` (not loaded by Rails) | `main` at 1.68.0 (PR2 merged) ✅ #153 | **1.69.0** |
-| **PR4** | `claude/llm-bridge-rails` | `Llm::BridgeClient` + `Llm::AgentCliProvider` (HTTP to the bridge) + `Llm::ResponseNormalizer` + per-task fallback chains + settings + a probe + scan scope from the folder + #153 follow-ups | PR2, PR3 | **1.70.0** |
+| **PR4** | `claude/llm-bridge-rails` | `Llm::BridgeClient` + `Llm::AgentCliProvider` (HTTP to the bridge) + `Llm::ResponseNormalizer` + per-task fallback chains + settings + a probe + scan scope from the folder + #153 follow-ups | PR2, PR3 ✅ #154 | **1.70.0** |
 | **PR5** | `claude/llm-switch-over` | Per-task switch-over, the inline gate, an `llm_cloud` queue, budgets and an `llm_usage` table, adopter docs | PR4 + a **PASS** lockdown gate per profile on Steve's workstation | **1.71.0** |
 
 PR3's bridge touches no Rails code. PR1 and PR2 merged first, so it takes 1.69.0; it also carries two small Rails

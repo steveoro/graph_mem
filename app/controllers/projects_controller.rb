@@ -7,6 +7,6 @@ class ProjectsController < Projects::BaseController
     @overview = ProjectsOverview.new(page: params[:page])
     @rows = @overview.rows
     # The folder cloud scans would be allowed from, for the Cloud column's confirm (one query).
-    @scan_roots = MemoryEntity.last_scan_roots(@rows.map(&:project))
+    @scan_roots = MemoryEntity.last_scan_roots(@rows.map(&:project)).transform_values { |root| Llm::Scope.recorded_folder(root) }
   end
 end

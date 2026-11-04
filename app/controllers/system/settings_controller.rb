@@ -37,6 +37,15 @@ module System
       redirect_to system_settings_path(tab: "project_scans")
     end
 
+    # POST /system/settings/bridge_probe: asks the host bridge for its health once (agent-CLI PR4)
+    # and shows Settings › Summaries with the answer. Operator only (BaseController); no state kept.
+    def bridge_probe
+      AppSettings.clear_cache
+      @group = SettingsSchema.group(:summaries)
+      @bridge_probe = Llm::BridgeProbe.call
+      render :show
+    end
+
     private
 
     # @return [SettingsSchema::Group] the group named by `tab`, or the first Settings tab

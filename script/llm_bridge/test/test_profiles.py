@@ -184,8 +184,8 @@ class EnvironmentAndRunDirTest(FakeCliCase):
     def test_no_private_place_for_runs_or_an_unsafe_state_dir_refuses(self):
         os.chmod(self.tmp, 0o770)  # group-writable above both the runtime dir and the state dir
         self.addCleanup(os.chmod, self.tmp, 0o700)
-        with self.assertRaises(agent_cli.UnsafeDir):
-            agent_cli.runs_dir(self.state)
+        with mock.patch.object(agent_cli, "private_group", return_value=False), self.assertRaises(agent_cli.UnsafeDir):
+            agent_cli.runs_dir(self.state)  # PR4: refused unless the group is the user's private group
         os.chmod(self.tmp, 0o700)
         os.symlink(self.state, os.path.join(self.tmp, "state-link"))
         with mock.patch.dict(os.environ, {"AGENT_CLI_STATE": os.path.join(self.tmp, "state-link")}), self.assertRaises(agent_cli.UnsafeDir):

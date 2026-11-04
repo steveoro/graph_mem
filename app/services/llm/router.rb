@@ -3,10 +3,17 @@
 module Llm
   # The one way app code reaches a model (agent-CLI train PR1). Each call names its task:
   # `:summary` (SummarizerService), `:scan` (a project scan part) or `:judge` (fact supersede).
-  # PR1 sends every task to the `:ollama` provider and returns its result Hash unchanged except
-  # for one added key, `provider:`; error strings are not rewritten (the summarizer shows them as
-  # `fallback_reason`). After each call it writes one UsageLog line. A provider with `cloud?` true
-  # (none until PR4) goes through Llm::CloudCall: gate, anonymize, restore.
+  # Each task has a chain of providers (PR4: AppSettings llm_chain_<task>, "ollama" by default, so
+  # with no configuration every task runs exactly as in PR1). The result Hash comes back unchanged
+  # except for one added key, `provider:`; error strings are not rewritten (the summarizer shows
+  # them as `fallback_reason`). After each call it writes one UsageLog line. A provider with
+  # `cloud?` true (`agent_cli`) goes through Llm::CloudCall: gate, anonymize, restore.
+  #
+  # The fallback rule: a CloudCall refusal (no provider call), an `agent_cli` failure
+  # (Llm::BridgeClient.fall_through?) or an Ollama outage (no answer at all) moves on to the next
+  # provider; a too-long prompt (413, so a scan part splits), a refused prompt and tool use are
+  # returned. The default chain has no next provider, so it returns exactly what Ollama did. An inline call skips providers that aren't
+  # `inline?` (the host bridge), so an MCP request never waits on one.
   #
   #   Llm::Router.usable?(:summary)                                   # => true
   #   Llm::Router.generate(:summary, prompt, style: "concise")
@@ -14,8 +21,16 @@ module Llm
   #   Llm::Router.client(:judge, inline: true).generate(prompt, style: "concise", options: { format: "json" })
   module Router
     TASKS = %i[summary scan judge].freeze
-    # The providers tried for every task, in order (PR4 makes the chain per task).
+    # The default chain (every task's setting defaults to "ollama"), in order.
     CHAIN = %i[ollama].freeze
+    DEFAULT_CHAIN = "ollama"
+    # The other values a llm_chain_<task> setting may hold (a fixed list, not free text).
+    CHAINS = { "agent_cli" => %i[agent_cli], "agent_cli,ollama" => %i[agent_cli ollama], "ollama,agent_cli" => %i[ollama agent_cli] }.freeze
+    CHAIN_VALUES = [ DEFAULT_CHAIN, *CHAINS.keys ].freeze
+    # The summary client's error for a request that failed (with an http_status when the server answered).
+    LOCAL_OUTAGE = "provider_unavailable"
+    # The error of an inline call whose whole chain was skipped.
+    INLINE_SKIPPED = "inline_skipped"
 
     # A `#generate(prompt, style:, options:)` object bound to one task, for code that takes a
     # client (FactSupersede::Judge).
@@ -30,8 +45,7 @@ module Llm
     end
 
     class << self
-      # Tries the CHAIN's providers in order; a cloud provider's refusal (no provider call) moves on
-      # to the next one, any other result is returned.
+      # Tries the task's chain in order (see the fallback rule above).
       #
       # @param task [Symbol] one of TASKS
       # @param prompt [String, Llm::Prompt] a local provider gets `prompt.to_s`; a cloud provider
@@ -39,30 +53,49 @@ module Llm
       # @param style [String] "concise" or "detailed"
       # @param options [Hash, nil] the request options, passed on only when given
       # @param inline [Boolean] true when the call runs inside an MCP request (detect_contradictions)
-      # @return [Hash] the provider's result plus `provider:` (its name)
+      # @return [Hash] the provider's result plus `provider:` (its name); when no provider answers,
+      #   the last real failure (a cloud refusal only when nothing was tried before it); an inline
+      #   call whose whole chain was skipped gets `{ ok: false, error: "inline_skipped", … }`
       # @raise [ArgumentError] for an unknown task
       def generate(task, prompt, style:, options: nil, inline: false)
-        check_task!(task)
         result = nil
-        CHAIN.each do |name|
+        skipped = nil
+        chain(task).each do |name|
           provider = Registry.fetch(name)
+          if inline && !provider.inline?
+            skipped ||= provider
+            next
+          end
           if provider.cloud?
-            result = CloudCall.new(task: task, provider: provider, prompt: prompt, style: style, options: options, inline: inline).call
-            next if CloudCall.refusal?(result)
+            provider = provider.for_task(task) if provider.respond_to?(:for_task)
+            attempt = CloudCall.new(task: task, provider: provider, prompt: prompt, style: style, options: options, inline: inline).call
+            # A refusal sent nothing: it never hides an earlier provider's failure (Ollama down, say).
+            result = attempt unless result && CloudCall.refusal?(attempt)
+            next if CloudCall.refusal?(attempt) || BridgeClient.fall_through?(attempt)
           else
             result = local(task, provider, prompt.to_s, style, options, inline)
+            next if local_outage?(result)
           end
           break
         end
-        result
+        result || skip(task, skipped)
       end
 
       # @param task [Symbol] one of TASKS
-      # @return [Boolean] whether the task's provider is configured and enabled
+      # @return [Array<Symbol>] the providers tried for the task, read from its setting on every call
+      #   (CHAIN for the default "ollama", and for a value outside CHAIN_VALUES)
+      # @raise [ArgumentError] for an unknown task
+      def chain(task)
+        check_task!(task)
+        value = AppSettings.public_send(:"llm_chain_#{task}").to_s
+        CHAINS.fetch(value, CHAIN)
+      end
+
+      # @param task [Symbol] one of TASKS
+      # @return [Boolean] whether any provider in the task's chain is configured and enabled
       # @raise [ArgumentError] for an unknown task
       def usable?(task)
-        check_task!(task)
-        Registry.fetch(CHAIN.first).available?
+        chain(task).any? { |name| Registry.fetch(name).available? }
       end
 
       # @param task [Symbol] one of TASKS
@@ -83,6 +116,18 @@ module Llm
         ensure
           UsageLog.record(task: task, provider: provider, inline: inline, prompt: prompt, result: result)
         end
+      end
+
+      # Ollama didn't answer at all (no HTTP status: refused, timed out): the next provider may. A
+      # refusal with a status (400/413, an over-long prompt) is returned, so a scan part splits.
+      def local_outage?(result)
+        !result[:ok] && result[:error] == LOCAL_OUTAGE && result[:http_status].nil?
+      end
+
+      def skip(task, provider)
+        result = { ok: false, text: nil, error: INLINE_SKIPPED, latency_ms: 0.0, provider: provider.name }
+        UsageLog.record(task: task, provider: provider, inline: true, prompt: "", result: result, cloud: { refused: INLINE_SKIPPED })
+        result
       end
 
       def check_task!(task)

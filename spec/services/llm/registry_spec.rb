@@ -8,7 +8,7 @@ RSpec.describe Llm::Registry do
   it "fetches the built-in ollama provider and refuses an unknown name" do
     expect(described_class.fetch(:ollama)).to be_a(Llm::OllamaProvider)
     expect(described_class.fetch("ollama")).to be_a(Llm::OllamaProvider)
-    expect { described_class.fetch(:agent_cli) }.to raise_error(KeyError)
+    expect { described_class.fetch(:zq7_unknown) }.to raise_error(KeyError)
   end
 
   it "swaps a provider in until the reset, in the test environment only" do

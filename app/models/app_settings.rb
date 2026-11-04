@@ -37,6 +37,13 @@ class AppSettings < RailsSettings::Base
   field :summary_num_ctx, default: 0, type: :integer
   field :summary_observations_per_entity, default: 3, type: :integer
   field :enable_llm_summarization, default: false, type: :boolean
+  # Agent-CLI PR4: the providers each task tries, in order (Llm::Router::CHAIN_VALUES), and the
+  # host bridge profile and model an `agent_cli` chain entry uses ("" = none).
+  field :llm_chain_summary, default: "ollama", type: :string
+  field :llm_chain_scan, default: "ollama", type: :string
+  field :llm_chain_judge, default: "ollama", type: :string
+  field :llm_agent_cli_profile, default: "", type: :string
+  field :llm_agent_cli_model, default: "", type: :string
 
   # Import matching settings
   field :import_observation_duplicate_max_distance, default: 0.35, type: :float,

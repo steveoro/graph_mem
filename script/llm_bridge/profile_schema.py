@@ -43,7 +43,9 @@ OUTPUT = {"format": ("str", True), "text_path": ("str?", False), "error_path": (
           "subtype_path": ("str?", False), "turns_path": ("str?", False)}
 CONFIG_FILE = {"path": ("str", True), "content": ("content", True)}
 TOOL_TRACE = {"hook_log": ("bool", True), "max_turns": ("int?", True), "export_path": ("str?", True),
-              "stdout_pattern": ("str?", True)}
+              "stdout_pattern": ("str?", True), "name_map": ("object", False)}
+# A tool name in tool_trace.name_map (lower case, as tool_trace compares them).
+TOOL_NAME_RE = re.compile(r"[a-z0-9][a-z0-9_.:*-]{0,63}")
 ENV = {"home": ("str", True), "xdg_data_home": ("str", True), "set": ("object", True), "pass": ("strings", True),
        "secret_env": ("object", True)}
 
@@ -91,6 +93,13 @@ def _check_prompt_and_files(data):
             raise ProfileError(f"config_files[{index}].path: must stay under {{run}}/ or {{home}}/")
 
 
+def _check_name_map(name_map):
+    """``{transcript_name: hook_name}``, both lower-case tool names; it can only rename, never excuse a call."""
+    if not all(isinstance(key, str) and isinstance(value, str) and TOOL_NAME_RE.fullmatch(key) and TOOL_NAME_RE.fullmatch(value)
+               for key, value in name_map.items()):
+        raise ProfileError("tool_trace.name_map: lower-case tool names on both sides")
+
+
 def _check_sections(data):
     _fields(data["output"], OUTPUT, "output")
     if data["output"]["format"] not in ("text", "json"):
@@ -98,6 +107,7 @@ def _check_sections(data):
     if data["output"]["format"] == "json" and not data["output"].get("text_path"):
         raise ProfileError("output.text_path: required for json")
     _fields(data["tool_trace"], TOOL_TRACE, "tool_trace")
+    _check_name_map(data["tool_trace"].get("name_map", {}))
     _fields(data["env"], ENV, "env")
     env = data["env"]
     if env["home"] not in ("synthetic", "real") or env["xdg_data_home"] not in ("owner", "synthetic"):

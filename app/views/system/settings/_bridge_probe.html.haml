@@ -1,0 +1,29 @@
+-# Settings › Summaries: the host bridge (agent-CLI PR4). Nothing but "not configured" while
+-# LLM_BRIDGE_URL is unset; otherwise a "Check now" button (POST, operator only) and, after one,
+-# what Llm::BridgeProbe saw. No path or token is ever shown; passed_on is text only.
+- probe = @bridge_probe
+- reason = probe ? probe[:reason] : Llm::BridgeClient.new.reason
+.system-bridge{ data: { testid: "settings-bridge-probe" } }
+  %h3.ui-label= t("system.settings.summaries.bridge.title")
+  - if reason == "url_unset"
+    %p.system-hint{ data: { testid: "bridge-probe-status" } }= t("system.settings.summaries.bridge.not_configured")
+  - else
+    - if probe&.dig(:reachable)
+      %p.system-hint{ data: { testid: "bridge-probe-status" } }= t("system.settings.summaries.bridge.reachable", version: probe[:bridge_version] || "?")
+      %ul.system-hint
+        - probe[:profiles].each do |name, info|
+          %li{ data: { testid: "bridge-probe-profile-#{name}" } }
+            = t("system.settings.summaries.bridge.profile", name: name,
+              cli: t("system.settings.summaries.bridge.#{info[:cli_ok] ? 'cli_ok' : 'cli_missing'}"),
+              gate: info[:gate_result] ? t("system.settings.summaries.bridge.gate", result: info[:gate_result], on: info[:passed_on] || "?") : t("system.settings.summaries.bridge.no_gate"),
+              usable: t("system.settings.summaries.bridge.#{info[:gate_ok] ? 'gate_ok' : 'gate_not_ok'}"))
+            - if info[:tripped]
+              %strong= t("system.settings.summaries.bridge.tripped")
+    - elsif probe
+      %p.system-hint{ data: { testid: "bridge-probe-status" } }= t("system.settings.summaries.bridge.problem", reason: probe[:reason])
+    - elsif reason
+      %p.system-hint{ data: { testid: "bridge-probe-status" } }= t("system.settings.summaries.bridge.problem", reason: reason)
+    - else
+      %p.system-hint{ data: { testid: "bridge-probe-status" } }= t("system.settings.summaries.bridge.not_checked")
+    = button_to t("system.settings.summaries.bridge.check_now"), system_bridge_probe_path, method: :post, class: "ui-btn",
+      data: { testid: "bridge-probe-check" }
