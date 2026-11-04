@@ -62,12 +62,14 @@ module Llm
     # @param style [String] unused: the prompt already says how to answer
     # @param options [Hash, nil] `timeout:` (seconds, the summary timeout by default), `format:`
     #   ("json" for scan and judge) and `max_output_length:` (see Llm::ResponseNormalizer)
-    # @return [Hash] see Llm::BridgeClient#complete; "bridge_not_configured" without a profile or model
+    # @return [Hash] see Llm::BridgeClient#complete, with an answer's text normalized
+    #   (Llm::ResponseNormalizer); "bridge_not_configured" without a profile or model
     def generate(prompt, style:, options: nil)
       opts = options.to_h.symbolize_keys
       return { ok: false, text: nil, error: BridgeClient::NOT_CONFIGURED, latency_ms: 0.0 } unless profile && model
 
-      @client.complete(prompt, profile: profile, model: model, task: @task, timeout_s: timeout(opts))
+      result = @client.complete(prompt, profile: profile, model: model, task: @task, timeout_s: timeout(opts))
+      result[:ok] ? result.merge(text: ResponseNormalizer.call(result[:text], opts)) : result
     rescue StandardError
       { ok: false, text: nil, error: "bridge_error", latency_ms: nil }
     end

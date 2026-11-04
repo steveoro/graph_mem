@@ -1,0 +1,4 @@
+Synthetic answer (replace with a sanitized capture). The extraction:
+```json
+[{"id": 7, "verdict": "superseded", "confidence": 0.9, "reason": "Alpha Service moved SynthWidget off zq7.example \"build\" {old}"}]
+```

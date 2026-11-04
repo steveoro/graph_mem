@@ -57,6 +57,15 @@ RSpec.describe Llm::AgentCliProvider do
     expect(summary).to include("task" => "summary", "timeout_s" => SummarizationConfig.resolved_config[:timeout].to_i.clamp(1, 600))
   end
 
+  it "normalizes a JSON answer (fence and prose dropped) and cuts a summary as the summary client does" do
+    text = JSON.parse(Rails.root.join("spec/fixtures/llm_bridge/envelopes/claude.json").read).fetch("result")
+    allow(handler).to receive(:call).and_return([ 200, { ok: true, text: text, failure_class: nil } ])
+
+    scan = provider.for_task(:scan).generate("Zq7", style: "concise", options: { format: "json", max_output_length: nil })
+    expect(JSON.parse(scan[:text])).to have_key("architecture")
+    expect(provider.generate("Zq7", style: "concise", options: { max_output_length: 20 })[:text]).to eq(text.strip[0, 20])
+  end
+
   it "never raises, and answers bridge_not_configured without a profile or model" do
     AppSettings.llm_agent_cli_model = ""
     expect(provider.generate("Zq7", style: "concise")).to include(ok: false, error: "bridge_not_configured")

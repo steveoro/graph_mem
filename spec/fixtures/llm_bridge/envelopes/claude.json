@@ -1,0 +1,15 @@
+{
+  "_note": "synthetic, replace with a sanitized capture",
+  "type": "result",
+  "subtype": "success",
+  "is_error": false,
+  "duration_ms": 2412,
+  "num_turns": 1,
+  "result": "Here is the extraction you asked for.\n\n```json\n{\"architecture\": [{\"entity\": {\"name\": \"SynthWidget\", \"type\": \"Component\"}, \"observations\": [\"SynthWidget renders frames for Gadget Project; see {docs} and [notes].\"], \"relations\": [{\"to\": \"Gadget Project\", \"type\": \"part_of\", \"confidence\": 0.9}]}]}\n```\n\nLet me know if you need more.",
+  "session_id": "00000000-0000-4000-8000-000000000000",
+  "total_cost_usd": 0,
+  "usage": {
+    "input_tokens": 1201,
+    "output_tokens": 212
+  }
+}
