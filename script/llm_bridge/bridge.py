@@ -114,8 +114,8 @@ class Bridge:
             json.dump({"profile": name, "run_id": run_id, "failure_class": "cli_tool_use"}, out)
 
     def gate_check(self, name: str, model: Optional[str] = None) -> Tuple[Optional[str], dict]:
-        """``(failure class or None, what was found)``: the CLI now versus the gate record, by realpath,
-        version and wrapper digest; ``passed_on`` is never compared to anything."""
+        """``(failure class or None, what was found)``: the CLI now versus the gate record, by realpath, version,
+        wrapper digest and runs dir (the parents the gate checked); ``passed_on`` is never compared to anything."""
         profile = self.profiles[name]
         found = agent_cli.resolve_cli(profile)
         info = {"cli_ok": bool(found), "cli_realpath": found[1] if found else None, "cli_version": None}
@@ -127,8 +127,8 @@ class Bridge:
             return "gate_missing", info
         if record.get("result") != "PASS":
             return "gate_failed", info
-        current = (found[1], info["cli_version"], agent_cli.wrapper_digest(profile))
-        if current != (record.get("cli_realpath"), record.get("cli_version"), record.get("wrapper_digest")):
+        current = (found[1], info["cli_version"], agent_cli.wrapper_digest(profile), agent_cli.runs_dir(self.state))
+        if current != tuple(record.get(key) for key in ("cli_realpath", "cli_version", "wrapper_digest", "runs_dir")):
             return "gate_stale", info
         if model is not None and model not in (record.get("models") or []):
             return "gate_missing", info
@@ -319,7 +319,11 @@ def make_server(listen: str = LISTEN, port: int = DEFAULT_PORT, log=None) -> Bri
         raise StartError("the bridge listens on %s only" % LISTEN)
     if not isinstance(port, int) or not 0 <= port <= 65535:
         raise StartError("bad port")
-    state = agent_cli.state_dir()
+    try:
+        state = agent_cli.state_dir()
+        agent_cli.runs_dir(state)
+    except agent_cli.UnsafeDir as error:
+        raise StartError(str(error)) from None
     token = load_token(state)
     try:
         profiles = {name: agent_cli.load_profile(name) for name in agent_cli.shipped_profiles()}

@@ -16,7 +16,7 @@ import bridge
 import lockdown
 
 FIELDS = {"profile", "result", "cli_path", "cli_realpath", "cli_version", "wrapper_digest", "models", "prompt_forms",
-          "trust_omit", "run_as", "warnings", "passed_on"}
+          "trust_omit", "run_as", "warnings", "passed_on", "runs_dir"}
 
 
 class LockdownCase(FakeCliCase):
@@ -101,7 +101,7 @@ class FailTest(LockdownCase):
     def test_each_vector_of_an_obedient_cli_fails(self):
         cases = {"read": "canary value in the output", "grep": "canary value in the output", "touch": "marker created",
                  "fetch": "listener reached", "mcp": "marker created (mcp-home, mcp-run)",
-                 "settings": "listener reached"}
+                 "settings": "marker created (hook-claude-settings); listener reached"}
         for vector, reason in cases.items():
             with self.subTest(vector=vector):
                 result, report = self.gate(sidecar={"obey": [vector]})
@@ -138,10 +138,13 @@ class FailTest(LockdownCase):
 class AncestorFailTest(LockdownCase):
     def test_devin_config_in_a_parent_fails_devin_only(self):
         os.mkdir(os.path.join(self.tmp, ".devin"))
+        os.mkdir(os.path.join(agent_cli.runs_dir(self.state), ".devin"))
         write_private(os.path.join(self.tmp, ".devin", "mcp_config.json"), "{}")
+        write_private(os.path.join(self.runs, ".devin", "hooks.v1.json"), "{}")  # the runs dir itself counts too
         result, report = self.gate("devin")
         self.assertEqual(result, "FAIL")
         self.assertIn("FAIL  parent dir %s has .devin/mcp_config.json, which devin loads" % self.tmp, report)
+        self.assertIn("FAIL  parent dir %s has .devin/hooks.v1.json, which devin loads" % self.runs, report)
         self.assertEqual(self.gate("claude")[0], "PASS")
 
 

@@ -31,6 +31,7 @@ import uuid
 from typing import Dict, List, Optional, Tuple
 
 from profile_schema import BUILT_ENV, CLASSES, HOOK, Profile, ProfileError, load_profile, shipped_profiles  # noqa: F401 (re-exported)
+from tool_trace import file_size as _size, hook_lines as _hook_lines, tool_use  # noqa: F401 (re-exported)
 
 HERE = os.path.dirname(os.path.realpath(__file__))
 STDOUT_CAP = 256 * 1024
@@ -40,7 +41,12 @@ VERSION_TIMEOUT_S = 10
 BASE_PATH = "/usr/local/bin:/usr/bin:/bin"
 ANSI_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b[@-Z\\-_]")
 CONTROL_RE = re.compile(r"[\x00-\x08\x0b-\x1f\x7f]")
-TOOL_KEYS = ("tool_calls", "tool_call", "tool_use", "function_call")
+# Tests only: the ancestors of a temp test root (such as /tmp) that the parents check skips. Empty in use.
+TRUSTED_ANCESTORS: Tuple[str, ...] = ()
+
+
+class UnsafeDir(RuntimeError):
+    """A state or runs dir that isn't the user's private dir (the message names the path, nothing else)."""
 
 
 def override_variable(name: str) -> str:
@@ -102,29 +108,49 @@ def cli_version(profile: Profile, found: Tuple[str, str]) -> Optional[str]:
 
 
 def wrapper_digest(profile: Profile) -> str:
-    """SHA-256 over ``agent_cli.py``, ``profile_schema.py``, ``deny-hook.sh`` and the profile file, in that order."""
+    """SHA-256 over ``agent_cli.py``, ``profile_schema.py``, ``tool_trace.py``, ``deny-hook.sh`` and the profile file."""
     digest = hashlib.sha256()
-    for path in (os.path.realpath(__file__), os.path.join(HERE, "profile_schema.py"), HOOK, profile.path):
+    for path in [os.path.join(HERE, name) for name in ("agent_cli.py", "profile_schema.py", "tool_trace.py")] + [HOOK, profile.path]:
         with open(path, "rb") as handle:
             digest.update(handle.read())
     return digest.hexdigest()
 
 
+def private_dir(path: str, parents: bool = False) -> bool:
+    """A real (not symlinked) dir the user owns, mode 0700; with ``parents``, every parent is root's or the user's
+    and not group- or other-writable, so nobody else can add config that a CLI finds by walking up."""
+    try:
+        info = os.lstat(path)
+        if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.getuid() or info.st_mode & 0o077:
+            return False
+        folder = os.path.realpath(path)
+        while parents and os.path.dirname(folder) != folder:
+            folder = os.path.dirname(folder)
+            above = os.lstat(folder)
+            if folder not in TRUSTED_ANCESTORS and (above.st_uid not in (0, os.getuid()) or above.st_mode & 0o022):
+                return False
+        return True
+    except OSError:
+        return False
+
+
 def state_dir() -> str:
-    """Return ``$AGENT_CLI_STATE`` (default ``~/.local/state/agent-cli``), created 0700."""
+    """Return ``$AGENT_CLI_STATE`` (default ``~/.local/state/agent-cli``), created 0700; UnsafeDir unless private."""
     path = os.environ.get("AGENT_CLI_STATE") or os.path.join(real_home(), ".local", "state", "agent-cli")
     os.makedirs(path, mode=0o700, exist_ok=True)
+    if not private_dir(path):
+        raise UnsafeDir("%s must be your own 0700 dir, not a symlink" % path)
     return os.path.realpath(path)
 
 
 def runs_dir(state: str) -> str:
-    """Where run dirs go (created 0700): ``$XDG_RUNTIME_DIR/agent-cli`` when that is the user's own 0700 dir (its
-    parents are root's), else ``<state>/runs``. Never the shared /tmp: CLIs search a run dir's parents for config."""
+    """Where run dirs go: ``$XDG_RUNTIME_DIR/agent-cli`` when that runtime dir is private all the way up, else
+    ``<state>/runs``; UnsafeDir unless the result is too. Never the shared /tmp: CLIs search a run dir's parents."""
     runtime = os.environ.get("XDG_RUNTIME_DIR") or ""
-    info = os.stat(runtime) if runtime and os.path.isdir(runtime) else None
-    private = info is not None and info.st_uid == os.getuid() and not info.st_mode & 0o077
-    path = os.path.join(runtime, "agent-cli") if private else os.path.join(state, "runs")
+    path = os.path.join(runtime, "agent-cli") if runtime and private_dir(runtime, parents=True) else os.path.join(state, "runs")
     os.makedirs(path, mode=0o700, exist_ok=True)
+    if not private_dir(path, parents=True):
+        raise UnsafeDir("%s and every dir above it must be writable only by you or root" % path)
     return path
 
 
@@ -325,63 +351,6 @@ def unwrap(profile: Profile, stdout: str) -> dict:
     text, subtype = pick("text_path"), pick("subtype_path")
     return {"valid": isinstance(text, str), "text": text, "error": bool(pick("error_path")),
             "subtype": subtype if isinstance(subtype, str) else "", "turns": pick("turns_path")}
-
-
-def _tool_steps(node) -> int:
-    """Tool calls in a transcript node; a doubtful node may count twice (more steps than hook calls fails closed)."""
-    if isinstance(node, dict):
-        own = int(node.get("type") in TOOL_KEYS)
-        own += sum(len(node[key]) if isinstance(node[key], list) else 1 for key in TOOL_KEYS if node.get(key))
-        return own + sum(_tool_steps(value) for value in node.values())
-    return sum(_tool_steps(item) for item in node) if isinstance(node, list) else 0
-
-
-def transcript_tool_steps(text: Optional[str], exit_code) -> Optional[int]:
-    """The tool calls in an exported transcript (JSON or JSON lines); None when it is unreadable (fail closed),
-    or missing although the run succeeded (a failed run may have stopped before writing one: 0)."""
-    if text is None:
-        return None if exit_code == 0 else 0
-    try:
-        try:
-            docs = [json.loads(text)]
-        except ValueError:
-            docs = [json.loads(line) for line in text.splitlines() if line.strip()]
-        return _tool_steps(docs)
-    except (ValueError, RecursionError):  # unreadable or too deep to walk
-        return None
-
-
-def _hook_lines(state, offset, run_id):
-    path = os.path.join(state, "hook.log")
-    try:
-        with open(path, "rb") as handle:
-            handle.seek(offset)
-            tail = handle.read().decode("utf-8", "replace")
-    except OSError:
-        return []
-    return [line for line in tail.splitlines() if ("\t%s\t" % run_id) in line]
-
-
-def _size(path):
-    return os.path.getsize(path) if os.path.isfile(path) else 0
-
-
-def tool_use(profile: Profile, proc: dict, envelope: dict, hook_lines: list, transcript: Optional[str], stdout: str):
-    """``"used"`` (cli_tool_use), ``"denied"`` or None. Too many turns, the stdout pattern or an unreadable
-    transcript is use. Otherwise any hook.log line or transcript tool call is use, except on a profile whose
-    tools are denied rather than removed (``tools_fully_disabled: false``, with the hook wired): there, when
-    the deny hook saw at least as many calls as the transcript shows, each was refused (cli_tool_denied)."""
-    trace, turns = profile["tool_trace"], envelope["turns"]
-    if (trace["max_turns"] is not None and isinstance(turns, int) and turns > trace["max_turns"]) or \
-            (profile.stdout_re and profile.stdout_re.search(stdout)):
-        return "used"
-    steps = transcript_tool_steps(transcript, proc["exit"]) if trace["export_path"] else 0
-    if steps is None:
-        return "used"
-    if not steps and not hook_lines:
-        return None
-    hooked = not profile["tools_fully_disabled"] and trace["hook_log"] and len(hook_lines) >= steps
-    return "denied" if hooked else "used"
 
 
 def classify(profile: Profile, proc: dict, envelope: dict, stdout: str, stderr: str) -> str:

@@ -122,10 +122,14 @@ class ToolUseTest(FakeCliCase):
         self.assertEqual(raw["hook_lines"][0].split("\t")[1:], ["11111111-2222-4333-8444-555555555555", "Bash"])
         self.assertEqual(os.stat(os.path.join(self.state, "hook.log")).st_mode & 0o077, 0)
 
-    def test_devin_tool_calls_the_hook_never_saw_are_tool_use(self):
-        self.assertEqual(self.run_fake("devin", "@fake hook=Bash\n@fake transcript=tool\n")[0]["failure_class"], "cli_tool_denied")
-        self.assertEqual(self.run_fake("devin", "@fake hook=Bash\n@fake transcript=tool2\n")[0]["failure_class"], "cli_tool_use")
-        self.assertEqual(self.run_fake("devin", "@fake hook=Bash\n@fake transcript=garbage\n")[0]["failure_class"], "cli_tool_use")
+    def test_devin_tool_calls_need_their_own_refusal_by_name(self):
+        outcome = lambda prompt: self.run_fake("devin", prompt)[0]["failure_class"]  # noqa: E731
+        self.assertEqual(outcome("@fake hook=exec\n@fake transcript=tool\n"), "cli_tool_denied")
+        self.assertEqual(outcome("@fake hook=EXEC\n@fake transcript=tool\n"), "cli_tool_denied")  # names compare case-insensitively
+        self.assertEqual(outcome("@fake hook=grep\n@fake transcript=tool\n"), "cli_tool_use")  # the exec call was never refused
+        self.assertEqual(outcome("@fake hook=exec\n@fake transcript=tool2\n"), "cli_tool_use")  # two calls, one refusal
+        self.assertEqual(outcome("@fake hook=exec\n@fake transcript=unnamed\n"), "cli_tool_use")
+        self.assertEqual(outcome("@fake hook=exec\n@fake transcript=garbage\n"), "cli_tool_use")
 
     def test_any_hook_line_is_tool_use_when_tools_are_fully_disabled(self):
         self.assertEqual(self.run_fake("claude", "@fake hook=Bash\n")[0]["failure_class"], "cli_tool_use")

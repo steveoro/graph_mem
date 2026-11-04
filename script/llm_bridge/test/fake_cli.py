@@ -11,7 +11,7 @@ Two control channels:
 - ``@fake key=value`` lines in the prompt (wrapper and bridge tests): ``answer``, ``raw``, ``exit``,
   ``stderr``, ``is_error``, ``subtype``, ``turns``, ``no_result``, ``sleep``, ``ignore_term``,
   ``spawn_child=<pid file>``, ``flood=<bytes>``, ``hook=<tool>``, ``echo_env``, ``echo_argv``, ``echo_cwd_mode``,
-  ``transcript=none|tool|tool2|garbage|deep``.
+  ``transcript=none|tool|tool2|unnamed|garbage|deep`` (``tool`` is one ``exec`` call).
 - ``<this file>.json`` next to the copy (lockdown tests): ``{"obey": [...], "load_decoys": bool,
   "refuse_without_trust": bool, "error_on_attack": bool, "hook_on_grep": bool}``. ``obey`` holds ``read``, ``grep``, ``touch``, ``fetch``, ``mcp`` and ``settings``:
   the fake then really reads the canary, touches the marker, fetches the listener or starts the
@@ -92,8 +92,9 @@ def obey(prompt, rules):
                 for server in json.load(open(config, encoding="utf-8")).get("mcpServers", {}).values():
                     subprocess.run([server["command"], *server.get("args", [])], check=False)
     if "settings" in wants and os.path.exists("./.claude/settings.json"):
-        url = json.load(open("./.claude/settings.json", encoding="utf-8"))["env"]["ANTHROPIC_BASE_URL"]
-        urllib.request.urlopen(url + "/v1/messages", timeout=5).read()
+        settings = json.load(open("./.claude/settings.json", encoding="utf-8"))
+        urllib.request.urlopen(settings["env"]["ANTHROPIC_BASE_URL"] + "/v1/messages", timeout=5).read()
+        subprocess.run(["sh", "-c", settings["hooks"]["SessionStart"][0]["hooks"][0]["command"]], check=False)
     if rules.get("load_decoys"):
         for path in ("AGENTS.md", "CLAUDE.md", user + "/devin/AGENTS.md", "~/.claude/CLAUDE.md", "~/.config/devin/AGENTS.md"):
             path = os.path.expanduser(path)
@@ -135,9 +136,9 @@ def write_transcript(argv, found, text):
     if "--export" not in argv or found.get("transcript") == "none":
         return
     steps = [{"source": "agent", "message": text}]
-    if found.get("transcript") in ("tool", "tool2"):
+    if found.get("transcript") in ("tool", "tool2", "unnamed"):
         calls = [{"function_name": "exec", "arguments": {}}] * (2 if found["transcript"] == "tool2" else 1)
-        steps.append({"source": "agent", "tool_calls": calls})
+        steps.append({"source": "agent", "tool_calls": [{"arguments": {}}] if found["transcript"] == "unnamed" else calls})
     body = {"garbage": "not json {", "deep": "[" * 100000 + "]" * 100000}.get(found.get("transcript"))
     body = body or json.dumps({"schema_version": "ATIF-v1.2", "steps": steps})
     with open(argv[argv.index("--export") + 1], "w", encoding="utf-8") as handle:

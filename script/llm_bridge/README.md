@@ -11,6 +11,7 @@ anything here; PR4 adds the client. Python 3.9+ standard library and POSIX `sh` 
 | `bridge.py` | `serve` (`GET /v1/health`, `POST /v1/complete`) and `init-token` |
 | `agent_cli.py` | The wrapper: argv, environment, run dir, timeout, caps, envelope, tool use, classes. `run` and `check` subcommands |
 | `profile_schema.py` | The strict profile loader (an unknown key or a wrong type is an error) |
+| `tool_trace.py` | Tool-use detection: the deny hook's `hook.log` lines, the transcript's tool calls, turns |
 | `profiles/claude.json`, `profiles/devin.json` | One profile per CLI, as data |
 | `deny-hook.sh` | A `PreToolUse` hook: logs the attempt to `hook.log` and denies it |
 | `lockdown.py`, `lockdown_test.sh` | The per-profile lockdown gate |
@@ -19,9 +20,11 @@ anything here; PR4 adds the client. Python 3.9+ standard library and POSIX `sh` 
 
 State lives in `$AGENT_CLI_STATE` (default `~/.local/state/agent-cli`, 0700): `bridge.token`,
 `claude.token`, `gates/<profile>.json`, `tripped/<profile>.json` and `hook.log`. Run dirs go in
-`$XDG_RUNTIME_DIR/agent-cli` (0700, with root-owned parents), or `$AGENT_CLI_STATE/runs` when there is no
-private runtime dir. They never go in the shared `/tmp`, because CLIs search a run dir's parents for
-config. Nothing is written
+`$XDG_RUNTIME_DIR/agent-cli`, or `$AGENT_CLI_STATE/runs` when there is no private runtime dir. Either way
+the runs dir must be a real (not symlinked) 0700 dir you own, and every dir above it must be root's or
+yours and not group- or other-writable. Otherwise the bridge won't start and the gate stops with a setup
+error. The state dir must be a real 0700 dir you own. Run dirs never go in the shared `/tmp`, because CLIs
+search a run dir's parents for config. Nothing is written
 under the checkout at run time.
 
 ## Install
@@ -64,14 +67,16 @@ Then it sends judge-style prompts whose statement asks the CLI to do one of thes
 Every run also carries decoys, each with its own random tag or marker:
 - `AGENTS.md` and `CLAUDE.md` in the run dir, in Devin's user config dir and in the synthetic home;
 - MCP configs that start a server which touches a marker: `.mcp.json` and `~/.claude.json`;
-- project `.claude/settings.json` files that point the API at the listener.
+- project `.claude/settings.json` files that point the API at the listener and carry a hook that
+  touches a marker (Devin also reads hooks from `.claude/` dirs).
 
 The run dir has no `.devin/` decoy and no decoy user `mcp_config.json`. Devin always loads native project
-config (`.devin/config.json`, `.devin/mcp_config.json` and their `.local` variants) from its working dir
+config (`.devin/config.json`, `.devin/mcp_config.json`, their `.local` variants and `.devin/hooks.v1.json`)
+from its working dir
 and that dir's parents, and its user `mcp_config.json` from `$XDG_CONFIG_HOME/devin/`, whatever its
 flags say. Both are inside the private run dir: it is created empty, and the profile writes the user
 `config.json` and an empty `mcp_config.json` itself. So the gate checks the parents instead: any of
-those project files there FAILs the `devin` gate.
+those project files in the runs dir or above it FAILs the `devin` gate.
 
 Each prompt also runs once without the profile's `trust_args`. A CLI that then refuses to run counts as
 not having loaded anything.
@@ -85,19 +90,21 @@ and prompt form, the gate FAILs.
 it logs), calls the hook (outside a `cli_tool_denied` run), prints a decoy's text or is classified `cli_tool_use`. These are listed as
 **WARN**:
 - with `env.home: real`, user-level `AGENTS.md`, `CLAUDE.md` and MCP configs in your home;
-- `.devin`, `.git`, `.jj`, `AGENTS.md`, `CLAUDE.md` or `.mcp.json` in the parents of the runs dir,
+- `.devin`, `.claude`, `.git`, `.jj`, `AGENTS.md`, `CLAUDE.md` or `.mcp.json` in the runs dir or above it,
   which a CLI may find by walking up.
 
 The gate writes `gates/<profile>.json` (0600): `profile`, `result`, `cli_path`, `cli_realpath`,
-`cli_version`, `wrapper_digest`, `models`, `prompt_forms`, `trust_omit`, `run_as`, `warnings`,
-`passed_on`. Exit codes: 0 PASS, 1 FAIL, 2 setup error. A PASS clears `tripped/<profile>.json`. The
+`cli_version`, `wrapper_digest`, `models`, `prompt_forms`, `trust_omit`, `run_as`, `runs_dir`,
+`warnings`, `passed_on`. Exit codes: 0 PASS, 1 FAIL, 2 setup error. A PASS clears `tripped/<profile>.json`. The
 prompts name the canary's path, so your username, and they go to the CLI's vendor like any prompt.
 The gate never changes an existing file.
 
 **Re-run it after every CLI update.** The bridge serves a profile only while the record's CLI
-realpath, version (from `version_args`, cached by realpath, inode and size, never by time) and
-`wrapper_digest` all match what it finds now. The digest is SHA-256 over `agent_cli.py`,
-`profile_schema.py`, `deny-hook.sh` and the profile file. `passed_on` is informational only.
+realpath, version (from `version_args`, cached by realpath, inode and size, never by time),
+`wrapper_digest` and `runs_dir` all match what it finds now. `runs_dir` is there because the gate checked
+that dir's parents; a bridge started as a service with another `XDG_RUNTIME_DIR` gets `gate_stale`. The
+digest is SHA-256 over `agent_cli.py`, `profile_schema.py`, `tool_trace.py`, `deny-hook.sh` and the profile
+file. `passed_on` is informational only.
 
 ## HTTP contract (`127.0.0.1` only; `X-GM-Bridge-Token` on every route)
 
@@ -131,10 +138,11 @@ gate: { result, cli_version, wrapper_digest, models, passed_on } | null, gate_ok
 
 A run classified `cli_tool_use` trips its profile: every request then gets `503 tripped` until a new
 gate PASS. One exception is for `devin`, whose tools are denied rather than removed
-(`tools_fully_disabled: false`): when the deny hook saw at least as many tool calls as the transcript
-shows, each call was refused, so the run is `cli_tool_denied`. That is a failed request, but it doesn't
+(`tools_fully_disabled: false`): when every tool call in the transcript has its own refusal by the same
+name (case-insensitive) in `hook.log`, each call was refused, so the run is `cli_tool_denied`. That is a failed request, but it doesn't
 trip the profile, and the gate counts it as a `warn` (not answered), not a leak. A tool call the hook
-never saw, too many turns, the stdout pattern or an unreadable transcript is still `cli_tool_use`; so is
+never refused by that name, an unnamed call, too many turns, the stdout pattern or an unreadable transcript
+is still `cli_tool_use`; so is
 any tool use on `claude`, whose tools are removed. The bridge never retries and never falls back to another profile; graph_mem's chain does
 that (PR4).
 

@@ -170,6 +170,31 @@ class EnvironmentAndRunDirTest(FakeCliCase):
         self.assertTrue(mcp_config.endswith("/empty-mcp.json"))
         self.assertTrue(mcp_config.startswith(os.path.join(self.runs, "agent-cli-run-")))
 
+    def test_a_runtime_dir_with_a_writable_parent_or_a_symlink_is_not_used(self):
+        shared = os.path.join(self.tmp, "shared")
+        os.mkdir(shared)
+        os.chmod(shared, 0o777)
+        for runtime in (os.path.join(shared, "rt"), os.path.join(self.tmp, "link")):
+            os.makedirs(os.path.join(shared, "rt"), mode=0o700, exist_ok=True)
+            if runtime.endswith("link"):
+                os.symlink(os.path.join(shared, "rt"), runtime)
+            with self.subTest(runtime=runtime), mock.patch.dict(os.environ, {"XDG_RUNTIME_DIR": runtime}):
+                self.assertEqual(agent_cli.runs_dir(self.state), os.path.join(self.state, "runs"))
+
+    def test_no_private_place_for_runs_or_an_unsafe_state_dir_refuses(self):
+        os.chmod(self.tmp, 0o770)  # group-writable above both the runtime dir and the state dir
+        self.addCleanup(os.chmod, self.tmp, 0o700)
+        with self.assertRaises(agent_cli.UnsafeDir):
+            agent_cli.runs_dir(self.state)
+        os.chmod(self.tmp, 0o700)
+        os.symlink(self.state, os.path.join(self.tmp, "state-link"))
+        with mock.patch.dict(os.environ, {"AGENT_CLI_STATE": os.path.join(self.tmp, "state-link")}), self.assertRaises(agent_cli.UnsafeDir):
+            agent_cli.state_dir()
+        os.chmod(self.state, 0o750)
+        with self.assertRaises(agent_cli.UnsafeDir):
+            agent_cli.state_dir()
+        os.chmod(self.state, 0o700)
+
     def test_runs_fall_back_to_the_state_dir_without_a_private_runtime_dir(self):
         os.chmod(self.runtime, 0o755)
         self.assertEqual(agent_cli.runs_dir(self.state), os.path.join(self.state, "runs"))

@@ -39,9 +39,14 @@ class FakeCliCase(unittest.TestCase):
         for folder in (self.state, self.bin, self.runtime):
             os.mkdir(folder, 0o700)
         self.runs = os.path.join(self.runtime, "agent-cli")
-        patcher = mock.patch.dict(os.environ, {"AGENT_CLI_STATE": self.state, "XDG_RUNTIME_DIR": self.runtime})
-        patcher.start()
-        self.addCleanup(patcher.stop)
+        above, folder = [], self.tmp
+        while os.path.dirname(folder) != folder:  # /tmp and / are world-writable or root's: trusted for tests only
+            folder = os.path.dirname(folder)
+            above.append(folder)
+        for patcher in (mock.patch.dict(os.environ, {"AGENT_CLI_STATE": self.state, "XDG_RUNTIME_DIR": self.runtime}),
+                        mock.patch.object(agent_cli, "TRUSTED_ANCESTORS", tuple(above))):
+            patcher.start()
+            self.addCleanup(patcher.stop)
         for name in ("claude", "devin"):
             self.install(name)
         write_private(os.path.join(self.state, "claude.token"), "fake-" + secrets.token_urlsafe(24))

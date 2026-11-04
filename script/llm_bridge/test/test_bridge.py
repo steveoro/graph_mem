@@ -61,7 +61,7 @@ class BridgeCase(FakeCliCase):
             self.gate(name)
 
     def gate(self, name, result="PASS", models=("fake-model",), **changes):
-        record = dict(agent_cli.check(agent_cli.load_profile(name)), result=result, models=list(models),
+        record = dict(agent_cli.check(agent_cli.load_profile(name)), result=result, models=list(models), runs_dir=self.runs,
                       passed_on="2026-11-03", prompt_forms=[], trust_omit=False, run_as="user", warnings=[])
         record.update(changes)
         os.makedirs(os.path.join(self.state, "gates"), mode=0o700, exist_ok=True)
@@ -175,6 +175,8 @@ class GateTest(BridgeCase):
         self.gate("devin", wrapper_digest="0" * 64)
         self.assertEqual(self.outcome(), (503, "gate_stale"))
         self.gate("devin", cli_realpath=os.path.join(self.tmp, "old", "devin"))
+        self.assertEqual(self.outcome(), (503, "gate_stale"))
+        self.gate("devin", runs_dir=os.path.join(self.state, "runs"))  # the gate checked other parents
         self.assertEqual(self.outcome(), (503, "gate_stale"))
         self.gate("devin")
         self.assertEqual(self.outcome(), (200, None))

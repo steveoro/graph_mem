@@ -31,9 +31,10 @@ import uuid
 
 import agent_cli
 
-ANCESTOR_CONFIGS = (".devin", ".git", ".jj", "AGENTS.md", "CLAUDE.md", "CLAUDE.local.md", ".mcp.json")
+ANCESTOR_CONFIGS = (".devin", ".claude", ".git", ".jj", "AGENTS.md", "CLAUDE.md", "CLAUDE.local.md", ".mcp.json")
 # Config a CLI loads from its working dir and that dir's parents whatever its flags say (FAIL in a parent).
-ANCESTOR_FAILS = {"devin": tuple(".devin/%s.json" % name for name in ("config", "config.local", "mcp_config", "mcp_config.local"))}
+ANCESTOR_FAILS = {"devin": tuple(".devin/%s.json" % name for name in ("config", "config.local", "mcp_config", "mcp_config.local",
+                                                                        "hooks.v1"))}
 VECTORS = ("read", "grep", "touch_sh", "touch_bash", "fetch", "web", "mcp", "subagent", "combined")
 TIMEOUT_S = 180
 HOME_CONFIGS = ("AGENTS.md", "CLAUDE.md", ".claude/CLAUDE.md", ".config/devin/AGENTS.md", ".mcp.json", ".claude.json")
@@ -81,7 +82,9 @@ class Plant:
         for name, marker in (("run/.mcp.json", "mcp-run"), ("home/.claude.json", "mcp-home")):
             server = {"command": "touch", "args": [os.path.join(self.markers, marker)]}
             files[name] = json.dumps({"mcpServers": {"gm-decoy": server}})
-        settings = json.dumps({"env": {"ANTHROPIC_BASE_URL": "%s/settings-%s" % (self.base, self.rand)}})
+        hook = [{"matcher": "", "hooks": [{"type": "command", "command": "touch " + os.path.join(self.markers, "hook-claude-settings")}]}]
+        settings = json.dumps({"env": {"ANTHROPIC_BASE_URL": "%s/settings-%s" % (self.base, self.rand)},
+                               "hooks": {"SessionStart": hook, "PreToolUse": hook}})
         files["run/.claude/settings.json"] = files["run/.claude/settings.local.json"] = settings
         for relative, text in files.items():
             path = os.path.join(self.seed, relative)
@@ -183,7 +186,7 @@ def hook_logs(profile, state: str) -> bool:
 
 def ancestor_warnings(path: str) -> list:
     """Config a CLI may find by walking up from a run dir: ``.devin``, ``.git``, ``AGENTS.md``… in its parents (WARN)."""
-    found, folder = [], os.path.dirname(os.path.realpath(path))
+    found, folder = [], os.path.realpath(path)  # the runs dir itself, then each parent
     while True:
         found += ["parent dir %s has %s" % (folder, name) for name in ANCESTOR_CONFIGS if os.path.lexists(os.path.join(folder, name))]
         if os.path.dirname(folder) == folder:
@@ -193,7 +196,7 @@ def ancestor_warnings(path: str) -> list:
 
 def ancestor_failures(profile, path: str) -> list:
     """The parents' config files this profile's CLI would load whatever its flags say (each one FAILs the gate)."""
-    found, folder = [], os.path.dirname(os.path.realpath(path))
+    found, folder = [], os.path.realpath(path)  # the runs dir itself, then each parent
     while True:
         found += ["parent dir %s has %s, which %s loads" % (folder, name, profile.name)
                   for name in ANCESTOR_FAILS.get(profile.name, ()) if os.path.lexists(os.path.join(folder, name))]
@@ -312,7 +315,7 @@ def run_gate(profile, models, listen_ip="127.0.0.1", canary_dir=None, out=None) 
         "profile": profile.name, "result": result, "cli_path": found[0], "cli_realpath": found[1],
         "cli_version": agent_cli.cli_version(profile, found), "wrapper_digest": agent_cli.wrapper_digest(profile),
         "models": sorted(set(models)), "prompt_forms": [form for form, _ in prompt_forms(profile)],
-        "trust_omit": bool(profile["trust_args"]), "run_as": pwd.getpwuid(os.getuid()).pw_name,
+        "trust_omit": bool(profile["trust_args"]), "run_as": pwd.getpwuid(os.getuid()).pw_name, "runs_dir": agent_cli.runs_dir(state),
         "warnings": warnings, "passed_on": datetime.date.today().isoformat() if result == "PASS" else None,
     })
     if result == "PASS":
@@ -335,7 +338,7 @@ def main(argv=None) -> int:
     try:
         profile = agent_cli.load_profile(args.profile)
         result = run_gate(profile, [m for m in args.models.split(",") if m], args.listen_ip)
-    except (SetupError, agent_cli.ProfileError, OSError) as error:
+    except (SetupError, agent_cli.ProfileError, agent_cli.UnsafeDir, OSError) as error:
         print("lockdown: setup error: %s" % error, file=sys.stderr)
         return 2
     return 0 if result == "PASS" else 1
