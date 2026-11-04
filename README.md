@@ -601,6 +601,7 @@ Sign in at `/operator/login`. Default operator credentials: `operator` / `change
 * [Web UI guide](docs/guides/ui-guide.md) (operator and read-only guest, with screenshots)
 * [Operator embeddings guide](docs/operator/embeddings.md)
 * [MCP Tools Reference](docs/mcp_tools.md)
+* [Agent-CLI backends](docs/agent_cli_backends.md): opt-in cloud models through your workstation's Claude Code or Devin, behind a loopback bridge, anonymized and per project
 * [App Settings Reference](docs/app_settings_reference.md)
 * [Architecture](docs/architecture.md)
 * [Development Guide](docs/development.md)
