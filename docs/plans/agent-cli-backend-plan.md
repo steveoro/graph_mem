@@ -9,9 +9,9 @@ Context: today every LLM call in graph_mem goes through `SummaryGenerationClient
 OpenAI-compatible server). This train adds an **opt-in** second backend: an agent CLI (Claude Code, Devin, …) run on
 the operator's workstation behind a small host-side HTTP bridge, with the data anonymized and a per-project
 `cloud_allowed` gate. It is five PRs. **This plan details PR1** (a provider abstraction with no behaviour
-change; done, #151, 1.67.0), **PR2** (the anonymizer and `cloud_allowed`; done, #152, 1.68.0) **and PR3** (the host
-bridge, profiles and lockdown gate, written Nov 3 from `c588765`); PR4–PR5 get one-paragraph scopes and will each
-get their own step list before they start.
+change; done, #151, 1.67.0), **PR2** (the anonymizer and `cloud_allowed`; done, #152, 1.68.0), **PR3** (the host
+bridge, profiles and lockdown gate; done, #153, 1.69.0) and **PR4** (Rails wired to the bridge, written Nov 4 from
+`e708f3c`); PR5 gets a one-paragraph scope and its own step list before it starts.
 
 ## Hard rules (the whole train)
 - **No new MCP tool**, no new or changed tool argument or description; the default `/mcp` stays at **12** (readonly 9,
@@ -32,8 +32,8 @@ get their own step list before they start.
 |---|---|---|---|---|
 | **PR1** | `claude/llm-provider-abstraction` | Provider abstraction, **no behaviour change**: `Llm::Provider`, `Llm::OllamaProvider`, `Llm::Router`, `Llm::Registry`, prompt parts, one usage log line per call, spec-side `FakeProvider` and `SubprocessGuard` | `main` (1.66.0) ✅ #151 | **1.67.0** |
 | **PR2** | `claude/llm-anonymizer` | Anonymizer (typed HMAC tokens) + `cloud_allowed` per project (default false) + the gate that refuses a cloud provider for a project that doesn't allow it | PR1 | **1.68.0** |
-| **PR3** | `claude/llm-bridge` | Host bridge + profile framework + `devin` and `claude` profiles + the per-profile lockdown gate, all under `script/llm_bridge/` (not loaded by Rails) | `main` at 1.68.0 (PR2 merged) | **1.69.0** |
-| **PR4** | `claude/agent-cli-provider` | `Llm::AgentCliProvider` (HTTP to the bridge) + `Llm::ResponseNormalizer` + per-task fallback chains + settings + a probe | PR2, PR3 | **1.70.0** |
+| **PR3** | `claude/llm-bridge` | Host bridge + profile framework + `devin` and `claude` profiles + the per-profile lockdown gate, all under `script/llm_bridge/` (not loaded by Rails) | `main` at 1.68.0 (PR2 merged) ✅ #153 | **1.69.0** |
+| **PR4** | `claude/llm-bridge-rails` | `Llm::BridgeClient` + `Llm::AgentCliProvider` (HTTP to the bridge) + `Llm::ResponseNormalizer` + per-task fallback chains + settings + a probe + scan scope from the folder + #153 follow-ups | PR2, PR3 | **1.70.0** |
 | **PR5** | `claude/llm-switch-over` | Per-task switch-over, the inline gate, an `llm_cloud` queue, budgets and an `llm_usage` table, adopter docs | PR4 + a **PASS** lockdown gate per profile on Steve's workstation | **1.71.0** |
 
 PR3's bridge touches no Rails code. PR1 and PR2 merged first, so it takes 1.69.0; it also carries two small Rails
@@ -45,7 +45,8 @@ items (the typed-confirm button styling and masking people's names everywhere, s
   (`script/llm_bridge/lockdown_test.sh --profile <name>`) and keep its PASS/FAIL report as `gates/<profile>.json`;
   capture one **sanitized** JSON envelope per profile as a spec fixture (PR4 needs it); set the CLI vendor's
   data-sharing opt-out where one exists; answer the synthetic-HOME question per CLI (PR3 Decision).
-- **After PR4 merges:** set `LLM_BRIDGE_URL` and `LLM_BRIDGE_TOKEN` in the app's environment and run the probe
+- **After PR4 merges:** re-run the lockdown gate per profile (PR4 changes the wrapper digest), set `LLM_BRIDGE_URL` and
+  `LLM_BRIDGE_TOKEN_FILE` in the app's environment and run the probe
   (System → Summarization, or the rake task PR4 adds). Nothing switches over yet.
 - **After PR5 merges:** turn on a chain per task and a budget, allow cloud for the projects that may use it, and
   **re-run the lockdown gate after every CLI update** (a stale or failed gate disables that profile).
@@ -1123,6 +1124,403 @@ Checkpoints are push-and-continue; stop **only** for these:
 ---
 
 
+## PR4: Rails ↔ host bridge (`AgentCliProvider`, normalizer, chains, probe) → 1.70.0
+
+**Written 2026-11-04 (Europe/Rome)** from `main` at `e708f3c` (#153 merged, **1.69.0**). Every file:line below was
+checked against that commit. If a line has moved, find it by the quoted text. If the code no longer matches, **stop
+and ask Steve**. The full suite, rubocop and brakeman were run green on `e708f3c` plus the lockfile update that lands
+just before this plan. No PR4 code exists yet.
+
+### Brief
+| | |
+|---|---|
+| Branch / PR | `claude/llm-bridge-rails`, **one PR**, titled "Rails provider for the LLM host bridge (1.70.0)" |
+| Commits | S → C1 → C2 → N → K → P → H → T → D → R, one commit per step (more is fine, fewer is not). **D and R are in this PR** |
+| Checkpoints | **push and continue**: push, get CI green, keep going; Steve reviews as it lands. Stop only for the conditions in "Stop and ask Steve if" |
+| Version | **1.70.0** (Decision 1) |
+| Data | synthetic only (`SynthWidget`, `Alpha Service`, `Gadget Project`, `Zq7…` canaries, `.example` hosts); the bridge is a **stub on `127.0.0.1`** in specs; never a real bridge, CLI, model call, account or token |
+| Read first | `CLAUDE.md`, `AGENTS.md`; this plan (hard rules, the PR2 and PR3 sections); `script/llm_bridge/README.md` (the HTTP contract); `app/services/llm/{provider,router,registry,cloud_call,cloud_gate,scope}.rb`; `app/services/project_scanner/chunked_extraction.rb`; `docs/summarization.md` ("LLM providers", "Anonymization and cloud access") |
+| MCP surface | **unchanged** (22 / 12 / 9 / 22; snapshots byte-identical); no tool gains or loses an argument. A change would be a stop-and-ask |
+| Migration / settings / gem | **none** / **four new `AppSettings` fields** (rails-settings-cached, no migration) / **none** |
+
+### Goal
+- Rails can reach the PR3 bridge: `Llm::BridgeClient` (HTTP to `127.0.0.1` only, the token read from the user's own
+  `0600` file) and `Llm::AgentCliProvider` (`cloud?` true), which goes through the existing `CloudCall`: gate,
+  anonymize, restore.
+- Every bridge outcome becomes today's result Hash, so the call sites don't change. The bridge's own `400` can never
+  make a scan part split. Only a real "prompt too long" (`413`) does.
+- Per-task chains (`summary`, `scan`, `judge`), each defaulting to `ollama`, so nothing changes until the operator
+  changes a chain.
+- A probe (System → Settings, Summaries panel, and a rake task) reports whether the bridge is reachable, plus each
+  profile's gate and tripped state.
+- The scan's cloud scope comes from the server-side project record, not from a name the caller typed.
+- The #153 follow-ups land: a parent rule for the state dir, a fail-closed `devin` tool-name map, optional `hook.log`
+  rotation, and one sanitized envelope per profile as fixtures.
+- With no configuration, every request, prompt, result, `[llm]` line and REST/MCP output stays **byte-identical** to
+  1.69.0's.
+
+### Non-goals
+- Switching any task over by default, budgets, the `llm_cloud` queue, `llm_usage`, adopter docs (PR5).
+- The full inline gate (PR5). PR4 only skips cloud providers for inline calls (Decision 5).
+- Changing scan part sizes for a cloud window, or lifting the judge's 8,192-character cut (Decisions 6 and 7).
+- Any bridge behaviour change beyond the follow-ups below: same routes, statuses and classes as #153.
+- Binding or calling anything but `127.0.0.1`, including `localhost`; Docker bridge networking.
+
+### What the code looks like today (verified at `e708f3c`)
+
+**Provider layer (#151, #152):**
+- `app/services/llm/provider.rb`: the result Hash `{ ok:, text:, error:, latency_ms: }` plus optional `prompt_tokens`,
+  `done_reason`, `http_status`. `generate(prompt, style:, options: nil)`, `available?` (false), `cloud?` (false),
+  `model` (nil).
+- `app/services/llm/registry.rb:12`: `BUILT_IN = { ollama: OllamaProvider }.freeze`. `override` is spec-only.
+- `app/services/llm/router.rb:16`: `TASKS = %i[summary scan judge]`. `:18`: `CHAIN = %i[ollama].freeze`, the same for
+  every task. `generate` (:44) tries the chain, a cloud provider goes through `CloudCall` and moves on only on
+  `CloudCall.refusal?`, and any other result is returned. `usable?` (:66) asks `CHAIN.first` only.
+- `app/services/llm/cloud_call.rb:20`: `REFUSALS = %w[prompt_not_segmented cloud_not_allowed anonymizer_refused]`.
+  It masks, sends `INSTRUCTION + masked.text`, then restores. A scan answer with leftover tokens fails as
+  `anonymization_round_trip_failed`.
+- `app/services/llm/usage_log.rb:27-43`: one `[llm]` line with task, provider, model, inline, sizes, latency and
+  outcome. No prompt text.
+- `app/services/summarization_config.rb`: `ALLOWED_PROVIDERS` (:15) `ollama openai_compatible`.
+  `app/models/app_settings.rb`: rails-settings-cached fields (`summary_provider` at :34), so new fields need no
+  migration.
+- `spec/support/outbound_http_guard.rb:32`: loopback is allowed on any port but 11434. There's no WebMock; `judge_spec`
+  stubs `Net::HTTP`.
+
+**The 400-split trap:**
+- `app/services/project_scanner/chunked_extraction.rb:24`: `PROMPT_REJECTED_STATUSES = [ 400, 413 ].freeze`.
+- `failure` (:106-115): its first line returns "prompt rejected … (HTTP n)" for **any** `ok: false` result whose
+  `http_status` is in that list, and the caller splits the part.
+- So a bridge `400 bridge_bad_request` (a malformed request, or a model outside the profile's pattern) passed on as
+  `http_status: 400` would split every part, and split again, ~32 doomed calls per scan.
+
+**Scan scope (deferred in #152 "until before PR4"):**
+- `chunked_extraction.rb:38`: `llm_scope:` defaults to `Llm::Scope.for_scan(project_name)`. The real caller is
+  `project_scanner/llm_extraction.rb:32`, `Llm::Scope.for_scan(prompt_project_name, project_root: @project_root)`.
+- `app/services/llm/scope.rb` `for_scan` resolves the Project root **by the caller's name**:
+  `MemoryEntity.where(entity_type: …, project_id: nil, name: project_name.to_s).pick(:id)`. The column collation is
+  case- and accent-insensitive, and `pick` is arbitrary if two roots collide. It keeps
+  `File.expand_path(project_root)`, which doesn't resolve symlinks.
+- `app/services/llm/cloud_gate.rb:24-27`: allowed only if every project has `cloud_allowed` and, for a scan, its
+  `cloud_root` equals `scope.scan_root` byte for byte. `cloud_root` is set by
+  `projects/cloud_access_controller.rb:21-27` from `project.last_scan_root`, the newest completed scan's
+  `details["project_root"]` (`memory_entity.rb:59-76`).
+- What is left after #152's `cloud_root` fix:
+  1. The name, not the folder, picks which project's row is checked.
+  2. A path compared as text passes after a symlink at `cloud_root` (or above it) is re-pointed to another tree.
+  3. The anonymizer dictionary is built from the project the name picked.
+
+**Bridge (#153), the contract PR4 consumes:**
+- `script/llm_bridge/bridge.py:39-41`, `STATUS`: `ok` 200, `bridge_bad_request` 400, `bridge_unauthorized` 401,
+  `bridge_not_found` 404, `bridge_method_not_allowed` 405, `prompt_too_long` 413, `bridge_busy` 429; `cli_missing`,
+  `gate_missing`, `gate_failed`, `gate_stale` and `tripped` 503; `bridge_error` 500.
+  - CLI-level failures are `200` with `ok: false` and `failure_class` (`cli_timeout`, `cli_quota`,
+    `cli_rate_limited`, `cli_auth`, `cli_model_unavailable`, `cli_payment_required`, `cli_config`, `cli_sandbox`,
+    `cli_truncated`, `cli_turn_limit`, `cli_error`, `cli_bad_output`, `cli_tool_use`).
+  - A model the gate didn't test is `503 gate_missing`.
+  - Response: `{ ok, text, failure_class, model_used, cli_version, latency_ms }`, where `text` is already unwrapped
+    from the CLI envelope.
+- Request: exactly `profile`, `model`, `prompt`, `timeout_s` (1..600), `task`, `run_id` (UUID), body ≤ 1 MiB, header
+  `X-GM-Bridge-Token`. `GET /v1/health` gives the per-profile `cli_ok`, `gate`, `gate_ok` and `tripped`.
+- `script/llm_bridge/agent_cli.py:119-134` `private_dir(path, parents=False)`: with `parents`, every ancestor must be
+  root's or the user's with no group or other write (`TRUSTED_ANCESTORS` excepted). `state_dir` (:137-143) checks the
+  leaf only. `runs_dir` (:146-155) uses `parents=True`, which refuses a 0775 home on user-private-group systems.
+- `script/llm_bridge/tool_trace.py:17-43`: transcript tool calls are matched by name (`function_name`, `name`,
+  `tool_name`, lower-cased) to `hook.log` refusals. An unnamed call counts as use (fail closed).
+  `agent_cli.py:405` reads `hook.log` from a byte offset taken before the run. `hook.log` only grows.
+- `spec/llm_bridge_isolation_spec.rb:18-22`: "is never named under app/, lib/ or config/" (`llm_bridge`, `agent_cli`,
+  `bridge.token`). It was written "until PR4", so **step T changes it, and that edit is planned** (not a stop-and-ask).
+- Deployment: `docker-compose.yml:21` `network_mode: host`, so the container reaches the host's `127.0.0.1`. The image
+  runs as uid `1000` (`Dockerfile:55-57`). The token file the app reads must be owned by **the app's own uid**
+  (Decision 3).
+
+### Design
+
+**1. `Llm::BridgeClient`** (`app/services/llm/bridge_client.rb`, plain `Net::HTTP`, no gem)
+- **URL:** `LLM_BRIDGE_URL` (ENV only). It must parse as `http://127.0.0.1:<port>` with no path beyond `/`, no
+  userinfo, query or fragment, where the host is the literal `127.0.0.1` (not `localhost`, not `::1`, not another
+  127/8 address). Anything else means the client is **not configured** (`available?` false), and the probe says why.
+  Redirects are never followed.
+- **Token:** `LLM_BRIDGE_TOKEN_FILE` (default `~/.local/state/agent-cli/bridge.token` under the app user's home).
+  - It's read on each request with `File.open(path, File::RDONLY | File::NOFOLLOW)`, then `stat` on the handle.
+  - It must be a regular file, owned by `Process.uid`, with mode `& 0o077 == 0` and at least 32 bytes. Otherwise:
+    not configured, reason `token_file_unsafe`.
+  - The value is never logged, never put in an error or exception message, and never stored in a setting.
+  - **No `LLM_BRIDGE_TOKEN` env var** (Decision 3): an env value leaks through `/proc` and crash dumps, and the
+    train's earlier wording is replaced.
+- **Request:** `POST /v1/complete` with the six keys. `run_id` = `SecureRandom.uuid`. `timeout_s` = the caller's
+  `options[:timeout]` clamped to `1..600` (default the summary timeout). The open timeout is 2 s; the read timeout is
+  `timeout_s + 10`. The body is refused before sending if it's over 1 MiB (it becomes `413`, so the scan splits).
+- **Response → result** (the one mapping table, spec'd row by row):
+
+| Bridge | Result Hash | Router | Scan |
+|---|---|---|---|
+| 200 `ok: true` | `ok: true, text:` (normalized, §2), `latency_ms:` | returned | parsed |
+| 200 `ok: false`, `cli_*` | `ok: false, error: "agent_cli_<class>"`, **no** `http_status` | next provider (Decision 4) | part fails, no split |
+| 200 `cli_truncated` | as above plus `done_reason: "length"` | next provider | not split (the part was cut, the same as Ollama's `length`) |
+| 200 `cli_tool_use` | `error: "agent_cli_tool_use"` | **not** retried elsewhere for that call; logged loudly | part fails |
+| 413 `prompt_too_long` | `ok: false, error: "prompt_too_long", http_status: 413` | returned (not a provider fault) | **split** |
+| 400 / 404 / 405 | `ok: false, error: "bridge_bad_request"` (etc.), **no** `http_status` | next provider | part fails, **never split** |
+| 401 | `error: "bridge_unauthorized"`, no `http_status` | next provider | part fails |
+| 429 | `error: "bridge_busy"` | next provider | part fails |
+| 503 `cli_missing` / `gate_missing` / `gate_failed` / `gate_stale` / `tripped` | `error: "bridge_<class>"` (e.g. `bridge_gate_stale`) | next provider | part fails |
+| 500 `bridge_error` | `error: "bridge_error"` | next provider | part fails |
+| connect refused, timeout, non-JSON, unknown status or class | `error: "bridge_unreachable"` / `"bridge_bad_response"` | next provider | part fails |
+
+  The only `http_status` the client ever sets is **413**. A spec asserts that no other row carries `http_status`, and
+  that `ChunkedExtraction#failure` gives "prompt rejected" only for the 413 row (§5).
+- **One run at a time:** the bridge already answers 429 per profile. The client doesn't retry; the chain does
+  (Decision 4).
+
+**2. `Llm::ResponseNormalizer`** (`app/services/llm/response_normalizer.rb`)
+- Input: the bridge's `text` (already unwrapped from the CLI envelope by the bridge) and the caller's options.
+- With `format: "json"` (scan, judge): strip one surrounding Markdown fence (```` ```json ```` … ```` ``` ````) and
+  leading or trailing prose around the outermost JSON object or array, found by a bracket scan that respects strings
+  (no regex backtracking, a hard cap of 256 KiB). If no balanced object is found, the text goes on unchanged, and the
+  caller's existing "not valid JSON" path handles it.
+- Otherwise (summary): trim, nothing else.
+- Then apply the caller's `max_output_length`, the same cut `SummaryGenerationClient` applies (8,192 by default,
+  `nil` = none for the scan).
+- Restoring tokens is `CloudCall`'s job and happens **after** normalizing, so the normalizer never sees plain names.
+
+**3. `Llm::AgentCliProvider`** (`app/services/llm/agent_cli_provider.rb`)
+- `name` "agent_cli". `cloud?` true. `model`: the profile's model setting. `available?`: the client is configured and
+  the profile and model settings are non-blank. It does **not** call the bridge; the probe does.
+- `generate(prompt, style:, options:)` = `BridgeClient#complete` → `ResponseNormalizer`. It never raises: any
+  exception becomes `bridge_error` with no message detail.
+- Registered as `BUILT_IN[:agent_cli]`. It's reachable only through a chain setting.
+
+**4. Chains and settings** (`AppSettings`, System → Settings → Summaries panel)
+- `llm_chain_summary`, `llm_chain_scan`, `llm_chain_judge`: strings, default `"ollama"`. Allowed values: `ollama`,
+  `agent_cli`, `agent_cli,ollama`, `ollama,agent_cli` (a fixed list, validated, not free text).
+- `llm_agent_cli_profile` (default `""`, one of the profile names the probe last saw, or `claude`/`devin`) and
+  `llm_agent_cli_model` (default `""`, a short identifier pattern `\A[A-Za-z0-9._:-]{1,64}\z`).
+- `Router::CHAIN` becomes `Router.chain(task)` read from the setting on every call (never cached, like `CloudGate`).
+  `usable?(task)` is true if any provider in the task's chain is `available?`.
+- The fallback rule (Decision 4): a `CloudCall` refusal, or an `agent_cli` failure from the table above, moves on to
+  the next provider. `prompt_too_long` (413) is returned so the scan can split, and `agent_cli_tool_use` is returned
+  (not hidden by a fallback).
+- With the defaults, `chain(task) == [:ollama]` for every task, so the code path is today's (P0 goldens prove it).
+
+**5. Scan scope keyed on the server-side record (closes the #152 item)**
+- `Llm::Scope.for_scan(project_name, project_root:)` becomes `Llm::Scope.for_scan(project_root:, project_name:)`.
+  - `project_root` is `File.realpath`-resolved. A missing folder gives an unscoped scope (refused).
+  - The project is resolved **from the folder**: the Project roots with `cloud_allowed: true` whose `cloud_root`
+    equals the realpath **byte for byte, compared in Ruby** (after a SQL prefilter that the collation can't make
+    stricter).
+  - Exactly one match → that id. Zero or more than one → unscoped (refused as `cloud_not_allowed`).
+  - The caller's `project_name` is then only checked: if it doesn't equal that record's `name` (case-sensitive), the
+    scope is refused. The prompt header keeps using the name as today.
+- `CloudGate.allowed?` additionally requires, for a scan, `File.realpath(cloud_root) == cloud_root`. A `cloud_root`
+  that is (or now passes through) a symlink is refused until the operator turns Cloud off and on again. This needs no
+  migration.
+- `CloudAccessController#update` stores `File.realpath(last_scan_root)` when turning Cloud on. A folder that no longer
+  exists refuses with the existing "root changed" alert. The confirm text shows the realpath.
+- The default `llm_scope:` in `ChunkedExtraction#initialize` (:38) becomes an explicitly refused scope
+  (`Llm::Scope.for_scan(project_root: nil, project_name:)`), so nothing can reach the cloud by leaving it out.
+- The Ollama path still never asks the scope, so local scans don't change.
+
+**6. Bridge follow-ups from #153** (`script/llm_bridge/`, Python standard library)
+- **State dir parents** (`agent_cli.py:137-155`), one rule for `state_dir` and `runs_dir`, `private_dir(path,
+  parents=True)` with a widened ancestor test. Every ancestor must be:
+  - owned by root or the user,
+  - with no other-write bit,
+  - and group write only when the group is the user's own private group: `st_gid == os.getgid()` **and**
+    `grp.getgrgid(gid).gr_mem` is empty **and** no other passwd entry has that primary gid (`pwd.getpwall()` scan,
+    once per process).
+  - Otherwise `UnsafeDir`, naming the first offending dir.
+  - Documented in the README as "parents writable only by you, root, or your own private group". Tests cover a 0775
+    home with a private group (passes), a 0775 home whose group has another member (refused), and a 0777 parent
+    (refused).
+- **`devin` tool-name map** (a new optional profile key, `tool_trace.name_map`, `{ transcript_name: hook_name }`, both
+  lower-case strings, validated by `profile_schema.py`, and part of `wrapper_digest` because the profile file is).
+  - `tool_trace.py` maps a transcript name through it before matching. A name that is neither in `hook.log` nor
+    mapped to a hook name still counts as tool use, so it **fails closed** exactly as today.
+  - A map entry whose target never appears in `hook.log` for that run doesn't excuse the call.
+  - `devin.json` ships an empty map. The README says when to add an entry (after a CLI update renames a tool, and only
+    with a fresh gate PASS).
+- **`hook.log` rotation** (optional, Decision 8): `bridge.py` rotates `hook.log` to `hook.log.1` (one generation, 0600)
+  when it passes 1 MiB, **only while holding every profile lock**. That means no run is in flight, so
+  `agent_cli.py:405`'s offset can't point past the end. Skip it if it gets complicated; it's a size limit, not a
+  security fix.
+- **Sanitized envelopes:** `spec/fixtures/llm_bridge/envelopes/claude.json` and `devin.txt`. Each holds one captured
+  CLI answer with every value replaced by synthetic text (`Zq7…`, `.example`) and the shape kept. Used by
+  `script/llm_bridge/test` (the profile's envelope parsing) and by the Rails normalizer spec (through a synthetic
+  bridge response built from it). Until Steve supplies captured ones, Claude ships **synthetic** ones built from the
+  README's field list, each with a top comment field `"_note": "synthetic, replace with a sanitized capture"`.
+
+**7. Probe**
+- `Llm::BridgeProbe.call` → `{ configured:, reason:, reachable:, bridge_version:, profiles: { name => { cli_ok:,
+  gate_ok:, gate_result:, tripped: } } }` from `GET /v1/health`. It never returns the token, `cli_realpath`, or a
+  path.
+- `bin/rails llm:bridge_probe` prints it (one line per profile).
+- System → Settings, Summaries panel: a "Host bridge" block with the same facts and a "Check now" button (operator
+  only, POST, no auto-refresh). It shows nothing but "not configured" when the URL is unset.
+- No timestamps are compared. `passed_on` is shown as text only.
+
+### Steps
+
+#### S. Scan scope from the server-side record
+- §5: `scope.rb`, `cloud_gate.rb`, `cloud_access_controller.rb`, `llm_extraction.rb:32`, `chunked_extraction.rb:38`.
+- Specs (new files):
+  - `spec/services/llm/scope_for_scan_spec.rb`: the folder picks the project; a name mismatch refuses; two roots with
+    the same `cloud_root` refuse; a case-only folder difference refuses.
+  - `spec/services/llm/cloud_gate_symlink_spec.rb`: a symlinked `cloud_root`, and a re-pointed symlink above it,
+    refuse; temp dirs only.
+  - A request spec: turning Cloud on stores the realpath.
+- Existing `cloud_gate_spec` / `scope` specs must pass **unchanged**. If one needs an edit because it calls
+  `for_scan(name)` positionally, keep a positional-compatible signature instead. Editing it is a stop-and-ask.
+
+#### C1. `Llm::BridgeClient`
+- §1, plus `spec/services/llm/bridge_client_spec.rb`:
+  - URL validation (`localhost`, `::1`, `127.0.0.2`, `https`, a path, userinfo: all not configured);
+  - token file rules (missing, 0644, symlink, another owner via a stubbed `stat`, too short);
+  - the full mapping table, one example per row, against an in-process stub server on an ephemeral `127.0.0.1` port
+    (a `TCPServer` thread in `spec/support/bridge_stub.rb`);
+  - the open and read timeouts;
+  - a body over 1 MiB → 413 without a request;
+  - the token never appears in any log line or exception message (capture the logger).
+
+#### C2. `Llm::AgentCliProvider` and registry
+- §3. `BUILT_IN[:agent_cli]`.
+- `spec/services/llm/agent_cli_provider_spec.rb`: `available?` by configuration; `cloud?`; it never raises; it goes
+  through `CloudCall` (masked text reaches the stub, the answer is restored).
+
+**Checkpoint 1:** S, C1 and C2 pushed, CI green; open the **draft PR**. **Continue.**
+
+#### N. `Llm::ResponseNormalizer`
+- §2, plus `spec/services/llm/response_normalizer_spec.rb`: fences, prose around JSON, nested braces inside strings,
+  no JSON, the 256 KiB cap, `max_output_length` applied after unwrapping, and the summary path untouched. Inputs come
+  from the envelope fixtures (§6).
+
+#### K. Chains and settings
+- §4: the five `AppSettings` fields, the validated chain values, `Router.chain(task)`, the fallback rule, the Summaries
+  panel fields (operator only, audited like the other settings).
+- Specs:
+  - the defaults give `[:ollama]` for every task, and P0 goldens are byte-identical;
+  - each fallback row (agent_cli fails → ollama answers; 413 is returned, not fallen through; `tool_use` is returned);
+  - inline calls skip cloud providers (Decision 5);
+  - `usable?` per chain.
+
+#### P. The 400-split guard
+- New `spec/services/project_scanner/chunked_extraction_bridge_spec.rb`:
+  - with `agent_cli` first in the scan chain and the stub answering `400` for every part: **no** split, each part
+    fails once, and the outcome's `first_error` is `bridge_bad_request`;
+  - with `413`: the part splits once, as with Ollama;
+  - with `503 gate_stale` and an `agent_cli,ollama` chain: Ollama answers.
+- No change to `PROMPT_REJECTED_STATUSES` (Ollama's 400 still splits). The guard is the client never setting
+  `http_status: 400`.
+
+**Checkpoint 2:** N, K and P pushed, CI green. Paste one synthetic request and response pair and its `[llm]` line in
+the PR. **Continue.**
+
+#### H. Bridge follow-ups
+- §6: `agent_cli.py` parent rule, `profile_schema.py` and `tool_trace.py` name map, the optional rotation in
+  `bridge.py`, the envelope fixtures, and Python tests for each (`test_agent_cli.py`, `test_profiles.py`,
+  `test_bridge.py`).
+- `wrapper_digest` changes because `agent_cli.py` changes, so every workstation gate goes **stale** after merge.
+  That's expected: the PR body and CHANGELOG say "re-run the lockdown gate per profile".
+
+#### T. Probe, isolation and cross-cutting checks
+- §7: `Llm::BridgeProbe`, the rake task, the panel block, with specs (a request spec for the panel and the button, and
+  a probe spec against the stub).
+- `spec/llm_bridge_isolation_spec.rb:18-22` (**planned edit**): the "never named" example becomes "named only by"
+  `app/services/llm/bridge_client.rb`, `agent_cli_provider.rb`, `bridge_probe.rb`, `lib/tasks/llm.rake` and the panel
+  partial. It also adds: nothing under `app/`, `lib/` or `config/` reads a file under `script/llm_bridge/`, and none
+  calls `Open3`, `system`, `spawn`, `exec` or backticks (`SubprocessGuard` stays).
+- MCP: counts 22 / 12 / 9 / 22 unchanged; `tools_list_snapshot_spec` green without re-recording;
+  `git diff db/structure.sql` empty.
+
+#### D. Docs
+- `docs/summarization.md` "LLM providers": the agent-CLI provider, the two env vars, the token-file rules, the chain
+  settings and their defaults, the mapping table (short), what "next provider" means, and that inline calls never use
+  it yet. "Anonymization and cloud access": the scan scope now comes from the folder (realpath) and `cloud_root`.
+- `script/llm_bridge/README.md`: the parent rule, `name_map`, rotation, "re-run the gate after upgrading graph_mem".
+- `docs/architecture.md`: one line linking Rails to the bridge.
+- `docs/plans/ui-dashboard-plan.md`: the AC4 row ✅ with the PR number, if that row exists.
+
+**Checkpoint 3:** H, T and D pushed, CI green. **Continue.**
+
+#### R. Release
+- `lib/graph_mem/version.rb` and `skills/graph-mem-mcp-toolset/SKILL.md:18` → **1.70.0**.
+- `CHANGELOG.md` `## [1.70.0] - <merge date>`, summary "Rails provider for the LLM host bridge":
+  - **Added:** `agent_cli` provider over the loopback host bridge, per-task chains (default `ollama`, so nothing
+    changes), a bridge probe (Settings and `bin/rails llm:bridge_probe`).
+  - **Changed:** a cloud scan's project now comes from the scanned folder (realpath) and its `cloud_root`, not from
+    the name given. Bridge state-dir parents may be group-writable only by the user's private group. `devin` gains a
+    fail-closed tool-name map.
+  - **Upgrade note:** re-run `lockdown_test.sh --profile <name>` for each profile (the wrapper digest changed).
+- This plan: mark **PR3 ✅ #153 (1.69.0)** in the train table and the header paragraph, and PR4's row with this PR's
+  number.
+- Mark the PR **ready for review**. Don't tag, don't push tags, don't run `rake release`.
+
+### Security checklist
+- The app calls only `http://127.0.0.1:<port>`, never follows a redirect, and reads the token from its own 0600 file
+  on each request. The token is never in an env var, setting, log line or error.
+- No bridge status other than 413 reaches a scan as `http_status`. The bridge's 400 never splits a part.
+- Every cloud call still goes through `CloudCall` (gate, mask, restore). A scan's gate keys on the realpath of the
+  scanned folder and the stored `cloud_root`, never on a caller's name.
+- A `cli_tool_use` answer is never masked by a fallback to another provider.
+- Inline MCP calls never wait on a cloud provider.
+- Bridge state and run dirs: parents only writable by the user, root or the user's private group. The tool-name map
+  can only narrow what counts as refused, never widen it.
+
+### Size
+About **2,000–2,600 changed lines** (about half tests): S ~300, C1 ~450, C2 ~150, N ~250, K ~350, P ~150, H ~450, T
+~250, D ~120, R ~20. **If the diff passes ~3,000 lines, stop and ask Steve.** Files under ~500 lines, methods under
+~60.
+
+### Decisions (open, with the recommended default)
+1. **Version.** *Default:* **1.70.0**.
+2. **Loopback literal.** *Default:* only the literal `127.0.0.1`, which is what the bridge binds. Alternative: also
+   `localhost` (it can resolve to `::1`, where nothing listens, and a hosts-file entry could point it elsewhere).
+3. **Token source.** *Default:* `LLM_BRIDGE_TOKEN_FILE`, a 0600 file owned by the app's uid. In the container, that
+   means a read-only bind mount of a copy owned by uid 1000. On a host whose user is uid 1000, the bridge's own file
+   can be mounted as is. Alternative: an `LLM_BRIDGE_TOKEN` env var (simpler, but leaks through process
+   environments). **Steve to confirm** which one his deployment uses.
+4. **Fallback.** *Default:* `agent_cli` failures (including 503 gate problems and 429 busy) fall through to the next
+   provider in the chain. 413 and `cli_tool_use` don't. Alternative: no fallback at all in PR4.
+5. **Inline calls.** *Default:* PR4 skips cloud providers for `inline: true` (`detect_contradictions`), so an inline
+   call never waits up to the bridge timeout inside an MCP request. PR5 makes this the full inline gate.
+   Alternative: leave it to PR5 (an operator setting a judge chain before PR5 would make that tool slow).
+6. **Scan part size for a cloud window.** *Default:* unchanged (`summary_num_ctx`). Cloud windows are larger, so parts
+   are conservative. PR5 revisits.
+7. **Judge's 8,192-char cut.** *Default:* unchanged.
+8. **`hook.log` rotation.** *Default:* in, as specified (one generation at 1 MiB, only with every profile lock held).
+   Alternative: drop it from PR4.
+9. **Private-group test.** *Default:* gid == the user's primary gid, the group has no listed members, and no other
+   account has it as its primary group. Alternative: refuse any group-writable parent and document `chmod g-w` (the
+   0775-home case then needs a manual step).
+
+### Acceptance criteria
+- With no configuration, every existing spec, P0 golden, REST JSON and MCP output is byte-identical. Every chain
+  defaults to `ollama`.
+- The client refuses any URL but `http://127.0.0.1:<port>` and any unsafe token file. Every row of the mapping table
+  is spec'd. Only 413 carries `http_status`, and a bridge 400 never splits a scan part (spec'd).
+- A cloud scan's scope comes from the folder's realpath and `cloud_root`. A mismatched name, a symlinked or
+  re-pointed `cloud_root`, and duplicate roots are refused (spec'd).
+- The probe reports reachability and per-profile gate and tripped state without a path or the token.
+- Python: the parent rule, name map, rotation and envelope fixtures tested. `wrapper_digest` covers the new profile
+  key.
+- MCP 22 / 12 / 9 / 22, snapshots byte-identical, no migration, no gem.
+- CircleCI (rspec, rubocop, brakeman) and Actions (lint, scan_ruby, scan_js, llm_bridge) green. Synthetic data and
+  generic paths only.
+
+### Stop and ask Steve if
+Checkpoints are push-and-continue; stop **only** for these:
+- Anything would add an MCP tool, change a tool's arguments, description or output, change an MCP snapshot, or push
+  the default `/mcp` past 12 tools.
+- The design needs a **migration**, a new gem, or a Python package outside the standard library.
+- The diff passes ~3,000 lines.
+- Anything would weaken the lockdown (the gate, the tripped rule, the fail-closed tool-use check, the token or
+  loopback rules) or the anonymizer and cloud gate (`CloudCall`, `CloudGate`, the scan scope).
+- An existing spec or fixture other than the planned `llm_bridge_isolation_spec.rb` edit has to change to pass.
+- A quoted line no longer matches the code (`PROMPT_REJECTED_STATUSES`, `Router::CHAIN`, `Scope.for_scan`,
+  `CloudGate.allowed?`, `bridge.py`'s `STATUS`, `private_dir`).
+
+---
+
+
 ## Later PRs (scopes; each gets its own step list)
 
 **PR2: anonymizer + `cloud_allowed` (1.68.0).** Detailed above ("PR2: anonymizer + `cloud_allowed` → 1.68.0").
@@ -1130,16 +1528,8 @@ Checkpoints are push-and-continue; stop **only** for these:
 **PR3: host bridge + profiles + lockdown gate (1.69.0).** Detailed above ("PR3: host bridge + profiles + lockdown
 gate → 1.69.0").
 
-**PR4: `AgentCliProvider` + normalizer + chains (1.70.0).** `Llm::AgentCliProvider` (`cloud?` true) posts to
-`LLM_BRIDGE_URL` with `LLM_BRIDGE_TOKEN` (env only, never a setting or log line; loopback only, enforced), and
-`Llm::ResponseNormalizer` unwraps the CLI's JSON envelope (`result` / `is_error` for `claude`, per profile), strips
-fences and chatter around JSON answers, applies the caller's `max_output_length` **after** unwrapping, and maps
-bridge errors to today's result keys (413 → `http_status` 413 so the scan still splits). Settings: `llm_chain_summary`,
-`llm_chain_scan`, `llm_chain_judge` (default `ollama` each, so nothing changes), the bridge profile per provider, and
-a probe (System → Summarization and a rake task) that reports reachability, profile and gate status. Decisions for
-its plan: how a cloud window sizes scan parts; whether a failed scan part may fall back to the next provider
-mid-scan; whether the judge's 8,192-char cut is lifted. Specs use the PR3 sanitized envelope fixtures and a stubbed
-bridge.
+**PR4: Rails ↔ host bridge (1.70.0).** Detailed above ("PR4: Rails ↔ host bridge (`AgentCliProvider`, normalizer,
+chains, probe) → 1.70.0").
 
 **PR5: switch-over (1.71.0).** Per-task switch-over behind the chains (still `ollama` by default); the inline gate (an
 inline call, i.e. `detect_contradictions`, never waits on the cloud: it uses Ollama or returns unjudged, the job
