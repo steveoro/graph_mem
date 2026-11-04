@@ -42,7 +42,7 @@ module System
     def bridge_probe
       AppSettings.clear_cache
       @group = SettingsSchema.group(:summaries)
-      @bridge_probe = Llm::BridgeProbe.call
+      @bridge_probe = Llm::BridgeProbe.call(chains: true)
       render :show
     end
 
