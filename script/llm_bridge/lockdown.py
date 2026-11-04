@@ -173,7 +173,7 @@ def hook_logs(profile, state: str) -> bool:
     if not profile["tool_trace"]["hook_log"]:
         return True
     run_id = "control-" + str(uuid.uuid4())
-    offset = agent_cli._size(os.path.join(state, "hook.log"))
+    mark = agent_cli._log_mark(os.path.join(state, "hook.log"))
     event = json.dumps({"hook_event_name": "PreToolUse", "tool_name": "gm-control", "tool_input": {}}).encode()
     with tempfile.TemporaryDirectory(prefix="agent-cli-hook-") as home:
         env = {"PATH": agent_cli.BASE_PATH, "HOME": home, "LANG": "C.UTF-8", "AGENT_CLI_STATE": state, "GM_LLM_RUN_ID": run_id}
@@ -181,7 +181,7 @@ def hook_logs(profile, state: str) -> bool:
             done = subprocess.run([agent_cli.HOOK], input=event, env=env, cwd=home, capture_output=True, timeout=10)
         except (OSError, subprocess.TimeoutExpired):
             return False
-    return done.returncode == 2 and bool(agent_cli._hook_lines(state, offset, run_id))
+    return done.returncode == 2 and bool(agent_cli._hook_lines(state, mark, run_id))
 
 
 def ancestor_warnings(path: str) -> list:

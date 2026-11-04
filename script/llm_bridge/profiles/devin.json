@@ -77,7 +77,8 @@
     "hook_log": true,
     "max_turns": null,
     "export_path": "{run}/transcript.atif",
-    "stdout_pattern": null
+    "stdout_pattern": null,
+    "name_map": {}
   },
   "env": {
     "home": "synthetic",

@@ -11,7 +11,7 @@ from __future__ import annotations
 import collections
 import json
 import os
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 TOOL_KEYS = ("tool_calls", "tool_call", "tool_use", "function_call")
 NAME_KEYS = ("function_name", "name", "tool_name")
@@ -58,36 +58,51 @@ def transcript_tool_names(text: Optional[str], exit_code) -> Optional[List[str]]
         return None
 
 
-def hook_lines(state: str, offset: int, run_id: str) -> List[str]:
-    """The ``hook.log`` lines written for ``run_id`` after byte ``offset``."""
+def log_mark(path: str) -> Tuple[Optional[int], int]:
+    """``(inode, size)`` of ``hook.log`` before a run; ``(None, 0)`` when it doesn't exist yet."""
+    try:
+        info = os.stat(path)
+    except FileNotFoundError:
+        return None, 0
+    return info.st_ino, info.st_size
+
+
+def hook_lines(state: str, mark: Tuple[Optional[int], int], run_id: str) -> Optional[List[str]]:
+    """The ``hook.log`` lines written for ``run_id`` since ``mark`` (``log_mark`` before the run). None when the
+    log was rotated, replaced, truncated or removed since then: lines may be lost, so the caller fails closed."""
+    inode, offset = mark
     try:
         with open(os.path.join(state, "hook.log"), "rb") as handle:
-            handle.seek(offset)
+            info = os.fstat(handle.fileno())
+            if inode is not None and (info.st_ino != inode or info.st_size < offset):
+                return None
+            handle.seek(offset if inode is not None else 0)
             tail = handle.read().decode("utf-8", "replace")
+    except FileNotFoundError:
+        return None if inode is not None else []
     except OSError:
-        return []
+        return None
     return [line for line in tail.splitlines() if ("\t%s\t" % run_id) in line]
-
-
-def file_size(path: str) -> int:
-    """A file's size, or 0 when it doesn't exist (the ``hook.log`` offset before a run)."""
-    return os.path.getsize(path) if os.path.isfile(path) else 0
 
 
 def _refused(lines: List[str]) -> collections.Counter:
     return collections.Counter((line.split("\t") + ["", "", "?"])[2].lower() or "?" for line in lines)
 
 
-def tool_use(profile, proc: dict, envelope: dict, lines: List[str], transcript: Optional[str], stdout: str):
+def tool_use(profile, proc: dict, envelope: dict, lines: Optional[List[str]], transcript: Optional[str], stdout: str):
     """``"used"`` (cli_tool_use), ``"denied"`` (cli_tool_denied) or None.
 
-    Too many turns, the stdout pattern or an unreadable transcript is use. Otherwise any hook line or
-    transcript tool call is use, except on a profile whose tools are denied rather than removed
-    (``tools_fully_disabled: false``, hook wired): there, when every named call in the transcript has its
-    own refusal by the same name in ``hook.log``, each was refused. An unnamed call is use.
+    Too many turns, the stdout pattern, an unreadable transcript or, on a profile with the hook wired, an
+    unreadable or moved ``hook.log`` (``lines`` None) is use. Otherwise any hook line or transcript tool call is use, except on a profile whose tools are denied
+    rather than removed (``tools_fully_disabled: false``, hook wired): there, when every named call in the
+    transcript has its own refusal by the same name in ``hook.log``, each was refused. A transcript name is
+    first looked up in ``tool_trace.name_map`` (transcript name → hook name); that only renames, so each
+    call still needs its own refusal, and an unnamed or unrefused call is use.
     """
     trace, turns = profile["tool_trace"], envelope["turns"]
-    if (trace["max_turns"] is not None and isinstance(turns, int) and turns > trace["max_turns"]) or \
+    if lines is None and not trace["hook_log"]:
+        lines = []  # no hook wired: nothing in hook.log can be this run's
+    if lines is None or (trace["max_turns"] is not None and isinstance(turns, int) and turns > trace["max_turns"]) or \
             (profile.stdout_re and profile.stdout_re.search(stdout)):
         return "used"
     names = transcript_tool_names(transcript, proc["exit"]) if trace["export_path"] else []
@@ -95,6 +110,7 @@ def tool_use(profile, proc: dict, envelope: dict, lines: List[str], transcript: 
         return "used"
     if not names and not lines:
         return None
-    calls = collections.Counter(names)
+    name_map = trace.get("name_map") or {}
+    calls = collections.Counter(name_map.get(name, name) for name in names)
     hooked = not profile["tools_fully_disabled"] and trace["hook_log"] and "?" not in calls and not (calls - _refused(lines))
     return "denied" if hooked else "used"

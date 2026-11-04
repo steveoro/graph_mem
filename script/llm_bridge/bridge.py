@@ -33,6 +33,7 @@ BRIDGE_VERSION = "1.0.0"
 LISTEN = "127.0.0.1"
 DEFAULT_PORT = 8765
 MAX_BODY = 1024 * 1024
+ROTATE_BYTES = 1024 * 1024  # hook.log moves to hook.log.1 (one generation) past this
 TOKEN_MIN_BYTES = 32
 KEYS = {"profile", "model", "prompt", "timeout_s", "task", "run_id"}
 TASKS = ("summary", "scan", "judge")
@@ -172,6 +173,7 @@ class Bridge:
         if not lock.acquire(blocking=False):
             return "bridge_busy", {}
         try:
+            self.rotate_hook_log(name)
             if self.tripped(name):
                 return "tripped", {}
             problem, info = self.gate_check(name, request["model"])
@@ -184,6 +186,32 @@ class Bridge:
             return result["failure_class"] or "ok", dict(result, cli_version=info["cli_version"])
         finally:
             lock.release()
+
+    def rotate_hook_log(self, held: str) -> bool:
+        """Move ``hook.log`` past ROTATE_BYTES to ``hook.log.1`` (one generation, 0600), only when every other
+        profile's lock is free too, so no bridge run is reading it. A run outside the bridge (the gate) that
+        sees it move fails closed (``tool_trace.hook_lines``). True when it rotated."""
+        path = os.path.join(self.state, "hook.log")
+        try:
+            if os.lstat(path).st_size <= ROTATE_BYTES:
+                return False
+        except OSError:
+            return False
+        taken = []
+        try:
+            for other, lock in self.locks.items():
+                if other != held:
+                    if not lock.acquire(blocking=False):
+                        return False
+                    taken.append(lock)
+            os.replace(path, path + ".1")
+            os.chmod(path + ".1", 0o600)
+            return True
+        except OSError:
+            return False
+        finally:
+            for lock in taken:
+                lock.release()
 
     def log(self, fields: dict):
         """One line per request (validated fields only; never the prompt, answer, stderr, token or env)."""

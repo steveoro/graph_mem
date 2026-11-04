@@ -14,6 +14,8 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import functools
+import grp
 import hashlib
 import json
 import os
@@ -31,7 +33,7 @@ import uuid
 from typing import Dict, List, Optional, Tuple
 
 from profile_schema import BUILT_ENV, CLASSES, HOOK, Profile, ProfileError, load_profile, shipped_profiles  # noqa: F401 (re-exported)
-from tool_trace import file_size as _size, hook_lines as _hook_lines, tool_use  # noqa: F401 (re-exported)
+from tool_trace import hook_lines as _hook_lines, log_mark as _log_mark, tool_use  # noqa: F401 (re-exported)
 
 HERE = os.path.dirname(os.path.realpath(__file__))
 STDOUT_CAP = 256 * 1024
@@ -116,30 +118,66 @@ def wrapper_digest(profile: Profile) -> str:
     return digest.hexdigest()
 
 
+def private_group(gid: int) -> bool:
+    """True when ``gid`` is the user's own private group: the user's primary group, with no listed members, and
+    no other account's primary group (the user-private-group scheme behind 0775 homes)."""
+    if gid != os.getgid():
+        return False
+    return _private_group(gid, os.getuid())
+
+
+@functools.lru_cache(maxsize=None)
+def _private_group(gid: int, uid: int) -> bool:
+    try:
+        if grp.getgrgid(gid).gr_mem:
+            return False
+    except KeyError:
+        return False
+    return not any(entry.pw_gid == gid and entry.pw_uid != uid for entry in pwd.getpwall())
+
+
+def trusted_parent(folder: str, info) -> bool:
+    """A parent dir nobody else can write: root's or the user's, no other-write bit, and group write only for
+    the user's private group (``private_group``). ``TRUSTED_ANCESTORS`` (tests) always pass."""
+    if folder in TRUSTED_ANCESTORS:
+        return True
+    if info.st_uid not in (0, os.getuid()) or info.st_mode & 0o002:
+        return False
+    return not info.st_mode & 0o020 or private_group(info.st_gid)
+
+
 def private_dir(path: str, parents: bool = False) -> bool:
-    """A real (not symlinked) dir the user owns, mode 0700; with ``parents``, every parent is root's or the user's
-    and not group- or other-writable, so nobody else can add config that a CLI finds by walking up."""
+    """A real (not symlinked) dir the user owns, mode 0700; with ``parents``, every parent passes ``trusted_parent``,
+    so nobody else can add config that a CLI finds by walking up."""
+    return unsafe_parent(path, parents) is None
+
+
+def unsafe_parent(path: str, parents: bool = True) -> Optional[str]:
+    """``private_dir``'s check, naming what fails: None when it passes, else ``path`` or the first unsafe parent."""
     try:
         info = os.lstat(path)
         if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.getuid() or info.st_mode & 0o077:
-            return False
+            return path
         folder = os.path.realpath(path)
         while parents and os.path.dirname(folder) != folder:
             folder = os.path.dirname(folder)
-            above = os.lstat(folder)
-            if folder not in TRUSTED_ANCESTORS and (above.st_uid not in (0, os.getuid()) or above.st_mode & 0o022):
-                return False
-        return True
+            if not trusted_parent(folder, os.lstat(folder)):
+                return folder
+        return None
     except OSError:
-        return False
+        return path
 
 
 def state_dir() -> str:
-    """Return ``$AGENT_CLI_STATE`` (default ``~/.local/state/agent-cli``), created 0700; UnsafeDir unless private."""
+    """Return ``$AGENT_CLI_STATE`` (default ``~/.local/state/agent-cli``), created 0700; UnsafeDir unless it is
+    private and every dir above it is writable only by you, root or your own private group."""
     path = os.environ.get("AGENT_CLI_STATE") or os.path.join(real_home(), ".local", "state", "agent-cli")
     os.makedirs(path, mode=0o700, exist_ok=True)
-    if not private_dir(path):
+    bad = unsafe_parent(path)
+    if bad == path:
         raise UnsafeDir("%s must be your own 0700 dir, not a symlink" % path)
+    if bad:
+        raise UnsafeDir("%s is above %s and writable by someone else" % (bad, path))
     return os.path.realpath(path)
 
 
@@ -149,8 +187,10 @@ def runs_dir(state: str) -> str:
     runtime = os.environ.get("XDG_RUNTIME_DIR") or ""
     path = os.path.join(runtime, "agent-cli") if runtime and private_dir(runtime, parents=True) else os.path.join(state, "runs")
     os.makedirs(path, mode=0o700, exist_ok=True)
-    if not private_dir(path, parents=True):
-        raise UnsafeDir("%s and every dir above it must be writable only by you or root" % path)
+    bad = unsafe_parent(path)
+    if bad:
+        raise UnsafeDir("%s and every dir above it must be writable only by you, root or your own private group (%s fails)"
+                        % (path, bad))
     return path
 
 
@@ -402,7 +442,7 @@ def run_cli(profile: Profile, prompt: str, model: str, timeout_s: float, run_id:
         if env is None:
             cls = "cli_auth"
             return _outcome(model, cls, started)
-        offset = _size(os.path.join(state, "hook.log"))
+        mark = _log_mark(os.path.join(state, "hook.log"))
         proc = execute(build_argv(profile, found[1], model, mode, ctx, omit_trust), env, run,
                        data if mode["mode"] == "stdin" else None, timeout_s)
         if proc is None:
@@ -411,9 +451,10 @@ def run_cli(profile: Profile, prompt: str, model: str, timeout_s: float, run_id:
         stdout, stderr = proc["stdout"].decode("utf-8", "replace"), proc["stderr"].decode("utf-8", "replace")
         export = profile["tool_trace"]["export_path"]
         transcript = _read_text(subst(export, ctx)) if export else None
-        raw = {"stdout": stdout, "stderr": stderr, "transcript": transcript, "hook_lines": _hook_lines(state, offset, run_id)}
+        lines = _hook_lines(state, mark, run_id)  # None: hook.log was rotated or replaced mid-run (counts as use)
+        raw = {"stdout": stdout, "stderr": stderr, "transcript": transcript, "hook_lines": lines or []}
         envelope = unwrap(profile, stdout)
-        used = tool_use(profile, proc, envelope, raw["hook_lines"], transcript, stdout)
+        used = tool_use(profile, proc, envelope, lines, transcript, stdout)
         cls = {"used": "cli_tool_use", "denied": "cli_tool_denied"}.get(used) or classify(profile, proc, envelope, stdout, stderr)
         text = envelope["text"] if isinstance(envelope["text"], str) else ""
         return _outcome(model, cls, started, clean(text), raw)
