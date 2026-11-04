@@ -18,8 +18,10 @@ anything here; PR4 adds the client. Python 3.9+ standard library and POSIX `sh` 
 | `test/` | `fake_cli.py` and the tests: `python3 -m unittest discover -s script/llm_bridge/test` |
 
 State lives in `$AGENT_CLI_STATE` (default `~/.local/state/agent-cli`, 0700): `bridge.token`,
-`claude.token`, `gates/<profile>.json`, `tripped/<profile>.json`, `hook.log` and `runs/` (each run's dir, so
-none sits under the shared `/tmp`, whose parents CLIs search for config). Nothing is written
+`claude.token`, `gates/<profile>.json`, `tripped/<profile>.json` and `hook.log`. Run dirs go in
+`$XDG_RUNTIME_DIR/agent-cli` (0700, with root-owned parents), or `$AGENT_CLI_STATE/runs` when there is no
+private runtime dir. They never go in the shared `/tmp`, because CLIs search a run dir's parents for
+config. Nothing is written
 under the checkout at run time.
 
 ## Install
@@ -62,9 +64,13 @@ Then it sends judge-style prompts whose statement asks the CLI to do one of thes
 Every run also carries decoys, each with its own random tag or marker:
 - `AGENTS.md` and `CLAUDE.md` in the run dir, in Devin's user config dir and in the synthetic home;
 - MCP configs that start a server which touches a marker: `.mcp.json`, `~/.claude.json`, and
-  Devin's project and user `mcp_config.json`;
-- a project `.devin/config.json` hook that touches a marker;
+  Devin's user `mcp_config.json`;
 - project `.claude/settings.json` files that point the API at the listener.
+
+The run dir has no `.devin/` decoy. Devin always loads native project config (`.devin/config.json`,
+`.devin/mcp_config.json` and their `.local` variants) from its working dir and that dir's parents,
+whatever its flags say. A real run dir is created empty and private, so the gate checks the parents
+instead: any of those files there FAILs the `devin` gate.
 
 Each prompt also runs once without the profile's `trust_args`. A CLI that then refuses to run counts as
 not having loaded anything.
@@ -78,8 +84,8 @@ and prompt form, the gate FAILs.
 it logs), calls the hook, prints a decoy's text or is classified `cli_tool_use`. These are listed as
 **WARN**:
 - with `env.home: real`, user-level `AGENTS.md`, `CLAUDE.md` and MCP configs in your home;
-- `.devin`, `.git`, `.jj`, `AGENTS.md`, `CLAUDE.md` or `.mcp.json` in the parents of the runs dir
-  (`$AGENT_CLI_STATE/runs`), which a CLI may find by walking up.
+- `.devin`, `.git`, `.jj`, `AGENTS.md`, `CLAUDE.md` or `.mcp.json` in the parents of the runs dir,
+  which a CLI may find by walking up.
 
 The gate writes `gates/<profile>.json` (0600): `profile`, `result`, `cli_path`, `cli_realpath`,
 `cli_version`, `wrapper_digest`, `models`, `prompt_forms`, `trust_omit`, `run_as`, `warnings`,
@@ -141,7 +147,7 @@ that (PR4).
 | `env` | `home` (`synthetic` or `real`), `xdg_data_home` (`owner` or `synthetic`), `set` (fixed `NAME: value` pairs), `pass` (env names to pass through; empty in both profiles), `secret_env` (`NAME: file`, each file the user's own and 0600) |
 | `failure_patterns`, `exit_codes` | Class → regex (case-insensitive, over the answer, the subtype and stderr of a failed run), and exit code → class |
 
-Each run gets a new 0700 dir under `$AGENT_CLI_STATE/runs` as its cwd: no repo, no `.git`, no `AGENTS.md`. It holds
+Each run gets a new 0700 dir under the runs dir as its cwd: no repo, no `.git`, no `AGENTS.md`. It holds
 `prompt.txt`, the synthetic `home/`, `config/`, `cache/` and `data/`. The environment is built from
 scratch:
 - `PATH=/usr/local/bin:/usr/bin:/bin` plus the CLI's directory;
@@ -168,8 +174,10 @@ group is killed. stdout is capped at 256 KiB and stderr at 64 KiB. The run dir i
   false`, print mode refuses to run in a new dir, so the `trust_omit` runs end without answering (their
   class shows in the report) ([config](https://docs.devin.ai/cli/reference/configuration/read-config-from),
   [commands](https://docs.devin.ai/cli/reference/commands), [permissions](https://docs.devin.ai/cli/reference/permissions)).
-  Still to confirm: whether `--config` replaces or adds to the other config layers, whether a tool that
-  needs approval is denied in print mode, and the transcript format.
+  The first gate runs showed two more things. Native project config in the working dir is loaded even
+  with `--config` and every import off. And a dir under your home counts as trusted once `~/.devin`
+  exists, so the `trust_omit` runs answered there; the runtime dir avoids both. Still to confirm:
+  whether a tool that needs approval is denied in print mode, and the transcript format.
 - `failure_patterns`: they are written from the vendors' documented messages. A sanitized envelope per
   profile becomes a spec fixture for PR4.
 

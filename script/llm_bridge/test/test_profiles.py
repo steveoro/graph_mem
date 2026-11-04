@@ -147,8 +147,8 @@ class EnvironmentAndRunDirTest(FakeCliCase):
         with mock.patch.object(agent_cli.tempfile, "mkdtemp", side_effect=record):
             result, _ = self.run_fake("devin", "@fake echo_cwd_mode\n")
         self.assertEqual(result["text"].strip(), "0o700")
-        self.assertEqual(os.path.dirname(made[0]), os.path.join(self.state, "runs"))  # not the shared /tmp
-        self.assertEqual(os.stat(os.path.dirname(made[0])).st_mode & 0o777, 0o700)
+        self.assertEqual(os.path.dirname(made[0]), self.runs)  # $XDG_RUNTIME_DIR/agent-cli, not the shared /tmp
+        self.assertEqual(os.stat(self.runs).st_mode & 0o777, 0o700)
         self.assertFalse(os.path.exists(made[0]))
 
     def test_a_failed_run_dir_is_kept_only_when_asked(self):
@@ -168,7 +168,13 @@ class EnvironmentAndRunDirTest(FakeCliCase):
         argv = json.loads(result["text"])
         mcp_config = argv[argv.index("--mcp-config") + 1]
         self.assertTrue(mcp_config.endswith("/empty-mcp.json"))
-        self.assertTrue(mcp_config.startswith(os.path.join(self.state, "runs", "agent-cli-run-")))
+        self.assertTrue(mcp_config.startswith(os.path.join(self.runs, "agent-cli-run-")))
+
+    def test_runs_fall_back_to_the_state_dir_without_a_private_runtime_dir(self):
+        os.chmod(self.runtime, 0o755)
+        self.assertEqual(agent_cli.runs_dir(self.state), os.path.join(self.state, "runs"))
+        with mock.patch.dict(os.environ, {"XDG_RUNTIME_DIR": ""}):
+            self.assertEqual(agent_cli.runs_dir(self.state), os.path.join(self.state, "runs"))
 
 
 if __name__ == "__main__":

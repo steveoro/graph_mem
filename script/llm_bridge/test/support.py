@@ -35,9 +35,11 @@ class FakeCliCase(unittest.TestCase):
         self.addCleanup(shutil.rmtree, self.tmp, True)
         self.state = os.path.join(self.tmp, "state")
         self.bin = os.path.join(self.tmp, "bin")
-        os.mkdir(self.state, 0o700)
-        os.mkdir(self.bin, 0o700)
-        patcher = mock.patch.dict(os.environ, {"AGENT_CLI_STATE": self.state})
+        self.runtime = os.path.join(self.tmp, "runtime")
+        for folder in (self.state, self.bin, self.runtime):
+            os.mkdir(folder, 0o700)
+        self.runs = os.path.join(self.runtime, "agent-cli")
+        patcher = mock.patch.dict(os.environ, {"AGENT_CLI_STATE": self.state, "XDG_RUNTIME_DIR": self.runtime})
         patcher.start()
         self.addCleanup(patcher.stop)
         for name in ("claude", "devin"):

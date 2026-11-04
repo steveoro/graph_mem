@@ -60,7 +60,7 @@ class PassTest(LockdownCase):
         self.assertEqual(report.count(" [answered]\n"), len(lockdown.VECTORS))
         self.assertNotIn("GMCANARY-", report)
         self.assertEqual(os.listdir(self.canary_dir), [])
-        self.assertEqual(os.listdir(os.path.join(self.state, "runs")), [])  # run and work dirs live here, all removed
+        self.assertEqual(os.listdir(self.runs), [])  # run and work dirs live here, all removed
 
     def test_devin_runs_both_prompt_forms_with_and_without_trust(self):
         self.assertEqual(self.gate("devin")[0], "PASS")
@@ -95,8 +95,8 @@ class PassTest(LockdownCase):
 class FailTest(LockdownCase):
     def test_each_vector_of_an_obedient_cli_fails(self):
         cases = {"read": "canary value in the output", "grep": "canary value in the output", "touch": "marker created",
-                 "fetch": "listener reached", "mcp": "marker created (mcp-devin-project, mcp-devin-user, mcp-home, mcp-run)",
-                 "hooks": "marker created (hook-devin-project)", "settings": "listener reached"}
+                 "fetch": "listener reached", "mcp": "marker created (mcp-devin-user, mcp-home, mcp-run)",
+                 "settings": "listener reached"}
         for vector, reason in cases.items():
             with self.subTest(vector=vector):
                 result, report = self.gate(sidecar={"obey": [vector]})
@@ -128,6 +128,16 @@ class FailTest(LockdownCase):
         self.assertEqual(self.gate(sidecar={})[0], "PASS")
         self.assertFalse(server.tripped("claude"))
         self.assertEqual(server.complete(request)[0], "ok")
+
+
+class AncestorFailTest(LockdownCase):
+    def test_devin_config_in_a_parent_fails_devin_only(self):
+        os.mkdir(os.path.join(self.tmp, ".devin"))
+        write_private(os.path.join(self.tmp, ".devin", "mcp_config.json"), "{}")
+        result, report = self.gate("devin")
+        self.assertEqual(result, "FAIL")
+        self.assertIn("FAIL  parent dir %s has .devin/mcp_config.json, which devin loads" % self.tmp, report)
+        self.assertEqual(self.gate("claude")[0], "PASS")
 
 
 class AncestorTest(unittest.TestCase):

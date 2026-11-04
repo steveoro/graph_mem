@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 """Agent-CLI profiles and the wrapper (graph_mem ``script/llm_bridge/``, agent-CLI train PR3).
 
-A profile (``profiles/<name>.json``) describes one agent CLI as data: how to call it
-non-interactively with every tool, MCP server, config file and network action switched off, how
-to hand it the prompt, and how to read and classify its answer. ``run_cli`` runs it once in an
-empty 0700 directory with an environment built from scratch. Python 3.9+ standard library only;
-the Rails app never loads this file.
+A profile (``profiles/<name>.json``) describes one agent CLI as data: how to call it non-interactively with
+every tool, MCP server, config file and network action off, how to hand it the prompt, and how to read and
+classify its answer. ``run_cli`` runs it once in an empty 0700 directory with an environment built from
+scratch. Python 3.9+ standard library only; the Rails app never loads this file.
 
     python3 agent_cli.py check --profile claude
     python3 agent_cli.py run --profile claude prompt.txt <model> 120
@@ -119,8 +118,12 @@ def state_dir() -> str:
 
 
 def runs_dir(state: str) -> str:
-    """Return ``<state>/runs`` (0700): not the shared /tmp, since CLIs search a run dir's parents for config."""
-    path = os.path.join(state, "runs")
+    """Where run dirs go (created 0700): ``$XDG_RUNTIME_DIR/agent-cli`` when that is the user's own 0700 dir (its
+    parents are root's), else ``<state>/runs``. Never the shared /tmp: CLIs search a run dir's parents for config."""
+    runtime = os.environ.get("XDG_RUNTIME_DIR") or ""
+    info = os.stat(runtime) if runtime and os.path.isdir(runtime) else None
+    private = info is not None and info.st_uid == os.getuid() and not info.st_mode & 0o077
+    path = os.path.join(runtime, "agent-cli") if private else os.path.join(state, "runs")
     os.makedirs(path, mode=0o700, exist_ok=True)
     return path
 
