@@ -100,6 +100,21 @@ RSpec.describe "Llm::Router chains" do
     expect(stub.requests.size).to eq(1)
   end
 
+  it "returns Ollama's outage, not the cloud refusal after it, when Ollama is down and the project doesn't allow cloud" do
+    chain!(:summary, "ollama,agent_cli")
+    project.update!(cloud_allowed: false)
+    down = FakeProvider.new(name: "ollama", result: { ok: false, text: nil, error: "provider_unavailable", latency_ms: 1.0, http_status: nil })
+
+    lines = llm_usage_lines do
+      expect(with_llm_provider(down) { Llm::Router.generate(:summary, prompt, style: "concise") }).to include(error: "provider_unavailable", provider: "ollama")
+    end
+    expect(lines.map { |line| line.values_at("provider", "refused") }).to eq([ [ "ollama", nil ], [ "agent_cli", "cloud_not_allowed" ] ])
+    expect(stub.requests).to be_empty
+
+    chain!(:summary, "agent_cli")
+    expect(route).to include(error: "cloud_not_allowed", provider: "agent_cli")
+  end
+
   it "returns Ollama's outage unchanged on the default chain" do
     down = FakeProvider.new(name: "ollama", result: { ok: false, text: nil, error: "provider_unavailable", latency_ms: 1.0, http_status: nil })
 

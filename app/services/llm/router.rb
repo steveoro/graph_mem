@@ -53,8 +53,9 @@ module Llm
       # @param style [String] "concise" or "detailed"
       # @param options [Hash, nil] the request options, passed on only when given
       # @param inline [Boolean] true when the call runs inside an MCP request (detect_contradictions)
-      # @return [Hash] the provider's result plus `provider:` (its name); an inline call whose whole
-      #   chain was skipped gets `{ ok: false, error: "inline_skipped", … }`
+      # @return [Hash] the provider's result plus `provider:` (its name); when no provider answers,
+      #   the last real failure (a cloud refusal only when nothing was tried before it); an inline
+      #   call whose whole chain was skipped gets `{ ok: false, error: "inline_skipped", … }`
       # @raise [ArgumentError] for an unknown task
       def generate(task, prompt, style:, options: nil, inline: false)
         result = nil
@@ -67,8 +68,10 @@ module Llm
           end
           if provider.cloud?
             provider = provider.for_task(task) if provider.respond_to?(:for_task)
-            result = CloudCall.new(task: task, provider: provider, prompt: prompt, style: style, options: options, inline: inline).call
-            next if CloudCall.refusal?(result) || BridgeClient.fall_through?(result)
+            attempt = CloudCall.new(task: task, provider: provider, prompt: prompt, style: style, options: options, inline: inline).call
+            # A refusal sent nothing: it never hides an earlier provider's failure (Ollama down, say).
+            result = attempt unless result && CloudCall.refusal?(attempt)
+            next if CloudCall.refusal?(attempt) || BridgeClient.fall_through?(attempt)
           else
             result = local(task, provider, prompt.to_s, style, options, inline)
             next if local_outage?(result)

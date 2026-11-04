@@ -25,7 +25,10 @@ State lives in `$AGENT_CLI_STATE` (default `~/.local/state/agent-cli`, 0700): `b
 dir and the runs dir must each be a real (not symlinked) 0700 dir you own, with **parents writable only by
 you, root, or your own private group**: every dir above is root's or yours, has no other-write bit, and is
 group-writable only when its group is your primary group, has no listed members and is no other
-account's primary group (the 0775 home of a user-private-group system passes). Otherwise the bridge
+account's primary group (the 0775 home of a user-private-group system passes). The check reads the
+group and account databases the system lists (`getgrgid`, `getpwall`). With a directory service (LDAP,
+SSSD) that doesn't enumerate its accounts, another account sharing your primary group may not show up,
+so on such a system run `chmod g-w` on those parents instead of relying on the group test. Otherwise the bridge
 won't start and the gate stops with a setup error naming the first offending dir. Run dirs never go in
 the shared `/tmp`, because CLIs search a run dir's parents for config. Nothing is written under the
 checkout at run time.
