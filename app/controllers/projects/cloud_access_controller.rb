@@ -17,8 +17,9 @@ module Projects
       allowed = { "true" => true, "false" => false }[params[:allowed].to_s]
       return head :unprocessable_content if allowed.nil?
 
-      # Cloud scans must come from the folder of the project's last completed scan (nil: none yet).
-      root = allowed ? project.last_scan_root : nil
+      # Cloud scans must come from the folder of the project's last completed scan (nil: none yet),
+      # recorded as its realpath (PR4): Llm::CloudGate refuses a recorded folder with a symlink on it.
+      root = allowed ? Llm::Scope.recorded_folder(project.last_scan_root) : nil
       # The folder must be the one the confirm showed: a scan finished since then needs a fresh look.
       return redirect_to(projects_path, alert: t("projects.cloud_access.root_changed", project: project.name)) if allowed && params[:root].to_s != root.to_s
 

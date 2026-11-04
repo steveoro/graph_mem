@@ -29,7 +29,7 @@ class ProjectScanner
         chunks: plan.chunks, project_name: prompt_project_name, num_ctx: scan_num_ctx,
         num_predict: scan_num_predict, timeout: [ SummarizationConfig.resolved_config[:timeout].to_i, 120 ].max,
         on_part: ->(part, parts) { part_progress!(part, parts) },
-        llm_scope: Llm::Scope.for_scan(prompt_project_name, project_root: @project_root)
+        llm_scope: Llm::Scope.for_scan(project_root: @project_root, project_name: prompt_project_name)
       ).call
       record_extraction(plan: plan, outcome: outcome)
       if partial?
