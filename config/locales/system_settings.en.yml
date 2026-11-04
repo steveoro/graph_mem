@@ -294,6 +294,22 @@ en:
         invalid_num_ctx: "Context window must be 0 (use ENV/default) or between 2048 and 131072 tokens."
         invalid_observations_per_entity: "Observations per entity must be 0 (use ENV/default) or between 0 and 100."
         invalid_url: "Summary URL must be a valid http or https URL."
+        usage:
+          title: "LLM usage"
+          day: "%{day}"
+          none: "No LLM calls."
+          task: "Task"
+          provider: "Provider"
+          fields:
+            calls: "Calls"
+            ok: "OK"
+            errors: "Errors"
+            fallbacks: "Fallbacks"
+            refused: "Refused"
+            est_tokens: "Est. tokens"
+          no_budget: "%{task}: no budget set."
+          budget: "%{task}: calls %{calls}, tokens %{tokens} today."
+          left: "%{left} of %{limit} left"
         bridge:
           title: "Host bridge"
           not_configured: "Not configured (LLM_BRIDGE_URL is unset). Chains that name agent_cli skip it."

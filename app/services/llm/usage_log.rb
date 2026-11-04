@@ -9,7 +9,8 @@ module Llm
   # Sizes and outcome only: never the prompt, the answer, an error or a project or entity name. A
   # cloud call's line also has CLOUD_KEYS (what was masked, per type; the round trip) and measures
   # the masked prompt.
-  # Token estimates use TokenBudget::CHARS_PER_TOKEN. A logging failure never fails the call.
+  # Token estimates use TokenBudget::CHARS_PER_TOKEN. A logging failure never fails the call. Each
+  # line also feeds the per-day counters of the usage card (Llm::Usage, PR5).
   module UsageLog
     PREFIX = "[llm]"
     # The only extra keys a cloud call's line may carry: counts and outcomes, never text.
@@ -31,6 +32,7 @@ module Llm
       line = line.merge(cloud.slice(*CLOUD_KEYS)) if cloud
       line = line.merge(attempt_fields(provider, cloud, step)) if cloud || step.positive?
       Rails.logger.info("#{PREFIX} #{JSON.generate(line)}")
+      Usage.count(line)
     rescue StandardError
       nil
     end
