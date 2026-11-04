@@ -1,0 +1,51 @@
+{
+  "name": "claude",
+  "cli_path": "claude",
+  "version_args": ["--version"],
+  "base_args": ["-p", "--output-format", "json"],
+  "model_flag": "--model",
+  "model_pattern": "[A-Za-z0-9][A-Za-z0-9._:-]{0,63}",
+  "prompt": [
+    { "mode": "stdin", "max_bytes": 10000000 }
+  ],
+  "output": {
+    "format": "json",
+    "text_path": "result",
+    "error_path": "is_error",
+    "subtype_path": "subtype",
+    "turns_path": "num_turns"
+  },
+  "lockdown_args": ["--safe-mode", "--setting-sources", "user", "--tools", "", "--disallowedTools", "mcp__*", "--strict-mcp-config", "--mcp-config", "{run}/empty-mcp.json"],
+  "config_files": [
+    { "path": "{run}/empty-mcp.json", "content": { "mcpServers": {} } }
+  ],
+  "trust_args": [],
+  "max_turns_args": ["--max-turns", "1"],
+  "tools_fully_disabled": true,
+  "tool_trace": {
+    "hook_log": false,
+    "max_turns": 1,
+    "export_path": null,
+    "stdout_pattern": null
+  },
+  "env": {
+    "home": "synthetic",
+    "xdg_data_home": "synthetic",
+    "set": { "CLAUDE_CODE_DISABLE_CLAUDE_MDS": "1", "CLAUDE_CODE_DISABLE_AUTO_MEMORY": "1" },
+    "pass": [],
+    "secret_env": { "CLAUDE_CODE_OAUTH_TOKEN": "{state}/claude.token" }
+  },
+  "failure_patterns": {
+    "prompt_too_long": "prompt is too long|context (length|window) exceeded|too many (input )?tokens",
+    "cli_quota": "usage limit|quota|limit reached|out of (extra )?usage",
+    "cli_rate_limited": "rate[ _-]?limit|too many requests|overloaded|\\b429\\b",
+    "cli_auth": "invalid api key|not logged in|/login|authentication|unauthori[sz]ed|oauth token|\\b401\\b",
+    "cli_model_unavailable": "model\\b.{0,80}\\b(not found|not available|does not exist|unsupported)|invalid model|unknown model",
+    "cli_payment_required": "credit balance|payment required|billing|\\b402\\b",
+    "cli_config": "unknown option|unrecognized|invalid (option|argument|value|configuration)|error: option",
+    "cli_sandbox": "sandbox",
+    "cli_truncated": "max[ _]tokens|output (was )?truncated",
+    "cli_turn_limit": "error_max_turns|max(imum)? turns|turn limit"
+  },
+  "exit_codes": {}
+}
