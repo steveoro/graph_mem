@@ -165,6 +165,24 @@ en:
         llm_profile_devin_backup_models:
           label: "devin: backup models"
           description: "Up to three more models, comma-separated, tried in order when a model is unavailable, over quota, rate limited, needs payment, or wasn't tested by the gate."
+        llm_budget_summary_calls:
+          label: "Summaries: cloud calls per day"
+          description: "The most host bridge calls (retries and backup models included) summary may make per calendar day. 0: no limit. Over it, the call goes to the next chain entry (Ollama if listed)."
+        llm_budget_summary_tokens:
+          label: "Summaries: cloud tokens per day"
+          description: "The most estimated tokens (prompt plus answer) summary may send to the host bridge per calendar day. 0: no limit."
+        llm_budget_scan_calls:
+          label: "Scans: cloud calls per day"
+          description: "The most host bridge calls (retries and backup models included) scan may make per calendar day. 0: no limit. Over it, the call goes to the next chain entry (Ollama if listed)."
+        llm_budget_scan_tokens:
+          label: "Scans: cloud tokens per day"
+          description: "The most estimated tokens (prompt plus answer) scan may send to the host bridge per calendar day. 0: no limit."
+        llm_budget_judge_calls:
+          label: "Judging: cloud calls per day"
+          description: "The most host bridge calls (retries and backup models included) judge may make per calendar day. 0: no limit. Over it, the call goes to the next chain entry (Ollama if listed)."
+        llm_budget_judge_tokens:
+          label: "Judging: cloud tokens per day"
+          description: "The most estimated tokens (prompt plus answer) judge may send to the host bridge per calendar day. 0: no limit."
         llm_inline_cloud_tasks:
           label: "Requests that may use the host bridge"
           description: "Blank (default): no summarize call (MCP or REST) ever waits on the bridge. summary: a summarize call may try its chain's first host bridge profile, once, primary model only. detect_contradictions never does."

@@ -145,7 +145,8 @@ class SettingsSchema
               define_field("llm_profile_#{profile}_backup_models", validator: :llm_backup_models) ]
           end,
           define_field("llm_inline_cloud_tasks", validator: :llm_inline_cloud_tasks, input: :select, choices: %w[summary]),
-          "llm_inline_cloud_timeout"
+          "llm_inline_cloud_timeout",
+          *Llm::Router::TASKS.flat_map { |task| [ "llm_budget_#{task}_calls", "llm_budget_#{task}_tokens" ] }
         ], partial: "system/settings/summaries_panel"),
         define_group(:imports, [ define_field("import_observation_duplicate_max_distance", validator: :import_distance, input: :slider) ]),
         define_group(:project_scans, [

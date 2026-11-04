@@ -51,6 +51,13 @@ class AppSettings < RailsSettings::Base
   field :llm_profile_devin_backup_models, default: "", type: :string
   # PR5: the tasks a request (MCP or REST) may send to the bridge ("" or "summary"), and the most
   # seconds it then waits (one attempt, primary model only).
+  # PR5: daily cloud budgets per task, calls and estimated tokens (0 = no limit; Llm::Budget).
+  %w[summary scan judge].each do |task|
+    field :"llm_budget_#{task}_calls", default: 0, type: :integer,
+                                       validates: { numericality: { greater_than_or_equal_to: 0, less_than_or_equal_to: 1_000_000 } }
+    field :"llm_budget_#{task}_tokens", default: 0, type: :integer,
+                                        validates: { numericality: { greater_than_or_equal_to: 0, less_than_or_equal_to: 1_000_000_000 } }
+  end
   field :llm_inline_cloud_tasks, default: "", type: :string
   field :llm_inline_cloud_timeout, default: 20, type: :integer,
         validates: { numericality: { greater_than_or_equal_to: 5, less_than_or_equal_to: 60 } }

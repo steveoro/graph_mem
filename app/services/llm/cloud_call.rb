@@ -2,7 +2,8 @@
 
 module Llm
   # One call to a provider with `cloud?` true (agent-CLI PR2; no such provider exists until PR4).
-  # In order: the prompt must be a segmented Llm::Prompt, Llm::CloudGate must allow its scope, and
+  # In order: the prompt must be a segmented Llm::Prompt, Llm::CloudGate must allow its scope, the
+  # task's daily budget (Llm::Budget, PR5) must have room, and
   # the scope's anonymizer session must mask it cleanly; any refusal returns an `ok: false` Hash
   # without calling the provider. Otherwise the masked text (plus one instruction about tokens)
   # goes to the provider and the answer is restored before the caller sees it; an answer that
@@ -18,7 +19,7 @@ module Llm
     INSTRUCTION = "Tokens like ⟦ENT_…⟧ stand for names, paths or addresses. Copy them exactly as written; " \
                   "never translate, split, merge or invent them.\n\n"
     # Errors that mean the provider was not called: the Router tries the next provider.
-    REFUSALS = %w[prompt_not_segmented cloud_not_allowed anonymizer_refused].freeze
+    REFUSALS = %w[prompt_not_segmented cloud_not_allowed anonymizer_refused budget_exhausted].freeze
     ROUND_TRIP_FAILED = "anonymization_round_trip_failed"
     # PR5: a scan or judge answer that isn't JSON of the requested shape, after the one retry.
     INVALID_JSON = "agent_cli_invalid_json"
@@ -55,6 +56,7 @@ module Llm
     def call
       return refuse("prompt_not_segmented") unless @prompt.is_a?(Prompt)
       return refuse("cloud_not_allowed") unless CloudGate.allowed?(@prompt.scope)
+      return refuse(Budget::EXHAUSTED) if Budget.exhausted?(@task)
 
       session = @prompt.scope.session
       masked = begin
@@ -76,7 +78,8 @@ module Llm
         answer = deliver(text)
         (shape_failed = wrong_shape?(answer)) ? invalid(answer) : restore(session, answer)
       end
-      return result unless shape_failed
+      # The retry is a cloud send too: over budget, the invalid answer stands.
+      return result unless shape_failed && !Budget.exhausted?(@task)
 
       attempt(text + REPAIR, retry: 1) do
         answer = deliver(text + REPAIR)
@@ -99,7 +102,9 @@ module Llm
     end
 
     def deliver(text)
-      @options.nil? ? @provider.generate(text, style: @style) : @provider.generate(text, style: @style, options: @options)
+      answer = @options.nil? ? @provider.generate(text, style: @style) : @provider.generate(text, style: @style, options: @options)
+      Budget.charge(@task, tokens: Budget.estimate(text, answer[:text]))
+      answer
     end
 
     def wrong_shape?(answer)
