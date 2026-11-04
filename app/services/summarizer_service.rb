@@ -444,7 +444,8 @@ class SummarizerService
     if result[:ok]
       response[:summary] = result[:text]
       response[:generation_mode] = "llm"
-      response[:generated_by] = SummarizationConfig.resolved_config[:model]
+      # The model that answered when a cloud provider did (PR5), else the configured summary model.
+      response[:generated_by] = result[:model] || SummarizationConfig.resolved_config[:model]
       response[:fallback_reason] = nil
       response[:citation_check] = citation_check_for(result[:text], evidence)
       return response

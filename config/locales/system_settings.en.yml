@@ -165,6 +165,12 @@ en:
         llm_profile_devin_backup_models:
           label: "devin: backup models"
           description: "Up to three more models, comma-separated, tried in order when a model is unavailable, over quota, rate limited, needs payment, or wasn't tested by the gate."
+        llm_inline_cloud_tasks:
+          label: "Requests that may use the host bridge"
+          description: "Blank (default): no summarize call (MCP or REST) ever waits on the bridge. summary: a summarize call may try its chain's first host bridge profile, once, primary model only. detect_contradictions never does."
+        llm_inline_cloud_timeout:
+          label: "Request wait for the host bridge (seconds)"
+          description: "The most a summarize call waits on the bridge when opted in (5 to 60)."
         llm_agent_cli_profile:
           label: "Host bridge profile"
           description: "The agent CLI profile an agent_cli chain entry uses (claude or devin). Blank: none, so agent_cli is skipped."
@@ -286,6 +292,7 @@ en:
           tripped: "Tripped: a run used a tool. Re-run the lockdown gate."
           check_now: "Check now"
         invalid_chain: "Providers must be one of the listed values (ollama, agent_cli, claude, devin, or a listed combination)."
+        invalid_inline_cloud_tasks: "Requests that may use the host bridge must be blank or summary."
         invalid_backup_models: "Backup models must be up to three distinct model names, comma-separated."
         invalid_agent_cli_profile: "Host bridge profile must be blank, claude or devin."
         invalid_agent_cli_model: "Host bridge model must be blank or up to 64 letters, digits, dots, underscores, colons or dashes, not starting with one of the last four."

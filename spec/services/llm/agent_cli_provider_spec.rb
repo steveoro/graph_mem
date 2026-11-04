@@ -22,6 +22,8 @@ RSpec.describe Llm::AgentCliProvider do
     AppSettings.clear_cache
     AppSettings.llm_agent_cli_profile = "claude"
     AppSettings.llm_agent_cli_model = "zq7-model"
+    # PR5: summaries reach the bridge only with the request opt-in (these examples route summaries).
+    AppSettings.llm_inline_cloud_tasks = "summary"
   end
 
   after { AppSettings.clear_cache }

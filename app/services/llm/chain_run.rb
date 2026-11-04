@@ -15,13 +15,20 @@ module Llm
   # - an Ollama outage (no answer at all) moves on; any other Ollama result is returned;
   # - a refusal (nothing sent) never replaces an earlier failure.
   #
-  # An inline call never uses a provider that isn't `inline?` (the host bridge).
+  # A request-bound call (inline, or a summary: both its callers are requests, the summarize tool and
+  # POST /api/v1/summaries) never uses a provider that isn't `inline?` (the host bridge) unless the
+  # operator opted the summary task in (llm_inline_cloud_tasks); then it makes one cloud attempt,
+  # primary model only, with the timeout capped at llm_inline_cloud_timeout. detect_contradictions
+  # (inline judge) never does. The summary keeps its `inline: false` in the [llm] line (1.70.0's).
   #
   #   Llm::ChainRun.new(task: :scan, prompt: prompt, style: "concise", options: { format: "json" }, inline: false).call
   class ChainRun
     # Failures about the model, not the profile: the profile's next model may answer.
     BACKUP_TRIGGERS = %w[agent_cli_model_unavailable agent_cli_payment_required agent_cli_quota agent_cli_rate_limited
                          bridge_gate_missing].freeze
+    # Tasks whose every caller is a request (SummarizerService).
+    REQUEST_TASKS = %i[summary].freeze
+    INLINE_TIMEOUTS = (5..60)
     LOCAL_OUTAGE = "provider_unavailable"
     INLINE_SKIPPED = "inline_skipped"
 
@@ -69,7 +76,7 @@ module Llm
 
     def run_named(name)
       provider = Registry.fetch(name)
-      return skip(provider) if @inline && !provider.inline?
+      return skip(provider) if request_bound? && !provider.inline? && !inline_cloud?
 
       if provider.cloud?
         return if @cloud_over
@@ -126,7 +133,7 @@ module Llm
 
     def skip_result
       result = { ok: false, text: nil, error: INLINE_SKIPPED, latency_ms: 0.0, provider: @skipped.name }
-      UsageLog.record(task: @task, provider: @skipped, inline: true, prompt: "", result: result, cloud: { refused: INLINE_SKIPPED })
+      UsageLog.record(task: @task, provider: @skipped, inline: @inline, prompt: "", result: result, cloud: { refused: INLINE_SKIPPED })
       result
     end
 
@@ -135,15 +142,16 @@ module Llm
     end
 
     def request_bound?
-      @inline
+      @inline || REQUEST_TASKS.include?(@task)
     end
 
+    # The operator opted this task in to the cloud on request-bound calls (summary only; never inline).
     def inline_cloud?
-      false
+      !@inline && REQUEST_TASKS.include?(@task) && Chain.split_models(AppSettings.llm_inline_cloud_tasks).include?(@task.to_s)
     end
 
     def timeout_cap
-      nil
+      request_bound? ? AppSettings.llm_inline_cloud_timeout.to_i.clamp(INLINE_TIMEOUTS.min, INLINE_TIMEOUTS.max) : nil
     end
   end
 end

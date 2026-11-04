@@ -143,7 +143,9 @@ class SettingsSchema
           *Llm::AgentCliProvider::PROFILES.flat_map do |profile|
             [ define_field("llm_profile_#{profile}_model", validator: :llm_agent_cli_model),
               define_field("llm_profile_#{profile}_backup_models", validator: :llm_backup_models) ]
-          end
+          end,
+          define_field("llm_inline_cloud_tasks", validator: :llm_inline_cloud_tasks, input: :select, choices: %w[summary]),
+          "llm_inline_cloud_timeout"
         ], partial: "system/settings/summaries_panel"),
         define_group(:imports, [ define_field("import_observation_duplicate_max_distance", validator: :import_distance, input: :slider) ]),
         define_group(:project_scans, [

@@ -73,6 +73,12 @@ class SettingsSchema
       [ (I18n.t("system.settings.summaries.invalid_backup_models") unless valid), models.join(",") ]
     end
 
+    # Agent-CLI PR5: blank (no request ever waits on the bridge) or "summary".
+    def llm_inline_cloud_tasks(raw)
+      value = raw.to_s.strip
+      [ (I18n.t("system.settings.summaries.invalid_inline_cloud_tasks") unless [ "", "summary" ].include?(value)), value ]
+    end
+
     def http_url_summary(raw)
       [ (I18n.t("system.settings.summaries.invalid_url") unless blank_or_http_url?(raw)), raw ]
     end

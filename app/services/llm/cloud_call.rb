@@ -88,6 +88,9 @@ module Llm
       result = nil
       begin
         result = yield.merge(provider: @provider.name)
+        # PR5: the answering model, for the summary's generated_by (an existing key's value).
+        result = result.merge(model: @provider.model) if result[:ok] && @provider.model
+        result
       ensure
         cloud = @log.merge(extra)
         cloud[:json] = "invalid" if result && result[:error] == INVALID_JSON
