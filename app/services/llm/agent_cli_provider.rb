@@ -60,6 +60,11 @@ module Llm
       false
     end
 
+    # @return [Boolean] true: a CLI's JSON answer is checked and retried once (Llm::JsonShape)
+    def checks_json_shape?
+      true
+    end
+
     # @return [String, nil] the attempt's model (else AppSettings llm_agent_cli_model), when valid
     def model
       value = @attempt ? @attempt[:model] : AppSettings.llm_agent_cli_model.to_s
@@ -88,7 +93,9 @@ module Llm
       return { ok: false, text: nil, error: BridgeClient::NOT_CONFIGURED, latency_ms: 0.0 } unless profile && model
 
       result = @client.complete(prompt, profile: profile, model: model, task: @task, timeout_s: timeout(opts))
-      result[:ok] ? result.merge(text: ResponseNormalizer.call(result[:text], opts)) : result
+      # PR5: a cloud JSON answer is never cut (a cut breaks the document); SCAN_CAP still applies.
+      normalize = opts[:format].to_s == "json" ? opts.merge(max_output_length: nil) : opts
+      result[:ok] ? result.merge(text: ResponseNormalizer.call(result[:text], normalize)) : result
     rescue StandardError
       { ok: false, text: nil, error: "bridge_error", latency_ms: 0.0 }
     end

@@ -9,6 +9,8 @@ module Llm
   # - an agent-CLI profile entry tries its models in order (primary, then backups) while the failure
   #   is about the model (BACKUP_TRIGGERS); any other bridge or CLI failure, and a CloudCall refusal,
   #   moves on to the next chain entry;
+  # - an unusable cloud answer (CloudCall::UNUSABLE: invalid JSON after the one retry, a failed
+  #   round trip) skips every other cloud attempt, so a chain that lists Ollama ends there;
   # - a too-long prompt and tool use are returned (BridgeClient::STAYS), never hidden by a fallback;
   # - an Ollama outage (no answer at all) moves on; any other Ollama result is returned;
   # - a refusal (nothing sent) never replaces an earlier failure.
@@ -92,6 +94,7 @@ module Llm
       error = attempt[:error].to_s
       return :next_entry if refused
       return stop if BridgeClient::STAYS.include?(error)
+      return (@cloud_over = true) && :next_entry if CloudCall::UNUSABLE.include?(error)
       return :next_model if BACKUP_TRIGGERS.include?(error)
       return :next_entry if BridgeClient.fall_through?(attempt)
 

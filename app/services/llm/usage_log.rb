@@ -13,7 +13,7 @@ module Llm
   module UsageLog
     PREFIX = "[llm]"
     # The only extra keys a cloud call's line may carry: counts and outcomes, never text.
-    CLOUD_KEYS = %i[anonymized masked secrets round_trip leftover_out refused refused_detail].freeze
+    CLOUD_KEYS = %i[anonymized masked secrets round_trip leftover_out refused refused_detail retry json].freeze
 
     module_function
 
