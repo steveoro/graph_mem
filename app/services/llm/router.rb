@@ -26,6 +26,9 @@ module Llm
     CHAIN_VALUES = Chain::VALUES
     # The summary client's error for a request that failed (with an http_status when the server answered).
     LOCAL_OUTAGE = ChainRun::LOCAL_OUTAGE
+    # PR5: the Solid Queue concurrency group and key every cloud-using job shares (one at a time).
+    CLOUD_GROUP = "llm"
+    CLOUD_KEY = "llm_cloud"
     # The error of an inline call whose whole chain was skipped.
     INLINE_SKIPPED = ChainRun::INLINE_SKIPPED
 
@@ -74,6 +77,26 @@ module Llm
       # @raise [ArgumentError] for an unknown task
       def usable?(task)
         chain(task).any? { |name| Chain.profile_entry?(name) ? profile_usable?(name) : Registry.fetch(name).available? }
+      end
+
+      # @param task [Symbol] one of TASKS
+      # @return [Boolean] whether the task's chain names a cloud provider (an agent-CLI profile, or a
+      #   registered provider with cloud? true); read from the setting on every call
+      # @raise [ArgumentError] for an unknown task
+      def cloud_chain?(task)
+        chain(task).any? { |name| Chain.profile_entry?(name) || Registry.fetch(name).cloud? }
+      end
+
+      # The concurrency group and key a job uses (PR5): the shared CLOUD_GROUP / CLOUD_KEY while its
+      # task's chain is cloud, so at most one cloud-using job runs at once; else the job's own.
+      # Solid Queue reads them when the job is enqueued.
+      #
+      # @param task [Symbol] one of TASKS
+      # @param own [String] the job's own group or key
+      # @param shared [String] CLOUD_GROUP or CLOUD_KEY
+      # @return [String]
+      def concurrency_for(task, own, shared)
+        cloud_chain?(task) ? shared : own
       end
 
       # @param task [Symbol] one of TASKS

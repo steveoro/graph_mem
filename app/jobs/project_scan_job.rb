@@ -3,6 +3,12 @@
 # Background job that runs a project source scan and reports progress.
 class ProjectScanJob < ApplicationJob
   queue_as :default
+  # Agent-CLI PR5: while the scan chain names a cloud provider, the job shares the "llm/llm_cloud"
+  # semaphore with FactSupersedeJob, so one cloud-using job runs at a time; otherwise each scan has
+  # its own key (nothing waits). Read at enqueue; the duration covers a scan's longest run.
+  limits_concurrency to: 1, duration: 6.hours,
+                     group: ->(*) { Llm::Router.concurrency_for(:scan, self.class.name, Llm::Router::CLOUD_GROUP) },
+                     key: ->(scan_id, *) { Llm::Router.concurrency_for(:scan, "scan:#{scan_id}", Llm::Router::CLOUD_KEY) }
 
   # Statuses `perform` continues from: its own pending row, a claimed resume, or a running scan.
   RESUMABLE_STATUSES = %w[pending paused running].freeze
