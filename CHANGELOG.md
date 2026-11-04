@@ -5,6 +5,22 @@ All notable changes to GraphMem will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.70.0] - 2026-11-04
+
+Rails provider for the LLM host bridge (#154).
+
+### Added
+- An `agent_cli` provider that reaches the host bridge over loopback HTTP only (`LLM_BRIDGE_URL`, exactly `http://127.0.0.1:<port>`, and `LLM_BRIDGE_TOKEN_FILE`, a 0600 file owned by the app's user). It's a cloud provider, so prompts go through the anonymizer and the per-project cloud gate.
+- Per-task provider chains in Settings › Summaries (summary, scan, judge), each `ollama` by default, so nothing changes until you change one; plus the bridge profile and model. An `agent_cli` failure falls back to the next provider; a too-long prompt and tool use don't. Inline checks (`detect_contradictions`) never wait on the bridge.
+- A bridge probe: Settings › Summaries › Host bridge › Check now, and `bin/rails llm:bridge_probe`. It shows reachability and each profile's gate and tripped state, never a path or the token.
+
+### Changed
+- A cloud scan's project now comes from the scanned folder (its realpath) and the project's recorded folder, not from the name the scan was given; a recorded folder with a symlink on its path is refused. Turning Cloud on records the folder's realpath.
+- Bridge: the state and run dirs' parents may be group-writable only by your own private group; `devin` gains a fail-closed tool-name map (`tool_trace.name_map`, empty); `hook.log` rotates at 1 MiB.
+
+### Upgrade note
+- Re-run `script/llm_bridge/lockdown_test.sh --profile <name>` for each profile: the wrapper digest changed, so existing gates now read as stale.
+
 ## [1.69.0] - 2026-11-04
 
 Host bridge and lockdown gate for agent CLIs (#153).
