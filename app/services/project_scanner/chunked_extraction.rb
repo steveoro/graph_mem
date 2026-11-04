@@ -8,7 +8,7 @@ class ProjectScanner
   # refusal of the prompt, which `truncate: false` asks for) or the answer isn't a JSON object with
   # an `architecture` array. A failed part is split in half once (between its
   # file blocks, or between the lines of its only block) and both halves are sent; a half that
-  # fails is final. A provider error isn't retried, and after MAX_PROVIDER_ERRORS in a row the
+  # fails is final. A cloud refusal or a host bridge failure isn't split (only a 413 is). A provider error isn't retried, and after MAX_PROVIDER_ERRORS in a row the
   # remaining parts are skipped as failed.
   #
   #   outcome = ProjectScanner::ChunkedExtraction.new(chunks: plan.chunks, project_name: "Gadget Project",
@@ -65,8 +65,9 @@ class ProjectScanner
         error = extract(unit, @done + @failed + 1)
         # A rejected half (already split once) counts like an outage: a provider that refuses every
         # request for another reason stops after two, instead of three tries per part.
-        # A cloud refusal (no provider call) would refuse every half too.
-        refused = Llm::CloudCall::REFUSALS.include?(error)
+        # A cloud refusal (no provider call) would refuse every half too, and so would a host bridge
+        # or agent CLI failure (PR4): only a 413 (PROMPT_REJECTED) splits a part sent there.
+        refused = Llm::CloudCall::REFUSALS.include?(error) || Llm::BridgeClient.failure?(error)
         outage = error == PROVIDER_ERROR || refused || (error&.start_with?(PROMPT_REJECTED) && !unit.splittable)
         provider_errors = outage ? provider_errors + 1 : 0
         next unless error

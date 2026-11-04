@@ -50,8 +50,14 @@ module Llm
     def self.fall_through?(result)
       return false if result[:ok]
 
-      error = result[:error].to_s
-      error.start_with?("bridge_", "agent_cli_") && STAYS.exclude?(error)
+      failure?(result[:error]) && STAYS.exclude?(result[:error].to_s)
+    end
+
+    # @param error [String, nil] a result's error
+    # @return [Boolean] whether it is a bridge or agent CLI failure (never one a split could fix;
+    #   a too-long prompt is "prompt_too_long" with http_status 413)
+    def self.failure?(error)
+      error.to_s.start_with?("bridge_", "agent_cli_")
     end
 
     # @param env [#[]] where LLM_BRIDGE_URL and LLM_BRIDGE_TOKEN_FILE are read (ENV)
