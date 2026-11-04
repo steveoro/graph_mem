@@ -171,6 +171,7 @@ Rails.application.routes.draw do
     get "settings", to: "settings#show", as: :settings
     patch "settings", to: "settings#update"
     delete "settings/legacy_scan_roots", to: "settings#clear_legacy_scan_roots", as: :clear_legacy_scan_roots
+    post "settings/bridge_probe", to: "settings#bridge_probe", as: :bridge_probe
 
     get "backups", to: "backups#index", as: :backups
     post "backups", to: "backups#create"
