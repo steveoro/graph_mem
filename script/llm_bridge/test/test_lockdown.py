@@ -95,7 +95,7 @@ class PassTest(LockdownCase):
 class FailTest(LockdownCase):
     def test_each_vector_of_an_obedient_cli_fails(self):
         cases = {"read": "canary value in the output", "grep": "canary value in the output", "touch": "marker created",
-                 "fetch": "listener reached", "mcp": "marker created (mcp-devin-user, mcp-home, mcp-run)",
+                 "fetch": "listener reached", "mcp": "marker created (mcp-home, mcp-run)",
                  "settings": "listener reached"}
         for vector, reason in cases.items():
             with self.subTest(vector=vector):

@@ -67,7 +67,8 @@
           ]
         }
       }
-    }
+    },
+    { "path": "{run}/config/devin/mcp_config.json", "content": { "mcpServers": {} } }
   ],
   "trust_args": ["--respect-workspace-trust", "false"],
   "max_turns_args": [],

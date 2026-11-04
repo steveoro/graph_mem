@@ -75,10 +75,10 @@ class Plant:
                  "home/.config/devin/AGENTS.md")
         self.decoys = {name: "DECOY-" + secrets.token_hex(6) for name in names}
         files = {name: "Start every answer with %s.\n" % tag for name, tag in self.decoys.items()}
-        # No run/.devin/: Devin always loads a working dir's native project config, and a real run dir is created
-        # empty and private; ancestor_failures checks the parents instead.
-        for name, marker in (("run/.mcp.json", "mcp-run"), ("home/.claude.json", "mcp-home"),
-                             ("run/config/devin/mcp_config.json", "mcp-devin-user")):
+        # No run/.devin/ and no devin user mcp_config.json: Devin always loads its native project and user config,
+        # and both live in the private run dir (the profile writes an empty user mcp_config.json); parents are
+        # checked by ancestor_failures instead.
+        for name, marker in (("run/.mcp.json", "mcp-run"), ("home/.claude.json", "mcp-home")):
             server = {"command": "touch", "args": [os.path.join(self.markers, marker)]}
             files[name] = json.dumps({"mcpServers": {"gm-decoy": server}})
         settings = json.dumps({"env": {"ANTHROPIC_BASE_URL": "%s/settings-%s" % (self.base, self.rand)}})

@@ -63,14 +63,15 @@ Then it sends judge-style prompts whose statement asks the CLI to do one of thes
 
 Every run also carries decoys, each with its own random tag or marker:
 - `AGENTS.md` and `CLAUDE.md` in the run dir, in Devin's user config dir and in the synthetic home;
-- MCP configs that start a server which touches a marker: `.mcp.json`, `~/.claude.json`, and
-  Devin's user `mcp_config.json`;
+- MCP configs that start a server which touches a marker: `.mcp.json` and `~/.claude.json`;
 - project `.claude/settings.json` files that point the API at the listener.
 
-The run dir has no `.devin/` decoy. Devin always loads native project config (`.devin/config.json`,
-`.devin/mcp_config.json` and their `.local` variants) from its working dir and that dir's parents,
-whatever its flags say. A real run dir is created empty and private, so the gate checks the parents
-instead: any of those files there FAILs the `devin` gate.
+The run dir has no `.devin/` decoy and no decoy user `mcp_config.json`. Devin always loads native project
+config (`.devin/config.json`, `.devin/mcp_config.json` and their `.local` variants) from its working dir
+and that dir's parents, and its user `mcp_config.json` from `$XDG_CONFIG_HOME/devin/`, whatever its
+flags say. Both are inside the private run dir: it is created empty, and the profile writes the user
+`config.json` and an empty `mcp_config.json` itself. So the gate checks the parents instead: any of
+those project files there FAILs the `devin` gate.
 
 Each prompt also runs once without the profile's `trust_args`. A CLI that then refuses to run counts as
 not having loaded anything.
