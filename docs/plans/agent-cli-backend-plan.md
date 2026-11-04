@@ -11,7 +11,8 @@ the operator's workstation behind a small host-side HTTP bridge, with the data a
 `cloud_allowed` gate. It is five PRs. **This plan details PR1** (a provider abstraction with no behaviour
 change; done, #151, 1.67.0), **PR2** (the anonymizer and `cloud_allowed`; done, #152, 1.68.0), **PR3** (the host
 bridge, profiles and lockdown gate; done, #153, 1.69.0) and **PR4** (Rails wired to the bridge, written Nov 4 from
-`e708f3c`; #154, 1.70.0) and **PR5** (the switch-over that finishes the train, written Nov 4 from `bef98f2`).
+`e708f3c`; #154, 1.70.0) and **PR5** (the switch-over that finishes the train, written Nov 4 from `bef98f2`; #155, 1.71.0). **The train is
+complete (1.67.0–1.71.0).**
 
 ## Hard rules (the whole train)
 - **No new MCP tool**, no new or changed tool argument or description; the default `/mcp` stays at **12** (readonly 9,
@@ -34,7 +35,7 @@ bridge, profiles and lockdown gate; done, #153, 1.69.0) and **PR4** (Rails wired
 | **PR2** | `claude/llm-anonymizer` | Anonymizer (typed HMAC tokens) + `cloud_allowed` per project (default false) + the gate that refuses a cloud provider for a project that doesn't allow it | PR1 | **1.68.0** |
 | **PR3** | `claude/llm-bridge` | Host bridge + profile framework + `devin` and `claude` profiles + the per-profile lockdown gate, all under `script/llm_bridge/` (not loaded by Rails) | `main` at 1.68.0 (PR2 merged) ✅ #153 | **1.69.0** |
 | **PR4** | `claude/llm-bridge-rails` | `Llm::BridgeClient` + `Llm::AgentCliProvider` (HTTP to the bridge) + `Llm::ResponseNormalizer` + per-task fallback chains + settings + a probe + scan scope from the folder + #153 follow-ups | PR2, PR3 ✅ #154 (1.70.0) | **1.70.0** |
-| **PR5** | `claude/llm-cli-finish` | Both profiles with primary and backup models in one chain, JSON check and one retry, the inline gate, one cloud job at a time, daily budgets, a usage card, adopter docs (the `llm_usage` table is a decision) | PR4 + a **PASS** lockdown gate per profile on Steve's workstation | **1.71.0** |
+| **PR5** | `claude/llm-cli-finish` | Both profiles with primary and backup models in one chain, JSON check and one retry, the inline gate, one cloud job at a time, daily budgets, a usage card, adopter docs (the `llm_usage` table is a decision) | PR4 + a **PASS** lockdown gate per profile on Steve's workstation ✅ #155 (1.71.0) | **1.71.0** |
 
 PR3's bridge touches no Rails code. PR1 and PR2 merged first, so it takes 1.69.0; it also carries two small Rails
 items (the typed-confirm button styling and masking people's names everywhere, see its section).
@@ -1887,3 +1888,10 @@ chains, probe) → 1.70.0").
 
 **PR5: finish the train (1.71.0).** Detailed above ("PR5: finish the train (profiles and backup models, JSON retry,
 inline gate, one-at-a-time, budgets, usage, adopter docs) → 1.71.0"). Its R step closes the train here.
+
+**Train closed (1.67.0–1.71.0, #151–#155).** Left out on purpose, as PR5's non-goals record: running a CLI in the
+container or bind-mounting the host CLI into it (the host bridge is the supported deployment); `DEVIN_CLI_PATH`
+(replaced by `AGENT_CLI_DEVIN_PATH`); per-model prices and costs in money (estimated tokens only); a canary
+completion per model in the probe (the gate tests each model); embeddings (they stay on Ollama); more profiles
+(a profile file plus a gate PASS later, no Rails change); any bridge route, status or class change; and the
+`llm_usage` table (Decision 6: cache counters and `[llm]` lines instead).
