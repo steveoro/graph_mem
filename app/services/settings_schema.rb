@@ -137,6 +137,7 @@ class SettingsSchema
           define_field("summary_max_tokens", validator: :summary_max_tokens, fallback: :summarization_settings_fallback_hint, hint: :max_tokens),
           define_field("summary_num_ctx", validator: :summary_num_ctx, fallback: :summarization_settings_fallback_hint, hint: :num_ctx),
           define_field("summary_observations_per_entity", validator: :summary_observations_per_entity),
+          *Llm::Router::TASKS.map { |task| define_field("llm_chain_#{task}", validator: :llm_chain, input: :select, choices: Llm::Router::CHAIN_VALUES) },
           define_field("llm_agent_cli_profile", validator: :llm_agent_cli_profile, input: :select, choices: Llm::AgentCliProvider::PROFILES),
           define_field("llm_agent_cli_model", validator: :llm_agent_cli_model)
         ], partial: "system/settings/summaries_panel"),

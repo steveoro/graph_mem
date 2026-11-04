@@ -35,6 +35,12 @@ module Llm
       false
     end
 
+    # @return [Boolean] whether an inline call (inside an MCP request) may wait on this provider
+    #   (PR4: the host bridge may not; the Router skips it there)
+    def inline?
+      true
+    end
+
     # @return [String, nil] the model the next request goes to, for the usage line
     def model
       nil

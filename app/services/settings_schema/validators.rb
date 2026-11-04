@@ -47,6 +47,12 @@ class SettingsSchema
       [ (I18n.t("system.settings.summaries.invalid_observations_per_entity") if invalid), raw ]
     end
 
+    # Agent-CLI PR4: one of Llm::Router::CHAIN_VALUES; blank stores the default, "ollama".
+    def llm_chain(raw)
+      value = raw.to_s.strip.presence || Llm::Router::DEFAULT_CHAIN
+      [ (I18n.t("system.settings.summaries.invalid_chain") unless Llm::Router::CHAIN_VALUES.include?(value)), value ]
+    end
+
     # Agent-CLI PR4: blank, or a profile the bridge ships.
     def llm_agent_cli_profile(raw)
       value = raw.to_s.strip

@@ -144,6 +144,15 @@ en:
         summary_observations_per_entity:
           label: "Observations per entity"
           description: "Maximum observations to include per entity before capping. 0 disables the cap. Set to 0 to use SUMMARY_OBSERVATIONS_PER_ENTITY from the environment or the default."
+        llm_chain_summary:
+          label: "Summary providers"
+          description: "The providers summaries try, in order. ollama (the default) changes nothing; agent_cli is the host bridge, used only for projects that allow cloud access."
+        llm_chain_scan:
+          label: "Scan providers"
+          description: "The providers project scan parts try, in order. ollama (the default) changes nothing; agent_cli is the host bridge, used only for projects that allow cloud access."
+        llm_chain_judge:
+          label: "Judge providers"
+          description: "The providers fact-supersede judging tries, in order. ollama (the default) changes nothing. Inline checks (detect_contradictions) never wait on agent_cli."
         llm_agent_cli_profile:
           label: "Host bridge profile"
           description: "The agent CLI profile an agent_cli chain entry uses (claude or devin). Blank: none, so agent_cli is skipped."
@@ -249,6 +258,7 @@ en:
         invalid_num_ctx: "Context window must be 0 (use ENV/default) or between 2048 and 131072 tokens."
         invalid_observations_per_entity: "Observations per entity must be 0 (use ENV/default) or between 0 and 100."
         invalid_url: "Summary URL must be a valid http or https URL."
+        invalid_chain: "Providers must be one of: ollama, agent_cli, agent_cli,ollama, ollama,agent_cli."
         invalid_agent_cli_profile: "Host bridge profile must be blank, claude or devin."
         invalid_agent_cli_model: "Host bridge model must be blank or up to 64 letters, digits, dots, underscores, colons or dashes, not starting with one of the last four."
       imports:

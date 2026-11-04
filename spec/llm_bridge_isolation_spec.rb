@@ -17,7 +17,7 @@ RSpec.describe "LLM host bridge isolation" do
 
   # PR4 wires Rails to the bridge over HTTP: only these files may name it.
   let(:rails_side) do
-    %w[app/services/llm/bridge_client.rb app/services/llm/agent_cli_provider.rb app/services/llm/registry.rb app/models/app_settings.rb
+    %w[app/services/llm/bridge_client.rb app/services/llm/agent_cli_provider.rb app/services/llm/registry.rb app/services/llm/router.rb app/models/app_settings.rb
        app/services/settings_schema.rb app/services/settings_schema/validators.rb config/locales/system_settings.en.yml]
   end
 

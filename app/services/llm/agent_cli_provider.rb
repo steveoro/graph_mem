@@ -41,6 +41,11 @@ module Llm
       true
     end
 
+    # @return [Boolean] false: an inline call (an MCP request) never waits up to the bridge timeout
+    def inline?
+      false
+    end
+
     # @return [String, nil] the configured model (AppSettings llm_agent_cli_model), when valid
     def model
       value = AppSettings.llm_agent_cli_model.to_s
