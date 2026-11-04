@@ -32,13 +32,15 @@ module Llm
     # @param style [String]
     # @param options [Hash, nil]
     # @param inline [Boolean]
-    def initialize(task:, provider:, prompt:, style:, options:, inline:)
+    # @param step [Integer] the attempt's place in the chain (UsageLog `fallback_step`; PR5)
+    def initialize(task:, provider:, prompt:, style:, options:, inline:, step: 0)
       @task = task
       @provider = provider
       @prompt = prompt
       @style = style
       @options = options
       @inline = inline
+      @step = step
       @log = { anonymized: true }
     end
 
@@ -65,7 +67,7 @@ module Llm
         answer = @options.nil? ? @provider.generate(text, style: @style) : @provider.generate(text, style: @style, options: @options)
         result = restore(session, answer).merge(provider: @provider.name)
       ensure
-        UsageLog.record(task: @task, provider: @provider, inline: @inline, prompt: text, result: result, cloud: @log)
+        UsageLog.record(task: @task, provider: @provider, inline: @inline, prompt: text, result: result, cloud: @log, step: @step)
       end
     end
 
@@ -89,7 +91,7 @@ module Llm
     def refuse(reason, detail: nil)
       result = { ok: false, text: nil, error: reason, latency_ms: 0.0, provider: @provider.name }
       UsageLog.record(task: @task, provider: @provider, inline: @inline, prompt: "", result: result,
-                      cloud: @log.merge(refused: reason, refused_detail: detail&.to_s).compact)
+                      cloud: @log.merge(refused: reason, refused_detail: detail&.to_s).compact, step: @step)
       result
     end
   end

@@ -23,10 +23,13 @@ module Llm
     # @param prompt [String]
     # @param result [Hash, nil] the provider's result; nil when it raised
     # @param cloud [Hash, nil] a cloud call's extra fields (CLOUD_KEYS only; the rest is dropped)
+    # @param step [Integer] the attempt's place in its chain (PR5): a cloud line always carries it as
+    #   `fallback_step`, with the agent-CLI `profile`; a local line only after a fallback (step > 0)
     # @return [void]
-    def record(task:, provider:, inline:, prompt:, result:, cloud: nil)
+    def record(task:, provider:, inline:, prompt:, result:, cloud: nil, step: 0)
       line = fields(task, provider, inline, prompt, result || {})
       line = line.merge(cloud.slice(*CLOUD_KEYS)) if cloud
+      line = line.merge(attempt_fields(provider, cloud, step)) if cloud || step.positive?
       Rails.logger.info("#{PREFIX} #{JSON.generate(line)}")
     rescue StandardError
       nil
@@ -42,9 +45,14 @@ module Llm
       result[:prompt_tokens].nil? ? line : line.merge(prompt_tokens: result[:prompt_tokens])
     end
 
+    def attempt_fields(provider, cloud, step)
+      profile = cloud && provider.respond_to?(:profile) ? provider.profile : nil
+      { profile: profile, fallback_step: step }.compact
+    end
+
     def estimate(chars)
       (chars.to_f / TokenBudget::CHARS_PER_TOKEN).ceil
     end
-    private_class_method :fields, :estimate
+    private_class_method :fields, :attempt_fields, :estimate
   end
 end

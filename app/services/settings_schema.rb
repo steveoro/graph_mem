@@ -139,7 +139,11 @@ class SettingsSchema
           define_field("summary_observations_per_entity", validator: :summary_observations_per_entity),
           *Llm::Router::TASKS.map { |task| define_field("llm_chain_#{task}", validator: :llm_chain, input: :select, choices: Llm::Router::CHAIN_VALUES) },
           define_field("llm_agent_cli_profile", validator: :llm_agent_cli_profile, input: :select, choices: Llm::AgentCliProvider::PROFILES),
-          define_field("llm_agent_cli_model", validator: :llm_agent_cli_model)
+          define_field("llm_agent_cli_model", validator: :llm_agent_cli_model),
+          *Llm::AgentCliProvider::PROFILES.flat_map do |profile|
+            [ define_field("llm_profile_#{profile}_model", validator: :llm_agent_cli_model),
+              define_field("llm_profile_#{profile}_backup_models", validator: :llm_backup_models) ]
+          end
         ], partial: "system/settings/summaries_panel"),
         define_group(:imports, [ define_field("import_observation_duplicate_max_distance", validator: :import_distance, input: :slider) ]),
         define_group(:project_scans, [

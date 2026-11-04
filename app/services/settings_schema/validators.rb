@@ -65,6 +65,14 @@ class SettingsSchema
       [ (I18n.t("system.settings.summaries.invalid_agent_cli_model") unless value.empty? || value.match?(Llm::AgentCliProvider::MODEL_PATTERN)), value ]
     end
 
+    # Agent-CLI PR5: blank, or up to three comma-separated model identifiers (stored normalized).
+    def llm_backup_models(raw)
+      models = Llm::Chain.split_models(raw)
+      valid = models.size <= Llm::Chain::MAX_BACKUPS && models.uniq.size == models.size &&
+              models.all? { |model| model.match?(Llm::AgentCliProvider::MODEL_PATTERN) }
+      [ (I18n.t("system.settings.summaries.invalid_backup_models") unless valid), models.join(",") ]
+    end
+
     def http_url_summary(raw)
       [ (I18n.t("system.settings.summaries.invalid_url") unless blank_or_http_url?(raw)), raw ]
     end

@@ -44,6 +44,11 @@ class AppSettings < RailsSettings::Base
   field :llm_chain_judge, default: "ollama", type: :string
   field :llm_agent_cli_profile, default: "", type: :string
   field :llm_agent_cli_model, default: "", type: :string
+  # PR5: per shipped profile, a primary model and up to three comma-separated backups ("" = none).
+  field :llm_profile_claude_model, default: "", type: :string
+  field :llm_profile_claude_backup_models, default: "", type: :string
+  field :llm_profile_devin_model, default: "", type: :string
+  field :llm_profile_devin_backup_models, default: "", type: :string
 
   # Import matching settings
   field :import_observation_duplicate_max_distance, default: 0.35, type: :float,

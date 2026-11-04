@@ -19,16 +19,30 @@ module Llm
 
     # @param client [Llm::BridgeClient]
     # @param task [Symbol] the Router task the bridge logs (one of Router::TASKS)
-    def initialize(client: BridgeClient.new, task: :summary)
+    # @param attempt [Hash, nil] `{ profile:, model:, timeout_cap: }` from #for_attempt; nil reads
+    #   PR4's single profile and model settings
+    def initialize(client: BridgeClient.new, task: :summary, attempt: nil)
       super()
       @client = client
       @task = task
+      @attempt = attempt
     end
 
     # @param task [Symbol]
     # @return [AgentCliProvider] a copy bound to `task` (the Router binds each call's task)
     def for_task(task)
-      self.class.new(client: @client, task: task)
+      self.class.new(client: @client, task: task, attempt: @attempt)
+    end
+
+    # PR5: one chain attempt, a profile and one of its models (Llm::Chain.models).
+    #
+    # @param task [Symbol]
+    # @param profile [String]
+    # @param model [String]
+    # @param timeout_cap [Integer, nil] the most seconds the bridge may take (inline calls)
+    # @return [AgentCliProvider]
+    def for_attempt(task:, profile:, model:, timeout_cap: nil)
+      self.class.new(client: @client, task: task, attempt: { profile: profile.to_s, model: model.to_s, timeout_cap: timeout_cap })
     end
 
     # @return [String] "agent_cli"
@@ -46,15 +60,15 @@ module Llm
       false
     end
 
-    # @return [String, nil] the configured model (AppSettings llm_agent_cli_model), when valid
+    # @return [String, nil] the attempt's model (else AppSettings llm_agent_cli_model), when valid
     def model
-      value = AppSettings.llm_agent_cli_model.to_s
+      value = @attempt ? @attempt[:model] : AppSettings.llm_agent_cli_model.to_s
       value if value.match?(MODEL_PATTERN)
     end
 
-    # @return [String, nil] the configured bridge profile (AppSettings llm_agent_cli_profile), when known
+    # @return [String, nil] the attempt's profile (else AppSettings llm_agent_cli_profile), when known
     def profile
-      value = AppSettings.llm_agent_cli_profile.to_s
+      value = @attempt ? @attempt[:profile] : AppSettings.llm_agent_cli_profile.to_s
       value if PROFILES.include?(value)
     end
 
@@ -82,7 +96,9 @@ module Llm
     private
 
     def timeout(opts)
-      opts[:timeout].presence || SummarizationConfig.resolved_config[:timeout]
+      seconds = (opts[:timeout].presence || SummarizationConfig.resolved_config[:timeout]).to_i
+      cap = @attempt && @attempt[:timeout_cap]
+      cap ? [ seconds.positive? ? seconds : cap, cap ].min : seconds
     end
   end
 end
