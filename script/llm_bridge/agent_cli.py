@@ -14,6 +14,7 @@ the Rails app never loads this file.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import hashlib
 import json
 import os
@@ -115,6 +116,13 @@ def state_dir() -> str:
     path = os.environ.get("AGENT_CLI_STATE") or os.path.join(real_home(), ".local", "state", "agent-cli")
     os.makedirs(path, mode=0o700, exist_ok=True)
     return os.path.realpath(path)
+
+
+def runs_dir(state: str) -> str:
+    """Return ``<state>/runs`` (0700): not the shared /tmp, since CLIs search a run dir's parents for config."""
+    path = os.path.join(state, "runs")
+    os.makedirs(path, mode=0o700, exist_ok=True)
+    return path
 
 
 def real_home() -> str:
@@ -243,19 +251,15 @@ def _drain(handle, cap, sink: bytearray, on_over=None):
 
 
 def _feed(pipe, data):
-    try:
+    with contextlib.suppress(OSError):
         pipe.write(data)
         pipe.close()
-    except OSError:
-        pass
 
 
 def kill_group(proc, sig):
     """Send ``sig`` to the run's process group (it was started in its own session)."""
-    try:
+    with contextlib.suppress(ProcessLookupError, PermissionError):
         os.killpg(proc.pid, sig)
-    except (ProcessLookupError, PermissionError):
-        pass
 
 
 def execute(argv: List[str], env: dict, cwd: str, stdin_data: Optional[bytes], timeout: float) -> Optional[dict]:
@@ -359,10 +363,7 @@ def _hook_lines(state, offset, run_id):
 
 
 def _size(path):
-    try:
-        return os.path.getsize(path)
-    except OSError:
-        return 0
+    return os.path.getsize(path) if os.path.isfile(path) else 0
 
 
 def tool_use(profile: Profile, proc: dict, envelope: dict, hook_lines: list, transcript: Optional[str], stdout: str) -> bool:
@@ -418,7 +419,7 @@ def run_cli(profile: Profile, prompt: str, model: str, timeout_s: float, run_id:
     if mode is None:
         return _outcome(model, "prompt_too_long", started)
     state = state_dir()
-    run = os.path.realpath(tempfile.mkdtemp(prefix="agent-cli-run-"))
+    run = os.path.realpath(tempfile.mkdtemp(prefix="agent-cli-run-", dir=runs_dir(state)))
     cls = "cli_error"
     try:
         ctx = prepare_run_dir(profile, run, data, state, test_seed)
@@ -467,11 +468,11 @@ def main(argv=None) -> int:
     parser = argparse.ArgumentParser(prog="agent_cli.py", description=__doc__.splitlines()[0])
     commands = parser.add_subparsers(dest="command", required=True)
     check_cmd = commands.add_parser("check", help="validate a profile and report the CLI it finds")
-    check_cmd.add_argument("--profile", required=True)
     run_cmd = commands.add_parser("run", help="run a profile's CLI once and print the result as JSON")
-    run_cmd.add_argument("--profile", required=True)
-    run_cmd.add_argument("prompt_file")
-    run_cmd.add_argument("model")
+    for command in (check_cmd, run_cmd):
+        command.add_argument("--profile", required=True)
+    for name in ("prompt_file", "model"):
+        run_cmd.add_argument(name)
     run_cmd.add_argument("timeout", type=int)
     run_cmd.add_argument("--run-id", default=None)
     run_cmd.add_argument("--test-seed", default=None, help="lockdown test only: decoys copied into the run dir")

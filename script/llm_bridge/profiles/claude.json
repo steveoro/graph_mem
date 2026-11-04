@@ -15,7 +15,7 @@
     "subtype_path": "subtype",
     "turns_path": "num_turns"
   },
-  "lockdown_args": ["--safe-mode", "--tools", "", "--disallowedTools", "mcp__*", "--strict-mcp-config", "--mcp-config", "{run}/empty-mcp.json"],
+  "lockdown_args": ["--safe-mode", "--setting-sources", "user", "--tools", "", "--disallowedTools", "mcp__*", "--strict-mcp-config", "--mcp-config", "{run}/empty-mcp.json"],
   "config_files": [
     { "path": "{run}/empty-mcp.json", "content": { "mcpServers": {} } }
   ],

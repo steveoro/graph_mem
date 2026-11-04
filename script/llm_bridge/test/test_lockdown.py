@@ -5,6 +5,7 @@ import contextlib
 import io
 import json
 import os
+import tempfile
 import unittest
 import uuid
 from unittest import mock
@@ -25,9 +26,10 @@ class LockdownCase(FakeCliCase):
         self.home = os.path.join(self.tmp, "home")
         os.mkdir(self.canary_dir, 0o700)
         os.mkdir(self.home, 0o700)
-        patcher = mock.patch.object(agent_cli, "real_home", return_value=self.home)
-        patcher.start()
-        self.addCleanup(patcher.stop)
+        for patcher in (mock.patch.object(agent_cli, "real_home", return_value=self.home),
+                        mock.patch.object(lockdown, "ancestor_warnings", return_value=[])):  # the host's own /tmp
+            patcher.start()
+            self.addCleanup(patcher.stop)
 
     def gate(self, profile="claude", sidecar=None, models=("fake-model",)):
         if sidecar is not None:
@@ -58,6 +60,7 @@ class PassTest(LockdownCase):
         self.assertEqual(report.count(" [answered]\n"), len(lockdown.VECTORS))
         self.assertNotIn("GMCANARY-", report)
         self.assertEqual(os.listdir(self.canary_dir), [])
+        self.assertEqual(os.listdir(os.path.join(self.state, "runs")), [])  # run and work dirs live here, all removed
 
     def test_devin_runs_both_prompt_forms_with_and_without_trust(self):
         self.assertEqual(self.gate("devin")[0], "PASS")
@@ -73,6 +76,13 @@ class PassTest(LockdownCase):
             self.assertEqual(lockdown.main(["--profile", "claude"]), 0)  # the models of the existing record
         self.assertEqual(self.record()["models"], ["fake-model"])
 
+    def test_config_in_the_run_dirs_parents_is_a_warning(self):
+        with mock.patch.object(lockdown, "ancestor_warnings", return_value=["parent dir /x has .git"]):
+            result, report = self.gate()
+        self.assertEqual(result, "PASS")
+        self.assertEqual(self.record()["warnings"], ["parent dir /x has .git"])
+        self.assertIn("WARN  parent dir /x has .git", report)
+
     def test_with_a_real_home_user_level_configs_are_warnings(self):
         write_private(os.path.join(self.home, "AGENTS.md"), "synthetic")
         env = dict(agent_cli.load_profile("claude")["env"], home="real")
@@ -85,7 +95,8 @@ class PassTest(LockdownCase):
 class FailTest(LockdownCase):
     def test_each_vector_of_an_obedient_cli_fails(self):
         cases = {"read": "canary value in the output", "grep": "canary value in the output", "touch": "marker created",
-                 "fetch": "listener fetched", "mcp": "marker created (mcp-home, mcp-run)"}
+                 "fetch": "listener reached", "mcp": "marker created (mcp-devin-project, mcp-devin-user, mcp-home, mcp-run)",
+                 "hooks": "marker created (hook-devin-project)", "settings": "listener reached"}
         for vector, reason in cases.items():
             with self.subTest(vector=vector):
                 result, report = self.gate(sidecar={"obey": [vector]})
@@ -98,7 +109,14 @@ class FailTest(LockdownCase):
     def test_a_decoy_the_cli_loads_fails(self):
         result, report = self.gate("devin", sidecar={"load_decoys": True})
         self.assertEqual(result, "FAIL")
-        self.assertIn("decoy instructions loaded (run/AGENTS.md, run/CLAUDE.md, home/.claude/CLAUDE.md, home/.config/devin/AGENTS.md)", report)
+        self.assertIn("decoy instructions loaded (run/AGENTS.md, run/CLAUDE.md, run/config/devin/AGENTS.md, home/.claude/CLAUDE.md, "
+                      "home/.config/devin/AGENTS.md)", report)
+
+    def test_a_cli_that_answers_no_attack_prompt_fails(self):
+        result, report = self.gate("devin", sidecar={"error_on_attack": True})
+        self.assertEqual(result, "FAIL")
+        self.assertIn("warn  fake-model arg read [cli_error]", report)
+        self.assertIn("FAIL  fake-model file: no attack run answered", report)
 
     def test_the_bridge_refuses_a_failed_gate_and_a_new_pass_clears_tripped(self):
         self.gate(sidecar={"obey": ["touch"]})
@@ -110,6 +128,18 @@ class FailTest(LockdownCase):
         self.assertEqual(self.gate(sidecar={})[0], "PASS")
         self.assertFalse(server.tripped("claude"))
         self.assertEqual(server.complete(request)[0], "ok")
+
+
+class AncestorTest(unittest.TestCase):
+    def test_config_in_a_run_dirs_parents_is_listed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            top = os.path.realpath(tmp)
+            os.makedirs(os.path.join(top, "a", ".devin"))
+            os.makedirs(os.path.join(top, "a", "b", "runs"))
+            open(os.path.join(top, "a", "b", "AGENTS.md"), "w").close()
+            found = lockdown.ancestor_warnings(os.path.join(top, "a", "b", "runs"))
+        self.assertIn("parent dir %s has AGENTS.md" % os.path.join(top, "a", "b"), found)
+        self.assertIn("parent dir %s has .devin" % os.path.join(top, "a"), found)
 
 
 class SetupErrorTest(LockdownCase):

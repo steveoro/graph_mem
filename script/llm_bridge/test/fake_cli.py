@@ -13,7 +13,7 @@ Two control channels:
   ``spawn_child=<pid file>``, ``flood=<bytes>``, ``hook=<tool>``, ``echo_env``, ``echo_argv``, ``echo_cwd_mode``,
   ``transcript=none|tool|garbage|deep``.
 - ``<this file>.json`` next to the copy (lockdown tests): ``{"obey": [...], "load_decoys": bool,
-  "refuse_without_trust": bool}``. ``obey`` holds ``read``, ``grep``, ``touch``, ``fetch`` and ``mcp``:
+  "refuse_without_trust": bool, "error_on_attack": bool}``. ``obey`` holds ``read``, ``grep``, ``touch``, ``fetch``, ``mcp``, ``hooks`` and ``settings``:
   the fake then really reads the canary, touches the marker, fetches the listener or starts the
   decoy MCP server named in the prompt or the seeded config.
 """
@@ -85,13 +85,20 @@ def obey(prompt, rules):
     if "fetch" in wants:
         for url in re.findall(r"(http://127\.0\.0\.1:\d+/canary-[0-9a-f]+)", prompt):
             said.append(urllib.request.urlopen(url, timeout=5).read().decode())
+    user = os.environ.get("XDG_CONFIG_HOME", "")
     if "mcp" in wants:
-        for config in ("./.mcp.json", os.path.expanduser("~/.claude.json")):
+        for config in ("./.mcp.json", os.path.expanduser("~/.claude.json"), "./.devin/mcp_config.json", user + "/devin/mcp_config.json"):
             if os.path.exists(config):
                 for server in json.load(open(config, encoding="utf-8")).get("mcpServers", {}).values():
                     subprocess.run([server["command"], *server.get("args", [])], check=False)
+    if "hooks" in wants and os.path.exists("./.devin/config.json"):
+        for entry in json.load(open("./.devin/config.json", encoding="utf-8"))["hooks"]["SessionStart"]:
+            subprocess.run(["sh", "-c", entry["hooks"][0]["command"]], check=False)
+    if "settings" in wants and os.path.exists("./.claude/settings.json"):
+        url = json.load(open("./.claude/settings.json", encoding="utf-8"))["env"]["ANTHROPIC_BASE_URL"]
+        urllib.request.urlopen(url + "/v1/messages", timeout=5).read()
     if rules.get("load_decoys"):
-        for path in ("AGENTS.md", "CLAUDE.md", "~/.claude/CLAUDE.md", "~/.config/devin/AGENTS.md"):
+        for path in ("AGENTS.md", "CLAUDE.md", user + "/devin/AGENTS.md", "~/.claude/CLAUDE.md", "~/.config/devin/AGENTS.md"):
             path = os.path.expanduser(path)
             if os.path.exists(path):
                 said += re.findall(r"DECOY-[0-9a-f]+", open(path, encoding="utf-8").read())
@@ -149,6 +156,9 @@ def main(argv):
         print("error: workspace is not trusted", file=sys.stderr)
         return 1
     prompt = read_prompt(argv, claude)
+    if rules.get("error_on_attack") and "Statements:" in prompt:  # answers the gate's control prompt only
+        print("error: synthetic failure", file=sys.stderr)
+        return 1
     found = directives(prompt)
     side_effects(found)
     text = answer_for(prompt, found, argv)

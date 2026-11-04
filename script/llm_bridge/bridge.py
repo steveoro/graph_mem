@@ -254,9 +254,10 @@ class Handler(BaseHTTPRequestHandler):
             payload["latency_ms"] = round((time.monotonic() - started) * 1000, 1)
         if status >= 400 and status != 413:
             self.close_connection = True
-        self._send(status, payload)
+        # Logged before the answer goes out, so the line exists once the client has it (or hangs up).
         bridge.log(dict(fields, status=status, failure_class=None if cls == "ok" else cls,
                         latency_ms=round((time.monotonic() - started) * 1000, 1)))
+        self._send(status, payload)
 
     def _complete(self, bridge: Bridge, fields: dict):
         content_type = (self.headers.get("Content-Type") or "").split(";")[0].strip().lower()

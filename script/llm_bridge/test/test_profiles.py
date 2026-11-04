@@ -86,7 +86,8 @@ class ArgvTest(unittest.TestCase):
         self.assertEqual(mode["mode"], "stdin")
         self.assertIsNone(agent_cli.choose_mode(profile, 10_000_001))
         self.assertEqual(agent_cli.build_argv(profile, "/bin/claude", "sonnet", mode, self.ctx), [
-            "/bin/claude", "-p", "--output-format", "json", "--max-turns", "1", "--safe-mode", "--tools", "", "--disallowedTools", "mcp__*",
+            "/bin/claude", "-p", "--output-format", "json", "--max-turns", "1", "--safe-mode", "--setting-sources", "user", "--tools", "",
+            "--disallowedTools", "mcp__*",
             "--strict-mcp-config", "--mcp-config", "/tmp/run/empty-mcp.json", "--model", "sonnet"])
 
     def test_devin_argv_for_arg_and_file_modes(self):
@@ -146,6 +147,8 @@ class EnvironmentAndRunDirTest(FakeCliCase):
         with mock.patch.object(agent_cli.tempfile, "mkdtemp", side_effect=record):
             result, _ = self.run_fake("devin", "@fake echo_cwd_mode\n")
         self.assertEqual(result["text"].strip(), "0o700")
+        self.assertEqual(os.path.dirname(made[0]), os.path.join(self.state, "runs"))  # not the shared /tmp
+        self.assertEqual(os.stat(os.path.dirname(made[0])).st_mode & 0o777, 0o700)
         self.assertFalse(os.path.exists(made[0]))
 
     def test_a_failed_run_dir_is_kept_only_when_asked(self):
@@ -165,7 +168,7 @@ class EnvironmentAndRunDirTest(FakeCliCase):
         argv = json.loads(result["text"])
         mcp_config = argv[argv.index("--mcp-config") + 1]
         self.assertTrue(mcp_config.endswith("/empty-mcp.json"))
-        self.assertNotIn(self.tmp, mcp_config)  # the run dir is a fresh temp dir, not under the state dir
+        self.assertTrue(mcp_config.startswith(os.path.join(self.state, "runs", "agent-cli-run-")))
 
 
 if __name__ == "__main__":
