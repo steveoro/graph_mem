@@ -4,7 +4,8 @@ A small HTTP server that runs on the operator's workstation, not in the containe
 PR3). It takes a prompt that graph_mem has already masked, runs **one** agent CLI (Claude Code,
 Devin) non-interactively with its tools, MCP servers, config files and network actions switched
 off, and returns the raw answer with a failure class. The Rails app never loads, starts or calls
-anything here; PR4 adds the client. Python 3.9+ standard library and POSIX `sh` only.
+anything here: since 1.70.0 it talks to the bridge over HTTP only (`Llm::BridgeClient`,
+`docs/summarization.md`). Python 3.9+ standard library and POSIX `sh` only.
 
 | File | What |
 |---|---|
@@ -20,19 +21,30 @@ anything here; PR4 adds the client. Python 3.9+ standard library and POSIX `sh` 
 
 State lives in `$AGENT_CLI_STATE` (default `~/.local/state/agent-cli`, 0700): `bridge.token`,
 `claude.token`, `gates/<profile>.json`, `tripped/<profile>.json` and `hook.log`. Run dirs go in
-`$XDG_RUNTIME_DIR/agent-cli`, or `$AGENT_CLI_STATE/runs` when there is no private runtime dir. Either way
-the runs dir must be a real (not symlinked) 0700 dir you own, and every dir above it must be root's or
-yours and not group- or other-writable. Otherwise the bridge won't start and the gate stops with a setup
-error. The state dir must be a real 0700 dir you own. Run dirs never go in the shared `/tmp`, because CLIs
-search a run dir's parents for config. Nothing is written
-under the checkout at run time.
+`$XDG_RUNTIME_DIR/agent-cli`, or `$AGENT_CLI_STATE/runs` when there is no private runtime dir. The state
+dir and the runs dir must each be a real (not symlinked) 0700 dir you own, with **parents writable only by
+you, root, or your own private group**: every dir above is root's or yours, has no other-write bit, and is
+group-writable only when its group is your primary group, has no listed members and is no other
+account's primary group (the 0775 home of a user-private-group system passes). Otherwise the bridge
+won't start and the gate stops with a setup error naming the first offending dir. Run dirs never go in
+the shared `/tmp`, because CLIs search a run dir's parents for config. Nothing is written under the
+checkout at run time.
+
+`hook.log` only grows during runs. Past 1 MiB the bridge moves it to `hook.log.1` (one generation, 0600)
+before a request, and only while no profile is running. Each run reads its hook lines against the log's
+inode and size taken before it started: a log that was moved, replaced or truncated mid-run (a gate
+running while the bridge rotated, say) counts as tool use on a hooked profile, and fails the gate's hook
+check. Re-run the gate if that happens.
 
 ## Install
 
 1. Install and log in to the CLI as you normally would. Set its vendor's data-sharing opt-out where one
    exists. The bridge never installs, updates or logs in to a CLI.
 2. `python3 script/llm_bridge/bridge.py init-token` writes `bridge.token` (0600) and prints its path.
-   graph_mem reads the same value from `LLM_BRIDGE_TOKEN` (PR4).
+   graph_mem reads it from the file `LLM_BRIDGE_TOKEN_FILE` names (default this one), which must be
+   owned by the app's own uid and 0600; in the container (uid 1000) mount a copy owned by uid 1000. Set
+   `LLM_BRIDGE_URL=http://127.0.0.1:<port>` too, and check with Settings › Summaries › **Check now** or
+   `bin/rails llm:bridge_probe`.
 3. `claude` only: create a long-lived token with `claude setup-token` and save it as
    `~/.local/state/agent-cli/claude.token`, mode 0600. The bridge passes it as `CLAUDE_CODE_OAUTH_TOKEN`
    to a run with an empty, synthetic HOME. `devin` keeps its login in the owner's data dir
@@ -99,7 +111,7 @@ The gate writes `gates/<profile>.json` (0600): `profile`, `result`, `cli_path`, 
 prompts name the canary's path, so your username, and they go to the CLI's vendor like any prompt.
 The gate never changes an existing file.
 
-**Re-run it after every CLI update.** The bridge serves a profile only while the record's CLI
+**Re-run it after every CLI update, and after every graph_mem upgrade that changes these files.** The bridge serves a profile only while the record's CLI
 realpath, version (from `version_args`, cached by realpath, inode and size, never by time),
 `wrapper_digest` and `runs_dir` all match what it finds now. `runs_dir` is there because the gate checked
 that dir's parents; a bridge started as a service with another `XDG_RUNTIME_DIR` gets `gate_stale`. The
@@ -157,9 +169,16 @@ that (PR4).
 | `output` | `format` (`text` or `json`); for `json`, `text_path`, `error_path`, `subtype_path`, `turns_path` (dotted keys) |
 | `config_files` | `{ path, content }` written into the run dir or the synthetic home (`{run}`, `{home}`, `{hook}` and `{state}` are substituted) |
 | `tools_fully_disabled` | Whether the CLI's flags alone switch every tool off (`claude`), or the hook, deny config and transcript checks are all needed (`devin`) |
-| `tool_trace` | `hook_log` (the profile wires `{hook}`), `max_turns`, `export_path` (a transcript to check), `stdout_pattern` |
+| `tool_trace` | `hook_log` (the profile wires `{hook}`), `max_turns`, `export_path` (a transcript to check), `stdout_pattern`, and optional `name_map` (below) |
 | `env` | `home` (`synthetic` or `real`), `xdg_data_home` (`owner` or `synthetic`), `set` (fixed `NAME: value` pairs), `pass` (env names to pass through; empty in both profiles), `secret_env` (`NAME: file`, each file the user's own and 0600) |
 | `failure_patterns`, `exit_codes` | Class → regex (case-insensitive, over the answer, the subtype and stderr of a failed run), and exit code → class |
+
+`tool_trace.name_map` (`{ "transcript_name": "hook_name" }`, lower-case tool names, `{}` in `devin`) renames
+a transcript's tool before it is matched to the hook's refusals. It only renames: each call still needs its
+own refusal under the mapped name, and an unnamed call, an unknown name or a name the hook never refused
+is still `cli_tool_use`. Add an entry only when a CLI update renames a tool in its transcript but not in
+its hook events, and only together with a fresh gate PASS (the map is in the profile file, so in the
+digest).
 
 Each run gets a new 0700 dir under the runs dir as its cwd: no repo, no `.git`, no `AGENTS.md`. It holds
 `prompt.txt`, the synthetic `home/`, `config/`, `cache/` and `data/`. The environment is built from
