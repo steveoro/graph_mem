@@ -45,6 +45,10 @@ RSpec.describe Llm::BridgeClient do
         File.chmod(mode, File.join(dir, name))
         expect(unsafe.call(File.join(dir, name))).to eq("token_file_unsafe"), name
       end
+      File.mkfifo(File.join(dir, "fifo"), 0o600)
+      started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      expect(unsafe.call(File.join(dir, "fifo"))).to eq("token_file_unsafe")
+      expect(Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).to be < 1.0
       allow_any_instance_of(File::Stat).to receive(:uid).and_return(Process.uid + 1) # rubocop:disable RSpec/AnyInstance
       expect(client.reason).to eq("token_file_unsafe")
     end
@@ -181,6 +185,7 @@ RSpec.describe Llm::BridgeClient do
 
     it "non-JSON, a non-object, an unknown status or class, a blank ok text → bridge_bad_response" do
       [ [ 200, "not json" ], [ 200, [ 1 ] ], [ 302, { ok: true, text: "x" } ], [ 200, { ok: false, failure_class: "gate_stale" } ],
+        [ 200, { ok: false, failure_class: "cli_tool_partly_hooked" } ], [ 200, { ok: false, failure_class: "cli_missing" } ],
         [ 200, { ok: "yes", text: "x" } ], [ 200, { ok: true, text: " " } ], [ 200, { ok: true, text: 42 } ] ].each do |status, body|
         allow(handler).to receive(:call).and_return([ status, body ])
         expect(complete).to include(ok: false, error: "bridge_bad_response"), body.inspect

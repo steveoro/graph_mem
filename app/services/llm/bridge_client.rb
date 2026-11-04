@@ -32,7 +32,10 @@ module Llm
     STATUS_ERRORS = { 400 => "bridge_bad_request", 401 => "bridge_unauthorized", 404 => "bridge_not_found",
                       405 => "bridge_method_not_allowed", 429 => "bridge_busy", 500 => "bridge_error" }.freeze
     GATE_CLASSES = %w[cli_missing gate_missing gate_failed gate_stale tripped].freeze
-    CLI_CLASS = /\Acli_[a-z_]{1,40}\z/
+    # The CLI-level classes a 200 may carry (script/llm_bridge/profile_schema.py CLASSES, but
+    # cli_missing, which is a 503, and prompt_too_long, which is a 413). Any other is a bad response.
+    CLI_CLASSES = %w[cli_tool_use cli_tool_denied cli_timeout cli_quota cli_rate_limited cli_auth cli_model_unavailable
+                     cli_payment_required cli_config cli_sandbox cli_truncated cli_turn_limit cli_error cli_bad_output].freeze
     TOOL_USE = "agent_cli_tool_use"
     PROMPT_TOO_LONG = "prompt_too_long"
     UNREACHABLE = "bridge_unreachable"
@@ -137,7 +140,8 @@ module Llm
     # @return [String, nil] the token when the file is safe; nil otherwise (never raises)
     def token
       path = File.expand_path(@env["LLM_BRIDGE_TOKEN_FILE"].presence || DEFAULT_TOKEN_FILE)
-      File.open(path, File::RDONLY | File::NOFOLLOW) do |file|
+      # NONBLOCK: a FIFO at the path must not hang the open (the regular-file check then refuses it).
+      File.open(path, File::RDONLY | File::NOFOLLOW | File::NONBLOCK) do |file|
         stat = file.stat
         next nil unless stat.file? && stat.uid == Process.uid && (stat.mode & 0o077).zero?
 
@@ -192,7 +196,7 @@ module Llm
         return { ok: true, text: body["text"], error: nil, latency_ms: elapsed(started) }
       end
       klass = body["failure_class"].to_s
-      raise BadResponse unless body["ok"] == false && klass.match?(CLI_CLASS)
+      raise BadResponse unless body["ok"] == false && CLI_CLASSES.include?(klass)
 
       error = "agent_cli_#{klass.delete_prefix('cli_')}"
       klass == "cli_truncated" ? failure(error, started, done_reason: "length") : failure(error, started)

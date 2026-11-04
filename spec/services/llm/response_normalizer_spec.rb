@@ -31,6 +31,12 @@ RSpec.describe Llm::ResponseNormalizer do
     expect(JSON.parse(json(text))).to eq("a" => { "b" => "x } ] {" }, "c" => [ 1, [ 2 ] ])
   end
 
+  it "prefers the longest value over a small parseable one in the prose (Graphy #154)" do
+    expect(json('Per the notes [1], here it is: {"entities": []}')).to eq('{"entities": []}')
+    expect(json('I found [] nothing odd. {"a":1}')).to eq('{"a":1}')
+    expect(json('[{"id": 7, "verdict": "kept"}] (see [1])')).to eq('[{"id": 7, "verdict": "kept"}]')
+  end
+
   it "passes text without a parseable JSON value through unchanged" do
     [ "No JSON here.", "{ unbalanced", "{\"a\": }", "```json\n{\"a\": \n```" ].each do |text|
       expect(json(text)).to eq(text)

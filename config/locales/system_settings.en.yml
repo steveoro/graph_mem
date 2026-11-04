@@ -146,7 +146,7 @@ en:
           description: "Maximum observations to include per entity before capping. 0 disables the cap. Set to 0 to use SUMMARY_OBSERVATIONS_PER_ENTITY from the environment or the default."
         llm_chain_summary:
           label: "Summary providers"
-          description: "The providers summaries try, in order. ollama (the default) changes nothing; agent_cli is the host bridge, used only for projects that allow cloud access."
+          description: "The providers summaries try, in order. ollama (the default) changes nothing; agent_cli is the host bridge, used only for projects that allow cloud access. In ollama,agent_cli the bridge is tried only when Ollama doesn't answer."
         llm_chain_scan:
           label: "Scan providers"
           description: "The providers project scan parts try, in order. ollama (the default) changes nothing; agent_cli is the host bridge, used only for projects that allow cloud access."

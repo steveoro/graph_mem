@@ -76,7 +76,7 @@ module Llm
       result = @client.complete(prompt, profile: profile, model: model, task: @task, timeout_s: timeout(opts))
       result[:ok] ? result.merge(text: ResponseNormalizer.call(result[:text], opts)) : result
     rescue StandardError
-      { ok: false, text: nil, error: "bridge_error", latency_ms: nil }
+      { ok: false, text: nil, error: "bridge_error", latency_ms: 0.0 }
     end
 
     private

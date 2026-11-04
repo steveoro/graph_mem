@@ -9,9 +9,10 @@ module Llm
   # them as `fallback_reason`). After each call it writes one UsageLog line. A provider with
   # `cloud?` true (`agent_cli`) goes through Llm::CloudCall: gate, anonymize, restore.
   #
-  # The fallback rule: a CloudCall refusal (no provider call) or an `agent_cli` failure
-  # (Llm::BridgeClient.fall_through?) moves on to the next provider; a too-long prompt (413, so a
-  # scan part splits) and tool use are returned. An inline call skips providers that aren't
+  # The fallback rule: a CloudCall refusal (no provider call), an `agent_cli` failure
+  # (Llm::BridgeClient.fall_through?) or an Ollama outage (no answer at all) moves on to the next
+  # provider; a too-long prompt (413, so a scan part splits), a refused prompt and tool use are
+  # returned. The default chain has no next provider, so it returns exactly what Ollama did. An inline call skips providers that aren't
   # `inline?` (the host bridge), so an MCP request never waits on one.
   #
   #   Llm::Router.usable?(:summary)                                   # => true
@@ -26,6 +27,8 @@ module Llm
     # The other values a llm_chain_<task> setting may hold (a fixed list, not free text).
     CHAINS = { "agent_cli" => %i[agent_cli], "agent_cli,ollama" => %i[agent_cli ollama], "ollama,agent_cli" => %i[ollama agent_cli] }.freeze
     CHAIN_VALUES = [ DEFAULT_CHAIN, *CHAINS.keys ].freeze
+    # The summary client's error for a request that failed (with an http_status when the server answered).
+    LOCAL_OUTAGE = "provider_unavailable"
     # The error of an inline call whose whole chain was skipped.
     INLINE_SKIPPED = "inline_skipped"
 
@@ -68,6 +71,7 @@ module Llm
             next if CloudCall.refusal?(result) || BridgeClient.fall_through?(result)
           else
             result = local(task, provider, prompt.to_s, style, options, inline)
+            next if local_outage?(result)
           end
           break
         end
@@ -109,6 +113,12 @@ module Llm
         ensure
           UsageLog.record(task: task, provider: provider, inline: inline, prompt: prompt, result: result)
         end
+      end
+
+      # Ollama didn't answer at all (no HTTP status: refused, timed out): the next provider may. A
+      # refusal with a status (400/413, an over-long prompt) is returned, so a scan part splits.
+      def local_outage?(result)
+        !result[:ok] && result[:error] == LOCAL_OUTAGE && result[:http_status].nil?
       end
 
       def skip(task, provider)

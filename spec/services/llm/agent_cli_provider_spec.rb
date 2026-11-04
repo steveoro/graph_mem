@@ -74,7 +74,7 @@ RSpec.describe Llm::AgentCliProvider do
     expect { described_class.new }.to raise_error(RuntimeError)
     client = instance_double(Llm::BridgeClient)
     allow(client).to receive(:complete).and_raise(RuntimeError, "Zq7 detail")
-    expect(described_class.new(client: client).generate("Zq7", style: "concise")).to eq(ok: false, text: nil, error: "bridge_error", latency_ms: nil)
+    expect(described_class.new(client: client).generate("Zq7", style: "concise")).to eq(ok: false, text: nil, error: "bridge_error", latency_ms: 0.0)
   end
 
   it "goes through CloudCall: refused until the project allows cloud, then masked out and restored back" do

@@ -6,7 +6,7 @@ module Llm
   # restores the tokens, so it only ever sees masked text.
   #
   # With `format: "json"` (scan, judge) it drops one surrounding Markdown fence and the prose
-  # around the outermost JSON object or array, found by a bracket scan that respects strings (no
+  # around the outermost (the longest) JSON object or array, found by a bracket scan that respects strings (no
   # regex backtracking; answers over SCAN_CAP are left as they are). Without a parseable value the
   # text goes on unchanged, to the caller's own "not valid JSON" path. Otherwise (summary) it
   # trims. Then it applies the caller's `max_output_length`, the same cut the summary client makes
@@ -39,15 +39,25 @@ module Llm
       return text if text.bytesize > SCAN_CAP
 
       chars = unfenced(text.strip).chars # an Array: String#[] on UTF-8 text is linear per call
-      starts = chars.each_index.lazy.select { |i| OPENERS.key?(chars[i]) }.first(MAX_TRIES)
-      starts.each do |start|
-        stop = closing(chars, start)
-        next unless stop
+      best = outermost(chars)
+      best ? chars[best].join : text
+    end
 
-        candidate = chars[start..stop].join
-        return candidate if parses?(candidate)
+    # @return [Range, nil] the longest bracketed span that parses as JSON, among the first MAX_TRIES
+    #   openers outside a span already found (so a stray "[1]" in the prose never wins over the answer)
+    def outermost(chars)
+      best = nil
+      tries = 0
+      chars.each_index do |start|
+        next unless OPENERS.key?(chars[start]) && !best&.cover?(start)
+        break if (tries += 1) > MAX_TRIES
+
+        stop = closing(chars, start)
+        next unless stop && parses?(chars[start..stop].join)
+
+        best = (start..stop) if best.nil? || (stop - start) > (best.end - best.begin)
       end
-      text
+      best
     end
 
     # @return [String] the text inside one surrounding ``` fence (an info string like `json` is
@@ -99,6 +109,6 @@ module Llm
       open = kept.rindex("⟦")
       open && !kept.index("⟧", open) ? kept[0, open] : kept
     end
-    private_class_method :unfenced, :closing, :parses?, :cut
+    private_class_method :outermost, :unfenced, :closing, :parses?, :cut
   end
 end

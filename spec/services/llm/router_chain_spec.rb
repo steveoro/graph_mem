@@ -84,10 +84,27 @@ RSpec.describe "Llm::Router chains" do
     expect(local.calls).to be_empty
   end
 
-  it "tries Ollama first in an ollama,agent_cli chain" do
+  it "tries Ollama first in an ollama,agent_cli chain, and agent_cli only when Ollama doesn't answer at all" do
     chain!(:summary, "ollama,agent_cli")
-
     expect(route).to include(provider: "ollama")
+    expect(stub.requests).to be_empty
+
+    down = FakeProvider.new(name: "ollama", result: { ok: false, text: nil, error: "provider_unavailable", latency_ms: 1.0, http_status: nil })
+    expect(with_llm_provider(down) { Llm::Router.generate(:summary, prompt, style: "concise") }).to include(ok: true, text: "bridge answer", provider: "agent_cli")
+    expect(stub.requests.size).to eq(1)
+
+    refused = FakeProvider.new(name: "ollama", result: { ok: false, text: nil, error: "provider_unavailable", latency_ms: 1.0, http_status: 413 })
+    expect(with_llm_provider(refused) { Llm::Router.generate(:scan, prompt, style: "concise") }).to include(http_status: 413, provider: "ollama")
+    bad = FakeProvider.new(name: "ollama", result: { ok: false, text: nil, error: "empty response", latency_ms: 1.0 })
+    expect(with_llm_provider(bad) { Llm::Router.generate(:summary, prompt, style: "concise") }).to include(error: "empty response", provider: "ollama")
+    expect(stub.requests.size).to eq(1)
+  end
+
+  it "returns Ollama's outage unchanged on the default chain" do
+    down = FakeProvider.new(name: "ollama", result: { ok: false, text: nil, error: "provider_unavailable", latency_ms: 1.0, http_status: nil })
+
+    expect(with_llm_provider(down) { Llm::Router.generate(:summary, prompt, style: "concise") })
+      .to eq(ok: false, text: nil, error: "provider_unavailable", latency_ms: 1.0, http_status: nil, provider: "ollama")
     expect(stub.requests).to be_empty
   end
 
