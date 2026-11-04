@@ -5,8 +5,12 @@ require "rake"
 
 # Agent-CLI PR4, step T: bin/rails llm:bridge_probe.
 RSpec.describe "llm:bridge_probe", type: :task do
+  # Other specs run Rails.application.load_tasks again and again, which appends the task's action each
+  # time: start from one definition.
   before do
-    Rails.application.load_tasks if Rake::Task.tasks.none? { |task| task.name == "llm:bridge_probe" }
+    Rails.application.load_tasks unless Rake::Task.task_defined?("environment")
+    Rake::Task["llm:bridge_probe"].clear if Rake::Task.task_defined?("llm:bridge_probe")
+    load Rails.root.join("lib/tasks/llm.rake")
     Rake::Task["llm:bridge_probe"].reenable
   end
 
