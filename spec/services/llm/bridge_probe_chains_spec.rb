@@ -48,6 +48,7 @@ RSpec.describe "Llm::BridgeProbe configured models", type: :request do
     Rails.application.load_tasks unless Rake::Task.task_defined?("environment")
     Rake::Task["llm:bridge_probe"].clear if Rake::Task.task_defined?("llm:bridge_probe")
     load Rails.root.join("lib/tasks/llm.rake")
+    Rake::Task["llm:bridge_probe"].reenable
     expect { Rake::Task["llm:bridge_probe"].invoke }.to output(/  chain scan: claude zq7-claude, claude zq7-claude-b1 \(NOT TESTED\), devin zq7-devin\n\z/).to_stdout
   end
 end
