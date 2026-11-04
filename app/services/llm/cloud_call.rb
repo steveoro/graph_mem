@@ -103,7 +103,7 @@ module Llm
 
     def deliver(text)
       answer = @options.nil? ? @provider.generate(text, style: @style) : @provider.generate(text, style: @style, options: @options)
-      Budget.charge(@task, tokens: Budget.estimate(text, answer[:text]))
+      Budget.charge(@task, tokens: Budget.estimate(text, answer[:text])) if Budget.chargeable?(answer)
       answer
     end
 

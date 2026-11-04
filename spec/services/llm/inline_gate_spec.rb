@@ -43,13 +43,17 @@ RSpec.describe "The inline gate" do
     expect(stub.requests).to be_empty
   end
 
-  it "with the opt-in, makes one attempt with the capped timeout and no backup model, and names the model" do
+  it "with the opt-in, makes one attempt within the capped wait and no backup model, and names the model" do
     AppSettings.llm_chain_summary = "claude"
     AppSettings.llm_inline_cloud_tasks = "summary"
     AppSettings.llm_inline_cloud_timeout = 7
+    created = []
+    allow(Net::HTTP).to receive(:new).and_wrap_original { |original, *args| original.call(*args).tap { |http| created << http } }
 
     expect(summarize).to include(generation_mode: "llm", generated_by: "zq7-claude")
-    expect(stub.requests.sole.json).to include("model" => "zq7-claude", "timeout_s" => 7, "task" => "summary")
+    # The whole wait fits in the 7 s: connect 1 + read 6, and the CLI's own timeout 3 s inside the read.
+    expect(stub.requests.sole.json).to include("model" => "zq7-claude", "timeout_s" => 3, "task" => "summary")
+    expect(created.sole.open_timeout + created.sole.read_timeout).to eq(7)
 
     allow(handler).to receive(:call).and_return([ 200, { ok: false, failure_class: "cli_quota" } ])
     stub.requests.clear
@@ -70,12 +74,20 @@ RSpec.describe "The inline gate" do
     expect(stub.requests.size).to eq(1)
   end
 
-  it "caps the opt-in timeout between 5 and 60 seconds" do
+  it "keeps the whole wait within the default 20 s, and within 5 s at the floor" do
     AppSettings.llm_chain_summary = "claude"
     AppSettings.llm_inline_cloud_tasks = "summary"
     AppSettings.where(var: "llm_inline_cloud_timeout").delete_all
+    created = []
+    allow(Net::HTTP).to receive(:new).and_wrap_original { |original, *args| original.call(*args).tap { |http| created << http } }
+
     summarize
-    expect(stub.requests.last.json["timeout_s"]).to eq(20)
+    expect(stub.requests.last.json["timeout_s"]).to eq(16)
+    expect(created.last.open_timeout + created.last.read_timeout).to eq(20)
+    AppSettings.llm_inline_cloud_timeout = 5
+    summarize
+    expect(stub.requests.last.json["timeout_s"]).to eq(1)
+    expect(created.last.open_timeout + created.last.read_timeout).to eq(5)
   end
 
   it "never sends detect_contradictions to the bridge, opt-in or not" do

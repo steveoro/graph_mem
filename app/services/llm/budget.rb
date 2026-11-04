@@ -4,9 +4,14 @@ module Llm
   # Daily cloud budgets per task (agent-CLI PR5): llm_budget_<task>_calls and llm_budget_<task>_tokens,
   # 0 = no limit (the default). Counted per calendar day in the app time zone, in Rails.cache, under
   # `llm:budget:<yyyy-mm-dd>:<task>:{calls,tokens}` (kept two days). Every cloud send counts, retries
-  # and backup models included; tokens are the [llm] line's estimates (prompt plus answer). A new day
-  # is a new key: no timestamp is compared. Counting is best effort under concurrency (increments are
-  # atomic per key, so a run can overshoot by one call). Llm::CloudCall checks it before each send.
+  # and backup models included, but only when a model answered (ok, or a CLI-level failure): a send
+  # the bridge refused or never got (not configured, unreachable, busy, a gate problem) costs nothing.
+  # Tokens are the [llm] line's estimates (prompt plus answer). A new day is a new key: no timestamp is
+  # compared. Counting is best effort: increments are atomic per key, and the check comes before the
+  # send, so each concurrent sender can overshoot by one call (cloud jobs run one at a time; opted-in
+  # summaries don't). The cache must be shared across processes for one count: production's
+  # solid_cache_store is; development's memory_store counts per process. Llm::CloudCall checks it
+  # before each send.
   #
   #   Llm::Budget.exhausted?(:scan)            # => false
   #   Llm::Budget.charge(:scan, tokens: 1500)
@@ -54,6 +59,12 @@ module Llm
       Rails.cache.increment(key(day, task, :tokens), tokens.to_i, expires_in: KEEP)
     rescue StandardError
       nil
+    end
+
+    # @param answer [Hash] a provider result
+    # @return [Boolean] whether a model answered (ok, or an agent CLI's own failure), so the send counts
+    def chargeable?(answer)
+      answer[:ok] || answer[:error].to_s.start_with?("#{AgentCliProvider::NAME}_")
     end
 
     # @param texts [Array<String, nil>]

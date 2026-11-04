@@ -92,7 +92,7 @@ module Llm
       opts = options.to_h.symbolize_keys
       return { ok: false, text: nil, error: BridgeClient::NOT_CONFIGURED, latency_ms: 0.0 } unless profile && model
 
-      result = @client.complete(prompt, profile: profile, model: model, task: @task, timeout_s: timeout(opts))
+      result = @client.complete(prompt, profile: profile, model: model, task: @task, timeout_s: timeout(opts), deadline_s: deadline)
       # PR5: a cloud JSON answer is never cut (a cut breaks the document); SCAN_CAP still applies.
       normalize = opts[:format].to_s == "json" ? opts.merge(max_output_length: nil) : opts
       result[:ok] ? result.merge(text: ResponseNormalizer.call(result[:text], normalize)) : result
@@ -104,8 +104,12 @@ module Llm
 
     def timeout(opts)
       seconds = (opts[:timeout].presence || SummarizationConfig.resolved_config[:timeout]).to_i
-      cap = @attempt && @attempt[:timeout_cap]
-      cap ? [ seconds.positive? ? seconds : cap, cap ].min : seconds
+      deadline ? [ seconds.positive? ? seconds : deadline, deadline ].min : seconds
+    end
+
+    # @return [Integer, nil] an inline attempt's cap on the whole call (the client fits its timeouts in)
+    def deadline
+      @attempt && @attempt[:timeout_cap]
     end
   end
 end

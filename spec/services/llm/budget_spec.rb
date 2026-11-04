@@ -68,6 +68,21 @@ RSpec.describe Llm::Budget do
     expect(described_class.used(:scan)[:calls]).to eq(3)
   end
 
+  it "charges nothing when no model answered: not configured, bridge stopped, gate refusal, busy" do
+    AppSettings.llm_budget_judge_calls = 1
+    AppSettings.llm_profile_devin_model = ""
+    route("devin,ollama")
+    [ [ 503, { ok: false, failure_class: "gate_stale" } ], [ 429, {} ] ].each do |answer|
+      allow(handler).to receive(:call).and_return(answer)
+      route
+    end
+    stub.stop
+    route
+
+    expect(described_class.used(:judge)).to eq(calls: 0, tokens: 0)
+    expect(described_class.exhausted?(:judge)).to be(false)
+  end
+
   it "skips the JSON retry when the budget runs out after the first answer" do
     AppSettings.llm_budget_scan_calls = 1
     allow(handler).to receive(:call).and_return([ 200, { ok: true, text: "not json" } ])

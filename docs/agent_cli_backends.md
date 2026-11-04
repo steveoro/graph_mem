@@ -60,7 +60,10 @@ can't answer `claude -p "hi"` (or `devin -p "hi"`) for that user in an empty fol
    - the task's **chain**, for example scan = `claude,ollama` (Ollama stays the last fallback) or
      `claude,devin,ollama`;
    - **a budget** for that task: cloud calls per day and estimated tokens per day. `0` means no limit, so set
-     one. Over it, the task goes to the next chain entry (Ollama if listed) until the next calendar day.
+     one. Over it, the task goes to the next chain entry (Ollama if listed) until the next calendar day. A call
+     counts only when a model answered (a stopped bridge or a gate refusal costs nothing). The counters need a
+     cache shared by the web and worker processes: production's `solid_cache_store` is; development's
+     `memory_store` counts per process.
 3. Summaries run inside requests (the `summarize` tool and `POST /api/v1/summaries`), so they use the bridge
    only if you also set **Requests that may use the host bridge** to `summary`. Then each request makes one
    attempt, primary model only, and waits at most the configured seconds (20 by default, 5 to 60).
