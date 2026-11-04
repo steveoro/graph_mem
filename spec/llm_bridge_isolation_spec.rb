@@ -2,7 +2,7 @@
 
 require "rails_helper"
 
-# Agent-CLI PR3, step T: the host bridge (script/llm_bridge/) stays outside the app until PR4, and
+# Agent-CLI PR3, step T: the host bridge (script/llm_bridge/) stays outside the app (PR4: but for its HTTP client), and
 # its files hold no real home path, no IPv4 address but loopback, and no .lan host. Plain text
 # checks: no file is run or loaded.
 RSpec.describe "LLM host bridge isolation" do
@@ -15,10 +15,15 @@ RSpec.describe "LLM host bridge isolation" do
 
   def relative(path) = Pathname.new(path).relative_path_from(Rails.root).to_s
 
-  it "is never named under app/, lib/ or config/" do
+  # PR4 wires Rails to the bridge over HTTP: only these files may name it.
+  let(:rails_side) do
+    %w[app/services/llm/bridge_client.rb]
+  end
+
+  it "is named under app/, lib/ or config/ only by the Rails side of the bridge (PR4)" do
     named = files("{app,lib,config}/**/*").select { |path| File.binread(path).match?(/llm_bridge|agent_cli|bridge\.token/) }
 
-    expect(named.map { |path| relative(path) }).to be_empty
+    expect(named.map { |path| relative(path) }).to match_array(rails_side)
   end
 
   it "has no home-directory path, no IPv4 address but 127.0.0.1, and no .lan host" do
