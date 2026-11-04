@@ -67,6 +67,11 @@ class PassTest(LockdownCase):
         record = self.record("devin")
         self.assertEqual((record["prompt_forms"], record["trust_omit"]), (["arg", "file"], True))
 
+    def test_a_tool_call_the_devin_hook_refused_is_a_warning_not_a_failure(self):
+        result, report = self.gate("devin", sidecar={"hook_on_grep": True})
+        self.assertEqual(result, "PASS")
+        self.assertIn("warn  fake-model arg grep [cli_tool_denied]", report)
+
     def test_a_cli_that_refuses_without_trust_counts_as_not_loaded(self):
         self.assertEqual(self.gate("devin", sidecar={"refuse_without_trust": True})[0], "PASS")
 

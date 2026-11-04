@@ -327,31 +327,28 @@ def unwrap(profile: Profile, stdout: str) -> dict:
             "subtype": subtype if isinstance(subtype, str) else "", "turns": pick("turns_path")}
 
 
-def _has_tool_step(node) -> bool:
+def _tool_steps(node) -> int:
+    """Tool calls in a transcript node; a doubtful node may count twice (more steps than hook calls fails closed)."""
     if isinstance(node, dict):
-        if node.get("type") in TOOL_KEYS or any(node.get(key) for key in TOOL_KEYS):
-            return True
-        return any(_has_tool_step(value) for value in node.values())
-    if isinstance(node, list):
-        return any(_has_tool_step(item) for item in node)
-    return False
+        own = int(node.get("type") in TOOL_KEYS)
+        own += sum(len(node[key]) if isinstance(node[key], list) else 1 for key in TOOL_KEYS if node.get(key))
+        return own + sum(_tool_steps(value) for value in node.values())
+    return sum(_tool_steps(item) for item in node) if isinstance(node, list) else 0
 
 
-def transcript_shows_tools(text: Optional[str], exit_code) -> bool:
-    """A tool step in an exported transcript (JSON or JSON lines); unreadable counts as tool use (fail closed).
-
-    A missing transcript counts too, unless the run already failed (it may have stopped before writing one).
-    """
+def transcript_tool_steps(text: Optional[str], exit_code) -> Optional[int]:
+    """The tool calls in an exported transcript (JSON or JSON lines); None when it is unreadable (fail closed),
+    or missing although the run succeeded (a failed run may have stopped before writing one: 0)."""
     if text is None:
-        return exit_code == 0
+        return None if exit_code == 0 else 0
     try:
         try:
             docs = [json.loads(text)]
         except ValueError:
             docs = [json.loads(line) for line in text.splitlines() if line.strip()]
-        return _has_tool_step(docs)
-    except (ValueError, RecursionError):  # unreadable or too deep to walk: fail closed
-        return True
+        return _tool_steps(docs)
+    except (ValueError, RecursionError):  # unreadable or too deep to walk
+        return None
 
 
 def _hook_lines(state, offset, run_id):
@@ -369,16 +366,22 @@ def _size(path):
     return os.path.getsize(path) if os.path.isfile(path) else 0
 
 
-def tool_use(profile: Profile, proc: dict, envelope: dict, hook_lines: list, transcript: Optional[str], stdout: str) -> bool:
-    """Whether the run used a tool: a hook.log line, too many turns, a transcript tool step, or the stdout pattern."""
-    trace = profile["tool_trace"]
-    turns = envelope["turns"]
-    return bool(
-        hook_lines
-        or (trace["max_turns"] is not None and isinstance(turns, int) and turns > trace["max_turns"])
-        or (trace["export_path"] and transcript_shows_tools(transcript, proc["exit"]))
-        or (profile.stdout_re and profile.stdout_re.search(stdout))
-    )
+def tool_use(profile: Profile, proc: dict, envelope: dict, hook_lines: list, transcript: Optional[str], stdout: str):
+    """``"used"`` (cli_tool_use), ``"denied"`` or None. Too many turns, the stdout pattern or an unreadable
+    transcript is use. Otherwise any hook.log line or transcript tool call is use, except on a profile whose
+    tools are denied rather than removed (``tools_fully_disabled: false``, with the hook wired): there, when
+    the deny hook saw at least as many calls as the transcript shows, each was refused (cli_tool_denied)."""
+    trace, turns = profile["tool_trace"], envelope["turns"]
+    if (trace["max_turns"] is not None and isinstance(turns, int) and turns > trace["max_turns"]) or \
+            (profile.stdout_re and profile.stdout_re.search(stdout)):
+        return "used"
+    steps = transcript_tool_steps(transcript, proc["exit"]) if trace["export_path"] else 0
+    if steps is None:
+        return "used"
+    if not steps and not hook_lines:
+        return None
+    hooked = not profile["tools_fully_disabled"] and trace["hook_log"] and len(hook_lines) >= steps
+    return "denied" if hooked else "used"
 
 
 def classify(profile: Profile, proc: dict, envelope: dict, stdout: str, stderr: str) -> str:
@@ -442,7 +445,7 @@ def run_cli(profile: Profile, prompt: str, model: str, timeout_s: float, run_id:
         raw = {"stdout": stdout, "stderr": stderr, "transcript": transcript, "hook_lines": _hook_lines(state, offset, run_id)}
         envelope = unwrap(profile, stdout)
         used = tool_use(profile, proc, envelope, raw["hook_lines"], transcript, stdout)
-        cls = "cli_tool_use" if used else classify(profile, proc, envelope, stdout, stderr)
+        cls = {"used": "cli_tool_use", "denied": "cli_tool_denied"}.get(used) or classify(profile, proc, envelope, stdout, stderr)
         text = envelope["text"] if isinstance(envelope["text"], str) else ""
         return _outcome(model, cls, started, clean(text), raw)
     finally:

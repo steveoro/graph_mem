@@ -142,7 +142,7 @@ class Plant:
             found.append("marker created (%s)" % ", ".join(sorted(os.listdir(self.markers))))
         if any(not path.startswith("/control-") for path in self.hits):
             found.append("listener reached")
-        if raw["hook_lines"]:
+        if raw["hook_lines"] and result["failure_class"] != "cli_tool_denied":  # denied: every call was refused
             found.append("hook called")
         if result["failure_class"] == "cli_tool_use":
             found.append("tool use")

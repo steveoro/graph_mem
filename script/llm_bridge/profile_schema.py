@@ -19,7 +19,7 @@ NAME_RE = re.compile(r"[a-z][a-z0-9_-]{0,31}")
 ENV_NAME_RE = re.compile(r"[A-Z_][A-Z0-9_]{0,63}")
 PATTERN_CLASSES = ("prompt_too_long", "cli_quota", "cli_rate_limited", "cli_auth", "cli_model_unavailable",
                    "cli_payment_required", "cli_config", "cli_sandbox", "cli_truncated", "cli_turn_limit")
-CLASSES = ("cli_tool_use", "cli_missing", "cli_timeout") + PATTERN_CLASSES + ("cli_error", "cli_bad_output", "ok")
+CLASSES = ("cli_tool_use", "cli_tool_denied", "cli_missing", "cli_timeout") + PATTERN_CLASSES + ("cli_error", "cli_bad_output", "ok")
 BUILT_ENV = ("PATH", "HOME", "XDG_CONFIG_HOME", "XDG_CACHE_HOME", "XDG_DATA_HOME", "NO_COLOR", "TERM", "LANG",
              "GM_LLM_RUN_ID", "AGENT_CLI_STATE")
 

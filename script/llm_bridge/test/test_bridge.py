@@ -209,15 +209,21 @@ class RunTest(BridgeCase):
         self.assertEqual(self.complete(prompt="@fake exit=1\n@fake stderr=Prompt is too long\n")[0], 413)
 
     def test_tool_use_trips_the_profile_until_a_new_pass(self):
-        status, body = self.complete(prompt="@fake hook=Bash\n")
+        status, body = self.complete(profile="claude", prompt="@fake hook=Bash\n")
         self.assertEqual((status, body["failure_class"]), (200, "cli_tool_use"))
-        tripped = os.path.join(self.state, "tripped", "devin.json")
+        tripped = os.path.join(self.state, "tripped", "claude.json")
         with open(tripped, encoding="utf-8") as handle:
             self.assertEqual(set(json.load(handle)), {"profile", "run_id", "failure_class"})
         self.assertEqual(os.stat(tripped).st_mode & 0o777, 0o600)
-        self.assertEqual(self.outcome(), (503, "tripped"))
-        self.assertTrue(self.client.call("GET", "/v1/health")[1]["profiles"]["devin"]["tripped"])
-        self.assertEqual(self.complete(profile="claude", prompt="@fake answer=ok\n")[0], 200)
+        self.assertEqual(self.outcome(profile="claude"), (503, "tripped"))
+        self.assertTrue(self.client.call("GET", "/v1/health")[1]["profiles"]["claude"]["tripped"])
+        self.assertEqual(self.complete(prompt="@fake answer=ok\n")[0], 200)
+
+    def test_a_devin_call_the_hook_refused_fails_the_request_without_tripping(self):
+        status, body = self.complete(prompt="@fake hook=Bash\n")
+        self.assertEqual((status, body["ok"], body["failure_class"]), (200, False, "cli_tool_denied"))
+        self.assertFalse(self.server.bridge.tripped("devin"))
+        self.assertEqual(self.outcome(prompt="@fake answer=ok\n"), (200, None))
 
     def test_one_run_at_a_time_per_profile(self):
         results = {}

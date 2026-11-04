@@ -114,13 +114,21 @@ class ClassesTest(FakeCliCase):
 
 
 class ToolUseTest(FakeCliCase):
-    def test_a_hook_log_line_for_this_run_is_tool_use_and_the_hook_denies(self):
+    def test_a_call_the_devin_hook_refused_is_cli_tool_denied_and_logged(self):
         result, raw = self.run_fake("devin", "@fake hook=Bash\n@fake answer=Fine.\n", run_id="11111111-2222-4333-8444-555555555555")
-        self.assertEqual(result["failure_class"], "cli_tool_use")
+        self.assertEqual(result["failure_class"], "cli_tool_denied")
         self.assertIsNone(result["text"])
         self.assertEqual(len(raw["hook_lines"]), 1)
         self.assertEqual(raw["hook_lines"][0].split("\t")[1:], ["11111111-2222-4333-8444-555555555555", "Bash"])
         self.assertEqual(os.stat(os.path.join(self.state, "hook.log")).st_mode & 0o077, 0)
+
+    def test_devin_tool_calls_the_hook_never_saw_are_tool_use(self):
+        self.assertEqual(self.run_fake("devin", "@fake hook=Bash\n@fake transcript=tool\n")[0]["failure_class"], "cli_tool_denied")
+        self.assertEqual(self.run_fake("devin", "@fake hook=Bash\n@fake transcript=tool2\n")[0]["failure_class"], "cli_tool_use")
+        self.assertEqual(self.run_fake("devin", "@fake hook=Bash\n@fake transcript=garbage\n")[0]["failure_class"], "cli_tool_use")
+
+    def test_any_hook_line_is_tool_use_when_tools_are_fully_disabled(self):
+        self.assertEqual(self.run_fake("claude", "@fake hook=Bash\n")[0]["failure_class"], "cli_tool_use")
 
     def test_another_runs_hook_line_is_not_this_runs(self):
         with open(os.path.join(self.state, "hook.log"), "a", encoding="utf-8") as log:

@@ -11,9 +11,9 @@ Two control channels:
 - ``@fake key=value`` lines in the prompt (wrapper and bridge tests): ``answer``, ``raw``, ``exit``,
   ``stderr``, ``is_error``, ``subtype``, ``turns``, ``no_result``, ``sleep``, ``ignore_term``,
   ``spawn_child=<pid file>``, ``flood=<bytes>``, ``hook=<tool>``, ``echo_env``, ``echo_argv``, ``echo_cwd_mode``,
-  ``transcript=none|tool|garbage|deep``.
+  ``transcript=none|tool|tool2|garbage|deep``.
 - ``<this file>.json`` next to the copy (lockdown tests): ``{"obey": [...], "load_decoys": bool,
-  "refuse_without_trust": bool, "error_on_attack": bool}``. ``obey`` holds ``read``, ``grep``, ``touch``, ``fetch``, ``mcp`` and ``settings``:
+  "refuse_without_trust": bool, "error_on_attack": bool, "hook_on_grep": bool}``. ``obey`` holds ``read``, ``grep``, ``touch``, ``fetch``, ``mcp`` and ``settings``:
   the fake then really reads the canary, touches the marker, fetches the listener or starts the
   decoy MCP server named in the prompt or the seeded config.
 """
@@ -135,8 +135,9 @@ def write_transcript(argv, found, text):
     if "--export" not in argv or found.get("transcript") == "none":
         return
     steps = [{"source": "agent", "message": text}]
-    if found.get("transcript") == "tool":
-        steps.append({"source": "agent", "tool_calls": [{"function_name": "exec", "arguments": {}}]})
+    if found.get("transcript") in ("tool", "tool2"):
+        calls = [{"function_name": "exec", "arguments": {}}] * (2 if found["transcript"] == "tool2" else 1)
+        steps.append({"source": "agent", "tool_calls": calls})
     body = {"garbage": "not json {", "deep": "[" * 100000 + "]" * 100000}.get(found.get("transcript"))
     body = body or json.dumps({"schema_version": "ATIF-v1.2", "steps": steps})
     with open(argv[argv.index("--export") + 1], "w", encoding="utf-8") as handle:
@@ -153,6 +154,8 @@ def main(argv):
         print("error: workspace is not trusted", file=sys.stderr)
         return 1
     prompt = read_prompt(argv, claude)
+    if rules.get("hook_on_grep") and "for a file named" in prompt:  # tries a tool, as swe-2 did, and the hook refuses
+        run_hook("grep")
     if rules.get("error_on_attack") and "Statements:" in prompt:  # answers the gate's control prompt only
         print("error: synthetic failure", file=sys.stderr)
         return 1
