@@ -1,7 +1,8 @@
 # frozen_string_literal: true
 
 module Llm
-  # Looks up a provider by name. PR1 has one, `:ollama`. Specs swap one in with `override`
+  # Looks up a provider by name: `:ollama`, and `:agent_cli` (PR4, the host bridge; only a chain
+  # setting reaches it). Specs swap one in with `override`
   # (spec/support/llm.rb resets it after each example); outside the test environment
   # `override` raises, so production code can't replace a provider.
   #
@@ -9,7 +10,7 @@ module Llm
   #   Llm::Registry.override(:ollama, fake)      # specs only
   #   Llm::Registry.reset_overrides!
   module Registry
-    BUILT_IN = { ollama: OllamaProvider }.freeze
+    BUILT_IN = { ollama: OllamaProvider, agent_cli: AgentCliProvider }.freeze
 
     @overrides = {}
 

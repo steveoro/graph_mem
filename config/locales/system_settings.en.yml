@@ -144,6 +144,12 @@ en:
         summary_observations_per_entity:
           label: "Observations per entity"
           description: "Maximum observations to include per entity before capping. 0 disables the cap. Set to 0 to use SUMMARY_OBSERVATIONS_PER_ENTITY from the environment or the default."
+        llm_agent_cli_profile:
+          label: "Host bridge profile"
+          description: "The agent CLI profile an agent_cli chain entry uses (claude or devin). Blank: none, so agent_cli is skipped."
+        llm_agent_cli_model:
+          label: "Host bridge model"
+          description: "The model that profile runs (letters, digits and . _ : -, up to 64). It must be one the profile's lockdown gate passed."
         import_observation_duplicate_max_distance:
           label: "Observation duplicate distance"
           description: "Maximum semantic distance for treating imported observation text as an existing fact. 0.20 is strict and only skips very close paraphrases. 0.50 is broad and may suppress distinct facts. Imports requiring semantic checks are rejected if embeddings are unavailable."
@@ -243,6 +249,8 @@ en:
         invalid_num_ctx: "Context window must be 0 (use ENV/default) or between 2048 and 131072 tokens."
         invalid_observations_per_entity: "Observations per entity must be 0 (use ENV/default) or between 0 and 100."
         invalid_url: "Summary URL must be a valid http or https URL."
+        invalid_agent_cli_profile: "Host bridge profile must be blank, claude or devin."
+        invalid_agent_cli_model: "Host bridge model must be blank or up to 64 letters, digits, dots, underscores, colons or dashes, not starting with one of the last four."
       imports:
         invalid_observation_duplicate_max_distance: "Observation duplicate distance must be between 0.20 and 0.50."
       project_scans:

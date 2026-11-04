@@ -136,7 +136,9 @@ class SettingsSchema
           define_field("summary_timeout", validator: :summary_timeout, fallback: :summarization_settings_fallback_hint, hint: :timeout),
           define_field("summary_max_tokens", validator: :summary_max_tokens, fallback: :summarization_settings_fallback_hint, hint: :max_tokens),
           define_field("summary_num_ctx", validator: :summary_num_ctx, fallback: :summarization_settings_fallback_hint, hint: :num_ctx),
-          define_field("summary_observations_per_entity", validator: :summary_observations_per_entity)
+          define_field("summary_observations_per_entity", validator: :summary_observations_per_entity),
+          define_field("llm_agent_cli_profile", validator: :llm_agent_cli_profile, input: :select, choices: Llm::AgentCliProvider::PROFILES),
+          define_field("llm_agent_cli_model", validator: :llm_agent_cli_model)
         ], partial: "system/settings/summaries_panel"),
         define_group(:imports, [ define_field("import_observation_duplicate_max_distance", validator: :import_distance, input: :slider) ]),
         define_group(:project_scans, [

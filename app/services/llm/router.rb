@@ -47,6 +47,7 @@ module Llm
         CHAIN.each do |name|
           provider = Registry.fetch(name)
           if provider.cloud?
+            provider = provider.for_task(task) if provider.respond_to?(:for_task)
             result = CloudCall.new(task: task, provider: provider, prompt: prompt, style: style, options: options, inline: inline).call
             next if CloudCall.refusal?(result)
           else
