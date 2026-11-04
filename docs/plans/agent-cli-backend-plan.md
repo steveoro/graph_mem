@@ -11,7 +11,7 @@ the operator's workstation behind a small host-side HTTP bridge, with the data a
 `cloud_allowed` gate. It is five PRs. **This plan details PR1** (a provider abstraction with no behaviour
 change; done, #151, 1.67.0), **PR2** (the anonymizer and `cloud_allowed`; done, #152, 1.68.0), **PR3** (the host
 bridge, profiles and lockdown gate; done, #153, 1.69.0) and **PR4** (Rails wired to the bridge, written Nov 4 from
-`e708f3c`; #154, 1.70.0); PR5 gets a one-paragraph scope and its own step list before it starts.
+`e708f3c`; #154, 1.70.0) and **PR5** (the switch-over that finishes the train, written Nov 4 from `bef98f2`).
 
 ## Hard rules (the whole train)
 - **No new MCP tool**, no new or changed tool argument or description; the default `/mcp` stays at **12** (readonly 9,
@@ -33,8 +33,8 @@ bridge, profiles and lockdown gate; done, #153, 1.69.0) and **PR4** (Rails wired
 | **PR1** | `claude/llm-provider-abstraction` | Provider abstraction, **no behaviour change**: `Llm::Provider`, `Llm::OllamaProvider`, `Llm::Router`, `Llm::Registry`, prompt parts, one usage log line per call, spec-side `FakeProvider` and `SubprocessGuard` | `main` (1.66.0) ✅ #151 | **1.67.0** |
 | **PR2** | `claude/llm-anonymizer` | Anonymizer (typed HMAC tokens) + `cloud_allowed` per project (default false) + the gate that refuses a cloud provider for a project that doesn't allow it | PR1 | **1.68.0** |
 | **PR3** | `claude/llm-bridge` | Host bridge + profile framework + `devin` and `claude` profiles + the per-profile lockdown gate, all under `script/llm_bridge/` (not loaded by Rails) | `main` at 1.68.0 (PR2 merged) ✅ #153 | **1.69.0** |
-| **PR4** | `claude/llm-bridge-rails` | `Llm::BridgeClient` + `Llm::AgentCliProvider` (HTTP to the bridge) + `Llm::ResponseNormalizer` + per-task fallback chains + settings + a probe + scan scope from the folder + #153 follow-ups | PR2, PR3 ✅ #154 | **1.70.0** |
-| **PR5** | `claude/llm-switch-over` | Per-task switch-over, the inline gate, an `llm_cloud` queue, budgets and an `llm_usage` table, adopter docs | PR4 + a **PASS** lockdown gate per profile on Steve's workstation | **1.71.0** |
+| **PR4** | `claude/llm-bridge-rails` | `Llm::BridgeClient` + `Llm::AgentCliProvider` (HTTP to the bridge) + `Llm::ResponseNormalizer` + per-task fallback chains + settings + a probe + scan scope from the folder + #153 follow-ups | PR2, PR3 ✅ #154 (1.70.0) | **1.70.0** |
+| **PR5** | `claude/llm-cli-finish` | Both profiles with primary and backup models in one chain, JSON check and one retry, the inline gate, one cloud job at a time, daily budgets, a usage card, adopter docs (the `llm_usage` table is a decision) | PR4 + a **PASS** lockdown gate per profile on Steve's workstation | **1.71.0** |
 
 PR3's bridge touches no Rails code. PR1 and PR2 merged first, so it takes 1.69.0; it also carries two small Rails
 items (the typed-confirm button styling and masking people's names everywhere, see its section).
@@ -1521,6 +1521,360 @@ Checkpoints are push-and-continue; stop **only** for these:
 ---
 
 
+## PR5: finish the train (profiles and backup models, JSON retry, inline gate, one-at-a-time, budgets, usage, adopter docs) → 1.71.0
+
+**Written 2026-11-04 (Europe/Rome)** from `main` at `bef98f2` (#154 merged, **1.70.0**). Every file:line below was
+checked against that commit; if a line has moved, find it by the quoted text. A generic `bundle update` left
+`Gemfile.lock` unchanged at this commit. No PR5 code exists yet. This is the **last PR of the train**.
+
+### Brief
+| | |
+|---|---|
+| Branch / PR | `claude/llm-cli-finish`, **one PR**, titled "Agent-CLI switch-over: profiles, budgets, usage (1.71.0)". **Open it as a draft at checkpoint 1; mark it ready only after R** |
+| Commits | M → J → I → Q → B → U → G → T → D → R, one commit per step (more is fine, fewer is not). **D and R are in this PR** |
+| Checkpoints | **push and continue**: push, get CI green, keep going; Steve reviews as it lands. Stop only for the conditions in "Stop and ask Steve if" |
+| Version | **1.71.0** |
+| Data | synthetic only (`SynthWidget`, `Alpha Service`, `Gadget Project`, `Zq7…` canaries, `.example` hosts); the bridge is the PR4 stub on `127.0.0.1` (`spec/support/bridge_stub.rb`); never a real bridge, CLI, model call, account or token |
+| Read first | `CLAUDE.md`, `AGENTS.md`; this plan (hard rules, the PR2–PR4 sections); `docs/summarization.md` ("LLM providers", "Anonymization and cloud access"); `script/llm_bridge/README.md`; `app/services/llm/*.rb`; `app/services/summarizer_service.rb:435-460`; `app/services/fact_supersede/{judge,proposals}.rb`; `app/services/project_scanner/chunked_extraction.rb`; `app/jobs/{project_scan_job,fact_supersede_job}.rb` |
+| MCP surface | **unchanged** (22 / 12 / 9 / 22; snapshots byte-identical); no tool gains or loses an argument, description or output key. A change would be a stop-and-ask |
+| Migration / settings / gem | **none by default** (Decision 6: the `llm_usage` table needs one, so it's a stop-and-ask if chosen) / **new `AppSettings` fields** (rails-settings-cached, no migration) / **none** |
+
+### Goal
+Close every provider-neutral goal the design study set for the train, so an operator can turn on a cloud chain per
+task, per project, with a budget, and see what it cost:
+- **Profiles and models:** both shipped profiles (`claude`, `devin`) usable in one chain, each with a **primary
+  model and up to three backup models**, tried in order on availability classes, then the next profile, then Ollama
+  as the **last fallback**.
+- **Structured calls:** scan and judge answers from a cloud provider are checked as JSON of the right shape; an
+  invalid one is **retried once** on the same profile and model with a repair suffix, then falls back (to Ollama),
+  never walking the backup models.
+- **Inline gate:** no MCP or REST request ever waits on the bridge unless the operator opts a task in, with a hard,
+  short timeout (the `summarize` tool and `POST /api/v1/summarize` today call the chain as if they were background).
+- **One at a time:** at most one cloud-using job runs at once across the app (the bridge already answers 429 per
+  profile; this stops jobs from burning through fallbacks on 429s).
+- **Budgets:** per task, per day, calls and estimated tokens, with a hard stop that sends the task to Ollama.
+- **Usage:** a small card on System (today and the previous day, per task and provider: calls, estimated tokens,
+  fallbacks, refusals), without storing a prompt.
+- **Adopter docs:** `docs/agent_cli_backends.md`: what must already exist on the workstation, setup per profile, what
+  leaves the machine, how to enable one task for one project, how to turn it all off.
+- Close the two PR4 "until PR5" decisions (scan part size for a cloud window, the judge's 8,192-character cut).
+- With no configuration, every request, prompt, result, `[llm]` line and REST/MCP output stays **byte-identical** to
+  1.70.0's.
+
+### Non-goals (explicitly out of scope, recorded so the train can close)
+- **Running a CLI in the container, or bind-mounting the host CLI into it.** The host bridge is the supported
+  deployment (design study §9.9–9.10: credential in the image, uid mismatch, auto-update swapping the binary). The
+  docs say so and stop there.
+- **`DEVIN_CLI_PATH`:** retired by PR3. The bridge's `AGENT_CLI_<NAME>_PATH` (`agent_cli.py:55-61`, e.g.
+  `AGENT_CLI_DEVIN_PATH`) covers it; the docs mention the old name once, as replaced.
+- **Per-model prices and cost in USD.** Usage shows estimated tokens only (a lower bound: agent overhead is invisible).
+- **A canary completion per model in the probe.** The lockdown gate already runs each tested model, and an untested
+  one is `503 gate_missing`; a probe call would be a cloud call outside `CloudCall`.
+- **Embeddings.** They stay on Ollama (fixed vector dims, called on every write).
+- **More profiles** (Cursor `agent -p`, Codex-style CLIs): a profile file plus a gate PASS later, no Rails change.
+- Any bridge route, status or class change.
+
+### What the code looks like today (verified at `bef98f2`)
+
+**Router and chains (PR1, PR4):**
+- `app/services/llm/router.rb:25-29`: `CHAIN = %i[ollama]`, `DEFAULT_CHAIN = "ollama"`, `CHAINS = { "agent_cli" =>
+  …, "agent_cli,ollama" => …, "ollama,agent_cli" => … }`, `CHAIN_VALUES`. `chain(task)` (:84-88) reads
+  `AppSettings.llm_chain_<task>` on every call; an unknown value is `CHAIN`.
+- `generate` (:58-79): skips a provider that isn't `inline?` on an inline call; a cloud provider goes through
+  `CloudCall` and moves on if `CloudCall.refusal?` or `BridgeClient.fall_through?`; an Ollama outage
+  (`provider_unavailable`, no `http_status`) moves on. A refusal never hides an earlier failure (`b070839`).
+- `app/services/llm/agent_cli_provider.rb:16-18`: `PROFILES = %w[claude devin]`, one profile
+  (`AppSettings.llm_agent_cli_profile`) and **one model** (`llm_agent_cli_model`), no backups. `inline?` false.
+- `app/models/app_settings.rb:42-46`: `llm_chain_summary`, `llm_chain_scan`, `llm_chain_judge` (default `"ollama"`),
+  `llm_agent_cli_profile`, `llm_agent_cli_model` (default `""`).
+- `app/services/llm/bridge_client.rb:43-53`: `STAYS = [prompt_too_long, agent_cli_tool_use]`; every other `bridge_*`
+  or `agent_cli_*` error falls through. `CLI_CLASSES` (:35-36) include `cli_model_unavailable`,
+  `cli_payment_required`, `cli_quota`, `cli_rate_limited` (the backup-model triggers).
+- `app/services/llm/cloud_call.rb`: `ROUND_TRIP_FAILED` (`anonymization_round_trip_failed`) is **returned**, not
+  fallen through (it doesn't start with `bridge_` or `agent_cli_`).
+
+**JSON handling:**
+- `app/services/llm/response_normalizer.rb`: unfences and extracts the longest parseable JSON value, else passes the
+  text on unchanged; then `cut` to `max_output_length` (default 8,192). No shape check, **no retry**.
+- Judge (`fact_supersede/judge.rb:97`) passes `num_ctx`, `num_predict: NUM_PREDICT`, `format: "json"` and **no
+  `max_output_length`**, so its answer is cut at 8,192 characters for every provider; scan passes
+  `max_output_length: nil` (`chunked_extraction.rb:105`).
+- Scan parts are sized from `summary_num_ctx` and `num_predict` (`chunked_extraction.rb:105-113`) whatever the
+  provider.
+
+**Inline:**
+- `fact_supersede/proposals.rb:69`: the inline `detect_contradictions` path uses `Router.client(:judge, inline:
+  true)`, so the bridge is skipped (PR4 Decision 5).
+- `summarizer_service.rb:442`: `Llm::Router.generate(:summary, prompt, style: @style)`: **no `inline:`**, though both
+  callers are synchronous (`app/tools/summarize_tool.rb:51`, `app/controllers/api/v1/summaries_controller.rb:13`).
+  With `llm_chain_summary = agent_cli`, a `summarize` call waits up to the bridge timeout inside the request.
+- `summarizer_service.rb:446`: `generated_by` is always `SummarizationConfig.resolved_config[:model]` (the Ollama
+  model), even when another provider answered.
+
+**Jobs and queues:**
+- `config/queue.yml`: one worker on `"*"`, 3 threads. `ProjectScanJob` `queue_as :default`;
+  `FactSupersedeJob` `queue_as :low_priority`, `limits_concurrency to: 1, key: ->(fact_id) { "fact:#{fact_id}" }`.
+  Nothing limits cloud calls across jobs.
+
+**Usage:**
+- `app/services/llm/usage_log.rb:27-43`: one `[llm]` log line per call (task, provider, model, inline, sizes,
+  estimated tokens, latency, outcome, plus the cloud keys). Not counted anywhere; no profile or fallback step.
+- `config/environments/production.rb:50`: `cache_store = :solid_cache_store` (shared across processes).
+
+### Design
+
+**1. Profiles, models and chains**
+- New `AppSettings` fields, per shipped profile (`claude`, `devin`):
+  `llm_profile_<name>_model` (default `""`) and `llm_profile_<name>_backup_models` (default `""`, comma-separated,
+  at most 3, each matching `AgentCliProvider::MODEL_PATTERN`, no duplicates of the primary).
+- Chain values (a fixed list, validated, as in PR4): the PR4 values stay, and these are added:
+  `claude`, `devin`, `claude,devin`, `devin,claude`, each alone or followed by `,ollama`. `ollama,<profile…>` is
+  not added (PR4's "Ollama outage falls through" covers the only use).
+- `agent_cli` (the PR4 value) means the profile in `llm_agent_cli_profile` with the model in `llm_agent_cli_model`,
+  exactly as today, unless that profile's own model field is set (then the profile's fields win). So 1.70.0
+  configurations keep working unchanged (spec'd).
+- Order per call: profile 1 primary → its backups in order → profile 2 primary → its backups → `ollama` if listed.
+- **Which failures move to the next model of the same profile** (Decision 2): `agent_cli_cli_model_unavailable`,
+  `agent_cli_cli_payment_required`, `agent_cli_cli_quota`, `agent_cli_cli_rate_limited`, and `bridge_gate_missing`
+  (that model was never tested). Every other fall-through failure skips the rest of that profile's models and moves
+  to the next profile (`bridge_gate_stale`, `bridge_tripped`, `bridge_unreachable`, … are about the profile or the
+  bridge, not the model). `prompt_too_long` and `agent_cli_tool_use` stay returned (PR4).
+- Every attempt goes through `CloudCall` (one mask session per attempt is fine; the HMAC tokens are stable per
+  project key). Each attempt writes its own `[llm]` line, now with `profile`, `model`, `fallback_step` (0 = the first
+  provider of the chain).
+
+**2. Structured calls: validate, retry once, fall back** (`Llm::JsonShape`, new, small)
+- Applies only to a **cloud** answer for a JSON task (`format: "json"`): scan and judge. Ollama answers are not
+  checked or retried (byte-identical).
+- Shapes (structural only; the callers keep their domain checks):
+
+| Task | Accepted | Refused as `agent_cli_invalid_json` |
+|---|---|---|
+| `scan` | one JSON object (what `ExtractionPrompt` asks for) | not parseable; an array or scalar |
+| `judge` | an array, or an object whose only Array value is the list (what `Judge` parses today) | not parseable; a scalar; an object with no array |
+
+- On refusal: **one retry**, same profile and model, the same masked prompt plus a fixed repair suffix ("Your
+  previous answer was not valid JSON of the requested shape. Reply with only that JSON."). Still refused ⇒
+  `agent_cli_invalid_json`, which **skips the remaining backup models and profiles** and goes to `ollama` if the chain
+  lists it, else is returned (scan: the part fails as today; judge: the batch is `unjudged`).
+- The check runs on the masked text after normalizing (JSON validity doesn't depend on tokens). A round-trip failure
+  (`anonymization_round_trip_failed`) after a valid answer also falls through to `ollama` (Decision 3), never retried.
+- Judge's 8,192-character cut (PR4 Decision 7): for a **cloud** JSON answer the normalizer no longer cuts at all
+  (only `SCAN_CAP` 256 KiB applies), because a cut breaks the document; Ollama keeps its cut (byte-identical).
+
+**3. Inline gate**
+- `SummarizerService#attempt_llm_synthesis` passes `inline: true` (both callers are requests). With the default
+  chain nothing changes (Ollama is `inline?`).
+- New setting `llm_inline_cloud_tasks` (default `""`; allowed `""` or `summary`). Only when it lists `summary` may an
+  inline summary use a cloud provider, and then with `timeout_s` capped at `llm_inline_cloud_timeout` (default 20,
+  range 5..60) and **no backup models** (one cloud attempt, then the next chain entry). Judge inline
+  (`detect_contradictions`) stays cloud-free in PR5 (it can fan out to 7 calls).
+- `generated_by` reports the model that answered (`result[:model]` when a cloud provider answered, else as today).
+  The key exists today; only its value differs, and only when a cloud provider answered (no surface change; spec'd
+  that the default output is byte-identical).
+
+**4. One cloud job at a time**
+- `Llm::Router.cloud_chain?(task)`: whether the task's chain names any cloud provider.
+- `ProjectScanJob` and `FactSupersedeJob` get a `limits_concurrency` key that is `"llm_cloud"` when their task's
+  chain is cloud (`:scan`, `:judge`) and their own key otherwise (`FactSupersedeJob` keeps `"fact:#{id}"`;
+  `ProjectScanJob` gets a per-job key so nothing changes for it), `to: 1`, `duration:` the longest call they can
+  make. **No `config/queue.yml` change** and no new queue (Decision 4).
+- The key is read when the job is enqueued; changing a chain affects jobs enqueued after the change (documented).
+
+**5. Budgets** (`Llm::Budget`, new)
+- Settings per task: `llm_budget_<task>_calls` and `llm_budget_<task>_tokens` (Integer, default `0` = no limit, so
+  1.70.0 setups keep working; Decision 5). The adopter docs tell operators to set one.
+- Counted per **calendar day** in the app time zone, in `Rails.cache` (`increment` with `expires_in: 2.days`), keys
+  `llm:budget:<yyyy-mm-dd>:<task>:{calls,tokens}`. Calls count every cloud attempt (retries and backups included);
+  tokens count `est_in_tokens + est_out_tokens` from the `[llm]` fields. A day boundary is a counter reset, not a
+  staleness decision.
+- Checked **before** each cloud attempt: over budget ⇒ that attempt is refused as `budget_exhausted` (a `CloudCall`
+  refusal, so it falls through to `ollama` like the other refusals and sends nothing). Logged with
+  `refused: "budget_exhausted"`.
+- Counting is best-effort under concurrency (cache increments are atomic per key; a job can overshoot by at most one
+  call). Documented.
+
+**6. Usage card**
+- `Llm::UsageLog.record` also increments per-day counters (same cache, same key scheme):
+  `llm:usage:<day>:<task>:<provider>:{calls,ok,errors,fallbacks,refused,est_tokens}`. A logging failure still never
+  fails the call.
+- System → Summaries panel (or the System home, wherever the bridge probe block sits): a small table for today and the
+  previous day, per task and provider, plus each task's budget and what's left. Operator only, no auto-refresh.
+- No prompt text, no masked text, no project names, no paths.
+- The `llm_usage` table from the original PR5 scope is **Decision 6** (default: not in PR5; a migration is a
+  stop-and-ask).
+
+**7. Scan parts for a cloud window** (PR4 Decision 6)
+- Default: **unchanged** (`summary_num_ctx`). A cloud scan therefore sends more, smaller parts than it could, but a
+  part that falls back to Ollama mid-scan always fits Ollama's window. Larger parts are Decision 7.
+
+### Steps
+
+#### M. Profiles, backup models, chain values
+- §1: the settings and validators (`settings_schema.rb`, `settings_schema/validators.rb`), the Summaries panel
+  fields, `Router` chain expansion into `(provider, profile, model)` attempts, the per-model and per-profile fall-through
+  rule, `fallback_step` / `profile` in `UsageLog`.
+- Specs: every chain value expands to the right attempts; the PR4 `agent_cli` value behaves exactly as in 1.70.0;
+  each backup trigger moves to the next model; `gate_stale` / `tripped` / `unreachable` skip to the next profile;
+  `prompt_too_long` and `tool_use` are returned; default chains are byte-identical (P0 goldens).
+
+#### J. JSON shape, retry once, fall back
+- §2: `Llm::JsonShape`, the retry in the cloud path, `agent_cli_invalid_json`, round-trip failure falling through,
+  no cut for cloud JSON answers.
+- Spec table (one example each, against the stub bridge):
+
+| Bridge answer(s) | Chain | Expected |
+|---|---|---|
+| fenced object | `claude,ollama` (scan) | accepted, 1 attempt |
+| prose + object | `claude,ollama` (scan) | accepted, 1 attempt |
+| array, then object | `claude,ollama` (scan) | retry accepted, 2 attempts |
+| invalid twice | `claude,ollama` (scan) | Ollama answers; backups not tried |
+| invalid twice | `claude` (scan) | `agent_cli_invalid_json`, part fails, no split |
+| object wrapping one array | `devin,ollama` (judge) | accepted |
+| scalar twice | `devin,ollama` (judge) | Ollama answers |
+| 12,000-char valid array | `devin` (judge) | accepted uncut |
+| Ollama invalid JSON | `ollama` | unchanged behaviour, no retry |
+| valid, leftover token on restore | `claude,ollama` (scan) | Ollama answers |
+
+**Checkpoint 1:** M and J pushed, CI green; **open the PR as a draft now**. **Continue.**
+
+#### I. Inline gate
+- §3: `inline: true` from the summarizer, `llm_inline_cloud_tasks`, `llm_inline_cloud_timeout`, `generated_by`.
+- Specs: default chain, summarize MCP and REST outputs byte-identical; `llm_chain_summary = claude` without the opt-in
+  ⇒ `inline_skipped` and the deterministic summary as today's fallback; with the opt-in ⇒ the capped `timeout_s`
+  reaches the stub, one attempt, no backups; `detect_contradictions` never reaches the stub.
+
+#### Q. One cloud job at a time
+- §4: `Router.cloud_chain?`, the two `limits_concurrency` keys.
+- Specs: the key per chain; two cloud scan jobs block each other; a local scan job and a fact job keep their keys.
+
+#### B. Budgets
+- §5: settings, `Llm::Budget`, the refusal, the counters. Specs use `ActiveSupport::Cache::MemoryStore` and
+  `travel_to` only to move across a **day boundary** (no age comparison anywhere).
+- Specs: under budget ⇒ sent; calls or tokens over ⇒ `budget_exhausted`, nothing sent, Ollama answers if listed;
+  retries and backups count; the next day starts at zero; `0` = no limit.
+
+**Checkpoint 2:** I, Q and B pushed, CI green. Paste one synthetic `[llm]` line for a backup-model fallback and one
+for `budget_exhausted` in the PR. **Continue.**
+
+#### U. Usage card
+- §6: counters in `UsageLog`, the card, a request spec (operator only; shows counts; never shows prompt text, a name
+  or a path).
+
+#### G. Cleanups
+- `BridgeProbe` reports the configured profiles and models per task chain next to each profile's gate state, and
+  flags a configured model (primary or backup) the gate didn't test (`gate.models` from `/v1/health`, `bridge.py:144`).
+  No new request type.
+
+#### T. Cross-cutting checks
+- MCP counts 22 / 12 / 9 / 22; `tools_list_snapshot_spec` green without re-recording; `git diff db/structure.sql`
+  empty; `spec/llm_bridge_isolation_spec.rb` still green (new files that name the bridge are added to its "named only
+  by" list; that list edit is **planned**).
+- A spec that every `Registry` provider with `cloud?` true is only ever reached through `CloudCall` (no direct
+  `generate` from app code).
+
+#### D. Docs
+- New `docs/agent_cli_backends.md` (adopter guide, generic placeholders only: `<user>`, `~/`, `/path/to/graph_mem`):
+  1. the assumption, first: a supported CLI is already installed and logged in on the workstation, under the user
+     that runs the bridge; graph_mem never installs a CLI, logs in, or stores the CLI credential;
+  2. setup per profile (`claude`, `devin`): install, headless login, verify in an empty dir, the bridge (systemd user
+     unit sample), `AGENT_CLI_<NAME>_PATH` only when not on PATH, the lockdown gate per profile and **after every CLI
+     update**;
+  3. the app side: `LLM_BRIDGE_URL`, `LLM_BRIDGE_TOKEN_FILE` (container: a read-only mount of a copy owned by the
+     app's uid), the probe;
+  4. enabling one task for one project: allow Cloud on that project, set the task's chain and models, set a budget;
+  5. what leaves the machine (masked prompt; what the anonymizer can't hide, from `docs/summarization.md`), what is
+     logged (sizes, never text);
+  6. turning it off: set the chains back to `ollama` (instant), or stop the bridge (every call falls back);
+  7. not supported: CLI in the container, bind-mounting the CLI, embeddings.
+- `docs/summarization.md`: chains with profiles and backups, the JSON retry, the inline opt-in, one-at-a-time,
+  budgets, the usage card.
+- `docs/architecture.md`: one line for budgets and usage.
+- `README.md`: one line linking the adopter guide.
+
+**Checkpoint 3:** U, G, T and D pushed, CI green. **Continue.**
+
+#### R. Release and close the train
+- `lib/graph_mem/version.rb` and `skills/graph-mem-mcp-toolset/SKILL.md:18` → **1.71.0**.
+- `CHANGELOG.md` `## [1.71.0] - <merge date>`, summary "Agent-CLI switch-over":
+  - **Added:** both profiles in one chain with primary and backup models; JSON answers checked and retried once;
+    the inline opt-in for summaries; one cloud job at a time; daily budgets per task; a usage card; the adopter guide.
+  - **Changed:** `summarize` (MCP and REST) never waits on the bridge unless opted in; `generated_by` names the model
+    that answered; cloud JSON answers are no longer cut at 8,192 characters.
+- This plan: PR4 ✅ #154 (1.70.0) where it isn't already, PR5's row ✅ with this PR's number, the header paragraph
+  says **the train is complete (1.67.0–1.71.0)**, and "Later PRs" ends with a "Train closed" line listing what was
+  left out on purpose (the non-goals above).
+- Mark the PR **ready for review only now**. Don't tag, don't push tags, don't run `rake release`.
+
+### Security checklist
+- Every cloud attempt (primary, backup, retry) goes through `CloudCall`: gate, mask, restore, log. A budget refusal
+  sends nothing.
+- The retry sends the same masked prompt plus a fixed suffix; nothing from the bad answer is sent back.
+- Tool use is never hidden by a backup model, a retry or a fallback.
+- No request (MCP or REST) waits on the bridge unless the operator opted the summary task in, and then for at most
+  60 seconds, one attempt.
+- Usage counters hold numbers only: no prompt, masked text, project name or path.
+- The app still never spawns a process and talks only to `127.0.0.1`.
+
+### Size
+About **2,200–2,800 changed lines** (about half tests): M ~450, J ~400, I ~250, Q ~150, B ~350, U ~300, G ~100,
+T ~100, D ~350, R ~30. **If the diff passes ~3,000 lines, stop and ask Steve.** Files under ~500 lines, methods
+under ~60.
+
+### Decisions (open, with the recommended default)
+1. **Version.** *Default:* **1.71.0**.
+2. **Backup-model triggers.** *Default:* model unavailable, payment required, quota, rate limited, and an untested
+   model (`gate_missing`). Alternative: drop `rate_limited` (it may be account-wide, so a backup wouldn't help).
+3. **Round-trip failure.** *Default:* falls through to `ollama` when listed (it's an unusable answer, like invalid
+   JSON). Alternative: keep returning it (PR4 behaviour).
+4. **One at a time.** *Default:* a Solid Queue concurrency key `"llm_cloud"` on the two jobs, no queue config change.
+   Alternative: an `llm_cloud` queue with its own one-thread worker (needs `config/queue.yml` to list queues instead
+   of `"*"`, which changes the default deployment).
+5. **Budget default.** *Default:* `0` = no limit (1.70.0 setups keep working); the docs and the usage card say "no
+   budget set". Alternative: a non-zero default (e.g. 200 calls per task per day), which would change behaviour for
+   anyone already using a chain.
+6. **`llm_usage` table.** *Default:* **not in PR5**; the cache counters and `[llm]` log lines cover today and the
+   previous day. Alternative: a table with one row per call (needs a **migration**: stop and ask Steve before writing
+   it).
+7. **Scan parts for a cloud window.** *Default:* unchanged (`summary_num_ctx`). Alternative: a
+   `llm_cloud_scan_num_ctx` setting used only when the scan chain starts with a cloud provider, with a part that
+   falls back to Ollama re-split locally first (more code, more risk, bigger diff).
+8. **Judge's cut.** *Default:* no cut for cloud JSON answers, Ollama unchanged. Alternative: keep 8,192 everywhere.
+9. **Inline summary opt-in.** *Default:* off; when on, timeout capped at 20 s (5..60), one attempt. Alternative: no
+   inline cloud at all (summary would never use the cloud, since it only runs inline).
+
+### Acceptance criteria
+- With no configuration, every existing spec, P0 golden, REST JSON and MCP output is byte-identical; every chain is
+  `ollama`; no counter changes behaviour.
+- Chains with both profiles and backup models expand and fall through as specified (spec'd per trigger).
+- A cloud scan or judge answer of the wrong shape is retried once, then falls back to Ollama (or fails as today);
+  the spec table in J passes.
+- `summarize` (MCP and REST) never reaches the bridge without the opt-in (spec'd); `detect_contradictions` never does.
+- Two cloud jobs never run at once (spec'd); local jobs are unaffected.
+- Over budget ⇒ `budget_exhausted`, nothing sent, Ollama answers if listed (spec'd).
+- The usage card shows per-day counts and budget left, with no text, name or path.
+- `docs/agent_cli_backends.md` exists and covers the seven points in D; the plan says the train is complete.
+- MCP 22 / 12 / 9 / 22, snapshots byte-identical, no migration (unless Steve approved Decision 6), no gem.
+- CircleCI (rspec, rubocop, brakeman) and Actions (lint, scan_ruby, scan_js, llm_bridge) green. Synthetic data and
+  generic paths only.
+
+### Stop and ask Steve if
+Checkpoints are push-and-continue; stop **only** for these:
+- Anything would add an MCP tool, change a tool's arguments, description, schema or output keys, change an MCP
+  snapshot, or push the default `/mcp` past 12 tools.
+- The design needs a **new migration** (including the Decision 6 table), a new gem, or a Python package outside the
+  standard library.
+- The diff passes ~3,000 lines.
+- Anything would weaken the lockdown (the gate, the tripped rule, the fail-closed tool-use check, the token-file or
+  loopback rules) or the anonymizer and cloud gate (`CloudCall`, `CloudGate`, the scan scope), for example a cloud
+  attempt that skips `CloudCall`.
+
+For anything else (an existing spec that needs a small edit, a quoted line that moved or no longer matches), adapt to
+the current code with the closest safe choice, note it in the PR description, and continue.
+
+---
+
+
 ## Later PRs (scopes; each gets its own step list)
 
 **PR2: anonymizer + `cloud_allowed` (1.68.0).** Detailed above ("PR2: anonymizer + `cloud_allowed` → 1.68.0").
@@ -1531,9 +1885,5 @@ gate → 1.69.0").
 **PR4: Rails ↔ host bridge (1.70.0).** Detailed above ("PR4: Rails ↔ host bridge (`AgentCliProvider`, normalizer,
 chains, probe) → 1.70.0").
 
-**PR5: switch-over (1.71.0).** Per-task switch-over behind the chains (still `ollama` by default); the inline gate (an
-inline call, i.e. `detect_contradictions`, never waits on the cloud: it uses Ollama or returns unjudged, the job
-picks up the rest); an `llm_cloud` Solid Queue queue with one thread so cloud calls run one at a time; per-task and
-daily budgets (calls and estimated tokens) with a hard stop; an `llm_usage` table (one row per call, the `[llm]`
-fields, no prompt) and a small usage card on System; adopter docs (how to enable a chain for one project, what leaves
-the machine, how to turn it off). Starts only after PR4 and a **PASS** gate for each profile it enables.
+**PR5: finish the train (1.71.0).** Detailed above ("PR5: finish the train (profiles and backup models, JSON retry,
+inline gate, one-at-a-time, budgets, usage, adopter docs) → 1.71.0"). Its R step closes the train here.
