@@ -14,13 +14,10 @@ module GraphMem
     module Metrics
       # Shorter active observations count as short.
       SHORT_OBSERVATION = 20
-      # File extensions a bare name may be (`md`) or end with (`user.rb`).
-      EXTENSIONS = "rb|md|js|ts|py|ya?ml|json|toml|txt|erb|haml|css|scss|html|sh|lock|gemspec|rake"
       # A bare file name or extension: `.rb`, `md`, `user.rb`, `README.md`, `Gemfile`.
-      FILENAME = /\A(\.[a-z0-9]{1,8}|(#{EXTENSIONS})|[\w.-]+\.(#{EXTENSIONS})|(gem|rake|docker|proc)file)\z/i
-      # Names that say nothing about the project (compared case-insensitively).
-      GENERIC_NAMES = %w[util utils utilities helper helpers config configuration main base common misc core
-                         manager service services model models module class function file files data index tool tools].freeze
+      FILENAME = /\A(\.[a-z0-9]{1,8}|(#{ProjectScanner::NoiseFilter::EXTENSIONS})|[\w.-]+\.(#{ProjectScanner::NoiseFilter::EXTENSIONS})|(gem|rake|docker|proc)file)\z/i
+      # Names that say nothing about the project: the noise filter's list.
+      GENERIC_NAMES = ProjectScanner::NoiseFilter::GENERIC_NAMES
       # The rescan counters that are churn when the code didn't change.
       CHURN_KEYS = %w[entities_created observations_created observations_obsoleted relations_created relations_deleted].freeze
 
@@ -56,7 +53,7 @@ module GraphMem
 
       # @param text [String]
       # @return [String] lower case, punctuation as spaces, whitespace squished
-      def normalized(text) = text.to_s.downcase.gsub(/[[:punct:]]+/, " ").squish
+      def normalized(text) = ProjectScanner::NoiseFilter.normalized(text)
 
       def graph_metrics(project, entities, observations, relations)
         per_entity = observations.group_by(&:first).transform_values { |rows| rows.map(&:last) }

@@ -62,7 +62,8 @@ RSpec.describe GraphMem::ScanProfile::Runner do
     expect(code["graph"].map { |entity| entity["name"] }).to include("Gadget Project", *GraphMem::ScanProfile::SynthRepo.expected("code")[:entities])
     expect(code["graph"].find { |entity| entity["name"] == "AlphaService" }["relations"]).to include({ "type" => "depends_on", "to" => "SynthWidget" })
     expect(code["metrics"]).to include("recall" => { "entities" => 1.0, "relations" => 1.0 }, "missed" => [], "rescan_churn" => be_a(Integer))
-    expect(code["metrics"]["unexpected"]).to include("GeneratedSchema")
+    expect(code["metrics"]["unexpected"]).to eq(%w[GeneratedSchema])
+    expect(code["scans"]["initial"]["noise_dropped"]).to include("self_relations" => 1, "generic_items" => 1)
 
     texts = Dir.glob(File.join(report.dir, "*")).map { |path| File.read(path) }
     expect(texts.join).not_to include(Dir.tmpdir, Rails.root.to_s, Dir.home)

@@ -42,6 +42,18 @@ class ProjectScanner
       fallback_extraction(reason, reason == "LLM response was not valid JSON" ? "LLM response was not valid JSON" : "LLM extraction failed")
     end
 
+    # The LLM extraction without NoiseFilter's noise (F-3b); the deterministic fallback as it is.
+    # The counts go into the result (noise_dropped) and one `[scan]` log line (numbers only).
+    # @return [Hash] the data reconcile takes
+    def filter_noise(extracted)
+      data = extracted[:data] || {}
+      return data if extracted[:fallback] || data.empty?
+
+      data, @noise_dropped = NoiseFilter.call(data)
+      @logger.info("[scan] #{JSON.generate(scan_id: @scan_id, noise_dropped: @noise_dropped)}")
+      data
+    end
+
     def fallback_extraction(reason, message)
       whole = whole_plan
       @context_text = whole.context_text

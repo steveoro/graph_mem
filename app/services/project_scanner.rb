@@ -55,6 +55,7 @@ class ProjectScanner
     :files_too_large,
     :files_over_budget,
     :partial,
+    :noise_dropped,
     keyword_init: true
   ) do
     def initialize(success: true, status: "completed", message: nil, **kwargs)
@@ -87,7 +88,8 @@ class ProjectScanner
         parts_failed: parts_failed || 0,
         files_too_large: files_too_large || 0,
         files_over_budget: files_over_budget || 0,
-        partial: partial || false
+        partial: partial || false,
+        noise_dropped: noise_dropped || {}
       }
     end
   end
@@ -153,7 +155,7 @@ class ProjectScanner
     update_progress!(phase: "reading_files", message: "Reading #{@discovered_files.size} project files")
     update_progress!(phase: "extracting_knowledge", message: "Extracting knowledge")
     extracted = extract_knowledge
-    @extracted_data = extracted[:data] || {}
+    @extracted_data = filter_noise(extracted)
 
     update_progress!(phase: "reconciling_graph", message: partial? ? partial_message : "Reconciling with graph memory")
     reconcile(@extracted_data)
@@ -206,6 +208,7 @@ class ProjectScanner
       fallback: extracted[:fallback] == true,
       fallback_reason: extracted[:fallback_reason],
       partial: partial?,
+      noise_dropped: @noise_dropped || {},
       **skip_counters,
       **@extraction.slice("parts_total", "parts_failed", "files_too_large", "files_over_budget").transform_keys(&:to_sym)
     )
