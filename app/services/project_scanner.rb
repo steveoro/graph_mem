@@ -410,8 +410,10 @@ class ProjectScanner
     [ entity, item ]
   end
 
+  # A name is unique in a project whatever its type or case (MemoryEntity), so an item the model
+  # typed differently in another part, or in an earlier scan, is that same entity: its type stays.
   def find_or_create_entity(name, type, entity_data)
-    existing = MemoryEntity.find_by(name: name, entity_type: type, project_id: @project_entity&.id)
+    existing = MemoryEntity.find_by(name: name, project_id: @project_entity&.id)
     if existing
       unless @dry_run
         updates = {}
