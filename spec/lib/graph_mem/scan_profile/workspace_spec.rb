@@ -63,6 +63,20 @@ RSpec.describe GraphMem::ScanProfile::Workspace do
     end
   end
 
+  it "doesn't count a symlink in a resolved list, so nothing outside the checkout is stat'ed" do
+    Dir.mktmpdir("workspace-spec") do |root|
+      Dir.mktmpdir("workspace-outside") do |outside|
+        File.write(File.join(outside, "synth_secret.md"), "outside the checkout\n")
+        FileUtils.mkdir_p(File.join(root, "docs"))
+        File.write(File.join(root, "docs/synth.md"), "synthetic\n")
+        File.symlink(File.join(outside, "synth_secret.md"), File.join(root, "docs/linked.md"))
+        File.symlink(outside, File.join(root, "docs/linked_dir"))
+
+        expect(described_class.resolved_files(root, [ "docs/**/*" ])).to eq(%w[docs/synth.md])
+      end
+    end
+  end
+
   it "refuses a checkout whose HEAD isn't the pinned commit" do
     moved = ->(url:, commit:, dir:) { "b" * 40 }
 

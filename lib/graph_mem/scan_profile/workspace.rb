@@ -43,8 +43,9 @@ module GraphMem
         FileUtils.rm_rf(dir) if dir
       end
 
-      # The files a scan with `globs` can read, before the scanner's caps: regular files only,
-      # without the manifest's excludes, ProjectScanner::EXCLUDED_FILE_GLOBS and hidden paths.
+      # The files a scan with `globs` can read, before the scanner's caps: regular files only (a
+      # symlink isn't followed, so nothing outside the checkout is counted or stat'ed), without the
+      # manifest's excludes, ProjectScanner::EXCLUDED_FILE_GLOBS and hidden paths.
       #
       # @param root [String]
       # @param globs [Array<String>]
@@ -52,7 +53,7 @@ module GraphMem
       # @return [Array<String>] relative paths, sorted
       def self.resolved_files(root, globs, exclude: [])
         skipped = exclude + ProjectScanner::EXCLUDED_FILE_GLOBS
-        Dir.glob(globs, base: root).uniq.select { |rel| File.file?(File.join(root, rel)) }.reject do |rel|
+        Dir.glob(globs, base: root).uniq.select { |rel| File.lstat(File.join(root, rel)).file? }.reject do |rel|
           rel.split("/").any? { |segment| segment.start_with?(".") } ||
             skipped.any? { |glob| File.fnmatch?(glob, rel, File::FNM_PATHNAME | File::FNM_DOTMATCH) }
         end.sort
