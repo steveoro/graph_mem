@@ -27,7 +27,7 @@ module GraphMem
       PROJECT_NAME = "Gadget Project"
       # A part with this many file blocks or more is answered as cut ("length"), so the run
       # exercises a split; its halves are answered normally.
-      SPLIT_AT = 4
+      SPLIT_AT = 3
       LONG_FILE = "lib/gadget/report_builder.rb"
       HUGE_FILE = "lib/gadget/huge_table.rb"
       PROFILES = {

@@ -25,6 +25,9 @@ class ProjectScanner
 
     Unit = Data.define(:pieces, :splittable)
     Outcome = Data.define(:data, :parts_total, :parts_done, :parts_failed, :first_error)
+    # One request's end (F-3b): its part number, the parts known then, why it failed (nil when it
+    # didn't), its wall time and whether it was split into two halves.
+    PartDone = Data.define(:part, :parts, :error, :seconds, :split)
 
     # @param chunks [Array<ChunkPlanner::Chunk>]
     # @param project_name [String] named in every part's header
@@ -35,14 +38,17 @@ class ProjectScanner
     # @param llm_scope [Llm::Scope] the scan's scope, one for every part and split, so a cloud
     #   provider's anonymizer keeps one mapping for the whole scan (the default knows no folder, so
     #   Llm::CloudGate refuses it)
+    # @param on_part_done [#call, nil] called after each request with a PartDone (F-3b: the
+    #   profiler's timing); nil changes nothing
     def initialize(chunks:, project_name:, num_ctx:, num_predict:, timeout:, on_part: nil,
-                   llm_scope: Llm::Scope.for_scan(project_root: nil, project_name: project_name))
+                   llm_scope: Llm::Scope.for_scan(project_root: nil, project_name: project_name), on_part_done: nil)
       @queue = chunks.map { |chunk| Unit.new(pieces: chunk.pieces, splittable: true) }
       @project_name = project_name
       @num_ctx = num_ctx.to_i
       @num_predict = num_predict.to_i
       @timeout = timeout.to_i
       @on_part = on_part
+      @on_part_done = on_part_done
       @llm_scope = llm_scope
       @merger = ExtractionMerger.new
     end
@@ -62,7 +68,10 @@ class ProjectScanner
           next
         end
 
-        error = extract(unit, @done + @failed + 1)
+        part = @done + @failed + 1
+        started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+        error = extract(unit, part)
+        seconds = Process.clock_gettime(Process::CLOCK_MONOTONIC) - started
         # A rejected half (already split once) counts like an outage: a provider that refuses every
         # request for another reason stops after two, instead of three tries per part.
         # A cloud refusal (no provider call) would refuse every half too, and so would a host bridge
@@ -70,7 +79,7 @@ class ProjectScanner
         refused = Llm::CloudCall::REFUSALS.include?(error) || Llm::BridgeClient.failure?(error)
         outage = error == PROVIDER_ERROR || refused || (error&.start_with?(PROMPT_REJECTED) && !unit.splittable)
         provider_errors = outage ? provider_errors + 1 : 0
-        next unless error
+        next part_done(part, nil, seconds, split: false) unless error
 
         halves = error == PROVIDER_ERROR || refused || !unit.splittable ? nil : split(unit)
         if halves
@@ -79,6 +88,7 @@ class ProjectScanner
         else
           fail_part(error)
         end
+        part_done(part, error, seconds, split: !halves.nil?)
       end
 
       Outcome.new(data: @done.positive? ? @merger.result : nil, parts_total: @total, parts_done: @done,
@@ -114,6 +124,10 @@ class ProjectScanner
       return "prompt cut: #{result[:prompt_tokens]} prompt tokens for a #{window}-token window" if result[:prompt_tokens].to_i >= window
 
       "LLM response was not valid JSON" unless ExtractionMerger.usable?(ExtractionPrompt.parse_json(result[:text]))
+    end
+
+    def part_done(part, error, seconds, split:)
+      @on_part_done&.call(PartDone.new(part: part, parts: @total, error: error, seconds: seconds, split: split))
     end
 
     def fail_part(error)

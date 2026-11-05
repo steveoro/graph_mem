@@ -92,9 +92,11 @@ class ProjectScanner
     end
   end
 
+  # @param on_part_done [#call, nil] called after each LLM part with a ChunkedExtraction::PartDone
+  #   (F-3b: graph_mem:scan_profile's timing); nil (the default) changes nothing
   def initialize(project_root:, project_name: nil, aliases: nil, mode: "initial",
                  dry_run: false, file_globs: nil, operation_progress: nil,
-                 max_files: nil, max_total_input_bytes: nil, scan_id: nil, resuming: false)
+                 max_files: nil, max_total_input_bytes: nil, scan_id: nil, resuming: false, on_part_done: nil)
     @project_root = File.expand_path(project_root.to_s)
     @project_name = project_name.to_s.strip.presence
     @aliases = Array(aliases).flat_map { |a| a.to_s.split(/[,|;]/).map(&:strip) }.reject(&:blank?)
@@ -106,6 +108,7 @@ class ProjectScanner
     @max_total_input_bytes = (max_total_input_bytes || MAX_TOTAL_INPUT_BYTES).to_i
     @scan_id = scan_id || SecureRandom.uuid
     @resuming = resuming == true
+    @on_part_done = on_part_done
     @logger = Rails.logger
     @entities_by_path = {}
     @created_entity_ids = Set.new

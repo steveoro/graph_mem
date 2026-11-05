@@ -28,7 +28,7 @@ class ProjectScanner
       outcome = ChunkedExtraction.new(
         chunks: plan.chunks, project_name: prompt_project_name, num_ctx: scan_num_ctx,
         num_predict: scan_num_predict, timeout: [ SummarizationConfig.resolved_config[:timeout].to_i, 120 ].max,
-        on_part: ->(part, parts) { part_progress!(part, parts) },
+        on_part: ->(part, parts) { part_progress!(part, parts) }, on_part_done: @on_part_done,
         llm_scope: Llm::Scope.for_scan(project_root: @project_root, project_name: prompt_project_name)
       ).call
       record_extraction(plan: plan, outcome: outcome)
