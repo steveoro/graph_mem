@@ -1,5 +1,7 @@
 # F-3b scan profiling and tuning → graph_mem 1.73.0: a safe, measurable first scan, and less noise
 
+**✅ DONE:** shipped in #157 as **1.73.0** (steps F, S, P, M, N, K, B, D and R; user docs in `docs/scan_profiling.md`). Departures from this plan, noted in #157: the profiler never grants cloud access (only the Projects page may set `cloud_allowed`), so it runs on local Ollama only: a cloud `BACKEND` and `ALLOW_CLOUD=1` are refused up front (Steve's call on #157), and the gate refusal stays spec'd underneath; the noise filter's "no observations" rule only drops an item that also has no relations and that nothing relates to; `synth` has a `code` profile too; timing uses an optional `on_part_done:` hook; the setting defaults are unchanged until a real-model baseline.
+
 **Written 2026-11-05 (Europe/Rome)** for Claude, from `main` at `7769d58` (#156 merged, **tagged `v1.72.0`**). Every
 file:line in "What the code looks like today" was checked against that commit. If a line has moved, find the code by the
 quoted text. If the code no longer matches the description, **stop and ask Steve** instead of improvising.

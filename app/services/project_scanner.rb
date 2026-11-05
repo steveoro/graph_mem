@@ -55,6 +55,7 @@ class ProjectScanner
     :files_too_large,
     :files_over_budget,
     :partial,
+    :noise_dropped,
     keyword_init: true
   ) do
     def initialize(success: true, status: "completed", message: nil, **kwargs)
@@ -87,14 +88,17 @@ class ProjectScanner
         parts_failed: parts_failed || 0,
         files_too_large: files_too_large || 0,
         files_over_budget: files_over_budget || 0,
-        partial: partial || false
+        partial: partial || false,
+        noise_dropped: noise_dropped || {}
       }
     end
   end
 
+  # @param on_part_done [#call, nil] called after each LLM part with a ChunkedExtraction::PartDone
+  #   (F-3b: graph_mem:scan_profile's timing); nil (the default) changes nothing
   def initialize(project_root:, project_name: nil, aliases: nil, mode: "initial",
                  dry_run: false, file_globs: nil, operation_progress: nil,
-                 max_files: nil, max_total_input_bytes: nil, scan_id: nil, resuming: false)
+                 max_files: nil, max_total_input_bytes: nil, scan_id: nil, resuming: false, on_part_done: nil)
     @project_root = File.expand_path(project_root.to_s)
     @project_name = project_name.to_s.strip.presence
     @aliases = Array(aliases).flat_map { |a| a.to_s.split(/[,|;]/).map(&:strip) }.reject(&:blank?)
@@ -106,6 +110,7 @@ class ProjectScanner
     @max_total_input_bytes = (max_total_input_bytes || MAX_TOTAL_INPUT_BYTES).to_i
     @scan_id = scan_id || SecureRandom.uuid
     @resuming = resuming == true
+    @on_part_done = on_part_done
     @logger = Rails.logger
     @entities_by_path = {}
     @created_entity_ids = Set.new
@@ -150,7 +155,7 @@ class ProjectScanner
     update_progress!(phase: "reading_files", message: "Reading #{@discovered_files.size} project files")
     update_progress!(phase: "extracting_knowledge", message: "Extracting knowledge")
     extracted = extract_knowledge
-    @extracted_data = extracted[:data] || {}
+    @extracted_data = filter_noise(extracted)
 
     update_progress!(phase: "reconciling_graph", message: partial? ? partial_message : "Reconciling with graph memory")
     reconcile(@extracted_data)
@@ -203,6 +208,7 @@ class ProjectScanner
       fallback: extracted[:fallback] == true,
       fallback_reason: extracted[:fallback_reason],
       partial: partial?,
+      noise_dropped: @noise_dropped || {},
       **skip_counters,
       **@extraction.slice("parts_total", "parts_failed", "files_too_large", "files_over_budget").transform_keys(&:to_sym)
     )

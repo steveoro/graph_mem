@@ -5,6 +5,16 @@ All notable changes to GraphMem will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.73.0] - 2026-11-05
+
+F-3b scan profiling and tuning (#157).
+
+### Added
+- `bin/rails graph_mem:scan_profile`: real project scans, run by hand, on pinned open-source repos (`graph_mem` at its release tag, `goggles_db`, `goggles_api`, `dry-inflector`) or a generated synthetic repo, into a throwaway `<configured name>_scan_profile` database that is created, loaded from `db/structure.sql` and dropped, on local Ollama only (a cloud backend is refused: only the Projects page grants cloud access). It reports per scan the counters, parts failed and split, wall time and part latency, noise metrics (empty entities, short or duplicate observations, file-like or generic names, root-only and isolated entities, rescan churn, and recall/precision on the synthetic repo), and a settings sweep (`SWEEP=`). Reports go to `tmp/scan_profile/` (Markdown and a versioned JSON). See `docs/scan_profiling.md`.
+
+### Changed
+- Project scans drop conservative noise from the LLM extraction before it reaches the graph: normalized duplicate observations, self-relations, entities named only by a file extension or a generic word with at most one observation, and entities with no observations and no relations that nothing points at. The counts are logged in one `[scan]` line; MCP and REST outputs are unchanged. The `project_scan_*` defaults are unchanged.
+
 ## [1.72.0] - 2026-11-05
 
 `mcp` gem 1.9.0, tool titles and the query length cap (#156).

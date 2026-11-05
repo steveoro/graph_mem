@@ -28,7 +28,7 @@ class ProjectScanner
       outcome = ChunkedExtraction.new(
         chunks: plan.chunks, project_name: prompt_project_name, num_ctx: scan_num_ctx,
         num_predict: scan_num_predict, timeout: [ SummarizationConfig.resolved_config[:timeout].to_i, 120 ].max,
-        on_part: ->(part, parts) { part_progress!(part, parts) },
+        on_part: ->(part, parts) { part_progress!(part, parts) }, on_part_done: @on_part_done,
         llm_scope: Llm::Scope.for_scan(project_root: @project_root, project_name: prompt_project_name)
       ).call
       record_extraction(plan: plan, outcome: outcome)
@@ -40,6 +40,18 @@ class ProjectScanner
 
       reason = outcome.first_error
       fallback_extraction(reason, reason == "LLM response was not valid JSON" ? "LLM response was not valid JSON" : "LLM extraction failed")
+    end
+
+    # The LLM extraction without NoiseFilter's noise (F-3b); the deterministic fallback as it is.
+    # The counts go into the result (noise_dropped) and one `[scan]` log line (numbers only).
+    # @return [Hash] the data reconcile takes
+    def filter_noise(extracted)
+      data = extracted[:data] || {}
+      return data if extracted[:fallback] || data.empty?
+
+      data, @noise_dropped = NoiseFilter.call(data)
+      @logger.info("[scan] #{JSON.generate(scan_id: @scan_id, noise_dropped: @noise_dropped)}")
+      data
     end
 
     def fallback_extraction(reason, message)

@@ -1,0 +1,81 @@
+# F-3b scan profiling fixtures (docs/scan_profiling.md, docs/plans/f3b-scan-profiling-plan.md).
+#
+# Public open-source repos only, each pinned by a full commit SHA and cloned into a temp dir by
+# `bin/rails graph_mem:scan_profile`; never a private project, a local folder or a copy of one.
+# The generated `synth` repo is built in code (GraphMem::ScanProfile::SynthRepo), not listed here.
+#
+# Per entry:
+#   url           https://github.com/<owner>/<repo>.git (nothing else is accepted)
+#   commit        the full 40-character SHA checked out (`ref` is informational)
+#   license       the repo's open-source license (SPDX id)
+#   project_name  the Project name the scan uses (default: the key)
+#   full          true: always the scanner's own caps (200 KB / 50 files), as with FULL=1
+#   exclude       paths deleted from the clone before any scan (globs relative to the repo root)
+#   profiles      docs / code: "default" (ProjectScanner::DEFAULT_FILE_GLOBS) or a glob list
+#
+# Adding a repo: an open-source license, a public URL and a pinned commit (see the docs).
+first_run_caps:
+  max_total_input_bytes: 65536
+  max_files: 20
+
+repos:
+  graph_mem:
+    url: https://github.com/steveoro/graph_mem.git
+    ref: v1.72.0
+    commit: 7769d582be520882fad7eda373d4ecf9b09c423c
+    license: LGPL-3.0
+    # Dogfood: always a fresh clone at the tag, never a working tree. Planning history, images,
+    # fixtures, the compat harness and the changelog aren't architecture.
+    exclude:
+      - docs/plans/**/*
+      - docs/images/**/*
+      - spec/fixtures/**/*
+      - script/mcp_compat/**/*
+      - CHANGELOG.md
+    profiles:
+      # DEFAULT_FILE_GLOBS reads docs/**/*.md, so this entry lists its docs explicitly.
+      docs:
+        - README*
+        - Gemfile
+        - package.json
+        - docker-compose*.yml
+        - docs/*.md
+        - docs/api/**/*.md
+        - docs/guides/**/*.md
+        - docs/operator/**/*.md
+        - docs/rules/**/*.md
+      code:
+        - app/services/*.rb
+        - app/models/*.rb
+        - app/tools/*.rb
+
+  goggles_db:
+    url: https://github.com/steveoro/goggles_db.git
+    commit: d14e6d705d985e6182b73e3ba69bae33a24be8f2
+    license: LGPL-3.0
+    # A small, namespaced Rails engine: always scanned with the scanner's own caps.
+    full: true
+    profiles:
+      docs: default
+      code:
+        - app/models/**/*.rb
+        - lib/**/*.rb
+
+  goggles_api:
+    url: https://github.com/steveoro/goggles_api.git
+    commit: e95fa8a9b44ad3f2b91d673d6e62bf5a6575edae
+    license: LGPL-3.0
+    profiles:
+      docs: default
+      code:
+        - app/api/**/*.rb
+
+  dry-inflector:
+    url: https://github.com/dry-rb/dry-inflector.git
+    commit: 65f186bb68e5a40be8552dafc203d03cd35223a9
+    license: MIT
+    # The outside-author control: noise from the scan vs noise from one docs style.
+    profiles:
+      docs: default
+      code:
+        - lib/**/*.rb
