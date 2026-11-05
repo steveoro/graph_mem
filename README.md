@@ -603,6 +603,7 @@ Sign in at `/operator/login`. Default operator credentials: `operator` / `change
 * [MCP Tools Reference](docs/mcp_tools.md)
 * [Agent-CLI backends](docs/agent_cli_backends.md): opt-in cloud models through your workstation's Claude Code or Devin, behind a loopback bridge, anonymized and per project
 * [App Settings Reference](docs/app_settings_reference.md)
+* [Scan profiling](docs/scan_profiling.md): `bin/rails graph_mem:scan_profile`, a safe, measured project scan on pinned open-source repos in a throwaway database, to tune the scan settings
 * [Architecture](docs/architecture.md)
 * [Development Guide](docs/development.md)
 * [Troubleshooting](docs/troubleshooting.md)
