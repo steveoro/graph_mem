@@ -125,8 +125,10 @@ RSpec.describe GraphMem::ScanProfile::Runner do
       Llm::Registry.reset_overrides!
     end
 
-    it "is refused by the gate (the profiler's projects never allow cloud): nothing leaves the machine and the scan falls back" do
-      report = run({ "BACKEND" => "agent_cli", "PROFILE" => "docs", "RESCAN" => "0" })
+    # Options refuses a cloud BACKEND up front; underneath, the gate refuses it too.
+    it "is refused by the gate even when it gets past the options: nothing leaves the machine and the scan falls back" do
+      cloud_options = options({ "PROFILE" => "docs", "RESCAN" => "0" }).with(chain: "agent_cli")
+      report = described_class.new(options: cloud_options, manifest: manifest, out: StringIO.new).call
 
       json = JSON.parse(File.read(File.join(report.dir, "report.json")))
       expect(cloud.calls).to be_empty

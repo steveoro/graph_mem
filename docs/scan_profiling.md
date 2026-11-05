@@ -28,10 +28,10 @@ REST endpoint, UI button or job for it.
 - **Nothing reaches the app's queues or caches.** During the run, jobs go to the `:test` adapter
   (the report counts what would have been enqueued; none runs). `Rails.cache` and the settings cache
   are a private in-memory store, and embeddings are skipped (the metrics don't need them).
-- **Local Ollama by default.** The scan chain is `ollama`. `BACKEND=` takes another
-  `llm_chain_scan` value, but **the profiler never grants cloud access**: only the Projects page
-  can, so `Llm::CloudGate` refuses every part of a cloud chain. Nothing leaves the machine, and the
-  report says so. `ALLOW_CLOUD=1` is refused.
+- **Local Ollama only.** The scan chain is `ollama`. **The profiler never grants cloud access**
+  (only the Projects page can), so a cloud chain could only be refused by `Llm::CloudGate` and fall
+  back. A cloud `BACKEND=` and `ALLOW_CLOUD=1` are therefore refused before anything runs. The
+  report still says whether anything left the machine.
 
 ## The fixtures
 
@@ -79,7 +79,7 @@ REPOS=synth,goggles_api PROFILE=docs bin/rails graph_mem:scan_profile
 | `FULL=1` | first-run caps | the scanner's own caps for every repo |
 | `SWEEP=…` | the current values | try settings, below |
 | `SETTINGS="k=v;k=v"` | none | `summary_*` and model settings (e.g. `summary_model=qwen3:14b;summary_num_ctx=16384`), written to the throwaway database only; never the scan chain, budgets or inline tasks |
-| `BACKEND=…` | `ollama` | an `llm_chain_scan` value; any cloud entry is refused by the gate (above) |
+| `BACKEND=ollama` | `ollama` | the scan chain; any cloud chain (and `ALLOW_CLOUD=1`) is refused (above) |
 | `KEEP_DB=1` | dropped | keep the throwaway database to look at it (`mariadb graph_mem_scan_profile`); the next run drops it, or `DROP DATABASE graph_mem_scan_profile;` |
 | `DB=<name>_scan_profile` | `<configured>_scan_profile` | another throwaway name |
 | `REPORT_DIR=…` | `tmp/scan_profile` | where reports go |

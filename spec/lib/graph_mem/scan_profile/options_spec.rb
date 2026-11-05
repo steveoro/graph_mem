@@ -14,7 +14,6 @@ RSpec.describe GraphMem::ScanProfile::Options do
     expect(options).to have_attributes(repos: manifest.keys, profiles: %w[docs code], rescan: true, full: false, keep_db: false,
                                        chain: "ollama", settings: {}, db: nil,
                                        report_dir: Rails.root.join("tmp/scan_profile").to_s)
-    expect(options.cloud?).to be(false)
   end
 
   it "reads REPOS, PROFILE, RESCAN=0, FULL=1, KEEP_DB=1, DB, REPORT_DIR and SETTINGS" do
@@ -37,14 +36,16 @@ RSpec.describe GraphMem::ScanProfile::Options do
     expect(parse.setting_sets).to eq([ {} ])
   end
 
-  it "takes a cloud chain only as a known chain value" do
-    expect(parse("BACKEND" => "claude,ollama")).to have_attributes(chain: "claude,ollama")
-    expect(parse("BACKEND" => "claude,ollama").cloud?).to be(true)
+  it "runs on local Ollama only: BACKEND may name it, and a cloud chain is refused up front" do
+    expect(parse("BACKEND" => "ollama").chain).to eq("ollama")
+    (Llm::Router::CHAIN_VALUES - [ "ollama" ]).each do |chain|
+      expect { parse("BACKEND" => chain) }.to raise_error(described_class::Error, /BACKEND=#{Regexp.escape(chain)} isn't available: .*only the Projects page grants/)
+    end
     expect { parse("BACKEND" => "openai") }.to raise_error(described_class::Error, /isn't a scan chain/)
   end
 
   it "refuses ALLOW_CLOUD=1: only the Projects page grants cloud access" do
-    expect { parse("BACKEND" => "agent_cli", "ALLOW_CLOUD" => "1") }.to raise_error(described_class::Error, /only the Projects page grants/)
+    expect { parse("ALLOW_CLOUD" => "1") }.to raise_error(described_class::Error, /ALLOW_CLOUD=1 isn't available: .*only the Projects page grants/)
   end
 
   {

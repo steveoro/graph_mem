@@ -4,7 +4,7 @@
 # a throwaway database. See docs/scan_profiling.md. Never scheduled, enqueued or exposed elsewhere.
 namespace :graph_mem do
   desc "Profile a project scan on pinned open-source repos / the synth repo in a throwaway DB " \
-       "(REPOS=… PROFILE=docs|code RESCAN=0 FULL=1 KEEP_DB=1 BACKEND=… ALLOW_CLOUD=1 SWEEP=… SETTINGS=… DB=… REPORT_DIR=…)"
+       "(REPOS=… PROFILE=docs|code RESCAN=0 FULL=1 KEEP_DB=1 SWEEP=… SETTINGS=… DB=… REPORT_DIR=…; local Ollama only)"
   task scan_profile: :environment do
     require Rails.root.join("script/scan_profile/git_fetch").to_s
 

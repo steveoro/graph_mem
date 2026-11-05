@@ -8,14 +8,14 @@ module GraphMem
     #   options = Options.parse(ENV.to_h, manifest: Manifest.load)
     #   options.repos    # => ["synth", "goggles_api"] for REPOS=synth,goggles_api
     #   options.profiles # => ["docs"] for PROFILE=docs
-    #   options.chain    # => "ollama" unless BACKEND=… (a cloud chain is refused by Llm::CloudGate)
+    #   options.chain    # => "ollama" (BACKEND may only name it: no cloud chain, see CLOUD_REFUSED)
     #
     # @!attribute repos [Array<String>] REPOS (default: every manifest key, synth first)
     # @!attribute profiles [Array<String>] PROFILE=docs|code (default: both)
     # @!attribute rescan [Boolean] a second, `mode: "rescan"` run per scan (RESCAN=0 turns it off)
     # @!attribute full [Boolean] FULL=1: the scanner's own caps for every repo
     # @!attribute keep_db [Boolean] KEEP_DB=1
-    # @!attribute chain [String] BACKEND: the run's llm_chain_scan (an Llm::Chain value)
+    # @!attribute chain [String] the run's llm_chain_scan: always local Ollama ("ollama")
     # @!attribute sweep [Hash{String => Array<Numeric>}] SWEEP="bytes_per_token:2.5,3.0;max_chunks:16,32"
     #   (step K): every combination runs; empty means the current values only
     # @!attribute settings [Hash{String => String}] SETTINGS="key=value;…" (summary_* and llm_* fields)
@@ -27,6 +27,10 @@ module GraphMem
 
       # A settings key SETTINGS may set: the model and provider settings, never the scan chain
       # (BACKEND), budgets or inline cloud tasks.
+
+      # Why a cloud chain (BACKEND) or ALLOW_CLOUD=1 is refused before anything runs.
+      const_set(:CLOUD_REFUSED, "the profiler runs on local Ollama only: only the Projects page grants a project cloud access, " \
+                                "so its projects never have it and a cloud chain could only fall back")
       const_set(:SETTING_KEY, /\A(summary_\w+|llm_(?!chain_|budget_|inline_)\w+)\z/)
 
       # The scan settings SWEEP may vary (project_scan_<key>), with AppSettings' ranges.
@@ -37,10 +41,7 @@ module GraphMem
       # @return [Options]
       # @raise [Options::Error]
       def self.parse(env, manifest:)
-        if env["ALLOW_CLOUD"].to_s == "1"
-          raise self::Error, "ALLOW_CLOUD=1 isn't available: only the Projects page grants a project cloud access, " \
-                             "so the profiler's projects never have it and a cloud BACKEND is refused by the gate"
-        end
+        raise self::Error, "ALLOW_CLOUD=1 isn't available: #{self::CLOUD_REFUSED}" if env["ALLOW_CLOUD"].to_s == "1"
 
         new(repos: repos(env["REPOS"], manifest), profiles: list(env["PROFILE"], Manifest::PROFILES, "PROFILE"),
             rescan: env["RESCAN"].to_s != "0", full: env["FULL"].to_s == "1", keep_db: env["KEEP_DB"].to_s == "1",
@@ -70,6 +71,7 @@ module GraphMem
       def self.chain(value)
         chain = value.to_s.strip.presence || Llm::Router::DEFAULT_CHAIN
         raise self::Error, "BACKEND: #{chain.inspect} isn't a scan chain (one of #{Llm::Router::CHAIN_VALUES.join(' | ')})" unless Llm::Router::CHAIN_VALUES.include?(chain)
+        raise self::Error, "BACKEND=#{chain} isn't available: #{self::CLOUD_REFUSED}" unless chain == Llm::Router::DEFAULT_CHAIN
 
         chain
       end
@@ -114,9 +116,6 @@ module GraphMem
         end
       end
       private_class_method :repos, :list, :chain, :sweep, :sweep_value, :settings
-
-      # @return [Boolean] the chain names a cloud provider
-      def cloud? = Llm::Router::CHAIN_VALUES.include?(chain) && chain != Llm::Router::DEFAULT_CHAIN
     end
   end
 end
