@@ -8,11 +8,11 @@ RSpec.describe GraphMem::ScanProfile::Options do
 
   def parse(env = {}) = described_class.parse(env, manifest: manifest)
 
-  it "defaults to every repo, both profiles, a rescan, first-run caps, local Ollama, no cloud and tmp/scan_profile" do
+  it "defaults to every repo, both profiles, a rescan, first-run caps, local Ollama and tmp/scan_profile" do
     options = parse
 
     expect(options).to have_attributes(repos: manifest.keys, profiles: %w[docs code], rescan: true, full: false, keep_db: false,
-                                       chain: "ollama", allow_cloud: false, settings: {}, db: nil,
+                                       chain: "ollama", settings: {}, db: nil,
                                        report_dir: Rails.root.join("tmp/scan_profile").to_s)
     expect(options.cloud?).to be(false)
   end
@@ -27,11 +27,14 @@ RSpec.describe GraphMem::ScanProfile::Options do
                                        settings: { "summary_model" => "synth-model", "summary_num_ctx" => "16384" })
   end
 
-  it "takes a cloud chain only as a known chain value, and allows cloud only with ALLOW_CLOUD=1" do
-    expect(parse("BACKEND" => "claude,ollama")).to have_attributes(chain: "claude,ollama", allow_cloud: false)
+  it "takes a cloud chain only as a known chain value" do
+    expect(parse("BACKEND" => "claude,ollama")).to have_attributes(chain: "claude,ollama")
     expect(parse("BACKEND" => "claude,ollama").cloud?).to be(true)
-    expect(parse("BACKEND" => "agent_cli", "ALLOW_CLOUD" => "1").allow_cloud).to be(true)
     expect { parse("BACKEND" => "openai") }.to raise_error(described_class::Error, /isn't a scan chain/)
+  end
+
+  it "refuses ALLOW_CLOUD=1: only the Projects page grants cloud access" do
+    expect { parse("BACKEND" => "agent_cli", "ALLOW_CLOUD" => "1") }.to raise_error(described_class::Error, /only the Projects page grants/)
   end
 
   {

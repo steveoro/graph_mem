@@ -14,7 +14,7 @@ module GraphMem
     #
     #   Sandbox.new(keep_db: false).run do |sandbox|
     #     sandbox.configure!(chain: "ollama")
-    #     sandbox.project!(name: "Gadget Project", root: "/tmp/…/synth", allow_cloud: false)
+    #     sandbox.project!(name: "Gadget Project")
     #     # … ProjectScanner.new(…).call writes to graph_mem_scan_profile …
     #   end
     class Sandbox
@@ -103,17 +103,15 @@ module GraphMem
         settings.each { |key, value| AppSettings.public_send(:"#{key}=", value) }
       end
 
-      # The scan's Project root, made before the scan so Llm::CloudGate can find it: cloud access
-      # only with allow_cloud (ALLOW_CLOUD=1), for this checkout's folder only.
+      # The scan's Project root, made before the scan. It never allows cloud access: only the
+      # Projects page grants that (Projects::CloudAccessController), so with a cloud chain
+      # Llm::CloudGate refuses every part and nothing leaves the machine.
       #
       # @param name [String]
-      # @param root [String] the checkout's realpath
-      # @param allow_cloud [Boolean]
       # @return [MemoryEntity]
-      def project!(name:, root:, allow_cloud:)
+      def project!(name:)
         assert_target!
-        MemoryEntity.create!(name: name, entity_type: NodeOperationsStrategy::PROJECT_ENTITY_TYPE,
-                             cloud_allowed: allow_cloud == true, cloud_root: (root if allow_cloud == true))
+        MemoryEntity.create!(name: name, entity_type: NodeOperationsStrategy::PROJECT_ENTITY_TYPE)
       end
 
       # Empties the graph between runs (every table but KEPT_TABLES).

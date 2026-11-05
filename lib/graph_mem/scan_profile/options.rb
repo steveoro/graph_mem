@@ -8,7 +8,7 @@ module GraphMem
     #   options = Options.parse(ENV.to_h, manifest: Manifest.load)
     #   options.repos    # => ["synth", "goggles_api"] for REPOS=synth,goggles_api
     #   options.profiles # => ["docs"] for PROFILE=docs
-    #   options.chain    # => "ollama" unless BACKEND=…
+    #   options.chain    # => "ollama" unless BACKEND=… (a cloud chain is refused by Llm::CloudGate)
     #
     # @!attribute repos [Array<String>] REPOS (default: every manifest key, synth first)
     # @!attribute profiles [Array<String>] PROFILE=docs|code (default: both)
@@ -16,11 +16,10 @@ module GraphMem
     # @!attribute full [Boolean] FULL=1: the scanner's own caps for every repo
     # @!attribute keep_db [Boolean] KEEP_DB=1
     # @!attribute chain [String] BACKEND: the run's llm_chain_scan (an Llm::Chain value)
-    # @!attribute allow_cloud [Boolean] ALLOW_CLOUD=1: the scanned projects allow cloud access
     # @!attribute settings [Hash{String => String}] SETTINGS="key=value;…" (summary_* and llm_* fields)
     # @!attribute db [String, nil] DB: the throwaway database's name
     # @!attribute report_dir [String] REPORT_DIR (default tmp/scan_profile)
-    Options = Data.define(:repos, :profiles, :rescan, :full, :keep_db, :chain, :allow_cloud, :settings, :db, :report_dir) do
+    Options = Data.define(:repos, :profiles, :rescan, :full, :keep_db, :chain, :settings, :db, :report_dir) do
       # Raised for an option value that isn't allowed.
       const_set(:Error, Class.new(StandardError))
 
@@ -33,9 +32,14 @@ module GraphMem
       # @return [Options]
       # @raise [Options::Error]
       def self.parse(env, manifest:)
+        if env["ALLOW_CLOUD"].to_s == "1"
+          raise self::Error, "ALLOW_CLOUD=1 isn't available: only the Projects page grants a project cloud access, " \
+                             "so the profiler's projects never have it and a cloud BACKEND is refused by the gate"
+        end
+
         new(repos: repos(env["REPOS"], manifest), profiles: list(env["PROFILE"], Manifest::PROFILES, "PROFILE"),
             rescan: env["RESCAN"].to_s != "0", full: env["FULL"].to_s == "1", keep_db: env["KEEP_DB"].to_s == "1",
-            chain: chain(env["BACKEND"]), allow_cloud: env["ALLOW_CLOUD"].to_s == "1", settings: settings(env["SETTINGS"]),
+            chain: chain(env["BACKEND"]), settings: settings(env["SETTINGS"]),
             db: env["DB"].presence, report_dir: env["REPORT_DIR"].presence || Rails.root.join("tmp/scan_profile").to_s)
       end
 

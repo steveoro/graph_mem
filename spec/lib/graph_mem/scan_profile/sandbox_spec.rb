@@ -97,7 +97,7 @@ RSpec.describe GraphMem::ScanProfile::Sandbox do
         seen[:adapter] = ActiveJob::Base.queue_adapter.class.name
         seen[:cache_isolated] = !Rails.cache.equal?(cache)
         sandbox.configure!(chain: "ollama", settings: { "summary_model" => "synth-model" })
-        sandbox.project!(name: "Gadget Project", root: Dir.tmpdir, allow_cloud: false)
+        sandbox.project!(name: "Gadget Project")
         GarbageCollectionJob.perform_later
         seen[:enqueued] = sandbox.enqueued
         seen[:summary_on] = AppSettings.llm_summarization_enabled?
@@ -122,7 +122,7 @@ RSpec.describe GraphMem::ScanProfile::Sandbox do
   end
 
   it "keeps the database with keep_db, and the next run drops that leftover and starts clean" do
-    described_class.new(base_config: base_config, keep_db: true).run { |sandbox| sandbox.project!(name: "Gadget Project", root: Dir.tmpdir, allow_cloud: false) }
+    described_class.new(base_config: base_config, keep_db: true).run { |sandbox| sandbox.project!(name: "Gadget Project") }
     expect(database?(target)).to be(true)
 
     entities = described_class.new(base_config: base_config).run { MemoryEntity.count }
@@ -137,19 +137,16 @@ RSpec.describe GraphMem::ScanProfile::Sandbox do
     expect(ActiveRecord::Base.connection.current_database).to eq(base_config.database)
   end
 
-  it "lets the cloud gate pass a scan's folder only for a project made with allow_cloud" do
+  it "makes projects the cloud gate refuses, so a cloud chain sends nothing" do
     Dir.mktmpdir("sandbox-spec") do |dir|
       root = File.realpath(dir)
       allowed = described_class.new(base_config: base_config).run do |sandbox|
         sandbox.configure!(chain: "agent_cli")
-        [ false, true ].map do |allow|
-          sandbox.reset_graph!
-          sandbox.project!(name: "Gadget Project", root: root, allow_cloud: allow)
-          Llm::CloudGate.allowed?(Llm::Scope.for_scan(project_root: root, project_name: "Gadget Project"))
-        end
+        sandbox.project!(name: "Gadget Project")
+        Llm::CloudGate.allowed?(Llm::Scope.for_scan(project_root: root, project_name: "Gadget Project"))
       end
 
-      expect(allowed).to eq([ false, true ])
+      expect(allowed).to be(false)
     end
   end
 end
