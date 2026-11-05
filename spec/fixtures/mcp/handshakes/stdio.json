@@ -210,6 +210,20 @@
         "reference": {"replies": 3, "messages": [{"id": 1, "result_has": ["protocolVersion"]}, {"id": 42, "error_code": -32602}, {"id": 5, "result": {}}]}
       },
       "divergence": "graph_mem can't echo the invalid name back and answers -32603 with the id (Ruby SDK 1.8.2, #629); Node decodes the byte as U+FFFD and answers -32602 \"Tool synth-\uFFFD not found\". Both keep serving."
+    },
+    {
+      "name": "tools/list with a non-object _meta, then a ping",
+      "send": [
+        {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "2025-11-25", "capabilities": {}, "clientInfo": {"name": "mcp-compat", "version": "0"}}},
+        {"jsonrpc": "2.0", "method": "notifications/initialized"},
+        {"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {"_meta": "x"}},
+        {"jsonrpc": "2.0", "id": 3, "method": "ping"}
+      ],
+      "expect": {
+        "graph_mem": {"replies": 3, "messages": [{"id": 1, "result_has": ["protocolVersion"]}, {"id": 2, "error_code": -32602}, {"id": 3, "result": {}}]},
+        "reference": {"replies": 2, "messages": [{"id": 1, "result_has": ["protocolVersion"]}, {"id": 3, "result": {}}]}
+      },
+      "divergence": "graph_mem refuses a non-object _meta with -32602 and the id (Ruby SDK 1.9.0, #651); Memory's transport fails to parse the message (a ZodError on stderr) and sends no reply. Both keep serving."
     }
   ]
 }

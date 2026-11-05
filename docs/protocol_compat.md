@@ -157,6 +157,9 @@ Each bullet is one `divergence` text from the fixture files, with the cases it c
 - graph_mem can't echo the invalid name back and answers -32603 with the id (Ruby SDK 1.8.2, #629);
   Node decodes the byte as U+FFFD and answers -32602 "Tool synth-� not found". Both keep
   serving. — *tools/call with an invalid UTF-8 tool name, then a ping*
+- graph_mem refuses a non-object _meta with -32602 and the id (Ruby SDK 1.9.0, #651); Memory's
+  transport fails to parse the message (a ZodError on stderr) and sends no reply. Both keep
+  serving. — *tools/list with a non-object _meta, then a ping*
 - Server-specific: Memory implements resource subscriptions and list-changed notifications;
   graph_mem doesn't. — *initialize capabilities: no subscribe or listChanged; instructions present*
 - Server-specific: Memory implements resource subscriptions; graph_mem advertises subscribe:
@@ -179,6 +182,9 @@ Each bullet is one `divergence` text from the fixture files, with the cases it c
 - graph_mem can't echo the invalid name back and answers -32603 with the id (Ruby SDK 1.8.2, #629);
   Node decodes the byte as U+FFFD and answers -32602 "Tool synth-� not found". — *tools/call
   with an invalid UTF-8 tool name*
+- graph_mem refuses a non-object _meta with -32602 and the id, HTTP 200 (Ruby SDK 1.9.0, #651);
+  Everything's transport can't parse the message and answers HTTP 400 -32700 "Parse error: Invalid
+  JSON-RPC message" with id null. — *tools/list with a non-object _meta*
 - graph_mem refuses batches (removed in 2025-06-18, and an array body was a high bug before
   1.54.0); the TS SDK still accepts them on the 2025 transport. — *a JSON array (batch) body*
 - Both refuse it; graph_mem (the official SDK) answers -32600 with HTTP 200 and echoes the id, the

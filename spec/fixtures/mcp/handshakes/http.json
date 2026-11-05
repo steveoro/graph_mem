@@ -321,6 +321,16 @@
         "reference": {"status": 200, "id": 44, "result_has": ["protocolVersion"]}
       },
       "divergence": "Everything 2.0.1 accepts any localhost origin; graph_mem accepts only same-origin and GRAPH_MEM_MCP_ALLOWED_ORIGINS (exact scheme://host:port)."
+    },
+    {
+      "name": "tools/list with a non-object _meta",
+      "session": "new",
+      "request": {"body": {"jsonrpc": "2.0", "id": 45, "method": "tools/list", "params": {"_meta": "x"}}},
+      "expect": {
+        "graph_mem": {"status": 200, "id": 45, "error_code": -32602},
+        "reference": {"status": 400, "id": null, "error_code": -32700}
+      },
+      "divergence": "graph_mem refuses a non-object _meta with -32602 and the id, HTTP 200 (Ruby SDK 1.9.0, #651); Everything's transport can't parse the message and answers HTTP 400 -32700 \"Parse error: Invalid JSON-RPC message\" with id null."
     }
   ]
 }
