@@ -49,4 +49,35 @@ RSpec.describe ProjectScanner, "reconcile" do
     expect(MemoryEntity.where(name: "SynthWidget").pluck(:entity_type)).to eq(%w[Module])
     expect(result.entities_created).to eq(0)
   end
+
+  it "makes an item typed as a project a Component of the scanned one, next to a real root of that name" do
+    MemoryEntity.create!(name: "Gadget Engine", entity_type: "Project")
+    items.push(item("Gadget Engine", "repository", "Gadget Engine stores the gadget tables."),
+               item("SynthWidget", "Class", "SynthWidget renders gadget frames.", relations: [ { to: "Gadget Engine", type: "depends_on" } ]))
+
+    result = scan
+
+    project = MemoryEntity.find_by!(name: "Gadget Project", project_id: nil)
+    engine = MemoryEntity.find_by!(name: "Gadget Engine", project_id: project.id)
+    expect(result.errors).to be_empty
+    expect(MemoryEntity.where(entity_type: "Project").pluck(:name)).to contain_exactly("Gadget Engine", "Gadget Project")
+    expect(engine.entity_type).to eq("Component")
+    expect(MemoryRelation.where(from_entity_id: MemoryEntity.find_by!(name: "SynthWidget").id, to_entity_id: engine.id, relation_type: "depends_on")).to exist
+  end
+
+  it "folds an item naming the scanned project (or an alias) into its root" do
+    items.push(item("gadget project", "Project", "Gadget Project renders gadget frames.", relations: [ { to: "SynthWidget", type: "depends_on" } ]),
+               item("Gadget", "Project", "Gadget ships a CLI."),
+               item("SynthWidget", "Class", "SynthWidget renders gadget frames."))
+
+    result = with_llm_provider(provider) do
+      described_class.new(project_root: root, project_name: "Gadget Project", aliases: "Gadget").call
+    end
+
+    project = MemoryEntity.find_by!(name: "Gadget Project", project_id: nil)
+    expect(result.errors).to be_empty
+    expect(MemoryEntity.where(project_id: project.id).pluck(:name)).to eq(%w[SynthWidget])
+    expect(project.memory_observations.pluck(:content)).to contain_exactly("Gadget Project renders gadget frames.", "Gadget ships a CLI.")
+    expect(MemoryRelation.where(from_entity_id: project.id, relation_type: "depends_on")).to exist
+  end
 end

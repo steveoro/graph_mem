@@ -29,6 +29,9 @@ class ProjectScanner
   MAX_FILE_BYTES = 50_000
   MAX_TOTAL_INPUT_BYTES = 200_000
   SUMMARY_PROVIDER = "ollama"
+  # The type of an item the model typed as a project (a gem, an engine, a sibling repo): a part of
+  # the scanned project, never a second Project-typed entity next to the real roots.
+  ITEM_TYPE_FOR_PROJECT = "Component"
 
   Result = Struct.new(
     :success,
@@ -400,6 +403,13 @@ class ProjectScanner
     type = ImportEntityResolver.canonical_type(entity_data["type"])
     return if name.blank? || type.blank?
 
+    # An item naming the scanned project is its root: its facts and relations go there.
+    if project_root_name?(name)
+      import_observations(@project_entity, Array(item["observations"]))
+      return [ @project_entity, item ]
+    end
+
+    type = ITEM_TYPE_FOR_PROJECT if project_type?(type)
     entity = find_or_create_entity(name, type, entity_data)
     return unless entity
 
@@ -502,8 +512,20 @@ class ProjectScanner
     @errors << "Failed to create relation #{from_entity.name} -> #{target_name}: #{e.message}"
   end
 
+  # @return [Boolean] "Project" or one of its vocabulary aliases (repo, repository, codebase, …),
+  #   whether or not the database's type mappings know them
+  def project_type?(type)
+    project = NodeOperationsStrategy::PROJECT_ENTITY_TYPE
+    type.casecmp?(project) || GraphVocabulary::ENTITY_TYPE_MAPPINGS.fetch(project).include?(type.downcase)
+  end
+
+  # @return [Boolean] the name (or one of the aliases) of the scanned project's root
+  def project_root_name?(name)
+    @project_entity.present? && ([ @project_entity.name ] + @project_entity.aliases.to_s.split(/[,|;]/)).any? { |known| known.strip.casecmp?(name) }
+  end
+
   def resolve_relation_target(name)
-    return @project_entity if @project_entity && (name.casecmp?(@project_entity.name) || @project_entity.aliases.to_s.split(/[,|;]/).any? { |a| a.strip.casecmp?(name) })
+    return @project_entity if project_root_name?(name)
 
     @entities_by_path[name.downcase] ||
       MemoryEntity.find_by(name: name, project_id: @project_entity&.id) ||
