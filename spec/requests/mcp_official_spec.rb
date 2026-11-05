@@ -436,7 +436,7 @@ RSpec.describe "MCP on the official SDK", type: :request do
     end
   end
 
-  # mcp 1.8.2 (#629): a reply that can't be generated as JSON gets -32603 with the request id, not HTTP 500.
+  # mcp 1.8.2 (#629), unchanged on 1.9.0: a reply that can't be generated as JSON gets -32603 with the request id, not HTTP 500.
   # The gem echoes the tool name in "Tool not found", so an invalid UTF-8 byte in it is a one-request trigger.
   describe "a reply that can't be encoded as JSON" do
     # Built as bytes: to_json would refuse the raw 0xFF in the tool name.
