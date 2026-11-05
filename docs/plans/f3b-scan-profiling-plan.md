@@ -23,7 +23,7 @@ uses those numbers to tune the scan settings and cut the noise.
 | **Branch / PR** | **One PR**, `claude/f3b-scan-profiling`, off `main`, title `F-3b scan profiling and tuning (1.73.0)`. Open it as a **draft** at checkpoint 1; mark it ready only after R. Steve merges and tags. Never merge, tag, push tags or run `rake release`. |
 | **Commits** | **F** fixture manifest + synthetic repo, **S** safety guards (throwaway DB, backend), **P** the profiler and report, **M** noise metrics, **N** noise filter, **K** settings sweep, **B** baseline report, **D** docs, **R** release. Review fixes go in new commits. No force-push after review starts. |
 | **Scope** | A rake task + library code for profiling; a conservative, spec'd noise filter in the scan; setting defaults changed only if B's numbers support it. No MCP surface change, no migration, no new gem or non-stdlib package, no REST change. |
-| **Code scanned** | **Only** the pinned open-source repos below or the generated synthetic repo. Never a private project, a copy of one, or any folder outside the profiler's own temp dirs. |
+| **Code scanned** | **Only** the pinned open-source repos below (mainly Steve's own) or the generated synthetic repo; `graph_mem` itself only as a temp clone at its tag. Never a private project, a copy of one, or any folder outside the profiler's own temp dirs. |
 | **Data** | Synthetic specs (`SynthWidget`, `Alpha Service`, `Gadget Project`, `.example` hosts, temp dirs). Never a real graph, a dump or credentials. |
 | **Read first** | `CLAUDE.md`, `AGENTS.md`, `.devin/rules/*`, the F-3 plan, `app/services/project_scanner.rb` and `app/services/project_scanner/*`, `app/services/llm/{router,scope}.rb`, `app/services/scan_root_policy.rb`, `skills/project-scan/SKILL.md`. |
 
@@ -43,19 +43,57 @@ uses those numbers to tune the scan settings and cut the noise.
 
 ## Fixtures (step F)
 
-`script/scan_profile/repos.yml`, pinned by commit (open source, all public, small):
+Mainly **Steve's own open-source repos**, so the first scan is on code he knows and can judge, plus one outside-author
+control and the synthetic repo. `script/scan_profile/repos.yml`, every entry pinned by commit (all public; checked 2026-11-05):
 
-| Key | Repo | Commit | License | Why |
-|---|---|---|---|---|
-| `rubocop-rake` | `rubocop/rubocop-rake` | `890aabc9708da938d54f954cc8393732e86b8891` | MIT | tiny gem, one part |
-| `dry-inflector` | `dry-rb/dry-inflector` | `65f186bb68e5a40be8552dafc203d03cd35223a9` | MIT | small library, few parts |
-| `rack-cors` | `cyu/rack-cors` | `f73bcd39b91c19ffa3d059dccc5d6ae62f24340a` | MIT | middleware + README-heavy |
-| `goggles_api` | `steveoro/goggles_api` | `e95fa8a9b44ad3f2b91d673d6e62bf5a6575edae` | LGPL-3.0 | Steve's public Rails API, many parts, hits `max_chunks` |
-| `synth` | generated | — | — | deterministic synthetic repo (below) |
+| Key | Repo | Pin | License | Size (git) | Ruby files | Why |
+|---|---|---|---|---|---|---|
+| `graph_mem` | `steveoro/graph_mem` | tag `v1.72.0` = `7769d582be520882fad7eda373d4ecf9b09c423c` | LGPL-3.0 | ~10 MB, 1,185 files | ~790 | dogfood: Steve knows every entity |
+| `goggles_db` | `steveoro/goggles_db` | `d14e6d705d985e6182b73e3ba69bae33a24be8f2` | LGPL-3.0 | ~45 MB, 975 files (most of it `db/data` seeds and migrations) | ~600 (95 models) | the biggest, model-heavy Rails engine |
+| `goggles_api` | `steveoro/goggles_api` | `e95fa8a9b44ad3f2b91d673d6e62bf5a6575edae` | LGPL-3.0 | ~1.5 MB, 239 files | ~170 (84 Grape API files) | an API app that depends on `goggles_db` (cross-repo names) |
+| `ambgest` | `steveoro/ambgest` | `dbed0536f33a1001b6a2e2ef65630ce57be09afa` | MIT (`LICENSE`) | ~14.5 MB, 1,337 files (1,000+ are `public/images`) | ~115 | an older, small Rails app: a different era and style |
+| `dry-inflector` | `dry-rb/dry-inflector` | `65f186bb68e5a40be8552dafc203d03cd35223a9` | MIT | ~0.5 MB | small | **outside-author control**: tells "noise from the scan" apart from "noise from Steve's docs style" |
+| `synth` | generated | — | — | tiny | — | deterministic, with an expected entity/relation list (recall/precision) |
+
+Dropped from the first version of this plan: `rubocop-rake` and `rack-cors` (one control is enough; `dry-inflector` is
+the better-documented of the three).
+
+**Dogfood rules (`graph_mem`).** The scan target is always a **fresh temp clone at the pinned tag**, never the working
+tree, the checkout the task runs from, or any other local folder. Its `docs/plans/**` (21 files, ~1 MB of plans,
+decisions and file:line lists), `docs/images/**`, `spec/fixtures/**`, `script/mcp_compat/**` and `CHANGELOG.md` are
+excluded: they are planning history, not architecture, and they alone would fill the input cap. Since
+`DEFAULT_FILE_GLOBS` includes `docs/**/*.md`, the `graph_mem` entry lists its globs explicitly.
+
+**Profiles and caps per repo.** `DEFAULT_FILE_GLOBS` (`project_scanner.rb:12-24`) reads only READMEs, manifests and
+`docs/**/*.md`, so on the default globs the Goggles repos and `ambgest` are 2–8 files (12–39 KB, 1–3 parts), while a
+code scan of any of them is over `MAX_TOTAL_INPUT_BYTES` (200 KB, about 12–13 parts). Each entry therefore has:
+- `profiles`: `docs` (the default globs, or the curated list for `graph_mem`) and `code` (a curated glob list, e.g.
+  `app/models/**/*.rb`, `lib/**/*.rb` for `goggles_db`; `app/api/**/*.rb` for `goggles_api`;
+  `app/models/*.rb`, `app/controllers/*.rb` for `ambgest`; `app/services/*.rb`, `app/models/*.rb`, `app/tools/*.rb`
+  for `graph_mem`), passed as the scanner's `file_globs:`;
+- `max_total_input_bytes` and `max_files`, passed straight to `ProjectScanner.new` (both keyword arguments exist at
+  `:95-97`; no scanner change). **First-run default: 64 KB and 20 files per scan** (about 4–5 parts), so a full first
+  run stays short; `FULL=1` uses the scanner's own caps (200 KB / 50 files);
+- the task options `REPOS=graph_mem,goggles_db` (default: all), `PROFILE=docs|code` (default: both) and `RESCAN=0`.
+
+**Estimated time on local Ollama** (assumptions: an 8B-class model, `summary_num_ctx` 8192 ⇒ ~15–16 KB of files per
+part, 2048 output tokens, ~60–120 s per part; the report measures the real figure):
+
+| Repo | `docs`, first-run cap | `code`, first-run cap | `code` with `FULL=1` |
+|---|---|---|---|
+| `graph_mem` | 64 KB, ~5 parts, 5–10 min | ~5 parts, 5–10 min | ~13 parts, 13–26 min |
+| `goggles_db` | 39 KB, ~3 parts, 3–6 min | ~5 parts, 5–10 min | ~13 parts, 13–26 min |
+| `goggles_api` | 24 KB, ~2 parts, 2–4 min | ~5 parts, 5–10 min | ~13 parts, 13–26 min |
+| `ambgest` | 12 KB, 1 part, 1–2 min | ~5 parts, 5–10 min | ~10 parts, 10–20 min |
+| `dry-inflector` | 1–2 parts, 1–4 min | 1–3 parts, 1–6 min | same |
+| `synth` | 1–2 parts, 1–4 min | — | — |
+
+A full first run (all repos, both profiles, first-run caps) is about 35–75 min, doubled with the rescan (`RESCAN=0`
+halves it). The suggested very first command is `REPOS=synth,ambgest PROFILE=docs` (a few minutes).
 
 - Cloned with `git clone --filter=blob:none` + `git checkout <sha>` into `Dir.mktmpdir("graph_mem-scan-profile")`, removed at the end (also on error). A missing or moved commit fails that repo, not the run.
 - The synthetic repo is generated by `GraphMem::ScanProfile::SynthRepo` into a temp dir: a `Gadget Project` README, a few Ruby classes (`SynthWidget`, `AlphaService`) with known relations, one file over `MAX_FILE_BYTES`, one generated/vendored file, and one long file that must split. It carries an **expected** entity/relation list, so recall and noise can be measured (M).
-- Adding a repo means an open-source license and a pinned commit; never a private or local folder. The task refuses any `--repo` that isn't a key in `repos.yml` or `synth`.
+- Adding a repo means an open-source license, a public URL and a pinned commit; never a private or local folder. The task refuses any `REPOS` key that isn't in `repos.yml` or `synth`.
 
 ## Steps
 
@@ -97,16 +135,18 @@ About 1,500–2,200 changed lines, half of them specs. Files under ~500 lines, m
 ## Decisions (defaults; Steve may change any)
 
 1. **Version 1.73.0** (minor: a new task and a scan behaviour change).
-2. **Fixtures:** the four pinned repos above + `synth`; Mastodon/Discourse subsets are too big for a first run (later, as a pinned subdirectory if wanted).
-3. **Throwaway DB** `<dev name>_scan_profile`, created and dropped by the task; `KEEP_DB=1` keeps it.
-4. **Backend:** local Ollama; cloud or agent CLI only with `BACKEND=…` **and** `ALLOW_CLOUD=1`, still through `CloudGate`/`CloudCall`.
-5. **Rescan run on by default** (churn is the clearest noise signal).
-6. **Noise filter on by default**, conservative rules only; no setting to turn it off (add one only if Steve asks).
-7. **Setting defaults** change only with a real baseline in the PR.
-8. **Reports** stay local under `tmp/` and are never committed.
+2. **Fixtures:** Steve's four open-source repos (`graph_mem` at `v1.72.0`, `goggles_db`, `goggles_api`, `ambgest`), `dry-inflector` as the one outside-author control, and `synth`. Larger third-party repos (Mastodon/Discourse subsets) are later, as a pinned subdirectory if wanted.
+3. **First-run caps:** 64 KB / 20 files per scan, `docs` and `code` profiles; `FULL=1` for the scanner's own caps.
+4. **Throwaway DB** `<dev name>_scan_profile`, created and dropped by the task; `KEEP_DB=1` keeps it.
+5. **Backend:** local Ollama; cloud or agent CLI only with `BACKEND=…` **and** `ALLOW_CLOUD=1`, still through `CloudGate`/`CloudCall`.
+6. **Rescan run on by default** (churn is the clearest noise signal).
+7. **Noise filter on by default**, conservative rules only; no setting to turn it off (add one only if Steve asks).
+8. **Setting defaults** change only with a real baseline in the PR.
+9. **Reports** stay local under `tmp/` and are never committed.
 
 ## Acceptance criteria
 
+- The `graph_mem` fixture is always a temp clone at the pinned tag, with `docs/plans/**` and the other listed paths excluded (spec'd on the resolved file list); the per-repo caps reach `ProjectScanner.new`.
 - `bin/rails graph_mem:scan_profile REPOS=synth` runs end to end with the stub backend in specs; the refusals (production, wrong DB name, foreign existing DB, unknown repo key) are spec'd.
 - After a run, the development DB is unchanged (spec: the profiler never connects to a name without `_scan_profile` for writing) and the temp dirs are gone.
 - Default backend is Ollama; with no `ALLOW_CLOUD=1`, a cloud chain is refused by the gate (spec'd).
