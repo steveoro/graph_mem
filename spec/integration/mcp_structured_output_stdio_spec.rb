@@ -112,6 +112,14 @@ RSpec.describe "MCP structured output over stdio" do
       ChangeSet.where(subject_type: "MemoryEntity", subject_id: project&.id).delete_all # the graph_delete is a change set (UI-4a)
     end
 
+    # mcp 1.9.0 (#651); before it, a string _meta was ignored and the tools were listed.
+    it "refuses a tools/list whose _meta is not an object with -32602 and the id" do
+      out, = run_runner(handshake + [ { jsonrpc: "2.0", id: 8, method: "tools/list", params: { _meta: "x" } } ])
+      reply = replies(out).find { |message| message["id"] == 8 }
+
+      expect(reply).to include("error" => include("code" => -32_602, "message" => "Invalid params: _meta must be an object"))
+    end
+
     it "ends the session on a line over GRAPH_MEM_MCP_MAX_REQUEST_BYTES without writing anything else" do
       oversized = JSON.generate(jsonrpc: "2.0", id: 6, method: "ping", params: { pad: "x" * 5_000 })
       out, = run_runner(handshake + [ oversized, { jsonrpc: "2.0", id: 7, method: "ping" } ],
