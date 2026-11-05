@@ -25,12 +25,12 @@ module GraphMem
       # Raised for an option value that isn't allowed.
       const_set(:Error, Class.new(StandardError))
 
-      # A settings key SETTINGS may set: the model and provider settings, never the scan chain
-      # (BACKEND), budgets or inline cloud tasks.
-
       # Why a cloud chain (BACKEND) or ALLOW_CLOUD=1 is refused before anything runs.
       const_set(:CLOUD_REFUSED, "the profiler runs on local Ollama only: only the Projects page grants a project cloud access, " \
                                 "so its projects never have it and a cloud chain could only fall back")
+
+      # A settings key SETTINGS may set: the model and provider settings, never the scan chain
+      # (BACKEND), budgets or inline cloud tasks.
       const_set(:SETTING_KEY, /\A(summary_\w+|llm_(?!chain_|budget_|inline_)\w+)\z/)
 
       # The scan settings SWEEP may vary (project_scan_<key>), with AppSettings' ranges.
