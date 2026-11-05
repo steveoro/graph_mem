@@ -29,8 +29,9 @@ class ProjectScanner
   MAX_FILE_BYTES = 50_000
   MAX_TOTAL_INPUT_BYTES = 200_000
   SUMMARY_PROVIDER = "ollama"
-  # The type of an item the model typed as a project (a gem, an engine, a sibling repo): a part of
-  # the scanned project, never a second Project-typed entity next to the real roots.
+  # The type of an item the model typed as a project (a gem, an engine, a sibling repo) when no
+  # Project root has its name (else it links to that root, ProjectLinks): a part of the scanned
+  # project, never a second Project-typed entity next to the real roots.
   ITEM_TYPE_FOR_PROJECT = "Component"
 
   Result = Struct.new(
@@ -185,6 +186,7 @@ class ProjectScanner
 
   include LlmExtraction
   include DeterministicExtraction
+  include ProjectLinks
 
   # Files the scan skipped because they left the root or are denylisted (ProjectScanFileFilter).
   def skip_counters
@@ -409,6 +411,12 @@ class ProjectScanner
       return [ @project_entity, item ]
     end
 
+    # An item naming another project is a link to that root, never an entity here (ProjectLinks).
+    if (root = other_project_root(name))
+      link_project!(root)
+      return
+    end
+
     type = ITEM_TYPE_FOR_PROJECT if project_type?(type)
     entity = find_or_create_entity(name, type, entity_data)
     return unless entity
@@ -489,7 +497,7 @@ class ProjectScanner
     return if from_entity.id == target.id
 
     relation_type = MemoryRelation.canonical_relation_type(relation_type)
-    return if relation_exists?(from_entity, target, relation_type)
+    return if part_of_another_root?(target, relation_type) || relation_exists?(from_entity, target, relation_type)
 
     return if @dry_run
 
@@ -512,22 +520,11 @@ class ProjectScanner
     @errors << "Failed to create relation #{from_entity.name} -> #{target_name}: #{e.message}"
   end
 
-  # @return [Boolean] "Project" or one of its vocabulary aliases (repo, repository, codebase, …),
-  #   whether or not the database's type mappings know them
-  def project_type?(type)
-    project = NodeOperationsStrategy::PROJECT_ENTITY_TYPE
-    type.casecmp?(project) || GraphVocabulary::ENTITY_TYPE_MAPPINGS.fetch(project).include?(type.downcase)
-  end
-
-  # @return [Boolean] the name (or one of the aliases) of the scanned project's root
-  def project_root_name?(name)
-    @project_entity.present? && ([ @project_entity.name ] + @project_entity.aliases.to_s.split(/[,|;]/)).any? { |known| known.strip.casecmp?(name) }
-  end
-
   def resolve_relation_target(name)
     return @project_entity if project_root_name?(name)
 
     @entities_by_path[name.downcase] ||
+      other_project_root(name) ||
       MemoryEntity.find_by(name: name, project_id: @project_entity&.id) ||
       MemoryEntity.find_by(name: name, project_id: nil) ||
       MemoryEntity.where(project_id: @project_entity&.id).where("aliases LIKE ?", "%#{name}%").first

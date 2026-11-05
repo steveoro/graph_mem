@@ -50,19 +50,91 @@ RSpec.describe ProjectScanner, "reconcile" do
     expect(result.entities_created).to eq(0)
   end
 
-  it "makes an item typed as a project a Component of the scanned one, next to a real root of that name" do
-    MemoryEntity.create!(name: "Gadget Engine", entity_type: "Project")
+  it "makes an item typed as a project a Component of the scanned one when no root has its name" do
     items.push(item("Gadget Engine", "repository", "Gadget Engine stores the gadget tables."),
                item("SynthWidget", "Class", "SynthWidget renders gadget frames.", relations: [ { to: "Gadget Engine", type: "depends_on" } ]))
 
     result = scan
 
     project = MemoryEntity.find_by!(name: "Gadget Project", project_id: nil)
-    engine = MemoryEntity.find_by!(name: "Gadget Engine", project_id: project.id)
+    engine = MemoryEntity.find_by!(name: "Gadget Engine")
     expect(result.errors).to be_empty
-    expect(MemoryEntity.where(entity_type: "Project").pluck(:name)).to contain_exactly("Gadget Engine", "Gadget Project")
-    expect(engine.entity_type).to eq("Component")
+    expect(MemoryEntity.where(entity_type: "Project").pluck(:name)).to eq([ "Gadget Project" ])
+    expect(engine).to have_attributes(entity_type: "Component", project_id: project.id)
     expect(MemoryRelation.where(from_entity_id: MemoryEntity.find_by!(name: "SynthWidget").id, to_entity_id: engine.id, relation_type: "depends_on")).to exist
+  end
+
+  describe "an item naming another Project root" do
+    let!(:engine) { MemoryEntity.create!(name: "Gadget Engine", entity_type: "Project", aliases: "GadgetEngine") }
+    let!(:engine_fact) { MemoryObservation.create!(memory_entity: engine, content: "Gadget Engine stores the gadget tables.") }
+
+    before do
+      items.push(item("gadget-engine", "Gem", "Gadget Engine is a Rails engine.", relations: [ { to: "Gadget Project", type: "part_of" } ]),
+                 item("SynthWidget", "Class", "SynthWidget renders gadget frames.",
+                      relations: [ { to: "gadget_engine", type: "depends_on" }, { to: "GadgetEngine", type: "part_of" } ]))
+    end
+
+    def relations(from, to) = MemoryRelation.where(from_entity_id: from.id, to_entity_id: to.id).pluck(:relation_type)
+
+    it "links the scanned root to it once, resolves the name to it, and writes nothing to the other project" do
+      result = scan
+
+      project = MemoryEntity.find_by!(name: "Gadget Project", project_id: nil)
+      widget = MemoryEntity.find_by!(name: "SynthWidget")
+      expect(result.errors).to be_empty
+      expect(MemoryEntity.where(entity_type: "Project").pluck(:name)).to contain_exactly("Gadget Engine", "Gadget Project")
+      expect(MemoryEntity.where(project_id: project.id).pluck(:name)).to eq(%w[SynthWidget])
+      expect(relations(project, engine)).to eq(%w[depends_on])
+      expect(relations(widget, engine)).to eq(%w[depends_on])
+      expect(relations(engine, project)).to be_empty
+      expect(engine.reload).to have_attributes(project_id: nil, entity_type: "Project")
+      expect(engine.memory_observations.pluck(:content)).to eq([ engine_fact.content ])
+      expect(widget.reload.project_id).to eq(project.id)
+    end
+
+    it "adds no second link on a rescan, nor one next to a link made by hand" do
+      scan
+      scan(mode: "rescan")
+      project = MemoryEntity.find_by!(name: "Gadget Project", project_id: nil)
+      expect(relations(project, engine)).to eq(%w[depends_on])
+
+      other = MemoryEntity.create!(name: "Alpha Service", entity_type: "Project")
+      MemoryRelation.create!(from_entity_id: other.id, to_entity_id: engine.id, relation_type: "relates_to")
+      items.replace([ item("Gadget Engine", "Gem", "Gadget Engine is a Rails engine.") ])
+      with_llm_provider(provider) { described_class.new(project_root: root, project_name: "Alpha Service").call }
+      expect(relations(other, engine)).to eq(%w[relates_to])
+    end
+
+    it "replaces a Component an earlier scan made before the root existed: the next complete scan links the root and obsoletes the Component's scan facts" do
+      engine_fact.destroy!
+      engine.destroy!
+      scan
+      project = MemoryEntity.find_by!(name: "Gadget Project", project_id: nil)
+      component = MemoryEntity.find_by!(name: "gadget-engine", project_id: project.id)
+      root = MemoryEntity.create!(name: "Gadget Engine", entity_type: "Project")
+
+      result = scan(mode: "rescan")
+
+      expect(relations(project, root)).to eq(%w[depends_on])
+      expect(component.reload.active_memory_observations).to be_empty
+      expect(result.errors).to be_empty
+    end
+  end
+
+  it "leaves same-named entities of other projects and the global namespace alone" do
+    other = MemoryEntity.create!(name: "Alpha Service", entity_type: "Project")
+    foreign = MemoryEntity.create!(name: "SynthWidget", entity_type: "Module", project_id: other.id)
+    global = MemoryEntity.create!(name: "synthwidget", entity_type: "Component")
+    items.push(item("SynthWidget", "Class", "SynthWidget renders gadget frames."))
+
+    result = scan
+
+    project = MemoryEntity.find_by!(name: "Gadget Project", project_id: nil)
+    expect(result.errors).to be_empty
+    expect(MemoryEntity.find_by!(name: "SynthWidget", project_id: project.id).entity_type).to eq("Class")
+    expect(foreign.reload.memory_observations).to be_empty
+    expect(global.reload.memory_observations).to be_empty
+    expect([ foreign.entity_type, global.entity_type ]).to eq(%w[Module Component])
   end
 
   it "folds an item naming the scanned project (or an alias) into its root" do
