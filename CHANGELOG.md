@@ -5,6 +5,15 @@ All notable changes to GraphMem will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.73.1] - 2026-11-05
+
+Project scan reconcile fixes found by the first real scan profile.
+
+### Fixed
+- A name the model typed differently in two parts (or differently from an earlier scan) no longer fails with "Name has already been taken" and loses its observations: a project holds one entity per name, which keeps its first type.
+- A scan whose every part failed now reports the parts it tried (scan page, `scan_project_status` counters, profiler) instead of 0, and still falls back to the deterministic extraction.
+- An item the model types as a project (Project, repository, codebase, …) becomes a Component of the scanned project instead of a second Project-typed entity, and an item naming the scanned project folds into its root.
+
 ## [1.73.0] - 2026-11-05
 
 F-3b scan profiling and tuning (#157).
