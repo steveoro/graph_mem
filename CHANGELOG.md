@@ -5,6 +5,20 @@ All notable changes to GraphMem will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.72.0] - 2026-11-05
+
+`mcp` gem 1.9.0, tool titles and the query length cap (#156).
+
+### Added
+- Tool titles in `tools/list`: every tool advertises a short human-readable `title` (e.g. "Search Graph"); prompts and resources are unchanged.
+- A 2,048-character cap on `query` for `search`, `get_entities`, `rank_observations` and `summarize`, advertised as `maxLength`. A longer query is refused with "Query is too long (max 2048 characters)." and never truncated.
+
+### Changed
+- MCP requests whose `_meta` is not an object (a string, an array, a number) are refused with -32602 "Invalid params: _meta must be an object", over HTTP and stdio (mcp 1.9.0); `_meta: null` reads as absent.
+
+### Dependencies
+- `mcp` 1.8.2 → 1.9.0.
+
 ## [1.71.0] - 2026-11-04
 
 Agent-CLI switch-over (#155).
