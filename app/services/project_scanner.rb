@@ -560,8 +560,9 @@ class ProjectScanner
         end
       end
 
-      # Queue entity deletion for review if it has no remaining active observations.
-      if entity.active_memory_observations.empty?
+      # Queue entity deletion for review if it has no remaining active observations (a fresh query:
+      # the loaded association still holds the ones just obsoleted).
+      if entity.active_memory_observations.reload.empty?
         queue_scan_review({
           id: SecureRandom.uuid,
           kind: "delete_entity",

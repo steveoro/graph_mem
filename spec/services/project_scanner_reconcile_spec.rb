@@ -105,7 +105,7 @@ RSpec.describe ProjectScanner, "reconcile" do
       expect(relations(other, engine)).to eq(%w[relates_to])
     end
 
-    it "replaces a Component an earlier scan made before the root existed: the next complete scan links the root and obsoletes the Component's scan facts" do
+    it "replaces a Component an earlier scan made before the root existed: the next complete scan links the root and leaves the Component missing" do
       engine_fact.destroy!
       engine.destroy!
       scan
@@ -117,7 +117,7 @@ RSpec.describe ProjectScanner, "reconcile" do
 
       expect(relations(project, root)).to eq(%w[depends_on])
       expect(component.reload.active_memory_observations).to be_empty
-      expect(result.errors).to be_empty
+      expect(result.scan_review_items).to include(a_hash_including(kind: "delete_entity", entity_id: component.id))
     end
   end
 
