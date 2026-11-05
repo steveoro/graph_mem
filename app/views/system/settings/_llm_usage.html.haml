@@ -1,0 +1,37 @@
+-# Settings › Summaries: LLM usage today and the day before, per task and provider, and each task's
+-# daily cloud budget (agent-CLI PR5, Llm::Usage and Llm::Budget). Counts only: no text, name or path.
+- today = Llm::Budget.today
+.system-usage{ data: { testid: "settings-llm-usage" } }
+  %h3.ui-label= t("system.settings.summaries.usage.title")
+  - [ today, today - 1 ].each do |day|
+    - table = Llm::Usage.day(day)
+    %p.system-hint= t("system.settings.summaries.usage.day", day: day.iso8601)
+    - if table.empty?
+      %p.system-hint{ data: { testid: "llm-usage-empty-#{day.iso8601}" } }= t("system.settings.summaries.usage.none")
+    - else
+      %table.system-table{ data: { testid: "llm-usage-#{day.iso8601}" } }
+        %thead
+          %tr
+            %th= t("system.settings.summaries.usage.task")
+            %th= t("system.settings.summaries.usage.provider")
+            - Llm::Usage::FIELDS.each do |field|
+              %th= t("system.settings.summaries.usage.fields.#{field}")
+        %tbody
+          - table.each do |task, providers|
+            - providers.each do |provider, counts|
+              %tr{ data: { testid: "llm-usage-#{day.iso8601}-#{task}-#{provider}" } }
+                %td= task
+                %td= provider
+                - Llm::Usage::FIELDS.each do |field|
+                  %td= counts[field]
+  %ul.system-hint{ data: { testid: "llm-budgets" } }
+    - Llm::Router::TASKS.each do |task|
+      - limits = Llm::Budget.limits(task)
+      %li{ data: { testid: "llm-budget-#{task}" } }
+        - if limits.values.all?(&:zero?)
+          = t("system.settings.summaries.usage.no_budget", task: task)
+        - else
+          - used = Llm::Budget.used(task)
+          = t("system.settings.summaries.usage.budget", task: task,
+            calls: limits[:calls].positive? ? t("system.settings.summaries.usage.left", left: [ limits[:calls] - used[:calls], 0 ].max, limit: limits[:calls]) : "-",
+            tokens: limits[:tokens].positive? ? t("system.settings.summaries.usage.left", left: [ limits[:tokens] - used[:tokens], 0 ].max, limit: limits[:tokens]) : "-")

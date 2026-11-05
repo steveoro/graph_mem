@@ -9,11 +9,12 @@ module Llm
   # Sizes and outcome only: never the prompt, the answer, an error or a project or entity name. A
   # cloud call's line also has CLOUD_KEYS (what was masked, per type; the round trip) and measures
   # the masked prompt.
-  # Token estimates use TokenBudget::CHARS_PER_TOKEN. A logging failure never fails the call.
+  # Token estimates use TokenBudget::CHARS_PER_TOKEN. A logging failure never fails the call. Each
+  # line also feeds the per-day counters of the usage card (Llm::Usage, PR5).
   module UsageLog
     PREFIX = "[llm]"
     # The only extra keys a cloud call's line may carry: counts and outcomes, never text.
-    CLOUD_KEYS = %i[anonymized masked secrets round_trip leftover_out refused refused_detail].freeze
+    CLOUD_KEYS = %i[anonymized masked secrets round_trip leftover_out refused refused_detail retry json].freeze
 
     module_function
 
@@ -23,11 +24,15 @@ module Llm
     # @param prompt [String]
     # @param result [Hash, nil] the provider's result; nil when it raised
     # @param cloud [Hash, nil] a cloud call's extra fields (CLOUD_KEYS only; the rest is dropped)
+    # @param step [Integer] the attempt's place in its chain (PR5): a cloud line always carries it as
+    #   `fallback_step`, with the agent-CLI `profile`; a local line only after a fallback (step > 0)
     # @return [void]
-    def record(task:, provider:, inline:, prompt:, result:, cloud: nil)
+    def record(task:, provider:, inline:, prompt:, result:, cloud: nil, step: 0)
       line = fields(task, provider, inline, prompt, result || {})
       line = line.merge(cloud.slice(*CLOUD_KEYS)) if cloud
+      line = line.merge(attempt_fields(provider, cloud, step)) if cloud || step.positive?
       Rails.logger.info("#{PREFIX} #{JSON.generate(line)}")
+      Usage.count(line)
     rescue StandardError
       nil
     end
@@ -42,9 +47,14 @@ module Llm
       result[:prompt_tokens].nil? ? line : line.merge(prompt_tokens: result[:prompt_tokens])
     end
 
+    def attempt_fields(provider, cloud, step)
+      profile = cloud && provider.respond_to?(:profile) ? provider.profile : nil
+      { profile: profile, fallback_step: step }.compact
+    end
+
     def estimate(chars)
       (chars.to_f / TokenBudget::CHARS_PER_TOKEN).ceil
     end
-    private_class_method :fields, :estimate
+    private_class_method :fields, :attempt_fields, :estimate
   end
 end

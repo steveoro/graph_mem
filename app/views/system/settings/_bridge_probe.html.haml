@@ -27,3 +27,13 @@
       %p.system-hint{ data: { testid: "bridge-probe-status" } }= t("system.settings.summaries.bridge.not_checked")
     = button_to t("system.settings.summaries.bridge.check_now"), system_bridge_probe_path, method: :post, class: "ui-btn",
       data: { testid: "bridge-probe-check" }
+    - if probe&.dig(:chains).present?
+      %ul.system-hint{ data: { testid: "bridge-probe-chains" } }
+        - probe[:chains].each do |task, models|
+          %li{ data: { testid: "bridge-probe-chain-#{task}" } }
+            = t("system.settings.summaries.bridge.chain", task: task)
+            - models.each do |entry|
+              %span{ data: { testid: "bridge-probe-model-#{task}-#{entry[:profile]}-#{entry[:model]}" } }
+                = "#{entry[:profile]} #{entry[:model].presence || t('system.settings.summaries.bridge.no_model')}"
+                - if entry[:tested] == false
+                  %strong= t("system.settings.summaries.bridge.untested")

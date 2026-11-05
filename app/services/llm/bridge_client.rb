@@ -27,6 +27,10 @@ module Llm
     # The read timeout is the CLI's timeout plus this margin (the bridge's own gate check and spawn).
     READ_MARGIN_S = 10
     HEALTH_READ_TIMEOUT_S = 30
+    # PR5: within a deadline (an inline call), the connect timeout, and the time left for the
+    # bridge's own checks and spawn between the CLI's timeout and the read timeout.
+    DEADLINE_OPEN_S = 1
+    DEADLINE_MARGIN_S = 3
     TIMEOUTS = (1..600)
     # Bridge request errors by status (the body's class is not trusted for these).
     STATUS_ERRORS = { 400 => "bridge_bad_request", 401 => "bridge_unauthorized", 404 => "bridge_not_found",
@@ -88,18 +92,21 @@ module Llm
     # @param model [String]
     # @param task [Symbol, String] one of Llm::Router::TASKS (the bridge logs it)
     # @param timeout_s [Integer, nil] the CLI's timeout, clamped to 1..600
+    # @param deadline_s [Integer, nil] PR5: the most seconds the whole call may take (connect, the
+    #   bridge's checks and the CLI); the connect and read timeouts and the CLI's timeout_s are fitted
+    #   inside it. nil: timeout_s plus the usual margins
     # @return [Hash] `{ ok:, text:, error:, latency_ms: }`, plus `done_reason: "length"` for a cut
     #   answer and `http_status: 413` for a too-long prompt; never raises
-    def complete(prompt, profile:, model:, task:, timeout_s:)
+    def complete(prompt, profile:, model:, task:, timeout_s:, deadline_s: nil)
       started = clock
-      seconds = timeout_s.to_i.clamp(TIMEOUTS.min, TIMEOUTS.max)
+      seconds, open, read = call_times(timeout_s, deadline_s)
       body = JSON.generate(profile: profile.to_s, model: model.to_s, prompt: prompt.to_s, timeout_s: seconds,
                            task: task.to_s, run_id: SecureRandom.uuid)
       secret = token
       return failure(NOT_CONFIGURED, started) unless port && secret
       return failure(PROMPT_TOO_LONG, started, http_status: 413) if body.bytesize > MAX_BODY
 
-      response = post("/v1/complete", body, secret, read_timeout: seconds + READ_MARGIN_S)
+      response = post("/v1/complete", body, secret, read_timeout: read, open_timeout: open)
       result_for(response, started)
     rescue BadResponse, JSON::ParserError
       failure(BAD_RESPONSE, started)
@@ -152,14 +159,24 @@ module Llm
       nil
     end
 
-    def post(path, body, secret, read_timeout:)
-      request(Net::HTTP::Post.new(path, "Content-Type" => "application/json").tap { |post| post.body = body }, secret, read_timeout: read_timeout)
+    # @return [Array(Integer, Integer, Integer)] the CLI's timeout_s, the open and the read timeout
+    def call_times(timeout_s, deadline_s)
+      seconds = timeout_s.to_i.clamp(TIMEOUTS.min, TIMEOUTS.max)
+      return [ seconds, OPEN_TIMEOUT_S, seconds + READ_MARGIN_S ] unless deadline_s
+
+      read = [ deadline_s.to_i - DEADLINE_OPEN_S, 1 ].max
+      [ seconds.clamp(TIMEOUTS.min, [ read - DEADLINE_MARGIN_S, TIMEOUTS.min ].max), DEADLINE_OPEN_S, read ]
     end
 
-    def request(http_request, secret, read_timeout:)
+    def post(path, body, secret, read_timeout:, open_timeout: OPEN_TIMEOUT_S)
+      request(Net::HTTP::Post.new(path, "Content-Type" => "application/json").tap { |post| post.body = body }, secret,
+              read_timeout: read_timeout, open_timeout: open_timeout)
+    end
+
+    def request(http_request, secret, read_timeout:, open_timeout: OPEN_TIMEOUT_S)
       http_request["X-GM-Bridge-Token"] = secret
       http = Net::HTTP.new("127.0.0.1", port, nil) # nil: never a proxy from the environment
-      http.open_timeout = OPEN_TIMEOUT_S
+      http.open_timeout = open_timeout
       http.read_timeout = read_timeout
       http.write_timeout = read_timeout
       http.max_retries = 0

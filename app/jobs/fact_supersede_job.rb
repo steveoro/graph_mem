@@ -6,7 +6,12 @@
 # (Solid Queue's concurrency control, keyed by the fact id); a stale or unmarked fact is a no-op.
 class FactSupersedeJob < ApplicationJob
   queue_as :low_priority
-  limits_concurrency to: 1, key: ->(fact_id) { "fact:#{fact_id}" }
+  # Agent-CLI PR5: while the judge chain names a cloud provider, the shared "llm/llm_cloud" semaphore
+  # (one cloud-using job at a time, with ProjectScanJob); otherwise "FactSupersedeJob/fact:<id>" as
+  # before. Read at enqueue; the duration covers a judge run's batches.
+  limits_concurrency to: 1, duration: 1.hour,
+                     group: ->(*) { Llm::Router.concurrency_for(:judge, self.class.name, Llm::Router::CLOUD_GROUP) },
+                     key: ->(fact_id) { Llm::Router.concurrency_for(:judge, "fact:#{fact_id}", Llm::Router::CLOUD_KEY) }
 
   # @param fact_id [Integer]
   # @return [FactSupersede::Proposals::Result, nil] nil when the fact is gone, no longer a fact, or the feature is off

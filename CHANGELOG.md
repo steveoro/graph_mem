@@ -5,6 +5,23 @@ All notable changes to GraphMem will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.71.0] - 2026-11-04
+
+Agent-CLI switch-over (#155).
+
+### Added
+- Both host-bridge profiles (`claude`, `devin`) in one chain, each with a primary model and up to three backup models, tried in order on availability failures, then the next profile, then Ollama (Settings › Summaries).
+- Cloud scan and judge answers are checked as JSON of the requested shape and retried once on the same model; still invalid, they fall back to Ollama.
+- An opt-in for summaries to use the host bridge inside a request: one attempt, primary model, at most 20 seconds by default (5 to 60).
+- One cloud-using job at a time: scans and fact-supersede runs whose chain is cloud share one Solid Queue concurrency key.
+- Daily budgets per task (cloud calls and estimated tokens; 0 = no limit), and an LLM usage card for today and the previous day (counts only).
+- The adopter guide, `docs/agent_cli_backends.md`; the bridge probe also lists each chain's models and flags ones the gate didn't test.
+
+### Changed
+- `summarize` (MCP and REST) never waits on the host bridge unless that opt-in is on; `detect_contradictions` never does. **Upgrading from 1.70.0:** a summary chain that names `agent_cli` now needs **Requests that may use the host bridge** = `summary`, or summaries go to the next chain entry (Ollama, else the deterministic summary).
+- `generated_by` names the model that answered when a cloud provider did.
+- Cloud JSON answers are no longer cut at 8,192 characters; Ollama answers are unchanged.
+
 ## [1.70.0] - 2026-11-04
 
 Rails provider for the LLM host bridge (#154).

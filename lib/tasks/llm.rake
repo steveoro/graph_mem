@@ -5,9 +5,14 @@ namespace :llm do
   # path, no token). Reads LLM_BRIDGE_URL and LLM_BRIDGE_TOKEN_FILE like the app.
   desc "Report whether the LLM host bridge is configured and reachable, and each profile's gate"
   task bridge_probe: :environment do
-    probe = Llm::BridgeProbe.call
+    probe = Llm::BridgeProbe.call(chains: true)
+    chain_lines = probe[:chains].map do |task, models|
+      listed = models.map { |entry| "#{entry[:profile]} #{entry[:model].presence || '(no model)'}#{' (NOT TESTED)' if entry[:tested] == false}" }
+      "  chain #{task}: #{listed.join(', ')}"
+    end
     unless probe[:reachable]
       puts "bridge: #{probe[:configured] ? 'not reachable' : 'not configured'} (#{probe[:reason]})"
+      puts chain_lines if chain_lines.any?
       next
     end
 
@@ -17,5 +22,6 @@ namespace :llm do
       puts "  #{name}: cli #{info[:cli_ok] ? 'found' : 'missing'}, gate #{gate}, #{info[:gate_ok] ? 'usable' : 'not usable'}" \
            "#{', TRIPPED' if info[:tripped]}"
     end
+    puts chain_lines if chain_lines.any?
   end
 end

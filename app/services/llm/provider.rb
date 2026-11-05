@@ -41,6 +41,12 @@ module Llm
       true
     end
 
+    # @return [Boolean] whether Llm::CloudCall checks this provider's scan and judge answers as JSON
+    #   of the requested shape and retries a wrong one once (PR5: the agent CLIs)
+    def checks_json_shape?
+      false
+    end
+
     # @return [String, nil] the model the next request goes to, for the usage line
     def model
       nil
