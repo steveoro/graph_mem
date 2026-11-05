@@ -24,8 +24,10 @@ Moving another Rails app from fast-mcp to the `mcp` gem:
 
 ## Client matrix
 
-`script/mcp_compat/clients.sh` at 1.58.2 (2026-10-27, Node 24.11.1): 12 of 12 OK. Every `auto` row
-negotiates 2026-07-28, every `legacy` row 2025-11-25.
+`script/mcp_compat/clients.sh` at 1.72.0 (2026-11-05, `mcp` 1.9.0, Node 24.11.1, Ruby 3.4.12): 12 of
+12 OK, and `/mcp` lists 12 tools on every row. Every `auto` row negotiates 2026-07-28, every `legacy`
+row 2025-11-25. The Ruby SDK 1.9.0 client keeps the tool `title` and sees one on all 12 tools; 1.8.2
+drops the field.
 
 | Client | Mode | Transport | OK | Protocol | Timing note |
 | --- | --- | --- | --- | --- | --- |
@@ -33,14 +35,14 @@ negotiates 2026-07-28, every `legacy` row 2025-11-25.
 | TS client 2.3.1 | auto | HTTP | OK | 2026-07-28 | |
 | TS client 2.3.1 | legacy | stdio | OK | 2025-11-25 | |
 | TS client 2.3.1 | legacy | HTTP | OK | 2025-11-25 | |
-| Ruby SDK 1.8.1 | auto | stdio | OK | 2026-07-28 | `auto` costs nothing extra |
-| Ruby SDK 1.8.1 | auto | HTTP | OK | 2026-07-28 | |
-| Ruby SDK 1.8.1 | legacy | stdio | OK | 2025-11-25 | |
-| Ruby SDK 1.8.1 | legacy | HTTP | OK | 2025-11-25 | |
 | Ruby SDK 1.8.2 | auto | stdio | OK | 2026-07-28 | `auto` costs nothing extra |
 | Ruby SDK 1.8.2 | auto | HTTP | OK | 2026-07-28 | |
 | Ruby SDK 1.8.2 | legacy | stdio | OK | 2025-11-25 | |
 | Ruby SDK 1.8.2 | legacy | HTTP | OK | 2025-11-25 | |
+| Ruby SDK 1.9.0 | auto | stdio | OK | 2026-07-28 | `auto` costs nothing extra; titles on 12 of 12 tools |
+| Ruby SDK 1.9.0 | auto | HTTP | OK | 2026-07-28 | titles on 12 of 12 tools |
+| Ruby SDK 1.9.0 | legacy | stdio | OK | 2025-11-25 | titles on 12 of 12 tools |
+| Ruby SDK 1.9.0 | legacy | HTTP | OK | 2025-11-25 | titles on 12 of 12 tools |
 
 ## Claude Code
 
@@ -58,17 +60,18 @@ MCP.
 
 ## Handshake comparison
 
-`script/mcp_compat/compare.rb`, 2026-10-27: graph_mem 1.58.2, reference servers Memory 2.0.0 and
-Everything 2.0.1 with SDK 2.3.1, on Node 24.11.1. 0 failed expectations, 0 unexpected differences;
-every case recorded at 1.58.1 answers the same, and 1.58.2 adds the two `Origin` cases. Outlines show
+`script/mcp_compat/compare.rb`, 2026-11-05: graph_mem 1.72.0 (`mcp` 1.9.0), reference servers Memory
+2.0.0 and Everything 2.0.1 with SDK 2.3.1, on Node 24.11.1 and Ruby 3.4.12. 0 failed expectations, 0
+unexpected differences; every case recorded at 1.58.2 answers the same, and 1.72.0 adds the two
+non-object `_meta` cases (documented divergences). Outlines show
 `[status, id, result or error code]` (HTTP) or the replies as `[id, result or error code]` (stdio);
 the cases are in `spec/fixtures/mcp/handshakes/`. The reference is Memory on stdio and Everything on
 HTTP. `compare.rb`'s informational Ruby SDK target (`rsdk_server.rb`, a one-tool server on `mcp`
-1.8.2) answers every case exactly as graph_mem does, so it has no column of its own.
+1.9.0) answers every case exactly as graph_mem does, so it has no column of its own.
 
 ### stdio
 
-17 cases: 8 same, 7 documented divergences, 2 graph_mem only.
+18 cases: 8 same, 8 documented divergences, 2 graph_mem only.
 
 | Case | graph_mem | Memory 2.0.0 | Verdict |
 | --- | --- | --- | --- |
@@ -89,10 +92,11 @@ HTTP. `compare.rb`'s informational Ruby SDK target (`rsdk_server.rb`, a one-tool
 | resources/subscribe is not offered | `[[1, "result"], [4, -32601]]` | n/a (server-specific) | graph_mem only |
 | an invalid UTF-8 object key, then a ping | `[[nil, -32700], [2, "result"]]` | `[[1, "result"], [2, "result"]]` | documented divergence |
 | tools/call with an invalid UTF-8 tool name, then a ping | `[[1, "result"], [42, -32603], [5, "result"]]` | `[[1, "result"], [42, -32602], [5, "result"]]` | documented divergence |
+| tools/list with a non-object _meta, then a ping | `[[1, "result"], [2, -32602], [3, "result"]]` | `[[1, "result"], [3, "result"]]` | documented divergence |
 
 ### Streamable HTTP
 
-30 cases: 14 same, 14 documented divergences, 2 graph_mem only.
+31 cases: 14 same, 15 documented divergences, 2 graph_mem only.
 
 | Case | graph_mem | Everything 2.0.1 | Verdict |
 | --- | --- | --- | --- |
@@ -126,6 +130,7 @@ HTTP. `compare.rb`'s informational Ruby SDK target (`rsdk_server.rb`, a one-tool
 | a request other than initialize, with no session | `[400, nil, -32600]` | `[400, nil, -32000]` | documented divergence |
 | an initialize from a foreign Origin | `[403, nil, -32600]` | `[403, nil, -32000]` | documented divergence |
 | an initialize from another localhost port | `[403, nil, -32600]` | `[200, 44, "result"]` | documented divergence |
+| tools/list with a non-object _meta | `[200, 45, -32602]` | `[400, nil, -32700]` | documented divergence |
 
 Browser origins: graph_mem accepts same-origin requests and the exact origins in
 `GRAPH_MEM_MCP_ALLOWED_ORIGINS`, and grants CORS on `/mcp` to that same list. It answers every
