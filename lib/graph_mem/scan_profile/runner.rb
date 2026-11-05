@@ -104,10 +104,10 @@ module GraphMem
       def scan_stats(result, parts, seconds, checkout)
         times = parts.map(&:seconds).sort
         stats = COUNTERS.to_h { |key| [ key.to_s, result[key] ] }
-        stats.merge("status" => result[:status], "wall_s" => seconds.round(3), "noise_dropped" => result[:noise_dropped],
+        stats.merge("status" => result[:status], "wall_s" => seconds.round(3), "noise_dropped" => result[:noise_dropped] || {},
                     "requests" => parts.size, "parts_split" => parts.count(&:split),
                     "part_p50_s" => percentile(times, 0.5), "part_p95_s" => percentile(times, 0.95),
-                    "errors" => Array(result[:errors]).first(3).map { |error| Report.scrub(error.to_s, checkout.root) }).compact
+                    "errors" => Array(result[:errors]).first(3).map { |error| Report.scrub(error.to_s, checkout.root) })
       end
 
       def percentile(sorted, fraction)
