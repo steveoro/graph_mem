@@ -4,7 +4,8 @@ module Llm
   # Per-day LLM usage counters for the System usage card (agent-CLI PR5), filled from each [llm] line
   # (Llm::UsageLog): `llm:usage:<yyyy-mm-dd>:<task>:<provider>:<field>` in Rails.cache, kept two days.
   # Numbers only: never a prompt, an answer, a project name or a path. A counting failure never fails
-  # the call, and a cache that can't be read shows zeros.
+  # the call, and a cache that can't be read shows zeros. It runs on every call, Ollama-only chains
+  # included: one synchronous Rails.cache.increment per non-zero field (3 for an ok call, at most 4).
   #
   #   Llm::Usage.count(task: "scan", provider: "ollama", outcome: "ok", fallback_step: 1, est_in_tokens: 40, est_out_tokens: 9)
   #   Llm::Usage.day(Time.zone.today)

@@ -18,7 +18,7 @@ Agent-CLI switch-over (#155).
 - The adopter guide, `docs/agent_cli_backends.md`; the bridge probe also lists each chain's models and flags ones the gate didn't test.
 
 ### Changed
-- `summarize` (MCP and REST) never waits on the host bridge unless that opt-in is on; `detect_contradictions` never does.
+- `summarize` (MCP and REST) never waits on the host bridge unless that opt-in is on; `detect_contradictions` never does. **Upgrading from 1.70.0:** a summary chain that names `agent_cli` now needs **Requests that may use the host bridge** = `summary`, or summaries go to the next chain entry (Ollama, else the deterministic summary).
 - `generated_by` names the model that answered when a cloud provider did.
 - Cloud JSON answers are no longer cut at 8,192 characters; Ollama answers are unchanged.
 
