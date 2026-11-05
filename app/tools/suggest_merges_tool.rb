@@ -16,6 +16,8 @@ class SuggestMergesTool < ApplicationTool
     open_world_hint: false
   )
 
+  title "Suggest Merges"
+
   description "Live vector scan of duplicate entities; returns pairs and does not merge. Pass optional `threshold` " \
     "(float, default 0.3 cosine distance), `limit` (integer, default 20), `entity_type` (string). " \
     "Do not use to execute a merge; use `graph_delete` instead. " \

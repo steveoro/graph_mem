@@ -17,6 +17,8 @@ class SearchTool < ApplicationTool
     open_world_hint: false
   )
 
+  title "Search Graph"
+
   description "Recall what earlier sessions learned before you act. Call before choosing a convention " \
     "(version bump, changelog, docs or test style, config location, release step) and before first editing a " \
     "file or component named in the task; query by the task's project, file paths and component names, not " \

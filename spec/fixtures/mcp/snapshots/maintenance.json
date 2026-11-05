@@ -3,6 +3,7 @@
     "tools": [
       {
         "name": "traverse_graph",
+        "title": "Traverse Graph",
         "description": "Traverse from one entity or query relations directly through one object-shaped response. Pass optional `start_entity_id` for bounded BFS; `from_entity_id`, `to_entity_id`, and singular `relation_type` for edge filters; `max_depth` (integer, default 2, max 5), `direction` (both|outgoing|incoming, default both), `relation_types` (array of strings), `max_entities` (integer, default 100, max 1000), and `include` (entities, relations, traversal). With no start entity, relation filters query edges directly; no filters list all edges. Do not use for keyword search; use `search` instead. Do not use for the shortest path between two ids; use `find_shortest_path` instead. Do not use for an explicit id set with no expansion; use `get_entities` instead.",
         "inputSchema": {
           "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -230,6 +231,7 @@
       },
       {
         "name": "summarize",
+        "title": "Summarize Topic",
         "description": "Summarize what the knowledge graph knows about a topic with deterministic source-backed evidence (optional LLM synthesis). Pass required `query` (string); optional `entity_id` (integer), `max_results` (integer, default 10), `max_observations` (integer, default 20), `observations_per_entity` (integer; 0 disables cap), `max_depth` (integer, default 0), `include_sources` (bool, default true), `scope` (string: context or global), `style` (string: concise or detailed), `occurred_after`/`occurred_before`/`as_of` (ISO 8601) to restrict evidence to a temporal window (temporal phrases in the query are also understood), and `max_tokens` to cap the evidence payload. Do not use for match listings; use `search` instead. Do not use to inspect one known entity; use `get_entities` instead. Do not use for a structural neighborhood; use `traverse_graph` instead. Do not use for numeric health metrics; use `get_graph_stats` instead.",
         "inputSchema": {
           "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -454,6 +456,7 @@
       },
       {
         "name": "suggest_merges",
+        "title": "Suggest Merges",
         "description": "Live vector scan of duplicate entities; returns pairs and does not merge. Pass optional `threshold` (float, default 0.3 cosine distance), `limit` (integer, default 20), `entity_type` (string). Do not use to execute a merge; use `graph_delete` instead. Do not use for queued dream-state review rows; use `list_maintenance_review` instead. Do not use for observation polarity conflicts; use `detect_contradictions` instead. Do not use for compaction job status; use `dream_state_status` instead.",
         "inputSchema": {
           "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -492,6 +495,7 @@
       },
       {
         "name": "set_context",
+        "title": "Set Context",
         "description": "Set this MCP client's active project so `search` boosts in-context entities without hard-filtering. Pass required `entity_id` as an integer/name, or null to clear the active context. Do not use to read the current project; use `get_context` instead. Do not omit entity_id; use null to search globally. Do not use to change entity fields or create a project; use `graph_edit` or `graph_write` instead.",
         "inputSchema": {
           "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -647,6 +651,7 @@
       },
       {
         "name": "search",
+        "title": "Search Graph",
         "description": "Recall what earlier sessions learned before you act. Call before choosing a convention (version bump, changelog, docs or test style, config location, release step) and before first editing a file or component named in the task; query by the task's project, file paths and component names, not only by topic. Search or page graph entities through one uniform response envelope. Omit `query` for catalog mode; pass `query` alone for ranked summary mode; add `include` values observations and/or relations for subgraph mode. Pass optional `page` (default 1), `per_page` (default 20, max 100), legacy alias `limit`, `search_in_name`, `search_in_type`, `search_in_aliases`, `search_in_observations` flags (which fields the query matches, both modes), `project_id` and `entity_types` filters (applied before ranking), and `max_tokens` (integer) to pack ranked results under an estimated token budget. Temporal recall: pass `occurred_after`, `occurred_before`, and/or `as_of` (ISO 8601) to weight and filter facts by occurred time; temporal phrases in the query itself (\"in October 2026\", \"during 2024\", \"last week\") are also understood. Active context boosts query matches rather than filtering them. Do not use to load known entity IDs; use `get_entities` instead. Do not use for multi-hop expansion; use `traverse_graph` instead. Do not use for synthesized prose; use `summarize` instead.",
         "inputSchema": {
           "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -952,6 +957,7 @@
       },
       {
         "name": "scan_project",
+        "title": "Scan Project",
         "description": "Enqueue an asynchronous filesystem scan that reconciles the knowledge graph with a project root; returns a scan_id and does not wait. `project_root` is an absolute path under the operator's scan folders (see `scan_project_status` / the Settings page); hidden folders are never scannable. Optional: `project_name` (string), `aliases` (comma- or pipe-separated string), `mode` (initial, rescan, or validate; default initial), `dry_run` (bool), `file_globs` (array of strings), `scan_id` (string, resume a paused validation batch). Do not use to poll completion; use `scan_project_status` instead. Do not use to create a single node by hand; use `graph_write` instead. Do not use to scope searches to a project already in the graph; use `set_context` instead.",
         "inputSchema": {
           "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -1016,6 +1022,7 @@
       },
       {
         "name": "scan_project_status",
+        "title": "Scan Project Status",
         "description": "Poll one asynchronous project scan for status, phase, progress, counters, fallback flags, and scan_review items. Pass required `scan_id` (string from `scan_project`). Do not use to start or resume a scan; use `scan_project` instead. Do not use for compaction-job status; use `dream_state_status` instead. Do not use for stored scan_review documents; use `get_maintenance_reports` instead.",
         "inputSchema": {
           "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -1040,6 +1047,7 @@
       },
       {
         "name": "rank_observations",
+        "title": "Rank Observations",
         "description": "Return one known entity's observations sorted by trust_score (most reliable first). Pass required `entity_id` (integer; also accepts entity name); optional `include_obsolete` (bool, default false), `limit` (integer, default all), `query` (string; relevance then trust). Do not use when you also need relations or entity metadata; use `get_entities` instead. Do not use for opposing observation pairs; use `detect_contradictions` instead. Do not use to find observations across entities by keyword; use `search` instead. Do not use for a topic answer; use `summarize` instead.",
         "inputSchema": {
           "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -1205,6 +1213,7 @@
       },
       {
         "name": "list_maintenance_review",
+        "title": "List Maintenance Reviews",
         "description": "List paginated maintenance-review queue rows (including item_id) for later apply or dismiss. Pass optional `report_type` (string, default compaction_review), `status` (active, dismissed, approved, ignored, or expired; default active), `kind` (string, e.g. entity_merge or orphan_parent), `page` (integer, default 1). per_page is not an input. Do not use for whole report documents; use `get_maintenance_reports` instead. Do not use to apply a row; use `apply_maintenance_review` instead. Do not use to dismiss, ignore, or restore a row; use `dismiss_maintenance_review` instead. Do not use to merge two known entity ids; use `graph_delete` instead.",
         "inputSchema": {
           "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -1244,6 +1253,7 @@
       },
       {
         "name": "graph_write",
+        "title": "Write Graph Data",
         "description": "Persist a durable lesson. Call when the user corrects you or states a preference, when you learn where something lives, or when a fix or procedure is verified. Write each observation as one general, imperative rule with scope and reason (\"In <project>, when <situation>, do <action> because <reason>\"), not a log of what happened; set `source`, and `valid_until` for time-bound facts. To correct a stored rule, use `graph_edit` update_observation with `supersede: true` instead of appending. Atomically create entities, observations, and relations (max 50 logical operations). Pass primary `operations` items with type create_entity, create_observation, or create_relation; the existing `entities`, `observations`, and `relations` arrays are also accepted. Single writes use one operation. A possible entity duplicate prevents every write and returns candidate details. Do not use to update existing data; use `graph_edit` instead. Do not use to delete or merge data; use `graph_delete` instead.",
         "inputSchema": {
           "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -1794,6 +1804,7 @@
       },
       {
         "name": "graph_edit",
+        "title": "Edit Graph Data",
         "description": "Rewrite what the graph already knows. When a stored rule or fact is outdated, call update_observation with `supersede: true` (history is kept) rather than adding a new dated observation. Atomically edit graph data with up to 50 type-discriminated `operations`. Use update_entity with entity_id and metadata fields, or update_observation with observation_id, fields, and optional supersede/reason. Every operation rolls back if any operation fails. Do not use to create data; use `graph_write` instead. Do not use to obsolete, delete, or merge data; use `graph_delete` instead.",
         "inputSchema": {
           "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -2060,6 +2071,7 @@
       },
       {
         "name": "graph_delete",
+        "title": "Delete Graph Data",
         "description": "Atomically remove or merge graph data with up to 50 type-discriminated `operations`. Supported types are delete_entity, delete_observation (marks obsolete), delete_relation, and merge_entities. Hard deletes accept per-operation reason; merge preserves duplicate audit semantics. Every operation rolls back if any operation fails. A Project root can be deleted only on the maintenance profile, and only once it has no members. Do not use to create data; use `graph_write` instead. Do not use to update retained data; use `graph_edit` instead.",
         "inputSchema": {
           "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -2211,6 +2223,7 @@
       },
       {
         "name": "get_maintenance_reports",
+        "title": "Get Maintenance Reports",
         "description": "Read stored maintenance report documents, not paginated review rows. Pass optional `report_type` (orphans, duplicates, compaction_review, embedding_maintenance, contradictions, or scan_review; omit for the latest of each type) and `limit` (integer, default 5, max 30). Do not use for paginated item_id rows; use `list_maintenance_review` instead. Do not use to apply or dismiss a row; use `apply_maintenance_review` or `dismiss_maintenance_review` instead. Do not use for live compaction job status; use `dream_state_status` instead. Do not use for a live duplicate scan; use `suggest_merges` instead.",
         "inputSchema": {
           "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -2250,6 +2263,7 @@
       },
       {
         "name": "get_graph_stats",
+        "title": "Get Graph Stats",
         "description": "Return live knowledge-graph health metrics (totals, entity_type_distribution, orphan_count, most_connected, god_nodes, recent updates). Takes no arguments. Do not use for stored report documents; use `get_maintenance_reports` instead. Do not use to page actual entities; use `search` instead. Do not use for a topic summary; use `summarize` instead. Do not use for compaction job status; use `dream_state_status` instead. Software version is included in every successful response.",
         "inputSchema": {
           "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -2266,6 +2280,7 @@
       },
       {
         "name": "get_entities",
+        "title": "Get Entities",
         "description": "Load one or more known entities with observations and a relation projection. Pass required `entity_ids` (array of IDs or resolvable names); optional `relations` (all or internal), `include_obsolete`, `include_ranked`, `query`, `observation_limit`, `perspective`, `occurred_after`/`occurred_before`/`as_of` (ISO 8601) to restrict observations to a temporal window, and `max_tokens` to pack the response under an estimated token budget. One unique ID defaults relations to all incident edges; multiple IDs default to internal edges only. Returns entities in input order plus missing_entity_ids. Do not use for keyword discovery or catalog paging; use `search` instead. Do not use for multi-hop neighbor expansion; use `traverse_graph` instead. Do not use for synthesized prose; use `summarize` instead.",
         "inputSchema": {
           "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -2493,6 +2508,7 @@
       },
       {
         "name": "get_current_time",
+        "title": "Get Current Time",
         "description": "Return the current server time as an ISO 8601 string. Takes no arguments; software version is included in every successful response. Do not use for graph health metrics; use `get_graph_stats` instead. Do not use to set observation validity windows; use `graph_write` or `graph_edit` instead.",
         "inputSchema": {
           "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -2623,6 +2639,7 @@
       },
       {
         "name": "get_context",
+        "title": "Get Context",
         "description": "Read this MCP client's active project context (entity and scope fields, or status no_context); auto-clears if the project entity is gone. Takes no arguments. Do not use to activate or switch projects; use `set_context` instead. Do not use to wipe context so searches span all projects; use `set_context` with entity_id null instead. Do not use to load an entity's observations or relations; use `get_entities` instead.",
         "inputSchema": {
           "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -2775,6 +2792,7 @@
       },
       {
         "name": "find_shortest_path",
+        "title": "Find Shortest Path",
         "description": "Find the shortest hop-count path between two entities. Pass required `from_entity_id` and `to_entity_id` (integer; also accepts entity name); optional `max_depth` (integer, default 2, max 5), `direction` (both|outgoing|incoming, default both), `relation_types` (array of strings). Returns ordered path entities and relations, or found false when none exists within max_depth. Do not use for a full neighborhood from one start; use `traverse_graph` instead. Do not use for 1-hop filters; use `traverse_graph` instead. Do not use for keyword lookup; use `search` instead.",
         "inputSchema": {
           "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -2966,6 +2984,7 @@
       },
       {
         "name": "dream_state_status",
+        "title": "Dream-State Status",
         "description": "Report the live dream-state compaction job (status, phase, cursor, stats, timestamps). Takes no arguments. Do not use for stored report documents; use `get_maintenance_reports` instead. Do not use for individual review-queue rows; use `list_maintenance_review` instead. Do not use for graph health totals; use `get_graph_stats` instead. Do not use for an on-demand duplicate scan; use `suggest_merges` instead.",
         "inputSchema": {
           "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -2982,6 +3001,7 @@
       },
       {
         "name": "dismiss_maintenance_review",
+        "title": "Dismiss Maintenance Review",
         "description": "Dismiss, ignore, or restore a maintenance-review queue row without applying the suggestion. Pass required `item_id` (string UUID) and `action` (dismiss, ignore, or restore); optional `report_type` (string, default compaction_review), `reason` (string). `ignore` snoozes an active row for 30 days: it comes back afterwards and isn't proposed again until then. Do not use to execute the suggestion; use `apply_maintenance_review` instead. Do not use to look up a row; use `list_maintenance_review` instead. Do not use to merge entities; use `graph_delete` instead.",
         "inputSchema": {
           "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -3022,6 +3042,7 @@
       },
       {
         "name": "detect_contradictions",
+        "title": "Detect Contradictions",
         "description": "Scan an entity's active observations and 1-hop related observations for semantically similar pairs with opposite polarity; returns candidates and stores a contradictions MaintenanceReport. Pass required `entity_id` (integer; also accepts entity name); optional `max_distance` (float, default 0.35), `max_results` (integer, default 20). With `mode: \"outdated_by_fact\"` it instead finds what one source fact (an observation tagged `source-fact`) outdates in the fact's own project: pass `entity_id` = the fact's entity, required `fact_observation_id`, optional `terms` (up to 5 strings), `seed_review` (bool, default true) and `max_results` (at most 50; `max_distance` is ignored); it returns new proposals with their review row ids (pairs already queued or dismissed are skipped) and never writes observations. With the LLM judge on it waits for at most 2 judge calls (16 candidates); the rest come back unjudged (`unjudged_over_cap` counts them) and a background job judges them later. Apply them with `apply_maintenance_review` (`action_params.fact_action` supersede or retire, optional `replacement`). Does not merge or delete. Do not use for trust ranking; use `rank_observations` instead. Do not use for duplicate entities; use `suggest_merges` instead. Do not use to read stored reports; use `get_maintenance_reports` instead. Do not use to resolve a conflicting fact; use `graph_edit` or `graph_delete` instead.",
         "inputSchema": {
           "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -3088,6 +3109,7 @@
       },
       {
         "name": "apply_maintenance_review",
+        "title": "Apply Maintenance Review",
         "description": "Apply a queued maintenance-review row (merge, relationship proposal, orphan parent, relation integrity, contradiction, or fact_supersede). Pass required `item_id` (string UUID); optional `report_type` (string, default compaction_review), `dry_run` (bool, default false), `action_params` (hash). A contradiction row needs `action_params.keep_observation_id` (one of its two observation ids): that observation is kept and the other is marked obsolete. A fact_supersede row takes optional `action_params.fact_action` (supersede or retire) and `replacement` (text); without them it supersedes with the judge's replacement, or retires when there is none. Do not use without a queue item_id; use `list_maintenance_review` first. Do not use to skip, ignore, or restore without applying; use `dismiss_maintenance_review` instead. Do not use to merge two known entity ids outside the queue; use `graph_delete` instead.",
         "inputSchema": {
           "$schema": "https://json-schema.org/draft/2020-12/schema",

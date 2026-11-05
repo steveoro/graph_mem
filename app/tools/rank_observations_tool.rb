@@ -13,6 +13,8 @@ class RankObservationsTool < ApplicationTool
     open_world_hint: false
   )
 
+  title "Rank Observations"
+
   description "Return one known entity's observations sorted by trust_score (most reliable first). Pass required " \
     "`entity_id` (integer; also accepts entity name); optional `include_obsolete` (bool, default false), " \
     "`limit` (integer, default all), `query` (string; relevance then trust). " \

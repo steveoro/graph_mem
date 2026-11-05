@@ -13,6 +13,8 @@ class ApplyMaintenanceReviewTool < ApplicationTool
     open_world_hint: false
   )
 
+  title "Apply Maintenance Review"
+
   description "Apply a queued maintenance-review row (merge, relationship proposal, orphan parent, relation integrity, " \
     "contradiction, or fact_supersede). " \
     "Pass required `item_id` (string UUID); optional `report_type` (string, default compaction_review), " \

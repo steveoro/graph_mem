@@ -15,6 +15,8 @@ class GraphWriteTool < ApplicationTool
     open_world_hint: false
   )
 
+  title "Write Graph Data"
+
   description "Persist a durable lesson. Call when the user corrects you or states a preference, when you learn " \
     "where something lives, or when a fix or procedure is verified. Write each observation as one general, " \
     "imperative rule with scope and reason (\"In <project>, when <situation>, do <action> because <reason>\"), " \

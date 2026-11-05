@@ -9,6 +9,7 @@ class ApplicationTool
   MCP_CLIENT_HEADER = "x-mcp-client"
   MCP_PROFILE_NAMES = GraphMem::McpProfile::NAMES
   MCP_ANNOTATION_KEYS = %i[read_only_hint destructive_hint idempotent_hint open_world_hint].freeze
+  MAX_TITLE_LENGTH = 40
 
   class << self
     def input_schema_to_json
@@ -37,6 +38,23 @@ class ApplicationTool
       @mcp_profiles = normalized_profiles.freeze
       @mcp_advertised = advertised
       annotations(hints.freeze)
+    end
+
+    # Sets (with a value) or returns the tool's human-readable name, advertised as `title` in
+    # tools/list: short Title Case, at most MAX_TITLE_LENGTH characters, no trailing period. Routing
+    # ("use when …") stays in the description.
+    #
+    #   title "Search Graph"
+    #
+    # @param value [String, nil]
+    # @return [String, nil]
+    # @raise [ArgumentError] when the value is blank, too long or ends with a period
+    def title(value = nil)
+      return @title if value.nil?
+      raise ArgumentError, "MCP title must be 1-#{MAX_TITLE_LENGTH} characters without a trailing period" \
+        if value.strip.empty? || value.length > MAX_TITLE_LENGTH || value.end_with?(".")
+
+      @title = value.dup.freeze
     end
 
     def mcp_profiles

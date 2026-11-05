@@ -13,6 +13,8 @@ class GetEntitiesTool < ApplicationTool
     open_world_hint: false
   )
 
+  title "Get Entities"
+
   description "Load one or more known entities with observations and a relation projection. Pass required `entity_ids` " \
     "(array of IDs or resolvable names); optional `relations` (all or internal), `include_obsolete`, `include_ranked`, " \
     "`query`, `observation_limit`, `perspective`, `occurred_after`/`occurred_before`/`as_of` (ISO 8601) to restrict observations " \

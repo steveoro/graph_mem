@@ -13,6 +13,8 @@ class SummarizeTool < ApplicationTool
     open_world_hint: true
   )
 
+  title "Summarize Topic"
+
   description "Summarize what the knowledge graph knows about a topic with deterministic source-backed evidence " \
     "(optional LLM synthesis). Pass required `query` (string); optional `entity_id` (integer), " \
     "`max_results` (integer, default 10), `max_observations` (integer, default 20), " \

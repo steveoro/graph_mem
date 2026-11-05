@@ -13,6 +13,8 @@ class GetContextTool < ApplicationTool
     open_world_hint: false
   )
 
+  title "Get Context"
+
   description "Read this MCP client's active project context (entity and scope fields, or status no_context); " \
     "auto-clears if the project entity is gone. Takes no arguments. " \
     "Do not use to activate or switch projects; use `set_context` instead. " \
