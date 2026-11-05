@@ -49,7 +49,7 @@ control and the synthetic repo. `script/scan_profile/repos.yml`, every entry pin
 | Key | Repo | Pin | License | Size (git) | Ruby files | Why |
 |---|---|---|---|---|---|---|
 | `graph_mem` | `steveoro/graph_mem` | tag `v1.72.0` = `7769d582be520882fad7eda373d4ecf9b09c423c` | LGPL-3.0 | ~10 MB, 1,185 files | ~790 | dogfood: Steve knows every entity |
-| `goggles_db` | `steveoro/goggles_db` | `d14e6d705d985e6182b73e3ba69bae33a24be8f2` | LGPL-3.0 | ~45 MB, 975 files (most of it `db/data` seeds and migrations) | ~600 (95 models) | the biggest, model-heavy Rails engine |
+| `goggles_db` | `steveoro/goggles_db` | `d14e6d705d985e6182b73e3ba69bae33a24be8f2` | LGPL-3.0 | ~45 MB, 975 files (most of it `db/data` seeds and migrations) | ~600 (95 models) | a small, namespaced Rails engine (most of its size is seed data); kept as a **full** fixture |
 | `goggles_api` | `steveoro/goggles_api` | `e95fa8a9b44ad3f2b91d673d6e62bf5a6575edae` | LGPL-3.0 | ~1.5 MB, 239 files | ~170 (84 Grape API files) | an API app that depends on `goggles_db` (cross-repo names) |
 | `ambgest` | `steveoro/ambgest` | `dbed0536f33a1001b6a2e2ef65630ce57be09afa` | MIT (`LICENSE`) | ~14.5 MB, 1,337 files (1,000+ are `public/images`) | ~115 | an older, small Rails app: a different era and style |
 | `dry-inflector` | `dry-rb/dry-inflector` | `65f186bb68e5a40be8552dafc203d03cd35223a9` | MIT | ~0.5 MB | small | **outside-author control**: tells "noise from the scan" apart from "noise from Steve's docs style" |
@@ -73,7 +73,8 @@ code scan of any of them is over `MAX_TOTAL_INPUT_BYTES` (200 KB, about 12–13 
   for `graph_mem`), passed as the scanner's `file_globs:`;
 - `max_total_input_bytes` and `max_files`, passed straight to `ProjectScanner.new` (both keyword arguments exist at
   `:95-97`; no scanner change). **First-run default: 64 KB and 20 files per scan** (about 4–5 parts), so a full first
-  run stays short; `FULL=1` uses the scanner's own caps (200 KB / 50 files);
+  run stays short; `FULL=1` uses the scanner's own caps (200 KB / 50 files). **`goggles_db` is always full**: its
+  entry sets `full: true`, so it gets the scanner's own caps on every run;
 - the task options `REPOS=graph_mem,goggles_db` (default: all), `PROFILE=docs|code` (default: both) and `RESCAN=0`.
 
 **Estimated time on local Ollama** (assumptions: an 8B-class model, `summary_num_ctx` 8192 ⇒ ~15–16 KB of files per
@@ -82,13 +83,13 @@ part, 2048 output tokens, ~60–120 s per part; the report measures the real fig
 | Repo | `docs`, first-run cap | `code`, first-run cap | `code` with `FULL=1` |
 |---|---|---|---|
 | `graph_mem` | 64 KB, ~5 parts, 5–10 min | ~5 parts, 5–10 min | ~13 parts, 13–26 min |
-| `goggles_db` | 39 KB, ~3 parts, 3–6 min | ~5 parts, 5–10 min | ~13 parts, 13–26 min |
+| `goggles_db` (always full) | 39 KB, ~3 parts, 3–6 min | ~13 parts, 13–26 min | same |
 | `goggles_api` | 24 KB, ~2 parts, 2–4 min | ~5 parts, 5–10 min | ~13 parts, 13–26 min |
 | `ambgest` | 12 KB, 1 part, 1–2 min | ~5 parts, 5–10 min | ~10 parts, 10–20 min |
 | `dry-inflector` | 1–2 parts, 1–4 min | 1–3 parts, 1–6 min | same |
 | `synth` | 1–2 parts, 1–4 min | — | — |
 
-A full first run (all repos, both profiles, first-run caps) is about 35–75 min, doubled with the rescan (`RESCAN=0`
+A full first run (all repos, both profiles, first-run caps, `goggles_db` full) is about 45–90 min, doubled with the rescan (`RESCAN=0`
 halves it). The suggested very first command is `REPOS=synth,ambgest PROFILE=docs` (a few minutes).
 
 - Cloned with `git clone --filter=blob:none` + `git checkout <sha>` into `Dir.mktmpdir("graph_mem-scan-profile")`, removed at the end (also on error). A missing or moved commit fails that repo, not the run.
@@ -128,6 +129,10 @@ Claude runs the task on `synth` with the spec bridge stub / a fake Ollama (no re
 ### R. Release 1.73.0
 `lib/graph_mem/version.rb` and `skills/graph-mem-mcp-toolset/SKILL.md:18` → `1.73.0`; CHANGELOG `## [1.73.0]`: Added `graph_mem:scan_profile` (OSS/synthetic repos, throwaway DB, report); Changed the scan's noise filter (and any default changed by B). Mark this plan DONE.
 
+## Later (not in this PR)
+
+- Comparing scan facts with an existing graph's `goggles_db` entities (some were merged wrongly by an early dream-state compactor) to fix or delete the bad merges is out of scope; F-3b has no access to any real DB, but the report's JSON (repo key, pinned commit, entities with type, observations and relations) must stay stable and versioned (`schema_version`) to support that comparison later.
+
 ## Size
 
 About 1,500–2,200 changed lines, half of them specs. Files under ~500 lines, methods under ~60, YARD on public methods.
@@ -136,7 +141,7 @@ About 1,500–2,200 changed lines, half of them specs. Files under ~500 lines, m
 
 1. **Version 1.73.0** (minor: a new task and a scan behaviour change).
 2. **Fixtures:** Steve's four open-source repos (`graph_mem` at `v1.72.0`, `goggles_db`, `goggles_api`, `ambgest`), `dry-inflector` as the one outside-author control, and `synth`. Larger third-party repos (Mastodon/Discourse subsets) are later, as a pinned subdirectory if wanted.
-3. **First-run caps:** 64 KB / 20 files per scan, `docs` and `code` profiles; `FULL=1` for the scanner's own caps.
+3. **First-run caps:** 64 KB / 20 files per scan (`goggles_db` always full), `docs` and `code` profiles; `FULL=1` for the scanner's own caps.
 4. **Throwaway DB** `<dev name>_scan_profile`, created and dropped by the task; `KEEP_DB=1` keeps it.
 5. **Backend:** local Ollama; cloud or agent CLI only with `BACKEND=…` **and** `ALLOW_CLOUD=1`, still through `CloudGate`/`CloudCall`.
 6. **Rescan run on by default** (churn is the clearest noise signal).
