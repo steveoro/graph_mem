@@ -15,6 +15,8 @@ class GraphDeleteTool < ApplicationTool
     open_world_hint: false
   )
 
+  title "Delete Graph Data"
+
   description "Atomically remove or merge graph data with up to #{MAX_OPERATIONS} type-discriminated `operations`. " \
     "Supported types are delete_entity, delete_observation (marks obsolete), delete_relation, and merge_entities. " \
     "Hard deletes accept per-operation reason; merge preserves duplicate audit semantics. Every operation rolls back " \

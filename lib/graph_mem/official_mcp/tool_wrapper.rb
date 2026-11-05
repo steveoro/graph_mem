@@ -23,14 +23,16 @@ module GraphMem
       end
 
       # @param tool_class [Class<ApplicationTool>]
-      # @return [Class<MCP::Tool>] with the tool's name, description, schemas and annotations
+      # @return [Class<MCP::Tool>] with the tool's name, title, description, schemas and annotations
       def self.build(tool_class)
         wrapper = self
         hints = tool_class.annotations.to_h.slice(*ANNOTATION_KEYS)
         output_schema = tool_class.output_schema_to_json
+        tool_title = tool_class.title
 
         Class.new(MCP::Tool) do
           tool_name tool_class.tool_name
+          title(tool_title) if tool_title
           description tool_class.description
           input_schema LenientInputSchema.new(tool_class.input_schema_to_json)
           output_schema(output_schema) if output_schema

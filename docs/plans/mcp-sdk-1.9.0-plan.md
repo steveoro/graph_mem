@@ -1,5 +1,7 @@
 # MCP SDK 1.9.0 → graph_mem 1.72.0 (gem bump, non-object `_meta`, tool titles, D-7 query cap)
 
+**✅ DONE:** shipped in #156 as **1.72.0** (steps A1–A6, T, Q, C and RA; compat verification recorded in `docs/protocol_compat.md`).
+
 **Written 2026-11-05 (Europe/Rome)** for Claude, from the 1.71.0 code (`94ead39`, #155 merged, tagged `v1.71.0`).
 File:line references were checked against `94ead39`. If a line has moved, find the code by the quoted text. If the code
 no longer matches the description, **stop and ask Steve** instead of improvising.

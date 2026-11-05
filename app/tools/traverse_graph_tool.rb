@@ -13,6 +13,8 @@ class TraverseGraphTool < ApplicationTool
     open_world_hint: false
   )
 
+  title "Traverse Graph"
+
   description "Traverse from one entity or query relations directly through one object-shaped response. Pass optional " \
     "`start_entity_id` for bounded BFS; `from_entity_id`, `to_entity_id`, and singular `relation_type` for edge filters; " \
     "`max_depth` (integer, default 2, max 5), `direction` (both|outgoing|incoming, default both), " \

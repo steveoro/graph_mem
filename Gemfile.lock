@@ -225,7 +225,7 @@ GEM
       net-smtp
     marcel (1.2.1)
     matrix (0.4.3)
-    mcp (1.8.2)
+    mcp (1.9.0)
       json_schemer (>= 2.4)
     method_source (1.1.0)
     mini_mime (1.1.5)
@@ -524,7 +524,7 @@ DEPENDENCIES
   kamal
   kaminari
   kaminari-tailwind
-  mcp (= 1.8.2)
+  mcp (= 1.9.0)
   mission_control-jobs
   mysql2
   prism

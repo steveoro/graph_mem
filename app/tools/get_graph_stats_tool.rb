@@ -15,6 +15,8 @@ class GetGraphStatsTool < ApplicationTool
     open_world_hint: false
   )
 
+  title "Get Graph Stats"
+
   description "Return live knowledge-graph health metrics (totals, entity_type_distribution, orphan_count, " \
     "most_connected, god_nodes, recent updates). Takes no arguments. " \
     "Do not use for stored report documents; use `get_maintenance_reports` instead. " \

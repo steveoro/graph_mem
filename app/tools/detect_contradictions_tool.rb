@@ -19,6 +19,8 @@ class DetectContradictionsTool < ApplicationTool
     open_world_hint: false
   )
 
+  title "Detect Contradictions"
+
   description "Scan an entity's active observations and 1-hop related observations for semantically similar pairs with " \
     "opposite polarity; returns candidates and stores a contradictions MaintenanceReport. Pass required `entity_id` " \
     "(integer; also accepts entity name); optional `max_distance` (float, default 0.35), `max_results` (integer, default 20). " \

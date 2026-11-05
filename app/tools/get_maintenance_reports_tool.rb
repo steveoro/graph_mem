@@ -16,6 +16,8 @@ class GetMaintenanceReportsTool < ApplicationTool
     open_world_hint: false
   )
 
+  title "Get Maintenance Reports"
+
   description "Read stored maintenance report documents, not paginated review rows. Pass optional `report_type` " \
     "(orphans, duplicates, compaction_review, embedding_maintenance, contradictions, or scan_review; omit for the " \
     "latest of each type) and `limit` (integer, default 5, max 30). " \

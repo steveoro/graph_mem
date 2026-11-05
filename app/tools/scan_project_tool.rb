@@ -25,6 +25,8 @@ class ScanProjectTool < ApplicationTool
     open_world_hint: true
   )
 
+  title "Scan Project"
+
   description "Enqueue an asynchronous filesystem scan that reconciles the knowledge graph with a project root; " \
     "returns a scan_id and does not wait. `project_root` is an absolute path under the operator's scan folders " \
     "(see `scan_project_status` / the Settings page); hidden folders are never scannable. " \

@@ -1,5 +1,7 @@
 # MCP SDK 1.8.2 + reference servers v2.1.0 → graph_mem 1.58.1 / 1.58.2 (gem bump, encoding regression spec, CORS from the allowlist, scan hardening)
 
+**✅ DONE:** shipped as **1.58.1–1.58.3**: #130 (mcp 1.8.2) as 1.58.1, #131 (CORS from the allowlist) as 1.58.2, and #132 (scan hardening, no bump) released with 1.58.3; all merged and tagged. The next gem bump is `docs/plans/mcp-sdk-1.9.0-plan.md` (1.72.0).
+
 **Written 2026-10-27 (Europe/Rome)** for Claude, from the 1.58.0 code (`75136ad`, #129 merged, tagged `v1.58.0`).
 Every file:line in "What the code looks like today" was checked against `75136ad`. If a line has moved, find the code
 by the quoted text; if the code no longer matches the description, **stop and ask Steve** instead of improvising.

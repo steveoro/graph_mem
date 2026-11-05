@@ -15,6 +15,8 @@ class ListMaintenanceReviewTool < ApplicationTool
     open_world_hint: false
   )
 
+  title "List Maintenance Reviews"
+
   description "List paginated maintenance-review queue rows (including item_id) for later apply or dismiss. " \
     "Pass optional `report_type` (string, default compaction_review), " \
     "`status` (active, dismissed, approved, ignored, or expired; default active), " \

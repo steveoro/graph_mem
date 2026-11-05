@@ -13,6 +13,8 @@ class ScanProjectStatusTool < ApplicationTool
     open_world_hint: false
   )
 
+  title "Scan Project Status"
+
   description "Poll one asynchronous project scan for status, phase, progress, counters, fallback flags, and " \
     "scan_review items. Pass required `scan_id` (string from `scan_project`). " \
     "Do not use to start or resume a scan; use `scan_project` instead. " \

@@ -13,6 +13,8 @@ class RankObservationsTool < ApplicationTool
     open_world_hint: false
   )
 
+  title "Rank Observations"
+
   description "Return one known entity's observations sorted by trust_score (most reliable first). Pass required " \
     "`entity_id` (integer; also accepts entity name); optional `include_obsolete` (bool, default false), " \
     "`limit` (integer, default all), `query` (string; relevance then trust). " \
@@ -25,7 +27,7 @@ class RankObservationsTool < ApplicationTool
     required(:entity_id).filled(:integer).description("The ID of the entity whose observations should be ranked.")
     optional(:include_obsolete).filled(:bool).description("Include obsolete and superseded observations in the ranking. Defaults to false.")
     optional(:limit).filled(:integer).description("Maximum number of observations to return. Defaults to all.")
-    optional(:query).filled(:string).description("Optional query for relevance-ranked observations.")
+    optional(:query).filled(:string, max_size?: MAX_QUERY_LENGTH).description("Optional query for relevance-ranked observations.")
   end
 
   def call(entity_id:, include_obsolete: false, limit: nil, query: nil)

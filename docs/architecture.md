@@ -56,7 +56,7 @@ written in the `arguments do … end` dry-schema DSL of `GraphMem::McpSchema::To
 connection profile serves (`persist` declares only the default and maintenance profiles, so the
 readonly profile neither lists nor renders it).
 
-The protocol itself is served by the official MCP Ruby SDK (`mcp` gem, pinned to 1.8.2), through
+The protocol itself is served by the official MCP Ruby SDK (`mcp` gem, pinned to 1.9.0), through
 the adapter in `lib/graph_mem/official_mcp/`. The tool classes don't depend on the gem: the
 adapter wraps them.
 The decisions taken when moving from fast-mcp to the gem (D1–D14: session cap, allowed hosts and
@@ -65,13 +65,15 @@ with graph_mem's answers in [the migration guide](guides/migrating-fast-mcp-to-m
 
 #### Official MCP SDK feature map
 
-| Feature | `mcp` gem 1.8.2 | GraphMem |
+| Feature | `mcp` gem 1.9.0 | GraphMem |
 |---|---|---|
 | JSON-RPC dispatch, `initialize` negotiation (2024-11-05 … 2025-11-25), `server/discover` and the 2026-07-28 per-request lifecycle | `MCP::Server` | — |
 | Tool, prompt and resource-template classes | `MCP::Tool`, `MCP::Prompt`, `MCP::ResourceTemplate` | generated from `ApplicationTool` / `ApplicationPrompt` / `ApplicationResource` by `ToolWrapper`, `PromptWrapper` and `ResourceCatalog` |
+| Tool `title` | `MCP::Tool.title` (the gem's client keeps it since 1.9.0) | `ApplicationTool.title` on every tool (≤ 40 characters), passed on by `ToolWrapper`; prompts and resources have none |
 | One server per profile, with `instructions` and `capabilities` | `MCP::Server.new(instructions:, capabilities:)` | `ServerFactory.for(profile)`: the profile's tools and prompts, `McpInstructions`, and explicit capabilities (no `subscribe` or `listChanged`) |
 | Argument validation | `validate_tool_call_arguments` (turned off) | the tool validates after `ParameterNormalizer` (aliases for required keys) |
-| Error formatting | `-32603` for unhandled errors and, with the request id, for a reply that can't be encoded as JSON (1.8.2); `exception_reporter` | `ToolWrapper` turns every tool error into the `ToolError` envelope as an `isError` result; gem-side errors go to `Rails.error` |
+| Error formatting | `-32603` for unhandled errors and, with the request id, for a reply that can't be encoded as JSON (since 1.8.2); `exception_reporter` | `ToolWrapper` turns every tool error into the `ToolError` envelope as an `isError` result; gem-side errors go to `Rails.error` |
+| Request `_meta` | a `_meta` that isn't an object (string, array, number) is refused with `-32602` "Invalid params: _meta must be an object" before any handler runs, on both lifecycles; `null` reads as absent (1.9.0) | — (graph_mem never reads request `_meta`) |
 | Streamable HTTP transport (`/mcp`, `/mcp/readonly`, `/mcp/maintenance`) | `StreamableHTTPTransport`: sessions, JSON responses, SSE streams, body and session caps, `MCP-Protocol-Version` check, DNS-rebinding protection (`Host` and `Origin`) | `Transports` (one per profile, options from `GRAPH_MEM_MCP_*`), `Router` (path → profile; other `/mcp/*` paths are 404) |
 | Per-request context (`X-MCP-Client`, profile, session id) | `env["mcp.auth_info"]` reaches the tool as `server_context[:auth_info]` | `RequestContext` carries it in an `MCP::Server::OAuth::AccessToken`'s claims |
 | Access control (token, IP allowlist) | — | `AccessGate` applies `McpAccessPolicy` before anything else ([mcp_access_control.md](mcp_access_control.md)) |

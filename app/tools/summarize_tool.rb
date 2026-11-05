@@ -13,6 +13,8 @@ class SummarizeTool < ApplicationTool
     open_world_hint: true
   )
 
+  title "Summarize Topic"
+
   description "Summarize what the knowledge graph knows about a topic with deterministic source-backed evidence " \
     "(optional LLM synthesis). Pass required `query` (string); optional `entity_id` (integer), " \
     "`max_results` (integer, default 10), `max_observations` (integer, default 20), " \
@@ -26,7 +28,7 @@ class SummarizeTool < ApplicationTool
     "Do not use for numeric health metrics; use `get_graph_stats` instead."
 
   arguments do
-    required(:query).filled(:string).description("The topic or question to summarize.")
+    required(:query).filled(:string, max_size?: MAX_QUERY_LENGTH).description("The topic or question to summarize.")
     optional(:entity_id).filled(:integer).description("Optional entity ID to scope summarization to a single entity.")
     optional(:max_results).filled(:integer).description("Maximum entities to retrieve before ranking observations. Defaults to 10.")
     optional(:max_observations).filled(:integer).description("Maximum observations to include in the summary. Defaults to 20.")

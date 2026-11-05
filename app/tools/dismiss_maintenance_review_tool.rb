@@ -15,6 +15,8 @@ class DismissMaintenanceReviewTool < ApplicationTool
     open_world_hint: false
   )
 
+  title "Dismiss Maintenance Review"
+
   description "Dismiss, ignore, or restore a maintenance-review queue row without applying the suggestion. " \
     "Pass required `item_id` (string UUID) and `action` (dismiss, ignore, or restore); optional " \
     "`report_type` (string, default compaction_review), `reason` (string). " \

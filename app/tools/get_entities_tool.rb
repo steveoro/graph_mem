@@ -13,6 +13,8 @@ class GetEntitiesTool < ApplicationTool
     open_world_hint: false
   )
 
+  title "Get Entities"
+
   description "Load one or more known entities with observations and a relation projection. Pass required `entity_ids` " \
     "(array of IDs or resolvable names); optional `relations` (all or internal), `include_obsolete`, `include_ranked`, " \
     "`query`, `observation_limit`, `perspective`, `occurred_after`/`occurred_before`/`as_of` (ISO 8601) to restrict observations " \
@@ -28,7 +30,7 @@ class GetEntitiesTool < ApplicationTool
     optional(:relations).filled(:string).description("Relation projection: all or internal. Defaults by entity count.")
     optional(:include_obsolete).filled(:bool).description("Include obsolete and superseded observations.")
     optional(:include_ranked).filled(:bool).description("Sort observations by trust score.")
-    optional(:query).filled(:string).description("Rank observations by relevance to this query.")
+    optional(:query).filled(:string, max_size?: MAX_QUERY_LENGTH).description("Rank observations by relevance to this query.")
     optional(:observation_limit).filled(:integer).description("Maximum observations returned per entity.")
     optional(:occurred_after).maybe(:string).description("ISO 8601 lower bound for observation occurred time.")
     optional(:occurred_before).maybe(:string).description("ISO 8601 upper bound for observation occurred time.")

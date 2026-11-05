@@ -17,6 +17,8 @@ class SearchTool < ApplicationTool
     open_world_hint: false
   )
 
+  title "Search Graph"
+
   description "Recall what earlier sessions learned before you act. Call before choosing a convention " \
     "(version bump, changelog, docs or test style, config location, release step) and before first editing a " \
     "file or component named in the task; query by the task's project, file paths and component names, not " \
@@ -35,7 +37,7 @@ class SearchTool < ApplicationTool
     "Do not use for synthesized prose; use `summarize` instead."
 
   arguments do
-    optional(:query).maybe(:string).description("Search query. Omit for catalog mode.")
+    optional(:query).maybe(:string, max_size?: MAX_QUERY_LENGTH).description("Search query. Omit for catalog mode.")
     optional(:include).array(:string).description("Subgraph projections: observations and/or relations.")
     optional(:search_in_name).filled(:bool).description("Match the query against entity names (default true; summary and subgraph modes).")
     optional(:search_in_type).filled(:bool).description("Match the query against entity types (default true; summary and subgraph modes).")

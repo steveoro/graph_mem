@@ -13,6 +13,8 @@ class FindShortestPathTool < ApplicationTool
     open_world_hint: false
   )
 
+  title "Find Shortest Path"
+
   description "Find the shortest hop-count path between two entities. Pass required `from_entity_id` and " \
     "`to_entity_id` (integer; also accepts entity name); optional `max_depth` (integer, default 2, max 5), " \
     "`direction` (both|outgoing|incoming, default both), `relation_types` (array of strings). " \

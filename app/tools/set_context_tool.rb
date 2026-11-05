@@ -13,6 +13,8 @@ class SetContextTool < ApplicationTool
     open_world_hint: false
   )
 
+  title "Set Context"
+
   description "Set this MCP client's active project so `search` boosts in-context entities without hard-filtering. " \
     "Pass required `entity_id` as an integer/name, or null to clear the active context. " \
     "Do not use to read the current project; use `get_context` instead. " \

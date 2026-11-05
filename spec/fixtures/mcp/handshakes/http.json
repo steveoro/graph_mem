@@ -215,7 +215,7 @@
         "graph_mem": {"status": 400, "error_code": -32700},
         "reference": {"status": 200, "id": 35, "result": {}}
       },
-      "divergence": "graph_mem refuses invalid UTF-8 with -32700 (like the Ruby SDK 1.8.2); Node decodes the byte as U+FFFD and answers the ping."
+      "divergence": "graph_mem refuses invalid UTF-8 with -32700 (like the Ruby SDK 1.9.0); Node decodes the byte as U+FFFD and answers the ping."
     },
     {
       "name": "tools/call with an invalid UTF-8 tool name",
@@ -225,7 +225,7 @@
         "graph_mem": {"status": 200, "id": 42, "error_code": -32603},
         "reference": {"status": 200, "id": 42, "error_code": -32602}
       },
-      "divergence": "graph_mem can't echo the invalid name back and answers -32603 with the id (Ruby SDK 1.8.2, #629); Node decodes the byte as U+FFFD and answers -32602 \"Tool synth-\uFFFD not found\"."
+      "divergence": "graph_mem can't echo the invalid name back and answers -32603 with the id (Ruby SDK 1.8.2 and 1.9.0, #629); Node decodes the byte as U+FFFD and answers -32602 \"Tool synth-\uFFFD not found\"."
     },
     {
       "name": "a JSON array (batch) body",
@@ -321,6 +321,16 @@
         "reference": {"status": 200, "id": 44, "result_has": ["protocolVersion"]}
       },
       "divergence": "Everything 2.0.1 accepts any localhost origin; graph_mem accepts only same-origin and GRAPH_MEM_MCP_ALLOWED_ORIGINS (exact scheme://host:port)."
+    },
+    {
+      "name": "tools/list with a non-object _meta",
+      "session": "new",
+      "request": {"body": {"jsonrpc": "2.0", "id": 45, "method": "tools/list", "params": {"_meta": "x"}}},
+      "expect": {
+        "graph_mem": {"status": 200, "id": 45, "error_code": -32602},
+        "reference": {"status": 400, "id": null, "error_code": -32700}
+      },
+      "divergence": "graph_mem refuses a non-object _meta with -32602 and the id, HTTP 200 (Ruby SDK 1.9.0, #651); Everything's transport can't parse the message and answers HTTP 400 -32700 \"Parse error: Invalid JSON-RPC message\" with id null."
     }
   ]
 }

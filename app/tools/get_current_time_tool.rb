@@ -14,6 +14,8 @@ class GetCurrentTimeTool < ApplicationTool
     open_world_hint: false
   )
 
+  title "Get Current Time"
+
   description "Return the current server time as an ISO 8601 string. Takes no arguments; software version is " \
     "included in every successful response. " \
     "Do not use for graph health metrics; use `get_graph_stats` instead. " \
