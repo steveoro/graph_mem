@@ -49,16 +49,12 @@ module GraphMem
       # @param backend [Hash] the Runner's backend summary
       # @param runs [Array<Hash>] the Runner's profiled runs
       # @param errors [Array<Hash>] repos that were skipped
-      # @param extra [Hash{String => Object}] more top-level JSON keys (a sweep comparison)
-      # @param sections [Array<String>] more Markdown lines at the end (the metrics, a sweep table)
-      def initialize(started_at:, options:, backend:, runs:, errors:, extra: {}, sections: [])
+      def initialize(started_at:, options:, backend:, runs:, errors:)
         @started_at = started_at
         @options = options
         @backend = backend || {}
         @runs = runs
         @errors = errors
-        @extra = extra
-        @sections = sections
       end
 
       # @param report_dir [String]
@@ -76,9 +72,9 @@ module GraphMem
         {
           "schema_version" => SCHEMA_VERSION, "graph_mem_version" => GraphMem::VERSION, "started_at" => @started_at.iso8601,
           "options" => { "repos" => @options.repos, "profiles" => @options.profiles, "rescan" => @options.rescan,
-                         "full" => @options.full, "settings" => @options.settings.keys },
-          "backend" => @backend, "errors" => @errors, "runs" => @runs
-        }.merge(@extra)
+                         "full" => @options.full, "sweep" => @options.sweep, "settings" => @options.settings.keys },
+          "backend" => @backend, "errors" => @errors, "sweep" => sweep_rows, "runs" => @runs
+        }
       end
 
       # @return [String] the Markdown summary (no graph contents)
@@ -88,8 +84,8 @@ module GraphMem
         lines.concat([ "", "## Scans", "", scan_header, scan_separator ])
         @runs.each { |run| run["scans"].each { |phase, stats| lines << scan_row(run, phase, stats) } }
         lines.concat(noise_lines)
+        lines.concat(sweep_lines)
         lines.concat([ "", "## Skipped repos", "" ] + @errors.map { |error| "- `#{error['repo']}`: #{error['error']}" }) if @errors.any?
-        lines.concat(@sections)
         "#{lines.join("\n")}\n"
       end
 
@@ -118,6 +114,34 @@ module GraphMem
         return [] if rows.empty?
 
         [ "", "## Noise (first scan)", "", header, "|#{'---|' * (NOISE_COLUMNS.size + 6)}" ] + rows
+      end
+
+      # One row per run of a repo and profile scanned with more than one settings set (SWEEP).
+      # @return [Array<Hash>]
+      def sweep_rows
+        @runs.group_by { |run| run.values_at("repo", "profile") }.values.select { |runs| runs.size > 1 }.flatten.map do |run|
+          first = run["scans"]["initial"]
+          metrics = run["metrics"].to_h
+          { "repo" => run["repo"], "profile" => run["profile"], "settings" => run["settings"],
+            **first.slice("parts_total", "parts_failed", "parts_split", "requests", "wall_s", "part_p50_s", "part_p95_s",
+                          "entities_created", "observations_created", "partial", "fallback"),
+            "noise" => metrics.slice("entities_without_observations", "short_observations", "duplicate_observations", "generic_names"),
+            "rescan_churn" => metrics["rescan_churn"], "recall" => metrics["recall"], "precision" => metrics["precision"] }
+        end
+      end
+
+      def sweep_lines
+        rows = sweep_rows
+        return [] if rows.empty?
+
+        header = "| repo | profile | bytes/token | output tokens | max chunks | parts t/f/s | wall s | part p50/p95 s | entities | observations | " \
+                 "noise (no obs./short/dup./generic) | churn | recall e | precision e |"
+        [ "", "## Settings sweep (first scan)", "", header, "|#{'---|' * 14}" ] + rows.map do |row|
+          settings = row["settings"].values_at("bytes_per_token", "chunk_output_tokens", "max_chunks")
+          "| #{row['repo']} | #{row['profile']} | #{settings.join(' | ')} | #{row.values_at('parts_total', 'parts_failed', 'parts_split').join('/')} | " \
+            "#{row['wall_s']} | #{row['part_p50_s'] || '-'}/#{row['part_p95_s'] || '-'} | #{row['entities_created']} | #{row['observations_created']} | " \
+            "#{row['noise'].values.join('/')} | #{row['rescan_churn'] || '-'} | #{row.dig('recall', 'entities') || '-'} | #{row.dig('precision', 'entities') || '-'} |"
+        end
       end
 
       def format_counts(counts)

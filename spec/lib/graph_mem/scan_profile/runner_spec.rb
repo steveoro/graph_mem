@@ -101,6 +101,20 @@ RSpec.describe GraphMem::ScanProfile::Runner do
     expect(json["runs"].map { |run| run["repo"] }).to eq(%w[synth])
   end
 
+  it "sweeps the scan settings in the throwaway database only, and compares the combinations" do
+    before_settings = AppSettings.unscoped.where("var LIKE 'project_scan_%'").pluck(:var, :value)
+
+    report = with_llm_provider(stub) { run({ "PROFILE" => "code", "RESCAN" => "0", "SWEEP" => "bytes_per_token:2.5,3.5;chunk_output_tokens:1024" }) }
+
+    json = JSON.parse(File.read(File.join(report.dir, "report.json")))
+    expect(json["runs"].map { |run| run["settings"] }).to eq([ { "bytes_per_token" => 2.5, "chunk_output_tokens" => 1024, "max_chunks" => 16 },
+                                                               { "bytes_per_token" => 3.5, "chunk_output_tokens" => 1024, "max_chunks" => 16 } ])
+    expect(json["sweep"].map { |row| row["settings"]["bytes_per_token"] }).to eq([ 2.5, 3.5 ])
+    expect(json["sweep"].first).to include("parts_total" => be_positive, "noise" => include("generic_names" => 0))
+    expect(File.read(File.join(report.dir, "report.md"))).to include("## Settings sweep (first scan)", "| synth | code | 2.5 | 1024 | 16 |")
+    expect(AppSettings.unscoped.where("var LIKE 'project_scan_%'").pluck(:var, :value)).to eq(before_settings)
+  end
+
   describe "a cloud chain" do
     let(:cloud) { FakeProvider.new(name: "agent_cli", cloud: true) { |prompt, **| GraphMem::ScanProfile::SynthRepo.stub_answer(prompt.to_s).merge(ok: true, error: nil, latency_ms: 1.0) } }
 

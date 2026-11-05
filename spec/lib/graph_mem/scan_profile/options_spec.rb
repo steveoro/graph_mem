@@ -27,6 +27,16 @@ RSpec.describe GraphMem::ScanProfile::Options do
                                        settings: { "summary_model" => "synth-model", "summary_num_ctx" => "16384" })
   end
 
+  it "reads SWEEP and runs every combination; without it, the current settings once" do
+    options = parse("SWEEP" => "bytes_per_token:2.5,3.0,3.5; chunk_output_tokens:1024,2048; max_chunks:16,32")
+
+    expect(options.sweep).to eq("bytes_per_token" => [ 2.5, 3.0, 3.5 ], "chunk_output_tokens" => [ 1024, 2048 ], "max_chunks" => [ 16, 32 ])
+    expect(options.setting_sets.size).to eq(12)
+    expect(options.setting_sets.first).to eq("bytes_per_token" => 2.5, "chunk_output_tokens" => 1024, "max_chunks" => 16)
+    expect(options.setting_sets.uniq.size).to eq(12)
+    expect(parse.setting_sets).to eq([ {} ])
+  end
+
   it "takes a cloud chain only as a known chain value" do
     expect(parse("BACKEND" => "claude,ollama")).to have_attributes(chain: "claude,ollama")
     expect(parse("BACKEND" => "claude,ollama").cloud?).to be(true)
@@ -44,7 +54,11 @@ RSpec.describe GraphMem::ScanProfile::Options do
     "the scan chain as a setting" => [ { "SETTINGS" => "llm_chain_scan=claude" }, /SETTINGS: "llm_chain_scan"/ ],
     "a budget setting" => [ { "SETTINGS" => "llm_budget_scan_calls=0" }, /SETTINGS/ ],
     "a non-model setting" => [ { "SETTINGS" => "enable_guest_access=true" }, /SETTINGS/ ],
-    "a setting without a value" => [ { "SETTINGS" => "summary_model" }, /SETTINGS/ ]
+    "a setting without a value" => [ { "SETTINGS" => "summary_model" }, /SETTINGS/ ],
+    "an unknown sweep setting" => [ { "SWEEP" => "validation_batch_size:5" }, /SWEEP: unknown setting "validation_batch_size"/ ],
+    "a sweep value out of range" => [ { "SWEEP" => "max_chunks:16,99" }, /SWEEP: max_chunks value "99" must be a number in 1..64/ ],
+    "a sweep value that isn't a number" => [ { "SWEEP" => "bytes_per_token:dense" }, /SWEEP: bytes_per_token value "dense"/ ],
+    "a sweep setting without values" => [ { "SWEEP" => "max_chunks:" }, /SWEEP: max_chunks needs at least one value/ ]
   }.each do |label, (env, message)|
     it "refuses #{label}" do
       expect { parse(env) }.to raise_error(described_class::Error, message)

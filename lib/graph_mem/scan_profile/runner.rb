@@ -54,7 +54,7 @@ module GraphMem
       def profile_repo(workspace, repo)
         checkout = workspace.checkout(repo)
         @options.profiles.each do |profile|
-          setting_sets.each { |settings| @runs << profile_unit(checkout, profile, settings) }
+          @options.setting_sets.each { |settings| @runs << profile_unit(checkout, profile, settings) }
         end
       rescue Sandbox::Refused
         raise
@@ -63,11 +63,6 @@ module GraphMem
         say "#{repo.key}: skipped (#{Report.scrub(e.message)})"
       ensure
         workspace.remove(checkout) if checkout
-      end
-
-      # The scan settings combinations (K adds SWEEP); one, the current values, by default.
-      def setting_sets
-        [ {} ]
       end
 
       def profile_unit(checkout, profile, settings)
