@@ -22,6 +22,13 @@ module GraphMem
         "relations c/d" => %w[relations_created relations_deleted], "parts t/f/s" => %w[parts_total parts_failed parts_split],
         "too large/over budget" => %w[files_too_large files_over_budget]
       }.freeze
+      # The noise columns of the Markdown table (Metrics keys), in order.
+      NOISE_COLUMNS = {
+        "entities" => "entities", "no obs." => "entities_without_observations", "short obs." => "short_observations",
+        "dup. obs." => "duplicate_observations", "generic" => "generic_names", "file name" => "filename_names",
+        "root only" => "root_only_entities", "isolated" => "isolated_entities",
+        "rescan churn" => "rescan_churn"
+      }.freeze
 
       # @return [String, nil] the directory written (after #write)
       attr_reader :dir
@@ -80,6 +87,7 @@ module GraphMem
         lines.concat(backend_lines)
         lines.concat([ "", "## Scans", "", scan_header, scan_separator ])
         @runs.each { |run| run["scans"].each { |phase, stats| lines << scan_row(run, phase, stats) } }
+        lines.concat(noise_lines)
         lines.concat([ "", "## Skipped repos", "" ] + @errors.map { |error| "- `#{error['repo']}`: #{error['error']}" }) if @errors.any?
         lines.concat(@sections)
         "#{lines.join("\n")}\n"
@@ -95,6 +103,21 @@ module GraphMem
           "jobs enqueued, none run: #{format_counts(@backend['enqueued_jobs'])}",
           "- Repos: #{@options.repos.join(', ')}; profiles: #{@options.profiles.join(', ')}; " \
           "#{@options.full ? 'FULL=1' : 'first-run caps'}; rescan: #{@options.rescan ? 'yes' : 'no'}" ]
+      end
+
+      # The noise metrics of each run's first scan (Metrics), with recall / precision for synth.
+      def noise_lines
+        header = "| repo | profile | settings | #{NOISE_COLUMNS.keys.join(' | ')} | recall e/r | precision e/r | types |"
+        rows = @runs.filter_map do |run|
+          metrics = run["metrics"] or next
+          cells = NOISE_COLUMNS.values.map { |key| metrics[key].nil? ? "-" : metrics[key] }
+          accuracy = %w[recall precision].map { |kind| metrics[kind] ? metrics[kind].values.map { |value| value || "-" }.join("/") : "-" }
+          types = metrics["types"].to_h.first(4).map { |type, count| "#{type} #{count}" }.join(", ")
+          "| #{run['repo']} | #{run['profile']} | #{run['settings'].values.join(' / ')} | #{cells.join(' | ')} | #{accuracy.join(' | ')} | #{types} |"
+        end
+        return [] if rows.empty?
+
+        [ "", "## Noise (first scan)", "", header, "|#{'---|' * (NOISE_COLUMNS.size + 6)}" ] + rows
       end
 
       def format_counts(counts)

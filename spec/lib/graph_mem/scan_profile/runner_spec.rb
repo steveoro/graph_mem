@@ -61,10 +61,12 @@ RSpec.describe GraphMem::ScanProfile::Runner do
     expect(code["scans"]["initial"]["part_p50_s"]).to be_a(Float)
     expect(code["graph"].map { |entity| entity["name"] }).to include("Gadget Project", *GraphMem::ScanProfile::SynthRepo.expected("code")[:entities])
     expect(code["graph"].find { |entity| entity["name"] == "AlphaService" }["relations"]).to include({ "type" => "depends_on", "to" => "SynthWidget" })
+    expect(code["metrics"]).to include("recall" => { "entities" => 1.0, "relations" => 1.0 }, "missed" => [], "rescan_churn" => be_a(Integer))
+    expect(code["metrics"]["unexpected"]).to include("GeneratedSchema")
 
     texts = Dir.glob(File.join(report.dir, "*")).map { |path| File.read(path) }
     expect(texts.join).not_to include(Dir.tmpdir, Rails.root.to_s, Dir.home)
-    expect(File.read(File.join(report.dir, "report.md"))).to include("| synth | code | 3.0 / 2048 / 16 | 64 KB / 20 | initial |")
+    expect(File.read(File.join(report.dir, "report.md"))).to include("| synth | code | 3.0 / 2048 / 16 | 64 KB / 20 | initial |", "## Noise (first scan)")
     expect(stub.calls).not_to be_empty
     expect(database?("#{ActiveRecord::Base.connection_db_config.database}_scan_profile")).to be(false)
     expect(workspaces).to eq(before_workspaces)

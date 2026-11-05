@@ -79,11 +79,14 @@ module GraphMem
         caps = @manifest.caps(repo, full: @options.full)
         files = checkout.files(globs)
         scans = { "initial" => scan(checkout, globs, caps, "initial") }
+        # The graph of a first scan: what the metrics and the snapshot describe.
+        graph = GraphSnapshot.call(project.reload)
+        metrics = Metrics.call(project, expected: (SynthRepo.expected(profile) if repo.synth?))
         scans["rescan"] = scan(checkout, globs, caps, "rescan") if @options.rescan
-        unit = { "repo" => repo.key, "commit" => checkout.commit, "profile" => profile, "settings" => applied,
-                 "caps" => effective_caps(caps), "files" => file_stats(checkout, files), "scans" => scans }
         say "#{repo.key} #{profile} #{applied.values.join('/')}: #{scan_line(scans['initial'])}"
-        unit.merge("graph" => GraphSnapshot.call(project.reload))
+        { "repo" => repo.key, "commit" => checkout.commit, "profile" => profile, "settings" => applied,
+          "caps" => effective_caps(caps), "files" => file_stats(checkout, files), "scans" => scans,
+          "metrics" => metrics.merge("rescan_churn" => Metrics.churn(scans["rescan"])), "graph" => graph }
       end
 
       # @return [Hash{String => Numeric}] the scan settings in force for the run
