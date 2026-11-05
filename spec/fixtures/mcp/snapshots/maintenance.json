@@ -240,6 +240,7 @@
             "query": {
               "type": "string",
               "minLength": 1,
+              "maxLength": 2048,
               "description": "The topic or question to summarize."
             },
             "entity_id": {
@@ -662,6 +663,7 @@
                 "null",
                 "string"
               ],
+              "maxLength": 2048,
               "description": "Search query. Omit for catalog mode."
             },
             "include": {
@@ -1077,6 +1079,7 @@
             "query": {
               "type": "string",
               "minLength": 1,
+              "maxLength": 2048,
               "description": "Optional query for relevance-ranked observations."
             }
           },
@@ -2315,6 +2318,7 @@
             "query": {
               "type": "string",
               "minLength": 1,
+              "maxLength": 2048,
               "description": "Rank observations by relevance to this query."
             },
             "observation_limit": {

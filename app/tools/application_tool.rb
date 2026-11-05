@@ -10,6 +10,11 @@ class ApplicationTool
   MCP_PROFILE_NAMES = GraphMem::McpProfile::NAMES
   MCP_ANNOTATION_KEYS = %i[read_only_hint destructive_hint idempotent_hint open_world_hint].freeze
   MAX_TITLE_LENGTH = 40
+  # D-7: the longest `query` the four query tools (search, get_entities, rank_observations,
+  # summarize) accept. Advertised as `maxLength` (`max_size?: MAX_QUERY_LENGTH` in their arguments)
+  # and enforced before any query work; a longer query is refused, never truncated.
+  MAX_QUERY_LENGTH = 2_048
+  QUERY_TOO_LONG = "Query is too long (max #{MAX_QUERY_LENGTH} characters).".freeze
 
   class << self
     def input_schema_to_json
@@ -61,6 +66,13 @@ class ApplicationTool
       @mcp_profiles || []
     end
 
+    # @return [Integer, nil] the `maxLength` this tool advertises for `query` (D-7), nil when none
+    def query_length_cap
+      return @query_length_cap if defined?(@query_length_cap)
+
+      @query_length_cap = input_schema_to_json.dig(:properties, :query, :maxLength)
+    end
+
     def mcp_advertised?
       @mcp_advertised != false
     end
@@ -82,6 +94,7 @@ class ApplicationTool
 
     normalized = ParameterNormalizer.normalize(tool_name, args,
                                                project_id: graph_mem_context.current_project_id)
+    refuse_long_query!(normalized)
     arg_validation = self.class.input_schema.call(normalized)
     if arg_validation.errors.any?
       details = arg_validation.errors.to_h
@@ -123,6 +136,18 @@ class ApplicationTool
 
   def logger
     Rails.logger
+  end
+
+  # D-7: refuses a `query` longer than the tool's advertised cap before validation and before any
+  # query work (no search, no ranking, no summary).
+  #
+  # @param arguments [Hash{Symbol => Object}] the normalized arguments
+  # @return [void]
+  # @raise [GraphMem::InvalidArgumentsError] QUERY_TOO_LONG
+  def refuse_long_query!(arguments)
+    cap = self.class.query_length_cap
+    query = arguments[:query]
+    raise GraphMem::InvalidArgumentsError, QUERY_TOO_LONG if cap && query.is_a?(String) && query.length > cap
   end
 
   def current_client_id

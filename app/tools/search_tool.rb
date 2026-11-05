@@ -37,7 +37,7 @@ class SearchTool < ApplicationTool
     "Do not use for synthesized prose; use `summarize` instead."
 
   arguments do
-    optional(:query).maybe(:string).description("Search query. Omit for catalog mode.")
+    optional(:query).maybe(:string, max_size?: MAX_QUERY_LENGTH).description("Search query. Omit for catalog mode.")
     optional(:include).array(:string).description("Subgraph projections: observations and/or relations.")
     optional(:search_in_name).filled(:bool).description("Match the query against entity names (default true; summary and subgraph modes).")
     optional(:search_in_type).filled(:bool).description("Match the query against entity types (default true; summary and subgraph modes).")

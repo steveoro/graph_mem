@@ -28,7 +28,7 @@ class SummarizeTool < ApplicationTool
     "Do not use for numeric health metrics; use `get_graph_stats` instead."
 
   arguments do
-    required(:query).filled(:string).description("The topic or question to summarize.")
+    required(:query).filled(:string, max_size?: MAX_QUERY_LENGTH).description("The topic or question to summarize.")
     optional(:entity_id).filled(:integer).description("Optional entity ID to scope summarization to a single entity.")
     optional(:max_results).filled(:integer).description("Maximum entities to retrieve before ranking observations. Defaults to 10.")
     optional(:max_observations).filled(:integer).description("Maximum observations to include in the summary. Defaults to 20.")
