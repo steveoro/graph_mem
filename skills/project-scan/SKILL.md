@@ -90,6 +90,7 @@ Goal: user-facing routes, views, components, and API endpoints.
 
 - Explore `app/views/`, `app/controllers/`, `frontend/`, `app/components/`, `routes.rb`, `pages/`, API route definitions.
 - Create `Controller`, `View`, `Layout`, `Route`, `APIEndpoint`, or `Component` entities. Rails code uses the role types (`Model`, `Controller`, `Helper`, `Job`, `Mailer`, `Concern`, `Decorator`, `Validator`, `Strategy`, `Command`) rather than a generic `Class`.
+- In a Rails project, `scan_project` already writes each class under its fully qualified name (`GogglesDb::Badge`, not `Badge`), each `app/views` folder as a `View` named by its path (`app/views/goggles_db/swimmers`) and each layout as a `Layout`: `search` for those names first and add observations to them instead of creating bare-named copies.
 - Add observations about paths, methods, and rendered templates.
 - Link UI entities to the project with `part_of`.
 - Persist with source `project_scan_skill:ui:<project_root>`.

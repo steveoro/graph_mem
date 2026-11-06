@@ -15,7 +15,8 @@ module GraphMem
     #   report = Report.new(started_at: Time.now.utc, options: options, backend: backend, runs: runs, errors: []).write("tmp/scan_profile")
     #   report.dir # => "tmp/scan_profile/20261105T101500Z"
     class Report
-      SCHEMA_VERSION = 1
+      # 2 (1.75.0): each scan's `code_map` counters and the `code_map_entities` metric.
+      SCHEMA_VERSION = 2
       # The scan columns of the Markdown table, in order.
       SCAN_COLUMNS = {
         "entities c/u" => %w[entities_created entities_updated], "observations c/o" => %w[observations_created observations_obsoleted],
@@ -27,7 +28,7 @@ module GraphMem
         "entities" => "entities", "no obs." => "entities_without_observations", "short obs." => "short_observations",
         "dup. obs." => "duplicate_observations", "generic" => "generic_names", "file name" => "filename_names",
         "root only" => "root_only_entities", "isolated" => "isolated_entities",
-        "rescan churn" => "rescan_churn"
+        "code map" => "code_map_entities", "rescan churn" => "rescan_churn"
       }.freeze
 
       # @return [String, nil] the directory written (after #write)
@@ -144,16 +145,23 @@ module GraphMem
         end
       end
 
+      # Entities, items mapped, items dropped; "-" for a scan without a code map.
+      def code_map_cell(stats)
+        # Symbol keys from the run, string keys from a parsed report.json.
+        counts = stats["code_map"].to_h.transform_keys(&:to_s)
+        counts.empty? ? "-" : counts.values_at("entities", "items_mapped", "items_dropped").map(&:to_i).join("/")
+      end
+
       def format_counts(counts)
         counts.blank? ? "none" : counts.map { |name, count| "#{name} #{count}" }.join(", ")
       end
 
       def scan_header
-        "| repo | profile | settings | caps | phase | #{SCAN_COLUMNS.keys.join(' | ')} | partial | fallback | wall s | part p50/p95 s | noise dropped |"
+        "| repo | profile | settings | caps | phase | #{SCAN_COLUMNS.keys.join(' | ')} | partial | fallback | wall s | part p50/p95 s | noise dropped | code map e/m/d |"
       end
 
       def scan_separator
-        "|#{'---|' * (SCAN_COLUMNS.size + 10)}"
+        "|#{'---|' * (SCAN_COLUMNS.size + 11)}"
       end
 
       def scan_row(run, phase, stats)
@@ -163,7 +171,7 @@ module GraphMem
         noise = stats["noise_dropped"].to_h.select { |_rule, count| count.to_i.positive? }
         "| #{run['repo']} | #{run['profile']} | #{settings} | #{caps} | #{phase} | #{cells.join(' | ')} | " \
           "#{stats['partial'] ? 'yes' : 'no'} | #{stats['fallback'] ? "yes (#{stats['fallback_reason']})" : 'no'} | " \
-          "#{stats['wall_s']} | #{stats['part_p50_s'] || '-'}/#{stats['part_p95_s'] || '-'} | #{format_counts(noise)} |"
+          "#{stats['wall_s']} | #{stats['part_p50_s'] || '-'}/#{stats['part_p95_s'] || '-'} | #{format_counts(noise)} | #{code_map_cell(stats)} |"
       end
     end
   end

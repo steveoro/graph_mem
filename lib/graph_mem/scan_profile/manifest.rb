@@ -6,10 +6,11 @@ module GraphMem
   module ScanProfile
     # The fixture repos of `graph_mem:scan_profile` (F-3b), read from script/scan_profile/repos.yml
     # and checked: every entry is a public GitHub repo over https, pinned by a full commit SHA, with
-    # a license and both profiles. The generated `synth` repo (SynthRepo) is always available too.
+    # a license and both profiles. The generated repos are always available too: `synth` (SynthRepo)
+    # and `synth_rails` (SynthRailsRepo, 1.75.0: the Rails code map's fixture).
     #
     #   manifest = GraphMem::ScanProfile::Manifest.load
-    #   manifest.keys                    # => ["synth", "graph_mem", "goggles_db", "goggles_api", "dry-inflector"]
+    #   manifest.keys                    # => ["synth", "synth_rails", "graph_mem", "goggles_db", "goggles_api", "dry-inflector"]
     #   repo = manifest.fetch("goggles_api")
     #   repo.globs("code")               # => ["app/api/**/*.rb"]
     #   manifest.caps(repo, full: false) # => { max_total_input_bytes: 65536, max_files: 20 }
@@ -22,6 +23,8 @@ module GraphMem
       URL_FORMAT = %r{\Ahttps://github\.com/[A-Za-z0-9][\w.-]*/[\w.-]+\.git\z}
       COMMIT_FORMAT = /\A\h{40}\z/
       KEY_FORMAT = /\A[a-z0-9][a-z0-9_-]*\z/
+      # The generated repos, by key: each writes its files, its expected lists and its stub answers.
+      SYNTHETIC = { SynthRepo::KEY => SynthRepo, SynthRailsRepo::KEY => SynthRailsRepo }.freeze
 
       # One fixture repo.
       #
@@ -34,13 +37,17 @@ module GraphMem
       # @!attribute exclude [Array<String>] globs deleted from the clone before scanning
       # @!attribute profiles [Hash{String => Array<String>}] the globs per profile
       Repo = Data.define(:key, :url, :commit, :license, :project_name, :full, :exclude, :profiles) do
-        # @return [Boolean] the generated synthetic repo
+        # @return [Boolean] a generated repo (Manifest::SYNTHETIC)
         def synth? = url.nil?
 
         # @param profile [String] "docs" or "code"
         # @return [Array<String>, nil] the profile's globs; nil when the repo has no such profile
         def globs(profile) = profiles[profile]
       end
+
+      # @param key [String]
+      # @return [Module, nil] the generated repo of that key (SynthRepo, SynthRailsRepo), nil for a pinned repo
+      def self.synthetic(key) = SYNTHETIC[key.to_s]
 
       # @param path [String, Pathname]
       # @return [Manifest]
@@ -55,11 +62,11 @@ module GraphMem
         raise Error, "the manifest must be a mapping with a `repos` mapping" unless data.is_a?(Hash) && data["repos"].is_a?(Hash)
 
         @first_run_caps = parse_caps(data["first_run_caps"])
-        @repos = { SynthRepo::KEY => SynthRepo.manifest_repo }
+        @repos = SYNTHETIC.transform_values(&:manifest_repo)
         data["repos"].each { |key, entry| @repos[key.to_s] = parse_repo(key.to_s, entry) }
       end
 
-      # @return [Array<String>] synth first, then the manifest's order
+      # @return [Array<String>] the generated repos first, then the manifest's order
       def keys = @repos.keys
 
       # @param key [String]
@@ -95,7 +102,7 @@ module GraphMem
       end
 
       def parse_repo(key, entry)
-        raise Error, "repo #{key.inspect}: the key must match #{KEY_FORMAT.source}" unless key.match?(KEY_FORMAT) && key != SynthRepo::KEY
+        raise Error, "repo #{key.inspect}: the key must match #{KEY_FORMAT.source}" unless key.match?(KEY_FORMAT) && !SYNTHETIC.key?(key)
         raise Error, "repo #{key}: the entry must be a mapping" unless entry.is_a?(Hash)
 
         url = entry["url"].to_s

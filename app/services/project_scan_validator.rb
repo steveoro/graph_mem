@@ -185,6 +185,8 @@ class ProjectScanValidator
     entity.active_memory_observations.find_each do |observation|
       next if from_current_scan?(observation.source)
       next if observation.content.blank?
+      # The Rails code map's facts come from the code itself; its skeleton writer diffs them.
+      next if observation.source == RailsCodeMap::SOURCE
 
       action = resolve_observation_action(observation, entity)
       case action[:type]
@@ -207,9 +209,14 @@ class ProjectScanValidator
       return { type: :keep }
     end
 
+    scan_sourced = from_project_scan_source?(observation.source)
+    # A Rails code map entity (1.75.0) was chosen by the code: the scan filed the fact under the
+    # class whose file it read, so a fact that names another class ("It belongs to a User.") is
+    # about this one and stays, neither moved nor obsoleted.
+    return { type: :keep } if scan_sourced && code_map_entity?(entity)
+
     candidates = find_observation_candidates(content, exclude: entity)
     best = select_best_candidate(candidates)
-    scan_sourced = from_project_scan_source?(observation.source)
 
     if candidates.size > 1
       return queue_move_review(observation, best, candidates, scan_sourced)
@@ -219,6 +226,10 @@ class ProjectScanValidator
       return scan_sourced ? { type: :move, target_entity: best[:entity] }
                           : queue_move_review(observation, best, candidates, scan_sourced)
     end
+
+    # A manual fact on a code map entity that names no other entity stays too (one that does is
+    # only queued for a move review above, never moved silently).
+    return { type: :keep } if code_map_entity?(entity)
 
     if scan_sourced
       {
@@ -350,6 +361,7 @@ class ProjectScanValidator
     entity.relations_from.find_each do |relation|
       next if from_current_scan?(relation.properties.to_h["source"])
       next if relation.properties.to_h["scan_id"] == @scan_id
+      next if relation.properties.to_h["source"] == RailsCodeMap::SOURCE
 
       if relation.relation_type == "part_of" && wrong_part_of_to_project_root?(relation)
         delete_relation(relation, "part_of to wrong project root")
@@ -400,6 +412,14 @@ class ProjectScanValidator
     @errors << "Failed to delete relation #{relation.id}: #{e.message}"
   ensure
     Current.deletion_reason = nil
+  end
+
+  # @return [Boolean] the entity holds an active fact of a Rails code map skeleton
+  def code_map_entity?(entity)
+    @code_map_entities ||= {}
+    return @code_map_entities[entity.id] if @code_map_entities.key?(entity.id)
+
+    @code_map_entities[entity.id] = entity.memory_observations.active.where(source: RailsCodeMap::SOURCE).exists?
   end
 
   def mentions_owned_terms?(content, owner)

@@ -71,6 +71,9 @@ module GraphMem
           "filename_names" => entities.count { |entity| filename?(entity.name) },
           "root_only_entities" => entities.count { |entity| touching[entity.id].any? && touching[entity.id].all?(project.id) },
           "isolated_entities" => entities.count { |entity| touching[entity.id].empty? },
+          # 1.75.0: the entities a Rails code map's skeleton holds (an active fact of its source).
+          "code_map_entities" => MemoryObservation.active.where(memory_entity_id: entities.map(&:id), source: RailsCodeMap::SOURCE)
+                                                  .distinct.count(:memory_entity_id),
           "types" => entities.map(&:entity_type).tally.sort_by { |type, count| [ -count, type ] }.to_h
         }
       end

@@ -73,11 +73,11 @@ module GraphMem
         globs = repo.globs(profile)
         caps = @manifest.caps(repo, full: @options.full)
         files = checkout.files(globs)
-        scans = { "initial" => scan(checkout, globs, caps, "initial") }
+        scans = { "initial" => scan(checkout, globs, caps, "initial", profile) }
         # The graph of a first scan: what the metrics and the snapshot describe.
         graph = GraphSnapshot.call(project.reload)
-        metrics = Metrics.call(project, expected: (SynthRepo.expected(profile) if repo.synth?))
-        scans["rescan"] = scan(checkout, globs, caps, "rescan") if @options.rescan
+        metrics = Metrics.call(project, expected: Manifest.synthetic(repo.key)&.expected(profile))
+        scans["rescan"] = scan(checkout, globs, caps, "rescan", profile) if @options.rescan
         say "#{repo.key} #{profile} #{applied.values.join('/')}: #{scan_line(scans['initial'])}"
         { "repo" => repo.key, "commit" => checkout.commit, "profile" => profile, "settings" => applied,
           "caps" => effective_caps(caps), "files" => file_stats(checkout, files), "scans" => scans,
@@ -92,12 +92,19 @@ module GraphMem
           "max_chunks" => AppSettings.project_scan_max_chunks.to_i }
       end
 
-      def scan(checkout, globs, caps, mode)
+      def scan(checkout, globs, caps, mode, profile)
         @sandbox.assert_target!
         parts = []
         started = monotonic
-        result = ProjectScanner.new(project_root: checkout.root, project_name: checkout.repo.project_name, mode: mode,
-                                    file_globs: globs, **caps, on_part_done: ->(done) { parts << done }).call
+        progress = Progress.new("#{checkout.repo.key} #{profile} #{mode}", out: @out)
+        part_done = lambda do |done|
+          parts << done
+          progress.part_done(done)
+        end
+        result = progress.watch do
+          ProjectScanner.new(project_root: checkout.root, project_name: checkout.repo.project_name, mode: mode,
+                             file_globs: globs, **caps, on_progress: progress.method(:phase), on_part_done: part_done).call
+        end
         scan_stats(result.to_h, parts, monotonic - started, checkout)
       end
 
@@ -105,6 +112,7 @@ module GraphMem
         times = parts.map(&:seconds).sort
         stats = COUNTERS.to_h { |key| [ key.to_s, result[key] ] }
         stats.merge("status" => result[:status], "wall_s" => seconds.round(3), "noise_dropped" => result[:noise_dropped] || {},
+                    "code_map" => result[:code_map] || {},
                     "requests" => parts.size, "parts_split" => parts.count(&:split),
                     "part_p50_s" => percentile(times, 0.5), "part_p95_s" => percentile(times, 0.95),
                     "errors" => Array(result[:errors]).first(3).map { |error| Report.scrub(error.to_s, checkout.root) })

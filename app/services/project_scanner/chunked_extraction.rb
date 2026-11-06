@@ -40,8 +40,12 @@ class ProjectScanner
     #   Llm::CloudGate refuses it)
     # @param on_part_done [#call, nil] called after each request with a PartDone (F-3b: the
     #   profiler's timing); nil changes nothing
+    # @param guide [#prompt_guide, #canonicalize, nil] a Rails project's code map
+    #   (ProjectScanner::CodeMapGuide, 1.75.0): each part's prompt gets its `prompt_guide(files, text)`
+    #   section, and each answer goes through `canonicalize(data, files)` before it is merged; nil
+    #   changes nothing
     def initialize(chunks:, project_name:, num_ctx:, num_predict:, timeout:, on_part: nil,
-                   llm_scope: Llm::Scope.for_scan(project_root: nil, project_name: project_name), on_part_done: nil)
+                   llm_scope: Llm::Scope.for_scan(project_root: nil, project_name: project_name), on_part_done: nil, guide: nil)
       @queue = chunks.map { |chunk| Unit.new(pieces: chunk.pieces, splittable: true) }
       @project_name = project_name
       @num_ctx = num_ctx.to_i
@@ -50,6 +54,7 @@ class ProjectScanner
       @on_part = on_part
       @on_part_done = on_part_done
       @llm_scope = llm_scope
+      @guide = guide
       @merger = ExtractionMerger.new
     end
 
@@ -100,13 +105,17 @@ class ProjectScanner
     # @return [String, nil] why the part failed
     def extract(unit, part)
       @on_part&.call(part, @total)
-      prompt = ExtractionPrompt.build(unit.pieces.join("\n"), part: part, parts: @total, project_name: @project_name,
-                                                              names: @merger.names(limit: MAX_NAMES)).scoped(@llm_scope)
+      text = unit.pieces.join("\n")
+      # A split half recomputes its files from its own headers.
+      files = unit.pieces.filter_map { |piece| ChunkPlanner.piece_path(piece) }.uniq if @guide
+      prompt = ExtractionPrompt.build(text, part: part, parts: @total, project_name: @project_name,
+                                            names: @merger.names(limit: MAX_NAMES), guide: @guide&.prompt_guide(files, text)).scoped(@llm_scope)
       result = Llm::Router.generate(:scan, prompt, style: "concise", options: request_options)
       error = failure(result)
       return error if error
 
-      @merger.add(ExtractionPrompt.parse_json(result[:text]))
+      data = ExtractionPrompt.parse_json(result[:text])
+      @merger.add(@guide ? @guide.canonicalize(data, files) : data)
       @done += 1
       nil
     end

@@ -72,7 +72,7 @@ module GraphMem
       def checkout(repo)
         root = File.join(@dir, repo.key)
         FileUtils.mkdir_p(root)
-        commit = repo.synth? ? (SynthRepo.write(root) && nil) : fetch(repo, root)
+        commit = repo.synth? ? (Manifest.synthetic(repo.key).write(root) && nil) : fetch(repo, root)
         prune(root, repo.exclude)
         Checkout.new(repo: repo, root: File.realpath(root), commit: commit)
       end

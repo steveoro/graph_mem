@@ -49,7 +49,7 @@ RSpec.describe GraphMem::ScanProfile::Runner do
     report = with_llm_provider(stub) { run }
 
     json = JSON.parse(File.read(File.join(report.dir, "report.json")))
-    expect(json).to include("schema_version" => 1, "graph_mem_version" => GraphMem::VERSION)
+    expect(json).to include("schema_version" => 2, "graph_mem_version" => GraphMem::VERSION)
     expect(json["backend"]).to include("chain" => "ollama", "left_machine" => false, "database_kept" => false)
     expect(json["runs"].map { |run| [ run["repo"], run["profile"], run["scans"].keys ] })
       .to eq([ [ "synth", "docs", %w[initial rescan] ], [ "synth", "code", %w[initial rescan] ] ])
@@ -137,5 +137,18 @@ RSpec.describe GraphMem::ScanProfile::Runner do
       expect(json["runs"].sole["scans"]["initial"]).to include("fallback" => true)
       expect(File.read(File.join(report.dir, "report.md"))).to include("cloud chain: yes (refused by the gate); anything left the machine: no")
     end
+  end
+
+  it "prints each scan's steps and parts as it goes (1.75.0)" do
+    out = StringIO.new
+
+    with_llm_provider(stub) do
+      described_class.new(options: options("PROFILE" => "docs", "RESCAN" => "0"), manifest: manifest, out: out).call
+    end
+
+    expect(out.string).to include("[scan_profile] synth docs initial: Discovering project files",
+                                  "[scan_profile] synth docs initial: Extracting knowledge: part 1 of",
+                                  "[scan_profile] synth docs initial: part 1 of", "[scan_profile] synth docs initial: Project scan completed")
+    expect(out.string).not_to include(Dir.tmpdir)
   end
 end
