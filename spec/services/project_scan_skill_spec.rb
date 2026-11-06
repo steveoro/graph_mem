@@ -89,7 +89,7 @@ RSpec.describe ProjectScanSkill, type: :service do
       project = MemoryEntity.find_by(entity_type: "Project", name: "Test Project")
       expect(project).to be_present
 
-      controller = MemoryEntity.find_by(entity_type: "Route", name: "TestController")
+      controller = MemoryEntity.find_by(entity_type: "Controller", name: "TestController")
       expect(controller).to be_present
       expect(controller.memory_observations.map(&:content)).to include(a_string_matching(/test_controller/))
 
