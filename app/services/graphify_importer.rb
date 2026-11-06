@@ -224,6 +224,10 @@ class GraphifyImporter
     # through to the label heuristics.
     hinted = node["entity_type"].to_s
     if hinted.present? && GraphVocabulary::ENTITY_TYPES.include?(hinted)
+      # A hinted File is named by its path like an unhinted one (1.74.0): two badge.rb in different
+      # dirs are two files, not one entity (names are unique per project).
+      return { name: file_display_name(node["source_file"].to_s, label), entity_type: "File" } if hinted == "File"
+
       return { name: label, entity_type: hinted }
     end
 

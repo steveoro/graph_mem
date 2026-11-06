@@ -27,7 +27,9 @@ class RailsAstExtractor
 
         qualified = qualified_name(const_prefix, name)
         entity_type = stmt.is_a?(Prism::ModuleNode) ? "Module" : "Class"
-        @const_decls[qualified] << { file: rel, line: line(stmt), type: entity_type }
+        superclass = collect_const_path(stmt.superclass) if stmt.is_a?(Prism::ClassNode) && stmt.superclass
+        @const_decls[qualified] << { file: rel, line: line(stmt), type: entity_type, superclass: superclass.presence,
+                                     prefix: const_prefix }
         @basename_index[qualified.split("::").last] |= [ qualified ]
         walk_index(Array(stmt.body&.body), const_prefix: qualified.split("::"), rel: rel)
       when Prism::SingletonClassNode
@@ -39,11 +41,20 @@ class RailsAstExtractor
         @method_decls["#{const_prefix.join('::')}#{sep}#{stmt.name}"] =
           { file: rel, line: line(stmt) }
       when Prism::CallNode
+        note_concern(stmt, const_prefix)
         walk_index(Array(stmt.block&.body&.body), const_prefix: const_prefix, rel: rel) if stmt.block
       else
         walk_index(Array(stmt.compact_child_nodes), const_prefix: const_prefix, rel: rel) if container_like?(stmt)
       end
     end
+  end
+
+  # `extend ActiveSupport::Concern` in a module's body makes it a Concern (RailsAstExtractor::Roles).
+  def note_concern(call, const_prefix)
+    return unless call.name == :extend && call.receiver.nil? && const_prefix.any? && const_prefix.last != "self"
+    return unless args_const(call).any? { |name| name.delete_prefix("::") == Roles::CONCERN }
+
+    @concern_modules << const_prefix.join("::")
   end
 
   # ------------------------------------------------------------------
@@ -113,7 +124,7 @@ class RailsAstExtractor
       decl = @const_decls[name].first
       add_node(name, source_file: decl ? decl[:file] : rel,
              source_location: decl ? decl[:line] : nil,
-             entity_type: decl ? decl[:type] : "Class")
+             entity_type: declared_type(name) || "Class")
     else
       add_node(name, source_file: nil, entity_type: stub_type,
                extra_obs: [], reference: true)

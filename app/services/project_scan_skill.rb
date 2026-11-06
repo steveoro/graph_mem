@@ -15,17 +15,25 @@ class ProjectScanSkill
     "tests_and_docs" => "Tests & docs"
   }.freeze
 
+  # The type of an architecture directory's entity (1.74.0: the Rails role types, as the AST
+  # importer and the scan's code map use them).
   ARCHITECTURE_DIR_TYPES = {
-    "app/controllers" => "Route",
+    "app/controllers" => "Controller",
     "app/models" => "Model",
     "app/services" => "Service",
-    "app/views" => "Component",
+    "app/views" => "View",
     "app/components" => "Component",
-    "app/helpers" => "Service",
+    "app/helpers" => "Helper",
+    "app/jobs" => "Job",
+    "app/mailers" => "Mailer",
+    "app/decorators" => "Decorator",
+    "app/validators" => "Validator",
+    "app/strategies" => "Strategy",
+    "app/commands" => "Command",
     "lib" => "Class",
     "src" => "Component",
     "api" => "APIEndpoint",
-    "controllers" => "Route",
+    "controllers" => "Controller",
     "models" => "Model",
     "services" => "Service",
     "components" => "Component"
@@ -316,6 +324,9 @@ class ProjectScanSkill
     type = ImportEntityResolver.canonical_type(type)
     return nil if name.blank? || type.blank?
 
+    family = code_family_child(name, type)
+    return update_child(family, description) if family
+
     unique_name = unique_name_for(name, type)
     project_id = @project_entity&.id
     existing = MemoryEntity.find_by(name: unique_name, entity_type: type, project_id: project_id)
@@ -344,6 +355,26 @@ class ProjectScanSkill
   # Same-name-different-type inside THIS project still gets the "(Type)"
   # suffix — but scoped names mean a same-named entity in another project
   # is not a collision any more, so cross-project lookups don't apply.
+  # The same name in this project typed with another code-family type (an AST import's Module or
+  # Class, the other depth's Controller): that entity, retyped by "specific beats generic"
+  # (ImportEntityResolver.resolved_code_type). Non-code types have no family: nil.
+  def code_family_child(name, type)
+    entity = ImportEntityResolver.code_type_collision(name.to_s.strip, type, project_id: @project_entity&.id)
+    return nil unless entity
+
+    target = ImportEntityResolver.resolved_code_type(entity.entity_type, type)
+    entity.update!(entity_type: target) if target != entity.entity_type && !@dry_run
+    entity
+  end
+
+  def update_child(entity, description)
+    return entity if @dry_run || description.blank? || entity.description.present?
+
+    entity.update!(description: description)
+    @updated_count += 1
+    entity
+  end
+
   def unique_name_for(name, type)
     base = name.to_s.strip
     scope = MemoryEntity.where(project_id: @project_entity&.id)
@@ -493,11 +524,14 @@ class ProjectScanSkill
     [ nil, nil ] # removed mid-scan: skipped by the caller
   end
 
+  # A Ruby file's type by its directory's Rails role (1.74.0: RailsAstExtractor::Roles, so guided
+  # scans agree with the AST importer and the scan's code map: a controller is a Controller).
   def infer_architecture_file_type(filename, parent_type, parent_dir)
     name = filename.downcase
-    return "Route" if name.end_with?("_controller.rb") || parent_dir == "controllers" || parent_dir == "app/controllers"
-    return "Model" if name.end_with?(".rb") && (parent_dir == "models" || parent_dir == "app/models")
-    return "Service" if name.end_with?(".rb") && (parent_dir == "services" || parent_dir == "app/services")
+    return "Controller" if name.end_with?("_controller.rb")
+
+    role = RailsAstExtractor::Roles::DIR_ROLES[parent_dir.to_s.delete_prefix("app/")]
+    return role if role && name.end_with?(".rb")
     return "Class" if parent_dir == "lib" || parent_dir == "src"
 
     parent_type
@@ -510,10 +544,13 @@ class ProjectScanSkill
     "Configuration"
   end
 
+  # The UI depth's types agree with the architecture depth's (1.74.0): one entity per controller or
+  # helper, not a `(Route)` / `(Service)` twin next to the Controller / Helper.
   def ui_type_for(relative)
     lowered = relative.downcase
-    return "Route" if lowered.include?("controller") || lowered.include?("routes.rb")
-    return "Service" if lowered.include?("helper")
+    return "Route" if lowered.include?("routes.rb")
+    return "Controller" if lowered.include?("controller")
+    return "Helper" if lowered.include?("helper")
     return "APIEndpoint" if lowered.include?("api")
 
     "Component"

@@ -154,9 +154,14 @@ module ImportExecutionStrategy::EntityWrites
     collision ||= ImportEntityResolver.class_module_collision(name, entity_type, project_id: nil)
     if collision && (collision.project_id == node_project_id ||
                      (reference_stub_entity?(collision) && !other_declarers?(name, entity_type)))
-      @logger.info "ImportExecutionStrategy: Retyping '#{name}' #{collision.entity_type} -> " \
-                   "#{entity_type} (same-scope leftover or claimed stub)"
-      collision.update!(entity_type: ImportEntityResolver.canonical_type(entity_type))
+      # Specific beats generic (1.74.0): a stored role type (Model) is reused as is by a generic
+      # declaration (Class); a stored Class/Module takes the role type.
+      target = ImportEntityResolver.resolved_code_type(collision.entity_type, ImportEntityResolver.canonical_type(entity_type))
+      if target != collision.entity_type
+        @logger.info "ImportExecutionStrategy: Retyping '#{name}' #{collision.entity_type} -> " \
+                     "#{target} (same-scope leftover or claimed stub)"
+        collision.update!(entity_type: target)
+      end
       return merge_into_existing(node, collision.id)
     end
 

@@ -50,7 +50,7 @@ module GraphifyRescan
   end
 
   # Indexes a translated payload for diffing:
-  #   keys:         Set of [entity_type.downcase, name.downcase] per node
+  #   keys:         Set of [type_key(entity_type), name.downcase] per node
   #   obs:          {key => Set["Defined at …"]} provenance contents
   #   tree_parents:      {child_key => parent_key} containment map (roots
   #                      have no entry)
@@ -68,7 +68,7 @@ module GraphifyRescan
         next unless node.is_a?(Hash)
 
         path = parent_path ? "#{parent_path}.children.#{node_index}" : node_index.to_s
-        key = [ (node["entity_type"] || node[:entity_type]).to_s.downcase,
+        key = [ type_key(node["entity_type"] || node[:entity_type]),
                 (node["name"] || node[:name]).to_s.downcase ]
         index[:keys] << key
         if parent_key
@@ -103,7 +103,7 @@ module GraphifyRescan
     result = { vanished: [], obsoleted: 0, superseded: 0 }
 
     stored.find_each do |entity|
-      key = [ entity.entity_type.to_s.downcase, entity.name.to_s.downcase ]
+      key = [ type_key(entity.entity_type), entity.name.to_s.downcase ]
       present = index[:keys].include?(key)
       new_contents = index[:obs][key]
       replacement_by_file = new_contents.index_by { |c| PROVENANCE_PATTERN.match(c)[1] }
@@ -161,8 +161,8 @@ module GraphifyRescan
       .where("JSON_UNQUOTE(JSON_EXTRACT(properties, '$.source')) = ?", source)
       .includes(:from_entity, :to_entity)
       .filter_map do |relation|
-        from_key = [ relation.from_entity.entity_type.to_s.downcase, relation.from_entity.name.to_s.downcase ]
-        to_key = [ relation.to_entity.entity_type.to_s.downcase, relation.to_entity.name.to_s.downcase ]
+        from_key = [ type_key(relation.from_entity.entity_type), relation.from_entity.name.to_s.downcase ]
+        to_key = [ type_key(relation.to_entity.entity_type), relation.to_entity.name.to_s.downcase ]
         # An endpoint is "vanished" only if it belongs to THIS subtree's
         # stored set AND dropped out of the payload — its delete_entity
         # item already covers the edge. Anything else (payload-present
@@ -195,7 +195,7 @@ module GraphifyRescan
 
     entities = MemoryEntity.where(id: stored_ids).index_by(&:id)
     by_key = entities.values.index_by do |e|
-      [ e.entity_type.to_s.downcase, e.name.to_s.downcase ]
+      [ type_key(e.entity_type), e.name.to_s.downcase ]
     end
     parent_rows = MemoryRelation
                   .where(from_entity_id: entities.keys, relation_type: "part_of")
@@ -207,7 +207,7 @@ module GraphifyRescan
       next unless entity
 
       stored_parent_keys = Array(parent_rows[entity.id]).map do |rel|
-        [ rel.to_entity.entity_type.to_s.downcase, rel.to_entity.name.to_s.downcase ]
+        [ type_key(rel.to_entity.entity_type), rel.to_entity.name.to_s.downcase ]
       end
       # Unparented entities take the edge directly via `add_relation` —
       # only a genuinely different stored parent counts as a move.
@@ -413,9 +413,20 @@ module GraphifyRescan
   private_class_method :reparent_row_stale?
 
   def self.entity_key(entity)
-    [ entity.entity_type.to_s.downcase, entity.name.to_s.downcase ]
+    [ type_key(entity.entity_type), entity.name.to_s.downcase ]
   end
   private_class_method :entity_key
+
+  # The type half of a rescan key: the code family (Class, Module and the 1.74.0 Rails role types)
+  # shares one, so an entity a newer extractor types Model (stored as Class by an older import) is
+  # the same entity, not one vanished and one new.
+  #
+  # @param type [String, nil]
+  # @return [String]
+  def self.type_key(type)
+    text = type.to_s
+    ImportEntityResolver::CODE_TYPES.any? { |code| code.casecmp?(text) } ? "class-module" : text.downcase
+  end
 
   # Seeded rows nest ids under "payload"; hand-seeded ones keep them flat.
   def self.item_field(row, field)
@@ -429,9 +440,9 @@ module GraphifyRescan
     Array(relations).each_with_object(Set.new) do |rel, set|
       next unless rel.is_a?(Hash)
 
-      from_key = [ (rel["from_type"] || rel[:from_type]).to_s.downcase,
+      from_key = [ type_key(rel["from_type"] || rel[:from_type]),
                    (rel["from_name"] || rel[:from_name]).to_s.downcase ]
-      to_key = [ (rel["to_type"] || rel[:to_type]).to_s.downcase,
+      to_key = [ type_key(rel["to_type"] || rel[:to_type]),
                  (rel["to_name"] || rel[:to_name]).to_s.downcase ]
       set << [ from_key, to_key,
                MemoryRelation.canonical_relation_type(rel["relation_type"] || rel[:relation_type]).to_s.downcase ]

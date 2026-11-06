@@ -91,7 +91,7 @@ module ImportExecutionStrategy::Claims
   def retype_on_claim(entity, raw_type, node)
     return if node[:reference] == true || node["reference"] == true
 
-    canonical = ImportEntityResolver.canonical_type(raw_type)
+    canonical = ImportEntityResolver.resolved_code_type(entity.entity_type, ImportEntityResolver.canonical_type(raw_type))
     return if entity.entity_type == canonical
     return unless reference_stub_entity?(entity) || entity.project_id == @import_project_id
 
@@ -105,7 +105,10 @@ module ImportExecutionStrategy::Claims
   # declared_elsewhere? so a `create` decision never claims a stub two
   # projects both want.
   def other_declarers?(name, entity_type)
-    scope = MemoryEntity.where(name: name, entity_type: ImportEntityResolver.canonical_type(entity_type))
+    # The code family counts as one declarer type (1.74.0), as in find_reference: a `Class` newcomer
+    # must not claim a stub two repos already declare as `Model`.
+    type = ImportEntityResolver.canonical_type(entity_type)
+    scope = MemoryEntity.where(name: name, entity_type: [ type ] + ImportEntityResolver.sibling_types(type))
                         .where.not(project_id: nil)
     scope = scope.where.not(project_id: @import_project_id) if @import_project_id
     scope.exists?

@@ -1315,7 +1315,18 @@
                       "Gem",
                       "Tool",
                       "Resource",
-                      "Documentation"
+                      "Documentation",
+                      "Controller",
+                      "Helper",
+                      "Job",
+                      "Mailer",
+                      "Concern",
+                      "View",
+                      "Layout",
+                      "Decorator",
+                      "Validator",
+                      "Strategy",
+                      "Command"
                     ]
                   },
                   "entity_id": {
@@ -1476,7 +1487,18 @@
                       "Gem",
                       "Tool",
                       "Resource",
-                      "Documentation"
+                      "Documentation",
+                      "Controller",
+                      "Helper",
+                      "Job",
+                      "Mailer",
+                      "Concern",
+                      "View",
+                      "Layout",
+                      "Decorator",
+                      "Validator",
+                      "Strategy",
+                      "Command"
                     ]
                   }
                 },
@@ -1877,7 +1899,18 @@
                       "Gem",
                       "Tool",
                       "Resource",
-                      "Documentation"
+                      "Documentation",
+                      "Controller",
+                      "Helper",
+                      "Job",
+                      "Mailer",
+                      "Concern",
+                      "View",
+                      "Layout",
+                      "Decorator",
+                      "Validator",
+                      "Strategy",
+                      "Command"
                     ]
                   },
                   "aliases": {

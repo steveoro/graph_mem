@@ -124,7 +124,7 @@ RSpec.describe "Rails AST extractor import" do
       first = import_fixture(dir)
       expect(first.success).to be true
 
-      swimmer = MemoryEntity.find_by(name: "Swimmer", entity_type: "Class")
+      swimmer = MemoryEntity.find_by(name: "Swimmer", entity_type: "Model")
       # A foreign (non-extractor) provenance obs on the same entity must NOT
       # be touched by an extractor rescan.
       foreign_obs = swimmer.memory_observations.create!(
@@ -154,7 +154,7 @@ RSpec.describe "Rails AST extractor import" do
       first = import_fixture(dir)
       expect(first.success).to be true
 
-      swimmer = MemoryEntity.find_by(name: "Swimmer", entity_type: "Class")
+      swimmer = MemoryEntity.find_by(name: "Swimmer", entity_type: "Model")
       # A different producer owns this entity too — removing the file must
       # obsolete OUR provenance but never queue a delete_entity (the other
       # producer's rescan owns that decision).
@@ -354,24 +354,26 @@ RSpec.describe "Rails AST extractor import" do
     end
   end
 
+  # lib/ on purpose (1.74.0): app/models would make `class Foo` a Model (Rails role types); these
+  # two specs are about the generic Class↔Module pair.
   it "conflicting real declarations keep their type — no cross-repo ping-pong" do
     # RepoA declares `class Foo`; RepoB declares `module Foo`. The stored
     # entity is a real declaration in ANOTHER project's subtree, so B's
     # colliding subtree is skipped — re-importing either side never flips
     # entity_type back and forth.
     Dir.mktmpdir do |dir_a|
-      FileUtils.mkdir_p(File.join(dir_a, "app/models"))
-      File.write(File.join(dir_a, "app/models/foo.rb"), "class Foo\n  def a; end\nend\n")
+      FileUtils.mkdir_p(File.join(dir_a, "lib"))
+      File.write(File.join(dir_a, "lib/foo.rb"), "class Foo\n  def a; end\nend\n")
       expect(import_fixture(dir_a, project: "RepoA").success).to be true
       foo = MemoryEntity.find_by(name: "Foo")
       expect(foo.entity_type).to eq("Class")
 
       Dir.mktmpdir do |dir_b|
-        FileUtils.mkdir_p(File.join(dir_b, "app/models"))
+        FileUtils.mkdir_p(File.join(dir_b, "lib"))
         # Distinct basename on purpose: with `foo.rb` on both sides the
         # same-file collision rule would pre-empt the Class↔Module check and
         # this spec couldn't go red with `retype_allowed?` forced to true.
-        File.write(File.join(dir_b, "app/models/foo_ext.rb"), "module Foo\n  def b; end\nend\n")
+        File.write(File.join(dir_b, "lib/foo_ext.rb"), "module Foo\n  def b; end\nend\n")
         report = import_fixture(dir_b, project: "RepoB")
         expect(report.success).to be true
         # Scoped names let both declarations coexist: RepoA's Class stays
@@ -395,15 +397,15 @@ RSpec.describe "Rails AST extractor import" do
     # RepoA then declares `class Foo` — the Class↔Module collision is allowed
     # to retype precisely because the stored entity is an unclaimed stub.
     Dir.mktmpdir do |dir_b|
-      FileUtils.mkdir_p(File.join(dir_b, "app/models"))
-      File.write(File.join(dir_b, "app/models/post.rb"), "class Post\n  include Foo\nend\n")
+      FileUtils.mkdir_p(File.join(dir_b, "lib"))
+      File.write(File.join(dir_b, "lib/post.rb"), "class Post\n  include Foo\nend\n")
       expect(import_fixture(dir_b, project: "RepoB").success).to be true
       stub = MemoryEntity.find_by(name: "Foo")
       expect(stub&.entity_type).to eq("Module")
 
       Dir.mktmpdir do |dir_a|
-        FileUtils.mkdir_p(File.join(dir_a, "app/models"))
-        File.write(File.join(dir_a, "app/models/foo.rb"), "class Foo\n  def a; end\nend\n")
+        FileUtils.mkdir_p(File.join(dir_a, "lib"))
+        File.write(File.join(dir_a, "lib/foo.rb"), "class Foo\n  def a; end\nend\n")
         expect(import_fixture(dir_a, project: "RepoA").success).to be true
         expect(stub.reload.entity_type).to eq("Class")
         expect(MemoryEntity.where(name: "Foo").count).to eq(1)

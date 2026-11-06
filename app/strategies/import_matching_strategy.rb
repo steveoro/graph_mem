@@ -169,11 +169,14 @@ class ImportMatchingStrategy
       node_result = match_child_node(node, path, parent_name, parent_entity_id)
     else
       node_result = match_root_node(node, path)
-      # A matched Project root pins this import's project scope: children
-      # resolve names inside it before falling back to the global namespace.
-      if node_result.selected_match_id &&
-         ImportEntityResolver.canonical_type(node["entity_type"] || node[:entity_type]) == "Project"
-        @import_project_id ||= node_result.selected_match_id
+      # An existing Project root of exactly this name pins this import's project scope: children
+      # resolve names inside it before falling back to the global namespace. Never the fuzzy
+      # suggestion (selected_match_id): its search on "<name> Project" matches any root whose name
+      # contains "Project", so "RepoC" was scoped to "Gadget Project" and its classes were matched,
+      # and in headless imports merged, into that project's (1.74.0). An operator who picks another
+      # root in Import Review still merges into it: execution resolves children inside the chosen root.
+      if ImportEntityResolver.canonical_type(node["entity_type"] || node[:entity_type]) == "Project"
+        @import_project_id ||= ImportEntityResolver.find_by_name_and_type(node_name, "Project")&.id
       end
     end
     results << node_result

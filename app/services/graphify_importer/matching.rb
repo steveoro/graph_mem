@@ -150,7 +150,9 @@ class GraphifyImporter
     # — exclude NULL and the import's project as two clauses so a nil
     # `excluding` (fresh project, not yet created) can't declare every
     # same-named entity "foreign".
-    scope = MemoryEntity.where(name: name, entity_type: type).where.not(project_id: nil)
+    # The code family counts as one declarer type (1.74.0): `Model: Badge` in one repo and
+    # `Class: Badge` in another both declare Badge.
+    scope = MemoryEntity.where(name: name, entity_type: [ type ] + ImportEntityResolver.sibling_types(type)).where.not(project_id: nil)
     scope = scope.where.not(project_id: excluding) if excluding
     scope.exists?
   end

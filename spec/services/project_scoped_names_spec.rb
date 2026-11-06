@@ -20,8 +20,9 @@ RSpec.describe "project-scoped entity names" do
                     ApplicationRecord app_record.rb StaleDup BackChild2
                     StaleStamp Xdup ProjX BackProj Noisy
                     Other0 Other1 Other2 Other3 Other4 Other5].freeze
-  # Names that can't live in the %w list above (spaces / quotes).
-  PURGED_NAMES_EXTRA = [ "Foo's Bar" ].freeze
+  # Names that can't live in the %w list above (spaces / quotes), and the File entities, named by
+  # path since 1.74.0 (write_models writes into app/models).
+  PURGED_NAMES_EXTRA = ([ "Foo's Bar" ] + PURGED_NAMES.grep(/\.rb\z/).map { |name| "app/models/#{name}" }).freeze
 
   before { purge_fixture_names }
   after { purge_fixture_names }
@@ -71,8 +72,8 @@ RSpec.describe "project-scoped entity names" do
         expect(import_payload(dir_b, project: "RepoB").success).to be true
       end
 
-      files = MemoryEntity.where(name: "account.rb", entity_type: "File")
-      classes = MemoryEntity.where(name: "Account", entity_type: "Class")
+      files = MemoryEntity.where(name: "app/models/account.rb", entity_type: "File")
+      classes = MemoryEntity.where(name: "Account", entity_type: "Model")
       expect(files.count).to eq(2)
       expect(classes.count).to eq(2)
       expect(files.map(&:project_id).uniq.size).to eq(2)
@@ -436,7 +437,7 @@ RSpec.describe "project-scoped entity names" do
                                     relation_type: "mixes_in")).to be true
 
       repo_d = MemoryEntity.find_by!(name: "RepoD", entity_type: "Project")
-      d_foo = MemoryEntity.find_by!(name: "Foo", entity_type: "Class", project_id: repo_d.id)
+      d_foo = MemoryEntity.find_by!(name: "Foo", entity_type: "Model", project_id: repo_d.id)
       expect(MemoryRelation.exists?(from_entity: bar, to_entity: d_foo,
                                     relation_type: "mixes_in")).to be false
     end
