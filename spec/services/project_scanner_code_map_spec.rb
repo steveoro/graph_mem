@@ -152,4 +152,16 @@ RSpec.describe ProjectScanner, "Rails code map" do
     expect(swimmer_fact.reload.status).to eq("active")
     expect(meet_fact.reload.status).to eq("obsolete")
   end
+
+  it "keeps a code entity's earlier scan fact that names another class where the scan filed it" do
+    answers["app/models/gadget/badge.rb"] = [ item("Gadget::Badge", "Class", "It belongs to a Swimmer.") ]
+    scan
+    fact = entity("Gadget::Badge").memory_observations.find_by!(content: "It belongs to a Swimmer.")
+
+    result = scan
+
+    expect(fact.reload).to have_attributes(status: "active", memory_entity_id: entity("Gadget::Badge").id)
+    expect(entity("Gadget::Swimmer").memory_observations.where(content: "It belongs to a Swimmer.")).to be_empty
+    expect(result.observations_moved).to eq(0)
+  end
 end

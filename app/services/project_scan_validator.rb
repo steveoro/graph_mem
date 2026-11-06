@@ -209,9 +209,14 @@ class ProjectScanValidator
       return { type: :keep }
     end
 
+    scan_sourced = from_project_scan_source?(observation.source)
+    # A Rails code map entity (1.75.0) was chosen by the code: the scan filed the fact under the
+    # class whose file it read, so a fact that names another class ("It belongs to a User.") is
+    # about this one and stays, neither moved nor obsoleted.
+    return { type: :keep } if scan_sourced && code_map_entity?(entity)
+
     candidates = find_observation_candidates(content, exclude: entity)
     best = select_best_candidate(candidates)
-    scan_sourced = from_project_scan_source?(observation.source)
 
     if candidates.size > 1
       return queue_move_review(observation, best, candidates, scan_sourced)
@@ -222,8 +227,8 @@ class ProjectScanValidator
                           : queue_move_review(observation, best, candidates, scan_sourced)
     end
 
-    # A Rails code map entity (1.75.0) was chosen by the code itself, not by the fact's wording: a
-    # fact on it that names no other entity ("Not meant to be instantiated directly.") stays.
+    # A manual fact on a code map entity that names no other entity stays too (one that does is
+    # only queued for a move review above, never moved silently).
     return { type: :keep } if code_map_entity?(entity)
 
     if scan_sourced
