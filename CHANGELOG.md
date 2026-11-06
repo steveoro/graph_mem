@@ -20,6 +20,7 @@ Rails role types for the AST importer (#159), the first PR of the Rails code-map
 
 ### Fixed
 - Two same-named files in different directories (two `badge.rb`) are no longer one File node.
+- An import's project scope is the existing Project root of exactly its name, never the fuzzy root suggestion: that search, on "<name> Project", matched any root named "… Project", so a `rails_ast:import` or `graphify:import` of `RepoC` matched (and, headless, merged) its classes into `Gadget Project`'s.
 
 ## [1.73.1] - 2026-11-05
 

@@ -107,6 +107,41 @@ RSpec.describe "Rails AST import: a family-aware claim guard" do
   end
 end
 
+RSpec.describe "Rails AST import: the project scope is the exact root" do
+  def import_repo(project, path, body)
+    Dir.mktmpdir do |dir|
+      FileUtils.mkdir_p(File.join(dir, File.dirname(path)))
+      File.write(File.join(dir, path), body)
+      payload = RailsAstExtractor.extract(dir, project_name: project)
+      result = GraphifyImporter.new(JSON.generate(payload), project_name: project).translate
+      match = ImportMatchingStrategy.new.match(result.import_data)
+      ImportExecutionStrategy.new.execute(result.import_data, GraphifyImporter.headless_decisions(match[:match_results]))
+    end
+  end
+
+  # The root's fuzzy search on "<name> Project" matched any root named "... Project" (score 37.5,
+  # "high"), so RepoC's classes were matched, and merged, into Gadget Project's.
+  it "never matches an import's code inside another project whose name fuzzily matches its root" do
+    expect(import_repo("Gadget Project", "app/models/synth_foo.rb", "class SynthFoo\nend\n").success).to be(true)
+
+    expect(import_repo("RepoC", "app/models/synth_foo.rb", "class SynthFoo\nend\n").success).to be(true)
+
+    gadget = MemoryEntity.find_by!(name: "Gadget Project", entity_type: "Project")
+    repo_c = MemoryEntity.find_by!(name: "RepoC", entity_type: "Project")
+    expect(MemoryEntity.where(name: "SynthFoo").pluck(:project_id)).to contain_exactly(gadget.id, repo_c.id)
+    expect(MemoryEntity.where(name: "app/models/synth_foo.rb").pluck(:project_id)).to contain_exactly(gadget.id, repo_c.id)
+  end
+
+  it "still scopes a re-import to its own existing root" do
+    expect(import_repo("Gadget Project", "app/models/synth_foo.rb", "class SynthFoo\nend\n").success).to be(true)
+
+    expect(import_repo("Gadget Project", "app/models/synth_foo.rb", "class SynthFoo\nend\n").success).to be(true)
+
+    expect(MemoryEntity.where(name: "SynthFoo").count).to eq(1)
+    expect(MemoryEntity.where(name: "Gadget Project", entity_type: "Project").count).to eq(1)
+  end
+end
+
 RSpec.describe ImportEntityResolver, ".resolved_code_type" do
   it "lets a specific role beat a generic code type, never the other way round" do
     expect(described_class.resolved_code_type("Class", "Model")).to eq("Model")
