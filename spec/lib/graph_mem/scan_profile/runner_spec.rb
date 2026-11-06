@@ -49,7 +49,7 @@ RSpec.describe GraphMem::ScanProfile::Runner do
     report = with_llm_provider(stub) { run }
 
     json = JSON.parse(File.read(File.join(report.dir, "report.json")))
-    expect(json).to include("schema_version" => 1, "graph_mem_version" => GraphMem::VERSION)
+    expect(json).to include("schema_version" => 2, "graph_mem_version" => GraphMem::VERSION)
     expect(json["backend"]).to include("chain" => "ollama", "left_machine" => false, "database_kept" => false)
     expect(json["runs"].map { |run| [ run["repo"], run["profile"], run["scans"].keys ] })
       .to eq([ [ "synth", "docs", %w[initial rescan] ], [ "synth", "code", %w[initial rescan] ] ])
