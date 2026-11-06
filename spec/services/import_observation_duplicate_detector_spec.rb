@@ -71,5 +71,17 @@ RSpec.describe ImportObservationDuplicateDetector, :with_test_embeddings do
       result = detector.find_duplicate(entity: entity, content: "Reworded imported fact")
       expect(result.duplicate).to be(false)
     end
+
+    it "compares only against embedded observations with only_embedded (1.76.0: project scans)" do
+      allow(EmbeddingService).to receive(:vector_enabled?).and_return(false)
+      MemoryObservation.create!(memory_entity: entity, content: "Unembedded code map fact")
+      allow(EmbeddingService).to receive(:vector_enabled?).and_return(true)
+      MemoryObservation.create!(memory_entity: entity, content: "Existing imported fact")
+
+      scan_detector = described_class.new(embedding_service: embedding_service, threshold: 0.35, only_embedded: true)
+
+      expect(scan_detector.find_duplicate(entity: entity, content: "Reworded imported fact").duplicate).to be(true)
+      expect(detector.find_duplicate(entity: entity, content: "Reworded imported fact").duplicate).to be(false)
+    end
   end
 end

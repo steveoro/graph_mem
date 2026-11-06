@@ -62,6 +62,7 @@ class ProjectScanner
     :noise_dropped,
     :type_mismatches,
     :code_map,
+    :observations_deduped,
     keyword_init: true
   ) do
     def initialize(success: true, status: "completed", message: nil, **kwargs)
@@ -97,7 +98,8 @@ class ProjectScanner
         partial: partial || false,
         noise_dropped: noise_dropped || {},
         type_mismatches: type_mismatches || 0,
-        code_map: code_map || {}
+        code_map: code_map || {},
+        observations_deduped: observations_deduped || 0
       }
     end
   end
@@ -142,6 +144,7 @@ class ProjectScanner
     @relations_deleted_count = 0
     @entities_reparented_count = 0
     @type_mismatches = 0
+    @observations_deduped = 0
     @validation_paused = false
     @extraction = {}
     @file_filter = ProjectScanFileFilter.new(@project_root)
@@ -201,6 +204,7 @@ class ProjectScanner
   include DeterministicExtraction
   include ProjectLinks
   include CodeSkeleton
+  include FactDedupe
 
   # Files the scan skipped because they left the root or are denylisted (ProjectScanFileFilter).
   def skip_counters
@@ -230,6 +234,7 @@ class ProjectScanner
       noise_dropped: @noise_dropped || {},
       type_mismatches: @type_mismatches,
       code_map: code_map_counts,
+      observations_deduped: @observations_deduped,
       **skip_counters,
       **@extraction.slice("parts_total", "parts_failed", "files_too_large", "files_over_budget").transform_keys(&:to_sym)
     )
@@ -496,7 +501,7 @@ class ProjectScanner
       text = content.to_s.strip
       next if text.blank? || existing_contents.include?(text)
 
-      next if @dry_run
+      next if @dry_run || reworded_duplicate?(entity, text)
 
       MemoryObservation.create!(
         memory_entity: entity,

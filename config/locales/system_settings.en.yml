@@ -216,6 +216,9 @@ en:
         project_scan_bytes_per_token:
           label: "Scan bytes per token"
           description: "How many bytes of a scanned file count as one token when the scan sizes its parts, 2.0-6.0 (no tokenizer is used). Lower it if parts come back with the prompt cut (smaller parts, more of them); raise it for fewer, fuller parts."
+        project_scan_fact_duplicate_max_distance:
+          label: "Scan reworded-fact distance"
+          description: "How close (semantic distance, 0.05-0.40) a fact a scan finds may be to one its entity already holds and still count as the same fact reworded, so a rescan doesn't add it again. Lower is stricter: 0.10 skips only near-identical wording; 0.40 may skip distinct facts with the same sentence shape. Without embeddings, only an exact repeat is skipped."
         tool_invocation_retention_days:
           label: "Tool telemetry retention (days)"
           description: "Tool invocation rows older than this are deleted by daily garbage collection. Use 0 to disable automatic telemetry pruning."

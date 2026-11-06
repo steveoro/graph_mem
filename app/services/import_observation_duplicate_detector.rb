@@ -16,9 +16,16 @@ class ImportObservationDuplicateDetector
     keyword_init: true
   )
 
-  def initialize(embedding_service: EmbeddingService.instance, threshold: AppSettings.import_observation_duplicate_max_distance)
+  # @param embedding_service [EmbeddingService]
+  # @param threshold [Float] the largest cosine distance that still counts as a duplicate
+  # @param only_embedded [Boolean] compare against the entity's embedded observations only, instead
+  #   of skipping the semantic check when one is still unembedded (1.76.0: project scans, whose Rails
+  #   code map facts wait for a deferred backfill)
+  def initialize(embedding_service: EmbeddingService.instance, threshold: AppSettings.import_observation_duplicate_max_distance,
+                 only_embedded: false)
     @embedding_service = embedding_service
     @threshold = threshold.to_f
+    @only_embedded = only_embedded
   end
 
   # @param entity [MemoryEntity] Target entity for the imported observation
@@ -41,7 +48,7 @@ class ImportObservationDuplicateDetector
     # whose deferred backfill has not run yet — cannot be compared
     # semantically. Degrade to the exact-content match above rather than
     # hard-failing the (re-)import; the backfill restores full dedup.
-    if observations.missing_embedding.exists?
+    if !@only_embedded && observations.missing_embedding.exists?
       Rails.logger.warn "ImportObservationDuplicateDetector: Entity '#{entity.name}' has " \
                         "unembedded observations; semantic de-duplication skipped (exact match only)"
       return Result.new(duplicate: false)
