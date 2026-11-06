@@ -5,6 +5,22 @@ All notable changes to GraphMem will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.74.0] - 2026-11-06
+
+Rails role types for the AST importer (#159), the first PR of the Rails code-map train.
+
+### Added
+- Eleven entity types for Rails code roles: Controller, Helper, Job, Mailer, Concern, View, Layout, Decorator, Validator, Strategy and Command (with their plural and common variants). A variant the `entity_type_mappings` table doesn't hold falls back to the code-owned vocabulary, so no `db:seed` is needed.
+
+### Changed
+- `rails_ast:import` (RailsAstExtractor) reads every Ruby dir of `app/` (except assets, javascript and views) and `lib/` (except tasks, generators, templates and assets), and types each constant by its Rails role instead of a generic Class. A file's main constant takes its directory's role (models → Model, controllers → Controller, …); concerns are Concern; other classes take the role of the first Rails base on their superclass chain. File entities are one per path and named by it.
+- "Specific beats generic": a Class or Module and a role type with the same name in one scope are one entity, which keeps the role type. An older import's `Class` is upgraded in place on re-import, with no rescan review row. Two different role types are never one entity, and a later declarer can't claim a stub other repos already declare with a family type.
+- Guided scans (the project-scan skill companion) use the role types: controllers are Controller (were Route), helpers Helper (were Service), and the architecture and UI depths no longer create `(Route)` / `(Service)` twins.
+- MCP: `graph_write` and `graph_edit` list the new types in their `entity_type` examples.
+
+### Fixed
+- Two same-named files in different directories (two `badge.rb`) are no longer one File node.
+
 ## [1.73.1] - 2026-11-05
 
 Project scan reconcile fixes found by the first real scan profile.
