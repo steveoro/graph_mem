@@ -118,6 +118,15 @@ class RailsAstExtractor
     end
   end
 
+  # @return [Hash{String => String}] after #extract: each class's superclass as first written
+  #   (`"GogglesDb::Badge" => "ApplicationRecord"`); constants declared without one are absent
+  def superclasses
+    @const_decls.each_with_object({}) do |(qualified, decls), found|
+      superclass = decls.find { |decl| decl[:superclass] }&.dig(:superclass)
+      found[qualified] = superclass.delete_prefix("::") if superclass
+    end
+  end
+
   # @return [Array<String>] after #extract: the relative paths skipped as too large or unparsable
   def unreadable_files
     @unreadable.dup
