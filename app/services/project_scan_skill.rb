@@ -324,6 +324,9 @@ class ProjectScanSkill
     type = ImportEntityResolver.canonical_type(type)
     return nil if name.blank? || type.blank?
 
+    family = code_family_child(name, type)
+    return update_child(family, description) if family
+
     unique_name = unique_name_for(name, type)
     project_id = @project_entity&.id
     existing = MemoryEntity.find_by(name: unique_name, entity_type: type, project_id: project_id)
@@ -352,6 +355,26 @@ class ProjectScanSkill
   # Same-name-different-type inside THIS project still gets the "(Type)"
   # suffix — but scoped names mean a same-named entity in another project
   # is not a collision any more, so cross-project lookups don't apply.
+  # The same name in this project typed with another code-family type (an AST import's Module or
+  # Class, the other depth's Controller): that entity, retyped by "specific beats generic"
+  # (ImportEntityResolver.resolved_code_type). Non-code types have no family: nil.
+  def code_family_child(name, type)
+    entity = ImportEntityResolver.code_type_collision(name.to_s.strip, type, project_id: @project_entity&.id)
+    return nil unless entity
+
+    target = ImportEntityResolver.resolved_code_type(entity.entity_type, type)
+    entity.update!(entity_type: target) if target != entity.entity_type && !@dry_run
+    entity
+  end
+
+  def update_child(entity, description)
+    return entity if @dry_run || description.blank? || entity.description.present?
+
+    entity.update!(description: description)
+    @updated_count += 1
+    entity
+  end
+
   def unique_name_for(name, type)
     base = name.to_s.strip
     scope = MemoryEntity.where(project_id: @project_entity&.id)
@@ -521,10 +544,13 @@ class ProjectScanSkill
     "Configuration"
   end
 
+  # The UI depth's types agree with the architecture depth's (1.74.0): one entity per controller or
+  # helper, not a `(Route)` / `(Service)` twin next to the Controller / Helper.
   def ui_type_for(relative)
     lowered = relative.downcase
-    return "Route" if lowered.include?("controller") || lowered.include?("routes.rb")
-    return "Service" if lowered.include?("helper")
+    return "Route" if lowered.include?("routes.rb")
+    return "Controller" if lowered.include?("controller")
+    return "Helper" if lowered.include?("helper")
     return "APIEndpoint" if lowered.include?("api")
 
     "Component"

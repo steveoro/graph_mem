@@ -3,18 +3,23 @@
 # Keeps import matching and execution aligned on canonical entity types.
 #
 # Code types are one family (1.74.0): Class, Module and the Rails role types
-# (GraphVocabulary::GENERIC_CODE_TYPES + RAILS_ROLE_TYPES). The same name in one scope typed with two
-# of them is one entity, and "specific beats generic": a stored Class/Module becomes the role type a
-# declaration brings (Class:GogglesDb::Badge -> Model), a stored role type is never made generic.
+# (GraphVocabulary::GENERIC_CODE_TYPES + RAILS_ROLE_TYPES). A generic type and a role type with the
+# same name in one scope are one entity, and "specific beats generic": a stored Class/Module becomes
+# the role type a declaration brings (Class:GogglesDb::Badge -> Model), a stored role type is never
+# made generic. Two different role types are never paired: a `Test` Model and a `Test` Component (a
+# views folder) stay two entities.
 class ImportEntityResolver
   CODE_TYPES = (GraphVocabulary::GENERIC_CODE_TYPES + GraphVocabulary::RAILS_ROLE_TYPES).uniq.freeze
 
   class << self
     # @param type [String] a canonical type
-    # @return [Array<String>] the other code types a same-named entity may carry (none for a
-    #   non-code type)
+    # @return [Array<String>] the other code types a same-named entity may carry: every other code
+    #   type for Class/Module, only Class and Module for a role type, none for a non-code type
     def sibling_types(type)
-      CODE_TYPES.include?(type) ? CODE_TYPES - [ type ] : []
+      return CODE_TYPES - [ type ] if generic_code_type?(type)
+      return GraphVocabulary::GENERIC_CODE_TYPES.dup if CODE_TYPES.include?(type)
+
+      []
     end
 
     # @param type [String, nil]

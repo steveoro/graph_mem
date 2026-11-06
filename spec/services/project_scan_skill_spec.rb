@@ -75,6 +75,43 @@ RSpec.describe ProjectScanSkill, type: :service do
     end
   end
 
+  def run_all_depths(operation)
+    ProjectScanSkill::DEPTH_ORDER.size.times do
+      operation.reload
+      described_class.process!(operation)
+      break if operation.reload.status == "completed"
+    end
+  end
+
+  it "keeps one entity per controller and helper across the architecture and UI depths (1.74.0)" do
+    with_scan_project do |root|
+      create_project_files(root)
+      FileUtils.mkdir_p(File.join(root, "app/helpers"))
+      File.write(File.join(root, "app/helpers/test_helper.rb"), "module TestHelper\nend\n")
+
+      run_all_depths(create_operation(root))
+
+      expect(MemoryEntity.where(name: "TestController").pluck(:entity_type)).to eq(%w[Controller])
+      expect(MemoryEntity.where(name: "TestHelper").pluck(:entity_type)).to eq(%w[Helper])
+      expect(MemoryEntity.where(name: [ "TestController (Route)", "TestHelper (Service)", "TestController (Controller)" ])).to be_empty
+    end
+  end
+
+  it "reuses a same-named code entity of the project and lets the specific type win (1.74.0)" do
+    with_scan_project do |root|
+      create_project_files(root)
+      project = MemoryEntity.create!(name: "Test Project", entity_type: "Project")
+      generic = MemoryEntity.create!(name: "Test", entity_type: "Class", project_id: project.id)
+
+      run_all_depths(create_operation(root))
+
+      expect(MemoryEntity.where(name: "Test").pluck(:id, :entity_type)).to eq([ [ generic.id, "Model" ] ])
+      # No `(Model)` / `(Class)` twin; the views folder stays its own `test (Component)` as before.
+      expect(MemoryEntity.where(name: [ "Test (Model)", "Test (Class)" ])).to be_empty
+      expect(MemoryEntity.find_by(name: "test (Component)")&.entity_type).to eq("Component")
+    end
+  end
+
   it "creates project and child entities across all depths" do
     with_scan_project do |root|
       create_project_files(root)
