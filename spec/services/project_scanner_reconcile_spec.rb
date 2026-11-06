@@ -38,6 +38,24 @@ RSpec.describe ProjectScanner, "reconcile" do
     expect(widget.memory_observations.pluck(:content)).to contain_exactly("SynthWidget renders gadget frames.", "SynthWidget keeps a FrameBuffer.")
   end
 
+  it "counts a name the model typed differently from the stored entity, in the result and one numbers-only line" do
+    items.push(item("SynthWidget", "Class", "SynthWidget renders gadget frames."),
+               item("synthwidget", "Component", "SynthWidget keeps a FrameBuffer."),
+               item("FrameBuffer", "Class", "FrameBuffer keeps the last frames."))
+    lines = []
+    allow(Rails.logger).to receive(:info).and_wrap_original do |original, *args, &block|
+      lines << args.first if args.first.to_s.start_with?("[scan] ")
+      original.call(*args, &block)
+    end
+
+    result = scan
+
+    expect(result.type_mismatches).to eq(1)
+    expect(result.to_h[:type_mismatches]).to eq(1)
+    expect(lines.grep(/type_mismatches/).sole).to match(/"ambiguous_project_roots":0,"type_mismatches":1\}\z/)
+    expect(lines.grep(/type_mismatches/).sole).not_to include("SynthWidget")
+  end
+
   it "reuses an entity an earlier scan made with another type" do
     project = MemoryEntity.create!(name: "Gadget Project", entity_type: "Project")
     MemoryEntity.create!(name: "SynthWidget", entity_type: "Module", project_id: project.id)
@@ -168,7 +186,7 @@ RSpec.describe ProjectScanner, "reconcile" do
       project = MemoryEntity.find_by!(name: "Gadget Project", project_id: nil)
       expect(result.errors).to be_empty
       expect(relations(project, dash) + relations(project, underscore)).to be_empty
-      expect(lines.grep(/ambiguous_project_roots/).sole).to match(/"ambiguous_project_roots":1\}\z/)
+      expect(lines.grep(/ambiguous_project_roots/).sole).to match(/"ambiguous_project_roots":1,"type_mismatches":0\}\z/)
       expect(lines.grep(/ambiguous_project_roots/).sole).not_to include("gadget")
     end
   end

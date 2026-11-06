@@ -60,6 +60,7 @@ class ProjectScanner
     :files_over_budget,
     :partial,
     :noise_dropped,
+    :type_mismatches,
     keyword_init: true
   ) do
     def initialize(success: true, status: "completed", message: nil, **kwargs)
@@ -93,7 +94,8 @@ class ProjectScanner
         files_too_large: files_too_large || 0,
         files_over_budget: files_over_budget || 0,
         partial: partial || false,
-        noise_dropped: noise_dropped || {}
+        noise_dropped: noise_dropped || {},
+        type_mismatches: type_mismatches || 0
       }
     end
   end
@@ -132,6 +134,7 @@ class ProjectScanner
     @observations_moved_count = 0
     @relations_deleted_count = 0
     @entities_reparented_count = 0
+    @type_mismatches = 0
     @validation_paused = false
     @extraction = {}
     @file_filter = ProjectScanFileFilter.new(@project_root)
@@ -214,6 +217,7 @@ class ProjectScanner
       fallback_reason: extracted[:fallback_reason],
       partial: partial?,
       noise_dropped: @noise_dropped || {},
+      type_mismatches: @type_mismatches,
       **skip_counters,
       **@extraction.slice("parts_total", "parts_failed", "files_too_large", "files_over_budget").transform_keys(&:to_sym)
     )
@@ -348,7 +352,7 @@ class ProjectScanner
       # later (or in another part) resolves.
       reconciled = architecture.filter_map { |item| reconcile_architecture_item(item) }
       reconciled.each { |entity, item| Array(item["relations"]).each { |rel| reconcile_relation(entity, rel) } }
-      report_ambiguous_roots!
+      report_reconcile_counts!
 
       # Only a complete scan saw every file: a partial one never obsoletes or queues a delete.
       unless @dry_run || partial?
@@ -435,6 +439,9 @@ class ProjectScanner
   def find_or_create_entity(name, type, entity_data)
     existing = MemoryEntity.find_by(name: name, project_id: @project_entity&.id)
     if existing
+      # Visible, not prevented: the model typed a stored entity differently (reported in the
+      # `[scan]` line and the result's type_mismatches).
+      @type_mismatches += 1 unless existing.entity_type.to_s.casecmp?(type.to_s)
       unless @dry_run
         updates = {}
         updates[:description] = entity_data["description"].to_s.strip if entity_data["description"].to_s.strip.present? && existing.description.blank?

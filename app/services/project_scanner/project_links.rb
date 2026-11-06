@@ -60,11 +60,13 @@ class ProjectScanner
       @ambiguous_root_names&.size.to_i
     end
 
-    # One numbers-only `[scan]` line when some names matched several roots (no names: logs stay clean).
-    def report_ambiguous_roots!
-      return unless ambiguous_root_names.positive?
+    # One numbers-only `[scan]` line for the reconcile's counters, when any is positive (no names: logs
+    # stay clean): names several roots matched, and stored entities the model typed differently.
+    def report_reconcile_counts!
+      counts = { ambiguous_project_roots: ambiguous_root_names, type_mismatches: @type_mismatches.to_i }
+      return unless counts.values.any?(&:positive?)
 
-      @logger.info("[scan] #{JSON.generate(scan_id: @scan_id, ambiguous_project_roots: ambiguous_root_names)}")
+      @logger.info("[scan] #{JSON.generate({ scan_id: @scan_id }.merge(counts))}")
     end
 
     def other_roots_by_key
