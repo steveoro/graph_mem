@@ -61,6 +61,7 @@ class ProjectScanner
     :partial,
     :noise_dropped,
     :type_mismatches,
+    :code_map,
     keyword_init: true
   ) do
     def initialize(success: true, status: "completed", message: nil, **kwargs)
@@ -95,7 +96,8 @@ class ProjectScanner
         files_over_budget: files_over_budget || 0,
         partial: partial || false,
         noise_dropped: noise_dropped || {},
-        type_mismatches: type_mismatches || 0
+        type_mismatches: type_mismatches || 0,
+        code_map: code_map || {}
       }
     end
   end
@@ -160,12 +162,15 @@ class ProjectScanner
     return failed_result("No readable files found in project root") if @discovered_files.empty?
 
     update_progress!(phase: "reading_files", message: "Reading #{@discovered_files.size} project files")
+    build_code_map!
     update_progress!(phase: "extracting_knowledge", message: "Extracting knowledge")
     extracted = extract_knowledge
     @extracted_data = filter_noise(extracted)
 
     update_progress!(phase: "reconciling_graph", message: partial? ? partial_message : "Reconciling with graph memory")
     reconcile(@extracted_data)
+    enqueue_code_map_backfill!
+    report_code_map!
     record_reconciled!(extracted)
     validate_and_finish(extracted)
   end
@@ -190,6 +195,7 @@ class ProjectScanner
   include LlmExtraction
   include DeterministicExtraction
   include ProjectLinks
+  include CodeSkeleton
 
   # Files the scan skipped because they left the root or are denylisted (ProjectScanFileFilter).
   def skip_counters
@@ -218,6 +224,7 @@ class ProjectScanner
       partial: partial?,
       noise_dropped: @noise_dropped || {},
       type_mismatches: @type_mismatches,
+      code_map: code_map_counts,
       **skip_counters,
       **@extraction.slice("parts_total", "parts_failed", "files_too_large", "files_over_budget").transform_keys(&:to_sym)
     )
@@ -347,6 +354,9 @@ class ProjectScanner
     ActiveRecord::Base.transaction do
       @project_entity = reconcile_project_root(project_data)
       return if @project_entity.nil? && !@dry_run
+
+      # A Rails project's code map first (1.75.0): the items below then find its entities.
+      write_code_skeleton!
 
       # Two passes: every entity first, then every relation, so a relation to an entity listed
       # later (or in another part) resolves.
@@ -534,6 +544,7 @@ class ProjectScanner
 
     @entities_by_path[name.downcase] ||
       MemoryEntity.find_by(name: name, project_id: @project_entity&.id) ||
+      code_map_target(name) ||
       other_project_root(name) ||
       MemoryEntity.find_by(name: name, project_id: nil) ||
       MemoryEntity.where(project_id: @project_entity&.id).where("aliases LIKE ?", "%#{name}%").first

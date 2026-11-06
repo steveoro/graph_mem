@@ -28,4 +28,26 @@ RSpec.describe ProjectScanner::ExtractionPrompt do
     expect(described_class.parse_json("{\"architecture\": [")).to be_nil
     expect(described_class.parse_json("")).to be_nil
   end
+
+  it "adds the code-map section (1.75.0) within its reserve, before the files, and counts the reserve only with a map" do
+    guide = { own: [ "Gadget::Badge (Model)" ], related: (1..300).map { |i| "Gadget::Widget#{i} (Model)" }, gems: true }
+
+    prompt = described_class.text("--- FILE: a.rb\n---\n", part: 1, parts: 1, project_name: "Gadget Project", guide: guide)
+    section = prompt[/Code entities defined.*?(?=\nFiles:)/m]
+
+    expect(section).to start_with("#{described_class::CODE_MAP_OWN}Gadget::Badge (Model)\n#{described_class::CODE_MAP_RELATED}Gadget::Widget1 (Model); ")
+    expect(section.bytesize).to be <= described_class::CODE_MAP_RESERVE_BYTES
+    expect(prompt.index("Code entities defined")).to be < prompt.index("Files:")
+    empty = described_class.text("", part: 999, parts: 999, project_name: "Gadget Project").bytesize
+    reserves = described_class::NAMES_RESERVE_BYTES + described_class::CODE_MAP_RESERVE_BYTES
+    expect(described_class.overhead_tokens("Gadget Project", code_map: true)).to eq(((empty + reserves) / 3.0).ceil)
+  end
+
+  it "lists only the gem rule when the guide holds no entity, and nothing without a guide" do
+    with_gems = described_class.text("", part: 1, parts: 1, project_name: "Gadget Project", guide: { own: [], related: [], gems: true })
+
+    expect(with_gems).to include(described_class::CODE_MAP_GEMS)
+    expect(with_gems).not_to include("Code entities defined")
+    expect(described_class.text("", part: 1, parts: 1, project_name: "Gadget Project")).not_to include(described_class::CODE_MAP_GEMS)
+  end
 end

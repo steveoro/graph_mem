@@ -185,6 +185,8 @@ class ProjectScanValidator
     entity.active_memory_observations.find_each do |observation|
       next if from_current_scan?(observation.source)
       next if observation.content.blank?
+      # The Rails code map's facts come from the code itself; its skeleton writer diffs them.
+      next if observation.source == RailsCodeMap::SOURCE
 
       action = resolve_observation_action(observation, entity)
       case action[:type]
@@ -350,6 +352,7 @@ class ProjectScanValidator
     entity.relations_from.find_each do |relation|
       next if from_current_scan?(relation.properties.to_h["source"])
       next if relation.properties.to_h["scan_id"] == @scan_id
+      next if relation.properties.to_h["source"] == RailsCodeMap::SOURCE
 
       if relation.relation_type == "part_of" && wrong_part_of_to_project_root?(relation)
         delete_relation(relation, "part_of to wrong project root")
