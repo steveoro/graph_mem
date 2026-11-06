@@ -33,7 +33,11 @@ class RailsAstExtractor
   include DslEmitters
 
   PRODUCER = "rails_ast_extractor"
-  SCANNED_DIRS = %w[app/models app/controllers].freeze
+  # 1.74.0: every Ruby dir under app/ (but assets, javascript and views) plus lib/ (but its tasks,
+  # generators, templates and assets), so helpers, jobs, mailers, services, strategies, … are typed
+  # by their Rails role (RailsAstExtractor::Roles). Before: app/models and app/controllers only.
+  EXCLUDED_APP_DIRS = %w[assets javascript views].freeze
+  EXCLUDED_LIB_DIRS = %w[lib/tasks lib/generators lib/templates lib/assets].freeze
   ROUTES_FILE = "config/routes.rb"
   RUBY_EXT = ".rb"
   ASSOCIATION_RELATIONS = {
@@ -55,13 +59,25 @@ class RailsAstExtractor
   }.freeze
   HTTP_VERBS = %w[get post put patch delete options head match].freeze
 
+  # @param repo_path [String]
+  # @param project_name [String]
+  # @return [Hash] the graphify-style node-link graph (see the class comment)
   def self.extract(repo_path, project_name: File.basename(File.expand_path(repo_path)))
     new(repo_path, project_name: project_name).extract
   end
 
-  def initialize(repo_path, project_name:)
+  # @param repo_path [String]
+  # @param project_name [String]
+  # @param dirs [Array<String>, nil] the dirs to read, relative to the repo (nil: the default set)
+  # @param keep [#call, nil] `keep.call(absolute_path)` false skips a file (the scan's file filter)
+  def initialize(repo_path, project_name:, dirs: nil, keep: nil)
     @repo = Pathname.new(File.expand_path(repo_path))
     @project_name = project_name
+    @dirs = dirs
+    @keep = keep
+    @roles = {}                                    # qualified => role type (after pass 1)
+    @concern_modules = Set.new                     # modules that `extend ActiveSupport::Concern`
+    @unreadable = []                               # relative paths too large or unparsable
     @nodes = []
     @links = []
     @node_ids = {} # "Type:label" => node id
@@ -79,6 +95,7 @@ class RailsAstExtractor
     files = ruby_files
     # Pass 1: index every declaration so pass 2 resolves order-independently.
     files.each { |f| index_file(f) }
+    assign_roles!
     files.each { |f| emit_file(f) }
     @parse_cache.clear # ASTs are only needed across the two passes
     scan_routes
@@ -93,11 +110,24 @@ class RailsAstExtractor
     }
   end
 
+  # @return [Hash{String => Array<Hash>}] after #extract: every declared constant's declarations,
+  #   `{ file:, line:, kind:, type: }` (kind "Class"/"Module" as written, type its Rails role)
+  def declarations
+    @const_decls.to_h do |qualified, decls|
+      [ qualified, decls.map { |decl| { file: decl[:file], line: decl[:line], kind: decl[:type], type: declared_type(qualified) } } ]
+    end
+  end
+
+  # @return [Array<String>] after #extract: the relative paths skipped as too large or unparsable
+  def unreadable_files
+    @unreadable.dup
+  end
+
   private
 
   def ruby_files
     repo_root = File.realpath(@repo.to_s)
-    SCANNED_DIRS.flat_map do |dir|
+    scanned_dirs.flat_map do |dir|
       base = @repo.join(dir)
       next [] unless base.directory?
 
@@ -105,9 +135,60 @@ class RailsAstExtractor
         # Only real files inside the repo root: a symlinked file (or a
         # symlinked directory) pointing outside must not leak another
         # tree's class/method names into the graph.
-        File.file?(file) && File.realpath(file).start_with?("#{repo_root}/")
+        File.file?(file) && File.realpath(file).start_with?("#{repo_root}/") && !excluded_lib_file?(file) &&
+          (@keep.nil? || @keep.call(file))
       end
-    end
+    end.uniq
+  end
+
+  def scanned_dirs
+    return @dirs if @dirs
+
+    app = @repo.join("app")
+    app_dirs = app.directory? ? app.children.select(&:directory?).map { |dir| "app/#{dir.basename}" }.sort : []
+    app_dirs.reject { |dir| EXCLUDED_APP_DIRS.include?(dir.delete_prefix("app/")) } + [ "lib" ]
+  end
+
+  def excluded_lib_file?(file)
+    rel = relative(file)
+    EXCLUDED_LIB_DIRS.any? { |dir| rel.start_with?("#{dir}/") }
+  end
+
+  # After pass 1: each declared constant's Rails role (RailsAstExtractor::Roles), so every node of it,
+  # stub or declaration, carries the same type (nodes are keyed on type + label).
+  def assign_roles!
+    @const_decls.each_key { |qualified| @roles[qualified] = role_of(qualified) }
+  end
+
+  def role_of(qualified)
+    decl = @const_decls[qualified].first
+    kind = decl[:type]
+    return "Concern" if kind == "Module" && @concern_modules.include?(qualified)
+
+    Roles.dir_role(decl[:file], qualified, kind) || (kind == "Class" && superclass_chain_role(qualified)) || kind
+  end
+
+  # The role the first SUPERCLASS_ROLES name on the chain gives, following the project's own
+  # classes (resolved like the `inherits` edges) up to Roles::MAX_CHAIN steps.
+  def superclass_chain_role(qualified, seen = Set.new)
+    return nil if seen.size >= Roles::MAX_CHAIN || !seen.add?(qualified)
+
+    decl = @const_decls[qualified].find { |entry| entry[:superclass] }
+    return nil unless decl
+
+    role = Roles.superclass_role(decl[:superclass])
+    return role if role
+
+    target = resolve_const(decl[:superclass], decl[:prefix])
+    return nil unless %i[resolved inferred].include?(target[:status]) && @const_decls.key?(target[:name])
+
+    superclass_chain_role(target[:name], seen) || own_dir_role(target[:name])
+  end
+
+  # A project superclass with a dir role (a model) gives its subclasses that role (STI).
+  def own_dir_role(qualified)
+    decl = @const_decls[qualified].first
+    Roles.dir_role(decl[:file], qualified, decl[:type]) if decl
   end
 
   MAX_FILE_BYTES = 2 * 1024 * 1024 # skip pathological files
@@ -120,11 +201,13 @@ class RailsAstExtractor
     @parse_cache[path] =
       if File.size(path) > MAX_FILE_BYTES
         @stats[:files_too_large] += 1
+        @unreadable << relative(path)
         nil
       elsif (parsed = Prism.parse_file(path)).success?
         parsed.value
       else
         @stats[:files_parse_failed] += 1
+        @unreadable << relative(path)
         nil
       end
   end
@@ -149,9 +232,8 @@ class RailsAstExtractor
         next if name.blank?
 
         qualified = qualified_name(const_prefix, name)
-        entity_type = stmt.is_a?(Prism::ModuleNode) ? "Module" : "Class"
         node_id = add_node(qualified, source_file: rel, source_location: line(stmt),
-                           entity_type: entity_type)
+                           entity_type: declared_type(qualified))
         add_containment(parent_for(file_id, const_prefix), node_id)
         emit_inherits(stmt, node_id, const_prefix, rel)
         walk_emit(Array(stmt.body&.body), file_id: node_id, rel: rel,
@@ -208,18 +290,21 @@ class RailsAstExtractor
              entity_type: declared_type(const_prefix.join("::")) || "Class")
   end
 
-  # The entity_type a qualified constant was DECLARED with (module vs
-  # class) — reusing it keeps stubs from duplicating the real node under
-  # a different type key (Module:Admin vs Class:Admin).
+  # The entity_type of a DECLARED constant: its Rails role (1.74.0; Model, Controller, …), else the
+  # kind it was declared with (Module vs Class). Reusing it keeps stubs from duplicating the real
+  # node under a different type key (Module:Admin vs Class:Admin, Class:Badge vs Model:Badge).
   def declared_type(qualified)
-    @const_decls[qualified].first&.dig(:type)
+    return nil unless @const_decls.key?(qualified)
+
+    @roles[qualified] || @const_decls[qualified].first&.dig(:type)
   end
 
   # ------------------------------------------------------------------
   # Node/edge primitives
   # ------------------------------------------------------------------
   def add_node(label, source_file:, source_location: nil, entity_type: nil, extra_obs: [], reference: false)
-    key = "#{entity_type}:#{label}"
+    # A File node is one per path (1.74.0): two badge.rb in different dirs are two files.
+    key = entity_type == "File" && source_file ? "File:#{source_file}" : "#{entity_type}:#{label}"
     if (existing = @node_ids[key])
       node = @nodes_by_id[existing]
       node["source_file"] ||= source_file

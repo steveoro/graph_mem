@@ -91,7 +91,7 @@ module ImportExecutionStrategy::Claims
   def retype_on_claim(entity, raw_type, node)
     return if node[:reference] == true || node["reference"] == true
 
-    canonical = ImportEntityResolver.canonical_type(raw_type)
+    canonical = ImportEntityResolver.resolved_code_type(entity.entity_type, ImportEntityResolver.canonical_type(raw_type))
     return if entity.entity_type == canonical
     return unless reference_stub_entity?(entity) || entity.project_id == @import_project_id
 

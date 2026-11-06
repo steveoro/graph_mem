@@ -394,7 +394,7 @@ class RailsAstExtractor
                    source_location: decl ? decl[:line] : nil,
                    entity_type: "Method")
     add_containment(add_node(ctrl_const, source_file: nil,
-                             entity_type: declared_type(ctrl_const) || "Class"), mid)
+                             entity_type: declared_type(ctrl_const) || "Controller"), mid)
     add_edge(rid, mid, "routes_to", confidence: "EXTRACTED", rel: rel,
              context: "routes_to #{ctrl_const}##{action}", call_line: line(stmt),
              properties: { "provenance" => "RAILS_DSL" })

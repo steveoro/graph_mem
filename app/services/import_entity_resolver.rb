@@ -1,8 +1,41 @@
 # frozen_string_literal: true
 
 # Keeps import matching and execution aligned on canonical entity types.
+#
+# Code types are one family (1.74.0): Class, Module and the Rails role types
+# (GraphVocabulary::GENERIC_CODE_TYPES + RAILS_ROLE_TYPES). The same name in one scope typed with two
+# of them is one entity, and "specific beats generic": a stored Class/Module becomes the role type a
+# declaration brings (Class:GogglesDb::Badge -> Model), a stored role type is never made generic.
 class ImportEntityResolver
+  CODE_TYPES = (GraphVocabulary::GENERIC_CODE_TYPES + GraphVocabulary::RAILS_ROLE_TYPES).uniq.freeze
+
   class << self
+    # @param type [String] a canonical type
+    # @return [Array<String>] the other code types a same-named entity may carry (none for a
+    #   non-code type)
+    def sibling_types(type)
+      CODE_TYPES.include?(type) ? CODE_TYPES - [ type ] : []
+    end
+
+    # @param type [String, nil]
+    # @return [Boolean] Class or Module
+    def generic_code_type?(type)
+      GraphVocabulary::GENERIC_CODE_TYPES.include?(type)
+    end
+
+    # The type a stored code entity ends up with when a declaration of `incoming` lands on it:
+    # specific beats generic; between two generic (Class<->Module) or two specific types, the
+    # incoming one (the callers only retype a same-scope leftover or a claimable stub).
+    #
+    # @param stored [String] the stored entity's type
+    # @param incoming [String] the declaration's canonical type
+    # @return [String]
+    def resolved_code_type(stored, incoming)
+      return stored if stored == incoming || (!generic_code_type?(stored) && generic_code_type?(incoming))
+
+      incoming
+    end
+
     def canonical_type(raw_type)
       EntityTypeMapping.canonicalize(raw_type) || raw_type.to_s.strip
     end
@@ -49,8 +82,7 @@ class ImportEntityResolver
       return stored if stored
 
       type = canonical_type(raw_type)
-      siblings = %w[Class Module].include?(type) ? %w[Class Module] - [ type ] : []
-      types = [ type ] + siblings
+      types = [ type ] + sibling_types(type)
 
       if project_id
         own = MemoryEntity.find_by(name: name, entity_type: types, project_id: project_id)
@@ -115,16 +147,17 @@ class ImportEntityResolver
       end
     end
 
-    # Read-only name-only lookup for Class↔Module same-name collisions —
-    # scoped to ONE project (project_id nil = the global namespace). A
-    # same-name pair in another project is not a collision any more.
+    # Read-only name-only lookup for same-name collisions inside the code family (Class↔Module, and
+    # since 1.74.0 Class/Module↔a Rails role type such as Model) — scoped to ONE project (project_id
+    # nil = the global namespace). A same-name pair in another project is not a collision any more.
     # Matching must NEVER write — this only returns the colliding entity;
-    # ImportExecutionStrategy decides whether retyping is allowed.
-    def class_module_collision(name, raw_type, project_id: nil)
-      type = canonical_type(raw_type)
-      return unless %w[Class Module].include?(type)
+    # ImportExecutionStrategy decides whether retyping is allowed (resolved_code_type).
+    def code_type_collision(name, raw_type, project_id: nil)
+      siblings = sibling_types(canonical_type(raw_type))
+      return if siblings.empty?
 
-      MemoryEntity.find_by(name: name, entity_type: %w[Class Module] - [ type ], project_id: project_id)
+      MemoryEntity.find_by(name: name, entity_type: siblings, project_id: project_id)
     end
+    alias_method :class_module_collision, :code_type_collision
   end
 end

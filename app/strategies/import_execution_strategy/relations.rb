@@ -117,18 +117,19 @@ module ImportExecutionStrategy::Relations
       types << (relation["from_type"] || relation[:from_type])
       types << (relation["to_type"] || relation[:to_type])
     end
-    # Class↔Module are one family for endpoint resolution: a payload may
+    # Code types are one family for endpoint resolution: a payload may
     # reference `Foo:Module` while the stored declaration is `Foo:Class`
-    # (mixin stubs emit Module; a claim can retype to Class). Fetch both
-    # and bucket them under one family key so either spelling resolves.
+    # (mixin stubs emit Module; a claim can retype to Class), or `Badge:Class`
+    # while it is stored as `Badge:Model` (1.74.0 role types). Fetch them all
+    # and bucket them under one family key so any spelling resolves.
     canonical_types = types.uniq.map { |type| ImportEntityResolver.canonical_type(type) }.uniq
-                           .flat_map { |t| %w[Class Module].include?(t) ? %w[Class Module] : [ t ] }.uniq
+                           .flat_map { |t| [ t ] + ImportEntityResolver.sibling_types(t) }.uniq
 
     grouped = {}
     MemoryEntity.where(name: names.uniq, entity_type: canonical_types)
                 .pluck(:name, :entity_type, :id, :project_id)
                 .each do |(name, entity_type, id, project_id)|
-      family = %w[Class Module].include?(entity_type) ? "class-module" : entity_type.to_s.downcase
+      family = ImportEntityResolver::CODE_TYPES.include?(entity_type) ? "class-module" : entity_type.to_s.downcase
       (grouped[[ name.to_s.downcase, family ]] ||= []) << [ id, project_id ]
     end
 
@@ -183,8 +184,9 @@ module ImportExecutionStrategy::Relations
   end
 
   def endpoint_key(name, raw_type)
-    type = ImportEntityResolver.canonical_type(raw_type).to_s.downcase
-    type = "class-module" if %w[class module].include?(type) # Class↔Module family
+    canonical = ImportEntityResolver.canonical_type(raw_type).to_s
+    # The code family (Class↔Module, and the 1.74.0 Rails role types) shares one key.
+    type = ImportEntityResolver::CODE_TYPES.include?(canonical) ? "class-module" : canonical.downcase
     [ name.to_s.downcase, type ]
   end
 
