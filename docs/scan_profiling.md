@@ -97,6 +97,13 @@ part, 2048 output tokens, 60–120 s per part). The report measures the real num
 
 All repos and both profiles take about 40–85 minutes, doubled by the rescan (`RESCAN=0` halves it).
 
+**On a CPU-only machine** (no usable GPU), generation is many times slower than on a GPU, more so for
+an 8B model than a 4B one, and a part can outlast the scan's 120 s request timeout: every part then
+fails and the scan falls back. When tested on a local workstation without GPU, giving parts more time
+and fewer, larger parts fixed it, for example `SETTINGS="summary_timeout=900;summary_num_ctx=16384"`
+(a 16K window fit goggles_api's docs in one part), and a small model such as `gemma3:4b` was much
+faster than `qwen3:8b`, with weaker answers.
+
 **Without a model** (to see the report's shape, or to check the task works),
 `script/scan_profile/fake_ollama.rb` answers `/api/generate` with the synth repo's canned answers.
 Only `synth` gives meaningful results with it:

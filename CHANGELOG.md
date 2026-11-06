@@ -5,6 +5,16 @@ All notable changes to GraphMem will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.73.1] - 2026-11-05
+
+Project scan reconcile fixes found by the first real scan profile.
+
+### Fixed
+- A name the model typed differently in two parts (or differently from an earlier scan) no longer fails with "Name has already been taken" and loses its observations: a project holds one entity per name, which keeps its first type. How often the model's type differed from the stored one is counted (`type_mismatches` in the scan's Ruby result and its numbers-only `[scan]` line).
+- A scan whose every part failed now reports the parts it tried (scan page, `scan_project_status` counters, profiler) instead of 0, and still falls back to the deterministic extraction.
+- A project-like item (typed as a project, a gem or a framework) that names another Project root (say `goggles_db` in goggles_api's Gemfile; case, `-` and `_` ignored, aliases included) no longer creates an entity inside the scanned project: the scanned root gets one `depends_on` to that root and nothing is written to the other project; a `part_of` into another root is never written. Other items sharing a root's name stay local, relations resolve to the scanned project's own entities first, and a name two roots share links to neither. Without such a root, an item typed as a project (Project, repository, codebase, …) becomes a Component instead of a second Project-typed entity, and an item naming the scanned project folds into its root.
+- A complete scan now queues the `delete_entity` review row for an entity it no longer finds, after obsoleting that entity's scan facts (the check read a stale association, so the row was never queued).
+
 ## [1.73.0] - 2026-11-05
 
 F-3b scan profiling and tuning (#157).

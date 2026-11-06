@@ -39,7 +39,8 @@ class ProjectScanner
       return { data: outcome.data } if outcome.data
 
       reason = outcome.first_error
-      fallback_extraction(reason, reason == "LLM response was not valid JSON" ? "LLM response was not valid JSON" : "LLM extraction failed")
+      fallback_extraction(reason, reason == "LLM response was not valid JSON" ? "LLM response was not valid JSON" : "LLM extraction failed",
+                          outcome: outcome)
     end
 
     # The LLM extraction without NoiseFilter's noise (F-3b); the deterministic fallback as it is.
@@ -54,10 +55,12 @@ class ProjectScanner
       data
     end
 
-    def fallback_extraction(reason, message)
+    # @param outcome [ChunkedExtraction::Outcome, nil] the parts that failed before the fallback,
+    #   kept in details["extraction"] (parts_total, parts_failed); nil when no part was sent
+    def fallback_extraction(reason, message, outcome: nil)
       whole = whole_plan
       @context_text = whole.context_text
-      record_extraction(plan: whole, fallback: true)
+      record_extraction(plan: whole, outcome: outcome, fallback: true)
       update_progress!(phase: "fallback_extraction", message: "#{message}; using deterministic fallback")
       { data: deterministic_extraction, fallback: true, fallback_reason: reason }
     end
