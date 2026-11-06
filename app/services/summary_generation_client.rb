@@ -58,6 +58,9 @@ class SummaryGenerationClient
   #   - `format:` (String, Ollama only) "json" asks Ollama for JSON output;
   #   - `truncate:` (Boolean, Ollama only) false asks Ollama to refuse an over-long prompt instead of
   #     dropping its start;
+  #   - `think:` (Boolean, Ollama only) false by default (1.75.0): a thinking model (gemma4, qwen3, …)
+  #     otherwise spends the num_predict budget on hidden reasoning and answers empty or cut; a model
+  #     without thinking accepts the flag;
   #   - `timeout:` (Integer seconds) the read timeout of this request only;
   #   - `max_output_length:` (Integer, or nil for no cut) the characters kept, MAX_OUTPUT_LENGTH by default
   # @return [Hash] `{ ok:, text:, error:, latency_ms:, prompt_tokens:, done_reason: }`; `prompt_tokens`
@@ -125,6 +128,7 @@ class SummaryGenerationClient
     }
     payload[:format] = options[:format].to_s if options[:format].present?
     payload[:truncate] = options[:truncate] == true unless options[:truncate].nil?
+    payload[:think] = options[:think] == true
 
     body = perform_request(uri, payload, timeout: options[:timeout])
     { text: body["response"].to_s.strip.presence, prompt_tokens: body["prompt_eval_count"]&.to_i, done_reason: body["done_reason"]&.to_s }

@@ -107,9 +107,26 @@ RSpec.describe SummaryGenerationClient do
         described_class.generate("Summarize these facts.", style: "detailed")
 
         expect(bodies.last).to eq(
-          "model" => "qwen3:8b", "prompt" => "Summarize these facts.", "stream" => false,
+          "model" => "qwen3:8b", "prompt" => "Summarize these facts.", "stream" => false, "think" => false,
           "options" => { "temperature" => 0.3, "num_predict" => 128, "num_ctx" => 8192 }
         )
+      end
+
+      it "turns a thinking model's thinking off unless the caller asks for it (1.75.0)" do
+        described_class.generate("Extract these files.", options: { num_predict: 2048 })
+        expect(bodies.last["think"]).to be false
+
+        described_class.generate("Extract these files.", options: { think: true })
+        expect(bodies.last["think"]).to be true
+        expect(bodies.last["options"]).not_to have_key("think")
+      end
+
+      it "sends no think flag on the OpenAI-compatible path" do
+        AppSettings.summary_provider = "openai_compatible"
+        described_class.reset_instance!
+        described_class.generate("Extract these files.", options: { think: false })
+
+        expect(bodies.last).not_to have_key("think")
       end
     end
 
