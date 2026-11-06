@@ -73,6 +73,40 @@ RSpec.describe "Rails AST import with Rails role types" do
   end
 end
 
+RSpec.describe "Rails AST import: a family-aware claim guard" do
+  def import_repo(project, files)
+    Dir.mktmpdir do |dir|
+      files.each do |path, body|
+        FileUtils.mkdir_p(File.join(dir, File.dirname(path)))
+        File.write(File.join(dir, path), body)
+      end
+      payload = RailsAstExtractor.extract(dir, project_name: project)
+      result = GraphifyImporter.new(JSON.generate(payload), project_name: project).translate
+      match = ImportMatchingStrategy.new.match(result.import_data)
+      ImportExecutionStrategy.new.execute(result.import_data, GraphifyImporter.headless_decisions(match[:match_results]))
+    end
+  end
+
+  # M6 (project_scoped_names_spec) with role types: two repos declare `class SynthFoo` in app/models
+  # (Model), a third includes it (a global Module stub, ambiguous), and a later repo declares a plain
+  # `class SynthFoo` in lib/ (Class), which must not claim that stub.
+  it "doesn't let a generic newcomer claim a stub two repos declare with a role type (Graphy, #159)" do
+    model = { "app/models/synth_foo.rb" => "class SynthFoo\nend\n" }
+    expect(import_repo("RepoA", model).success).to be(true)
+    expect(import_repo("RepoC", model).success).to be(true)
+    expect(import_repo("RepoB", { "app/models/synth_bar.rb" => "class SynthBar\n  include SynthFoo\nend\n" }).success).to be(true)
+    stub = MemoryEntity.find_by!(name: "SynthFoo", project_id: nil)
+    bar = MemoryEntity.find_by!(name: "SynthBar")
+
+    expect(import_repo("RepoD", { "lib/synth_foo.rb" => "class SynthFoo\nend\n" }).success).to be(true)
+
+    late_root = MemoryEntity.find_by!(name: "RepoD", entity_type: "Project")
+    expect(stub.reload.project_id).to be_nil
+    expect(MemoryRelation.exists?(from_entity_id: bar.id, to_entity_id: stub.id, relation_type: "mixes_in")).to be(true)
+    expect(MemoryEntity.where(name: "SynthFoo", project_id: late_root.id).pluck(:entity_type)).to eq(%w[Class])
+  end
+end
+
 RSpec.describe ImportEntityResolver, ".resolved_code_type" do
   it "lets a specific role beat a generic code type, never the other way round" do
     expect(described_class.resolved_code_type("Class", "Model")).to eq("Model")
@@ -86,9 +120,10 @@ RSpec.describe ImportEntityResolver, ".resolved_code_type" do
     expect(described_class.resolved_code_type("Model", "Model")).to eq("Model")
   end
 
-  it "groups Class, Module and the role types as one sibling family, and nothing else" do
+  it "pairs a generic code type with any role type, a role type only with Class and Module, nothing else" do
     expect(described_class.sibling_types("Class")).to include("Module", "Model", "Controller", "Strategy")
-    expect(described_class.sibling_types("Model")).to include("Class", "Module")
+    expect(described_class.sibling_types("Model")).to eq(%w[Class Module])
+    expect(described_class.sibling_types("Component")).not_to include("Model")
     expect(described_class.sibling_types("Issue")).to eq([])
   end
 end
