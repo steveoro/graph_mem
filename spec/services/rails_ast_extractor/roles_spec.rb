@@ -37,4 +37,10 @@ RSpec.describe RailsAstExtractor::Roles do
     expect(described_class.superclass_role("Grape::API")).to eq("APIEndpoint")
     expect(described_class.superclass_role("StandardError")).to be_nil
   end
+
+  it "matches a path with a digit segment, which the class name doesn't underscore back to (1.75.0)" do
+    expect(described_class.main_constant?("app/models/goggles_db/best_50m_result.rb", "app/models", "GogglesDb::Best50mResult")).to be(true)
+    expect(described_class.dir_role("app/models/goggles_db/best_50m_result.rb", "GogglesDb::Best50mResult", "Class")).to eq("Model")
+    expect(described_class.main_constant?("app/models/goggles_db/best_50m_result.rb", "app/models", "GogglesDb::BestResult")).to be(false)
+  end
 end

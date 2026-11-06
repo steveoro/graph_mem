@@ -24,6 +24,12 @@ RSpec.describe GraphMem::ScanProfile::Progress do
                           "in 62 s; split in two" ])
   end
 
+  it "prints a step once when the scan reports it twice in a row" do
+    2.times { progress.phase("completed", "Partial: 2 of 8 parts failed; nothing was marked missing") }
+
+    expect(lines).to eq([ "[scan_profile] synth code initial: Partial: 2 of 8 parts failed; nothing was marked missing" ])
+  end
+
   it "prints a heartbeat with the current step while the scan runs, and stops with it" do
     stub_const("#{described_class}::HEARTBEAT_SECONDS", 0.01)
 

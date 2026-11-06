@@ -50,6 +50,8 @@ module GraphMem
       # @param message [String]
       # @return [void]
       def phase(_phase, message)
+        return if message.to_s == @step
+
         @step = message.to_s
         say(@step)
       end

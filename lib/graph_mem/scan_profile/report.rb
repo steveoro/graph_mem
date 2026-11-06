@@ -147,7 +147,8 @@ module GraphMem
 
       # Entities, items mapped, items dropped; "-" for a scan without a code map.
       def code_map_cell(stats)
-        counts = stats["code_map"].to_h
+        # Symbol keys from the run, string keys from a parsed report.json.
+        counts = stats["code_map"].to_h.transform_keys(&:to_s)
         counts.empty? ? "-" : counts.values_at("entities", "items_mapped", "items_dropped").map(&:to_i).join("/")
       end
 

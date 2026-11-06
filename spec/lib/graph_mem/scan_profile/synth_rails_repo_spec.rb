@@ -23,6 +23,7 @@ RSpec.describe GraphMem::ScanProfile::SynthRailsRepo do
   def profile(repos)
     options = GraphMem::ScanProfile::Options.parse({ "REPOS" => repos, "REPORT_DIR" => @dir }, manifest: manifest)
     report = with_llm_provider(stub) { GraphMem::ScanProfile::Runner.new(options: options, manifest: manifest, out: nil).call }
+    @markdown = File.read(File.join(report.dir, "report.md"))
     JSON.parse(File.read(File.join(report.dir, "report.json")))["runs"]
   end
 
@@ -64,6 +65,8 @@ RSpec.describe GraphMem::ScanProfile::SynthRailsRepo do
     docs = runs.first
     expect(docs["graph"].find { |entity| entity["name"] == "grape" }["type"]).to eq("Gem")
     expect(docs["scans"]["initial"]["code_map"]).to include("items_dropped" => 1, "gems_typed" => 2)
+    mapped = docs["scans"]["initial"]["code_map"]["items_mapped"]
+    expect(@markdown).to include("| 15/#{mapped}/1 |")
   end
 
   it "leaves synth's numbers as they were: no code map" do
