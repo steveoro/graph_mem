@@ -128,4 +128,14 @@ RSpec.describe ProjectScanner, "Rails code map" do
     expect(result.code_map).to eq({})
     expect(provider.calls.map(&:prompt).join).not_to include("Code entities defined")
   end
+
+  it "doesn't bind a target the map doesn't know to a class whose path alias contains it" do
+    answers["app/models/gadget/badge.rb"] = [ item("Gadget::Badge", "Class", "Badge belongs to a swimmer.",
+                                                   relations: [ { to: "Swimmers", type: "relates_to" }, { to: "Importer", type: "relates_to" } ]) ]
+
+    scan
+
+    badge = entity("Gadget::Badge")
+    expect(MemoryRelation.where(from_entity_id: badge.id, relation_type: "relates_to")).to be_empty
+  end
 end

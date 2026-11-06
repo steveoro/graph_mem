@@ -552,7 +552,18 @@ class ProjectScanner
       code_map_target(name) ||
       other_project_root(name) ||
       MemoryEntity.find_by(name: name, project_id: nil) ||
-      MemoryEntity.where(project_id: @project_entity&.id).where("aliases LIKE ?", "%#{name}%").first
+      alias_target(name)
+  end
+
+  # An entity of the project whose aliases hold the name. With a Rails code map (1.75.0) only a
+  # whole alias counts: the skeleton stores path aliases (`goggles_db/importers/badge`), and a
+  # substring match would bind a target the map doesn't know (`Importer`, `Swimmers`) to any class
+  # whose path contains it.
+  def alias_target(name)
+    scope = MemoryEntity.where(project_id: @project_entity&.id).where("aliases LIKE ?", "%#{name}%")
+    return scope.first if code_map.empty?
+
+    scope.find { |entity| entity.aliases.to_s.split(/[,|;]/).any? { |known| known.strip.casecmp?(name) } }
   end
 
   def relation_exists?(from, to, relation_type)

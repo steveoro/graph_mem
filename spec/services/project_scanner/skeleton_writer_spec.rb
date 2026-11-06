@@ -124,4 +124,35 @@ RSpec.describe ProjectScanner::SkeletonWriter do
     expect(writer.errors.sole).to start_with("Code map: failed to write Gadget::RenderJob")
     expect(MemoryEntity.where(project_id: root.id).count).to eq(14)
   end
+
+  it "retires nothing in a run where an entry failed, and doesn't count the rolled-back create" do
+    write(build_map)
+    job = entity("Gadget::RenderJob")
+    allow(MemoryEntity).to receive(:find_by).and_wrap_original do |original, **attributes|
+      raise ActiveRecord::StatementInvalid, "synthetic failure" if attributes[:name] == "Gadget::RenderJob"
+
+      original.call(**attributes)
+    end
+
+    writer = write(build_map("app/models/gadget/badge.rb" => "module Gadget\n  class Badge < ApplicationRecord\n  end\nend\n"))
+
+    expect(writer.errors.sole).to start_with("Code map: failed to write Gadget::RenderJob")
+    expect(job.memory_observations.active.count).to eq(1)
+    expect(writer.review_items).to be_empty
+  end
+
+  it "keeps a rolled-back create out of the counts and the created ids" do
+    allow(MemoryObservation).to receive(:create!).and_wrap_original do |original, **attributes|
+      raise ActiveRecord::RecordInvalid, MemoryObservation.new if attributes[:content].to_s.include?("render_job.rb")
+
+      original.call(**attributes)
+    end
+
+    writer = write(build_map)
+
+    expect(writer.errors.sole).to start_with("Code map: failed to write Gadget::RenderJob")
+    expect(MemoryEntity.where(name: "Gadget::RenderJob")).to be_empty
+    expect(writer.counts).to include(entities_created: 14)
+    expect(writer.created_ids.size).to eq(14)
+  end
 end

@@ -20,8 +20,9 @@ class ProjectScanner
   #   scan's missing-entity pass then queues the entity for review).
   #
   # Nothing is retired (no obsolete fact or review item for a gone entry or relation) when the map
-  # is incomplete, or for an entity whose file the extractor couldn't read. An entry that fails is
-  # rolled back to its savepoint and reported; the others still land.
+  # is incomplete, when any entry failed in this run (its live facts would look gone), or for an
+  # entity whose file the extractor couldn't read. An entry that fails is rolled back to its
+  # savepoint, with its counts, and reported; the others still land.
   #
   #   writer = ProjectScanner::SkeletonWriter.new(map: map, root: project, scan_id: id).call
   #   writer.entities["GogglesDb::Badge"] # => #<MemoryEntity …>
@@ -75,9 +76,11 @@ class ProjectScanner
 
     private
 
-    def retiring? = @map.complete?
+    def retiring? = @map.complete? && @errors.empty?
 
     def write_entry(entry)
+      counts = @counts.dup
+      created = @created_ids.dup
       ActiveRecord::Base.transaction(requires_new: true) do
         entity = entity_for(entry)
         ensure_parent(entity)
@@ -85,6 +88,9 @@ class ProjectScanner
         @entities[entry.name] = entity
       end
     rescue StandardError => e
+      # The savepoint undid the rows: undo the counts too.
+      @counts = counts
+      @created_ids = created
       @entities.delete(entry.name)
       @errors << "Code map: failed to write #{entry.name}: #{e.message}"
     end
