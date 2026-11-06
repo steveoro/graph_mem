@@ -149,4 +149,17 @@ RSpec.describe GraphMem::ScanProfile::Sandbox do
       expect(allowed).to be(false)
     end
   end
+
+  it "embeds new facts only when the embedding endpoint is on this machine (1.76.0)" do
+    seen = {}
+    { "http://127.0.0.1:11434" => :loopback, "http://[::1]:11434" => :ipv6, "https://embeddings.example:443" => :remote }.each do |url, label|
+      allow(EmbeddingConfig).to receive(:resolved_config).and_return({ url: url, model: "synth-embed", provider: "ollama", dims: 768 })
+      described_class.new(base_config: base_config).run do |sandbox|
+        seen[label] = [ sandbox.embeddings, EmbeddingService.inline_embeddings_suppressed? ]
+      end
+    end
+
+    expect(seen).to eq(loopback: [ "local", false ], ipv6: [ "local", false ], remote: [ "off", true ])
+    expect(EmbeddingService.inline_embeddings_suppressed?).to be(false)
+  end
 end

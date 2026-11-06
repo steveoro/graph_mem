@@ -8,7 +8,10 @@ module GraphMem
     #   (unless keep_db); the configured database is never connected to;
     # - runs jobs on the :test adapter (nothing reaches Solid Queue; #enqueued counts them);
     # - gives Rails.cache and the settings cache a private memory store (the run's settings and
-    #   LLM usage counters never reach the app's cache), and skips inline embeddings.
+    #   LLM usage counters never reach the app's cache);
+    # - embeds new facts inline only when the embedding endpoint is on this machine (1.76.0: a scan
+    #   skips reworded facts by embedding distance, so a rescan's churn needs them), else skips
+    #   inline embeddings as before (#embeddings says which).
     # It refuses production, a target without the suffix (or the configured name itself), a
     # non-MariaDB adapter, and an existing database the profiler didn't make.
     #
@@ -24,6 +27,7 @@ module GraphMem
       # Tables reset_graph! keeps between runs.
       KEPT_TABLES = %w[ar_internal_metadata schema_migrations settings].freeze
       STRUCTURE = Rails.root.join("db/structure.sql")
+      LOOPBACK_HOSTS = %w[localhost 127.0.0.1 ::1].freeze
 
       # Raised when the run may not start (or a write would reach another database).
       class Refused < StandardError; end
@@ -36,6 +40,10 @@ module GraphMem
 
       # @return [String] the throwaway database's name
       attr_reader :target
+
+      # @return [String, nil] during #run: "local" when new facts are embedded (the embedding endpoint
+      #   is a loopback address), "off" when inline embeddings are skipped
+      attr_reader :embeddings
 
       # @param env [String] the Rails environment
       # @param base_config [ActiveRecord::DatabaseConfigurations::DatabaseConfig] the primary
@@ -183,12 +191,25 @@ module GraphMem
         Rails.cache = RailsSettings.config.cache_storage = ActiveSupport::Cache::MemoryStore.new
         reset_memos!
         @started_on = Llm::Budget.today
-        EmbeddingService.suppress_inline_embeddings { yield }
+        # The embedding client reads its endpoint from the throwaway database's (empty) settings,
+        # then ENV, never from the app database's.
+        EmbeddingService.reset_instance!
+        @embeddings = local_embeddings? ? "local" : "off"
+        @embeddings == "local" ? yield : EmbeddingService.suppress_inline_embeddings { yield }
       ensure
         ActiveJob::Base.queue_adapter = previous[:adapter]
         Rails.cache = previous[:cache]
         RailsSettings.config.cache_storage = previous[:settings_cache]
         reset_memos!
+        EmbeddingService.reset_instance!
+      end
+
+      # Nothing leaves the machine: embeddings only from a loopback endpoint.
+      def local_embeddings?
+        host = URI.parse(EmbeddingConfig.resolved_config[:url].to_s).host.to_s.downcase.delete_prefix("[").delete_suffix("]")
+        LOOPBACK_HOSTS.include?(host) || host.start_with?("127.")
+      rescue URI::InvalidURIError
+        false
       end
 
       # Class-level memos of database rows: the throwaway database's must not outlive the run.

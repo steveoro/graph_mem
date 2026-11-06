@@ -34,7 +34,8 @@ module GraphMem
       const_set(:SETTING_KEY, /\A(summary_\w+|llm_(?!chain_|budget_|inline_)\w+)\z/)
 
       # The scan settings SWEEP may vary (project_scan_<key>), with AppSettings' ranges.
-      const_set(:SWEEP_RANGES, { "bytes_per_token" => 2.0..6.0, "chunk_output_tokens" => 512..8192, "max_chunks" => 1..64 }.freeze)
+      const_set(:SWEEP_RANGES, { "bytes_per_token" => 2.0..6.0, "chunk_output_tokens" => 512..8192, "max_chunks" => 1..64,
+                                 "fact_duplicate_max_distance" => 0.05..0.4 }.freeze)
 
       # @param env [Hash{String => String}]
       # @param manifest [Manifest]
