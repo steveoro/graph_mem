@@ -35,8 +35,28 @@ module GraphVocabulary
     "Gem" => %w[gem gems rubygem],
     "Tool" => %w[tool tools],
     "Resource" => %w[resource resources],
-    "Documentation" => %w[documentation docs doc readme]
+    "Documentation" => %w[documentation docs doc readme],
+    # Rails code roles (1.74.0): what a Rails convention (directory or superclass) makes a constant.
+    # Appended last so the type lists other tools publish only grow at their end.
+    "Controller" => %w[controller controllers],
+    "Helper" => %w[helper helpers view_helper],
+    "Job" => %w[job jobs background_job active_job activejob],
+    "Mailer" => %w[mailer mailers],
+    "Concern" => %w[concern concerns],
+    "View" => %w[view views template templates partial partials],
+    "Layout" => %w[layout layouts],
+    "Decorator" => %w[decorator decorators],
+    "Validator" => %w[validator validators],
+    "Strategy" => %w[strategy strategies],
+    "Command" => %w[command commands]
   }.freeze
+  # The Rails role types (1.74.0): more specific than a generic Class or Module. "Specific beats
+  # generic": the same name in one project, typed Class/Module once and a role type once, is one
+  # entity of the role type (imports and scans).
+  RAILS_ROLE_TYPES = %w[Model Controller Helper Job Mailer Concern View Layout Decorator Validator Strategy Command
+                        Service Component APIEndpoint].freeze
+  # The generic code types a role type refines.
+  GENERIC_CODE_TYPES = %w[Class Module].freeze
   RELATION_TYPE_MAPPINGS = {
     # NOTE: `contains` is NOT a `part_of` variant — the direction is inverted
     # (`File -[contains]-> Class` would wrongly canonicalize to the file being

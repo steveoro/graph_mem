@@ -435,7 +435,13 @@ Data-exchange import matching and execution share the same canonicalization via 
 | PossibleSolution | solution, workaround, fix |
 | Service | service |
 | Component | component, widget |
-| ... | (see `db/seeds/entity_type_mappings.rb` for full list) |
+| Model | model, models, activerecord_model |
+| Controller, Helper, Job, Mailer, Concern | controller(s), helper(s), job(s)/active_job, mailer(s), concern(s) (1.74.0) |
+| View, Layout | view(s), template(s), partial(s); layout(s) (1.74.0) |
+| Decorator, Validator, Strategy, Command | decorator(s), validator(s), strategy/strategies, command(s) (1.74.0) |
+| ... | (see `app/lib/graph_vocabulary.rb` for the full list; `db/seeds/entity_type_mappings.rb` seeds it) |
+
+A variant the `entity_type_mappings` table doesn't hold falls back to the code-owned vocabulary (`GraphVocabulary`), so types added in a release canonicalize before `bin/rails db:seed` is run again (1.74.0).
 
 ## Vector Search Architecture
 

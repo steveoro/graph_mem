@@ -9,6 +9,22 @@ RSpec.describe GraphVocabulary do
                                                        "caused_by")
   end
 
+  it "appends the Rails role types (1.74.0) after the earlier types" do
+    roles = %w[Controller Helper Job Mailer Concern View Layout Decorator Validator Strategy Command]
+
+    expect(described_class::ENTITY_TYPES.last(roles.size)).to eq(roles)
+    expect(described_class::RAILS_ROLE_TYPES).to include("Model", *roles)
+    expect(described_class::RAILS_ROLE_TYPES - described_class::ENTITY_TYPES).to be_empty
+    expect(described_class::GENERIC_CODE_TYPES).to eq(%w[Class Module])
+  end
+
+  it "maps no variant to two canonical types" do
+    owners = described_class::ENTITY_TYPE_MAPPINGS.flat_map { |type, variants| ([ type.downcase ] + variants).uniq.map { |variant| [ variant, type ] } }
+    clashes = owners.group_by(&:first).select { |_variant, pairs| pairs.map(&:last).uniq.size > 1 }
+
+    expect(clashes).to be_empty
+  end
+
   it "keeps forward causal verbs out of caused_by variants (direction guard)" do
     # `led_to`/`resulted_in`/`triggered` read FORWARD; canonicalizing them
     # into backward-reading `caused_by` would store edges inverted.

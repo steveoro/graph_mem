@@ -11,7 +11,12 @@ class EntityTypeMapping < ApplicationRecord
   # instead of needing a restart.
   CANONICALIZE_TTL = 60.seconds
 
-  # Returns the canonical type for a given variant string, or nil if no mapping exists.
+  # Returns the canonical type for a given variant string, or nil if no mapping exists. A variant
+  # the table doesn't hold falls back to the code-owned vocabulary (GraphVocabulary), so types
+  # added in a release (1.74.0's Rails roles) canonicalize before `db:seed` is run again.
+  #
+  # @param raw_type [String, nil]
+  # @return [String, nil]
   def self.canonicalize(raw_type)
     return nil if raw_type.blank?
 
@@ -20,10 +25,17 @@ class EntityTypeMapping < ApplicationRecord
     entry = @canonical_cache[key]
     return entry[:value] if entry && entry[:at] > CANONICALIZE_TTL.ago
 
-    value = find_by("LOWER(variant) = ?", key)&.canonical_type
+    value = find_by("LOWER(variant) = ?", key)&.canonical_type || vocabulary_type(key)
     @canonical_cache[key] = { value: value, at: Time.current }
     value
   end
+
+  # @param key [String] a downcased variant
+  # @return [String, nil] the GraphVocabulary canonical type the variant (or type name) belongs to
+  def self.vocabulary_type(key)
+    GraphVocabulary::ENTITY_TYPE_MAPPINGS.find { |type, variants| type.downcase == key || variants.include?(key) }&.first
+  end
+  private_class_method :vocabulary_type
 
   # Clears the process cache — call after re-seeding/upserting mappings so
   # new or changed variants take effect without a restart.
