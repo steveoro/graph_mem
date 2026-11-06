@@ -40,6 +40,7 @@ REST endpoint, UI button or job for it.
 | Key | Repo | Pin | License | `docs` profile | `code` profile |
 |---|---|---|---|---|---|
 | `synth` | generated "Gadget Project" | — | — | README, Gemfile, `docs/**/*.md` | `lib/**/*.rb`, `vendor/**/*.rb` |
+| `synth_rails` | generated Rails engine "gadget_engine" | — | — | README, Gemfile, `docs/**/*.md` | `app/**/*.rb`, `lib/**/*.rb`, `config/routes.rb` |
 | `graph_mem` | `steveoro/graph_mem` | tag `v1.72.0` | LGPL-3.0 | README, Gemfile, `docs/*.md` and the `api`, `guides`, `operator`, `rules` docs | `app/services/*.rb`, `app/models/*.rb`, `app/tools/*.rb` |
 | `goggles_db` | `steveoro/goggles_db` | `d14e6d7` | LGPL-3.0 | the scanner's defaults | `app/models/**/*.rb`, `lib/**/*.rb` |
 | `goggles_api` | `steveoro/goggles_api` | `e95fa8a` | LGPL-3.0 | the scanner's defaults | `app/api/**/*.rb` |
@@ -56,7 +57,14 @@ REST endpoint, UI button or job for it.
 - **`synth`** is written by `GraphMem::ScanProfile::SynthRepo`: `SynthWidget`, `AlphaService`,
   `FrameBuffer`, a long `ReportBuilder` that must split, one file over the 50 KB file cap (so its
   `code` scans are always *partial*) and a generated file. It carries the expected entities and
-  relations, so the report can show recall and precision.
+  relations, so the report can show recall and precision. It isn't a Rails project, so its numbers
+  stay comparable across releases.
+- **`synth_rails`** (1.75.0) is written by `GraphMem::ScanProfile::SynthRailsRepo`: a small Rails
+  engine for the scan's Rails code map, with two classes named `Badge` (a model and an importer
+  strategy), a controller with a views folder and a layout, engine routes, a concern, a job, a
+  helper, a mailer and a Gemfile with gems. Its stub answers use bare names, as a small model does;
+  expect its 15 code-map entities with their role types, no bare `Badge`, the gems typed Gem and no
+  rescan churn.
 
 ## Running it
 
@@ -73,7 +81,7 @@ REPOS=synth,goggles_api PROFILE=docs bin/rails graph_mem:scan_profile
 
 | Option | Default | Meaning |
 |---|---|---|
-| `REPOS=a,b` | every key, `synth` first | the repos to scan; a key that isn't in `repos.yml` (or `synth`) is refused |
+| `REPOS=a,b` | every key, `synth` and `synth_rails` first | the repos to scan; a key that isn't in `repos.yml` (or a generated repo) is refused |
 | `PROFILE=docs\|code` | both | the glob profile(s) |
 | `RESCAN=0` | rescan on | skip the second, `mode: "rescan"` scan of the same code (halves the time) |
 | `FULL=1` | first-run caps | the scanner's own caps for every repo |
@@ -105,8 +113,8 @@ and fewer, larger parts fixed it, for example `SETTINGS="summary_timeout=900;sum
 faster than `qwen3:8b`, with weaker answers.
 
 **Without a model** (to see the report's shape, or to check the task works),
-`script/scan_profile/fake_ollama.rb` answers `/api/generate` with the synth repo's canned answers.
-Only `synth` gives meaningful results with it:
+`script/scan_profile/fake_ollama.rb` answers `/api/generate` with the generated repos' canned
+answers. Only `synth` and `synth_rails` give meaningful results with it:
 
 ```bash
 ruby script/scan_profile/fake_ollama.rb 3995 &
@@ -124,7 +132,8 @@ are never committed.
 - **Scans:** one row per scan (initial, rescan): entities created/updated, observations
   created/obsoleted, relations created/deleted, parts total/failed/split, files too large/over budget,
   partial, fallback (with its reason), wall time, the p50/p95 time of one part, and what the noise
-  filter dropped. A fallback means no part succeeded; partial means a part failed or a file was left
+  filter dropped, and for a Rails project the code map's entities, items mapped and items dropped
+  (`code map e/m/d`). A fallback means no part succeeded; partial means a part failed or a file was left
   out (nothing was marked missing).
 - **Noise (first scan):** on the graph after the first scan:
   - entities with no observations;
@@ -133,13 +142,14 @@ are never committed.
   - entities named like a file (`user.rb`, `.md`, `Gemfile`) or by a generic word (`Utils`,
     `Helper`, `Config`, …);
   - entities whose only relations are to the project root, and entities with no relation at all;
-  - the type spread;
+  - the type spread, and the entities the Rails code map's skeleton holds (`code map`);
   - **rescan churn**: what the second scan of unchanged code created, obsoleted or deleted. The
     clearest noise signal: a stable scan has none;
   - for `synth`, **recall** and **precision** of entities and relations, with the missed and
     unexpected names.
 - **Settings sweep:** with `SWEEP`, one row per combination (below).
-- **JSON** (`schema_version: 1`): the same, plus each scan's resulting graph by name (entities with
+- **JSON** (`schema_version: 2` since 1.75.0, which added each scan's `code_map` counters and the
+  `code_map_entities` metric): the same, plus each scan's resulting graph by name (entities with
   type, observations and relations), the pinned commit and the LLM usage counters. The shape is
   stable so that a later tool can compare a report with another graph. A new key means a new
   `schema_version`.
