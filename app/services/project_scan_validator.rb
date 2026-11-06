@@ -222,6 +222,10 @@ class ProjectScanValidator
                           : queue_move_review(observation, best, candidates, scan_sourced)
     end
 
+    # A Rails code map entity (1.75.0) was chosen by the code itself, not by the fact's wording: a
+    # fact on it that names no other entity ("Not meant to be instantiated directly.") stays.
+    return { type: :keep } if code_map_entity?(entity)
+
     if scan_sourced
       {
         type: :obsolete,
@@ -403,6 +407,14 @@ class ProjectScanValidator
     @errors << "Failed to delete relation #{relation.id}: #{e.message}"
   ensure
     Current.deletion_reason = nil
+  end
+
+  # @return [Boolean] the entity holds an active fact of a Rails code map skeleton
+  def code_map_entity?(entity)
+    @code_map_entities ||= {}
+    return @code_map_entities[entity.id] if @code_map_entities.key?(entity.id)
+
+    @code_map_entities[entity.id] = entity.memory_observations.active.where(source: RailsCodeMap::SOURCE).exists?
   end
 
   def mentions_owned_terms?(content, owner)

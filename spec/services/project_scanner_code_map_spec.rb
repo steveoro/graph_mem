@@ -138,4 +138,18 @@ RSpec.describe ProjectScanner, "Rails code map" do
     badge = entity("Gadget::Badge")
     expect(MemoryRelation.where(from_entity_id: badge.id, relation_type: "relates_to")).to be_empty
   end
+
+  it "keeps a code entity's earlier scan fact that doesn't name it through a rescan's validation" do
+    answers["app/models/gadget/swimmer.rb"] = [ item("Swimmer", "Class", "Not meant to be instantiated directly.") ]
+    # A non-code entity in the project's tree keeps today's rule.
+    answers["README.md"] << item("Swim Meet", "Concept", "Gathers the season's results.", relations: [ { to: "Gadget", type: "part_of" } ])
+    scan
+    swimmer_fact = entity("Gadget::Swimmer").memory_observations.find_by!(content: "Not meant to be instantiated directly.")
+    meet_fact = entity("Swim Meet").memory_observations.find_by!(content: "Gathers the season's results.")
+
+    scan
+
+    expect(swimmer_fact.reload.status).to eq("active")
+    expect(meet_fact.reload.status).to eq("obsolete")
+  end
 end
