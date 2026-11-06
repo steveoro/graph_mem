@@ -5,6 +5,18 @@ All notable changes to GraphMem will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.76.0] - 2026-11-06
+
+Rescans recognize a reworded fact. The goggles_db profile with all of 1.75.0's fixes still showed a rescan churn of 98, mostly the model wording facts it had already given in new ways.
+
+### Added
+- Setting `project_scan_fact_duplicate_max_distance` (Settings › Project scans, default 0.2, 0.05–0.4): how close, by embedding distance, a scanned fact may be to one its entity already holds and still be skipped as the same fact reworded.
+- `graph_mem:scan_profile`: new facts are embedded when the embedding endpoint is on this machine (the header says `embeddings: local` or `off`), a `deduped` column, and the `SWEEP` key `fact_duplicate_max_distance`. The report's JSON is `schema_version` 3.
+
+### Changed
+- A project scan no longer adds a fact its entity already holds in other words. Before each new fact is written, its embedding is compared with the entity's embedded active facts; one within the distance is skipped and counted (`observations_deduped` in the scan's Ruby result and its numbers-only `[scan]` line; MCP and REST outputs are unchanged). Without embeddings, only an exact repeat is skipped, as before, and the scan never fails on it.
+- `ImportObservationDuplicateDetector` takes `only_embedded: true` to compare against embedded facts only (the Rails code map's facts wait for a deferred backfill). Imports and Explore edits are unchanged.
+
 ## [1.75.0] - 2026-11-06
 
 The Rails code map for project scans, the second PR of the Rails code-map train.

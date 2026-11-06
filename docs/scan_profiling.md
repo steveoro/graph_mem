@@ -3,9 +3,10 @@
 `bin/rails graph_mem:scan_profile` runs real project scans, with the real scanner and model, on
 **pinned open-source repos or a generated synthetic repo**, into a **throwaway database**, and writes
 a report: what each scan created, how many parts it sent, how long they took, and how noisy the
-result is. Use it for a first scan you can judge without risking a graph, and to tune the three scan
+result is. Use it for a first scan you can judge without risking a graph, and to tune the scan
 settings (`project_scan_bytes_per_token`, `project_scan_chunk_output_tokens`,
-`project_scan_max_chunks`; see [Summarization › Project scans](summarization.md#project-scans)).
+`project_scan_max_chunks`, `project_scan_fact_duplicate_max_distance`; see
+[Summarization › Project scans](summarization.md#project-scans)).
 
 It is a rake task you run by hand. Nothing schedules, enqueues or exposes it: there is no MCP tool,
 REST endpoint, UI button or job for it.
@@ -27,7 +28,10 @@ REST endpoint, UI button or job for it.
   dir; `ScanRootPolicy` and your scan folders aren't used or widened.
 - **Nothing reaches the app's queues or caches.** During the run, jobs go to the `:test` adapter
   (the report counts what would have been enqueued; none runs). `Rails.cache` and the settings cache
-  are a private in-memory store, and embeddings are skipped (the metrics don't need them).
+  are a private in-memory store. New facts are embedded (1.76.0: a scan skips a reworded fact by
+  embedding distance, so the rescan churn needs them) only when the embedding endpoint is on this
+  machine (localhost, 127.x, ::1); otherwise embeddings are skipped and only an exact repeat is
+  skipped. The report's header says which (`embeddings: local` or `off`).
 - **Local Ollama only.** The scan chain is `ollama`. **The profiler never grants cloud access**
   (only the Projects page can), so a cloud chain could only be refused by `Llm::CloudGate` and fall
   back. A cloud `BACKEND=` and `ALLOW_CLOUD=1` are therefore refused before anything runs. The
@@ -136,7 +140,8 @@ are never committed.
 - **Header:** the chain, model and window; whether anything left the machine; the throwaway
   database; the jobs that would have run.
 - **Scans:** one row per scan (initial, rescan): entities created/updated, observations
-  created/obsoleted, relations created/deleted, parts total/failed/split, files too large/over budget,
+  created/obsoleted, relations created/deleted, facts skipped as reworded repeats (`deduped`),
+  parts total/failed/split, files too large/over budget,
   partial, fallback (with its reason), wall time, the p50/p95 time of one part, and what the noise
   filter dropped, and for a Rails project the code map's entities, items mapped and items dropped
   (`code map e/m/d`). A fallback means no part succeeded; partial means a part failed or a file was left
@@ -154,8 +159,9 @@ are never committed.
   - for `synth`, **recall** and **precision** of entities and relations, with the missed and
     unexpected names.
 - **Settings sweep:** with `SWEEP`, one row per combination (below).
-- **JSON** (`schema_version: 2` since 1.75.0, which added each scan's `code_map` counters and the
-  `code_map_entities` metric): the same, plus each scan's resulting graph by name (entities with
+- **JSON** (`schema_version: 3` since 1.76.0, which added each scan's `observations_deduped`, the
+  backend's `embeddings` and the `fact_duplicate_max_distance` setting; 2 added each scan's
+  `code_map` counters and the `code_map_entities` metric): the same, plus each scan's resulting graph by name (entities with
   type, observations and relations), the pinned commit and the LLM usage counters. The shape is
   stable so that a later tool can compare a report with another graph. A new key means a new
   `schema_version`.
@@ -170,9 +176,13 @@ REPOS=synth,goggles_api PROFILE=docs \
 
 Every combination runs on every selected repo and profile (here 12 per repo and profile), with the
 values written only into the throwaway database. Each value must be in the setting's range
-(`bytes_per_token` 2.0–6.0, `chunk_output_tokens` 512–8192, `max_chunks` 1–64). The "Settings
+(`bytes_per_token` 2.0–6.0, `chunk_output_tokens` 512–8192, `max_chunks` 1–64,
+`fact_duplicate_max_distance` 0.05–0.4). The "Settings
 sweep" table puts parts, failures, splits, time, entities, noise, churn and (synth) recall side by
-side. To adopt a value, set it on **Settings › Summaries**. The defaults change in a release only
+side. To find the reworded-fact distance, sweep it on a rescan and compare the churn with the
+`deduped` count, then check by hand that no distinct fact was skipped:
+`SWEEP="fact_duplicate_max_distance:0.1,0.2,0.3"`. To adopt a value, set it on **Settings ›
+Project scans**, where the scan settings live. The defaults change in a release only
 with a real-model baseline behind them.
 
 ## The noise filter
