@@ -29,6 +29,10 @@ class ProjectScanner
   MAX_FILE_BYTES = 50_000
   MAX_TOTAL_INPUT_BYTES = 200_000
   SUMMARY_PROVIDER = "ollama"
+  # The type of an item the model typed as a project (a gem, an engine, a sibling repo) when no
+  # Project root has its name (else it links to that root, ProjectLinks): a part of the scanned
+  # project, never a second Project-typed entity next to the real roots.
+  ITEM_TYPE_FOR_PROJECT = "Component"
 
   Result = Struct.new(
     :success,
@@ -56,6 +60,7 @@ class ProjectScanner
     :files_over_budget,
     :partial,
     :noise_dropped,
+    :type_mismatches,
     keyword_init: true
   ) do
     def initialize(success: true, status: "completed", message: nil, **kwargs)
@@ -89,7 +94,8 @@ class ProjectScanner
         files_too_large: files_too_large || 0,
         files_over_budget: files_over_budget || 0,
         partial: partial || false,
-        noise_dropped: noise_dropped || {}
+        noise_dropped: noise_dropped || {},
+        type_mismatches: type_mismatches || 0
       }
     end
   end
@@ -128,6 +134,7 @@ class ProjectScanner
     @observations_moved_count = 0
     @relations_deleted_count = 0
     @entities_reparented_count = 0
+    @type_mismatches = 0
     @validation_paused = false
     @extraction = {}
     @file_filter = ProjectScanFileFilter.new(@project_root)
@@ -182,6 +189,7 @@ class ProjectScanner
 
   include LlmExtraction
   include DeterministicExtraction
+  include ProjectLinks
 
   # Files the scan skipped because they left the root or are denylisted (ProjectScanFileFilter).
   def skip_counters
@@ -209,6 +217,7 @@ class ProjectScanner
       fallback_reason: extracted[:fallback_reason],
       partial: partial?,
       noise_dropped: @noise_dropped || {},
+      type_mismatches: @type_mismatches,
       **skip_counters,
       **@extraction.slice("parts_total", "parts_failed", "files_too_large", "files_over_budget").transform_keys(&:to_sym)
     )
@@ -343,6 +352,7 @@ class ProjectScanner
       # later (or in another part) resolves.
       reconciled = architecture.filter_map { |item| reconcile_architecture_item(item) }
       reconciled.each { |entity, item| Array(item["relations"]).each { |rel| reconcile_relation(entity, rel) } }
+      report_reconcile_counts!
 
       # Only a complete scan saw every file: a partial one never obsoletes or queues a delete.
       unless @dry_run || partial?
@@ -400,6 +410,20 @@ class ProjectScanner
     type = ImportEntityResolver.canonical_type(entity_data["type"])
     return if name.blank? || type.blank?
 
+    # An item naming the scanned project is its root: its facts and relations go there.
+    if project_root_name?(name)
+      import_observations(@project_entity, Array(item["observations"]))
+      return [ @project_entity, item ]
+    end
+
+    # A project-like item naming another project is a link to that root, never an entity here
+    # (ProjectLinks); a Class or a concept that happens to share a root's name stays local.
+    if project_like_type?(type) && (root = other_project_root(name))
+      link_project!(root)
+      return
+    end
+
+    type = ITEM_TYPE_FOR_PROJECT if project_type?(type)
     entity = find_or_create_entity(name, type, entity_data)
     return unless entity
 
@@ -410,9 +434,14 @@ class ProjectScanner
     [ entity, item ]
   end
 
+  # A name is unique in a project whatever its type or case (MemoryEntity), so an item the model
+  # typed differently in another part, or in an earlier scan, is that same entity: its type stays.
   def find_or_create_entity(name, type, entity_data)
-    existing = MemoryEntity.find_by(name: name, entity_type: type, project_id: @project_entity&.id)
+    existing = MemoryEntity.find_by(name: name, project_id: @project_entity&.id)
     if existing
+      # Visible, not prevented: the model typed a stored entity differently (reported in the
+      # `[scan]` line and the result's type_mismatches).
+      @type_mismatches += 1 unless existing.entity_type.to_s.casecmp?(type.to_s)
       unless @dry_run
         updates = {}
         updates[:description] = entity_data["description"].to_s.strip if entity_data["description"].to_s.strip.present? && existing.description.blank?
@@ -477,7 +506,7 @@ class ProjectScanner
     return if from_entity.id == target.id
 
     relation_type = MemoryRelation.canonical_relation_type(relation_type)
-    return if relation_exists?(from_entity, target, relation_type)
+    return if part_of_another_root?(target, relation_type) || relation_exists?(from_entity, target, relation_type)
 
     return if @dry_run
 
@@ -501,10 +530,11 @@ class ProjectScanner
   end
 
   def resolve_relation_target(name)
-    return @project_entity if @project_entity && (name.casecmp?(@project_entity.name) || @project_entity.aliases.to_s.split(/[,|;]/).any? { |a| a.strip.casecmp?(name) })
+    return @project_entity if project_root_name?(name)
 
     @entities_by_path[name.downcase] ||
       MemoryEntity.find_by(name: name, project_id: @project_entity&.id) ||
+      other_project_root(name) ||
       MemoryEntity.find_by(name: name, project_id: nil) ||
       MemoryEntity.where(project_id: @project_entity&.id).where("aliases LIKE ?", "%#{name}%").first
   end
@@ -539,8 +569,9 @@ class ProjectScanner
         end
       end
 
-      # Queue entity deletion for review if it has no remaining active observations.
-      if entity.active_memory_observations.empty?
+      # Queue entity deletion for review if it has no remaining active observations (a fresh query:
+      # the loaded association still holds the ones just obsoleted).
+      if entity.active_memory_observations.reload.empty?
         queue_scan_review({
           id: SecureRandom.uuid,
           kind: "delete_entity",
