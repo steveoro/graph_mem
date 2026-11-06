@@ -89,7 +89,7 @@ Goal: how the project is run, configured, and deployed.
 Goal: user-facing routes, views, components, and API endpoints.
 
 - Explore `app/views/`, `app/controllers/`, `frontend/`, `app/components/`, `routes.rb`, `pages/`, API route definitions.
-- Create `Route`, `APIEndpoint`, `Component`, or `Service` entities.
+- Create `Controller`, `View`, `Layout`, `Route`, `APIEndpoint`, or `Component` entities. Rails code uses the role types (`Model`, `Controller`, `Helper`, `Job`, `Mailer`, `Concern`, `Decorator`, `Validator`, `Strategy`, `Command`) rather than a generic `Class`.
 - Add observations about paths, methods, and rendered templates.
 - Link UI entities to the project with `part_of`.
 - Persist with source `project_scan_skill:ui:<project_root>`.

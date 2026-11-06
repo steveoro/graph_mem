@@ -424,7 +424,7 @@ These tools perform structural graph queries. `direction` is one of `outgoing`
 
 GraphMem automatically normalizes entity types. When creating or updating entities, the `entity_type` field is looked up in the `entity_type_mappings` table. Known variants are rewritten to their canonical form.
 
-Data-exchange import matching and execution share the same canonicalization via `ImportEntityResolver`: an existing entity is reused only on exact name **and** canonical type. A same-name node of another type is not a match (no name-only fallback), so observations and relations stay on the correctly typed entity.
+Data-exchange import matching and execution share the same canonicalization via `ImportEntityResolver`: an existing entity is reused only on exact name **and** canonical type. A same-name node of another type is not a match (no name-only fallback), so observations and relations stay on the correctly typed entity. The one exception is the **code family** (1.74.0): Class, Module and the Rails role types (Model, Controller, Helper, Job, Mailer, Concern, View, Layout, Decorator, Validator, Strategy, Command, Service, Component, APIEndpoint) name the same entity in one scope, and **specific beats generic**: a stored Class or Module takes the role type a declaration brings (an older import's `Class: GogglesDb::Badge` becomes a `Model`, in place, with no rescan review row), while a stored role type is never made generic again.
 
 | Canonical Type | Accepted Variants |
 |---|---|
