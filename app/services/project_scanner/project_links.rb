@@ -5,15 +5,21 @@ class ProjectScanner
   # they read its instance variables.
   #
   # - An item naming the scanned project (name or alias) is its root (ProjectScanner folds it).
-  # - An item naming **another** Project root (say goggles_api's Gemfile naming goggles_db) isn't
-  #   created inside the scanned project: the scanned root gets one LINK_RELATION to that root, unless
-  #   the two are already related either way, and the name resolves to that root for every other
-  #   item's relations. Nothing is written to the other project: not its facts, not a `part_of`.
+  # - A project-like item (typed as a project, a gem or a framework) naming **another** Project root
+  #   (say goggles_api's Gemfile naming goggles_db) isn't created inside the scanned project: the
+  #   scanned root gets one LINK_RELATION to that root, unless the two are already related either
+  #   way. Any other item sharing a root's name stays a local entity. A relation's target resolves to
+  #   the scanned project's own entities first, then to another root. Nothing is written to the other
+  #   project: not its facts, not a `part_of`.
+  # - A name two roots share (after normalization, or one root's alias being another's name) matches
+  #   neither: no link, counted in #ambiguous_root_names.
   # - An item typed as a project with no such root becomes an ITEM_TYPE_FOR_PROJECT entity.
   # Names match ignoring case and treating "-", "_" and spaces alike (goggles-db is goggles_db).
   module ProjectLinks
     # The relation from the scanned project's root to another root one of its items names.
     LINK_RELATION = "depends_on"
+    # Canonical types (besides the project types) whose items may name another project.
+    LIBRARY_TYPES = %w[Gem Framework].freeze
 
     private
 
@@ -24,19 +30,49 @@ class ProjectScanner
       type.casecmp?(project) || GraphVocabulary::ENTITY_TYPE_MAPPINGS.fetch(project).include?(type.downcase)
     end
 
+    # @return [Boolean] a project type, or a library type (Gem, Framework) or one of their
+    #   vocabulary aliases (gem, rubygem, library, …)
+    def project_like_type?(type)
+      project_type?(type) || LIBRARY_TYPES.any? do |library|
+        type.casecmp?(library) || GraphVocabulary::ENTITY_TYPE_MAPPINGS.fetch(library).include?(type.downcase)
+      end
+    end
+
     # @return [Boolean] the name (or one of the aliases) of the scanned project's root
     def project_root_name?(name)
       @project_entity.present? && root_keys(@project_entity).include?(project_key(name))
     end
 
-    # @return [MemoryEntity, nil] another Project root whose name or alias matches
+    # @return [MemoryEntity, nil] the one other Project root whose name or alias matches; nil when
+    #   none does, or when several do (counted in #ambiguous_root_names)
     def other_project_root(name)
       return nil if @project_entity.nil?
 
-      @other_roots ||= MemoryEntity.where(entity_type: NodeOperationsStrategy::PROJECT_ENTITY_TYPE, project_id: nil)
-                                   .where.not(id: @project_entity.id).order(:id).to_a
-                                   .each_with_object({}) { |root, keys| root_keys(root).each { |key| keys[key] ||= root } }
-      @other_roots[project_key(name)]
+      roots = other_roots_by_key.fetch(project_key(name), [])
+      return roots.first if roots.size <= 1
+
+      (@ambiguous_root_names ||= Set.new) << project_key(name)
+      nil
+    end
+
+    # @return [Integer] the distinct names this scan couldn't link because several roots match them
+    def ambiguous_root_names
+      @ambiguous_root_names&.size.to_i
+    end
+
+    # One numbers-only `[scan]` line when some names matched several roots (no names: logs stay clean).
+    def report_ambiguous_roots!
+      return unless ambiguous_root_names.positive?
+
+      @logger.info("[scan] #{JSON.generate(scan_id: @scan_id, ambiguous_project_roots: ambiguous_root_names)}")
+    end
+
+    def other_roots_by_key
+      @other_roots_by_key ||= MemoryEntity.where(entity_type: NodeOperationsStrategy::PROJECT_ENTITY_TYPE, project_id: nil)
+                                          .where.not(id: @project_entity.id).order(:id).to_a
+                                          .each_with_object(Hash.new { |hash, key| hash[key] = [] }) do |root, keys|
+        root_keys(root).uniq.each { |key| keys[key] << root unless keys[key].include?(root) }
+      end
     end
 
     # One LINK_RELATION from the scanned root to `root`, unless the two are already related.

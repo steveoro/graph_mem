@@ -348,6 +348,7 @@ class ProjectScanner
       # later (or in another part) resolves.
       reconciled = architecture.filter_map { |item| reconcile_architecture_item(item) }
       reconciled.each { |entity, item| Array(item["relations"]).each { |rel| reconcile_relation(entity, rel) } }
+      report_ambiguous_roots!
 
       # Only a complete scan saw every file: a partial one never obsoletes or queues a delete.
       unless @dry_run || partial?
@@ -411,8 +412,9 @@ class ProjectScanner
       return [ @project_entity, item ]
     end
 
-    # An item naming another project is a link to that root, never an entity here (ProjectLinks).
-    if (root = other_project_root(name))
+    # A project-like item naming another project is a link to that root, never an entity here
+    # (ProjectLinks); a Class or a concept that happens to share a root's name stays local.
+    if project_like_type?(type) && (root = other_project_root(name))
       link_project!(root)
       return
     end
@@ -524,8 +526,8 @@ class ProjectScanner
     return @project_entity if project_root_name?(name)
 
     @entities_by_path[name.downcase] ||
-      other_project_root(name) ||
       MemoryEntity.find_by(name: name, project_id: @project_entity&.id) ||
+      other_project_root(name) ||
       MemoryEntity.find_by(name: name, project_id: nil) ||
       MemoryEntity.where(project_id: @project_entity&.id).where("aliases LIKE ?", "%#{name}%").first
   end

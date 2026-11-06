@@ -121,6 +121,58 @@ RSpec.describe ProjectScanner, "reconcile" do
     end
   end
 
+  describe "names shared with other Project roots (Graphy #158 round 2)" do
+    def relations(from, to) = MemoryRelation.where(from_entity_id: from.id, to_entity_id: to.id).pluck(:relation_type)
+
+    it "keeps a non-project item named like another root's alias local, with its facts and no link" do
+      engine = MemoryEntity.create!(name: "Gadget Engine", entity_type: "Project", aliases: "api")
+      items.push(item("Api", "Class", "Api renders the gadget endpoints."))
+
+      result = scan
+
+      project = MemoryEntity.find_by!(name: "Gadget Project", project_id: nil)
+      api = MemoryEntity.find_by!(name: "Api", project_id: project.id)
+      expect(result.errors).to be_empty
+      expect(api.entity_type).to eq("Class")
+      expect(api.memory_observations.pluck(:content)).to eq([ "Api renders the gadget endpoints." ])
+      expect(relations(project, engine)).to be_empty
+    end
+
+    it "resolves a relation to a local entity before another root of the same name" do
+      engine = MemoryEntity.create!(name: "Gadget Engine", entity_type: "Project")
+      items.push(item("Gadget Engine", "Component", "The local Gadget Engine wraps the renderer."),
+                 item("SynthWidget", "Class", "SynthWidget renders gadget frames.", relations: [ { to: "Gadget Engine", type: "depends_on" } ]))
+
+      scan
+
+      project = MemoryEntity.find_by!(name: "Gadget Project", project_id: nil)
+      local = MemoryEntity.find_by!(name: "Gadget Engine", project_id: project.id)
+      widget = MemoryEntity.find_by!(name: "SynthWidget")
+      expect(relations(widget, local)).to eq(%w[depends_on])
+      expect(relations(widget, engine)).to be_empty
+      expect(relations(project, engine)).to be_empty
+    end
+
+    it "links to no root when two roots share the name, and counts it in one numbers-only line" do
+      dash = MemoryEntity.create!(name: "gadget-engine", entity_type: "Project")
+      underscore = MemoryEntity.create!(name: "gadget_engine", entity_type: "Project")
+      items.push(item("Gadget Engine", "Gem", "Gadget Engine stores the gadget tables."))
+      lines = []
+      allow(Rails.logger).to receive(:info).and_wrap_original do |original, *args, &block|
+        lines << args.first if args.first.to_s.start_with?("[scan] ")
+        original.call(*args, &block)
+      end
+
+      result = scan
+
+      project = MemoryEntity.find_by!(name: "Gadget Project", project_id: nil)
+      expect(result.errors).to be_empty
+      expect(relations(project, dash) + relations(project, underscore)).to be_empty
+      expect(lines.grep(/ambiguous_project_roots/).sole).to match(/"ambiguous_project_roots":1\}\z/)
+      expect(lines.grep(/ambiguous_project_roots/).sole).not_to include("gadget")
+    end
+  end
+
   it "leaves same-named entities of other projects and the global namespace alone" do
     other = MemoryEntity.create!(name: "Alpha Service", entity_type: "Project")
     foreign = MemoryEntity.create!(name: "SynthWidget", entity_type: "Module", project_id: other.id)
