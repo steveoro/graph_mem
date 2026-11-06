@@ -121,6 +121,12 @@ ruby script/scan_profile/fake_ollama.rb 3995 &
 SUMMARY_URL=http://127.0.0.1:3995 REPOS=synth bin/rails graph_mem:scan_profile
 ```
 
+**While it runs** (1.75.0), each scan prints its steps (reading files, "part k of n" as each
+request starts, reconciling, completed), each part's end (done or failed with the reason, its time,
+whether it was split) and, every minute, a `still working (<step>; N min so far)` line. On a
+CPU-only machine one part can take 5–10 minutes: a heartbeat without a part line means the model is
+still answering, not that the run is stuck. Counts and steps only, no file names.
+
 ## Reading the report
 
 `tmp/scan_profile/<UTC timestamp>/report.md` (a summary) and `report.json` (everything). Both use

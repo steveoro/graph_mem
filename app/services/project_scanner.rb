@@ -104,9 +104,13 @@ class ProjectScanner
 
   # @param on_part_done [#call, nil] called after each LLM part with a ChunkedExtraction::PartDone
   #   (F-3b: graph_mem:scan_profile's timing); nil (the default) changes nothing
+  # @param on_progress [#call, nil] called with `(phase, message)` at each progress step the scan
+  #   reports, with or without an operation_progress (1.75.0: graph_mem:scan_profile's progress
+  #   lines); nil (the default) changes nothing
   def initialize(project_root:, project_name: nil, aliases: nil, mode: "initial",
                  dry_run: false, file_globs: nil, operation_progress: nil,
-                 max_files: nil, max_total_input_bytes: nil, scan_id: nil, resuming: false, on_part_done: nil)
+                 max_files: nil, max_total_input_bytes: nil, scan_id: nil, resuming: false, on_part_done: nil,
+                 on_progress: nil)
     @project_root = File.expand_path(project_root.to_s)
     @project_name = project_name.to_s.strip.presence
     @aliases = Array(aliases).flat_map { |a| a.to_s.split(/[,|;]/).map(&:strip) }.reject(&:blank?)
@@ -119,6 +123,7 @@ class ProjectScanner
     @scan_id = scan_id || SecureRandom.uuid
     @resuming = resuming == true
     @on_part_done = on_part_done
+    @on_progress = on_progress
     @logger = Rails.logger
     @entities_by_path = {}
     @created_entity_ids = Set.new
@@ -705,6 +710,7 @@ class ProjectScanner
   end
 
   def update_progress!(phase:, message:, current: nil, total: nil)
+    @on_progress&.call(phase, message)
     return unless @operation_progress
 
     current_value = current || @operation_progress.current_count.to_i + 1
