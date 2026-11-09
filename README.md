@@ -150,6 +150,10 @@ Interactive Cytoscape.js-based graph visualization at the server root (`/`), wit
 
 ## Quick Start with Docker
 
+> New workstation? [docs/quick_setup.md](docs/quick_setup.md) covers the container, the MCP
+> client config and the skill and rule for Claude Code, Cursor and Devin Desktop in seven steps,
+> including generating your own master key.
+
 **Prerequisites:** Ollama must be running on the host with at least one embedding model pulled:
 
 ```bash

@@ -190,7 +190,8 @@ RSpec.describe "agent text sync" do
     end
 
     it "keeps the skill metadata version equal to the app version" do
-      expect(frontmatter(skill_path).dig("metadata", "graph-mem-version")).to eq(GraphMem::VERSION)
+      expect(frontmatter(skill_path).dig("metadata", "graph-mem-version")).to eq(GraphMem::VERSION),
+        "SKILL.md is static Markdown; run `bin/rails graph_mem:sync_skill_version` after a version bump"
     end
 
     it "has Gotchas and one fully qualified tool name" do
