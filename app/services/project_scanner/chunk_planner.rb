@@ -38,6 +38,19 @@ class ProjectScanner
         name.start_with?("requirements", "docker-compose")
     end
 
+    # The labels a piece's header may carry after its path: "(part k of m)" from the planner,
+    # "(half k of 2)" from ChunkedExtraction's split.
+    PIECE_LABELS = /(?: \((?:part|half) \d+ of \d+\))+\z/
+
+    # @param piece [String] one "--- FILE: path[ (part k of m)][ (half k of 2)]\n…" block
+    # @return [String, nil] its relative path, nil when it has no FILE header
+    def self.piece_path(piece)
+      header = piece.to_s.lines.first.to_s.chomp
+      return nil unless header.start_with?("--- FILE: ")
+
+      header.delete_prefix("--- FILE: ").sub(PIECE_LABELS, "").presence
+    end
+
     # @param files [Array<String>] realpaths under root
     # @param root [String, Pathname] the project root's realpath
     # @param input_budget [Integer] estimated tokens per part (TokenEstimate.input_budget)

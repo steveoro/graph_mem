@@ -61,6 +61,7 @@ class ProjectScanner
     :partial,
     :noise_dropped,
     :type_mismatches,
+    :code_map,
     keyword_init: true
   ) do
     def initialize(success: true, status: "completed", message: nil, **kwargs)
@@ -95,16 +96,21 @@ class ProjectScanner
         files_over_budget: files_over_budget || 0,
         partial: partial || false,
         noise_dropped: noise_dropped || {},
-        type_mismatches: type_mismatches || 0
+        type_mismatches: type_mismatches || 0,
+        code_map: code_map || {}
       }
     end
   end
 
   # @param on_part_done [#call, nil] called after each LLM part with a ChunkedExtraction::PartDone
   #   (F-3b: graph_mem:scan_profile's timing); nil (the default) changes nothing
+  # @param on_progress [#call, nil] called with `(phase, message)` at each progress step the scan
+  #   reports, with or without an operation_progress (1.75.0: graph_mem:scan_profile's progress
+  #   lines); nil (the default) changes nothing
   def initialize(project_root:, project_name: nil, aliases: nil, mode: "initial",
                  dry_run: false, file_globs: nil, operation_progress: nil,
-                 max_files: nil, max_total_input_bytes: nil, scan_id: nil, resuming: false, on_part_done: nil)
+                 max_files: nil, max_total_input_bytes: nil, scan_id: nil, resuming: false, on_part_done: nil,
+                 on_progress: nil)
     @project_root = File.expand_path(project_root.to_s)
     @project_name = project_name.to_s.strip.presence
     @aliases = Array(aliases).flat_map { |a| a.to_s.split(/[,|;]/).map(&:strip) }.reject(&:blank?)
@@ -117,6 +123,7 @@ class ProjectScanner
     @scan_id = scan_id || SecureRandom.uuid
     @resuming = resuming == true
     @on_part_done = on_part_done
+    @on_progress = on_progress
     @logger = Rails.logger
     @entities_by_path = {}
     @created_entity_ids = Set.new
@@ -160,12 +167,15 @@ class ProjectScanner
     return failed_result("No readable files found in project root") if @discovered_files.empty?
 
     update_progress!(phase: "reading_files", message: "Reading #{@discovered_files.size} project files")
+    build_code_map!
     update_progress!(phase: "extracting_knowledge", message: "Extracting knowledge")
     extracted = extract_knowledge
     @extracted_data = filter_noise(extracted)
 
     update_progress!(phase: "reconciling_graph", message: partial? ? partial_message : "Reconciling with graph memory")
     reconcile(@extracted_data)
+    enqueue_code_map_backfill!
+    report_code_map!
     record_reconciled!(extracted)
     validate_and_finish(extracted)
   end
@@ -190,6 +200,7 @@ class ProjectScanner
   include LlmExtraction
   include DeterministicExtraction
   include ProjectLinks
+  include CodeSkeleton
 
   # Files the scan skipped because they left the root or are denylisted (ProjectScanFileFilter).
   def skip_counters
@@ -218,6 +229,7 @@ class ProjectScanner
       partial: partial?,
       noise_dropped: @noise_dropped || {},
       type_mismatches: @type_mismatches,
+      code_map: code_map_counts,
       **skip_counters,
       **@extraction.slice("parts_total", "parts_failed", "files_too_large", "files_over_budget").transform_keys(&:to_sym)
     )
@@ -347,6 +359,9 @@ class ProjectScanner
     ActiveRecord::Base.transaction do
       @project_entity = reconcile_project_root(project_data)
       return if @project_entity.nil? && !@dry_run
+
+      # A Rails project's code map first (1.75.0): the items below then find its entities.
+      write_code_skeleton!
 
       # Two passes: every entity first, then every relation, so a relation to an entity listed
       # later (or in another part) resolves.
@@ -534,9 +549,21 @@ class ProjectScanner
 
     @entities_by_path[name.downcase] ||
       MemoryEntity.find_by(name: name, project_id: @project_entity&.id) ||
+      code_map_target(name) ||
       other_project_root(name) ||
       MemoryEntity.find_by(name: name, project_id: nil) ||
-      MemoryEntity.where(project_id: @project_entity&.id).where("aliases LIKE ?", "%#{name}%").first
+      alias_target(name)
+  end
+
+  # An entity of the project whose aliases hold the name. With a Rails code map (1.75.0) only a
+  # whole alias counts: the skeleton stores path aliases (`goggles_db/importers/badge`), and a
+  # substring match would bind a target the map doesn't know (`Importer`, `Swimmers`) to any class
+  # whose path contains it.
+  def alias_target(name)
+    scope = MemoryEntity.where(project_id: @project_entity&.id).where("aliases LIKE ?", "%#{name}%")
+    return scope.first if code_map.empty?
+
+    scope.find { |entity| entity.aliases.to_s.split(/[,|;]/).any? { |known| known.strip.casecmp?(name) } }
   end
 
   def relation_exists?(from, to, relation_type)
@@ -694,6 +721,7 @@ class ProjectScanner
   end
 
   def update_progress!(phase:, message:, current: nil, total: nil)
+    @on_progress&.call(phase, message)
     return unless @operation_progress
 
     current_value = current || @operation_progress.current_count.to_i + 1

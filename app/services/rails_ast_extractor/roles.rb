@@ -76,10 +76,13 @@ class RailsAstExtractor
       end
     end
 
-    # @return [Boolean] the constant is the one the file's path names (`GogglesDB::APIClient` and
-    #   `goggles_db/api_client.rb` match: both sides are compared underscored)
+    # @return [Boolean] the constant is the one the file's path names, either way round:
+    #   `GogglesDB::APIClient` underscores to `goggles_db/api_client` (an acronym inflection), and
+    #   `goggles_db/best_50m_result` camelizes to `GogglesDb::Best50mResult` (a digit, which
+    #   `"Best50mResult".underscore` doesn't split back)
     def main_constant?(file, root, qualified)
-      qualified.to_s.underscore == file.to_s.delete_prefix("#{root}/").delete_suffix(".rb")
+      path = file.to_s.delete_prefix("#{root}/").delete_suffix(".rb")
+      qualified.to_s.underscore == path || path.camelize == qualified.to_s
     end
   end
 end

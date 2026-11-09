@@ -5,6 +5,25 @@ All notable changes to GraphMem will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.75.0] - 2026-11-06
+
+The Rails code map for project scans, the second PR of the Rails code-map train.
+
+### Added
+- A project scan of a Rails application or engine first builds a deterministic **code map** of its Ruby code (`RailsCodeMap`, Prism only, no model) and writes it into the project as its skeleton: each file's main constant under its fully qualified name (`GogglesDb::Badge`) with its Rails role type, its aliases (short name and path) and a `Defined at <file>:L<n>` fact; a View per `app/views` folder and a Layout per layout file, named by path; a Route for `config/routes.rb`; and the relations the code proves (inheritance, associations, mixins, routes to each controller, engine namespaces included, controllers and mailers to their views). A rescan diffs only these facts and relations: a moved definition supersedes the old fact, a lost one is obsoleted, a lost relation becomes a `delete_relation` review row. Nothing is retired from an incomplete map (over 3,000 files or 2,000 entries), in a scan where an entry failed to write, or for an entity whose file couldn't be parsed.
+- Each scan part's prompt lists the code entities its files define and the related ones, with "use exactly these names and types", within a 2 KB allowance counted only for Rails projects.
+- `graph_mem:scan_profile`: a generated `synth_rails` engine fixture (two classes named Badge, a controller with views and a layout, engine routes, a concern, a job, a helper, a mailer, gems), each scan's `code_map` counters and a `code_map_entities` metric. The report's JSON is `schema_version` 2.
+- `graph_mem:scan_profile` prints progress while a scan runs: each step, each part's end (done or failed, its time, a split) and a `still working` heartbeat every minute, so a long CPU-only part no longer looks stuck. `ProjectScanner` takes an `on_progress:` callback for it.
+
+### Changed
+- Each part's answer is mapped onto the code map before the merge: an item the map resolves takes the map's name and type (the model's aliases and `part_of` are dropped; the skeleton owns containment); an item or relation target the part can't tell apart (a bare `Badge` where both `GogglesDb::Badge` and `GogglesDb::Importers::Badge` exist) is dropped and counted; a gem the Gemfile or a gemspec declares is typed Gem. Counts go to the scan's Ruby result (`code_map`) and one numbers-only `[scan]` line; MCP and REST outputs are unchanged. A folder that isn't a Rails project scans exactly as before.
+- The scan validator leaves the code map's facts and relations alone, and keeps a scan fact on a code-map entity where the scan filed it: one that names no entity is no longer obsoleted (the first goggles_db rescan lost 60), and one that names another class ("It belongs to a User.") is no longer moved to that class (18 on the next rescan).
+- Every Ollama request sends `think: false` unless the caller asks for thinking: a thinking model (gemma4:e4b's default) spent the scan's answer budget on hidden reasoning, and its parts came back empty or cut. Models without thinking accept the flag.
+- In a Rails project, a relation target matches a stored alias only as a whole alias, no longer as a substring: the skeleton's path aliases (`goggles_db/importers/badge`) would otherwise bind an unknown target such as `Importer` to any class whose path contains it.
+
+### Fixed
+- A file whose path has a digit segment (`best_50m_result.rb` declaring `Best50mResult`) is recognized as declaring its main constant, by `rails_ast:import` and the code map alike. `"Best50mResult".underscore` doesn't split the digit back, so such a class used to get no role (Class) and no code-map entry.
+
 ## [1.74.0] - 2026-11-06
 
 Rails role types for the AST importer (#159), the first PR of the Rails code-map train.

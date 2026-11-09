@@ -2,7 +2,8 @@
 
 # A stand-in for Ollama's /api/generate on 127.0.0.1 for a `graph_mem:scan_profile` run with no
 # model (F-3b, step B): every scan part is answered from GraphMem::ScanProfile::SynthRepo's canned
-# answers, so only the synth repo gives meaningful results. Plain Ruby (stdlib only), no Rails.
+# answers, or SynthRailsRepo's for a part of its project (1.75.0), so only the generated repos give
+# meaningful results. Plain Ruby (stdlib only), no Rails.
 #
 #   ruby script/scan_profile/fake_ollama.rb 3995 &
 #   SUMMARY_URL=http://127.0.0.1:3995 bin/rails graph_mem:scan_profile REPOS=synth
@@ -11,6 +12,7 @@
 require "json"
 require "socket"
 require_relative "../../lib/graph_mem/scan_profile/synth_repo"
+require_relative "../../lib/graph_mem/scan_profile/synth_rails_repo"
 
 # The fake server: one thread, one request per connection.
 class ScanProfileFakeOllama
@@ -72,7 +74,8 @@ class ScanProfileFakeOllama
 
     @requests += 1
     prompt = JSON.parse(body)["prompt"].to_s
-    stub = GraphMem::ScanProfile::SynthRepo.stub_answer(prompt)
+    repo = GraphMem::ScanProfile::SynthRailsRepo.prompt?(prompt) ? GraphMem::ScanProfile::SynthRailsRepo : GraphMem::ScanProfile::SynthRepo
+    stub = repo.stub_answer(prompt)
     [ 200, { model: "fake-model", response: stub[:text], done: true, done_reason: stub[:done_reason],
              prompt_eval_count: prompt.bytesize / 4, eval_count: stub[:text].bytesize / 4 } ]
   end

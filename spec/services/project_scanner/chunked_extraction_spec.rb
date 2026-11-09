@@ -115,4 +115,29 @@ RSpec.describe ProjectScanner::ChunkedExtraction do
     expect(outcome).to have_attributes(parts_total: 5, parts_done: 1, parts_failed: 4, first_error: "provider_unavailable")
     expect(outcome.data["architecture"].size).to eq(1)
   end
+
+  context "with a Rails code map guide (1.75.0)" do
+    around do |example|
+      Dir.mktmpdir("chunked-guide") do |dir|
+        @guide = ProjectScanner::CodeMapGuide.new(RailsCodeMap.build(write_rails_code_map_tree(dir), reserved_names: [ "Gadget" ]))
+        example.run
+      end
+    end
+
+    let(:model_file) { "app/models/gadget/badge.rb" }
+    let(:importer_file) { "app/strategies/gadget/importers/badge.rb" }
+
+    it "lists each part's code entities and maps each answer by its own files, a split half's included" do
+      badge = ->(prompt) { prompt.include?(importer_file) && prompt.include?(model_file) ? answer("x").merge(done_reason: "length") : answer("Badge") }
+      stub_generate(model_file => badge, importer_file => badge)
+
+      outcome = described_class.new(chunks: [ chunk(1, block(model_file), block(importer_file)) ], project_name: "Gadget Project",
+                                    num_ctx: 8192, num_predict: 2048, timeout: 120, guide: @guide).call
+
+      expect(prompts.first).to include("#{ProjectScanner::ExtractionPrompt::CODE_MAP_OWN}Gadget::Badge (Model); Gadget::Importers::Badge (Strategy)")
+      expect(prompts.last).to include("#{ProjectScanner::ExtractionPrompt::CODE_MAP_OWN}Gadget::Importers::Badge (Strategy)\n")
+      expect(outcome.data["architecture"].map { |item| item["entity"].values_at("name", "type") })
+        .to eq([ %w[Gadget::Badge Model], %w[Gadget::Importers::Badge Strategy] ])
+    end
+  end
 end

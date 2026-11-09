@@ -7,7 +7,8 @@ require "rails_helper"
 # Net::HTTP stubbed, and compares the prompt with a golden file in spec/fixtures/llm/ and the rest
 # of the request body with a literal Hash, under both transports. Database ids are replaced by
 # placeholders (OBS1, ENT1, …) before comparing. These goldens must not change in this train
-# unless a plan says so.
+# unless a plan says so. 1.75.0 (Steve, #160): every Ollama body also sends `think: false`; the
+# golden prompts are unchanged.
 RSpec.describe "LLM calls (characterization)" do
   let(:bodies) { [] }
   let(:read_timeouts) { [] }
@@ -102,7 +103,7 @@ RSpec.describe "LLM calls (characterization)" do
       response = summarize
 
       expect(placeholders(prompt_of(bodies.sole), ids)).to eq(golden("g1_summary_prompt"))
-      expect(envelope_of(bodies.sole)).to eq("model" => "synth-model", "stream" => false,
+      expect(envelope_of(bodies.sole)).to eq("model" => "synth-model", "stream" => false, "think" => false,
                                              "options" => { "temperature" => 0.1, "num_predict" => 256, "num_ctx" => 8192 })
       expect(read_timeouts).to eq([ 30 ])
       expect(results.sole).to match(ok: true, text: answers_text(first), error: nil, latency_ms: kind_of(Float), prompt_tokens: 321, done_reason: "stop")
@@ -163,6 +164,7 @@ RSpec.describe "LLM calls (characterization)" do
 
       expect(bodies.map { |body| prompt_of(body) }).to eq([ golden("g3_scan_part1_prompt"), golden("g3_scan_part2_prompt") ])
       expect(bodies.map { |body| envelope_of(body) }).to all(eq("model" => "synth-model", "stream" => false, "format" => "json", "truncate" => false,
+                                                                "think" => false,
                                                                 "options" => { "temperature" => 0.1, "num_predict" => 512, "num_ctx" => 4096 }))
       expect(read_timeouts).to eq([ 120, 120 ])
       # The keys ChunkedExtraction reads to decide a split (no client cut: max_output_length nil).
@@ -194,7 +196,7 @@ RSpec.describe "LLM calls (characterization)" do
     def ids = { %("id":#{old.id},) => %("id":"OBS1",) }
 
     def judge_body
-      { "model" => "synth-model", "stream" => false, "format" => "json",
+      { "model" => "synth-model", "stream" => false, "format" => "json", "think" => false,
         "options" => { "temperature" => 0.1, "num_predict" => FactSupersede::Judge::NUM_PREDICT, "num_ctx" => 8192 } }
     end
 

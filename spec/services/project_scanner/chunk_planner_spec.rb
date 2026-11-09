@@ -117,6 +117,12 @@ RSpec.describe ProjectScanner::ChunkPlanner do
     expect(File).not_to have_received(:binread)
   end
 
+  it "reads a piece's path back from its header, without the part and half labels (1.75.0)" do
+    expect(described_class.piece_path("--- FILE: app/models/gadget/badge.rb\nclass Badge\n---\n")).to eq("app/models/gadget/badge.rb")
+    expect(described_class.piece_path("--- FILE: docs/a b.md (part 2 of 3) (half 1 of 2)\ntext\n")).to eq("docs/a b.md")
+    expect(described_class.piece_path("no header")).to be_nil
+  end
+
   describe ProjectScanner::TokenEstimate do
     it "counts 3 bytes per token, rounding up, and bytes not characters" do
       expect(described_class.tokens("abcd")).to eq(2)

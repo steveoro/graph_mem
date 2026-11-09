@@ -54,6 +54,17 @@ class ProjectScanFileFilter
     !kept_path(path).nil?
   end
 
+  # Like #keep?, without counting: the Rails code map (1.75.0) checks every Ruby file of the
+  # project, and the scan's counters report only the files its globs found.
+  #
+  # @return [Boolean] whether +path+ may be read
+  def allowed?(path)
+    real = ScanRootPolicy.realpath_or_nil(path)
+    return false unless real && ScanRootPolicy.contained?(@root, real)
+
+    !(ScanRootPolicy.denied_file?(@root, path) || root_level_denied?(path, real))
+  end
+
   private
 
   def root_level_denied?(path, real)
