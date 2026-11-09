@@ -1,5 +1,5 @@
 # frozen_string_literal: true
 
 module GraphMem
-  VERSION = "1.75.0"
+  VERSION = "1.75.1"
 end

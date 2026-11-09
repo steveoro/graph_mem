@@ -190,6 +190,35 @@ Every part failed to give a JSON object with an `architecture` array, so the sca
    - Ensure databases exist: `bin/rails db:create`
    - Run migrations: `bin/rails db:migrate`
 
+### Problem: Docker app fails with "Access denied for user 'root'@'172.30.42.1'"
+
+The address is the compose bridge gateway (`GRAPH_MEM_DOCKER_SUBNET`, default `172.30.42.0/24`), not
+your LAN: the `app` container uses the host network and reaches MariaDB through the published
+`DB_PORT`. The rejection is about the password.
+
+MariaDB applies `MARIADB_ROOT_PASSWORD` only when it initializes an empty `graph_mem_db` volume. If
+`DB_PASSWORD` in `.env` changed since then (for example, `.env` copied from another machine), the app
+sends the new password and the DB still expects the old one. Either restore the old `DB_PASSWORD`, or
+log in with it and change root's password to the new one:
+
+```bash
+docker compose exec db mariadb -uroot -p'<old>' \
+  -e "ALTER USER 'root'@'%' IDENTIFIED BY '<new>'; ALTER USER 'root'@'localhost' IDENTIFIED BY '<new>';"
+```
+
+### Problem: `docker compose up` fails with "Pool overlaps with other one on this address space"
+
+Another Docker network, or a LAN/VPN interface, already uses `GRAPH_MEM_DOCKER_SUBNET`. Pick a free
+`/24` inside `172.16.0.0/12` (so the MCP allowlist defaults still cover it), set it in `.env`, then
+`docker compose down && bin/up`. `ip -4 -br addr` and `docker network ls` show what is taken.
+
+To keep *every* Docker network out of home-LAN ranges, also set the daemon pool in
+`/etc/docker/daemon.json` and restart Docker:
+
+```json
+{ "default-address-pools": [ { "base": "172.30.0.0/16", "size": 24 } ] }
+```
+
 ### Problem: Slow Database Queries
 
 **Symptoms:**
