@@ -5,7 +5,7 @@ All notable changes to GraphMem will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.76.0] - 2026-11-06
+## [1.76.0] - 2026-11-10
 
 Rescans recognize a reworded fact. The goggles_db profile with all of 1.75.0's fixes still showed a rescan churn of 98, mostly the model wording facts it had already given in new ways.
 

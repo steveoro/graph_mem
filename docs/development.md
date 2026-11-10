@@ -318,8 +318,10 @@ and `skills/project-scan`, and paste the output in the release PR. Run it only i
 throwaway venv outside the repo, on temporary copies of the two folders (`cp -rL`), so no
 venv, `pip` cache or validator output lands in the working tree. Expected: the first is
 valid; the second reports only `triggers` and `disable-model-invocation` as unexpected
-fields (documented in `docs/rules/README.md`). Also keep `metadata.graph-mem-version` in
-`skills/graph-mem-mcp-toolset/SKILL.md` equal to `GraphMem::VERSION`.
+fields (documented in `docs/rules/README.md`). After bumping `lib/graph_mem/version.rb`,
+run `bin/rails graph_mem:sync_skill_version` to copy the version into `metadata.graph-mem-version`
+of `skills/graph-mem-mcp-toolset/SKILL.md`; that file is static Markdown read by agents, so it
+can't reference `GraphMem::VERSION` itself (`spec/docs/agent_text_sync_spec.rb` checks they match).
 
 ## Additional Resources
 

@@ -150,6 +150,10 @@ Interactive Cytoscape.js-based graph visualization at the server root (`/`), wit
 
 ## Quick Start with Docker
 
+> New workstation? [docs/quick_setup.md](docs/quick_setup.md) covers the container, the MCP
+> client config and the skill and rule for Claude Code, Cursor and Devin Desktop in seven steps,
+> including generating your own master key.
+
 **Prerequisites:** Ollama must be running on the host with at least one embedding model pulled:
 
 ```bash
@@ -160,6 +164,10 @@ ollama pull nomic-embed-text
 > The `app` container uses `network_mode: host`, so it shares the host's network
 > stack. `localhost:11434` reaches Ollama with no bridge/firewall configuration needed.
 > The app binds directly to host port 3030.
+>
+> Only the `db` container sits on the compose bridge, on a fixed subnet (`172.30.42.0/24`, set
+> `GRAPH_MEM_DOCKER_SUBNET` in `.env` if it clashes with a LAN or VPN). The app reaches MariaDB through
+> the published port, so the DB sees it connecting from that subnet's gateway (`172.30.42.1`).
 
 ```bash
 # Clone and enter the project

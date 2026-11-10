@@ -59,4 +59,18 @@ namespace :graph_mem do
     never_called = report[:tools].select { |row| row[:call_count].zero? }.map { |row| row[:tool_name] }
     puts "Never called: #{never_called.any? ? never_called.join(', ') : 'none'}"
   end
+
+  desc "Set metadata.graph-mem-version in skills/graph-mem-mcp-toolset/SKILL.md to GraphMem::VERSION " \
+       "(run after bumping lib/graph_mem/version.rb; SKILL_PATH overrides the file)"
+  task :sync_skill_version do
+    require Rails.root.join("lib/graph_mem/version").to_s
+
+    path = ENV.fetch("SKILL_PATH", Rails.root.join("skills/graph-mem-mcp-toolset/SKILL.md").to_s)
+    text = File.read(path)
+    pattern = /^(  graph-mem-version: )"[^"]*"$/
+    abort "#{path}: no 'graph-mem-version:' line under metadata" unless text.match?(pattern)
+
+    File.write(path, text.sub(pattern, %(\\1"#{GraphMem::VERSION}")))
+    puts "#{path}: graph-mem-version = #{GraphMem::VERSION}"
+  end
 end

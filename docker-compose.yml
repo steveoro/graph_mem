@@ -56,3 +56,13 @@ services:
 volumes:
   graph_mem_db:
   graph_mem_storage:
+
+networks:
+  # Fixed subnet for the project bridge (only `db` sits on it: `app` uses the host network).
+  # Inside 172.16.0.0/12, the Docker range the MCP allowlist defaults already trust; it never
+  # depends on the daemon's address pool, which may hand out a 192.168.x range clashing with a LAN.
+  # Changing it needs `docker compose down` first (Docker never edits an existing network).
+  default:
+    ipam:
+      config:
+        - subnet: ${GRAPH_MEM_DOCKER_SUBNET:-172.30.42.0/24}
