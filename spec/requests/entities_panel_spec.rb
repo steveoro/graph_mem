@@ -121,6 +121,17 @@ RSpec.describe "Entity panel", type: :request do
 
     it_behaves_like "a panel"
 
+    it "shows the entities a fact mentions, from its keyword path (1.77.0)" do
+      fact = widget.memory_observations.find_by!(content: "High-trust fact")
+      fact.update_columns(keywords: [ "Alpha Service", "SynthWidget", "Synth Router" ], keywords_at: Time.current)
+
+      get entity_panel_path(widget), headers: frame
+
+      mentions = html.css("[data-testid='entity-panel-mentions']")
+      expect(mentions.size).to eq(1)
+      expect(mentions.first.css(".ui-badge").map(&:text)).to eq([ "Synth Router" ])
+    end
+
     it "has the edit forms, each a Turbo Stream form with the CSRF token, and Recent changes" do
       ChangeSet.record(kind: "explore.entity_edit", subject: widget, summary: "edited 'SynthWidget'") { widget.update!(description: "Synthetic") }
       ActionController::Base.allow_forgery_protection = true

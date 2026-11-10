@@ -11,6 +11,11 @@ development:
     class: EmbeddingScheduledBackfillJob
     queue: low_priority
     schedule: every day at 4am
+  # 1.77.0: facts whose keyword path a write-time request missed.
+  fact_keywords:
+    class: FactKeywordsJob
+    queue: low_priority
+    schedule: every day at 4:15am
   review_policy:
     class: ReviewPolicyJob
     queue: low_priority
@@ -55,6 +60,10 @@ production:
     class: EmbeddingScheduledBackfillJob
     queue: low_priority
     schedule: at 4am every day
+  fact_keywords:
+    class: FactKeywordsJob
+    queue: low_priority
+    schedule: at 4:15am every day
   review_policy:
     class: ReviewPolicyJob
     queue: low_priority

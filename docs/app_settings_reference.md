@@ -16,6 +16,7 @@ GraphMem stores operator-tunable runtime settings in the primary MariaDB `settin
 | `enable_garbage_collector` | `true` | When `false`, `GarbageCollectionJob` and manual GC runs are skipped. |
 | `enable_stale_memory_scan` | `true` | **Stale memory scan.** When `false`, the scheduled scan that flags stale observations for review is skipped. |
 | `enable_contradiction_detection` | `true` | **Contradiction detection.** When `false`, the contradiction detector (in the stale memory scan and the `detect_contradictions` endpoint) finds no pairs. |
+| `fact_keywords_enabled` | `true` | **Fact keywords** (1.77.0). When `true`, every fact gets a keyword path (`FactKeywords`): its project, the entity that holds it, then the project's entities it mentions, in the order it names them. Computed by `FactKeywordsJob`, requested after a fact is written or its text changes and run nightly for anything left pending; a project scan computes its own new facts before it commits. Turned off, nothing is computed and stored paths stay as they are. |
 | `fact_supersede_enabled` | `true` | **Source fact supersede** (1.64.0). When `true`, a new or changed source fact queues `FactSupersedeJob`, which proposes "Outdated by a fact" review rows in the fact's project. Proposals only; applying on its own needs `enable_auto_apply_fact_supersede` (Review policies, off by default). |
 
 `enable_guest_access` is on **System › Access** (see [MCP Access](#mcp-access)).

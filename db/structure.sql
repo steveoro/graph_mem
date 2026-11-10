@@ -270,6 +270,8 @@ CREATE TABLE `memory_observations` (
   `embedded_at` datetime(6) DEFAULT NULL,
   `perspective` varchar(16) DEFAULT NULL,
   `outdated_by_id` bigint(20) DEFAULT NULL,
+  `keywords` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL DEFAULT '[]' CHECK (json_valid(`keywords`)),
+  `keywords_at` datetime(6) DEFAULT NULL,
   PRIMARY KEY (`id`),
   KEY `index_memory_observations_on_memory_entity_id` (`memory_entity_id`),
   KEY `index_memory_observations_on_source` (`source`),
@@ -283,6 +285,7 @@ CREATE TABLE `memory_observations` (
   KEY `idx_memory_observations_embedded_at` (`embedded_at`),
   KEY `index_memory_observations_on_perspective` (`perspective`),
   KEY `index_memory_observations_on_outdated_by_id` (`outdated_by_id`),
+  KEY `idx_memory_observations_keywords_at_status` (`keywords_at`,`status`),
   VECTOR KEY `idx_memory_observations_embedding` (`embedding`) `DISTANCE`='cosine',
   CONSTRAINT `fk_rails_29fad01511` FOREIGN KEY (`outdated_by_id`) REFERENCES `memory_observations` (`id`) ON DELETE SET NULL,
   CONSTRAINT `fk_rails_59348732bc` FOREIGN KEY (`superseded_by_id`) REFERENCES `memory_observations` (`id`) ON DELETE SET NULL,
@@ -422,6 +425,7 @@ CREATE TABLE `tool_invocations` (
 /*M!100616 SET NOTE_VERBOSITY=@OLD_NOTE_VERBOSITY */;
 
 INSERT INTO `schema_migrations` (version) VALUES
+('20261110120000'),
 ('20261103160000'),
 ('20261103140000'),
 ('20261030120000'),

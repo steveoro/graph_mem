@@ -436,9 +436,7 @@ class ProjectScanValidator
   end
 
   def entity_terms(entity)
-    terms = [ entity.name.to_s.strip ]
-    terms += entity.aliases.to_s.split(/[,|;]/).map(&:strip) if entity.aliases.present?
-    terms.map(&:downcase).reject(&:blank?).reject { |t| t.length < 3 }.uniq
+    EntityTerms.for(entity)
   end
 
   def content_matches_entity?(content, entity)
@@ -446,7 +444,7 @@ class ProjectScanValidator
   end
 
   def content_matches_term?(content, term)
-    return false if term.blank? || term.length < 3
+    return false if term.blank? || term.length < EntityTerms::MIN_LENGTH
 
     words = term.split(/\s+/)
     pattern = words.map { |w| Regexp.escape(w) }.join("\\W+")

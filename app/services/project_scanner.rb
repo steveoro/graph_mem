@@ -146,6 +146,7 @@ class ProjectScanner
     @type_mismatches = 0
     @observations_deduped = 0
     @restated_observation_ids = Set.new
+    @scan_fact_ids = []
     @validation_paused = false
     @extraction = {}
     @file_filter = ProjectScanFileFilter.new(@project_root)
@@ -373,6 +374,7 @@ class ProjectScanner
       # later (or in another part) resolves.
       reconciled = architecture.filter_map { |item| reconcile_architecture_item(item) }
       reconciled.each { |entity, item| Array(item["relations"]).each { |rel| reconcile_relation(entity, rel) } }
+      compute_scan_fact_keywords!
       report_reconcile_counts!
 
       # Only a complete scan saw every file: a partial one never obsoletes or queues a delete.
@@ -511,12 +513,12 @@ class ProjectScanner
 
       next if @dry_run || reworded_duplicate?(entity, text)
 
-      MemoryObservation.create!(
+      @scan_fact_ids << MemoryObservation.create!(
         memory_entity: entity,
         content: text,
         source: scan_source("reconcile"),
         confidence: 0.9
-      )
+      ).id
       @observations_created_count += 1
       existing[text] = nil
     end

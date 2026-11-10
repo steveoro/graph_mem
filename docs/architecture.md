@@ -178,7 +178,7 @@ Calls Ollama (or an OpenAI-compatible endpoint) to generate vectors from entity 
 #### Core Models
 
 - **MemoryEntity** - Graph node with name, entity_type, aliases, description, and VECTOR(768) embedding
-- **MemoryObservation** - Versioned text facts plus confidence, provenance, validity, tags, and `active`/`obsolete`/`superseded` lifecycle state, with its own VECTOR(768) embedding
+- **MemoryObservation** - Versioned text facts plus confidence, provenance, validity, tags, and `active`/`obsolete`/`superseded` lifecycle state, with its own VECTOR(768) embedding and (1.77.0) a keyword path: `keywords`, the project root's name, the name of the entity that holds the fact, then each project entity the fact mentions in the order it names them (`FactKeywords` / `FactKeywords::TermIndex`, deterministic: entity names and aliases, no LLM; a short name several entities share is left out). `keywords_at` NULL means pending: `FactKeywordsJob` computes pending facts after writes (one delayed run per burst, discarded while one is queued or running) and nightly, `graph_mem:fact_keywords:refresh [PROJECT=]` recomputes on demand (after renames, merges or alias changes; a fact that moves to another entity is re-pended on its own). The path is never embedded and isn't in the REST or MCP output yet; Explore shows a fact's mentions
 - **MemoryRelation** - Directed edge with a canonicalized relation_type, weight, confidence, and structured properties
 - **EntityTypeMapping** - Canonicalization rules for entity types
 - **RelationTypeMapping** - Canonicalization rules for relation types

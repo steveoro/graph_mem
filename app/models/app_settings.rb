@@ -12,6 +12,8 @@ class AppSettings < RailsSettings::Base
   field :enable_guest_access, default: true, type: :boolean
   # Fact supersede (1.64.0): a new or changed source fact queues FactSupersedeJob (proposals only).
   field :fact_supersede_enabled, default: true, type: :boolean
+  # 1.77.0: compute each fact's keyword path (FactKeywords) after it is written and nightly.
+  field :fact_keywords_enabled, default: true, type: :boolean
 
   # Database backup settings
   field :backup_folder_path, default: "db/backup", type: :string

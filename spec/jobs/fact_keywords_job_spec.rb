@@ -1,0 +1,49 @@
+# frozen_string_literal: true
+
+require "rails_helper"
+
+# 1.77.0: FactKeywordsJob computes pending active facts in batches; writes request one run.
+RSpec.describe FactKeywordsJob do
+  include ActiveJob::TestHelper
+
+  let(:root) { MemoryEntity.create!(name: "Gadget Project", entity_type: "Project") }
+  let(:widget) do
+    MemoryEntity.create!(name: "SynthWidget", entity_type: "Class", project_id: root.id).tap do |entity|
+      MemoryRelation.create!(from_entity_id: entity.id, to_entity_id: root.id, relation_type: "part_of")
+    end
+  end
+
+  before { described_class.reset_request! }
+  after { AppSettings.where(var: "fact_keywords_enabled").delete_all }
+
+  it "computes every pending active fact in batches, leaves inactive ones and is idempotent" do
+    stub_const("#{described_class}::BATCH_SIZE", 2)
+    facts = Array.new(5) { |i| MemoryObservation.create!(memory_entity: widget, content: "SynthWidget fact #{i}.") }
+    retired = MemoryObservation.create!(memory_entity: widget, content: "SynthWidget retired fact.")
+    retired.mark_obsolete!(reason: "spec")
+
+    expect(described_class.perform_now).to eq(5)
+    expect(facts.map { |fact| fact.reload.keywords }).to all(eq([ "Gadget Project", "SynthWidget" ]))
+    expect(retired.reload.keywords_at).to be_nil
+    expect(described_class.perform_now).to eq(0)
+  end
+
+  it "does nothing with the setting off" do
+    MemoryObservation.create!(memory_entity: widget, content: "SynthWidget fact.")
+    AppSettings.fact_keywords_enabled = false
+
+    expect(described_class.perform_now).to eq(0)
+    expect(MemoryObservation.keywords_pending.count).to eq(1)
+  end
+
+  it "enqueues one delayed run per burst of writes, and none with the setting off" do
+    clear_enqueued_jobs
+
+    expect { 3.times { |i| MemoryObservation.create!(memory_entity: widget, content: "SynthWidget fact #{i}.") } }
+      .to have_enqueued_job(described_class).exactly(:once)
+
+    described_class.reset_request!
+    AppSettings.fact_keywords_enabled = false
+    expect(described_class.request!).to be(false)
+  end
+end
