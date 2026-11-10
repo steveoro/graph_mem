@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "ipaddr"
+require_relative "lan_addresses"
 
 module GraphMem
   # Resolves the access posture of the MCP endpoint: which client IPs may connect,
@@ -135,7 +136,8 @@ module GraphMem
     end
 
     def resolve_allowed_ips(raw)
-      entries = split_entries(raw)
+      # `@lan` (1.79.0): this machine's LAN subnets, read when the policy is built (LanAddresses).
+      entries = LanAddresses.expand_ips(split_entries(raw))
 
       return default_ranges if entries.empty?
 

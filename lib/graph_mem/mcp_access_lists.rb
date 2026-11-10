@@ -83,7 +83,16 @@ module GraphMem
       #
       # @raise [ReadError]
       def entries!(kind, env: ENV)
-        (env_entries(kind, env: env) + extra_entries!(kind)).uniq(&:downcase)
+        listed = env_entries(kind, env: env)
+        # `@lan` (1.79.0) in the hosts: this machine's LAN addresses and host name (LanAddresses).
+        listed = LanAddresses.expand_hosts(listed) if kind == :hosts
+        (listed + extra_entries!(kind)).uniq(&:downcase)
+      end
+
+      # @param kind [Symbol]
+      # @return [Boolean] the ENV value of +kind+ holds `@lan`
+      def lan?(kind, env: ENV)
+        LanAddresses.token?(env_entries(kind, env: env))
       end
 
       # Checks and normalizes an additive list before it is saved (see Validator).
