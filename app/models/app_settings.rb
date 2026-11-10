@@ -103,6 +103,7 @@ class AppSettings < RailsSettings::Base
 
   # Review policies (UI-5a, ReviewPolicyRunner): hygiene policies start on, auto-apply starts off.
   field :enable_review_policy_dangling, default: true, type: :boolean
+  field :enable_review_policy_no_shared_subject, default: true, type: :boolean
   field :enable_review_policy_no_longer_flagged, default: true, type: :boolean
   field :enable_review_policy_expire_low_confidence, default: true, type: :boolean
   field :review_expire_low_confidence_days, default: 30, type: :integer,
@@ -132,6 +133,7 @@ class AppSettings < RailsSettings::Base
   # Each review policy's toggle and its default (snooze_expiry always runs).
   REVIEW_POLICY_TOGGLES = {
     "dangling" => [ "enable_review_policy_dangling", true ],
+    "no_shared_subject" => [ "enable_review_policy_no_shared_subject", true ],
     "no_longer_flagged" => [ "enable_review_policy_no_longer_flagged", true ],
     "expire_low_confidence" => [ "enable_review_policy_expire_low_confidence", true ],
     "auto_apply_relationships" => [ "enable_auto_apply_relationships", false ],

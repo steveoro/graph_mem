@@ -10,7 +10,7 @@
 #   # => { report_id: 12, policies: { "dangling" => { "acted" => 3, ... }, ... }, ... }
 class ReviewPolicyRunner
   POLICIES = [
-    ReviewPolicies::SnoozeExpiry, ReviewPolicies::Dangling, ReviewPolicies::NoLongerFlagged,
+    ReviewPolicies::SnoozeExpiry, ReviewPolicies::Dangling, ReviewPolicies::NoSharedSubject, ReviewPolicies::NoLongerFlagged,
     ReviewPolicies::ExpireLowConfidence, ReviewPolicies::AutoApplyExpiredValidity, ReviewPolicies::AutoApplyRelationships,
     ReviewPolicies::AutoApplyFactSupersede
   ].freeze
