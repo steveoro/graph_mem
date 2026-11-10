@@ -12,7 +12,11 @@ module FactSupersede
   #   and the fact is embedded), within the fact_supersede_max_distance review number;
   # - terms: an escaped LIKE per term (the operator's query, the fact's replaces: tags, the
   #   caller's terms; at most SourceFact::MAX_TERMS);
-  # - polarity: ContradictionDetector.negative? on both sides is a +0.1 boost, never a filter.
+  # - polarity: ContradictionDetector.negative? on both sides is a +0.1 boost, never a filter;
+  # - keywords (1.78.0, with fact keywords on): the two keyword paths (FactKeywords::Relatedness),
+  #   computed first when pending. Related facts get SHARED_BOOST (STRONG_BOOST when they share
+  #   their first mention); the answer is kept on the candidate, and Proposals seeds no unjudged
+  #   row for an unrelated pair.
   #
   #   result = FactSupersede::Candidates.call(fact, terms: ["fast-mcp"])
   #   result.candidates.first # => #<struct Candidate observation=…, score=0.6, term="fast-mcp", scoped=true, …>
@@ -22,6 +26,8 @@ module FactSupersede
     MAX_LIMIT = 500
     TERM_SCORE = 0.6
     POLARITY_BOOST = 0.1
+    SHARED_BOOST = 0.1
+    STRONG_BOOST = 0.2
     MAX_SCORE = 0.99
 
     # @!attribute candidates [Array<Candidate>] by score desc, then id
@@ -55,7 +61,10 @@ module FactSupersede
       distances = vector_distances
       hits = term_hits
       ids = distances.keys | hits.keys
-      candidates = scope.where(id: ids).includes(:memory_entity).map { |observation| candidate(observation, distances, hits) }
+      observations = scope.where(id: ids).includes(:memory_entity).to_a
+      @keywords = AppSettings.fact_keywords_enabled?
+      FactKeywords.ensure!(observations + [ @fact ]) if @keywords
+      candidates = observations.map { |observation| candidate(observation, distances, hits) }
       candidates = candidates.sort_by { |entry| [ -entry.score, entry.observation.id ] }.first(@limit)
       Result.new(candidates: candidates, terms: @terms, vector: vector_usable?, project_id: @project_id)
     end
@@ -67,8 +76,18 @@ module FactSupersede
       flip = ContradictionDetector.negative?(@fact.content) != ContradictionDetector.negative?(observation.content)
       score = [ distance ? 1.0 - distance : 0.0, hits[observation.id] ? TERM_SCORE : 0.0 ].max
       score += POLARITY_BOOST if flip
+      comparison = keyword_comparison(observation)
+      score += comparison.strong ? STRONG_BOOST : SHARED_BOOST if comparison&.related?
       Candidate.new(observation: observation, score: [ score, MAX_SCORE ].min.round(3), distance: distance, term: hits[observation.id],
-                    polarity_flip: flip, scoped: scoped_entity?(observation.memory_entity))
+                    polarity_flip: flip, scoped: scoped_entity?(observation.memory_entity), subject: comparison&.subject,
+                    shared_keywords: comparison&.shared, strong: comparison&.strong)
+    end
+
+    # @return [FactKeywords::Relatedness::Comparison, nil] nil with fact keywords off or a path pending
+    def keyword_comparison(observation)
+      return nil unless @keywords && FactKeywords::Relatedness.computed?(@fact, observation)
+
+      FactKeywords::Relatedness.compare(@fact, observation)
     end
 
     def scoped_entity?(entity)
