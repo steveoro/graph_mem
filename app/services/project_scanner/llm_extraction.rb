@@ -154,7 +154,8 @@ class ProjectScanner
 
       names = Array(@extracted_data["architecture"]).filter_map { |item| item.dig("entity", "name").to_s.strip.presence if item.is_a?(Hash) }
       @extraction.merge!("reconciled" => true, "project_root" => @project_root, "project_entity_id" => @project_entity.id,
-                         "names" => names.uniq.first(500), "fallback" => extracted[:fallback] == true,
+                         "names" => names.uniq.first(500), "restated_observation_ids" => @restated_observation_ids.to_a.first(5000),
+                         "fallback" => extracted[:fallback] == true,
                          "fallback_reason" => extracted[:fallback_reason]).compact!
       save_extraction_details!
     end
@@ -176,6 +177,7 @@ class ProjectScanner
       @discovered_files = discover_files
       @context_text = whole_plan.context_text
       @extracted_data = { "architecture" => Array(@extraction["names"]).map { |name| { "entity" => { "name" => name } } } }
+      @restated_observation_ids = Array(@extraction["restated_observation_ids"]).to_set(&:to_i)
       validate_and_finish({ fallback: @extraction["fallback"] == true, fallback_reason: @extraction["fallback_reason"] })
     end
   end

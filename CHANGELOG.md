@@ -14,7 +14,10 @@ Rescans recognize a reworded fact. The goggles_db profile with all of 1.75.0's f
 - `graph_mem:scan_profile`: new facts are embedded when the embedding endpoint is on this machine (the header says `embeddings: local` or `off`), a `deduped` column, and the `SWEEP` key `fact_duplicate_max_distance`. The report's JSON is `schema_version` 3.
 
 ### Changed
-- A project scan no longer adds a fact its entity already holds in other words. Before each new fact is written, its embedding is compared with the entity's embedded active facts; one within the distance is skipped and counted (`observations_deduped` in the scan's Ruby result and its numbers-only `[scan]` line; MCP and REST outputs are unchanged). Without embeddings, only an exact repeat is skipped, as before, and the scan never fails on it.
+- A project scan no longer adds a fact its entity already holds in other words. Before each new fact is written, its embedding is compared with the entity's embedded active facts; one within the distance is skipped and counted (`observations_deduped` in the scan's Ruby result and its numbers-only `[scan]` line; MCP and REST outputs are unchanged). Without embeddings, only an exact repeat is skipped, as before, and the scan never fails on it; a service that fails once isn't asked again in that scan.
+
+### Fixed
+- A stored fact a scan restates, word for word or reworded, is left alone by that scan's validator, like the scan's own facts (and through a resumed validation). Before, the validator could move or obsolete it ("It belongs to a User." names another entity) while the restatement had been skipped, leaving the entity with neither wording.
 - `ImportObservationDuplicateDetector` takes `only_embedded: true` to compare against embedded facts only (the Rails code map's facts wait for a deferred backfill). Imports and Explore edits are unchanged.
 
 ## [1.75.0] - 2026-11-06

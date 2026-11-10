@@ -16,12 +16,15 @@ RSpec.describe ProjectScanner, "reworded facts", :with_test_embeddings do
   let(:close_vector) { Array.new(620, 0.1) + Array.new(148, 0.0) }
   let(:far_vector) { [ 1.0 ] + Array.new(767, 0.0) }
   let(:vectors) { {} }
+  let(:widget_relations) { [] }
+  let(:extra_items) { [] }
   let(:embedding_service) { EmbeddingService.new(config: { url: "http://test", model: "test", provider: "ollama", dims: 768 }) }
   let(:provider) do
     FakeProvider.new do |*|
       { ok: true, done_reason: "stop", prompt_tokens: 10, error: nil, latency_ms: 1.0,
         text: { project: { name: "Gadget Project" },
-                architecture: [ { entity: { name: "SynthWidget", type: "Class" }, observations: facts, relations: [] } ] }.to_json }
+                architecture: [ { entity: { name: "SynthWidget", type: "Class" }, observations: facts, relations: widget_relations },
+                                *extra_items ] }.to_json }
     end
   end
 
@@ -103,5 +106,61 @@ RSpec.describe ProjectScanner, "reworded facts", :with_test_embeddings do
     allow(embedding_service).to receive(:embed!).and_raise(EmbeddingService::EmbeddingError, "connection refused")
     expect(scan).to have_attributes(errors: [], observations_deduped: 0)
     expect(widget_facts.size).to eq(3)
+  end
+
+  it "asks a down embedding service once per scan, not once per fact" do
+    scan
+    facts.replace([ "SynthWidget paints the gadget frames.", "SynthWidget draws the gadget frames." ])
+    allow(embedding_service).to receive(:embed!).and_raise(EmbeddingService::EmbeddingError, "connection refused")
+
+    expect(scan).to have_attributes(errors: [], observations_deduped: 0)
+    expect(embedding_service).to have_received(:embed!).once
+    expect(widget_facts.size).to eq(3)
+  end
+
+  context "when the stored fact names another entity, which validation would move" do
+    # A first scan's fact on SynthWidget that names only FrameBuffer: on the rescan the validator would
+    # move it to FrameBuffer. A rescan that restates it (reworded or word for word) keeps it where it is,
+    # so SynthWidget never ends up with neither wording.
+    let(:facts) { [ "It belongs to a FrameBuffer." ] }
+    let(:widget_relations) { [ { to: "Gadget Project", type: "part_of" } ] }
+    let(:extra_items) do
+      [ { entity: { name: "FrameBuffer", type: "Class" }, observations: [ "FrameBuffer keeps the last frames." ],
+          relations: [ { to: "Gadget Project", type: "part_of" } ] } ]
+    end
+
+    it "keeps the stored fact when the rescan rewords it" do
+      scan
+      facts.replace([ "SynthWidget belongs to a FrameBuffer." ])
+
+      result = scan
+
+      expect(result.observations_deduped).to eq(1)
+      expect(widget_facts).to eq([ "It belongs to a FrameBuffer." ])
+      expect(result.observations_moved).to eq(0)
+    end
+
+    it "keeps the stored fact when the rescan repeats it word for word" do
+      scan
+
+      result = scan
+
+      expect(widget_facts).to eq([ "It belongs to a FrameBuffer." ])
+      expect(result.observations_moved).to eq(0)
+    end
+
+    it "saves the restated facts with the reconciled extraction, for a resumed validation" do
+      scan
+      operation = OperationProgress.start!(operation_type: "project_scan", operation_id: SecureRandom.uuid, total_count: 6,
+                                           message: "Synthetic scan")
+      stored = MemoryObservation.active.where(content: [ "It belongs to a FrameBuffer.", "FrameBuffer keeps the last frames." ]).pluck(:id)
+
+      with_llm_provider(provider) do
+        described_class.new(project_root: root, project_name: "Gadget Project", operation_progress: operation).call
+      end
+
+      # Both items' facts were restated word for word.
+      expect(operation.reload.details.dig("extraction", "restated_observation_ids")).to match_array(stored)
+    end
   end
 end

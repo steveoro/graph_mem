@@ -48,6 +48,7 @@ class ImportObservationDuplicateDetector
     # whose deferred backfill has not run yet — cannot be compared
     # semantically. Degrade to the exact-content match above rather than
     # hard-failing the (re-)import; the backfill restores full dedup.
+    return Result.new(duplicate: false) if @only_embedded && !observations.with_embedding.exists?
     if !@only_embedded && observations.missing_embedding.exists?
       Rails.logger.warn "ImportObservationDuplicateDetector: Entity '#{entity.name}' has " \
                         "unembedded observations; semantic de-duplication skipped (exact match only)"
