@@ -285,7 +285,7 @@ CREATE TABLE `memory_observations` (
   KEY `idx_memory_observations_embedded_at` (`embedded_at`),
   KEY `index_memory_observations_on_perspective` (`perspective`),
   KEY `index_memory_observations_on_outdated_by_id` (`outdated_by_id`),
-  KEY `idx_memory_observations_keywords_at` (`keywords_at`),
+  KEY `idx_memory_observations_keywords_at_status` (`keywords_at`,`status`),
   VECTOR KEY `idx_memory_observations_embedding` (`embedding`) `DISTANCE`='cosine',
   CONSTRAINT `fk_rails_29fad01511` FOREIGN KEY (`outdated_by_id`) REFERENCES `memory_observations` (`id`) ON DELETE SET NULL,
   CONSTRAINT `fk_rails_59348732bc` FOREIGN KEY (`superseded_by_id`) REFERENCES `memory_observations` (`id`) ON DELETE SET NULL,

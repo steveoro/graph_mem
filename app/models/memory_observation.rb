@@ -61,8 +61,9 @@ class MemoryObservation < ApplicationRecord
   after_commit :refresh_embedding, on: [ :update ], if: :embedding_fields_changed?
   before_update :invalidate_stale_embedding,
                 if: -> { (changes_to_save.keys & EMBEDDING_FIELDS).any? }
-  # New text, new keywords: the stamp is cleared and FactKeywordsJob recomputes the path.
-  before_update :invalidate_keywords, if: :will_save_change_to_content?
+  # New text or a new owner (an entity merge moves facts), new keywords: the owner is part of the
+  # path, so the stamp is cleared and FactKeywordsJob recomputes it.
+  before_update :invalidate_keywords, if: -> { will_save_change_to_content? || will_save_change_to_memory_entity_id? }
   after_commit :request_fact_keywords, on: %i[create update], if: -> { keywords_at.nil? && active? }
 
   # The REST output leaves out the vector and, for now (1.77.0), the keyword path: an API change of

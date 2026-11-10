@@ -11,6 +11,8 @@ class AddKeywordsToMemoryObservations < ActiveRecord::Migration[8.1]
       t.json :keywords, null: false, default: []
       t.datetime :keywords_at, precision: 6, null: true
     end
-    add_index :memory_observations, :keywords_at, name: "idx_memory_observations_keywords_at"
+    # FactKeywordsJob's query is "pending AND active": an obsolete or superseded fact is never
+    # computed, so it stays pending; with status in the index the query skips those rows.
+    add_index :memory_observations, %i[keywords_at status], name: "idx_memory_observations_keywords_at_status"
   end
 end

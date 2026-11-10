@@ -33,6 +33,15 @@ RSpec.describe MemoryObservation, "keywords" do
     expect(fact.reload.keywords_at).to be_nil
   end
 
+  it "is pending again when it moves to another entity, as an entity merge moves facts" do
+    other = MemoryEntity.create!(name: "AlphaService", entity_type: "Service", project_id: root.id)
+    computed!(fact, [ "Gadget Project", "SynthWidget", "FrameBuffer" ])
+
+    fact.update!(memory_entity: other)
+
+    expect(fact.reload.keywords_at).to be_nil
+  end
+
   it "starts a superseding fact pending" do
     computed!(fact, [ "Gadget Project", "SynthWidget", "FrameBuffer" ])
 

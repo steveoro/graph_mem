@@ -1,7 +1,9 @@
 # frozen_string_literal: true
 
-# Fact keyword paths (1.77.0, FactKeywords). Recompute them after entities were renamed or their
-# aliases changed, or to fill them for facts written before 1.77.0 without waiting for the night.
+# Fact keyword paths (1.77.0, FactKeywords). Recompute them after entities were renamed, merged or
+# their aliases changed (the facts that mention them keep the old names), or to fill them for facts
+# written before 1.77.0 without waiting for the night. A fact that moves to another entity (a
+# merge) is recomputed on its own.
 namespace :graph_mem do
   namespace :fact_keywords do
     desc "Recompute every active fact's keyword path now (PROJECT=<name> for one project's facts)"
