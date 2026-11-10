@@ -30,6 +30,10 @@ class MemoryObservation < ApplicationRecord
            inverse_of: :superseded_by
 
   serialize :tags, coder: JSON
+  # 1.77.0: the fact's keyword path (FactKeywords): the project root, the entity that holds the
+  # fact, then each project entity it mentions in text order. Never embedded; `keywords_at` NULL
+  # means pending.
+  serialize :keywords, coder: JSON
 
   scope :active, -> { where(status: ACTIVE_STATUS) }
   scope :inactive, -> { where.not(status: ACTIVE_STATUS) }
@@ -40,6 +44,7 @@ class MemoryObservation < ApplicationRecord
   # zero-vectors on this NOT NULL column).
   scope :with_embedding, -> { where.not(embedded_at: nil) }
   scope :missing_embedding, -> { where(embedded_at: nil) }
+  scope :keywords_pending, -> { where(keywords_at: nil) }
 
   validates :content, presence: true
   validates :confidence, numericality: { greater_than_or_equal_to: 0, less_than_or_equal_to: 1 }, allow_nil: true
@@ -48,6 +53,7 @@ class MemoryObservation < ApplicationRecord
   validates :perspective, inclusion: { in: PERSPECTIVES }, allow_nil: true
   validate :validity_range_is_ordered
   validate :tags_are_strings
+  validate :keywords_are_strings
   validate :lifecycle_state_is_consistent
 
   before_save :assign_trust_score
@@ -55,9 +61,14 @@ class MemoryObservation < ApplicationRecord
   after_commit :refresh_embedding, on: [ :update ], if: :embedding_fields_changed?
   before_update :invalidate_stale_embedding,
                 if: -> { (changes_to_save.keys & EMBEDDING_FIELDS).any? }
+  # New text, new keywords: the stamp is cleared and FactKeywordsJob recomputes the path.
+  before_update :invalidate_keywords, if: :will_save_change_to_content?
+  after_commit :request_fact_keywords, on: %i[create update], if: -> { keywords_at.nil? && active? }
 
+  # The REST output leaves out the vector and, for now (1.77.0), the keyword path: an API change of
+  # its own once review rows use it.
   def as_json(options = {})
-    super(options.merge(except: Array(options[:except]) | [ :embedding ]))
+    super(options.merge(except: Array(options[:except]) | %i[embedding keywords keywords_at]))
   end
 
   def assign_trust_score
@@ -66,6 +77,14 @@ class MemoryObservation < ApplicationRecord
 
   def active?
     status == ACTIVE_STATUS
+  end
+
+  # @return [Array<String>] the entities the fact mentions besides its own and its project: its
+  #   keyword path after its own entity (1.77.0, FactKeywords); [] while pending or without any
+  def keyword_mentions
+    path = Array(keywords)
+    own = path.index(memory_entity&.name)
+    own ? path.drop(own + 1) : []
   end
 
   def obsolete?
@@ -141,6 +160,22 @@ class MemoryObservation < ApplicationRecord
     return if tags.is_a?(Array) && tags.all? { |tag| tag.is_a?(String) }
 
     errors.add(:tags, "must be an array of strings")
+  end
+
+  def keywords_are_strings
+    return if keywords.is_a?(Array) && keywords.all? { |keyword| keyword.is_a?(String) }
+
+    errors.add(:keywords, "must be an array of strings")
+  end
+
+  def invalidate_keywords
+    self.keywords_at = nil
+  end
+
+  def request_fact_keywords
+    FactKeywordsJob.request!
+  rescue StandardError => e
+    Rails.logger.warn "MemoryObservation#request_fact_keywords failed for id=#{id}: #{e.message}"
   end
 
   def lifecycle_state_is_consistent
