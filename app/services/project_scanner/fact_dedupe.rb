@@ -35,6 +35,17 @@ class ProjectScanner
       false
     end
 
+    # 1.77.0: the keyword paths (FactKeywords) of the facts this scan wrote, computed once every
+    # item's entity exists, before the reconcile commits; the after-commit request finds them done.
+    def compute_scan_fact_keywords!
+      return if @dry_run || @scan_fact_ids.empty? || !AppSettings.fact_keywords_enabled?
+
+      FactKeywords.compute!(MemoryObservation.where(id: @scan_fact_ids).includes(:memory_entity))
+    rescue StandardError => e
+      # An aid, never a reason to roll the scan back: FactKeywordsJob computes them later.
+      @logger.warn "ProjectScanner: fact keywords not computed: #{e.class}: #{e.message}"
+    end
+
     # Compares only against embedded facts: a Rails code map's facts wait for a deferred backfill.
     def fact_duplicate_detector
       @fact_duplicate_detector ||= ImportObservationDuplicateDetector.new(

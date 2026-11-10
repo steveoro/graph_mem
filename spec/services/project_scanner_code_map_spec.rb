@@ -166,4 +166,14 @@ RSpec.describe ProjectScanner, "Rails code map" do
     expect(entity("Gadget::Swimmer").memory_observations.where(content: "It belongs to a Swimmer.")).to be_empty
     expect(result.observations_moved).to eq(0)
   end
+
+  it "stores each new fact's keyword path before the scan commits (1.77.0)" do
+    answers["app/models/gadget/badge.rb"] = [ item("Gadget::Badge", "Class", "A Badge is earned by one Swimmer.") ]
+
+    scan
+
+    fact = entity("Gadget::Badge").memory_observations.find_by!(content: "A Badge is earned by one Swimmer.")
+    expect(fact.keywords).to eq([ "Gadget", "Gadget::Badge", "Gadget::Swimmer" ])
+    expect(fact.keywords_at).to be_present
+  end
 end

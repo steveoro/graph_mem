@@ -13,6 +13,11 @@
       %span.ui-badge= observation.status
     - if active && observation.fact_tagged?
       %span.ui-badge.ui-badge--ok{ data: { testid: "entity-panel-source-fact" } }= t("explore.panel.source_fact")
+  - if (mentions = observation.keyword_mentions).any?
+    %p.entity-panel__meta{ title: t("explore.panel.mentions_title"), data: { testid: "entity-panel-mentions" } }
+      = t("explore.panel.mentions")
+      - mentions.each do |name|
+        %span.ui-badge= name
   - if !active && (fact = observation.outdated_by)
     %p.entity-panel__meta{ data: { testid: "entity-panel-outdated-by" } }
       = t("explore.panel.outdated_by")
