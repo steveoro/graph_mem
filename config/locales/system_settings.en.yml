@@ -240,6 +240,9 @@ en:
         fact_supersede_enabled:
           label: "Source fact supersede"
           description: "When a source fact is added or changed, look for the observations of its project it outdates and propose them in Review & Fix (\"Outdated by a fact\"). Proposals only, unless the auto-apply policy is on."
+        fact_keywords_enabled:
+          label: "Fact keywords"
+          description: "Give every fact a keyword path: its project, the entity that holds it, then the project's entities it mentions, in order. Computed in the background after a fact is written, and nightly for any left pending. Turned off, nothing is computed and existing paths stay as they are."
         review_backlog_ceiling:
           label: "Backlog ceiling per kind"
           description: "Active suggestions per kind before new ones must beat the lowest priority to be queued (a soft limit)."
