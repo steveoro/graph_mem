@@ -11,7 +11,8 @@
 # paths say they're about the same thing (FactKeywords::Relatedness: a shared mention, or one
 # mentions the other's entity). Two facts that mention no entity at all are paired only when very
 # close (STRICT_MAX_DISTANCE). Pending paths are computed first. Before, any two close facts on an
-# entity and its neighbours with one negative word were paired, unrelated or not.
+# entity and its neighbours with one negative word were paired, unrelated or not. What the paths
+# share is never stored in the row: it is recomputed where it's shown.
 class ContradictionDetector
   DEFAULT_MAX_DISTANCE = 0.35
   # The most a pair of facts that mention no entity may differ (cosine distance) and still be paired.
@@ -27,7 +28,8 @@ class ContradictionDetector
     discontinued retired invalid
   ].freeze
 
-  # `shared_keywords` / `strong`: what the two keyword paths share (nil with fact keywords off).
+  # `shared_keywords` / `strong`: what the two keyword paths share (nil with fact keywords off). In
+  # memory only: never written to a review payload or a report.
   Result = Struct.new(:observation_id_1, :observation_id_2, :distance, :confidence, :shared_keywords, :strong, keyword_init: true)
 
   class << self
@@ -66,9 +68,10 @@ class ContradictionDetector
         [ n, { "observation_id_#{n}": id, "entity_id_#{n}": entity_id, "entity_name_#{n}": name,
                "content_#{n}": content.to_s.truncate(REVIEW_CONTENT_LIMIT) } ]
       end
+      # The shared keyword names stay off the payload (MCP review tools return it verbatim): the
+      # review view and the no_shared_subject policy recompute them from the live paths.
       { kind: "contradiction", **sides[1], **sides[2], distance: result.distance, confidence: result.confidence,
-        shared_keywords: result.shared_keywords.presence, strong: (true if result.strong),
-        detected_at: Time.current.iso8601 }.compact
+        detected_at: Time.current.iso8601 }
     end
 
     # Whether two facts may form a contradiction pair, from their keyword paths (both computed):

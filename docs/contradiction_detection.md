@@ -10,7 +10,7 @@ The `detect_contradictions` MCP tool and the `POST /api/v1/memory_entities/:id/m
 2. **Polarity opposites** — one statement contains negative markers such as `not`, `never`, `deprecated`, `unsupported`, or `removed`, while the other does not.
 3. **About the same thing** (1.78.0, with `fact_keywords_enabled` on) — their keyword paths (`FactKeywords`: project › own entity › the entities each fact mentions, in order) share a mention, or one mentions the other's entity. Two facts that mention no entity at all are paired only when very close (`ContradictionDetector::STRICT_MAX_DISTANCE`, 0.15). Pending paths are computed first. Before 1.78.0, two close facts on one entity were paired whatever they were about, as long as one had a negative word ("It belongs to a User." against "It is not linked to a Team.").
 
-When a candidate is found, it is returned with a `confidence` score (and, with fact keywords on, the names the two paths share and whether they share their first mention) and written as a `contradictions` `MaintenanceReport` for operator review. Review rows show both paths, the shared names in bold.
+When a candidate is found, it is returned with a `confidence` score and written as a `contradictions` `MaintenanceReport` for operator review. Review rows show both keyword paths, the shared names in bold, computed when the row is shown (nothing about the paths is stored in the row, which MCP review tools return verbatim).
 
 ## Triggering Detection
 

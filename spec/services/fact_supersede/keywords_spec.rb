@@ -21,7 +21,8 @@ RSpec.describe "FactSupersede keyword paths" do
     expect(related).to have_attributes(subject: :related, strong: true, shared_keywords: %w[FrameBuffer],
                                        score: (FactSupersede::Candidates::TERM_SCORE + FactSupersede::Candidates::POLARITY_BOOST +
                                                FactSupersede::Candidates::STRONG_BOOST).round(3))
-    expect(related.signals).to include("shared_keywords" => %w[FrameBuffer], "strong" => true)
+    # In memory only: the row's signals reach MCP verbatim.
+    expect(related.signals.keys).to contain_exactly("term", "polarity_flip", "scoped")
     other = candidates.fetch("SynthWidget draws for AlphaService.")
     expect(other).to have_attributes(subject: :unrelated, score: FactSupersede::Candidates::TERM_SCORE)
     expect(other.signals).not_to have_key("shared_keywords")

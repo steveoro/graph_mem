@@ -25,9 +25,10 @@ module FactSupersede
   Candidate = Struct.new(:observation, :score, :distance, :term, :polarity_flip, :scoped, :guard, :guard_reason,
                          :subject, :shared_keywords, :strong, keyword_init: true) do
     # @return [Hash] what found it, for the review row and the page
+    # The keyword comparison isn't in it: review payloads reach MCP verbatim, and the review view
+    # recomputes the shared names from the live paths.
     def signals
-      { "distance" => distance&.round(4), "term" => term, "polarity_flip" => polarity_flip, "scoped" => scoped,
-        "shared_keywords" => shared_keywords.presence, "strong" => (true if strong) }.compact
+      { "distance" => distance&.round(4), "term" => term, "polarity_flip" => polarity_flip, "scoped" => scoped }.compact
     end
 
     # @return [Boolean] the keyword paths say the two facts are about different things (both

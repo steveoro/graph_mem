@@ -2,7 +2,7 @@
 - ids = [ payload["observation_id_1"], payload["observation_id_2"] ].map(&:to_i)
 - sides = MemoryObservation.where(id: ids).includes(:memory_entity).index_by(&:id)
 - pair = ids.map { |id| sides[id] }
-- shared = pair.all? && FactKeywords::Relatedness.computed?(pair) ? FactKeywords::Relatedness.compare(*pair).shared : Array(payload["shared_keywords"])
+- shared = pair.all? && FactKeywords::Relatedness.computed?(pair) ? FactKeywords::Relatedness.compare(*pair).shared : []
 %p.review-hint= "Distance #{payload['distance']} · confidence #{payload['confidence']}"
 .review-contradiction{ data: { testid: "contradiction-sides" } }
   - ids.each_with_index do |id, index|

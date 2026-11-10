@@ -3,7 +3,7 @@
 -# fact doesn't outdate it (suppresses this pair only). Age is never shown: it is not evidence.
 - fact = MemoryObservation.includes(:memory_entity).find_by(id: payload["fact_observation_id"].to_i)
 - observation = MemoryObservation.includes(:memory_entity).find_by(id: payload["observation_id"].to_i)
-- shared = fact && observation && FactKeywords::Relatedness.computed?(fact, observation) ? FactKeywords::Relatedness.compare(fact, observation).shared : Array(payload.dig("signals", "shared_keywords"))
+- shared = fact && observation && FactKeywords::Relatedness.computed?(fact, observation) ? FactKeywords::Relatedness.compare(fact, observation).shared : []
 %p.review-hint{ data: { testid: "fact-supersede-verdict" } }
   = "Judge: #{payload['verdict']} · confidence #{payload['confidence']}"
   - if payload["reason"].present?

@@ -15,8 +15,8 @@ module FactSupersede
   # - polarity: ContradictionDetector.negative? on both sides is a +0.1 boost, never a filter;
   # - keywords (1.78.0, with fact keywords on): the two keyword paths (FactKeywords::Relatedness),
   #   computed first when pending. Related facts get SHARED_BOOST (STRONG_BOOST when they share
-  #   their first mention); the answer is kept on the candidate, and Proposals seeds no unjudged
-  #   row for an unrelated pair.
+  #   their first mention); the answer is kept on the candidate (never in the row's signals), and
+  #   Proposals seeds no unjudged row for an unrelated pair.
   #
   #   result = FactSupersede::Candidates.call(fact, terms: ["fast-mcp"])
   #   result.candidates.first # => #<struct Candidate observation=…, score=0.6, term="fast-mcp", scoped=true, …>

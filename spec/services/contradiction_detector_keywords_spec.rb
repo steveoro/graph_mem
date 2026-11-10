@@ -46,7 +46,8 @@ RSpec.describe ContradictionDetector, "keyword paths", :with_test_embeddings do
     pair = described_class.detect(grant.id, persist: false).sole
 
     expect(pair).to have_attributes(shared_keywords: %w[User], strong: true)
-    expect(described_class.review_item(pair)).to include(shared_keywords: %w[User], strong: true)
+    # In memory only: the row payload reaches MCP verbatim.
+    expect(described_class.review_item(pair).keys).not_to include(:shared_keywords, :strong)
     expect([ first, second ].map { |observation| observation.reload.keywords_at }).to all(be_present)
   end
 

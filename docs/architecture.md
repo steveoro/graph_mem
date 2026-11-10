@@ -355,7 +355,7 @@ and nothing acts across projects. Step list: `docs/plans/fact-supersede-plan.md`
   query within `fact_supersede_max_distance` (0.45) and an escaped `LIKE` per term (at most 5).
   A polarity flip adds 0.1. With fact keywords on (1.78.0), the two keyword paths are compared
   (`FactKeywords::Relatedness`, pending ones computed first): a related candidate adds 0.1, or 0.2
-  when both share their first mention, and the answer and shared names go in the row's `signals`.
+  when both share their first mention (kept in memory, not in the row's `signals`).
   Related entities without a project come back as **unscoped**: shown
   with a warning, applied by hand only (without `outdated_by`), never auto-applied.
 - **Legacy guard** (`FactSupersede::LegacyGuard`, again at apply): `keep` (never proposed) when the
