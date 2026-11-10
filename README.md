@@ -179,7 +179,8 @@ cp .env.example .env
 # Edit .env: set RAILS_MASTER_KEY (from config/master.key) and DB_PASSWORD
 
 # Start the stack (MariaDB 11.8 + Rails in production mode), with the host's LAN
-# address and names as the MCP allowlist defaults (bin/up --print shows them)
+# as the MCP allowlist defaults (on Linux "@lan", read by graph_mem from its
+# interfaces whatever the subnet; bin/up --print shows them)
 bin/up
 
 # Seed canonical entity types

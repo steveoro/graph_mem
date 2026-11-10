@@ -98,22 +98,49 @@ A change from System › Access logs the new posture, e.g.
 ### Starting with `bin/up`
 
 `bin/up` runs `docker compose up -d` (extra arguments are passed on, e.g. `bin/up --build`) after
-detecting the host's LAN address, subnet and host name, and passes them as the defaults:
+setting the allowlists for the host's LAN.
+
+**On Linux (1.79.0)** it writes `@lan`, which graph_mem expands itself (below), so the values never
+go stale. A reboot on another subnet, or a laptop on another network, needs no new `bin/up`:
 
 ```console
 $ bin/up --print
-GRAPH_MEM_MCP_ALLOWED_HOSTS=synth-box,synth-box.local,10.9.8.18 (detected)
-GRAPH_MEM_MCP_ALLOWED_IPS=127.0.0.0/8,::1,172.16.0.0/12,10.9.8.0/24 (detected)
+GRAPH_MEM_MCP_ALLOWED_HOSTS=@lan (detected)
+GRAPH_MEM_MCP_ALLOWED_IPS=127.0.0.0/8,::1,172.16.0.0/12,@lan (detected)
 GRAPH_MEM_MCP_ALLOWED_ORIGINS unset (built-in default: never detected; same-origin pages need no entry)
+@lan is expanded by graph_mem from its interfaces; now: synth-box,synth-box.local,10.9.8.18 · 10.9.8.0/24
 ```
 
-- Loopback and the Docker bridge range are always in the IP list. The subnet is used only for a
-  private address with a `/16`–`/30` prefix; otherwise the IP list stays unset (built-in defaults).
+**On macOS** Docker Desktop runs the container in a VM that can't see the Mac's interfaces, so
+`bin/up` writes the detected values instead, as before 1.79.0 (re-run it after a network change):
+
+```console
+$ bin/up --print
+GRAPH_MEM_MCP_ALLOWED_HOSTS=synth-mac,synth-mac.local,172.20.1.5 (detected)
+GRAPH_MEM_MCP_ALLOWED_IPS=127.0.0.0/8,::1,172.16.0.0/12,172.20.0.0/16 (detected)
+```
+
+- **`@lan`** (in `GRAPH_MEM_MCP_ALLOWED_IPS` or `GRAPH_MEM_MCP_ALLOWED_HOSTS`, also when you write it
+  yourself) is this machine's LAN, read from its network interfaces (`GraphMem::LanAddresses`): each
+  interface that is up, not loopback and not a container or VM bridge (`docker0`, `br-…`, `veth…`,
+  `virbr…`, …), with a private IPv4 address and a `/16`–`/30` prefix. In the IP list it means each
+  such subnet; in the host list each such address, the host name and `<host name>.local`. It is read
+  when the lists are built and checked again at most every 30 seconds on the next request: when the
+  LAN changed, the lists are rebuilt (with `@lan` in the hosts, that closes the open MCP sessions,
+  as any hosts change does) and one `[McpAccessPolicy] LAN changed` line is logged. With no LAN
+  (a laptop that booted offline), `@lan` adds nothing until one appears. The container needs the host
+  network (`network_mode: host`, as in `docker-compose.yml`) to see the host's interfaces.
+- Loopback and the Docker bridge range are always in the IP list. On macOS the subnet is used only
+  for a private address with a `/16`–`/30` prefix; otherwise the IP list stays unset (built-in defaults).
 - Origins are never detected: a browser client's origin is its own `scheme://host:port`.
 - A non-empty value in the environment, or a `KEY=value` line in `.env`, wins and is passed through
   unchanged. Leave the lines unset in `.env` to use the detection.
-- Detection runs on the host (Linux: `ip`; macOS, best effort: `route`, `ipconfig`, `ifconfig`). If
-  it fails, `bin/up` prints one line and starts with today's defaults.
+- Detection runs on the host (Linux: `ip`, for the `now:` line only; macOS, best effort: `route`,
+  `ipconfig`, `ifconfig`). If it fails, `bin/up` prints one line; on macOS it starts with the
+  built-in defaults, on Linux still with `@lan`.
+- The containers keep the values they were created with: Docker's own restart (after a reboot)
+  reuses them. With `@lan` that is fine; with literal values (macOS, or your own `.env` lines),
+  run `docker compose down && bin/up` after the address changes.
 
 Plain `docker compose up -d` still works and uses the built-in defaults.
 
