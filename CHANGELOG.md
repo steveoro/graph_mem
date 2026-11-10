@@ -5,6 +5,20 @@ All notable changes to GraphMem will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.77.0] - 2026-11-10
+
+Fact keywords, the foundation of fact pertinence: every fact gets a deterministic keyword path, so later releases can tell when two facts are about the same thing.
+
+### Added
+- **Keyword paths.** Each fact (`memory_observations.keywords`, new column) holds an ordered path: its project's name, the name of the entity that holds it, then each project entity it mentions, in the order it names them ("A Swimmer should only have a single Badge for a single Season…" on `GogglesDb::Badge` gives `goggles_db → GogglesDb::Badge → GogglesDb::Swimmer → GogglesDb::Season → GogglesDb::Team`). Mentions are found by entity name and alias (any case, `_`, `-` and spaces alike, plurals too), without an LLM. A short name the fact's own entity shares means that entity; one several other entities share is left out. At most 12 names. The path is never embedded.
+- `FactKeywordsJob` computes pending paths (`keywords_at` NULL): requested after a fact is written or its text changes (one delayed run per burst of writes), and nightly. A project scan computes its own new facts before it commits. Setting `fact_keywords_enabled` (Settings › Feature flags, on by default).
+- `bin/rails graph_mem:fact_keywords:refresh [PROJECT=<name>]` recomputes paths now, after renames or alias changes, or to fill facts written before 1.77.0 without waiting for the night.
+- Explore shows the entities a fact mentions.
+
+### Changed
+- `ProjectScanValidator` reads an entity's terms from the shared `EntityTerms` (same rules as before).
+- REST and MCP outputs are unchanged: the new columns are left out of the JSON for now.
+
 ## [1.76.0] - 2026-11-10
 
 Rescans recognize a reworded fact. The goggles_db profile with all of 1.75.0's fixes still showed a rescan churn of 98, mostly the model wording facts it had already given in new ways.
