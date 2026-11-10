@@ -370,9 +370,11 @@ class ProjectScanner
       # A Rails project's code map first (1.75.0): the items below then find its entities.
       write_code_skeleton!
 
-      # Two passes: every entity first, then every relation, so a relation to an entity listed
-      # later (or in another part) resolves.
+      # Three passes: every entity first, then every item's facts, then every relation, so a
+      # relation to an entity listed later (or in another part) resolves, and a fact's keyword path
+      # (FactDedupe, 1.78.0) can name any entity of the scan.
       reconciled = architecture.filter_map { |item| reconcile_architecture_item(item) }
+      reconciled.each { |entity, item| import_observations(entity, Array(item["observations"])) }
       reconciled.each { |entity, item| Array(item["relations"]).each { |rel| reconcile_relation(entity, rel) } }
       compute_scan_fact_keywords!
       report_reconcile_counts!
@@ -434,10 +436,7 @@ class ProjectScanner
     return if name.blank? || type.blank?
 
     # An item naming the scanned project is its root: its facts and relations go there.
-    if project_root_name?(name)
-      import_observations(@project_entity, Array(item["observations"]))
-      return [ @project_entity, item ]
-    end
+    return [ @project_entity, item ] if project_root_name?(name)
 
     # A project-like item naming another project is a link to that root, never an entity here
     # (ProjectLinks); a Class or a concept that happens to share a root's name stays local.
@@ -453,7 +452,6 @@ class ProjectScanner
     @entities_by_path[name.downcase] = entity
     @entities_by_path["#{name.downcase}:#{type.downcase}"] = entity
 
-    import_observations(entity, Array(item["observations"]))
     [ entity, item ]
   end
 
