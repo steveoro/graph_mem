@@ -59,14 +59,15 @@ RSpec.describe "bin/up" do
                    unsetenv_others: true, chdir: @root)
   end
 
-  it "detects the Linux host name, address and subnet, keeping loopback and the Docker bridge range" do
+  it "writes @lan on Linux, keeping loopback and the Docker bridge range, and prints what it means now (1.79.0)" do
     stdout, stderr, status = run_up(linux)
 
     expect(status).to be_success
     expect(stderr).to be_empty
-    expect(stdout).to include("GRAPH_MEM_MCP_ALLOWED_HOSTS=synth-box,synth-box.local,10.9.8.18 (detected)")
-    expect(stdout).to include("GRAPH_MEM_MCP_ALLOWED_IPS=127.0.0.0/8,::1,172.16.0.0/12,10.9.8.0/24 (detected)")
+    expect(stdout).to include("GRAPH_MEM_MCP_ALLOWED_HOSTS=@lan (detected)")
+    expect(stdout).to include("GRAPH_MEM_MCP_ALLOWED_IPS=127.0.0.0/8,::1,172.16.0.0/12,@lan (detected)")
     expect(stdout).to include("GRAPH_MEM_MCP_ALLOWED_ORIGINS unset")
+    expect(stdout).to include("@lan is expanded by graph_mem from its interfaces; now: synth-box,synth-box.local,10.9.8.18 · 10.9.8.0/24")
   end
 
   it "detects the same on macOS from route, ipconfig and ifconfig" do
@@ -81,7 +82,7 @@ RSpec.describe "bin/up" do
     stdout, = run_up(linux, env: { "GRAPH_MEM_MCP_ALLOWED_HOSTS" => "env-host.test" })
 
     expect(stdout).to include("GRAPH_MEM_MCP_ALLOWED_HOSTS=env-host.test (ENV)")
-    expect(stdout).to include("10.9.8.0/24 (detected)")
+    expect(stdout).to include("172.16.0.0/12,@lan (detected)")
   end
 
   it "lets a .env line win over detection, but not a commented one" do
@@ -89,7 +90,7 @@ RSpec.describe "bin/up" do
     stdout, = run_up(linux, dotenv: dotenv)
 
     expect(stdout).to include("GRAPH_MEM_MCP_ALLOWED_IPS=127.0.0.0/8,::1,10.9.0.0/16 (.env)")
-    expect(stdout).to include("GRAPH_MEM_MCP_ALLOWED_HOSTS=synth-box,synth-box.local,10.9.8.18 (detected)")
+    expect(stdout).to include("GRAPH_MEM_MCP_ALLOWED_HOSTS=@lan (detected)")
   end
 
   it "prefers the environment over .env" do
@@ -98,13 +99,29 @@ RSpec.describe "bin/up" do
     expect(stdout).to include("GRAPH_MEM_MCP_ALLOWED_IPS=127.0.0.1 (ENV)")
   end
 
-  it "leaves the IPs to the defaults for a public address, but still sets the hosts" do
-    public_linux = linux.merge("ip" => linux["ip"].gsub("10.9.8.18", "192.0.2.18").gsub("10.9.8", "192.0.2"))
-    stdout, _stderr, status = run_up(public_linux)
+  it "leaves the IPs to the defaults for a public address on macOS, but still sets the hosts" do
+    public_mac = macos.merge("ipconfig" => macos["ipconfig"].sub("172.20.1.5", "192.0.2.18"),
+                             "ifconfig" => macos["ifconfig"].sub("172.20.1.5", "192.0.2.18"))
+    stdout, _stderr, status = run_up(public_mac)
 
     expect(status).to be_success
-    expect(stdout).to include("GRAPH_MEM_MCP_ALLOWED_HOSTS=synth-box,synth-box.local,192.0.2.18 (detected)")
+    expect(stdout).to include("GRAPH_MEM_MCP_ALLOWED_HOSTS=synth-mac,synth-mac.local,192.0.2.18 (detected)")
     expect(stdout).to include("GRAPH_MEM_MCP_ALLOWED_IPS unset (built-in default: 192.0.2.18 is not a private address)")
+  end
+
+  it "still writes @lan on Linux for a public address: graph_mem reads the LAN itself" do
+    public_linux = linux.merge("ip" => linux["ip"].gsub("10.9.8.18", "192.0.2.18").gsub("10.9.8", "192.0.2"))
+    stdout, = run_up(public_linux)
+
+    expect(stdout).to include("GRAPH_MEM_MCP_ALLOWED_IPS=127.0.0.0/8,::1,172.16.0.0/12,@lan (detected)")
+    expect(stdout).to include("now: synth-box,synth-box.local,192.0.2.18")
+  end
+
+  it "still writes @lan on Linux when detection fails" do
+    stdout, stderr, = run_up(linux.merge("ip" => "echo garbage"))
+
+    expect(stderr).to include("LAN detection failed")
+    expect(stdout).to include("GRAPH_MEM_MCP_ALLOWED_HOSTS=@lan (detected)", "now: no private LAN detected")
   end
 
   it "falls back to the built-in defaults with one stderr line when every tool is missing" do
@@ -130,7 +147,7 @@ RSpec.describe "bin/up" do
                                     dotenv: "GRAPH_MEM_MCP_ALLOWED_IPS=10.9.0.0/16\n", env: { "GRAPH_MEM_MCP_ALLOWED_IPS" => "" })
 
     expect(status).to be_success
-    expect(stdout.lines.map(&:chomp)).to eq([ "docker compose up -d --build", "hosts=synth-box,synth-box.local,10.9.8.18", "ips=<unset>" ])
+    expect(stdout.lines.map(&:chomp)).to eq([ "docker compose up -d --build", "hosts=@lan", "ips=<unset>" ])
     expect(stderr).to include("GRAPH_MEM_MCP_ALLOWED_IPS=10.9.0.0/16 (.env)")
   end
 
