@@ -146,6 +146,8 @@ RSpec.describe ProjectScanner, "Rails code map" do
     scan
     swimmer_fact = entity("Gadget::Swimmer").memory_observations.find_by!(content: "Not meant to be instantiated directly.")
     meet_fact = entity("Swim Meet").memory_observations.find_by!(content: "Gathers the season's results.")
+    # The rescan states another fact, so the first one isn't restated (a restated fact is left alone, 1.76.0).
+    answers["README.md"][-1] = item("Swim Meet", "Concept", "Swim Meets close the season.", relations: [ { to: "Gadget", type: "part_of" } ])
 
     scan
 

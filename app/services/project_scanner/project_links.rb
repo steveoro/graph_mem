@@ -61,9 +61,11 @@ class ProjectScanner
     end
 
     # One numbers-only `[scan]` line for the reconcile's counters, when any is positive (no names: logs
-    # stay clean): names several roots matched, and stored entities the model typed differently.
+    # stay clean): facts skipped as reworded repeats (1.76.0), names several roots matched, and stored
+    # entities the model typed differently.
     def report_reconcile_counts!
-      counts = { ambiguous_project_roots: ambiguous_root_names, type_mismatches: @type_mismatches.to_i }
+      counts = { observations_deduped: @observations_deduped.to_i, ambiguous_project_roots: ambiguous_root_names,
+                 type_mismatches: @type_mismatches.to_i }
       return unless counts.values.any?(&:positive?)
 
       @logger.info("[scan] #{JSON.generate({ scan_id: @scan_id }.merge(counts))}")

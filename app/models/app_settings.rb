@@ -83,6 +83,10 @@ class AppSettings < RailsSettings::Base
   # The scan's token estimate: lower it when a model's tokenizer is denser (smaller, more parts).
   field :project_scan_bytes_per_token, default: 3.0, type: :float,
         validates: { numericality: { greater_than_or_equal_to: 2.0, less_than_or_equal_to: 6.0 } }
+  # 1.76.0: how close (cosine distance) a scanned fact may be to one its entity already holds and
+  # still count as the same fact reworded, so a rescan doesn't add it again.
+  field :project_scan_fact_duplicate_max_distance, default: 0.2, type: :float,
+        validates: { numericality: { greater_than_or_equal_to: 0.05, less_than_or_equal_to: 0.4 } }
 
   # Compaction review row retention (approved/dismissed rows are pruned after N days)
   field :compaction_review_row_retention_days, default: 30, type: :integer,

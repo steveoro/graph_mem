@@ -15,7 +15,7 @@ module GraphMem
       # The scan result's counters a run reports (ProjectScanner::Result#to_h keys).
       COUNTERS = %i[entities_created entities_updated observations_created observations_obsoleted observations_moved
                     relations_created relations_deleted parts_total parts_failed files_too_large files_over_budget
-                    partial fallback fallback_reason].freeze
+                    partial fallback fallback_reason observations_deduped].freeze
 
       # @param options [Options]
       # @param manifest [Manifest]
@@ -89,7 +89,8 @@ module GraphMem
         settings.each { |key, value| AppSettings.public_send(:"project_scan_#{key}=", value) }
         { "bytes_per_token" => AppSettings.project_scan_bytes_per_token.to_f,
           "chunk_output_tokens" => AppSettings.project_scan_chunk_output_tokens.to_i,
-          "max_chunks" => AppSettings.project_scan_max_chunks.to_i }
+          "max_chunks" => AppSettings.project_scan_max_chunks.to_i,
+          "fact_duplicate_max_distance" => AppSettings.project_scan_fact_duplicate_max_distance.to_f }
       end
 
       def scan(checkout, globs, caps, mode, profile)
@@ -145,7 +146,7 @@ module GraphMem
         cloud_calls = usage.sum { |_task, providers| providers.except(Llm::OllamaProvider::NAME).sum { |_name, counts| counts[:calls] } }
         { "chain" => @options.chain, "cloud_chain" => Llm::Router.cloud_chain?(:scan),
           "left_machine" => cloud_calls.positive?, "model" => config[:model], "num_ctx" => config[:num_ctx],
-          "llm_usage" => usage, "enqueued_jobs" => @sandbox.enqueued, "database" => @sandbox.target,
+          "embeddings" => @sandbox.embeddings, "llm_usage" => usage, "enqueued_jobs" => @sandbox.enqueued, "database" => @sandbox.target,
           "database_kept" => @sandbox.keep_db? }
       end
 

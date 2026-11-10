@@ -49,12 +49,13 @@ RSpec.describe GraphMem::ScanProfile::Runner do
     report = with_llm_provider(stub) { run }
 
     json = JSON.parse(File.read(File.join(report.dir, "report.json")))
-    expect(json).to include("schema_version" => 2, "graph_mem_version" => GraphMem::VERSION)
+    expect(json).to include("schema_version" => 3, "graph_mem_version" => GraphMem::VERSION)
     expect(json["backend"]).to include("chain" => "ollama", "left_machine" => false, "database_kept" => false)
     expect(json["runs"].map { |run| [ run["repo"], run["profile"], run["scans"].keys ] })
       .to eq([ [ "synth", "docs", %w[initial rescan] ], [ "synth", "code", %w[initial rescan] ] ])
     code = json["runs"].last
-    expect(code).to include("commit" => nil, "settings" => { "bytes_per_token" => 3.0, "chunk_output_tokens" => 2048, "max_chunks" => 16 },
+    expect(code).to include("commit" => nil, "settings" => { "bytes_per_token" => 3.0, "chunk_output_tokens" => 2048, "max_chunks" => 16,
+                                                                "fact_duplicate_max_distance" => 0.2 },
                             "caps" => { "max_total_input_bytes" => 65_536, "max_files" => 20 })
     expect(code["scans"]["initial"]).to include("files_too_large" => 1, "partial" => true, "fallback" => false, "parts_split" => 1)
     expect(code["scans"]["initial"]["requests"]).to eq(code["scans"]["initial"]["parts_total"] + 1)
@@ -67,7 +68,7 @@ RSpec.describe GraphMem::ScanProfile::Runner do
 
     texts = Dir.glob(File.join(report.dir, "*")).map { |path| File.read(path) }
     expect(texts.join).not_to include(Dir.tmpdir, Rails.root.to_s, Dir.home)
-    expect(File.read(File.join(report.dir, "report.md"))).to include("| synth | code | 3.0 / 2048 / 16 | 64 KB / 20 | initial |", "## Noise (first scan)")
+    expect(File.read(File.join(report.dir, "report.md"))).to include("| synth | code | 3.0 / 2048 / 16 / 0.2 | 64 KB / 20 | initial |", "## Noise (first scan)")
     expect(stub.calls).not_to be_empty
     expect(database?("#{ActiveRecord::Base.connection_db_config.database}_scan_profile")).to be(false)
     expect(workspaces).to eq(before_workspaces)
@@ -107,8 +108,10 @@ RSpec.describe GraphMem::ScanProfile::Runner do
     report = with_llm_provider(stub) { run({ "PROFILE" => "code", "RESCAN" => "0", "SWEEP" => "bytes_per_token:2.5,3.5;chunk_output_tokens:1024" }) }
 
     json = JSON.parse(File.read(File.join(report.dir, "report.json")))
-    expect(json["runs"].map { |run| run["settings"] }).to eq([ { "bytes_per_token" => 2.5, "chunk_output_tokens" => 1024, "max_chunks" => 16 },
-                                                               { "bytes_per_token" => 3.5, "chunk_output_tokens" => 1024, "max_chunks" => 16 } ])
+    expect(json["runs"].map { |run| run["settings"] }).to eq([ { "bytes_per_token" => 2.5, "chunk_output_tokens" => 1024, "max_chunks" => 16,
+                                                                 "fact_duplicate_max_distance" => 0.2 },
+                                                               { "bytes_per_token" => 3.5, "chunk_output_tokens" => 1024, "max_chunks" => 16,
+                                                                 "fact_duplicate_max_distance" => 0.2 } ])
     expect(json["sweep"].map { |row| row["settings"]["bytes_per_token"] }).to eq([ 2.5, 3.5 ])
     expect(json["sweep"].first).to include("parts_total" => be_positive, "noise" => include("generic_names" => 0))
     expect(File.read(File.join(report.dir, "report.md"))).to include("## Settings sweep (first scan)", "| synth | code | 2.5 | 1024 | 16 |")

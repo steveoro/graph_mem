@@ -44,11 +44,16 @@ class ProjectScanValidator
     end
   end
 
+  # @param restated_observation_ids [Array<Integer>] facts this scan restated (word for word or
+  #   reworded, 1.76.0): left alone like the scan's own, so a skipped rewording never leaves its
+  #   entity with neither wording
   def initialize(project_entity:, scan_id:, created_entity_ids:, context_text:, extracted_data:,
-                 project_root:, dry_run: false, logger: Rails.logger, operation_progress: nil)
+                 project_root:, dry_run: false, logger: Rails.logger, operation_progress: nil,
+                 restated_observation_ids: [])
     @project_entity = project_entity
     @scan_id = scan_id
     @created_entity_ids = created_entity_ids || Set.new
+    @restated_observation_ids = Array(restated_observation_ids).to_set(&:to_i)
     @context_text = context_text.to_s
     @extracted_data = extracted_data || {}
     @project_root = project_root.to_s
@@ -184,6 +189,7 @@ class ProjectScanValidator
   def validate_entity_observations(entity)
     entity.active_memory_observations.find_each do |observation|
       next if from_current_scan?(observation.source)
+      next if @restated_observation_ids.include?(observation.id)
       next if observation.content.blank?
       # The Rails code map's facts come from the code itself; its skeleton writer diffs them.
       next if observation.source == RailsCodeMap::SOURCE

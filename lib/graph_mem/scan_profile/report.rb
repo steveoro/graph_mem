@@ -16,11 +16,13 @@ module GraphMem
     #   report.dir # => "tmp/scan_profile/20261105T101500Z"
     class Report
       # 2 (1.75.0): each scan's `code_map` counters and the `code_map_entities` metric.
-      SCHEMA_VERSION = 2
+      # 3 (1.76.0): each scan's `observations_deduped`, the backend's `embeddings` and the
+      # `fact_duplicate_max_distance` setting.
+      SCHEMA_VERSION = 3
       # The scan columns of the Markdown table, in order.
       SCAN_COLUMNS = {
         "entities c/u" => %w[entities_created entities_updated], "observations c/o" => %w[observations_created observations_obsoleted],
-        "relations c/d" => %w[relations_created relations_deleted], "parts t/f/s" => %w[parts_total parts_failed parts_split],
+        "relations c/d" => %w[relations_created relations_deleted], "deduped" => %w[observations_deduped], "parts t/f/s" => %w[parts_total parts_failed parts_split],
         "too large/over budget" => %w[files_too_large files_over_budget]
       }.freeze
       # The noise columns of the Markdown table (Metrics keys), in order.
@@ -95,7 +97,8 @@ module GraphMem
       def backend_lines
         cloud = @backend["left_machine"] ? "**yes**" : "no"
         [ "- Backend: chain `#{@backend['chain']}`, model `#{@backend['model']}`, num_ctx #{@backend['num_ctx']}; " \
-          "cloud chain: #{@backend['cloud_chain'] ? 'yes (refused by the gate)' : 'no'}; anything left the machine: #{cloud}",
+          "cloud chain: #{@backend['cloud_chain'] ? 'yes (refused by the gate)' : 'no'}; anything left the machine: #{cloud}; " \
+          "embeddings: #{@backend['embeddings'] || 'off'}",
           "- Throwaway database `#{@backend['database']}`#{@backend['database_kept'] ? ' (kept: KEEP_DB=1)' : ' (dropped)'}; " \
           "jobs enqueued, none run: #{format_counts(@backend['enqueued_jobs'])}",
           "- Repos: #{@options.repos.join(', ')}; profiles: #{@options.profiles.join(', ')}; " \

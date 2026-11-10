@@ -62,6 +62,7 @@ class ProjectScanner
     :noise_dropped,
     :type_mismatches,
     :code_map,
+    :observations_deduped,
     keyword_init: true
   ) do
     def initialize(success: true, status: "completed", message: nil, **kwargs)
@@ -97,7 +98,8 @@ class ProjectScanner
         partial: partial || false,
         noise_dropped: noise_dropped || {},
         type_mismatches: type_mismatches || 0,
-        code_map: code_map || {}
+        code_map: code_map || {},
+        observations_deduped: observations_deduped || 0
       }
     end
   end
@@ -142,6 +144,8 @@ class ProjectScanner
     @relations_deleted_count = 0
     @entities_reparented_count = 0
     @type_mismatches = 0
+    @observations_deduped = 0
+    @restated_observation_ids = Set.new
     @validation_paused = false
     @extraction = {}
     @file_filter = ProjectScanFileFilter.new(@project_root)
@@ -201,6 +205,7 @@ class ProjectScanner
   include DeterministicExtraction
   include ProjectLinks
   include CodeSkeleton
+  include FactDedupe
 
   # Files the scan skipped because they left the root or are denylisted (ProjectScanFileFilter).
   def skip_counters
@@ -230,6 +235,7 @@ class ProjectScanner
       noise_dropped: @noise_dropped || {},
       type_mismatches: @type_mismatches,
       code_map: code_map_counts,
+      observations_deduped: @observations_deduped,
       **skip_counters,
       **@extraction.slice("parts_total", "parts_failed", "files_too_large", "files_over_budget").transform_keys(&:to_sym)
     )
@@ -490,13 +496,20 @@ class ProjectScanner
     nil
   end
 
+  # A fact the entity already holds, word for word or reworded (FactDedupe), isn't written again: the
+  # stored one is recorded as restated by this scan (@restated_observation_ids), so the validator
+  # leaves it as it leaves this scan's own facts (1.76.0).
   def import_observations(entity, observations)
-    existing_contents = entity.active_memory_observations.pluck(:content).map(&:to_s).map(&:strip).to_set
+    existing = entity.active_memory_observations.pluck(:content, :id).to_h { |content, id| [ content.to_s.strip, id ] }
     observations.each do |content|
       text = content.to_s.strip
-      next if text.blank? || existing_contents.include?(text)
+      next if text.blank?
+      if existing.key?(text)
+        @restated_observation_ids << existing[text] if existing[text]
+        next
+      end
 
-      next if @dry_run
+      next if @dry_run || reworded_duplicate?(entity, text)
 
       MemoryObservation.create!(
         memory_entity: entity,
@@ -505,7 +518,7 @@ class ProjectScanner
         confidence: 0.9
       )
       @observations_created_count += 1
-      existing_contents.add(text)
+      existing[text] = nil
     end
   rescue StandardError => e
     @errors << "Failed to add observation to #{entity.name}: #{e.message}"
@@ -631,7 +644,8 @@ class ProjectScanner
       project_root: @project_root,
       dry_run: @dry_run,
       logger: @logger,
-      operation_progress: @operation_progress
+      operation_progress: @operation_progress,
+      restated_observation_ids: @restated_observation_ids.to_a
     )
 
     merge_validation_result(validator.call)
