@@ -29,7 +29,7 @@ RSpec.describe "FactSupersede keyword paths" do
     expect(other.unrelated?).to be(false) # found by a search term
   end
 
-  it "proposes an unjudged row unless the pair is unrelated and no term found it" do
+  it "proposes a row unless the pair is unrelated and no term found it, judged or not (1.80.0)" do
     proposals = FactSupersede::Proposals.new(fs_fact!(widget), terms: [], limit: 10, seed: false, max_batches: nil)
     verdict = ->(subject, term, outcome) do
       FactSupersede::Judge::Verdict.new(candidate: FactSupersede::Candidate.new(subject: subject, term: term), verdict: outcome)
@@ -39,8 +39,35 @@ RSpec.describe "FactSupersede keyword paths" do
     expect(proposals.send(:proposal?, verdict.call(:unrelated, "draws", FactSupersede::Judge::UNJUDGED))).to be(true)
     expect(proposals.send(:proposal?, verdict.call(:one_sided, nil, FactSupersede::Judge::UNJUDGED))).to be(true)
     expect(proposals.send(:proposal?, verdict.call(nil, nil, FactSupersede::Judge::UNJUDGED))).to be(true)
-    expect(proposals.send(:proposal?, verdict.call(:unrelated, nil, "superseded"))).to be(true)
+    expect(proposals.send(:proposal?, verdict.call(:unrelated, nil, "superseded"))).to be(false)
+    expect(proposals.send(:proposal?, verdict.call(:unrelated, "draws", "superseded"))).to be(true)
     expect(proposals.send(:proposal?, verdict.call(:related, nil, "still_valid"))).to be(false)
+  end
+
+  it "never sends a sibling pair to the judge, and judges a related one (1.80.0)" do
+    rework = fs_member!(gadget, "Rework Plan")
+    fact = fs_fact!(rework, "Approve the read-model tools first.").tap { |observation| FactKeywords.compute!([ observation.reload ]) }
+    sibling = fs_observe!(widget, "Approve nothing that writes without a review.").tap { |observation| FactKeywords.compute!([ observation.reload ]) }
+    related = fs_observe!(rework, "Approve the write tools first.").tap { |observation| FactKeywords.compute!([ observation.reload ]) }
+    judged = []
+    allow(FactSupersede::Judge).to receive(:call) do |_fact, candidates, **|
+      judged.concat(candidates.map(&:observation))
+      candidates.map { |candidate| FactSupersede::Judge::Verdict.new(candidate: candidate, verdict: "superseded", confidence: 0.9, judged: true) }
+    end
+    allow(FactSupersede::Candidates).to receive(:call).and_wrap_original do |method, *args, **options|
+      result = method.call(*args, **options)
+      # Both found by the vector search, as on a real install where the two texts sit close.
+      extra = [ sibling, related ].reject { |observation| result.candidates.any? { |candidate| candidate.observation == observation } }.map do |observation|
+        FactSupersede::Candidate.new(observation: observation.reload, score: 0.7, distance: 0.3, scoped: true,
+                                     subject: FactKeywords::Relatedness.compare(fact, observation).subject)
+      end
+      result.with(candidates: result.candidates + extra, vector: true)
+    end
+
+    items = FactSupersede::Proposals.call(fact, seed: false).items
+
+    expect(judged).to contain_exactly(related)
+    expect(items.map { |item| item["observation_id"] }).to eq([ related.id ])
   end
 
   it "leaves candidates as before with fact keywords off" do

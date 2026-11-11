@@ -31,8 +31,9 @@ module FactSupersede
       { "distance" => distance&.round(4), "term" => term, "polarity_flip" => polarity_flip, "scoped" => scoped }.compact
     end
 
-    # @return [Boolean] the keyword paths say the two facts are about different things (both
-    #   mention entities, none in common) and no search term matched: an unjudged row isn't seeded
+    # @return [Boolean] the keyword paths say the two facts are about different things
+    #   (FactKeywords::Relatedness: siblings, or mentions with none in common) and no search term
+    #   matched: the pair is neither judged nor proposed (1.80.0)
     def unrelated?
       subject == :unrelated && term.nil?
     end
