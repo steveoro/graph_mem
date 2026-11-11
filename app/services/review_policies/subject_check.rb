@@ -5,8 +5,9 @@ module ReviewPolicies
   # (1.78.0, FactKeywords::Relatedness), with the generators' own rules:
   #
   # - a `contradiction` row whose facts ContradictionDetector.pairable no longer pairs;
-  # - an `unjudged` `fact_supersede` row whose facts are unrelated (both mention entities, none in
-  #   common) and that no search term found. A judged row is the judge's call and is left alone.
+  # - a `fact_supersede` row whose facts are unrelated (FactKeywords::Relatedness: siblings, or
+  #   mentions with none in common) and that no search term found. Judged rows too (1.80.0): the
+  #   generator no longer judges such a pair, so a `superseded` verdict on it was the judge's mistake.
   #
   # A row whose facts are gone or inactive is the Dangling policy's; a row whose paths are still
   # pending can't be told yet.
@@ -20,7 +21,7 @@ module ReviewPolicies
 
     # @param row [MaintenanceReportRow]
     # @return [Symbol] :dismiss, :keep, :pending (a path not computed yet) or :not_applicable
-    #   (another kind, a judged row, a term match, or a fact gone or inactive)
+    #   (another kind, a term match, or a fact gone or inactive)
     def status(row)
       return :not_applicable unless KINDS.include?(row.kind)
 
@@ -42,7 +43,7 @@ module ReviewPolicies
     end
 
     def fact_supersede_status(payload)
-      return :not_applicable unless payload["verdict"] == FactSupersede::Judge::UNJUDGED && payload.dig("signals", "term").blank?
+      return :not_applicable if payload.dig("signals", "term").present?
 
       fact, observation = active_pair(payload["fact_observation_id"], payload["observation_id"])
       return :not_applicable unless fact && observation

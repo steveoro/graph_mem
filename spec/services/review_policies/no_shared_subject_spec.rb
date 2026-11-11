@@ -45,7 +45,7 @@ RSpec.describe ReviewPolicies::NoSharedSubject do
     expect(related.reload.status).to eq("active")
   end
 
-  it "leaves rows with a pending path, judged rows and term matches alone; dismisses an unrelated unjudged row" do
+  it "leaves rows with a pending path and term matches alone; dismisses unrelated rows, judged or not (1.80.0)" do
     pending = contradiction_row(fs_observe!(grant, "It belongs to a User."), computed("It is not linked to a Team."))
     fact = fs_fact!(grant, "AdminGrant now belongs to a Team.").tap { |observation| FactKeywords.compute!([ observation.reload ]) }
     target = computed("It belongs to a User.")
@@ -55,8 +55,22 @@ RSpec.describe ReviewPolicies::NoSharedSubject do
 
     described_class.new.call
 
-    expect([ pending, judged, by_term ].map { |row| row.reload.status }).to all(eq("active"))
-    expect(unjudged.reload.status).to eq("dismissed")
+    expect([ pending, by_term ].map { |row| row.reload.status }).to all(eq("active"))
+    expect([ judged, unjudged ].map { |row| row.reload.status }).to all(eq("dismissed"))
+  end
+
+  it "dismisses rows pairing facts on two sibling entities, and keeps a fact held by the project root (1.80.0)" do
+    rework = fs_member!(root, "Rework Plan")
+    rules = fs_member!(root, "Server Rules")
+    fact = fs_fact!(rework, "Approve the read-model tools first.").tap { |observation| FactKeywords.compute!([ observation.reload ]) }
+    sibling_row = supersede_row(fact, computed("Never pass the development database to the analyzer.", rules), verdict: "superseded")
+    contradiction = contradiction_row(computed("Approve the reads first.", rework), computed("Do not approve reads before writes.", rules))
+    root_row = supersede_row(fact, computed("Never approve a tool without a test.", root), verdict: "superseded")
+
+    described_class.new.call
+
+    expect([ sibling_row, contradiction ].map { |row| row.reload.status }).to all(eq("dismissed"))
+    expect(root_row.reload.status).to eq("active")
   end
 
   it "does nothing with fact keywords off or its own toggle off" do

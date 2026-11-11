@@ -24,6 +24,8 @@ module ReviewPolicies
       ids = MaintenanceReportRow.active.where(kind: KIND, confidence: threshold..).select do |row|
         payload = row.effective_payload
         next false unless confident_unguarded_scoped?(payload, threshold)
+        # Never a pair the keyword paths call unrelated (1.80.0), even with no_shared_subject off.
+        next false if AppSettings.fact_keywords_enabled? && SubjectCheck.status(row) == :dismiss
 
         fact_id = payload["fact_observation_id"].to_i
         facts.fetch(fact_id) { facts[fact_id] = MemoryObservation.find_by(id: fact_id)&.operator_confirmed_fact? || false }
