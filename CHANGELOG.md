@@ -5,6 +5,14 @@ All notable changes to GraphMem will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.80.1] - 2026-11-11
+
+A GraphMem logo.
+
+### Changed
+- **Logo** (`app/assets/images/logo.svg`): in the operator UI's sidebar header, next to the name, at the top of the README and of `docs/quick_setup.md`, `docs/development.md` and `docs/architecture.md`.
+- **Icons:** `public/icon.svg` (transparent) and `public/icon.png` (512×512) replace the placeholder, so the favicon, the Apple touch icon and the web app manifest show the new mark. The SVGs follow the system's dark mode.
+
 ## [1.80.0] - 2026-11-11
 
 Fewer false "Outdated by a fact" and contradiction rows: facts on sibling entities are unrelated.
