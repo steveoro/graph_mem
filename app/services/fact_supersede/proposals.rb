@@ -4,9 +4,10 @@ module FactSupersede
   # Candidates → LegacyGuard → Judge → review rows: the one pipeline behind FactSupersedeJob and
   # detect_contradictions' `outdated_by_fact` mode. It never writes an observation: "keep"
   # candidates are dropped, `still_valid` and `unrelated` verdicts are dropped, and the
-  # `superseded` and `unjudged` ones become `fact_supersede` rows ("Outdated by a fact"). An
-  # `unjudged` one isn't seeded when the keyword paths say the pair is unrelated and no search term
-  # matched (1.78.0): without the judge, nothing else tells the two subjects apart.
+  # `superseded` and `unjudged` ones become `fact_supersede` rows ("Outdated by a fact"). A pair the
+  # keyword paths call unrelated and no search term found (Candidate#unrelated?) is neither judged
+  # nor proposed (1.80.0; 1.78.0 skipped only its unjudged row): the paths already say the two facts
+  # are about different things, so a `superseded` verdict on it would be the judge's mistake.
   #
   # Pairs that already have a row aren't judged again, except a pending `unjudged` row while the
   # LLM is usable (seeded with the LLM off, or past the tool's cap): a `superseded` verdict
@@ -65,6 +66,7 @@ module FactSupersede
 
       guarded = LegacyGuard.new(@fact).apply(found.candidates)
       kept, rest = guarded.partition { |candidate| candidate.guard == LegacyGuard::KEEP }
+      rest = rest.reject(&:unrelated?)
       known_ids, rejudge_rows = known_pairs(rest)
       to_judge = rest.reject { |candidate| known_ids.include?(candidate.observation.id) }
       # Judge's default client is the Router's non-inline :judge client; an inline call passes its own.
@@ -80,11 +82,9 @@ module FactSupersede
 
     private
 
-    # A superseded verdict, or an unjudged one the keyword paths don't call unrelated.
+    # A superseded or unjudged verdict on a pair the keyword paths don't call unrelated.
     def proposal?(verdict)
-      return false unless PROPOSAL_VERDICTS.include?(verdict.verdict)
-
-      verdict.verdict != Judge::UNJUDGED || !verdict.candidate.unrelated?
+      PROPOSAL_VERDICTS.include?(verdict.verdict) && !verdict.candidate.unrelated?
     end
 
     # The candidates whose pair (signature fact:<id>|obs:<id>) already has a pending row or an

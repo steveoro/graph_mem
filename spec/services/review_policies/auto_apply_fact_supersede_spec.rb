@@ -64,6 +64,22 @@ RSpec.describe ReviewPolicies::AutoApplyFactSupersede do
       expect(MemoryObservation.inactive.where(memory_entity_id: [ widget.id, loose.id ])).to be_empty
     end
 
+    it "never applies a row whose facts the keyword paths call unrelated, even with no_shared_subject off (1.80.0)" do
+      AppSettings.enable_review_policy_no_shared_subject = false
+      sibling = fs_member!(gadget, "FrameBuffer")
+      fact = fs_fact!(sibling, "The frame buffer flushes every frame.")
+      [ fact, old ].each { |observation| FactKeywords.compute!([ observation.reload ]) }
+      item = { "kind" => "fact_supersede", "fact_observation_id" => fact.id, "observation_id" => old.id, "verdict" => "superseded",
+               "confidence" => 0.95, "signals" => { "distance" => 0.2, "scoped" => true }, "project_id" => gadget.id,
+               "content" => old.content, "fact_content" => fact.content, "entity_id" => widget.id, "entity_name" => widget.name }
+      CompactionReviewService.seed_report(report_type: "compaction_review", source: "fact_supersede", source_ref: "fact:#{fact.id}", items: [ item ])
+
+      expect(run["acted"]).to eq(0)
+      expect(old.reload).to be_active
+    ensure
+      AppSettings.where(var: "enable_review_policy_no_shared_subject").delete_all
+    end
+
     it "never applies an unjudged row" do
       judged(fs_fact!(gadget, tags: [ "replaces:fast-mcp" ]), verdict: "unjudged", confidence: 0.5)
       AppSettings.auto_apply_fact_supersede_min_confidence = 0.8

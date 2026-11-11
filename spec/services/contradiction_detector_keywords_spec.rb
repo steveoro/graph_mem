@@ -61,6 +61,25 @@ RSpec.describe ContradictionDetector, "keyword paths", :with_test_embeddings do
     expect(described_class.detect(grant.id, persist: false).size).to eq(1)
   end
 
+  it "pairs a fact with one on a related entity, but not two facts on siblings the graph doesn't join (1.80.0)" do
+    deployment = member("Deployment")
+    billing = member("Billing")
+    MemoryRelation.create!(from_entity: deployment, to_entity: grant, relation_type: "depends_on")
+    MemoryRelation.create!(from_entity: billing, to_entity: grant, relation_type: "relates_to")
+    deploys = MemoryObservation.create!(memory_entity: deployment, content: "It deploys with Kamal.")
+    bills = MemoryObservation.create!(memory_entity: billing, content: "It does not bill monthly.")
+
+    # Deployment and Billing are both AdminGrant's neighbours, but nothing joins them: siblings.
+    expect(described_class.detect(grant.id, persist: false)).to be_empty
+
+    own = fact("It is not deployed with Kamal.")
+    pairs = described_class.detect(grant.id, persist: false).map { |found| [ found.observation_id_1, found.observation_id_2 ].sort }
+
+    # AdminGrant and Deployment are joined by a relation. (Its fact and Billing's are both negative.)
+    expect(pairs).to eq([ [ own.id, deploys.id ].sort ])
+    expect(pairs.flatten).not_to include(bills.id)
+  end
+
   it "pairs as before with fact keywords off" do
     AppSettings.fact_keywords_enabled = false
     fact("It belongs to a User.")
