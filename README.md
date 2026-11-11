@@ -1,3 +1,5 @@
+<p align="center"><img src="app/assets/images/logo.svg" alt="GraphMem logo" width="128" height="128"></p>
+
 # GraphMem: Graph-Based Memory MCP Server
 
 GraphMem is a Ruby on Rails application implementing a Model Context Protocol (MCP) server for graph-based memory management. It enables AI assistants and other clients to create, retrieve, search, and manage knowledge entities and their relationships through a standardized interface.

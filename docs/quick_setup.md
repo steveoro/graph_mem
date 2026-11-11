@@ -1,3 +1,5 @@
+<img src="../app/assets/images/logo.svg" alt="GraphMem logo" width="64" height="64" align="right">
+
 # Quick setup: graph_mem on a new workstation
 
 The shortest path from nothing to a running graph_mem container, plus the skill and the rule
