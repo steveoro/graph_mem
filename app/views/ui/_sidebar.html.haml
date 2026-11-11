@@ -7,8 +7,11 @@
 %nav.ui-sidebar{ "aria-label": t("ui.nav.label"), data: { controller: "nav", action: "keydown.esc@window->nav#close" } }
   .ui-sidebar__top
     = link_to (can_write? ? main_app.root_path : main_app.search_path), class: "ui-sidebar__brand" do
-      GraphMem
-      %span.ui-sidebar__version v#{GraphMem::VERSION}
+      = image_tag "logo.svg", alt: "", class: "ui-sidebar__logo", data: { testid: "brand-logo" }
+      -# One box for the name and version, so the flex gap only parts them from the logo.
+      %span
+        GraphMem
+        %span.ui-sidebar__version v#{GraphMem::VERSION}
     %button.ui-sidebar__toggle{ type: "button", "aria-expanded": "false", "aria-controls": "ui-sidebar-menu",
       "aria-label": t("ui.nav.toggle"), data: { action: "nav#toggle", nav_target: "toggle", testid: "nav-toggle" } }
       %span{ "aria-hidden": "true" } ☰

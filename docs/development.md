@@ -1,3 +1,5 @@
+<img src="../app/assets/images/logo.svg" alt="GraphMem logo" width="64" height="64" align="right">
+
 # Development Guide
 
 This guide covers everything you need to know to set up a development environment and contribute to the GraphMem project.

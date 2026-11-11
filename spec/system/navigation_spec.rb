@@ -39,6 +39,18 @@ RSpec.describe "Navigation", type: :system do
       end
     end
 
+    it "shows the GraphMem logo next to the name in the sidebar (1.80.1)" do
+      logo = find("nav.ui-sidebar [data-testid='brand-logo']")
+
+      expect(logo[:src]).to match(%r{/assets/logo-\h+\.svg\z})
+      # Loaded and decoded, not a broken image (retried: the page can render before the image loads).
+      natural_width = page.document.synchronize(5) do
+        width = page.evaluate_script("document.querySelector(\"[data-testid='brand-logo']\").naturalWidth")
+        width.to_i.positive? ? width : raise(Capybara::ExpectationNotMet, "brand logo not decoded yet")
+      end
+      expect(natural_width).to be_positive
+    end
+
     it "shows a notice toast after sign-in that can be dismissed" do
       find(".ui-toast--notice", text: "Signed in successfully.").find(".ui-toast__dismiss").click
 

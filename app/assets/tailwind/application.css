@@ -93,9 +93,18 @@
   }
 
   .ui-sidebar__brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
     font-weight: 700;
     color: var(--color-ui-text);
     text-decoration: none;
+  }
+
+  .ui-sidebar__logo {
+    width: 2rem;
+    height: 2rem;
+    flex: none;
   }
 
   .ui-sidebar__version {

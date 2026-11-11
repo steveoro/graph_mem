@@ -1,3 +1,5 @@
+<img src="../app/assets/images/logo.svg" alt="GraphMem logo" width="64" height="64" align="right">
+
 # GraphMem Architecture
 
 This document provides an overview of GraphMem's architecture, explaining how the various components work together to provide a complete graph-based memory system accessed through the Model Context Protocol (MCP) and a REST API.
