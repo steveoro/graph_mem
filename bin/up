@@ -182,7 +182,7 @@ $print_only && out=1
   resolve GRAPH_MEM_MCP_ALLOWED_IPS "$detected_ips" "$ips_reason"
   resolve GRAPH_MEM_MCP_ALLOWED_ORIGINS "" "never detected; same-origin pages need no entry"
   if [[ $detected_ips == *@lan ]]; then
-    printf '@lan is expanded by graph_mem from its interfaces; now: %s\n' "${lan_now:-no private LAN detected}"
+    printf '@lan is expanded by graph_mem from its default-route interface (tunnels and bridges give none); bin/up sees: %s\n' "${lan_now:-no private LAN detected}"
   fi
 } >&"$out"
 

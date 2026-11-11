@@ -108,7 +108,7 @@ $ bin/up --print
 GRAPH_MEM_MCP_ALLOWED_HOSTS=@lan (detected)
 GRAPH_MEM_MCP_ALLOWED_IPS=127.0.0.0/8,::1,172.16.0.0/12,@lan (detected)
 GRAPH_MEM_MCP_ALLOWED_ORIGINS unset (built-in default: never detected; same-origin pages need no entry)
-@lan is expanded by graph_mem from its interfaces; now: synth-box,synth-box.local,10.9.8.18 · 10.9.8.0/24
+@lan is expanded by graph_mem from its default-route interface (tunnels and bridges give none); bin/up sees: synth-box,synth-box.local,10.9.8.18 · 10.9.8.0/24
 ```
 
 **On macOS** Docker Desktop runs the container in a VM that can't see the Mac's interfaces, so
@@ -141,8 +141,8 @@ GRAPH_MEM_MCP_ALLOWED_IPS=127.0.0.0/8,::1,172.16.0.0/12,172.20.0.0/16 (detected)
 - Origins are never detected: a browser client's origin is its own `scheme://host:port`.
 - A non-empty value in the environment, or a `KEY=value` line in `.env`, wins and is passed through
   unchanged. Leave the lines unset in `.env` to use the detection.
-- Detection runs on the host (Linux: `ip`, for the `now:` line only; macOS, best effort: `route`,
-  `ipconfig`, `ifconfig`). If it fails, `bin/up` prints one line; on macOS it starts with the
+- Detection runs on the host (Linux: `ip`, for the `bin/up sees:` hint only, which applies none of
+  graph_mem's tunnel and bridge checks; macOS, best effort: `route`, `ipconfig`, `ifconfig`). If it fails, `bin/up` prints one line; on macOS it starts with the
   built-in defaults, on Linux still with `@lan`.
 - The containers keep the values they were created with: Docker's own restart (after a reboot)
   reuses them. With `@lan` that is fine; with literal values (macOS, or your own `.env` lines),

@@ -67,7 +67,7 @@ RSpec.describe "bin/up" do
     expect(stdout).to include("GRAPH_MEM_MCP_ALLOWED_HOSTS=@lan (detected)")
     expect(stdout).to include("GRAPH_MEM_MCP_ALLOWED_IPS=127.0.0.0/8,::1,172.16.0.0/12,@lan (detected)")
     expect(stdout).to include("GRAPH_MEM_MCP_ALLOWED_ORIGINS unset")
-    expect(stdout).to include("@lan is expanded by graph_mem from its interfaces; now: synth-box,synth-box.local,10.9.8.18 · 10.9.8.0/24")
+    expect(stdout).to include("@lan is expanded by graph_mem from its default-route interface (tunnels and bridges give none); bin/up sees: synth-box,synth-box.local,10.9.8.18 · 10.9.8.0/24")
   end
 
   it "detects the same on macOS from route, ipconfig and ifconfig" do
@@ -114,14 +114,14 @@ RSpec.describe "bin/up" do
     stdout, = run_up(public_linux)
 
     expect(stdout).to include("GRAPH_MEM_MCP_ALLOWED_IPS=127.0.0.0/8,::1,172.16.0.0/12,@lan (detected)")
-    expect(stdout).to include("now: synth-box,synth-box.local,192.0.2.18")
+    expect(stdout).to include("bin/up sees: synth-box,synth-box.local,192.0.2.18")
   end
 
   it "still writes @lan on Linux when detection fails" do
     stdout, stderr, = run_up(linux.merge("ip" => "echo garbage"))
 
     expect(stderr).to include("LAN detection failed")
-    expect(stdout).to include("GRAPH_MEM_MCP_ALLOWED_HOSTS=@lan (detected)", "now: no private LAN detected")
+    expect(stdout).to include("GRAPH_MEM_MCP_ALLOWED_HOSTS=@lan (detected)", "bin/up sees: no private LAN detected")
   end
 
   it "falls back to the built-in defaults with one stderr line when every tool is missing" do
