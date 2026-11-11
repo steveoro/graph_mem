@@ -15,7 +15,7 @@ Sets the MCP allowlists for the host's LAN, then runs
 On Linux (the app container uses the host network, so it sees the host's interfaces):
   GRAPH_MEM_MCP_ALLOWED_HOSTS  @lan
   GRAPH_MEM_MCP_ALLOWED_IPS    127.0.0.0/8,::1,172.16.0.0/12,@lan
-  graph_mem expands @lan itself from its network interfaces, when it boots and again
+  graph_mem expands @lan itself from its default-route interface, when it boots and again
   whenever the LAN changes (another subnet, another network), so a reboot or a move
   needs no new bin/up. The current expansion is printed for reference.
 

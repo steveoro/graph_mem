@@ -14,12 +14,15 @@ module GraphMem
   # interfaces. Docker Desktop (macOS) runs it in a VM that can't, so bin/up writes literal
   # addresses there instead.
   #
-  # An interface counts when it is up, not loopback, not point-to-point, not a container or VM
-  # bridge and not a VPN tunnel (VIRTUAL), and its IPv4 address is private (10/8, 172.16/12,
-  # 192.168/16) with a /16-/30 prefix. Unlike bin/up before 1.79.0, which took only the
-  # default-route interface, every such interface counts (wired and Wi-Fi at once). `@lan` then means:
-  # - in GRAPH_MEM_MCP_ALLOWED_IPS: each such interface's subnet ("10.9.8.0/24");
-  # - in GRAPH_MEM_MCP_ALLOWED_HOSTS: each such address, the host name and "<host name>.local".
+  # Only the interface that carries the lowest-metric IPv4 default route counts (ROUTE_TABLE), as
+  # bin/up detected before 1.79.0: another NIC, a tethered phone, a bridge or a VPN never joins the
+  # unauthenticated allowlist. That interface must also be up, not loopback, not point-to-point
+  # and not a container, VM or VPN interface (VIRTUAL), with a private IPv4 address (10/8,
+  # 172.16/12, 192.168/16) and a /16-/30 prefix, so a full-tunnel VPN that owns the default route
+  # is refused too. No default route, an unreadable route table (macOS has none) or a refused
+  # interface: the LAN is empty. `@lan` then means:
+  # - in GRAPH_MEM_MCP_ALLOWED_IPS: that interface's subnet ("10.9.8.0/24");
+  # - in GRAPH_MEM_MCP_ALLOWED_HOSTS: its address, the host name and "<host name>.local".
   #
   #   GraphMem::LanAddresses.expand_ips(%w[127.0.0.0/8 @lan]) # => ["127.0.0.0/8", "10.9.8.0/24"]
   #   GraphMem::LanAddresses.expand_hosts(%w[@lan])           # => ["10.9.8.18", "synth-box", "synth-box.local"]
@@ -32,6 +35,9 @@ module GraphMem
     # join the unauthenticated allowlist; point-to-point links (wg, tun, ppp) are refused by flag too.
     VIRTUAL = /\A(docker|br-|veth|virbr|vmnet|vboxnet|cni|flannel|cali|cilium|weave|kube|vxlan|lxc|lxd|incusbr|podman|
                   tailscale|zt|wg|tun|tap|ppp|utun|ipsec|nordlynx|wt)/x
+    # The kernel's IPv4 routes; with host networking, the host's.
+    ROUTE_TABLE = "/proc/net/route"
+    RTF_UP = 0x1
     HOST_LABEL = /\A[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\z/
 
     # `ranges` the subnets ("10.9.8.0/24"), `hosts` the addresses and names.
@@ -87,12 +93,18 @@ module GraphMem
 
       # @param interfaces [Array<Socket::Ifaddr>, nil] injectable for specs (nil: this machine's)
       # @param hostname [String, nil]
-      # @return [Snapshot] empty when the interfaces can't be read
-      def read(interfaces: nil, hostname: nil)
+      # @param routes [String, nil] the ROUTE_TABLE text, injectable for specs
+      # @return [Snapshot] empty without a usable default-route interface, or when a read fails
+      def read(interfaces: nil, hostname: nil, routes: nil)
         # Read here, not as default arguments, so the rescue below covers a failed read.
+        default = default_route_interface(routes || File.read(ROUTE_TABLE))
+        return Snapshot.new(ranges: [], hosts: []) unless default
+
         interfaces ||= Socket.getifaddrs
         hostname ||= Socket.gethostname
-        addresses = interfaces.filter_map { |interface| lan_address(interface) }.uniq
+        addresses = interfaces.filter_map { |interface| interface.name == default && lan_address(interface) }.uniq
+        return Snapshot.new(ranges: [], hosts: []) if addresses.empty?
+
         name = hostname.to_s.split(".").first.to_s.downcase
         names = name.match?(HOST_LABEL) ? [ name, "#{name}.local" ] : []
         Snapshot.new(ranges: addresses.map { |_ip, range| range }.uniq, hosts: addresses.map(&:first) + names)
@@ -101,6 +113,17 @@ module GraphMem
       end
 
       private
+
+      # @param routes [String] /proc/net/route text: a header, then one route per line (hex fields)
+      # @return [String, nil] the interface of the lowest-metric default route that is up
+      def default_route_interface(routes)
+        routes.lines.drop(1).filter_map do |line|
+          iface, destination, _gateway, flags, _refcnt, _use, metric, mask = line.split
+          next unless destination == "00000000" && mask == "00000000" && flags.to_s.to_i(16).anybits?(RTF_UP)
+
+          [ metric.to_i, iface ]
+        end.min&.last
+      end
 
       def expand(entries, &replacement)
         Array(entries).flat_map { |entry| entry.to_s.strip.casecmp?(TOKEN) ? replacement.call : [ entry ] }.uniq

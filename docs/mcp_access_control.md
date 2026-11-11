@@ -121,16 +121,19 @@ GRAPH_MEM_MCP_ALLOWED_IPS=127.0.0.0/8,::1,172.16.0.0/12,172.20.0.0/16 (detected)
 ```
 
 - **`@lan`** (in `GRAPH_MEM_MCP_ALLOWED_IPS` or `GRAPH_MEM_MCP_ALLOWED_HOSTS`, also when you write it
-  yourself) is this machine's LAN, read from its network interfaces (`GraphMem::LanAddresses`): each
-  interface that is up, not loopback, not a container or VM bridge (`docker0`, `br-…`, `veth…`,
+  yourself) is this machine's LAN, read from its network interfaces (`GraphMem::LanAddresses`): only
+  the interface of the lowest-metric IPv4 default route (`/proc/net/route`), as `bin/up` detected it
+  before 1.79.0. Another NIC, a tethered phone, a bridge or a VPN never joins the list. That
+  interface must also be up, not loopback, not a container or VM bridge (`docker0`, `br-…`, `veth…`,
   `virbr…`, `kube…`, …) and not a VPN tunnel (`wg…`, `tun…`, `tap…`, `ppp…`, `nordlynx`, or any
-  point-to-point link), with a private IPv4 address and a `/16`–`/30` prefix. Every such interface
-  counts (wired and Wi-Fi at once), not only the default route's. In the IP list it means each
-  such subnet; in the host list each such address, the host name and `<host name>.local`. It is read
+  point-to-point link), with a private IPv4 address and a `/16`–`/30` prefix; a full-tunnel VPN that
+  owns the default route gives no LAN. In the IP list `@lan` means that subnet; in the host list
+  that address, the host name and `<host name>.local`. It is read
   when the lists are built and checked again at most every 30 seconds on the next request: when the
   LAN changed, the lists are rebuilt (with `@lan` in the hosts, that closes the open MCP sessions,
   as any hosts change does) and one `[McpAccessPolicy] LAN changed` line is logged. With no LAN
-  (a laptop that booted offline), `@lan` adds nothing until one appears: an IP list that has nothing
+  (a laptop that booted offline, no default route, an unreadable route table), `@lan` adds nothing
+  until one appears: an IP list that has nothing
   else usable then means loopback only, never the built-in private ranges. The container needs the host
   network (`network_mode: host`, as in `docker-compose.yml`) to see the host's interfaces.
 - Loopback and the Docker bridge range are always in the IP list. On macOS the subnet is used only
