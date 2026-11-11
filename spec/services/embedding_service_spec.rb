@@ -451,6 +451,39 @@ RSpec.describe EmbeddingService do
     end
   end
 
+  describe "#backfill_all inside a scheduled run (1.81.0)" do
+    def pending_entities
+      EmbeddingService.suppress_inline_embeddings do
+        Array.new(3) { |i| MemoryEntity.create!(name: "StopBackfill#{i}", entity_type: "Project") }
+      end
+    end
+
+    before do
+      allow(described_class).to receive(:vector_enabled?).and_return(true)
+      allow(service).to receive(:embed).and_return([ 0.25 ] * 768)
+    end
+
+    it "stops between records when a stop is requested, leaving the rest pending" do
+      entities = pending_entities
+      allow(MemoryEntity).to receive(:missing_embedding).and_return(MemoryEntity.where(id: entities.map(&:id)))
+      asked = 0
+      stub_const("CooperativeStop::INTERVAL", 0.seconds) # ask on every call
+
+      result = CooperativeStop.with(-> { (asked += 1) > 1 }) { service.backfill_all }
+
+      expect(result[:entities]).to eq(1)
+      expect(entities.count { |entity| entity.reload.embedded_at.nil? }).to eq(2)
+    end
+
+    it "embeds them all with no stop requested" do
+      entities = pending_entities
+      allow(MemoryEntity).to receive(:missing_embedding).and_return(MemoryEntity.where(id: entities.map(&:id)))
+      allow(MemoryObservation).to receive(:missing_embedding).and_return(MemoryObservation.none)
+
+      expect(service.backfill_all[:entities]).to eq(3)
+    end
+  end
+
   describe "#store_vector" do
     it "stamps embedded_at with the vector write" do
       allow(described_class).to receive(:vector_enabled?).and_return(true)
