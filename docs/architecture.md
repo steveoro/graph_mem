@@ -358,8 +358,9 @@ and nothing acts across projects. Step list: `docs/plans/fact-supersede-plan.md`
   when both share their first mention (kept in memory, not in the row's `signals`). Two facts are
   **related** when they share a mention or one mentions the other's own entity, and **unrelated**
   when both mention entities with none in common or (1.80.0) when they are held by two different
-  entities the paths don't connect ("siblings": `gadget_mcp › Rework` and `gadget_mcp › Server Rules`). A fact
-  held by its project root, or by an entity with no project, is never a sibling.
+  entities the paths don't connect ("siblings": `gadget_mcp › Rework` and `gadget_mcp › Server Rules`).
+  Never siblings: two entities a relation joins directly, a fact held by its project root (or by
+  an entity with no project), and a path computed before its entity was renamed.
   Related entities without a project come back as **unscoped**: shown
   with a warning, applied by hand only (without `outdated_by`), never auto-applied.
 - **Legacy guard** (`FactSupersede::LegacyGuard`, again at apply): `keep` (never proposed) when the

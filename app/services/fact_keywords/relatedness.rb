@@ -8,8 +8,10 @@ module FactKeywords
   #   mention is the strong match;
   # - **unrelated**: held by two different entities the paths don't connect (siblings, 1.80.0:
   #   "gadget_mcp › Rework" and "gadget_mcp › Server Rules"), or both mention entities, none in common.
-  #   A fact held by its project root itself (or by an entity with no project: its path starts with
-  #   its own entity) is about the whole project, so it is never a sibling;
+  #   Never siblings: two entities a relation joins directly (Deployment part_of Infrastructure), a
+  #   fact held by its project root itself (or by an entity with no project: its path starts with its
+  #   own entity), which is about the whole project, and a path that no longer holds its owner (the
+  #   entity was renamed since it was computed), which can't tell;
   # - **one_sided**: one own entity, and only one of them mentions any entity;
   # - **unknown**: one own entity, and neither mentions any entity, so the paths can't tell.
   #
@@ -35,21 +37,27 @@ module FactKeywords
     # @param second [MemoryObservation]
     # @return [Comparison]
     def compare(first, second)
-      compare_paths(first.keywords, first.memory_entity&.name, second.keywords, second.memory_entity&.name)
+      first_entity = first.memory_entity
+      second_entity = second.memory_entity
+      compare_paths(first.keywords, first_entity&.name, second.keywords, second_entity&.name,
+                    connected: -> { joined?(first_entity, second_entity) })
     end
 
     # @param first_path [Array<String>] a keyword path
     # @param first_owner [String, nil] the name of the entity that holds the first fact
     # @param second_path [Array<String>]
     # @param second_owner [String, nil]
+    # @param connected [Boolean, #call] a relation joins the two owners directly (a callable is only
+    #   called when the answer depends on it)
     # @return [Comparison]
-    def compare_paths(first_path, first_owner, second_path, second_owner)
+    def compare_paths(first_path, first_owner, second_path, second_owner, connected: false)
       first = FactKeywords.mentions(first_path, first_owner)
       second = FactKeywords.mentions(second_path, second_owner)
       shared = first & second
       shared += [ second_owner ] if second_owner && second_owner != first_owner && first.include?(second_owner)
       shared += [ first_owner ] if first_owner && first_owner != second_owner && second.include?(first_owner)
-      siblings = siblings?(first_path, first_owner, second_path, second_owner)
+      siblings = shared.empty? && siblings?(first_path, first_owner, second_path, second_owner) &&
+                 !(connected.respond_to?(:call) ? connected.call : connected)
       Comparison.new(subject: subject(first, second, shared, siblings), strong: first.first.present? && first.first == second.first,
                      shared: shared.uniq)
     end
@@ -69,13 +77,25 @@ module FactKeywords
       :one_sided
     end
 
-    # Two different own entities, neither of them at the head of its own path (a project root, or
-    # an entity with no project).
+    # Two different own entities, each still in its own path, neither of them at the head of it (a
+    # project root, or an entity with no project).
     def siblings?(first_path, first_owner, second_path, second_owner)
       return false if first_owner.nil? || second_owner.nil? || first_owner == second_owner
 
-      [ [ first_path, first_owner ], [ second_path, second_owner ] ].none? { |path, owner| Array(path).first == owner }
+      pairs = [ [ first_path, first_owner ], [ second_path, second_owner ] ]
+      # A path that no longer holds its owner (the entity was renamed since) can't tell.
+      return false unless pairs.all? { |path, owner| Array(path).include?(owner) }
+
+      pairs.none? { |path, owner| Array(path).first == owner }
     end
-    private_class_method :subject, :siblings?
+
+    # @return [Boolean] a relation joins the two entities directly, in either direction
+    def joined?(first, second)
+      return false if first.nil? || second.nil? || first.id == second.id
+
+      MemoryRelation.where(from_entity_id: first.id, to_entity_id: second.id)
+                    .or(MemoryRelation.where(from_entity_id: second.id, to_entity_id: first.id)).exists?
+    end
+    private_class_method :subject, :siblings?, :joined?
   end
 end

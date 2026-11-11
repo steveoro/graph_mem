@@ -45,6 +45,31 @@ RSpec.describe FactKeywords::Relatedness do
     expect(compare_owned(%w[LooseNote], "LooseNote", %w[gadget_mcp ServerRules], "ServerRules").subject).to eq(:unknown)
   end
 
+  it "never calls a stale path a sibling: an owner or a project root renamed since it was computed" do
+    expect(compare_owned(%w[gadget_mcp OldRework], "Rework", %w[gadget_mcp ServerRules], "ServerRules").subject).to eq(:unknown)
+    expect(compare_owned(%w[old_mcp], "gadget_mcp", %w[old_mcp ServerRules], "ServerRules").subject).to eq(:unknown)
+  end
+
+  it "never calls two entities a relation joins directly siblings" do
+    expect(described_class.compare_paths(%w[gadget_mcp Deployment], "Deployment", %w[gadget_mcp Infrastructure], "Infrastructure",
+                                         connected: true).subject).to eq(:unknown)
+
+    root = MemoryEntity.create!(name: "gadget_mcp", entity_type: "Project")
+    deployment, infrastructure, rules = %w[Deployment Infrastructure ServerRules].map do |name|
+      MemoryEntity.create!(name: name, entity_type: "Component", project_id: root.id)
+    end
+    MemoryRelation.create!(from_entity: deployment, to_entity: infrastructure, relation_type: "part_of")
+    facts = { deployment => "We deploy with Kamal.", infrastructure => "We deploy with Capistrano.", rules => "Never deploy on Fridays." }
+              .to_h do |entity, content|
+      observation = MemoryObservation.create!(memory_entity: entity, content: content)
+      observation.update_columns(keywords: [ root.name, entity.name ], keywords_at: Time.current)
+      [ entity.name, observation ]
+    end
+
+    expect(described_class.compare(facts["Infrastructure"], facts["Deployment"]).subject).to eq(:unknown)
+    expect(described_class.compare(facts["Deployment"], facts["ServerRules"]).subject).to eq(:unrelated)
+  end
+
   it "compares observations by their stored paths and owners" do
     root = MemoryEntity.create!(name: "Gadget Project", entity_type: "Project")
     grant = MemoryEntity.create!(name: "AdminGrant", entity_type: "Model", project_id: root.id)
