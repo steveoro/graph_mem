@@ -5,6 +5,16 @@ All notable changes to GraphMem will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.79.0] - 2026-11-10
+
+Subnet-tolerant MCP allowlists.
+
+### Added
+- **`@lan`** in `GRAPH_MEM_MCP_ALLOWED_IPS` and `GRAPH_MEM_MCP_ALLOWED_HOSTS`: this machine's LAN, read by graph_mem from its network interfaces (`GraphMem::LanAddresses`): only the interface of the lowest-metric IPv4 default route, as `bin/up` detected it, and only when it is up, private (/16-/30), and not loopback, a container or VM bridge, a VPN tunnel or a point-to-point link. In the IP list it means that subnet, in the host list that address plus the host name and `<host name>.local`. No default route, an unreadable route table or a refused interface means no LAN; an IP list naming `@lan` with nothing else usable then means loopback only. Checked again at most every 30 s: when the LAN changes (a reboot on another subnet, a laptop on another network), the next request rebuilds the lists, with no restart and no new `bin/up`.
+
+### Changed
+- `bin/up` on Linux writes `@lan` (`GRAPH_MEM_MCP_ALLOWED_HOSTS=@lan`, `GRAPH_MEM_MCP_ALLOWED_IPS=127.0.0.0/8,::1,172.16.0.0/12,@lan`) instead of the detected addresses, which the container kept until it was recreated; `--print` shows the default-route address and subnet `bin/up` sees, as a hint (graph_mem's own read also refuses tunnels and bridges). On macOS (Docker Desktop's VM can't see the Mac's interfaces) it writes the detected values, as before. A value in the environment or `.env` still wins.
+
 ## [1.78.0] - 2026-11-10
 
 Fact pertinence: the keyword paths of 1.77.0 decide when two facts are about the same thing, in scans and in review rows.

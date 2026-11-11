@@ -24,6 +24,7 @@ module GraphMem
     #
     # @return [GraphMem::McpAccessPolicy]
     def self.access_policy
+      refresh_lan!
       @access_policy ||= GraphMem::McpAccessPolicy.from_env(logger: Rails.logger,
                                                             extra_ips: McpAccessLists.extra_entries!(:ips))
     rescue McpAccessLists::ReadError
@@ -47,6 +48,22 @@ module GraphMem
     def self.refresh_access!(transports:)
       @access_policy = nil
       Transports.reset! if transports
+    end
+
+    # When an allowlist holds `@lan` (1.79.0) and this machine's LAN changed (a laptop on another
+    # network, a host rebooted on another subnet), rebuilds what was built from the old one: the
+    # policy, and the transports when the hosts hold `@lan` (which closes the MCP sessions). Checks
+    # the interfaces at most every LanAddresses::REFRESH_SECONDS; a no-op without `@lan`.
+    #
+    # @return [Boolean] whether anything was rebuilt
+    def self.refresh_lan!
+      ips = McpAccessLists.lan?(:ips)
+      hosts = McpAccessLists.lan?(:hosts)
+      return false unless (ips || hosts) && LanAddresses.refresh!
+
+      Rails.logger.info("[McpAccessPolicy] LAN changed (#{LanAddresses.current.ranges.join(', ').presence || 'none'}); /mcp allowlists rebuilt")
+      refresh_access!(transports: hosts)
+      true
     end
 
     # Request-body and stdio line cap, in bytes (D7).

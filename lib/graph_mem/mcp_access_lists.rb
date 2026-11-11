@@ -76,14 +76,30 @@ module GraphMem
       def entries(kind, env: ENV)
         entries!(kind, env: env)
       rescue ReadError
-        env_entries(kind, env: env)
+        listed_entries(kind, env: env)
       end
 
       # Like {entries}, but raises ReadError when the settings can't be read.
       #
       # @raise [ReadError]
       def entries!(kind, env: ENV)
-        (env_entries(kind, env: env) + extra_entries!(kind)).uniq(&:downcase)
+        (listed_entries(kind, env: env) + extra_entries!(kind)).uniq(&:downcase)
+      end
+
+      # The ENV entries as they apply: `@lan` (1.79.0) in the hosts expanded to this machine's LAN
+      # addresses and host name (LanAddresses). Also the fallback when the settings can't be read.
+      #
+      # @param kind [Symbol]
+      # @return [Array<String>]
+      def listed_entries(kind, env: ENV)
+        listed = env_entries(kind, env: env)
+        kind == :hosts ? LanAddresses.expand_hosts(listed) : listed
+      end
+
+      # @param kind [Symbol]
+      # @return [Boolean] the ENV value of +kind+ holds `@lan`
+      def lan?(kind, env: ENV)
+        LanAddresses.token?(env_entries(kind, env: env))
       end
 
       # Checks and normalizes an additive list before it is saved (see Validator).

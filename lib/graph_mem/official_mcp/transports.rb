@@ -72,7 +72,7 @@ module GraphMem
         def access_lists
           @access_lists ||= { hosts: McpAccessLists.entries!(:hosts).freeze, origins: McpAccessLists.entries!(:origins).freeze }.freeze
         rescue McpAccessLists::ReadError
-          { hosts: McpAccessLists.env_entries(:hosts), origins: McpAccessLists.env_entries(:origins) }
+          { hosts: McpAccessLists.listed_entries(:hosts), origins: McpAccessLists.listed_entries(:origins) }
         end
 
         # Whether +origin+ is in {allowed_origins}, compared case-insensitively as the transport does.
