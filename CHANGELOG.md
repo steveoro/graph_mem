@@ -5,6 +5,15 @@ All notable changes to GraphMem will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.80.0] - 2026-11-11
+
+Fewer false "Outdated by a fact" and contradiction rows: facts on sibling entities are unrelated.
+
+### Changed
+- **Siblings are unrelated** (`FactKeywords::Relatedness`): two facts held by different entities whose keyword paths don't connect them (neither mentions the other's entity, no mention in common) are about different things, mentions or not. Example: `gadget_mcp › Rework` and `gadget_mcp › Server Rules`. Before, two such facts that mentioned no entity were `unknown`, so their embedding distance alone could pair them. A fact held by its project root (or by an entity with no project) is about the whole project and is never a sibling.
+- **"Outdated by a fact"**: a pair the paths call unrelated and no search term found is no longer sent to the judge, so no row is proposed for it, `superseded` verdicts included (1.78.0 skipped only its unjudged row). `auto_apply_fact_supersede` never applies such a row, even with `no_shared_subject` off.
+- **Review policy `no_shared_subject`** also dismisses *judged* "Outdated by a fact" rows for unrelated pairs (no term match), and contradiction rows between siblings, clearing the backlog on its next run (nightly, or Run policies on the Review page). `bin/rails graph_mem:fact_keywords:review_report` counts them first, read-only.
+
 ## [1.79.0] - 2026-11-10
 
 Subnet-tolerant MCP allowlists.
