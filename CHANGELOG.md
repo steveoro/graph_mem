@@ -5,6 +5,23 @@ All notable changes to GraphMem will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.81.0] - 2026-11-11
+
+Every scheduled job on demand, for a machine that is off at the scheduled times.
+
+### Added
+- **Run all scheduled jobs now** (System › Background jobs): one switch runs every job of `config/recurring.yml` once, one at a time, in a safe order: a backup first, then garbage collection, compaction (waited on until its run ends), the embedding backfill, fact keywords, the stale-memory and contradiction scan, the review policies and the clean-ups. A failing job is recorded and the run goes on; a job whose own setting is off is skipped.
+  - **Start / Stop / Resume** on the same button, which never re-enables itself, so no parallel run can start. Stop pauses compaction through its own pause, stops the fact-keywords job and the embedding backfill between batches, and otherwise pauses after the current job; Resume continues where it stopped. **Start over** drops a paused run.
+  - **Status line:** the current job, when the run and the job started, the last progress (live), and the newest audit-log entry since the run started.
+  - A run interrupted by a shutdown continues by itself when the machine is back on.
+
+### Changed
+- `FactKeywordsJob` and the embedding backfill stop between batches when a scheduled run asks them to (`CooperativeStop`); on their own schedule they run as before.
+- `bin/rails graph_mem:sync_skill_version` also sets the README's version badge (it said 1.52.1), and a spec keeps it equal to `GraphMem::VERSION`.
+
+### Removed
+- The unused PWA template (`app/views/pwa/`: nothing routed or linked it).
+
 ## [1.80.1] - 2026-11-11
 
 A GraphMem logo.

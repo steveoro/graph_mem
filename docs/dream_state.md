@@ -205,7 +205,10 @@ To action a queued relationship proposal: inspect the evidence, then call
 | **development** | Every hour           |
 
 
-Times are GMT as noted in `config/recurring.yml`.
+Times are GMT as noted in `config/recurring.yml`. On a machine that is off at 3:00, **Run all
+scheduled jobs now** on System › Background jobs (1.81.0) runs compaction with the other scheduled
+jobs and waits for it to finish; its **Stop** pauses the compaction run, and **Resume** continues
+from its cursor.
 
 Resolved review rows are pruned by a separate daily job, `MaintenanceReportRowCleanupJob`
 (5:15 AM GMT in production, after compaction): approved, dismissed and ignored rows older than

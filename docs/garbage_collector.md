@@ -82,7 +82,9 @@ Defined in `config/recurring.yml`:
 | **production** | Daily at 2:00 PM GMT |
 | **development** | Not scheduled (manual or operator trigger only) |
 
-Solid Queue must be running for scheduled invocations to fire.
+Solid Queue must be running for scheduled invocations to fire. On a machine that is off at
+2:00 PM, **Run all scheduled jobs now** on System › Background jobs (1.81.0) runs garbage collection
+with the other scheduled jobs, right after the backup.
 
 ### Feature flag
 
