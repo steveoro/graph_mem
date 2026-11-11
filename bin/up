@@ -17,7 +17,7 @@ On Linux (the app container uses the host network, so it sees the host's interfa
   GRAPH_MEM_MCP_ALLOWED_IPS    127.0.0.0/8,::1,172.16.0.0/12,@lan
   graph_mem expands @lan itself from its default-route interface, when it boots and again
   whenever the LAN changes (another subnet, another network), so a reboot or a move
-  needs no new bin/up. The current expansion is printed for reference.
+  needs no new bin/up. What bin/up itself sees is printed as a hint (graph_mem also refuses tunnels and bridges).
 
 On macOS (Docker Desktop's VM can't see the Mac's interfaces), the detected values:
   GRAPH_MEM_MCP_ALLOWED_HOSTS  <name>,<name>.local,<lan-ip>
