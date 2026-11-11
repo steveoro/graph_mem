@@ -23,5 +23,21 @@ namespace :graph_mem do
       end
       puts "[fact_keywords] #{marked} facts marked, #{computed} computed"
     end
+
+    desc "Read-only: how many pending contradiction / \"Outdated by a fact\" rows the no_shared_subject policy would dismiss"
+    task review_report: :environment do
+      counts = Hash.new { |hash, kind| hash[kind] = Hash.new(0) }
+      MaintenanceReportRow.pending.where(kind: ReviewPolicies::SubjectCheck::KINDS).find_each do |row|
+        counts[row.kind][ReviewPolicies::SubjectCheck.status(row)] += 1
+      end
+      ReviewPolicies::SubjectCheck::KINDS.each do |kind|
+        found = counts[kind]
+        puts "[fact_keywords] #{kind}: #{found.values.sum} pending; #{found[:dismiss]} share no subject (would be dismissed), " \
+             "#{found[:keep]} kept, #{found[:pending]} with a pending path (run graph_mem:fact_keywords:refresh first), " \
+             "#{found[:not_applicable]} not checked (judged, a term match, or a fact gone)"
+      end
+      puts "[fact_keywords] the no_shared_subject policy is #{AppSettings.review_policy_enabled?('no_shared_subject') ? 'on' : 'off'}; " \
+           "fact keywords are #{AppSettings.fact_keywords_enabled? ? 'on' : 'off'}"
+    end
   end
 end

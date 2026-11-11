@@ -6,8 +6,17 @@
 # similar statements and then applies a lightweight polarity check to flag
 # pairs that likely conflict. Results are stored as a MaintenanceReport for
 # operator review; no observations are modified automatically.
+#
+# Fact pertinence (1.78.0): with fact keywords on, two facts are paired only when their keyword
+# paths say they're about the same thing (FactKeywords::Relatedness: a shared mention, or one
+# mentions the other's entity). Two facts that mention no entity at all are paired only when very
+# close (STRICT_MAX_DISTANCE). Pending paths are computed first. Before, any two close facts on an
+# entity and its neighbours with one negative word were paired, unrelated or not. What the paths
+# share is never stored in the row: it is recomputed where it's shown.
 class ContradictionDetector
   DEFAULT_MAX_DISTANCE = 0.35
+  # The most a pair of facts that mention no entity may differ (cosine distance) and still be paired.
+  STRICT_MAX_DISTANCE = 0.15
   DEFAULT_MAX_RESULTS = 20
   # Review rows show this much of each observation; apply always re-reads the live rows.
   REVIEW_CONTENT_LIMIT = 300
@@ -19,7 +28,9 @@ class ContradictionDetector
     discontinued retired invalid
   ].freeze
 
-  Result = Struct.new(:observation_id_1, :observation_id_2, :distance, :confidence, keyword_init: true)
+  # `shared_keywords` / `strong`: what the two keyword paths share (nil with fact keywords off). In
+  # memory only: never written to a review payload or a report.
+  Result = Struct.new(:observation_id_1, :observation_id_2, :distance, :confidence, :shared_keywords, :strong, keyword_init: true)
 
   class << self
     # @param entity_id [Integer]
@@ -57,8 +68,24 @@ class ContradictionDetector
         [ n, { "observation_id_#{n}": id, "entity_id_#{n}": entity_id, "entity_name_#{n}": name,
                "content_#{n}": content.to_s.truncate(REVIEW_CONTENT_LIMIT) } ]
       end
+      # The shared keyword names stay off the payload (MCP review tools return it verbatim): the
+      # review view and the no_shared_subject policy recompute them from the live paths.
       { kind: "contradiction", **sides[1], **sides[2], distance: result.distance, confidence: result.confidence,
         detected_at: Time.current.iso8601 }
+    end
+
+    # Whether two facts may form a contradiction pair, from their keyword paths (both computed):
+    # related, or both without any mention and within STRICT_MAX_DISTANCE.
+    #
+    # @param first [MemoryObservation]
+    # @param second [MemoryObservation]
+    # @param distance [Float] their cosine distance
+    # @return [FactKeywords::Relatedness::Comparison, nil] the comparison when pairable, else nil
+    def pairable(first, second, distance)
+      comparison = FactKeywords::Relatedness.compare(first, second)
+      return comparison if comparison.related?
+
+      comparison if comparison.subject == :unknown && distance.to_f <= STRICT_MAX_DISTANCE
     end
 
     # Whether the text has one of NEGATIVE_MARKERS as a word (FactSupersede uses it as a boost).
@@ -81,16 +108,24 @@ class ContradictionDetector
     end
 
     def load_observations(entity_ids)
-      MemoryObservation
+      observations = MemoryObservation
         .active
         .where(memory_entity_id: entity_ids)
         .with_embedding
+        .includes(:memory_entity)
         .to_a
+      keyword_gate? ? FactKeywords.ensure!(observations) : observations
+    end
+
+    def keyword_gate?
+      AppSettings.fact_keywords_enabled?
     end
 
     def find_contradiction_pairs(observations, max_distance, max_results)
       pairs = []
       entity_ids = observations.map(&:memory_entity_id).uniq
+      by_id = observations.index_by(&:id)
+      gate = keyword_gate?
 
       # Query each anchor observation against the set of candidate embeddings.
       # For small N (same entity + 1-hop) this is simple and correct; it can be
@@ -116,11 +151,21 @@ class ContradictionDetector
         candidates.each do |candidate|
           next unless polarity_conflict?(anchor.content, candidate.content)
 
+          distance = candidate[:vec_distance].to_f
+          comparison = nil
+          if gate
+            other = by_id[candidate.id]
+            comparison = other && FactKeywords::Relatedness.computed?(anchor, other) && pairable(anchor, other, distance)
+            next unless comparison
+          end
+
           pairs << Result.new(
             observation_id_1: anchor.id,
             observation_id_2: candidate.id,
-            distance: candidate[:vec_distance].to_f,
-            confidence: contradiction_confidence(candidate[:vec_distance].to_f)
+            distance: distance,
+            confidence: contradiction_confidence(distance),
+            shared_keywords: comparison&.shared,
+            strong: comparison&.strong
           )
         end
       end

@@ -64,6 +64,18 @@ RSpec.describe ProjectScanner, "reworded facts", :with_test_embeddings do
     expect(line).not_to include("SynthWidget")
   end
 
+  it "writes a close rewording that names an entity the stored fact doesn't (1.78.0)" do
+    extra_items.replace([ { entity: { name: "FrameBuffer", type: "Class" }, observations: [ "FrameBuffer keeps the last frames." ],
+                            relations: [] } ])
+    scan
+    facts.replace([ "SynthWidget renders gadget frames into a FrameBuffer." ])
+
+    result = scan
+
+    expect(result.observations_deduped).to eq(0)
+    expect(widget_facts).to contain_exactly("SynthWidget renders gadget frames.", "SynthWidget renders gadget frames into a FrameBuffer.")
+  end
+
   it "adds a distinct fact" do
     scan
     facts.replace([ "SynthWidget keeps a FrameBuffer." ])

@@ -1,0 +1,13 @@
+-# One side's keyword path (1.78.0, FactKeywords): project › own entity › mentions, the names both
+-# sides share in bold ("why these two"). Nothing while the path is pending.
+- path = Array(observation&.keywords)
+- if observation&.keywords_at.present? && path.any?
+  %p.review-hint{ data: { testid: "keyword-path" } }
+    = "Keywords:"
+    - path.each_with_index do |name, index|
+      - if index.positive?
+        = "›"
+      - if shared.include?(name)
+        %strong= name
+      - else
+        = name
