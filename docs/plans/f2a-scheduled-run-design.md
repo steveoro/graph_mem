@@ -19,6 +19,13 @@ in a safe order, and show how far it got. F2b's backfill depends on this, since 
 2. Ship F2a first, then F2b.
 3. The unused PWA template files are removed; the manifest colour and maskable-icon follow-ups are dropped with them.
 4. The README version badge is kept in step with `GraphMem::VERSION`.
+5. **One start/stop switch, never a button that re-enables itself** (2026-11-11, after the first plan): Run →
+   Stop → (Stopping…) → Resume, so no second run can start while one is running or paused. A paused run resumes
+   where it stopped, a paused compaction from its own cursor.
+6. **Stop inside batch jobs too**, not only between jobs: compaction pauses through its own pause, and the jobs
+   that loop over batches whose progress lives in the database stop between batches and continue on Resume.
+7. **A status line**: the current or last job, when the run and the step started, the last progress report, and
+   the latest audit-log entry since the run started.
 
 ## Design
 
@@ -52,7 +59,7 @@ the same `command` count as one. They run in the order of `ScheduledRun::ORDER`:
 - A `command` entry runs the same way Solid Queue runs it (`eval` of the configured string). It is read from our
   own config file only, never from user input.
 
-### 2. `ScheduledRunJob`: running the steps
+### 2. `ScheduledRunJob`: running, stopping and resuming the steps
 
 `app/jobs/scheduled_run_job.rb`, queue `default`. The run's state lives in an `OperationProgress` row
 (`operation_type: "scheduled_run"`): the step list, the current index, and each step's outcome (`done`,
@@ -66,22 +73,49 @@ model, so the page updates live over `OperationProgressChannel`.
   the progress row, and once the compaction run is `completed`, `paused` or `failed`, the step is recorded (a
   paused or failed run as `done` with its status) and the next step runs. With the compactor setting off, the step
   is skipped.
-- **One run at a time:** the button refuses while a `scheduled_run` progress row is `running` and was updated in
-  the last 15 minutes. An older one is **stale** (wks-0 was shut down mid-run): the next button press marks it
-  `failed` ("interrupted") and starts a new run. A job that wakes up for a run that is no longer `running` does
-  nothing.
-- A run that was waiting on compaction when wks-0 went off resumes by itself when the machine comes back on (its
-  delayed job is still queued in Solid Queue), unless a new run has replaced it.
+- **One run at a time, with no timer:** a run is `running` until it finishes or is stopped; while it is
+  `running` or `paused`, the button never starts another one (decision 5). A job that wakes up for a run that is
+  no longer `running` does nothing.
+- **Stop** (the same button) sets `details["stop_requested"]`:
+  - compaction: `CompactionRun#request_pause!` at once; when its run is `paused`, the step is `stopped` and the run
+    `paused`;
+  - a **stoppable** job (`FactKeywordsJob`; the embedding backfill, `EmbeddingService#backfill_all`) checks
+    `CooperativeStop.requested?` between batches (FactKeywordsJob) or records (the backfill) and returns early;
+    the step is `stopped` and the run `paused`. Their progress lives in the database (pending paths, missing
+    vectors), so running the step again continues the work;
+  - any other job finishes; the run pauses before the next step ("Stopping after: <job>");
+  - `CooperativeStop` is a thread-scoped check set only while `ScheduledRunJob` runs a step, so the same jobs run
+    unchanged on their schedule or from their own buttons.
+- **Resume** re-runs the step it stopped at (a paused compaction resumes from its cursor) and goes on.
+  **Start over**, next to Resume, closes the paused run (`failed`, "abandoned") and starts at step 1.
+- **wks-0 switched off mid-run:** Solid Queue releases the dead process's job at boot and it runs again,
+  continuing at the stored step. If no `ScheduledRunJob` is left in Solid Queue for a `running` row (its job was
+  lost), **Stop** pauses the row at once, since nothing is running to stop.
 - The schedule in `recurring.yml` is unchanged.
 
 ### 3. System › Background jobs: the "Scheduled jobs" card
 
 - A new card on `/system/jobs`, above the compactor and GC cards. It lists the steps in run order, each with its
   schedule (from `recurring.yml`) and, during or after a run, its outcome.
-- **Run all scheduled jobs now** (`POST /system/jobs/scheduled_run`, operator only like the other controls) asks
-  for confirmation (`data-turbo-confirm`, as the GC card's **Run now** does), starts `ScheduledRunJob`, and redirects back with a notice. While a
-  run is active, the button is disabled and the card shows "step *n* of *N*: <job>" with live updates.
-- Idle, the card shows when the last run started and finished, and how many steps were done, skipped or failed.
+- **One switch** (`POST /system/jobs/scheduled_run`, operator only like the other controls), whose label and
+  action follow the run's state:
+
+  | State | Button | Press |
+  |---|---|---|
+  | none, completed or failed | **Run all scheduled jobs now** | start (with `data-turbo-confirm`, as the GC card's **Run now** does) |
+  | running | **Stop** | request a stop |
+  | running, stop requested | **Stopping…** (disabled) | — |
+  | paused | **Resume** (and a small **Start over**) | continue / abandon and start again |
+
+  The form posts the state it was rendered for (`expected: start|stop|resume|start_over`); a press that no
+  longer matches the row's state (another tab, a finished run) changes nothing and redirects with a notice.
+- **Status line**, live while running and kept after a reload:
+  - "Step *n* of *N*: <job> · run started HH:MM · step started HH:MM · last progress HH:MM" (or, idle, the last
+    run's start, finish and its done / skipped / stopped / failed counts);
+  - "Latest graph change: <action> · <auditable_type> #<id> · by <actor> · HH:MM", the newest `AuditLog` row
+    created since the run started, or "no graph changes logged". Jobs that change the graph through the services
+    write audit rows with their actor, so this shows what is happening even when a job reports no progress.
+- The step list shows each job's schedule and, during or after a run, its outcome.
 - Texts go to the locale file, like the rest of System.
 
 ### 4. Follow-ups folded in
@@ -97,8 +131,12 @@ model, so the page updates live over `OperationProgressChannel`.
   this environment left out, a setting-off step reported as skipped; the production section of `recurring.yml`
   matches `ORDER`.
 - `ScheduledRunJob`: steps run in order; a failing step is recorded and the next one runs; compaction is waited on
-  (re-enqueued until its run ends); a second start is refused while active; a stale run is replaced; a job for a
-  replaced run does nothing. Jobs that would touch the outside world (the backup's `db:dump`) are stubbed at that
+  (re-enqueued until its run ends); start is refused while a run is running or paused; stop pauses after a plain
+  step, pauses compaction through its own pause, and stops a stoppable job between batches; resume continues at the
+  stopped step; start over abandons the paused run; a job for a run that isn't running does nothing; a lost job's
+  row is paused at once by Stop.
+- `CooperativeStop`, `FactKeywordsJob` and `EmbeddingService#backfill_all`: they stop early only inside a scheduled
+  run with a stop requested, and the remaining work is still pending afterwards. Jobs that would touch the outside world (the backup's `db:dump`) are stubbed at that
   boundary only.
 - Request spec for the new route (operator only, notice, refused while active); one system example for the card
   (button, confirmation, progress text).
