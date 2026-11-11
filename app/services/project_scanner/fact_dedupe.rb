@@ -22,7 +22,7 @@ class ProjectScanner
       return false if @fact_dedupe_unavailable || !EmbeddingService.vector_enabled?
 
       found = fact_duplicate_detector.find_duplicate(entity: entity, content: text)
-      return false unless found.duplicate == true
+      return false unless found.duplicate == true && same_subject?(entity, text, found.observation)
 
       @observations_deduped = @observations_deduped.to_i + 1
       # The stored wording stands for both: the validator leaves it alone in this scan.
@@ -33,6 +33,24 @@ class ProjectScanner
       @fact_dedupe_unavailable = true
       @logger.debug { "ProjectScanner: reworded-fact check skipped: #{e.class}" }
       false
+    end
+
+    # 1.78.0: a close fact is the same fact only if the new one mentions nothing the stored one
+    # doesn't (its keyword-path mentions are a subset); one that names something more adds
+    # information, so it is written. Both paths come from one index of the project, built once every
+    # item's entity exists. Always true with fact keywords off.
+    def same_subject?(entity, text, stored)
+      return true unless stored && @project_entity && AppSettings.fact_keywords_enabled?
+
+      content = MemoryObservation.where(id: stored.id).pick(:content)
+      return true if content.nil?
+
+      (scan_mentions(entity, text) - scan_mentions(entity, content)).empty?
+    end
+
+    def scan_mentions(entity, text)
+      @fact_term_index ||= FactKeywords::TermIndex.new(@project_entity)
+      FactKeywords.mentions(@fact_term_index.path_for(text, owner: entity).path, entity.name)
     end
 
     # 1.77.0: the keyword paths (FactKeywords) of the facts this scan wrote, computed once every

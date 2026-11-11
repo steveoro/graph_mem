@@ -27,6 +27,7 @@ en:
         runs_link: "See the policy runs (with Undo) on Review › Policies"
         policies:
           dangling: "Dismisses suggestions that point at something deleted, or whose effect already holds. No suppression. Reverse: Undo the run, or Restore the row."
+          no_shared_subject: "Dismisses contradiction and unjudged \"Outdated by a fact\" suggestions whose two facts share no subject by their keyword paths (needs Fact keywords on). No suppression. Reverse: Undo the run, or Restore the row."
           no_longer_flagged: "Dismisses stale-memory suggestions the scanner no longer flags. Reverse: Undo the run, or Restore."
           expire_low_confidence: "Expires suggestions with confidence below 0.4 that nobody touched for the days below, and keeps them away for 90 days. Reverse: Undo, or Restore."
           auto_apply_relationships: "Applies high-band relationship proposals at or above the confidence below (never part_of), at most 50 per run. Reverse: Undo the run (removes the relations)."
@@ -224,6 +225,8 @@ en:
           description: "Tool invocation rows older than this are deleted by daily garbage collection. Use 0 to disable automatic telemetry pruning."
         enable_review_policy_dangling:
           label: "Dismiss dangling suggestions"
+        enable_review_policy_no_shared_subject:
+          label: "Dismiss pair suggestions whose facts share no subject"
         enable_review_policy_no_longer_flagged:
           label: "Dismiss stale-memory suggestions no longer flagged"
         enable_review_policy_expire_low_confidence:

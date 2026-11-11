@@ -37,6 +37,29 @@ module FactKeywords
     facts.size
   end
 
+  # @param path [Array<String>] a keyword path
+  # @param owner_name [String, nil] the name of the entity that holds the fact
+  # @return [Array<String>] the names after the owner: the entities the fact mentions ([] when the
+  #   path doesn't hold the owner, e.g. still pending)
+  def mentions(path, owner_name)
+    path = Array(path)
+    index = owner_name && path.index(owner_name)
+    index ? path.drop(index + 1) : []
+  end
+
+  # Computes the paths still pending among `observations`, when the feature is on, and returns them
+  # all (the ones it computed updated in place). For a background generator that must compare paths
+  # now rather than wait for FactKeywordsJob.
+  #
+  # @param observations [Array<MemoryObservation>] with their entities loaded
+  # @return [Array<MemoryObservation>]
+  def ensure!(observations)
+    list = Array(observations)
+    pending = list.select { |observation| observation.keywords_at.nil? }
+    compute!(pending) if pending.any? && AppSettings.fact_keywords_enabled?
+    list
+  end
+
   # @param entity [MemoryEntity]
   # @return [MemoryEntity, nil] the entity's project root (itself for a root)
   def project_of(entity)

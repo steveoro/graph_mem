@@ -18,11 +18,23 @@ module FactSupersede
   # @!attribute scoped [Boolean] false for an entity without a project related to the fact's entity
   # @!attribute guard [String, nil] "keep" (never proposed), "context" (never auto-applied) or nil
   # @!attribute guard_reason [String, nil]
+  # @!attribute subject [Symbol, nil] the keyword paths' answer (FactKeywords::Relatedness: :related,
+  #   :unrelated, :one_sided or :unknown), nil with fact keywords off (1.78.0)
+  # @!attribute shared_keywords [Array<String>, nil] the names both paths share
+  # @!attribute strong [Boolean, nil] the paths share their first mention
   Candidate = Struct.new(:observation, :score, :distance, :term, :polarity_flip, :scoped, :guard, :guard_reason,
-                         keyword_init: true) do
+                         :subject, :shared_keywords, :strong, keyword_init: true) do
     # @return [Hash] what found it, for the review row and the page
+    # The keyword comparison isn't in it: review payloads reach MCP verbatim, and the review view
+    # recomputes the shared names from the live paths.
     def signals
       { "distance" => distance&.round(4), "term" => term, "polarity_flip" => polarity_flip, "scoped" => scoped }.compact
+    end
+
+    # @return [Boolean] the keyword paths say the two facts are about different things (both
+    #   mention entities, none in common) and no search term matched: an unjudged row isn't seeded
+    def unrelated?
+      subject == :unrelated && term.nil?
     end
   end
 end

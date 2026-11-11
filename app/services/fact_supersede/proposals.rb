@@ -4,7 +4,9 @@ module FactSupersede
   # Candidates → LegacyGuard → Judge → review rows: the one pipeline behind FactSupersedeJob and
   # detect_contradictions' `outdated_by_fact` mode. It never writes an observation: "keep"
   # candidates are dropped, `still_valid` and `unrelated` verdicts are dropped, and the
-  # `superseded` and `unjudged` ones become `fact_supersede` rows ("Outdated by a fact").
+  # `superseded` and `unjudged` ones become `fact_supersede` rows ("Outdated by a fact"). An
+  # `unjudged` one isn't seeded when the keyword paths say the pair is unrelated and no search term
+  # matched (1.78.0): without the judge, nothing else tells the two subjects apart.
   #
   # Pairs that already have a row aren't judged again, except a pending `unjudged` row while the
   # LLM is usable (seeded with the LLM off, or past the tool's cap): a `superseded` verdict
@@ -70,13 +72,20 @@ module FactSupersede
       verdicts = Judge.call(@fact, to_judge, **judge_options, max_batches: @max_batches)
       rejudged, verdicts = verdicts.partition { |verdict| rejudge_rows.key?(verdict.candidate.observation.id) }
       refreshed = rejudged.count { |verdict| refresh(rejudge_rows.fetch(verdict.candidate.observation.id), verdict) }
-      items = verdicts.select { |verdict| PROPOSAL_VERDICTS.include?(verdict.verdict) }.first(@limit).map { |verdict| item(verdict) }
+      items = verdicts.select { |verdict| proposal?(verdict) }.first(@limit).map { |verdict| item(verdict) }
       rows = @seed && items.any? ? CompactionReviewService.seed_report(report_type: REPORT_TYPE, source: SOURCE, source_ref: "fact:#{@fact.id}", items: items) : []
       Result.new(items: items, rows: rows, searched: true, candidates: found.candidates.size, kept: kept.size, known: known_ids.size,
                  judged: (verdicts + rejudged).any?(&:judged), capped: (verdicts + rejudged).count(&:capped), rejudged: refreshed)
     end
 
     private
+
+    # A superseded verdict, or an unjudged one the keyword paths don't call unrelated.
+    def proposal?(verdict)
+      return false unless PROPOSAL_VERDICTS.include?(verdict.verdict)
+
+      verdict.verdict != Judge::UNJUDGED || !verdict.candidate.unrelated?
+    end
 
     # The candidates whose pair (signature fact:<id>|obs:<id>) already has a pending row or an
     # in-force suppression (seed_report would skip them), except pending `unjudged` rows while the

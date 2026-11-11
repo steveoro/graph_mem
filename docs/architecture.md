@@ -317,6 +317,7 @@ The review rows (`maintenance_report_rows`) that dream-state compaction, the sta
   |---|---|---|
   | `snooze_expiry` | always | snoozed rows whose snooze ended → active, snoozed suppression removed |
   | `dangling` | on | rows pointing at something gone, or whose effect already holds → dismissed (no suppression) |
+  | `no_shared_subject` | on (needs `fact_keywords_enabled`) | 1.78.0: `contradiction` rows the detector would no longer pair, and unjudged `fact_supersede` rows for unrelated facts (both mention entities, none in common, no term match), by their keyword paths → dismissed (no suppression). `bin/rails graph_mem:fact_keywords:review_report` counts them first, read-only |
   | `no_longer_flagged` | on | stale_memory rows the scanner no longer flags → dismissed (no suppression) |
   | `expire_low_confidence` | on, 30 days | confidence < 0.4, untouched for N days → expired + 90-day suppression |
   | `auto_apply_expired_validity` | off | stale_memory `valid_until_elapsed` → applied (max 100) |
@@ -352,7 +353,10 @@ and nothing acts across projects. Step list: `docs/plans/fact-supersede-plan.md`
 - **Candidates** (`FactSupersede::Candidates`, no LLM call): the fact's project's observations
   (members and root; the fact and other facts excluded), found by one `VEC_DISTANCE_COSINE`
   query within `fact_supersede_max_distance` (0.45) and an escaped `LIKE` per term (at most 5).
-  A polarity flip adds 0.1. Related entities without a project come back as **unscoped**: shown
+  A polarity flip adds 0.1. With fact keywords on (1.78.0), the two keyword paths are compared
+  (`FactKeywords::Relatedness`, pending ones computed first): a related candidate adds 0.1, or 0.2
+  when both share their first mention (kept in memory, not in the row's `signals`).
+  Related entities without a project come back as **unscoped**: shown
   with a warning, applied by hand only (without `outdated_by`), never auto-applied.
 - **Legacy guard** (`FactSupersede::LegacyGuard`, again at apply): `keep` (never proposed) when the
   text names another project by name or alias; `context` (proposed, never auto-applied, the
@@ -366,7 +370,8 @@ and nothing acts across projects. Step list: `docs/plans/fact-supersede-plan.md`
 - **Proposals** (`FactSupersede::Proposals`): `FactSupersedeJob` (queued by the observation's
   `after_commit` for a new fact, a fact's new text or a new tag, when `fact_supersede_enabled`;
   one job per fact via Solid Queue's `limits_concurrency`) seeds `fact_supersede` rows
-  ("Outdated by a fact") for `superseded` and `unjudged` verdicts only. Signature
+  ("Outdated by a fact") for `superseded` and `unjudged` verdicts only; an `unjudged` one is
+  skipped when the keyword paths call the pair unrelated and no search term found it. Signature
   `fact:<fact>|obs:<observation>`, so a dismissal suppresses that pair alone; run cap 100. The
   kind is a choice kind (never bulk or group applied). `CompactionReviewApplier::FactSupersede`
   supersedes (a replacement text) or retires inside `review.apply`, after re-checking the fact,

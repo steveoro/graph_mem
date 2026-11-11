@@ -83,9 +83,7 @@ class MemoryObservation < ApplicationRecord
   # @return [Array<String>] the entities the fact mentions besides its own and its project: its
   #   keyword path after its own entity (1.77.0, FactKeywords); [] while pending or without any
   def keyword_mentions
-    path = Array(keywords)
-    own = path.index(memory_entity&.name)
-    own ? path.drop(own + 1) : []
+    FactKeywords.mentions(keywords, memory_entity&.name)
   end
 
   def obsolete?

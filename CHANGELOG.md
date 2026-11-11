@@ -15,6 +15,20 @@ Subnet-tolerant MCP allowlists.
 ### Changed
 - `bin/up` on Linux writes `@lan` (`GRAPH_MEM_MCP_ALLOWED_HOSTS=@lan`, `GRAPH_MEM_MCP_ALLOWED_IPS=127.0.0.0/8,::1,172.16.0.0/12,@lan`) instead of the detected addresses, which the container kept until it was recreated; `--print` shows what `@lan` means now. On macOS (Docker Desktop's VM can't see the Mac's interfaces) it writes the detected values, as before. A value in the environment or `.env` still wins.
 
+## [1.78.0] - 2026-11-10
+
+Fact pertinence: the keyword paths of 1.77.0 decide when two facts are about the same thing, in scans and in review rows.
+
+### Changed
+- **Contradiction pairs** need two facts about the same thing: their keyword paths share a mention, or one mentions the other's entity (`FactKeywords::Relatedness`). Two facts that mention no entity are paired only when very close (cosine distance ≤ 0.15). Before, two close facts on one entity were paired whatever they were about, as long as one had a negative word. Pending paths are computed first.
+- **"Outdated by a fact"** candidates: a related one scores higher (+0.1, +0.2 for a shared first mention), and without the judge no unjudged row is proposed for an unrelated pair (both mention entities, none in common) that no search term found.
+- **Scan dedupe:** a close fact is the same fact only when it mentions no entity the stored one doesn't; a rewording that names something more is written. A scan writes its items' facts once every item's entity exists.
+- With `fact_keywords_enabled` off, all three behave as in 1.77.0.
+
+### Added
+- Review policy **`no_shared_subject`** (on by default, needs fact keywords): dismisses pending contradiction rows and unjudged "Outdated by a fact" rows whose facts share no subject, cleaning the backlog seeded before 1.78.0. No suppression; undo the run or restore a row. `bin/rails graph_mem:fact_keywords:review_report` counts them first, read-only.
+- Contradiction and "Outdated by a fact" rows show each side's keyword path, the shared names in bold (computed when shown; review payloads, which MCP returns verbatim, are unchanged).
+
 ## [1.77.0] - 2026-11-10
 
 Fact keywords, the foundation of fact pertinence: every fact gets a deterministic keyword path, so later releases can tell when two facts are about the same thing.
