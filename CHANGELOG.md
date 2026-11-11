@@ -13,7 +13,8 @@ Every scheduled job on demand, for a machine that is off at the scheduled times.
 - **Run all scheduled jobs now** (System › Background jobs): one switch runs every job of `config/recurring.yml` once, one at a time, in a safe order: a backup first, then garbage collection, compaction (waited on until its run ends), the embedding backfill, fact keywords, the stale-memory and contradiction scan, the review policies and the clean-ups. A failing job is recorded and the run goes on; a job whose own setting is off is skipped.
   - **Start / Stop / Resume** on the same button, which never re-enables itself, so no parallel run can start. Stop pauses compaction through its own pause, stops the fact-keywords job and the embedding backfill between batches, and otherwise pauses after the current job; Resume continues where it stopped. **Start over** drops a paused run.
   - **Status line:** the current job, when the run and the job started, the last progress (live), and the newest audit-log entry since the run started.
-  - A run interrupted by a shutdown continues by itself when the machine is back on.
+  - A run interrupted by a shutdown is shown as such ("No job is running this run"): **Pause now**, then **Resume** continues at the job it stopped at. Solid Queue marks the interrupted job failed rather than running it again. A job that fails outside a step pauses the run too ("Interrupted: …").
+  - One run at a time even with two tabs or a double click: Run and Resume lock, each start or resume gives the run a new token, and a job carrying an old one (a retry from Mission Control) does nothing.
 
 ### Changed
 - `FactKeywordsJob` and the embedding backfill stop between batches when a scheduled run asks them to (`CooperativeStop`); on their own schedule they run as before.

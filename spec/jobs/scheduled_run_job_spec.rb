@@ -27,7 +27,7 @@ RSpec.describe ScheduledRunJob do
 
   def outcomes(row) = row.reload.details["steps"].map { |step| step["outcome"] }
 
-  def run(row) = described_class.perform_now(row.operation_id)
+  def run(row) = described_class.perform_now(row.operation_id, row.reload.details["token"])
 
   it "runs every step in order and completes" do
     row = described_class.start!(steps: steps("SynthAlphaJob", "SynthBetaJob", "SynthGammaJob"))
@@ -61,7 +61,7 @@ RSpec.describe ScheduledRunJob do
 
     run(row)
     expect(outcomes(row)).to eq([ "waiting", nil ])
-    expect(described_class).to have_been_enqueued.with(row.operation_id)
+    expect(described_class).to have_been_enqueued.with(row.operation_id, row.reload.details["token"])
     expect(calls).to be_empty
 
     CompactionRun.find(row.details["steps"][0]["compaction_run_id"]).mark_completed!
@@ -138,7 +138,7 @@ RSpec.describe ScheduledRunJob do
     run(row)
     compaction = CompactionRun.find(row.reload.details["steps"][0]["compaction_run_id"])
 
-    expect(described_class.stop!(row, live: true)).to be(true)
+    expect(described_class.stop!(row, live: true)).to eq(:requested)
     expect(compaction.reload.pause_requested).to be(true)
     expect(described_class.state(row.reload)).to eq(:stopping)
 
@@ -167,7 +167,7 @@ RSpec.describe ScheduledRunJob do
   it "pauses at once on Stop when no job is left to run the steps" do
     row = described_class.start!(steps: steps("SynthAlphaJob", "SynthBetaJob"))
 
-    expect(described_class.stop!(row)).to be(true)
+    expect(described_class.stop!(row)).to eq(:paused)
     expect(row.reload.status).to eq("paused")
     expect(described_class.state(row)).to eq(:paused)
   end
@@ -193,6 +193,57 @@ RSpec.describe ScheduledRunJob do
     run(row)
 
     expect(calls).to be_empty
+  end
+
+  # Final review fixes.
+  it "pauses the run, keeping its step, when the job fails outside a step (an interruption)" do
+    stub_const("ScheduledRun::SETTINGS", { "SynthBetaJob" => :no_such_setting? })
+    row = described_class.start!(steps: steps("SynthAlphaJob", "SynthBetaJob"))
+
+    expect { run(row) }.to raise_error(NoMethodError)
+
+    expect(row.reload).to have_attributes(status: "paused")
+    expect(row.message).to start_with("Interrupted: NoMethodError")
+    expect(row.details["index"]).to eq(1)
+  end
+
+  it "sees a stop the query cache would hide" do
+    row = described_class.start!(steps: steps("SynthAlphaJob"))
+    job = described_class.new
+    job.instance_variable_set(:@row, row)
+
+    ActiveRecord::Base.cache do
+      expect(job.send(:stop_requested?)).to be(false)
+      # A write the query cache doesn't see (another process, in production).
+      details = row.details.merge("stop_requested" => true).to_json
+      OperationProgress.connection.raw_connection.query(
+        "UPDATE operation_progresses SET details = #{OperationProgress.connection.quote(details)} WHERE id = #{row.id}"
+      )
+      expect(job.send(:stop_requested?)).to be(true)
+    end
+  end
+
+  it "never overwrites the job's progress from a stale copy of the row" do
+    row = described_class.start!(steps: steps("SynthAlphaJob", "SynthBetaJob", "SynthGammaJob"))
+    stale = OperationProgress.find(row.id)
+    fresh = OperationProgress.find(row.id)
+    fresh.update!(details: fresh.details.merge("index" => 2))
+
+    described_class.stop!(stale, live: true)
+
+    expect(row.reload.details).to include("index" => 2, "stop_requested" => true)
+  end
+
+  it "ignores a job from an earlier start or resume of the run (a retried old job)" do
+    row = described_class.start!(steps: steps("SynthAlphaJob", "SynthBetaJob"))
+    old_token = row.reload.details["token"]
+    row.pause!
+    described_class.resume!(row)
+
+    described_class.perform_now(row.operation_id, old_token)
+
+    expect(calls).to be_empty
+    expect(row.reload.details["token"]).not_to eq(old_token)
   end
 
   it "is idle with no run, or after one finished" do

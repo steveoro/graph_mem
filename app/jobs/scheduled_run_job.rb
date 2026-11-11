@@ -4,7 +4,7 @@
 # that are off when the schedule would run them. The run's state is an OperationProgress row
 # (operation_type "scheduled_run"), so System › Background jobs shows it live:
 #
-#   details = { "index" => 2, "stop_requested" => false,
+#   details = { "index" => 2, "stop_requested" => false, "token" => "…",
 #               "steps" => [ { "entry", "label", "schedule", "outcome", "note", "error",
 #                              "started_at", "finished_at", "compaction_run_id" }, … ] }
 #
@@ -19,9 +19,14 @@
 #   ScheduledRunJob.resume!(row)  # paused → running, at the step it stopped at
 #   ScheduledRunJob.start_over!(row)
 #
-# There is no timer: a run is running until it finishes or is stopped. After a power cut, Solid
-# Queue runs the job again at boot and it continues at the stored step; if its job was lost, Stop
-# pauses the row at once.
+# There is no timer: a run is running until it finishes or is stopped. A job that raises outside a
+# step pauses the run ("Interrupted: …"). After a power cut Solid Queue marks the job failed (it
+# doesn't run it again), so no job is left for the row: the card says so and Stop pauses the row at
+# once ("Pause now"); Resume continues at the stored step.
+#
+# Every start and resume gives the run a new token, passed to its jobs: a job carrying another one
+# (a retried old job) does nothing, so one run never has two jobs. The row's details are read and
+# written under its row lock, so the switch and the job never overwrite each other.
 class ScheduledRunJob < ApplicationJob
   queue_as :default
 
@@ -47,46 +52,61 @@ class ScheduledRunJob < ApplicationJob
     end
 
     # @param steps [Array<ScheduledRun::Step>]
-    # @return [OperationProgress, nil] the new run; nil unless idle
+    # @return [OperationProgress, nil] the new run; nil unless idle (two presses at once start one run)
     def start!(steps: ScheduledRun.steps)
-      return nil unless state == :idle
+      row = with_start_lock do
+        next nil unless state == :idle
 
-      details = { "index" => 0, "stop_requested" => false,
-                  "steps" => steps.map { |step| { "entry" => step.entry, "label" => step.label, "schedule" => step.schedule } } }
-      row = OperationProgress.start!(operation_type: OPERATION_TYPE, total_count: steps.size, phase: steps.first&.label,
-                                     message: "Starting", details: details)
+        details = { "index" => 0, "stop_requested" => false, "token" => SecureRandom.hex(8),
+                    "steps" => steps.map { |step| { "entry" => step.entry, "label" => step.label, "schedule" => step.schedule } } }
+        OperationProgress.start!(operation_type: OPERATION_TYPE, total_count: steps.size, phase: steps.first&.label,
+                                 message: "Starting", details: details)
+      end
+      return nil unless row
+
       OperationProgressBroadcaster.call(row)
-      perform_later(row.operation_id)
+      perform_later(row.operation_id, row.details["token"])
       row
     end
 
-    # Requests a stop. With no live job to honour it (its job was lost), the row pauses at once.
+    # Requests a stop. With no live job to honour it (after a power cut, or a lost job), the row
+    # pauses at once, also while a stop is already requested.
     #
     # @param row [OperationProgress]
     # @param live [Boolean] whether a job is running the steps (Solid Queue knows; specs pass it)
-    # @return [Boolean] false unless the run is running
-    def stop!(row, live: live_job?)
-      return false unless row&.status == "running"
+    # @return [Symbol, false] :requested, :paused, or false unless the run is running
+    def stop!(row, live: live_job?(row))
+      return false unless row
 
-      details = row.details.deep_dup
-      return pause!(row, details) || true unless live
+      result = locked(row) do
+        next false unless row.status == "running"
 
-      details["stop_requested"] = true
-      step = details["steps"][details["index"]]
-      CompactionRun.find_by(id: step["compaction_run_id"])&.request_pause! if step && step["outcome"] == "waiting"
-      row.update!(details: details, message: "Stopping after: #{step&.dig('label')}")
-      OperationProgressBroadcaster.call(row)
-      true
+        details = row.details.deep_dup
+        next pause_locked!(row, details) unless live
+
+        details["stop_requested"] = true
+        step = details["steps"][details["index"]]
+        CompactionRun.find_by(id: step["compaction_run_id"])&.request_pause! if step && step["outcome"] == "waiting"
+        row.update!(details: details, message: "Stopping after: #{step&.dig('label')}")
+        :requested
+      end
+      OperationProgressBroadcaster.call(row) if result
+      result
     end
 
     # @param row [OperationProgress]
-    # @return [Boolean] false unless the run is paused
+    # @return [Boolean] false unless the run is paused (two presses at once resume it once)
     def resume!(row)
-      return false unless row&.status == "paused"
+      return false unless row
+      return false unless locked(row) do
+        next false unless row.status == "paused"
 
-      row.update!(status: "running", details: row.details.merge("stop_requested" => false), message: "Resuming", finished_at: nil)
+        row.update!(status: "running", details: row.details.merge("stop_requested" => false, "token" => SecureRandom.hex(8)),
+                    message: "Resuming", finished_at: nil)
+      end
+
       OperationProgressBroadcaster.call(row)
-      perform_later(row.operation_id)
+      perform_later(row.operation_id, row.details["token"])
       true
     end
 
@@ -94,50 +114,94 @@ class ScheduledRunJob < ApplicationJob
     #
     # @return [OperationProgress, nil] the new run; nil unless the row was paused
     def start_over!(row, steps: ScheduledRun.steps)
-      return nil unless row&.status == "paused"
+      return nil unless row && locked(row) { row.status == "paused" && row.fail!("abandoned") }
 
-      row.fail!("abandoned")
       OperationProgressBroadcaster.call(row)
       start!(steps: steps)
     end
 
-    # @return [Boolean] Solid Queue holds an unfinished ScheduledRunJob
-    def live_job?
-      return false unless ActiveJob::Base.queue_adapter_name.to_s == "solid_queue"
+    # Whether a Solid Queue job is still going to run this run's steps: an unfinished
+    # ScheduledRunJob for this run that hasn't failed. After a power cut Solid Queue fails the job
+    # that was running (it isn't run again), so this is false and Stop pauses the row at once.
+    #
+    # @param row [OperationProgress]
+    # @return [Boolean] false outside Solid Queue (the test adapter)
+    def live_job?(row)
+      return false unless row && ActiveJob::Base.queue_adapter_name.to_s == "solid_queue"
 
-      SolidQueue::Job.where(class_name: name, finished_at: nil).exists?
+      SolidQueue::Job.where(class_name: name, finished_at: nil).where.missing(:failed_execution)
+                     .where("arguments LIKE ?", "%#{SolidQueue::Job.sanitize_sql_like(row.operation_id)}%").exists?
     end
 
-    def pause!(row, details)
+    # Pauses the row (the caller holds its lock and passes its details to keep).
+    #
+    # @return [Symbol] :paused
+    def pause_locked!(row, details, message: nil)
       details["stop_requested"] = false
       label = details["steps"][details["index"]]&.dig("label")
-      row.update!(status: "paused", details: details, message: label ? "Stopped at: #{label}" : "Stopped")
+      row.update!(status: "paused", details: details, message: message || (label ? "Stopped at: #{label}" : "Stopped"))
+      :paused
+    end
+
+    # Pauses the row under its lock, then broadcasts.
+    def pause!(row, message: nil)
+      locked(row) { pause_locked!(row, row.details.deep_dup, message: message) if row.status == "running" }
       OperationProgressBroadcaster.call(row)
       nil
+    end
+
+    # Runs the block with the row locked and freshly read.
+    def locked(row, &)
+      row.with_lock(&)
+    end
+
+    # Two presses of Run at once start one run: a database-wide named lock around check and create.
+    def with_start_lock
+      connection = OperationProgress.connection
+      name = connection.quote("graph_mem:#{connection.current_database}:scheduled_run_start")
+      return nil unless connection.select_value("SELECT GET_LOCK(#{name}, 5)").to_i == 1
+
+      begin
+        yield
+      ensure
+        connection.select_value("SELECT RELEASE_LOCK(#{name})")
+      end
     end
   end
 
   # @param operation_id [String] the run's OperationProgress
-  def perform(operation_id)
+  # @param token [String] the run's token when this job was enqueued (a job from an earlier start
+  #   or resume carries an old one and does nothing)
+  def perform(operation_id, token = nil)
     @row = OperationProgress.find_by(operation_id: operation_id, operation_type: OPERATION_TYPE)
-    return unless @row&.status == "running"
+    return unless @row&.status == "running" && @row.details["token"] == token
 
+    @token = token
+    run_steps
+  rescue StandardError => e
+    # Outside a step (a step's own errors are recorded and the run goes on): pause, so Resume can
+    # continue, and let Solid Queue record the failure.
+    self.class.pause!(@row, message: "Interrupted: #{e.class}: #{e.message}".truncate(250)) if @row
+    raise
+  end
+
+  private
+
+  def run_steps
     steps = @row.details["steps"]
     while (index = @row.details["index"]) < steps.size
       step = ScheduledRun::Step.new(entry: steps[index]["entry"], schedule: steps[index]["schedule"])
       outcome = run_step(index, step)
       return if outcome == :wait
       # A stopped step runs again on Resume; a finished one doesn't.
-      return self.class.pause!(@row.reload, @row.details.deep_dup) if outcome == "stopped"
+      return self.class.pause!(@row) if outcome == "stopped"
 
       save!(index) { |details| details["index"] = index + 1 }
-      return self.class.pause!(@row.reload, @row.details.deep_dup) if stop_requested?
+      return self.class.pause!(@row) if stop_requested?
     end
     @row.complete!(message: "Done", details: @row.details)
     OperationProgressBroadcaster.call(@row)
   end
-
-  private
 
   # @return [String, Symbol] the step's outcome, or :wait while compaction runs
   def run_step(index, step)
@@ -178,7 +242,7 @@ class ScheduledRunJob < ApplicationJob
   end
 
   def wait
-    self.class.set(wait: COMPACTION_POLL).perform_later(@row.operation_id)
+    self.class.set(wait: COMPACTION_POLL).perform_later(@row.operation_id, @token)
     :wait
   end
 
@@ -191,18 +255,23 @@ class ScheduledRunJob < ApplicationJob
   end
 
   # Writes the details (the block edits a copy), the finished-step count and the phase, then broadcasts.
-  def save!(_index, phase: @row.phase)
-    @row.reload
-    details = @row.details.deep_dup
-    yield details
-    finished = details["steps"].count { |step| FINISHED.include?(step["outcome"]) }
-    @row.update_progress!(current: finished, phase: phase, message: @row.message, details: details)
-    @row.touch
+  # Writes the details under the row lock (the block edits a fresh copy, so a stop requested
+  # meanwhile is kept), the finished-step count and the phase, then broadcasts.
+  def save!(_index, phase: nil)
+    @row.with_lock do
+      details = @row.details.deep_dup
+      yield details
+      finished = details["steps"].count { |step| FINISHED.include?(step["outcome"]) }
+      @row.update_progress!(current: finished, phase: phase || @row.phase, message: @row.message, details: details)
+      @row.touch
+    end
     OperationProgressBroadcaster.call(@row)
   end
 
+  # Read past the query cache: Solid Queue runs jobs with it on, and a step that writes nothing (an
+  # embedding backfill while Ollama fails) would otherwise never see the stop.
   def stop_requested?
-    OperationProgress.where(id: @row.id).pick(:details).to_h["stop_requested"] == true
+    OperationProgress.uncached { OperationProgress.where(id: @row.id).pick(:details) }.to_h["stop_requested"] == true
   end
 
   def now = Time.current.iso8601

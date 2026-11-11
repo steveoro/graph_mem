@@ -83,6 +83,7 @@ RSpec.describe "System › Background jobs", type: :request do
       details["steps"][0].merge!("outcome" => "done", "started_at" => 3.minutes.ago.iso8601, "finished_at" => 2.minutes.ago.iso8601)
       details["steps"][1].merge!("outcome" => "running", "started_at" => 2.minutes.ago.iso8601)
       row.update_progress!(current: 1, phase: "Maintenance report row cleanup", details: details)
+      allow(ScheduledRunJob).to receive(:live_job?).and_return(true) # the test queue has no Solid Queue jobs
 
       get system_jobs_path
 
@@ -96,11 +97,27 @@ RSpec.describe "System › Background jobs", type: :request do
     it "shows Stopping… (disabled) once a stop is requested" do
       row = ScheduledRunJob.start!(steps: steps("ChangeSetPruneJob"))
       ScheduledRunJob.stop!(row, live: true)
+      allow(ScheduledRunJob).to receive(:live_job?).and_return(true) # the job is still running
 
       get system_jobs_path
 
       stopping = card.css("button").find { |node| node.text.squish == "Stopping…" }
       expect(stopping["disabled"]).to be_present
+    end
+
+    it "offers Pause now when no job is running the run (a shutdown), even while stopping, and pauses it" do
+      row = ScheduledRunJob.start!(steps: steps("ChangeSetPruneJob"))
+      ScheduledRunJob.stop!(row, live: true) # Stopping…, then the machine went off
+
+      get system_jobs_path
+      expect(card.at_css("[data-testid='scheduled-run-status']").text.squish).to include("No job is running this run")
+      expect(button("stop").at_css("button").text.squish).to eq("Pause now")
+
+      press("stop")
+
+      expect(row.reload.status).to eq("paused")
+      follow_redirect!
+      expect(response.body).to include("Paused: no job was running it")
     end
 
     it "offers Resume and Start over when paused, and resumes" do
@@ -111,7 +128,7 @@ RSpec.describe "System › Background jobs", type: :request do
       expect(button("resume").at_css("button").text.squish).to eq("Resume")
       expect(button("start_over").at_css("button").text.squish).to eq("Start over")
 
-      expect { press("resume") }.to have_enqueued_job(ScheduledRunJob).with(row.operation_id)
+      expect { press("resume") }.to have_enqueued_job(ScheduledRunJob).with(row.operation_id, anything)
       expect(row.reload.status).to eq("running")
     end
 

@@ -88,7 +88,9 @@ model, so the page updates live over `OperationProgressChannel`.
     unchanged on their schedule or from their own buttons.
 - **Resume** re-runs the step it stopped at (a paused compaction resumes from its cursor) and goes on.
   **Start over**, next to Resume, closes the paused run (`failed`, "abandoned") and starts at step 1.
-- **wks-0 switched off mid-run:** Solid Queue releases the dead process's job at boot and it runs again,
+- **wks-0 switched off mid-run** (corrected in the final review: Solid Queue 1.7.2 marks such a job
+  failed, it does not run it again; the card shows "No job is running this run" and **Pause now**,
+  then Resume continues at the stored step). The original text: Solid Queue releases the dead process's job at boot and it runs again,
   continuing at the stored step. If no `ScheduledRunJob` is left in Solid Queue for a `running` row (its job was
   lost), **Stop** pauses the row at once, since nothing is running to stop.
 - The schedule in `recurring.yml` is unchanged.

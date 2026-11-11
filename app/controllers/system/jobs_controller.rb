@@ -8,7 +8,8 @@ module System
     self.nav_section = :jobs
 
     # What the scheduled-jobs switch may do in each state (ScheduledRunJob.state).
-    SCHEDULED_RUN_ACTIONS = { idle: %w[start], running: %w[stop], paused: %w[resume start_over] }.freeze
+    # Stop also while stopping: with no job left to run the steps (a shutdown), it pauses at once.
+    SCHEDULED_RUN_ACTIONS = { idle: %w[start], running: %w[stop], stopping: %w[stop], paused: %w[resume start_over] }.freeze
 
     # GET /system/jobs
     def index
@@ -57,7 +58,8 @@ module System
       done = allowed.include?(expected) && scheduled_run_action(expected, row)
       return redirect_to(system_jobs_path, alert: t("system.jobs.scheduled_run.changed")) unless done
 
-      redirect_to system_jobs_path, notice: t("system.jobs.scheduled_run.notice.#{expected}")
+      notice = done == :paused ? "stop_paused" : expected
+      redirect_to system_jobs_path, notice: t("system.jobs.scheduled_run.notice.#{notice}")
     end
 
     def repair_relations
@@ -69,7 +71,7 @@ module System
 
     private
 
-    # @return [Boolean] whether the action took effect
+    # @return [Boolean, Symbol] whether the action took effect (stop: :requested or :paused)
     def scheduled_run_action(expected, row)
       case expected
       when "start" then ScheduledRunJob.start!.present?

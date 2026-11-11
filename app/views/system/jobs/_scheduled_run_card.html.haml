@@ -23,6 +23,8 @@
             total: tag.span(run[:total], data: { progress_total: true }))
           %strong{ data: { progress_phase: true } }= run[:phase]
         %p.system-hint{ data: { progress_message: true } }= run[:message]
+        - if run[:status] == "running" && !data[:live]
+          %p.system-hint{ data: { testid: "scheduled-run-no-job" } }= t("#{scope}.no_job")
         %p.system-hint
           = t("#{scope}.run_started", time: at.call(run[:started_at]))
           ·
@@ -62,7 +64,10 @@
         class: "ui-btn ui-btn-primary", id: "btn-scheduled-run", data: { testid: "btn-scheduled-run", turbo_confirm: t("#{scope}.run_confirm") }
     - if run && state != :idle
       %span{ data: { progress_action: true, progress_visible_for: "running" }, **shown.call(%w[running]) }
-        - if state == :stopping
+        - if run[:status] == "running" && !data[:live]
+          = button_to t("#{scope}.pause_now"), system_scheduled_run_path, method: :post, params: { expected: "stop" },
+            class: "ui-btn system-btn--warning", data: { testid: "btn-scheduled-run-stop" }
+        - elsif state == :stopping
           %button.ui-btn{ type: "button", disabled: true }= t("#{scope}.stopping")
         - else
           = button_to t("#{scope}.stop"), system_scheduled_run_path, method: :post, params: { expected: "stop" },

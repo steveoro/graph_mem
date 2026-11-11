@@ -24,6 +24,8 @@ en:
         run_confirm: "Run every scheduled job now, one after the other? A backup runs first."
         stop: "Stop"
         stopping: "Stopping…"
+        pause_now: "Pause now"
+        no_job: "No job is running this run (it was interrupted, for example by a shutdown): pause it, then resume."
         resume: "Resume"
         start_over: "Start over"
         start_over_confirm: "Drop the paused run and start again from the first job?"
@@ -41,6 +43,7 @@ en:
         notice:
           start: "Scheduled jobs started."
           stop: "Stop requested: the run pauses at the next safe point."
+          stop_paused: "Paused: no job was running it. Resume continues where it stopped."
           resume: "Scheduled jobs resumed."
           start_over: "Paused run dropped; scheduled jobs started again from the first job."
     confirm:
