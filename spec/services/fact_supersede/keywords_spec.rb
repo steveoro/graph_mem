@@ -70,6 +70,26 @@ RSpec.describe "FactSupersede keyword paths" do
     expect(items.map { |item| item["observation_id"] }).to eq([ related.id ])
   end
 
+  it "reads the fact's relations once, not once per sibling candidate, and keeps a joined one" do
+    rework = fs_member!(gadget, "Rework Plan")
+    joined = fs_member!(gadget, "Rework Notes")
+    MemoryRelation.create!(from_entity: joined, to_entity: rework, relation_type: "relates_to")
+    fact = fs_fact!(rework, "Approve the read tools first.", tags: [ "replaces:approve" ])
+    siblings = [ widget, buffer, alpha ].map { |entity| fs_observe!(entity, "Approve nothing without a review.") }
+    near = fs_observe!(joined, "Approve the write tools first.")
+    FactKeywords.compute!(MemoryObservation.where(id: [ fact.id, near.id, *siblings.map(&:id) ]).includes(:memory_entity))
+    # Relatedness.compare's own check is an exists? query per pair; the preload is two plucks per job.
+    pair_queries = 0
+    counter = ->(*, payload) { pair_queries += 1 if payload[:sql].match?(/SELECT 1 AS one FROM `memory_relations`/) }
+
+    candidates = ActiveSupport::Notifications.subscribed(counter, "sql.active_record") { FactSupersede::Candidates.call(fact).candidates }
+
+    subjects = candidates.to_h { |candidate| [ candidate.observation.id, candidate.subject ] }
+    expect(subjects.values_at(*siblings.map(&:id))).to all(eq(:unrelated))
+    expect(subjects[near.id]).to eq(:unknown)
+    expect(pair_queries).to eq(0)
+  end
+
   it "leaves candidates as before with fact keywords off" do
     AppSettings.fact_keywords_enabled = false
     fact = fs_fact!(widget, "SynthWidget now draws into a FrameBuffer.", tags: [ "replaces:draws" ])

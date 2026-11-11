@@ -35,12 +35,15 @@ module FactKeywords
 
     # @param first [MemoryObservation] with its keyword path computed and its entity loaded
     # @param second [MemoryObservation]
+    # @param connected [Boolean, #call, nil] whether a relation joins the two entities directly; nil
+    #   asks the database (one query, only when the answer depends on it). A caller comparing one
+    #   fact with many passes what it preloaded.
     # @return [Comparison]
-    def compare(first, second)
+    def compare(first, second, connected: nil)
       first_entity = first.memory_entity
       second_entity = second.memory_entity
       compare_paths(first.keywords, first_entity&.name, second.keywords, second_entity&.name,
-                    connected: -> { joined?(first_entity, second_entity) })
+                    connected: connected.nil? ? -> { joined?(first_entity, second_entity) } : connected)
     end
 
     # @param first_path [Array<String>] a keyword path

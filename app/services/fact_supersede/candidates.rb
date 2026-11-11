@@ -87,7 +87,17 @@ module FactSupersede
     def keyword_comparison(observation)
       return nil unless @keywords && FactKeywords::Relatedness.computed?(@fact, observation)
 
-      FactKeywords::Relatedness.compare(@fact, observation)
+      # The fact's entity is the same for every candidate: its neighbours are read once.
+      FactKeywords::Relatedness.compare(@fact, observation, connected: -> { neighbour_ids.include?(observation.memory_entity_id) })
+    end
+
+    # @return [Set<Integer>] the entities a relation joins directly to the fact's entity, either direction
+    def neighbour_ids
+      @neighbour_ids ||= begin
+        entity_id = @fact.memory_entity_id
+        (MemoryRelation.where(from_entity_id: entity_id).pluck(:to_entity_id) |
+         MemoryRelation.where(to_entity_id: entity_id).pluck(:from_entity_id)).to_set
+      end
     end
 
     def scoped_entity?(entity)
@@ -107,12 +117,8 @@ module FactSupersede
     # Entities without a project (never a Project root: that is another project) related to the
     # fact's entity in either direction.
     def unscoped_entity_ids
-      @unscoped_entity_ids ||= begin
-        entity_id = @fact.memory_entity_id
-        related = MemoryRelation.where(from_entity_id: entity_id).pluck(:to_entity_id) +
-                  MemoryRelation.where(to_entity_id: entity_id).pluck(:from_entity_id)
-        MemoryEntity.where(id: related.uniq, project_id: nil).where.not(entity_type: NodeOperationsStrategy::PROJECT_ENTITY_TYPE).pluck(:id)
-      end
+      @unscoped_entity_ids ||= MemoryEntity.where(id: neighbour_ids.to_a, project_id: nil)
+                                           .where.not(entity_type: NodeOperationsStrategy::PROJECT_ENTITY_TYPE).pluck(:id)
     end
 
     # The stamp is read from the row: store_vector writes it without touching loaded records.
