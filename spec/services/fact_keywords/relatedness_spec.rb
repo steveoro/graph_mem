@@ -26,6 +26,25 @@ RSpec.describe FactKeywords::Relatedness do
     expect(compare(%w[goggles_db AdminGrant], %w[goggles_db AdminGrant]).subject).to eq(:unknown)
   end
 
+  # 1.80.0: siblings, two entities of one parent that the paths don't connect, are unrelated.
+  def compare_owned(first_path, first_owner, second_path, second_owner)
+    described_class.compare_paths(first_path, first_owner, second_path, second_owner)
+  end
+
+  it "calls facts on two entities the paths don't connect unrelated, mentions or not (1.80.0)" do
+    expect(compare(%w[gadget_mcp Rework], %w[gadget_mcp ServerRules]).subject).to eq(:unrelated)
+    expect(compare(%w[gadget_mcp Rework Session], %w[gadget_mcp ServerRules]).subject).to eq(:unrelated)
+    expect(compare(%w[gadget_mcp Rework Session], %w[gadget_mcp ServerRules Profile]).subject).to eq(:unrelated)
+    expect(compare(%w[gadget_mcp Rework Session], %w[gadget_mcp ServerRules Session]).subject).to eq(:related)
+    expect(compare(%w[gadget_mcp Rework ServerRules], %w[gadget_mcp ServerRules]).subject).to eq(:related)
+  end
+
+  it "never calls a fact held by its project root, or by an entity with no project, a sibling" do
+    expect(compare_owned(%w[gadget_mcp], "gadget_mcp", %w[gadget_mcp ServerRules], "ServerRules").subject).to eq(:unknown)
+    expect(compare_owned(%w[gadget_mcp Session], "gadget_mcp", %w[gadget_mcp ServerRules], "ServerRules").subject).to eq(:one_sided)
+    expect(compare_owned(%w[LooseNote], "LooseNote", %w[gadget_mcp ServerRules], "ServerRules").subject).to eq(:unknown)
+  end
+
   it "compares observations by their stored paths and owners" do
     root = MemoryEntity.create!(name: "Gadget Project", entity_type: "Project")
     grant = MemoryEntity.create!(name: "AdminGrant", entity_type: "Model", project_id: root.id)

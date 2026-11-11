@@ -6,14 +6,17 @@ module FactKeywords
   #
   # - **related**: they share a mention, or one mentions the other's own entity. A shared **first**
   #   mention is the strong match;
-  # - **unrelated**: both mention entities, none in common;
-  # - **one_sided**: only one of them mentions any entity;
-  # - **unknown**: neither mentions any entity, so the paths can't tell.
+  # - **unrelated**: held by two different entities the paths don't connect (siblings, 1.80.0:
+  #   "gadget_mcp › Rework" and "gadget_mcp › Server Rules"), or both mention entities, none in common.
+  #   A fact held by its project root itself (or by an entity with no project: its path starts with
+  #   its own entity) is about the whole project, so it is never a sibling;
+  # - **one_sided**: one own entity, and only one of them mentions any entity;
+  # - **unknown**: one own entity, and neither mentions any entity, so the paths can't tell.
   #
   # The callers decide what each answer allows: ContradictionDetector pairs only related facts (or
-  # two unknown ones that are very close), FactSupersede seeds an unjudged row for anything but an
-  # unrelated pair, and the NoSharedSubject review policy dismisses rows the generators would no
-  # longer seed.
+  # two unknown ones that are very close), FactSupersede neither judges nor seeds an unrelated pair
+  # that no search term found, and the NoSharedSubject review policy dismisses rows the generators
+  # would no longer seed.
   #
   #   FactKeywords::Relatedness.compare(badge_fact, other_fact)
   #   # => #<data Comparison subject=:related, strong=true, shared=["GogglesDb::Swimmer"]>
@@ -46,7 +49,8 @@ module FactKeywords
       shared = first & second
       shared += [ second_owner ] if second_owner && second_owner != first_owner && first.include?(second_owner)
       shared += [ first_owner ] if first_owner && first_owner != second_owner && second.include?(first_owner)
-      Comparison.new(subject: subject(first, second, shared), strong: first.first.present? && first.first == second.first,
+      siblings = siblings?(first_path, first_owner, second_path, second_owner)
+      Comparison.new(subject: subject(first, second, shared, siblings), strong: first.first.present? && first.first == second.first,
                      shared: shared.uniq)
     end
 
@@ -56,13 +60,22 @@ module FactKeywords
       observations.flatten.all? { |observation| observation&.keywords_at.present? }
     end
 
-    def subject(first, second, shared)
+    def subject(first, second, shared, siblings)
       return :related if shared.any?
+      return :unrelated if siblings
       return :unknown if first.empty? && second.empty?
       return :unrelated if first.any? && second.any?
 
       :one_sided
     end
-    private_class_method :subject
+
+    # Two different own entities, neither of them at the head of its own path (a project root, or
+    # an entity with no project).
+    def siblings?(first_path, first_owner, second_path, second_owner)
+      return false if first_owner.nil? || second_owner.nil? || first_owner == second_owner
+
+      [ [ first_path, first_owner ], [ second_path, second_owner ] ].none? { |path, owner| Array(path).first == owner }
+    end
+    private_class_method :subject, :siblings?
   end
 end
