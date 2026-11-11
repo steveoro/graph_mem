@@ -145,6 +145,11 @@
     padding-left: 1.25rem;
   }
 
+  /* A scheduled-jobs step not reached yet has no outcome: no empty badge. */
+  .system-list .ui-badge:empty {
+    display: none;
+  }
+
   .system-code {
     overflow-x: auto;
     padding: 0.75rem;

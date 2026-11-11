@@ -202,6 +202,7 @@ Rails.application.routes.draw do
     post "jobs/compaction/pause", to: "jobs#pause_compaction", as: :pause_compaction
     post "jobs/garbage_collection/run", to: "jobs#run_garbage_collection", as: :run_garbage_collection
     post "jobs/relations/repair", to: "jobs#repair_relations", as: :repair_relations
+    post "jobs/scheduled_run", to: "jobs#scheduled_run", as: :scheduled_run
   end
   # Mission Control (System › Queue). Its base controller is System::QueueDashboardController.
   mount MissionControl::Jobs::Engine, at: "/system/queue"

@@ -94,6 +94,7 @@ class OperationProgress < ApplicationRecord
       details: details || {},
       started_at: started_at&.iso8601,
       finished_at: finished_at&.iso8601,
+      updated_at: updated_at&.iso8601,
       error: error_message,
       error_class: error_class
     }.compact

@@ -31,9 +31,37 @@ export default class extends Controller {
       element.querySelectorAll("[data-progress-total]").forEach((node) => { node.textContent = payload.total ?? 0 })
       element.querySelectorAll("[data-progress-percentage]").forEach((node) => { node.textContent = `${payload.percentage ?? 0}%` })
       element.querySelectorAll("progress").forEach((node) => { node.value = payload.percentage ?? 0 })
+      if (payload.updated_at) {
+        element.querySelectorAll("[data-progress-received-at]").forEach((node) => {
+          node.textContent = this.formatTime(new Date(payload.updated_at), element)
+        })
+      }
+      this.renderSteps(element, payload.details)
       element.dataset.progressStatus = status
       this.updateActionVisibility(element, status)
     })
+  }
+
+  // A run made of steps (the scheduled-jobs card, 1.81.0): details = { index, steps: [{ outcome, started_at }] }.
+  renderSteps(element, details) {
+    const steps = details && Array.isArray(details.steps) ? details.steps : null
+    if (!steps || !Number.isInteger(details.index)) return
+
+    const index = Math.min(details.index, steps.length - 1)
+    const step = steps[index] || {}
+    element.querySelectorAll("[data-progress-step-number]").forEach((node) => { node.textContent = Math.min(details.index + 1, steps.length) })
+    element.querySelectorAll("[data-progress-step-started]").forEach((node) => {
+      node.textContent = step.started_at ? this.formatTime(new Date(step.started_at), element) : "—"
+    })
+    steps.forEach((entry, position) => {
+      element.querySelectorAll(`[data-progress-step-outcome="${position}"]`).forEach((node) => { node.textContent = entry.outcome || "" })
+    })
+  }
+
+  // The server's time zone (data-progress-time-zone), so live times match the rendered ones.
+  formatTime(date, element) {
+    const timeZone = element.dataset.progressTimeZone || undefined
+    return date.toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hour12: false, timeZone })
   }
 
   updateActionVisibility(element, status) {

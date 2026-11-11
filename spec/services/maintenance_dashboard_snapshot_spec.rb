@@ -11,7 +11,9 @@ RSpec.describe MaintenanceDashboardSnapshot do
 
       result = described_class.call
 
-      expect(result.keys).to contain_exactly(:refreshed_at, :compaction, :graph_stats, :latest_reports, :schedules, :cursor_entity, :operations)
+      expect(result.keys).to contain_exactly(:refreshed_at, :compaction, :graph_stats, :latest_reports, :schedules, :cursor_entity, :operations,
+                                             :scheduled_run)
+      expect(result[:scheduled_run]).to include(state: :idle, run: nil, latest_audit: nil)
       expect(result[:graph_stats][:totals][:entities]).to be >= 1
       expect(result[:compaction]).to include(:dream_state)
       expect(result[:operations].keys).to eq([ :garbage_collection ])
