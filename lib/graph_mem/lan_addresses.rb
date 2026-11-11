@@ -14,24 +14,27 @@ module GraphMem
   # interfaces. Docker Desktop (macOS) runs it in a VM that can't, so bin/up writes literal
   # addresses there instead.
   #
-  # An interface counts when it is up, not loopback and not a container or VM bridge (VIRTUAL),
-  # and its IPv4 address is private (10/8, 172.16/12, 192.168/16) with a /16-/30 prefix (the rules
-  # bin/up uses). `@lan` then means:
-  # - in GRAPH_MEM_MCP_ALLOWED_IPS: each such interface's subnet ("192.168.1.0/24");
+  # An interface counts when it is up, not loopback, not point-to-point, not a container or VM
+  # bridge and not a VPN tunnel (VIRTUAL), and its IPv4 address is private (10/8, 172.16/12,
+  # 192.168/16) with a /16-/30 prefix. Unlike bin/up before 1.79.0, which took only the
+  # default-route interface, every such interface counts (wired and Wi-Fi at once). `@lan` then means:
+  # - in GRAPH_MEM_MCP_ALLOWED_IPS: each such interface's subnet ("10.9.8.0/24");
   # - in GRAPH_MEM_MCP_ALLOWED_HOSTS: each such address, the host name and "<host name>.local".
   #
-  #   GraphMem::LanAddresses.expand_ips(%w[127.0.0.0/8 @lan]) # => ["127.0.0.0/8", "192.168.1.0/24"]
-  #   GraphMem::LanAddresses.expand_hosts(%w[@lan])           # => ["192.168.1.18", "wks-0", "wks-0.local"]
+  #   GraphMem::LanAddresses.expand_ips(%w[127.0.0.0/8 @lan]) # => ["127.0.0.0/8", "10.9.8.0/24"]
+  #   GraphMem::LanAddresses.expand_hosts(%w[@lan])           # => ["10.9.8.18", "synth-box", "synth-box.local"]
   module LanAddresses
     TOKEN = "@lan"
     REFRESH_SECONDS = 30
     PRIVATE_RANGES = %w[10.0.0.0/8 172.16.0.0/12 192.168.0.0/16].map { |range| IPAddr.new(range) }.freeze
     PREFIXES = (16..30)
-    # Interfaces of containers, bridges and VMs: never "the LAN".
-    VIRTUAL = /\A(docker|br-|veth|virbr|vmnet|vboxnet|cni|flannel|cali|lxc|lxd|podman|tailscale|zt)/
+    # Interfaces of containers, bridges, VMs and VPN tunnels: never "the LAN". A VPN peer must not
+    # join the unauthenticated allowlist; point-to-point links (wg, tun, ppp) are refused by flag too.
+    VIRTUAL = /\A(docker|br-|veth|virbr|vmnet|vboxnet|cni|flannel|cali|cilium|weave|kube|vxlan|lxc|lxd|incusbr|podman|
+                  tailscale|zt|wg|tun|tap|ppp|utun|ipsec|nordlynx|wt)/x
     HOST_LABEL = /\A[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\z/
 
-    # `ranges` the subnets ("192.168.1.0/24"), `hosts` the addresses and names.
+    # `ranges` the subnets ("10.9.8.0/24"), `hosts` the addresses and names.
     Snapshot = Data.define(:ranges, :hosts) do
       def empty? = ranges.empty?
     end
@@ -82,10 +85,13 @@ module GraphMem
         @mutex.synchronize { @snapshot = @read_at = nil }
       end
 
-      # @param interfaces [Array<Socket::Ifaddr>] injectable for specs
-      # @param hostname [String]
-      # @return [Snapshot]
-      def read(interfaces: Socket.getifaddrs, hostname: Socket.gethostname)
+      # @param interfaces [Array<Socket::Ifaddr>, nil] injectable for specs (nil: this machine's)
+      # @param hostname [String, nil]
+      # @return [Snapshot] empty when the interfaces can't be read
+      def read(interfaces: nil, hostname: nil)
+        # Read here, not as default arguments, so the rescue below covers a failed read.
+        interfaces ||= Socket.getifaddrs
+        hostname ||= Socket.gethostname
         addresses = interfaces.filter_map { |interface| lan_address(interface) }.uniq
         name = hostname.to_s.split(".").first.to_s.downcase
         names = name.match?(HOST_LABEL) ? [ name, "#{name}.local" ] : []
@@ -111,6 +117,7 @@ module GraphMem
         mask = interface.netmask
         return nil unless addr&.ipv4? && mask&.ipv4? && !addr.ipv4_loopback?
         return nil if interface.name.to_s.match?(VIRTUAL) || (interface.flags & Socket::IFF_UP).zero?
+        return nil if interface.flags.anybits?(Socket::IFF_POINTOPOINT)
 
         ip = IPAddr.new(addr.ip_address)
         prefix = IPAddr.new(mask.ip_address).to_i.to_s(2).count("1")

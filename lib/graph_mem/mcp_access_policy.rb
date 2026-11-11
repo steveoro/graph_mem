@@ -137,9 +137,13 @@ module GraphMem
 
     def resolve_allowed_ips(raw)
       # `@lan` (1.79.0): this machine's LAN subnets, read when the policy is built (LanAddresses).
-      entries = LanAddresses.expand_ips(split_entries(raw))
+      listed = split_entries(raw)
+      entries = LanAddresses.expand_ips(listed)
+      # A list naming `@lan` that leaves nothing usable (no LAN yet) means loopback, never every
+      # private range: the defaults are for an unset list only.
+      fallback = LanAddresses.token?(listed) ? loopback_ranges : default_ranges
 
-      return default_ranges if entries.empty?
+      return fallback if entries.empty?
 
       if entries.any? { |entry| UNRESTRICTED.include?(entry.downcase) }
         return [] if token_required?
@@ -154,7 +158,7 @@ module GraphMem
       parsed = parse_ranges(entries)
       parsed = narrow_to_defaults(parsed) unless token_required?
 
-      parsed.empty? ? default_ranges : parsed
+      parsed.empty? ? fallback : parsed
     end
 
     # Appends the additive entries to the resolved list and returns how many were added. Every
@@ -201,6 +205,10 @@ module GraphMem
 
     def default_ranges
       self.class.default_ranges
+    end
+
+    def loopback_ranges
+      LOOPBACK_RANGES.map { |entry| IPAddr.new(entry) }
     end
 
     def split_entries(raw)
