@@ -39,6 +39,14 @@ RSpec.describe "Navigation", type: :system do
       end
     end
 
+    it "shows the GraphMem logo next to the name in the sidebar (1.80.1)" do
+      logo = find("nav.ui-sidebar [data-testid='brand-logo']")
+
+      expect(logo[:src]).to match(%r{/assets/logo-\h+\.svg\z})
+      # Loaded and decoded, not a broken image.
+      expect(page.evaluate_script("document.querySelector(\"[data-testid='brand-logo']\").naturalWidth")).to be_positive
+    end
+
     it "shows a notice toast after sign-in that can be dismissed" do
       find(".ui-toast--notice", text: "Signed in successfully.").find(".ui-toast__dismiss").click
 
