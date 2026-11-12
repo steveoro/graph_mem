@@ -60,6 +60,19 @@ module FactKeywords
     list
   end
 
+  # @param project [String, nil] a Project root's name (the rake tasks' PROJECT); nil for every fact
+  # @return [ActiveRecord::Relation] active facts, of that project's root and members when named
+  # @raise [ArgumentError] for a name no Project root has
+  def active_facts(project: nil)
+    scope = MemoryObservation.active
+    return scope unless (name = project.to_s.strip.presence)
+
+    root = MemoryEntity.find_by(name: name, entity_type: NodeOperationsStrategy::PROJECT_ENTITY_TYPE, project_id: nil)
+    raise ArgumentError, "no Project root named #{name.inspect}" unless root
+
+    scope.where(memory_entity_id: MemoryEntity.where(project_id: root.id).select(:id)).or(scope.where(memory_entity_id: root.id))
+  end
+
   # @param entity [MemoryEntity]
   # @return [MemoryEntity, nil] the entity's project root (itself for a root)
   def project_of(entity)

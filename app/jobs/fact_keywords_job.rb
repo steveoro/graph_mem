@@ -16,6 +16,9 @@ class FactKeywordsJob < ApplicationJob
   MAX_BATCHES = 200
   # A burst of writes (an import, a scan) asks for one run, a moment after its first write.
   REQUEST_DELAY = 5
+  # 1.83.0: LLM word batches per run (FactKeywords::LlmWords::BATCH_SIZE facts each); the next
+  # request or night continues.
+  LLM_BATCHES_PER_RUN = 25
 
   class << self
     # Enqueues one run, at most once per REQUEST_DELAY in this process, when the setting is on.
@@ -52,6 +55,31 @@ class FactKeywordsJob < ApplicationJob
 
       computed += FactKeywords.compute!(batch)
     end
-    computed
+    computed + compute_llm_words
+  end
+
+  private
+
+  # 1.83.0: the LLM words of facts whose path is computed (FactKeywords::LlmWords), at most
+  # LLM_BATCHES_PER_RUN batches, stopping between batches inside a scheduled run asked to stop.
+  #
+  # @return [Integer] the facts stamped
+  def compute_llm_words
+    return 0 unless FactKeywords::LlmWords.enabled?
+
+    stamped = 0
+    LLM_BATCHES_PER_RUN.times do
+      break if CooperativeStop.requested?
+
+      batch = MemoryObservation.active.where.not(keywords_at: nil).llm_words_pending.includes(:memory_entity).order(:id)
+                               .limit(FactKeywords::LlmWords::BATCH_SIZE).to_a
+      break if batch.empty?
+
+      done = FactKeywords::LlmWords.compute!(batch)
+      stamped += done
+      # Nothing stamped (the LLM is down or answered nothing usable): try again on the next run.
+      break if done.zero?
+    end
+    stamped
   end
 end

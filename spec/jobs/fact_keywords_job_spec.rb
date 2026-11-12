@@ -47,6 +47,36 @@ RSpec.describe FactKeywordsJob do
     expect(described_class.perform_now).to eq(5)
   end
 
+  # 1.83.0: after the paths, the LLM words of the facts that name no entity.
+  context "with LLM words" do
+    let(:provider) do
+      FakeProvider.new do |prompt, **|
+        ids = JSON.parse(prompt.to_s[/STATEMENTS:\n(\[.*\])/m, 1]).map { |entry| entry["id"].to_s }
+        { ok: true, done_reason: "stop", error: nil, latency_ms: 1.0, text: ids.to_h { |id| [ id, %w[frame] ] }.to_json }
+      end
+    end
+
+    it "computes the words of the facts that name no entity, after their paths" do
+      fact = MemoryObservation.create!(memory_entity: widget, content: "SynthWidget renders frames.")
+
+      with_llm_provider(provider) { described_class.perform_now }
+
+      expect(fact.reload).to have_attributes(keywords_at: be_present, llm_keywords: %w[frame], llm_keywords_at: be_present)
+    end
+
+    it "stops between LLM batches when a scheduled run asks it to" do
+      stub_const("FactKeywords::LlmWords::BATCH_SIZE", 2)
+      stub_const("CooperativeStop::INTERVAL", 0.seconds)
+      Array.new(5) { |i| MemoryObservation.create!(memory_entity: widget, content: "SynthWidget fact #{i}.") }
+      asked = 0
+
+      # Two checks around the path batches, one before the first LLM batch, then the stop.
+      with_llm_provider(provider) { CooperativeStop.with(-> { (asked += 1) > 3 }) { described_class.perform_now } }
+
+      expect(MemoryObservation.where.not(llm_keywords_at: nil).count).to eq(2)
+    end
+  end
+
   it "does nothing with the setting off" do
     MemoryObservation.create!(memory_entity: widget, content: "SynthWidget fact.")
     AppSettings.fact_keywords_enabled = false
