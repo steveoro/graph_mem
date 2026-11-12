@@ -80,6 +80,14 @@ RSpec.describe ContradictionDetector, "keyword paths", :with_test_embeddings do
     expect(pairs.flatten).not_to include(bills.id)
   end
 
+  it "doesn't pair related facts that aren't about the same subject (1.82.0)" do
+    member("Season")
+    fact("It belongs to a User and a Team.")
+    fact("It is not linked to a Team for a Season.")
+
+    expect(described_class.detect(grant.id, persist: false)).to be_empty
+  end
+
   it "pairs as before with fact keywords off" do
     AppSettings.fact_keywords_enabled = false
     fact("It belongs to a User.")

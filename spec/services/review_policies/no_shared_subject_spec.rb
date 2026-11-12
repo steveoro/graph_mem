@@ -73,6 +73,22 @@ RSpec.describe ReviewPolicies::NoSharedSubject do
     expect(root_row.reload.status).to eq("active")
   end
 
+  it "mirrors the 1.82.0 seeding: an unjudged row needs the same fact with a different detail; a judged related row stays" do
+    fs_member!(root, "Season", "Model")
+    fact = fs_fact!(grant, "AdminGrant allows 5 Users per Team.").tap { |observation| FactKeywords.compute!([ observation.reload ]) }
+    related = computed("It links a Team to a Season.")
+    detail = computed("It allows 3 Users per Team.")
+
+    unjudged_related = supersede_row(fact, related)
+    unjudged_detail = supersede_row(fact, detail)
+    judged_related = supersede_row(fact, computed("It ties a Team to one Season."), verdict: "superseded")
+
+    described_class.new.call
+
+    expect(unjudged_related.reload.status).to eq("dismissed")
+    expect([ unjudged_detail, judged_related ].map { |row| row.reload.status }).to all(eq("active"))
+  end
+
   it "does nothing with fact keywords off or its own toggle off" do
     row = contradiction_row(computed("It belongs to a User."), computed("It is not linked to a Team."))
 
