@@ -28,8 +28,9 @@ class DetectContradictionsTool < ApplicationTool
     "in the fact's own project: pass `entity_id` = the fact's entity, required `fact_observation_id`, optional `terms` " \
     "(up to 5 strings), `seed_review` (bool, default true) and `max_results` (at most 50; `max_distance` is ignored); it " \
     "returns new proposals with their review row ids (pairs already queued or dismissed are skipped) and never writes " \
-    "observations. With the LLM judge on it waits for at most 2 judge calls (16 candidates); the rest come back unjudged " \
-    "(`unjudged_over_cap` counts them) and a background job judges them later. " \
+    "observations. With the LLM judge on it waits for at most 2 judge calls (16 candidates); the rest are counted in " \
+    "`unjudged_over_cap` and judged later by a background job (only a same fact with a different detail also comes back " \
+    "as an unjudged proposal now). " \
     "Apply them with `apply_maintenance_review` " \
     "(`action_params.fact_action` supersede or retire, optional `replacement`). Does not merge or delete. " \
     "Do not use for trust ranking; use `rank_observations` instead. " \

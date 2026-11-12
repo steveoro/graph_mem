@@ -9,6 +9,8 @@
 # either repairs them automatically when the target is unambiguous or queues a
 # `scan_review` item for operator/agent review.
 class ProjectScanner
+  # 1.83.0: LLM word batches a scan asks inline (inside its reconcile transaction), at most.
+  SCAN_LLM_BATCHES = 3
   DEFAULT_FILE_GLOBS = %w[
     README*
     package.json
@@ -147,6 +149,7 @@ class ProjectScanner
     @observations_deduped = 0
     @restated_observation_ids = Set.new
     @scan_fact_ids = []
+    @scan_llm_words = {}
     @validation_paused = false
     @extraction = {}
     @file_filter = ProjectScanFileFilter.new(@project_root)
@@ -374,6 +377,7 @@ class ProjectScanner
       # relation to an entity listed later (or in another part) resolves, and a fact's keyword path
       # (FactDedupe, 1.78.0) can name any entity of the scan.
       reconciled = architecture.filter_map { |item| reconcile_architecture_item(item) }
+      prepare_scan_llm_words!(reconciled)
       reconciled.each { |entity, item| import_observations(entity, Array(item["observations"])) }
       reconciled.each { |entity, item| Array(item["relations"]).each { |rel| reconcile_relation(entity, rel) } }
       compute_scan_fact_keywords!
@@ -511,12 +515,14 @@ class ProjectScanner
 
       next if @dry_run || reworded_duplicate?(entity, text)
 
-      @scan_fact_ids << MemoryObservation.create!(
+      fact = MemoryObservation.create!(
         memory_entity: entity,
         content: text,
         source: scan_source("reconcile"),
         confidence: 0.9
-      ).id
+      )
+      store_scan_llm_words(fact, entity, text)
+      @scan_fact_ids << fact.id
       @observations_created_count += 1
       existing[text] = nil
     end

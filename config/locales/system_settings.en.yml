@@ -27,7 +27,7 @@ en:
         runs_link: "See the policy runs (with Undo) on Review › Policies"
         policies:
           dangling: "Dismisses suggestions that point at something deleted, or whose effect already holds. No suppression. Reverse: Undo the run, or Restore the row."
-          no_shared_subject: "Dismisses contradiction and unjudged \"Outdated by a fact\" suggestions whose two facts share no subject by their keyword paths (needs Fact keywords on). No suppression. Reverse: Undo the run, or Restore the row."
+          no_shared_subject: "Dismisses contradiction and \"Outdated by a fact\" suggestions whose two facts share no subject, or (unjudged ones, and contradictions) aren't the same fact, by their keyword paths (needs Fact keywords on). A judged suggestion is dismissed only when its facts share no subject. No suppression. Reverse: Undo the run, or Restore the row."
           no_longer_flagged: "Dismisses stale-memory suggestions the scanner no longer flags. Reverse: Undo the run, or Restore."
           expire_low_confidence: "Expires suggestions with confidence below 0.4 that nobody touched for the days below, and keeps them away for 90 days. Reverse: Undo, or Restore."
           auto_apply_relationships: "Applies high-band relationship proposals at or above the confidence below (never part_of), at most 50 per run. Reverse: Undo the run (removes the relations)."
@@ -226,7 +226,7 @@ en:
         enable_review_policy_dangling:
           label: "Dismiss dangling suggestions"
         enable_review_policy_no_shared_subject:
-          label: "Dismiss pair suggestions whose facts share no subject"
+          label: "Dismiss pair suggestions whose facts share no subject or aren't the same fact"
         enable_review_policy_no_longer_flagged:
           label: "Dismiss stale-memory suggestions no longer flagged"
         enable_review_policy_expire_low_confidence:
@@ -246,6 +246,9 @@ en:
         fact_keywords_enabled:
           label: "Fact keywords"
           description: "Give every fact a keyword path: its project, the entity that holds it, then the project's entities it mentions, in order. Computed in the background after a fact is written, and nightly for any left pending. Turned off, nothing is computed and existing paths stay as they are."
+        llm_keywords_enabled:
+          label: "LLM keywords"
+          description: "For a fact that names no entity, ask the summary LLM for 1–3 words naming what it is about (never a value), so two such facts on one entity can be told apart: the same subject, related, or unrelated. Computed with the fact keywords (scans compute their own facts at once). Needs Fact keywords on. Turned off, nothing is asked and stored words are ignored."
         review_backlog_ceiling:
           label: "Backlog ceiling per kind"
           description: "Active suggestions per kind before new ones must beat the lowest priority to be queued (a soft limit)."

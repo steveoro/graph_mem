@@ -38,19 +38,61 @@ class ProjectScanner
     # 1.78.0: a close fact is the same fact only if the new one mentions nothing the stored one
     # doesn't (its keyword-path mentions are a subset); one that names something more adds
     # information, so it is written. Both paths come from one index of the project, built once every
-    # item's entity exists. Always true with fact keywords off.
+    # item's entity exists. With fact keywords off, only the detail check below applies.
     #
     # 1.82.0: a close fact with a different detail (a version, a number, a date) is never the same
     # fact ("Developed using Rails 8.0" / "… 8.1"): it is written, as a supersede candidate.
+    #
+    # 1.83.0: two facts that name no entity compare by their LLM words: the new fact is the same
+    # only if its words are a subset of the stored one's. Either side without words: as 1.82.0.
     def same_subject?(entity, text, stored)
       return true unless stored
 
-      content = MemoryObservation.where(id: stored.id).pick(:content)
+      content, stored_words, words_at = MemoryObservation.where(id: stored.id).pick(:content, :llm_keywords, :llm_keywords_at)
       return true if content.nil?
       return false if FactKeywords::Details.compare(text, content) == :different
       return true unless @project_entity && AppSettings.fact_keywords_enabled?
 
-      (scan_mentions(entity, text) - scan_mentions(entity, content)).empty?
+      new_mentions = scan_mentions(entity, text)
+      stored_mentions = scan_mentions(entity, content)
+      words = @scan_llm_words[[ entity.id, text ]]
+      if new_mentions.empty? && stored_mentions.empty? && words.present? && words_at.present? && stored_words.present?
+        return FactKeywords::LlmWords.keys(words).subset?(FactKeywords::LlmWords.keys(stored_words))
+      end
+
+      (new_mentions - stored_mentions).empty?
+    end
+
+    # 1.83.0: the LLM words of this scan's new facts that name no entity, asked in batches before
+    # their dedupe (FactKeywords::LlmWords). A failed call leaves them pending: FactKeywordsJob asks
+    # again, and the dedupe uses the 1.82.0 rule meanwhile.
+    #
+    # It runs inside the reconcile transaction, so it is bounded: at most SCAN_LLM_BATCHES calls,
+    # none after one the LLM didn't answer, and none when the dedupe can't use the words (no
+    # vectors). FactKeywordsJob computes the rest after the commit.
+    def prepare_scan_llm_words!(reconciled)
+      return if @dry_run || @project_entity.nil? || !FactKeywords::LlmWords.enabled?
+      return if @fact_dedupe_unavailable || !EmbeddingService.vector_enabled?
+
+      wanted = reconciled.flat_map do |entity, item|
+        known = entity.active_memory_observations.pluck(:content).to_set { |content| content.to_s.strip }
+        Array(item["observations"]).filter_map do |content|
+          text = content.to_s.strip
+          [ entity, text ] if text.present? && !known.include?(text) && scan_mentions(entity, text).empty?
+        end
+      end.uniq { |entity, text| [ entity.id, text ] }
+      # Plain integer keys: they are the ids the LLM sees.
+      entries = wanted.each_with_index.map { |(entity, text), i| { key: i, text: text, entity: entity } }
+      found = FactKeywords::LlmWords.words_for(entries, max_batches: ProjectScanner::SCAN_LLM_BATCHES, stop_on_failure: true)
+      found.each { |i, words| @scan_llm_words[[ wanted[i][0].id, wanted[i][1] ]] = words }
+    rescue StandardError => e
+      @logger.warn "ProjectScanner: LLM words not asked: #{e.class}: #{e.message}"
+    end
+
+    # Stores a new fact's LLM words when this scan asked for them.
+    def store_scan_llm_words(fact, entity, text)
+      words = @scan_llm_words[[ entity.id, text ]]
+      fact.update_columns(llm_keywords: words, llm_keywords_at: Time.current) if words
     end
 
     def scan_mentions(entity, text)

@@ -12,12 +12,17 @@ module FactKeywords
   # Digits inside an identifier (gemma3, utf8mb4) aren't details. An incidental number (an issue id,
   # a count) is one: a rewording that changes it reads as a different detail, and the judge decides.
   module Details
-    # Tried in this order, each match removed before the next pattern.
-    # A match may end a sentence ("Rails 8.0."), but not run into more digits or a word.
+    # Tried in this order, each match removed before the next pattern, each with how its match is
+    # kept. A match may end a sentence ("Rails 8.0."), but not run into more digits or a word.
     PATTERNS = [
-      /(?<![\w.])\d{4}-\d{2}-\d{2}(?!\w)(?!\.\d)/,                   # ISO dates
-      /(?<![\w.])(?:v\d+(?:\.\d+)*|\d+(?:\.\d+)+)(?!\w)(?!\.\d)/i,   # versions: 8.0, v2, v1.7.2, 3.4.12
-      /(?<![\w.])\d+[a-z]{0,3}\b/i                                     # numbers with an optional unit: 30, 5s, 768(-dim), 2025
+      # ISO dates, with an optional time (2026-11-12T10:00:00Z): the date, and the time on its own
+      [ /(?<![\w.])(\d{4}-\d{2}-\d{2})(?:T(\d{2}:\d{2}(?::\d{2})?)Z?)?(?!\w)(?!\.\d)/i, ->(m) { [ m[1], m[2] ] } ],
+      # versions and decimals, with an optional unit: 8.0, v2, v1.7.2, 3.4.12, 1.5x
+      [ /(?<![\w.])(?:v\d+(?:\.\d+)*|\d+(?:\.\d+)+)[a-z]{0,8}(?!\w)(?!\.\d)/i, ->(m) { [ m[0].sub(/\Av(?=\d)/i, "") ] } ],
+      # thousands: 1,000 → 1000
+      [ /(?<![\w.,])\d{1,3}(?:,\d{3})+(?![\d,])/, ->(m) { [ m[0].delete(",") ] } ],
+      # numbers, signed, with an optional unit: 30, -5, 5s, 10mins, 768(-dim), 2025
+      [ /(?:(?<=\A)|(?<=[^\w.\-]))-\d+[a-z]{0,8}\b|(?<![\w.])\d+[a-z]{0,8}\b/i, ->(m) { [ m[0] ] } ]
     ].freeze
 
     module_function
@@ -26,9 +31,9 @@ module FactKeywords
     # @return [Set<String>] the details, lowercase, a version's leading "v" dropped
     def extract(text)
       rest = text.to_s.dup
-      PATTERNS.each_with_object(Set.new) do |pattern, found|
-        rest = rest.gsub(pattern) do |match|
-          found << match.downcase.sub(/\Av(?=\d)/, "")
+      PATTERNS.each_with_object(Set.new) do |(pattern, keep), found|
+        rest = rest.gsub(pattern) do
+          keep.call(Regexp.last_match).compact.each { |token| found << token.downcase }
           " "
         end
       end

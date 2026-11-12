@@ -15,10 +15,11 @@ module FactKeywords
   # - **one_sided**: one own entity, and only one of them mentions any entity;
   # - **unknown**: one own entity, and neither mentions any entity, so the paths can't tell.
   #
-  # The callers decide what each answer allows: ContradictionDetector pairs only related facts (or
-  # two unknown ones that are very close), FactSupersede neither judges nor seeds an unrelated pair
-  # that no search term found, and the NoSharedSubject review policy dismisses rows the generators
-  # would no longer seed.
+  # The callers decide what each answer allows: ContradictionDetector pairs only facts about the same
+  # subject (or two unknown ones that are very close), FactSupersede neither judges nor seeds an
+  # unrelated pair that no search term found and seeds an unjudged row only for the same fact with a
+  # different detail, and the NoSharedSubject review policy dismisses rows the generators would no
+  # longer seed.
   #
   #   FactKeywords::Relatedness.compare(badge_fact, other_fact)
   #   # => #<data Comparison subject=:related, strong=true, shared=["GogglesDb::Swimmer"]>
@@ -35,8 +36,14 @@ module FactKeywords
     # - `covers`: :both, :first, :second (whose subjects contain the other's), or nil;
     # - `details`: FactKeywords::Details.compare of the two texts, the first being the newer (:none,
     #   :same, :dropped, :different).
-    Comparison = Data.define(:subject, :strong, :shared, :same_subject, :covers, :details) do
+    # `by_words` (1.83.0): the answer comes from the two facts' LLM words, not their entity mentions.
+    Comparison = Data.define(:subject, :strong, :shared, :same_subject, :covers, :details, :by_words) do
       def related? = subject == :related
+
+      # Unrelated by their entity mentions: the hard skip (never judged, judged rows dismissed).
+      # Unrelated by LLM words alone isn't (Steve, 1.83.0): words are asked per fact and can name one
+      # subject two ways, so such a pair still reaches the judge.
+      def hard_unrelated? = subject == :unrelated && !by_words
 
       # The first fact is about the same thing as the second, covers all it is about, and states a
       # different detail: it may outdate it ("Updated using Rails 8.1" over "… Rails 8.0").
@@ -67,7 +74,8 @@ module FactKeywords
       compare_paths(first.keywords, first_entity&.name, second.keywords, second_entity&.name,
                     connected: connected.nil? ? -> { joined?(first_entity, second_entity) } : connected,
                     first_text: first.content, second_text: second.content,
-                    first_root: first_entity&.project_root?, second_root: second_entity&.project_root?)
+                    first_root: first_entity&.project_root?, second_root: second_entity&.project_root?,
+                    first_words: llm_words(first), second_words: llm_words(second))
     end
 
     # @param first_path [Array<String>] a keyword path
@@ -81,11 +89,18 @@ module FactKeywords
     # @param first_root [Boolean, nil] the first fact's entity is a project root (nil: read from the
     #   path, which also starts with its own entity for an entity with no project)
     # @param second_root [Boolean, nil]
+    # @param first_words [Array<String>, nil] the first fact's LLM words (1.83.0), used only when both
+    #   facts are on one entity and mention none
+    # @param second_words [Array<String>, nil]
     # @return [Comparison]
     def compare_paths(first_path, first_owner, second_path, second_owner, connected: false, first_text: nil, second_text: nil,
-                      first_root: nil, second_root: nil)
+                      first_root: nil, second_root: nil, first_words: nil, second_words: nil)
       first = FactKeywords.mentions(first_path, first_owner)
       second = FactKeywords.mentions(second_path, second_owner)
+      if first_owner && first_owner == second_owner && first.empty? && second.empty? && first_words.present? && second_words.present?
+        return compare_words(first_words, second_words, first_text, second_text)
+      end
+
       shared = first & second
       shared += [ second_owner ] if second_owner && second_owner != first_owner && first.include?(second_owner)
       shared += [ first_owner ] if first_owner && first_owner != second_owner && second.include?(first_owner)
@@ -96,13 +111,37 @@ module FactKeywords
       covers = covers(first, first_owner, first_rooted, second, second_owner, second_rooted)
       Comparison.new(subject: subject(first, second, shared, siblings), strong: first.first.present? && first.first == second.first,
                      shared: shared.uniq, same_subject: !covers.nil?, covers: covers,
-                     details: FactKeywords::Details.compare(first_text, second_text))
+                     details: FactKeywords::Details.compare(first_text, second_text), by_words: false)
     end
 
     # @param observations [Array<MemoryObservation>]
     # @return [Boolean] every one has a computed path
     def computed?(*observations)
       observations.flatten.all? { |observation| observation&.keywords_at.present? }
+    end
+
+    # 1.83.0: two facts on one entity that name no entity, by their LLM words (FactKeywords::LlmWords),
+    # which take the place of the mentions: shared words relate them (none: unrelated, full weight),
+    # and one fact's words containing the other's make the same subject.
+    #
+    # @return [Comparison]
+    def compare_words(first_words, second_words, first_text, second_text)
+      mine = FactKeywords::LlmWords.keys(first_words)
+      theirs = FactKeywords::LlmWords.keys(second_words)
+      shared = mine & theirs
+      covers = if mine == theirs then :both
+      elsif mine.superset?(theirs) then :first
+      elsif theirs.superset?(mine) then :second
+      end
+      Comparison.new(subject: shared.any? ? :related : :unrelated, strong: false, shared: shared.to_a.sort, same_subject: !covers.nil?,
+                     covers: covers, details: FactKeywords::Details.compare(first_text, second_text), by_words: true)
+    end
+
+    # @return [Array<String>, nil] a fact's computed LLM words, nil while pending or with the setting off
+    def llm_words(observation)
+      return nil unless observation.llm_keywords_at.present? && FactKeywords::LlmWords.enabled?
+
+      observation.llm_keywords
     end
 
     # @return [Symbol, nil] whose subjects (own entity and mentions) contain the other's; nil unless
@@ -152,6 +191,6 @@ module FactKeywords
       MemoryRelation.where(from_entity_id: first.id, to_entity_id: second.id)
                     .or(MemoryRelation.where(from_entity_id: second.id, to_entity_id: first.id)).exists?
     end
-    private_class_method :subject, :siblings?, :joined?, :covers, :rooted?
+    private_class_method :subject, :siblings?, :joined?, :covers, :rooted?, :compare_words, :llm_words
   end
 end

@@ -14,6 +14,8 @@ class AppSettings < RailsSettings::Base
   field :fact_supersede_enabled, default: true, type: :boolean
   # 1.77.0: compute each fact's keyword path (FactKeywords) after it is written and nightly.
   field :fact_keywords_enabled, default: true, type: :boolean
+  # 1.83.0: LLM words for facts that name no entity (FactKeywords::LlmWords); needs fact_keywords_enabled.
+  field :llm_keywords_enabled, default: true, type: :boolean
 
   # Database backup settings
   field :backup_folder_path, default: "db/backup", type: :string

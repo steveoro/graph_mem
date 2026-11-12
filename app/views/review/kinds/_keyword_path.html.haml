@@ -1,5 +1,6 @@
 -# One side's keyword path (1.78.0, FactKeywords): project › own entity › mentions, the names both
--# sides share in bold ("why these two"). Nothing while the path is pending.
+-# sides share in bold ("why these two"). Nothing while the path is pending. 1.83.0: a fact that names no
+-# entity also shows its LLM words, the shared ones in bold.
 - path = Array(observation&.keywords)
 - if observation&.keywords_at.present? && path.any?
   %p.review-hint{ data: { testid: "keyword-path" } }
@@ -11,3 +12,13 @@
         %strong= name
       - else
         = name
+- words = observation ? observation.shown_llm_words : []
+- if words.any?
+  - shared_keys = shared.to_set { |name| FactKeywords::LlmWords.key(name) }
+  %p.review-hint{ data: { testid: "llm-words" } }
+    = "LLM:"
+    - words.each do |word|
+      - if shared_keys.include?(FactKeywords::LlmWords.key(word))
+        %strong= word
+      - else
+        = word

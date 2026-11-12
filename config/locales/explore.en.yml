@@ -61,6 +61,8 @@ en:
       outdated_by: "Outdated by:"
       mentions: "Mentions:"
       mentions_title: "The project's entities this fact names, in order (its keyword path after its own entity)"
+      llm_words: "LLM:"
+      llm_words_title: "What this fact is about, in the LLM's words (for a fact that names no entity)"
       find_outdated: "Find what this outdates"
       remove_relation: "Remove"
       remove_relation_confirm: "Remove the relation “%{relation}”? You can undo it from the toast."

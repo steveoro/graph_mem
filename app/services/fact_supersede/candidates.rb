@@ -14,9 +14,10 @@ module FactSupersede
   #   caller's terms; at most SourceFact::MAX_TERMS);
   # - polarity: ContradictionDetector.negative? on both sides is a +0.1 boost, never a filter;
   # - keywords (1.78.0, with fact keywords on): the two keyword paths (FactKeywords::Relatedness),
-  #   computed first when pending. Related facts get SHARED_BOOST (STRONG_BOOST when they share
-  #   their first mention); the answer is kept on the candidate (never in the row's signals), and
-  #   Proposals seeds no unjudged row for an unrelated pair.
+  #   computed first when pending. Since 1.82.0 only a same-subject candidate the fact covers is
+  #   boosted (SHARED_BOOST, STRONG_BOOST with a different detail); the answer is kept on the
+  #   candidate (never in the row's signals), and Proposals seeds an unjudged row only for the same
+  #   fact with a different detail.
   #
   #   result = FactSupersede::Candidates.call(fact, terms: ["fast-mcp"])
   #   result.candidates.first # => #<struct Candidate observation=…, score=0.6, term="fast-mcp", scoped=true, …>
@@ -79,9 +80,17 @@ module FactSupersede
       comparison = keyword_comparison(observation)
       score += boost(comparison)
       Candidate.new(observation: observation, score: [ score, MAX_SCORE ].min.round(3), distance: distance, term: hits[observation.id],
-                    polarity_flip: flip, scoped: scoped_entity?(observation.memory_entity), subject: comparison&.subject,
+                    polarity_flip: flip, scoped: scoped_entity?(observation.memory_entity), subject: candidate_subject(comparison),
                     shared_keywords: comparison&.shared, strong: comparison&.strong, level: comparison&.level,
                     same_fact: comparison&.same_fact_different_detail?)
+    end
+
+    # The candidate's subject: unrelated by LLM words alone counts as unknown, so the pair is still
+    # judged (1.83.0); unrelated by entity mentions stays the hard skip.
+    def candidate_subject(comparison)
+      return nil unless comparison
+
+      comparison.subject == :unrelated && comparison.by_words ? :unknown : comparison.subject
     end
 
     # 1.82.0: only a candidate about the same subject, which the fact covers, is boosted; most when

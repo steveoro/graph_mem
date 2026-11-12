@@ -5,6 +5,22 @@ All notable changes to GraphMem will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.83.0] - 2026-11-12
+
+Facts that name no entity get a subject too: 1–3 words from the LLM.
+
+### Added
+- **LLM keywords** (`FactKeywords::LlmWords`, setting `llm_keywords_enabled`, on): a fact whose keyword path mentions no entity gets 1–3 words naming what it is about, never a value, from the summary LLM chain ("Developed using Rails 8.0" and "Updated using Rails 8.1" both get `rails, version`). Stored in a new `llm_keywords` column, never merged with the path, never embedded, not in REST or MCP output.
+- Two such facts on one entity compare by their words in the same-fact ladder: one's words containing the other's is the same subject, some shared is related, none is unrelated. So "Outdated by a fact", contradictions, the `no_shared_subject` policy and the scan dedupe now tell them apart too; while the words are pending, everything behaves as in 1.82.0.
+- Words alone never make the hard "unrelated" (only entity mentions do): words are asked per fact and can name one subject two ways ("Shipped via Capistrano" / "Deploys with Kamal 2"). Such a pair gets no unjudged row and no contradiction pair, but it is still judged, and a judged row is never dismissed on words alone.
+- `FactKeywordsJob` computes them after the paths (25 batches of 20 facts per run, one project per call; it walks past a batch the cloud gate refuses and gives up only after 3 batches in a row the LLM failed to answer; "Run all scheduled jobs now" can stop it between batches); a project scan computes its own facts' words before its dedupe. `bin/rails graph_mem:fact_keywords:llm_refresh [PROJECT=]` recomputes them, `llm_report` counts them (read-only).
+- Explore and the review rows show a fact's LLM words ("LLM:"), the shared ones in bold.
+
+### Changed
+- `no_shared_subject` gives a second dismissal reason, "not the same fact (keyword paths)", for pairs that share something but aren't the same fact; `review_report` counts both.
+- Detail tokens read ISO date-times (the date and the time), decimals and numbers with a unit (`1.5x`, `10mins`), a sign (`-5` ≠ `5`) and thousands (`1,000`).
+- `detect_contradictions` (MCP description, `docs/mcp_tools.md`): over-cap candidates are counted in `unjudged_over_cap` and judged later; only the same fact with a different detail also comes back as an unjudged proposal (the text only; arguments and output unchanged).
+
 ## [1.82.0] - 2026-11-12
 
 The same fact is not a related fact: only the same subject may make a fact obsolete.

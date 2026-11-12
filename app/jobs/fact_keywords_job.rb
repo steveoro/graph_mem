@@ -16,6 +16,13 @@ class FactKeywordsJob < ApplicationJob
   MAX_BATCHES = 200
   # A burst of writes (an import, a scan) asks for one run, a moment after its first write.
   REQUEST_DELAY = 5
+  # 1.83.0: LLM word batches per run that reach the LLM (FactKeywords::LlmWords::BATCH_SIZE facts
+  # each); the next request or night continues. A batch the cloud gate refused isn't charged.
+  LLM_BATCHES_PER_RUN = 25
+  # Batches in a row the LLM failed to answer (down, not JSON) before the run gives up; one such
+  # batch is passed over, so it never blocks the facts behind it. A batch the cloud gate refused
+  # (nothing sent) never counts: the run walks past it, however many there are.
+  LLM_EMPTY_BATCHES = 3
 
   class << self
     # Enqueues one run, at most once per REQUEST_DELAY in this process, when the setting is on.
@@ -52,6 +59,42 @@ class FactKeywordsJob < ApplicationJob
 
       computed += FactKeywords.compute!(batch)
     end
-    computed
+    computed + compute_llm_words
+  end
+
+  private
+
+  # 1.83.0: the LLM words of facts whose path is computed (FactKeywords::LlmWords), at most
+  # LLM_BATCHES_PER_RUN batches, stopping between batches inside a scheduled run asked to stop.
+  #
+  # @return [Integer] the facts stamped
+  def compute_llm_words
+    return 0 unless FactKeywords::LlmWords.enabled?
+
+    stamped = 0
+    after_id = 0
+    empty = 0
+    asked = 0
+    # Ends: the cursor only moves forward, and the loop breaks on an empty batch or the cap.
+    loop do
+      break if asked >= LLM_BATCHES_PER_RUN || CooperativeStop.requested?
+
+      batch = MemoryObservation.active.where.not(keywords_at: nil).llm_words_pending.where("memory_observations.id > ?", after_id)
+                               .includes(:memory_entity).order(:id).limit(FactKeywords::LlmWords::BATCH_SIZE).to_a
+      break if batch.empty?
+
+      after_id = batch.last.id
+      refused = []
+      done = FactKeywords::LlmWords.compute!(batch, refused: refused)
+      stamped += done
+      # The whole batch refused by the cloud gate (nothing sent): neither the LLM failing nor a call to
+      # charge. With done 0 the batch holds no named fact, so every fact in it was asked or refused.
+      next if done.zero? && refused.size == batch.size
+
+      asked += 1
+      empty = done.zero? ? empty + 1 : 0
+      break if empty >= LLM_EMPTY_BATCHES
+    end
+    stamped
   end
 end

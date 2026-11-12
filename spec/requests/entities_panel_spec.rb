@@ -132,6 +132,19 @@ RSpec.describe "Entity panel", type: :request do
       expect(mentions.first.css(".ui-badge").map(&:text)).to eq([ "Synth Router" ])
     end
 
+    it "shows a fact's LLM words when it names no entity (1.83.0)" do
+      fact = widget.memory_observations.find_by!(content: "High-trust fact")
+      fact.update_columns(keywords: [ "Alpha Service", "SynthWidget" ], keywords_at: Time.current, llm_keywords: %w[name presence],
+                          llm_keywords_at: Time.current)
+
+      get entity_panel_path(widget), headers: frame
+
+      words = html.css("[data-testid='entity-panel-llm-words']")
+      expect(words.size).to eq(1)
+      expect(words.first.css(".ui-badge").map(&:text)).to eq(%w[name presence])
+      expect(html.css("[data-testid='entity-panel-mentions']")).to be_empty
+    end
+
     it "has the edit forms, each a Turbo Stream form with the CSRF token, and Recent changes" do
       ChangeSet.record(kind: "explore.entity_edit", subject: widget, summary: "edited 'SynthWidget'") { widget.update!(description: "Synthetic") }
       ActionController::Base.allow_forgery_protection = true

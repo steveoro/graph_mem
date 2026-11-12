@@ -10,6 +10,15 @@ RSpec.describe ProjectScanner, type: :service do
     end
   end
 
+  # These examples count the scan's own model calls; the LLM words call (1.83.0) is specced in
+  # project_scanner_fact_dedupe_spec.rb.
+  around do |example|
+    AppSettings.llm_keywords_enabled = false
+    example.run
+  ensure
+    AppSettings.where(var: "llm_keywords_enabled").delete_all
+  end
+
   before do
     File.write(File.join(@project_root, "README.md"), "# TestProject\n\nA test project for the scanner.")
     File.write(File.join(@project_root, "package.json"), '{"name": "test-project", "version": "1.0.0"}')

@@ -45,4 +45,19 @@ RSpec.describe "Review keyword paths", type: :request do
 
     expect(html.css("[data-testid='keyword-path']").map { |path| path.text.squish }).to eq([ "Keywords: Gadget Project › AdminGrant › User" ])
   end
+
+  it "shows the LLM words of two facts that name no entity, the shared ones in bold (1.83.0)" do
+    first, second = [ [ "Validates presence of email.", %w[email presence] ], [ "Validates presence.", %w[presence] ] ].map do |content, words|
+      computed(fs_observe!(grant, content)).tap { |fact| fact.update_columns(llm_keywords: words, llm_keywords_at: Time.current) }
+    end
+    item = ContradictionDetector.review_item(ContradictionDetector::Result.new(observation_id_1: first.id, observation_id_2: second.id,
+                                                                                distance: 0.1, confidence: 0.9))
+    row = CompactionReviewService.seed_report(report_type: "compaction_review", source: "test", items: [ item ]).sole
+
+    get review_row_path(row.row_uuid)
+
+    words = html.css("[data-testid='llm-words']")
+    expect(words.map { |node| node.text.squish }).to eq([ "LLM: email presence", "LLM: presence" ])
+    expect(words.map { |node| node.css("strong").map(&:text) }).to all(eq([ "presence" ]))
+  end
 end
