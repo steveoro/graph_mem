@@ -1,12 +1,12 @@
 # MCP Apps → graph_mem 1.85.0–1.87.0: a graph view and a search view inside the chat
 
-**Status (2026-11-12): PLAN, for Steve's review.** Written from `main` at `30beb6f` (1.84.0) and **reviewed the
+**Status (2026-11-12): PLAN, reviewed, all questions answered.** Written from `main` at `30beb6f` (1.84.0) and **reviewed the
 same day at `9df8556`** against three sources: this repo's code, the installed `mcp` 1.9.0 gem source, and the
 live spec (stable 2026-01-26 and the draft). The review changed the first-load design, the tool linkage and the
 view packaging, and added the sections from "Acceptance criteria" on; "What the review changed" lists the
-differences. Steve answered every open question on 2026-11-12 (decisions 6–13). No kickoff yet. File:line references were checked at `9df8556`; if a
-line has moved, find the code by the quoted text, and if the code no longer matches the description, **stop and
-ask Steve** instead of improvising. **No spec was run.**
+differences. Steve answered every open question on 2026-11-12 (decisions 6–13). No kickoff yet. File:line
+references were checked at `9df8556`; if a line has moved, find the code by the quoted text, and if the code no
+longer matches the description, **stop and ask Steve** instead of improvising. **No spec was run.**
 
 ## Goal
 
@@ -280,9 +280,9 @@ the view never calls. The only state the view can change is through `get_context
 
 The view is on all three profiles (decision 11), so the first rule only matters for a later view or profile.
 
-The on/off setting (decision 12) is `mcp_apps_enabled`, default on: an `AppSettings` field in the `:feature_flags` group of
-`SettingsSchema` (`app/services/settings_schema.rb:120`), with its i18n label and help text
-(`spec/services/settings_schema_spec.rb` requires both). No migration. Servers are built once per transport, so a
+The on/off setting (decision 12) is `mcp_apps_enabled`, default on: an `AppSettings` field in the
+`:feature_flags` group of `SettingsSchema` (`app/services/settings_schema.rb:120`), with its i18n label and help
+text (`spec/services/settings_schema_spec.rb` requires both). No migration. Servers are built once per transport, so a
 change takes effect after `Transports.reset!` (which closes open MCP sessions) on HTTP, and after a restart on
 stdio. With the setting off, the server declares no extension, links no tool and lists no `ui://` resource:
 today's wire, exactly.
