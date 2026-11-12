@@ -32,9 +32,20 @@ module FactKeywords
 
       project = projects.fetch(owner.id) { projects[owner.id] = project_of(owner) }
       index = indexes.fetch(project&.id) { indexes[project&.id] = TermIndex.new(project) }
-      fact.update_columns(keywords: index.path_for(fact.content, owner: owner).path, keywords_at: now)
+      path = index.path_for(fact.content, owner: owner).path
+      fact.update_columns(keywords: path, keywords_at: now, **repend_words(fact, path, owner.name))
     end
     facts.size
+  end
+
+  # 1.84.0: a fact whose mentions went from some to none (an entity it named is gone) had its LLM
+  # words stamped [] without a call (FactKeywords::LlmWords): it needs them now.
+  #
+  # @return [Hash] the columns that re-pend its words, or none
+  def repend_words(fact, path, owner_name)
+    return {} unless fact.llm_keywords_at && mentions(path, owner_name).empty? && mentions(fact.keywords, owner_name).any?
+
+    { llm_keywords: [], llm_keywords_at: nil }
   end
 
   # @param path [Array<String>] a keyword path

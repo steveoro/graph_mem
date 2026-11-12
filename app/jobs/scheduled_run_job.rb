@@ -35,6 +35,8 @@ class ScheduledRunJob < ApplicationJob
   # A compaction run in one of these has ended (a paused one ends the step unless we asked for it).
   COMPACTION_ENDED = %w[completed paused failed].freeze
   FINISHED = %w[done skipped failed].freeze
+  # A step's own progress (StepProgress) is written at most this often; a new label at once.
+  PROGRESS_EVERY = 2.seconds
   # Polls in a row that find no job running a still-running compaction run before acting on it.
   ORPHAN_POLLS = 2
 
@@ -241,9 +243,14 @@ class ScheduledRunJob < ApplicationJob
     return finish(index, "skipped") unless step.enabled?
     return compaction_step(index) if step.compaction?
 
-    save!(index, phase: step.label) { |details| details["steps"][index].merge!("outcome" => "running", "started_at" => now, "error" => nil) }
+    # A progress left by a job that died mid-step (a power cut) is dropped (final review).
+    save!(index, phase: step.label) do |details|
+      details["steps"][index].merge!("outcome" => "running", "started_at" => now, "error" => nil).delete("progress")
+    end
+    @progress_at = @progress_label = nil
+    sink = ->(done:, total:, label: nil) { record_progress(index, done: done, total: total, label: label) }
     begin
-      CooperativeStop.with(-> { stop_requested? }) { step.run! }
+      CooperativeStop.with(-> { stop_requested? }) { StepProgress.with(sink) { step.run! } }
     rescue StandardError => e
       Rails.logger.error("[ScheduledRun] #{step.entry} failed: #{e.class}: #{e.message}")
       return finish(index, "failed", "error" => "#{e.class}: #{e.message}")
@@ -302,8 +309,29 @@ class ScheduledRunJob < ApplicationJob
     :wait
   end
 
+  # Stores a step's own progress (1.84.0, StepProgress) on the run's step, at most every
+  # PROGRESS_EVERY (a new label at once), and broadcasts it. A run that moved on without this job
+  # gets nothing, and nothing is raised into the step.
+  def record_progress(index, done:, total:, label:)
+    at = Time.current
+    return if label == @progress_label && @progress_at && at - @progress_at < PROGRESS_EVERY
+
+    written = @row.with_lock do
+      next false unless current_job?
+
+      details = @row.details.deep_dup
+      details["steps"][index]["progress"] = { "done" => done.to_i, "total" => total.to_i, "label" => label }
+      @row.update!(details: details)
+      true
+    end
+    @progress_at = at
+    @progress_label = label
+    OperationProgressBroadcaster.call(@row) if written
+  end
+
   def finish(index, outcome, extra = {})
     save!(index) do |details|
+      details["steps"][index].delete("progress")
       details["steps"][index].merge!("outcome" => outcome, "finished_at" => now, **extra)
       details["steps"][index]["started_at"] ||= now
     end

@@ -5,8 +5,12 @@ class ChangeSetUndo
   # `from` values back, a relation delete is re-inserted with its original id. Runs inside
   # ChangeSetUndo's lock and transaction; every problem is collected and raised as one Conflict.
   class AuditInverse
-    # Derived or bookkeeping columns: never written back.
-    IGNORED = %w[updated_at embedded_at trust_score memory_observations_count project_id project_scope].freeze
+    # Derived or bookkeeping columns: never written back. 1.84.0: a fact's keyword path and LLM words
+    # too (FactKeywordsJob recomputes them; the restored text re-pends them).
+    IGNORED = %w[
+      updated_at embedded_at trust_score memory_observations_count project_id project_scope
+      keywords keywords_at llm_keywords llm_keywords_at
+    ].freeze
     MODELS = { "MemoryEntity" => MemoryEntity, "MemoryObservation" => MemoryObservation, "MemoryRelation" => MemoryRelation }.freeze
 
     # @param change_set [ChangeSet] the set being undone

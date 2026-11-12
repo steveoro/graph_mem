@@ -1,0 +1,10 @@
+-# The cards (1.84.0). The page renders them inside #jobs-cards; GET /system/jobs/cards sends them again
+-# as a Turbo Stream that morphs #jobs-cards (live_refresh_controller.js polls it). data-active: some
+-# job is running, so the page polls faster.
+%span{ hidden: true, data: { live_refresh_target: "state", active: snapshot[:active].to_s } }
+%section#background-jobs.system-grid.system-grid--two{ "aria-label": t("system.jobs.title") }
+  = render "system/jobs/scheduled_run_card", data: snapshot[:scheduled_run]
+  = render "system/jobs/dream_state_compactor_card", compaction: snapshot[:compaction], cursor_entity: snapshot[:cursor_entity],
+    schedules: snapshot[:schedules], latest_reports: snapshot[:latest_reports]
+  = render "system/jobs/garbage_collector_card", latest_reports: snapshot[:latest_reports], schedules: snapshot[:schedules],
+    operation: snapshot.dig(:operations, :garbage_collection)

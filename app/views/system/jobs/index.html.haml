@@ -9,11 +9,8 @@
   %p.projects-hint{ data: { testid: "background-jobs-totals" } }
     = t("system.jobs.totals", entities: number_with_delimiter(totals[:entities]), observations: number_with_delimiter(totals[:observations]),
       relations: number_with_delimiter(totals[:relations]), orphans: number_with_delimiter(snapshot.dig(:graph_stats, :orphan_count)))
-  %section#background-jobs.system-grid.system-grid--two{ "aria-label": t("system.jobs.title") }
-    = render "system/jobs/scheduled_run_card", data: snapshot[:scheduled_run]
-    = render "system/jobs/dream_state_compactor_card", compaction: snapshot[:compaction], cursor_entity: snapshot[:cursor_entity],
-      schedules: snapshot[:schedules], latest_reports: snapshot[:latest_reports]
-    = render "system/jobs/garbage_collector_card", latest_reports: snapshot[:latest_reports], schedules: snapshot[:schedules],
-      operation: snapshot.dig(:operations, :garbage_collection)
+  -# 1.84.0: the cards refresh themselves (live_refresh_controller.js, GET /system/jobs/cards).
+  #jobs-cards{ data: { controller: "live-refresh", live_refresh_url_value: system_jobs_cards_path } }
+    = render "system/jobs/cards", snapshot: snapshot
   %section.system-details
     = render "system/jobs/reports_details", latest_reports: snapshot[:latest_reports], compaction: snapshot[:compaction]

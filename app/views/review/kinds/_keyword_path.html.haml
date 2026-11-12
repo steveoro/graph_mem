@@ -4,7 +4,7 @@
 - path = Array(observation&.keywords)
 - if observation&.keywords_at.present? && path.any?
   %p.review-hint{ data: { testid: "keyword-path" } }
-    = "Keywords:"
+    = t("ui.review.keyword_path.keywords")
     - path.each_with_index do |name, index|
       - if index.positive?
         = "›"
@@ -16,7 +16,7 @@
 - if words.any?
   - shared_keys = shared.to_set { |name| FactKeywords::LlmWords.key(name) }
   %p.review-hint{ data: { testid: "llm-words" } }
-    = "LLM:"
+    = t("ui.review.keyword_path.llm_words")
     - words.each do |word|
       - if shared_keys.include?(FactKeywords::LlmWords.key(word))
         %strong= word

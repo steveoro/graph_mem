@@ -141,6 +141,67 @@ RSpec.describe FactKeywordsJob do
       expect(failing.size).to eq(described_class::LLM_EMPTY_BATCHES)
     end
 
+    it "gives up on an LLM that answers nothing even when every batch also holds a fact naming an entity (final review)" do
+      stub_const("FactKeywords::LlmWords::BATCH_SIZE", 2)
+      buffer = MemoryEntity.create!(name: "FrameBuffer", entity_type: "Class", project_id: root.id)
+      MemoryRelation.create!(from_entity_id: buffer.id, to_entity_id: root.id, relation_type: "part_of")
+      facts = Array.new(10).flat_map do |i|
+        [ MemoryObservation.create!(memory_entity: widget, content: "SynthWidget keeps a FrameBuffer #{i}."),
+          MemoryObservation.create!(memory_entity: widget, content: "SynthWidget fact #{i}.") ]
+      end
+      FactKeywords.compute!(MemoryObservation.where(id: facts.map(&:id)).includes(:memory_entity))
+      down = FakeProvider.new { |*| { ok: false, text: nil, error: "timeout", latency_ms: 1.0 } }
+
+      CooperativeStop.with(-> { false }) { with_llm_provider(down) { described_class.perform_now } }
+
+      expect(down.calls.size).to eq(described_class::LLM_EMPTY_BATCHES)
+    end
+
+    it "keeps going while some project's facts are answered, even if another's in the same batches never are (Graphy)" do
+      stub_const("FactKeywords::LlmWords::BATCH_SIZE", 2)
+      other_root = MemoryEntity.create!(name: "Other Project", entity_type: "Project")
+      other = MemoryEntity.create!(name: "AlphaService", entity_type: "Class", project_id: other_root.id)
+      MemoryRelation.create!(from_entity_id: other.id, to_entity_id: other_root.id, relation_type: "part_of")
+      facts = Array.new(5).flat_map do |i|
+        [ MemoryObservation.create!(memory_entity: widget, content: "SynthWidget fact #{i}."),
+          MemoryObservation.create!(memory_entity: other, content: "AlphaService fact #{i}.") ]
+      end
+      FactKeywords.compute!(MemoryObservation.where(id: facts.map(&:id)).includes(:memory_entity))
+      half = FakeProvider.new do |prompt, **|
+        next { ok: false, text: nil, error: "timeout", latency_ms: 1.0 } if prompt.to_s.include?("AlphaService fact")
+
+        ids = JSON.parse(prompt.to_s[/STATEMENTS:\n(\[.*\])/m, 1]).map { |entry| entry["id"].to_s }
+        { ok: true, done_reason: "stop", error: nil, latency_ms: 1.0, text: ids.to_h { |id| [ id, %w[frame] ] }.to_json }
+      end
+
+      CooperativeStop.with(-> { false }) { with_llm_provider(half) { described_class.perform_now } }
+
+      expect(MemoryObservation.where(memory_entity: widget).where.not(llm_keywords_at: nil).count).to eq(5)
+    end
+
+    it "has no batch cap inside a scheduled run, and keeps it outside one (1.84.0)" do
+      stub_const("FactKeywords::LlmWords::BATCH_SIZE", 2)
+      stub_const("#{described_class}::LLM_BATCHES_PER_RUN", 1)
+      Array.new(5) { |i| MemoryObservation.create!(memory_entity: widget, content: "SynthWidget fact #{i}.") }
+
+      with_llm_provider(provider) { described_class.perform_now }
+      expect(MemoryObservation.where.not(llm_keywords_at: nil).count).to eq(2)
+
+      with_llm_provider(provider) { CooperativeStop.with(-> { false }) { described_class.perform_now } }
+      expect(MemoryObservation.llm_words_pending.count).to eq(0)
+    end
+
+    it "reports its progress to a scheduled run: the paths, then the LLM words (1.84.0)" do
+      stub_const("FactKeywords::LlmWords::BATCH_SIZE", 2)
+      Array.new(3) { |i| MemoryObservation.create!(memory_entity: widget, content: "SynthWidget fact #{i}.") }
+      reports = []
+
+      with_llm_provider(provider) { StepProgress.with(->(**report) { reports << report }) { described_class.perform_now } }
+
+      expect(reports.first).to eq(done: 0, total: 3, label: "Keyword paths")
+      expect(reports).to include({ done: 3, total: 3, label: "Keyword paths" }, { done: 3, total: 3, label: "LLM words" })
+    end
+
     it "stops between LLM batches when a scheduled run asks it to" do
       stub_const("FactKeywords::LlmWords::BATCH_SIZE", 2)
       stub_const("CooperativeStop::INTERVAL", 0.seconds)

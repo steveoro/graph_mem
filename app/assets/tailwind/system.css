@@ -370,6 +370,25 @@
     color: var(--color-ui-ok);
   }
 
+  /* 1.84.0: the scheduled run's status lines, one under the other (was a two-column .system-kv) */
+  .system-run-status {
+    display: grid;
+    gap: 0.25rem;
+    margin: 0.5rem 0;
+    font-size: 0.875rem;
+  }
+
+  .system-run-status p {
+    margin: 0;
+  }
+
+  /* 1.84.0: system/jobs/_progress, one label line over a full-width bar */
+  .system-progress {
+    display: grid;
+    gap: 0.25rem;
+    margin: 0.5rem 0;
+  }
+
   .system-progress__label {
     color: var(--color-ui-text-muted);
     font-size: 0.875rem;

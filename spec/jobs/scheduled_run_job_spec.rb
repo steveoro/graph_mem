@@ -318,6 +318,82 @@ RSpec.describe ScheduledRunJob do
     expect(row.reload.status).to eq("running")
   end
 
+  # 1.84.0: a step's own progress, reported by the batch jobs (StepProgress), on the run's step.
+  context "with step progress" do
+    let(:seen) { [] }
+
+    before do
+      log = seen
+      stub_const("SynthReporterJob", Class.new(ApplicationJob) do
+        define_method(:perform) do
+          StepProgress.report(done: 1, total: 4, label: "Facts")
+          log << ScheduledRunJob.current.reload.details["steps"][0]["progress"]
+          StepProgress.report(done: 2, total: 4, label: "Facts") # within the throttle: not written
+          log << ScheduledRunJob.current.reload.details["steps"][0]["progress"]
+          StepProgress.report(done: 3, total: 4, label: "Words") # a new label: written at once
+          log << ScheduledRunJob.current.reload.details["steps"][0]["progress"]
+        end
+      end)
+    end
+
+    it "stores the step's progress, throttled, and drops it when the step ends" do
+      row = described_class.start!(steps: steps("SynthReporterJob"))
+      run(row)
+
+      expect(seen).to eq([ { "done" => 1, "total" => 4, "label" => "Facts" }, { "done" => 1, "total" => 4, "label" => "Facts" },
+                          { "done" => 3, "total" => 4, "label" => "Words" } ])
+      expect(row.reload.details["steps"][0]).not_to have_key("progress")
+    end
+
+    it "drops a progress left by a job that died mid-step when the step runs again (final review)" do
+      log = seen
+      stub_const("SynthPeekJob", Class.new(ApplicationJob) do
+        define_method(:perform) { log << ScheduledRunJob.current.reload.details["steps"][0]["progress"] }
+      end)
+      row = described_class.start!(steps: steps("SynthPeekJob"))
+      details = row.details.deep_dup
+      details["steps"][0].merge!("outcome" => "running", "progress" => { "done" => 1_200, "total" => 3_533, "label" => "LLM words" })
+      row.update!(details: details)
+
+      run(row)
+
+      expect(seen).to eq([ nil ])
+    end
+
+    it "writes again once the throttle has passed" do
+      log = seen
+      stub_const("SynthSlowJob", Class.new(ApplicationJob) do
+        define_method(:perform) do
+          StepProgress.report(done: 1, total: 2)
+          travel(ScheduledRunJob::PROGRESS_EVERY + 1.second) do
+            StepProgress.report(done: 2, total: 2)
+            log << ScheduledRunJob.current.reload.details["steps"][0]["progress"]
+          end
+        end
+        include ActiveSupport::Testing::TimeHelpers
+      end)
+      run(described_class.start!(steps: steps("SynthSlowJob")))
+
+      expect(seen).to eq([ { "done" => 2, "total" => 2, "label" => nil } ])
+    end
+
+    it "writes nothing, and doesn't fail the step, for a run that moved on without it" do
+      log = seen
+      stub_const("SynthTakenJob", Class.new(ApplicationJob) do
+        define_method(:perform) do
+          current = ScheduledRunJob.current
+          current.update!(details: current.details.merge("token" => "another"))
+          StepProgress.report(done: 1, total: 2)
+          log << ScheduledRunJob.current.reload.details["steps"][0]["progress"]
+        end
+      end)
+      row = described_class.start!(steps: steps("SynthTakenJob"))
+
+      expect { run(row) }.not_to raise_error
+      expect(seen).to eq([ nil ])
+    end
+  end
+
   it "is idle with no run, or after one finished" do
     expect(described_class.state).to eq(:idle)
     row = described_class.start!(steps: steps("SynthAlphaJob"))

@@ -16,6 +16,13 @@ module System
       @snapshot = MaintenanceDashboardSnapshot.call
     end
 
+    # GET /system/jobs/cards (1.84.0): a Turbo Stream that morphs the page's #jobs-cards, polled by
+    # live_refresh_controller.js. A poll isn't activity: it never extends the session.
+    def cards
+      render turbo_stream: turbo_stream.update("jobs-cards", method: :morph, partial: "system/jobs/cards",
+                                                             locals: { snapshot: MaintenanceDashboardSnapshot.cards })
+    end
+
     def start_compaction
       unless AppSettings.dream_state_compactor_enabled?
         redirect_to system_jobs_path, alert: t("operator.maintenance.compactor_disabled")
@@ -70,6 +77,16 @@ module System
     end
 
     private
+
+    # The cards poll checks the session's expiry without recording activity, so an open tab never
+    # keeps a session alive (SessionAuthentication#refresh_session!).
+    def refresh_session!(idle:, absolute:)
+      return super unless action_name == "cards"
+
+      expired = session_expired?(idle: idle, absolute: absolute)
+      reset_session if expired
+      !expired
+    end
 
     # @return [Boolean, Symbol] whether the action took effect (stop: :requested or :paused)
     def scheduled_run_action(expected, row)

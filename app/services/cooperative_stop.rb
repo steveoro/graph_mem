@@ -28,6 +28,9 @@ module CooperativeStop
     Thread.current[KEY] = previous
   end
 
+  # @return [Boolean] inside a scheduled run (1.84.0: FactKeywordsJob drops its per-run batch cap there)
+  def active? = !Thread.current[KEY].nil?
+
   # @return [Boolean] whether the work should stop now (always false outside #with)
   def requested?
     state = Thread.current[KEY]

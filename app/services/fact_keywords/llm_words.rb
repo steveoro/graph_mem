@@ -18,8 +18,18 @@ module FactKeywords
   module LlmWords
     BATCH_SIZE = 20
     MAX_WORDS = 3
-    # Words too vague to name a subject alone: a list made only of these counts as none.
+    # Words too vague to name a subject alone: a list made only of these counts as none (compared by
+    # key, so "data" is caught as "datum").
     GENERIC = %w[thing value setting config data info item stuff way use].freeze
+    GENERIC_KEYS = GENERIC.to_set { |word| word.singularize }.freeze
+    # A number with one of these units is a value, never a word (1.84.0): "10mins", "3d", "1st"; a
+    # word with digits that names a thing ("2fa", "s3", "oauth2") is kept.
+    UNITS = %w[
+      s ms sec secs second seconds m min mins minute minutes h hr hrs hour hours d day days w wk wks week weeks
+      mo month months y yr yrs year years k b kb mb gb tb kib mib gib tib bit bits byte bytes hz khz mhz ghz
+      fps bps kbps mbps gbps rpm rps qps p x px em rem pt st nd rd th
+    ].freeze
+    VALUE = /\A(?:v\d+|\d+(?:#{UNITS.join("|")})?)\z/
     PROMPT_TEXT_LIMIT = 500
     NUM_PREDICT = 1_024
 
@@ -45,8 +55,12 @@ module FactKeywords
     # @param now [Time] the stamp
     # @param refused [Array, nil] collects the ids of facts the cloud gate refused (nothing was sent:
     #   a project that doesn't allow cloud, an entity with no project); they stay pending
+    # @param unanswered [Array, nil] collects the ids of facts sent to the LLM that it didn't answer
+    #   (down, not JSON); they stay pending
+    # @param answered [Array, nil] collects the ids of facts the LLM answered (1.84.0: FactKeywordsJob
+    #   counts a batch as failed only when it sent facts and none was answered)
     # @return [Integer] the facts stamped
-    def compute!(observations, now: Time.current, refused: nil)
+    def compute!(observations, now: Time.current, refused: nil, unanswered: nil, answered: nil)
       return 0 unless enabled?
 
       ready = observations.to_a.select { |fact| fact.keywords_at.present? }
@@ -58,6 +72,8 @@ module FactKeywords
         all.merge!(words_for(facts.map { |fact| { key: fact.id, text: fact.content, entity: fact.memory_entity } }, refused: refused))
       end
       unnamed.each { |fact| fact.update_columns(llm_keywords: found[fact.id], llm_keywords_at: now) if found.key?(fact.id) }
+      unanswered&.concat(unnamed.map(&:id).reject { |id| found.key?(id) || refused&.include?(id) })
+      answered&.concat(unnamed.map(&:id).select { |id| found.key?(id) })
       named.size + unnamed.count { |fact| found.key?(fact.id) }
     end
 
@@ -90,23 +106,37 @@ module FactKeywords
     end
 
     # @param words [Array<String>] the LLM's words
-    # @return [Array<String>] at most MAX_WORDS single lowercase words with no detail tokens, the
-    #   first ones kept (one per key), sorted; [] when only GENERIC words remain. Stored as written:
-    #   plurals are folded only when comparing (#keys), so "rails" isn't shown as "rail".
+    # @return [Array<String>] at most MAX_WORDS single lowercase words with no values, the first ones
+    #   kept (one per key), sorted; [] when only GENERIC words remain. Stored as written: plurals and
+    #   the separators inside a word are folded only when comparing (#keys), so "rails" isn't shown
+    #   as "rail", nor "e-mail" as "email".
     def normalize(words)
-      tokens = Array(words).flat_map { |word| word.to_s.downcase.split(/[^\p{L}\p{N}]+/) }
-      tokens = tokens.reject { |token| token.blank? || FactKeywords::Details.extract(token).any? }
+      tokens = Array(words).flat_map { |word| words_in(word) }
       tokens = tokens.uniq { |token| key(token) }.first(MAX_WORDS)
-      tokens.all? { |token| GENERIC.include?(key(token)) } ? [] : tokens.sort
+      tokens.all? { |token| GENERIC_KEYS.include?(key(token)) } ? [] : tokens.sort
+    end
+
+    # "Rate limit", "rate-limit", "rate_limit" → ["rate", "limit"]; a word joined around a single
+    # letter stays one word, its separator kept ("e-mail", compared as "email"); "utf-8",
+    # "2026-11-12" → the parts that aren't values (["utf"], []).
+    def words_in(text)
+      text.to_s.downcase.split(/[^\p{L}\p{N}_-]+/).flat_map do |token|
+        parts = token.split(/[_-]+/).reject(&:empty?)
+        next parts.grep_v(VALUE) if parts.any?(VALUE)
+        next parts unless parts.size > 1 && parts.any? { |part| part.length == 1 }
+
+        [ token.gsub(/\A[_-]+|[_-]+\z/, "") ]
+      end
     end
 
     # @param words [Array<String>] stored words
-    # @return [Set<String>] their comparison keys (lowercase, singular)
+    # @return [Set<String>] their comparison keys (lowercase, singular, with no separators inside, as
+    #   RailsCodeMap.lookup_key folds them: "e-mail" is "email")
     def keys(words)
       Array(words).to_set { |word| key(word) }
     end
 
-    def key(word) = word.to_s.downcase.singularize
+    def key(word) = word.to_s.downcase.delete("_-").singularize
 
     def enabled?
       AppSettings.fact_keywords_enabled? && AppSettings.llm_keywords_enabled?
@@ -128,11 +158,11 @@ module FactKeywords
       nil
     end
 
-    # A duplicated id makes the JSON invalid (json 3 raises): the batch then counts as unanswered.
+    # A repeated id (json 3 refuses it by default) keeps the batch: its last answer counts.
     def parse(result, ids)
       return nil unless result.is_a?(Hash) && result[:ok]
 
-      answer = JSON.parse(result[:text].to_s)
+      answer = JSON.parse(result[:text].to_s, allow_duplicate_key: true)
       return nil unless answer.is_a?(Hash)
 
       answer.each_with_object({}) do |(id, words), found|
@@ -144,9 +174,10 @@ module FactKeywords
     rescue JSON::ParserError
       nil
     end
+
     def refused?(result)
       result.is_a?(Hash) && (Llm::CloudCall.refusal?(result) || result[:error] == Llm::ChainRun::INLINE_SKIPPED)
     end
-    private_class_method :ask, :parse, :refused?
+    private_class_method :ask, :parse, :refused?, :words_in
   end
 end

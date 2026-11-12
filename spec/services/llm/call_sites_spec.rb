@@ -107,4 +107,19 @@ RSpec.describe "LLM call sites (through Llm::Router)" do
       expect(lines.sole).to include("task" => "judge", "provider" => "fake", "inline" => true, "outcome" => "ok")
     end
   end
+
+  # 1.83.0 (named 1.84.0): FactKeywords::LlmWords reuses the summary task, in JSON mode, from a job.
+  it "G6: the LLM words of a fact are task :summary, not inline, in JSON mode" do
+    root = MemoryEntity.create!(name: "Gadget Project", entity_type: "Project")
+    widget = MemoryEntity.create!(name: "SynthWidget", entity_type: "Class", project_id: root.id)
+    fact = MemoryObservation.create!(memory_entity: widget, content: "Validates presence of name.")
+    fact.update_columns(keywords: [ "Gadget Project", "SynthWidget" ], keywords_at: Time.current)
+    fake = FakeProvider.new { |*| { ok: true, text: { fact.id.to_s => %w[name presence] }.to_json, error: nil, latency_ms: 3.0 } }
+
+    lines = llm_usage_lines { with_llm_provider(fake) { FactKeywords::LlmWords.compute!([ fact ]) } }
+
+    expect(fact.reload.llm_keywords).to eq(%w[name presence])
+    expect(fake.calls.sole).to have_attributes(style: "concise", options: { num_predict: FactKeywords::LlmWords::NUM_PREDICT, format: "json" })
+    expect(lines.sole).to include("task" => "summary", "provider" => "fake", "inline" => false, "outcome" => "ok")
+  end
 end

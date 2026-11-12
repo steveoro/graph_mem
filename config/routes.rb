@@ -198,6 +198,7 @@ Rails.application.routes.draw do
     post "audit_log/prune", to: "audit_log#prune", as: :prune_audit_log
 
     get "jobs", to: "jobs#index", as: :jobs
+    get "jobs/cards", to: "jobs#cards", as: :jobs_cards
     post "jobs/compaction/start", to: "jobs#start_compaction", as: :start_compaction
     post "jobs/compaction/pause", to: "jobs#pause_compaction", as: :pause_compaction
     post "jobs/garbage_collection/run", to: "jobs#run_garbage_collection", as: :run_garbage_collection

@@ -253,6 +253,8 @@ GraphMem includes a web UI (served by Rails) for browsing and managing the knowl
     - **No timer:** after a power cut Solid Queue marks the running job failed (it doesn't run it again), so no live job is left for the row (`ScheduledRunJob.live_job?`: an unfinished, not failed `ScheduledRunJob` whose arguments carry the run's id). The card then says so and offers **Pause now**; Resume continues at the stored step. A job that raises outside a step pauses the run itself ("Interrupted: …"). A compaction run left `running` with no `DreamStateCompactionJob` behind it (two polls in a row) is started again, or paused by the run on Stop.
     - **One job per run:** Run takes a named lock (`GET_LOCK`), Resume and Stop work under the row lock, and the job's own writes too, so neither side overwrites the other's `details`. Each start or resume sets a new `token`, passed to the run's jobs; a job with another token (a retried old one) does nothing. The stop check reads past the query cache.
     - **Status line:** the current step, when the run and the step started, the last progress (live through `OperationProgressChannel`), and the newest audit-log entry since the run started.
+    - **Step progress (1.84.0):** one bar under the step label. `FactKeywordsJob` (keyword paths, then LLM words) and the embedding backfill report done/total next to their stop checks (`StepProgress`, thread-scoped like `CooperativeStop`); `ScheduledRunJob#record_progress` stores it on the step (at most every 2 s, only for the current run's job) and drops it when the step ends. Compaction and garbage collection are read from their own progress rows (`MaintenanceDashboardSnapshot#step_progress`); the other steps show the browser's indeterminate bar. Inside a scheduled run the LLM words have no per-run batch cap (Stop ends them between batches).
+  - **Live Background jobs page (1.84.0):** `live_refresh_controller.js` polls `GET /system/jobs/cards`, a Turbo Stream `update … method="morph"` of `#jobs-cards` built from `MaintenanceDashboardSnapshot.cards` (no graph totals): every 3 s while a job runs, every 30 s otherwise, paused in a hidden tab and at once on coming back, an open `<details>` kept open. A poll never counts as session activity (`System::JobsController#refresh_session!`); one past the idle limit gets the sign-in page and the page goes there. The cable (`OperationProgressChannel`) still updates the scheduled run's status between polls. The three cards share one bar (`system/jobs/_progress`).
 - **Swagger UI** at `/api-docs` for REST API exploration
 
 ### Browser access, roles and CSP (UI-1, 1.56.0)
@@ -392,7 +394,8 @@ and nothing acts across projects. Step list: `docs/plans/fact-supersede-plan.md`
   on words alone. A scan asks at most 3 word batches inside its reconcile (none after one the LLM
   didn't answer); `FactKeywordsJob` asks one project per call and walks past a batch that stamps
   nothing. `FactKeywordsJob` computes pending
-  words after the paths (25 batches per run, stopping between batches in a scheduled run), a scan
+  words after the paths (25 batches per run; 1.84.0: no cap inside a scheduled run, which stops
+  between batches), a scan
   computes its own facts' words before its dedupe (a subset of the stored words is a duplicate), and
   `graph_mem:fact_keywords:llm_refresh` / `llm_report` refresh and count them. Setting
   `llm_keywords_enabled` (on; needs `fact_keywords_enabled`).

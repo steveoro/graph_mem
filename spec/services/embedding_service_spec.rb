@@ -475,6 +475,18 @@ RSpec.describe EmbeddingService do
       expect(entities.count { |entity| entity.reload.embedded_at.nil? }).to eq(2)
     end
 
+    it "reports its progress to a scheduled run (1.84.0)" do
+      entities = pending_entities
+      allow(MemoryEntity).to receive(:missing_embedding).and_return(MemoryEntity.where(id: entities.map(&:id)))
+      allow(MemoryObservation).to receive(:missing_embedding).and_return(MemoryObservation.none)
+      reports = []
+
+      StepProgress.with(->(**report) { reports << report }) { service.backfill_all }
+
+      expect(reports.first).to eq(done: 0, total: 3, label: "Embeddings")
+      expect(reports.last).to eq(done: 3, total: 3, label: "Embeddings")
+    end
+
     it "embeds them all with no stop requested" do
       entities = pending_entities
       allow(MemoryEntity).to receive(:missing_embedding).and_return(MemoryEntity.where(id: entities.map(&:id)))

@@ -84,6 +84,16 @@ RSpec.describe "graph_mem:fact_keywords:llm_refresh and llm_report", type: :task
     expect(other.reload.llm_keywords).to eq(%w[old])
   end
 
+  # 1.84.0: marking every fact pending with no LLM to answer would only grow the backlog.
+  it "refuses to start, marking nothing, when the summary LLM can't be used" do
+    fact = fact_in("Gadget Project", "SynthWidget")
+    allow(Llm::Router).to receive(:usable?).and_call_original
+    allow(Llm::Router).to receive(:usable?).with(:summary).and_return(false)
+
+    expect { refresh.invoke }.to raise_error(SystemExit).and output(/the summary LLM isn't usable/).to_stderr
+    expect(fact.reload.llm_keywords).to eq(%w[old])
+  end
+
   it "counts the words read-only" do
     fact_in("Gadget Project", "SynthWidget")
     pending = fact_in("Gadget Project", "AlphaService")

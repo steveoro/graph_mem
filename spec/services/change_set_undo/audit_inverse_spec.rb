@@ -56,6 +56,21 @@ RSpec.describe ChangeSetUndo::AuditInverse do
     expect(widget.reload).to have_attributes(description: "original", aliases: nil, embedded_at: nil)
   end
 
+  # 1.84.0: the keyword stamps are bookkeeping; the restored text re-pends them.
+  it "undoes a fact's edit after its keywords were computed, and the restored text is pending again" do
+    observation = MemoryObservation.create!(memory_entity: widget, content: "synthetic fact before")
+    FactKeywords.compute!([ observation ])
+    observation.update_columns(llm_keywords: [], llm_keywords_at: Time.current)
+    uuid = recorded("graph.edit") do
+      GraphEditService.call(operations: [ { type: "update_observation", observation_id: observation.id, text_content: "synthetic fact after" } ])
+    end
+    FactKeywords.compute!([ observation.reload ])
+    observation.update_columns(llm_keywords: [], llm_keywords_at: Time.current)
+
+    expect(undo(uuid)).to be_ok
+    expect(observation.reload).to have_attributes(content: "synthetic fact before", keywords_at: nil)
+  end
+
   it "turns an obsolete mark back into an active observation with obsoleted_at cleared" do
     observation = MemoryObservation.create!(memory_entity: widget, content: "synthetic fact to retire")
     uuid = recorded("graph.delete") do

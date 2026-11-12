@@ -50,6 +50,9 @@ class FactKeywordsJob < ApplicationJob
     return 0 unless AppSettings.fact_keywords_enabled?
 
     computed = 0
+    # 1.84.0: a scheduled run shows how far this step is (StepProgress); counted only there.
+    total = pending_count { MemoryObservation.active.keywords_pending }
+    StepProgress.report(done: 0, total: total, label: "Keyword paths")
     MAX_BATCHES.times do
       # Inside a scheduled run with a stop requested (1.81.0): the rest stays pending for the next run.
       break if CooperativeStop.requested?
@@ -58,6 +61,7 @@ class FactKeywordsJob < ApplicationJob
       break if batch.empty?
 
       computed += FactKeywords.compute!(batch)
+      StepProgress.report(done: computed, total: total, label: "Keyword paths")
     end
     computed + compute_llm_words
   end
@@ -66,6 +70,8 @@ class FactKeywordsJob < ApplicationJob
 
   # 1.83.0: the LLM words of facts whose path is computed (FactKeywords::LlmWords), at most
   # LLM_BATCHES_PER_RUN batches, stopping between batches inside a scheduled run asked to stop.
+  # 1.84.0: inside a scheduled run there is no cap (Stop works between batches), and the step's
+  # progress is reported.
   #
   # @return [Integer] the facts stamped
   def compute_llm_words
@@ -75,9 +81,14 @@ class FactKeywordsJob < ApplicationJob
     after_id = 0
     empty = 0
     asked = 0
-    # Ends: the cursor only moves forward, and the loop breaks on an empty batch or the cap.
+    walked = 0
+    capped = !CooperativeStop.active?
+    total = pending_count { MemoryObservation.active.where.not(keywords_at: nil).llm_words_pending }
+    StepProgress.report(done: 0, total: total, label: "LLM words")
+    # Ends: the cursor only moves forward, and the loop breaks on an empty batch, the cap (outside a
+    # scheduled run) or a stop.
     loop do
-      break if asked >= LLM_BATCHES_PER_RUN || CooperativeStop.requested?
+      break if (capped && asked >= LLM_BATCHES_PER_RUN) || CooperativeStop.requested?
 
       batch = MemoryObservation.active.where.not(keywords_at: nil).llm_words_pending.where("memory_observations.id > ?", after_id)
                                .includes(:memory_entity).order(:id).limit(FactKeywords::LlmWords::BATCH_SIZE).to_a
@@ -85,16 +96,30 @@ class FactKeywordsJob < ApplicationJob
 
       after_id = batch.last.id
       refused = []
-      done = FactKeywords::LlmWords.compute!(batch, refused: refused)
+      unanswered = []
+      answered = []
+      done = FactKeywords::LlmWords.compute!(batch, refused: refused, unanswered: unanswered, answered: answered)
       stamped += done
+      walked += batch.size
+      StepProgress.report(done: [ walked, total ].min, total: total, label: "LLM words")
       # The whole batch refused by the cloud gate (nothing sent): neither the LLM failing nor a call to
       # charge. With done 0 the batch holds no named fact, so every fact in it was asked or refused.
       next if done.zero? && refused.size == batch.size
 
       asked += 1
-      empty = done.zero? ? empty + 1 : 0
+      # Failed: the LLM was asked and answered none of the batch, even when its facts naming an entity
+      # were stamped without a call (1.84.0: no cap in a scheduled run bounds it otherwise). One answered
+      # project resets the count, so a project the LLM keeps failing never stops the others (Graphy).
+      empty = unanswered.any? && answered.empty? ? empty + 1 : 0
       break if empty >= LLM_EMPTY_BATCHES
     end
     stamped
+  end
+
+  # @return [Integer] the scope's size inside a scheduled run (read past the query cache), 0 outside
+  def pending_count
+    return 0 unless StepProgress.active?
+
+    MemoryObservation.uncached { yield.count }
   end
 end

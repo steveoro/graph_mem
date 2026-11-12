@@ -15,8 +15,8 @@ module Llm
   # - an Ollama outage (no answer at all) moves on; any other Ollama result is returned;
   # - a refusal (nothing sent) never replaces an earlier failure.
   #
-  # A request-bound call (inline, or a summary: both its callers are requests, the summarize tool and
-  # POST /api/v1/summaries) never uses a provider that isn't `inline?` (the host bridge) unless the
+  # A request-bound call (inline, or a summary: the summarize tool, POST /api/v1/summaries, and since
+  # 1.83.0 FactKeywords::LlmWords' short JSON batches from FactKeywordsJob and scans) never uses a provider that isn't `inline?` (the host bridge) unless the
   # operator opted the summary task in (llm_inline_cloud_tasks); then it makes one cloud attempt,
   # primary model only, with the timeout capped at llm_inline_cloud_timeout. detect_contradictions
   # (inline judge) never does. The summary keeps its `inline: false` in the [llm] line (1.70.0's).
@@ -26,7 +26,8 @@ module Llm
     # Failures about the model, not the profile: the profile's next model may answer.
     BACKUP_TRIGGERS = %w[agent_cli_model_unavailable agent_cli_payment_required agent_cli_quota agent_cli_rate_limited
                          bridge_gate_missing].freeze
-    # Tasks whose every caller is a request (SummarizerService).
+    # Tasks treated as request-bound: :summary (SummarizerService, and FactKeywords::LlmWords, whose
+    # short batches follow the same rules; a skipped cloud attempt leaves its facts pending).
     REQUEST_TASKS = %i[summary].freeze
     INLINE_TIMEOUTS = (5..60)
     LOCAL_OUTAGE = "provider_unavailable"
