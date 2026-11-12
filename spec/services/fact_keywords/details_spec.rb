@@ -18,11 +18,12 @@ RSpec.describe FactKeywords::Details do
     expect(described_class.extract("Validates presence of name")).to be_empty
   end
 
-  it "compares two texts' details: none, the same (in any order) or different" do
+  it "compares two texts' details: none, the same (in any order), different, or dropped by the newer one" do
     expect(described_class.compare("No numbers", "None here either")).to eq(:none)
     expect(described_class.compare("Ruby 3.4.12 and Rails 8.1", "Rails 8.1 with Ruby 3.4.12")).to eq(:same)
     expect(described_class.compare("Rails 8.0", "Rails 8.1")).to eq(:different)
-    expect(described_class.compare("Uses Rails", "Uses Rails 8.1")).to eq(:different)
+    expect(described_class.compare("Uses Rails 8.1", "Uses Rails")).to eq(:different) # the newer one adds a detail
+    expect(described_class.compare("Uses Rails", "Uses Rails 8.1")).to eq(:dropped)   # the newer one states less
     expect(described_class.compare("Rails 8.0", "Rails 8")).to eq(:different)
   end
 end

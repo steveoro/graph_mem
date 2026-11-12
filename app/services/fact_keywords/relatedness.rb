@@ -33,7 +33,8 @@ module FactKeywords
     # - `same_subject`: both facts mention entities and one's subjects contain the other's (a fact
     #   with no mentions says too little about its subject: F2c gives it LLM words);
     # - `covers`: :both, :first, :second (whose subjects contain the other's), or nil;
-    # - `details`: FactKeywords::Details.compare of the two texts (:none, :same, :different).
+    # - `details`: FactKeywords::Details.compare of the two texts, the first being the newer (:none,
+    #   :same, :dropped, :different).
     Comparison = Data.define(:subject, :strong, :shared, :same_subject, :covers, :details) do
       def related? = subject == :related
 
@@ -65,7 +66,8 @@ module FactKeywords
       second_entity = second.memory_entity
       compare_paths(first.keywords, first_entity&.name, second.keywords, second_entity&.name,
                     connected: connected.nil? ? -> { joined?(first_entity, second_entity) } : connected,
-                    first_text: first.content, second_text: second.content)
+                    first_text: first.content, second_text: second.content,
+                    first_root: first_entity&.project_root?, second_root: second_entity&.project_root?)
     end
 
     # @param first_path [Array<String>] a keyword path
@@ -76,8 +78,12 @@ module FactKeywords
     #   called when the answer depends on it)
     # @param first_text [String, nil] the first fact, for its details
     # @param second_text [String, nil]
+    # @param first_root [Boolean, nil] the first fact's entity is a project root (nil: read from the
+    #   path, which also starts with its own entity for an entity with no project)
+    # @param second_root [Boolean, nil]
     # @return [Comparison]
-    def compare_paths(first_path, first_owner, second_path, second_owner, connected: false, first_text: nil, second_text: nil)
+    def compare_paths(first_path, first_owner, second_path, second_owner, connected: false, first_text: nil, second_text: nil,
+                      first_root: nil, second_root: nil)
       first = FactKeywords.mentions(first_path, first_owner)
       second = FactKeywords.mentions(second_path, second_owner)
       shared = first & second
@@ -85,7 +91,9 @@ module FactKeywords
       shared += [ first_owner ] if first_owner && first_owner != second_owner && second.include?(first_owner)
       siblings = shared.empty? && siblings?(first_path, first_owner, second_path, second_owner) &&
                  !(connected.respond_to?(:call) ? connected.call : connected)
-      covers = covers(first, first_owner, rooted?(first_path, first_owner), second, second_owner, rooted?(second_path, second_owner))
+      first_rooted = first_root.nil? ? rooted?(first_path, first_owner) : first_root
+      second_rooted = second_root.nil? ? rooted?(second_path, second_owner) : second_root
+      covers = covers(first, first_owner, first_rooted, second, second_owner, second_rooted)
       Comparison.new(subject: subject(first, second, shared, siblings), strong: first.first.present? && first.first == second.first,
                      shared: shared.uniq, same_subject: !covers.nil?, covers: covers,
                      details: FactKeywords::Details.compare(first_text, second_text))

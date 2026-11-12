@@ -50,6 +50,8 @@ RSpec.describe FactKeywords::Relatedness, "the same-fact ladder" do
       [ %w[p App Ruby Rails], "Rails 8.1 with Ruby 3.4.12.", %w[p App Ruby Rails], "Ruby 3.4.12 and Rails 8.1.", true, :both, :same, "same", false ],
     "a version added" =>
       [ %w[p App Rails], "Uses Rails 8.1.", %w[p App Rails], "Uses Rails.", true, :both, :different, "same", true ],
+    "a vaguer restatement drops the detail: never a different detail (Graphy)" =>
+      [ %w[p App Rails], "Uses Rails.", %w[p App Rails], "Uses Rails 8.1.", true, :both, :dropped, "same", false ],
     "related through a mentioned own entity, not covering" =>
       [ %w[p Badge Swimmer Season], "A Swimmer has one Badge per Season.", %w[p Swimmer Team], "A Swimmer joins one Team.", false, nil, :none, "related", false ]
   }.freeze
@@ -79,6 +81,19 @@ RSpec.describe FactKeywords::Relatedness, "the same-fact ladder" do
 
     expect(result).to have_attributes(same_subject: true, covers: :second)
     expect(result.same_fact_different_detail?).to be(false)
+  end
+
+  it "treats a fact on an entity with no project as that entity's, not as the project's (Graphy)" do
+    root = MemoryEntity.create!(name: "Gadget Project", entity_type: "Project")
+    app = MemoryEntity.create!(name: "SynthApp", entity_type: "Component", project_id: root.id)
+    loose = MemoryEntity.create!(name: "LooseNotes", entity_type: "Note")
+    member = MemoryObservation.create!(memory_entity: app, content: "SynthApp runs on Puma 6.")
+    member.update_columns(keywords: [ "Gadget Project", "SynthApp", "Puma" ], keywords_at: Time.current)
+    unscoped = MemoryObservation.create!(memory_entity: loose, content: "Puma 5 serves Rails.")
+    unscoped.update_columns(keywords: [ "LooseNotes", "Puma", "Rails" ], keywords_at: Time.current)
+
+    # Its path starts with its own entity, like a project root's, but it isn't about the whole project.
+    expect(described_class.compare(member, unscoped)).to have_attributes(same_subject: false, covers: nil, level: "related")
   end
 
   it "reads the details from the facts themselves when comparing observations" do

@@ -85,6 +85,15 @@ RSpec.describe ProjectScanner, "reworded facts", :with_test_embeddings do
     expect(widget_facts).to contain_exactly("SynthWidget is developed using Rails 8.0.", "SynthWidget is updated using Rails 8.1.")
   end
 
+  it "skips a vaguer restatement that drops the stored fact's detail (Graphy)" do
+    facts.replace([ "SynthWidget is updated using Rails 8.1." ])
+    scan
+    facts.replace([ "SynthWidget uses Rails." ])
+
+    expect(scan.observations_deduped).to eq(1)
+    expect(widget_facts).to eq([ "SynthWidget is updated using Rails 8.1." ])
+  end
+
   it "still skips a close rewording with the same detail (1.82.0)" do
     facts.replace([ "SynthWidget is updated using Rails 8.1." ])
     scan

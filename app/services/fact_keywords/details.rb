@@ -34,13 +34,18 @@ module FactKeywords
       end
     end
 
-    # @param first_text [String, nil]
-    # @param second_text [String, nil]
-    # @return [Symbol] :none (neither states a detail), :same (in any order) or :different
+    # Directional: the first text is the newer one (the source fact, the scanned fact).
+    #
+    # @param first_text [String, nil] the newer fact
+    # @param second_text [String, nil] the older one
+    # @return [Symbol] :none (neither states a detail), :same (in any order), :dropped (only the
+    #   older one states details: the newer is a vaguer restatement, never "a different detail") or
+    #   :different
     def compare(first_text, second_text)
       first = extract(first_text)
       second = extract(second_text)
       return :none if first.empty? && second.empty?
+      return :dropped if first.empty?
 
       first == second ? :same : :different
     end
