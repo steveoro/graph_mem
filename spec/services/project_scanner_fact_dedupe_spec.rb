@@ -76,6 +76,24 @@ RSpec.describe ProjectScanner, "reworded facts", :with_test_embeddings do
     expect(widget_facts).to contain_exactly("SynthWidget renders gadget frames.", "SynthWidget renders gadget frames into a FrameBuffer.")
   end
 
+  it "writes a close rewording with a different detail (1.82.0)" do
+    facts.replace([ "SynthWidget is developed using Rails 8.0." ])
+    scan
+    facts.replace([ "SynthWidget is updated using Rails 8.1." ])
+
+    expect(scan.observations_deduped).to eq(0)
+    expect(widget_facts).to contain_exactly("SynthWidget is developed using Rails 8.0.", "SynthWidget is updated using Rails 8.1.")
+  end
+
+  it "still skips a close rewording with the same detail (1.82.0)" do
+    facts.replace([ "SynthWidget is updated using Rails 8.1." ])
+    scan
+    facts.replace([ "SynthWidget is built with Rails 8.1." ])
+
+    expect(scan.observations_deduped).to eq(1)
+    expect(widget_facts).to eq([ "SynthWidget is updated using Rails 8.1." ])
+  end
+
   it "adds a distinct fact" do
     scan
     facts.replace([ "SynthWidget keeps a FrameBuffer." ])
