@@ -60,8 +60,8 @@ namespace :graph_mem do
     puts "Never called: #{never_called.any? ? never_called.join(', ') : 'none'}"
   end
 
-  desc "Set metadata.graph-mem-version in skills/graph-mem-mcp-toolset/SKILL.md to GraphMem::VERSION " \
-       "(run after bumping lib/graph_mem/version.rb; SKILL_PATH overrides the file)"
+  desc "Set metadata.graph-mem-version in skills/graph-mem-mcp-toolset/SKILL.md and the README's version badge " \
+       "to GraphMem::VERSION (run after bumping lib/graph_mem/version.rb; SKILL_PATH and README_PATH override the files)"
   task :sync_skill_version do
     require Rails.root.join("lib/graph_mem/version").to_s
 
@@ -72,5 +72,14 @@ namespace :graph_mem do
 
     File.write(path, text.sub(pattern, %(\\1"#{GraphMem::VERSION}")))
     puts "#{path}: graph-mem-version = #{GraphMem::VERSION}"
+
+    # 1.81.0: the README's shields.io version badge, which used to fall behind.
+    readme = ENV.fetch("README_PATH", Rails.root.join("README.md").to_s)
+    badge = %r{(img\.shields\.io/badge/version-)[0-9][0-9.]*(-blue)}
+    readme_text = File.read(readme)
+    abort "#{readme}: no version badge (img.shields.io/badge/version-X.Y.Z-blue)" unless readme_text.match?(badge)
+
+    File.write(readme, readme_text.sub(badge, "\\1#{GraphMem::VERSION}\\2"))
+    puts "#{readme}: version badge = #{GraphMem::VERSION}"
   end
 end

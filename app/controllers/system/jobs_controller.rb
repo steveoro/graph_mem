@@ -1,10 +1,15 @@
 # frozen_string_literal: true
 
 module System
-  # Background jobs (UI-7, moved from Projects & Data): the dream-state compactor, garbage
-  # collector and relation-repair cards, and their controls. Each control redirects back here.
+  # Background jobs (UI-7, moved from Projects & Data): the scheduled-jobs switch (1.81.0), the
+  # dream-state compactor, garbage collector and relation-repair cards, and their controls. Each
+  # control redirects back here.
   class JobsController < BaseController
     self.nav_section = :jobs
+
+    # What the scheduled-jobs switch may do in each state (ScheduledRunJob.state).
+    # Stop also while stopping: with no job left to run the steps (a shutdown), it pauses at once.
+    SCHEDULED_RUN_ACTIONS = { idle: %w[start], running: %w[stop], stopping: %w[stop], paused: %w[resume start_over] }.freeze
 
     # GET /system/jobs
     def index
@@ -43,6 +48,20 @@ module System
                   notice: "Garbage collection completed. #{counts}. Pruned #{result[:audit_logs_pruned]} audit logs."
     end
 
+    # POST /system/jobs/scheduled_run, the one switch of "Run all scheduled jobs now" (1.81.0).
+    # `expected` is the action the page offered (start, stop, resume or start_over); a press made
+    # for another state (a stale tab, a run that finished meanwhile) changes nothing.
+    def scheduled_run
+      row = ScheduledRunJob.current
+      expected = params[:expected].to_s
+      allowed = SCHEDULED_RUN_ACTIONS.fetch(ScheduledRunJob.state(row), [])
+      done = allowed.include?(expected) && scheduled_run_action(expected, row)
+      return redirect_to(system_jobs_path, alert: t("system.jobs.scheduled_run.changed")) unless done
+
+      notice = done == :paused ? "stop_paused" : expected
+      redirect_to system_jobs_path, notice: t("system.jobs.scheduled_run.notice.#{notice}")
+    end
+
     def repair_relations
       # Operator "Repair" is an explicit destructive cleanup; ambiguous issues are deleted.
       result = RelationIntegrityRepairer.call(dry_run: false, review_ambiguous: false)
@@ -51,6 +70,16 @@ module System
     end
 
     private
+
+    # @return [Boolean, Symbol] whether the action took effect (stop: :requested or :paused)
+    def scheduled_run_action(expected, row)
+      case expected
+      when "start" then ScheduledRunJob.start!.present?
+      when "stop" then ScheduledRunJob.stop!(row)
+      when "resume" then ScheduledRunJob.resume!(row)
+      when "start_over" then ScheduledRunJob.start_over!(row).present?
+      end
+    end
 
     def relation_repair_notice(result)
       parts = [

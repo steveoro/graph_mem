@@ -41,6 +41,133 @@ RSpec.describe "System › Background jobs", type: :request do
     expect(response.body).to include('id="btn-repair-relations"', "Repair relation duplicates")
   end
 
+  # 1.81.0: one switch runs every scheduled job now (start / stop / resume / start over).
+  describe "the scheduled-jobs switch" do
+    def card = Nokogiri::HTML(response.body).at_css("[data-testid='scheduled-run-card']")
+
+    def button(expected) = card.at_css("form[action='#{system_scheduled_run_path}'] input[name='expected'][value='#{expected}']")&.ancestors("form")&.first
+
+    def press(expected) = post(system_scheduled_run_path, params: { expected: expected })
+
+    def steps(*entries) = entries.map { |entry| ScheduledRun::Step.new(entry: entry, schedule: "every day at 1pm") }
+
+    after { OperationProgress.where(operation_type: "scheduled_run").delete_all }
+
+    it "lists every scheduled step and offers to run them, with a confirmation" do
+      # The test environment schedules nothing: the production list, read from the real file.
+      allow(ScheduledRun).to receive(:steps).and_return(ScheduledRun.steps(env: "production"))
+
+      get system_jobs_path
+
+      expect(card.css("[data-testid='scheduled-run-step']").map { |li| li.text.squish })
+        .to eq(ScheduledRun.steps(env: "production").map { |step| "#{step.label} #{step.schedule}".squish })
+      expect(card.css("[data-testid='scheduled-run-step']").size).to eq(ScheduledRun::ORDER.size)
+      start = button("start")
+      expect(start.at_css("button").text.squish).to eq("Run all scheduled jobs now")
+      expect(start.at_css("button")["data-turbo-confirm"]).to be_present
+    end
+
+    it "starts a run" do
+      expect { press("start") }.to have_enqueued_job(ScheduledRunJob)
+
+      expect(response).to redirect_to(system_jobs_path)
+      expect(OperationProgress.where(operation_type: "scheduled_run", status: "running").count).to eq(1)
+      follow_redirect!
+      expect(response.body).to include("Scheduled jobs started")
+    end
+
+    it "shows Stop, the current step and its times while running" do
+      row = ScheduledRunJob.start!(steps: steps("ChangeSetPruneJob", "MaintenanceReportRowCleanupJob", "ExportJob.cleanup_old_exports"))
+      details = row.details.deep_dup
+      details["index"] = 1
+      details["steps"][0].merge!("outcome" => "done", "started_at" => 3.minutes.ago.iso8601, "finished_at" => 2.minutes.ago.iso8601)
+      details["steps"][1].merge!("outcome" => "running", "started_at" => 2.minutes.ago.iso8601)
+      row.update_progress!(current: 1, phase: "Maintenance report row cleanup", details: details)
+      allow(ScheduledRunJob).to receive(:live_job?).and_return(true) # the test queue has no Solid Queue jobs
+
+      get system_jobs_path
+
+      status = card.at_css("[data-testid='scheduled-run-status']").text.squish
+      expect(status).to include("Step 2 of 3", "Maintenance report row cleanup", "Run started", "Step started", "Last progress")
+      expect(button("stop").at_css("button").text.squish).to eq("Stop")
+      expect(card.css("[data-testid='scheduled-run-step']").map { |li| li.at_css("[data-progress-step-outcome]")&.text.to_s.squish })
+        .to eq([ "done", "running", "" ])
+    end
+
+    it "shows Stopping… (disabled) once a stop is requested" do
+      row = ScheduledRunJob.start!(steps: steps("ChangeSetPruneJob"))
+      ScheduledRunJob.stop!(row, live: true)
+      allow(ScheduledRunJob).to receive(:live_job?).and_return(true) # the job is still running
+
+      get system_jobs_path
+
+      stopping = card.css("button").find { |node| node.text.squish == "Stopping…" }
+      expect(stopping["disabled"]).to be_present
+    end
+
+    it "offers Pause now when no job is running the run (a shutdown), even while stopping, and pauses it" do
+      row = ScheduledRunJob.start!(steps: steps("ChangeSetPruneJob"))
+      ScheduledRunJob.stop!(row, live: true) # Stopping…, then the machine went off
+
+      get system_jobs_path
+      expect(card.at_css("[data-testid='scheduled-run-status']").text.squish).to include("No job is running this run")
+      expect(button("stop").at_css("button").text.squish).to eq("Pause now")
+
+      press("stop")
+
+      expect(row.reload.status).to eq("paused")
+      follow_redirect!
+      expect(response.body).to include("Paused: no job was running it")
+    end
+
+    it "offers Resume and Start over when paused, and resumes" do
+      row = ScheduledRunJob.start!(steps: steps("ChangeSetPruneJob"))
+      row.pause!
+
+      get system_jobs_path
+      expect(button("resume").at_css("button").text.squish).to eq("Resume")
+      expect(button("start_over").at_css("button").text.squish).to eq("Start over")
+
+      expect { press("resume") }.to have_enqueued_job(ScheduledRunJob).with(row.operation_id, anything)
+      expect(row.reload.status).to eq("running")
+    end
+
+    it "ignores a press made for another state (a stale tab)" do
+      row = ScheduledRunJob.start!(steps: steps("ChangeSetPruneJob"))
+      row.pause!
+
+      press("stop")
+
+      expect(row.reload.status).to eq("paused")
+      follow_redirect!
+      expect(response.body).to include("The scheduled run changed meanwhile")
+    end
+
+    it "shows the newest audit-log entry since the run started" do
+      row = ScheduledRunJob.start!(steps: steps("ChangeSetPruneJob"))
+      entity = MemoryEntity.create!(name: "SynthAudited", entity_type: "Component")
+      AuditLog.create!(auditable: entity, action: "update", actor: "policy:synth", created_at: 1.second.from_now)
+
+      get system_jobs_path
+
+      expect(card.at_css("[data-testid='scheduled-run-audit']").text.squish)
+        .to include("update", "MemoryEntity ##{entity.id}", "policy:synth")
+      row.update!(started_at: 1.minute.from_now)
+      get system_jobs_path
+      expect(card.at_css("[data-testid='scheduled-run-audit']").text.squish).to include("No graph changes logged")
+    end
+
+    it "answers a guest with 403" do
+      enable_guest!
+      sign_in_guest
+
+      press("start")
+
+      expect(response).to have_http_status(:forbidden)
+      expect(OperationProgress.where(operation_type: "scheduled_run")).to be_empty
+    end
+  end
+
   describe "POST /system/jobs/compaction/start" do
     it "redirects when dream-state compactor is disabled" do
       AppSettings.enable_dream_state_compactor = false

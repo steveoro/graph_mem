@@ -28,6 +28,25 @@ RSpec.describe FactKeywordsJob do
     expect(described_class.perform_now).to eq(0)
   end
 
+  it "stops between batches when a scheduled run asks it to, leaving the rest pending (1.81.0)" do
+    stub_const("#{described_class}::BATCH_SIZE", 2)
+    Array.new(5) { |i| MemoryObservation.create!(memory_entity: widget, content: "SynthWidget fact #{i}.") }
+    asked = 0
+    stub_const("CooperativeStop::INTERVAL", 0.seconds) # ask on every call
+
+    computed = CooperativeStop.with(-> { (asked += 1) > 1 }) { described_class.perform_now }
+
+    expect(computed).to eq(2)
+    expect(MemoryObservation.keywords_pending.count).to eq(3)
+  end
+
+  it "never stops outside a scheduled run" do
+    stub_const("#{described_class}::BATCH_SIZE", 2)
+    Array.new(5) { |i| MemoryObservation.create!(memory_entity: widget, content: "SynthWidget fact #{i}.") }
+
+    expect(described_class.perform_now).to eq(5)
+  end
+
   it "does nothing with the setting off" do
     MemoryObservation.create!(memory_entity: widget, content: "SynthWidget fact.")
     AppSettings.fact_keywords_enabled = false

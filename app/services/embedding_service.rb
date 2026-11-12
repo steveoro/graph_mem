@@ -236,13 +236,19 @@ class EmbeddingService
         next
       end
 
+      # Inside a scheduled run with a stop requested (1.81.0, CooperativeStop): the rest stays
+      # missing for the next run.
       MemoryEntity.missing_embedding.find_each(batch_size: batch_size) do |entity|
+        break if CooperativeStop.requested?
+
         total_entities += 1 if embed_entity(entity)
       rescue StandardError => e
         @logger.warn "EmbeddingService: backfill left entity #{entity.id} pending (#{e.class}: #{e.message})"
       end
 
       MemoryObservation.missing_embedding.find_each(batch_size: batch_size) do |obs|
+        break if CooperativeStop.requested?
+
         total_observations += 1 if embed_observation(obs)
       rescue StandardError => e
         @logger.warn "EmbeddingService: backfill left observation #{obs.id} pending (#{e.class}: #{e.message})"

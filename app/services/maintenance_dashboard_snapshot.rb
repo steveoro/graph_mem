@@ -18,7 +18,26 @@ class MaintenanceDashboardSnapshot
       latest_reports: latest_reports_by_type,
       operations: operation_snapshots,
       schedules: schedule_hints,
-      cursor_entity: cursor_entity
+      cursor_entity: cursor_entity,
+      scheduled_run: scheduled_run_snapshot
+    }
+  end
+
+  # The "Run all scheduled jobs now" card (1.81.0): the switch's state, the latest run (its
+  # OperationProgress snapshot plus when it last changed), the steps (the run's, or the ones a new
+  # run would have), and the newest audit-log entry since the run started. Plain values only.
+  #
+  # @return [Hash] `{ state:, run:, steps:, latest_audit:, live: }` (`live`: a job is still going to run
+  #   the steps; false after a shutdown)
+  def scheduled_run_snapshot
+    row = ScheduledRunJob.current
+    steps = row ? row.details.to_h["steps"].to_a : ScheduledRun.steps.map { |step| { "label" => step.label, "schedule" => step.schedule } }
+    {
+      state: ScheduledRunJob.state(row),
+      run: row && row.snapshot.merge(index: row.details.to_h["index"]),
+      steps: steps,
+      latest_audit: row&.started_at && latest_audit_since(row.started_at),
+      live: %w[running].include?(row&.status) && ScheduledRunJob.live_job?(row)
     }
   end
 
@@ -86,6 +105,12 @@ class MaintenanceDashboardSnapshot
     (yaml[env] || {}).transform_values { |job| job["schedule"] }
   rescue StandardError
     {}
+  end
+
+  def latest_audit_since(time)
+    log = AuditLog.where(created_at: time..).order(created_at: :desc, id: :desc).first
+    log && { action: log.action, auditable_type: log.auditable_type, auditable_id: log.auditable_id, actor: log.actor,
+             created_at: log.created_at.iso8601 }
   end
 
   def cursor_entity

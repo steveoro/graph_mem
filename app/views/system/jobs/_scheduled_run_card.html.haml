@@ -1,0 +1,79 @@
+-# "Run all scheduled jobs now" (1.81.0): one switch (start → stop → resume / start over), the run's
+-# status line, the newest audit-log entry since it started, and its steps. While a run exists, the
+-# operation-progress controller updates the counters, the outcomes and the visible button live.
+- run = data[:run]
+- state = data[:state]
+- steps = data[:steps]
+- scope = "system.jobs.scheduled_run"
+- at = ->(iso) { iso.present? ? l(Time.zone.parse(iso.to_s), format: :short) : "—" }
+- shown = ->(statuses) { run.nil? || statuses.include?(run[:status]) ? {} : { style: "display: none" } }
+- live = run ? { controller: "operation-progress", operation_progress_operation_id_value: run[:operation_id], operation_progress_id: run[:operation_id],
+  progress_time_zone: Time.zone.tzinfo.name } : {}
+.ui-card.system-card--state{ data: { testid: "scheduled-run-card", **live } }
+  .system-card__header
+    %h2.system-card__title= t("#{scope}.title")
+    %span.system-hint= t("#{scope}.hint")
+  .system-card__body
+    - if run && state != :idle
+      - index = run[:index].to_i
+      .system-kv{ data: { testid: "scheduled-run-status" } }
+        %p
+          %span.ui-badge{ data: { progress_status: true } }= run[:status].to_s.humanize
+          = t("#{scope}.step_html", current: tag.span([ index + 1, run[:total] ].min, data: { progress_step_number: true }),
+            total: tag.span(run[:total], data: { progress_total: true }))
+          %strong{ data: { progress_phase: true } }= run[:phase]
+        %p.system-hint{ data: { progress_message: true } }= run[:message]
+        - if run[:status] == "running" && !data[:live]
+          %p.system-hint{ data: { testid: "scheduled-run-no-job" } }= t("#{scope}.no_job")
+        %p.system-hint
+          = t("#{scope}.run_started", time: at.call(run[:started_at]))
+          ·
+          = t("#{scope}.step_started_html", time: tag.span(at.call(steps.dig(index, "started_at")), data: { progress_step_started: true }))
+          ·
+          = t("#{scope}.last_progress_html", time: tag.span(at.call(run[:updated_at]), data: { progress_received_at: true }))
+    - elsif run
+      - counts = steps.map { |step| step["outcome"] }.tally
+      %p.system-hint{ data: { testid: "scheduled-run-status" } }
+        = t("#{scope}.last_run", started: at.call(run[:started_at]), finished: at.call(run[:finished_at]), status: run[:message].presence || run[:status])
+        = t("#{scope}.counts", done: counts["done"].to_i, skipped: counts["skipped"].to_i, stopped: counts["stopped"].to_i, failed: counts["failed"].to_i)
+    - else
+      %p.system-hint{ data: { testid: "scheduled-run-status" } }= t("#{scope}.never_run")
+
+    - if run
+      - audit = data[:latest_audit]
+      %p.system-hint{ data: { testid: "scheduled-run-audit" } }
+        - if audit
+          = t("#{scope}.audit", action: audit[:action], record: "#{audit[:auditable_type]} ##{audit[:auditable_id]}",
+            actor: audit[:actor].presence || "—", time: at.call(audit[:created_at]))
+        - else
+          = t("#{scope}.no_audit")
+
+    - if steps.empty?
+      %p.system-hint= t("#{scope}.nothing_scheduled", env: Rails.env)
+    - else
+      %ol.system-list
+        - steps.each_with_index do |step, i|
+          %li{ data: { testid: "scheduled-run-step" } }
+            %span= step["label"]
+            %span.system-hint= step["schedule"]
+            %span.ui-badge{ data: { progress_step_outcome: i } }= step["outcome"]
+
+  .system-actions
+    %span{ data: { progress_action: true, progress_visible_for: "completed failed" }, **shown.call(%w[completed failed]) }
+      = button_to t("#{scope}.run"), system_scheduled_run_path, method: :post, params: { expected: "start" },
+        class: "ui-btn ui-btn-primary", id: "btn-scheduled-run", data: { testid: "btn-scheduled-run", turbo_confirm: t("#{scope}.run_confirm") }
+    - if run && state != :idle
+      %span{ data: { progress_action: true, progress_visible_for: "running" }, **shown.call(%w[running]) }
+        - if run[:status] == "running" && !data[:live]
+          = button_to t("#{scope}.pause_now"), system_scheduled_run_path, method: :post, params: { expected: "stop" },
+            class: "ui-btn system-btn--warning", data: { testid: "btn-scheduled-run-stop" }
+        - elsif state == :stopping
+          %button.ui-btn{ type: "button", disabled: true }= t("#{scope}.stopping")
+        - else
+          = button_to t("#{scope}.stop"), system_scheduled_run_path, method: :post, params: { expected: "stop" },
+            class: "ui-btn system-btn--warning", data: { testid: "btn-scheduled-run-stop" }
+      %span{ data: { progress_action: true, progress_visible_for: "paused" }, **shown.call(%w[paused]) }
+        = button_to t("#{scope}.resume"), system_scheduled_run_path, method: :post, params: { expected: "resume" },
+          class: "ui-btn ui-btn-primary", data: { testid: "btn-scheduled-run-resume" }
+        = button_to t("#{scope}.start_over"), system_scheduled_run_path, method: :post, params: { expected: "start_over" },
+          class: "ui-btn", data: { testid: "btn-scheduled-run-start-over", turbo_confirm: t("#{scope}.start_over_confirm") }

@@ -5,7 +5,8 @@
 # written or its text changes (FactKeywordsJob.request!), and run nightly (config/recurring.yml) for
 # anything a request missed. One run at a time: a request while one is queued or running is
 # discarded, and the running one picks up facts written meanwhile on its next batch. Off when the
-# fact_keywords_enabled setting is.
+# fact_keywords_enabled setting is. Inside "Run all scheduled jobs now" it stops between batches when
+# a stop is requested (CooperativeStop).
 class FactKeywordsJob < ApplicationJob
   queue_as :low_priority
   limits_concurrency to: 1, key: "fact_keywords", duration: 1.hour, on_conflict: :discard
@@ -43,6 +44,9 @@ class FactKeywordsJob < ApplicationJob
 
     computed = 0
     MAX_BATCHES.times do
+      # Inside a scheduled run with a stop requested (1.81.0): the rest stays pending for the next run.
+      break if CooperativeStop.requested?
+
       batch = MemoryObservation.active.keywords_pending.includes(:memory_entity).order(:id).limit(BATCH_SIZE).to_a
       break if batch.empty?
 

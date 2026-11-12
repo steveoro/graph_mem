@@ -189,6 +189,11 @@ RSpec.describe "agent text sync" do
       expect(description).not_to match(/\bI\b/)
     end
 
+    it "keeps the README version badge equal to the app version (1.81.0)" do
+      expect(root.join("README.md").read[%r{img\.shields\.io/badge/version-([0-9][0-9.]*)-blue}, 1]).to eq(GraphMem::VERSION),
+        "run `bin/rails graph_mem:sync_skill_version` after a version bump"
+    end
+
     it "keeps the skill metadata version equal to the app version" do
       expect(frontmatter(skill_path).dig("metadata", "graph-mem-version")).to eq(GraphMem::VERSION),
         "SKILL.md is static Markdown; run `bin/rails graph_mem:sync_skill_version` after a version bump"
