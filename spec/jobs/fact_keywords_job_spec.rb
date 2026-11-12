@@ -64,6 +64,24 @@ RSpec.describe FactKeywordsJob do
       expect(fact.reload).to have_attributes(keywords_at: be_present, llm_keywords: %w[frame], llm_keywords_at: be_present)
     end
 
+    it "moves past a batch that stamps nothing, and stops after three in a row (final review)" do
+      stub_const("FactKeywords::LlmWords::BATCH_SIZE", 2)
+      facts = Array.new(6) { |i| MemoryObservation.create!(memory_entity: widget, content: "SynthWidget fact #{i}.") }
+      FactKeywords.compute!(MemoryObservation.where(id: facts.map(&:id)).includes(:memory_entity))
+      head = facts.first(2).map(&:id).map(&:to_s)
+      picky = FakeProvider.new do |prompt, **|
+        ids = JSON.parse(prompt.to_s[/STATEMENTS:\n(\[.*\])/m, 1]).map { |entry| entry["id"].to_s }
+        next { ok: false, text: nil, error: "refused", latency_ms: 1.0 } if (ids & head).any?
+
+        { ok: true, done_reason: "stop", error: nil, latency_ms: 1.0, text: ids.to_h { |id| [ id, %w[frame] ] }.to_json }
+      end
+
+      with_llm_provider(picky) { described_class.perform_now }
+
+      expect(MemoryObservation.where(id: facts.last(4).map(&:id)).where.not(llm_keywords_at: nil).count).to eq(4)
+      expect(MemoryObservation.where(id: facts.first(2).map(&:id)).llm_words_pending.count).to eq(2)
+    end
+
     it "stops between LLM batches when a scheduled run asks it to" do
       stub_const("FactKeywords::LlmWords::BATCH_SIZE", 2)
       stub_const("CooperativeStop::INTERVAL", 0.seconds)

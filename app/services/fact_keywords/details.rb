@@ -22,7 +22,7 @@ module FactKeywords
       # thousands: 1,000 → 1000
       [ /(?<![\w.,])\d{1,3}(?:,\d{3})+(?![\d,])/, ->(m) { [ m[0].delete(",") ] } ],
       # numbers, signed, with an optional unit: 30, -5, 5s, 10mins, 768(-dim), 2025
-      [ /(?:(?<=\A)|(?<=[^\w.\-]))-?\d+[a-z]{0,8}\b|(?<![\w.\-])\d+[a-z]{0,8}\b/i, ->(m) { [ m[0] ] } ]
+      [ /(?:(?<=\A)|(?<=[^\w.\-]))-\d+[a-z]{0,8}\b|(?<![\w.])\d+[a-z]{0,8}\b/i, ->(m) { [ m[0] ] } ]
     ].freeze
 
     module_function

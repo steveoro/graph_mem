@@ -23,6 +23,14 @@ RSpec.describe FactKeywords::Details do
     expect(described_class.extract("Keeps 1,000 rows")).to eq(Set["1000"])
   end
 
+  it "keeps a number right after a hyphen: ranges and names like gpt-4 (final review)" do
+    expect(described_class.extract("Retries 3-5 times")).to eq(Set["3", "5"])
+    expect(described_class.compare("Retries 3-7 times", "Retries 3-5 times")).to eq(:different)
+    expect(described_class.compare("Uses gpt-5", "Uses gpt-4")).to eq(:different)
+    expect(described_class.extract("A 768-dim vector")).to eq(Set["768"])
+    expect(described_class.compare("An offset of -5", "An offset of 5")).to eq(:different)
+  end
+
   it "leaves out digits inside identifiers, and finds nothing in plain text" do
     expect(described_class.extract("Runs gemma3 with utf8mb4 tables")).to be_empty
     expect(described_class.extract("Validates presence of name")).to be_empty

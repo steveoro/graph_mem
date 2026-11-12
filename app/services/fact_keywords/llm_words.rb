@@ -49,7 +49,11 @@ module FactKeywords
       ready = observations.to_a.select { |fact| fact.keywords_at.present? }
       named, unnamed = ready.partition { |fact| FactKeywords.mentions(fact.keywords, fact.memory_entity&.name).any? }
       named.each { |fact| fact.update_columns(llm_keywords: [], llm_keywords_at: now) }
-      found = words_for(unnamed.map { |fact| { key: fact.id, text: fact.content, entity: fact.memory_entity } })
+      # One project per call: a cloud gate refusing one project never holds another's facts back, and
+      # a fact's text only ever shares a prompt with its own project's.
+      found = unnamed.group_by { |fact| FactKeywords.project_of(fact.memory_entity)&.id }.values.each_with_object({}) do |facts, all|
+        all.merge!(words_for(facts.map { |fact| { key: fact.id, text: fact.content, entity: fact.memory_entity } }))
+      end
       unnamed.each { |fact| fact.update_columns(llm_keywords: found[fact.id], llm_keywords_at: now) if found.key?(fact.id) }
       named.size + unnamed.count { |fact| found.key?(fact.id) }
     end
@@ -57,14 +61,27 @@ module FactKeywords
     # Asks the LLM for the words of each entry, BATCH_SIZE at a time.
     #
     # @param entries [Array<Hash>] `{ key:, text:, entity: }`
-    # @return [Hash{Object => Array<String>}] the normalized words per key; a key the LLM didn't
-    #   answer validly is absent ({} with the LLM unusable or the setting off)
-    def words_for(entries)
+    # @param max_batches [Integer, nil] ask at most this many batches (the rest stay absent)
+    # @param stop_on_failure [Boolean] stop at the first batch the LLM didn't answer (a scan: down
+    #   once is down)
+    # @return [Hash{Object => Array<String>}] the normalized words per key. An answered batch gives
+    #   every one of its keys ([] for one the answer left out, so it never blocks the queue); a batch
+    #   the LLM didn't answer (down, refused, not JSON) gives none ({} with the LLM unusable or the
+    #   setting off)
+    def words_for(entries, max_batches: nil, stop_on_failure: false)
       return {} if entries.empty? || !enabled? || !Llm::Router.usable?(:summary)
 
-      entries.each_slice(BATCH_SIZE).each_with_object({}) do |batch, found|
-        found.merge!(ask(batch))
+      found = {}
+      entries.each_slice(BATCH_SIZE).with_index do |batch, index|
+        break if max_batches && index >= max_batches
+
+        answer = ask(batch)
+        break if answer.nil? && stop_on_failure
+        next unless answer
+
+        batch.each { |entry| found[entry[:key]] = answer.fetch(entry[:key], []) }
       end
+      found
     end
 
     # @param words [Array<String>] the LLM's words
@@ -90,7 +107,8 @@ module FactKeywords
       AppSettings.fact_keywords_enabled? && AppSettings.llm_keywords_enabled?
     end
 
-    # @return [Hash{Object => Array<String>}] this batch's parsed words
+    # @return [Hash{Object => Array<String>}, nil] this batch's parsed words; nil when the LLM didn't
+    #   answer it (down, refused, not JSON)
     def ask(batch)
       ids = batch.to_h { |entry| [ entry[:key].to_s, entry[:key] ] }
       statements = batch.map { |entry| { id: entry[:key], text: entry[:text].to_s.truncate(PROMPT_TEXT_LIMIT) } }
@@ -100,14 +118,15 @@ module FactKeywords
       parse(result, ids)
     rescue StandardError => e
       Rails.logger.warn("[FactKeywords::LlmWords] #{e.class}: #{e.message}")
-      {}
+      nil
     end
 
+    # A duplicated id makes the JSON invalid (json 3 raises): the batch then counts as unanswered.
     def parse(result, ids)
-      return {} unless result.is_a?(Hash) && result[:ok]
+      return nil unless result.is_a?(Hash) && result[:ok]
 
       answer = JSON.parse(result[:text].to_s)
-      return {} unless answer.is_a?(Hash)
+      return nil unless answer.is_a?(Hash)
 
       answer.each_with_object({}) do |(id, words), found|
         key = ids[id.to_s]
@@ -116,7 +135,7 @@ module FactKeywords
         found[key] = normalize(words)
       end
     rescue JSON::ParserError
-      {}
+      nil
     end
     private_class_method :ask, :parse
   end

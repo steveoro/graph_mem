@@ -9,6 +9,8 @@
 # either repairs them automatically when the target is unambiguous or queues a
 # `scan_review` item for operator/agent review.
 class ProjectScanner
+  # 1.83.0: LLM word batches a scan asks inline (inside its reconcile transaction), at most.
+  SCAN_LLM_BATCHES = 3
   DEFAULT_FILE_GLOBS = %w[
     README*
     package.json

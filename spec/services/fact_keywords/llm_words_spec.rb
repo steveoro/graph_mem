@@ -47,7 +47,7 @@ RSpec.describe FactKeywords::LlmWords do
     expect(pending.reload.llm_keywords_at).to be_nil
   end
 
-  it "parses strictly: an id it wasn't asked about is ignored, a missing one stays pending" do
+  it "parses strictly: an id it wasn't asked about is ignored, a missing one gets no words" do
     asked = fact("Validates presence of name.")
     missing = fact("Validates presence of email.")
     answers[asked.id.to_s] = %w[name presence]
@@ -56,7 +56,32 @@ RSpec.describe FactKeywords::LlmWords do
     compute(asked, missing)
 
     expect(asked.reload.llm_keywords).to eq(%w[name presence])
-    expect(missing.reload.llm_keywords_at).to be_nil
+    expect(missing.reload).to have_attributes(llm_keywords: [], llm_keywords_at: be_present)
+    expect(MemoryObservation.where(llm_keywords: %w[hijack].to_json)).to be_empty
+  end
+
+  it "stamps a fact the LLM left out of a valid answer with no words, so it never blocks the queue (final review)" do
+    asked = fact("Validates presence of name.")
+    skipped = fact("Validates presence of email.")
+    answers[asked.id.to_s] = %w[name presence]
+
+    compute(asked, skipped)
+
+    expect(skipped.reload).to have_attributes(llm_keywords: [], llm_keywords_at: be_present)
+  end
+
+  it "asks one project's facts per call" do
+    other_root = MemoryEntity.create!(name: "Other Project", entity_type: "Project")
+    other = MemoryEntity.create!(name: "AlphaService", entity_type: "Service", project_id: other_root.id)
+    mine = fact("Validates presence of name.")
+    theirs = MemoryObservation.create!(memory_entity: other, content: "Retries the queue.").tap do |observation|
+      observation.update_columns(keywords: [ "Other Project", "AlphaService" ], keywords_at: Time.current)
+    end
+    [ mine, theirs ].each { |observation| answers[observation.id.to_s] = %w[thing name] }
+
+    compute(mine, theirs)
+
+    expect(provider.calls.size).to eq(2)
   end
 
   it "batches the calls" do

@@ -152,6 +152,15 @@ RSpec.describe ProjectScanner, "reworded facts", :with_test_embeddings do
       expect(widget_facts).to contain_exactly("Validates presence of name.", "Validates presence of email.")
     end
 
+    it "asks for the words at most SCAN_LLM_BATCHES times inside the reconcile, and once when the LLM fails (final review)" do
+      stub_const("FactKeywords::LlmWords::BATCH_SIZE", 1)
+      facts.replace(Array.new(5) { |i| "Validates presence of field #{i}." })
+
+      scan
+
+      expect(provider.calls.count { |call| call.prompt.to_s.include?("name what it is about") }).to eq(ProjectScanner::SCAN_LLM_BATCHES)
+    end
+
     context "when the LLM is down for the words" do
       let(:words_down) { true }
 
@@ -162,6 +171,15 @@ RSpec.describe ProjectScanner, "reworded facts", :with_test_embeddings do
 
         expect(scan.observations_deduped).to eq(1)
         expect(stored("Validates presence of name.").llm_keywords_at).to be_nil
+      end
+
+      it "asks once, not once per batch" do
+        stub_const("FactKeywords::LlmWords::BATCH_SIZE", 1)
+        facts.replace(Array.new(3) { |i| "Validates presence of field #{i}." })
+
+        scan
+
+        expect(provider.calls.count { |call| call.prompt.to_s.include?("name what it is about") }).to eq(1)
       end
     end
   end

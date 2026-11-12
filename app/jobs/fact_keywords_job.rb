@@ -19,6 +19,9 @@ class FactKeywordsJob < ApplicationJob
   # 1.83.0: LLM word batches per run (FactKeywords::LlmWords::BATCH_SIZE facts each); the next
   # request or night continues.
   LLM_BATCHES_PER_RUN = 25
+  # Batches in a row that stamp nothing (the LLM down, or refusing) before the run gives up; one
+  # such batch is passed over, so it never blocks the facts behind it.
+  LLM_EMPTY_BATCHES = 3
 
   class << self
     # Enqueues one run, at most once per REQUEST_DELAY in this process, when the setting is on.
@@ -68,17 +71,20 @@ class FactKeywordsJob < ApplicationJob
     return 0 unless FactKeywords::LlmWords.enabled?
 
     stamped = 0
+    after_id = 0
+    empty = 0
     LLM_BATCHES_PER_RUN.times do
       break if CooperativeStop.requested?
 
-      batch = MemoryObservation.active.where.not(keywords_at: nil).llm_words_pending.includes(:memory_entity).order(:id)
-                               .limit(FactKeywords::LlmWords::BATCH_SIZE).to_a
+      batch = MemoryObservation.active.where.not(keywords_at: nil).llm_words_pending.where("memory_observations.id > ?", after_id)
+                               .includes(:memory_entity).order(:id).limit(FactKeywords::LlmWords::BATCH_SIZE).to_a
       break if batch.empty?
 
+      after_id = batch.last.id
       done = FactKeywords::LlmWords.compute!(batch)
       stamped += done
-      # Nothing stamped (the LLM is down or answered nothing usable): try again on the next run.
-      break if done.zero?
+      empty = done.zero? ? empty + 1 : 0
+      break if empty >= LLM_EMPTY_BATCHES
     end
     stamped
   end

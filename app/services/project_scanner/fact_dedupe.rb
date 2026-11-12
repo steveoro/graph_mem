@@ -66,8 +66,13 @@ class ProjectScanner
     # 1.83.0: the LLM words of this scan's new facts that name no entity, asked in batches before
     # their dedupe (FactKeywords::LlmWords). A failed call leaves them pending: FactKeywordsJob asks
     # again, and the dedupe uses the 1.82.0 rule meanwhile.
+    #
+    # It runs inside the reconcile transaction, so it is bounded: at most SCAN_LLM_BATCHES calls,
+    # none after one the LLM didn't answer, and none when the dedupe can't use the words (no
+    # vectors). FactKeywordsJob computes the rest after the commit.
     def prepare_scan_llm_words!(reconciled)
       return if @dry_run || @project_entity.nil? || !FactKeywords::LlmWords.enabled?
+      return if @fact_dedupe_unavailable || !EmbeddingService.vector_enabled?
 
       wanted = reconciled.flat_map do |entity, item|
         known = entity.active_memory_observations.pluck(:content).to_set { |content| content.to_s.strip }
@@ -77,7 +82,8 @@ class ProjectScanner
         end
       end.uniq { |entity, text| [ entity.id, text ] }
       # Plain integer keys: they are the ids the LLM sees.
-      found = FactKeywords::LlmWords.words_for(wanted.each_with_index.map { |(entity, text), i| { key: i, text: text, entity: entity } })
+      entries = wanted.each_with_index.map { |(entity, text), i| { key: i, text: text, entity: entity } }
+      found = FactKeywords::LlmWords.words_for(entries, max_batches: ProjectScanner::SCAN_LLM_BATCHES, stop_on_failure: true)
       found.each { |i, words| @scan_llm_words[[ wanted[i][0].id, wanted[i][1] ]] = words }
     rescue StandardError => e
       @logger.warn "ProjectScanner: LLM words not asked: #{e.class}: #{e.message}"
