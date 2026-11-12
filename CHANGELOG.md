@@ -5,6 +5,24 @@ All notable changes to GraphMem will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.84.0] - 2026-11-12
+
+System › Background jobs updates itself, and the running scheduled step shows how far it is.
+
+### Added
+- **Live Background jobs page:** the cards refresh on their own (every 3 s while a job runs, every 30 s otherwise), patching only what changed; a hidden tab pauses, coming back refreshes at once, an open section stays open. The polls never keep a session alive. The Dream State card's Refresh button is gone.
+- **Step progress:** one bar under the running step of "Run all scheduled jobs now", with what it counts ("LLM words: 1,200 of 3,533 (33%)"): keyword paths, LLM words, embeddings, compaction and garbage collection; the other steps show a moving bar.
+
+### Changed
+- "Run all scheduled jobs now" fills the whole LLM-word backlog in one run (Stop still ends it between batches); the nightly and after-write runs keep their 25-batch cap.
+- The three job cards share one progress bar: the compactor shows one bar instead of three (they showed one number), and neither old bar repeats its status ("Completed Completed"); the garbage collector shows its status as a badge. The scheduled run's status lines no longer sit in two columns.
+- LLM words keep a word with digits that names a thing (`2fa`, `s3`), drop a number with a unit (`10mins`, `3d`), compare `e-mail` and `email` as one word, and count `data` as generic. A batch whose answer repeats an id keeps the rest of its answers.
+- A fact that stops naming an entity (the entity is gone) asks for its LLM words again; words are compared only for two facts on the same entity record, not two entities with one name.
+- `graph_mem:fact_keywords:llm_refresh` refuses to start (marking nothing) when the summary LLM isn't usable.
+
+### Fixed
+- Undo of a fact's edit no longer fails because its keyword path or LLM words were computed since.
+
 ## [1.83.0] - 2026-11-12
 
 Facts that name no entity get a subject too: 1–3 words from the LLM.

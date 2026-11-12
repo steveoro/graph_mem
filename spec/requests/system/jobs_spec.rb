@@ -385,4 +385,3 @@ RSpec.describe "System › Background jobs", type: :request do
     end
   end
 end
-

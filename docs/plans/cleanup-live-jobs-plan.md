@@ -21,6 +21,11 @@ Design from Fable (advisor), checked against the code. Steve's decisions (2026-1
 
 ## Part A: live page (polling a morphing Turbo frame)
 
+> **As built:** a Turbo frame with `src` loads as soon as it upgrades (`complete` doesn't stop it) and refuses a
+> response whose frame has a `src` of its own, so the page polls a Turbo Stream `update … method="morph"` of a
+> plain `#jobs-cards` instead; the rest below holds. Steve's review added one shared bar for the three cards
+> (`system/jobs/_progress`).
+
 - **Route + action:** `GET /system/jobs/cards` → `System::JobsController#cards`, renders a new partial
   `system/jobs/_cards` (the three cards, extracted from `app/views/system/jobs/index.html.haml`). The action skips
   the session activity stamp (`refresh_session!`), so polls never extend the session (decision 3).
