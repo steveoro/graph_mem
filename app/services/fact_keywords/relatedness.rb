@@ -85,7 +85,7 @@ module FactKeywords
       shared += [ first_owner ] if first_owner && first_owner != second_owner && second.include?(first_owner)
       siblings = shared.empty? && siblings?(first_path, first_owner, second_path, second_owner) &&
                  !(connected.respond_to?(:call) ? connected.call : connected)
-      covers = covers(first, first_owner, second, second_owner)
+      covers = covers(first, first_owner, rooted?(first_path, first_owner), second, second_owner, rooted?(second_path, second_owner))
       Comparison.new(subject: subject(first, second, shared, siblings), strong: first.first.present? && first.first == second.first,
                      shared: shared.uniq, same_subject: !covers.nil?, covers: covers,
                      details: FactKeywords::Details.compare(first_text, second_text))
@@ -98,9 +98,12 @@ module FactKeywords
     end
 
     # @return [Symbol, nil] whose subjects (own entity and mentions) contain the other's; nil unless
-    #   both facts mention entities
-    def covers(first, first_owner, second, second_owner)
+    #   both facts mention entities. A fact held by the project root is about the whole project: it
+    #   covers a member's fact whose mentions it contains, and a member's fact never covers it.
+    def covers(first, first_owner, first_rooted, second, second_owner, second_rooted)
       return nil if first.empty? || second.empty?
+      return (:first if Set.new(first).superset?(Set.new(second))) if first_rooted && !second_rooted
+      return (:second if Set.new(second).superset?(Set.new(first))) if second_rooted && !first_rooted
 
       mine = Set[first_owner, *first]
       theirs = Set[second_owner, *second]
@@ -109,6 +112,9 @@ module FactKeywords
 
       :second if theirs.superset?(mine)
     end
+
+    # A path that starts with its own entity: the project root's (or an entity with no project).
+    def rooted?(path, owner) = owner.present? && Array(path).first == owner
 
     def subject(first, second, shared, siblings)
       return :related if shared.any?
@@ -138,6 +144,6 @@ module FactKeywords
       MemoryRelation.where(from_entity_id: first.id, to_entity_id: second.id)
                     .or(MemoryRelation.where(from_entity_id: second.id, to_entity_id: first.id)).exists?
     end
-    private_class_method :subject, :siblings?, :joined?, :covers
+    private_class_method :subject, :siblings?, :joined?, :covers, :rooted?
   end
 end

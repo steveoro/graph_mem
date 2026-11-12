@@ -377,8 +377,9 @@ and nothing acts across projects. Step list: `docs/plans/fact-supersede-plan.md`
   (`covers`: `:both`, `:first`, `:second`). Their **details** (`FactKeywords::Details`: versions,
   numbers with a unit, dates; deterministic) are `:none`, `:same` or `:different`. **The same fact
   with a different detail** ("Developed using Rails 8.0" / "Updated using Rails 8.1", Rails an
-  entity) is the same subject, the fact covering the candidate, and different details. A fact with no
-  mentions is never the same subject yet (LLM words, F2c).
+  entity) is the same subject, the fact covering the candidate, and different details. A fact held by
+  the project root covers a member's fact whose mentions it contains (never the reverse). A fact with
+  no mentions is never the same subject yet (LLM words, F2c).
   Related entities without a project come back as **unscoped**: shown
   with a warning, applied by hand only (without `outdated_by`), never auto-applied.
 - **Legacy guard** (`FactSupersede::LegacyGuard`, again at apply): `keep` (never proposed) when the

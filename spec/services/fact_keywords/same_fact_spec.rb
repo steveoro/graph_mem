@@ -63,6 +63,24 @@ RSpec.describe FactKeywords::Relatedness, "the same-fact ladder" do
     end
   end
 
+  # A fact held by the project root is about the whole project (its path is [project, mentions…]):
+  # it covers a member's own entity (final review of 1.82.0).
+  it "lets a project-level fact cover a member's fact about the same thing" do
+    result = described_class.compare_paths(%w[p Rails], "p", %w[p App Rails], "App",
+                                           first_text: "The project uses Rails 8.1.", second_text: "SynthApp is developed using Rails 8.0.")
+
+    expect(result).to have_attributes(same_subject: true, covers: :first, details: :different, level: "same")
+    expect(result.same_fact_different_detail?).to be(true)
+  end
+
+  it "never lets a member's fact cover a project-level one" do
+    result = described_class.compare_paths(%w[p App Rails], "App", %w[p Rails], "p",
+                                           first_text: "SynthApp uses Rails 8.1.", second_text: "The project runs Rails 8.0.")
+
+    expect(result).to have_attributes(same_subject: true, covers: :second)
+    expect(result.same_fact_different_detail?).to be(false)
+  end
+
   it "reads the details from the facts themselves when comparing observations" do
     root = MemoryEntity.create!(name: "Gadget Project", entity_type: "Project")
     app = MemoryEntity.create!(name: "SynthApp", entity_type: "Component", project_id: root.id)
