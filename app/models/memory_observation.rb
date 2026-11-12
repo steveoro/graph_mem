@@ -34,6 +34,9 @@ class MemoryObservation < ApplicationRecord
   # fact, then each project entity it mentions in text order. Never embedded; `keywords_at` NULL
   # means pending.
   serialize :keywords, coder: JSON
+  # 1.83.0: 1–3 words naming what a fact that mentions no entity is about (FactKeywords::LlmWords).
+  # Never merged with `keywords`, never embedded; `llm_keywords_at` NULL means pending.
+  serialize :llm_keywords, coder: JSON
 
   scope :active, -> { where(status: ACTIVE_STATUS) }
   scope :inactive, -> { where.not(status: ACTIVE_STATUS) }
@@ -45,6 +48,7 @@ class MemoryObservation < ApplicationRecord
   scope :with_embedding, -> { where.not(embedded_at: nil) }
   scope :missing_embedding, -> { where(embedded_at: nil) }
   scope :keywords_pending, -> { where(keywords_at: nil) }
+  scope :llm_words_pending, -> { where(llm_keywords_at: nil) }
 
   validates :content, presence: true
   validates :confidence, numericality: { greater_than_or_equal_to: 0, less_than_or_equal_to: 1 }, allow_nil: true
@@ -54,6 +58,7 @@ class MemoryObservation < ApplicationRecord
   validate :validity_range_is_ordered
   validate :tags_are_strings
   validate :keywords_are_strings
+  validate :llm_keywords_are_strings
   validate :lifecycle_state_is_consistent
 
   before_save :assign_trust_score
@@ -69,7 +74,7 @@ class MemoryObservation < ApplicationRecord
   # The REST output leaves out the vector and, for now (1.77.0), the keyword path: an API change of
   # its own once review rows use it.
   def as_json(options = {})
-    super(options.merge(except: Array(options[:except]) | %i[embedding keywords keywords_at]))
+    super(options.merge(except: Array(options[:except]) | %i[embedding keywords keywords_at llm_keywords llm_keywords_at]))
   end
 
   def assign_trust_score
@@ -169,6 +174,13 @@ class MemoryObservation < ApplicationRecord
 
   def invalidate_keywords
     self.keywords_at = nil
+    self.llm_keywords_at = nil
+  end
+
+  def llm_keywords_are_strings
+    return if llm_keywords.is_a?(Array) && llm_keywords.all? { |word| word.is_a?(String) }
+
+    errors.add(:llm_keywords, "must be an array of strings")
   end
 
   def request_fact_keywords
