@@ -23,9 +23,9 @@ This checklist tracks the implementation across separate runs; keep completed it
 ## Run 3 — UI and compatibility
 
 - [x] Add live progress targets to the compactor, garbage collector, and import report cards.
-- [ ] Add a reusable styled partial/component instead of duplicated HAML markup if the visual design is finalized.
+- [x] Add a reusable styled partial/component instead of duplicated HAML markup if the visual design is finalized. (1.84.0: `system/jobs/_progress`, Background jobs cards only)
 - [ ] Add live export progress target to the maintenance page and wire the async response operation ID into it.
-- [ ] Add reconnect/fallback snapshot endpoint if Turbo navigation exposes stale operation markup.
+- [x] Add reconnect/fallback snapshot endpoint if Turbo navigation exposes stale operation markup. (1.84.0: Background jobs polls `GET /system/jobs/cards`)
 - [ ] Add authorization and validation rules for operation IDs if channels become externally reachable.
 
 ## Run 4 — verification and cleanup
