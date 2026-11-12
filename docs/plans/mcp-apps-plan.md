@@ -4,7 +4,7 @@
 same day at `9df8556`** against three sources: this repo's code, the installed `mcp` 1.9.0 gem source, and the
 live spec (stable 2026-01-26 and the draft). The review changed the first-load design, the tool linkage and the
 view packaging, and added the sections from "Acceptance criteria" on; "What the review changed" lists the
-differences. No kickoff yet: Steve reviews this plan first. File:line references were checked at `9df8556`; if a
+differences. Steve answered every open question on 2026-11-12 (decisions 6–13). No kickoff yet. File:line references were checked at `9df8556`; if a
 line has moved, find the code by the quoted text, and if the code no longer matches the description, **stop and
 ask Steve** instead of improvising. **No spec was run.**
 
@@ -43,12 +43,17 @@ The review found that decisions 3 and 5 meet limits in the spec and in the `sear
    how decision 5 is applied.
 7. **`get_context` is not linked.** Only `traverse_graph` and `find_shortest_path` open the view. Decision 3 is
    applied inside the view: "Context project" and "Root entities" are buttons.
-
 8. **The root view pages the unfiltered catalog** and filters in the view. No change to `search`. Revisit when a
    graph outgrows the 2,000-entity scan or the load is slow in practice; the tool change (filters in catalog mode)
    stays a hard stop.
 9. **v1 has no `set_context` control.** Scoping is local to the view. Decision 2 allows `set_context`; v1 doesn't
    use it, so the view changes no server state. The user can ask the agent to set the active project.
+10. **The wire additions are accepted** as exceptions to "the surface stays as is" (the list under "What changes
+    on the wire"). On the tool count of the default `/mcp`: the hard limit is about 20 tools, and under 15 is
+    better. It is 12 today and this train adds none.
+11. **The view is registered on all three profiles** (`default`, `readonly`, `maintenance`).
+12. **An on/off setting,** `mcp_apps_enabled`, default on.
+13. **The `ui://` resource is listed in `resources/list`.**
 
 ## What the review changed
 
@@ -70,7 +75,9 @@ The review found that decisions 3 and 5 meet limits in the spec and in the `sear
 - **Any change to an MCP tool's params or outputs** (input schema, output schema, new keys in `structuredContent`,
   a changed text result, a relaxed validation), and any new tool, including an app-only tool
   (`_meta.ui.visibility: ["app"]`).
-- **The default `/mcp` stays at 12 tools or fewer** (`spec/fixtures/mcp/snapshots/default.json`).
+- **A change to the tool count of any profile.** This train adds no tool, so the default `/mcp` stays at 12
+  (`spec/fixtures/mcp/snapshots/default.json`). Steve's limit for it is about 20, preferably under 15
+  (decision 10); a new tool is still his call.
 - **Any new gem, a gem bump (including `mcp` 1.9.0 → 1.10.0), a migration, or any non-stdlib package** (npm
   packages such as `@modelcontextprotocol/ext-apps`, a JS bundler, a CDN script).
 - **Anything that weakens the lockdown or the anonymizer/cloud gate:** the `/mcp` `AccessGate` (IP allowlist and
@@ -83,8 +90,8 @@ The review found that decisions 3 and 5 meet limits in the spec and in the `sear
   source that the new view-source spec (step A) would reject.
 - **Overriding private gem code** (for example `MCP::Server#list_tools`) to vary a list per client.
 
-What the feature *does* add to the wire, by design, is listed under "What changes on the wire". Steve confirms
-those additions (open question 1) before step A starts.
+What the feature *does* add to the wire, by design, is listed under "What changes on the wire". Steve accepted
+those additions (decision 10); anything beyond that list is a hard stop.
 
 ## The extension, as of 2026-11-12
 
@@ -212,14 +219,14 @@ What **graph_mem has to wire or hand-roll** (all graph_mem code, no protocol rei
 - **The view runtime** (the HTML document, a ~100-line vanilla `postMessage` bridge, the result → Cytoscape
   adapter, inlining Cytoscape): nothing in the gem covers it, by design; it is host-side protocol.
 
-## What changes on the wire (by design; open question 1)
+## What changes on the wire (by design; decision 10)
 
 - `initialize` result: `capabilities.extensions["io.modelcontextprotocol/ui"]`, for every client.
 - `tools/list`: `_meta.ui.resourceUri` on the linked tools only, for every client. Names, descriptions, input and
   output schemas unchanged.
-- `resources/list`: the static `ui://` resource(s), where today the list is empty (or none, if Steve prefers to
-  rely on tool metadata only; the spec allows both). `resources/templates/list`: unchanged.
-- `resources/read` for the `ui://` URI(s): an HTML document with `_meta.ui` on the content item.
+- `resources/list`: the static `ui://` resource, where today the list is empty (decision 13).
+  `resources/templates/list`: unchanged.
+- `resources/read` for the `ui://` URI: an HTML document with `_meta.ui` on the content item.
 - `tools/call` results: **unchanged**, for every client.
 
 How the specs see these changes:
@@ -271,11 +278,14 @@ The three profiles that exist: `readonly` has all five tools the view calls (`se
 the view never calls. The only state the view can change is through `get_context`, which clears a stale context
 (a deleted project) exactly as it does for an agent.
 
-If Steve wants an on/off setting (open question 3), it is an `AppSettings` field in the `:feature_flags` group of
+The view is on all three profiles (decision 11), so the first rule only matters for a later view or profile.
+
+The on/off setting (decision 12) is `mcp_apps_enabled`, default on: an `AppSettings` field in the `:feature_flags` group of
 `SettingsSchema` (`app/services/settings_schema.rb:120`), with its i18n label and help text
 (`spec/services/settings_schema_spec.rb` requires both). No migration. Servers are built once per transport, so a
 change takes effect after `Transports.reset!` (which closes open MCP sessions) on HTTP, and after a restart on
-stdio.
+stdio. With the setting off, the server declares no extension, links no tool and lists no `ui://` resource:
+today's wire, exactly.
 
 ### Which tools link to which view
 
@@ -434,11 +444,11 @@ operator Explore and Search pages untouched, and its own CHANGELOG entry and doc
 
 - Providers as above; `TemplateResourceProvider` first, in its own commit, with no output change (snapshots
   identical).
-- Declare the extension (plain-hash `extensions:` key); register the `ui://` resource on the profiles Steve picks
-  (question 2); add `_meta.ui.resourceUri` to `traverse_graph` and `find_shortest_path` through `ToolWrapper`: a
+- Declare the extension (plain-hash `extensions:` key); register the `ui://` resource on all three profiles;
+  add `_meta.ui.resourceUri` to `traverse_graph` and `find_shortest_path` through `ToolWrapper`: a
   per-tool `mcp_ui_view` setting on `ApplicationTool`, next to `title` (`app/tools/application_tool.rb:57-63`),
   empty by default, applied with `MCP::Apps.tool_meta` only when the server registers that view.
-- The setting, if Steve wants one (question 3).
+- The `mcp_apps_enabled` setting (decision 12), with a spec that the wire is today's when it is off.
 - Stub HTML: the `ui/initialize` handshake, a title, the tool result's entity count, the teardown reply.
 - Specs:
   - `initialize` carries the extension, and the rest of the capabilities are unchanged;
@@ -449,7 +459,8 @@ operator Explore and Search pages untouched, and its own CHANGELOG entry and doc
   - a linked tool never points at a view its server doesn't register (per profile, and with the setting off);
   - the view-source spec;
   - `tools/call` results are byte-identical with and without the extension declared by the client.
-- Re-record the snapshots; add the handshake expectation; `docs/mcp_tools.md` and `docs/protocol_compat.md` get a
+- Re-record the snapshots by replacing only the changed entries in place (keep the recorded order, so the diff
+  stays small); add the handshake expectation; `docs/mcp_tools.md` and `docs/protocol_compat.md` get a
   short MCP Apps section.
 - Manual check, recorded in the PR: the stub renders in Claude (first, because of ext-apps #671) and in Cursor
   (global server entry) when the agent calls a linked tool; the view's own `tools/call` to an unlinked tool
@@ -512,14 +523,4 @@ snapshots), B about 1,500, C about 900. **Stop and ask Steve if a PR's diff grow
 
 ## Open questions for Steve
 
-1. **The wire additions** listed under "What changes on the wire" (the capability and `_meta.ui` on two tools for
-   every client, the `ui://` resource in `resources/list`, its `resources/read`): are they within "the surface
-   stays as is"? Tool names, params, outputs and results do not change.
-2. **Which profiles get the view?** Recommended: all three (`readonly` has every tool the view calls; `default`
-   and `maintenance` include them). Leaving one out is possible but needs the per-profile wiring described under
-   "Profiles and the on/off setting".
-3. **An on/off setting** (`mcp_apps_enabled`, an `AppSettings` feature flag, no migration) so the capability, the
-   links and the resource can be turned off? It takes effect after a transport reset (HTTP) or a restart (stdio).
-   Default on or off?
-4. **List the `ui://` resource in `resources/list`,** or rely on tool metadata only (the spec allows both)?
-   Recommended: list it.
+None. Decisions 6–13 answered the eight questions the review raised.
