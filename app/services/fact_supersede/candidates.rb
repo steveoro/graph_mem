@@ -77,10 +77,19 @@ module FactSupersede
       score = [ distance ? 1.0 - distance : 0.0, hits[observation.id] ? TERM_SCORE : 0.0 ].max
       score += POLARITY_BOOST if flip
       comparison = keyword_comparison(observation)
-      score += comparison.strong ? STRONG_BOOST : SHARED_BOOST if comparison&.related?
+      score += boost(comparison)
       Candidate.new(observation: observation, score: [ score, MAX_SCORE ].min.round(3), distance: distance, term: hits[observation.id],
                     polarity_flip: flip, scoped: scoped_entity?(observation.memory_entity), subject: comparison&.subject,
-                    shared_keywords: comparison&.shared, strong: comparison&.strong)
+                    shared_keywords: comparison&.shared, strong: comparison&.strong, level: comparison&.level,
+                    same_fact: comparison&.same_fact_different_detail?)
+    end
+
+    # 1.82.0: only a candidate about the same subject, which the fact covers, is boosted; most when
+    # it states a different detail. A merely related one isn't: being related isn't being outdated.
+    def boost(comparison)
+      return 0.0 unless comparison&.same_subject && %i[first both].include?(comparison.covers)
+
+      comparison.details == :different ? STRONG_BOOST : SHARED_BOOST
     end
 
     # @return [FactKeywords::Relatedness::Comparison, nil] nil with fact keywords off or a path pending

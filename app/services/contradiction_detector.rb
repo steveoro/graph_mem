@@ -74,8 +74,9 @@ class ContradictionDetector
         detected_at: Time.current.iso8601 }
     end
 
-    # Whether two facts may form a contradiction pair, from their keyword paths (both computed):
-    # related, or both without any mention and within STRICT_MAX_DISTANCE.
+    # Whether two facts may form a contradiction pair, from their keyword paths (both computed): about
+    # the same subject (1.82.0; applying a contradiction obsoletes one side, so being related isn't
+    # enough), or both without any mention and within STRICT_MAX_DISTANCE.
     #
     # @param first [MemoryObservation]
     # @param second [MemoryObservation]
@@ -83,7 +84,7 @@ class ContradictionDetector
     # @return [FactKeywords::Relatedness::Comparison, nil] the comparison when pairable, else nil
     def pairable(first, second, distance)
       comparison = FactKeywords::Relatedness.compare(first, second)
-      return comparison if comparison.related?
+      return comparison if comparison.same_subject
 
       comparison if comparison.subject == :unknown && distance.to_f <= STRICT_MAX_DISTANCE
     end

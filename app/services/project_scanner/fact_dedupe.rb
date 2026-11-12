@@ -39,11 +39,16 @@ class ProjectScanner
     # doesn't (its keyword-path mentions are a subset); one that names something more adds
     # information, so it is written. Both paths come from one index of the project, built once every
     # item's entity exists. Always true with fact keywords off.
+    #
+    # 1.82.0: a close fact with a different detail (a version, a number, a date) is never the same
+    # fact ("Developed using Rails 8.0" / "… 8.1"): it is written, as a supersede candidate.
     def same_subject?(entity, text, stored)
-      return true unless stored && @project_entity && AppSettings.fact_keywords_enabled?
+      return true unless stored
 
       content = MemoryObservation.where(id: stored.id).pick(:content)
       return true if content.nil?
+      return false if FactKeywords::Details.compare(text, content) == :different
+      return true unless @project_entity && AppSettings.fact_keywords_enabled?
 
       (scan_mentions(entity, text) - scan_mentions(entity, content)).empty?
     end

@@ -5,6 +5,19 @@ All notable changes to GraphMem will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.82.0] - 2026-11-12
+
+The same fact is not a related fact: only the same subject may make a fact obsolete.
+
+### Changed
+- **The same-fact ladder** (`FactKeywords::Relatedness`): two facts have the **same subject** when both mention entities and one's subjects (its own entity and its mentions) contain the other's; their **details** (versions, numbers with a unit, dates: `FactKeywords::Details`, deterministic) are none, the same, different, or dropped (the newer fact restates the older one without its detail: a vaguer restatement, never "a different detail"). "Developed using Rails 8.0" and "Updated using Rails 8.1" (Rails an entity) are the same fact with a different detail. A fact held by the project root (not merely an entity with no project) is about the whole project: it covers a member's fact about the same mentions, never the other way round.
+- **"Outdated by a fact":** only a same-subject candidate the fact covers is boosted (most with a different detail); a merely related one isn't. Without the judge, an unjudged row is proposed only for the same fact with a different detail or a search-term match. The judge sees each statement's level (`same`, `related`, `unclear`) and a new rule: "superseded" requires the same thing with a different detail; a related topic is "still_valid".
+- **Contradictions** pair only facts about the same subject (applying one obsoletes a side); two facts with no mentions keep the 0.15-distance rule.
+- **Review policy `no_shared_subject`** mirrors the generators: it also dismisses pending unjudged "Outdated by a fact" rows that aren't the same fact with a different detail, and contradiction rows no longer paired. A judged row is never dismissed just for being related. Run `bin/rails graph_mem:fact_keywords:review_report` (read-only) to see the counts first.
+
+### Fixed
+- **Scan dedupe** no longer drops a close fact that states a different detail ("… Rails 8.0" / "… Rails 8.1"): it is written, as a supersede candidate.
+
 ## [1.81.0] - 2026-11-11
 
 Every scheduled job on demand, for a machine that is off at the scheduled times.
