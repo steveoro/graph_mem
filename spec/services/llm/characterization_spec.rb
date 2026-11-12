@@ -133,6 +133,15 @@ RSpec.describe "LLM calls (characterization)" do
   end
 
   describe "G3: a project scan in two parts (ProjectScanner → ChunkedExtraction)" do
+    # The scan's own part calls; its LLM words call (1.83.0) is specced in
+    # spec/services/fact_keywords/llm_words_spec.rb and project_scanner_fact_dedupe_spec.rb.
+    around do |example|
+      AppSettings.llm_keywords_enabled = false
+      example.run
+    ensure
+      AppSettings.where(var: "llm_keywords_enabled").delete_all
+    end
+
     around do |example|
       Dir.mktmpdir("llm_characterization") do |dir|
         @root = File.realpath(dir)
