@@ -16,8 +16,8 @@ on MariaDB 11.8.6 and Ruby 3.4.12:
 
 That run used Node 20, not 24, and predates titles and D-7, so step C re-runs everything on Node 24.
 
-Context: `docs/plans.done/mcp-update-plan.md` (DONE), `docs/plans.done/mcp-sdk-1.8.2-plan.md` (shipped as 1.58.1–1.58.3),
-`docs/plans.done/ui-dashboard-plan.md` §6.D (**D-7**), `docs/guides/migrating-fast-mcp-to-mcp-gem.md` (**D14** exact pin, one PR
+Context: `docs/plans/done/mcp-update-plan.md` (DONE), `docs/plans/done/mcp-sdk-1.8.2-plan.md` (shipped as 1.58.1–1.58.3),
+`docs/plans/done/ui-dashboard-plan.md` §6.D (**D-7**), `docs/guides/migrating-fast-mcp-to-mcp-gem.md` (**D14** exact pin, one PR
 per upgrade), `docs/protocol_compat.md`, `script/mcp_compat/README.md`. This plan is self-contained.
 
 **Version.** Titles and the D-7 `maxLength` change what `tools/list` advertises, so this is a **minor** release: **1.72.0**.
@@ -37,7 +37,7 @@ readonly 9, maintenance 22.
 | **Commits** | **A1** gem bump, **A2** non-object `_meta` specs, **A3** compat cases, **T** tool titles, **Q** D-7 query cap, **A4** harness versions, **C** compat verification, **A5** version text + re-recorded results, **A6** mark the 1.8.2 plan DONE, **RA** release. Review fixes go in new commits. No force-push after review starts. |
 | **Scope** | The gem bump, `_meta` specs and compat cases, tool titles (T) and the D-7 query cap (Q). No other tool, prompt, resource or `/api/v1` changes. No Skills (SEP-2640), no `icons`. Snapshot changes only from T and Q. |
 | **Data** | Synthetic fixtures only (`SynthClient`, `synth-*` names). Never real data, real credentials or a production dump. |
-| **Read first** | `CLAUDE.md`, `AGENTS.md`, `.devin/rules/*`, `script/mcp_compat/README.md`, `docs/protocol_compat.md`, `docs/plans.done/ui-dashboard-plan.md` §6.D (D-7). |
+| **Read first** | `CLAUDE.md`, `AGENTS.md`, `.devin/rules/*`, `script/mcp_compat/README.md`, `docs/protocol_compat.md`, `docs/plans/done/ui-dashboard-plan.md` §6.D (D-7). |
 
 ## Upstream changes (verified at `v1.9.0`)
 
@@ -143,10 +143,10 @@ On Node 24 and Ruby 3.4.12, against a local server on synthetic data (README "Ru
 - Fixture divergence texts that name "Ruby SDK 1.8.2": update to 1.9.0 only if `compare.rb` still labels them correctly.
 - Leave `spec/jobs/fact_supersede_job_spec.rb` (sample data "mcp 1.8.2.") and `docs/guides/migrating-fast-mcp-to-mcp-gem.md` as they are.
 - Record C's counts in `docs/protocol_compat.md` and the harness README's "Expected results" (now 1.72.0).
-- `docs/plans.done/ui-dashboard-plan.md` §6.D: mark D-7 done (this PR).
+- `docs/plans/done/ui-dashboard-plan.md` §6.D: mark D-7 done (this PR).
 
 ### A6. Housekeeping
-Mark `docs/plans.done/mcp-sdk-1.8.2-plan.md` DONE in its header (shipped as 1.58.1–1.58.3, #130–#132), and this plan DONE in RA.
+Mark `docs/plans/done/mcp-sdk-1.8.2-plan.md` DONE in its header (shipped as 1.58.1–1.58.3, #130–#132), and this plan DONE in RA.
 
 ### RA. Release 1.72.0
 - `lib/graph_mem/version.rb` → `1.72.0`; `skills/graph-mem-mcp-toolset/SKILL.md:18` → `"1.72.0"` (the sync spec checks it).

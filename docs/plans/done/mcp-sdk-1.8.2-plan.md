@@ -1,6 +1,6 @@
 # MCP SDK 1.8.2 + reference servers v2.1.0 → graph_mem 1.58.1 / 1.58.2 (gem bump, encoding regression spec, CORS from the allowlist, scan hardening)
 
-**✅ DONE:** shipped as **1.58.1–1.58.3**: #130 (mcp 1.8.2) as 1.58.1, #131 (CORS from the allowlist) as 1.58.2, and #132 (scan hardening, no bump) released with 1.58.3; all merged and tagged. The next gem bump is `docs/plans.done/mcp-sdk-1.9.0-plan.md` (1.72.0).
+**✅ DONE:** shipped as **1.58.1–1.58.3**: #130 (mcp 1.8.2) as 1.58.1, #131 (CORS from the allowlist) as 1.58.2, and #132 (scan hardening, no bump) released with 1.58.3; all merged and tagged. The next gem bump is `docs/plans/done/mcp-sdk-1.9.0-plan.md` (1.72.0).
 
 **Written 2026-10-27 (Europe/Rome)** for Claude, from the 1.58.0 code (`75136ad`, #129 merged, tagged `v1.58.0`).
 Every file:line in "What the code looks like today" was checked against `75136ad`. If a line has moved, find the code
@@ -10,7 +10,7 @@ v2.1.0, `rack-cors` 3.0.0, the published npm packages). **No spec, `compare.rb` 
 writing it: the PRs are checked by running the suite locally and by CI (CircleCI: rspec, rubocop, brakeman; Actions:
 lint, scan_ruby, scan_js).
 
-Context: `docs/plans.done/mcp-update-plan.md` (DONE; its D-nn decisions still apply), `docs/guides/migrating-fast-mcp-to-mcp-gem.md`
+Context: `docs/plans/done/mcp-update-plan.md` (DONE; its D-nn decisions still apply), `docs/guides/migrating-fast-mcp-to-mcp-gem.md`
 (D1–D14, notably **D4** allowed origins, **D5** CORS left to `rack-cors`, **D14** exact pin, one PR per upgrade),
 `docs/protocol_compat.md`, `script/mcp_compat/README.md`, `docs/mcp_access_control.md`. This plan is self-contained.
 It does **not** move the UI train: UI-2 stays **1.59.0**.

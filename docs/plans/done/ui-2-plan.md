@@ -10,7 +10,7 @@ by the quoted text; if the code no longer matches the description, **stop and as
 Only code was read while writing this plan. **No spec was run**: the PRs are checked by running the suite locally and
 by CI (CircleCI: rspec, rubocop, brakeman; Actions: lint, scan_ruby, scan_js).
 
-Context: this file expands `docs/plans.done/ui-dashboard-plan.md` §6 **"UI-2 [Claude]: Home → 1.59.0"** (and §2.2 Home)
+Context: this file expands `docs/plans/done/ui-dashboard-plan.md` §6 **"UI-2 [Claude]: Home → 1.59.0"** (and §2.2 Home)
 and wins where the two differ. The Home scope there is unchanged and is carried as **UI-2b** below. Steve added two
 items to UI-2 on Oct 27, and they are carried as **UI-2a**:
 
@@ -20,7 +20,7 @@ items to UI-2 on Oct 27, and they are carried as **UI-2a**:
 2. a host-side **`bin/up`** that detects the host's LAN address, subnet and host names and passes them as the
    allowlist defaults to `docker compose up -d` (Steve: "Fold the bin/up LAN auto-detect into the UI-2 plan").
 
-It also records the **PR-B follow-up** from `docs/plans.done/mcp-sdk-1.8.2-plan.md`: a runtime source for the allowed
+It also records the **PR-B follow-up** from `docs/plans/done/mcp-sdk-1.8.2-plan.md`: a runtime source for the allowed
 origins must call `Transports.reset!` (the transport reads the list once, when it is built; CORS reads it per
 request). A1–A4 below do that.
 

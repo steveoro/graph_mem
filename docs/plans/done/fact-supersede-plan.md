@@ -1,6 +1,6 @@
 # Fact supersede → graph_mem 1.64.0: source facts that retire the observations they contradict, per project, never by age
 
-**Status (Oct 30): DONE.** Shipped as #141, merged to `main` as `089ae2d` and tagged **1.64.0**. Next: §6.D-6 plus the audit actor fix, `docs/plans.done/d6-cleanup-plan.md` (1.65.0).
+**Status (Oct 30): DONE.** Shipped as #141, merged to `main` as `089ae2d` and tagged **1.64.0**. Next: §6.D-6 plus the audit actor fix, `docs/plans/done/d6-cleanup-plan.md` (1.65.0).
 
 **1.63.0 update (Oct 29, after UI-7).** UI-7 shipped as 1.63.0 (`501f5d5`), so the version is **1.64.0** and FS is
 next. Re-checked against `501f5d5`: of the files this plan cites, only the header comments of
@@ -37,7 +37,7 @@ contradiction is checked per pair.
 | Commits | S → F1 … F6 → T → D → R, one commit per step (more is fine, fewer is not; S stays its own commit) |
 | Version | **1.64.0** (UI-7 shipped as 1.63.0 on Oct 29) |
 | Data | synthetic only (`SynthWidget`, `Alpha Service`, `Gadget Project`, a "Legacy Gadget" project as the legacy case); never a real graph, never a copy of one, never a real project folder |
-| Read first | `CLAUDE.md`, `AGENTS.md`, `.devin/rules/*`, `docs/plans.done/ui-dashboard-plan.md` §0.1, §2.5, §5.3; `docs/plans.done/ui-5-plan.md` (review kinds, policies); `docs/architecture.md` "Change sets and undo" |
+| Read first | `CLAUDE.md`, `AGENTS.md`, `.devin/rules/*`, `docs/plans/done/ui-dashboard-plan.md` §0.1, §2.5, §5.3; `docs/plans/done/ui-5-plan.md` (review kinds, policies); `docs/architecture.md` "Change sets and undo" |
 | Depends on | UI-4a (change sets) ✅, UI-5 (review kinds, policies) ✅, UI-4b (Explore panel) ✅. Not on UI-6 or UI-7 (both shipped; branch from `main` after 1.63.0) |
 
 ## Goal
@@ -385,7 +385,7 @@ restores it; CI green.
 - `docs/guides/ui-guide.md`: Explore "Mark as source fact"; Review "Outdated by a fact"; the Find & supersede page.
 - `skills/graph-mem-mcp-toolset/SKILL.md`: when agents write a source fact and how to use
   `detect_contradictions` with `mode: "outdated_by_fact"`, then `list_maintenance_review` / `apply_maintenance_review`.
-- `docs/plans.done/ui-dashboard-plan.md`: the "FS" row ✅ with the PR number.
+- `docs/plans/done/ui-dashboard-plan.md`: the "FS" row ✅ with the PR number.
 
 ### R. Release
 - `lib/graph_mem/version.rb` and `skills/graph-mem-mcp-toolset/SKILL.md:18` → the version from the Brief.

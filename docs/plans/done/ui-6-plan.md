@@ -1,6 +1,6 @@
 # UI-6 → graph_mem 1.62.0: Projects & Data (projects list, one scan form with a live path check, scan detail, imports with history, async exports), plus the #136 leftovers
 
-**✅ DONE (Oct 29):** shipped in #137 as **1.62.0** (merged as `dddad69`, tagged `v1.62.0`). The one leftover from the #137 review (the "capped" hints show at exactly 500 roots, because the check is `>=`) is step **L** of `docs/plans.done/ui-7-plan.md`, and Decision 1's "UI-7 may move Background jobs under System" is that plan's Decision 1.
+**✅ DONE (Oct 29):** shipped in #137 as **1.62.0** (merged as `dddad69`, tagged `v1.62.0`). The one leftover from the #137 review (the "capped" hints show at exactly 500 roots, because the check is `>=`) is step **L** of `docs/plans/done/ui-7-plan.md`, and Decision 1's "UI-7 may move Background jobs under System" is that plan's Decision 1.
 
 **Written 2026-10-29 (Europe/Rome)** for Claude, from `main` at `9e51dd9` (#136 merged as `05aa5c1`, **1.61.0 not
 tagged yet**: Steve tags it). Every file:line in "What the code looks like today" was checked against that commit. If
@@ -8,7 +8,7 @@ a line has moved, find the code by the quoted text. If the code no longer matche
 Steve** instead of improvising. Only code was read while writing this plan. **No spec was run**: the PR is checked by
 running the suite locally and by CI (CircleCI: rspec, rubocop, brakeman; Actions: lint, scan_ruby, scan_js).
 
-Context: this file expands `docs/plans.done/ui-dashboard-plan.md` §6 **"UI-6 [Claude]: Projects & Data → 1.62.0"** and
+Context: this file expands `docs/plans/done/ui-dashboard-plan.md` §6 **"UI-6 [Claude]: Projects & Data → 1.62.0"** and
 §2.6, and it wins where they differ. It also carries the optional leftovers from the #136 review (step **L**). Scope:
 Projects & Data replaces the scan, import and export parts of the Maintenance hub. It has the following parts:
 - a projects list;
@@ -28,7 +28,7 @@ are done.
 | Commits | L → P1 … P6 → T → D → R, one commit per step (more is fine, fewer is not; L stays its own commit) |
 | Scope | §2.6, minus what "Open decisions" changes, plus L |
 | Data | synthetic only (`SynthWidget`, `Alpha Service`, `Gadget Project`, `Dir.mktmpdir` trees as scan roots); never a real graph, never a copy of one, never a real project folder |
-| Read first | `CLAUDE.md`, `AGENTS.md`, `.devin/rules/*`, `docs/plans.done/ui-dashboard-plan.md` §0.1, §2.6, §5; `docs/guides/ui-guide.md` "Projects & Data"; `docs/architecture.md` |
+| Read first | `CLAUDE.md`, `AGENTS.md`, `.devin/rules/*`, `docs/plans/done/ui-dashboard-plan.md` §0.1, §2.6, §5; `docs/guides/ui-guide.md` "Projects & Data"; `docs/architecture.md` |
 
 ## What the code looks like today (verified at `9e51dd9`)
 
@@ -258,7 +258,7 @@ redirects. CI is green.
   - the guest 403 list (220).
 - `docs/dream_state.md:149,168,239`: the new location of the compactor controls.
 - `docs/architecture.md`: `ProjectScanLauncher`, the import history from `OperationProgress.details`.
-- `docs/plans.done/ui-dashboard-plan.md`: row 21 ✅ with the PR number.
+- `docs/plans/done/ui-dashboard-plan.md`: row 21 ✅ with the PR number.
 
 ### R. Release 1.62.0
 - `lib/graph_mem/version.rb` → `1.62.0`, and `skills/graph-mem-mcp-toolset/SKILL.md:18` →

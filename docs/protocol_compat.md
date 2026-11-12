@@ -47,7 +47,7 @@ drops the field.
 ## Claude Code
 
 `script/mcp_compat/claude_client_check.rb` (the automated
-[`docs/plans.done/claude-mcp-client-check.md`](plans.done/claude-mcp-client-check.md)), 2026-10-25: Claude
+[`docs/plans/done/claude-mcp-client-check.md`](plans/done/claude-mcp-client-check.md)), 2026-10-25: Claude
 Code 2.1.310 against graph_mem 1.55.0, over HTTP (default, readonly and maintenance profiles, and a
 wrong bearer token) and stdio. All checks pass in both modes. Claude Code negotiates 2026-07-28 over
 HTTP and stdio by default, and 2025-11-25 with `MCP_PROTOCOL_NEGOTIATION=legacy`.

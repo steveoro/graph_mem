@@ -1,7 +1,7 @@
 # F2c → graph_mem 1.83.0: LLM words for facts that name no entity
 
 **Status (2026-11-12): DESIGN, for Steve's review.** Written from `main` at `50c92d0` (1.82.0). Builds on F2b's
-same-fact ladder (`docs/plans.done/f2b-same-fact-design.md`).
+same-fact ladder (`docs/plans/done/f2b-same-fact-design.md`).
 
 ## Why
 

@@ -1,6 +1,6 @@
 # D-6 cleanup + audit actor → graph_mem 1.65.0: drop the transition shims, and record who wrote what through MCP
 
-**Status (Oct 30): DONE.** Split at checkpoint 1: Part A in #142 (merged as `e808274`, no bump), Part B in #143 (merged as `dc571a8`, tagged **1.65.0**). Next: §6.F F-3, `docs/plans.done/f3-scan-chunking-plan.md` (1.66.0).
+**Status (Oct 30): DONE.** Split at checkpoint 1: Part A in #142 (merged as `e808274`, no bump), Part B in #143 (merged as `dc571a8`, tagged **1.65.0**). Next: §6.F F-3, `docs/plans/done/f3-scan-chunking-plan.md` (1.66.0).
 
 **Written 2026-10-30 (Europe/Rome)** for Claude, from `main` at `089ae2d` (#141 merged, **tagged `v1.64.0`**). Every
 file:line in "What the code looks like today" was checked against that commit. If a line has moved, find the code by
@@ -23,7 +23,7 @@ Context: two independent pieces in one PR, each in its own commits.
 | Commits | A1 → A2 → A3 → B1 … B6 → T → D → R, one commit per step (more is fine, fewer is not) |
 | Version | **1.65.0** (default, Decision 1): a migration plus removed routes is more than a patch |
 | Data | synthetic only (`SynthWidget`, `Alpha Service`, `Gadget Project`, client ids like `synth-client-a`, `Dir.mktmpdir` folders); never a real graph, a copy of one, a real project folder or a real host or user name |
-| Read first | `CLAUDE.md`, `AGENTS.md`, `.devin/rules/*`; `docs/plans.done/ui-dashboard-plan.md` §6.D-6; `docs/plans.done/ui-7-plan.md` Decision 2; `docs/architecture.md` "Change sets and undo" |
+| Read first | `CLAUDE.md`, `AGENTS.md`, `.devin/rules/*`; `docs/plans/done/ui-dashboard-plan.md` §6.D-6; `docs/plans/done/ui-7-plan.md` Decision 2; `docs/architecture.md` "Change sets and undo" |
 | Depends on | 1.64.0 on `main` ✅ (it is the "one release after UI-7" that D-6 waited for) |
 | MCP surface | **unchanged**: no new tool, no new or changed tool argument; default `/mcp` stays at **12**, readonly 9, maintenance 22, 22 classes; `spec/fixtures/mcp/snapshots/*.json` byte-identical |
 
@@ -331,7 +331,7 @@ Stop for Steve's review of the removed list.
 - `docs/mcp_tools.md` (`graph_write` section): one line restating the `source` convention
   `"<client>/<model>: <task>"` and that the audit log reads its prefix as a claim and its suffix as the reason.
   Do **not** change any tool description or schema string (snapshots stay unchanged).
-- `docs/plans.done/ui-dashboard-plan.md`: the D-6 row ✅ with the PR number; §6.D-6 marked done.
+- `docs/plans/done/ui-dashboard-plan.md`: the D-6 row ✅ with the PR number; §6.D-6 marked done.
 - Generic paths only (`<project root>`, `/path/to/…`), no host or user names.
 
 ### R. Release

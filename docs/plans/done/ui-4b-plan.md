@@ -1,6 +1,6 @@
 # UI-4b → graph_mem 1.61.0: Explore (canvas + editable panel, merges with a preview, every edit undoable), plus F-1, F-2 and the UI-3 leftovers
 
-**✅ DONE (Oct 29):** shipped in #136 as **1.61.0** (merged as `05aa5c1`; **tag pending**, Steve tags it). The optional follow-ups left from the #136 review are none of them blocking, and they are step **L** of `docs/plans.done/ui-6-plan.md`: `EntityMergePreview#subtree_size` limits relation rows, not new ids (`entity_merge_preview.rb:159-160`); the capped neighbourhood read in `graph_data` has no `ORDER` (`graph_data_controller.rb:109`); and the panel's "Show it" link is dead when the duplicate is on another panel page (`_add_observation.html.haml:15`).
+**✅ DONE (Oct 29):** shipped in #136 as **1.61.0** (merged as `05aa5c1`; **tag pending**, Steve tags it). The optional follow-ups left from the #136 review are none of them blocking, and they are step **L** of `docs/plans/done/ui-6-plan.md`: `EntityMergePreview#subtree_size` limits relation rows, not new ids (`entity_merge_preview.rb:159-160`); the capped neighbourhood read in `graph_data` has no `ORDER` (`graph_data_controller.rb:109`); and the panel's "Show it" link is dead when the duplicate is on another panel page (`_add_observation.html.haml:15`).
 
 **Written 2026-10-28 (Europe/Rome)** for Claude, from `main` at `9c8d3bc` (1.60.0 tagged, #135 merged as `5e17353`).
 Every file:line in "What the code looks like today" was checked against that commit. If a line has moved, find the
@@ -8,11 +8,11 @@ code by the quoted text; if the code no longer matches the description, **stop a
 Only code was read while writing this plan. **No spec was run**: the PR is checked by running the suite locally and by
 CI (CircleCI: rspec, rubocop, brakeman; Actions: lint, scan_ruby, scan_js).
 
-Context: this file expands `docs/plans.done/ui-dashboard-plan.md` §6 **"UI-4b [Claude]: Explore → 1.61.0"**, §2.4
+Context: this file expands `docs/plans/done/ui-dashboard-plan.md` §6 **"UI-4b [Claude]: Explore → 1.61.0"**, §2.4
 (Explore), §5.1-§5.4 (guardrails, confirm levels, change sets, role matrix) and wins where they differ. It also
 carries three small items that Steve folded into this PR on Oct 28: §6.F **F-1** (handled errors never reach the
 log), §6.F **F-2** (GitHub Actions can't set up Ruby) and the optional leftovers listed at the top of
-`docs/plans.done/ui-3-plan.md`. Scope: Explore replaces the `/graph` page. One canvas for the operator and the guest, the
+`docs/plans/done/ui-3-plan.md`. Scope: Explore replaces the `/graph` page. One canvas for the operator and the guest, the
 UI-3 entity panel on the right, operator edits that each run in a change set (UI-4a) with a 10-minute undo toast, a
 merge dialog with a server-side preview and a digest check, "Propose deletion" instead of delete, and no browser call
 to an `/api/v1` write endpoint any more.
@@ -25,7 +25,7 @@ to an `/api/v1` write endpoint any more.
 | Commits | F-2 → F-1 → L → E1 … E5 → W1 … W7 → T → D → R, one commit per step (more is fine, fewer is not: F-2, F-1 and L stay separate commits) |
 | Scope | §2.4 exactly, minus what "Decided" below changes; plus F-1, F-2 and the UI-3 leftovers |
 | Data | synthetic only (`SynthWidget`, `Alpha Service`, `Gadget Project`, `Dir.mktmpdir`); never a real graph, never a copy of one |
-| Read first | `CLAUDE.md`, `AGENTS.md`, `.devin/rules/*`, `docs/plans.done/ui-dashboard-plan.md` §0.1, §2.4, §5; `docs/plans.done/ui-4a-plan.md` "Decisions"; `docs/architecture.md` "Change sets and undo (UI-4a, 1.57.0)" (line 224) |
+| Read first | `CLAUDE.md`, `AGENTS.md`, `.devin/rules/*`, `docs/plans/done/ui-dashboard-plan.md` §0.1, §2.4, §5; `docs/plans/done/ui-4a-plan.md` "Decisions"; `docs/architecture.md` "Change sets and undo (UI-4a, 1.57.0)" (line 224) |
 
 ## What the code looks like today (verified at `9c8d3bc`)
 
@@ -410,7 +410,7 @@ sees none of them and every write route answers 403; suite, CSP and escaping spe
   the PR and leave them.
 - `docs/architecture.md` "Change sets and undo": the `explore.*` kinds, `EntityMergePreview` / `EntityMergeService`
   and the digest guard.
-- `docs/plans.done/ui-dashboard-plan.md`: row 20 ✅ with the PR number; mark F-1, F-2 and the UI-3 leftovers done.
+- `docs/plans/done/ui-dashboard-plan.md`: row 20 ✅ with the PR number; mark F-1, F-2 and the UI-3 leftovers done.
 
 ### R. Release 1.61.0
 - `lib/graph_mem/version.rb` → `1.61.0`; `skills/graph-mem-mcp-toolset/SKILL.md:18` → `graph-mem-version: "1.61.0"`;

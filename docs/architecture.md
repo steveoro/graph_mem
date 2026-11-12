@@ -348,7 +348,7 @@ The review rows (`maintenance_report_rows`) that dream-state compaction, the sta
 
 An authoritative statement, such as an updated README line, can retire the older observations of
 **its own project** that it contradicts. Old is not wrong: nothing here filters or scores by age,
-and nothing acts across projects. Step list: `docs/plans.done/fact-supersede-plan.md`.
+and nothing acts across projects. Step list: `docs/plans/done/fact-supersede-plan.md`.
 
 - **Source facts.** An active observation tagged `source-fact` (`SourceFact::SOURCE_FACT_TAG`) on
   an entity inside a project, or on the Project root; a tagged row outside any project is invalid.

@@ -4,7 +4,7 @@ Design records and step lists for work that has shipped. They are kept for their
 rationale; the code, the specs and `CHANGELOG.md` are the source of truth for what was built. File:line
 references inside them point at the commits they were written from and are not kept up to date.
 
-Active plans and the backlog live in [`docs/plans/`](../plans/).
+Active plans and the backlog live in [`docs/plans/`](../).
 
 | File | What it records | Shipped |
 |---|---|---|

@@ -192,7 +192,7 @@ Every model call goes through one seam, `Llm::Router` (`app/services/llm/`), whi
   | no answer, timeout, anything else | `bridge_unreachable`, `bridge_bad_response` | next provider | fails, not split |
 
   Only the 413 row carries an `http_status`, so a bridge 400 can never make a scan split its parts. Two bridge failures in a row stop a scan, like two Ollama outages. The answer is normalized before the tokens are restored (`Llm::ResponseNormalizer`): for `format: "json"` (scan, judge), one Markdown fence and the prose around the outermost JSON value are dropped; a summary is trimmed; then the caller's `max_output_length` applies as for Ollama.
-- **Setting it up:** the adopter guide, [`docs/agent_cli_backends.md`](agent_cli_backends.md), covers the workstation, the bridge, the app side, enabling one task for one project, what leaves the machine and how to turn it off. The train's plan: [`docs/plans.done/agent-cli-backend-plan.md`](plans.done/agent-cli-backend-plan.md).
+- **Setting it up:** the adopter guide, [`docs/agent_cli_backends.md`](agent_cli_backends.md), covers the workstation, the bridge, the app side, enabling one task for one project, what leaves the machine and how to turn it off. The train's plan: [`docs/plans/done/agent-cli-backend-plan.md`](plans/done/agent-cli-backend-plan.md).
 - **Specs:** `spec/support/llm.rb` has a `FakeProvider` (`with_llm_provider(fake) { … }`) and a `SubprocessGuard` that fails a spec when code under `app/` or `lib/` starts a process (`lib/tasks/db_utils.rake`, which runs mariadb-dump for backups, is the one exception). `spec/services/llm/characterization_spec.rb` pins every prompt and request body against `spec/fixtures/llm/`.
 
 ## Anonymization and cloud access

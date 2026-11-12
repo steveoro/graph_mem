@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 # Claude Code as the MCP client against a local graph_mem: the automated version of
-# docs/plans.done/claude-mcp-client-check.md (Parts A, B and C).
+# docs/plans/done/claude-mcp-client-check.md (Parts A, B and C).
 #
 #   script/mcp_compat/claude_client_check.rb [--model NAME] [--budget USD] [--port N]
 #                                            [--only default|legacy] [--timeout SECONDS]

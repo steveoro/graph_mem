@@ -1,6 +1,6 @@
 # UI-7 → graph_mem 1.63.0: System (health, one settings schema, backups with a typed restore, access, activity, jobs), plus the #137 leftover
 
-**Status (Oct 29): DONE.** Shipped as UI-7a (#138) and UI-7b (#140, split at S4 and merged into #138), merged to `main` as `501f5d5` and tagged **1.63.0**. The only leftover is §6.D-6 (drop the transition shims, UI-7's included; listed in `ui-dashboard-plan.md` §6.D-6), a separate PR after 1.63.0. Next: fact supersede, `docs/plans.done/fact-supersede-plan.md` (1.64.0).
+**Status (Oct 29): DONE.** Shipped as UI-7a (#138) and UI-7b (#140, split at S4 and merged into #138), merged to `main` as `501f5d5` and tagged **1.63.0**. The only leftover is §6.D-6 (drop the transition shims, UI-7's included; listed in `ui-dashboard-plan.md` §6.D-6), a separate PR after 1.63.0. Next: fact supersede, `docs/plans/done/fact-supersede-plan.md` (1.64.0).
 
 **Written 2026-10-29 (Europe/Rome)** for Claude, from `main` at `dddad69` (#137 merged and **tagged 1.62.0**). Every
 file:line in "What the code looks like today" was checked against that commit. If a line has moved, find the code by
@@ -8,7 +8,7 @@ the quoted text. If the code no longer matches the description, **stop and ask S
 code was read while writing this plan. **No spec was run**: the PR is checked by running the suite locally and by CI
 (CircleCI: rspec, rubocop, brakeman; Actions: lint, scan_ruby, scan_js).
 
-Context: this file expands `docs/plans.done/ui-dashboard-plan.md` §6 **"UI-7 [Claude]: System → 1.63.0"** and §2.7, and it
+Context: this file expands `docs/plans/done/ui-dashboard-plan.md` §6 **"UI-7 [Claude]: System → 1.63.0"** and §2.7, and it
 wins where they differ. It also carries the one small leftover from the #137 review (step **L**) and what earlier
 plans left for UI-7:
 - moving "Background jobs" under System (`ui-6-plan.md` Decision 1);
@@ -30,7 +30,7 @@ All of System is operator only (§5.4: guest 403). The dependency (UI-1: shell, 
 | Commits | L → S1 … S7 → T → D → R, one commit per step (more is fine, fewer is not; L stays its own commit) |
 | Scope | §2.7 and §6 UI-7, minus what "Open decisions" changes, plus L |
 | Data | synthetic only (`SynthWidget`, `Alpha Service`, `Gadget Project`, `Dir.mktmpdir` folders as backup and scan roots); never a real graph, a real backup file, a real project folder or real credentials |
-| Read first | `CLAUDE.md`, `AGENTS.md`, `.devin/rules/*`, `docs/plans.done/ui-dashboard-plan.md` §0.1, §2.7, §5.2, §5.4; `docs/guides/ui-guide.md` "System" and "The read-only guest"; `docs/app_settings_reference.md`; `docs/mcp_access_control.md` |
+| Read first | `CLAUDE.md`, `AGENTS.md`, `.devin/rules/*`, `docs/plans/done/ui-dashboard-plan.md` §0.1, §2.7, §5.2, §5.4; `docs/guides/ui-guide.md` "System" and "The read-only guest"; `docs/app_settings_reference.md`; `docs/mcp_access_control.md` |
 
 ## What the code looks like today (verified at `dddad69`)
 
@@ -285,7 +285,7 @@ now.**
 - Repoint `/operator/*` paths in `docs/operator/embeddings.md`, `docs/summarization.md`, `docs/garbage_collector.md`,
   `docs/mcp_access_control.md`, `docs/development.md` and `README.md`.
 - `docs/architecture.md`: `SettingsSchema`, `SystemHealth`, the typed confirmation.
-- `docs/plans.done/ui-dashboard-plan.md`: row 22 ✅ with the PR number; append UI-7's shims to §6.D-6.
+- `docs/plans/done/ui-dashboard-plan.md`: row 22 ✅ with the PR number; append UI-7's shims to §6.D-6.
 
 ### R. Release 1.63.0
 - `lib/graph_mem/version.rb` → `1.63.0`, and `skills/graph-mem-mcp-toolset/SKILL.md:18` →
