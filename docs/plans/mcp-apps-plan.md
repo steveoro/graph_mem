@@ -44,8 +44,6 @@ The review found that decisions 3 and 5 meet limits in the spec and in the `sear
 7. **`get_context` is not linked.** Only `traverse_graph` and `find_shortest_path` open the view. Decision 3 is
    applied inside the view: "Context project" and "Root entities" are buttons.
 
-Provisional, on Claude's recommendation, until Steve confirms (he left both open):
-
 8. **The root view pages the unfiltered catalog** and filters in the view. No change to `search`. Revisit when a
    graph outgrows the 2,000-entity scan or the load is slow in practice; the tool change (filters in catalog mode)
    stays a hard stop.
@@ -525,5 +523,3 @@ snapshots), B about 1,500, C about 900. **Stop and ask Steve if a PR's diff grow
    Default on or off?
 4. **List the `ui://` resource in `resources/list`,** or rely on tool metadata only (the spec allows both)?
    Recommended: list it.
-5. **Confirm the two provisional decisions** (8: the root view pages the catalog; 9: no `set_context` control in
-   v1), or change them.
