@@ -275,6 +275,11 @@ class ScheduledRunJob < ApplicationJob
     end
     if stop_requested?
       run.pause!
+      # Keep its progress row in step, as the compactor does when it pauses itself.
+      if (operation = run.operation_progress)
+        operation.pause!(message: "Compaction paused")
+        OperationProgressBroadcaster.call(operation)
+      end
       return finish(index, "stopped", "note" => "paused (no compaction job was running it)")
     end
 

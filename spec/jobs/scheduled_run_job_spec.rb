@@ -272,9 +272,23 @@ RSpec.describe ScheduledRunJob do
       2.times { run(row) }
 
       expect(compaction.reload.status).to eq("paused")
+      expect(compaction.operation_progress.reload.status).to eq("paused") # in step, as when the compactor pauses itself
       expect(outcomes(row)).to eq([ "stopped", nil ])
       expect(row.status).to eq("paused")
     end
+  end
+
+  it "leaves a compaction run that a job is running alone, however many polls" do
+    allow(described_class).to receive(:compaction_job_live?).and_return(true)
+    row = described_class.start!(steps: steps("DreamStateCompactionJob", "SynthAlphaJob"))
+    run(row)
+    clear_enqueued_jobs
+
+    3.times { run(row) }
+
+    expect(DreamStateCompactionJob).not_to have_been_enqueued
+    expect(outcomes(row)).to eq([ "waiting", nil ])
+    expect(row.details["steps"][0]).not_to have_key("idle_polls")
   end
 
   it "stops at its next write when the run moved on without it (paused or resumed meanwhile)" do
