@@ -16,8 +16,8 @@ class FactKeywordsJob < ApplicationJob
   MAX_BATCHES = 200
   # A burst of writes (an import, a scan) asks for one run, a moment after its first write.
   REQUEST_DELAY = 5
-  # 1.83.0: LLM word batches per run (FactKeywords::LlmWords::BATCH_SIZE facts each); the next
-  # request or night continues.
+  # 1.83.0: LLM word batches per run that reach the LLM (FactKeywords::LlmWords::BATCH_SIZE facts
+  # each); the next request or night continues. A batch the cloud gate refused isn't charged.
   LLM_BATCHES_PER_RUN = 25
   # Batches in a row the LLM failed to answer (down, not JSON) before the run gives up; one such
   # batch is passed over, so it never blocks the facts behind it. A batch the cloud gate refused
@@ -74,8 +74,10 @@ class FactKeywordsJob < ApplicationJob
     stamped = 0
     after_id = 0
     empty = 0
-    LLM_BATCHES_PER_RUN.times do
-      break if CooperativeStop.requested?
+    asked = 0
+    # Ends: the cursor only moves forward, and the loop breaks on an empty batch or the cap.
+    loop do
+      break if asked >= LLM_BATCHES_PER_RUN || CooperativeStop.requested?
 
       batch = MemoryObservation.active.where.not(keywords_at: nil).llm_words_pending.where("memory_observations.id > ?", after_id)
                                .includes(:memory_entity).order(:id).limit(FactKeywords::LlmWords::BATCH_SIZE).to_a
@@ -85,8 +87,10 @@ class FactKeywordsJob < ApplicationJob
       refused = []
       done = FactKeywords::LlmWords.compute!(batch, refused: refused)
       stamped += done
-      next if refused.any? && done.zero? # refused by the cloud gate: not the LLM failing
+      # Refused by the cloud gate (nothing sent): neither the LLM failing nor a call to charge.
+      next if refused.any? && done.zero?
 
+      asked += 1
       empty = done.zero? ? empty + 1 : 0
       break if empty >= LLM_EMPTY_BATCHES
     end
