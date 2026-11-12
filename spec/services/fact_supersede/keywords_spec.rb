@@ -10,7 +10,7 @@ RSpec.describe "FactSupersede keyword paths" do
   let!(:buffer) { fs_member!(gadget, "FrameBuffer") }
   let!(:alpha) { fs_member!(gadget, "AlphaService") }
 
-  it "boosts a related candidate, most for a shared first mention, and keeps the signal" do
+  it "boosts a same-subject candidate the fact covers, and keeps the signal (1.82.0)" do
     fact = fs_fact!(widget, "SynthWidget now draws into a FrameBuffer.", tags: [ "replaces:draws" ])
     fs_observe!(widget, "SynthWidget draws straight to the screen, not a FrameBuffer.")
     fs_observe!(widget, "SynthWidget draws for AlphaService.")
@@ -18,9 +18,10 @@ RSpec.describe "FactSupersede keyword paths" do
     candidates = FactSupersede::Candidates.call(fact).candidates.index_by { |candidate| candidate.observation.content }
 
     related = candidates.fetch("SynthWidget draws straight to the screen, not a FrameBuffer.")
-    expect(related).to have_attributes(subject: :related, strong: true, shared_keywords: %w[FrameBuffer],
+    # The same subject (SynthWidget, FrameBuffer), no detail: the shared boost (1.78.0 gave the strong one).
+    expect(related).to have_attributes(subject: :related, strong: true, shared_keywords: %w[FrameBuffer], level: "same",
                                        score: (FactSupersede::Candidates::TERM_SCORE + FactSupersede::Candidates::POLARITY_BOOST +
-                                               FactSupersede::Candidates::STRONG_BOOST).round(3))
+                                               FactSupersede::Candidates::SHARED_BOOST).round(3))
     # In memory only: the row's signals reach MCP verbatim.
     expect(related.signals.keys).to contain_exactly("term", "polarity_flip", "scoped")
     other = candidates.fetch("SynthWidget draws for AlphaService.")
@@ -29,16 +30,21 @@ RSpec.describe "FactSupersede keyword paths" do
     expect(other.unrelated?).to be(false) # found by a search term
   end
 
-  it "proposes a row unless the pair is unrelated and no term found it, judged or not (1.80.0)" do
+  it "proposes a judged row unless the pair is unrelated and no term found it; an unjudged one only for the same fact (1.82.0)" do
     proposals = FactSupersede::Proposals.new(fs_fact!(widget), terms: [], limit: 10, seed: false, max_batches: nil)
-    verdict = ->(subject, term, outcome) do
-      FactSupersede::Judge::Verdict.new(candidate: FactSupersede::Candidate.new(subject: subject, term: term), verdict: outcome)
+    verdict = ->(subject, term, outcome, same_fact = false) do
+      candidate = FactSupersede::Candidate.new(subject: subject, term: term, same_fact: same_fact)
+      FactSupersede::Judge::Verdict.new(candidate: candidate, verdict: outcome)
     end
 
     expect(proposals.send(:proposal?, verdict.call(:unrelated, nil, FactSupersede::Judge::UNJUDGED))).to be(false)
     expect(proposals.send(:proposal?, verdict.call(:unrelated, "draws", FactSupersede::Judge::UNJUDGED))).to be(true)
-    expect(proposals.send(:proposal?, verdict.call(:one_sided, nil, FactSupersede::Judge::UNJUDGED))).to be(true)
+    expect(proposals.send(:proposal?, verdict.call(:one_sided, nil, FactSupersede::Judge::UNJUDGED))).to be(false)
+    expect(proposals.send(:proposal?, verdict.call(:related, nil, FactSupersede::Judge::UNJUDGED))).to be(false)
+    expect(proposals.send(:proposal?, verdict.call(:related, nil, FactSupersede::Judge::UNJUDGED, true))).to be(true)
+    # Fact keywords off: no subject, as before.
     expect(proposals.send(:proposal?, verdict.call(nil, nil, FactSupersede::Judge::UNJUDGED))).to be(true)
+    expect(proposals.send(:proposal?, verdict.call(:related, nil, "superseded"))).to be(true)
     expect(proposals.send(:proposal?, verdict.call(:unrelated, nil, "superseded"))).to be(false)
     expect(proposals.send(:proposal?, verdict.call(:unrelated, "draws", "superseded"))).to be(true)
     expect(proposals.send(:proposal?, verdict.call(:related, nil, "still_valid"))).to be(false)
@@ -88,6 +94,30 @@ RSpec.describe "FactSupersede keyword paths" do
     expect(subjects.values_at(*siblings.map(&:id))).to all(eq(:unrelated))
     expect(subjects[near.id]).to eq(:unknown)
     expect(pair_queries).to eq(0)
+  end
+
+  it "boosts most a same-subject candidate with a different detail, and none one that covers more than the fact (1.82.0)" do
+    fact = fs_fact!(widget, "SynthWidget renders 60 frames into a FrameBuffer.", tags: [ "replaces:FrameBuffer" ])
+    fs_observe!(widget, "SynthWidget renders 30 frames into a FrameBuffer.")
+    fs_observe!(widget, "SynthWidget renders into a FrameBuffer for AlphaService.")
+
+    candidates = FactSupersede::Candidates.call(fact).candidates.index_by { |candidate| candidate.observation.content }
+
+    detail = candidates.fetch("SynthWidget renders 30 frames into a FrameBuffer.")
+    expect(detail).to have_attributes(level: "same", same_fact: true,
+                                      score: (FactSupersede::Candidates::TERM_SCORE + FactSupersede::Candidates::STRONG_BOOST).round(3))
+    more = candidates.fetch("SynthWidget renders into a FrameBuffer for AlphaService.")
+    expect(more).to have_attributes(level: "same", same_fact: false, score: FactSupersede::Candidates::TERM_SCORE)
+  end
+
+  it "gives the judge each statement's level and the same-thing rule (1.82.0)" do
+    fact = fs_fact!(widget, "SynthWidget renders 60 frames into a FrameBuffer.")
+    candidate = FactSupersede::Candidate.new(observation: fs_observe!(widget, "SynthWidget renders 30 frames."), scoped: true, level: "related")
+
+    statement = FactSupersede::Judge.new(fact, nil).send(:statement, candidate)
+
+    expect(statement).to include(subject: "related")
+    expect(FactSupersede::Judge::PROMPT_RULES).to include('"superseded" requires the statement to be about the same thing as the fact and to differ in a detail')
   end
 
   it "leaves candidates as before with fact keywords off" do

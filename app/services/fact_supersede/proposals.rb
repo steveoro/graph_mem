@@ -82,9 +82,12 @@ module FactSupersede
 
     private
 
-    # A superseded or unjudged verdict on a pair the keyword paths don't call unrelated.
+    # A superseded or unjudged verdict on a pair the keyword paths don't call unrelated; an unjudged
+    # one only for the same fact with a different detail, or a term match (1.82.0).
     def proposal?(verdict)
-      PROPOSAL_VERDICTS.include?(verdict.verdict) && !verdict.candidate.unrelated?
+      return false unless PROPOSAL_VERDICTS.include?(verdict.verdict) && !verdict.candidate.unrelated?
+
+      verdict.verdict != Judge::UNJUDGED || verdict.candidate.seed_unjudged?
     end
 
     # The candidates whose pair (signature fact:<id>|obs:<id>) already has a pending row or an

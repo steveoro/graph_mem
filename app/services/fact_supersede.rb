@@ -22,8 +22,11 @@ module FactSupersede
   #   :unrelated, :one_sided or :unknown), nil with fact keywords off (1.78.0)
   # @!attribute shared_keywords [Array<String>, nil] the names both paths share
   # @!attribute strong [Boolean, nil] the paths share their first mention
+  # @!attribute level [String, nil] "same", "related" or "unclear" (1.82.0, Comparison#level), for the judge
+  # @!attribute same_fact [Boolean, nil] the fact covers the candidate's subject and states a different
+  #   detail (Comparison#same_fact_different_detail?)
   Candidate = Struct.new(:observation, :score, :distance, :term, :polarity_flip, :scoped, :guard, :guard_reason,
-                         :subject, :shared_keywords, :strong, keyword_init: true) do
+                         :subject, :shared_keywords, :strong, :level, :same_fact, keyword_init: true) do
     # @return [Hash] what found it, for the review row and the page
     # The keyword comparison isn't in it: review payloads reach MCP verbatim, and the review view
     # recomputes the shared names from the live paths.
@@ -36,6 +39,13 @@ module FactSupersede
     #   matched: the pair is neither judged nor proposed (1.80.0)
     def unrelated?
       subject == :unrelated && term.nil?
+    end
+
+    # @return [Boolean] whether an unjudged row may be proposed (1.82.0): only for the same fact with a
+    #   different detail, or a search-term match. Being related isn't enough without the judge. With
+    #   fact keywords off (no subject), as before.
+    def seed_unjudged?
+      term.present? || subject.nil? || same_fact == true
     end
   end
 end
