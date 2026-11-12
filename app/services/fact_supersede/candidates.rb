@@ -80,9 +80,17 @@ module FactSupersede
       comparison = keyword_comparison(observation)
       score += boost(comparison)
       Candidate.new(observation: observation, score: [ score, MAX_SCORE ].min.round(3), distance: distance, term: hits[observation.id],
-                    polarity_flip: flip, scoped: scoped_entity?(observation.memory_entity), subject: comparison&.subject,
+                    polarity_flip: flip, scoped: scoped_entity?(observation.memory_entity), subject: candidate_subject(comparison),
                     shared_keywords: comparison&.shared, strong: comparison&.strong, level: comparison&.level,
                     same_fact: comparison&.same_fact_different_detail?)
+    end
+
+    # The candidate's subject: unrelated by LLM words alone counts as unknown, so the pair is still
+    # judged (1.83.0); unrelated by entity mentions stays the hard skip.
+    def candidate_subject(comparison)
+      return nil unless comparison
+
+      comparison.subject == :unrelated && comparison.by_words ? :unknown : comparison.subject
     end
 
     # 1.82.0: only a candidate about the same subject, which the fact covers, is boosted; most when

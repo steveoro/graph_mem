@@ -386,7 +386,12 @@ and nothing acts across projects. Step list: `docs/plans/fact-supersede-plan.md`
   batches of 20, scoped like summaries; stored in `memory_observations.llm_keywords`, never merged
   with the path nor embedded, `llm_keywords_at` NULL = pending). Two such facts on one entity
   compare by their words (case and plurals folded): one containing the other's is the same subject
-  (with `covers`), some shared is related, none is unrelated. `FactKeywordsJob` computes pending
+  (with `covers`), some shared is related, none is unrelated, but never the hard skip
+  (`Comparison#hard_unrelated?` is for entity mentions only): such a pair gets no unjudged row and
+  no contradiction pair, yet it is still judged, and `no_shared_subject` never dismisses a judged row
+  on words alone. A scan asks at most 3 word batches inside its reconcile (none after one the LLM
+  didn't answer); `FactKeywordsJob` asks one project per call and walks past a batch that stamps
+  nothing. `FactKeywordsJob` computes pending
   words after the paths (25 batches per run, stopping between batches in a scheduled run), a scan
   computes its own facts' words before its dedupe (a subset of the stored words is a duplicate), and
   `graph_mem:fact_keywords:llm_refresh` / `llm_report` refresh and count them. Setting

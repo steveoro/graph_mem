@@ -120,6 +120,22 @@ RSpec.describe "FactSupersede keyword paths" do
     expect(FactSupersede::Judge::PROMPT_RULES).to include('"superseded" requires the statement to be about the same thing as the fact and to differ in a detail')
   end
 
+  it "sends a candidate whose LLM words share nothing with the fact's to the judge, never skipped (Steve, final review)" do
+    fact = fs_fact!(widget, "Deploys with Kamal 2.")
+    old = fs_observe!(widget, "Shipped to production via Capistrano.")
+    FactKeywords.compute!(MemoryObservation.where(id: [ fact.id, old.id ]).includes(:memory_entity))
+    fact.update_columns(llm_keywords: %w[deployment], llm_keywords_at: Time.current)
+    old.update_columns(llm_keywords: %w[production release], llm_keywords_at: Time.current)
+    candidates = FactSupersede::Candidates.new(fact.reload, query: nil, terms: [], limit: 10, include_inactive: false)
+    candidates.instance_variable_set(:@keywords, true)
+
+    candidate = candidates.send(:candidate, old.reload, { old.id => 0.3 }, {})
+
+    expect(candidate.unrelated?).to be(false)
+    expect(candidate).to have_attributes(level: "unclear", same_fact: false)
+    expect(candidate.seed_unjudged?).to be(false)
+  end
+
   it "leaves candidates as before with fact keywords off" do
     AppSettings.fact_keywords_enabled = false
     fact = fs_fact!(widget, "SynthWidget now draws into a FrameBuffer.", tags: [ "replaces:draws" ])

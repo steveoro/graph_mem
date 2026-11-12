@@ -42,7 +42,7 @@ module ReviewPolicies
       pair = row.kind == "contradiction" ? %w[observation_id_1 observation_id_2] : %w[fact_observation_id observation_id]
       payload = row.effective_payload.to_h.deep_stringify_keys
       first, second = active_pair(*payload.values_at(*pair))
-      FactKeywords::Relatedness.compare(first, second).subject == :unrelated ? REASON : REASON_NOT_SAME
+      FactKeywords::Relatedness.compare(first, second).hard_unrelated? ? REASON : REASON_NOT_SAME
     end
 
     def contradiction_status(payload)
@@ -61,7 +61,8 @@ module ReviewPolicies
       return :pending unless FactKeywords::Relatedness.computed?(fact, observation)
 
       comparison = FactKeywords::Relatedness.compare(fact, observation)
-      return :dismiss if comparison.subject == :unrelated
+      # A judged row is dismissed only for facts unrelated by their entity mentions, never by LLM words alone.
+      return :dismiss if comparison.hard_unrelated?
       return :keep unless payload["verdict"] == FactSupersede::Judge::UNJUDGED
 
       comparison.same_fact_different_detail? ? :keep : :dismiss

@@ -89,6 +89,23 @@ RSpec.describe ReviewPolicies::NoSharedSubject do
     expect([ unjudged_detail, judged_related ].map { |row| row.reload.status }).to all(eq("active"))
   end
 
+  it "never dismisses a judged row whose facts differ only by their LLM words (Steve, final review)" do
+    fact = fs_fact!(grant, "Deploys with Kamal 2.").tap { |observation| FactKeywords.compute!([ observation.reload ]) }
+    old = computed("Shipped to production via Capistrano.")
+    fact.update_columns(llm_keywords: %w[deployment], llm_keywords_at: Time.current)
+    old.update_columns(llm_keywords: %w[production release], llm_keywords_at: Time.current)
+    judged = supersede_row(fact, old, verdict: "superseded")
+    unjudged_old = computed("Released by hand every Friday.").tap do |observation|
+      observation.update_columns(llm_keywords: %w[release schedule], llm_keywords_at: Time.current)
+    end
+    unjudged = supersede_row(fact, unjudged_old)
+
+    described_class.new.call
+
+    expect(judged.reload.status).to eq("active")
+    expect(unjudged.reload).to have_attributes(status: "dismissed", resolution_reason: ReviewPolicies::SubjectCheck::REASON_NOT_SAME)
+  end
+
   it "does nothing with fact keywords off or its own toggle off" do
     row = contradiction_row(computed("It belongs to a User."), computed("It is not linked to a Team."))
 

@@ -36,8 +36,14 @@ module FactKeywords
     # - `covers`: :both, :first, :second (whose subjects contain the other's), or nil;
     # - `details`: FactKeywords::Details.compare of the two texts, the first being the newer (:none,
     #   :same, :dropped, :different).
-    Comparison = Data.define(:subject, :strong, :shared, :same_subject, :covers, :details) do
+    # `by_words` (1.83.0): the answer comes from the two facts' LLM words, not their entity mentions.
+    Comparison = Data.define(:subject, :strong, :shared, :same_subject, :covers, :details, :by_words) do
       def related? = subject == :related
+
+      # Unrelated by their entity mentions: the hard skip (never judged, judged rows dismissed).
+      # Unrelated by LLM words alone isn't (Steve, 1.83.0): words are asked per fact and can name one
+      # subject two ways, so such a pair still reaches the judge.
+      def hard_unrelated? = subject == :unrelated && !by_words
 
       # The first fact is about the same thing as the second, covers all it is about, and states a
       # different detail: it may outdate it ("Updated using Rails 8.1" over "… Rails 8.0").
@@ -105,7 +111,7 @@ module FactKeywords
       covers = covers(first, first_owner, first_rooted, second, second_owner, second_rooted)
       Comparison.new(subject: subject(first, second, shared, siblings), strong: first.first.present? && first.first == second.first,
                      shared: shared.uniq, same_subject: !covers.nil?, covers: covers,
-                     details: FactKeywords::Details.compare(first_text, second_text))
+                     details: FactKeywords::Details.compare(first_text, second_text), by_words: false)
     end
 
     # @param observations [Array<MemoryObservation>]
@@ -128,7 +134,7 @@ module FactKeywords
       elsif theirs.superset?(mine) then :second
       end
       Comparison.new(subject: shared.any? ? :related : :unrelated, strong: false, shared: shared.to_a.sort, same_subject: !covers.nil?,
-                     covers: covers, details: FactKeywords::Details.compare(first_text, second_text))
+                     covers: covers, details: FactKeywords::Details.compare(first_text, second_text), by_words: true)
     end
 
     # @return [Array<String>, nil] a fact's computed LLM words, nil while pending or with the setting off

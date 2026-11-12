@@ -120,6 +120,16 @@ RSpec.describe FactKeywords::Relatedness, "the same-fact ladder" do
       .to have_attributes(subject: :unrelated, same_subject: false)
   end
 
+  it "never makes words alone a hard \"unrelated\": only entity mentions are (Steve, final review)" do
+    by_words = words("Deploys with Kamal 2.", %w[deployment], "Shipped to production via Capistrano.", %w[production release])
+    expect(by_words).to have_attributes(subject: :unrelated, by_words: true, level: "unclear")
+    expect(by_words.hard_unrelated?).to be(false)
+
+    by_mentions = described_class.compare_paths(%w[p A User], "A", %w[p A Team], "A")
+    expect(by_mentions).to have_attributes(subject: :unrelated, by_words: false)
+    expect(by_mentions.hard_unrelated?).to be(true)
+  end
+
   it "knows which fact's words cover the other's" do
     expect(words("Validates presence", %w[presence], "Validates presence of email", %w[email presence])).to have_attributes(covers: :second)
     expect(words("Validates presence of email", %w[email presence], "Validates presence", %w[presence])).to have_attributes(covers: :first)
