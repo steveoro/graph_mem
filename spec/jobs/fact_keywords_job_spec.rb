@@ -82,6 +82,24 @@ RSpec.describe FactKeywordsJob do
       expect(MemoryObservation.where(id: facts.first(2).map(&:id)).llm_words_pending.count).to eq(2)
     end
 
+    it "walks past batches the cloud gate refuses, however many, and words the rest (Graphy)" do
+      stub_const("FactKeywords::LlmWords::BATCH_SIZE", 2)
+      facts = Array.new(8) { |i| MemoryObservation.create!(memory_entity: widget, content: "SynthWidget fact #{i}.") }
+      FactKeywords.compute!(MemoryObservation.where(id: facts.map(&:id)).includes(:memory_entity))
+      refused = facts.first(6).map(&:id).map(&:to_s)
+      gate = FakeProvider.new do |prompt, **|
+        ids = JSON.parse(prompt.to_s[/STATEMENTS:\n(\[.*\])/m, 1]).map { |entry| entry["id"].to_s }
+        next { ok: false, text: nil, error: "cloud_not_allowed", latency_ms: 0.0 } if (ids & refused).any?
+
+        { ok: true, done_reason: "stop", error: nil, latency_ms: 1.0, text: ids.to_h { |id| [ id, %w[frame] ] }.to_json }
+      end
+
+      with_llm_provider(gate) { described_class.perform_now }
+
+      expect(MemoryObservation.where(id: facts.last(2).map(&:id)).where.not(llm_keywords_at: nil).count).to eq(2)
+      expect(MemoryObservation.where(id: facts.first(6).map(&:id)).llm_words_pending.count).to eq(6)
+    end
+
     it "stops between LLM batches when a scheduled run asks it to" do
       stub_const("FactKeywords::LlmWords::BATCH_SIZE", 2)
       stub_const("CooperativeStop::INTERVAL", 0.seconds)

@@ -11,9 +11,10 @@ module FactKeywords
   #   FactKeywords::LlmWords.compute!(MemoryObservation.active.llm_words_pending.limit(20)) # => 20
   #   FactKeywords::LlmWords.normalize(["Rails 8", "Versions"])                         # => ["rails", "version"]
   #
-  # Parsing is strict: an id outside the batch is ignored, a missing or malformed answer leaves the
-  # fact pending (the next run asks again). With the LLM unusable or the setting off, nothing is
-  # stamped and nothing fails.
+  # Parsing is strict: an id outside the batch is ignored. A batch the LLM didn't answer (down,
+  # refused, not JSON) leaves its facts pending (the next run asks again); a fact a valid answer
+  # leaves out, or answers with anything but a list of strings, is stamped []. With the LLM unusable
+  # or the setting off, nothing is stamped and nothing fails.
   module LlmWords
     BATCH_SIZE = 20
     MAX_WORDS = 3
@@ -42,8 +43,10 @@ module FactKeywords
     #
     # @param observations [Enumerable<MemoryObservation>] with their entities loaded
     # @param now [Time] the stamp
+    # @param refused [Array, nil] collects the ids of facts the cloud gate refused (nothing was sent:
+    #   a project that doesn't allow cloud, an entity with no project); they stay pending
     # @return [Integer] the facts stamped
-    def compute!(observations, now: Time.current)
+    def compute!(observations, now: Time.current, refused: nil)
       return 0 unless enabled?
 
       ready = observations.to_a.select { |fact| fact.keywords_at.present? }
@@ -52,7 +55,7 @@ module FactKeywords
       # One project per call: a cloud gate refusing one project never holds another's facts back, and
       # a fact's text only ever shares a prompt with its own project's.
       found = unnamed.group_by { |fact| FactKeywords.project_of(fact.memory_entity)&.id }.values.each_with_object({}) do |facts, all|
-        all.merge!(words_for(facts.map { |fact| { key: fact.id, text: fact.content, entity: fact.memory_entity } }))
+        all.merge!(words_for(facts.map { |fact| { key: fact.id, text: fact.content, entity: fact.memory_entity } }, refused: refused))
       end
       unnamed.each { |fact| fact.update_columns(llm_keywords: found[fact.id], llm_keywords_at: now) if found.key?(fact.id) }
       named.size + unnamed.count { |fact| found.key?(fact.id) }
@@ -68,7 +71,8 @@ module FactKeywords
     #   every one of its keys ([] for one the answer left out, so it never blocks the queue); a batch
     #   the LLM didn't answer (down, refused, not JSON) gives none ({} with the LLM unusable or the
     #   setting off)
-    def words_for(entries, max_batches: nil, stop_on_failure: false)
+    # @param refused [Array, nil] collects the keys of a batch the cloud gate refused
+    def words_for(entries, max_batches: nil, stop_on_failure: false, refused: nil)
       return {} if entries.empty? || !enabled? || !Llm::Router.usable?(:summary)
 
       found = {}
@@ -76,8 +80,9 @@ module FactKeywords
         break if max_batches && index >= max_batches
 
         answer = ask(batch)
-        break if answer.nil? && stop_on_failure
-        next unless answer
+        refused&.concat(batch.map { |entry| entry[:key] }) if answer == :refused
+        break if !answer.is_a?(Hash) && stop_on_failure
+        next unless answer.is_a?(Hash)
 
         batch.each { |entry| found[entry[:key]] = answer.fetch(entry[:key], []) }
       end
@@ -107,14 +112,16 @@ module FactKeywords
       AppSettings.fact_keywords_enabled? && AppSettings.llm_keywords_enabled?
     end
 
-    # @return [Hash{Object => Array<String>}, nil] this batch's parsed words; nil when the LLM didn't
-    #   answer it (down, refused, not JSON)
+    # @return [Hash{Object => Array<String>}, Symbol, nil] this batch's parsed words; :refused when the
+    #   cloud gate refused it (nothing sent); nil when the LLM didn't answer it (down, not JSON)
     def ask(batch)
       ids = batch.to_h { |entry| [ entry[:key].to_s, entry[:key] ] }
       statements = batch.map { |entry| { id: entry[:key], text: entry[:text].to_s.truncate(PROMPT_TEXT_LIMIT) } }
       prompt = Llm::Prompt.new.trusted(INSTRUCTION).data(JSON.generate(statements))
                           .scoped(Llm::Scope.for_entities(batch.filter_map { |entry| entry[:entity] }))
       result = Llm::Router.generate(:summary, prompt, style: "concise", options: { num_predict: NUM_PREDICT, format: "json" })
+      return :refused if refused?(result)
+
       parse(result, ids)
     rescue StandardError => e
       Rails.logger.warn("[FactKeywords::LlmWords] #{e.class}: #{e.message}")
@@ -137,6 +144,9 @@ module FactKeywords
     rescue JSON::ParserError
       nil
     end
-    private_class_method :ask, :parse
+    def refused?(result)
+      result.is_a?(Hash) && (Llm::CloudCall.refusal?(result) || result[:error] == Llm::ChainRun::INLINE_SKIPPED)
+    end
+    private_class_method :ask, :parse, :refused?
   end
 end

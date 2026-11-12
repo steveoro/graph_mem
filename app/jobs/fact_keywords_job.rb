@@ -19,8 +19,9 @@ class FactKeywordsJob < ApplicationJob
   # 1.83.0: LLM word batches per run (FactKeywords::LlmWords::BATCH_SIZE facts each); the next
   # request or night continues.
   LLM_BATCHES_PER_RUN = 25
-  # Batches in a row that stamp nothing (the LLM down, or refusing) before the run gives up; one
-  # such batch is passed over, so it never blocks the facts behind it.
+  # Batches in a row the LLM failed to answer (down, not JSON) before the run gives up; one such
+  # batch is passed over, so it never blocks the facts behind it. A batch the cloud gate refused
+  # (nothing sent) never counts: the run walks past it, however many there are.
   LLM_EMPTY_BATCHES = 3
 
   class << self
@@ -81,8 +82,11 @@ class FactKeywordsJob < ApplicationJob
       break if batch.empty?
 
       after_id = batch.last.id
-      done = FactKeywords::LlmWords.compute!(batch)
+      refused = []
+      done = FactKeywords::LlmWords.compute!(batch, refused: refused)
       stamped += done
+      next if refused.any? && done.zero? # refused by the cloud gate: not the LLM failing
+
       empty = done.zero? ? empty + 1 : 0
       break if empty >= LLM_EMPTY_BATCHES
     end
