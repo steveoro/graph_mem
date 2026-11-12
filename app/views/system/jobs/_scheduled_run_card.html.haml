@@ -16,7 +16,7 @@
   .system-card__body
     - if run && state != :idle
       - index = run[:index].to_i
-      .system-kv{ data: { testid: "scheduled-run-status" } }
+      .system-run-status{ data: { testid: "scheduled-run-status" } }
         %p
           %span.ui-badge{ data: { progress_status: true } }= run[:status].to_s.humanize
           = t("#{scope}.step_html", current: tag.span([ index + 1, run[:total] ].min, data: { progress_step_number: true }),
@@ -26,15 +26,10 @@
           -# 1.84.0: how far the step is (MaintenanceDashboardSnapshot#step_progress); with no count, the
           -# browser's indeterminate bar. data-progress-step: the cable's renderer leaves it alone.
           - progress = data[:step_progress]
-          .system-step-progress
-            - if progress
-              %progress.system-progress__bar{ max: 100, value: progress[:percent], "aria-label": progress[:label],
-                data: { testid: "scheduled-run-step-progress", progress_step: true } }
-              %span.system-progress__label{ data: { testid: "scheduled-run-step-progress-label" } }
-                = t("#{scope}.step_progress", label: progress[:label], done: number_with_delimiter(progress[:done]),
-                  total: number_with_delimiter(progress[:total]), percent: progress[:percent])
-            - else
-              %progress.system-progress__bar{ max: 100, "aria-label": run[:phase].to_s, data: { testid: "scheduled-run-step-progress", progress_step: true } }
+          = render "system/jobs/progress", testid: "scheduled-run-step-progress", percent: progress&.dig(:percent),
+            label: progress && t("system.jobs.progress", label: progress[:label], done: number_with_delimiter(progress[:done]),
+              total: number_with_delimiter(progress[:total]), percent: progress[:percent]),
+            bar_data: { progress_step: true }
         %p.system-hint{ data: { progress_message: true } }= run[:message]
         - if run[:status] == "running" && !data[:live]
           %p.system-hint{ data: { testid: "scheduled-run-no-job" } }= t("#{scope}.no_job")

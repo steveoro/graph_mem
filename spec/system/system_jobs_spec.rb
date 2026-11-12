@@ -39,7 +39,7 @@ RSpec.describe "System › Background jobs: scheduled jobs", type: :system do
 
     visit system_jobs_path
     wait_for_stimulus
-    expect(page).to have_css("progress[data-testid='scheduled-run-step-progress']:not([value])")
+    expect(page).to have_css("[data-testid='scheduled-run-step-progress'] progress:not([value])")
     find("#jobs-cards details.system-card__details summary", text: "Latest GC report samples").click
     expect(page).to have_css("#jobs-cards details.system-card__details[open]")
 
@@ -47,7 +47,7 @@ RSpec.describe "System › Background jobs: scheduled jobs", type: :system do
     row.update!(details: details)
 
     expect(page).to have_css("[data-testid='scheduled-run-step-progress-label']", text: "LLM words: 50 of 200 (25%)", wait: 8)
-    expect(find("progress[data-testid='scheduled-run-step-progress']")["value"]).to eq("25")
+    expect(find("[data-testid='scheduled-run-step-progress'] progress")["value"]).to eq("25")
     expect(page).to have_css("#jobs-cards details.system-card__details[open]")
   ensure
     MaintenanceReport.delete_all

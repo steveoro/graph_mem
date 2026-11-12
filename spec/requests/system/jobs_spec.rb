@@ -314,7 +314,7 @@ RSpec.describe "System › Background jobs", type: :request do
   describe "the step progress bar" do
     after { OperationProgress.where(operation_type: "scheduled_run").delete_all }
 
-    def bar = Nokogiri::HTML(response.body).at_css("[data-testid='scheduled-run-step-progress']")
+    def bar = Nokogiri::HTML(response.body).at_css("[data-testid='scheduled-run-step-progress'] progress")
 
     def start_run
       ScheduledRunJob.start!(steps: [ ScheduledRun::Step.new(entry: "FactKeywordsJob", schedule: "every day") ]).tap do |row|
@@ -346,7 +346,43 @@ RSpec.describe "System › Background jobs", type: :request do
       OperationProgress.where(operation_type: "scheduled_run").update_all(status: "paused")
       get system_jobs_path
 
-      expect(bar).to be_nil
+      expect(Nokogiri::HTML(response.body).at_css("[data-testid='scheduled-run-step-progress']")).to be_nil
+    end
+  end
+
+  # 1.84.0: one shared bar per card (system/jobs/_progress): a label line over a full-width bar.
+  describe "the compactor and garbage collector bars" do
+    after { CompactionRun.delete_all; OperationProgress.where(operation_type: %w[compaction garbage_collection]).delete_all }
+
+    def html = Nokogiri::HTML(response.body)
+
+    it "shows the compaction run's one bar, with its count, and no repeated status line" do
+      op = OperationProgress.start!(operation_type: "compaction", total_count: 1_515, phase: "relationship_discovery")
+      op.complete!
+      CompactionRun.create!(status: "completed", phase: "relationship_discovery", operation_progress: op, stats: {},
+                            started_at: 3.minutes.ago, finished_at: Time.current)
+
+      get system_jobs_path
+
+      card = html.at_css("[data-testid='compaction-card']")
+      expect(card.css("progress").size).to eq(1)
+      expect(card.at_css("[data-testid='compaction-progress'] progress")).to have_attributes(classes: include("system-progress__bar"))
+      expect(card.at_css("[data-testid='compaction-progress'] progress")["value"]).to eq("100")
+      expect(card.at_css("[data-testid='compaction-progress']").text.squish).to eq("Overall: 1,515 of 1,515 (100%)")
+      expect(card.text).not_to include("Completed Completed", "Phase: ")
+    end
+
+    it "shows the garbage collection's bar and its status as a badge" do
+      op = OperationProgress.start!(operation_type: "garbage_collection", total_count: 2, phase: "duplicates")
+      op.update_progress!(current: 1)
+
+      get system_jobs_path
+
+      card = html.at_css("[data-testid='gc-card']")
+      expect(card.at_css(".system-card__header .ui-badge").text.squish).to eq("Running")
+      expect(card.at_css("[data-testid='gc-progress']").text.squish).to eq("Duplicates: 1 of 2 (50%)")
+      expect(card.at_css("[data-testid='gc-progress'] progress")["value"]).to eq("50")
     end
   end
 end
+

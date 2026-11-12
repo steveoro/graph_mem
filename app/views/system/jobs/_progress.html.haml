@@ -1,0 +1,12 @@
+-# One progress bar (1.84.0), the same in every Background jobs card: a label line over a full-width
+-# bar. The page's live refresh moves it (live_refresh_controller.js).
+-# locals: testid (String); percent (Numeric, nil: the browser's indeterminate bar); label (String,
+-# nil: no label line); bar_data (Hash, optional: data attributes of the bar)
+- percent = local_assigns[:percent]
+- label = local_assigns[:label]
+.system-progress{ data: { testid: testid } }
+  - if label.present?
+    %span.system-progress__label{ data: { testid: "#{testid}-label" } }= label
+  - bar = { max: 100, "aria-label": label.presence || t("system.jobs.progress_aria"), data: local_assigns.fetch(:bar_data, {}) }
+  - bar[:value] = percent.to_f.round if percent
+  %progress.system-progress__bar{ bar }
