@@ -72,6 +72,15 @@ RSpec.describe ProjectScanJob, type: :job do
   end
 
   describe "scan parts and resume (F-3)" do
+    # These examples count the scan's own model calls; the LLM words call (1.83.0) is specced in
+    # project_scanner_fact_dedupe_spec.rb.
+    around do |example|
+      AppSettings.llm_keywords_enabled = false
+      example.run
+    ensure
+      AppSettings.where(var: "llm_keywords_enabled").delete_all
+    end
+
     let(:scan_id) { SecureRandom.uuid }
     let(:architecture) do
       [ { entity: { name: "SynthWidget", type: "Component" }, observations: [ "SynthWidget renders gadgets." ],

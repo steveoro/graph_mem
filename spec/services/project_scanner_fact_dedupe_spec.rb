@@ -103,6 +103,69 @@ RSpec.describe ProjectScanner, "reworded facts", :with_test_embeddings do
     expect(widget_facts).to eq([ "SynthWidget is updated using Rails 8.1." ])
   end
 
+  # 1.83.0: the scan asks for the LLM words of its own facts that name no entity, before dedupe.
+  context "with LLM words" do
+    let(:word_map) { { "Validates presence of name." => %w[name presence], "Name must be present." => %w[name presence],
+                       "Validates presence of email." => %w[email presence] } }
+    let(:words_down) { false }
+    let(:provider) do
+      FakeProvider.new do |prompt, **|
+        text = prompt.to_s
+        if text.include?("name what it is about")
+          next { ok: false, text: nil, error: "connection refused", latency_ms: 1.0 } if words_down
+
+          entries = JSON.parse(text[/STATEMENTS:\n(\[.*\])/m, 1])
+          { ok: true, done_reason: "stop", error: nil, latency_ms: 1.0,
+            text: entries.to_h { |entry| [ entry["id"].to_s, word_map.fetch(entry["text"], []) ] }.to_json }
+        else
+          { ok: true, done_reason: "stop", prompt_tokens: 10, error: nil, latency_ms: 1.0,
+            text: { project: { name: "Gadget Project" },
+                    architecture: [ { entity: { name: "SynthWidget", type: "Class" }, observations: facts, relations: widget_relations } ] }.to_json }
+        end
+      end
+    end
+
+    def stored(content) = MemoryObservation.find_by!(content: content)
+
+    it "stores the words of the facts it writes" do
+      facts.replace([ "Validates presence of name." ])
+      scan
+
+      expect(stored("Validates presence of name.")).to have_attributes(llm_keywords: %w[name presence], llm_keywords_at: be_present)
+    end
+
+    it "skips a rewording that names no entity and has the same words" do
+      facts.replace([ "Validates presence of name." ])
+      scan
+      facts.replace([ "Name must be present." ])
+
+      expect(scan.observations_deduped).to eq(1)
+      expect(widget_facts).to eq([ "Validates presence of name." ])
+    end
+
+    it "writes a fact that names no entity and has a word the stored one lacks" do
+      facts.replace([ "Validates presence of name." ])
+      scan
+      facts.replace([ "Validates presence of email." ])
+
+      expect(scan.observations_deduped).to eq(0)
+      expect(widget_facts).to contain_exactly("Validates presence of name.", "Validates presence of email.")
+    end
+
+    context "when the LLM is down for the words" do
+      let(:words_down) { true }
+
+      it "behaves as 1.82.0: the close rewording is skipped, the words stay pending" do
+        facts.replace([ "Validates presence of name." ])
+        scan
+        facts.replace([ "Validates presence of email." ])
+
+        expect(scan.observations_deduped).to eq(1)
+        expect(stored("Validates presence of name.").llm_keywords_at).to be_nil
+      end
+    end
+  end
+
   it "adds a distinct fact" do
     scan
     facts.replace([ "SynthWidget keeps a FrameBuffer." ])
