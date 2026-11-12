@@ -43,6 +43,23 @@ RSpec.describe FactKeywords do
     expect(observation.reload.keywords).to eq([ "Gadget Project", "SynthWidget", "FrameBuffer" ])
   end
 
+  # 1.84.0: a fact that stopped naming an entity (the entity went away) needs LLM words now.
+  it "re-pends the LLM words of a fact whose mentions went from some to none, and only those" do
+    gadget = project("Gadget Project")
+    widget = entity("SynthWidget", gadget)
+    buffer = entity("FrameBuffer", gadget)
+    lost = fact(widget, "SynthWidget keeps a FrameBuffer.")
+    kept = fact(widget, "SynthWidget renders frames.")
+    described_class.compute!([ lost, kept ])
+    [ lost, kept ].each { |observation| observation.update_columns(llm_keywords: [], llm_keywords_at: Time.current) }
+
+    buffer.destroy!
+    described_class.compute!([ lost.reload, kept.reload ])
+
+    expect(lost.reload).to have_attributes(keywords: [ "Gadget Project", "SynthWidget" ], llm_keywords_at: nil)
+    expect(kept.reload.llm_keywords_at).to be_present
+  end
+
   it "leaves the embedding and updated_at alone" do
     gadget = project("Gadget Project")
     observation = fact(entity("SynthWidget", gadget), "SynthWidget renders frames.")

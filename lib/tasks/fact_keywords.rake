@@ -28,6 +28,10 @@ namespace :graph_mem do
       rescue ArgumentError => e
         abort "graph_mem:fact_keywords:llm_refresh: #{e.message}"
       end
+      # 1.84.0: with no LLM to answer, re-pending every fact would only grow the backlog.
+      unless Llm::Router.usable?(:summary)
+        abort "graph_mem:fact_keywords:llm_refresh: the summary LLM isn't usable (Settings › LLM); nothing was marked"
+      end
       marked = scope.update_all(llm_keywords_at: nil)
       computed = 0
       scope.where.not(keywords_at: nil).llm_words_pending.includes(:memory_entity)

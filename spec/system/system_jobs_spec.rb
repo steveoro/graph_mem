@@ -53,4 +53,3 @@ RSpec.describe "System › Background jobs: scheduled jobs", type: :system do
     MaintenanceReport.delete_all
   end
 end
-

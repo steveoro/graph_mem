@@ -119,4 +119,35 @@ RSpec.describe FactKeywords::LlmWords do
     expect(described_class.keys(%w[rails versions])).to eq(described_class.keys(%w[Rails version]))
     expect(described_class.keys(%w[email presence])).not_to eq(described_class.keys(%w[name presence]))
   end
+
+  # 1.84.0 (F2c's deferred minors)
+  it "keeps a word with digits that names a thing, and drops a number with a unit" do
+    expect(described_class.normalize(%w[2FA S3 OAuth2])).to eq(%w[2fa oauth2 s3])
+    expect(described_class.normalize(%w[10mins 3d 1st v2 2024 token])).to eq(%w[token])
+    expect(described_class.normalize([ "1.5x speedup" ])).to eq(%w[speedup])
+  end
+
+  it "folds the separators inside a word, as RailsCodeMap.lookup_key does, keeping the word as written" do
+    expect(described_class.normalize(%w[e-mail rate_limits])).to eq(%w[e-mail rate_limits])
+    expect(described_class.keys(%w[e-mail rate_limits])).to eq(described_class.keys(%w[email ratelimit]))
+    expect(described_class.normalize(%w[utf-8 2026-11-12])).to eq(%w[utf])
+    expect(described_class.normalize([ "release date" ])).to eq(%w[date release])
+  end
+
+  it "counts a generic word by its key too (data is datum)" do
+    expect(described_class.normalize(%w[data])).to eq([])
+    expect(described_class.normalize(%w[Data Infos])).to eq([])
+  end
+
+  it "keeps the rest of a batch whose answer repeats an id (the last answer for it counts)" do
+    twice = fact("Validates presence of name.")
+    other = fact("Validates presence of email.")
+    text = %({"#{twice.id}":["name","presence"],"#{other.id}":["email","presence"],"#{twice.id}":["name"]})
+    raw = FakeProvider.new { |*| { ok: true, done_reason: "stop", error: nil, latency_ms: 1.0, text: text } }
+
+    with_llm_provider(raw) { described_class.compute!([ twice, other ]) }
+
+    expect(other.reload.llm_keywords).to eq(%w[email presence])
+    expect(twice.reload.llm_keywords).to eq(%w[name])
+  end
 end

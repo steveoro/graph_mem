@@ -81,4 +81,22 @@ RSpec.describe FactKeywords::Relatedness do
     second.update_columns(keywords: [ "Gadget Project", "AdminGrant", "Team" ], keywords_at: Time.current)
     expect(described_class.compare(first, second).subject).to eq(:unrelated)
   end
+
+  # 1.84.0: "the same own entity" is the same record, not the same name (two projects' SynthWidget).
+  it "compares LLM words only for two facts on the same entity record" do
+    facts = [ "Gadget Project", "Other Project" ].map do |project|
+      root = MemoryEntity.create!(name: project, entity_type: "Project")
+      widget = MemoryEntity.create!(name: "SynthWidget", entity_type: "Class", project_id: root.id)
+      MemoryObservation.create!(memory_entity: widget, content: "Validates presence of name.").tap do |fact|
+        fact.update_columns(keywords: [ project, "SynthWidget" ], keywords_at: Time.current, llm_keywords: %w[name presence],
+                            llm_keywords_at: Time.current)
+      end
+    end
+    twin = MemoryObservation.create!(memory_entity: facts.first.memory_entity, content: "Checks that a name is present.")
+    twin.update_columns(keywords: [ "Gadget Project", "SynthWidget" ], keywords_at: Time.current, llm_keywords: %w[name presence],
+                        llm_keywords_at: Time.current)
+
+    expect(described_class.compare(facts.first, twin)).to have_attributes(by_words: true, same_subject: true)
+    expect(described_class.compare(*facts).by_words).to be(false)
+  end
 end

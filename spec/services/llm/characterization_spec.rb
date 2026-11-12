@@ -194,6 +194,30 @@ RSpec.describe "LLM calls (characterization)" do
     end
   end
 
+  # 1.84.0: FactKeywords::LlmWords (1.83.0) through the summary transport, in JSON mode.
+  describe "G6: the LLM words of facts that name no entity (FactKeywords::LlmWords)" do
+    let!(:root) { MemoryEntity.create!(name: "Gadget Project", entity_type: "Project") }
+    let!(:widget) { MemoryEntity.create!(name: "SynthWidget", entity_type: "Class", project_id: root.id) }
+    let!(:fact) do
+      MemoryObservation.create!(memory_entity: widget, content: "Validates presence of name.").tap do |observation|
+        observation.update_columns(keywords: [ "Gadget Project", "SynthWidget" ], keywords_at: Time.current)
+      end
+    end
+
+    before { answers << { fact.id.to_s => %w[name presence] }.to_json }
+
+    it "sends the golden prompt in JSON mode (Ollama)" do
+      use_provider("ollama")
+
+      FactKeywords::LlmWords.compute!([ fact ])
+
+      expect(placeholders(prompt_of(bodies.sole), %("id":#{fact.id},) => %("id":"OBS1",))).to eq(golden("g6_llm_words_prompt"))
+      expect(envelope_of(bodies.sole)).to eq("model" => "synth-model", "stream" => false, "format" => "json", "think" => false,
+                                             "options" => { "temperature" => 0.1, "num_predict" => FactKeywords::LlmWords::NUM_PREDICT, "num_ctx" => 8192 })
+      expect(fact.reload.llm_keywords).to eq(%w[name presence])
+    end
+  end
+
   describe "G4/G5: the fact-supersede judge (FactSupersedeJob and detect_contradictions)" do
     let!(:gadget) { fs_project!("Gadget Project") }
     let!(:widget) { fs_member!(gadget, "SynthWidget") }

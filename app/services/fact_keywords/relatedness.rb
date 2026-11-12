@@ -75,7 +75,8 @@ module FactKeywords
                     connected: connected.nil? ? -> { joined?(first_entity, second_entity) } : connected,
                     first_text: first.content, second_text: second.content,
                     first_root: first_entity&.project_root?, second_root: second_entity&.project_root?,
-                    first_words: llm_words(first), second_words: llm_words(second))
+                    first_words: llm_words(first), second_words: llm_words(second),
+                    same_owner: first.memory_entity_id.present? && first.memory_entity_id == second.memory_entity_id)
     end
 
     # @param first_path [Array<String>] a keyword path
@@ -92,12 +93,15 @@ module FactKeywords
     # @param first_words [Array<String>, nil] the first fact's LLM words (1.83.0), used only when both
     #   facts are on one entity and mention none
     # @param second_words [Array<String>, nil]
+    # @param same_owner [Boolean, nil] both facts are on the same entity record (1.84.0; nil: the same
+    #   owner name), which the LLM words need
     # @return [Comparison]
     def compare_paths(first_path, first_owner, second_path, second_owner, connected: false, first_text: nil, second_text: nil,
-                      first_root: nil, second_root: nil, first_words: nil, second_words: nil)
+                      first_root: nil, second_root: nil, first_words: nil, second_words: nil, same_owner: nil)
       first = FactKeywords.mentions(first_path, first_owner)
       second = FactKeywords.mentions(second_path, second_owner)
-      if first_owner && first_owner == second_owner && first.empty? && second.empty? && first_words.present? && second_words.present?
+      same_owner = first_owner.present? && first_owner == second_owner if same_owner.nil?
+      if same_owner && first.empty? && second.empty? && first_words.present? && second_words.present?
         return compare_words(first_words, second_words, first_text, second_text)
       end
 
