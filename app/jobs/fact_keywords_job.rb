@@ -97,7 +97,8 @@ class FactKeywordsJob < ApplicationJob
       after_id = batch.last.id
       refused = []
       unanswered = []
-      done = FactKeywords::LlmWords.compute!(batch, refused: refused, unanswered: unanswered)
+      answered = []
+      done = FactKeywords::LlmWords.compute!(batch, refused: refused, unanswered: unanswered, answered: answered)
       stamped += done
       walked += batch.size
       StepProgress.report(done: [ walked, total ].min, total: total, label: "LLM words")
@@ -106,9 +107,10 @@ class FactKeywordsJob < ApplicationJob
       next if done.zero? && refused.size == batch.size
 
       asked += 1
-      # A batch the LLM didn't answer counts as failed even when its facts naming an entity were
-      # stamped without a call (final review, 1.84.0: no cap in a scheduled run bounds it otherwise).
-      empty = unanswered.any? ? empty + 1 : 0
+      # Failed: the LLM was asked and answered none of the batch, even when its facts naming an entity
+      # were stamped without a call (1.84.0: no cap in a scheduled run bounds it otherwise). One answered
+      # project resets the count, so a project the LLM keeps failing never stops the others (Graphy).
+      empty = unanswered.any? && answered.empty? ? empty + 1 : 0
       break if empty >= LLM_EMPTY_BATCHES
     end
     stamped

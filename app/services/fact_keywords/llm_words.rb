@@ -56,9 +56,11 @@ module FactKeywords
     # @param refused [Array, nil] collects the ids of facts the cloud gate refused (nothing was sent:
     #   a project that doesn't allow cloud, an entity with no project); they stay pending
     # @param unanswered [Array, nil] collects the ids of facts sent to the LLM that it didn't answer
-    #   (down, not JSON); they stay pending (1.84.0: FactKeywordsJob counts these batches as failed)
+    #   (down, not JSON); they stay pending
+    # @param answered [Array, nil] collects the ids of facts the LLM answered (1.84.0: FactKeywordsJob
+    #   counts a batch as failed only when it sent facts and none was answered)
     # @return [Integer] the facts stamped
-    def compute!(observations, now: Time.current, refused: nil, unanswered: nil)
+    def compute!(observations, now: Time.current, refused: nil, unanswered: nil, answered: nil)
       return 0 unless enabled?
 
       ready = observations.to_a.select { |fact| fact.keywords_at.present? }
@@ -71,6 +73,7 @@ module FactKeywords
       end
       unnamed.each { |fact| fact.update_columns(llm_keywords: found[fact.id], llm_keywords_at: now) if found.key?(fact.id) }
       unanswered&.concat(unnamed.map(&:id).reject { |id| found.key?(id) || refused&.include?(id) })
+      answered&.concat(unnamed.map(&:id).select { |id| found.key?(id) })
       named.size + unnamed.count { |fact| found.key?(fact.id) }
     end
 

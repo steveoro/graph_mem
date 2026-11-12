@@ -157,6 +157,28 @@ RSpec.describe FactKeywordsJob do
       expect(down.calls.size).to eq(described_class::LLM_EMPTY_BATCHES)
     end
 
+    it "keeps going while some project's facts are answered, even if another's in the same batches never are (Graphy)" do
+      stub_const("FactKeywords::LlmWords::BATCH_SIZE", 2)
+      other_root = MemoryEntity.create!(name: "Other Project", entity_type: "Project")
+      other = MemoryEntity.create!(name: "AlphaService", entity_type: "Class", project_id: other_root.id)
+      MemoryRelation.create!(from_entity_id: other.id, to_entity_id: other_root.id, relation_type: "part_of")
+      facts = Array.new(5).flat_map do |i|
+        [ MemoryObservation.create!(memory_entity: widget, content: "SynthWidget fact #{i}."),
+          MemoryObservation.create!(memory_entity: other, content: "AlphaService fact #{i}.") ]
+      end
+      FactKeywords.compute!(MemoryObservation.where(id: facts.map(&:id)).includes(:memory_entity))
+      half = FakeProvider.new do |prompt, **|
+        next { ok: false, text: nil, error: "timeout", latency_ms: 1.0 } if prompt.to_s.include?("AlphaService fact")
+
+        ids = JSON.parse(prompt.to_s[/STATEMENTS:\n(\[.*\])/m, 1]).map { |entry| entry["id"].to_s }
+        { ok: true, done_reason: "stop", error: nil, latency_ms: 1.0, text: ids.to_h { |id| [ id, %w[frame] ] }.to_json }
+      end
+
+      CooperativeStop.with(-> { false }) { with_llm_provider(half) { described_class.perform_now } }
+
+      expect(MemoryObservation.where(memory_entity: widget).where.not(llm_keywords_at: nil).count).to eq(5)
+    end
+
     it "has no batch cap inside a scheduled run, and keeps it outside one (1.84.0)" do
       stub_const("FactKeywords::LlmWords::BATCH_SIZE", 2)
       stub_const("#{described_class}::LLM_BATCHES_PER_RUN", 1)

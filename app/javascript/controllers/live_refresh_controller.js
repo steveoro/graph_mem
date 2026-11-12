@@ -9,8 +9,8 @@ import { Turbo } from "@hotwired/turbo-rails"
 // - Paused while the tab is hidden; coming back polls at once, then the timer resumes.
 // - One poll at a time: a tick is skipped while the previous one is still loading.
 // - An open <details> stays open across morphs.
-// - A poll that gets anything but a stream back (an expired session's login page) stops the polling
-//   and visits that page.
+// - A poll redirected elsewhere (an expired session) stops the polling and visits this page again,
+//   so the server sends it to sign-in, with the way back.
 //
 //   #jobs-cards{ data: { controller: "live-refresh", live_refresh_url_value: "/system/jobs/cards" } }
 //     %span{ hidden: true, data: { live_refresh_target: "state", active: "true" } }
@@ -69,8 +69,10 @@ export default class extends Controller {
     if (response.ok && type.startsWith("text/vnd.turbo-stream.html")) {
       if (!this.stopped) Turbo.renderStreamMessage(await response.text())
     } else if (response.redirected) {
+      // Visit this page, not the redirect: the server then stores it as the way back and shows the
+      // sign-in page with its message (the hidden fetch used that flash up) (Graphy).
       this.stop()
-      Turbo.visit(response.url)
+      Turbo.visit(window.location.href)
     }
   }
 
