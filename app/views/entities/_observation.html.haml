@@ -18,6 +18,11 @@
       = t("explore.panel.mentions")
       - mentions.each do |name|
         %span.ui-badge= name
+  - elsif (words = observation.shown_llm_words).any?
+    %p.entity-panel__meta{ title: t("explore.panel.llm_words_title"), data: { testid: "entity-panel-llm-words" } }
+      = t("explore.panel.llm_words")
+      - words.each do |word|
+        %span.ui-badge= word
   - if !active && (fact = observation.outdated_by)
     %p.entity-panel__meta{ data: { testid: "entity-panel-outdated-by" } }
       = t("explore.panel.outdated_by")

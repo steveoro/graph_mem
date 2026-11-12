@@ -91,6 +91,15 @@ class MemoryObservation < ApplicationRecord
     FactKeywords.mentions(keywords, memory_entity&.name)
   end
 
+  # @return [Array<String>] the LLM words a reader is shown (1.83.0): only for a fact that names no
+  #   entity, once computed, with the setting on; [] otherwise
+  def shown_llm_words
+    return [] unless llm_keywords_at.present? && Array(llm_keywords).any? && FactKeywords::LlmWords.enabled?
+    return [] if keywords_at.present? && keyword_mentions.any?
+
+    Array(llm_keywords)
+  end
+
   def obsolete?
     status == OBSOLETE_STATUS
   end
