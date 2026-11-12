@@ -85,7 +85,7 @@ RSpec.describe ReviewPolicies::NoSharedSubject do
 
     described_class.new.call
 
-    expect(unjudged_related.reload.status).to eq("dismissed")
+    expect(unjudged_related.reload).to have_attributes(status: "dismissed", resolution_reason: ReviewPolicies::SubjectCheck::REASON_NOT_SAME)
     expect([ unjudged_detail, judged_related ].map { |row| row.reload.status }).to all(eq("active"))
   end
 
@@ -111,7 +111,7 @@ RSpec.describe ReviewPolicies::NoSharedSubject do
     row = contradiction_row(computed("It belongs to a User."), computed("It is not linked to a Team."))
 
     expect { Rake::Task["graph_mem:fact_keywords:review_report"].invoke }
-      .to output(/contradiction: 1 pending; 1 share no subject \(would be dismissed\)/).to_stdout
+      .to output(/contradiction: 1 pending; 1 would be dismissed \(1 share no subject, 0 not the same fact\)/).to_stdout
     expect(row.reload.status).to eq("active")
   ensure
     Rake::Task["graph_mem:fact_keywords:review_report"].reenable

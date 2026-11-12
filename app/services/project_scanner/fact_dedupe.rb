@@ -38,7 +38,7 @@ class ProjectScanner
     # 1.78.0: a close fact is the same fact only if the new one mentions nothing the stored one
     # doesn't (its keyword-path mentions are a subset); one that names something more adds
     # information, so it is written. Both paths come from one index of the project, built once every
-    # item's entity exists. Always true with fact keywords off.
+    # item's entity exists. With fact keywords off, only the detail check below applies.
     #
     # 1.82.0: a close fact with a different detail (a version, a number, a date) is never the same
     # fact ("Developed using Rails 8.0" / "… 8.1"): it is written, as a supersede candidate.

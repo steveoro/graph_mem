@@ -15,10 +15,11 @@ module FactKeywords
   # - **one_sided**: one own entity, and only one of them mentions any entity;
   # - **unknown**: one own entity, and neither mentions any entity, so the paths can't tell.
   #
-  # The callers decide what each answer allows: ContradictionDetector pairs only related facts (or
-  # two unknown ones that are very close), FactSupersede neither judges nor seeds an unrelated pair
-  # that no search term found, and the NoSharedSubject review policy dismisses rows the generators
-  # would no longer seed.
+  # The callers decide what each answer allows: ContradictionDetector pairs only facts about the same
+  # subject (or two unknown ones that are very close), FactSupersede neither judges nor seeds an
+  # unrelated pair that no search term found and seeds an unjudged row only for the same fact with a
+  # different detail, and the NoSharedSubject review policy dismisses rows the generators would no
+  # longer seed.
   #
   #   FactKeywords::Relatedness.compare(badge_fact, other_fact)
   #   # => #<data Comparison subject=:related, strong=true, shared=["GogglesDb::Swimmer"]>

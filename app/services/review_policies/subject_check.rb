@@ -19,6 +19,8 @@ module ReviewPolicies
   module SubjectCheck
     KINDS = %w[contradiction fact_supersede].freeze
     REASON = "the facts share no subject (keyword paths)"
+    # 1.83.0: a pair that does share something, but isn't the same fact the generators need.
+    REASON_NOT_SAME = "not the same fact (keyword paths)"
 
     module_function
 
@@ -32,9 +34,15 @@ module ReviewPolicies
       row.kind == "contradiction" ? contradiction_status(payload) : fact_supersede_status(payload)
     end
 
-    # @return [String, nil] the dismissal reason, nil when the row still applies
+    # @return [String, nil] the dismissal reason (REASON for unrelated facts, REASON_NOT_SAME for the
+    #   others), nil when the row still applies
     def reason(row)
-      REASON if status(row) == :dismiss
+      return nil unless status(row) == :dismiss
+
+      pair = row.kind == "contradiction" ? %w[observation_id_1 observation_id_2] : %w[fact_observation_id observation_id]
+      payload = row.effective_payload.to_h.deep_stringify_keys
+      first, second = active_pair(*payload.values_at(*pair))
+      FactKeywords::Relatedness.compare(first, second).subject == :unrelated ? REASON : REASON_NOT_SAME
     end
 
     def contradiction_status(payload)

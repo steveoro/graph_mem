@@ -13,6 +13,16 @@ RSpec.describe FactKeywords::Details do
     expect(described_class.extract("Fixed in #4227")).to eq(Set["4227"])
   end
 
+  it "reads date-times, decimals and long units, a sign and thousands (1.83.0)" do
+    expect(described_class.extract("Backed up at 2026-11-12T10:00:00Z")).to include("2026-11-12")
+    expect(described_class.compare("Backed up at 2026-11-12T10:00:00Z", "Backed up at 2026-11-13T10:00:00Z")).to eq(:different)
+    expect(described_class.extract("Renders 1.5x faster")).to eq(Set["1.5x"])
+    expect(described_class.compare("Renders 1.5x faster", "Renders 1.8x faster")).to eq(:different)
+    expect(described_class.extract("Retries after 10mins")).to eq(Set["10mins"])
+    expect(described_class.compare("An offset of -5", "An offset of 5")).to eq(:different)
+    expect(described_class.extract("Keeps 1,000 rows")).to eq(Set["1000"])
+  end
+
   it "leaves out digits inside identifiers, and finds nothing in plain text" do
     expect(described_class.extract("Runs gemma3 with utf8mb4 tables")).to be_empty
     expect(described_class.extract("Validates presence of name")).to be_empty

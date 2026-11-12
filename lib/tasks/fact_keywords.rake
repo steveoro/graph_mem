@@ -53,11 +53,16 @@ namespace :graph_mem do
     task review_report: :environment do
       counts = Hash.new { |hash, kind| hash[kind] = Hash.new(0) }
       MaintenanceReportRow.pending.where(kind: ReviewPolicies::SubjectCheck::KINDS).find_each do |row|
-        counts[row.kind][ReviewPolicies::SubjectCheck.status(row)] += 1
+        status = ReviewPolicies::SubjectCheck.status(row)
+        counts[row.kind][status] += 1
+        counts[row.kind][ReviewPolicies::SubjectCheck.reason(row)] += 1 if status == :dismiss
       end
       ReviewPolicies::SubjectCheck::KINDS.each do |kind|
         found = counts[kind]
-        puts "[fact_keywords] #{kind}: #{found.values.sum} pending; #{found[:dismiss]} share no subject (would be dismissed), " \
+        pending = found.select { |key, _| key.is_a?(Symbol) }.values.sum
+        puts "[fact_keywords] #{kind}: #{pending} pending; #{found[:dismiss]} would be dismissed " \
+             "(#{found[ReviewPolicies::SubjectCheck::REASON]} share no subject, " \
+             "#{found[ReviewPolicies::SubjectCheck::REASON_NOT_SAME]} not the same fact), " \
              "#{found[:keep]} kept, #{found[:pending]} with a pending path (run graph_mem:fact_keywords:refresh first), " \
              "#{found[:not_applicable]} not checked (a term match, or a fact gone)"
       end
