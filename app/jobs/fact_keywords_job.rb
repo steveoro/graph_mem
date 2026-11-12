@@ -87,8 +87,9 @@ class FactKeywordsJob < ApplicationJob
       refused = []
       done = FactKeywords::LlmWords.compute!(batch, refused: refused)
       stamped += done
-      # Refused by the cloud gate (nothing sent): neither the LLM failing nor a call to charge.
-      next if refused.any? && done.zero?
+      # The whole batch refused by the cloud gate (nothing sent): neither the LLM failing nor a call to
+      # charge. With done 0 the batch holds no named fact, so every fact in it was asked or refused.
+      next if done.zero? && refused.size == batch.size
 
       asked += 1
       empty = done.zero? ? empty + 1 : 0

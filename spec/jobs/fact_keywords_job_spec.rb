@@ -118,6 +118,29 @@ RSpec.describe FactKeywordsJob do
       expect(MemoryObservation.where(id: facts.last(2).map(&:id)).where.not(llm_keywords_at: nil).count).to eq(2)
     end
 
+    it "counts a batch that mixes a refused project with a failed call as a failure (Graphy)" do
+      stub_const("FactKeywords::LlmWords::BATCH_SIZE", 2)
+      other_root = MemoryEntity.create!(name: "Other Project", entity_type: "Project")
+      other = MemoryEntity.create!(name: "AlphaService", entity_type: "Service", project_id: other_root.id)
+      facts = Array.new(5).flat_map do |i|
+        [ MemoryObservation.create!(memory_entity: widget, content: "SynthWidget fact #{i}."),
+          MemoryObservation.create!(memory_entity: other, content: "AlphaService fact #{i}.") ]
+      end
+      FactKeywords.compute!(MemoryObservation.where(id: facts.map(&:id)).includes(:memory_entity))
+      failing = []
+      gate = FakeProvider.new do |prompt, **|
+        text = prompt.to_s
+        next { ok: false, text: nil, error: "cloud_not_allowed", latency_ms: 0.0 } if text.include?("SynthWidget fact")
+
+        failing << text
+        { ok: false, text: nil, error: "timeout", latency_ms: 1.0 }
+      end
+
+      with_llm_provider(gate) { described_class.perform_now }
+
+      expect(failing.size).to eq(described_class::LLM_EMPTY_BATCHES)
+    end
+
     it "stops between LLM batches when a scheduled run asks it to" do
       stub_const("FactKeywords::LlmWords::BATCH_SIZE", 2)
       stub_const("CooperativeStop::INTERVAL", 0.seconds)
