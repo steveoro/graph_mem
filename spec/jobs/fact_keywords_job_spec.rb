@@ -141,6 +141,29 @@ RSpec.describe FactKeywordsJob do
       expect(failing.size).to eq(described_class::LLM_EMPTY_BATCHES)
     end
 
+    it "has no batch cap inside a scheduled run, and keeps it outside one (1.84.0)" do
+      stub_const("FactKeywords::LlmWords::BATCH_SIZE", 2)
+      stub_const("#{described_class}::LLM_BATCHES_PER_RUN", 1)
+      Array.new(5) { |i| MemoryObservation.create!(memory_entity: widget, content: "SynthWidget fact #{i}.") }
+
+      with_llm_provider(provider) { described_class.perform_now }
+      expect(MemoryObservation.where.not(llm_keywords_at: nil).count).to eq(2)
+
+      with_llm_provider(provider) { CooperativeStop.with(-> { false }) { described_class.perform_now } }
+      expect(MemoryObservation.llm_words_pending.count).to eq(0)
+    end
+
+    it "reports its progress to a scheduled run: the paths, then the LLM words (1.84.0)" do
+      stub_const("FactKeywords::LlmWords::BATCH_SIZE", 2)
+      Array.new(3) { |i| MemoryObservation.create!(memory_entity: widget, content: "SynthWidget fact #{i}.") }
+      reports = []
+
+      with_llm_provider(provider) { StepProgress.with(->(**report) { reports << report }) { described_class.perform_now } }
+
+      expect(reports.first).to eq(done: 0, total: 3, label: "Keyword paths")
+      expect(reports).to include({ done: 3, total: 3, label: "Keyword paths" }, { done: 3, total: 3, label: "LLM words" })
+    end
+
     it "stops between LLM batches when a scheduled run asks it to" do
       stub_const("FactKeywords::LlmWords::BATCH_SIZE", 2)
       stub_const("CooperativeStop::INTERVAL", 0.seconds)

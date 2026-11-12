@@ -4,6 +4,7 @@ require "rails_helper"
 
 RSpec.describe "System › Background jobs", type: :request do
   include ActiveJob::TestHelper
+  include ActiveSupport::Testing::TimeHelpers
 
   before { sign_in_operator }
 
@@ -25,7 +26,7 @@ RSpec.describe "System › Background jobs", type: :request do
     expect(jobs.at_css("#btn-dream-state-resume")).to be_present
     expect(jobs.at_css("#btn-gc-run")).to be_present
     expect(jobs.at_css("#btn-compaction-review")["href"]).to eq(review_path)
-    expect(jobs.at_css("#btn-dream-state-refresh")["href"]).to eq(system_jobs_path)
+    expect(jobs.at_css("#btn-dream-state-refresh")).to be_nil # 1.84.0: the cards refresh themselves
   end
 
   it "shows the repair action only when compaction failed with a relation error" do
@@ -39,6 +40,67 @@ RSpec.describe "System › Background jobs", type: :request do
 
     get system_jobs_path
     expect(response.body).to include('id="btn-repair-relations"', "Repair relation duplicates")
+  end
+
+  # 1.84.0: the page polls its cards (live_refresh_controller.js) and morphs them in.
+  describe "the live cards" do
+    after { OperationProgress.where(operation_type: "scheduled_run").delete_all }
+
+    def frame
+      html = Nokogiri::HTML(response.body)
+      html.at_css("#jobs-cards") || html.at_css("turbo-stream template")
+    end
+
+    it "renders the cards inline, in a container that polls the cards endpoint" do
+      get system_jobs_path
+
+      expect(frame.attributes.transform_values(&:value))
+        .to include("data-controller" => "live-refresh", "data-live-refresh-url-value" => system_jobs_cards_path)
+      expect(frame.at_css("[data-testid='scheduled-run-card']")).to be_present
+      expect(frame.at_css("#btn-gc-run")).to be_present
+    end
+
+    it "serves the cards alone, as a Turbo Stream that morphs the container" do
+      get system_jobs_cards_path, headers: { "Accept" => "text/vnd.turbo-stream.html" }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.media_type).to eq("text/vnd.turbo-stream.html")
+      stream = Nokogiri::HTML(response.body).at_css("turbo-stream")
+      expect(stream.attributes.transform_values(&:value)).to include("action" => "update", "target" => "jobs-cards", "method" => "morph")
+      expect(frame.inner_html).to include('data-testid="scheduled-run-card"')
+      expect(response.body).not_to include('data-testid="background-jobs-totals"')
+    end
+
+    it "flags the cards active while a scheduled run runs, so the page polls faster" do
+      get system_jobs_cards_path
+      expect(frame.at_css("[data-live-refresh-target='state']")["data-active"]).to eq("false")
+
+      ScheduledRunJob.start!(steps: [ ScheduledRun::Step.new(entry: "ChangeSetPruneJob", schedule: "every day") ])
+      get system_jobs_cards_path
+      expect(frame.at_css("[data-live-refresh-target='state']")["data-active"]).to eq("true")
+    end
+
+    it "never counts a poll as activity, and still expires an idle session" do
+      get system_jobs_path
+      seen = session[:last_seen_at]
+
+      travel 10.minutes do
+        get system_jobs_cards_path
+        expect(response).to have_http_status(:ok)
+        expect(session[:last_seen_at]).to eq(seen)
+      end
+
+      travel SessionAuthentication::OPERATOR_IDLE_TIMEOUT + 1.minute do
+        get system_jobs_cards_path
+        expect(response).to redirect_to(operator_login_path)
+      end
+    end
+
+    it "needs the operator" do
+      reset!
+      get system_jobs_cards_path
+      expect(response).to redirect_to(operator_login_path)
+    end
   end
 
   # 1.81.0: one switch runs every scheduled job now (start / stop / resume / start over).
@@ -245,6 +307,46 @@ RSpec.describe "System › Background jobs", type: :request do
       follow_redirect!
       expect(response.body).to include("Relation repair completed")
       expect(MemoryRelation.count).to eq(1)
+    end
+  end
+
+  # 1.84.0: one bar under the running step's label, for how far that step is.
+  describe "the step progress bar" do
+    after { OperationProgress.where(operation_type: "scheduled_run").delete_all }
+
+    def bar = Nokogiri::HTML(response.body).at_css("[data-testid='scheduled-run-step-progress']")
+
+    def start_run
+      ScheduledRunJob.start!(steps: [ ScheduledRun::Step.new(entry: "FactKeywordsJob", schedule: "every day") ]).tap do |row|
+        details = row.details.deep_dup
+        details["steps"][0].merge!("outcome" => "running", "started_at" => Time.current.iso8601)
+        row.update!(details: details)
+      end
+    end
+
+    it "is indeterminate for a step that reports nothing, and counts what a step reports" do
+      row = start_run
+      get system_jobs_path
+      expect(bar.name).to eq("progress")
+      expect(bar["value"]).to be_nil
+      expect(bar.key?("data-progress-step")).to be(true)
+
+      details = row.details.deep_dup
+      details["steps"][0]["progress"] = { "done" => 1_200, "total" => 3_533, "label" => "LLM words" }
+      row.update!(details: details)
+      get system_jobs_path
+
+      expect(bar["value"]).to eq("33")
+      expect(Nokogiri::HTML(response.body).at_css("[data-testid='scheduled-run-step-progress-label']").text.squish)
+        .to eq("LLM words: 1,200 of 3,533 (33%)")
+    end
+
+    it "is gone once the run isn't running" do
+      start_run
+      OperationProgress.where(operation_type: "scheduled_run").update_all(status: "paused")
+      get system_jobs_path
+
+      expect(bar).to be_nil
     end
   end
 end

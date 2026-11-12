@@ -28,4 +28,29 @@ RSpec.describe "System › Background jobs: scheduled jobs", type: :system do
       expect(page).to have_no_css("[data-testid='btn-scheduled-run']")
     end
   end
+
+  # 1.84.0: the cards reload by themselves (every 3 s while a run is going), morphing what changed.
+  it "moves the step's bar without a visit, and keeps an open <details> open" do
+    row = ScheduledRunJob.start!(steps: [ ScheduledRun::Step.new(entry: "FactKeywordsJob", schedule: "every day") ])
+    details = row.details.deep_dup
+    details["steps"][0].merge!("outcome" => "running", "started_at" => Time.current.iso8601)
+    row.update!(details: details)
+    MaintenanceReport.create!(report_type: "orphans", data: { count: 1, entities: [] })
+
+    visit system_jobs_path
+    wait_for_stimulus
+    expect(page).to have_css("progress[data-testid='scheduled-run-step-progress']:not([value])")
+    find("#jobs-cards details.system-card__details summary", text: "Latest GC report samples").click
+    expect(page).to have_css("#jobs-cards details.system-card__details[open]")
+
+    details["steps"][0]["progress"] = { "done" => 50, "total" => 200, "label" => "LLM words" }
+    row.update!(details: details)
+
+    expect(page).to have_css("[data-testid='scheduled-run-step-progress-label']", text: "LLM words: 50 of 200 (25%)", wait: 8)
+    expect(find("progress[data-testid='scheduled-run-step-progress']")["value"]).to eq("25")
+    expect(page).to have_css("#jobs-cards details.system-card__details[open]")
+  ensure
+    MaintenanceReport.delete_all
+  end
 end
+

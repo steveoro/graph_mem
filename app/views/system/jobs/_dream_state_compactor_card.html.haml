@@ -86,7 +86,6 @@
     - if compaction[:error].present?
       = button_to "Repair relation duplicates", system_repair_relations_path, method: :post, class: "ui-btn system-btn--warning", id: "btn-repair-relations", data: { turbo_confirm: "Remove duplicate and conflicting relations (keeps oldest row per tuple)? Then use Start / Resume to retry compaction." }
     = link_to "Review suggestions", review_path, class: "ui-btn", id: "btn-compaction-review"
-    = link_to "Refresh", system_jobs_path, class: "ui-btn", id: "btn-dream-state-refresh"
 
   %details.system-card__details
     %summary Raw dream-state snapshot

@@ -237,9 +237,14 @@ class EmbeddingService
       end
 
       # Inside a scheduled run with a stop requested (1.81.0, CooperativeStop): the rest stays
-      # missing for the next run.
+      # missing for the next run. 1.84.0: it also shows how far it is (StepProgress).
+      total = StepProgress.active? ? MemoryEntity.missing_embedding.count + MemoryObservation.missing_embedding.count : 0
+      visited = 0
+      StepProgress.report(done: 0, total: total, label: "Embeddings")
       MemoryEntity.missing_embedding.find_each(batch_size: batch_size) do |entity|
         break if CooperativeStop.requested?
+
+        StepProgress.report(done: visited += 1, total: total, label: "Embeddings")
 
         total_entities += 1 if embed_entity(entity)
       rescue StandardError => e
@@ -248,6 +253,8 @@ class EmbeddingService
 
       MemoryObservation.missing_embedding.find_each(batch_size: batch_size) do |obs|
         break if CooperativeStop.requested?
+
+        StepProgress.report(done: visited += 1, total: total, label: "Embeddings")
 
         total_observations += 1 if embed_observation(obs)
       rescue StandardError => e

@@ -34,6 +34,7 @@ en:
         run_started: "Run started %{time}"
         step_started_html: "Step started %{time}"
         last_progress_html: "Last progress %{time}"
+        step_progress: "%{label}: %{done} of %{total} (%{percent}%)"
         last_run: "Last run: %{started} → %{finished}, %{status}."
         never_run: "Not run from here yet."
         counts: "%{done} done, %{skipped} skipped, %{stopped} stopped, %{failed} failed"
