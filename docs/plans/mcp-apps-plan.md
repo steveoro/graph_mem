@@ -16,8 +16,7 @@ built only on graph_mem's existing tools:
 1. **Graph view:** the Cytoscape.js graph of any knowledge subset, read-only.
 2. **Search view:** a query box, filters, paged hits, click-through to an entity.
 
-Whether these are two `ui://` documents or two modes of one document is open question 2; the spec decides most
-of it (see "How a view opens").
+They are two modes of one `ui://` document (decision 6; see "How a view opens" for why).
 
 Clients without the extension keep exactly today's behaviour: the same tools, the same text and
 `structuredContent`.
@@ -36,8 +35,22 @@ Design goal (Steve, 2026-11-12): **the resource layer is generic**, not hard-wir
 static resource (for example skills, later) can register through the same code. This plan does not plan Skills over
 MCP.
 
-The review found that decisions 3 and 5 meet limits in the spec and in the `search` tool. They still stand; open
-questions 2, 3 and 5 ask how Steve wants them applied.
+### After the review (2026-11-12)
+
+The review found that decisions 3 and 5 meet limits in the spec and in the `search` tool. Steve decided:
+
+6. **One document with a Graph mode and a Search mode** (`ui://graph-mem/graph`); `search` is not linked. This is
+   how decision 5 is applied.
+7. **`get_context` is not linked.** Only `traverse_graph` and `find_shortest_path` open the view. Decision 3 is
+   applied inside the view: "Context project" and "Root entities" are buttons.
+
+Provisional, on Claude's recommendation, until Steve confirms (he left both open):
+
+8. **The root view pages the unfiltered catalog** and filters in the view. No change to `search`. Revisit when a
+   graph outgrows the 2,000-entity scan or the load is slow in practice; the tool change (filters in catalog mode)
+   stays a hard stop.
+9. **v1 has no `set_context` control.** Scoping is local to the view. Decision 2 allows `set_context`; v1 doesn't
+   use it, so the view changes no server state. The user can ask the agent to set the active project.
 
 ## What the review changed
 
@@ -45,13 +58,13 @@ questions 2, 3 and 5 ask how Steve wants them applied.
   mode with filters" cannot run. The project subset now comes from `traverse_graph`, the root view from the
   unfiltered catalog.
 - **How a view opens.** The spec has no way to open a view without a linked tool call, and no way for one view to
-  load another. The two views become two modes of one document unless `search` is linked.
+  load another. The two views become two modes of one document.
 - **`get_context` linkage.** Agents call `get_context` at the start of every task, so linking it opens a widget in
   every session. The recommendation no longer links it.
-- **Scoping.** The view scopes locally; `set_context` moves behind a separate, explicit button.
+- **Scoping.** The view scopes locally and v1 calls `set_context` nowhere.
 - **Packaging.** View JS moves out of `app/javascript/` (Propshaft would serve it publicly).
-- **Facts corrected:** what the fixtures hold, what the guard specs scan, `get_context` statuses, the
-  `set_context` warning keys, several gem and spec details.
+- **Facts corrected:** what the fixtures hold, what the guard specs scan, `get_context` statuses,
+  several gem and spec details.
 - **Sections added:** acceptance criteria, compat verification, size, release and housekeeping.
 
 ## Hard stops (ask Steve before doing any of these)
@@ -65,7 +78,7 @@ questions 2, 3 and 5 ask how Steve wants them applied.
 - **Anything that weakens the lockdown or the anonymizer/cloud gate:** the `/mcp` `AccessGate` (IP allowlist and
   optional bearer token), the host bridge lockdown, `Llm::Anonymizer`, `cloud_allowed`. Nothing in this plan needs
   to touch them; if a step seems to, stop.
-- **Letting a view call a write tool**, or `set_context` for anything but scoping (decision 2).
+- **Letting a view call a write tool**, or `set_context` at all in v1 (decisions 2 and 9).
 - **A new HTTP route, a new public asset path, or a wider CORS/allowlist** for the views. The views never call
   graph_mem over HTTP, and their sources are not served by the Rails app.
 - **An exemption in a guard spec** (`spec/inline_scripts_spec.rb`, `spec/javascript_sinks_spec.rb`), or a view
@@ -255,12 +268,12 @@ consistent:
   needs to know which views the server being built has (pass the profile's view URIs, or a
   `linked_view_for(klass)` callable, from `ServerFactory.for`).
 
-The three profiles that exist: `readonly` has all six tools the views call (`search`, `get_entities`,
-`traverse_graph`, `find_shortest_path`, `get_context`, `set_context`); `default` and `maintenance` add the write
-tools, which the views never call. Note that `readonly` is not strictly read-only: `set_context` writes the
-client's `AgentContext` row.
+The three profiles that exist: `readonly` has all five tools the view calls (`search`, `get_entities`,
+`traverse_graph`, `find_shortest_path`, `get_context`); `default` and `maintenance` add the write tools, which
+the view never calls. The only state the view can change is through `get_context`, which clears a stale context
+(a deleted project) exactly as it does for an agent.
 
-If Steve wants an on/off setting (open question 6), it is an `AppSettings` field in the `:feature_flags` group of
+If Steve wants an on/off setting (open question 3), it is an `AppSettings` field in the `:feature_flags` group of
 `SettingsSchema` (`app/services/settings_schema.rb:120`), with its i18n label and help text
 (`spec/services/settings_schema_spec.rb` requires both). No migration. Servers are built once per transport, so a
 change takes effect after `Transports.reset!` (which closes open MCP sessions) on HTTP, and after a restart on
@@ -272,16 +285,16 @@ The view a host renders for a tool call is decided by the **tool's** `_meta.ui.r
 every call of that tool, the agent's included. How often agents call each tool therefore decides how often a
 widget appears:
 
-| Tool | Agent calls it | Recommended | Why |
+| Tool | Agent calls it | Linked to | Why |
 |---|---|---|---|
 | `traverse_graph` | rarely | **graph view** | A neighbourhood is a graph by nature. |
 | `find_shortest_path` | rarely | **graph view** | Same. |
-| `get_context` | **at the start of every task** (the `orient` prompt and the skill say so) | not linked | A widget in every session; and its result holds no graph. Decision 3 needs it linked: open question 3. |
-| `search` | in most memory turns | not linked | The most frequent call. Linking it is the only way to a separate search document: open question 2. |
+| `get_context` | **at the start of every task** (the `orient` prompt and the skill say so) | not linked | A widget in every session; and its result holds no graph (decision 7). |
+| `search` | in most memory turns | not linked | The most frequent call (decision 6). |
 | `get_entities` | often | not linked | The views call it; it needs no view of its own. |
-| `set_context` | at task start | not linked | It returns no graph. |
+| `set_context` | at task start | not linked | It returns no graph; the view doesn't call it (decision 9). |
 
-With the recommended linkage a user reaches the views by asking for a graph ("show me the graph around X", "how
+With this linkage a user reaches the views by asking for a graph ("show me the graph around X", "how
 are X and Y connected"): the agent calls `traverse_graph` or `find_shortest_path`, and the host opens the view.
 
 A view can call any tool whose visibility includes `"app"`, linked or not, so the view can still call `search`,
@@ -290,16 +303,15 @@ A view can call any tool whose visibility includes `"app"`, linked or not, so th
 ### One document or two
 
 Because a view opens only from a linked tool call and can't load another view, a search view that no tool links
-to would be unreachable. Two ways to keep decision 5:
+to would be unreachable. The two ways to keep decision 5 were:
 
-- **One document, two modes (recommended).** A single `ui://graph-mem/graph` resource with a Graph mode and a
+- **One document, two modes (chosen, decision 6).** A single `ui://graph-mem/graph` resource with a Graph mode and a
   Search mode, switched inside the page. "Show as graph" and "Search" are mode switches, not navigation. Cytoscape
   is inlined once.
-- **Two documents.** `ui://graph-mem/graph` and `ui://graph-mem/search`, with `search` linked to the second. Each
-  document is self-contained, so "Show as graph" in the search view needs Cytoscape inlined there too (two
-  ~430 KB documents), and a search widget opens on most memory turns.
+- **Two documents (not chosen).** `ui://graph-mem/graph` and `ui://graph-mem/search`, with `search` linked to
+  the second. Each document is self-contained, so "Show as graph" in the search view needs Cytoscape inlined
+  there too (two ~430 KB documents), and a search widget opens on most memory turns.
 
-The steps below are written for one document. With two, step C adds the second resource and the `search` link.
 
 ### Graph mode
 
@@ -308,10 +320,10 @@ On `ui/notifications/tool-result` the view draws that result:
 - `traverse_graph` → `{ entities, relations, traversal }` and `find_shortest_path` →
   `{ found, hop_count, direction, entities, relations }` map straight to nodes and edges. `found: false` shows
   "no path" instead of an empty canvas.
-- If `get_context` is linked (open question 3), its result holds no graph, so the view starts the first load
-  below (decision 3).
+- A result with no entities (an empty neighbourhood) shows the two buttons below instead of an empty canvas.
 
-**First load of a subset (decision 3).** `search` can't select a project's members or the root entities without a
+**Loading a subset (decision 3).** Two buttons, "Context project" and "Root entities", start these loads; the
+first calls `get_context`. `search` can't select a project's members or the root entities without a
 query: catalog mode refuses `project_id` and `entity_types` (`app/services/graph_search.rb:70-71`, "project_id and
 entity_types require a query"), and it returns only `entity_id`, `name`, `entity_type`. So:
 
@@ -325,8 +337,8 @@ entity_types require a query"), and it returns only `entity_id`, `name`, `entity
    (`search` with no arguments but `page` and `per_page: 100`) and keep the `Project` and untyped rows in the
    view, then `get_entities(relations: "internal")` for their edges. This shows the same entities as Explore,
    untyped ones included, at one call per 100 entities of the whole graph. The view stops after 20 pages (2,000
-   entities scanned) and says "scanned N of `total_entities`" when it stopped early. Open question 5 asks whether
-   that is good enough.
+   entities scanned) and says "scanned N of `total_entities`" when it stopped early (decision 8). The loader is
+   one function, so a later `search` change can replace it.
 3. **Caps:** 1,000 nodes for a project subset (`GraphTraversalService::MAX_ENTITIES`; Explore's
    `GraphDataController::MAX_NODES` is 2,000), with a "showing N of `scope_entity_count`" note from `get_context`.
 
@@ -345,17 +357,17 @@ and the adapter writes that one.
 write tool is ever called; there is no edit control in the DOM. The view asks for `fullscreen` on a button, sends
 `ui/notifications/size-changed`, and answers `ui/resource-teardown`.
 
-**Scoping (decision 2).** "Show this project" is **view state**: the view runs the first load for that project
-and calls nothing that changes server state. A separate button, "Set as active project", calls
-`set_context(entity_id)`, and "Clear active project" calls `set_context(null)`, each only on that explicit click.
-The reason for keeping them apart:
+**Scoping (decisions 2 and 9).** "Show this project" is **view state**: the view runs the project load for that
+project and calls nothing that changes server state. v1 has no `set_context` control, for two reasons:
 
-- the host proxies the view's calls over the agent's own connection, so `set_context` changes **the agent's**
+- the host proxies the view's calls over the agent's own connection, so `set_context` would change **the agent's**
   active project (`app/tools/set_context_tool.rb:44`), which boosts `search` and scopes name → id resolution;
 - clients that send no `X-MCP-Client` header, and every stdio client, share the `"default"` context, which is also
-  the ambient boost for callers without a context of their own. A click there affects other clients.
+  the ambient boost for callers without a context of their own. A click there would affect other clients.
 
-When `set_context` returns a `warning` (the shared-client warning, with its `next_move`), the view shows it.
+The view puts the shown project in `ui/update-model-context`, so a user who wants it as the active project asks
+the agent, and the agent's `set_context` call is visible in the chat. A "Set as active project" button can come
+in a later release.
 
 ### Search mode
 
@@ -425,10 +437,10 @@ operator Explore and Search pages untouched, and its own CHANGELOG entry and doc
 - Providers as above; `TemplateResourceProvider` first, in its own commit, with no output change (snapshots
   identical).
 - Declare the extension (plain-hash `extensions:` key); register the `ui://` resource on the profiles Steve picks
-  (question 4); add `_meta.ui.resourceUri` to the tools Steve picks (questions 2 and 3) through `ToolWrapper`: a
+  (question 2); add `_meta.ui.resourceUri` to `traverse_graph` and `find_shortest_path` through `ToolWrapper`: a
   per-tool `mcp_ui_view` setting on `ApplicationTool`, next to `title` (`app/tools/application_tool.rb:57-63`),
   empty by default, applied with `MCP::Apps.tool_meta` only when the server registers that view.
-- The setting, if Steve wants one (question 6).
+- The setting, if Steve wants one (question 3).
 - Stub HTML: the `ui/initialize` handshake, a title, the tool result's entity count, the teardown reply.
 - Specs:
   - `initialize` carries the extension, and the rest of the capabilities are unchanged;
@@ -449,8 +461,8 @@ operator Explore and Search pages untouched, and its own CHANGELOG entry and doc
 
 - The bridge helper, the HTML builder with inlined Cytoscape and config (trailer and `export` rewrites, with their
   specs), the result → elements adapter for `traverse_graph`, `find_shortest_path`, `get_entities` and catalog
-  results, the first load (decision 3), the node panel, expand, path, local scoping and the two explicit
-  `set_context` buttons, model-context updates, host theming, fullscreen.
+  results, the two subset loads (decision 3), the node panel, expand, path, local scoping, model-context updates,
+  host theming, fullscreen. A spec checks that the view sources name no tool but the five the view may call.
 - Specs: there is no JS test runner in the repo (no `package.json`), so the adapter is tested in the browser. The
   system-spec setup has headless Chrome (`spec/support/system.rb`). A system spec writes the built HTML to a
   temporary file, opens it inside a small stub-host page that plays the `postMessage` protocol with envelopes
@@ -502,28 +514,16 @@ snapshots), B about 1,500, C about 900. **Stop and ask Steve if a PR's diff grow
 
 ## Open questions for Steve
 
-1. **The wire additions** listed under "What changes on the wire" (the capability and `_meta.ui` on some tools for
+1. **The wire additions** listed under "What changes on the wire" (the capability and `_meta.ui` on two tools for
    every client, the `ui://` resource in `resources/list`, its `resources/read`): are they within "the surface
    stays as is"? Tool names, params, outputs and results do not change.
-2. **One document or two?** The spec gives no way to open a view except a linked tool call, and no way to move
-   from one view to another. Recommended: **one document with a Graph mode and a Search mode**, `search` unlinked.
-   Or two documents with `search` linked to the search one, accepting a search widget on most memory turns.
-3. **Link `get_context`?** Decision 3 (the view starts from `get_context`) only happens if `get_context` is
-   linked, and agents call it at the start of every task. Recommended: **don't link it**; link `traverse_graph`
-   and `find_shortest_path` only, and offer the context project and the root view as buttons inside the view. Or
-   link it and accept a graph widget at the start of every session.
-4. **Which profiles get the views?** Recommended: all three (`readonly` has every tool the views call; `default`
+2. **Which profiles get the view?** Recommended: all three (`readonly` has every tool the view calls; `default`
    and `maintenance` include them). Leaving one out is possible but needs the per-profile wiring described under
    "Profiles and the on/off setting".
-5. **The root view through existing tools** pages the whole catalog and filters in the view: it matches Explore
-   (untyped entities included) but costs one call per 100 entities and stops after 2,000. Accept that for v1, or
-   allow `entity_types` (and `project_id`) in catalog mode, which is a change to `search`'s behaviour (a hard
-   stop, and its own PR before step B)?
-6. **An on/off setting** (`mcp_apps_enabled`, an `AppSettings` feature flag, no migration) so the capability, the
+3. **An on/off setting** (`mcp_apps_enabled`, an `AppSettings` feature flag, no migration) so the capability, the
    links and the resource can be turned off? It takes effect after a transport reset (HTTP) or a restart (stdio).
    Default on or off?
-7. **Scoping.** Recommended: "show this project" is local to the view, and `set_context` is only behind the
-   explicit "Set as active project" button, because it changes the agent's context (and, for clients sharing the
-   `"default"` context, other clients'). Or drop the `set_context` buttons from v1 altogether?
-8. **List the `ui://` resource in `resources/list`,** or rely on tool metadata only (the spec allows both)?
+4. **List the `ui://` resource in `resources/list`,** or rely on tool metadata only (the spec allows both)?
    Recommended: list it.
+5. **Confirm the two provisional decisions** (8: the root view pages the catalog; 9: no `set_context` control in
+   v1), or change them.
