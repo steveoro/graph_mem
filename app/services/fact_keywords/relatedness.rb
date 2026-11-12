@@ -67,7 +67,8 @@ module FactKeywords
       compare_paths(first.keywords, first_entity&.name, second.keywords, second_entity&.name,
                     connected: connected.nil? ? -> { joined?(first_entity, second_entity) } : connected,
                     first_text: first.content, second_text: second.content,
-                    first_root: first_entity&.project_root?, second_root: second_entity&.project_root?)
+                    first_root: first_entity&.project_root?, second_root: second_entity&.project_root?,
+                    first_words: llm_words(first), second_words: llm_words(second))
     end
 
     # @param first_path [Array<String>] a keyword path
@@ -81,11 +82,18 @@ module FactKeywords
     # @param first_root [Boolean, nil] the first fact's entity is a project root (nil: read from the
     #   path, which also starts with its own entity for an entity with no project)
     # @param second_root [Boolean, nil]
+    # @param first_words [Array<String>, nil] the first fact's LLM words (1.83.0), used only when both
+    #   facts are on one entity and mention none
+    # @param second_words [Array<String>, nil]
     # @return [Comparison]
     def compare_paths(first_path, first_owner, second_path, second_owner, connected: false, first_text: nil, second_text: nil,
-                      first_root: nil, second_root: nil)
+                      first_root: nil, second_root: nil, first_words: nil, second_words: nil)
       first = FactKeywords.mentions(first_path, first_owner)
       second = FactKeywords.mentions(second_path, second_owner)
+      if first_owner && first_owner == second_owner && first.empty? && second.empty? && first_words.present? && second_words.present?
+        return compare_words(first_words, second_words, first_text, second_text)
+      end
+
       shared = first & second
       shared += [ second_owner ] if second_owner && second_owner != first_owner && first.include?(second_owner)
       shared += [ first_owner ] if first_owner && first_owner != second_owner && second.include?(first_owner)
@@ -103,6 +111,30 @@ module FactKeywords
     # @return [Boolean] every one has a computed path
     def computed?(*observations)
       observations.flatten.all? { |observation| observation&.keywords_at.present? }
+    end
+
+    # 1.83.0: two facts on one entity that name no entity, by their LLM words (FactKeywords::LlmWords),
+    # which take the place of the mentions: shared words relate them (none: unrelated, full weight),
+    # and one fact's words containing the other's make the same subject.
+    #
+    # @return [Comparison]
+    def compare_words(first_words, second_words, first_text, second_text)
+      mine = FactKeywords::LlmWords.keys(first_words)
+      theirs = FactKeywords::LlmWords.keys(second_words)
+      shared = mine & theirs
+      covers = if mine == theirs then :both
+      elsif mine.superset?(theirs) then :first
+      elsif theirs.superset?(mine) then :second
+      end
+      Comparison.new(subject: shared.any? ? :related : :unrelated, strong: false, shared: shared.to_a.sort, same_subject: !covers.nil?,
+                     covers: covers, details: FactKeywords::Details.compare(first_text, second_text))
+    end
+
+    # @return [Array<String>, nil] a fact's computed LLM words, nil while pending or with the setting off
+    def llm_words(observation)
+      return nil unless observation.llm_keywords_at.present? && FactKeywords::LlmWords.enabled?
+
+      observation.llm_keywords
     end
 
     # @return [Symbol, nil] whose subjects (own entity and mentions) contain the other's; nil unless
@@ -152,6 +184,6 @@ module FactKeywords
       MemoryRelation.where(from_entity_id: first.id, to_entity_id: second.id)
                     .or(MemoryRelation.where(from_entity_id: second.id, to_entity_id: first.id)).exists?
     end
-    private_class_method :subject, :siblings?, :joined?, :covers, :rooted?
+    private_class_method :subject, :siblings?, :joined?, :covers, :rooted?, :compare_words, :llm_words
   end
 end

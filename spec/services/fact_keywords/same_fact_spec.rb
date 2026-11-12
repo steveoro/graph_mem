@@ -96,6 +96,64 @@ RSpec.describe FactKeywords::Relatedness, "the same-fact ladder" do
     expect(described_class.compare(member, unscoped)).to have_attributes(same_subject: false, covers: nil, level: "related")
   end
 
+  # 1.83.0: two facts on one entity that name no entity compare by their LLM words.
+  def words(first_text, first_words, second_text, second_words, first_path: %w[p App], second_path: %w[p App])
+    described_class.compare_paths(first_path, first_path[1], second_path, second_path[1], first_text: first_text, second_text: second_text,
+                                  first_words: first_words, second_words: second_words)
+  end
+
+  it "makes Rails 8.0 → 8.1 with no mentions the same fact with a different detail, by their words" do
+    result = words("Updated using Rails 8.1", %w[rails version], "Developed using Rails 8.0", %w[rails version])
+
+    expect(result).to have_attributes(subject: :related, same_subject: true, covers: :both, details: :different, level: "same")
+    expect(result.same_fact_different_detail?).to be(true)
+  end
+
+  it "folds case and plurals when comparing words" do
+    expect(words("A", %w[versions Rails], "B", %w[rails version])).to have_attributes(same_subject: true, covers: :both)
+  end
+
+  it "relates facts sharing some words, and calls facts sharing none unrelated (full weight)" do
+    expect(words("Validates presence of email", %w[email presence], "Validates presence of name", %w[name presence]))
+      .to have_attributes(subject: :related, same_subject: false, covers: nil, level: "related")
+    expect(words("Hashes passwords with bcrypt", %w[bcrypt password], "Validates presence of name", %w[name presence]))
+      .to have_attributes(subject: :unrelated, same_subject: false)
+  end
+
+  it "knows which fact's words cover the other's" do
+    expect(words("Validates presence", %w[presence], "Validates presence of email", %w[email presence])).to have_attributes(covers: :second)
+    expect(words("Validates presence of email", %w[email presence], "Validates presence", %w[presence])).to have_attributes(covers: :first)
+  end
+
+  it "stays unclear while one side's words are missing or empty" do
+    expect(words("A", %w[name], "B", nil)).to have_attributes(subject: :unknown, level: "unclear")
+    expect(words("A", %w[name], "B", [])).to have_attributes(subject: :unknown, level: "unclear")
+  end
+
+  it "ignores words once a fact mentions an entity, and across two entities" do
+    mention = words("It belongs to a User.", %w[user], "Names a user.", %w[user], first_path: %w[p App User])
+    expect(mention).to have_attributes(subject: :one_sided, same_subject: false)
+    siblings = words("A", %w[name], "B", %w[name], second_path: %w[p Other])
+    expect(siblings).to have_attributes(subject: :unrelated, same_subject: false)
+  end
+
+  it "passes the stored words of computed facts, and none with LLM keywords off" do
+    root = MemoryEntity.create!(name: "Gadget Project", entity_type: "Project")
+    app = MemoryEntity.create!(name: "SynthApp", entity_type: "Component", project_id: root.id)
+    old, new = [ "Developed using Rails 8.0", "Updated using Rails 8.1" ].map do |content|
+      MemoryObservation.create!(memory_entity: app, content: content).tap do |fact|
+        fact.update_columns(keywords: [ "Gadget Project", "SynthApp" ], keywords_at: Time.current,
+                            llm_keywords: %w[rails version], llm_keywords_at: Time.current)
+      end
+    end
+
+    expect(described_class.compare(new, old).same_fact_different_detail?).to be(true)
+    AppSettings.llm_keywords_enabled = false
+    expect(described_class.compare(new, old).subject).to eq(:unknown)
+  ensure
+    AppSettings.where(var: "llm_keywords_enabled").delete_all
+  end
+
   it "reads the details from the facts themselves when comparing observations" do
     root = MemoryEntity.create!(name: "Gadget Project", entity_type: "Project")
     app = MemoryEntity.create!(name: "SynthApp", entity_type: "Component", project_id: root.id)
