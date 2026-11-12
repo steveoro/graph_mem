@@ -6,9 +6,9 @@
 file:line in "What the code looks like today" was checked against that commit. If a line has moved, find the code by the
 quoted text. If the code no longer matches the description, **stop and ask Steve** instead of improvising.
 
-Context: `docs/plans/f3-scan-chunking-plan.md` (F-3, shipped as 1.66.0), `docs/plans/ui-dashboard-plan.md` §6.F **F-3b**
+Context: `docs/plans.done/f3-scan-chunking-plan.md` (F-3, shipped as 1.66.0), `docs/plans.done/ui-dashboard-plan.md` §6.F **F-3b**
 ("a profiling script … over a few small open-source repos … to tune `project_scan_bytes_per_token`,
-`project_scan_chunk_output_tokens` and `project_scan_max_chunks`"), `docs/plans/agent-cli-backend-plan.md` (the LLM
+`project_scan_chunk_output_tokens` and `project_scan_max_chunks`"), `docs/plans.done/agent-cli-backend-plan.md` (the LLM
 router, `CloudCall`/`CloudGate`, anonymizer; train complete 1.67.0–1.71.0), `docs/summarization.md`.
 
 **Why.** Steve has never run a real project scan, not even in development, for fear of filling a graph with noise. F-3b

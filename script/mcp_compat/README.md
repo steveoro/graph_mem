@@ -21,7 +21,7 @@ change it (no case carries one since 1.55.0).
 | `tsclient/tsclient.mjs <stdio\|http> <auto\|legacy> <url \| -- cmd…>` | Connects the TS client (`@modelcontextprotocol/client` 2.3.1) and lists tools. |
 | `refservers/` | `package.json` + `package-lock.json` for the reference servers (Memory 2.0.0, Everything 2.0.1, SDK 2.3.1). |
 | `clients.sh <url>` | The client matrix: TS 2.3.1 and Ruby SDK 1.8.2 and 1.9.0, × auto and legacy, × stdio and HTTP (12 rows). |
-| `claude_client_check.rb` | Claude Code as the client: the automated `docs/plans/claude-mcp-client-check.md` (below). |
+| `claude_client_check.rb` | Claude Code as the client: the automated `docs/plans.done/claude-mcp-client-check.md` (below). |
 
 ## Setup (once)
 
@@ -91,7 +91,7 @@ Results, tables and the remaining divergences from the reference: [`docs/protoco
 
 ## Claude Code client check
 
-`claude_client_check.rb` automates `docs/plans/claude-mcp-client-check.md`. Run it from the graph_mem
+`claude_client_check.rb` automates `docs/plans.done/claude-mcp-client-check.md`. Run it from the graph_mem
 checkout with the graph_mem Ruby, and the `claude` CLI (2.1.296 or later) logged in:
 
 ```bash

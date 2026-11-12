@@ -1,4 +1,4 @@
-# F-3b scan profiling fixtures (docs/scan_profiling.md, docs/plans/f3b-scan-profiling-plan.md).
+# F-3b scan profiling fixtures (docs/scan_profiling.md, docs/plans.done/f3b-scan-profiling-plan.md).
 #
 # Public open-source repos only, each pinned by a full commit SHA and cloned into a temp dir by
 # `bin/rails graph_mem:scan_profile`; never a private project, a local folder or a copy of one.

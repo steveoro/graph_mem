@@ -258,7 +258,7 @@ scan with two parts. Stop for Steve's review.
   `[llm]` log line and its fields (and that it never logs prompts), the plan for the train (one paragraph, linking
   this file).
 - `docs/architecture.md`: the `app/services/llm/` layer between the three call sites and `SummaryGenerationClient`.
-- `docs/plans/ui-dashboard-plan.md`: row AC1 ✅ with the PR number.
+- `docs/plans.done/ui-dashboard-plan.md`: row AC1 ✅ with the PR number.
 - Generic paths only, no host or user names.
 
 #### R. Release
@@ -630,7 +630,7 @@ prompt in its description). **Continue** with A3; don't wait for review.
   leaks (structure, domain vocabulary, numbers; pseudonymization, not anonymity), and that nothing leaves the
   machine until a cloud provider exists (PR4).
 - `docs/architecture.md`: the anonymizer and gate inside the `app/services/llm/` layer.
-- `docs/plans/ui-dashboard-plan.md`: row AC2 ✅ with the PR number. Generic paths only.
+- `docs/plans.done/ui-dashboard-plan.md`: row AC2 ✅ with the PR number. Generic paths only.
 
 #### R. Release
 - `lib/graph_mem/version.rb` and `skills/graph-mem-mcp-toolset/SKILL.md:18` (`graph-mem-version:`) → **1.68.0**.
@@ -1043,7 +1043,7 @@ hardening; no `sudo` code ships.
 - `docs/summarization.md` "LLM providers": one paragraph: the host bridge exists (`script/llm_bridge/`, installed
   separately, never started by the app), nothing calls it until PR4, and the line from L.
 - `docs/architecture.md`: one paragraph on the bridge as a host-side process outside the Rails app.
-- `docs/plans/ui-dashboard-plan.md`: row AC3 ✅ with the PR number.
+- `docs/plans.done/ui-dashboard-plan.md`: row AC3 ✅ with the PR number.
 
 **Checkpoint 3:** B3–D pushed, CI green. **Continue.**
 
@@ -1438,7 +1438,7 @@ the PR. **Continue.**
   it yet. "Anonymization and cloud access": the scan scope now comes from the folder (realpath) and `cloud_root`.
 - `script/llm_bridge/README.md`: the parent rule, `name_map`, rotation, "re-run the gate after upgrading graph_mem".
 - `docs/architecture.md`: one line linking Rails to the bridge.
-- `docs/plans/ui-dashboard-plan.md`: the AC4 row ✅ with the PR number, if that row exists.
+- `docs/plans.done/ui-dashboard-plan.md`: the AC4 row ✅ with the PR number, if that row exists.
 
 **Checkpoint 3:** H, T and D pushed, CI green. **Continue.**
 

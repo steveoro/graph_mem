@@ -19,7 +19,7 @@ fit the window, extract each part, merge the parts before reconcile. Folded in: 
 | Commits | L → C1 → C2 → C3 → C4 → C5 → C6 → T → D → R, one commit per step (more is fine, fewer is not) |
 | Version | **1.66.0** (default, Decision 1): new settings and a visible behaviour change on every LLM scan |
 | Data | synthetic only (`SynthWidget`, `Alpha Service`, `Gadget Project`, `Dir.mktmpdir` trees, stubbed HTTP); never a real graph, a copy of one, a real project folder, a real model call, or a real host or user name |
-| Read first | `CLAUDE.md`, `AGENTS.md`; `docs/plans/ui-dashboard-plan.md` §6.F F-3; `docs/summarization.md`; `docs/architecture.md` (project scans, review rows); `docs/container_scan_mounts.md` |
+| Read first | `CLAUDE.md`, `AGENTS.md`; `docs/plans.done/ui-dashboard-plan.md` §6.F F-3; `docs/summarization.md`; `docs/architecture.md` (project scans, review rows); `docs/container_scan_mounts.md` |
 | Depends on | 1.65.0 on `main` ✅; fact supersede step S (`summary_num_ctx`, the `options:` keyword on `generate`) ✅ in 1.64.0 |
 | MCP surface | **unchanged**: no new tool, no new or changed tool argument or description; default `/mcp` stays at **12**, readonly 9, maintenance 22, 22 classes; `spec/fixtures/mcp/snapshots/*.json` byte-identical. `scan_project_status` already returns `counters` and `details` as free JSON, so the new chunk fields reach agents without a schema change |
 | Migration | **none** (the two new settings are `AppSettings` fields) |
@@ -344,7 +344,7 @@ paste its output in the PR: a `Dir.mktmpdir` tree of ~40 KB at `summary_num_ctx`
   change any tool description or schema string.
 - `docs/troubleshooting.md`: "a scan says Partial" and "a scan falls back: LLM response was not valid JSON" (raise
   `summary_num_ctx`, check the model's real window).
-- `docs/plans/ui-dashboard-plan.md`: the F-3 row ✅ with the PR number; §6.F F-3 marked done.
+- `docs/plans.done/ui-dashboard-plan.md`: the F-3 row ✅ with the PR number; §6.F F-3 marked done.
 - Generic paths only (`<project root>`, `/path/to/…`), no host or user names.
 
 ### R. Release
