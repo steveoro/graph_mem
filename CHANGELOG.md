@@ -16,7 +16,7 @@ System › Background jobs updates itself, and the running scheduled step shows 
 ### Changed
 - "Run all scheduled jobs now" fills the whole LLM-word backlog in one run (Stop still ends it between batches); the nightly and after-write runs keep their 25-batch cap.
 - The three job cards share one progress bar: the compactor shows one bar instead of three (they showed one number), and neither old bar repeats its status ("Completed Completed"); the garbage collector shows its status as a badge. The scheduled run's status lines no longer sit in two columns.
-- LLM words keep a word with digits that names a thing (`2fa`, `s3`), drop a number with a unit (`10mins`, `3d`), compare `e-mail` and `email` as one word, and count `data` as generic. A batch whose answer repeats an id keeps the rest of its answers.
+- LLM words keep a word with digits that names a thing (`2fa`, `s3`), drop a number with a unit (`10mins`, `3d`, `60fps`, `8gib`), compare `e-mail` and `email` as one word (and `rate-limit` as `rate limit`), and count `data` as generic. A batch whose answer repeats an id keeps the rest of its answers; a run gives up on an LLM that answers nothing after 3 batches in a row, also when those batches hold facts naming an entity.
 - A fact that stops naming an entity (the entity is gone) asks for its LLM words again; words are compared only for two facts on the same entity record, not two entities with one name.
 - `graph_mem:fact_keywords:llm_refresh` refuses to start (marking nothing) when the summary LLM isn't usable.
 

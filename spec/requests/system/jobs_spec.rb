@@ -96,10 +96,11 @@ RSpec.describe "System › Background jobs", type: :request do
       end
     end
 
-    it "needs the operator" do
+    it "needs the operator, and a signed-out poll isn't where sign-in returns to (final review)" do
       reset!
-      get system_jobs_cards_path
+      get system_jobs_cards_path, headers: { "Accept" => "text/vnd.turbo-stream.html" }
       expect(response).to redirect_to(operator_login_path)
+      expect(session[:operator_return_to]).to be_nil
     end
   end
 

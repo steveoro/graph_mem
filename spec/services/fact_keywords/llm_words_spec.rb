@@ -125,11 +125,13 @@ RSpec.describe FactKeywords::LlmWords do
     expect(described_class.normalize(%w[2FA S3 OAuth2])).to eq(%w[2fa oauth2 s3])
     expect(described_class.normalize(%w[10mins 3d 1st v2 2024 token])).to eq(%w[token])
     expect(described_class.normalize([ "1.5x speedup" ])).to eq(%w[speedup])
+    expect(described_class.normalize(%w[64bit 60fps 100mbps 8gib 2ghz 1080p 512b codec])).to eq(%w[codec])
   end
 
-  it "folds the separators inside a word, as RailsCodeMap.lookup_key does, keeping the word as written" do
-    expect(described_class.normalize(%w[e-mail rate_limits])).to eq(%w[e-mail rate_limits])
-    expect(described_class.keys(%w[e-mail rate_limits])).to eq(described_class.keys(%w[email ratelimit]))
+  it "keeps a word joined around a single letter (e-mail, as email), and splits other joined words (final review)" do
+    expect(described_class.normalize(%w[e-mail rate_limits])).to eq(%w[e-mail limits rate])
+    expect(described_class.keys(described_class.normalize(%w[e-mail rate_limits]))).to eq(described_class.keys(%w[email rate limit]))
+    expect(described_class.normalize(%w[rate-limit])).to eq(described_class.normalize([ "rate limit" ]))
     expect(described_class.normalize(%w[utf-8 2026-11-12])).to eq(%w[utf])
     expect(described_class.normalize([ "release date" ])).to eq(%w[date release])
   end

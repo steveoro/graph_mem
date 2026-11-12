@@ -29,6 +29,7 @@ namespace :graph_mem do
         abort "graph_mem:fact_keywords:llm_refresh: #{e.message}"
       end
       # 1.84.0: with no LLM to answer, re-pending every fact would only grow the backlog.
+      abort "graph_mem:fact_keywords:llm_refresh: LLM keywords are off (Settings); nothing was marked" unless FactKeywords::LlmWords.enabled?
       unless Llm::Router.usable?(:summary)
         abort "graph_mem:fact_keywords:llm_refresh: the summary LLM isn't usable (Settings › LLM); nothing was marked"
       end

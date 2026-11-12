@@ -113,8 +113,9 @@ class MaintenanceDashboardSnapshot
     end
   end
 
+  # Read once per snapshot (#cursor_entity reads it too).
   def compaction_snapshot
-    CompactionRunner.status_snapshot
+    @compaction_snapshot ||= CompactionRunner.status_snapshot
   end
 
   def orphan_count

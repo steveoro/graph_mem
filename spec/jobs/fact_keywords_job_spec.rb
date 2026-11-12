@@ -141,6 +141,22 @@ RSpec.describe FactKeywordsJob do
       expect(failing.size).to eq(described_class::LLM_EMPTY_BATCHES)
     end
 
+    it "gives up on an LLM that answers nothing even when every batch also holds a fact naming an entity (final review)" do
+      stub_const("FactKeywords::LlmWords::BATCH_SIZE", 2)
+      buffer = MemoryEntity.create!(name: "FrameBuffer", entity_type: "Class", project_id: root.id)
+      MemoryRelation.create!(from_entity_id: buffer.id, to_entity_id: root.id, relation_type: "part_of")
+      facts = Array.new(10).flat_map do |i|
+        [ MemoryObservation.create!(memory_entity: widget, content: "SynthWidget keeps a FrameBuffer #{i}."),
+          MemoryObservation.create!(memory_entity: widget, content: "SynthWidget fact #{i}.") ]
+      end
+      FactKeywords.compute!(MemoryObservation.where(id: facts.map(&:id)).includes(:memory_entity))
+      down = FakeProvider.new { |*| { ok: false, text: nil, error: "timeout", latency_ms: 1.0 } }
+
+      CooperativeStop.with(-> { false }) { with_llm_provider(down) { described_class.perform_now } }
+
+      expect(down.calls.size).to eq(described_class::LLM_EMPTY_BATCHES)
+    end
+
     it "has no batch cap inside a scheduled run, and keeps it outside one (1.84.0)" do
       stub_const("FactKeywords::LlmWords::BATCH_SIZE", 2)
       stub_const("#{described_class}::LLM_BATCHES_PER_RUN", 1)

@@ -48,7 +48,9 @@ class ApplicationController < ActionController::Base
   # otherwise the role's idle/absolute expiry applies.
   def authenticate!
     unless signed_in?
-      session[:operator_return_to] = request.fullpath if request.get?
+      # Pages only: a background poll (the jobs cards' Turbo Stream, whose type also says "html") is no
+      # place to land after sign-in.
+      session[:operator_return_to] = request.fullpath if request.get? && request.format.symbol == :html
       redirect_to main_app.operator_login_path, alert: t("operator.sessions.login_required")
       return
     end

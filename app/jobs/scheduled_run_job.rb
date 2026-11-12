@@ -243,7 +243,10 @@ class ScheduledRunJob < ApplicationJob
     return finish(index, "skipped") unless step.enabled?
     return compaction_step(index) if step.compaction?
 
-    save!(index, phase: step.label) { |details| details["steps"][index].merge!("outcome" => "running", "started_at" => now, "error" => nil) }
+    # A progress left by a job that died mid-step (a power cut) is dropped (final review).
+    save!(index, phase: step.label) do |details|
+      details["steps"][index].merge!("outcome" => "running", "started_at" => now, "error" => nil).delete("progress")
+    end
     @progress_at = @progress_label = nil
     sink = ->(done:, total:, label: nil) { record_progress(index, done: done, total: total, label: label) }
     begin

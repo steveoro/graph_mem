@@ -345,6 +345,21 @@ RSpec.describe ScheduledRunJob do
       expect(row.reload.details["steps"][0]).not_to have_key("progress")
     end
 
+    it "drops a progress left by a job that died mid-step when the step runs again (final review)" do
+      log = seen
+      stub_const("SynthPeekJob", Class.new(ApplicationJob) do
+        define_method(:perform) { log << ScheduledRunJob.current.reload.details["steps"][0]["progress"] }
+      end)
+      row = described_class.start!(steps: steps("SynthPeekJob"))
+      details = row.details.deep_dup
+      details["steps"][0].merge!("outcome" => "running", "progress" => { "done" => 1_200, "total" => 3_533, "label" => "LLM words" })
+      row.update!(details: details)
+
+      run(row)
+
+      expect(seen).to eq([ nil ])
+    end
+
     it "writes again once the throttle has passed" do
       log = seen
       stub_const("SynthSlowJob", Class.new(ApplicationJob) do

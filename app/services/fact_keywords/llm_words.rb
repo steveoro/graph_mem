@@ -26,7 +26,8 @@ module FactKeywords
     # word with digits that names a thing ("2fa", "s3", "oauth2") is kept.
     UNITS = %w[
       s ms sec secs second seconds m min mins minute minutes h hr hrs hour hours d day days w wk wks week weeks
-      mo month months y yr yrs year years k kb mb gb tb x px em rem pt st nd rd th
+      mo month months y yr yrs year years k b kb mb gb tb kib mib gib tib bit bits byte bytes hz khz mhz ghz
+      fps bps kbps mbps gbps rpm rps qps p x px em rem pt st nd rd th
     ].freeze
     VALUE = /\A(?:v\d+|\d+(?:#{UNITS.join("|")})?)\z/
     PROMPT_TEXT_LIMIT = 500
@@ -54,8 +55,10 @@ module FactKeywords
     # @param now [Time] the stamp
     # @param refused [Array, nil] collects the ids of facts the cloud gate refused (nothing was sent:
     #   a project that doesn't allow cloud, an entity with no project); they stay pending
+    # @param unanswered [Array, nil] collects the ids of facts sent to the LLM that it didn't answer
+    #   (down, not JSON); they stay pending (1.84.0: FactKeywordsJob counts these batches as failed)
     # @return [Integer] the facts stamped
-    def compute!(observations, now: Time.current, refused: nil)
+    def compute!(observations, now: Time.current, refused: nil, unanswered: nil)
       return 0 unless enabled?
 
       ready = observations.to_a.select { |fact| fact.keywords_at.present? }
@@ -67,6 +70,7 @@ module FactKeywords
         all.merge!(words_for(facts.map { |fact| { key: fact.id, text: fact.content, entity: fact.memory_entity } }, refused: refused))
       end
       unnamed.each { |fact| fact.update_columns(llm_keywords: found[fact.id], llm_keywords_at: now) if found.key?(fact.id) }
+      unanswered&.concat(unnamed.map(&:id).reject { |id| found.key?(id) || refused&.include?(id) })
       named.size + unnamed.count { |fact| found.key?(fact.id) }
     end
 
@@ -109,14 +113,16 @@ module FactKeywords
       tokens.all? { |token| GENERIC_KEYS.include?(key(token)) } ? [] : tokens.sort
     end
 
-    # "Rate limit" → ["rate", "limit"]; "e-mail" → ["e-mail"] (one word, its separator kept);
-    # "utf-8", "2026-11-12" → the parts that aren't values (["utf"], []).
+    # "Rate limit", "rate-limit", "rate_limit" → ["rate", "limit"]; a word joined around a single
+    # letter stays one word, its separator kept ("e-mail", compared as "email"); "utf-8",
+    # "2026-11-12" → the parts that aren't values (["utf"], []).
     def words_in(text)
       text.to_s.downcase.split(/[^\p{L}\p{N}_-]+/).flat_map do |token|
         parts = token.split(/[_-]+/).reject(&:empty?)
         next parts.grep_v(VALUE) if parts.any?(VALUE)
+        next parts unless parts.size > 1 && parts.any? { |part| part.length == 1 }
 
-        parts.empty? ? [] : [ token.gsub(/\A[_-]+|[_-]+\z/, "") ]
+        [ token.gsub(/\A[_-]+|[_-]+\z/, "") ]
       end
     end
 
