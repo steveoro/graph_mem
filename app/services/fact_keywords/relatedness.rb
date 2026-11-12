@@ -27,8 +27,29 @@ module FactKeywords
 
     # `subject` is one of SUBJECTS; `strong` a shared first mention; `shared` the shared names, in
     # the first fact's path order (a mentioned own entity included).
-    Comparison = Data.define(:subject, :strong, :shared) do
+    #
+    # The same-fact ladder (1.82.0): being related is not being the same fact, and only the same
+    # subject may make one fact obsolete. A fact's subjects are its own entity and its mentions.
+    # - `same_subject`: both facts mention entities and one's subjects contain the other's (a fact
+    #   with no mentions says too little about its subject: F2c gives it LLM words);
+    # - `covers`: :both, :first, :second (whose subjects contain the other's), or nil;
+    # - `details`: FactKeywords::Details.compare of the two texts (:none, :same, :different).
+    Comparison = Data.define(:subject, :strong, :shared, :same_subject, :covers, :details) do
       def related? = subject == :related
+
+      # The first fact is about the same thing as the second, covers all it is about, and states a
+      # different detail: it may outdate it ("Updated using Rails 8.1" over "… Rails 8.0").
+      def same_fact_different_detail?
+        same_subject && %i[first both].include?(covers) && details == :different
+      end
+
+      # @return [String] "same", "related" or "unclear", as the fact-supersede judge reads it
+      def level
+        return "same" if same_subject
+        return "related" if related?
+
+        "unclear"
+      end
     end
 
     module_function
@@ -43,7 +64,8 @@ module FactKeywords
       first_entity = first.memory_entity
       second_entity = second.memory_entity
       compare_paths(first.keywords, first_entity&.name, second.keywords, second_entity&.name,
-                    connected: connected.nil? ? -> { joined?(first_entity, second_entity) } : connected)
+                    connected: connected.nil? ? -> { joined?(first_entity, second_entity) } : connected,
+                    first_text: first.content, second_text: second.content)
     end
 
     # @param first_path [Array<String>] a keyword path
@@ -52,8 +74,10 @@ module FactKeywords
     # @param second_owner [String, nil]
     # @param connected [Boolean, #call] a relation joins the two owners directly (a callable is only
     #   called when the answer depends on it)
+    # @param first_text [String, nil] the first fact, for its details
+    # @param second_text [String, nil]
     # @return [Comparison]
-    def compare_paths(first_path, first_owner, second_path, second_owner, connected: false)
+    def compare_paths(first_path, first_owner, second_path, second_owner, connected: false, first_text: nil, second_text: nil)
       first = FactKeywords.mentions(first_path, first_owner)
       second = FactKeywords.mentions(second_path, second_owner)
       shared = first & second
@@ -61,14 +85,29 @@ module FactKeywords
       shared += [ first_owner ] if first_owner && first_owner != second_owner && second.include?(first_owner)
       siblings = shared.empty? && siblings?(first_path, first_owner, second_path, second_owner) &&
                  !(connected.respond_to?(:call) ? connected.call : connected)
+      covers = covers(first, first_owner, second, second_owner)
       Comparison.new(subject: subject(first, second, shared, siblings), strong: first.first.present? && first.first == second.first,
-                     shared: shared.uniq)
+                     shared: shared.uniq, same_subject: !covers.nil?, covers: covers,
+                     details: FactKeywords::Details.compare(first_text, second_text))
     end
 
     # @param observations [Array<MemoryObservation>]
     # @return [Boolean] every one has a computed path
     def computed?(*observations)
       observations.flatten.all? { |observation| observation&.keywords_at.present? }
+    end
+
+    # @return [Symbol, nil] whose subjects (own entity and mentions) contain the other's; nil unless
+    #   both facts mention entities
+    def covers(first, first_owner, second, second_owner)
+      return nil if first.empty? || second.empty?
+
+      mine = Set[first_owner, *first]
+      theirs = Set[second_owner, *second]
+      return :both if mine == theirs
+      return :first if mine.superset?(theirs)
+
+      :second if theirs.superset?(mine)
     end
 
     def subject(first, second, shared, siblings)
@@ -99,6 +138,6 @@ module FactKeywords
       MemoryRelation.where(from_entity_id: first.id, to_entity_id: second.id)
                     .or(MemoryRelation.where(from_entity_id: second.id, to_entity_id: first.id)).exists?
     end
-    private_class_method :subject, :siblings?, :joined?
+    private_class_method :subject, :siblings?, :joined?, :covers
   end
 end
