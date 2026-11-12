@@ -33,7 +33,7 @@
 
 ## Review Focus
 
-1. **wks-0 switched off mid-step:** when Solid Queue re-runs the job at boot, the step marked `running` runs again and no step is recorded twice. Owner: Task 3, "resumes at the stored index".
+1. **The machine switched off mid-step:** when Solid Queue re-runs the job at boot, the step marked `running` runs again and no step is recorded twice. Owner: Task 3, "resumes at the stored index".
 2. **Stop pressed in two tabs, or after the run finished:** the `expected` guard changes nothing and shows a notice. Owner: Task 4, request spec "a stale press".
 3. **Stop during compaction, while the compactor is between slices:** the pause is requested, and the step becomes `stopped` only once the compaction run is `paused`. Owner: Task 3, "stops compaction through its pause".
 4. **A job lost from Solid Queue while its row is `running`:** Stop pauses it at once instead of showing "Stopping…" forever. Owner: Task 3, "Stop with no live job".

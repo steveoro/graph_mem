@@ -246,6 +246,64 @@ RSpec.describe ScheduledRunJob do
     expect(row.reload.details["token"]).not_to eq(old_token)
   end
 
+  # Graphy round 1: a compaction run left running with nothing behind it (a shutdown mid-batch, a
+  # discarded job). The test adapter has no Solid Queue, so the check is stubbed: no job.
+  context "when nothing is running the compaction run" do
+    before { allow(described_class).to receive(:compaction_job_live?).and_return(false) }
+
+    it "starts it again after two empty polls" do
+      row = described_class.start!(steps: steps("DreamStateCompactionJob", "SynthAlphaJob"))
+      run(row)
+      clear_enqueued_jobs
+
+      run(row)
+      expect(DreamStateCompactionJob).not_to have_been_enqueued
+      run(row)
+      expect(DreamStateCompactionJob).to have_been_enqueued
+      expect(outcomes(row)).to eq([ "waiting", nil ])
+    end
+
+    it "pauses it itself on Stop, and the run pauses" do
+      row = described_class.start!(steps: steps("DreamStateCompactionJob", "SynthAlphaJob"))
+      run(row)
+      compaction = CompactionRun.find(row.reload.details["steps"][0]["compaction_run_id"])
+      described_class.stop!(row, live: true)
+
+      2.times { run(row) }
+
+      expect(compaction.reload.status).to eq("paused")
+      expect(outcomes(row)).to eq([ "stopped", nil ])
+      expect(row.status).to eq("paused")
+    end
+  end
+
+  it "stops at its next write when the run moved on without it (paused or resumed meanwhile)" do
+    log = calls
+    stub_const("SynthHijackJob", Class.new(ApplicationJob) do
+      define_method(:perform) do
+        log << :hijack
+        current = ScheduledRunJob.current
+        current.update!(details: current.details.merge("token" => "another"))
+      end
+    end)
+    row = described_class.start!(steps: steps("SynthHijackJob", "SynthAlphaJob"))
+
+    expect { run(row) }.not_to raise_error
+
+    expect(calls).to eq(%i[hijack])
+    expect(row.reload.status).to eq("running")
+  end
+
+  it "never pauses the run that replaced it when it fails afterwards" do
+    row = described_class.start!(steps: steps("SynthAlphaJob"))
+    old_token = row.details["token"]
+    row.update!(details: row.details.merge("token" => "another")) # resumed by another job meanwhile
+
+    described_class.pause!(row, message: "Interrupted", token: old_token)
+
+    expect(row.reload.status).to eq("running")
+  end
+
   it "is idle with no run, or after one finished" do
     expect(described_class.state).to eq(:idle)
     row = described_class.start!(steps: steps("SynthAlphaJob"))

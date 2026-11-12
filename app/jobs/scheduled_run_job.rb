@@ -35,6 +35,11 @@ class ScheduledRunJob < ApplicationJob
   # A compaction run in one of these has ended (a paused one ends the step unless we asked for it).
   COMPACTION_ENDED = %w[completed paused failed].freeze
   FINISHED = %w[done skipped failed].freeze
+  # Polls in a row that find no job running a still-running compaction run before acting on it.
+  ORPHAN_POLLS = 2
+
+  # Raised at a write when the run moved on without this job (paused, resumed or started over meanwhile).
+  class Superseded < StandardError; end
 
   class << self
     # @return [OperationProgress, nil] the latest run
@@ -124,13 +129,30 @@ class ScheduledRunJob < ApplicationJob
     # ScheduledRunJob for this run that hasn't failed. After a power cut Solid Queue fails the job
     # that was running (it isn't run again), so this is false and Stop pauses the row at once.
     #
+    # The test database has no Solid Queue tables, so specs stub this; it was checked by hand
+    # against the development queue (an enqueued job: true; the same job after `failed_with`: false).
+    #
     # @param row [OperationProgress]
     # @return [Boolean] false outside Solid Queue (the test adapter)
     def live_job?(row)
-      return false unless row && ActiveJob::Base.queue_adapter_name.to_s == "solid_queue"
+      return false unless row && solid_queue?
 
-      SolidQueue::Job.where(class_name: name, finished_at: nil).where.missing(:failed_execution)
-                     .where("arguments LIKE ?", "%#{SolidQueue::Job.sanitize_sql_like(row.operation_id)}%").exists?
+      unfinished(name).where("arguments LIKE ?", "%#{SolidQueue::Job.sanitize_sql_like(row.operation_id)}%").exists?
+    end
+
+    # Whether a DreamStateCompactionJob is going to run a compaction slice (one compaction run at a
+    # time, so any such job will). Checked the same way as #live_job?.
+    #
+    # @return [Boolean] false outside Solid Queue
+    def compaction_job_live?
+      solid_queue? && unfinished("DreamStateCompactionJob").exists?
+    end
+
+    def solid_queue? = ActiveJob::Base.queue_adapter_name.to_s == "solid_queue"
+
+    # Unfinished jobs of a class that haven't failed (a failed one keeps finished_at nil).
+    def unfinished(class_name)
+      SolidQueue::Job.where(class_name: class_name, finished_at: nil).where.missing(:failed_execution)
     end
 
     # Pauses the row (the caller holds its lock and passes its details to keep).
@@ -143,9 +165,14 @@ class ScheduledRunJob < ApplicationJob
       :paused
     end
 
-    # Pauses the row under its lock, then broadcasts.
-    def pause!(row, message: nil)
-      locked(row) { pause_locked!(row, row.details.deep_dup, message: message) if row.status == "running" }
+    # Pauses the row under its lock, then broadcasts. With a token, only while the run still has it
+    # (a superseded job never pauses the run that replaced it).
+    def pause!(row, message: nil, token: nil)
+      locked(row) do
+        next unless row.status == "running" && (token.nil? || row.details["token"] == token)
+
+        pause_locked!(row, row.details.deep_dup, message: message)
+      end
       OperationProgressBroadcaster.call(row)
       nil
     end
@@ -178,10 +205,12 @@ class ScheduledRunJob < ApplicationJob
 
     @token = token
     run_steps
+  rescue Superseded
+    nil # the run belongs to another job now: leave it alone
   rescue StandardError => e
     # Outside a step (a step's own errors are recorded and the run goes on): pause, so Resume can
     # continue, and let Solid Queue record the failure.
-    self.class.pause!(@row, message: "Interrupted: #{e.class}: #{e.message}".truncate(250)) if @row
+    self.class.pause!(@row, message: "Interrupted: #{e.class}: #{e.message}".truncate(250), token: @token) if @token
     raise
   end
 
@@ -194,12 +223,16 @@ class ScheduledRunJob < ApplicationJob
       outcome = run_step(index, step)
       return if outcome == :wait
       # A stopped step runs again on Resume; a finished one doesn't.
-      return self.class.pause!(@row) if outcome == "stopped"
+      return self.class.pause!(@row, token: @token) if outcome == "stopped"
 
       save!(index) { |details| details["index"] = index + 1 }
-      return self.class.pause!(@row) if stop_requested?
+      return self.class.pause!(@row, token: @token) if stop_requested?
     end
-    @row.complete!(message: "Done", details: @row.details)
+    @row.with_lock do
+      raise Superseded unless current_job?
+
+      @row.complete!(message: "Done", details: @row.details)
+    end
     OperationProgressBroadcaster.call(@row)
   end
 
@@ -226,9 +259,27 @@ class ScheduledRunJob < ApplicationJob
     return finish(index, "failed", "error" => "the compaction run is gone") unless run
     return finish(index, "stopped", "note" => run.status) if run.status == "paused" && stop_requested?
     return finish(index, "done", "note" => run.status) if COMPACTION_ENDED.include?(run.status)
+    return orphaned_compaction(index, run, entry["idle_polls"].to_i + 1) unless self.class.compaction_job_live?
 
     run.request_pause! if stop_requested?
-    save!(index) { |_details| nil } # last progress, for the status line
+    save!(index) { |details| details["steps"][index].delete("idle_polls") } # also the last progress
+    wait
+  end
+
+  # A compaction run still running with no job behind it (a shutdown mid-slice, a discarded job):
+  # after ORPHAN_POLLS such polls, a Stop pauses it here, otherwise it is started again.
+  def orphaned_compaction(index, run, polls)
+    if polls < ORPHAN_POLLS
+      save!(index) { |details| details["steps"][index]["idle_polls"] = polls }
+      return wait
+    end
+    if stop_requested?
+      run.pause!
+      return finish(index, "stopped", "note" => "paused (no compaction job was running it)")
+    end
+
+    CompactionRunner.start_or_resume!
+    save!(index) { |details| details["steps"][index]["idle_polls"] = 0 }
     wait
   end
 
@@ -254,11 +305,14 @@ class ScheduledRunJob < ApplicationJob
     outcome
   end
 
-  # Writes the details (the block edits a copy), the finished-step count and the phase, then broadcasts.
   # Writes the details under the row lock (the block edits a fresh copy, so a stop requested
   # meanwhile is kept), the finished-step count and the phase, then broadcasts.
+  #
+  # @raise [Superseded] when the run is no longer this job's (paused, resumed or started over meanwhile)
   def save!(_index, phase: nil)
     @row.with_lock do
+      raise Superseded unless current_job?
+
       details = @row.details.deep_dup
       yield details
       finished = details["steps"].count { |step| FINISHED.include?(step["outcome"]) }
@@ -267,6 +321,9 @@ class ScheduledRunJob < ApplicationJob
     end
     OperationProgressBroadcaster.call(@row)
   end
+
+  # The row (freshly read) still runs with this job's token.
+  def current_job? = @row.status == "running" && @row.details["token"] == @token
 
   # Read past the query cache: Solid Queue runs jobs with it on, and a step that writes nothing (an
   # embedding backfill while Ollama fails) would otherwise never see the stop.

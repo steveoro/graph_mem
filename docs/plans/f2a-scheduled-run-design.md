@@ -6,16 +6,16 @@ decisions are recorded in graph_mem (entity "Fact Pertinence", 2026-11-11) and g
 
 ## Why
 
-wks-0 is off at night, so the jobs scheduled between 3:00 and 5:30 (GMT) never run there: compaction, the
+The machine running graph_mem is often off at night, so the jobs scheduled between 3:00 and 5:30 (GMT) never run there: compaction, the
 embedding backfill, fact keywords, the contradiction scan, the review policies and the clean-ups. The afternoon
-jobs (backups at 13:00 and 17:00, garbage collection at 14:00) run only when wks-0 is on at those times. Steve
+jobs (backups at 13:00 and 17:00, garbage collection at 14:00) run only when it is on at those times. The operator
 often has a couple of hours in the afternoon while he's out: one button should run **every** scheduled job then,
 in a safe order, and show how far it got. F2b's backfill depends on this, since it runs with the fact-keywords job.
 
 ## Decisions (Steve, 2026-11-11)
 
-1. One button runs **all** the scheduled jobs, not only the night ones (wks-0 is off at night; the schedule stays
-   for machines that are on then, such as wks-2b).
+1. One button runs **all** the scheduled jobs, not only the night ones (the main machine is off at night; the schedule stays
+   for machines that are on then).
 2. Ship F2a first, then F2b.
 3. The unused PWA template files are removed; the manifest colour and maskable-icon follow-ups are dropped with them.
 4. The README version badge is kept in step with `GraphMem::VERSION`.
@@ -88,7 +88,7 @@ model, so the page updates live over `OperationProgressChannel`.
     unchanged on their schedule or from their own buttons.
 - **Resume** re-runs the step it stopped at (a paused compaction resumes from its cursor) and goes on.
   **Start over**, next to Resume, closes the paused run (`failed`, "abandoned") and starts at step 1.
-- **wks-0 switched off mid-run** (corrected in the final review: Solid Queue 1.7.2 marks such a job
+- **The machine switched off mid-run** (corrected in the final review: Solid Queue 1.7.2 marks such a job
   failed, it does not run it again; the card shows "No job is running this run" and **Pause now**,
   then Resume continues at the stored step). The original text: Solid Queue releases the dead process's job at boot and it runs again,
   continuing at the stored step. If no `ScheduledRunJob` is left in Solid Queue for a `running` row (its job was
