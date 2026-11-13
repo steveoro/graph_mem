@@ -4,6 +4,8 @@ require "rails_helper"
 
 # UI-5b C2: /review (operator only).
 RSpec.describe "Review & Fix", type: :request do
+  include ActiveSupport::Testing::TimeHelpers
+
   let!(:widget) { MemoryEntity.create!(name: "SynthWidget", entity_type: "Component") }
   let!(:beta) { MemoryEntity.create!(name: "Beta Service", entity_type: "Component") }
   let(:turbo) { { "Accept" => "text/vnd.turbo-stream.html" } }
@@ -121,6 +123,44 @@ RSpec.describe "Review & Fix", type: :request do
       end
     end
 
+    describe "GET /review/live (1.86.2)" do
+      def live_streams = Nokogiri::HTML5.fragment(response.body).css("turbo-stream").map { |node| [ node["action"], node["target"] ] }
+      def live_active = Nokogiri::HTML5.fragment(response.body).at_css("turbo-stream[target='review-live-state'] template").inner_html[/data-active="(\w+)"/, 1]
+
+      it "streams the rail counts and the policy-run state, and the run list only on the Policies view" do
+        proposal
+        get review_live_path, headers: turbo
+
+        expect(response).to have_http_status(:ok)
+        expect(live_streams).to contain_exactly(%w[replace review-rail-count-attention], %w[replace review-rail-count-kind],
+                                                %w[replace review-rail-count-errors], %w[replace review-rail-count-scan],
+                                                %w[replace review-live-state])
+        expect(live_active).to eq("false")
+
+        allow(ReviewPolicyJob).to receive(:running?).and_return(true)
+        get review_live_path(view: "policies"), headers: turbo
+        expect(live_active).to eq("true")
+        expect(live_streams).to include(%w[update review-policy-runs])
+        expect(response.body).to include("No policy run yet.")
+      end
+
+      it "never counts a poll as activity, and still expires an idle session" do
+        get review_path
+        seen = session[:last_seen_at]
+
+        travel 10.minutes do
+          get review_live_path, headers: turbo
+          expect(response).to have_http_status(:ok)
+          expect(session[:last_seen_at]).to eq(seen)
+        end
+
+        travel SessionAuthentication::OPERATOR_IDLE_TIMEOUT + 1.minute do
+          get review_live_path, headers: turbo
+          expect(response).to redirect_to(operator_login_path)
+        end
+      end
+    end
+
     it "keeps one side of a contradiction" do
       kept = MemoryObservation.create!(memory_entity: widget, content: "SynthWidget is fast.")
       other = MemoryObservation.create!(memory_entity: beta, content: "SynthWidget is not fast.")
@@ -216,7 +256,11 @@ RSpec.describe "Review & Fix", type: :request do
     end
 
     it "queues a policy run and imports suggest-merges" do
-      expect { post review_run_policies_path, headers: turbo }.to have_enqueued_job(ReviewPolicyJob).with(trigger: "manual")
+      expect { post review_run_policies_path, params: { view: "policies" }, headers: turbo }
+        .to have_enqueued_job(ReviewPolicyJob).with(trigger: "manual")
+      expect(response.body).to include("Review policies queued; the numbers update when the run finishes.")
+      rail = Nokogiri::HTML5.fragment(response.body).at_css("turbo-stream[action='replace'][target='review-rail'] template")
+      expect(rail.inner_html).to include('id="review-live-state"', 'data-active="true"', "/review/live?view=policies")
       allow_any_instance_of(SuggestMergesTool).to receive(:call).and_return(suggestions: [
         { entity_a: { entity_id: widget.id, name: widget.name }, entity_b: { entity_id: beta.id, name: beta.name }, cosine_distance: 0.1 }
       ])
@@ -284,5 +328,21 @@ RSpec.describe "Review & Fix", type: :request do
     get review_path
 
     expect(response).to redirect_to(operator_login_path)
+  end
+
+  it "sends a signed-out live poll to sign-in without storing it as the way back (1.86.2)" do
+    get review_live_path, headers: turbo
+
+    expect(response).to redirect_to(operator_login_path)
+    expect(session[:operator_return_to]).to be_nil
+  end
+
+  it "answers a guest's live poll with 403 (1.86.2)" do
+    enable_guest!
+    sign_in_guest
+
+    get review_live_path, headers: turbo
+
+    expect(response).to have_http_status(:forbidden)
   end
 end

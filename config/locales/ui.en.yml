@@ -30,7 +30,7 @@ en:
       cant_undo: "can't be undone: %{reason}"
       saved: "Suggestion updated."
       done: "Done. Pick the next suggestion."
-      policies_queued: "Review policies queued; results show under Policies."
+      policies_queued: "Review policies queued; the numbers update when the run finishes."
       imported: "Imported %{count} new merge suggestion(s)."
       keyword_path:
         keywords: "Keywords:"

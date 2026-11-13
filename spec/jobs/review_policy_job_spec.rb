@@ -24,6 +24,29 @@ RSpec.describe ReviewPolicyJob, type: :job do
     holder&.close
   end
 
+  describe ".running? (1.86.2)" do
+    it "is false when no run holds the lock and no job is waiting" do
+      expect(described_class.running?).to be(false)
+    end
+
+    it "is true while another session holds the run's lock" do
+      config = ActiveRecord::Base.connection_db_config.configuration_hash
+      holder = Mysql2::Client.new(**config.slice(:host, :port, :socket, :username, :password, :database))
+      holder.query("SELECT GET_LOCK('#{described_class::LOCK_PREFIX}:#{config[:database]}', 0)")
+
+      expect(described_class.running?).to be(true)
+    ensure
+      holder&.close
+    end
+
+    # The test database has no Solid Queue tables, so the job half is stubbed.
+    it "is true while a Solid Queue job of the class hasn't finished" do
+      allow(described_class).to receive(:pending_job?).and_return(true)
+
+      expect(described_class.running?).to be(true)
+    end
+  end
+
   it "is enqueued only when rows were seeded" do
     expect { described_class.enqueue_if_seeded(trigger: "stale_scan", seeded: []) }.not_to have_enqueued_job(described_class)
     expect { described_class.enqueue_if_seeded(trigger: "stale_scan", seeded: 0) }.not_to have_enqueued_job(described_class)

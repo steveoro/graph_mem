@@ -1,7 +1,10 @@
 -# Left rail: the views of the Review page with their counts.
 - items = [ [ "attention", "Needs attention", rail["attention"] ], [ "kind", "By kind", rail["kind"] ], [ "project", "By project", nil ],
   [ "errors", "Errors", rail["errors"] ], [ "scan", "Scan review", rail["scan"] ], [ "resolved", "Resolved", nil ], [ "policies", "Policies", nil ] ]
-%nav.review-rail{ "aria-label": "Review views", id: "review-rail" }
+-# 1.86.2: the badges and the policy-run state refresh themselves (live_refresh_controller.js, GET /review/live).
+%nav.review-rail{ "aria-label": "Review views", id: "review-rail",
+  data: { controller: "live-refresh", live_refresh_url_value: review_live_path(view: view) } }
+  = render "review/live_state", active: local_assigns.fetch(:active, false)
   %ul
     - items.each do |key, label, count|
       %li
@@ -13,7 +16,8 @@
   %p
     = link_to "Find & supersede", review_supersede_path, class: "review-rail__link", data: { testid: "review-find-supersede" }
   .review-rail__actions
-    = button_to "Run policies now", review_run_policies_path, method: :post, class: "ui-btn", data: { testid: "review-run-policies" }
+    = button_to "Run policies now", review_run_policies_path, method: :post, params: { view: view }, class: "ui-btn",
+      data: { testid: "review-run-policies" }
     %details
       %summary Import suggest-merges
       = form_with url: review_import_suggest_merges_path, method: :post, class: "ui-form" do

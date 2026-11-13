@@ -93,6 +93,22 @@ RSpec.describe "Review & Fix", type: :system do
     expect(csp_console_errors).to be_empty
   end
 
+  it "shows the new policy run on the Policies view without a reload after Run policies now (1.86.2)" do
+    visit review_path(view: "policies")
+    wait_for_stimulus
+    expect(page).to have_text("No policy run yet.")
+    page.execute_script("window.synthNoReload = true")
+
+    click_button "Run policies now"
+    expect(page).to have_css("#toasts .ui-toast", text: "the numbers update when the run finishes")
+    ReviewPolicyJob.perform_now(trigger: "manual") # the enqueued job doesn't run in the test adapter
+
+    # The rail polls every 3 s after the click (not after the 30 s idle tick).
+    expect(page).to have_css("[data-testid='policy-run']", text: "manual", wait: 10)
+    expect(page.evaluate_script("window.synthNoReload")).to be(true)
+    expect(csp_console_errors).to be_empty
+  end
+
   describe "keyboard" do
     it "moves with j, dismisses with d, and ignores shortcuts while typing in the search field" do
       rows = seed(*Array.new(2) do |i|

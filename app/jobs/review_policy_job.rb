@@ -20,11 +20,38 @@ class ReviewPolicyJob < ApplicationJob
     perform_later(trigger: trigger) if count.positive?
   end
 
+  # Whether a run is under way or waiting (1.86.2: the Review rail polls faster meanwhile): the
+  # run's lock is held, or a Solid Queue job of this class hasn't finished yet.
+  # @return [Boolean]
+  def self.running?
+    conn = ActiveRecord::Base.connection
+    name = conn.quote(lock_name(conn))
+    return true unless conn.uncached { conn.select_value("SELECT IS_USED_LOCK(#{name})") }.nil?
+
+    pending_job?
+  end
+
+  # @param conn [ActiveRecord::ConnectionAdapters::AbstractAdapter]
+  # @return [String] the named-lock name, per database (quote it before use in SQL)
+  def self.lock_name(conn)
+    "#{LOCK_PREFIX}:#{conn.current_database}"
+  end
+  private_class_method :lock_name
+
+  def self.pending_job?
+    return false unless defined?(SolidQueue::Job)
+
+    SolidQueue::Job.where(class_name: name, finished_at: nil).exists?
+  rescue StandardError
+    false
+  end
+  private_class_method :pending_job?
+
   # @param trigger [String]
   # @return [Hash, nil] the run summary, nil when another run holds the lock
   def perform(trigger: "nightly")
     conn = ActiveRecord::Base.connection
-    name = conn.quote("#{LOCK_PREFIX}:#{conn.current_database}")
+    name = conn.quote(self.class.send(:lock_name, conn))
     return unless conn.uncached { conn.select_value("SELECT GET_LOCK(#{name}, 0)") }.to_i == 1
 
     begin
