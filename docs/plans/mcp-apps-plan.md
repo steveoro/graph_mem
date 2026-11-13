@@ -1,17 +1,23 @@
-# MCP Apps → graph_mem 1.85.0–1.87.0: a graph view and a search view inside the chat
+# MCP Apps → graph_mem 1.87.0–1.89.0: a graph view and a search view inside the chat
 
-**Status (2026-11-12): PLAN, for Steve's review.** Written from `main` at `30beb6f` (1.84.0). No kickoff yet:
-Steve reviews this plan first. File:line references were checked against that commit; if a line has moved, find
-the code by the quoted text, and if the code no longer matches the description, **stop and ask Steve** instead of
-improvising. Only code and the public spec were read while writing this plan. **No spec was run.**
+**Status (2026-11-13): PLAN, reviewed, all questions answered.** Written from `main` at `30beb6f` (1.84.0) and
+**reviewed at `9df8556`** against three sources: this repo's code, the installed `mcp` 1.9.0 gem source, and the
+live spec (stable 2026-01-26 and the draft). The review changed the first-load design, the tool linkage and the
+view packaging, and added the sections from "Acceptance criteria" on; "What the review changed" lists the
+differences. Steve answered every open question on 2026-11-12 (decisions 6–13). 1.85.0 and 1.86.0 shipped other
+work meanwhile, so this train is now 1.87.0–1.89.0. No kickoff yet. File:line references were checked again at
+`cb44409` (1.86.0); if a line has moved, find the code by the quoted text, and if the code no
+longer matches the description, **stop and ask Steve** instead of improvising. Only `spec/docs` was run.
 
 ## Goal
 
-Two MCP Apps views that hosts supporting the extension (Claude, Cursor, VS Code Copilot, …) render next to the
-chat, built only on graph_mem's existing tools:
+MCP Apps views that hosts supporting the extension (Claude, Cursor, VS Code Copilot, …) render next to the chat,
+built only on graph_mem's existing tools:
 
-1. **Graph view** (`ui://graph-mem/graph`): the Cytoscape.js graph of any knowledge subset, read-only.
-2. **Search view** (`ui://graph-mem/search`): a query box, filters, paged hits, click-through to an entity.
+1. **Graph view:** the Cytoscape.js graph of any knowledge subset, read-only.
+2. **Search view:** a query box, filters, paged hits, click-through to an entity.
+
+They are two modes of one `ui://` document (decision 6; see "How a view opens" for why).
 
 Clients without the extension keep exactly today's behaviour: the same tools, the same text and
 `structuredContent`.
@@ -30,58 +36,123 @@ Design goal (Steve, 2026-11-12): **the resource layer is generic**, not hard-wir
 static resource (for example skills, later) can register through the same code. This plan does not plan Skills over
 MCP.
 
+### After the review (2026-11-12)
+
+The review found that decisions 3 and 5 meet limits in the spec and in the `search` tool. Steve decided:
+
+6. **One document with a Graph mode and a Search mode** (`ui://graph-mem/graph`); `search` is not linked. This is
+   how decision 5 is applied.
+7. **`get_context` is not linked.** Only `traverse_graph` and `find_shortest_path` open the view. Decision 3 is
+   applied inside the view: "Context project" and "Root entities" are buttons.
+8. **The root view pages the unfiltered catalog** and filters in the view. No change to `search`. Revisit when a
+   graph outgrows the 2,000-entity scan or the load is slow in practice; the tool change (filters in catalog mode)
+   stays a hard stop.
+9. **v1 has no `set_context` control.** Scoping is local to the view. Decision 2 allows `set_context`; v1 doesn't
+   use it, so the view changes no server state. The user can ask the agent to set the active project.
+10. **The wire additions are accepted** as exceptions to "the surface stays as is" (the list under "What changes
+    on the wire"). On the tool count of the default `/mcp`: the hard limit is about 20 tools, and under 15 is
+    better. It is 12 today and this train adds none.
+11. **The view is registered on all three profiles** (`default`, `readonly`, `maintenance`).
+12. **An on/off setting,** `mcp_apps_enabled`, default on.
+13. **The `ui://` resource is listed in `resources/list`.**
+
+## What the review changed
+
+- **First load.** `search` refuses `project_id` and `entity_types` without a query, so the first draft's "catalog
+  mode with filters" cannot run. The project subset now comes from `traverse_graph`, the root view from the
+  unfiltered catalog.
+- **How a view opens.** The spec has no way to open a view without a linked tool call, and no way for one view to
+  load another. The two views become two modes of one document.
+- **`get_context` linkage.** Agents call `get_context` at the start of every task, so linking it opens a widget in
+  every session. The recommendation no longer links it.
+- **Scoping.** The view scopes locally and v1 calls `set_context` nowhere.
+- **Packaging.** View JS moves out of `app/javascript/` (Propshaft would serve it publicly).
+- **Facts corrected:** what the fixtures hold, what the guard specs scan, `get_context` statuses,
+  several gem and spec details.
+- **Sections added:** acceptance criteria, compat verification, size, release and housekeeping.
+
 ## Hard stops (ask Steve before doing any of these)
 
 - **Any change to an MCP tool's params or outputs** (input schema, output schema, new keys in `structuredContent`,
-  a changed text result), and any new tool, including an app-only tool (`_meta.ui.visibility: ["app"]`).
-- **The default `/mcp` stays at 12 tools or fewer** (`spec/fixtures/mcp/snapshots/default.json`).
+  a changed text result, a relaxed validation), and any new tool, including an app-only tool
+  (`_meta.ui.visibility: ["app"]`).
+- **A change to the tool count of any profile.** This train adds no tool, so the default `/mcp` stays at 12
+  (`spec/fixtures/mcp/snapshots/default.json`). Steve's limit for it is about 20, preferably under 15
+  (decision 10); a new tool is still his call.
 - **Any new gem, a gem bump (including `mcp` 1.9.0 → 1.10.0), a migration, or any non-stdlib package** (npm
   packages such as `@modelcontextprotocol/ext-apps`, a JS bundler, a CDN script).
 - **Anything that weakens the lockdown or the anonymizer/cloud gate:** the `/mcp` `AccessGate` (IP allowlist and
   optional bearer token), the host bridge lockdown, `Llm::Anonymizer`, `cloud_allowed`. Nothing in this plan needs
   to touch them; if a step seems to, stop.
-- **Letting a view call a write tool**, or `set_context` for anything but scoping (decision 2).
-- **A new HTTP route or a wider CORS/allowlist** for the views. The views never call graph_mem over HTTP.
-- **An exemption in a guard spec** (`spec/inline_scripts_spec.rb`, `spec/javascript_sinks_spec.rb`,
-  `spec/outbound_http_guard_spec.rb`).
+- **Letting a view call a write tool**, or `set_context` at all in v1 (decisions 2 and 9).
+- **A new HTTP route, a new public asset path, or a wider CORS/allowlist** for the views. The views never call
+  graph_mem over HTTP, and their sources are not served by the Rails app.
+- **An exemption in a guard spec** (`spec/inline_scripts_spec.rb`, `spec/javascript_sinks_spec.rb`), or a view
+  source that the new view-source spec (step A) would reject.
+- **Overriding private gem code** (for example `MCP::Server#list_tools`) to vary a list per client.
 
-What the feature *does* add to the wire, by design, is listed under "What changes on the wire". Steve confirms
-those additions (open question 1) before step A starts.
+What the feature *does* add to the wire, by design, is listed under "What changes on the wire". Steve accepted
+those additions (decision 10); anything beyond that list is a hard stop.
 
 ## The extension, as of 2026-11-12
 
 Spec: SEP-1865, **Stable (2026-01-26)**,
-<https://github.com/modelcontextprotocol/ext-apps/blob/main/specification/2026-01-26/apps.mdx>.
+<https://github.com/modelcontextprotocol/ext-apps/blob/main/specification/2026-01-26/apps.mdx>. The repo's
+`specification/` holds only `2026-01-26` and `draft` (last draft commit 2026-11-04).
 
 - **Negotiation:** extension id `io.modelcontextprotocol/ui`. The client declares
-  `capabilities.extensions["io.modelcontextprotocol/ui"] = { mimeTypes: ["text/html;profile=mcp-app"] }`; the
-  server declares the same under its capabilities. A client that doesn't declare it gets plain tools.
+  `capabilities.extensions["io.modelcontextprotocol/ui"] = { mimeTypes: ["text/html;profile=mcp-app"] }`. The
+  server declares the extension in its `initialize` result too: a client uses an extension only when both sides
+  declare it. A client that doesn't declare it gets plain tools.
+- **Gating by client:** the spec says servers SHOULD check the client's capability before registering UI-enabled
+  tools. graph_mem can't do that in `tools/list` (see "The Ruby `mcp` gem"), so `_meta.ui` goes to every client.
+  That is tolerated: a host without the extension treats the tool as a plain tool.
 - **UI resources:** ordinary MCP resources with a `ui://` URI and MIME type `text/html;profile=mcp-app`; the content
-  (`text` or base64 `blob`) MUST be a full HTML5 document. Servers MAY leave them out of `resources/list`, since
+  (`text` or base64 `blob`) MUST be a valid HTML5 document. Servers MAY leave them out of `resources/list`, since
   hosts find them through tool metadata.
-- **Resource `_meta.ui`** (on the listing and/or the `resources/read` content): `csp` (`connectDomains`,
-  `resourceDomains`, `frameDomains`, `baseUriDomains`), `permissions` (camera, microphone, geolocation,
-  clipboardWrite), `domain`, `prefersBorder`.
+- **Resource `_meta.ui`:** `csp` (`connectDomains`, `resourceDomains`, `frameDomains`, `baseUriDomains`),
+  `permissions` (camera, microphone, geolocation, clipboardWrite), `domain`, `prefersBorder`. **Put it on the
+  `resources/read` content item:** that is where the stable spec's examples and the official SDK read it, and the
+  draft makes the content item win over the listing. Repeating it on the listing is optional.
 - **CSP default when `csp` is omitted:** `default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self'
-  'unsafe-inline'; img-src 'self' data:; media-src 'self' data:; connect-src 'none'`. Hosts MUST NOT allow
-  undeclared domains. So everything the views need must be inlined, and a view can't `fetch` anything.
+  'unsafe-inline'; img-src 'self' data:; media-src 'self' data:; connect-src 'none'` (the draft adds
+  `object-src 'none'`). Hosts MUST NOT allow undeclared domains. What follows for the views:
+  - everything must be inlined, and a view can't `fetch` anything;
+  - an inline `<script type="module">` runs; a `blob:` or `data:` script does not;
+  - no `eval` or `new Function`, no WASM, no `blob:` workers;
+  - no `font-src`, so embedded fonts are blocked: use the host's font variables or system fonts.
 - **Tool linkage:** `_meta.ui.resourceUri` on a tool in `tools/list`; optional `_meta.ui.visibility`
   (`["model", "app"]` by default). The flat `_meta["ui/resourceUri"]` is deprecated and goes before GA (decision 4:
   not emitted).
-- **When a linked tool is called,** a host that supports the extension renders the linked view and pushes it
-  `ui/notifications/tool-input` (the arguments) and `ui/notifications/tool-result` (the full `CallToolResult`,
-  `structuredContent` included). **This happens on every call of a linked tool, including the agent's own calls**
-  (open question 2).
-- **View ↔ host messages** (JSON-RPC over `postMessage`, no SDK needed): `ui/initialize` →
-  `ui/notifications/initialized`; `tools/call` and `resources/read` (proxied to the server, possibly after user
-  consent); `ui/update-model-context` (overwrites what the view tells the model for later turns);
-  `ui/message` (a follow-up into the chat); `ui/open-link`; `ui/request-display-mode` (`inline`, `fullscreen`,
-  `pip`); `ui/notifications/size-changed`; `notifications/message` (logs). Host → view:
-  `ui/notifications/host-context-changed` (theme, display mode, size), `ui/resource-teardown`,
-  `ui/notifications/tool-cancelled`. Theming arrives as standard CSS variables in `hostContext.styles.variables`
-  (`--color-background-primary`, `--font-sans`, …), with `light-dark()` values.
-- **Graceful degradation:** tools MUST still return a meaningful `content` array. `structuredContent` is meant for
-  the view and is not added to the model's context by hosts that follow the spec's guidance.
+- **How a view opens.** The spec's only rule is: a tool with `_meta.ui.resourceUri` is rendered with that resource
+  when it is called. So:
+  - a view opens on **every call of a linked tool, the agent's own calls included**;
+  - there is **no way to open a view without a linked tool call** (no "open this `ui://` resource" action);
+  - **one view cannot load or switch to another** `ui://` resource (view-to-view communication is listed as future
+    work);
+  - a tool result cannot choose its view: `resourceUri` is fixed on the tool definition.
+- **What the host pushes to the view:** `ui/notifications/tool-input` (the arguments, at most once, before the
+  result) and `ui/notifications/tool-result` (the full `CallToolResult`, `structuredContent` included). The host
+  sends nothing before the view's `ui/notifications/initialized`.
+- **View ↔ host messages** (JSON-RPC over `postMessage`, no SDK needed):
+  - `ui/initialize` (params: `protocolVersion` `"2026-01-26"`, `appInfo`, `appCapabilities` with
+    `availableDisplayModes: ["inline", "fullscreen"]`) → `ui/notifications/initialized`; the view requests
+    `fullscreen` only if `hostContext.availableDisplayModes` lists it;
+  - `tools/call` and `resources/read`, proxied to the server. A view can call **any tool of the same server whose
+    visibility includes `"app"`** (the default), linked or not. The host MAY block a call or ask the user first;
+  - `ui/update-model-context` (replaces what the view told the model before), `ui/message` (a follow-up into the
+    chat), `ui/open-link`, `ui/request-display-mode` (`inline`, `fullscreen`, `pip`),
+    `ui/notifications/size-changed`, `notifications/message` (logs), `ping`;
+  - host → view: `ui/notifications/host-context-changed` (theme, display mode, size),
+    `ui/notifications/tool-cancelled`, and `ui/resource-teardown`, which carries an id and **expects a response**.
+- **Theming** arrives as standard CSS variables in `hostContext.styles.variables` (`--color-background-primary`,
+  `--font-sans`, …) with `light-dark()` values, plus `hostContext.theme`. Views should set fallback values.
+- **Graceful degradation:** tools MUST still return a meaningful `content` array. As a best practice (not a MUST),
+  hosts keep `structuredContent` out of the model's context. graph_mem's `content` text is already the same JSON
+  as `structuredContent` (`lib/graph_mem/official_mcp/tool_wrapper.rb:86-87`), so the model sees the same data
+  either way.
+- **Size:** neither the spec nor the docs set a limit for the HTML resource. The SDK docs note that some hosts
+  limit tool-result sizes.
 
 ### Client support
 
@@ -89,13 +160,15 @@ Spec: SEP-1865, **Stable (2026-01-26)**,
   (<https://modelcontextprotocol.io/extensions/apps/overview>). Claude's 2026-11-10 update moves interactive
   connectors to a side panel or fullscreen and puts more of the extension (app tools) in public preview; not on
   Claude Mobile. A remote graph_mem still needs the usual reachable MCP endpoint (and a token off loopback); the view
-  itself opens no connection.
+  itself opens no connection. ext-apps issue #671 (open) reports Claude fetching a resource without rendering the
+  iframe, so step A's manual check on Claude comes first.
 - **Cursor:** its docs mark "Apps (extension)" as Supported (<https://cursor.com/docs/mcp>), since Cursor 2.6.
   Known issues in the forum: inline widgets stopped mounting for some sessions around 3.9.16 (fixed in 3.12), and
   servers configured in a project's `.cursor/mcp.json` never get their `ui://` resource read, while the same server
   in the global (user-level) `mcp.json` works. Test with a global entry on a current build.
-- **Also listed on the overview:** VS Code GitHub Copilot, Microsoft 365 Copilot, Goose, Postman, MCPJam,
-  Archestra.AI. Claude Code and other CLIs: assume no rendering; they keep the text result.
+- **Also listed:** VS Code GitHub Copilot, Microsoft 365 Copilot, Goose, Postman, MCPJam, Archestra.AI on the
+  overview; ChatGPT, PostHog Code, Kiro Crew and Glean in the client matrix; MCP Inspector as partial.
+- **Claude Code** is in the matrix without Apps support. It and other CLIs keep the text result.
 
 ## The Ruby `mcp` gem
 
@@ -103,49 +176,77 @@ graph_mem pins `gem "mcp", "1.9.0"` (`Gemfile:36`). The newest release is **1.10
 header validation, OAuth `issuer:`, stdio env and SSE hardening; **nothing for Apps or resources**). No bump is
 needed for this train; a bump stays its own "one PR per upgrade" change and is a hard stop.
 
-What **1.9.0 already has** (read at the `v1.9.0` tag):
+What **1.9.0 already has** (read in the installed gem):
 
-- `MCP::Apps` (`lib/mcp/apps.rb`, since 0.24.0): `EXTENSION_ID`, `RESOURCE_MIME_TYPE`, `URI_SCHEME`,
-  `Apps.capability`, `Apps.ui_resource(uri:, name:, …)` (refuses a non-`ui://` URI),
-  `Apps.tool_meta(resource_uri:, visibility: nil, meta: nil, legacy: false)` (use the default `legacy: false`,
-  decision 4), `Apps.client_supports?(client_capabilities)`.
-- **Extension capability declaration:** `MCP::Server::Capabilities#support_extensions` (SEP-2133, merges
-  repeated calls). graph_mem passes a plain `CAPABILITIES` hash today, so either add an `extensions:` key to it or
-  switch to a `Capabilities` object; step A checks which one the 1.9.0 server serializes unchanged.
+- `MCP::Apps` (`lib/mcp/apps.rb`, autoloaded): `EXTENSION_ID`, `RESOURCE_MIME_TYPE`, `URI_SCHEME`, and
+  - `Apps.capability` → `{ "io.modelcontextprotocol/ui" => { mimeTypes: [...] } }`;
+  - `Apps.ui_resource(uri:, name:, **rest)`: refuses a non-`ui://` URI and returns an `MCP::Resource` **instance**
+    for the listing. It takes `title`, `description`, `meta` and the other `Resource` fields; there are no
+    `csp`, `permissions` or `prefers_border` keywords, so the `ui` hash is written by hand inside `meta:`;
+  - `Apps.tool_meta(resource_uri:, visibility: nil, meta: nil, legacy: false)`: returns
+    `{ ui: { resourceUri: uri } }` with **Symbol keys** (use the default `legacy: false`, decision 4);
+  - `Apps.client_supports?(client_capabilities)`.
+- **Capability declaration:** `MCP::Server.new(capabilities:)` stores a plain Hash unchanged
+  (`lib/mcp/server.rb:1679-1685`), so `CAPABILITIES.merge(extensions: MCP::Apps.capability)` is serialized as
+  written. **Don't switch to a `Capabilities` object:** it drops the explicit `subscribe: false` and
+  `listChanged: false` values that the handshake cases expect.
 - **Tool `_meta`:** `MCP::Tool.meta(value)` (`lib/mcp/tool.rb:113`), serialized as `_meta` in `tools/list`.
-- **Resources:** static resources (`MCP::Server.new(resources:)`, `#resources=`, `#define_resource`, with `meta:`),
-  templates, and `resources_read_handler`, which **fully replaces** the default read dispatch. `_meta` on resource
-  contents has been supported since 0.13.0.
+- **`tools/list` is the same for every client:** `list_tools` takes no request context and has no handler hook. A
+  tool (`server_context.client_capabilities`) and the read handler can see the client's capabilities; the tool
+  list cannot vary by them.
+- **Resources:** static resources (`MCP::Server.new(resources:)`, with `meta:` serialized as `_meta`), templates,
+  and `resources_read_handler`, which **fully replaces** the default read dispatch. The handler's return value
+  becomes `contents` as is, so it must return plain Hashes; a `_meta` key in them reaches the wire unchanged.
+  `MCP::Resource::TextContents.new(uri:, mime_type:, text:, meta:).to_h` builds such a Hash.
+- The gem's own read dispatch can't replace graph_mem's: it reads only resource *classes* (not the instance
+  `Apps.ui_resource` returns), and its template matcher doesn't handle the `{?…}` form graph_mem's templates use.
+- **Response size:** no limit and no chunking on outgoing responses on either transport. graph_mem serves one JSON
+  body per response (`enable_json_response: true`). The 4 MiB caps apply to incoming requests only.
 - Also in 1.9.0, not used here: the Skills extension (SEP-2640, `MCP::Skill`), relevant only to a later Skills over
   MCP decision.
 
 What **graph_mem has to wire or hand-roll** (all graph_mem code, no protocol reimplementation):
 
 - `ServerFactory::CAPABILITIES` (`lib/graph_mem/official_mcp/server_factory.rb:12-16`) advertises tools, resources
-  and prompts only: add the Apps extension.
-- `ServerFactory.for` registers only `resource_templates:` and a `resources_read_handler` that goes straight to
-  `ResourceCatalog.read` (`server_factory.rb:24-35`). Because that handler replaces the gem's dispatch, the gem's
-  own static-resource read path is never reached: `ResourceCatalog` must learn to read static resources itself.
+  and prompts only: add the `extensions:` key.
+- `ServerFactory.for` passes no `resources:` (so `resources/list` is empty today), only `resource_templates:`, and
+  sets a `resources_read_handler` that goes straight to `ResourceCatalog.read` (`server_factory.rb:25-35`).
+  `ResourceCatalog` must learn to list and read static resources itself.
 - `ResourceCatalog.read` (`lib/graph_mem/official_mcp/resource_catalog.rb:20-27`) returns
   `{ uri, mimeType, text|blob }` and never `_meta`.
-- `ToolWrapper.build` (`lib/graph_mem/official_mcp/tool_wrapper.rb:27`, the `Class.new(MCP::Tool)` block) sets name, title, description, schemas
-  and annotations, never `meta`.
-- **The view runtime** (HTML documents, a ~100-line vanilla `postMessage` bridge, the result → Cytoscape adapter,
-  inlining Cytoscape): nothing in the gem covers it, by design; it is host-side protocol.
+- `ToolWrapper.build` (`lib/graph_mem/official_mcp/tool_wrapper.rb:27`, the `Class.new(MCP::Tool)` block) sets
+  name, title, description, schemas and annotations, never `meta`. It also receives no profile, which matters
+  when a profile or a setting leaves the views out (see "Profiles and the on/off setting").
+- `bin/mcp_stdio_runner.rb:51-53` logs the counts of tools, prompts and templates: add the static resources.
+- **The view runtime** (the HTML document, a ~100-line vanilla `postMessage` bridge, the result → Cytoscape
+  adapter, inlining Cytoscape): nothing in the gem covers it, by design; it is host-side protocol. The bridge's
+  message checks are under "Rendering and packaging".
 
-## What changes on the wire (by design; open question 1)
+## What changes on the wire (by design; decision 10)
 
-- `initialize` result: `capabilities.extensions["io.modelcontextprotocol/ui"]`.
-- `tools/list`: `_meta.ui.resourceUri` on the linked tools only. Names, descriptions, input and output schemas
-  unchanged.
-- `resources/list`: two static `ui://` resources (or none, if Steve prefers to rely on tool metadata only; the spec
-  allows both). `resources/templates/list`: unchanged.
-- `resources/read` for the two `ui://` URIs: an HTML document with `_meta.ui`.
+- `initialize` result: `capabilities.extensions["io.modelcontextprotocol/ui"]`, for every client.
+- `tools/list`: `_meta.ui.resourceUri` on the linked tools only, for every client. Names, descriptions, input and
+  output schemas unchanged.
+- `resources/list`: the static `ui://` resource, where today the list is empty (decision 13).
+  `resources/templates/list`: unchanged.
+- `resources/read` for the `ui://` URI: an HTML document with `_meta.ui` on the content item.
 - `tools/call` results: **unchanged**, for every client.
 
-The snapshots (`spec/fixtures/mcp/snapshots/{default,readonly,maintenance}.json`) and the handshake fixtures
-(`spec/fixtures/mcp/handshakes/{http,stdio}.json`) are re-recorded once, in step A, and the diff must show only the
-items above.
+How the specs see these changes:
+
+- `spec/mcp/tools_list_snapshot_spec.rb` compares `tools/list`, `prompts/list` and `resources/templates/list`
+  only (`list_methods`, line 14). Step A adds `resources/list` to that list and re-records the three snapshots
+  (`spec/fixtures/mcp/snapshots/{default,readonly,maintenance}.json`) by hand, as `docs/development.md:129`
+  describes. The diff must show only `_meta` on the linked tools and the new `resources/list` block.
+- The handshake fixtures (`spec/fixtures/mcp/handshakes/{http,stdio}.json`) are hand-written expectations matched
+  by subset (`script/mcp_compat/handshake_cases.rb`), not recordings. An added `extensions` key passes them
+  unchanged. Step A adds an expectation for it instead of re-recording anything.
+- Three checks compare the served capabilities with `CAPABILITIES.deep_stringify_keys`
+  (`spec/requests/mcp_official_spec.rb:66`, `spec/integration/mcp_structured_output_stdio_spec.rb:76`,
+  `script/mcp_compat/claude_client_check.rb:249`). With an on/off setting, one of its two states can't equal a
+  constant. So `CAPABILITIES` stays today's base, and one new method, `ServerFactory.capabilities(apps_enabled:)`,
+  returns the base or the base plus `extensions:`. The server and the three checks all call it, and step A adds
+  an example for each state.
 
 ## Design
 
@@ -159,159 +260,318 @@ answering `resources` (static listings), `templates`, `match?(uri)` and `read(ur
 - `TemplateResourceProvider`: today's behaviour, moved as is (same URIs, same output).
 - `StaticResourceProvider`: a frozen list of `{ uri:, name:, title:, description:, mime_type:, meta:, body: }`,
   where `body` is a callable that builds the content once and memoizes it. It has no knowledge of `ui://`.
-- `McpApps::Views`: registers the two views into a `StaticResourceProvider`, using `MCP::Apps.ui_resource` for the
-  listing (which enforces the `ui://` scheme and MIME type) and adding `_meta.ui` to both listing and content.
+- `McpApps::Views`: registers the view(s) into a `StaticResourceProvider`, using `MCP::Apps.ui_resource` for the
+  listing (which enforces the `ui://` scheme and MIME type) and `MCP::Resource::TextContents#to_h` with
+  `meta: { ui: … }` for the content.
 
 `resources/read` asks the providers in order and raises `ResourceNotFoundError` as today when none matches. A later
-provider (skills, or anything else) registers the same way without touching the read path. Static resources are
-per profile, like tools, so a view is only registered on a profile that advertises the tools it calls.
+provider (skills, or anything else) registers the same way without touching the read path.
+
+### Profiles and the on/off setting
+
+Resource templates are on every profile today (`McpToolRegistry.resource_classes` isn't filtered), so **static
+resources per profile are new behaviour**, not a copy of an existing pattern. Two rules keep the three lists
+consistent:
+
+- A view is registered on a profile only if that profile advertises every tool the view calls.
+- A tool carries `_meta.ui` only on a server that also registers its view. `ToolWrapper.build(klass)` therefore
+  needs to know which views the server being built has (pass the profile's view URIs, or a
+  `linked_view_for(klass)` callable, from `ServerFactory.for`).
+
+The three profiles that exist: `readonly` has all five tools the view calls (`search`, `get_entities`,
+`traverse_graph`, `find_shortest_path`, `get_context`); `default` and `maintenance` add the write tools, which
+the view never calls. The only state the view can change is through `get_context`, which clears a stale context
+(a deleted project) exactly as it does for an agent.
+
+The view is on all three profiles (decision 11), so the first rule only matters for a later view or profile.
+
+The on/off setting (decision 12) is `mcp_apps_enabled`, default on: an `AppSettings` field in the
+`:feature_flags` group of `SettingsSchema` (`app/services/settings_schema.rb:120`), with its i18n label and help
+text (`spec/services/settings_schema_spec.rb` requires both). No migration. Servers are built once per
+transport, so a change has to rebuild them:
+
+- **HTTP:** saving a changed `mcp_apps_enabled` in System › Settings calls
+  `GraphMem::OfficialMcp.refresh_access!(transports: true)`, the call a change of the allowed hosts or origins
+  already makes (`app/controllers/concerns/mcp_access_settings.rb:51`). That call runs only for the allowlist
+  keys today, so this is a small new hook: in `SettingsGroupUpdate#write_settings`
+  (`app/controllers/concerns/settings_group_update.rb:35-44`), next to `apply_mcp_access_changes`, read the value
+  before and after the save and call `refresh_access!(transports: true)` only when it changed. Restoring a
+  backup is already covered (`app/controllers/system/backups_controller.rb:45`). The refresh closes the open MCP
+  sessions, and the help text says so. Like that call it is in-process only: with several Puma workers the
+  others pick the change up at their next restart (`lib/graph_mem/official_mcp.rb:44-45`).
+- **Stdio:** the runner builds its server once at boot, so the change needs a restart of the runner. The help
+  text says that too.
+- A Solid Queue worker never serves MCP and needs nothing.
+
+With the setting off, the server declares no extension, links no tool and lists no `ui://` resource:
+today's wire, exactly.
 
 ### Which tools link to which view
 
 The view a host renders for a tool call is decided by the **tool's** `_meta.ui.resourceUri`, and hosts render it on
-every call of that tool, the agent's included. Linking `search` and `get_entities` (the two tools agents call most)
-would put a widget into nearly every turn that touches memory. Recommendation, pending open question 2:
+every call of that tool, the agent's included. How often agents call each tool therefore decides how often a
+widget appears:
 
-| Tool | Links to | Why |
-|---|---|---|
-| `traverse_graph` | graph view | A neighbourhood or path is a graph by nature, and agents call it rarely. |
-| `find_shortest_path` | graph view | Same. |
-| `get_context` | graph view | The natural "show me my project" entry point; rare in agent turns. |
-| `search` | **not linked in v1** (search view only if Steve wants it; see question 2) | The most frequent agent call. |
-| `get_entities` | not linked | Frequent; the views call it, it needs no view of its own. |
-| `set_context` | not linked | The views call it; it returns no graph. |
+| Tool | Agent calls it | Linked to | Why |
+|---|---|---|---|
+| `traverse_graph` | rarely | **graph view** | A neighbourhood is a graph by nature. |
+| `find_shortest_path` | rarely | **graph view** | Same. |
+| `get_context` | **at the start of every task** (the `orient` prompt and the skill say so) | not linked | A widget in every session; and its result holds no graph (decision 7). |
+| `search` | in most memory turns | not linked | The most frequent call (decision 6). |
+| `get_entities` | often | not linked | The views call it; it needs no view of its own. |
+| `set_context` | at task start | not linked | It returns no graph; the view doesn't call it (decision 9). |
 
-A view can call **any** model-visible tool through `tools/call`, linked or not, so the search view can still call
-`search`, and the graph view `get_entities`. The linkage only decides which tool *results* open a view by
-themselves. If `search` stays unlinked, the search view is reached from the graph view (a search box that swaps the
-view) or, in hosts that list UI resources, opened directly. Step A verifies on Claude and Cursor how a view is
-reachable without a linked tool; if it isn't, open question 2 decides between linking `search` and merging the two
-views into one document with two tabs.
+With this linkage a user reaches the views by asking for a graph ("show me the graph around X", "how
+are X and Y connected"): the agent calls `traverse_graph` or `find_shortest_path`, and the host opens the view.
 
-### Graph view (`ui://graph-mem/graph`)
+A view can call any tool whose visibility includes `"app"`, linked or not, so the view can still call `search`,
+`get_entities` and `get_context`.
 
-On `ui/notifications/tool-result` from a linked tool it draws that result. On first load with no tool result
-(opened directly), it follows decision 3:
+### One document or two
 
-1. `tools/call get_context`. If it returns a project (`status` other than `no_context`): draw that project's
-   subset with `search` in catalog mode (`project_id:`, `per_page: 100`, paging up to a cap) plus
-   `get_entities(entity_ids:, relations: "internal")` for the edges.
-2. With no context: draw all root entities, Explore's default view. Explore picks
-   `entity_type IN ("Project", NULL)` (`app/controllers/api/v1/graph_data_controller.rb:66-70`). Through existing
-   tools that is `search` in catalog mode with `entity_types: ["Project"]`, paged, then
-   `get_entities(relations: "internal")`. Untyped entities (`entity_type` NULL) can't be selected by
-   `entity_types`; they are left out, and the view says so (open question 5).
-3. Node cap: the same 2,000 as `GraphDataController::MAX_NODES`, with a "truncated, N total" note.
+Because a view opens only from a linked tool call and can't load another view, a search view that no tool links
+to would be unreachable. The two ways to keep decision 5 were:
 
-Interaction: click a node → `get_entities` for its details in a side panel (observations, relations); a depth 1/2
-"expand" → `traverse_graph`; "path between two selected nodes" → `find_shortest_path`; "scope to this project" →
-`set_context(entity_id)` and redraw, and "clear scope" → `set_context(null)`, both only on an explicit click
-(decision 2). The selection goes to `ui/update-model-context` as a short text plus ids, so the next agent turn knows
-what the user is looking at. No write tool is ever called; there is no edit control in the DOM.
+- **One document, two modes (chosen, decision 6).** A single `ui://graph-mem/graph` resource with a Graph mode and a
+  Search mode, switched inside the page. "Show as graph" and "Search" are mode switches, not navigation. Cytoscape
+  is inlined once.
+- **Two documents (not chosen).** `ui://graph-mem/graph` and `ui://graph-mem/search`, with `search` linked to
+  the second. Each document is self-contained, so "Show as graph" in the search view needs Cytoscape inlined
+  there too (two ~430 KB documents), and a search widget opens on most memory turns.
 
-`set_context` is per MCP client (`app/tools/set_context_tool.rb`, `graph_mem_context.set_project!`), and the host
-proxies the view's calls over the agent's own connection, so **scoping in the view also changes the agent's active
-project** (which only boosts `search`, never filters). The view labels the control "Set as active project" and shows
-the `shared_client_id_warning` if the tool returns one.
 
-### Search view (`ui://graph-mem/search`)
+### Graph mode
 
-A query box, the filters `search` already takes (project, entity types, match-in name/type/aliases/observations,
-perspective), paging (`page`, `per_page`), and a hit list built from `search`'s `structuredContent`. Clicking a hit
-calls `get_entities`; "Show as graph" swaps to the graph view with those ids (the same idea as the Search page's
-"Show as graph"). The current query goes to `ui/update-model-context`.
+On `ui/notifications/tool-result` the view draws that result:
+
+- `find_shortest_path` → `{ found, hop_count, direction, entities, relations }` maps straight to nodes and
+  edges. `found: false` shows "no path" instead of an empty canvas.
+- `traverse_graph` has two modes, and the host opens the view for both:
+  - **Expansion** (`start_entity_id` alone) → `{ entities, relations, traversal }`, straight to nodes and edges.
+    `include` can leave either key out (`traverse_graph_tool.rb:110-117`): without `entities` the view treats
+    the result as relations-only, without `relations` it draws the nodes alone, and `include: ["traversal"]`
+    falls under the "neither" case below.
+  - **Relation query** (no `start_entity_id`, or `from_entity_id`/`to_entity_id`;
+    `app/tools/traverse_graph_tool.rb:43-51`, `:86-108`) → **relations only** by default, with ids and no names,
+    and **no limit** (`app/services/relation_query_service.rb:32-41`): `traverse_graph({})` returns every relation
+    in the graph. The view loads the relations' endpoints with batched `get_entities` (below) before drawing.
+- **Draw cap, for any result:** 2,000 nodes (Explore's `MAX_NODES`) and 5,000 edges, with a "showing N of M"
+  note. For a relations-only result the view keeps the first relations until either cap is reached and loads
+  only their endpoints. The edge cap is a first value; step B adjusts it to what Cytoscape draws smoothly.
+- A result with neither entities nor relations shows the two buttons below instead of an empty canvas.
+
+**Loading a subset (decision 3).** Two buttons, "Context project" and "Root entities", start these loads; the
+first calls `get_context`. `search` can't select a project's members or the root entities without a
+query: catalog mode refuses `project_id` and `entity_types` (`app/services/graph_search.rb:70-71`, "project_id and
+entity_types require a query"), and it returns only `entity_id`, `name`, `entity_type`. So:
+
+1. **Context project** (`get_context` returns `status: "context_active"`; `context_cleared` and `no_context` have
+   no project):
+   `traverse_graph(start_entity_id: <project>, direction: "incoming", relation_types: ["part_of"], max_depth: 5,
+   max_entities: 1000)` returns the members and their `part_of` edges. The other edges between them come from
+   batched `get_entities(entity_ids:)` calls (below).
+2. **No context: root entities.** Explore picks `entity_type IN ("Project", NULL)`
+   (`app/controllers/api/v1/graph_data_controller.rb:66-70`). Through existing tools: page the unfiltered catalog
+   (`search` with no arguments but `page` and `per_page: 100`) and keep the `Project` and untyped rows in the
+   view, then batched `get_entities` (below) for their edges. This shows the same entities as Explore,
+   untyped ones included, at one call per 100 entities of the whole graph. The view stops after 20 pages (2,000
+   entities scanned) and says "scanned N of `total_entities`" when it stopped early (decision 8). The loader is
+   one function, so a later `search` change can replace it. A full scan is up to 40 view-initiated calls (20
+   catalog pages and up to 20 `get_entities` batches). A host may ask for consent on each, or add each result
+   to the model's context: step A's manual check records what Claude and Cursor do, and step B keeps this
+   loader only if that is usable. If it isn't, stop and ask Steve.
+3. **Caps:** 1,000 nodes for a project subset (`GraphTraversalService::MAX_ENTITIES`; Explore's
+   `GraphDataController::MAX_NODES` is 2,000), with a "showing N of `scope_entity_count`" note from `get_context`.
+
+**`get_entities` batches.** The tool has no cap on `entity_ids` and returns every active observation of each
+entity. The view sends at most 100 ids per call with `relations: "all"`, dedupes the edges by `relation_id` and
+keeps only those whose two ends are both in the loaded set (`relations: "internal"` keeps only the edges inside one
+call, so edges between two batches would be lost). It passes `observation_limit: 1`: 0 or less means no limit
+(`app/services/observation_ranking_service.rb:21`). It loads full observations only for the node the user clicks.
+
+**The adapter** builds Cytoscape elements with the keys `GRAPH_STYLES` reads, as
+`graph_data_controller.rb:138-170` does: `data.label`, `data.type`, `data.is_focus`. The existing style selector
+is `node[is_focus="true"]` while the controller sends a boolean; step B checks which value the selector matches
+and the adapter writes that one.
+
+**Interaction:** click a node → `get_entities` for its details in a side panel (observations, relations); a depth
+1/2 "expand" → `traverse_graph`; "path between two selected nodes" → `find_shortest_path`. The selection goes to
+`ui/update-model-context` as a short text plus ids, so the next agent turn knows what the user is looking at. No
+write tool is ever called; there is no edit control in the DOM. The view asks for `fullscreen` on a button, sends
+`ui/notifications/size-changed`, and answers `ui/resource-teardown`.
+
+**Scoping (decisions 2 and 9).** "Show this project" is **view state**: the view runs the project load for that
+project and calls nothing that changes server state. v1 has no `set_context` control, for two reasons:
+
+- the host proxies the view's calls over the agent's own connection, so `set_context` would change **the agent's**
+  active project (`app/tools/set_context_tool.rb:44`), which boosts `search` and scopes name → id resolution;
+- clients that send no `X-MCP-Client` header, and every stdio client, share the `"default"` context, which is also
+  the ambient boost for callers without a context of their own. A click there would affect other clients.
+
+The view puts the shown project in `ui/update-model-context`, so a user who wants it as the active project asks
+the agent, and the agent's `set_context` call is visible in the chat. A "Set as active project" button can come
+in a later release.
+
+### Search mode
+
+A query box, the filters `search` takes with a query (project, entity types, match-in name/type/aliases/
+observations, perspective `world`/`experience`), paging, and a hit list built from `search`'s `structuredContent`
+(`entity_id`, `name`, `entity_type`, `project_id`, `description`, `aliases`, `relevance_score`,
+`matched_fields`). Summary-mode pagination has no total (`per_page` and `current_page` only), so the pager is
+"previous / next", with "next" disabled when a page comes back short. Clicking a hit calls `get_entities`; "Show
+as graph" switches to Graph mode with the hits' ids. The current query goes to `ui/update-model-context`.
 
 ### Rendering and packaging
 
-- **Reuse:** `GRAPH_STYLES` and `LAYOUT_OPTIONS` from `app/javascript/graph/cytoscape_config.js`, the graph rules
-  of `app/assets/stylesheets/graph.css`, the same vendored Cytoscape 3.31.4. **Don't reuse**
+- **Reuse:** `GRAPH_STYLES` and `LAYOUT_OPTIONS` from `app/javascript/graph/cytoscape_config.js` and the vendored
+  Cytoscape 3.31.4. The layouts Explore uses (`cose`, `breadthfirst`, `concentric`, `grid`) are built into
+  Cytoscape, so no layout extension is inlined. `app/assets/stylesheets/graph.css` styles Explore's chrome; its
+  only canvas rule is `.cytoscape-container` (line 7). The view writes its own few rules instead. **Don't reuse**
   `explore_controller.js` (Stimulus, Turbo, history, edit dialogs, drag-drop edits) or `api_client.js`
   (`fetch('/api/v1/graph_data')`): neither works under `connect-src 'none'`, and both carry edit paths.
-- **Inline everything; no CDN, no `csp` domains.** The vendored build
-  (`vendor/javascript/cytoscape.js-3.31.4-dist/cytoscape.esm.min.mjs`, 416,235 bytes) is ESM ending in
-  `export{Ah as default};`. A data: or blob: module import is blocked by the default `script-src`, so the HTML
-  builder inlines the file into one `<script type="module">` and rewrites that exact trailer to a local binding.
-  A spec pins the trailer, so a future Cytoscape bump fails loudly instead of shipping a broken view. No second copy
-  of the file is committed; the HTML is built at boot (memoized) from the files already in the repo.
-- **Where the files live:** the view JS under `app/javascript/mcp_apps/` (so `spec/javascript_sinks_spec.rb` covers
-  it; render text with `textContent`, never `innerHTML` with graph data), the HTML shells outside `app/views` (they
-  must carry inline scripts by design, and `spec/inline_scripts_spec.rb` forbids those in `app/views`; no exemption
-  is needed if they live elsewhere), for example `lib/graph_mem/mcp_apps/templates/`.
+- **Inline everything; no CDN, no `csp` domains.** The HTML builder writes one `<script type="module">` holding,
+  in order: Cytoscape, the config, the view code. There is no importmap inside the iframe, so the sources are
+  concatenated and their module syntax removed:
+  - `vendor/javascript/cytoscape.js-3.31.4-dist/cytoscape.esm.min.mjs` (416,235 bytes) has no `import`, no
+    `</script` and no `fetch(`, and ends with `export{Ah as default};` plus a newline. The builder rewrites that
+    exact trailer to a local binding. A spec pins the trailer, so a Cytoscape bump fails loudly instead of
+    shipping a broken view.
+  - `cytoscape_config.js` has no imports and two `export const`. `LAYOUT_OPTIONS` holds a function, so it can't
+    travel as JSON: the builder inlines the file's source with `export ` stripped. A spec pins that too.
+  - Cytoscape contains one `Function("return this")()` fallback, reached only when `self` is missing. Step B
+    checks the browser console for CSP violations.
+  - No second copy of any file is committed; the HTML is built once per process (memoized).
+- **Where the files live:** the view JS, CSS and HTML shell under `lib/graph_mem/mcp_apps/` (for example
+  `lib/graph_mem/mcp_apps/view/`). **Not under `app/javascript/`:** importmap-rails adds that folder to
+  Propshaft's paths, so the files would be served publicly at `/assets/…`. **Not under `app/views/`:** the shell
+  carries an inline script by design, and `spec/inline_scripts_spec.rb` forbids those there.
+- **A view-source spec** (new, step A) replaces what the guard specs would not catch
+  (`spec/javascript_sinks_spec.rb` scans only `app/javascript/**/*.js`, and only for interpolated `innerHTML`
+  template literals). It fails on any `innerHTML`, `outerHTML`, `insertAdjacentHTML`, `document.write`, `eval(`,
+  `new Function`, `fetch(`, `XMLHttpRequest`, `WebSocket`, or `http:`/`https:` URL in the view sources. Text is
+  rendered with `textContent`.
+- **The bridge checks every message.** It has to post with target origin `*` (the view doesn't know the host's
+  origin) and it listens on `window`, so:
+  - it accepts a message only when `event.source === window.parent`;
+  - it accepts only JSON-RPC 2.0 objects whose `id` matches a pending request, or whose `method` is one the view
+    handles; everything else is ignored, not treated as an error;
+  - message data reaches the DOM only through `textContent`.
+
+  Don't copy the spec's sample `sendRequest` as is: it rejects a pending request on any unrelated message, so a
+  notification arriving first would fail the call. The view-source spec checks the `event.source` test is
+  present; the system spec (step B) sends a message from another source and an unknown method and checks both
+  are ignored.
 - `_meta.ui`: `prefersBorder: true`, no `csp` (the restrictive default), no `permissions`, no `domain`.
-- **Theming:** read `hostContext.styles.variables` and `theme`, with fallbacks in `:root`, so the views follow the
-  host's light/dark mode. (The operator UI's own theme switch stays a separate backlog item.)
-- **Size:** about 430 KB per graph view document. Hosts may cache it; check that both transports (Streamable HTTP
-  and stdio) send a response that size without hitting a limit, and record the number in the PR.
+- **Theming:** read `hostContext.styles.variables` and `theme`, with fallbacks in `:root`, and use the host's font
+  variables or system fonts. (The operator UI's own theme switch stays a separate backlog item.)
+- **Size:** about 430 KB for the document. Record in the PR that both transports (Streamable HTTP and stdio)
+  deliver it, and whether Claude and Cursor accept it.
 
 ### Lockdown, privacy, cloud gate
 
 - `AccessGate` already wraps every `/mcp` path; `resources/read` and the view's proxied `tools/call` use the same
-  session and token. No new route, no allowlist change.
+  session and token. No new route, no new asset path, no allowlist change. Stdio has no gate, as today.
 - The templates are static: no graph data, settings, paths or hostnames are baked into the HTML. Facts reach the
   view only in tool results, which the host already receives today.
-- The anonymizer and `cloud_allowed` govern graph_mem's own LLM calls; this train makes none and changes none.
-- Tool results keep today's `content` text for the model; the views read `structuredContent`, so nothing new goes
-  to the host's model.
+- The anonymizer and `cloud_allowed` govern graph_mem's own LLM calls; this train makes none and changes none. A
+  search from the view calls the embedding provider, exactly as an agent's `search` does.
+- **View calls are recorded as the agent's calls.** Each one goes through `ApplicationTool`'s wrapper, so it writes
+  `ToolTelemetry` and `AgentContext.record_activity!` (`app/tools/application_tool.rb:122`, `:259`). Telemetry
+  will count UI clicks together with agent calls; the user guide says so.
+- A host may put the `content` text of a view-initiated call into the model's context. The batches and
+  `observation_limit` above keep those results small.
 
 ## Steps (one PR each)
 
-Versions follow 1.84.0. Each PR keeps the default `/mcp` at 12 tools, unchanged tool schemas and results, the
-operator Explore and Search pages untouched, and its own CHANGELOG entry and docs.
+Versions follow 1.86.0. Each PR keeps the default `/mcp` at 12 tools, unchanged tool schemas and results, the
+operator Explore and Search pages untouched, and its own CHANGELOG entry and docs. Branches are `claude/<topic>`.
 
-### A. Generic resource layer, Apps capability, stub views → 1.85.0
+### A. Generic resource layer, Apps capability, stub view → 1.87.0
 
 - Providers as above; `TemplateResourceProvider` first, in its own commit, with no output change (snapshots
   identical).
-- Declare the extension; register the two `ui://` resources on the profiles that advertise their tools; add
-  `_meta.ui.resourceUri` to the tools Steve picks (question 2) through `ToolWrapper` (a per-tool `mcp_ui_view`
-  setting on `ApplicationTool`, empty by default).
-- Stub HTML for both views: the `ui/initialize` handshake, a title, and the tool result's entity count.
-- Specs: `initialize` carries the extension; `tools/list` has `_meta.ui` on exactly the linked tools and nothing
-  else changed; `resources/read` for each `ui://` URI returns the MIME type, a full HTML document, `_meta.ui`, and no
-  `http:`/`https:` `src`/`href` and no `fetch(`; an unknown URI still raises not-found; the templated resources read
-  as before; a client without the extension gets byte-identical `tools/call` results.
-- Re-record the snapshots and handshake fixtures; `docs/mcp_tools.md` and `docs/protocol_compat.md` get a short
-  MCP Apps section.
-- Manual check, recorded in the PR: the stubs render in Claude and in Cursor (global server entry), and how a view
-  is reachable without a linked tool (question 2).
+- Declare the extension (plain-hash `extensions:` key, through `ServerFactory.capabilities(apps_enabled:)`);
+  register the `ui://` resource on all three profiles;
+  add `_meta.ui.resourceUri` to `traverse_graph` and `find_shortest_path` through `ToolWrapper`: a
+  per-tool `mcp_ui_view` setting on `ApplicationTool`, next to `title` (`app/tools/application_tool.rb:57-63`),
+  empty by default, applied with `MCP::Apps.tool_meta` only when the server registers that view.
+- The `mcp_apps_enabled` setting (decision 12): a spec that the wire is today's when it is off, and a spec that
+  saving a change rebuilds the HTTP servers and saving an unchanged value doesn't.
+- Stub HTML: the `ui/initialize` handshake, a title, the tool result's entity count, the teardown reply.
+- Specs:
+  - `initialize` carries the extension, and the rest of the capabilities are unchanged;
+  - `tools/list` has `_meta.ui` on exactly the linked tools and nothing else changed;
+  - `resources/list` lists the view on the chosen profiles and nowhere else (snapshot spec, extended);
+  - `resources/read` for the `ui://` URI returns the MIME type, a full HTML document and `_meta.ui` on the content
+    item; an unknown URI still raises not-found; the templated resources read as before;
+  - a linked tool never points at a view its server doesn't register (per profile, and with the setting off);
+  - the view-source spec;
+  - `tools/call` results are byte-identical with and without the extension declared by the client.
+- Re-record the snapshots by replacing only the changed entries in place (keep the recorded order, so the diff
+  stays small); add the handshake expectation; `docs/mcp_tools.md` and `docs/protocol_compat.md` get a
+  short MCP Apps section.
+- Manual check, recorded in the PR: the stub renders in Claude (first, because of ext-apps #671) and in Cursor
+  (global server entry) when the agent calls a linked tool; the view's own `tools/call` to an unlinked tool
+  (`get_entities`) works; whether the host asks for consent on each view-initiated call, and whether those
+  results reach the model's context.
 
-### B. Graph view → 1.86.0
+### B. Graph mode → 1.88.0
 
-- The bridge helper, the HTML builder with inlined Cytoscape (trailer rewrite and its spec), the result → elements
-  adapter for `search`, `get_entities`, `traverse_graph`, `find_shortest_path` and `get_context` results, the
-  unscoped/scoped first load (decision 3), the node panel, expand, path, scope/clear, model-context updates, host
-  theming.
-- Specs: adapter unit specs on synthetic envelopes recorded from the real tools in the test DB (synthetic entities
-  only); a headless smoke with a stub `postMessage` host if it fits the existing system-spec setup without a new
-  gem or package (otherwise a manual check).
+- The bridge helper with its message checks, the HTML builder with inlined Cytoscape and config (trailer and
+  `export` rewrites, with their specs), the result → elements adapter for `traverse_graph`,
+  `find_shortest_path`, `get_entities` and catalog results, the draw cap, the two subset loads (decision 3), the
+  node panel, expand, path, local scoping, model-context updates, host theming, fullscreen.
+- A spec checks that the view sources name no tool but the five the view may call.
+- Recorded envelopes cover each `traverse_graph` mode: expansion, relations-only and `include: ["traversal"]`.
+- Specs: there is no JS test runner in the repo (no `package.json`), so the adapter is tested in the browser. The
+  system-spec setup has headless Chrome (`spec/support/system.rb`). A system spec writes the built HTML to a
+  temporary file, opens it inside a small stub-host page that plays the `postMessage` protocol with envelopes
+  recorded from the real tools in the test DB (synthetic entities only), and checks the drawn node and edge
+  counts and the absence of console errors. If headless Chrome can't load a local file that way without a new
+  route, a gem or a package, stop there and do a manual check instead; say so in the PR.
 
-### C. Search view, docs → 1.87.0
+### C. Search mode, docs → 1.89.0
 
-- The search view (filters, paging, click-through, "Show as graph"), the user guide page
-  (`docs/guides/` or `docs/operator/`: what the views do, which clients render them, the Cursor global-entry note),
-  README feature line, CHANGELOG.
+- Search mode (filters, paging, click-through, "Show as graph"), the user guide page under `docs/guides/` (what
+  the views do, how to open them, which clients render them, the Cursor global-entry note, that view calls count
+  as agent calls), the README feature line.
 - Manual check on Claude and Cursor, recorded in `docs/protocol_compat.md`.
+- Housekeeping: mark this plan DONE, move it to `docs/plans/done/` and add its row to
+  `docs/plans/done/README.md`.
 
-If step A shows that a view can't be opened without a linked tool and Steve keeps `search` unlinked, B and C merge
-into one document with two tabs (one `ui://` resource), and C becomes the docs-only patch.
+### Release (each step)
+
+`lib/graph_mem/version.rb`, then `bin/rails graph_mem:sync_skill_version` (SKILL.md line 18 and the README badge;
+`spec/docs/agent_text_sync_spec.rb` compares them), then the CHANGELOG entry under the new version. Don't edit
+`version.rb` or SKILL.md while the full suite is running.
+
+## Compat verification (each step)
+
+As in `docs/plans/done/mcp-sdk-1.9.0-plan.md`:
+
+- `ruby script/mcp_compat/compare.rb`: 0 failed expectations, 0 unexpected differences. graph_mem will now declare
+  an extension the reference servers don't. Step A checks how `compare.rb` reports that, records it as a
+  `divergence` in the handshake cases and in `docs/protocol_compat.md`, and changes `compare.rb` only if it can't
+  express it (ask Steve first).
+- `script/mcp_compat/clients.sh <url>`: every row OK, same row count as before the step.
+- `script/mcp_compat/claude_client_check.rb`: passes (Claude Code ignores the extension).
+
+## Acceptance criteria
+
+- Tool counts stay 12 / 9 / 22 (`spec/lib/graph_mem/mcp_tool_registry_spec.rb`); the snapshot diff holds only
+  `_meta` on the linked tools and the `resources/list` block.
+- `tools/call` text and `structuredContent` are identical before and after, for every tool.
+- No new route, asset path, gem, package or migration; `Gemfile.lock` and `db/structure.sql` are untouched.
+- The view sources pass the view-source spec; no guard spec gains an exemption.
+- The full suite is green on CI (CircleCI rspec, rubocop, brakeman; Actions lint, scan_ruby, scan_js).
+- No real hostnames, IPs, usernames or home paths in docs or fixtures. Synthetic data only.
+- The manual checks are recorded in each PR with the client name and build.
+
+## Size
+
+Rough estimates, to be corrected in each PR: A about 700 changed lines (half of it specs and re-recorded
+snapshots), B about 1,500, C about 900. **Stop and ask Steve if a PR's diff grows past ~3,000 lines.**
 
 ## Open questions for Steve
 
-1. **The wire additions** listed under "What changes on the wire" (the capability, `_meta.ui` on some tools, two
-   `ui://` resources in `resources/list`, their `resources/read`): are they within "the surface stays as is"?
-   Tool names, params, outputs and results do not change.
-2. **Which tools link to a view?** Recommended: `traverse_graph`, `find_shortest_path` and `get_context` → graph
-   view; `search` and `get_entities` unlinked, so routine agent memory calls don't open a widget every turn. Or link
-   `search` → search view too, accepting a widget on most memory turns.
-3. **Which profiles get the views?** Recommended: `default` and `readonly` (the readonly profile has every tool the
-   views call); `maintenance` too?
-4. **List the `ui://` resources in `resources/list`,** or rely on tool metadata only (the spec allows both)?
-   Recommended: list them.
-5. **Untyped root entities:** Explore's root view also shows entities with no type, which `search`'s
-   `entity_types` filter can't select. Accept that the view leaves them out (with a note), or is that worth a tool
-   change later (a hard stop)?
-6. **An on/off setting** (`mcp_apps_enabled`, a settings-table key, no migration) so the capability, the links and
-   the resources can be turned off without a deploy? Default on or off?
-7. **Scoping changes the agent's active project** (one context per MCP client). Fine as is, with the label "Set as
-   active project", or should the view restore the previous context when it closes (best effort; a host may tear
-   the view down without notice)?
+None. Decisions 6–13 answered the eight questions the review raised.
