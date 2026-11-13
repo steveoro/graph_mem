@@ -287,13 +287,17 @@ The view is on all three profiles (decision 11), so the first rule only matters 
 
 The on/off setting (decision 12) is `mcp_apps_enabled`, default on: an `AppSettings` field in the
 `:feature_flags` group of `SettingsSchema` (`app/services/settings_schema.rb:120`), with its i18n label and help
-text (`spec/services/settings_schema_spec.rb` requires both). No migration. Servers are built once per transport, so a
-change has to rebuild them:
+text (`spec/services/settings_schema_spec.rb` requires both). No migration. Servers are built once per
+transport, so a change has to rebuild them:
 
 - **HTTP:** saving a changed `mcp_apps_enabled` in System › Settings calls
   `GraphMem::OfficialMcp.refresh_access!(transports: true)`, the call a change of the allowed hosts or origins
-  already makes (`app/controllers/concerns/mcp_access_settings.rb:51`). It closes the open MCP sessions, and the
-  help text says so. Like that call it is in-process only: with several Puma workers the others pick the change
+  already makes (`app/controllers/concerns/mcp_access_settings.rb:51`). That call runs only for the allowlist
+  keys today, so this is a small new hook: in `SettingsGroupUpdate#write_settings`
+  (`app/controllers/concerns/settings_group_update.rb:35-44`), next to `apply_mcp_access_changes`, read the value
+  before and after the save and call `refresh_access!(transports: true)` only when it changed. Restoring a
+  backup is already covered (`app/controllers/system/backups_controller.rb:45`). The refresh closes the open MCP
+  sessions, and the help text says so. Like that call it is in-process only: with several Puma workers the others pick the change
   up at their next restart (`lib/graph_mem/official_mcp.rb:44-45`).
 - **Stdio:** the runner builds its server once at boot, so the change needs a restart of the runner. The help
   text says that too.
@@ -344,7 +348,9 @@ On `ui/notifications/tool-result` the view draws that result:
   edges. `found: false` shows "no path" instead of an empty canvas.
 - `traverse_graph` has two modes, and the host opens the view for both:
   - **Expansion** (`start_entity_id` alone) → `{ entities, relations, traversal }`, straight to nodes and edges.
-    `include` can leave `entities` out; then the view treats the result as relations-only.
+    `include` can leave either key out (`traverse_graph_tool.rb:110-117`): without `entities` the view treats
+    the result as relations-only, without `relations` it draws the nodes alone, and `include: ["traversal"]`
+    falls under the "neither" case below.
   - **Relation query** (no `start_entity_id`, or `from_entity_id`/`to_entity_id`;
     `app/tools/traverse_graph_tool.rb:43-51`, `:86-108`) → **relations only** by default, with ids and no names,
     and **no limit** (`app/services/relation_query_service.rb:32-41`): `traverse_graph({})` returns every relation
@@ -490,7 +496,7 @@ operator Explore and Search pages untouched, and its own CHANGELOG entry and doc
   per-tool `mcp_ui_view` setting on `ApplicationTool`, next to `title` (`app/tools/application_tool.rb:57-63`),
   empty by default, applied with `MCP::Apps.tool_meta` only when the server registers that view.
 - The `mcp_apps_enabled` setting (decision 12): a spec that the wire is today's when it is off, and a spec that
-  saving a change rebuilds the HTTP servers.
+  saving a change rebuilds the HTTP servers and saving an unchanged value doesn't.
 - Stub HTML: the `ui/initialize` handshake, a title, the tool result's entity count, the teardown reply.
 - Specs:
   - `initialize` carries the extension, and the rest of the capabilities are unchanged;
