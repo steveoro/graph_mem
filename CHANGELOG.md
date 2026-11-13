@@ -5,6 +5,17 @@ All notable changes to GraphMem will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.86.1] - 2026-11-13
+
+The official MCP Ruby SDK moves to 1.10.0, and the compat harness to the MCP reference servers release v2.4.0.
+
+### Changed
+- An MCP request whose method name is not valid UTF-8 is refused as an invalid request (-32600) instead of an internal error (mcp 1.10.0).
+- The compat harness's reference baseline is the MCP servers release v2.4.0 (Everything 2.3.0, Memory 2.1.1, TS SDK 2.4.0); Everything now listens only on loopback by default.
+
+### Dependencies
+- `mcp` 1.9.0 → 1.10.0.
+
 ## [1.86.0] - 2026-11-13
 
 The daily jobs catch up by themselves on a machine that is off at night, and a broken supersede link can be repaired from Review & Fix.
