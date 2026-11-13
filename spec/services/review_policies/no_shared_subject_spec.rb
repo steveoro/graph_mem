@@ -45,6 +45,42 @@ RSpec.describe ReviewPolicies::NoSharedSubject do
     expect(related.reload.status).to eq("active")
   end
 
+  # 1.85.0: contradiction rows are re-checked with ContradictionDetector.still_pairable?, so the new
+  # gates (dated events, another project's mention) dismiss old rows too. A row of the `:unknown`
+  # fallback isn't dismissed: it is rerouted (the stale scan sends it to the fact-supersede judge).
+  it "dismisses contradiction rows the 1.85.0 gates no longer pair, and leaves fallback and foreign-only rows to the reroute" do
+    other = fs_project!("Legacy Gadget")
+    legacy_user = fs_member!(other, "LegacyUser", "Model")
+    unknown = contradiction_row(computed("Deploy by running the rake task by hand."), computed("Do not deploy by running the rake task by hand."))
+    far = contradiction_row(computed("Deploy on Mondays."), computed("Never deploy on Fridays."), distance: 0.3)
+    dated = contradiction_row(computed("[2026-08-26] It names a User."), computed("[2026-09-02] It no longer names a User."))
+    foreign = [ "It reads the LegacyUser table.", "It does not read the LegacyUser table." ].map do |content|
+      computed(content).tap { |fact| fact.update_columns(keywords: [ root.name, grant.name, legacy_user.name ]) }
+    end
+    foreign_row = contradiction_row(*foreign)
+    kept = contradiction_row(computed("It names a User."), computed("It does not name a User."))
+
+    expect(ReviewPolicies::SubjectCheck.status(unknown)).to eq(:reroute)
+    expect(ReviewPolicies::SubjectCheck.reason(unknown)).to be_nil
+    described_class.new.call
+
+    expect([ far, dated ].map(&:reload))
+      .to all(have_attributes(status: "dismissed", resolution_reason: ReviewPolicies::SubjectCheck::REASON_NOT_CONTRADICTION))
+    # One owner's two facts about another project's thing go to the judge too (Graphy, #172).
+    expect(ReviewPolicies::SubjectCheck.status(foreign_row)).to eq(:reroute)
+    expect([ unknown, foreign_row, kept ].map { |row| row.reload.status }).to all(eq("active"))
+  end
+
+  it "counts the rows to reroute in the read-only report" do
+    Rails.application.load_tasks unless Rake::Task.task_defined?("graph_mem:fact_keywords:review_report")
+    contradiction_row(computed("Deploy by running the rake task by hand."), computed("Do not deploy by running the rake task by hand."))
+
+    expect { Rake::Task["graph_mem:fact_keywords:review_report"].invoke }
+      .to output(/contradiction: 1 pending; 0 would be dismissed .*1 to reroute through the fact-supersede judge/).to_stdout
+  ensure
+    Rake::Task["graph_mem:fact_keywords:review_report"].reenable
+  end
+
   it "leaves rows with a pending path and term matches alone; dismisses unrelated rows, judged or not (1.80.0)" do
     pending = contradiction_row(fs_observe!(grant, "It belongs to a User."), computed("It is not linked to a Team."))
     fact = fs_fact!(grant, "AdminGrant now belongs to a Team.").tap { |observation| FactKeywords.compute!([ observation.reload ]) }
@@ -128,7 +164,7 @@ RSpec.describe ReviewPolicies::NoSharedSubject do
     row = contradiction_row(computed("It belongs to a User."), computed("It is not linked to a Team."))
 
     expect { Rake::Task["graph_mem:fact_keywords:review_report"].invoke }
-      .to output(/contradiction: 1 pending; 1 would be dismissed \(1 share no subject, 0 not the same fact\)/).to_stdout
+      .to output(/contradiction: 1 pending; 1 would be dismissed \(1 share no subject, 0 not the same fact, 0 no longer a contradiction\)/).to_stdout
     expect(row.reload.status).to eq("active")
   ensure
     Rake::Task["graph_mem:fact_keywords:review_report"].reenable

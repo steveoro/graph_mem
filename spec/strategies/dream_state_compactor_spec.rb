@@ -64,6 +64,20 @@ RSpec.describe DreamStateCompactor, type: :model do
       expect(relation).to be_present
       expect(orphan_run.reload.stats["orphans_parented"]).to eq(1)
     end
+
+    it "leaves an orphan with no suggestion alone: no review row, no queued stat" do
+      MemoryEntity.create!(name: "Swiftshop v2", entity_type: "Project")
+      orphan = MemoryEntity.create!(name: "Make Sure The Scratch Folder Exists Before Writing", entity_type: "Task",
+                                    description: "Create it if missing")
+      orphan_run = CompactionRun.create!(status: "running", phase: "orphans", stats: {}, started_at: Time.current)
+      compactor = described_class.new(run: orphan_run)
+
+      compactor.send(:process_orphan, orphan.id)
+
+      expect(compactor.instance_variable_get(:@review_items)).to be_empty
+      expect(orphan_run.reload.stats["orphans_queued"].to_i).to eq(0)
+      expect(MemoryRelation.where(from_entity: orphan)).to be_empty
+    end
   end
 
   describe "phase completion" do
@@ -120,6 +134,29 @@ RSpec.describe DreamStateCompactor, type: :model do
       expect(row).to be_present
       expect(row.kind).to eq("relationship_proposal")
       expect(row.payload["from_entity_id"]).to eq(solution.id)
+    end
+  end
+
+  describe "queued stats" do
+    it "count the rows actually seeded, not the candidates: the per-run cap and dedupe come off the stat" do
+      stub_const("ReviewRowClassifier::RUN_CAPS", ReviewRowClassifier::RUN_CAPS.merge("relationship_proposal" => 2))
+      source = MemoryEntity.create!(name: "StatsSource", entity_type: "Component")
+      targets = Array.new(4) { |i| MemoryEntity.create!(name: "StatsTarget #{i}", entity_type: "Component") }
+      proposals = targets.map do |target|
+        { id: SecureRandom.uuid, kind: "relationship_proposal", from_entity_id: source.id, to_entity_id: target.id,
+          relation_type: "depends_on", confidence_band: "high", score: 12, explanation: "test" }
+      end
+      stats_run = CompactionRun.create!(status: "running", phase: "relationship_discovery", stats: {}, started_at: Time.current)
+      discovery = instance_double(RelationshipDiscoveryStrategy, proposals_for_entity: proposals)
+      compactor = described_class.new(run: stats_run, relationship_discovery: discovery)
+
+      compactor.send(:process_relationship_discovery, source.id)
+      expect(stats_run.reload.stats["relationships_queued"].to_i).to eq(0) # nothing seeded before the flush
+
+      compactor.send(:flush_review_queue!)
+
+      expect(stats_run.reload.stats["relationships_queued"]).to eq(2)
+      expect(MaintenanceReportRow.where(kind: "relationship_proposal", maintenance_report_id: MaintenanceReport.recent.first.id).count).to eq(2)
     end
   end
 

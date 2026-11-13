@@ -74,6 +74,16 @@ RSpec.describe ScheduledRun do
     expect(steps.values.select(&:stoppable?).map(&:entry)).to eq(%w[EmbeddingScheduledBackfillJob FactKeywordsJob])
   end
 
+  it "never makes the catch-up job a step: it starts the run" do
+    schedule("production", {
+      "catch_up" => { "class" => "ScheduledRunCatchUpJob", "schedule" => "every 15 minutes" },
+      "prune" => { "class" => "ChangeSetPruneJob", "schedule" => "at 5:30am every day" }
+    })
+
+    expect(described_class.steps(env: "production", path: path).map(&:entry)).to eq(%w[ChangeSetPruneJob])
+    expect(described_class.steps(env: "production").map(&:entry)).not_to include("ScheduledRunCatchUpJob")
+  end
+
   it "matches the production schedule: place a newly scheduled job in ORDER" do
     expect(described_class.steps(env: "production").map(&:entry)).to eq(described_class::ORDER)
   end

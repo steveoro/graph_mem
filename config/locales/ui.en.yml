@@ -34,6 +34,18 @@ en:
       keyword_path:
         keywords: "Keywords:"
         llm_words: "LLM:"
+      lifecycle_corruption:
+        repair: "Repair"
+        issue: "Found by the integrity sweep: %{issue}."
+        now: "Now: %{issue}."
+        consistent_now: "Now: the observation is consistent; Repair only resolves this row."
+        state: "%{status} · obsoleted_at %{obsoleted_at} · superseded_by %{superseded_by} · outdated_by %{outdated_by}"
+        none: "none"
+        link: "#%{id} (%{status}, %{entity})"
+        same_entity: "same entity"
+        other_entity: "entity #%{id}"
+        gone: "The observation is gone."
+        no_repair: "No automatic repair for a superseded_by on another entity: Dismiss this row, or fix the observation by hand."
     guest_search_throttled:
       title: "Too many searches"
       body: "Guests can run up to %{limit} searches a minute. Please wait a moment and try again."

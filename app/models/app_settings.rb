@@ -16,6 +16,8 @@ class AppSettings < RailsSettings::Base
   field :fact_keywords_enabled, default: true, type: :boolean
   # 1.83.0: LLM words for facts that name no entity (FactKeywords::LlmWords); needs fact_keywords_enabled.
   field :llm_keywords_enabled, default: true, type: :boolean
+  # 1.86.0: ScheduledRunCatchUpJob starts "Run all scheduled jobs now" by itself when nothing ran lately.
+  field :scheduled_run_catch_up_enabled, default: true, type: :boolean
 
   # Database backup settings
   field :backup_folder_path, default: "db/backup", type: :string
@@ -107,6 +109,7 @@ class AppSettings < RailsSettings::Base
   field :enable_review_policy_dangling, default: true, type: :boolean
   field :enable_review_policy_no_shared_subject, default: true, type: :boolean
   field :enable_review_policy_no_longer_flagged, default: true, type: :boolean
+  field :enable_review_policy_still_qualifies, default: true, type: :boolean
   field :enable_review_policy_expire_low_confidence, default: true, type: :boolean
   field :review_expire_low_confidence_days, default: 30, type: :integer,
         validates: { numericality: { greater_than_or_equal_to: 7, less_than_or_equal_to: 365 } }
@@ -137,6 +140,7 @@ class AppSettings < RailsSettings::Base
     "dangling" => [ "enable_review_policy_dangling", true ],
     "no_shared_subject" => [ "enable_review_policy_no_shared_subject", true ],
     "no_longer_flagged" => [ "enable_review_policy_no_longer_flagged", true ],
+    "still_qualifies" => [ "enable_review_policy_still_qualifies", true ],
     "expire_low_confidence" => [ "enable_review_policy_expire_low_confidence", true ],
     "auto_apply_relationships" => [ "enable_auto_apply_relationships", false ],
     "auto_apply_expired_validity" => [ "enable_auto_apply_expired_validity", false ],
@@ -243,6 +247,13 @@ class AppSettings < RailsSettings::Base
   # Bypass process-local cache so Solid Queue workers see UI changes immediately.
   def self.scheduled_backups_enabled?
     read_boolean_setting("enable_scheduled_backups")
+  end
+
+  # Whether ScheduledRunCatchUpJob may start a scheduled run (read uncached, like the other job switches).
+  #
+  # @return [Boolean] true unless turned off in System › Settings
+  def self.scheduled_run_catch_up_enabled?
+    read_boolean_setting("scheduled_run_catch_up_enabled", default: true)
   end
 
   def self.dream_state_compactor_enabled?

@@ -96,6 +96,8 @@ class ChangeSetUndo
       end
 
       record.assign_attributes(changes.transform_values { |change| change["from"] })
+      # The undo of a lifecycle repair writes back the inconsistent state it fixed, as it was.
+      record.restoring_audited_state = true if record.is_a?(MemoryObservation) && lifecycle_repair?
       @effects.reembed!(record) if record.respond_to?(:embedded_at) && (record.changed & model::EMBEDDING_FIELDS).any?
       record.save!
       note_touched(record)
@@ -111,6 +113,16 @@ class ChangeSetUndo
 
       relation = MemoryRelation.create!(attrs)
       note_touched(relation)
+    end
+
+    # 1.86.0: the set applied (or undid, or redid) a lifecycle_corruption review row. Such a row is
+    # applied one by one (never bulk or group), so the set touches only that row's observation.
+    # @return [Boolean]
+    def lifecycle_repair?
+      return @lifecycle_repair if defined?(@lifecycle_repair)
+
+      row_ids = @change_set.section(:review_rows).filter_map { |entry| entry["id"] }
+      @lifecycle_repair = row_ids.any? && MaintenanceReportRow.where(id: row_ids, kind: "lifecycle_corruption").exists?
     end
 
     def relation_restore_problem(attrs)

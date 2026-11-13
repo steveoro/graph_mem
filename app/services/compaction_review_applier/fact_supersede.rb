@@ -5,6 +5,10 @@ class CompactionReviewApplier
   # review.apply change set: the observation is superseded by a replacement text, or retired,
   # and records the fact in `outdated_by` (undone by ChangeSetUndo::AuditInverse).
   #
+  # A row from the contradiction detector's fallback (1.85.0, payload `origin` "contradiction_fallback")
+  # has a newer observation as its "fact", not a tagged source fact: it only needs to be active, and
+  # it isn't recorded in `outdated_by` (source facts only); the obsolete reason names it.
+  #
   # Re-checked at apply, whatever the row says: the fact is still an active source fact, the
   # observation is still active and in the fact's project (or an entity without a project
   # related to the fact's entity: applied by hand only, without outdated_by, since that link is
@@ -14,7 +18,8 @@ class CompactionReviewApplier
   #   # => { success: true, message: "Superseded observation #15 (outdated by source fact #12)" }
   #
   # Without `fact_action`, a row with a replacement is superseded and one without is retired;
-  # `fact_action: "supersede"` without any replacement uses the fact's text.
+  # `fact_action: "supersede"` without any replacement uses the fact's text. When that text is the
+  # fact's own and the fact is on the same entity, the fact itself becomes `superseded_by` (no copy).
   module FactSupersede
     ACTIONS = %w[supersede retire].freeze
 
@@ -25,7 +30,8 @@ class CompactionReviewApplier
     # @!attribute scoped [Boolean] the observation is in the fact's project
     # @!attribute error [String, nil] why it can't be applied
     # @!attribute warnings [Array<String>]
-    Plan = Struct.new(:fact, :observation, :action, :replacement, :scoped, :error, :warnings, keyword_init: true)
+    # @!attribute fallback [Boolean] a contradiction-fallback row: the fact is a newer observation, not a source fact
+    Plan = Struct.new(:fact, :observation, :action, :replacement, :scoped, :error, :warnings, :fallback, keyword_init: true)
 
     module_function
 
@@ -36,11 +42,17 @@ class CompactionReviewApplier
       plan = plan(effective, action_params)
       return { success: false, error: plan.error } if plan.error
 
-      reason = "Outdated by source fact ##{plan.fact.id}#{' (entity outside the project)' unless plan.scoped}"
-      outdated_by = plan.scoped ? plan.fact : nil
+      reason = "Outdated by #{fact_label(plan)}#{' (entity outside the project)' unless plan.scoped}"
+      # outdated_by links source facts only (a model validation): a fallback row names its newer
+      # observation in the reason instead.
+      outdated_by = plan.scoped && !plan.fallback ? plan.fact : nil
       if plan.action == "supersede"
-        replacement = plan.observation.supersede!({ content: plan.replacement }, reason: reason, outdated_by: outdated_by)
-        { success: true, message: "Superseded observation ##{plan.observation.id} with ##{replacement.id} (outdated by source fact ##{plan.fact.id})" }
+        replacement = if fact_is_replacement?(plan)
+                        plan.observation.supersede_with!(plan.fact, reason: reason, outdated_by: outdated_by)
+        else
+                        plan.observation.supersede!({ content: plan.replacement }, reason: reason, outdated_by: outdated_by)
+        end
+        { success: true, message: "Superseded observation ##{plan.observation.id} with ##{replacement.id} (outdated by #{fact_label(plan)})" }
       else
         # supersede! locks and re-checks itself; retire does it here, so an edit that landed
         # after the plan isn't overwritten.
@@ -48,7 +60,7 @@ class CompactionReviewApplier
         return { success: false, error: "Observation is no longer active; dismiss this row or restore it first" } unless plan.observation.active?
 
         plan.observation.mark_obsolete!(reason: reason, outdated_by: outdated_by)
-        { success: true, message: "Retired observation ##{plan.observation.id} (outdated by source fact ##{plan.fact.id})" }
+        { success: true, message: "Retired observation ##{plan.observation.id} (outdated by #{fact_label(plan)})" }
       end
     end
 
@@ -57,8 +69,12 @@ class CompactionReviewApplier
       plan = plan(effective, action_params)
       return Preview.result(false, warnings: [ plan.error, *plan.warnings ]) if plan.error
 
-      effect = plan.action == "supersede" ? "Supersedes ##{plan.observation.id} with: “#{plan.replacement.truncate(200)}”" : "Retires ##{plan.observation.id}"
-      Preview.result(true, effects: [ effect, "Records source fact ##{plan.fact.id} as what outdated it" ], warnings: plan.warnings)
+      effect = if plan.action != "supersede" then "Retires ##{plan.observation.id}"
+      elsif fact_is_replacement?(plan) then "Supersedes ##{plan.observation.id} by ##{plan.fact.id} itself (same text, same entity: no copy)"
+      else "Supersedes ##{plan.observation.id} with: “#{plan.replacement.truncate(200)}”"
+      end
+      record = plan.fallback ? "Names #{fact_label(plan)} in the obsolete reason" : "Records #{fact_label(plan)} as what outdated it"
+      Preview.result(true, effects: [ effect, record ], warnings: plan.warnings)
     end
 
     # @return [Plan]
@@ -71,16 +87,34 @@ class CompactionReviewApplier
       action = params[:fact_action].presence || (replacement ? "supersede" : "retire")
       # Asked to supersede without a text: the fact's own text is the replacement.
       replacement ||= fact&.content if action == "supersede"
-      plan = Plan.new(fact: fact, observation: observation, action: action, replacement: replacement, warnings: [])
+      plan = Plan.new(fact: fact, observation: observation, action: action, replacement: replacement, warnings: [],
+                      fallback: effective[:origin] == ::FactSupersede::ContradictionFallback::ORIGIN)
       plan.error = refusal(plan)
       plan
+    end
+
+    # 1.86.0: the replacement text is the fact's own text and the fact is on the observation's entity,
+    # so the fact itself is the replacement (a copy would be a twin that GC deletes as a duplicate).
+    # @return [Boolean]
+    def fact_is_replacement?(plan)
+      plan.replacement.to_s.strip == plan.fact.content.to_s.strip &&
+        plan.fact.memory_entity_id == plan.observation.memory_entity_id
+    end
+
+    # @return [String] what outdated the observation, for messages and the obsolete reason
+    def fact_label(plan)
+      "#{plan.fallback ? 'newer observation' : 'source fact'} ##{plan.fact.id}"
     end
 
     def refusal(plan)
       fact = plan.fact
       observation = plan.observation
       return "Choose supersede or retire" unless ACTIONS.include?(plan.action)
-      return "Source fact ##{fact&.id || '?'} is no longer an active source fact; dismiss this row" unless fact&.source_fact?
+      if plan.fallback
+        return "Observation ##{fact&.id || '?'} is no longer active; dismiss this row" unless fact&.active?
+      else
+        return "Source fact ##{fact&.id || '?'} is no longer an active source fact; dismiss this row" unless fact&.source_fact?
+      end
       return "Observation is no longer active; dismiss this row or restore it first" unless observation&.active?
 
       plan.scoped = observation.fact_project_id == fact.fact_project_id

@@ -83,7 +83,7 @@ Each run progresses through three phases in order:
 2. **Entity merge scan** — if the entity has an embedding and is not a `Project`:
   - Find up to 3 candidates with cosine distance **< 0.30** (`REVIEW_MERGE_DISTANCE`), excluding Projects, **requiring the same `entity_type`**, and `id > entity.id` for deterministic ordering.
   - If distance **< 0.10** (`AUTO_MERGE_DISTANCE`), auto-merge via `NodeOperationsStrategy#merge_into`.
-  - Otherwise, queue a merge review item.
+  - Otherwise, queue a merge review item, but only when the pair's evidence score reaches `EntityMergeEvidence::REVIEW_SCORE` (6). Distance in the review band scores 4 and each shared observation adds 2 (max 6), so a distance-only pair is not queued. A shared observation counts only when `ObservationEvidence` finds it distinctive: at least 40 characters and held by at most 3 entities.
 
 `Project` entities are never auto-merged or queued for merge review.
 
@@ -97,11 +97,12 @@ Each run progresses through three phases in order:
 
 | Rule | Relation type | Evidence |
 |------|---------------|----------|
-| Shared observation phrase | `relates_to` | Byte-identical observation content on two entities (minimum length 15) |
-| Issue/solution pairing | `solves` | `PossibleSolution` + `Issue` observations sharing topic tokens, with fix/solve vs block/problem language |
+| Issue/solution pairing | `solves` | `PossibleSolution` + `Issue` observations sharing at least 3 topic tokens, with fix/solve vs block/problem language |
 | Named dependency | `depends_on` | Observation contains dependency language and references another entity by name or alias |
 
 Each proposal is queued as `relationship_proposal` with `from_entity_id`, `to_entity_id`, `relation_type`, `confidence_band`, `score`, `supporting_observation_ids`, `explanation`, and optional `evidence_terms`.
+
+There is no `relates_to` rule: identical observation content (even distinctive content) was dropped as evidence because none of its proposals were ever approved, and boilerplate lines ("Status: Completed") made cliques of them.
 
 Safety filters: no self-links, no duplicate same-direction relations, no Project-root involvement, allowed relation types only, max 3 proposals per entity per run.
 
@@ -208,7 +209,11 @@ To action a queued relationship proposal: inspect the evidence, then call
 Times are GMT as noted in `config/recurring.yml`. On a machine that is off at 3:00, **Run all
 scheduled jobs now** on System › Background jobs (1.81.0) runs compaction with the other scheduled
 jobs and waits for it to finish; its **Stop** pauses the compaction run, and **Resume** continues
-from its cursor.
+from its cursor. Since 1.86.0 the machine does that by itself: `ScheduledRunCatchUpJob` starts the
+run about 20 minutes after Solid Queue boots when no scheduled run and no compaction run started
+since the last 3:00 slot, and resumes a run a power cut interrupted (setting
+`scheduled_run_catch_up_enabled`, on by default). A host that stayed up overnight ran the 3:00
+compaction itself, so nothing is started.
 
 Resolved review rows are pruned by a separate daily job, `MaintenanceReportRowCleanupJob`
 (5:15 AM GMT in production, after compaction): approved, dismissed and ignored rows older than
@@ -284,7 +289,7 @@ Operators and agents can apply those rows from the compaction-review UI or via `
 - **Review band** — cosine distance between **0.10** and **0.30** requires human or agent confirmation.
 - **Type-safe merges** — only entities of the same `entity_type` are considered for auto-merge or merge review. `NodeOperationsStrategy#merge_into` refuses cross-type merges.
 - **Low-confidence orphans** — token scores below **10** are never auto-parented.
-- **Pre-flight integrity sweep** — before each run, `GraphIntegrityService` auto-repairs counter cache drift and dangling relations, backfills missing embeddings (queuing failures for review), and detects observation lifecycle corruption (active with `obsoleted_at`, superseded without `superseded_by`, cross-entity `superseded_by` references). Lifecycle issues and embedding failures are queued into `compaction_review`.
+- **Pre-flight integrity sweep** — before each run, `GraphIntegrityService` auto-repairs counter cache drift and dangling relations, backfills missing embeddings (queuing failures for review), and detects observation lifecycle corruption (active with `obsoleted_at`, superseded without `superseded_by`, cross-entity `superseded_by` references). Lifecycle issues and embedding failures are queued into `compaction_review`. A lifecycle row's **Repair** (1.86.0) re-reads the observation: superseded without `superseded_by` points at its active same-entity `outdated_by`, else becomes obsolete; active with `obsoleted_at` has it cleared; a cross-entity `superseded_by` is Dismiss only. Undoable; a row already consistent is resolved, and the Dangling policy dismisses it.
 
 
 

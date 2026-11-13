@@ -4,14 +4,15 @@
 # that are off when the schedule would run them. The run's state is an OperationProgress row
 # (operation_type "scheduled_run"), so System › Background jobs shows it live:
 #
-#   details = { "index" => 2, "stop_requested" => false, "token" => "…",
+#   details = { "index" => 2, "stop_requested" => false, "token" => "…", "trigger" => "manual",
 #               "steps" => [ { "entry", "label", "schedule", "outcome", "note", "error",
 #                              "started_at", "finished_at", "compaction_run_id" }, … ] }
 #
 # A step's outcome is nil (not reached), "running", "waiting" (compaction), "done", "skipped" (its
 # setting is off), "stopped" (it stopped early: it runs again on Resume) or "failed" (logged; the
 # run goes on). Compaction works in slices, so the job re-enqueues itself every COMPACTION_POLL
-# until the compaction run ends. One switch drives it (System::JobsController#scheduled_run):
+# until the compaction run ends. The trigger is "manual" (the button) or "catch-up"
+# (ScheduledRunCatchUpJob, 1.86.0). One switch drives it (System::JobsController#scheduled_run):
 #
 #   ScheduledRunJob.start!        # idle → running
 #   ScheduledRunJob.stop!(row)    # running → stopping → paused (between steps, or inside the
@@ -31,6 +32,9 @@ class ScheduledRunJob < ApplicationJob
   queue_as :default
 
   OPERATION_TYPE = "scheduled_run"
+  # details["trigger"]: who started the run (1.86.0). A row from before has none: it reads as manual.
+  TRIGGER_MANUAL = "manual"
+  TRIGGER_CATCH_UP = "catch-up"
   COMPACTION_POLL = 1.minute
   # A compaction run in one of these has ended (a paused one ends the step unless we asked for it).
   COMPACTION_ENDED = %w[completed paused failed].freeze
@@ -59,12 +63,14 @@ class ScheduledRunJob < ApplicationJob
     end
 
     # @param steps [Array<ScheduledRun::Step>]
+    # @param trigger [String] who started it, kept in the row's details: TRIGGER_MANUAL (the
+    #   operator's button) or TRIGGER_CATCH_UP (ScheduledRunCatchUpJob)
     # @return [OperationProgress, nil] the new run; nil unless idle (two presses at once start one run)
-    def start!(steps: ScheduledRun.steps)
+    def start!(steps: ScheduledRun.steps, trigger: TRIGGER_MANUAL)
       row = with_start_lock do
         next nil unless state == :idle
 
-        details = { "index" => 0, "stop_requested" => false, "token" => SecureRandom.hex(8),
+        details = { "index" => 0, "stop_requested" => false, "token" => SecureRandom.hex(8), "trigger" => trigger,
                     "steps" => steps.map { |step| { "entry" => step.entry, "label" => step.label, "schedule" => step.schedule } } }
         OperationProgress.start!(operation_type: OPERATION_TYPE, total_count: steps.size, phase: steps.first&.label,
                                  message: "Starting", details: details)

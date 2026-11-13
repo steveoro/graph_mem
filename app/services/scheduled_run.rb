@@ -5,7 +5,8 @@
 # ORDER: a backup first, then the jobs that delete or merge, then the ones that read what those
 # changed. An entry missing from ORDER runs after the listed ones, so a job added to the schedule
 # later is never skipped (spec/services/scheduled_run_spec.rb flags it, to place it in ORDER).
-# ScheduledRunJob runs the steps.
+# ScheduledRunJob runs the steps. ScheduledRunCatchUpJob (1.86.0), which starts the run, is in the
+# schedule but is never a step (EXCLUDED).
 #
 #   ScheduledRun.steps.map(&:entry) # => ["DatabaseBackupJob", "GarbageCollectionJob", …]
 #   ScheduledRun.steps.first.label  # => "Database backup"
@@ -30,6 +31,9 @@ module ScheduledRun
   # Jobs that stop between batches when a stop is requested (CooperativeStop); their progress lives
   # in the database, so running them again continues the work.
   STOPPABLE = %w[EmbeddingScheduledBackfillJob FactKeywordsJob].freeze
+
+  # Schedule entries that are not steps of the run: the catch-up job starts the run, so it can't be one.
+  EXCLUDED = %w[ScheduledRunCatchUpJob].freeze
 
   COMPACTION = "DreamStateCompactionJob"
   CLASS_NAME = /\A[A-Z]\w*(?:::[A-Z]\w*)*\z/
@@ -81,7 +85,7 @@ module ScheduledRun
     section = YAML.safe_load(path.read, aliases: true)&.fetch(env.to_s, nil) || {}
     steps = section.values.filter_map do |config|
       entry = config["class"] || config["command"]
-      Step.new(entry: entry, schedule: config["schedule"]) if entry
+      Step.new(entry: entry, schedule: config["schedule"]) if entry && EXCLUDED.exclude?(entry)
     end
     steps = steps.uniq(&:entry)
     steps.sort_by.with_index { |step, index| [ ORDER.index(step.entry) || ORDER.size, index ] }

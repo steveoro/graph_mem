@@ -51,17 +51,20 @@ RSpec.describe ContradictionDetector, "keyword paths", :with_test_embeddings do
     expect([ first, second ].map { |observation| observation.reload.keywords_at }).to all(be_present)
   end
 
-  it "pairs two facts that mention no entity only when they are very close" do
+  # 1.85.0 (Steve, decision 2): never a contradiction pair; very close ones go to the fallback.
+  it "hands two facts that mention no entity to the fallback only when they are very close" do
     fact("Not meant to be instantiated directly.")
     vectors["It can be instantiated."] = apart_vector
     fact("It can be instantiated.")
-    expect(described_class.detect(grant.id, persist: false)).to be_empty
+    expect(described_class.scan(grant.id, persist: false)).to have_attributes(pairs: [], fallback: [])
 
     fact("It can be instantiated directly.")
-    expect(described_class.detect(grant.id, persist: false).size).to eq(1)
+    scan = described_class.scan(grant.id, persist: false)
+    expect(scan.pairs).to be_empty
+    expect(scan.fallback.size).to eq(1)
   end
 
-  it "pairs a fact with one on a related entity, but not two facts on siblings the graph doesn't join (1.80.0)" do
+  it "relates a fact with one on a related entity, but not two facts on siblings the graph doesn't join (1.80.0)" do
     deployment = member("Deployment")
     billing = member("Billing")
     MemoryRelation.create!(from_entity: deployment, to_entity: grant, relation_type: "depends_on")
@@ -73,9 +76,12 @@ RSpec.describe ContradictionDetector, "keyword paths", :with_test_embeddings do
     expect(described_class.detect(grant.id, persist: false)).to be_empty
 
     own = fact("It is not deployed with Kamal.")
-    pairs = described_class.detect(grant.id, persist: false).map { |found| [ found.observation_id_1, found.observation_id_2 ].sort }
+    scan = described_class.scan(grant.id, persist: false)
+    pairs = scan.fallback.map { |found| [ found.observation_id_1, found.observation_id_2 ].sort }
 
     # AdminGrant and Deployment are joined by a relation. (Its fact and Billing's are both negative.)
+    # Neither mentions an entity: the `:unknown` fallback, not a contradiction pair (1.85.0).
+    expect(scan.pairs).to be_empty
     expect(pairs).to eq([ [ own.id, deploys.id ].sort ])
     expect(pairs.flatten).not_to include(bills.id)
   end

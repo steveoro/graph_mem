@@ -61,6 +61,17 @@ class ReviewRowClassifier
     new.classify(row_or_attrs)
   end
 
+  # Sort key that ranks seed candidates of one kind, best first: the producer's score (higher first;
+  # an orphan row uses its best suggested parent's), then the cosine distance (closer first), then
+  # the classified priority. A missing score counts as 0, a missing distance as 1.0 (farthest).
+  # @param candidate [Hash] a seed candidate: string keys, with "payload" and "priority"
+  # @return [Array<Numeric>] `[-score, distance, -priority]`, for `sort_by`
+  def self.rank_key(candidate)
+    payload = candidate["payload"] || {}
+    score = payload["score"] || Array(payload["suggested_parents"]).filter_map { |parent| parent["score"] if parent.is_a?(Hash) }.max
+    [ -score.to_f, (payload["cosine_distance"] || 1.0).to_f, -candidate["priority"].to_i ]
+  end
+
   # Classifies rows seeded before UI-5a and dedupes symmetric proposals; see Backfill.
   # @return [Hash] counts per step
   def self.backfill!(batch_size: 1_000, limit: nil, progress: nil, symmetric: true)

@@ -16,8 +16,8 @@
       = render "review/effects", preview: preview
     .review-detail__actions
       - if row.pending?
-        - unless choice
-          = link_to "Apply…", review_row_preview_path(row.row_uuid), class: "ui-btn ui-btn-primary", data: { turbo_frame: "review-detail" }
+        - if review_offers_apply?(row, preview)
+          = link_to "#{review_apply_label(row.kind)}…", review_row_preview_path(row.row_uuid), class: "ui-btn ui-btn-primary", data: { turbo_frame: "review-detail" }
         = button_to (row.kind == "contradiction" ? "Both are right" : "Dismiss"), review_row_dismiss_path(row.row_uuid), class: "ui-btn",
           data: { testid: "detail-dismiss" }
         = button_to "Snooze 30 days", review_row_snooze_path(row.row_uuid), class: "ui-btn"

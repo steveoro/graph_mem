@@ -130,6 +130,36 @@ RSpec.describe "System › Background jobs", type: :request do
       expect(start.at_css("button")["data-turbo-confirm"]).to be_present
     end
 
+    describe "who started the run" do
+      def trigger_note = card.at_css("[data-testid='scheduled-run-trigger']")
+
+      it "says so for a run the catch-up job started, running or finished" do
+        row = ScheduledRunJob.start!(steps: steps("ChangeSetPruneJob"), trigger: "catch-up")
+        get system_jobs_path
+        expect(trigger_note.text.squish).to eq("Started automatically (catch-up)")
+
+        row.update!(status: "completed", finished_at: Time.current)
+        get system_jobs_path
+        expect(trigger_note.text.squish).to eq("Started automatically (catch-up)")
+      end
+
+      it "says nothing for a run started from the button" do
+        press("start")
+        expect(ScheduledRunJob.current.details["trigger"]).to eq("manual")
+
+        get system_jobs_path
+        expect(trigger_note).to be_nil
+      end
+
+      it "says nothing for a run from before the trigger was recorded" do
+        row = ScheduledRunJob.start!(steps: steps("ChangeSetPruneJob"))
+        row.update!(details: row.details.except("trigger"))
+
+        get system_jobs_path
+        expect(trigger_note).to be_nil
+      end
+    end
+
     it "starts a run" do
       expect { press("start") }.to have_enqueued_job(ScheduledRunJob)
 

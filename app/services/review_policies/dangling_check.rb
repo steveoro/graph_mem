@@ -61,8 +61,13 @@ module ReviewPolicies
       inactive_observation([ field.call("observation_id") ], any: true)
     end
 
+    # The observation is gone, or no longer has any lifecycle issue (Repair would say "already consistent").
     def lifecycle_corruption_reason(_payload, field)
-      "observation ##{field.call('observation_id')} gone" unless MemoryObservation.exists?(id: field.call("observation_id"))
+      observation = MemoryObservation.find_by(id: field.call("observation_id"))
+      return "observation ##{field.call('observation_id')} gone" unless observation
+
+      "observation ##{observation.id} #{CompactionReviewApplier::LifecycleCorruption::ALREADY_CONSISTENT}" unless
+        CompactionReviewApplier::LifecycleCorruption.live_issue(observation)
     end
 
     def move_observation_reason(_payload, field)
@@ -81,9 +86,11 @@ module ReviewPolicies
     end
 
     # The fact or the observation is gone or inactive, or the fact lost its tag.
+    # A contradiction-fallback row (1.85.0) has a newer observation as its fact, never a tagged one.
     def fact_supersede_reason(payload, _field)
       inactive_observation([ payload["fact_observation_id"], payload["observation_id"] ], any: true) ||
         ("observation ##{payload['fact_observation_id']} is no longer a source fact" unless
+          payload["origin"] == FactSupersede::ContradictionFallback::ORIGIN ||
           MemoryObservation.fact_tagged.exists?(id: payload["fact_observation_id"].to_i))
     end
 

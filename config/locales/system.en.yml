@@ -39,6 +39,7 @@ en:
         last_progress_html: "Last progress %{time}"
         last_run: "Last run: %{started} → %{finished}, %{status}."
         never_run: "Not run from here yet."
+        trigger_catch_up: "Started automatically (catch-up)"
         counts: "%{done} done, %{skipped} skipped, %{stopped} stopped, %{failed} failed"
         audit: "Latest graph change: %{action} · %{record} · by %{actor} · %{time}"
         no_audit: "No graph changes logged since the run started."

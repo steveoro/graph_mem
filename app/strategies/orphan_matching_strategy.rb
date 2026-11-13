@@ -12,9 +12,25 @@ class OrphanMatchingStrategy
   CHILD_RELATION_TYPES = RelationSemantics::CHILD_RELATION_TYPES
   AUTO_PARENT_SCORE = 10
   AUTO_PARENT_MARGIN = 3
+  # Lowest score worth suggesting: an exact name or alias token, or two fragments. One fragment (5)
+  # plus the context bonus (2) stays below it, so a suggestion never depends on the active context.
+  MIN_SUGGESTION_SCORE = 8
+  # Shortest token allowed to match by substring ("if" must not hit "Swiftshop")
+  MIN_SUBSTRING_TOKEN_LENGTH = 3
 
   def initialize
     @logger = Rails.logger
+  end
+
+  # Whether the orphan would still be suggested for the project under the current rules.
+  # Recomputes the live match for that pair.
+  # @param orphan_entity [MemoryEntity] the orphan
+  # @param project_entity [MemoryEntity] the suggested parent Project
+  # @return [Boolean] true when the pair scores at least MIN_SUGGESTION_SCORE now
+  def self.suggestion_qualifies?(orphan_entity, project_entity)
+    return false unless orphan_entity && project_entity
+
+    new.match_to_projects(orphan_entity, [ project_entity ]).any?
   end
 
   # Get all orphan nodes (root nodes that are not Projects)
@@ -88,7 +104,7 @@ class OrphanMatchingStrategy
     projects.each do |project|
       score, matched_tokens = calculate_match_score(tokens, project, node)
 
-      if score > 0
+      if score >= MIN_SUGGESTION_SCORE
         matches << {
           project: project,
           score: score,
@@ -140,17 +156,19 @@ class OrphanMatchingStrategy
 
     tokens.each do |token|
       token_matched = false
+      substring_ok = token.length >= MIN_SUBSTRING_TOKEN_LENGTH
 
+      # Exact tokens first: an exact alias token ("gizmo" for a project aliased gizmo) beats a name substring.
       if project_name_tokens.include?(token)
         score += 10
-        token_matched = true
-      elsif project_name_lower.include?(token)
-        score += 5
         token_matched = true
       elsif project_alias_tokens.include?(token)
         score += 8
         token_matched = true
-      elsif project_aliases_lower.include?(token)
+      elsif substring_ok && project_name_lower.include?(token)
+        score += 5
+        token_matched = true
+      elsif substring_ok && project_aliases_lower.include?(token)
         score += 3
         token_matched = true
       end
@@ -158,7 +176,7 @@ class OrphanMatchingStrategy
       matched_tokens << token if token_matched
     end
 
-    if orphan && project.id == GraphMemContext.current_project_id
+    if orphan && matched_tokens.any? && project.id == GraphMemContext.current_project_id
       score += 2
     end
 

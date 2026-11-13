@@ -81,3 +81,9 @@ production:
     command: "ExportJob.cleanup_old_exports"
     queue: low_priority
     schedule: every hour
+  # 1.86.0: a machine that is off at night misses the slots above (Solid Queue skips a missed one):
+  # start "Run all scheduled jobs now" by itself when nothing ran lately. Not in ScheduledRun's steps.
+  scheduled_run_catch_up:
+    class: ScheduledRunCatchUpJob
+    queue: default
+    schedule: every 15 minutes

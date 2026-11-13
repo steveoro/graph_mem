@@ -106,7 +106,7 @@ class GraphIntegrityService
         kind: "lifecycle_corruption",
         observation_id: obs.id,
         entity_id: obs.memory_entity_id,
-        issue: "active observation has obsoleted_at set",
+        issue: CompactionReviewApplier::LifecycleCorruption::ACTIVE_WITH_OBSOLETED_AT,
         obsoleted_at: obs.obsoleted_at.iso8601
       }
     end
@@ -116,7 +116,7 @@ class GraphIntegrityService
         kind: "lifecycle_corruption",
         observation_id: obs.id,
         entity_id: obs.memory_entity_id,
-        issue: "superseded observation has no superseded_by reference"
+        issue: CompactionReviewApplier::LifecycleCorruption::SUPERSEDED_WITHOUT_LINK
       }
     end
 
@@ -127,7 +127,7 @@ class GraphIntegrityService
         kind: "lifecycle_corruption",
         observation_id: obs.id,
         entity_id: obs.memory_entity_id,
-        issue: "superseded_by references a different entity",
+        issue: CompactionReviewApplier::LifecycleCorruption::CROSS_ENTITY_LINK,
         superseded_by_id: obs.superseded_by_id,
         superseded_by_entity_id: obs.superseded_by&.memory_entity_id
       }

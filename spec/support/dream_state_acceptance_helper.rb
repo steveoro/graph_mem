@@ -31,6 +31,9 @@ module DreamStateAcceptanceHelper
     keyword_init: true
   )
 
+  AUTO_MERGE_FACT = "auto merge provenance shared by the near-identical bench pair"
+  REVIEW_MERGE_FACT = "review merge evidence shared only by the review-band bench pair"
+
   module_function
 
   def build_acceptance_graph!
@@ -38,7 +41,9 @@ module DreamStateAcceptanceHelper
     bench_project2 = MemoryEntity.create!(name: "BenchProject2", entity_type: "Project")
 
     auto_orphan = MemoryEntity.create!(name: "BenchProject_autotask", entity_type: "Task")
-    review_orphan = MemoryEntity.create!(name: "AmbiguousOrphan_Bench", entity_type: "Task")
+    # Ambiguous on real tokens (1.85.0): "bench" and "project" hit both BenchProject roots equally.
+    review_orphan = MemoryEntity.create!(name: "AmbiguousOrphan_Bench", entity_type: "Task",
+                                         description: "bench project work")
     filler_orphans = 6.times.map do |i|
       MemoryEntity.create!(name: "FillerOrphan#{i + 1}", entity_type: "Task")
     end
@@ -53,8 +58,9 @@ module DreamStateAcceptanceHelper
     merge_target_auto = MemoryEntity.create!(name: "BenchProject_merge_auto_target", entity_type: "Task")
     link_child!(merge_source_auto, bench_project)
     link_child!(merge_target_auto, bench_project)
-    MemoryObservation.create!(memory_entity: merge_source_auto, content: "auto merge provenance")
-    MemoryObservation.create!(memory_entity: merge_target_auto, content: "auto merge provenance")
+    # Shared facts count as merge evidence only when distinctive (1.85.0, ObservationEvidence).
+    MemoryObservation.create!(memory_entity: merge_source_auto, content: AUTO_MERGE_FACT)
+    MemoryObservation.create!(memory_entity: merge_target_auto, content: AUTO_MERGE_FACT)
     assign_test_embedding!(merge_source_auto, 1.0, 0.0, 0.0)
     assign_test_embedding!(merge_target_auto, 1.0, 0.0, 0.0)
 
@@ -62,6 +68,8 @@ module DreamStateAcceptanceHelper
     merge_target_review = MemoryEntity.create!(name: "BenchProject_merge_review_target", entity_type: "Task")
     link_child!(merge_source_review, bench_project)
     link_child!(merge_target_review, bench_project)
+    MemoryObservation.create!(memory_entity: merge_source_review, content: REVIEW_MERGE_FACT)
+    MemoryObservation.create!(memory_entity: merge_target_review, content: REVIEW_MERGE_FACT)
     assign_test_embedding!(merge_source_review, 0.0, 1.0, 0.0)
     assign_test_embedding!(merge_target_review, 0.0, 0.8, 0.6)
 

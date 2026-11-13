@@ -80,7 +80,7 @@ RSpec.describe "Contradiction review rows" do
     end
 
     it "seeds the pairs it finds with the scan's source_ref and counts them in the report" do
-      allow(ContradictionDetector).to receive(:detect).and_return([ result ])
+      allow(ContradictionDetector).to receive(:scan).and_return(ContradictionDetector::Scan.new(pairs: [ result ], fallback: []))
 
       expect { StaleMemoryScanJob.perform_now }.to change { MaintenanceReportRow.where(kind: "contradiction").count }.by(1)
       report = MaintenanceReport.where(report_type: "stale_memory_scan").last
@@ -90,12 +90,12 @@ RSpec.describe "Contradiction review rows" do
     end
 
     it "seeds nothing and keeps the watermark when the detector fails" do
-      allow(ContradictionDetector).to receive(:detect).and_raise(StandardError, "synthetic")
+      allow(ContradictionDetector).to receive(:scan).and_raise(StandardError, "synthetic")
       previous = 6.hours.ago
       allow(StaleMemoryScanner).to receive(:previous_watermark).and_return(previous)
 
       scan = StaleMemoryScanner.scan
-      expect(scan).to include(contradiction_items: [], next_watermark: previous)
+      expect(scan).to include(contradiction_items: [], supersede_items: [], next_watermark: previous)
       expect { StaleMemoryScanJob.perform_now }.not_to change { MaintenanceReportRow.where(kind: "contradiction").count }
     end
 

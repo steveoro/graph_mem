@@ -59,7 +59,14 @@ class MemoryObservation < ApplicationRecord
   validate :tags_are_strings
   validate :keywords_are_strings
   validate :llm_keywords_are_strings
-  validate :lifecycle_state_is_consistent
+  validate :lifecycle_state_is_consistent, unless: :restoring_audited_state
+
+  # Set by ChangeSetUndo::AuditInverse only, when it undoes a lifecycle_corruption repair (1.86.0):
+  # that undo writes back the inconsistent state the repair replaced, so the lifecycle checks
+  # (lifecycle_state_is_consistent, and outdated_by on an active row) are skipped for that save.
+  # Every other validation still runs.
+  # @return [Boolean, nil]
+  attr_accessor :restoring_audited_state
 
   before_save :assign_trust_score
   after_create :set_initial_embedding
@@ -155,6 +162,35 @@ class MemoryObservation < ApplicationRecord
     end
 
     replacement
+  end
+
+  # Supersedes this row by an observation that already exists, without creating a copy (1.86.0):
+  # a fact supersede whose replacement text is the fact's own text points at the fact itself.
+  #
+  #   old.supersede_with!(fact, reason: "Outdated by source fact #12", outdated_by: fact)
+  #
+  # @param existing [MemoryObservation] the active observation that replaces this one (same entity, not self)
+  # @param reason [String, nil]
+  # @param outdated_by [MemoryObservation, nil] the source fact that outdated it (same project)
+  # @return [MemoryObservation] existing
+  # @raise [InactiveObservationError] when this row or `existing` is no longer active
+  # @raise [ActiveRecord::RecordInvalid] when `existing` is on another entity or is this row
+  def supersede_with!(existing, reason: nil, outdated_by: nil)
+    self.class.transaction do
+      lock!
+      raise InactiveObservationError, "Inactive observations cannot be superseded." unless active?
+      raise InactiveObservationError, "The replacement ##{existing.id} is not active." unless existing.reload.active?
+
+      update!(
+        status: SUPERSEDED_STATUS,
+        obsoleted_at: Time.current,
+        obsolescence_reason: reason.presence,
+        superseded_by: existing,
+        outdated_by: outdated_by
+      )
+    end
+
+    existing
   end
 
   private

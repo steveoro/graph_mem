@@ -1,0 +1,22 @@
+-# A lifecycle_corruption row (1.86.0): the sweep's issue and the observation read live, with its
+-# lifecycle links. What Repair does is the effects card under it (CompactionReviewApplier::LifecycleCorruption).
+-# A superseded_by on another entity has no Repair: Dismiss only.
+- scope = "ui.review.lifecycle_corruption"
+- applier = CompactionReviewApplier::LifecycleCorruption
+- observation = MemoryObservation.includes(:memory_entity, :superseded_by, :outdated_by).find_by(id: payload["observation_id"].to_i)
+%p.review-warning{ data: { testid: "lifecycle-corruption-issue" } }= t("#{scope}.issue", issue: payload["issue"])
+- if observation
+  - live = applier.live_issue(observation)
+  .ui-card{ data: { testid: "lifecycle-corruption-observation" } }
+    %h4= "##{observation.id} · #{observation.memory_entity&.name || payload['entity_id']}"
+    %p= observation.content.to_s.truncate(300)
+    %p.review-hint= t("#{scope}.state", status: observation.status, obsoleted_at: observation.obsoleted_at&.to_fs(:db) || t("#{scope}.none"),
+      superseded_by: review_lifecycle_link(observation, observation.superseded_by), outdated_by: review_lifecycle_link(observation, observation.outdated_by))
+  - if live.nil?
+    %p.review-hint= t("#{scope}.consistent_now")
+  - elsif live != payload["issue"]
+    %p.review-hint= t("#{scope}.now", issue: live)
+  - if live == applier::CROSS_ENTITY_LINK
+    %p.review-hint= t("#{scope}.no_repair")
+- else
+  %p= t("#{scope}.gone")
