@@ -1,4 +1,4 @@
-// Connects the official TypeScript MCP client (@modelcontextprotocol/client 2.3.1) to a server
+// Connects the official TypeScript MCP client (@modelcontextprotocol/client 2.4.0) to a server
 // and lists its tools (mcp-update-plan §3.0 "Real SDK clients", §3.1 step 4).
 //
 //   (cd script/mcp_compat/tsclient && npm ci)

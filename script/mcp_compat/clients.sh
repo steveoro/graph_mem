@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# SDK client matrix (mcp-update-plan §3.1 step 4): TS client 2.3.1 and Ruby SDK 1.9.0 and 1.10.0, each
+# SDK client matrix (mcp-update-plan §3.1 step 4): TS client 2.4.0 and Ruby SDK 1.9.0 and 1.10.0, each
 # in `auto` and `legacy` mode, against graph_mem over stdio and Streamable HTTP. All twelve must
 # connect and list tools; the stdio `auto` timing shows the cost of the server/discover probe process.
 #

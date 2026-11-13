@@ -7,7 +7,7 @@ is synthetic and read-only. Run it against a local dev or test instance, never p
 
 The cases live in `spec/fixtures/mcp/handshakes/` (`stdio.json`, `http.json`). Each case gives the
 messages and headers and the expected answer per target: `graph_mem`, and `reference` (the
-reference servers: Memory 2.0.0 over stdio, Everything 2.0.1 over HTTP). A `divergence` explains every place
+reference servers: Memory 2.1.1 over stdio, Everything 2.3.0 over HTTP). A `divergence` explains every place
 where graph_mem answers differently, and an optional `changes_in` names the plan step that will
 change it (no case carries one since 1.55.0).
 
@@ -18,9 +18,9 @@ change it (no case carries one since 1.55.0).
 | `handshake_cases.rb` | Loads and checks the cases; shared by the spec and `compare.rb`. |
 | `rsdk_server.rb <stdio\|http PORT>` | A one-tool server on the official Ruby SDK (`mcp` 1.10.0), for `compare.rb`'s informational `ruby_sdk` column. |
 | `rsdk_client.rb <stdio\|http> <auto\|legacy> <url \| -- cmd…>` | Connects the Ruby SDK client (`RSDK_VERSION`, default 1.10.0), lists tools and counts their titles (1.9.0 and later keep the field). |
-| `tsclient/tsclient.mjs <stdio\|http> <auto\|legacy> <url \| -- cmd…>` | Connects the TS client (`@modelcontextprotocol/client` 2.3.1) and lists tools. |
-| `refservers/` | `package.json` + `package-lock.json` for the reference servers (Memory 2.0.0, Everything 2.0.1, SDK 2.3.1). |
-| `clients.sh <url>` | The client matrix: TS 2.3.1 and Ruby SDK 1.9.0 and 1.10.0, × auto and legacy, × stdio and HTTP (12 rows). |
+| `tsclient/tsclient.mjs <stdio\|http> <auto\|legacy> <url \| -- cmd…>` | Connects the TS client (`@modelcontextprotocol/client` 2.4.0) and lists tools. |
+| `refservers/` | `package.json` + `package-lock.json` for the reference servers (Memory 2.1.1, Everything 2.3.0, SDK 2.4.0). |
+| `clients.sh <url>` | The client matrix: TS 2.4.0 and Ruby SDK 1.9.0 and 1.10.0, × auto and legacy, × stdio and HTTP (12 rows). |
 | `claude_client_check.rb` | Claude Code as the client: the automated `docs/plans/done/claude-mcp-client-check.md` (below). |
 
 ## Setup (once)
@@ -35,9 +35,9 @@ gem install mcp -v 1.9.0 && gem install mcp -v 1.10.0 && gem install faraday rac
 ```
 
 Reference servers (Node >= 24, the `engines` of both servers). `refservers/`
-pins Memory 2.0.0 and Everything 2.0.1, with the SDK's `server` and `core` packages overridden to 2.3.1
-(`node` 2.1.2 and `server-legacy` 2.4.0 declare newer `server`/`core` ranges but run against the
-overrides), and its committed `package-lock.json` pins every transitive dependency:
+pins Memory 2.1.1 and Everything 2.3.0 (the MCP servers release v2.4.0), with the SDK's `server` and
+`core` packages pinned to 2.4.0 through `overrides` (`node` 2.1.2 and `server-legacy` 2.4.0 run against
+them), and its committed `package-lock.json` pins every other transitive dependency:
 
 ```bash
 (cd script/mcp_compat/refservers && npm ci --ignore-scripts)
@@ -70,8 +70,9 @@ script/mcp_compat/clients.sh http://127.0.0.1:3999/mcp
 Any subset of the `--…` targets works: graph_mem alone just checks graph_mem. Stop the servers
 afterwards. No case runs a tool, so the test DB stays empty.
 
-Everything listens on all interfaces (it has no host option), so run the harness only on a trusted
-machine, and keep Everything at 2.0.1 or later (2.0.0 has open CORS, GHSA-mvf5-2qqv-rg3c).
+Everything 2.3.0 and later listen only on 127.0.0.1 by default (`HOST` widens the bind; the harness
+never sets it). Keep Everything at 2.3.0 or later: 2.0.x listened on all interfaces, and 2.0.0 also had
+open CORS (GHSA-mvf5-2qqv-rg3c).
 
 ## Expected results
 

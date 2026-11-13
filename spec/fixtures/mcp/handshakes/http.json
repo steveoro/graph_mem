@@ -7,12 +7,13 @@
     "(a ping padded past that many bytes). `kind: \"second_get_stream\"` holds one GET stream open and sends a second.",
     "Every request carries Content-Type: application/json and Accept: application/json, text/event-stream.",
     "`expect` holds one expectation per target: `graph_mem` (asserted by spec/requests/mcp_protocol_compat_spec.rb)",
-    "and `reference` (Everything 2.0.0, checked by script/mcp_compat/compare.rb; null when the case is graph_mem-only):",
+    "and `reference` (Everything 2.3.0, checked by script/mcp_compat/compare.rb; null when the case is graph_mem-only):",
     "`status`; `id` (compared when present; null also matches an omitted id); `error_code`; `result` (subset match);",
     "`result_has` (keys that must exist); `empty_body`; `opens_session` (whether Mcp-Session-Id comes back).",
     "`divergence` says why graph_mem and the reference may differ; `changes_in` names the plan step that changes graph_mem's answer.",
     "Reference expectations come from the v2.0.0 code (plan §0b) and were confirmed against",
-    "@modelcontextprotocol/server-everything 2.0.0 with server/core 2.3.1 (the tag's lockfile) on 2026-10-24."
+    "@modelcontextprotocol/server-everything 2.0.0 with server/core 2.3.1 (the tag's lockfile) on 2026-10-24,",
+    "and re-confirmed against server-everything 2.3.0 with server/core 2.4.0 (servers v2.4.0) on 2026-11-13."
   ],
   "cases": [
     {
@@ -317,7 +318,7 @@
         "graph_mem": {"status": 403},
         "reference": {"status": 403}
       },
-      "divergence": "Same status; graph_mem (the official SDK) uses -32600 without the id, Everything 2.0.1 -32000 \"Invalid Origin\"."
+      "divergence": "Same status; graph_mem (the official SDK) uses -32600 without the id, Everything 2.3.0 -32000 \"Invalid Origin\"."
     },
     {
       "name": "an initialize from another localhost port",
@@ -330,7 +331,7 @@
         "graph_mem": {"status": 403},
         "reference": {"status": 200, "id": 44, "result_has": ["protocolVersion"]}
       },
-      "divergence": "Everything 2.0.1 accepts any localhost origin; graph_mem accepts only same-origin and GRAPH_MEM_MCP_ALLOWED_ORIGINS (exact scheme://host:port)."
+      "divergence": "Everything 2.3.0 accepts any localhost origin; graph_mem accepts only same-origin and GRAPH_MEM_MCP_ALLOWED_ORIGINS (exact scheme://host:port)."
     },
     {
       "name": "tools/list with a non-object _meta",

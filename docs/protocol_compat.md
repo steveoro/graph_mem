@@ -31,10 +31,10 @@ drops the field.
 
 | Client | Mode | Transport | OK | Protocol | Timing note |
 | --- | --- | --- | --- | --- | --- |
-| TS client 2.3.1 | auto | stdio | OK | 2026-07-28 | about 1.0 s longer than `legacy` (the `server/discover` probe runs in a sibling process) |
-| TS client 2.3.1 | auto | HTTP | OK | 2026-07-28 | |
-| TS client 2.3.1 | legacy | stdio | OK | 2025-11-25 | |
-| TS client 2.3.1 | legacy | HTTP | OK | 2025-11-25 | |
+| TS client 2.4.0 | auto | stdio | OK | 2026-07-28 | about 1.0 s longer than `legacy` (the `server/discover` probe runs in a sibling process) |
+| TS client 2.4.0 | auto | HTTP | OK | 2026-07-28 | |
+| TS client 2.4.0 | legacy | stdio | OK | 2025-11-25 | |
+| TS client 2.4.0 | legacy | HTTP | OK | 2025-11-25 | |
 | Ruby SDK 1.8.2 | auto | stdio | OK | 2026-07-28 | `auto` costs nothing extra |
 | Ruby SDK 1.8.2 | auto | HTTP | OK | 2026-07-28 | |
 | Ruby SDK 1.8.2 | legacy | stdio | OK | 2025-11-25 | |
@@ -73,7 +73,7 @@ HTTP. `compare.rb`'s informational Ruby SDK target (`rsdk_server.rb`, a one-tool
 
 18 cases: 8 same, 8 documented divergences, 2 graph_mem only.
 
-| Case | graph_mem | Memory 2.0.0 | Verdict |
+| Case | graph_mem | Memory 2.1.1 | Verdict |
 | --- | --- | --- | --- |
 | initialize 2025-03-26 is echoed | `[[1, "result"]]` | `[[1, "result"]]` | same |
 | initialize 2025-11-25 is echoed, with serverInfo | `[[1, "result"]]` | `[[1, "result"]]` | same |
@@ -98,7 +98,7 @@ HTTP. `compare.rb`'s informational Ruby SDK target (`rsdk_server.rb`, a one-tool
 
 31 cases: 14 same, 15 documented divergences, 2 graph_mem only.
 
-| Case | graph_mem | Everything 2.0.1 | Verdict |
+| Case | graph_mem | Everything 2.3.0 | Verdict |
 | --- | --- | --- | --- |
 | server/discover with a 2026-07-28 envelope and headers, no session | `[200, 11, "result"]` | `[200, 11, "result"]` | same |
 | 2026-07-28 header without the envelope | `[400, 12, -32602]` | `[400, 12, -32602]` | same |
@@ -135,7 +135,8 @@ HTTP. `compare.rb`'s informational Ruby SDK target (`rsdk_server.rb`, a one-tool
 Browser origins: graph_mem accepts same-origin requests and the exact origins in
 `GRAPH_MEM_MCP_ALLOWED_ORIGINS`, and grants CORS on `/mcp` to that same list. It answers every
 preflight 200 (rack-cors) and leaves out the CORS headers for an unlisted origin, where Everything
-answers 403; the browser blocks the request either way.
+answers 403; the browser blocks the request either way. Everything 2.3.0 and later listen only on
+127.0.0.1 by default (2.0.x did not); the harness runs every server on loopback.
 
 ## Known divergences
 
@@ -201,9 +202,9 @@ Each bullet is one `divergence` text from the fixture files, with the cases it c
   id. Clients start a new session on 404 either way. — *an unknown session*
 - Both refuse it with 400 and no id; graph_mem (the official SDK) uses -32600, the TS SDK -32000
   "Server not initialized". — *a request other than initialize, with no session*
-- Same status; graph_mem (the official SDK) uses -32600 without the id, Everything 2.0.1 -32000
+- Same status; graph_mem (the official SDK) uses -32600 without the id, Everything 2.3.0 -32000
   "Invalid Origin". — *an initialize from a foreign Origin*
-- Everything 2.0.1 accepts any localhost origin; graph_mem accepts only same-origin and
+- Everything 2.3.0 accepts any localhost origin; graph_mem accepts only same-origin and
   GRAPH_MEM_MCP_ALLOWED_ORIGINS (exact scheme://host:port). — *an initialize from another localhost
   port*
 - Server-specific: Everything implements subscriptions, list-changed notifications and logging;

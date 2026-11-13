@@ -4,13 +4,14 @@
     "Each case runs in a fresh server process. `send` items are JSON values sent as one line each, or",
     "{\"raw\": \"...\"} / {\"raw_bytes_hex\": \"...\"} for lines that aren't valid JSON.",
     "`expect` holds one expectation per target: `graph_mem` (asserted by spec/requests/mcp_protocol_compat_spec.rb)",
-    "and `reference` (Memory 2.0.0, checked by script/mcp_compat/compare.rb; null when the case is graph_mem-only).",
+    "and `reference` (Memory 2.1.1, checked by script/mcp_compat/compare.rb; null when the case is graph_mem-only).",
     "An expectation gives `replies` (the exact number of reply lines) and `messages`, matched by `id` (null-id",
     "replies in order): `error_code`, or `result` (subset match) and `result_has` (keys that must exist).",
     "Every stdout line must be a JSON-RPC 2.0 message. `divergence` says why graph_mem and the reference may differ;",
     "`changes_in` names the plan step that changes graph_mem's answer.",
     "Reference expectations come from the v2.0.0 code (plan §0b) and were confirmed against",
-    "@modelcontextprotocol/server-memory 2.0.0 with server/core 2.3.1 (the tag's lockfile) on 2026-10-24."
+    "@modelcontextprotocol/server-memory 2.0.0 with server/core 2.3.1 (the tag's lockfile) on 2026-10-24,",
+    "and re-confirmed against server-memory 2.1.1 with server/core 2.4.0 (servers v2.4.0) on 2026-11-13."
   ],
   "cases": [
     {
