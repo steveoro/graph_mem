@@ -456,6 +456,26 @@ RSpec.describe "MCP on the official SDK", type: :request do
     end
   end
 
+  # mcp 1.10.0 (#672): a method name that is not valid UTF-8 is refused before dispatch as an invalid request.
+  # Before 1.10.0 it was -32603 "Internal error" with the id.
+  describe "a method name that is not valid UTF-8" do
+    # Built as bytes: to_json would refuse the raw 0xFF in the method name.
+    let(:body) { %({"jsonrpc":"2.0","id":8,"method":"tools/\xFFlist"}).b }
+
+    %w[/mcp /mcp/readonly].each do |path|
+      it "answers -32600 with the id on #{path} and reports nothing" do
+        allow(Rails.error).to receive(:report).and_call_original
+        session_id = initialize_session(path)
+
+        post path, params: body, headers: request_headers.merge("Mcp-Session-Id" => session_id)
+
+        expect(response).to have_http_status(:ok)
+        expect(response.parsed_body).to include("id" => 8, "error" => include("code" => -32_600))
+        expect(Rails.error).not_to have_received(:report)
+      end
+    end
+  end
+
   # /mcp CORS comes from GRAPH_MEM_MCP_ALLOWED_ORIGINS, the transport's own Origin list (mcp-sdk-1.8.2 plan B1).
   # rack-cors answers every preflight 200 and sends the CORS headers only for a listed origin.
   describe "CORS preflight (rack-cors)" do

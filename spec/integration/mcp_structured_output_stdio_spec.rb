@@ -52,6 +52,7 @@ RSpec.describe "MCP structured output over stdio" do
       lines = messages.map { |message| message.is_a?(String) ? message : JSON.generate(message) }
       Open3.popen3(env, RbConfig.ruby, Rails.root.join("bin/mcp_stdio_runner.rb").to_s, chdir: Rails.root.to_s) do |stdin, stdout, stderr, wait|
         err_reader = Thread.new { stderr.read }
+        stdin.binmode # a raw line may hold invalid UTF-8 bytes on purpose
         lines.each { |line| stdin.puts(line) }
         stdin.close
         out = Timeout.timeout(90) { stdout.read }
@@ -118,6 +119,16 @@ RSpec.describe "MCP structured output over stdio" do
       reply = replies(out).find { |message| message["id"] == 8 }
 
       expect(reply).to include("error" => include("code" => -32_602, "message" => "Invalid params: _meta must be an object"))
+    end
+
+    # mcp 1.10.0 (#672); before it, -32603 "Internal error" with the id.
+    it "refuses a method name that is not valid UTF-8 with -32600 and the id, then still answers a ping" do
+      # Built as bytes: JSON.generate would refuse the raw 0xFF in the method name.
+      invalid = %({"jsonrpc":"2.0","id":9,"method":"tools/\xFFlist"}).b
+      out, = run_runner(handshake + [ invalid, { jsonrpc: "2.0", id: 10, method: "ping" } ])
+
+      expect(replies(out).find { |message| message["id"] == 9 }).to include("error" => include("code" => -32_600))
+      expect(replies(out).find { |message| message["id"] == 10 }).to include("result" => {})
     end
 
     it "ends the session on a line over GRAPH_MEM_MCP_MAX_REQUEST_BYTES without writing anything else" do
