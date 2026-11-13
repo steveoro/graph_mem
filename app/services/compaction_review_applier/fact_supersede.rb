@@ -18,7 +18,8 @@ class CompactionReviewApplier
   #   # => { success: true, message: "Superseded observation #15 (outdated by source fact #12)" }
   #
   # Without `fact_action`, a row with a replacement is superseded and one without is retired;
-  # `fact_action: "supersede"` without any replacement uses the fact's text.
+  # `fact_action: "supersede"` without any replacement uses the fact's text. When that text is the
+  # fact's own and the fact is on the same entity, the fact itself becomes `superseded_by` (no copy).
   module FactSupersede
     ACTIONS = %w[supersede retire].freeze
 
@@ -46,7 +47,11 @@ class CompactionReviewApplier
       # observation in the reason instead.
       outdated_by = plan.scoped && !plan.fallback ? plan.fact : nil
       if plan.action == "supersede"
-        replacement = plan.observation.supersede!({ content: plan.replacement }, reason: reason, outdated_by: outdated_by)
+        replacement = if fact_is_replacement?(plan)
+                        plan.observation.supersede_with!(plan.fact, reason: reason, outdated_by: outdated_by)
+        else
+                        plan.observation.supersede!({ content: plan.replacement }, reason: reason, outdated_by: outdated_by)
+        end
         { success: true, message: "Superseded observation ##{plan.observation.id} with ##{replacement.id} (outdated by #{fact_label(plan)})" }
       else
         # supersede! locks and re-checks itself; retire does it here, so an edit that landed
@@ -64,7 +69,10 @@ class CompactionReviewApplier
       plan = plan(effective, action_params)
       return Preview.result(false, warnings: [ plan.error, *plan.warnings ]) if plan.error
 
-      effect = plan.action == "supersede" ? "Supersedes ##{plan.observation.id} with: “#{plan.replacement.truncate(200)}”" : "Retires ##{plan.observation.id}"
+      effect = if plan.action != "supersede" then "Retires ##{plan.observation.id}"
+      elsif fact_is_replacement?(plan) then "Supersedes ##{plan.observation.id} by ##{plan.fact.id} itself (same text, same entity: no copy)"
+      else "Supersedes ##{plan.observation.id} with: “#{plan.replacement.truncate(200)}”"
+      end
       record = plan.fallback ? "Names #{fact_label(plan)} in the obsolete reason" : "Records #{fact_label(plan)} as what outdated it"
       Preview.result(true, effects: [ effect, record ], warnings: plan.warnings)
     end
@@ -83,6 +91,14 @@ class CompactionReviewApplier
                       fallback: effective[:origin] == ::FactSupersede::ContradictionFallback::ORIGIN)
       plan.error = refusal(plan)
       plan
+    end
+
+    # 1.86.0: the replacement text is the fact's own text and the fact is on the observation's entity,
+    # so the fact itself is the replacement (a copy would be a twin that GC deletes as a duplicate).
+    # @return [Boolean]
+    def fact_is_replacement?(plan)
+      plan.replacement.to_s.strip == plan.fact.content.to_s.strip &&
+        plan.fact.memory_entity_id == plan.observation.memory_entity_id
     end
 
     # @return [String] what outdated the observation, for messages and the obsolete reason

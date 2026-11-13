@@ -51,6 +51,39 @@ RSpec.describe CompactionReviewApplier::FactSupersede do
     expect(old.reload.superseded_by.content).to eq(fact.content)
   end
 
+  # 1.86.0 (B2): the production chain started with a byte-identical copy of a same-entity fact, which
+  # GC then deleted as a duplicate. The fact itself is the replacement: no twin.
+  context "when the fact is on the observation's own entity" do
+    let!(:own_fact) { fs_fact!(widget, "SynthWidget's MCP server runs on the mcp gem.") }
+    let(:own_row) do
+      item = { id: SecureRandom.uuid, kind: "fact_supersede", fact_observation_id: own_fact.id, observation_id: old.id,
+               verdict: "outdated", confidence: 0.9 }
+      CompactionReviewService.seed_report(report_type: "compaction_review", source: "fact_supersede", items: [ item ]).sole
+    end
+
+    def apply_own(params) = Current.set(actor: FactSupersedeHelpers::OPERATOR_ACTOR) { CompactionReviewService.apply(own_row.row_uuid, params) }
+
+    it "supersedes by the fact itself when no replacement text is given, and undo restores the observation" do
+      expect { @result = apply_own(fact_action: "supersede") }.not_to change(MemoryObservation, :count)
+
+      expect(@result).to include(success: true, message: include("##{old.id}", "##{own_fact.id}"))
+      expect(old.reload).to have_attributes(status: "superseded", superseded_by_id: own_fact.id, outdated_by_id: own_fact.id)
+      expect(own_fact.reload).to have_attributes(status: "active", content: "SynthWidget's MCP server runs on the mcp gem.")
+
+      expect(ChangeSetUndo.call(@result[:change_set_uuid], actor: FactSupersedeHelpers::OPERATOR_ACTOR)).to be_ok
+      expect(old.reload).to have_attributes(status: "active", superseded_by_id: nil, outdated_by_id: nil, obsoleted_at: nil)
+      expect(own_fact.reload).to be_active
+    end
+
+    it "makes no twin either when the given replacement is the fact's text with extra spaces, and says so in the preview" do
+      params = { fact_action: "supersede", replacement: "  #{own_fact.content}  " }
+      expect(CompactionReviewApplier.preview(own_row, params)[:effects].first).to include("##{own_fact.id}", "no copy")
+
+      expect { apply_own(params) }.not_to change(MemoryObservation, :count)
+      expect(old.reload.superseded_by_id).to eq(own_fact.id)
+    end
+  end
+
   it "refuses a changed fact, an inactive observation, another project and a kept statement" do
     row
     fact.update_active!(tags: [])

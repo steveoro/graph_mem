@@ -65,6 +65,40 @@ RSpec.describe GarbageCollectionRunner do
       expect(entity.reload.memory_observations_count).to eq(1)
     end
 
+    # 1.86.0 (B3): the production chain: a supersede whose replacement was a byte-identical copy of a
+    # same-entity fact. Deleting the copy used to null superseded_by (dependent: :nullify / the FK).
+    it "repoints superseded_by and outdated_by links from deleted duplicates to the kept row" do
+      gadget = fs_project!("Gadget Project")
+      widget = fs_member!(gadget, "SynthWidget")
+      fact = fs_fact!(widget, "SynthWidget renders with the canvas backend.")
+      fact_twin = fs_fact!(widget, "SynthWidget renders with the canvas backend.")
+      old = fs_observe!(widget, "SynthWidget renders with the SVG backend.")
+      twin = old.supersede!({ content: fact.content }, reason: "Outdated by source fact ##{fact.id}", outdated_by: fact)
+      retired = fs_observe!(widget, "SynthWidget renders with the WebGL backend.").mark_obsolete!(outdated_by: fact_twin)
+
+      described_class.call
+
+      expect(MemoryObservation.where(id: [ twin.id, fact_twin.id ])).to be_empty
+      expect(old.reload).to have_attributes(status: "superseded", superseded_by_id: fact.id, outdated_by_id: fact.id)
+      expect(retired.reload.outdated_by_id).to eq(fact.id)
+      expect(old).to be_valid
+      expect(GraphIntegrityService.new.send(:detect_observation_lifecycle_corruption)).to be_empty
+    end
+
+    it "clears outdated_by instead of pointing it at a kept copy that isn't a source fact (Graphy, #173)" do
+      gadget = fs_project!("Gadget Project")
+      widget = fs_member!(gadget, "SynthWidget")
+      plain = fs_observe!(widget, "SynthWidget renders with the canvas backend.")
+      tagged_twin = fs_fact!(widget, "SynthWidget renders with the canvas backend.")
+      retired = fs_observe!(widget, "SynthWidget renders with the WebGL backend.").mark_obsolete!(outdated_by: tagged_twin)
+
+      described_class.call
+
+      expect(MemoryObservation.where(id: tagged_twin.id)).to be_empty
+      expect(plain.reload).to be_active
+      expect(retired.reload.outdated_by_id).to be_nil
+    end
+
     it "reports deleted duplicate observations in the duplicates report" do
       entity = MemoryEntity.create!(name: "DupReportEntity", entity_type: "Task")
       MemoryObservation.create!(memory_entity: entity, content: "report dup")

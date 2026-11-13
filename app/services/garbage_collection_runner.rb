@@ -77,7 +77,10 @@ class GarbageCollectionRunner
 
       begin
         Current.deletion_reason = "duplicate"
-        MemoryObservation.where(id: delete_ids).destroy_all
+        MemoryObservation.transaction do
+          repoint_links(delete_ids, group.keep_id)
+          MemoryObservation.where(id: delete_ids).destroy_all
+        end
       ensure
         Current.deletion_reason = nil
       end
@@ -104,6 +107,20 @@ class GarbageCollectionRunner
     )
 
     Rails.logger.info "[GC] Deleted #{deleted_count} duplicate observations from #{duplicate_groups.size} groups"
+  end
+
+  # 1.86.0: rows that point at a duplicate about to be deleted point at the kept copy instead (same
+  # entity, same text), so the deletion's `dependent: :nullify` / ON DELETE SET NULL never leaves a
+  # superseded row without superseded_by. update_all, like the nullify it replaces: these link
+  # columns aren't audited on deletion either. outdated_by names a source fact: it moves only when the
+  # kept copy carries the source-fact tag, else it is cleared as the deletion would have (Graphy, #173).
+  #
+  # @param delete_ids [Array<Integer>] the duplicates about to be deleted
+  # @param keep_id [Integer] the kept copy
+  def repoint_links(delete_ids, keep_id)
+    MemoryObservation.where(superseded_by_id: delete_ids).update_all(superseded_by_id: keep_id, updated_at: Time.current)
+    outdated_by = MemoryObservation.fact_tagged.exists?(id: keep_id) ? keep_id : nil
+    MemoryObservation.where(outdated_by_id: delete_ids).update_all(outdated_by_id: outdated_by, updated_at: Time.current)
   end
 
   def repair_counters_for(entity_ids)

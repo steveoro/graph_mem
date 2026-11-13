@@ -55,6 +55,7 @@ The report stores:
 ### 2. Duplicate observation cleanup (`cleanup_duplicates`)
 
 Scans `MemoryObservation` grouped by `(memory_entity_id, content)`. Groups with `COUNT(*) > 1` are cleaned by deleting every row except the lowest `id` for that group.
+Before the delete, every `superseded_by_id` / `outdated_by_id` that points at a deleted duplicate is repointed to the kept row (1.86.0), so no superseded observation loses its link.
 
 Each reported group includes:
 
@@ -84,7 +85,9 @@ Defined in `config/recurring.yml`:
 
 Solid Queue must be running for scheduled invocations to fire. On a machine that is off at
 2:00 PM, **Run all scheduled jobs now** on System › Background jobs (1.81.0) runs garbage collection
-with the other scheduled jobs, right after the backup.
+with the other scheduled jobs, right after the backup. Since 1.86.0 `ScheduledRunCatchUpJob` starts
+that run by itself after a boot when nothing ran since the last nightly slot (setting
+`scheduled_run_catch_up_enabled`).
 
 ### Feature flag
 

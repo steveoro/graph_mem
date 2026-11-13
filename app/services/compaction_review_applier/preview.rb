@@ -146,6 +146,10 @@ class CompactionReviewApplier
       FactSupersede.preview(effective, params)
     end
 
+    def preview_lifecycle_corruption(effective, params)
+      LifecycleCorruption.preview(effective, params)
+    end
+
     def move_preview(node_id, parent_id)
       node = entity(node_id)
       parent = entity(parent_id)

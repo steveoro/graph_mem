@@ -5,6 +5,22 @@ All notable changes to GraphMem will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.86.0] - 2026-11-13
+
+The daily jobs catch up by themselves on a machine that is off at night, and a broken supersede link can be repaired from Review & Fix.
+
+### Added
+- **Scheduled-run catch-up** (`ScheduledRunCatchUpJob`, every 15 minutes in production; setting `scheduled_run_catch_up_enabled`, on): starts "Run all scheduled jobs now" by itself once the job workers have been up 20 minutes, when nothing has run since the last nightly slot (no scheduled run or compaction run since the last 3am compaction time), so a host that stays up at night gets no extra run and the daily start doesn't drift. A run cut off by a shutdown is resumed at its step (one cut off while stopping is only paused). A run you paused is never resumed for you; a paused compaction (the MCP write valve pauses it on writes) is resumed by the run, as from the button. The Background jobs card says "Started automatically (catch-up)".
+- **Repair for `lifecycle_corruption` suggestions** (the button reads "Repair…"; Apply did nothing before):
+  - a superseded fact that lost its replacement link points at the fact that outdated it when that fact is still active on the same entity, else it is retired;
+  - an active fact with an obsolete date has the date cleared;
+  - a link to another entity's fact isn't repaired (Dismiss or Snooze).
+  Each repair is undoable. A suggestion whose fact is already consistent is dismissed by the `dangling` policy.
+
+### Fixed
+- "Supersede…" on an "Outdated by a fact" suggestion without a replacement text no longer creates a copy of the fact on the same entity: the outdated fact points at the fact itself. That copy was later removed by garbage collection as a duplicate, which cut the link.
+- Garbage collection moves the links that point at a duplicate it deletes to the copy it keeps (`superseded_by` always, `outdated_by` when the kept copy is a source fact, else cleared as before).
+
 ## [1.85.0] - 2026-11-13
 
 A quieter Review queue: the first full compaction in months queued 447 suggestions, most of them on boilerplate evidence. The producers now ask for real evidence, the per-run cap binds, and a new policy clears what the old rules queued.
