@@ -16,6 +16,8 @@ class AppSettings < RailsSettings::Base
   field :fact_keywords_enabled, default: true, type: :boolean
   # 1.83.0: LLM words for facts that name no entity (FactKeywords::LlmWords); needs fact_keywords_enabled.
   field :llm_keywords_enabled, default: true, type: :boolean
+  # 1.86.0: ScheduledRunCatchUpJob starts "Run all scheduled jobs now" by itself when nothing ran lately.
+  field :scheduled_run_catch_up_enabled, default: true, type: :boolean
 
   # Database backup settings
   field :backup_folder_path, default: "db/backup", type: :string
@@ -245,6 +247,13 @@ class AppSettings < RailsSettings::Base
   # Bypass process-local cache so Solid Queue workers see UI changes immediately.
   def self.scheduled_backups_enabled?
     read_boolean_setting("enable_scheduled_backups")
+  end
+
+  # Whether ScheduledRunCatchUpJob may start a scheduled run (read uncached, like the other job switches).
+  #
+  # @return [Boolean] true unless turned off in System › Settings
+  def self.scheduled_run_catch_up_enabled?
+    read_boolean_setting("scheduled_run_catch_up_enabled", default: true)
   end
 
   def self.dream_state_compactor_enabled?

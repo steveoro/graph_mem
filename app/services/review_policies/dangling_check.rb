@@ -61,8 +61,13 @@ module ReviewPolicies
       inactive_observation([ field.call("observation_id") ], any: true)
     end
 
+    # The observation is gone, or no longer has any lifecycle issue (Repair would say "already consistent").
     def lifecycle_corruption_reason(_payload, field)
-      "observation ##{field.call('observation_id')} gone" unless MemoryObservation.exists?(id: field.call("observation_id"))
+      observation = MemoryObservation.find_by(id: field.call("observation_id"))
+      return "observation ##{field.call('observation_id')} gone" unless observation
+
+      "observation ##{observation.id} #{CompactionReviewApplier::LifecycleCorruption::ALREADY_CONSISTENT}" unless
+        CompactionReviewApplier::LifecycleCorruption.live_issue(observation)
     end
 
     def move_observation_reason(_payload, field)

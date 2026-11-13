@@ -7,6 +7,36 @@ module ReviewHelper
   # Kinds whose humanized name doesn't read well (Decision 3 of the fact supersede plan).
   KIND_LABELS = { "fact_supersede" => "Outdated by a fact" }.freeze
 
+  # Kinds whose Apply button reads otherwise (an i18n key).
+  APPLY_LABELS = { "lifecycle_corruption" => "ui.review.lifecycle_corruption.repair" }.freeze
+
+  # @param kind [String] a review row kind
+  # @return [String] the label of its Apply button ("Repair" for a lifecycle_corruption row)
+  def review_apply_label(kind)
+    APPLY_LABELS.key?(kind.to_s) ? t(APPLY_LABELS[kind.to_s]) : "Apply"
+  end
+
+  # @param row [MaintenanceReportRow]
+  # @param preview [Hash] CompactionReviewApplier.preview of the row
+  # @return [Boolean] the detail pane offers Apply…: not for a choice kind, nor for a lifecycle row
+  #   Repair refuses (a cross-entity superseded_by: Dismiss only)
+  def review_offers_apply?(row, preview)
+    return false if ReviewRowClassifier::CHOICE_KINDS.include?(row.kind)
+
+    row.kind != "lifecycle_corruption" || preview[:ok]
+  end
+
+  # @param observation [MemoryObservation] the observation of a lifecycle_corruption row
+  # @param other [MemoryObservation, nil] its superseded_by or outdated_by
+  # @return [String] e.g. "#12 (active, same entity)", or "none"
+  def review_lifecycle_link(observation, other)
+    scope = "ui.review.lifecycle_corruption"
+    return t("#{scope}.none") unless other
+
+    entity = other.memory_entity_id == observation.memory_entity_id ? t("#{scope}.same_entity") : t("#{scope}.other_entity", id: other.memory_entity_id)
+    t("#{scope}.link", id: other.id, status: other.status, entity: entity)
+  end
+
   # @param kind [String] a review row kind
   # @return [String] its label in badges and filters
   def review_kind_label(kind)
@@ -33,6 +63,7 @@ module ReviewHelper
     when "stale_memory" then "#{payload['entity_name'] || "##{payload['entity_id']}"}: #{Array(payload['observation_ids']).size} stale observation(s)"
     when "delete_entity" then "Delete #{payload['entity_name'].presence || "entity ##{payload['entity_id']}"}"
     when "delete_relation" then "Delete relation ##{payload['relation_id']}"
+    when "lifecycle_corruption" then "Observation ##{payload['observation_id']}: #{payload['issue']}"
     else payload["entity_name"].presence || payload["reason"].presence || row.group_key.to_s
     end.to_s.truncate(140)
   end

@@ -47,6 +47,22 @@ RSpec.describe ChangeSetUndo::AuditInverse do
     expect(result.change_set.not_undoable_reason).to eq("hard_delete")
   end
 
+  # 1.86.0: only the undo of a lifecycle_corruption repair may write back an inconsistent lifecycle.
+  it "still validates the lifecycle when an ordinary observation undo would restore a cross-entity superseded_by" do
+    old = MemoryObservation.create!(memory_entity: widget, content: "SynthWidget renders with SVG.")
+    replacement = old.supersede!({ content: "SynthWidget renders with canvas." })
+    uuid = recorded("graph.edit") do
+      old.reload.update!(status: "active", superseded_by: nil, obsoleted_at: nil, obsolescence_reason: nil)
+    end
+    replacement.update_columns(memory_entity_id: beta.id)
+
+    result = undo(uuid)
+
+    expect(result.status).to eq(:conflict)
+    expect(result.conflicts.join).to include("same entity")
+    expect(old.reload).to have_attributes(status: "active", superseded_by_id: nil)
+  end
+
   it "restores the from values of an update and recounts nothing it shouldn't" do
     uuid = recorded("graph.edit") do
       GraphEditService.call(operations: [ { type: "update_entity", entity_id: widget.id, description: "edited", aliases: "Widget" } ])

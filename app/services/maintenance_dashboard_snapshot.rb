@@ -43,14 +43,15 @@ class MaintenanceDashboardSnapshot
   # OperationProgress snapshot plus when it last changed), the steps (the run's, or the ones a new
   # run would have), and the newest audit-log entry since the run started. Plain values only.
   #
-  # @return [Hash] `{ state:, run:, steps:, latest_audit:, live:, step_progress: }` (`live`: a job is
+  # @return [Hash] `{ state:, run:, steps:, latest_audit:, live:, step_progress: }` (`run[:trigger]`: "manual"
+  #   or "catch-up", nil before 1.86.0; `live`: a job is
   #   still going to run the steps; false after a shutdown. `step_progress`: see #step_progress)
   def scheduled_run_snapshot
     row = ScheduledRunJob.current
     steps = row ? row.details.to_h["steps"].to_a : ScheduledRun.steps.map { |step| { "label" => step.label, "schedule" => step.schedule } }
     {
       state: ScheduledRunJob.state(row),
-      run: row && row.snapshot.merge(index: row.details.to_h["index"]),
+      run: row && row.snapshot.merge(index: row.details.to_h["index"], trigger: row.details.to_h["trigger"]),
       steps: steps,
       latest_audit: row&.started_at && latest_audit_since(row.started_at),
       live: %w[running].include?(row&.status) && ScheduledRunJob.live_job?(row),

@@ -252,6 +252,9 @@ en:
         llm_keywords_enabled:
           label: "LLM keywords"
           description: "For a fact that names no entity, ask the summary LLM for 1–3 words naming what it is about (never a value), so two such facts on one entity can be told apart: the same subject, related, or unrelated. Computed with the fact keywords (scans compute their own facts at once). Needs Fact keywords on. Turned off, nothing is asked and stored words are ignored."
+        scheduled_run_catch_up_enabled:
+          label: "Scheduled jobs catch-up"
+          description: "Every 15 minutes, start \"Run all scheduled jobs now\" by itself when the queue has been up for 20 minutes and neither a scheduled run nor a compaction run started since the last nightly slot (a machine that is off at night misses it). A run cut off by a power cut is resumed; a run you paused is never touched. Turned off, scheduled jobs run only on their schedule or from the button."
         review_backlog_ceiling:
           label: "Backlog ceiling per kind"
           description: "Active suggestions per kind before new ones must beat the lowest priority to be queued (a soft limit)."

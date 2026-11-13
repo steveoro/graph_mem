@@ -47,6 +47,9 @@
     - else
       %p.system-hint{ data: { testid: "scheduled-run-status" } }= t("#{scope}.never_run")
 
+    - if run && run[:trigger] == ScheduledRunJob::TRIGGER_CATCH_UP
+      %p.system-hint{ data: { testid: "scheduled-run-trigger" } }= t("#{scope}.trigger_catch_up")
+
     - if run
       - audit = data[:latest_audit]
       %p.system-hint{ data: { testid: "scheduled-run-audit" } }

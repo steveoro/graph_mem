@@ -114,7 +114,8 @@ module SourceFact
   end
 
   def outdated_by_is_consistent
-    errors.add(:outdated_by, "is only valid for inactive observations") if active?
+    # The undo of a lifecycle repair may write outdated_by back onto an active row (MemoryObservation#restoring_audited_state).
+    errors.add(:outdated_by, "is only valid for inactive observations") if active? && !restoring_audited_state
     return errors.add(:outdated_by, "cannot reference itself") if outdated_by_id == id
 
     fact = outdated_by

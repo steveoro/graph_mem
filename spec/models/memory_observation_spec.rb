@@ -197,6 +197,28 @@ RSpec.describe MemoryObservation, type: :model do
       expect(observation.obsolescence_reason).to eq("Correction")
     end
 
+    it "supersedes by an existing same-entity observation without creating a copy" do
+      existing = described_class.create!(memory_entity: entity, content: "corrected")
+      observation
+
+      expect {
+        expect(observation.supersede_with!(existing, reason: "Correction")).to eq(existing)
+      }.not_to change(described_class, :count)
+      expect(observation.reload).to have_attributes(status: "superseded", superseded_by_id: existing.id,
+                                                    obsolescence_reason: "Correction")
+      expect(observation.obsoleted_at).to be_present
+    end
+
+    it "refuses to supersede by an inactive, another-entity or own observation" do
+      inactive = described_class.create!(memory_entity: entity, content: "retired").mark_obsolete!
+      elsewhere = described_class.create!(memory_entity: MemoryEntity.create!(name: "Other", entity_type: "Task"), content: "x")
+
+      expect { observation.supersede_with!(inactive) }.to raise_error(described_class::InactiveObservationError)
+      expect { observation.supersede_with!(elsewhere) }.to raise_error(ActiveRecord::RecordInvalid, /same entity/)
+      expect { observation.reload.supersede_with!(observation) }.to raise_error(ActiveRecord::RecordInvalid, /itself/)
+      expect(observation.reload).to be_active
+    end
+
     it "rejects updates and supersession for inactive observations" do
       observation.mark_obsolete!
 

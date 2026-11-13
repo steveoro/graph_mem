@@ -40,6 +40,8 @@ class CompactionReviewApplier
         Contradiction.apply(effective, action_params)
       when "fact_supersede"
         FactSupersede.apply(effective, action_params)
+      when "lifecycle_corruption"
+        LifecycleCorruption.apply(effective, action_params)
       else
         { success: false, error: "Unknown review kind: #{row.kind}" }
       end

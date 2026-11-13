@@ -10,7 +10,7 @@
     - if choice
       = link_to (row.kind == "fact_supersede" ? "Supersede or retire…" : "Choose a side"), review_row_path(row.row_uuid), class: "ui-btn", data: { turbo_frame: "review-detail", review_keys_action: "apply" }
     - elsif confirm
-      = link_to "Apply…", review_row_preview_path(row.row_uuid), class: "ui-btn", data: { turbo_frame: "review-detail", review_keys_action: "apply" }
+      = link_to "#{review_apply_label(row.kind)}…", review_row_preview_path(row.row_uuid), class: "ui-btn", data: { turbo_frame: "review-detail", review_keys_action: "apply" }
     - else
       = button_to "Apply", review_row_apply_path(row.row_uuid), class: "ui-btn ui-btn-primary", form: { data: { review_keys_action: "apply" } }
     = button_to "Dismiss", review_row_dismiss_path(row.row_uuid), class: "ui-btn", form: { data: { review_keys_action: "dismiss" } }

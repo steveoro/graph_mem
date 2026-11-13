@@ -209,7 +209,11 @@ To action a queued relationship proposal: inspect the evidence, then call
 Times are GMT as noted in `config/recurring.yml`. On a machine that is off at 3:00, **Run all
 scheduled jobs now** on System › Background jobs (1.81.0) runs compaction with the other scheduled
 jobs and waits for it to finish; its **Stop** pauses the compaction run, and **Resume** continues
-from its cursor.
+from its cursor. Since 1.86.0 the machine does that by itself: `ScheduledRunCatchUpJob` starts the
+run about 20 minutes after Solid Queue boots when no scheduled run and no compaction run started
+since the last 3:00 slot, and resumes a run a power cut interrupted (setting
+`scheduled_run_catch_up_enabled`, on by default). A host that stayed up overnight ran the 3:00
+compaction itself, so nothing is started.
 
 Resolved review rows are pruned by a separate daily job, `MaintenanceReportRowCleanupJob`
 (5:15 AM GMT in production, after compaction): approved, dismissed and ignored rows older than
@@ -285,7 +289,7 @@ Operators and agents can apply those rows from the compaction-review UI or via `
 - **Review band** — cosine distance between **0.10** and **0.30** requires human or agent confirmation.
 - **Type-safe merges** — only entities of the same `entity_type` are considered for auto-merge or merge review. `NodeOperationsStrategy#merge_into` refuses cross-type merges.
 - **Low-confidence orphans** — token scores below **10** are never auto-parented.
-- **Pre-flight integrity sweep** — before each run, `GraphIntegrityService` auto-repairs counter cache drift and dangling relations, backfills missing embeddings (queuing failures for review), and detects observation lifecycle corruption (active with `obsoleted_at`, superseded without `superseded_by`, cross-entity `superseded_by` references). Lifecycle issues and embedding failures are queued into `compaction_review`.
+- **Pre-flight integrity sweep** — before each run, `GraphIntegrityService` auto-repairs counter cache drift and dangling relations, backfills missing embeddings (queuing failures for review), and detects observation lifecycle corruption (active with `obsoleted_at`, superseded without `superseded_by`, cross-entity `superseded_by` references). Lifecycle issues and embedding failures are queued into `compaction_review`. A lifecycle row's **Repair** (1.86.0) re-reads the observation: superseded without `superseded_by` points at its active same-entity `outdated_by`, else becomes obsolete; active with `obsoleted_at` has it cleared; a cross-entity `superseded_by` is Dismiss only. Undoable; a row already consistent is resolved, and the Dangling policy dismisses it.
 
 
 
