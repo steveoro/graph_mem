@@ -58,7 +58,7 @@ Each run progresses through three phases in order:
 
 1. Tokenize the orphan name and score matches against every `Project` name and aliases.
 2. If the best match scores **≥ 10** (`AUTO_ORPHAN_SCORE`), call `NodeOperationsStrategy#move_to_parent` to create a `part_of` link.
-3. Otherwise, queue the orphan for review in a `compaction_review` report.
+3. Otherwise, queue the orphan for review in a `compaction_review` report, with up to three `suggested_parents` (best score first). Applying the row (Review & Fix or `apply_maintenance_review`, also `dry_run`) without a chosen `parent_id` uses the first suggested parent that still exists (1.86.2); the Dangling review policy dismisses the row once its chosen parent, or every suggestion, is gone.
 
 **Scoring highlights** (from `OrphanMatchingStrategy`):
 

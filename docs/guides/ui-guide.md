@@ -160,8 +160,11 @@ Search (`/search`, 1.60.0) runs the same search as the agents' MCP `search` tool
 - **By kind**, **By project**, **Errors**, **Scan review**: the same groups as lines; **Review** opens a group's rows.
 - **Resolved**: approved, dismissed and expired suggestions with who resolved them, **Undo** while the change can be undone, otherwise **Restore** and the reason ("can't be undone: entity deleted").
 - **Policies**: the latest policy runs with one **Undo** per batch. **Run policies now** and **Import suggest-merges** sit under the rail.
+- The rail's counts refresh by themselves (every 30 s; every 3 s while a policy run is under way, 1.86.2). After **Run policies now** the counts, and on Policies the run list, update when the run finishes, without a reload.
 
-**A suggestion (detail pane, right):** what it is, its edit fields (merge targets, relation type, parent), and **If applied**: the exact effects and how long it stays undoable. **Apply…** opens a confirm card with the same effects. Merges, deletes, moves and reparents are applied one at a time; a deleted entity can't be undone, and the card says so.
+**A suggestion (detail pane, right):** what it is, its edit fields (merge targets, relation type, parent), and **If applied**: the exact effects and how long it stays undoable. **Apply…** opens a confirm card with the same effects. Merges, deletes, moves and reparents are applied one at a time; a deleted entity can't be undone, and the card says so. After **Apply**, **Dismiss**, **Snooze** or **Restore** (1.86.2) the pane shows "Done. Pick the next suggestion.", the group card shows its new count (or goes once it's empty) and the rail counts update, without a reload; **Save** keeps the suggestion open.
+
+**Orphans (no parent):** the Parent field starts on the parent **Apply** moves to (1.86.2): the parent you saved, else the best suggested project that still exists, marked **(default)** in the list; a suggested project that was deleted shows **(gone)**. When the chosen parent or every suggestion is gone, the Dangling policy dismisses the suggestion.
 
 **Contradictions:** the two observations side by side; **Keep this** on either side opens the confirm card (the other side is marked obsolete, undoable for 30 days). **Both are right** dismisses the pair for good.
 
