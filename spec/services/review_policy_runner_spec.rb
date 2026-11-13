@@ -63,6 +63,28 @@ RSpec.describe ReviewPolicyRunner do
       expect([ dangling.reload.status, done.reload.status ]).to eq(%w[active active])
     end
 
+    # 1.86.2: orphan rows whose chosen parent, or every suggested parent, is gone.
+    it "dismisses orphan rows whose parent is gone, and keeps one with a live second suggestion" do
+      alpha_project = MemoryEntity.create!(name: "synth-alpha-project", entity_type: "Project")
+      beta_project = MemoryEntity.create!(name: "synth-beta-project", entity_type: "Project")
+      chosen = MemoryEntity.create!(name: "synth-chosen-project", entity_type: "Project")
+      orphan = ->(name) { MemoryEntity.create!(name: name, entity_type: "Task") }
+      suggestions = [ { "project_id" => alpha_project.id, "project_name" => alpha_project.name, "score" => 0.9 },
+                      { "project_id" => beta_project.id, "project_name" => beta_project.name, "score" => 0.6 } ]
+      edited = row("orphan_parent", { "entity_id" => orphan.call("synth-orphan-a").id, "suggested_parents" => suggestions },
+                   edited_payload: { "parent_id" => chosen.id })
+      all_gone = row("orphan_parent", { "entity_id" => orphan.call("synth-orphan-b").id,
+                                        "suggested_parents" => [ suggestions.first ] })
+      second_live = row("orphan_parent", { "entity_id" => orphan.call("synth-orphan-c").id, "suggested_parents" => suggestions })
+      [ chosen, alpha_project ].each(&:destroy!)
+
+      run
+
+      expect(edited.reload).to have_attributes(status: "dismissed", resolution_reason: "dangling: parent ##{chosen.id} gone")
+      expect(all_gone.reload).to have_attributes(status: "dismissed", resolution_reason: "dangling: no suggested parent left")
+      expect(second_live.reload.status).to eq("active")
+    end
+
     it "dismisses a contradiction whose side is no longer active" do
       a = MemoryObservation.create!(memory_entity: widget, content: "SynthWidget is fast.")
       b = MemoryObservation.create!(memory_entity: beta, content: "SynthWidget is not fast.")

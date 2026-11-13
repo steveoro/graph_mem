@@ -27,10 +27,20 @@ module ReviewPolicies
         ("relation already exists" if MemoryRelation.exists?(from_entity_id: from, to_entity_id: to, relation_type: type))
     end
 
+    # 1.86.2: also the chosen (edited or stored) parent gone, or no suggested parent left.
     def orphan_parent_reason(_payload, field)
       entity_id = field.call("entity_id")
       gone_entity(entity_id) ||
-        ("entity already has a parent" if MemoryRelation.exists?(from_entity_id: entity_id, relation_type: "part_of"))
+        ("entity already has a parent" if MemoryRelation.exists?(from_entity_id: entity_id, relation_type: "part_of")) ||
+        orphan_parent_gone(field)
+    end
+
+    def orphan_parent_gone(field)
+      parent_id = field.call("parent_id")
+      return ("parent ##{parent_id.to_i} gone" unless MemoryEntity.exists?(id: parent_id.to_i)) if parent_id
+
+      ids = Array(field.call("suggested_parents")).filter_map { |parent| parent["project_id"]&.to_i if parent.is_a?(Hash) }
+      "no suggested parent left" unless ids.any? && MemoryEntity.exists?(id: ids)
     end
 
     def reparent_entity_reason(_payload, field)
