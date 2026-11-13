@@ -352,8 +352,10 @@ entity_types require a query"), and it returns only `entity_id`, `name`, `entity
    `GraphDataController::MAX_NODES` is 2,000), with a "showing N of `scope_entity_count`" note from `get_context`.
 
 **`get_entities` batches.** The tool has no cap on `entity_ids` and returns every active observation of each
-entity. The view sends at most 100 ids per call and passes the smallest `observation_limit` the tool accepts
-(step B checks whether that is 0 or 1); it loads full observations only for the node the user clicks.
+entity. The view sends at most 100 ids per call with `relations: "all"`, dedupes the edges by `relation_id` and
+keeps only those whose two ends are both in the loaded set (`relations: "internal"` keeps only the edges inside one
+call, so edges between two batches would be lost). It passes `observation_limit: 1`: 0 or less means no limit
+(`app/services/observation_ranking_service.rb:21`). It loads full observations only for the node the user clicks.
 
 **The adapter** builds Cytoscape elements with the keys `GRAPH_STYLES` reads, as
 `graph_data_controller.rb:138-170` does: `data.label`, `data.type`, `data.is_focus`. The existing style selector
