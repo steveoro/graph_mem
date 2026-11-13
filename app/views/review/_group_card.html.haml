@@ -5,14 +5,8 @@
   %header.review-group__head
     %span.ui-badge= review_kind_label(group.kind)
     %strong= group.anchor_name || "##{group.anchor_id || '—'}"
-    %span.review-group__meta
-      = "#{group.count} suggestion#{'s' unless group.count == 1}"
-      - if group.high_confidence.positive?
-        = " · #{group.high_confidence} high confidence"
-      = " · priority #{group.max_priority}"
-      - if group.max_confidence
-        = " · confidence #{format('%.2f', group.max_confidence)}"
-      = " · oldest #{time_ago_in_words(group.oldest_at)} ago"
+    %span.review-group__meta{ id: "#{dom}-meta" }
+      = render "review/group_meta", group: group
   .review-group__actions
     - if safe
       = link_to "Apply high-confidence", review_group_preview_path(key: group.key, op: "apply", min_confidence: ReviewDigest::HIGH_CONFIDENCE),

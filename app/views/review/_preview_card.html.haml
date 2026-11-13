@@ -7,7 +7,10 @@
       - if preview[:ok] && row.kind == "fact_supersede"
         = render "review/kinds/fact_supersede_apply", row: row
       - elsif preview[:ok]
+        -# An orphan row posts the parent this card previewed (1.86.2), so Apply can't pick another suggestion meanwhile.
+        - apply_params = keep_id.present? ? { keep_observation_id: keep_id } : {}
+        - if row.kind == "orphan_parent"
+          - apply_params[:parent_id] = CompactionReviewApplier.orphan_parent_id(row.effective_payload, params.permit(:parent_id).to_h)
         = button_to review_apply_label(row.kind), review_row_apply_path(row.row_uuid), class: "ui-btn ui-btn-primary",
-          params: keep_id.present? ? { keep_observation_id: keep_id } : {}, form: { data: { turbo_frame: "_top" } },
-          data: { testid: "preview-confirm" }
+          params: apply_params, form: { data: { turbo_frame: "_top" } }, data: { testid: "preview-confirm" }
       = link_to "Cancel", review_row_path(row.row_uuid), class: "ui-btn", data: { turbo_frame: "review-detail" }

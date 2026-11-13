@@ -21,7 +21,9 @@ class ReviewPolicyJob < ApplicationJob
   end
 
   # Whether a run is under way or waiting (1.86.2: the Review rail polls faster meanwhile): the
-  # run's lock is held, or a Solid Queue job of this class hasn't finished yet.
+  # run's lock is held, or a Solid Queue job of this class hasn't finished yet. A failed job also
+  # keeps finished_at nil until it's retried or discarded, so it doesn't count (else every open
+  # Review tab would poll every 3 s after one failed run).
   # @return [Boolean]
   def self.running?
     conn = ActiveRecord::Base.connection
@@ -41,7 +43,7 @@ class ReviewPolicyJob < ApplicationJob
   def self.pending_job?
     return false unless defined?(SolidQueue::Job)
 
-    SolidQueue::Job.where(class_name: name, finished_at: nil).exists?
+    SolidQueue::Job.where(class_name: name, finished_at: nil).where.missing(:failed_execution).exists?
   rescue StandardError
     false
   end

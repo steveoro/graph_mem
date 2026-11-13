@@ -91,7 +91,8 @@ RSpec.describe "Review & Fix", type: :request do
         expect(stream_html("update", "review-detail")).to include('data-testid="review-detail-done"')
       end
 
-      it "replaces the group card with the new count when one of two rows is dismissed" do
+      # Only the card's counts: a whole-card replace would close the group's open row list (Graphy).
+      it "updates the group card's counts, not the card, when one of two rows is dismissed" do
         row = proposal
         other = proposal(beta, widget)
         other.update_column(:group_key, row.group_key)
@@ -99,8 +100,9 @@ RSpec.describe "Review & Fix", type: :request do
         post review_row_dismiss_path(row.row_uuid), headers: turbo
 
         dom = ApplicationController.helpers.review_group_dom_id(row.group_key)
-        expect(streams).to include([ "replace", dom ])
-        expect(stream_html("replace", dom)).to match(/^1 suggestion$/)
+        expect(streams).to include([ "update", "#{dom}-meta" ])
+        expect(streams).not_to include([ "replace", dom ], [ "remove", dom ])
+        expect(stream_html("update", "#{dom}-meta")).to include("<template>1 suggestion\n")
       end
 
       it "leaves the detail pane and the group card alone on Save, and streams only the toast on a failure" do
@@ -178,6 +180,14 @@ RSpec.describe "Review & Fix", type: :request do
 
       get review_row_preview_path(row.row_uuid)
       expect(response.body).to include('data-testid="preview-confirm"')
+      # Apply posts the parent the card previewed, so it can't move under another suggestion meanwhile.
+      confirm = Nokogiri::HTML5.fragment(response.body).at_css("form:has([data-testid='preview-confirm'])")
+      expect(confirm.at_css("input[name='parent_id']")["value"]).to eq(alpha.id.to_s)
+
+      alpha.destroy!
+      post review_row_apply_path(row.row_uuid), params: { parent_id: confirm.at_css("input[name='parent_id']")["value"] }, headers: turbo
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(MemoryRelation.where(from_entity_id: orphan.id, relation_type: "part_of")).not_to exist
     end
 
     it "keeps one side of a contradiction" do

@@ -23,7 +23,7 @@ module ReviewResponses
   # @param result [Hash] a CompactionReviewService / ReviewGroupActions result
   # @param remove [Array<String>] DOM ids to remove on success (the acted-on row or group)
   # @param refresh [MaintenanceReportRow, nil] the acted-on row (1.86.2): on success the detail pane
-  #   shows the done state and the row's group card is replaced (or removed once it's empty)
+  #   shows the done state and the row's group card shows its new counts (or goes once it's empty)
   # @param rail [Boolean] on success, also send the rail's per-badge counts
   # @yieldreturn [Array<String>] more Turbo Streams to send on success (Turbo Stream answers only)
   def respond_with_review(result, remove: [], refresh: nil, rail: refresh.present?)
@@ -50,7 +50,9 @@ module ReviewResponses
     end
   end
 
-  # The detail pane's done state and the row's group card, re-read after the action.
+  # The detail pane's done state and the row's group card, re-read after the action: the card's
+  # counts when the group survives (a whole-card replace would close its open row list), else the
+  # card goes.
   # @param row [MaintenanceReportRow]
   # @return [Array<String>] Turbo Streams
   def review_refresh_streams(row)
@@ -59,7 +61,7 @@ module ReviewResponses
     group = ReviewDigest.new.group_for(key)
     [
       turbo_stream.update("review-detail", partial: "review/detail_done"),
-      group ? turbo_stream.replace(dom, partial: "review/group_card", locals: { group: group }) : turbo_stream.remove(dom)
+      group ? turbo_stream.update("#{dom}-meta", partial: "review/group_meta", locals: { group: group }) : turbo_stream.remove(dom)
     ]
   end
 

@@ -93,6 +93,25 @@ RSpec.describe "Review & Fix", type: :system do
     expect(csp_console_errors).to be_empty
   end
 
+  it "keeps an open group's other rows listed after acting on one of them (1.86.2)" do
+    rows = seed(*%w[depends_on relates_to].map do |type|
+      { kind: "relationship_proposal", from_entity_id: widget.id, to_entity_id: beta.id, relation_type: type,
+        confidence_band: "high", score: 14 }
+    end)
+    expect(rows.map(&:group_key).uniq.size).to eq(1)
+
+    visit review_path(view: "kind")
+    wait_for_stimulus
+    click_link "Review", exact: true
+    expect(page).to have_css("[data-testid='review-row']", count: 2)
+    within("##{ActionView::RecordIdentifier.dom_id(rows.first)}") { click_button "Dismiss" }
+
+    expect(page).to have_css("#toasts .ui-toast", text: "Suggestion dismissed")
+    expect(page).to have_css("[data-testid='review-row']", count: 1)
+    expect(page).to have_css("##{ActionView::RecordIdentifier.dom_id(rows.last)}")
+    expect(page).to have_css("[data-testid='review-group']", text: "1 suggestion · ")
+  end
+
   it "shows the new policy run on the Policies view without a reload after Run policies now (1.86.2)" do
     visit review_path(view: "policies")
     wait_for_stimulus
