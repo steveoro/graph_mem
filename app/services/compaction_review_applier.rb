@@ -47,6 +47,31 @@ class CompactionReviewApplier
       end
     end
 
+    # The parent an orphan_parent row moves its entity under (1.86.2), shared by apply, the preview
+    # and the Review card: an explicit action_params parent_id, then the edited or stored parent_id
+    # (kept even when that entity is gone: the preview says so and Dangling retires the row), else
+    # the first suggested parent that still exists (stored order: best score first), else 0.
+    #
+    #   CompactionReviewApplier.orphan_parent_id(row.effective_payload)            # => 42
+    #   CompactionReviewApplier.orphan_parent_id(row.effective_payload, parent_id: 7) # => 7
+    #
+    # @param effective [Hash] the row's effective payload (string or symbol keys)
+    # @param action_params [Hash] apply/preview overrides
+    # @return [Integer] the parent's entity id, 0 when there is none
+    def orphan_parent_id(effective, action_params = {})
+      effective = effective.to_h.with_indifferent_access
+      chosen = pick_id(action_params || {}, :parent_id, effective, [ :parent_id ])
+      return chosen unless chosen.zero?
+
+      suggested = Array(effective[:suggested_parents]).filter_map do |parent|
+        parent.is_a?(Hash) ? parent.with_indifferent_access[:project_id].presence&.to_i : nil
+      end
+      return 0 if suggested.empty?
+
+      live = MemoryEntity.where(id: suggested).pluck(:id)
+      suggested.find { |id| live.include?(id) } || 0
+    end
+
     private
 
     def apply_stale_memory(effective)
@@ -133,7 +158,7 @@ class CompactionReviewApplier
 
     def move_to_parent(row, effective, action_params)
       node_id = pick_id(action_params, :node_id, effective, [ :node_id, :entity_id ])
-      parent_id = pick_id(action_params, :parent_id, effective, [ :parent_id ])
+      parent_id = orphan_parent_id(effective, action_params)
 
       return { success: false, error: "Node and parent are required" } if node_id.zero? || parent_id.zero?
 

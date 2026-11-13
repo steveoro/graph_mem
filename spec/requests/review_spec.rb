@@ -4,6 +4,8 @@ require "rails_helper"
 
 # UI-5b C2: /review (operator only).
 RSpec.describe "Review & Fix", type: :request do
+  include ActiveSupport::Testing::TimeHelpers
+
   let!(:widget) { MemoryEntity.create!(name: "SynthWidget", entity_type: "Component") }
   let!(:beta) { MemoryEntity.create!(name: "Beta Service", entity_type: "Component") }
   let(:turbo) { { "Accept" => "text/vnd.turbo-stream.html" } }
@@ -71,6 +73,121 @@ RSpec.describe "Review & Fix", type: :request do
       patch review_row_path(row.row_uuid), params: { relation_type: "relates_to" }, headers: turbo
       expect(response).to have_http_status(:ok)
       expect(row.reload.effective_payload["relation_type"]).to eq("relates_to")
+    end
+
+    describe "refresh after a row action (1.86.2)" do
+      def streams = Nokogiri::HTML5.fragment(response.body).css("turbo-stream").map { |node| [ node["action"], node["target"] ] }
+      def stream_html(action, target) = Nokogiri::HTML5.fragment(response.body).at_css("turbo-stream[action='#{action}'][target='#{target}']").to_html
+
+      it "clears the detail pane, removes the emptied group card and updates the rail after applying its last row" do
+        row = proposal
+        dom = ApplicationController.helpers.review_group_dom_id(row.group_key)
+
+        post review_row_apply_path(row.row_uuid), headers: turbo
+
+        expect(streams).to include([ "update", "review-detail" ], [ "remove", dom ], [ "replace", "review-rail-count-attention" ],
+                                   [ "replace", "review-rail-count-kind" ], [ "replace", "review-rail-count-errors" ],
+                                   [ "replace", "review-rail-count-scan" ])
+        expect(stream_html("update", "review-detail")).to include('data-testid="review-detail-done"')
+      end
+
+      # Only the card's counts: a whole-card replace would close the group's open row list (Graphy).
+      it "updates the group card's counts, not the card, when one of two rows is dismissed" do
+        row = proposal
+        other = proposal(beta, widget)
+        other.update_column(:group_key, row.group_key)
+
+        post review_row_dismiss_path(row.row_uuid), headers: turbo
+
+        dom = ApplicationController.helpers.review_group_dom_id(row.group_key)
+        expect(streams).to include([ "update", "#{dom}-meta" ])
+        expect(streams).not_to include([ "replace", dom ], [ "remove", dom ])
+        expect(stream_html("update", "#{dom}-meta")).to include("<template>1 suggestion\n")
+      end
+
+      it "leaves the detail pane and the group card alone on Save, and streams only the toast on a failure" do
+        row = proposal
+        patch review_row_path(row.row_uuid), params: { relation_type: "relates_to" }, headers: turbo
+        expect(streams).to eq([ [ "update", "toasts" ] ])
+
+        post review_row_dismiss_path(SecureRandom.uuid), headers: turbo
+        expect(response).to have_http_status(:not_found)
+        expect(streams).to eq([ [ "update", "toasts" ] ])
+      end
+
+      it "streams the rail counts after a group action" do
+        row = proposal
+
+        post review_group_dismiss_path, params: { key: row.group_key, row_uuids: [ row.row_uuid ] }, headers: turbo
+
+        expect(streams).to include([ "remove", ApplicationController.helpers.review_group_dom_id(row.group_key) ], [ "replace", "review-rail-count-kind" ])
+        expect(stream_html("replace", "review-rail-count-kind")).to include("hidden")
+      end
+    end
+
+    describe "GET /review/live (1.86.2)" do
+      def live_streams = Nokogiri::HTML5.fragment(response.body).css("turbo-stream").map { |node| [ node["action"], node["target"] ] }
+      def live_active = Nokogiri::HTML5.fragment(response.body).at_css("turbo-stream[target='review-live-state'] template").inner_html[/data-active="(\w+)"/, 1]
+
+      it "streams the rail counts and the policy-run state, and the run list only on the Policies view" do
+        proposal
+        get review_live_path, headers: turbo
+
+        expect(response).to have_http_status(:ok)
+        expect(live_streams).to contain_exactly(%w[replace review-rail-count-attention], %w[replace review-rail-count-kind],
+                                                %w[replace review-rail-count-errors], %w[replace review-rail-count-scan],
+                                                %w[replace review-live-state])
+        expect(live_active).to eq("false")
+
+        allow(ReviewPolicyJob).to receive(:running?).and_return(true)
+        get review_live_path(view: "policies"), headers: turbo
+        expect(live_active).to eq("true")
+        expect(live_streams).to include(%w[update review-policy-runs])
+        expect(response.body).to include("No policy run yet.")
+      end
+
+      it "never counts a poll as activity, and still expires an idle session" do
+        get review_path
+        seen = session[:last_seen_at]
+
+        travel 10.minutes do
+          get review_live_path, headers: turbo
+          expect(response).to have_http_status(:ok)
+          expect(session[:last_seen_at]).to eq(seen)
+        end
+
+        travel SessionAuthentication::OPERATOR_IDLE_TIMEOUT + 1.minute do
+          get review_live_path, headers: turbo
+          expect(response).to redirect_to(operator_login_path)
+        end
+      end
+    end
+
+    it "previews a suggestion-only orphan row under its top live suggestion, with Apply on the confirm card (1.86.2)" do
+      orphan = MemoryEntity.create!(name: "synth-orphan-task", entity_type: "Task")
+      gone = MemoryEntity.create!(name: "synth-gone-project", entity_type: "Project")
+      alpha = MemoryEntity.create!(name: "synth-alpha-project", entity_type: "Project")
+      row = seed({ kind: "orphan_parent", entity_id: orphan.id, entity_name: orphan.name, entity_type: "Task",
+                   suggested_parents: [ { project_id: gone.id, project_name: gone.name, score: 0.9 },
+                                        { project_id: alpha.id, project_name: alpha.name, score: 0.7 } ] }).sole
+      gone.destroy!
+
+      get review_row_path(row.row_uuid)
+      expect(response.body).to include("Moves &#39;synth-orphan-task&#39; (1 entity) under &#39;synth-alpha-project&#39;")
+      suggestions = Nokogiri::HTML5.fragment(response.body).css("[data-testid='orphan-suggestion']").map { |li| li.text.squish }
+      expect(suggestions).to eq([ "synth-gone-project (score 0.9) (gone)", "synth-alpha-project (score 0.7) (default)" ])
+      expect(response.body).to include(%(value="#{alpha.id}"))
+
+      get review_row_preview_path(row.row_uuid)
+      expect(response.body).to include('data-testid="preview-confirm"')
+      # Apply posts the parent the card previewed, so it can't move under another suggestion meanwhile.
+      confirm = Nokogiri::HTML5.fragment(response.body).at_css("form:has([data-testid='preview-confirm'])")
+      expect(confirm.at_css("input[name='parent_id']")["value"]).to eq(alpha.id.to_s)
+
+      alpha.destroy!
+      post review_row_apply_path(row.row_uuid), params: { parent_id: confirm.at_css("input[name='parent_id']")["value"] }, headers: turbo
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(MemoryRelation.where(from_entity_id: orphan.id, relation_type: "part_of")).not_to exist
     end
 
     it "keeps one side of a contradiction" do
@@ -168,7 +285,11 @@ RSpec.describe "Review & Fix", type: :request do
     end
 
     it "queues a policy run and imports suggest-merges" do
-      expect { post review_run_policies_path, headers: turbo }.to have_enqueued_job(ReviewPolicyJob).with(trigger: "manual")
+      expect { post review_run_policies_path, params: { view: "policies" }, headers: turbo }
+        .to have_enqueued_job(ReviewPolicyJob).with(trigger: "manual")
+      expect(response.body).to include("Review policies queued; the numbers update when the run finishes.")
+      rail = Nokogiri::HTML5.fragment(response.body).at_css("turbo-stream[action='replace'][target='review-rail'] template")
+      expect(rail.inner_html).to include('id="review-live-state"', 'data-active="true"', "/review/live?view=policies")
       allow_any_instance_of(SuggestMergesTool).to receive(:call).and_return(suggestions: [
         { entity_a: { entity_id: widget.id, name: widget.name }, entity_b: { entity_id: beta.id, name: beta.name }, cosine_distance: 0.1 }
       ])
@@ -236,5 +357,21 @@ RSpec.describe "Review & Fix", type: :request do
     get review_path
 
     expect(response).to redirect_to(operator_login_path)
+  end
+
+  it "sends a signed-out live poll to sign-in without storing it as the way back (1.86.2)" do
+    get review_live_path, headers: turbo
+
+    expect(response).to redirect_to(operator_login_path)
+    expect(session[:operator_return_to]).to be_nil
+  end
+
+  it "answers a guest's live poll with 403 (1.86.2)" do
+    enable_guest!
+    sign_in_guest
+
+    get review_live_path, headers: turbo
+
+    expect(response).to have_http_status(:forbidden)
   end
 end

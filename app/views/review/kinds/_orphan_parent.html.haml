@@ -1,8 +1,19 @@
-- best = Array(payload["suggested_parents"]).first || {}
-- parent_id = payload["parent_id"] || best["project_id"]
+-# 1.86.2: the Parent prefill is the parent Apply moves to (CompactionReviewApplier.orphan_parent_id):
+-# the edited parent, else the first suggestion that still exists.
+- suggestions = Array(payload["suggested_parents"]).select { |parent| parent.is_a?(Hash) }
+- parent_id = CompactionReviewApplier.orphan_parent_id(payload).nonzero?
+- live = MemoryEntity.where(id: suggestions.map { |parent| parent["project_id"].to_i }).pluck(:id, :name).to_h
 %p= "'#{payload['entity_name']}' (#{payload['entity_type']} ##{payload['entity_id']}) has no parent."
 %ul
-  - Array(payload["suggested_parents"]).each do |parent|
-    %li= "#{parent['project_name']} (score #{parent['score']})"
+  - suggestions.each do |parent|
+    - id = parent["project_id"].to_i
+    %li{ data: { testid: "orphan-suggestion" } }
+      = "#{parent['project_name']} (score #{parent['score']})"
+      - if id == parent_id
+        %strong (default)
+      - unless live.key?(id)
+        %span.review-hint (gone)
+- current_name = live[parent_id] || MemoryEntity.where(id: parent_id).pick(:name)
+- current_name ||= suggestions.find { |parent| parent["project_id"].to_i == parent_id }&.dig("project_name")
 = render "review/entity_search_select", row: row, field_name: "parent_id", label_text: "Parent", current_id: parent_id,
-  current_name: MemoryEntity.where(id: parent_id).pick(:name) || best["project_name"]
+  current_name: current_name

@@ -22,7 +22,11 @@ module ReviewResponses
 
   # @param result [Hash] a CompactionReviewService / ReviewGroupActions result
   # @param remove [Array<String>] DOM ids to remove on success (the acted-on row or group)
-  def respond_with_review(result, remove: [])
+  # @param refresh [MaintenanceReportRow, nil] the acted-on row (1.86.2): on success the detail pane
+  #   shows the done state and the row's group card shows its new counts (or goes once it's empty)
+  # @param rail [Boolean] on success, also send the rail's per-badge counts
+  # @yieldreturn [Array<String>] more Turbo Streams to send on success (Turbo Stream answers only)
+  def respond_with_review(result, remove: [], refresh: nil, rail: refresh.present?)
     return review_frame_not_found if request.get? && review_status(result) == :not_found
 
     kind = result[:success] ? :notice : :alert
@@ -34,10 +38,52 @@ module ReviewResponses
         flash.now[kind] = message
         flash.now[:undo] = undo if undo
         streams = [ turbo_stream.update("toasts", partial: "layouts/flash_messages") ]
-        streams += remove.map { |id| turbo_stream.remove(id) } if result[:success]
+        if result[:success]
+          streams += remove.map { |id| turbo_stream.remove(id) }
+          streams += review_refresh_streams(refresh) if refresh
+          streams += review_rail_streams if rail
+          streams += Array(yield) if block_given?
+        end
         render turbo_stream: streams, status: review_status(result)
       end
       format.html { review_redirect(kind, message, undo) }
+    end
+  end
+
+  # The detail pane's done state and the row's group card, re-read after the action: the card's
+  # counts when the group survives (a whole-card replace would close its open row list), else the
+  # card goes.
+  # @param row [MaintenanceReportRow]
+  # @return [Array<String>] Turbo Streams
+  def review_refresh_streams(row)
+    key = row.group_key || "#{row.kind}|row:#{row.row_uuid}" # the fallback of ReviewDigest::GROUP_SQL
+    dom = helpers.review_group_dom_id(key)
+    group = ReviewDigest.new.group_for(key)
+    [
+      turbo_stream.update("review-detail", partial: "review/detail_done"),
+      group ? turbo_stream.update("#{dom}-meta", partial: "review/group_meta", locals: { group: group }) : turbo_stream.remove(dom)
+    ]
+  end
+
+  # The rail's counted views (Needs attention, By kind, Errors, Scan review).
+  # @param digest [ReviewDigest]
+  # @return [Hash{String => Integer}]
+  def review_rail_counts(digest = ReviewDigest.new)
+    active = MaintenanceReportRow.active.where(report_type: ReviewDigest::REPORT_TYPES)
+    {
+      "attention" => digest.attention_count,
+      "errors" => active.where(kind: ReviewRowClassifier::ERROR_KINDS).count,
+      "scan" => active.where(report_type: "scan_review").count,
+      "kind" => active.count
+    }
+  end
+
+  # One replace per rail badge (#review-rail-count-<key>), so the nav, its aria-current and an
+  # open <details> stay as they are.
+  # @return [Array<String>] Turbo Streams
+  def review_rail_streams(counts = review_rail_counts)
+    counts.map do |key, count|
+      turbo_stream.replace("review-rail-count-#{key}", partial: "review/rail_count", locals: { key: key, count: count })
     end
   end
 

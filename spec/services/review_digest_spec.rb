@@ -73,4 +73,25 @@ RSpec.describe ReviewDigest do
 
     expect(large).to eq(small)
   end
+
+  describe "#group_for (1.86.2)" do
+    it "returns the group's count, and nil once its rows are resolved" do
+      key = "relationship_proposal|synth-#{SecureRandom.hex(3)}"
+      first = row(priority: 50, group_key: key)
+      row(priority: 60, group_key: key)
+
+      expect(described_class.new(threshold: 40).group_for(key)).to have_attributes(key: key, count: 2, max_priority: 60)
+
+      MaintenanceReportRow.where(group_key: key).update_all(status: "dismissed")
+      expect(described_class.new(threshold: 40).group_for(key)).to be_nil
+      expect(first.reload.status).to eq("dismissed")
+    end
+
+    it "works for an unclassified row's fallback key" do
+      unclassified = row(priority: 50, group_key: nil)
+      key = "relationship_proposal|row:#{unclassified.row_uuid}"
+
+      expect(described_class.new(threshold: 40).group_for(key)).to have_attributes(key: key, count: 1)
+    end
+  end
 end

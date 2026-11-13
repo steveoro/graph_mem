@@ -5,6 +5,19 @@ All notable changes to GraphMem will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.86.2] - 2026-11-13
+
+Review & Fix keeps itself current, and orphan suggestions queued by compaction can be applied again.
+
+### Fixed
+- Review & Fix: after Apply, Dismiss, Snooze or Restore the detail pane clears, the group card updates its count (or goes when it's empty) and the rail counts update, without a reload.
+- "Run policies now": the rail counts and the Policies list update by themselves when the run finishes.
+- Orphan suggestions queued by compaction can be applied again: the detail pane, the confirm card and Apply use the top suggested parent that still exists (it showed "Entity or parent not found" unless the suggestion had been saved once).
+
+### Changed
+- `apply_maintenance_review` (and its `dry_run`) on an orphan suggestion without `action_params.parent_id` moves the entity under the top suggested parent that still exists, instead of failing. Params and output are unchanged.
+- The `dangling` review policy dismisses orphan suggestions whose chosen parent is gone (`parent #N gone`) or whose suggested parents are all gone (`no suggested parent left`).
+
 ## [1.86.1] - 2026-11-13
 
 The official MCP Ruby SDK moves to 1.10.0, and the compat harness to the MCP reference servers release v2.4.0.

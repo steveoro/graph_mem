@@ -144,6 +144,7 @@ Rails.application.routes.draw do
     post "group/dismiss", action: :group_dismiss, as: :group_dismiss
     post "group/snooze", action: :group_snooze, as: :group_snooze
     post "policies/run", action: :run_policies, as: :run_policies
+    get "live", action: :live, as: :live
     post "import_suggest_merges", action: :import_suggest_merges, as: :import_suggest_merges
     get "rows/:uuid", action: :show, as: :row
     patch "rows/:uuid", action: :update

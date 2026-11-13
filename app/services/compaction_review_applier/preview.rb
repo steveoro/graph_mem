@@ -61,7 +61,7 @@ class CompactionReviewApplier
     end
 
     def preview_orphan_parent(effective, params)
-      move_preview(pick(params, :node_id, effective, [ :node_id, :entity_id ]), pick(params, :parent_id, effective, [ :parent_id ]))
+      move_preview(pick(params, :node_id, effective, [ :node_id, :entity_id ]), CompactionReviewApplier.orphan_parent_id(effective, params))
     end
 
     def preview_reparent_entity(effective, params)

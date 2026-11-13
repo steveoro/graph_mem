@@ -71,6 +71,63 @@ RSpec.describe "Review & Fix", type: :system do
     expect(other.reload.status).to eq("active")
     expect(csp_console_errors).to be_empty
   end
+  it "clears the detail pane, the group card and the rail badge after a dismiss, without a reload (1.86.2)" do
+    row = seed({ kind: "relationship_proposal", from_entity_id: widget.id, to_entity_id: beta.id, relation_type: "depends_on",
+                 confidence_band: "high", score: 14 }).sole
+    allow(AppSettings).to receive(:review_number).and_call_original
+    allow(AppSettings).to receive(:review_number).with(:review_attention_threshold).and_return(1)
+
+    visit review_path
+    wait_for_stimulus
+    expect(page).to have_css("#review-rail-count-attention", text: "1")
+    page.execute_script("window.synthNoReload = true")
+    click_link "Review"
+    find("##{ActionView::RecordIdentifier.dom_id(row)} .review-row__open").click
+    within("[data-testid='review-detail-card']") { click_button "Dismiss" }
+
+    expect(page).to have_css("[data-testid='review-detail-done']", text: "Done. Pick the next suggestion.")
+    expect(page).to have_no_css("[data-testid='review-group']")
+    expect(page).to have_no_css("#review-rail-count-attention", visible: :visible)
+    expect(row.reload.status).to eq("dismissed")
+    expect(page.evaluate_script("window.synthNoReload")).to be(true)
+    expect(csp_console_errors).to be_empty
+  end
+
+  it "keeps an open group's other rows listed after acting on one of them (1.86.2)" do
+    rows = seed(*%w[depends_on relates_to].map do |type|
+      { kind: "relationship_proposal", from_entity_id: widget.id, to_entity_id: beta.id, relation_type: type,
+        confidence_band: "high", score: 14 }
+    end)
+    expect(rows.map(&:group_key).uniq.size).to eq(1)
+
+    visit review_path(view: "kind")
+    wait_for_stimulus
+    click_link "Review", exact: true
+    expect(page).to have_css("[data-testid='review-row']", count: 2)
+    within("##{ActionView::RecordIdentifier.dom_id(rows.first)}") { click_button "Dismiss" }
+
+    expect(page).to have_css("#toasts .ui-toast", text: "Suggestion dismissed")
+    expect(page).to have_css("[data-testid='review-row']", count: 1)
+    expect(page).to have_css("##{ActionView::RecordIdentifier.dom_id(rows.last)}")
+    expect(page).to have_css("[data-testid='review-group']", text: "1 suggestion · ")
+  end
+
+  it "shows the new policy run on the Policies view without a reload after Run policies now (1.86.2)" do
+    visit review_path(view: "policies")
+    wait_for_stimulus
+    expect(page).to have_text("No policy run yet.")
+    page.execute_script("window.synthNoReload = true")
+
+    click_button "Run policies now"
+    expect(page).to have_css("#toasts .ui-toast", text: "the numbers update when the run finishes")
+    ReviewPolicyJob.perform_now(trigger: "manual") # the enqueued job doesn't run in the test adapter
+
+    # The rail polls every 3 s after the click (not after the 30 s idle tick).
+    expect(page).to have_css("[data-testid='policy-run']", text: "manual", wait: 10)
+    expect(page.evaluate_script("window.synthNoReload")).to be(true)
+    expect(csp_console_errors).to be_empty
+  end
+
   describe "keyboard" do
     it "moves with j, dismisses with d, and ignores shortcuts while typing in the search field" do
       rows = seed(*Array.new(2) do |i|

@@ -1,0 +1,8 @@
+-# A group card's counts (1.86.2: also streamed into #<card>-meta after a row action, so an open row list stays open).
+= "#{group.count} suggestion#{'s' unless group.count == 1}"
+- if group.high_confidence.positive?
+  = " · #{group.high_confidence} high confidence"
+= " · priority #{group.max_priority}"
+- if group.max_confidence
+  = " · confidence #{format('%.2f', group.max_confidence)}"
+= " · oldest #{time_ago_in_words(group.oldest_at)} ago"

@@ -16,7 +16,7 @@ class ReviewController < ApplicationController
   def index
     @view = VIEWS.include?(params[:view]) ? params[:view] : "attention"
     @digest = ReviewDigest.new
-    @rail = rail_counts
+    @rail = review_rail_counts(@digest)
     @q = params[:q].to_s.strip.presence
     return load_search if @q
 
@@ -46,20 +46,22 @@ class ReviewController < ApplicationController
   end
 
   def apply
-    respond_with_review(CompactionReviewService.apply(@row.row_uuid, action_params, report_type: @row.report_type), remove: row_ids)
+    respond_with_review(CompactionReviewService.apply(@row.row_uuid, action_params, report_type: @row.report_type),
+                        remove: row_ids, refresh: @row)
   end
 
   def dismiss
     respond_with_review(CompactionReviewService.dismiss(@row.row_uuid, reason: params[:reason].presence, report_type: @row.report_type),
-                        remove: row_ids)
+                        remove: row_ids, refresh: @row)
   end
 
   def snooze
-    respond_with_review(CompactionReviewService.snooze(@row.row_uuid, days: snooze_days, report_type: @row.report_type), remove: row_ids)
+    respond_with_review(CompactionReviewService.snooze(@row.row_uuid, days: snooze_days, report_type: @row.report_type),
+                        remove: row_ids, refresh: @row)
   end
 
   def restore
-    respond_with_review(CompactionReviewService.restore(@row.row_uuid, report_type: @row.report_type), remove: row_ids)
+    respond_with_review(CompactionReviewService.restore(@row.row_uuid, report_type: @row.report_type), remove: row_ids, refresh: @row)
   end
 
   # GET /review/group/preview?key=&op=&min_confidence= : the confirm card for a group action.
@@ -71,23 +73,41 @@ class ReviewController < ApplicationController
 
   def group_apply
     respond_with_review(ReviewGroupActions.apply(group_key: params.require(:key), row_uuids: params[:row_uuids], token: params[:token],
-                                                 min_confidence: min_confidence), remove: group_ids)
+                                                 min_confidence: min_confidence), remove: group_ids, rail: true)
   end
 
   def group_dismiss
     respond_with_review(ReviewGroupActions.dismiss(group_key: params.require(:key), row_uuids: params[:row_uuids],
-                                                   reason: params[:reason].presence), remove: group_ids)
+                                                   reason: params[:reason].presence), remove: group_ids, rail: true)
   end
 
   def group_snooze
     respond_with_review(ReviewGroupActions.snooze(group_key: params.require(:key), row_uuids: params[:row_uuids], days: snooze_days),
-                        remove: group_ids)
+                        remove: group_ids, rail: true)
   end
 
-  # POST /review/policies/run
+  # POST /review/policies/run (view: the page's view). 1.86.2: the answer replaces the rail with its
+  # live state active, so live_refresh_controller.js reconnects and polls every 3 s at once (a
+  # replaced state target alone would wait for the pending 30 s tick), until a poll sees the run end.
   def run_policies
     ReviewPolicyJob.perform_later(trigger: "manual")
-    respond_with_review({ success: true, message: t("ui.review.policies_queued") })
+    view = VIEWS.include?(params[:view]) ? params[:view] : "attention"
+    respond_with_review({ success: true, message: t("ui.review.policies_queued") }) do
+      [ turbo_stream.replace("review-rail", partial: "review/rail", locals: { view: view, rail: review_rail_counts, active: true }) ]
+    end
+  end
+
+  # GET /review/live (1.86.2): the rail counts, whether a policy run is under way and, on the
+  # Policies view, the run list, as Turbo Streams polled by live_refresh_controller.js. A poll
+  # isn't activity: it never extends the session.
+  def live
+    streams = review_rail_streams + [ review_live_state_stream(ReviewPolicyJob.running?) ]
+    if params[:view] == "policies"
+      load_policies
+      streams << turbo_stream.update("review-policy-runs", method: :morph, partial: "review/policy_runs",
+                                                           locals: { reports: @reports, change_sets: @change_sets })
+    end
+    render turbo_stream: streams
   end
 
   # POST /review/import_suggest_merges (moved from data_exchange): live suggest_merges output → queue.
@@ -105,6 +125,20 @@ class ReviewController < ApplicationController
   end
 
   private
+
+  # The live poll checks the session's expiry without recording activity, so an open tab never
+  # keeps a session alive (SessionAuthentication#refresh_session!).
+  def refresh_session!(idle:, absolute:)
+    return super unless action_name == "live"
+
+    expired = session_expired?(idle: idle, absolute: absolute)
+    reset_session if expired
+    !expired
+  end
+
+  def review_live_state_stream(active)
+    turbo_stream.replace("review-live-state", partial: "review/live_state", locals: { active: active })
+  end
 
   def load_row
     @row = MaintenanceReportRow.where(report_type: REPORT_TYPES).find_by(row_uuid: params[:uuid])
@@ -145,15 +179,6 @@ class ReviewController < ApplicationController
   end
 
   def active_scope = MaintenanceReportRow.active.where(report_type: REPORT_TYPES)
-
-  def rail_counts
-    {
-      "attention" => @digest.attention_count,
-      "errors" => active_scope.where(kind: ReviewRowClassifier::ERROR_KINDS).count,
-      "scan" => active_scope.where(report_type: "scan_review").count,
-      "kind" => active_scope.count
-    }
-  end
 
   def action_params = params.permit(*EDIT_FIELDS, :keep_observation_id, :fact_action, :replacement).to_h
   def snooze_days = (params[:days].presence || CompactionReviewService::SNOOZE_DAYS).to_i
