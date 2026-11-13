@@ -161,6 +161,25 @@ RSpec.describe "Review & Fix", type: :request do
       end
     end
 
+    it "previews a suggestion-only orphan row under its top live suggestion, with Apply on the confirm card (1.86.2)" do
+      orphan = MemoryEntity.create!(name: "synth-orphan-task", entity_type: "Task")
+      gone = MemoryEntity.create!(name: "synth-gone-project", entity_type: "Project")
+      alpha = MemoryEntity.create!(name: "synth-alpha-project", entity_type: "Project")
+      row = seed({ kind: "orphan_parent", entity_id: orphan.id, entity_name: orphan.name, entity_type: "Task",
+                   suggested_parents: [ { project_id: gone.id, project_name: gone.name, score: 0.9 },
+                                        { project_id: alpha.id, project_name: alpha.name, score: 0.7 } ] }).sole
+      gone.destroy!
+
+      get review_row_path(row.row_uuid)
+      expect(response.body).to include("Moves &#39;synth-orphan-task&#39; (1 entity) under &#39;synth-alpha-project&#39;")
+      suggestions = Nokogiri::HTML5.fragment(response.body).css("[data-testid='orphan-suggestion']").map { |li| li.text.squish }
+      expect(suggestions).to eq([ "synth-gone-project (score 0.9) (gone)", "synth-alpha-project (score 0.7) (default)" ])
+      expect(response.body).to include(%(value="#{alpha.id}"))
+
+      get review_row_preview_path(row.row_uuid)
+      expect(response.body).to include('data-testid="preview-confirm"')
+    end
+
     it "keeps one side of a contradiction" do
       kept = MemoryObservation.create!(memory_entity: widget, content: "SynthWidget is fast.")
       other = MemoryObservation.create!(memory_entity: beta, content: "SynthWidget is not fast.")

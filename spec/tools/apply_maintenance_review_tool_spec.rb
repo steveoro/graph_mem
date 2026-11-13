@@ -43,6 +43,24 @@ RSpec.describe ApplyMaintenanceReviewTool, type: :model do
       expect(merge_row.reload.status).to eq("approved")
     end
 
+    it "applies a suggestion-only orphan row without action_params, with the same result keys as a merge (1.86.2)" do
+      merged_keys = tool.call(item_id: merge_row.row_uuid, action_params: { "source_id" => source.id, "target_id" => target.id }).keys
+      orphan = MemoryEntity.create!(name: "synth-orphan-task", entity_type: "Task")
+      alpha = MemoryEntity.create!(name: "synth-alpha-project", entity_type: "Project")
+      payload = { "entity_id" => orphan.id, "entity_name" => orphan.name, "entity_type" => "Task",
+                  "suggested_parents" => [ { "project_id" => alpha.id, "project_name" => alpha.name, "score" => 0.9 } ] }
+      row = MaintenanceReportRow.create!(maintenance_report: report, report_type: "compaction_review", row_uuid: "apply-orphan-1",
+                                         kind: "orphan_parent", status: "active",
+                                         signature: CompactionReviewService.signature_for("orphan_parent", payload), payload: payload)
+
+      result = tool.call(item_id: row.row_uuid)
+
+      expect(result[:success]).to be true
+      expect(result.keys).to match_array(merged_keys)
+      expect(MemoryRelation.exists?(from_entity_id: orphan.id, to_entity_id: alpha.id, relation_type: "part_of")).to be true
+      expect(row.reload.status).to eq("approved")
+    end
+
     it "surfaces a busy membership lock as OperationFailed concurrency — never 'escalate'" do
       stub_const("ProjectMembership::LOCK_TIMEOUT_SECONDS", 0)
       conn = ActiveRecord::Base.connection

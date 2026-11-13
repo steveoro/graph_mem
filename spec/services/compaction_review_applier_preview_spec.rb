@@ -107,4 +107,68 @@ RSpec.describe CompactionReviewApplier, ".preview" do
     expect(result[:preview]).to include(ok: true, effects: [ "Creates 'SynthWidget' depends_on 'Beta Service'" ])
     expect(MemoryRelation.where(from_entity_id: widget.id, to_entity_id: beta.id)).not_to exist
   end
+  # 1.86.2: compaction queues orphan rows with suggested_parents only (no parent_id).
+  describe "an orphan_parent row with suggestions only" do
+    let!(:alpha) { MemoryEntity.create!(name: "synth-alpha-project", entity_type: "Project") }
+    let!(:beta_project) { MemoryEntity.create!(name: "synth-beta-project", entity_type: "Project") }
+    let!(:orphan) { MemoryEntity.create!(name: "synth-orphan-task", entity_type: "Task") }
+
+    def orphan_row(edited: nil)
+      row("orphan_parent", { "entity_id" => orphan.id, "entity_name" => orphan.name, "entity_type" => "Task",
+                             "suggested_parents" => [ { "project_id" => alpha.id, "project_name" => alpha.name, "score" => 0.9 },
+                                                      { "project_id" => beta_project.id, "project_name" => beta_project.name, "score" => 0.6 } ] })
+        .tap { |review_row| review_row.update!(edited_payload: edited) if edited }
+    end
+
+    def parent_of(entity) = MemoryRelation.where(from_entity_id: entity.id, relation_type: "part_of").pick(:to_entity_id)
+
+    it "previews and applies under the top suggestion" do
+      preview, applied = preview_then_apply(orphan_row)
+
+      expect(preview).to include(ok: true)
+      expect(preview[:effects].first).to eq("Moves 'synth-orphan-task' (1 entity) under 'synth-alpha-project'")
+      expect(applied[:success]).to be(true)
+      expect(parent_of(orphan)).to eq(alpha.id)
+    end
+
+    it "skips a suggestion whose project is gone" do
+      review_row = orphan_row
+      alpha.destroy!
+
+      preview, applied = preview_then_apply(review_row)
+
+      expect(preview[:effects].first).to eq("Moves 'synth-orphan-task' (1 entity) under 'synth-beta-project'")
+      expect(applied[:success]).to be(true)
+      expect(parent_of(orphan)).to eq(beta_project.id)
+    end
+
+    it "lets an explicit action_params parent_id and an edited parent_id win over the suggestions" do
+      expect(described_class.preview(orphan_row, { parent_id: beta_project.id })[:effects].first).to end_with("under 'synth-beta-project'")
+      expect(described_class.preview(orphan_row(edited: { "parent_id" => project.id }))[:effects].first).to end_with("under 'Alpha Service'")
+      expect(described_class.orphan_parent_id(orphan_row(edited: { "parent_id" => project.id }).effective_payload, { "parent_id" => beta_project.id.to_s }))
+        .to eq(beta_project.id)
+    end
+
+    it "keeps an edited parent that is gone, and refuses when every suggestion is gone" do
+      gone = MemoryEntity.create!(name: "synth-gone-project", entity_type: "Project").tap(&:destroy!)
+      expect(described_class.orphan_parent_id(orphan_row(edited: { "parent_id" => gone.id }).effective_payload)).to eq(gone.id)
+
+      review_row = orphan_row
+      [ alpha, beta_project ].each(&:destroy!)
+
+      expect(described_class.orphan_parent_id(review_row.effective_payload)).to eq(0)
+      expect(described_class.preview(review_row)).to include(ok: false, warnings: [ "Entity or parent not found" ])
+    end
+
+    it "returns ok: true from apply_maintenance_review dry_run without action_params, and writes nothing" do
+      review_row = orphan_row
+      before = counts
+
+      result = ApplyMaintenanceReviewTool.new.call(item_id: review_row.row_uuid, dry_run: true)
+
+      expect(result[:preview]).to include(ok: true)
+      expect(result[:preview][:effects].first).to end_with("under 'synth-alpha-project'")
+      expect(counts).to eq(before)
+    end
+  end
 end

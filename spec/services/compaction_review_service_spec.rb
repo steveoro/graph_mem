@@ -184,6 +184,25 @@ RSpec.describe CompactionReviewService, type: :service do
       expect(described_class.find_item("merge-1").status).to eq("approved")
     end
 
+    # 1.86.2: compaction queues suggested_parents only; apply uses the top one that still exists.
+    it "moves a suggestion-only orphan under its top suggested parent, undoably" do
+      orphan = MemoryEntity.create!(name: "synth-orphan-task", entity_type: "Task")
+      alpha = MemoryEntity.create!(name: "synth-alpha-project", entity_type: "Project")
+      row = MaintenanceReportRow.create!(
+        maintenance_report: report, report_type: "compaction_review", row_uuid: "orphan-suggested-1", kind: "orphan_parent",
+        status: "active", signature: described_class.signature_for("orphan_parent", { entity_id: orphan.id }),
+        payload: { "entity_id" => orphan.id, "entity_name" => orphan.name, "entity_type" => "Task",
+                   "suggested_parents" => [ { "project_id" => alpha.id, "project_name" => alpha.name, "score" => 0.9 } ] }
+      )
+
+      result = described_class.apply(row.row_uuid)
+
+      expect(result[:success]).to be true
+      expect(MemoryRelation.exists?(from_entity_id: orphan.id, to_entity_id: alpha.id, relation_type: "part_of")).to be true
+      expect(row.reload.status).to eq("approved")
+      expect(ChangeSet.find(row.change_set_id).undoable?).to be true
+    end
+
     it "creates a relationship between two entities" do
       result = described_class.apply("relation-1", { "from_id" => from_entity.id, "to_id" => to_entity.id, "relation_type" => "solves" })
 
