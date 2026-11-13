@@ -48,6 +48,13 @@ class ReviewDigest
     { groups: groups.to_i, rows: rows.to_i }
   end
 
+  # One group, re-read after a row action (1.86.2).
+  # @param key [String] a Group key (a group_key, or "<kind>|row:<row_uuid>")
+  # @return [Group, nil] nil once the group has no active rows in this digest's scope
+  def group(key)
+    groups(@scope.in_group(key), limit: 1).first
+  end
+
   # One page of groups for the grouped lists (By kind, By project, Errors, Scan review).
   # @return [Array<Group>]
   def page(scope, page:, per: 25)

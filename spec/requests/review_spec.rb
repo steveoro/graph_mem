@@ -73,6 +73,54 @@ RSpec.describe "Review & Fix", type: :request do
       expect(row.reload.effective_payload["relation_type"]).to eq("relates_to")
     end
 
+    describe "refresh after a row action (1.86.2)" do
+      def streams = Nokogiri::HTML5.fragment(response.body).css("turbo-stream").map { |node| [ node["action"], node["target"] ] }
+      def stream_html(action, target) = Nokogiri::HTML5.fragment(response.body).at_css("turbo-stream[action='#{action}'][target='#{target}']").to_html
+
+      it "clears the detail pane, removes the emptied group card and updates the rail after applying its last row" do
+        row = proposal
+        dom = ApplicationController.helpers.review_group_dom_id(row.group_key)
+
+        post review_row_apply_path(row.row_uuid), headers: turbo
+
+        expect(streams).to include([ "update", "review-detail" ], [ "remove", dom ], [ "replace", "review-rail-count-attention" ],
+                                   [ "replace", "review-rail-count-kind" ], [ "replace", "review-rail-count-errors" ],
+                                   [ "replace", "review-rail-count-scan" ])
+        expect(stream_html("update", "review-detail")).to include('data-testid="review-detail-done"')
+      end
+
+      it "replaces the group card with the new count when one of two rows is dismissed" do
+        row = proposal
+        other = proposal(beta, widget)
+        other.update_column(:group_key, row.group_key)
+
+        post review_row_dismiss_path(row.row_uuid), headers: turbo
+
+        dom = ApplicationController.helpers.review_group_dom_id(row.group_key)
+        expect(streams).to include([ "replace", dom ])
+        expect(stream_html("replace", dom)).to match(/^1 suggestion$/)
+      end
+
+      it "leaves the detail pane and the group card alone on Save, and streams only the toast on a failure" do
+        row = proposal
+        patch review_row_path(row.row_uuid), params: { relation_type: "relates_to" }, headers: turbo
+        expect(streams).to eq([ [ "update", "toasts" ] ])
+
+        post review_row_dismiss_path(SecureRandom.uuid), headers: turbo
+        expect(response).to have_http_status(:not_found)
+        expect(streams).to eq([ [ "update", "toasts" ] ])
+      end
+
+      it "streams the rail counts after a group action" do
+        row = proposal
+
+        post review_group_dismiss_path, params: { key: row.group_key, row_uuids: [ row.row_uuid ] }, headers: turbo
+
+        expect(streams).to include([ "remove", ApplicationController.helpers.review_group_dom_id(row.group_key) ], [ "replace", "review-rail-count-kind" ])
+        expect(stream_html("replace", "review-rail-count-kind")).to include("hidden")
+      end
+    end
+
     it "keeps one side of a contradiction" do
       kept = MemoryObservation.create!(memory_entity: widget, content: "SynthWidget is fast.")
       other = MemoryObservation.create!(memory_entity: beta, content: "SynthWidget is not fast.")

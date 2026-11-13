@@ -71,6 +71,28 @@ RSpec.describe "Review & Fix", type: :system do
     expect(other.reload.status).to eq("active")
     expect(csp_console_errors).to be_empty
   end
+  it "clears the detail pane, the group card and the rail badge after a dismiss, without a reload (1.86.2)" do
+    row = seed({ kind: "relationship_proposal", from_entity_id: widget.id, to_entity_id: beta.id, relation_type: "depends_on",
+                 confidence_band: "high", score: 14 }).sole
+    allow(AppSettings).to receive(:review_number).and_call_original
+    allow(AppSettings).to receive(:review_number).with(:review_attention_threshold).and_return(1)
+
+    visit review_path
+    wait_for_stimulus
+    expect(page).to have_css("#review-rail-count-attention", text: "1")
+    page.execute_script("window.synthNoReload = true")
+    click_link "Review"
+    find("##{ActionView::RecordIdentifier.dom_id(row)} .review-row__open").click
+    within("[data-testid='review-detail-card']") { click_button "Dismiss" }
+
+    expect(page).to have_css("[data-testid='review-detail-done']", text: "Done. Pick the next suggestion.")
+    expect(page).to have_no_css("[data-testid='review-group']")
+    expect(page).to have_no_css("#review-rail-count-attention", visible: :visible)
+    expect(row.reload.status).to eq("dismissed")
+    expect(page.evaluate_script("window.synthNoReload")).to be(true)
+    expect(csp_console_errors).to be_empty
+  end
+
   describe "keyboard" do
     it "moves with j, dismisses with d, and ignores shortcuts while typing in the search field" do
       rows = seed(*Array.new(2) do |i|

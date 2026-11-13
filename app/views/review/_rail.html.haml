@@ -8,8 +8,8 @@
         = link_to review_path(view: key), class: "review-rail__link", "aria-current": (key == view ? "page" : nil),
           data: { testid: "review-view-#{key}" } do
           = label
-          - if count&.positive?
-            %span.ui-badge= count
+          - unless count.nil?
+            = render "review/rail_count", key: key, count: count
   %p
     = link_to "Find & supersede", review_supersede_path, class: "review-rail__link", data: { testid: "review-find-supersede" }
   .review-rail__actions

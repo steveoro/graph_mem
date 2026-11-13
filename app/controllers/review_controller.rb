@@ -16,7 +16,7 @@ class ReviewController < ApplicationController
   def index
     @view = VIEWS.include?(params[:view]) ? params[:view] : "attention"
     @digest = ReviewDigest.new
-    @rail = rail_counts
+    @rail = review_rail_counts(@digest)
     @q = params[:q].to_s.strip.presence
     return load_search if @q
 
@@ -46,20 +46,22 @@ class ReviewController < ApplicationController
   end
 
   def apply
-    respond_with_review(CompactionReviewService.apply(@row.row_uuid, action_params, report_type: @row.report_type), remove: row_ids)
+    respond_with_review(CompactionReviewService.apply(@row.row_uuid, action_params, report_type: @row.report_type),
+                        remove: row_ids, refresh: @row)
   end
 
   def dismiss
     respond_with_review(CompactionReviewService.dismiss(@row.row_uuid, reason: params[:reason].presence, report_type: @row.report_type),
-                        remove: row_ids)
+                        remove: row_ids, refresh: @row)
   end
 
   def snooze
-    respond_with_review(CompactionReviewService.snooze(@row.row_uuid, days: snooze_days, report_type: @row.report_type), remove: row_ids)
+    respond_with_review(CompactionReviewService.snooze(@row.row_uuid, days: snooze_days, report_type: @row.report_type),
+                        remove: row_ids, refresh: @row)
   end
 
   def restore
-    respond_with_review(CompactionReviewService.restore(@row.row_uuid, report_type: @row.report_type), remove: row_ids)
+    respond_with_review(CompactionReviewService.restore(@row.row_uuid, report_type: @row.report_type), remove: row_ids, refresh: @row)
   end
 
   # GET /review/group/preview?key=&op=&min_confidence= : the confirm card for a group action.
@@ -71,17 +73,17 @@ class ReviewController < ApplicationController
 
   def group_apply
     respond_with_review(ReviewGroupActions.apply(group_key: params.require(:key), row_uuids: params[:row_uuids], token: params[:token],
-                                                 min_confidence: min_confidence), remove: group_ids)
+                                                 min_confidence: min_confidence), remove: group_ids, rail: true)
   end
 
   def group_dismiss
     respond_with_review(ReviewGroupActions.dismiss(group_key: params.require(:key), row_uuids: params[:row_uuids],
-                                                   reason: params[:reason].presence), remove: group_ids)
+                                                   reason: params[:reason].presence), remove: group_ids, rail: true)
   end
 
   def group_snooze
     respond_with_review(ReviewGroupActions.snooze(group_key: params.require(:key), row_uuids: params[:row_uuids], days: snooze_days),
-                        remove: group_ids)
+                        remove: group_ids, rail: true)
   end
 
   # POST /review/policies/run
@@ -145,15 +147,6 @@ class ReviewController < ApplicationController
   end
 
   def active_scope = MaintenanceReportRow.active.where(report_type: REPORT_TYPES)
-
-  def rail_counts
-    {
-      "attention" => @digest.attention_count,
-      "errors" => active_scope.where(kind: ReviewRowClassifier::ERROR_KINDS).count,
-      "scan" => active_scope.where(report_type: "scan_review").count,
-      "kind" => active_scope.count
-    }
-  end
 
   def action_params = params.permit(*EDIT_FIELDS, :keep_observation_id, :fact_action, :replacement).to_h
   def snooze_days = (params[:days].presence || CompactionReviewService::SNOOZE_DAYS).to_i

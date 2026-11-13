@@ -1,0 +1,2 @@
+-# One rail badge (1.86.2): always rendered for the counted views, hidden at zero, so a Turbo Stream can replace it.
+%span.ui-badge{ id: "review-rail-count-#{key}", hidden: !count&.positive?, data: { testid: "review-rail-count-#{key}" } }= count

@@ -29,6 +29,7 @@ en:
       review_again: "Review the preview again."
       cant_undo: "can't be undone: %{reason}"
       saved: "Suggestion updated."
+      done: "Done. Pick the next suggestion."
       policies_queued: "Review policies queued; results show under Policies."
       imported: "Imported %{count} new merge suggestion(s)."
       keyword_path:
