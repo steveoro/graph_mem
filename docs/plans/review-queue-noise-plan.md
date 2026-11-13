@@ -47,7 +47,7 @@ loose producer thresholds and a per-run cap that never binds.
    - The run stats also count candidates before the cap (merges_queued 290 vs 234 seeded).
 4. **Orphan suggestions without evidence.**
    - The +2 bonus for the agent's active project alone passes `score > 0`: 20 rows with `matched_tokens: []`.
-   - Substring matches of 2-letter tokens ("if" and "sh" in TwelveShifts, "go" in goggles) add 5.
+   - Substring matches of 2-letter tokens ("if" and "sh" in Swiftshop, "go" in goggles) add 5.
 5. **Contradictions.**
    - The `:unknown` fallback pairs any two mention-less facts within 0.15 (`contradiction_detector.rb:89`): 16 of 22,
      Steve's example included. Its keyword paths are just `["goggles_db"]` / `["goggles_main"]`.
