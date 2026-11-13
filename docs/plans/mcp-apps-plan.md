@@ -1,11 +1,12 @@
-# MCP Apps → graph_mem 1.85.0–1.87.0: a graph view and a search view inside the chat
+# MCP Apps → graph_mem 1.87.0–1.89.0: a graph view and a search view inside the chat
 
-**Status (2026-11-12): PLAN, reviewed, all questions answered.** Written from `main` at `30beb6f` (1.84.0) and **reviewed the
-same day at `9df8556`** against three sources: this repo's code, the installed `mcp` 1.9.0 gem source, and the
+**Status (2026-11-13): PLAN, reviewed, all questions answered.** Written from `main` at `30beb6f` (1.84.0) and
+**reviewed at `9df8556`** against three sources: this repo's code, the installed `mcp` 1.9.0 gem source, and the
 live spec (stable 2026-01-26 and the draft). The review changed the first-load design, the tool linkage and the
 view packaging, and added the sections from "Acceptance criteria" on; "What the review changed" lists the
-differences. Steve answered every open question on 2026-11-12 (decisions 6–13). No kickoff yet. File:line
-references were checked at `9df8556`; if a line has moved, find the code by the quoted text, and if the code no
+differences. Steve answered every open question on 2026-11-12 (decisions 6–13). 1.85.0 and 1.86.0 shipped other
+work meanwhile, so this train is now 1.87.0–1.89.0. No kickoff yet. File:line references were checked again at
+`cb44409` (1.86.0); if a line has moved, find the code by the quoted text, and if the code no
 longer matches the description, **stop and ask Steve** instead of improvising. Only `spec/docs` was run.
 
 ## Goal
@@ -218,7 +219,8 @@ What **graph_mem has to wire or hand-roll** (all graph_mem code, no protocol rei
   when a profile or a setting leaves the views out (see "Profiles and the on/off setting").
 - `bin/mcp_stdio_runner.rb:51-53` logs the counts of tools, prompts and templates: add the static resources.
 - **The view runtime** (the HTML document, a ~100-line vanilla `postMessage` bridge, the result → Cytoscape
-  adapter, inlining Cytoscape): nothing in the gem covers it, by design; it is host-side protocol.
+  adapter, inlining Cytoscape): nothing in the gem covers it, by design; it is host-side protocol. The bridge's
+  message checks are under "Rendering and packaging".
 
 ## What changes on the wire (by design; decision 10)
 
@@ -241,8 +243,10 @@ How the specs see these changes:
   unchanged. Step A adds an expectation for it instead of re-recording anything.
 - Three checks compare the served capabilities with `CAPABILITIES.deep_stringify_keys`
   (`spec/requests/mcp_official_spec.rb:66`, `spec/integration/mcp_structured_output_stdio_spec.rb:76`,
-  `script/mcp_compat/claude_client_check.rb:249`). They follow the constant, so they keep passing with the
-  plain-hash form.
+  `script/mcp_compat/claude_client_check.rb:249`). With an on/off setting, one of its two states can't equal a
+  constant. So `CAPABILITIES` stays today's base, and one new method, `ServerFactory.capabilities(apps_enabled:)`,
+  returns the base or the base plus `extensions:`. The server and the three checks all call it, and step A adds
+  an example for each state.
 
 ## Design
 
@@ -284,8 +288,18 @@ The view is on all three profiles (decision 11), so the first rule only matters 
 The on/off setting (decision 12) is `mcp_apps_enabled`, default on: an `AppSettings` field in the
 `:feature_flags` group of `SettingsSchema` (`app/services/settings_schema.rb:120`), with its i18n label and help
 text (`spec/services/settings_schema_spec.rb` requires both). No migration. Servers are built once per transport, so a
-change takes effect after `Transports.reset!` (which closes open MCP sessions) on HTTP, and after a restart on
-stdio. With the setting off, the server declares no extension, links no tool and lists no `ui://` resource:
+change has to rebuild them:
+
+- **HTTP:** saving a changed `mcp_apps_enabled` in System › Settings calls
+  `GraphMem::OfficialMcp.refresh_access!(transports: true)`, the call a change of the allowed hosts or origins
+  already makes (`app/controllers/concerns/mcp_access_settings.rb:51`). It closes the open MCP sessions, and the
+  help text says so. Like that call it is in-process only: with several Puma workers the others pick the change
+  up at their next restart (`lib/graph_mem/official_mcp.rb:44-45`).
+- **Stdio:** the runner builds its server once at boot, so the change needs a restart of the runner. The help
+  text says that too.
+- A Solid Queue worker never serves MCP and needs nothing.
+
+With the setting off, the server declares no extension, links no tool and lists no `ui://` resource:
 today's wire, exactly.
 
 ### Which tools link to which view
@@ -326,10 +340,19 @@ to would be unreachable. The two ways to keep decision 5 were:
 
 On `ui/notifications/tool-result` the view draws that result:
 
-- `traverse_graph` → `{ entities, relations, traversal }` and `find_shortest_path` →
-  `{ found, hop_count, direction, entities, relations }` map straight to nodes and edges. `found: false` shows
-  "no path" instead of an empty canvas.
-- A result with no entities (an empty neighbourhood) shows the two buttons below instead of an empty canvas.
+- `find_shortest_path` → `{ found, hop_count, direction, entities, relations }` maps straight to nodes and
+  edges. `found: false` shows "no path" instead of an empty canvas.
+- `traverse_graph` has two modes, and the host opens the view for both:
+  - **Expansion** (`start_entity_id` alone) → `{ entities, relations, traversal }`, straight to nodes and edges.
+    `include` can leave `entities` out; then the view treats the result as relations-only.
+  - **Relation query** (no `start_entity_id`, or `from_entity_id`/`to_entity_id`;
+    `app/tools/traverse_graph_tool.rb:43-51`, `:86-108`) → **relations only** by default, with ids and no names,
+    and **no limit** (`app/services/relation_query_service.rb:32-41`): `traverse_graph({})` returns every relation
+    in the graph. The view loads the relations' endpoints with batched `get_entities` (below) before drawing.
+- **Draw cap, for any result:** 2,000 nodes (Explore's `MAX_NODES`) and 5,000 edges, with a "showing N of M"
+  note. For a relations-only result the view keeps the first relations until either cap is reached and loads
+  only their endpoints. The edge cap is a first value; step B adjusts it to what Cytoscape draws smoothly.
+- A result with neither entities nor relations shows the two buttons below instead of an empty canvas.
 
 **Loading a subset (decision 3).** Two buttons, "Context project" and "Root entities", start these loads; the
 first calls `get_context`. `search` can't select a project's members or the root entities without a
@@ -340,14 +363,17 @@ entity_types require a query"), and it returns only `entity_id`, `name`, `entity
    no project):
    `traverse_graph(start_entity_id: <project>, direction: "incoming", relation_types: ["part_of"], max_depth: 5,
    max_entities: 1000)` returns the members and their `part_of` edges. The other edges between them come from
-   `get_entities(entity_ids:, relations: "internal")`, in batches (below).
+   batched `get_entities(entity_ids:)` calls (below).
 2. **No context: root entities.** Explore picks `entity_type IN ("Project", NULL)`
    (`app/controllers/api/v1/graph_data_controller.rb:66-70`). Through existing tools: page the unfiltered catalog
    (`search` with no arguments but `page` and `per_page: 100`) and keep the `Project` and untyped rows in the
-   view, then `get_entities(relations: "internal")` for their edges. This shows the same entities as Explore,
+   view, then batched `get_entities` (below) for their edges. This shows the same entities as Explore,
    untyped ones included, at one call per 100 entities of the whole graph. The view stops after 20 pages (2,000
    entities scanned) and says "scanned N of `total_entities`" when it stopped early (decision 8). The loader is
-   one function, so a later `search` change can replace it.
+   one function, so a later `search` change can replace it. A full scan is up to 40 view-initiated calls (20
+   catalog pages and up to 20 `get_entities` batches). A host may ask for consent on each, or add each result
+   to the model's context: step A's manual check records what Claude and Cursor do, and step B keeps this
+   loader only if that is usable. If it isn't, stop and ask Steve.
 3. **Caps:** 1,000 nodes for a project subset (`GraphTraversalService::MAX_ENTITIES`; Explore's
    `GraphDataController::MAX_NODES` is 2,000), with a "showing N of `scope_entity_count`" note from `get_context`.
 
@@ -418,6 +444,17 @@ as graph" switches to Graph mode with the hits' ids. The current query goes to `
   template literals). It fails on any `innerHTML`, `outerHTML`, `insertAdjacentHTML`, `document.write`, `eval(`,
   `new Function`, `fetch(`, `XMLHttpRequest`, `WebSocket`, or `http:`/`https:` URL in the view sources. Text is
   rendered with `textContent`.
+- **The bridge checks every message.** It has to post with target origin `*` (the view doesn't know the host's
+  origin) and it listens on `window`, so:
+  - it accepts a message only when `event.source === window.parent`;
+  - it accepts only JSON-RPC 2.0 objects whose `id` matches a pending request, or whose `method` is one the view
+    handles; everything else is ignored, not treated as an error;
+  - message data reaches the DOM only through `textContent`.
+
+  Don't copy the spec's sample `sendRequest` as is: it rejects a pending request on any unrelated message, so a
+  notification arriving first would fail the call. The view-source spec checks the `event.source` test is
+  present; the system spec (step B) sends a message from another source and an unknown method and checks both
+  are ignored.
 - `_meta.ui`: `prefersBorder: true`, no `csp` (the restrictive default), no `permissions`, no `domain`.
 - **Theming:** read `hostContext.styles.variables` and `theme`, with fallbacks in `:root`, and use the host's font
   variables or system fonts. (The operator UI's own theme switch stays a separate backlog item.)
@@ -440,18 +477,20 @@ as graph" switches to Graph mode with the hits' ids. The current query goes to `
 
 ## Steps (one PR each)
 
-Versions follow 1.84.0. Each PR keeps the default `/mcp` at 12 tools, unchanged tool schemas and results, the
+Versions follow 1.86.0. Each PR keeps the default `/mcp` at 12 tools, unchanged tool schemas and results, the
 operator Explore and Search pages untouched, and its own CHANGELOG entry and docs. Branches are `claude/<topic>`.
 
-### A. Generic resource layer, Apps capability, stub view → 1.85.0
+### A. Generic resource layer, Apps capability, stub view → 1.87.0
 
 - Providers as above; `TemplateResourceProvider` first, in its own commit, with no output change (snapshots
   identical).
-- Declare the extension (plain-hash `extensions:` key); register the `ui://` resource on all three profiles;
+- Declare the extension (plain-hash `extensions:` key, through `ServerFactory.capabilities(apps_enabled:)`);
+  register the `ui://` resource on all three profiles;
   add `_meta.ui.resourceUri` to `traverse_graph` and `find_shortest_path` through `ToolWrapper`: a
   per-tool `mcp_ui_view` setting on `ApplicationTool`, next to `title` (`app/tools/application_tool.rb:57-63`),
   empty by default, applied with `MCP::Apps.tool_meta` only when the server registers that view.
-- The `mcp_apps_enabled` setting (decision 12), with a spec that the wire is today's when it is off.
+- The `mcp_apps_enabled` setting (decision 12): a spec that the wire is today's when it is off, and a spec that
+  saving a change rebuilds the HTTP servers.
 - Stub HTML: the `ui/initialize` handshake, a title, the tool result's entity count, the teardown reply.
 - Specs:
   - `initialize` carries the extension, and the rest of the capabilities are unchanged;
@@ -467,14 +506,17 @@ operator Explore and Search pages untouched, and its own CHANGELOG entry and doc
   short MCP Apps section.
 - Manual check, recorded in the PR: the stub renders in Claude (first, because of ext-apps #671) and in Cursor
   (global server entry) when the agent calls a linked tool; the view's own `tools/call` to an unlinked tool
-  (`get_entities`) works, and whether the host asks for consent.
+  (`get_entities`) works; whether the host asks for consent on each view-initiated call, and whether those
+  results reach the model's context.
 
-### B. Graph mode → 1.86.0
+### B. Graph mode → 1.88.0
 
-- The bridge helper, the HTML builder with inlined Cytoscape and config (trailer and `export` rewrites, with their
-  specs), the result → elements adapter for `traverse_graph`, `find_shortest_path`, `get_entities` and catalog
-  results, the two subset loads (decision 3), the node panel, expand, path, local scoping, model-context updates,
-  host theming, fullscreen. A spec checks that the view sources name no tool but the five the view may call.
+- The bridge helper with its message checks, the HTML builder with inlined Cytoscape and config (trailer and
+  `export` rewrites, with their specs), the result → elements adapter for `traverse_graph`,
+  `find_shortest_path`, `get_entities` and catalog results, the draw cap, the two subset loads (decision 3), the
+  node panel, expand, path, local scoping, model-context updates, host theming, fullscreen.
+- A spec checks that the view sources name no tool but the five the view may call.
+- Recorded envelopes cover each `traverse_graph` mode: expansion, relations-only and `include: ["traversal"]`.
 - Specs: there is no JS test runner in the repo (no `package.json`), so the adapter is tested in the browser. The
   system-spec setup has headless Chrome (`spec/support/system.rb`). A system spec writes the built HTML to a
   temporary file, opens it inside a small stub-host page that plays the `postMessage` protocol with envelopes
@@ -482,7 +524,7 @@ operator Explore and Search pages untouched, and its own CHANGELOG entry and doc
   counts and the absence of console errors. If headless Chrome can't load a local file that way without a new
   route, a gem or a package, stop there and do a manual check instead; say so in the PR.
 
-### C. Search mode, docs → 1.87.0
+### C. Search mode, docs → 1.89.0
 
 - Search mode (filters, paging, click-through, "Show as graph"), the user guide page under `docs/guides/` (what
   the views do, how to open them, which clients render them, the Cursor global-entry note, that view calls count
