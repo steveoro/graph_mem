@@ -6,7 +6,7 @@ live spec (stable 2026-01-26 and the draft). The review changed the first-load d
 view packaging, and added the sections from "Acceptance criteria" on; "What the review changed" lists the
 differences. Steve answered every open question on 2026-11-12 (decisions 6–13). No kickoff yet. File:line
 references were checked at `9df8556`; if a line has moved, find the code by the quoted text, and if the code no
-longer matches the description, **stop and ask Steve** instead of improvising. **No spec was run.**
+longer matches the description, **stop and ask Steve** instead of improvising. Only `spec/docs` was run.
 
 ## Goal
 
