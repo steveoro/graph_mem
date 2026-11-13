@@ -212,6 +212,20 @@
       "divergence": "graph_mem can't echo the invalid name back and answers -32603 with the id (Ruby SDK 1.8.2 and 1.9.0, #629); Node decodes the byte as U+FFFD and answers -32602 \"Tool synth-\uFFFD not found\". Both keep serving."
     },
     {
+      "name": "a method name that is not valid UTF-8, then a ping",
+      "send": [
+        {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "2025-11-25", "capabilities": {}, "clientInfo": {"name": "mcp-compat", "version": "0"}}},
+        {"jsonrpc": "2.0", "method": "notifications/initialized"},
+        {"raw_bytes_hex": "7b226a736f6e727063223a22322e30222c226964223a34332c226d6574686f64223a22746f6f6c732fff6c697374227d"},
+        {"jsonrpc": "2.0", "id": 6, "method": "ping"}
+      ],
+      "expect": {
+        "graph_mem": {"replies": 3, "messages": [{"id": 1, "result_has": ["protocolVersion"]}, {"id": 43, "error_code": -32600}, {"id": 6, "result": {}}]},
+        "reference": {"replies": 3, "messages": [{"id": 1, "result_has": ["protocolVersion"]}, {"id": 43, "error_code": -32601}, {"id": 6, "result": {}}]}
+      },
+      "divergence": "graph_mem refuses the method as an invalid request, -32600 with the id (Ruby SDK 1.10.0, #672); Node decodes the byte as U+FFFD and answers -32601 Method not found. Both keep serving."
+    },
+    {
       "name": "tools/list with a non-object _meta, then a ping",
       "send": [
         {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "2025-11-25", "capabilities": {}, "clientInfo": {"name": "mcp-compat", "version": "0"}}},
