@@ -57,7 +57,7 @@ RSpec.describe EntityMergeEvidence do
       clique = 5.times.map { |index| MemoryEntity.create!(name: "Clique#{index}", entity_type: "Task") }
       clique.each { |member| assign_test_embedding!(member, 1.0, 0.0) }
       share(clique, "Status: Completed")
-      share(clique, "Successfully refactored to use fast-mcp syntax.")
+      share(clique, "Successfully refactored to use the new syntax.")
 
       match = described_class.send(:score_pair, clique.first.reload, clique.last.reload, 0.2)
 
@@ -65,11 +65,14 @@ RSpec.describe EntityMergeEvidence do
       expect(match.reasons.join).not_to include("shared_observations")
     end
 
-    it "does not count a long fact held by three entities" do
+    it "counts a long fact a triplicate shares, but not one held by four entities (Graphy, #172)" do
       left, right = pair_at_distance(0.2)
       third = MemoryEntity.create!(name: "MergeThird", entity_type: "Task")
-      share([ left, right, third ], "The importer retries three times with exponential backoff, always.")
+      fact = "The importer retries three times with exponential backoff, always."
+      share([ left, right, third ], fact)
+      expect(described_class.candidates_for(left).map(&:target)).to include(right)
 
+      share([ MemoryEntity.create!(name: "MergeFourth", entity_type: "Task") ], fact)
       expect(described_class.candidates_for(left)).to be_empty
     end
   end

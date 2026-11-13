@@ -2,23 +2,22 @@
 
 # Decides whether an observation content that two entities share is distinctive enough to count
 # as evidence that they are related or the same thing. Boilerplate ("Status: Completed",
-# "Successfully refactored to use fast-mcp syntax.") sits on dozens of entities and proves nothing.
+# "Successfully refactored to use the new syntax.") sits on dozens of entities and proves nothing.
 #
-# Content is distinctive when ALL of these hold:
-# - it is at least {MIN_LENGTH} characters;
-# - it is not a "Key: value" metadata line ({METADATA_LINE});
-# - at most {MAX_HOLDERS} entities hold it as an active observation.
+# Content is distinctive when both hold:
+# - it is at least {MIN_LENGTH} characters (short "Key: value" lines like "Status: Completed" fail it);
+# - at most {MAX_HOLDERS} entities hold it as an active observation (three copies of one duplicated
+#   entity still count; boilerplate sits on many more).
 #
-# Producers should call {.distinctive_contents} once per set of contents: it runs one grouped
-# count query per batch, never one per pair.
+# {.distinctive_contents} runs one grouped count query per batch of contents. EntityMergeEvidence
+# calls it per scored pair, and only for pairs that share a long line, which is rare.
 #
 # @example
 #   ObservationEvidence.distinctive_contents(shared_contents) # => Set of the contents worth counting
 #   ObservationEvidence.distinctive?("Status: Completed")     # => false
 class ObservationEvidence
   MIN_LENGTH = 40
-  MAX_HOLDERS = 2
-  METADATA_LINE = /\A[\w ]{2,20}:\s/
+  MAX_HOLDERS = 3
   BATCH_SIZE = 500
 
   class << self
@@ -43,8 +42,7 @@ class ObservationEvidence
 
     # Cheap checks that need no query.
     def plausible?(content)
-      text = content.to_s
-      text.length >= MIN_LENGTH && !METADATA_LINE.match?(text)
+      content.to_s.length >= MIN_LENGTH
     end
 
     # One grouped query per batch: how many distinct entities hold each content as active.

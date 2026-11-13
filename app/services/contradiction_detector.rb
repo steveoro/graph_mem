@@ -106,7 +106,8 @@ class ContradictionDetector
 
     # Whether two facts may form a contradiction pair, from their keyword paths (both computed): about
     # the same subject (1.82.0; applying a contradiction obsoletes one side, so being related isn't
-    # enough), counting no mention of another project (1.85.0), and not two dated events. Two facts
+    # enough), counting no mention of another project (1.85.0; see .foreign_only? for where such a pair goes), and
+    # not two dated events. Two facts
     # that mention no entity never pair since 1.85.0 (see .fallback?).
     #
     # @param first [MemoryObservation]
@@ -126,18 +127,38 @@ class ContradictionDetector
       own if own.same_subject
     end
 
-    # Whether a pair .pairable refuses is an `:unknown` fallback pair (1.85.0): neither fact mentions
-    # an entity, the paths can't tell (FactKeywords::Relatedness `:unknown`), the two are within
-    # STRICT_MAX_DISTANCE, and they aren't two dated events. Such pairs go to FactSupersede.
+    # Whether a pair .pairable refuses goes to FactSupersede instead (1.85.0), unless the two are dated
+    # events:
+    # - an `:unknown` pair: neither fact mentions an entity, the paths can't tell
+    #   (FactKeywords::Relatedness `:unknown`), and the two are within STRICT_MAX_DISTANCE;
+    # - a .foreign_only? pair (Graphy, #172): one owner's two facts about another project's thing
+    #   ("It reads X" / "It doesn't read X") may be a changed dependency, or two passing mentions.
     #
     # @param first [MemoryObservation] with its keyword path computed
     # @param second [MemoryObservation]
     # @param distance [Float] their cosine distance
     # @return [Boolean]
     def fallback?(first, second, distance)
-      return false if distance.to_f > STRICT_MAX_DISTANCE || dated_events?(first.content, second.content)
+      return false if dated_events?(first.content, second.content)
+      return true if foreign_only?(first, second)
+      return false if distance.to_f > STRICT_MAX_DISTANCE
 
       FactKeywords::Relatedness.compare(first, second).subject == :unknown
+    end
+
+    # Whether two facts of one owner share a subject only through mentions of another project's
+    # things (its root, or entities it owns). The fallback lets the judge decide these, with the guard
+    # lowered from "keep" to "context" (FactSupersede::ContradictionFallback).
+    #
+    # @param first [MemoryObservation] with its keyword path computed
+    # @param second [MemoryObservation]
+    # @return [Boolean]
+    def foreign_only?(first, second)
+      return false unless first.memory_entity_id == second.memory_entity_id
+      return false unless FactKeywords::Relatedness.compare(first, second).same_subject
+
+      foreign = foreign_mentions(first, second)
+      foreign.any? && !FactKeywords::Relatedness.compare(first, second, ignore: foreign).same_subject
     end
 
     # The re-check behind review policies (1.85.0): whether two live observations would still make a

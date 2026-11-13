@@ -66,8 +66,8 @@ RSpec.describe DreamStateCompactor, type: :model do
     end
 
     it "leaves an orphan with no suggestion alone: no review row, no queued stat" do
-      MemoryEntity.create!(name: "TwelveShifts v2", entity_type: "Project")
-      orphan = MemoryEntity.create!(name: "Ensure tmp Directory Exists Before File Write", entity_type: "Task",
+      MemoryEntity.create!(name: "Swiftshop v2", entity_type: "Project")
+      orphan = MemoryEntity.create!(name: "Make Sure The Scratch Folder Exists Before Writing", entity_type: "Task",
                                     description: "Create it if missing")
       orphan_run = CompactionRun.create!(status: "running", phase: "orphans", stats: {}, started_at: Time.current)
       compactor = described_class.new(run: orphan_run)

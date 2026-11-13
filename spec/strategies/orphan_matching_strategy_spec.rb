@@ -169,14 +169,14 @@ RSpec.describe OrphanMatchingStrategy, type: :model do
   describe "suggestion gates" do
     after { GraphMemContext.clear! }
 
-    it "does not suggest a project for a 2-letter substring token (if in TwelveShifts)" do
-      MemoryEntity.create!(name: "TwelveShifts v2", entity_type: "Project")
-      orphan = MemoryEntity.create!(name: "Ensure tmp Directory Exists Before File Write", entity_type: "Task",
+    it "does not suggest a project for a 2-letter substring token (if in Swiftshop)" do
+      MemoryEntity.create!(name: "Swiftshop v2", entity_type: "Project")
+      orphan = MemoryEntity.create!(name: "Make Sure The Scratch Folder Exists Before Writing", entity_type: "Task",
                                     description: "Create it if missing")
 
       matches = strategy.match_to_projects(orphan)
 
-      expect(matches.map { |m| m[:project].name }).not_to include("TwelveShifts v2")
+      expect(matches.map { |m| m[:project].name }).not_to include("Swiftshop v2")
     end
 
     it "does not suggest the context project from the +2 bonus alone" do
@@ -187,23 +187,23 @@ RSpec.describe OrphanMatchingStrategy, type: :model do
     end
 
     it "does not let the context bonus lift one name fragment over the floor" do
-      project = MemoryEntity.create!(name: "TwelveShifts v2", entity_type: "Project")
+      project = MemoryEntity.create!(name: "Swiftshop v2", entity_type: "Project")
       GraphMemContext.current_project_id = project.id
-      orphan = MemoryEntity.create!(name: "Shift rota export", entity_type: "Task")
+      orphan = MemoryEntity.create!(name: "Shop rota export", entity_type: "Task")
 
       expect(strategy.match_to_projects(orphan).map { |m| m[:project].id }).not_to include(project.id)
     end
 
     it "still suggests a project matched on real tokens" do
-      project = MemoryEntity.create!(name: "goggles_admin2", entity_type: "Project")
-      orphan = MemoryEntity.create!(name: "Modify Rspec Binstub", entity_type: "Task",
-                                    description: "goggles admin2 binstub")
+      project = MemoryEntity.create!(name: "relay_admin2", entity_type: "Project")
+      orphan = MemoryEntity.create!(name: "Patch Test Runner Script", entity_type: "Task",
+                                    description: "relay admin2 script")
 
       match = strategy.match_to_projects(orphan).find { |m| m[:project].id == project.id }
 
       expect(match).to be_present
       expect(match[:score]).to be >= described_class::MIN_SUGGESTION_SCORE
-      expect(match[:matched_tokens]).to include("goggles", "admin2")
+      expect(match[:matched_tokens]).to include("relay", "admin2")
     end
   end
 

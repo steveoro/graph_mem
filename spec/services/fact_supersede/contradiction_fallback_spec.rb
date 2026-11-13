@@ -89,6 +89,21 @@ RSpec.describe FactSupersede::ContradictionFallback do
     expect(bodies).to be_empty
   end
 
+  it "judges one owner's facts about another project's thing, guarded as context instead of kept (Graphy, #172)" do
+    fs_project!("Ledger Service")
+    was = fs_observe!(deployer, "It reads the invoices from Ledger Service.", created_at: 3.days.ago)
+    now = fs_observe!(deployer, "It no longer reads the invoices from Ledger Service.")
+    # Paths set by hand: both mention the other root (as a part_of edge between two roots once made it).
+    [ was, now ].each { |fact| fact.update_columns(keywords: [ "Gadget Project", "Deployer", "Ledger Service" ], keywords_at: Time.current) }
+    expect(ContradictionDetector.foreign_only?(was.reload, now.reload)).to be(true)
+    answers << [ verdict(was, "superseded") ]
+
+    item = described_class.call([ pair(was, now) ]).items.sole
+
+    expect(item).to include("fact_observation_id" => now.id, "observation_id" => was.id, "guard" => FactSupersede::LegacyGuard::CONTEXT)
+    expect(item["guard_reason"]).to include("names another project (Ledger Service)", "the judge decides")
+  end
+
   it "skips quietly when the judge LLM isn't usable" do
     AppSettings.enable_llm_summarization = false
 
@@ -153,11 +168,14 @@ RSpec.describe FactSupersede::ContradictionFallback do
     expect(result.leftovers.map(&:observation_id_1)).to eq([ older.id ])
   end
 
-  it "does nothing with fact supersede off: no judge call, no item, no leftover" do
+  it "judges nothing with fact supersede off, but keeps the pairs as leftovers for when it's back on (Graphy, #172)" do
     AppSettings.fact_supersede_enabled = false
     answers << [ verdict(older, "superseded") ]
 
-    expect(described_class.call([ pair ])).to have_attributes(items: [], judge_calls: 0, outcomes: {}, leftovers: [])
+    result = described_class.call([ pair ])
+
+    expect(result).to have_attributes(items: [], judge_calls: 0, outcomes: {})
+    expect(result.leftovers.map { |left| [ left.observation_id_1, left.observation_id_2 ] }).to eq([ [ older.id, newer.id ] ])
     expect(bodies).to be_empty
   ensure
     AppSettings.where(var: "fact_supersede_enabled").delete_all

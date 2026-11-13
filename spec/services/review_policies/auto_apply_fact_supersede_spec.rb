@@ -80,6 +80,15 @@ RSpec.describe ReviewPolicies::AutoApplyFactSupersede do
       AppSettings.where(var: "enable_review_policy_no_shared_subject").delete_all
     end
 
+    it "never applies a contradiction-fallback row, even when its newer side is an operator-confirmed fact (Graphy, #172)" do
+      fact = fs_fact!(gadget, tags: [ "replaces:fast-mcp" ])
+      row = judged(fact).sole
+      row.update!(payload: row.payload.merge("origin" => FactSupersede::ContradictionFallback::ORIGIN))
+
+      expect(run["acted"]).to eq(0)
+      expect(old.reload).to be_active
+    end
+
     it "never applies an unjudged row" do
       judged(fs_fact!(gadget, tags: [ "replaces:fast-mcp" ]), verdict: "unjudged", confidence: 0.5)
       AppSettings.auto_apply_fact_supersede_min_confidence = 0.8

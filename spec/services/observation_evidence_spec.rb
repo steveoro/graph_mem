@@ -24,14 +24,20 @@ RSpec.describe ObservationEvidence do
       expect(described_class.distinctive_contents([ distinctive_fact ])).to include(distinctive_fact)
     end
 
-    it "drops a long fact held by three entities" do
+    it "keeps a long fact held by three entities: a triplicate's shared fact (Graphy, #172)" do
       hold(%w[EvA EvB EvC].map { |name| entity(name) }, distinctive_fact)
+
+      expect(described_class.distinctive_contents([ distinctive_fact ])).to include(distinctive_fact)
+    end
+
+    it "drops a long fact held by four entities" do
+      hold(%w[EvA EvB EvC EvD].map { |name| entity(name) }, distinctive_fact)
 
       expect(described_class.distinctive_contents([ distinctive_fact ])).to be_empty
     end
 
     it "does not count obsolete holders" do
-      holders = %w[EvA EvB EvC].map { |name| entity(name) }
+      holders = %w[EvA EvB EvC EvD].map { |name| entity(name) }
       hold(holders, distinctive_fact)
       MemoryObservation.where(memory_entity: holders.last).first.mark_obsolete!
 
@@ -45,15 +51,15 @@ RSpec.describe ObservationEvidence do
       expect(described_class.distinctive_contents([ short ])).to be_empty
     end
 
-    it "drops Key: value metadata lines even when long and rare" do
-      metadata = "Status: Completed after a very long reviewed and verified rollout"
-      hold([ entity("EvA"), entity("EvB") ], metadata)
+    it "keeps long prose with a label in front (Graphy, #172): short Key: value lines fail the length" do
+      labelled = "Decision: always validate uploads server-side before storing them"
+      hold([ entity("EvA"), entity("EvB") ], labelled)
 
-      expect(described_class.distinctive_contents([ metadata ])).to be_empty
+      expect(described_class.distinctive_contents([ labelled ])).to include(labelled)
     end
 
     it "drops a boilerplate sentence held by many entities" do
-      boilerplate = "Successfully refactored to use fast-mcp syntax."
+      boilerplate = "Successfully refactored to use the new syntax."
       hold(5.times.map { |index| entity("Clique#{index}") }, boilerplate)
 
       expect(described_class.distinctive_contents([ boilerplate ])).to be_empty
@@ -77,7 +83,7 @@ RSpec.describe ObservationEvidence do
   end
 
   describe ".distinctive?" do
-    it "is true for a rare long fact and false for metadata" do
+    it "is true for a rare long fact and false for a short metadata line" do
       hold([ entity("EvA"), entity("EvB") ], distinctive_fact)
 
       expect(described_class.distinctive?(distinctive_fact)).to be(true)

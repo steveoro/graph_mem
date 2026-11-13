@@ -7,16 +7,16 @@ require "rails_helper"
 # `:unknown` fallback (two close facts that mention no entity) no longer makes contradiction rows:
 # ContradictionDetector.scan hands those pairs over as `fallback` (FactSupersede::ContradictionFallback).
 RSpec.describe ContradictionDetector, "noise rules", :with_test_embeddings do
-  let!(:main) { MemoryEntity.create!(name: "goggles_main", entity_type: "Project") }
+  let!(:main) { MemoryEntity.create!(name: "suite_web", entity_type: "Project") }
   # The production data smell: a Project root part_of another one.
   let!(:db) do
-    MemoryEntity.create!(name: "goggles_db", entity_type: "Project").tap do |root|
+    MemoryEntity.create!(name: "suite_core", entity_type: "Project").tap do |root|
       MemoryRelation.create!(from_entity: root, to_entity: main, relation_type: "part_of")
     end
   end
-  let!(:page) { member(main, "RankingPage") }
-  let!(:swimmer) { member(main, "Swimmer") }
-  let!(:db_user) { member(db, "GogglesDb::User") }
+  let!(:page) { member(main, "ScorePage") }
+  let!(:player) { member(main, "Player") }
+  let!(:db_user) { member(db, "CoreLib::User") }
   let(:service) { EmbeddingService.new(config: { url: "http://test", model: "test", provider: "ollama", dims: 768 }) }
 
   before do
@@ -42,16 +42,16 @@ RSpec.describe ContradictionDetector, "noise rules", :with_test_embeddings do
   def ids(results) = results.map { |result| [ result.observation_id_1, result.observation_id_2 ].sort }
 
   it "still pairs two facts about the same subject of their own project" do
-    first = fact(page, "It lists Swimmer rankings.", mentions: %w[Swimmer])
-    second = fact(page, "It no longer lists Swimmer rankings.", mentions: %w[Swimmer])
+    first = fact(page, "It lists Player scores.", mentions: %w[Player])
+    second = fact(page, "It no longer lists Player scores.", mentions: %w[Player])
 
     expect(ids(described_class.detect(page.id, persist: false))).to eq([ [ first.id, second.id ].sort ])
     expect(described_class.still_pairable?(first, second)).to be(true)
   end
 
   it "skips two dated events: two events don't contradict" do
-    first = fact(page, "[2026-08-26] It lists Swimmer rankings.", mentions: %w[Swimmer])
-    second = fact(page, "[2026-09-02] It no longer lists Swimmer rankings.", mentions: %w[Swimmer])
+    first = fact(page, "[2026-08-26] It lists Player scores.", mentions: %w[Player])
+    second = fact(page, "[2026-09-02] It no longer lists Player scores.", mentions: %w[Player])
 
     scan = described_class.scan(page.id, persist: false)
 
@@ -60,9 +60,9 @@ RSpec.describe ContradictionDetector, "noise rules", :with_test_embeddings do
     expect(described_class.still_pairable?(first, second)).to be(false)
   end
 
-  it "skips two dated release notes held by two Project roots (Steve's #3620 / #3622)" do
-    fact(db, "[2026-08-26] goggles_db v0.10.40 phase 1: added GogglesDb::RankingPosComponent.")
-    fact(main, "[2026-08-26] goggles_main v0.10.40 phase 3: removed the local RankingPosComponent.")
+  it "skips two dated release notes held by two Project roots (the operator's example)" do
+    fact(db, "[2026-08-26] suite_core v0.10.40 phase 1: added CoreLib::ScoreComponent.")
+    fact(main, "[2026-08-26] suite_web v0.10.40 phase 3: removed the local ScoreComponent.")
 
     scan = described_class.scan(main.id, persist: false)
 
@@ -70,8 +70,8 @@ RSpec.describe ContradictionDetector, "noise rules", :with_test_embeddings do
   end
 
   it "doesn't pair or hand over two undated facts of two Project roots" do
-    first = fact(db, "Rankings are computed per season.")
-    second = fact(main, "Rankings are not computed per season.")
+    first = fact(db, "Scores are computed per season.")
+    second = fact(main, "Scores are not computed per season.")
 
     scan = described_class.scan(main.id, persist: false)
 
@@ -79,29 +79,37 @@ RSpec.describe ContradictionDetector, "noise rules", :with_test_embeddings do
     expect(described_class.still_pairable?(first, second)).to be(false)
   end
 
-  it "doesn't count a shared mention of another project's root as the same subject (rows 804/805)" do
-    first = fact(page, "It reads rankings from goggles_db.", mentions: %w[goggles_db])
-    second = fact(page, "It does not read rankings from goggles_db.", mentions: %w[goggles_db])
+  it "hands one owner's two facts about another project's root to the judge instead of pairing them (Graphy, #172)" do
+    first = fact(page, "It reads scores from suite_core.", mentions: %w[suite_core])
+    second = fact(page, "It does not read scores from suite_core.", mentions: %w[suite_core])
 
-    expect(described_class.detect(page.id, persist: false)).to be_empty
+    scan = described_class.scan(page.id, persist: false)
+
+    expect(scan.pairs).to be_empty
+    expect(ids(scan.fallback)).to eq([ [ first.id, second.id ].sort ])
     expect(described_class.still_pairable?(first, second)).to be(false)
+    expect(described_class.foreign_only?(first, second)).to be(true)
   end
 
-  it "doesn't count a shared mention of an entity owned by another project (rows 802/803)" do
-    fact(page, "It shows the GogglesDb::User name.", mentions: %w[GogglesDb::User])
-    fact(page, "It never shows the GogglesDb::User name.", mentions: %w[GogglesDb::User])
+  it "hands over a shared mention of an entity owned by another project the same way" do
+    first = fact(page, "It shows the CoreLib::User name.", mentions: %w[CoreLib::User])
+    second = fact(page, "It never shows the CoreLib::User name.", mentions: %w[CoreLib::User])
 
-    expect(described_class.detect(page.id, persist: false)).to be_empty
+    scan = described_class.scan(page.id, persist: false)
+
+    expect(scan.pairs).to be_empty
+    expect(ids(scan.fallback)).to eq([ [ first.id, second.id ].sort ])
   end
 
   it "still pairs on an own-project mention next to another project's one" do
-    first = fact(page, "It reads Swimmer rankings from goggles_db.", mentions: %w[Swimmer goggles_db])
-    second = fact(page, "It does not read Swimmer rankings from goggles_db.", mentions: %w[Swimmer goggles_db])
+    first = fact(page, "It reads Player scores from suite_core.", mentions: %w[Player suite_core])
+    second = fact(page, "It does not read Player scores from suite_core.", mentions: %w[Player suite_core])
 
     pair = described_class.detect(page.id, persist: false).sole
 
     expect([ pair.observation_id_1, pair.observation_id_2 ].sort).to eq([ first.id, second.id ].sort)
-    expect(pair.shared_keywords).to eq(%w[Swimmer])
+    expect(pair.shared_keywords).to eq(%w[Player])
+    expect(described_class.foreign_only?(first, second)).to be(false)
   end
 
   it "hands the `:unknown` fallback over instead of making a contradiction pair (Steve, decision 2)" do
@@ -120,9 +128,9 @@ RSpec.describe ContradictionDetector, "noise rules", :with_test_embeddings do
 
   describe ".still_pairable?" do
     it "is false once either side is inactive, or for the same polarity" do
-      first = fact(page, "It lists Swimmer rankings.", mentions: %w[Swimmer])
-      second = fact(page, "It no longer lists Swimmer rankings.", mentions: %w[Swimmer])
-      same = fact(page, "It sorts Swimmer rankings.", mentions: %w[Swimmer])
+      first = fact(page, "It lists Player scores.", mentions: %w[Player])
+      second = fact(page, "It no longer lists Player scores.", mentions: %w[Player])
+      same = fact(page, "It sorts Player scores.", mentions: %w[Player])
 
       expect(described_class.still_pairable?(first, same)).to be(false)
       second.mark_obsolete!(reason: "synthetic")
@@ -130,8 +138,8 @@ RSpec.describe ContradictionDetector, "noise rules", :with_test_embeddings do
     end
 
     it "computes pending keyword paths first" do
-      first = MemoryObservation.create!(memory_entity: page, content: "It lists Swimmer rankings.")
-      second = MemoryObservation.create!(memory_entity: page, content: "It no longer lists Swimmer rankings.")
+      first = MemoryObservation.create!(memory_entity: page, content: "It lists Player scores.")
+      second = MemoryObservation.create!(memory_entity: page, content: "It no longer lists Player scores.")
 
       expect(described_class.still_pairable?(first, second)).to be(true)
       expect(first.reload.keywords_at).to be_present

@@ -15,7 +15,7 @@ class OrphanMatchingStrategy
   # Lowest score worth suggesting: an exact name or alias token, or two fragments. One fragment (5)
   # plus the context bonus (2) stays below it, so a suggestion never depends on the active context.
   MIN_SUGGESTION_SCORE = 8
-  # Shortest token allowed to match by substring ("if" must not hit "TwelveShifts")
+  # Shortest token allowed to match by substring ("if" must not hit "Swiftshop")
   MIN_SUBSTRING_TOKEN_LENGTH = 3
 
   def initialize
@@ -158,7 +158,7 @@ class OrphanMatchingStrategy
       token_matched = false
       substring_ok = token.length >= MIN_SUBSTRING_TOKEN_LENGTH
 
-      # Exact tokens first: an exact alias token ("coach" for CoachInABox) beats a name substring.
+      # Exact tokens first: an exact alias token ("gizmo" for a project aliased gizmo) beats a name substring.
       if project_name_tokens.include?(token)
         score += 10
         token_matched = true

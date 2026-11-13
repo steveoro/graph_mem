@@ -63,7 +63,12 @@ module FactSupersede
 
     # @see .call
     def call
-      return result([]) if @pairs.empty? || !AppSettings.fact_supersede_enabled?
+      return result([]) if @pairs.empty?
+      unless AppSettings.fact_supersede_enabled?
+        # Kept for the next scan (the retry list), so turning it back on loses nothing (Graphy, #172).
+        @leftovers.concat(@pairs)
+        return result([])
+      end
 
       entries = known_filter(@pairs.filter_map { |pair| entry(pair) })
       return result([]).tap { @leftovers.concat(entries.map(&:last)) } unless Llm::Router.usable?(:judge)
@@ -118,8 +123,18 @@ module FactSupersede
       return decide(pair, :kept, "kept: two projects") unless fact.fact_project_id == older.fact_project_id
 
       candidate = candidate(older, pair.distance)
-      candidate.guard, candidate.guard_reason = LegacyGuard.new(fact).check(older)
+      candidate.guard, candidate.guard_reason = guard(fact, older)
       candidate.guard == LegacyGuard::KEEP ? decide(pair, :kept, "kept: #{candidate.guard_reason}") : [ fact, candidate ]
+    end
+
+    # LegacyGuard's answer, except that a pair one owner holds about another project's thing
+    # (ContradictionDetector.foreign_only?) names that project by nature: "keep" becomes "context", so
+    # the judge decides and the row is never auto-applied (Graphy, #172).
+    def guard(fact, older)
+      guard, reason = LegacyGuard.new(fact).check(older)
+      return [ guard, reason ] unless guard == LegacyGuard::KEEP && ContradictionDetector.foreign_only?(fact, older)
+
+      [ LegacyGuard::CONTEXT, "#{reason}: about another project's thing, the judge decides" ]
     end
 
     def decide(pair, counter, outcome)

@@ -63,8 +63,9 @@ loose producer thresholds and a per-run cap that never binds.
 - **A1. Boilerplate filter (shared).** A small service, e.g. `ObservationEvidence.distinctive?(content)`, used by
   both producers. Shared content counts as evidence only when all of these hold:
   - it is at least 40 chars;
-  - it is not a `Key: value` line (`/\A[\w ]{2,20}:\s/`);
-  - it is held by ≤ 2 entities (one grouped count per run, not a query per pair).
+  - it is held by ≤ 3 entities (one grouped count per batch of contents).
+  - Review (Graphy, #172): the `Key: value` pattern was dropped (short ones already fail the length; it only hid
+    labelled prose), and 3 holders are allowed so a triplicate's shared fact still counts.
 - **A2. Relationship proposals.** Drop the identical-content `relates_to` rule (0 of 31 approvals ever came from it;
   decision 1). `solves` needs ≥ 3 shared terms, the existing high-band line. Do not add an IDF cutoff on `solves`:
   it would lose 23-30 of the 31 approvals. **171 → 2.**
@@ -136,7 +137,7 @@ nightly is safe.
 1. The identical-content `relates_to` rule is dropped entirely.
 2. The `:unknown` pairs go through FactSupersede (A5).
 3. Night jobs: the catch-up job (D, option b), in a follow-up PR.
-   - wks-0 is off at night, and Steve runs all scheduled jobs at lunch.
+   - The host is off at night, and Steve runs all scheduled jobs at lunch.
    - The catch-up makes that press optional: whenever the host is up, the overdue daily jobs run.
 
 ## Graph data (by hand, not code)
@@ -167,3 +168,13 @@ nightly is safe.
 - `StillQualifies` dismisses an old-gate row and keeps a qualifying one.
 - Full suite with the test DB truncated before and after; rubocop.
 - On production after deploy: "Run policies now", then compare the counts per kind with the table above.
+
+## Review notes (Graphy, #172)
+
+- `solves` with exactly 2 shared terms: 0 of the 31 approved rows (they had 3 to 24), so `still_qualifies` dismissing
+  pending 2-term `solves` rows loses no kind of row the operator ever approved.
+- Another project's mention: on one owner, two facts that share a subject only through another project's thing
+  (`ContradictionDetector.foreign_only?`) go to the fallback judge, with LegacyGuard's "keep" lowered to "context",
+  instead of being dropped: "It reads X" / "It doesn't read X" may be a changed dependency.
+- `bin/rails review:still_qualifies_report` counts, read-only, what the policy would dismiss per kind, so the 447 → ~40
+  estimate can be checked before "Run policies now".

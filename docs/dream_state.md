@@ -83,7 +83,7 @@ Each run progresses through three phases in order:
 2. **Entity merge scan** — if the entity has an embedding and is not a `Project`:
   - Find up to 3 candidates with cosine distance **< 0.30** (`REVIEW_MERGE_DISTANCE`), excluding Projects, **requiring the same `entity_type`**, and `id > entity.id` for deterministic ordering.
   - If distance **< 0.10** (`AUTO_MERGE_DISTANCE`), auto-merge via `NodeOperationsStrategy#merge_into`.
-  - Otherwise, queue a merge review item, but only when the pair's evidence score reaches `EntityMergeEvidence::REVIEW_SCORE` (6). Distance in the review band scores 4 and each shared observation adds 2 (max 6), so a distance-only pair is not queued. A shared observation counts only when `ObservationEvidence` finds it distinctive: at least 40 characters, not a `Key: value` line, held by at most 2 entities.
+  - Otherwise, queue a merge review item, but only when the pair's evidence score reaches `EntityMergeEvidence::REVIEW_SCORE` (6). Distance in the review band scores 4 and each shared observation adds 2 (max 6), so a distance-only pair is not queued. A shared observation counts only when `ObservationEvidence` finds it distinctive: at least 40 characters and held by at most 3 entities.
 
 `Project` entities are never auto-merged or queued for merge review.
 

@@ -16,9 +16,24 @@ module ReviewPolicies
   # grows is proposed again. Reverse: Undo the run, or Restore the row.
   #
   #   ReviewPolicies::StillQualifies.new.call # => { "acted" => 400, "skipped" => 0, ... }
+  #   ReviewPolicies::StillQualifies.preview  # => { "entity_merge" => { "pending" => 234, "below_bar" => 208 }, ... }
   class StillQualifies < Base
     KINDS = %w[entity_merge relationship_proposal orphan_parent].freeze
     REASON = "below the current evidence bar"
+
+    # What a run would dismiss, read-only and without the per-run limit (`bin/rails review:still_qualifies_report`).
+    # @return [Hash{String => Hash{String => Integer}}] per kind: "pending" rows and how many are "below_bar"
+    def self.preview
+      policy = new
+      KINDS.index_with do |kind|
+        rows = MaintenanceReportRow.pending.where(kind: kind)
+        { "pending" => rows.count, "below_bar" => rows.find_each.count { |row| policy.dismissible?(row) } }
+      end
+    end
+
+    # @param row [MaintenanceReportRow]
+    # @return [Boolean] whether a run would dismiss the row now
+    def dismissible?(row) = below_bar?(row)
 
     private
 

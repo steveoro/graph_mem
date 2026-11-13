@@ -3,7 +3,7 @@
 # Composite merge evidence beyond cosine distance for dream-state compaction.
 #
 # Shared observations count only when {ObservationEvidence} finds them distinctive (long enough,
-# not a "Key: value" line, held by at most 2 entities); boilerplate gives no merge credit.
+# held by at most 3 entities); boilerplate gives no merge credit.
 class EntityMergeEvidence
   # Cosine-only is not enough for auto-merge; need lexical/shared evidence too.
   AUTO_SCORE = 10
