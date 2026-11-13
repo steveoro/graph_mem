@@ -297,8 +297,8 @@ transport, so a change has to rebuild them:
   (`app/controllers/concerns/settings_group_update.rb:35-44`), next to `apply_mcp_access_changes`, read the value
   before and after the save and call `refresh_access!(transports: true)` only when it changed. Restoring a
   backup is already covered (`app/controllers/system/backups_controller.rb:45`). The refresh closes the open MCP
-  sessions, and the help text says so. Like that call it is in-process only: with several Puma workers the others pick the change
-  up at their next restart (`lib/graph_mem/official_mcp.rb:44-45`).
+  sessions, and the help text says so. Like that call it is in-process only: with several Puma workers the
+  others pick the change up at their next restart (`lib/graph_mem/official_mcp.rb:44-45`).
 - **Stdio:** the runner builds its server once at boot, so the change needs a restart of the runner. The help
   text says that too.
 - A Solid Queue worker never serves MCP and needs nothing.
