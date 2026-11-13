@@ -51,7 +51,7 @@ class ReviewDigest
   # One group, re-read after a row action (1.86.2).
   # @param key [String] a Group key (a group_key, or "<kind>|row:<row_uuid>")
   # @return [Group, nil] nil once the group has no active rows in this digest's scope
-  def group(key)
+  def group_for(key)
     groups(@scope.in_group(key), limit: 1).first
   end
 

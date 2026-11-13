@@ -56,7 +56,7 @@ module ReviewResponses
   def review_refresh_streams(row)
     key = row.group_key || "#{row.kind}|row:#{row.row_uuid}" # the fallback of ReviewDigest::GROUP_SQL
     dom = helpers.review_group_dom_id(key)
-    group = ReviewDigest.new.group(key)
+    group = ReviewDigest.new.group_for(key)
     [
       turbo_stream.update("review-detail", partial: "review/detail_done"),
       group ? turbo_stream.replace(dom, partial: "review/group_card", locals: { group: group }) : turbo_stream.remove(dom)
