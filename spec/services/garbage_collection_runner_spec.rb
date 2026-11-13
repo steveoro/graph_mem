@@ -85,6 +85,20 @@ RSpec.describe GarbageCollectionRunner do
       expect(GraphIntegrityService.new.send(:detect_observation_lifecycle_corruption)).to be_empty
     end
 
+    it "clears outdated_by instead of pointing it at a kept copy that isn't a source fact (Graphy, #173)" do
+      gadget = fs_project!("Gadget Project")
+      widget = fs_member!(gadget, "SynthWidget")
+      plain = fs_observe!(widget, "SynthWidget renders with the canvas backend.")
+      tagged_twin = fs_fact!(widget, "SynthWidget renders with the canvas backend.")
+      retired = fs_observe!(widget, "SynthWidget renders with the WebGL backend.").mark_obsolete!(outdated_by: tagged_twin)
+
+      described_class.call
+
+      expect(MemoryObservation.where(id: tagged_twin.id)).to be_empty
+      expect(plain.reload).to be_active
+      expect(retired.reload.outdated_by_id).to be_nil
+    end
+
     it "reports deleted duplicate observations in the duplicates report" do
       entity = MemoryEntity.create!(name: "DupReportEntity", entity_type: "Task")
       MemoryObservation.create!(memory_entity: entity, content: "report dup")

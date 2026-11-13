@@ -11,17 +11,19 @@ require "fugit"
 # (System › Settings, default on) and the oldest live Solid Queue supervisor has been up at least
 # BOOT_GRACE, so the machine has settled before a long run starts. Then:
 #
-# - **A run cut off** (a power cut, a lost job: the row is running or stopping and no Solid Queue job
-#   is left for it) is resumed at the step it stopped at: it was interrupted, not paused by the
-#   operator. One info line says so. A run that is running with a live job, or paused, is left alone
-#   (a paused run is never auto-resumed: it was paused for a reason).
+# - **A run cut off** (a power cut, a lost job: the row is running and no Solid Queue job is left for
+#   it) is resumed at the step it stopped at: it was interrupted, not paused by the operator. One info
+#   line says so. A run cut off while stopping only finishes its stop (paused): the operator asked it to
+#   stop (Graphy, #173). A run that is running with a live job, or paused, is left alone (a paused run
+#   is never auto-resumed: it was paused for a reason).
 # - **Otherwise it starts a new run** only when the nightly slot has been missed: no scheduled run and
 #   no compaction run started at or after `due_since`, the previous fire time of the compaction
 #   entry's schedule in config/recurring.yml (computed with Fugit in Solid Queue's time zone; 20 hours
 #   ago when no schedule can be read). A host that is off at night is overdue on every boot (the same
 #   time of day, no drift); a host that stayed up ran the 3:00 compaction itself, so nothing is due.
-#   A compaction run that is paused (by the operator), or running with a job behind it, also blocks:
-#   the run's compaction step would resume it.
+#   A compaction run running with a job behind it also blocks. A paused compaction run does not: it is
+#   usually paused by the MCP write valve (CompactionValve), and only the run's compaction step
+#   (CompactionRunner) resumes it on a host that is off at night (Graphy, #173).
 #
 #   ScheduledRunCatchUpJob.perform_now # => the new or resumed OperationProgress, or nil
 class ScheduledRunCatchUpJob < ApplicationJob
@@ -42,7 +44,9 @@ class ScheduledRunCatchUpJob < ApplicationJob
     return log_skip(reason) if reason
 
     row = ScheduledRunJob.current
-    return resume_interrupted(row) if ScheduledRunJob.state(row) != :idle
+    state = ScheduledRunJob.state(row)
+    return finish_stop(row) if state == :stopping
+    return resume_interrupted(row) if state != :idle
 
     row = ScheduledRunJob.start!(trigger: ScheduledRunJob::TRIGGER_CATCH_UP)
     Rails.logger.info(started_message(row)) if row
@@ -69,9 +73,16 @@ class ScheduledRunCatchUpJob < ApplicationJob
   def overdue_blocker
     return "a scheduled run started #{minutes_since(last_scheduled_run_at)} min ago (since #{due_since.iso8601})" if since_due?(last_scheduled_run_at)
     return "a compaction run started #{minutes_since(last_compaction_at)} min ago (since #{due_since.iso8601})" if since_due?(last_compaction_at)
-    return "a compaction run is paused" if CompactionRun.exists?(status: "paused")
     return "a compaction run is running" if CompactionRun.exists?(status: "running") && ScheduledRunJob.compaction_job_live?
 
+    nil
+  end
+
+  # Finishes the stop of an orphaned stopping run (stop! with no live job pauses it) and leaves it paused.
+  def finish_stop(row)
+    return nil unless ScheduledRunJob.stop!(row, live: false) == :paused
+
+    Rails.logger.info("#{LOG_TAG} paused a run that was stopping when its job was lost (#{row.operation_id}); not resumed")
     nil
   end
 

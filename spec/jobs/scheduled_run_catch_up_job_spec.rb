@@ -180,11 +180,20 @@ RSpec.describe ScheduledRunCatchUpJob do
         expect(Rails.logger).to have_received(:info).with(/\[ScheduledRunCatchUp\] resumed an interrupted run at step 2 of 2/).once
       end
 
-      it "is resumed even though it started within the last day, and a stopping one too" do
-        row = interrupted(stop_requested: true)
+      it "is resumed even though it started within the last day" do
+        row = interrupted
 
         expect(described_class.perform_now).to eq(row)
-        expect(row.reload.details["stop_requested"]).to be(false)
+        expect(row.reload.status).to eq("running")
+      end
+
+      it "only finishes the stop of one that was stopping: the operator asked it to stop (Graphy, #173)" do
+        row = interrupted(stop_requested: true)
+
+        expect { expect(described_class.perform_now).to be_nil }.not_to have_enqueued_job(ScheduledRunJob)
+        expect(row.reload.status).to eq("paused")
+        expect(described_class.perform_now).to be_nil
+        expect(row.reload.status).to eq("paused")
       end
 
       it "waits for the boot grace period like any start" do
@@ -281,11 +290,11 @@ RSpec.describe ScheduledRunCatchUpJob do
     end
 
     describe "a compaction run that is not finished" do
-      it "blocks while paused, however long ago it started (the run's compaction step would resume it)" do
+      it "doesn't block while paused: the MCP write valve pauses it, and the run's compaction step resumes it (Graphy, #173)" do
         CompactionRun.create!(status: "paused", started_at: 3.days.ago)
 
-        expect(described_class.perform_now).to be_nil
-        expect(current_run).to be_nil
+        expect(described_class.perform_now).to be_a(OperationProgress)
+        expect(current_run).to be_present
       end
 
       it "blocks while running with a job behind it, however long ago it started" do
