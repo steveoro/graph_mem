@@ -393,8 +393,8 @@ as graph" switches to Graph mode with the hits' ids. The current query goes to `
 
 - **Reuse:** `GRAPH_STYLES` and `LAYOUT_OPTIONS` from `app/javascript/graph/cytoscape_config.js` and the vendored
   Cytoscape 3.31.4. The layouts Explore uses (`cose`, `breadthfirst`, `concentric`, `grid`) are built into
-  Cytoscape, so no layout extension is inlined. `app/assets/stylesheets/graph.css` has a single graph rule
-  (`.cytoscape-container`, line 7); the view writes its own few rules instead. **Don't reuse**
+  Cytoscape, so no layout extension is inlined. `app/assets/stylesheets/graph.css` styles Explore's chrome; its
+  only canvas rule is `.cytoscape-container` (line 7). The view writes its own few rules instead. **Don't reuse**
   `explore_controller.js` (Stimulus, Turbo, history, edit dialogs, drag-drop edits) or `api_client.js`
   (`fetch('/api/v1/graph_data')`): neither works under `connect-src 'none'`, and both carry edit paths.
 - **Inline everything; no CDN, no `csp` domains.** The HTML builder writes one `<script type="module">` holding,
