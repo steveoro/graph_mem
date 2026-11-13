@@ -29,6 +29,7 @@ en:
           dangling: "Dismisses suggestions that point at something deleted, or whose effect already holds. No suppression. Reverse: Undo the run, or Restore the row."
           no_shared_subject: "Dismisses contradiction and \"Outdated by a fact\" suggestions whose two facts share no subject, or (unjudged ones, and contradictions) aren't the same fact, by their keyword paths (needs Fact keywords on). A judged suggestion is dismissed only when its facts share no subject. No suppression. Reverse: Undo the run, or Restore the row."
           no_longer_flagged: "Dismisses stale-memory suggestions the scanner no longer flags. Reverse: Undo the run, or Restore."
+          still_qualifies: "Dismisses merge, relationship and orphan suggestions that dream-state compaction would no longer queue under its current evidence rules. No suppression. Reverse: Undo the run, or Restore the row."
           expire_low_confidence: "Expires suggestions with confidence below 0.4 that nobody touched for the days below, and keeps them away for 90 days. Reverse: Undo, or Restore."
           auto_apply_relationships: "Applies high-band relationship proposals at or above the confidence below (never part_of), at most 50 per run. Reverse: Undo the run (removes the relations)."
           auto_apply_expired_validity: "Marks observations obsolete when their own valid_until has passed, at most 100 per run. Reverse: Undo the run."
@@ -229,6 +230,8 @@ en:
           label: "Dismiss pair suggestions whose facts share no subject or aren't the same fact"
         enable_review_policy_no_longer_flagged:
           label: "Dismiss stale-memory suggestions no longer flagged"
+        enable_review_policy_still_qualifies:
+          label: "Dismiss compaction suggestions below the current evidence bar"
         enable_review_policy_expire_low_confidence:
           label: "Expire old low-confidence suggestions"
         enable_auto_apply_relationships:

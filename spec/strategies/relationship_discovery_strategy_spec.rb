@@ -6,47 +6,22 @@ RSpec.describe RelationshipDiscoveryStrategy, type: :model do
   let(:strategy) { described_class.new }
 
   describe "#proposals_for_entity" do
-    it "proposes relates_to for shared observation evidence" do
+    it "never proposes relates_to from identical observation content, however distinctive" do
       left = MemoryEntity.create!(name: "SharedLeft", entity_type: "Task")
       right = MemoryEntity.create!(name: "SharedRight", entity_type: "Task")
-      shared_content = "Shared dependency on BenchProject auth module"
-      left_obs = MemoryObservation.create!(memory_entity: left, content: shared_content)
-      right_obs = MemoryObservation.create!(memory_entity: right, content: shared_content)
-
-      proposals = strategy.proposals_for_entity(left.id)
-
-      expect(proposals.size).to eq(1)
-      expect(proposals.first).to include(
-        kind: "relationship_proposal",
-        from_entity_id: left.id,
-        to_entity_id: right.id,
-        relation_type: "relates_to",
-        confidence_band: "high",
-        supporting_observation_ids: [ left_obs.id, right_obs.id ],
-        explanation: be_present
-      )
-    end
-
-    it "permits byte-identical shared observations across a supplied project scope" do
-      left = MemoryEntity.create!(name: "ScopedLeft", entity_type: "Task")
-      right = MemoryEntity.create!(name: "OutsideScopeRight", entity_type: "Task")
-      shared_content = "Identical evidence across separate project boundaries"
+      shared_content = "The importer retries three times with exponential backoff."
       MemoryObservation.create!(memory_entity: left, content: shared_content)
       MemoryObservation.create!(memory_entity: right, content: shared_content)
 
-      proposals = strategy.proposals_for_entity(left.id, scope_entity_ids: [ left.id ])
-
-      expect(proposals.map { |proposal| proposal[:relation_type] }).to include("relates_to")
+      expect(strategy.proposals_for_entity(left.id)).to be_empty
+      expect(strategy.proposals_for_entity(right.id)).to be_empty
     end
 
-    it "ignores obsolete observation evidence" do
-      left = MemoryEntity.create!(name: "HistoricalLeft", entity_type: "Task")
-      right = MemoryEntity.create!(name: "HistoricalRight", entity_type: "Task")
-      shared_content = "Historical shared dependency on auth module"
-      MemoryObservation.create!(memory_entity: left, content: shared_content).mark_obsolete!
-      MemoryObservation.create!(memory_entity: right, content: shared_content)
+    it "yields no proposals for a boilerplate clique sharing one metadata line" do
+      clique = 5.times.map { |index| MemoryEntity.create!(name: "StatusClique#{index}", entity_type: "Task") }
+      clique.each { |member| MemoryObservation.create!(memory_entity: member, content: "Status: Completed") }
 
-      expect(strategy.proposals_for_entity(left.id)).to be_empty
+      clique.each { |member| expect(strategy.proposals_for_entity(member.id)).to be_empty }
     end
 
     it "proposes solves for issue and solution observation pairs" do
@@ -78,34 +53,36 @@ RSpec.describe RelationshipDiscoveryStrategy, type: :model do
       expect(strategy.proposals_for_entity(solution.id, scope_entity_ids: [ solution.id ])).to be_empty
     end
 
-    it "assigns medium confidence when issue-solution pairs share only two topic tokens" do
+    it "does not propose solves when the pair shares only two topic terms" do
       issue = MemoryEntity.create!(name: "Alpha_login_issue", entity_type: "Issue")
       solution = MemoryEntity.create!(name: "Alpha_login_fix", entity_type: "PossibleSolution")
-      issue_obs = MemoryObservation.create!(memory_entity: issue, content: "Blocks alpha login")
-      solution_obs = MemoryObservation.create!(memory_entity: solution, content: "Fixes alpha login")
+      MemoryObservation.create!(memory_entity: issue, content: "Blocks alpha login")
+      MemoryObservation.create!(memory_entity: solution, content: "Fixes alpha login")
+
+      expect(strategy.proposals_for_entity(solution.id)).to be_empty
+    end
+
+    it "proposes solves, in the high band, when the pair shares three topic terms" do
+      issue = MemoryEntity.create!(name: "Beta_login_issue", entity_type: "Issue")
+      solution = MemoryEntity.create!(name: "Beta_login_fix", entity_type: "PossibleSolution")
+      MemoryObservation.create!(memory_entity: issue, content: "Blocks beta login flow")
+      MemoryObservation.create!(memory_entity: solution, content: "Fixes beta login flow")
 
       proposals = strategy.proposals_for_entity(solution.id)
 
       expect(proposals.size).to eq(1)
-      expect(proposals.first).to include(
-        relation_type: "solves",
-        confidence_band: "medium",
-        score: 11,
-        supporting_observation_ids: [ solution_obs.id, issue_obs.id ]
-      )
+      expect(proposals.first).to include(relation_type: "solves", confidence_band: "high", score: 14)
+      expect(proposals.first[:evidence_terms].size).to be >= 3
     end
 
     it "skips proposals when the same-direction relation already exists" do
-      left = MemoryEntity.create!(name: "ExistingLeft", entity_type: "Task")
-      right = MemoryEntity.create!(name: "ExistingRight", entity_type: "Task")
-      shared_content = "Shared dependency on BenchProject auth module"
-      MemoryObservation.create!(memory_entity: left, content: shared_content)
-      MemoryObservation.create!(memory_entity: right, content: shared_content)
-      MemoryRelation.create!(from_entity: left, to_entity: right, relation_type: "relates_to")
+      issue = MemoryEntity.create!(name: "Gamma_login_issue", entity_type: "Issue")
+      solution = MemoryEntity.create!(name: "Gamma_login_fix", entity_type: "PossibleSolution")
+      MemoryObservation.create!(memory_entity: issue, content: "Blocks gamma login flow")
+      MemoryObservation.create!(memory_entity: solution, content: "Fixes gamma login flow")
+      MemoryRelation.create!(from_entity: solution, to_entity: issue, relation_type: "solves")
 
-      proposals = strategy.proposals_for_entity(left.id)
-
-      expect(proposals).to be_empty
+      expect(strategy.proposals_for_entity(solution.id)).to be_empty
     end
 
     it "skips weak token overlap without shared observation phrases" do
@@ -120,20 +97,19 @@ RSpec.describe RelationshipDiscoveryStrategy, type: :model do
     end
 
     it "returns deterministic ordering and caps proposals per entity" do
-      source = MemoryEntity.create!(name: "CapSource", entity_type: "Task")
-      peers = 4.times.map do |index|
-        peer = MemoryEntity.create!(name: "CapPeer#{index}", entity_type: "Task")
-        shared = "Shared dependency on BenchProject auth module #{index}"
-        MemoryObservation.create!(memory_entity: source, content: shared)
-        MemoryObservation.create!(memory_entity: peer, content: shared)
-        peer
+      solution = MemoryEntity.create!(name: "CapSolution", entity_type: "PossibleSolution")
+      MemoryObservation.create!(memory_entity: solution, content: "Fixes cap login flow")
+      issues = 4.times.map do |index|
+        issue = MemoryEntity.create!(name: "CapIssue#{index}", entity_type: "Issue")
+        MemoryObservation.create!(memory_entity: issue, content: "Blocks cap login flow")
+        issue
       end
 
-      proposals = strategy.proposals_for_entity(source.id)
+      proposals = strategy.proposals_for_entity(solution.id)
 
       expect(proposals.size).to eq(RelationshipDiscoveryStrategy::MAX_PROPOSALS_PER_ENTITY)
       expect(proposals.map { |proposal| proposal[:to_entity_id] }).to eq(
-        peers.first(RelationshipDiscoveryStrategy::MAX_PROPOSALS_PER_ENTITY).map(&:id)
+        issues.first(RelationshipDiscoveryStrategy::MAX_PROPOSALS_PER_ENTITY).map(&:id)
       )
     end
 
@@ -156,6 +132,38 @@ RSpec.describe RelationshipDiscoveryStrategy, type: :model do
           supporting_observation_ids: [ observation.id ]
         )
       )
+    end
+  end
+
+  describe ".proposal_qualifies?" do
+    let(:solves) do
+      { relation_type: "solves", score: 14, evidence_terms: %w[alpha login flow],
+        explanation: "Issue and solution observations share topic tokens: alpha, login, flow" }
+    end
+
+    it "rejects the removed identical-content relates_to rule" do
+      payload = { relation_type: "relates_to", score: 10, evidence_terms: %w[shared dependency],
+                  explanation: "Shared observation evidence on both entities" }
+
+      expect(described_class.proposal_qualifies?(payload)).to be(false)
+    end
+
+    it "accepts a solves proposal with three terms in the high band" do
+      expect(described_class.proposal_qualifies?(solves)).to be(true)
+    end
+
+    it "rejects a solves proposal with two terms or a score below the high band" do
+      expect(described_class.proposal_qualifies?(solves.merge(evidence_terms: %w[alpha login], score: 11))).to be(false)
+      expect(described_class.proposal_qualifies?(solves.merge(score: 11))).to be(false)
+    end
+
+    it "reads string-keyed payloads, as stored in review rows" do
+      expect(described_class.proposal_qualifies?(solves.stringify_keys)).to be(true)
+      expect(described_class.proposal_qualifies?(solves.stringify_keys.merge("evidence_terms" => %w[a b]))).to be(false)
+    end
+
+    it "accepts other relation types" do
+      expect(described_class.proposal_qualifies?({ relation_type: "depends_on", score: 8 })).to be(true)
     end
   end
 end

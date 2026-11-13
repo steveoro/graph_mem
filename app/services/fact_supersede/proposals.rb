@@ -57,6 +57,28 @@ module FactSupersede
       @inline = inline
     end
 
+    # The review item for one verdict: the `fact_supersede` payload ("Outdated by a fact"). Shared
+    # with ContradictionFallback, which adds its `origin`.
+    #
+    # @param fact [MemoryObservation] the fact (its entity loaded)
+    # @param verdict [Judge::Verdict]
+    # @return [Hash] string keys
+    def self.item(fact, verdict)
+      candidate = verdict.candidate
+      observation = candidate.observation
+      entity = observation.memory_entity
+      project_id = candidate.scoped ? fact.fact_project_id : nil
+      {
+        "kind" => KIND, "fact_observation_id" => fact.id, "observation_id" => observation.id,
+        "fact_content" => fact.content.to_s.truncate(CONTENT_LIMIT), "fact_entity_name" => fact.memory_entity.name,
+        "content" => observation.content.to_s.truncate(CONTENT_LIMIT), "entity_id" => entity.id, "entity_name" => entity.name,
+        "project_id" => project_id, "project_name" => project_id && MemoryEntity.where(id: project_id).pick(:name),
+        "verdict" => verdict.verdict, "confidence" => verdict.confidence, "reason" => verdict.reason, "replacement" => verdict.replacement,
+        "guard" => candidate.guard, "guard_reason" => candidate.guard_reason, "signals" => candidate.signals,
+        "detected_at" => Time.current.iso8601
+      }
+    end
+
     # @see .call
     def call
       found = Candidates.call(@fact, terms: @terms, limit: @limit)
@@ -122,20 +144,6 @@ module FactSupersede
       true
     end
 
-    def item(verdict)
-      candidate = verdict.candidate
-      observation = candidate.observation
-      entity = observation.memory_entity
-      {
-        "kind" => KIND, "fact_observation_id" => @fact.id, "observation_id" => observation.id,
-        "fact_content" => @fact.content.to_s.truncate(CONTENT_LIMIT), "fact_entity_name" => @fact.memory_entity.name,
-        "content" => observation.content.to_s.truncate(CONTENT_LIMIT), "entity_id" => entity.id, "entity_name" => entity.name,
-        "project_id" => candidate.scoped ? @fact.fact_project_id : nil,
-        "project_name" => candidate.scoped ? MemoryEntity.where(id: @fact.fact_project_id).pick(:name) : nil,
-        "verdict" => verdict.verdict, "confidence" => verdict.confidence, "reason" => verdict.reason, "replacement" => verdict.replacement,
-        "guard" => candidate.guard, "guard_reason" => candidate.guard_reason, "signals" => candidate.signals,
-        "detected_at" => Time.current.iso8601
-      }
-    end
+    def item(verdict) = self.class.item(@fact, verdict)
   end
 end

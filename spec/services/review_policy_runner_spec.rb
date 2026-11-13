@@ -28,7 +28,7 @@ RSpec.describe ReviewPolicyRunner do
   end
 
   it "starts with the hygiene policies on and auto-apply off" do
-    expect(%w[dangling no_longer_flagged expire_low_confidence].map { |p| AppSettings.review_policy_enabled?(p) }).to all(be(true))
+    expect(%w[dangling no_longer_flagged still_qualifies expire_low_confidence].map { |p| AppSettings.review_policy_enabled?(p) }).to all(be(true))
     expect(%w[auto_apply_relationships auto_apply_expired_validity].map { |p| AppSettings.review_policy_enabled?(p) }).to all(be(false))
 
     proposal(widget, beta, confidence: 0.95)
@@ -171,6 +171,8 @@ RSpec.describe ReviewPolicyRunner do
     end
 
     it "never applies destructive or choice kinds, even with tampered queries and kind lists" do
+      # This synthetic merge has no evidence: keep still_qualifies (1.85.0) from dismissing it first.
+      set_setting("enable_review_policy_still_qualifies", false)
       merge = row("entity_merge", { "entity_a" => { "entity_id" => widget.id }, "entity_b" => { "entity_id" => beta.id } }, confidence: 1.0)
       sides = [ widget, beta ].map { |entity| MemoryObservation.create!(memory_entity: entity, content: "SynthWidget side #{entity.id}") }
       pair = row("contradiction", { "observation_id_1" => sides.first.id, "observation_id_2" => sides.last.id }, confidence: 1.0)

@@ -69,6 +69,34 @@ RSpec.describe CompactionReviewService, "UI-5a" do
       expect(other_run.size).to eq(1)
     end
 
+    it "binds the per-run cap across more reports than MaintenanceReport prunes (one report per flush)" do
+      cap = 35
+      stub_const("ReviewRowClassifier::RUN_CAPS", ReviewRowClassifier::RUN_CAPS.merge("relationship_proposal" => cap))
+      targets = entities(MaintenanceReport::MAX_REPORTS_PER_TYPE + 10)
+
+      seeded = targets.flat_map { |target| seed([ proposal(widget, target, band: "medium") ], source_ref: 77) }
+
+      expect(seeded.size).to eq(cap)
+      expect(MaintenanceReportRow.where(report_type: "compaction_review", kind: "relationship_proposal").count).to eq(cap)
+    end
+
+    it "admits the best candidates of a kind first: score descending, then distance ascending" do
+      stub_const("ReviewRowClassifier::RUN_CAPS", ReviewRowClassifier::RUN_CAPS.merge("entity_merge" => 2))
+      a, b, c, d = entities(4)
+      merge = lambda do |left, right, score:, distance:|
+        { id: SecureRandom.uuid, kind: "entity_merge", score: score, cosine_distance: distance,
+          entity_a: { entity_id: left.id, name: left.name, entity_type: "Component" },
+          entity_b: { entity_id: right.id, name: right.name, entity_type: "Component" } }
+      end
+
+      e = MemoryEntity.create!(name: "SynthGadget closer", entity_type: "Component")
+      # Two at score 9 compete for the second place: the closer one wins it (cap 2).
+      rows = seed([ merge.call(a, b, score: 6, distance: 0.05), merge.call(a, c, score: 9, distance: 0.20),
+                    merge.call(a, d, score: 10, distance: 0.25), merge.call(a, e, score: 9, distance: 0.10) ], source_ref: 78)
+
+      expect(rows.map { |row| row.payload["entity_b"]["entity_id"] }).to contain_exactly(d.id, e.id)
+    end
+
     it "keeps only items that beat the lowest active priority once the backlog is full" do
       allow(AppSettings).to receive(:review_number).and_call_original
       allow(AppSettings).to receive(:review_number).with(:review_backlog_ceiling).and_return(2)

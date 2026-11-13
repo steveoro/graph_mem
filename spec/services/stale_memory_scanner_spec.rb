@@ -178,7 +178,7 @@ RSpec.describe StaleMemoryScanner do
     it "contradiction watermark does NOT advance when the pass fails mid-scan" do
       allow(AppSettings).to receive(:contradiction_detection_enabled?).and_return(true)
       configure_test_embeddings!
-      allow(ContradictionDetector).to receive(:detect).and_raise(StandardError, "boom")
+      allow(ContradictionDetector).to receive(:scan).and_raise(StandardError, "boom")
       prev = 12.hours.ago
       allow(described_class).to receive(:previous_watermark).and_return(prev)
       obs("recent fact")
@@ -189,9 +189,26 @@ RSpec.describe StaleMemoryScanner do
     it "contradiction watermark advances after a clean pass" do
       allow(AppSettings).to receive(:contradiction_detection_enabled?).and_return(true)
       configure_test_embeddings!
-      allow(ContradictionDetector).to receive(:detect)
+      allow(ContradictionDetector).to receive(:scan).and_return(ContradictionDetector::Scan.new(pairs: [], fallback: []))
       obs("recent fact")
       expect(described_class.scan[:next_watermark]).to be > 1.minute.ago
+    end
+
+    # 1.85.0: a fallback pair skipped while its LLM words were pending is retried once they land
+    # (written with update_columns, so updated_at doesn't move).
+    it "revisits an entity whose facts' LLM words landed since the last scan" do
+      allow(AppSettings).to receive(:contradiction_detection_enabled?).and_return(true)
+      configure_test_embeddings!
+      allow(described_class).to receive(:previous_watermark).and_return(1.hour.ago)
+      quiet = obs("old fact").tap { |fact| fact.update_columns(updated_at: 2.hours.ago) }
+      allow(ContradictionDetector).to receive(:scan).and_return(ContradictionDetector::Scan.new(pairs: [], fallback: []))
+
+      described_class.scan
+      expect(ContradictionDetector).not_to have_received(:scan)
+
+      quiet.update_columns(llm_keywords: %w[fact], llm_keywords_at: Time.current)
+      described_class.scan
+      expect(ContradictionDetector).to have_received(:scan).with(entity.id)
     end
 
     it "job is a no-op when the setting is off" do

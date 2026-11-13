@@ -76,6 +76,27 @@ RSpec.describe MaintenanceReport, type: :model do
       expect(MaintenanceReport.by_type("orphans").count).to eq(MaintenanceReport::MAX_REPORTS_PER_TYPE)
     end
 
+    it "keeps older reports that still hold pending rows, and prunes the ones whose rows are all resolved" do
+      MaintenanceReport.delete_all
+      MaintenanceReportRow.delete_all
+      row = lambda do |report, status|
+        MaintenanceReportRow.create!(maintenance_report: report, report_type: "orphans", row_uuid: SecureRandom.uuid, kind: "orphan_parent",
+                                     status: status, signature: SecureRandom.hex(8), payload: {})
+      end
+      pending = MaintenanceReport.create!(report_type: "orphans", data: {}, created_at: 3.days.ago)
+      snoozed = MaintenanceReport.create!(report_type: "orphans", data: {}, created_at: 3.days.ago)
+      settled = MaintenanceReport.create!(report_type: "orphans", data: {}, created_at: 3.days.ago)
+      row.call(pending, "active")
+      row.call(snoozed, "ignored")
+      row.call(settled, "dismissed")
+
+      MaintenanceReport::MAX_REPORTS_PER_TYPE.times { MaintenanceReport.create!(report_type: "orphans", data: {}) }
+
+      expect(MaintenanceReport.where(id: [ pending.id, snoozed.id ]).count).to eq(2)
+      expect(MaintenanceReport.find_by(id: settled.id)).to be_nil
+      expect(MaintenanceReport.by_type("orphans").count).to eq(MaintenanceReport::MAX_REPORTS_PER_TYPE + 2)
+    end
+
     it "does not prune reports of other types" do
       MaintenanceReport.delete_all
 

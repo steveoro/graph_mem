@@ -75,7 +75,7 @@ loose producer thresholds and a per-run cap that never binds.
 - **A4. Orphans.**
   - The context bonus applies only when at least one token matched.
   - Substring matches need a token of ≥ 3 chars.
-  - A suggestion needs a score of at least 6, and an orphan with no suggestion left isn't queued (it stays an
+  - A suggestion needs a score of at least 8 (review: 6 let the context bonus decide), and an orphan with no suggestion left isn't queued (it stays an
     orphan, visible on Explore).
   - **30 → 5.**
 - **A5. Contradictions.** All of these together lose none of the 5 real rows: **22 → 11**.

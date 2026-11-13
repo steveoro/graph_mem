@@ -14,7 +14,9 @@
   %p.review-warning{ data: { testid: "fact-supersede-unscoped" } } The entity has no project: the fact isn't authoritative for it, and this is never auto-applied.
 .review-contradiction
   .ui-card.review-contradiction__side{ data: { testid: "fact-supersede-fact" } }
-    %h4= "Source fact ##{payload['fact_observation_id']} · #{fact&.memory_entity&.name || payload['fact_entity_name']}"
+    -# 1.85.0: a contradiction-fallback row's "fact" is a newer observation, not a tagged source fact.
+    - fact_label = payload["origin"] == FactSupersede::ContradictionFallback::ORIGIN ? "Newer observation" : "Source fact"
+    %h4= "#{fact_label} ##{payload['fact_observation_id']} · #{fact&.memory_entity&.name || payload['fact_entity_name']}"
     %p= (fact&.content || payload["fact_content"]).to_s.truncate(300)
     %p.review-hint= fact ? "#{fact.status} · #{fact.source}" : "gone"
     = render "review/kinds/keyword_path", observation: fact, shared: shared

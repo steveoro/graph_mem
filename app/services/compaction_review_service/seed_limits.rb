@@ -4,7 +4,7 @@ class CompactionReviewService
   # Limits at the source (UI-5a, §2.5.4) for one seed_report call:
   # - per-run caps (ReviewRowClassifier::RUN_CAPS): at most N rows of a kind per run, counting
   #   earlier reports with the same source_ref (DreamStateCompactor flushes several times per run);
-  #   the best by priority are kept;
+  #   the best by ReviewRowClassifier.rank_key (score, distance, priority) are kept;
   # - the backlog ceiling (AppSettings review_backlog_ceiling): the room left under it is filled
   #   with the best candidates; beyond it, a candidate is seeded only when its priority beats the
   #   lowest active one (a soft ceiling: nothing is evicted).
@@ -41,7 +41,7 @@ class CompactionReviewService
       return list unless cap
 
       room = [ cap - earlier_in_run(kind), 0 ].max
-      ranked = list.sort_by.with_index { |candidate, index| [ -candidate["priority"], index ] }
+      ranked = ranked(list)
       @skipped["skipped_run_cap"][kind] += [ ranked.size - room, 0 ].max
       ranked.first(room)
     end
@@ -51,7 +51,7 @@ class CompactionReviewService
     def within_backlog(kind, list)
       active = MaintenanceReportRow.by_report_type(@report_type).active.where(kind: kind)
       room = [ AppSettings.review_number(:review_backlog_ceiling) - active.count, 0 ].max
-      ranked = list.sort_by.with_index { |candidate, index| [ -candidate["priority"], index ] }
+      ranked = ranked(list)
       free = ranked.first(room)
       rest = ranked.drop(room)
       return free if rest.empty?
@@ -62,6 +62,15 @@ class CompactionReviewService
       free + admitted
     end
 
+    # Best first: ReviewRowClassifier.rank_key (score, then distance, then priority); ties keep their order.
+    def ranked(list)
+      list.sort_by.with_index { |candidate, index| [ *ReviewRowClassifier.rank_key(candidate), index ] }
+    end
+
+    # Rows this run already seeded for the kind, counted through the run's reports. MaintenanceReport
+    # keeps every report that still holds a pending row, so the count survives report pruning (the
+    # compactor flushes one report per entity, far more than MAX_REPORTS_PER_TYPE) and a run resumed
+    # by another job. Rows already resolved whose report was pruned are no longer counted.
     def earlier_in_run(kind)
       return 0 if @source_ref.nil?
 

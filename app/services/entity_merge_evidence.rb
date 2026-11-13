@@ -1,14 +1,25 @@
 # frozen_string_literal: true
 
 # Composite merge evidence beyond cosine distance for dream-state compaction.
+#
+# Shared observations count only when {ObservationEvidence} finds them distinctive (long enough,
+# not a "Key: value" line, held by at most 2 entities); boilerplate gives no merge credit.
 class EntityMergeEvidence
   # Cosine-only is not enough for auto-merge; need lexical/shared evidence too.
   AUTO_SCORE = 10
-  REVIEW_SCORE = 4
+  # Distance alone in the review band scores 4, so the floor sits above it: a review row needs
+  # evidence beyond "the embeddings are near" (a distinctive shared observation, name or alias).
+  REVIEW_SCORE = 6
 
   Match = Struct.new(:source, :target, :score, :distance, :reasons, keyword_init: true)
 
   class << self
+    # Finds the best merge candidates for +entity+ (same type, higher id, within +review_distance+).
+    #
+    # @param entity [MemoryEntity] the source entity (must have an embedding, not a Project)
+    # @param limit [Integer] max matches returned
+    # @param review_distance [Float] cosine distance below which a pair is a candidate
+    # @return [Array<Match>] matches scoring at least {REVIEW_SCORE}, best first
     def candidates_for(entity, limit: 3, review_distance: DreamStateCompactor::REVIEW_MERGE_DISTANCE)
       return [] if entity.embedding.blank?
       return [] if entity.entity_type == NodeOperationsStrategy::PROJECT_ENTITY_TYPE
@@ -27,12 +38,35 @@ class EntityMergeEvidence
         .order(Arel.sql("vec_distance ASC"))
         .limit(limit * 3)
         .to_a
-        .map { |candidate| score_pair(entity, candidate) }
+        .map { |candidate| score_pair(entity, candidate, candidate[:vec_distance].to_f) }
         .select { |match| match.score >= REVIEW_SCORE }
         .sort_by { |match| [ -match.score, match.distance ] }
         .first(limit)
     end
 
+    # Re-scores a live pair with the current rules, for re-checking an existing review row.
+    # The distance comes from the stored embeddings; the pair must be same-type, non-Project
+    # entities that both have an embedding.
+    #
+    # @param entity_a [MemoryEntity, nil]
+    # @param entity_b [MemoryEntity, nil]
+    # @param review_distance [Float] the distance bound a review candidate must stay under
+    # @return [Boolean] true when score >= {REVIEW_SCORE} and distance < +review_distance+
+    def qualifies?(entity_a, entity_b, review_distance: DreamStateCompactor::REVIEW_MERGE_DISTANCE)
+      return false if entity_a.nil? || entity_b.nil? || entity_a.id == entity_b.id
+      return false if entity_a.entity_type != entity_b.entity_type
+      return false if entity_a.entity_type == NodeOperationsStrategy::PROJECT_ENTITY_TYPE
+      return false if entity_a.embedded_at.nil? || entity_b.embedded_at.nil?
+
+      distance = pair_distance(entity_a, entity_b)
+      return false if distance.nil? || distance >= review_distance
+
+      score_pair(entity_a, entity_b, distance).score >= REVIEW_SCORE
+    end
+
+    # @param left [MemoryEntity]
+    # @param right [MemoryEntity]
+    # @return [MemoryEntity, MemoryEntity] the entity to merge away first, then the survivor
     def pick_survivor(left, right)
       left_score = canonical_score(left)
       right_score = canonical_score(right)
@@ -51,8 +85,7 @@ class EntityMergeEvidence
 
     private
 
-    def score_pair(entity, candidate)
-      distance = candidate[:vec_distance].to_f
+    def score_pair(entity, candidate, distance)
       reasons = []
       score = 0
 
@@ -92,11 +125,20 @@ class EntityMergeEvidence
       aliases.any? { |alias_name| alias_name.casecmp?(name.to_s) }
     end
 
+    # Contents both entities hold as active observations and that are distinctive evidence.
     def shared_observation_count(left, right)
       left_contents = left.active_memory_observations.pluck(:content)
       return 0 if left_contents.empty?
 
-      right.active_memory_observations.where(content: left_contents).count
+      shared = right.active_memory_observations.where(content: left_contents).distinct.pluck(:content)
+      ObservationEvidence.distinctive_contents(shared).size
+    end
+
+    # @return [Float, nil] cosine distance between the two stored embeddings
+    def pair_distance(left, right)
+      sql = "SELECT VEC_DISTANCE_COSINE(a.embedding, b.embedding) FROM memory_entities a, memory_entities b " \
+            "WHERE a.id = #{left.id.to_i} AND b.id = #{right.id.to_i}"
+      ActiveRecord::Base.connection.select_value(sql)&.to_f
     end
 
     def vector_sql_literal(entity)

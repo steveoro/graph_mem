@@ -14,6 +14,7 @@ class StaleMemoryScanJob < ApplicationJob
     result = StaleMemoryScanner.scan
     items = result[:items]
     contradiction_items = result[:contradiction_items] || []
+    supersede_items = result[:supersede_items] || []
 
     seeded = []
     unless items.empty? && contradiction_items.empty?
@@ -25,8 +26,16 @@ class StaleMemoryScanJob < ApplicationJob
         source_ref: started_at.to_i,
         items: items + contradiction_items
       )
-      ReviewPolicyJob.enqueue_if_seeded(trigger: "stale_scan", seeded: seeded)
     end
+    # 1.85.0: the `:unknown` fallback pairs the judge found superseded, under their own source.
+    supersedes = CompactionReviewService.seed_report(
+      report_type: FactSupersede::Proposals::REPORT_TYPE,
+      source: FactSupersede::ContradictionFallback::ORIGIN,
+      source_ref: started_at.to_i,
+      items: supersede_items
+    )
+    ReviewPolicyJob.enqueue_if_seeded(trigger: "stale_scan", seeded: seeded + supersedes)
+    rerouted = dismiss_rerouted(result[:rerouted] || [])
 
     MaintenanceReport.create!(
       report_type: StaleMemoryScanner::SCAN_REPORT_TYPE,
@@ -34,6 +43,10 @@ class StaleMemoryScanJob < ApplicationJob
         items_seeded: items.size,
         by_signal: items.group_by { |item| item[:signal] }.transform_values(&:size),
         contradictions_seeded: seeded.count { |row| row.kind == "contradiction" },
+        supersedes_seeded: supersedes.size,
+        contradictions_rerouted: rerouted,
+        # 1.85.0: fallback pairs the judge couldn't take, retried by the next scan.
+        fallback_retry: result[:fallback_retry] || [],
         started_at: started_at.iso8601,
         # Contradiction-pass watermark for the NEXT scan: advances only when
         # the pass completed (a failed pass re-scans the same window).
@@ -41,5 +54,21 @@ class StaleMemoryScanJob < ApplicationJob
         duration_ms: ((Time.current - started_at) * 1000).round
       }
     )
+  end
+
+  private
+
+  # Old contradiction rows of the `:unknown` fallback whose pair the fact-supersede judge (or its
+  # guard) decided: dismissed by the generator, without suppression (1.85.0).
+  #
+  # @param rerouted [Array(MaintenanceReportRow, String)] each row and its pair's outcome
+  # @return [Integer] the rows dismissed
+  def dismiss_rerouted(rerouted)
+    rerouted.count do |row, outcome|
+      next false unless %w[active ignored].include?(row.reload.status)
+
+      row.update!(status: "dismissed", dismissed_at: Time.current, resolved_by: "generator", expires_at: nil,
+                  resolution_reason: "routed to Outdated by a fact (#{outcome})")
+    end
   end
 end

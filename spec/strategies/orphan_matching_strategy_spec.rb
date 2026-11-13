@@ -157,5 +157,63 @@ RSpec.describe OrphanMatchingStrategy, type: :model do
       matching_project = matches.find { |m| m[:project].name == "CoachInABox" }
       expect(matching_project).to be_present
     end
+
+    it "scores an exact alias token as an alias hit, not as a name substring" do
+      node = MemoryEntity.new(name: "Coach", entity_type: "Task")
+      match = strategy.match_to_projects(node).find { |m| m[:project].name == "CoachInABox" }
+
+      expect(match[:score]).to eq(8)
+    end
+  end
+
+  describe "suggestion gates" do
+    after { GraphMemContext.clear! }
+
+    it "does not suggest a project for a 2-letter substring token (if in TwelveShifts)" do
+      MemoryEntity.create!(name: "TwelveShifts v2", entity_type: "Project")
+      orphan = MemoryEntity.create!(name: "Ensure tmp Directory Exists Before File Write", entity_type: "Task",
+                                    description: "Create it if missing")
+
+      matches = strategy.match_to_projects(orphan)
+
+      expect(matches.map { |m| m[:project].name }).not_to include("TwelveShifts v2")
+    end
+
+    it "does not suggest the context project from the +2 bonus alone" do
+      GraphMemContext.current_project_id = project_coach.id
+      orphan = MemoryEntity.create!(name: "Xyzzy Plugh Frobnicate", entity_type: "Task")
+
+      expect(strategy.match_to_projects(orphan)).to be_empty
+    end
+
+    it "does not let the context bonus lift one name fragment over the floor" do
+      project = MemoryEntity.create!(name: "TwelveShifts v2", entity_type: "Project")
+      GraphMemContext.current_project_id = project.id
+      orphan = MemoryEntity.create!(name: "Shift rota export", entity_type: "Task")
+
+      expect(strategy.match_to_projects(orphan).map { |m| m[:project].id }).not_to include(project.id)
+    end
+
+    it "still suggests a project matched on real tokens" do
+      project = MemoryEntity.create!(name: "goggles_admin2", entity_type: "Project")
+      orphan = MemoryEntity.create!(name: "Modify Rspec Binstub", entity_type: "Task",
+                                    description: "goggles admin2 binstub")
+
+      match = strategy.match_to_projects(orphan).find { |m| m[:project].id == project.id }
+
+      expect(match).to be_present
+      expect(match[:score]).to be >= described_class::MIN_SUGGESTION_SCORE
+      expect(match[:matched_tokens]).to include("goggles", "admin2")
+    end
+  end
+
+  describe ".suggestion_qualifies?" do
+    it "is true when the project is still a live suggestion" do
+      expect(described_class.suggestion_qualifies?(orphan_task, project_admin_hub)).to be(true)
+    end
+
+    it "is false when the project no longer matches" do
+      expect(described_class.suggestion_qualifies?(orphan_issue, project_admin_hub)).to be(false)
+    end
   end
 end
