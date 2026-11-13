@@ -158,7 +158,7 @@
         "graph_mem": {"replies": 3, "messages": [{"id": 1, "result_has": ["protocolVersion"]}, {"id": null, "error_code": -32600}, {"id": 5, "result": {}}]},
         "reference": {"replies": 2, "messages": [{"id": 1, "result_has": ["protocolVersion"]}, {"id": 5, "result": {}}]}
       },
-      "divergence": "Neither runs it: graph_mem answers -32600 (like the Ruby SDK 1.9.0); the TS SDK drops the line silently."
+      "divergence": "Neither runs it: graph_mem answers -32600 (like the Ruby SDK 1.9.0 and 1.10.0); the TS SDK drops the line silently."
     },
     {
       "name": "tools/call without an id is a notification: no reply, not run",
@@ -196,7 +196,7 @@
         "graph_mem": {"replies": 2, "messages": [{"id": null, "error_code": -32700}, {"id": 2, "result": {}}]},
         "reference": {"replies": 2, "messages": [{"id": 1, "result": {}}, {"id": 2, "result": {}}]}
       },
-      "divergence": "graph_mem refuses invalid UTF-8 with -32700 (like the Ruby SDK 1.9.0); Node decodes the byte as U+FFFD and answers the ping. Both keep serving."
+      "divergence": "graph_mem refuses invalid UTF-8 with -32700 (like the Ruby SDK 1.9.0 and 1.10.0); Node decodes the byte as U+FFFD and answers the ping. Both keep serving."
     },
     {
       "name": "tools/call with an invalid UTF-8 tool name, then a ping",
@@ -210,7 +210,7 @@
         "graph_mem": {"replies": 3, "messages": [{"id": 1, "result_has": ["protocolVersion"]}, {"id": 42, "error_code": -32603}, {"id": 5, "result": {}}]},
         "reference": {"replies": 3, "messages": [{"id": 1, "result_has": ["protocolVersion"]}, {"id": 42, "error_code": -32602}, {"id": 5, "result": {}}]}
       },
-      "divergence": "graph_mem can't echo the invalid name back and answers -32603 with the id (Ruby SDK 1.8.2 and 1.9.0, #629); Node decodes the byte as U+FFFD and answers -32602 \"Tool synth-\uFFFD not found\". Both keep serving."
+      "divergence": "graph_mem can't echo the invalid name back and answers -32603 with the id (Ruby SDK 1.8.2, 1.9.0 and 1.10.0, #629); Node decodes the byte as U+FFFD and answers -32602 \"Tool synth-\uFFFD not found\". Both keep serving."
     },
     {
       "name": "a method name that is not valid UTF-8, then a ping",

@@ -76,17 +76,17 @@ open CORS (GHSA-mvf5-2qqv-rg3c).
 
 ## Expected results
 
-At 1.72.0 (2026-11-05, `mcp` 1.9.0; reference servers Memory 2.0.0, Everything 2.0.1, SDK 2.3.1, on
-Node 24.11.1 and Ruby 3.4.12):
+At 1.86.1 (2026-11-13, `mcp` 1.10.0; reference servers Memory 2.1.1, Everything 2.3.0, SDK 2.4.0 (the MCP
+servers release v2.4.0), on Node 24.11.1 and Ruby 3.4.12):
 
-- `compare.rb`: 0 failed expectations, 0 unexpected differences (18 stdio and 31 HTTP cases; the two
-  non-object `_meta` cases are documented divergences). The `ruby_sdk` column (`mcp` 1.9.0,
-  informational) answers every case exactly like graph_mem, which runs on the same gem.
-- `clients.sh`: 12 of 12 OK (TS 2.3.1, Ruby SDK 1.8.2 and 1.9.0), each listing 12 tools on `/mcp`; the
-  1.9.0 rows report a title on all 12 (`titled=12`), the 1.8.2 rows `titled=n/a`. Every `auto` row negotiates
-  2026-07-28, every `legacy` row 2025-11-25. The TS stdio `auto` row takes about 1.0 s longer than
-  `legacy` (the `server/discover` probe runs in a sibling process); the Ruby SDK's `auto` costs
-  nothing extra.
+- `compare.rb`: 0 failed expectations, 0 unexpected differences (19 stdio and 32 HTTP cases; the two
+  non-object `_meta` cases and the two invalid UTF-8 method name cases are documented divergences). The
+  `ruby_sdk` column (`mcp` 1.10.0, informational) answers every case exactly like graph_mem, which runs
+  on the same gem.
+- `clients.sh`: 12 of 12 OK (TS 2.4.0, Ruby SDK 1.9.0 and 1.10.0), each listing 12 tools on `/mcp`; every
+  Ruby SDK row reports a title on all 12 (`titled=12`). Every `auto` row negotiates 2026-07-28, every
+  `legacy` row 2025-11-25. The TS stdio `auto` row takes about 1.1 s longer than `legacy` (the
+  `server/discover` probe runs in a sibling process); the Ruby SDK's `auto` costs nothing extra.
 
 Results, tables and the remaining divergences from the reference: [`docs/protocol_compat.md`](../../docs/protocol_compat.md).
 

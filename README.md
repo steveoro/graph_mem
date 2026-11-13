@@ -70,7 +70,7 @@ The header is a cooperative scope key, **not** a credential: an agent can claim 
 
 * **Ruby**: 3.4.12+
 * **Rails**: 8.1.4+
-* **MCP Implementation**: the official MCP Ruby SDK ([`mcp`](https://github.com/modelcontextprotocol/ruby-sdk) gem, pinned to 1.9.0) over Streamable HTTP and stdio (MCP 2024-11-05 … 2026-07-28). Moving another Rails app off fast-mcp: [`docs/guides/migrating-fast-mcp-to-mcp-gem.md`](docs/guides/migrating-fast-mcp-to-mcp-gem.md)
+* **MCP Implementation**: the official MCP Ruby SDK ([`mcp`](https://github.com/modelcontextprotocol/ruby-sdk) gem, pinned to 1.10.0) over Streamable HTTP and stdio (MCP 2024-11-05 … 2026-07-28). Moving another Rails app off fast-mcp: [`docs/guides/migrating-fast-mcp-to-mcp-gem.md`](docs/guides/migrating-fast-mcp-to-mcp-gem.md)
 * **Database**: MariaDB 11.8+ (VECTOR support required)
 * **Embeddings**: Ollama with nomic-embed-text (768 dimensions)
 
