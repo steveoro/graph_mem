@@ -7,7 +7,7 @@ require Rails.root.join("script/mcp_compat/handshake_cases")
 # mcp plan PR-3 §3.1 step 2: replays every handshake case in spec/fixtures/mcp/handshakes/ and
 # asserts graph_mem's expectations. Wire-level only (status, headers, JSON-RPC bodies, stdout
 # lines, DB side effects), so the same spec holds whichever MCP engine serves the requests.
-# script/mcp_compat/compare.rb runs the same cases against the v2.0.0 reference servers.
+# script/mcp_compat/compare.rb runs the same cases against the v2.4.0 reference servers.
 RSpec.describe "MCP protocol compatibility (handshake fixtures)", type: :request do
   cases = McpCompat::HandshakeCases
 

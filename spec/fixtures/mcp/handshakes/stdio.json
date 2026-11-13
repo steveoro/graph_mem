@@ -4,13 +4,14 @@
     "Each case runs in a fresh server process. `send` items are JSON values sent as one line each, or",
     "{\"raw\": \"...\"} / {\"raw_bytes_hex\": \"...\"} for lines that aren't valid JSON.",
     "`expect` holds one expectation per target: `graph_mem` (asserted by spec/requests/mcp_protocol_compat_spec.rb)",
-    "and `reference` (Memory 2.0.0, checked by script/mcp_compat/compare.rb; null when the case is graph_mem-only).",
+    "and `reference` (Memory 2.1.1, checked by script/mcp_compat/compare.rb; null when the case is graph_mem-only).",
     "An expectation gives `replies` (the exact number of reply lines) and `messages`, matched by `id` (null-id",
     "replies in order): `error_code`, or `result` (subset match) and `result_has` (keys that must exist).",
     "Every stdout line must be a JSON-RPC 2.0 message. `divergence` says why graph_mem and the reference may differ;",
     "`changes_in` names the plan step that changes graph_mem's answer.",
     "Reference expectations come from the v2.0.0 code (plan §0b) and were confirmed against",
-    "@modelcontextprotocol/server-memory 2.0.0 with server/core 2.3.1 (the tag's lockfile) on 2026-10-24."
+    "@modelcontextprotocol/server-memory 2.0.0 with server/core 2.3.1 (the tag's lockfile) on 2026-10-24,",
+    "and re-confirmed against server-memory 2.1.1 with server/core 2.4.0 (servers v2.4.0) on 2026-11-13."
   ],
   "cases": [
     {
@@ -157,7 +158,7 @@
         "graph_mem": {"replies": 3, "messages": [{"id": 1, "result_has": ["protocolVersion"]}, {"id": null, "error_code": -32600}, {"id": 5, "result": {}}]},
         "reference": {"replies": 2, "messages": [{"id": 1, "result_has": ["protocolVersion"]}, {"id": 5, "result": {}}]}
       },
-      "divergence": "Neither runs it: graph_mem answers -32600 (like the Ruby SDK 1.9.0); the TS SDK drops the line silently."
+      "divergence": "Neither runs it: graph_mem answers -32600 (like the Ruby SDK 1.9.0 and 1.10.0); the TS SDK drops the line silently."
     },
     {
       "name": "tools/call without an id is a notification: no reply, not run",
@@ -195,7 +196,7 @@
         "graph_mem": {"replies": 2, "messages": [{"id": null, "error_code": -32700}, {"id": 2, "result": {}}]},
         "reference": {"replies": 2, "messages": [{"id": 1, "result": {}}, {"id": 2, "result": {}}]}
       },
-      "divergence": "graph_mem refuses invalid UTF-8 with -32700 (like the Ruby SDK 1.9.0); Node decodes the byte as U+FFFD and answers the ping. Both keep serving."
+      "divergence": "graph_mem refuses invalid UTF-8 with -32700 (like the Ruby SDK 1.9.0 and 1.10.0); Node decodes the byte as U+FFFD and answers the ping. Both keep serving."
     },
     {
       "name": "tools/call with an invalid UTF-8 tool name, then a ping",
@@ -209,7 +210,21 @@
         "graph_mem": {"replies": 3, "messages": [{"id": 1, "result_has": ["protocolVersion"]}, {"id": 42, "error_code": -32603}, {"id": 5, "result": {}}]},
         "reference": {"replies": 3, "messages": [{"id": 1, "result_has": ["protocolVersion"]}, {"id": 42, "error_code": -32602}, {"id": 5, "result": {}}]}
       },
-      "divergence": "graph_mem can't echo the invalid name back and answers -32603 with the id (Ruby SDK 1.8.2 and 1.9.0, #629); Node decodes the byte as U+FFFD and answers -32602 \"Tool synth-\uFFFD not found\". Both keep serving."
+      "divergence": "graph_mem can't echo the invalid name back and answers -32603 with the id (Ruby SDK 1.8.2, 1.9.0 and 1.10.0, #629); Node decodes the byte as U+FFFD and answers -32602 \"Tool synth-\uFFFD not found\". Both keep serving."
+    },
+    {
+      "name": "a method name that is not valid UTF-8, then a ping",
+      "send": [
+        {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "2025-11-25", "capabilities": {}, "clientInfo": {"name": "mcp-compat", "version": "0"}}},
+        {"jsonrpc": "2.0", "method": "notifications/initialized"},
+        {"raw_bytes_hex": "7b226a736f6e727063223a22322e30222c226964223a34332c226d6574686f64223a22746f6f6c732fff6c697374227d"},
+        {"jsonrpc": "2.0", "id": 6, "method": "ping"}
+      ],
+      "expect": {
+        "graph_mem": {"replies": 3, "messages": [{"id": 1, "result_has": ["protocolVersion"]}, {"id": 43, "error_code": -32600}, {"id": 6, "result": {}}]},
+        "reference": {"replies": 3, "messages": [{"id": 1, "result_has": ["protocolVersion"]}, {"id": 43, "error_code": -32601}, {"id": 6, "result": {}}]}
+      },
+      "divergence": "graph_mem refuses the method as an invalid request, -32600 with the id (Ruby SDK 1.10.0, #672); Node decodes the byte as U+FFFD and answers -32601 Method not found. Both keep serving."
     },
     {
       "name": "tools/list with a non-object _meta, then a ping",

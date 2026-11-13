@@ -1,7 +1,7 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
-# Replays the MCP handshake cases (spec/fixtures/mcp/handshakes/) against graph_mem and the v2.0.0
+# Replays the MCP handshake cases (spec/fixtures/mcp/handshakes/) against graph_mem and the v2.4.0
 # reference servers, checks each target against its own expectations, and prints how they compare
 # (mcp-update-plan PR-3 §3.1 step 3). Plain Ruby, no gems; the reference servers need Node.
 #
@@ -34,9 +34,9 @@ OptionParser.new do |o|
   o.on("--only TEXT", "run cases whose name includes TEXT") { |v| options[:only] = v }
   o.on("--timeout SECS", Float, "per-case timeout (default 60, covers Rails boot)") { |v| options[:timeout] = v }
   o.on("--stdio-graph-mem CMD", "graph_mem stdio command") { |v| options[:targets][[ :stdio, "graph_mem" ]] = Shellwords.split(v) }
-  o.on("--stdio-reference CMD", "Memory 2.0.0 stdio command") { |v| options[:targets][[ :stdio, "reference" ]] = Shellwords.split(v) }
+  o.on("--stdio-reference CMD", "Memory 2.1.1 stdio command") { |v| options[:targets][[ :stdio, "reference" ]] = Shellwords.split(v) }
   o.on("--http-graph-mem URL", "graph_mem MCP URL") { |v| options[:targets][[ :http, "graph_mem" ]] = URI(v) }
-  o.on("--http-reference URL", "Everything 2.0.0 MCP URL") { |v| options[:targets][[ :http, "reference" ]] = URI(v) }
+  o.on("--http-reference URL", "Everything 2.3.0 MCP URL") { |v| options[:targets][[ :http, "reference" ]] = URI(v) }
   o.on("--stdio-ruby-sdk CMD", "rsdk_server.rb stdio command") { |v| options[:targets][[ :stdio, "ruby_sdk" ]] = Shellwords.split(v) }
   o.on("--http-ruby-sdk URL", "rsdk_server.rb MCP URL") { |v| options[:targets][[ :http, "ruby_sdk" ]] = URI(v) }
 end.parse!
