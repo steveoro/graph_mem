@@ -79,7 +79,7 @@ The review found that decisions 3 and 5 meet limits in the spec and in the `sear
 - **A change to the tool count of any profile.** This train adds no tool, so the default `/mcp` stays at 12
   (`spec/fixtures/mcp/snapshots/default.json`). Steve's limit for it is about 20, preferably under 15
   (decision 10); a new tool is still his call.
-- **Any new gem, a gem bump (including `mcp` 1.9.0 → 1.10.0), a migration, or any non-stdlib package** (npm
+- **Any new gem, a gem bump (such as an `mcp` bump past 1.10.0), a migration, or any non-stdlib package** (npm
   packages such as `@modelcontextprotocol/ext-apps`, a JS bundler, a CDN script).
 - **Anything that weakens the lockdown or the anonymizer/cloud gate:** the `/mcp` `AccessGate` (IP allowlist and
   optional bearer token), the host bridge lockdown, `Llm::Anonymizer`, `cloud_allowed`. Nothing in this plan needs
@@ -172,11 +172,11 @@ Spec: SEP-1865, **Stable (2026-01-26)**,
 
 ## The Ruby `mcp` gem
 
-graph_mem pins `gem "mcp", "1.9.0"` (`Gemfile:36`). The newest release is **1.10.0** (2026-11-11: `Mcp-Param-*`
-header validation, OAuth `issuer:`, stdio env and SSE hardening; **nothing for Apps or resources**). No bump is
-needed for this train; a bump stays its own "one PR per upgrade" change and is a hard stop.
+graph_mem pins `gem "mcp", "1.10.0"` (`Gemfile:36`) since 1.86.1 (`docs/plans/mcp-sdk-1.10.0-plan.md`). Nothing
+in 1.10.0 is for Apps or resources (it brought `Mcp-Param-*` header validation, OAuth `issuer:`, stdio env and SSE
+hardening). A further bump stays its own "one PR per upgrade" change and is a hard stop.
 
-What **1.9.0 already has** (read in the installed gem):
+What **1.9.0 and 1.10.0 have** (`lib/mcp/apps.rb` is identical in both tags; read in the installed gem):
 
 - `MCP::Apps` (`lib/mcp/apps.rb`, autoloaded): `EXTENSION_ID`, `RESOURCE_MIME_TYPE`, `URI_SCHEME`, and
   - `Apps.capability` → `{ "io.modelcontextprotocol/ui" => { mimeTypes: [...] } }`;
@@ -187,7 +187,7 @@ What **1.9.0 already has** (read in the installed gem):
     `{ ui: { resourceUri: uri } }` with **Symbol keys** (use the default `legacy: false`, decision 4);
   - `Apps.client_supports?(client_capabilities)`.
 - **Capability declaration:** `MCP::Server.new(capabilities:)` stores a plain Hash unchanged
-  (`lib/mcp/server.rb:1679-1685`), so `CAPABILITIES.merge(extensions: MCP::Apps.capability)` is serialized as
+  (`lib/mcp/server.rb:1691-1697`), so `CAPABILITIES.merge(extensions: MCP::Apps.capability)` is serialized as
   written. **Don't switch to a `Capabilities` object:** it drops the explicit `subscribe: false` and
   `listChanged: false` values that the handshake cases expect.
 - **Tool `_meta`:** `MCP::Tool.meta(value)` (`lib/mcp/tool.rb:113`), serialized as `_meta` in `tools/list`.
@@ -202,8 +202,8 @@ What **1.9.0 already has** (read in the installed gem):
   `Apps.ui_resource` returns), and its template matcher doesn't handle the `{?…}` form graph_mem's templates use.
 - **Response size:** no limit and no chunking on outgoing responses on either transport. graph_mem serves one JSON
   body per response (`enable_json_response: true`). The 4 MiB caps apply to incoming requests only.
-- Also in 1.9.0, not used here: the Skills extension (SEP-2640, `MCP::Skill`), relevant only to a later Skills over
-  MCP decision.
+- Also in 1.9.0 and later, not used here: the Skills extension (SEP-2640, `MCP::Skill`), relevant only to a later
+  Skills over MCP decision.
 
 What **graph_mem has to wire or hand-roll** (all graph_mem code, no protocol reimplementation):
 
