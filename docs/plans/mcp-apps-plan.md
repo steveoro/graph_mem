@@ -134,8 +134,9 @@ Spec: SEP-1865, **Stable (2026-01-26)**,
   result) and `ui/notifications/tool-result` (the full `CallToolResult`, `structuredContent` included). The host
   sends nothing before the view's `ui/notifications/initialized`.
 - **View ↔ host messages** (JSON-RPC over `postMessage`, no SDK needed):
-  - `ui/initialize` (params: `protocolVersion` `"2026-01-26"`, `appInfo`, `appCapabilities`) →
-    `ui/notifications/initialized`;
+  - `ui/initialize` (params: `protocolVersion` `"2026-01-26"`, `appInfo`, `appCapabilities` with
+    `availableDisplayModes: ["inline", "fullscreen"]`) → `ui/notifications/initialized`; the view requests
+    `fullscreen` only if `hostContext.availableDisplayModes` lists it;
   - `tools/call` and `resources/read`, proxied to the server. A view can call **any tool of the same server whose
     visibility includes `"app"`** (the default), linked or not. The host MAY block a call or ask the user first;
   - `ui/update-model-context` (replaces what the view told the model before), `ui/message` (a follow-up into the
