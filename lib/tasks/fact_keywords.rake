@@ -67,8 +67,10 @@ namespace :graph_mem do
         pending = found.select { |key, _| key.is_a?(Symbol) }.values.sum
         puts "[fact_keywords] #{kind}: #{pending} pending; #{found[:dismiss]} would be dismissed " \
              "(#{found[ReviewPolicies::SubjectCheck::REASON]} share no subject, " \
-             "#{found[ReviewPolicies::SubjectCheck::REASON_NOT_SAME]} not the same fact), " \
-             "#{found[:keep]} kept, #{found[:pending]} with a pending path (run graph_mem:fact_keywords:refresh first), " \
+             "#{found[ReviewPolicies::SubjectCheck::REASON_NOT_SAME]} not the same fact, " \
+             "#{found[ReviewPolicies::SubjectCheck::REASON_NOT_CONTRADICTION]} no longer a contradiction), " \
+             "#{found[:keep]} kept, #{found[:reroute]} to reroute through the fact-supersede judge (the stale scan), " \
+             "#{found[:pending]} with a pending path (run graph_mem:fact_keywords:refresh first), " \
              "#{found[:not_applicable]} not checked (a term match, or a fact gone)"
       end
       puts "[fact_keywords] the no_shared_subject policy is #{AppSettings.review_policy_enabled?('no_shared_subject') ? 'on' : 'off'}; " \

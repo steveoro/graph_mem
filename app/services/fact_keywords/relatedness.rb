@@ -7,8 +7,9 @@ module FactKeywords
   # - **related**: they share a mention, or one mentions the other's own entity. A shared **first**
   #   mention is the strong match;
   # - **unrelated**: held by two different entities the paths don't connect (siblings, 1.80.0:
-  #   "gadget_mcp › Rework" and "gadget_mcp › Server Rules"), or both mention entities, none in common.
-  #   Never siblings: two entities a relation joins directly (Deployment part_of Infrastructure), a
+  #   "gadget_mcp › Rework" and "gadget_mcp › Server Rules"), held by two different Project roots
+  #   (1.85.0: two projects are two subjects, even when a relation joins the roots), or both mention
+  #   entities, none in common. Never siblings: two entities a relation joins directly (Deployment part_of Infrastructure), a
   #   fact held by its project root itself (or by an entity with no project: its path starts with its
   #   own entity), which is about the whole project, and a path that no longer holds its owner (the
   #   entity was renamed since it was computed), which can't tell;
@@ -67,11 +68,14 @@ module FactKeywords
     # @param connected [Boolean, #call, nil] whether a relation joins the two entities directly; nil
     #   asks the database (one query, only when the answer depends on it). A caller comparing one
     #   fact with many passes what it preloaded.
+    # @param ignore [Enumerable<String>, nil] mention names to leave out of both facts (1.85.0: the
+    #   contradiction detector's other-project mentions); never the owners or the paths' heads
     # @return [Comparison]
-    def compare(first, second, connected: nil)
+    def compare(first, second, connected: nil, ignore: nil)
       first_entity = first.memory_entity
       second_entity = second.memory_entity
-      compare_paths(first.keywords, first_entity&.name, second.keywords, second_entity&.name,
+      compare_paths(without(first.keywords, first_entity&.name, ignore), first_entity&.name,
+                    without(second.keywords, second_entity&.name, ignore), second_entity&.name,
                     connected: connected.nil? ? -> { joined?(first_entity, second_entity) } : connected,
                     first_text: first.content, second_text: second.content,
                     first_root: first_entity&.project_root?, second_root: second_entity&.project_root?,
@@ -88,7 +92,8 @@ module FactKeywords
     # @param first_text [String, nil] the first fact, for its details
     # @param second_text [String, nil]
     # @param first_root [Boolean, nil] the first fact's entity is a project root (nil: read from the
-    #   path, which also starts with its own entity for an entity with no project)
+    #   path, which also starts with its own entity for an entity with no project). Two facts held by
+    #   two different roots (both true) are unrelated unless they share a mention (1.85.0)
     # @param second_root [Boolean, nil]
     # @param first_words [Array<String>, nil] the first fact's LLM words (1.83.0), used only when both
     #   facts are on one entity and mention none
@@ -108,8 +113,10 @@ module FactKeywords
       shared = first & second
       shared += [ second_owner ] if second_owner && second_owner != first_owner && first.include?(second_owner)
       shared += [ first_owner ] if first_owner && first_owner != second_owner && second.include?(first_owner)
-      siblings = shared.empty? && siblings?(first_path, first_owner, second_path, second_owner) &&
-                 !(connected.respond_to?(:call) ? connected.call : connected)
+      # Two projects are two subjects (1.85.0): a relation between the roots doesn't join their facts.
+      two_roots = first_root == true && second_root == true && !same_owner
+      siblings = shared.empty? && (two_roots || (siblings?(first_path, first_owner, second_path, second_owner) &&
+                                                 !(connected.respond_to?(:call) ? connected.call : connected)))
       first_rooted = first_root.nil? ? rooted?(first_path, first_owner) : first_root
       second_rooted = second_root.nil? ? rooted?(second_path, second_owner) : second_root
       covers = covers(first, first_owner, first_rooted, second, second_owner, second_rooted)
@@ -164,6 +171,17 @@ module FactKeywords
       :second if theirs.superset?(mine)
     end
 
+    # The path without the ignored names after its owner (the mentions); unchanged when none apply.
+    def without(path, owner, ignore)
+      return path if ignore.blank? || owner.nil?
+
+      path = Array(path)
+      index = path.index(owner)
+      return path unless index
+
+      path.first(index + 1) + (path.drop(index + 1) - Array(ignore))
+    end
+
     # A path that starts with its own entity: the project root's (or an entity with no project).
     def rooted?(path, owner) = owner.present? && Array(path).first == owner
 
@@ -195,6 +213,6 @@ module FactKeywords
       MemoryRelation.where(from_entity_id: first.id, to_entity_id: second.id)
                     .or(MemoryRelation.where(from_entity_id: second.id, to_entity_id: first.id)).exists?
     end
-    private_class_method :subject, :siblings?, :joined?, :covers, :rooted?, :compare_words, :llm_words
+    private_class_method :subject, :siblings?, :joined?, :covers, :rooted?, :compare_words, :llm_words, :without
   end
 end

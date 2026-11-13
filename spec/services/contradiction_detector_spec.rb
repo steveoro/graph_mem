@@ -62,14 +62,18 @@ RSpec.describe ContradictionDetector do
       service
     end
 
+    # The vector and polarity mechanics alone: these facts mention no entity, which with fact keywords
+    # on is the `:unknown` fallback (no contradiction pair since 1.85.0; see the keyword specs).
     before do
       EmbeddingService.reset_vector_cache!
       allow(EmbeddingService).to receive(:vector_enabled?).and_return(true)
       allow(EmbeddingService).to receive(:instance).and_return(stubbed_service)
+      AppSettings.fact_keywords_enabled = false
     end
 
     after do
       EmbeddingService.reset_vector_cache!
+      AppSettings.where(var: "fact_keywords_enabled").delete_all
     end
 
     it "returns candidate pairs for semantically similar observations with opposite polarity" do

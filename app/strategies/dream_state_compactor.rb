@@ -145,7 +145,6 @@ class DreamStateCompactor
       next if CompactionReviewService.suppressed?(proposal[:kind], proposal)
 
       @review_items << proposal
-      @run.increment_stat!("relationships_queued")
     end
   end
 
@@ -155,19 +154,17 @@ class DreamStateCompactor
 
     matches = @orphan_matcher.match_to_projects(orphan)
     best = matches.first
-    return queue_orphan_review(orphan, matches) unless best
+    return unless best # no suggestion: stays an orphan, visible on Explore
 
     if @orphan_matcher.auto_parent_match?(matches)
       result = @node_ops.move_to_parent(orphan.id, best[:project].id)
       if result[:success]
         @run.increment_stat!("orphans_parented")
       else
-        queued = queue_orphan_review(orphan, matches, error: result[:error])
-        @run.increment_stat!("orphans_queued") if queued
+        queue_orphan_review(orphan, matches, error: result[:error])
       end
     else
-      queued = queue_orphan_review(orphan, matches)
-      @run.increment_stat!("orphans_queued") if queued
+      queue_orphan_review(orphan, matches)
     end
   end
 
@@ -258,12 +255,10 @@ class DreamStateCompactor
       end
 
       queue_merge_review(best.source, best.target, best.distance, best.score, error: result[:error])
-      @run.increment_stat!("merges_queued")
       return
     end
 
     queue_merge_review(best.source, best.target, best.distance, best.score)
-    @run.increment_stat!("merges_queued")
   end
 
   def queue_merge_review(entity_a, entity_b, distance, score, error: nil)
@@ -298,13 +293,23 @@ class DreamStateCompactor
     }
   end
 
+  # Run stats for the kinds the compactor queues, keyed by row kind.
+  QUEUED_STATS = { "entity_merge" => "merges_queued", "relationship_proposal" => "relationships_queued",
+                   "orphan_parent" => "orphans_queued" }.freeze
+
+  # Seeds the buffered items; the *_queued stats count the rows actually seeded (after suppression,
+  # dedupe, the per-run cap and the backlog ceiling), not the candidates.
   def flush_review_queue!
-    CompactionReviewService.seed_report(
+    rows = CompactionReviewService.seed_report(
       report_type: "compaction_review",
       source: "compaction_run",
       source_ref: @run.id,
       items: @review_items
     )
+    rows.group_by(&:kind).each do |kind, seeded|
+      stat = QUEUED_STATS[kind]
+      @run.increment_stat!(stat, seeded.size) if stat
+    end
     @review_items.clear
   end
 end

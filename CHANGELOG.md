@@ -5,6 +5,27 @@ All notable changes to GraphMem will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.85.0] - 2026-11-13
+
+A quieter Review queue: the first full compaction in months queued 447 suggestions, most of them on boilerplate evidence. The producers now ask for real evidence, the per-run cap binds, and a new policy clears what the old rules queued.
+
+### Added
+- **`still_qualifies` review policy** (setting `enable_review_policy_still_qualifies`, on): dismisses pending merge, relationship and orphan suggestions that compaction would no longer queue under its current rules, without suppression ("Import suggest merges" rows and pairs waiting for an embedding are left alone). Runs with the other policies ("Run policies now"); Undo the run or Restore a row to reverse. `bin/rails review:still_qualifies_report` counts what it would dismiss per kind first, read-only.
+- **Contradiction fallback goes to fact supersede:** two close facts that name no entity no longer make a contradiction row. The stale scan sends them through fact supersede's guard and judge (newer fact against older, at most 10 judge calls per scan, skipped while LLM words are pending); only a `superseded` verdict queues an "Outdated by a fact" row, shown as "Newer observation #N". Applying it retires or supersedes the older one and names the newer one in the reason. Pairs the judge didn't reach are kept in the scan report and retried by the next scan (also while fact supersede is off, so turning it back on loses nothing). Such a row is never auto-applied.
+- Pending contradiction rows that came from the fallback are rerouted the same way: the next stale scan judges up to 50 of them and dismisses each once judged ("routed to Outdated by a fact"); `review_report` counts them as "to reroute".
+
+### Changed
+- **Boilerplate isn't evidence** (`ObservationEvidence`): a fact two entities share counts only when it is at least 40 characters (so short lines like "Status: Completed" or "Priority: Medium" never count) and held by at most 3 entities.
+- **Relationship proposals:** the identical-content `relates_to` rule is gone (none was ever approved); `solves` needs 3 shared terms.
+- **Merge suggestions:** a same-type pair needs more than closeness (review score 6; distance under 0.10 still counts on its own), and shared boilerplate no longer adds to the score. That holds for auto-merge too: a near-identical pair needs a distinctive shared fact (or the same name) to merge on its own, otherwise it goes to review.
+- **Orphan suggestions:** the active-project bonus counts only with a matching word, a word must be 3+ letters to match inside a project name ("if" no longer hits "Swiftshop"), a suggestion needs score 8 (an exact name or alias word, or two fragments; the context bonus can't lift one fragment over it), an exact alias word counts before a name fragment, and an orphan with no suggestion left isn't queued.
+- **Contradictions:** two dated events (release notes, work logs) never contradict; a shared mention of another project, or of something it owns, isn't a shared subject (on one owner, such a pair goes to the fallback judge instead: "It reads X" / "It doesn't read X" may be a changed dependency); facts held by two different Project roots compare as unrelated. `no_shared_subject` dismisses old rows that fail these ("no longer a contradiction"), and `review_report` counts that reason. `detect_contradictions` returns real contradiction pairs only.
+- The scheduled stale scan also revisits entities whose LLM words landed since the last scan.
+
+### Fixed
+- **The per-run cap now binds:** report pruning deleted the reports the cap counted through, so one run could seed 234 merges against a cap of 100. A report keeps while it holds a pending row (this also keeps those rows in the Graphify rescan's sweep), and the cap keeps the best score, then the closest distance.
+- Compaction run stats (`merges_queued`, `relationships_queued`, `orphans_queued`) count the rows actually queued, not the candidates.
+
 ## [1.84.0] - 2026-11-12
 
 System › Background jobs updates itself, and the running scheduled step shows how far it is.

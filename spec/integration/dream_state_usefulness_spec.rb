@@ -67,7 +67,8 @@ RSpec.describe "Dream-state usefulness acceptance benchmark", :with_test_embeddi
       review_orphans = compaction_review_items.select { |item| item["kind"] == "orphan_parent" }
       queued_entity_ids = review_orphans.map { |item| item["entity_id"] }
       expect(queued_entity_ids).to include(graph.review_orphan.id)
-      expect(queued_entity_ids).to include(graph.unrelated_control.id)
+      # An orphan with no candidate parent isn't queued (1.85.0): it stays visible on Explore.
+      expect(queued_entity_ids).not_to include(graph.unrelated_control.id)
     end
 
     it "deduplicates byte-identical observations during tree walk" do
@@ -83,7 +84,7 @@ RSpec.describe "Dream-state usefulness acceptance benchmark", :with_test_embeddi
       expect(MemoryEntity.find_by(id: graph.merge_source_auto.id)).to be_nil
       expect(MemoryEntity.find_by(id: graph.merge_target_auto.id)).to be_present
       expect(graph.merge_target_auto.reload.memory_observations.pluck(:content))
-        .to include("auto merge provenance")
+        .to include(DreamStateAcceptanceHelper::AUTO_MERGE_FACT)
       expect(graph.merge_target_auto.aliases.to_s).to include("BenchProject_merge_auto_source")
 
       merge_reviews = compaction_review_items.select { |item| item["kind"] == "entity_merge" }
@@ -215,7 +216,7 @@ RSpec.describe "Dream-state usefulness acceptance benchmark", :with_test_embeddi
       end
     end
 
-    it "proposes cross-project connections only when shared observations justify them" do
+    it "proposes no relates_to from one shared phrase (1.85.0: the identical-content rule is gone)" do
       run_compaction_via_jobs!
 
       cross_project = compaction_review_items.find do |item|
@@ -226,8 +227,7 @@ RSpec.describe "Dream-state usefulness acceptance benchmark", :with_test_embeddi
           )
       end
 
-      expect(cross_project).to be_present
-      expect(cross_project["supporting_observation_ids"]).to be_present
+      expect(cross_project).to be_nil
     end
 
     it "keeps inferred links review-only and avoids duplicate or unsupported relations" do

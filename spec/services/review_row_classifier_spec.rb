@@ -138,6 +138,31 @@ RSpec.describe ReviewRowClassifier do
                                                "fact_supersede" => 100)
   end
 
+  describe ".rank_key" do
+    def key(payload, priority = 50)
+      described_class.rank_key("payload" => payload, "priority" => priority)
+    end
+
+    it "ranks by score descending, then cosine distance ascending, then priority" do
+      candidates = [
+        key({ "score" => 6, "cosine_distance" => 0.05 }, 90),
+        key({ "score" => 9, "cosine_distance" => 0.20 }, 10),
+        key({ "score" => 9, "cosine_distance" => 0.10 }, 10),
+        key({ "score" => 9, "cosine_distance" => 0.10 }, 40)
+      ]
+
+      expect(candidates.sort).to eq([ candidates[3], candidates[2], candidates[1], candidates[0] ])
+    end
+
+    it "reads an orphan row's score from its best suggested parent, and ranks missing fields last" do
+      orphan = key({ "suggested_parents" => [ { "score" => 4 }, { "score" => 8 } ] })
+      bare = key({})
+
+      expect(orphan.first).to eq(-8.0)
+      expect(orphan <=> bare).to eq(-1)
+    end
+  end
+
   describe ".backfill!" do
     def row(kind:, payload:, signature:, status: "active", **attrs)
       MaintenanceReportRow.create!(report_type: "compaction_review", row_uuid: SecureRandom.uuid, kind: kind,

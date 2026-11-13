@@ -82,6 +82,42 @@ RSpec.describe FactKeywords::Relatedness do
     expect(described_class.compare(first, second).subject).to eq(:unrelated)
   end
 
+  # 1.85.0: two projects are two subjects. The operator's example: suite_core's and suite_web's release
+  # notes, paths ["suite_core"] / ["suite_web"], with suite_core part_of suite_web.
+  it "calls facts held by two different Project roots unrelated, even when a relation joins the roots (1.85.0)" do
+    db, main = %w[suite_core suite_web].map { |name| MemoryEntity.create!(name: name, entity_type: "Project") }
+    MemoryRelation.create!(from_entity: db, to_entity: main, relation_type: "part_of")
+    facts = { db => "[2026-08-26] suite_core v0.10.40 phase 1: added the score component.",
+              main => "[2026-08-26] suite_web v0.10.40 phase 3: removed the local score component." }.map do |root, content|
+      MemoryObservation.create!(memory_entity: root, content: content).tap do |fact|
+        fact.update_columns(keywords: [ root.name ], keywords_at: Time.current)
+      end
+    end
+
+    expect(described_class.compare(*facts)).to have_attributes(subject: :unrelated, same_subject: false)
+    expect(described_class.compare(*facts)).to be_hard_unrelated
+    expect(described_class.compare_paths(%w[suite_core], "suite_core", %w[suite_web], "suite_web", first_root: true, second_root: true,
+                                         connected: true).subject).to eq(:unrelated)
+    # A shared mention still relates them.
+    expect(described_class.compare_paths(%w[suite_core Player], "suite_core", %w[suite_web Player], "suite_web", first_root: true,
+                                         second_root: true).subject).to eq(:related)
+    # Without the root flags a rooted path can be an entity with no project: unchanged.
+    expect(compare_owned(%w[suite_core], "suite_core", %w[suite_web], "suite_web").subject).to eq(:unknown)
+  end
+
+  it "leaves out the ignored names from both facts' mentions (1.85.0, for the contradiction detector)" do
+    root = MemoryEntity.create!(name: "suite_web", entity_type: "Project")
+    page = MemoryEntity.create!(name: "ScorePage", entity_type: "Component", project_id: root.id)
+    first, second = [ "It renders suite_core scores.", "It does not render suite_core scores." ].map do |content|
+      MemoryObservation.create!(memory_entity: page, content: content).tap do |fact|
+        fact.update_columns(keywords: [ root.name, page.name, "suite_core" ], keywords_at: Time.current)
+      end
+    end
+
+    expect(described_class.compare(first, second)).to have_attributes(subject: :related, same_subject: true, shared: %w[suite_core])
+    expect(described_class.compare(first, second, ignore: %w[suite_core])).to have_attributes(subject: :unknown, same_subject: false, shared: [])
+  end
+
   # 1.84.0: "the same own entity" is the same record, not the same name (two projects' SynthWidget).
   it "compares LLM words only for two facts on the same entity record" do
     facts = [ "Gadget Project", "Other Project" ].map do |project|

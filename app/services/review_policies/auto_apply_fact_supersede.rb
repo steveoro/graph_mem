@@ -24,6 +24,8 @@ module ReviewPolicies
       ids = MaintenanceReportRow.active.where(kind: KIND, confidence: threshold..).select do |row|
         payload = row.effective_payload
         next false unless confident_unguarded_scoped?(payload, threshold)
+        # A contradiction-fallback row is a judged guess between two observations, never applied unattended.
+        next false if payload["origin"] == FactSupersede::ContradictionFallback::ORIGIN
         # Never a pair the keyword paths call unrelated (1.80.0), even with no_shared_subject off.
         next false if AppSettings.fact_keywords_enabled? && SubjectCheck.status(row) == :dismiss
 

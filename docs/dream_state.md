@@ -83,7 +83,7 @@ Each run progresses through three phases in order:
 2. **Entity merge scan** — if the entity has an embedding and is not a `Project`:
   - Find up to 3 candidates with cosine distance **< 0.30** (`REVIEW_MERGE_DISTANCE`), excluding Projects, **requiring the same `entity_type`**, and `id > entity.id` for deterministic ordering.
   - If distance **< 0.10** (`AUTO_MERGE_DISTANCE`), auto-merge via `NodeOperationsStrategy#merge_into`.
-  - Otherwise, queue a merge review item.
+  - Otherwise, queue a merge review item, but only when the pair's evidence score reaches `EntityMergeEvidence::REVIEW_SCORE` (6). Distance in the review band scores 4 and each shared observation adds 2 (max 6), so a distance-only pair is not queued. A shared observation counts only when `ObservationEvidence` finds it distinctive: at least 40 characters and held by at most 3 entities.
 
 `Project` entities are never auto-merged or queued for merge review.
 
@@ -97,11 +97,12 @@ Each run progresses through three phases in order:
 
 | Rule | Relation type | Evidence |
 |------|---------------|----------|
-| Shared observation phrase | `relates_to` | Byte-identical observation content on two entities (minimum length 15) |
-| Issue/solution pairing | `solves` | `PossibleSolution` + `Issue` observations sharing topic tokens, with fix/solve vs block/problem language |
+| Issue/solution pairing | `solves` | `PossibleSolution` + `Issue` observations sharing at least 3 topic tokens, with fix/solve vs block/problem language |
 | Named dependency | `depends_on` | Observation contains dependency language and references another entity by name or alias |
 
 Each proposal is queued as `relationship_proposal` with `from_entity_id`, `to_entity_id`, `relation_type`, `confidence_band`, `score`, `supporting_observation_ids`, `explanation`, and optional `evidence_terms`.
+
+There is no `relates_to` rule: identical observation content (even distinctive content) was dropped as evidence because none of its proposals were ever approved, and boilerplate lines ("Status: Completed") made cliques of them.
 
 Safety filters: no self-links, no duplicate same-direction relations, no Project-root involvement, allowed relation types only, max 3 proposals per entity per run.
 

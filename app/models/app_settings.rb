@@ -107,6 +107,7 @@ class AppSettings < RailsSettings::Base
   field :enable_review_policy_dangling, default: true, type: :boolean
   field :enable_review_policy_no_shared_subject, default: true, type: :boolean
   field :enable_review_policy_no_longer_flagged, default: true, type: :boolean
+  field :enable_review_policy_still_qualifies, default: true, type: :boolean
   field :enable_review_policy_expire_low_confidence, default: true, type: :boolean
   field :review_expire_low_confidence_days, default: 30, type: :integer,
         validates: { numericality: { greater_than_or_equal_to: 7, less_than_or_equal_to: 365 } }
@@ -137,6 +138,7 @@ class AppSettings < RailsSettings::Base
     "dangling" => [ "enable_review_policy_dangling", true ],
     "no_shared_subject" => [ "enable_review_policy_no_shared_subject", true ],
     "no_longer_flagged" => [ "enable_review_policy_no_longer_flagged", true ],
+    "still_qualifies" => [ "enable_review_policy_still_qualifies", true ],
     "expire_low_confidence" => [ "enable_review_policy_expire_low_confidence", true ],
     "auto_apply_relationships" => [ "enable_auto_apply_relationships", false ],
     "auto_apply_expired_validity" => [ "enable_auto_apply_expired_validity", false ],

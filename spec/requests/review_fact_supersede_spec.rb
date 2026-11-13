@@ -38,6 +38,21 @@ RSpec.describe "Review & Fix › Outdated by a fact", type: :request do
       expect(row.reload.status).to eq("active")
     end
 
+    it "labels a contradiction-fallback row's fact as the newer observation (1.85.0)" do
+      newer = fs_observe!(widget, "The MCP server never runs on fast-mcp any more.")
+      item = { "kind" => "fact_supersede", "fact_observation_id" => newer.id, "observation_id" => old.id,
+               "verdict" => "superseded", "confidence" => 0.9, "signals" => { "scoped" => true }, "content" => old.content,
+               "fact_content" => newer.content, "entity_id" => widget.id, "entity_name" => widget.name,
+               "origin" => FactSupersede::ContradictionFallback::ORIGIN }
+      fallback = CompactionReviewService.seed_report(report_type: "compaction_review", source: FactSupersede::ContradictionFallback::ORIGIN,
+                                                     items: [ item ]).sole
+
+      get review_row_path(fallback.row_uuid)
+
+      expect(response.body).to include("Newer observation ##{newer.id}")
+      expect(response.body).not_to include("Source fact ##{newer.id}")
+    end
+
     it "retires from the preview" do
       get review_row_preview_path(row.row_uuid, fact_action: "retire")
       expect(response.body).not_to include('name="replacement"')

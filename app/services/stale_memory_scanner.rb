@@ -43,21 +43,26 @@ class StaleMemoryScanner
   # Vector contradiction detection candidates are bounded by obs activity
   # since the previous scan — a cost bound, not a staleness criterion.
   CONTRADICTION_LOOKBACK = 24.hours
+  # 1.85.0: the most pending `:unknown`-fallback contradiction rows one scan reroutes to the judge,
+  # and the most unjudged fallback pairs the scan report keeps for the next scan.
+  MAX_REROUTE_ROWS = 50
+  MAX_FALLBACK_RETRY = 100
   SCAN_REPORT_TYPE = "stale_memory_scan"
 
-  # Returns { items:, contradiction_items:, next_watermark: } — `next_watermark` is the bound the
-  # NEXT scan's contradiction pass should start from. It advances only when
+  # Returns { items:, contradiction_items:, supersede_items:, rerouted:, fallback_retry:,
+  # next_watermark: } — `next_watermark` is the bound the NEXT scan's contradiction pass should
+  # start from. It advances only when
   # the contradiction pass completed: a failed pass must not lose the
   # candidates it never visited (the report row is written regardless, so
   # keying the watermark off report created_at would silently skip them).
-  # `contradiction_items` are the review rows for the pairs that pass found (UI-5a).
+  # `contradiction_items` are the review rows for the pairs that pass found (UI-5a). See
+  # .detect_contradictions for the 1.85.0 keys.
   def self.scan
     items = []
     items.concat(expired_items)
     items.concat(addressed_items)
     items.concat(unrooted_items)
-    next_watermark, contradiction_items = detect_contradictions
-    { items: items, contradiction_items: contradiction_items, next_watermark: next_watermark }
+    { items: items, **detect_contradictions }
   end
 
   # --- Detector 1: explicit expiry elapsed ---------------------------------
@@ -143,27 +148,76 @@ class StaleMemoryScanner
   # runs it only for entities with obs activity newer than the last scan —
   # keeps re-runs cheap and avoids duplicate reports. Gated by the same
   # AppSettings + vector flags the detector itself honors.
-  # @return [Array(Time, Array<Hash>)] the next watermark and one review item per pair found
-  #   (de-duplicated across entities)
+  #
+  # "Activity" includes LLM words landing (llm_keywords_at, written without touching updated_at):
+  # a fallback pair skipped while its words were pending is looked at again once they land.
+  #
+  # The `:unknown` fallback pairs (1.85.0) go to FactSupersede::ContradictionFallback, one judge
+  # cap for all, together with the pairs the previous scan couldn't judge (`fallback_retry`, kept
+  # in its report) and those of up to MAX_REROUTE_ROWS pending contradiction rows that
+  # ReviewPolicies::SubjectCheck calls `:reroute` (seeded before 1.85.0). The job dismisses each
+  # rerouted row whose pair was decided; an undecided one stays pending for the next scan.
+  #
+  # @return [Hash] `next_watermark:` [Time]; `contradiction_items:` [Array<Hash>] one review item per
+  #   pair (de-duplicated across entities); `supersede_items:` [Array<Hash>] the fallback's
+  #   fact_supersede items; `rerouted:` [Array(MaintenanceReportRow, String)] the rows to dismiss with
+  #   their pair's outcome; `fallback_retry:` [Array(Integer, Integer, Float)] unjudged pairs (sorted
+  #   ids, distance) for the next scan
   def self.detect_contradictions
     watermark = previous_watermark
-    return [ watermark, [] ] unless AppSettings.contradiction_detection_enabled? && EmbeddingService.vector_enabled?
+    retry_pairs = previous_fallback_retry
+    none = { next_watermark: watermark, contradiction_items: [], supersede_items: [], rerouted: [], fallback_retry: retry_pairs }
+    return none unless AppSettings.contradiction_detection_enabled? && EmbeddingService.vector_enabled?
 
     cutoff = Time.current
-    results = MemoryEntity.joins(:memory_observations)
-                          .where(memory_observations: { status: MemoryObservation::ACTIVE_STATUS })
-                          .where("memory_observations.updated_at > ?", watermark)
-                          .distinct
-                          .pluck(:id)
-                          .flat_map { |entity_id| Array(ContradictionDetector.detect(entity_id)) }
-    items = results.uniq { |result| [ result.observation_id_1, result.observation_id_2 ].map(&:to_i).sort }
-                   .filter_map { |result| ContradictionDetector.review_item(result) }
-    [ cutoff, items ]
+    scans = MemoryEntity.joins(:memory_observations)
+                        .where(memory_observations: { status: MemoryObservation::ACTIVE_STATUS })
+                        .where("memory_observations.updated_at > :at OR memory_observations.llm_keywords_at > :at", at: watermark)
+                        .distinct
+                        .pluck(:id)
+                        .map { |entity_id| ContradictionDetector.scan(entity_id) }
+    items = scans.flat_map(&:pairs).uniq { |result| [ result.observation_id_1, result.observation_id_2 ].map(&:to_i).sort }
+                 .filter_map { |result| ContradictionDetector.review_item(result) }
+    { next_watermark: cutoff, contradiction_items: items, **route_fallback(scans.flat_map(&:fallback), retry_pairs) }
   rescue StandardError => e
     # Vector work is best-effort inside a maintenance scan — log, never abort.
     # Return the PREVIOUS watermark so the failed window is retried next run.
     Rails.logger.warn "[StaleMemoryScanner] contradiction pass skipped: #{e.message}"
-    [ watermark, [] ]
+    none
+  end
+
+  # @param found [Array<ContradictionDetector::Result>] this scan's fallback pairs
+  # @param retry_pairs [Array<Array>] the previous scan's leftovers
+  # @return [Hash] supersede_items:, rerouted:, fallback_retry:
+  def self.route_fallback(found, retry_pairs)
+    retried = retry_pairs.map { |first, second, distance| ContradictionDetector::Result.new(observation_id_1: first, observation_id_2: second, distance: distance) }
+    reroute = reroute_rows
+    result = FactSupersede::ContradictionFallback.call(found + retried + reroute.map(&:last))
+    rows_pairs = reroute.to_set { |_row, pair| FactSupersede::ContradictionFallback.key(pair) }
+    leftovers = result.leftovers.map { |pair| FactSupersede::ContradictionFallback.key(pair) + [ pair.distance.to_f.round(4) ] }
+    { supersede_items: result.items,
+      rerouted: reroute.filter_map { |row, pair| (outcome = result.outcomes[FactSupersede::ContradictionFallback.key(pair)]) && [ row, outcome ] },
+      fallback_retry: leftovers.reject { |entry| rows_pairs.include?(entry.first(2)) }.first(MAX_FALLBACK_RETRY) }
+  end
+
+  # @return [Array(MaintenanceReportRow, ContradictionDetector::Result)] pending contradiction rows
+  #   of the `:unknown` fallback (none with fact supersede off: they stay pending)
+  def self.reroute_rows
+    return [] unless AppSettings.fact_supersede_enabled?
+
+    MaintenanceReportRow.by_report_type(FactSupersede::Proposals::REPORT_TYPE).pending.where(kind: "contradiction").find_each.lazy
+                        .select { |row| ReviewPolicies::SubjectCheck.status(row) == :reroute }.first(MAX_REROUTE_ROWS)
+                        .map do |row|
+      payload = row.effective_payload.to_h.stringify_keys
+      [ row, ContradictionDetector::Result.new(observation_id_1: payload["observation_id_1"].to_i, observation_id_2: payload["observation_id_2"].to_i,
+                                               distance: payload["distance"].to_f, confidence: payload["confidence"]) ]
+    end
+  end
+
+  # @return [Array<Array(Integer, Integer, Float)>] the unjudged fallback pairs the last scan kept
+  def self.previous_fallback_retry
+    report = MaintenanceReport.where(report_type: SCAN_REPORT_TYPE).order(id: :desc).first
+    Array(report&.data.is_a?(Hash) ? report.data["fallback_retry"] : nil).select { |entry| entry.is_a?(Array) && entry.size == 3 }
   end
 
   # The scan watermark lives in the previous report's `data` (set by the job),
