@@ -5,6 +5,27 @@ All notable changes to GraphMem will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.88.0] - 2026-11-17
+
+MCP Apps, step B: the interactive view draws the graph. Hosts that support MCP Apps (Cursor today) show the result of `traverse_graph` or `find_shortest_path` as a Cytoscape graph next to the chat, and the view can load and explore a subset on its own.
+
+### Added
+- **Graph mode** in the `ui://graph-mem/graph` view, with Explore's styles:
+  - `traverse_graph` results in every mode: an expansion (start entity highlighted), a relation query (endpoints loaded with batched `get_entities`), nodes alone without `relations`; `find_shortest_path` draws the path or says there is none.
+  - A draw cap of 2,000 entities and 5,000 relations, with a "Showing N of M" note.
+  - **Context project** and **Root entities** buttons load a subset without a tool result (for hosts that open one view per chat): the active project's `part_of` subtree, or the Projects and untyped entities from the paged `search` catalog.
+  - Clicking a node shows its observations and relations; **Expand 1/2**, **Path between selected** and **Show this project** extend or replace the drawing. The view only calls read tools and never changes the active project; it tells the agent what it shows (scope, counts, selected ids) through `ui/update-model-context`.
+  - Fullscreen when the host offers it, and the host's theme and colors.
+
+### Fixed
+- Explore: the entity a neighbourhood or project opens from has its yellow focus border again. The style rule compared `is_focus` with the string `"true"`, and the API sends a boolean; it now matches the boolean. The API output is unchanged.
+
+### Changed
+- The view document (`resources/read`) is now built by `GraphMem::McpApps::ViewBuilder`: the shell and scripts under `lib/graph_mem/mcp_apps/view/` plus the vendored Cytoscape 3.31.4 and the Explore graph config, inlined (about 460 KB). Capabilities, `tools/list`, `resources/list` and every `tools/call` result are unchanged.
+
+### Dependencies
+- None: a generic `bundle update` changed nothing.
+
 ## [1.87.0] - 2026-11-17
 
 MCP Apps, step A: graph_mem declares the MCP Apps extension and serves a first (stub) interactive view, which hosts such as Claude and Cursor open when `traverse_graph` or `find_shortest_path` is called. 1.88.0 draws the graph.

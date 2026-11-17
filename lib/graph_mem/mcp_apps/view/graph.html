@@ -5,122 +5,103 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>graph_mem</title>
 <style>
+  /* Host variables (hostContext.styles.variables) win; the fallbacks follow the color scheme. */
   :root {
     color-scheme: light dark;
     --gm-bg: var(--color-background-primary, Canvas);
+    --gm-bg-2: var(--color-background-secondary, light-dark(#f4f4f5, #27272a));
     --gm-fg: var(--color-text-primary, CanvasText);
-    --gm-muted: var(--color-text-secondary, GrayText);
+    --gm-muted: var(--color-text-secondary, light-dark(#52525b, #a1a1aa));
+    --gm-danger: var(--color-text-danger, light-dark(#b91c1c, #f87171));
+    --gm-border: var(--color-border-primary, light-dark(#d4d4d8, #3f3f46));
+    --gm-accent: var(--color-ring-primary, light-dark(#2563eb, #60a5fa));
     --gm-font: var(--font-sans, system-ui, sans-serif);
+    --gm-radius: var(--border-radius-md, 6px);
+    --gm-graph-height: 460px;
   }
-  body { margin: 0; padding: 12px 16px; background: var(--gm-bg); color: var(--gm-fg); font: 14px/1.4 var(--gm-font); }
-  h1 { margin: 0 0 4px; font-size: 16px; }
+  :root[data-theme="light"] { color-scheme: light; }
+  :root[data-theme="dark"] { color-scheme: dark; }
+  :root.fullscreen { --gm-graph-height: calc(100vh - 120px); }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 8px 12px; background: var(--gm-bg); color: var(--gm-fg); font: 13px/1.4 var(--gm-font); }
+  h1 { margin: 0; font-size: 15px; }
+  h2 { margin: 0; font-size: 14px; overflow-wrap: anywhere; }
+  h3 { margin: 10px 0 4px; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--gm-muted); }
   p { margin: 4px 0; }
   .muted { color: var(--gm-muted); }
-  button { font: inherit; margin-top: 8px; }
+  .bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
+  .spacer { flex: 1; }
+  button { font: inherit; color: var(--gm-fg); background: var(--gm-bg-2); border: 1px solid var(--gm-border);
+           border-radius: var(--gm-radius); padding: 3px 9px; cursor: pointer; }
+  button:disabled { opacity: .5; cursor: default; }
+  #status.error { color: var(--gm-danger); }
+  #note:empty { display: none; }
+  .stage { display: flex; gap: 8px; margin: 6px 0; }
+  .canvas { position: relative; flex: 1; min-width: 0; }
+  #graph { height: var(--gm-graph-height); border: 1px solid var(--gm-border); border-radius: var(--gm-radius); background: var(--gm-bg); }
+  .empty { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+           gap: 8px; padding: 16px; text-align: center; }
+  .empty[hidden] { display: none; }
+  body.busy button[data-load], body.busy button[data-action] { pointer-events: none; opacity: .5; }
+  #panel { width: 320px; max-height: var(--gm-graph-height); overflow: auto; padding: 8px 10px;
+           border: 1px solid var(--gm-border); border-radius: var(--gm-radius); background: var(--gm-bg-2); }
+  #panel[hidden] { display: none; }
+  #panel ul { margin: 0; padding-left: 18px; }
+  #panel li { margin: 3px 0; overflow-wrap: anywhere; }
+  .panel-head { display: flex; align-items: flex-start; gap: 8px; }
+  .panel-head h2 { flex: 1; }
+  @media (max-width: 640px) {
+    .stage { flex-direction: column; }
+    #panel { width: auto; }
+  }
 </style>
 </head>
 <body>
-<h1 id="title">graph_mem graph view</h1>
-<p id="status" class="muted">Waiting for the host…</p>
-<p id="count"></p>
-<p><button id="details" type="button" hidden>Load entity details</button></p>
-<p id="details-status" class="muted"></p>
+<header class="bar">
+  <h1>graph_mem</h1>
+  <span id="scope" class="muted"></span>
+  <span class="spacer"></span>
+  <button id="load-context" type="button" data-load="context">Context project</button>
+  <button id="load-roots" type="button" data-load="roots">Root entities</button>
+  <button id="fit" type="button" disabled>Fit</button>
+  <button id="fullscreen" type="button" hidden>Fullscreen</button>
+</header>
+<p id="status" class="muted" role="status">Waiting for the host…</p>
+<p id="note" class="muted"></p>
+<div class="stage">
+  <div class="canvas">
+    <div id="graph" role="img" aria-label="Graph of graph_mem entities"></div>
+    <div id="empty" class="empty" hidden>
+      <p id="empty-text">Nothing to draw yet.</p>
+      <p class="muted">Load the active project, or the root entities (Projects and untyped entities).</p>
+      <p class="bar"><button type="button" data-load="context">Context project</button>
+        <button type="button" data-load="roots">Root entities</button></p>
+    </div>
+  </div>
+  <aside id="panel" aria-label="Entity details" hidden>
+    <div class="panel-head"><h2 id="panel-title"></h2><button id="panel-close" type="button" aria-label="Close the details">Close</button></div>
+    <p id="panel-type" class="muted"></p>
+    <p id="panel-aliases" class="muted"></p>
+    <p class="bar">
+      <button type="button" data-action="expand-1">Expand 1</button>
+      <button type="button" data-action="expand-2">Expand 2</button>
+      <button type="button" data-action="show-project" hidden>Show this project</button>
+    </p>
+    <p id="panel-status" class="muted"></p>
+    <h3>Observations</h3>
+    <ul id="panel-observations"></ul>
+    <h3>Relations</h3>
+    <ul id="panel-relations"></ul>
+  </aside>
+</div>
+<footer class="bar">
+  <span id="counts" class="muted"></span>
+  <span class="spacer"></span>
+  <span id="selection" class="muted"></span>
+  <button id="path" type="button" data-action="path" disabled>Path between selected</button>
+</footer>
 <script type="module">
-// MCP Apps stub view (graph_mem 1.87.0, step A). Talks JSON-RPC 2.0 with the host over
-// postMessage: ui/initialize, then ui/notifications/initialized; shows the entity count of the
-// tool result the host pushes; answers ui/resource-teardown. Step B (1.88.0) draws the graph.
-// Rules: only messages from window.parent; only JSON-RPC 2.0 replies to a pending request or a
-// method handled here; an unknown request gets -32601, anything else is ignored; page text only
-// through textContent.
-
-const PROTOCOL_VERSION = "2026-01-26";
-const pending = new Map();
-let nextId = 1;
-let entityIds = [];
-
-const $ = (id) => document.getElementById(id);
-const setText = (id, text) => { $(id).textContent = text; };
-
-function post(message) {
-  // The view doesn't know the host's origin; the host routes the message to this frame.
-  window.parent.postMessage({ jsonrpc: "2.0", ...message }, "*");
-}
-
-function request(method, params) {
-  const id = nextId++;
-  return new Promise((resolve, reject) => {
-    pending.set(id, { resolve, reject });
-    post({ id, method, params });
-  });
-}
-
-const notify = (method, params) => post({ method, params });
-
-function showResult(result) {
-  const structured = result && typeof result === "object" ? result.structuredContent : null;
-  const entities = structured && Array.isArray(structured.entities) ? structured.entities : [];
-  entityIds = entities.map((entity) => entity && entity.entity_id).filter((id) => Number.isInteger(id));
-  setText("count", `${entities.length} ${entities.length === 1 ? "entity" : "entities"} in the result`);
-  $("details").hidden = entityIds.length === 0;
-}
-
-// Host → view requests and notifications this view handles.
-const handlers = {
-  "ui/notifications/tool-result": (params) => { setText("status", "Tool result received."); showResult(params); },
-  "ui/notifications/tool-input": () => setText("status", "Waiting for the tool result…"),
-  "ui/notifications/tool-cancelled": () => setText("status", "The tool call was cancelled."),
-  "ui/notifications/host-context-changed": () => {},
-  "ui/resource-teardown": () => ({}),
-  ping: () => ({})
-};
-
-window.addEventListener("message", (event) => {
-  if (event.source !== window.parent) return;
-  const message = event.data;
-  if (!message || typeof message !== "object" || message.jsonrpc !== "2.0") return;
-
-  const isReply = "id" in message && !("method" in message);
-  if (isReply) {
-    const waiter = pending.get(message.id);
-    if (!waiter) return;
-    pending.delete(message.id);
-    if (message.error) waiter.reject(message.error);
-    else waiter.resolve(message.result);
-    return;
-  }
-
-  if (typeof message.method !== "string") return;
-  if (!Object.hasOwn(handlers, message.method)) {
-    // A request (it has an id) gets an answer, as JSON-RPC 2.0 requires; a notification is dropped.
-    if ("id" in message) post({ id: message.id, error: { code: -32601, message: "Method not found" } });
-    return;
-  }
-  const answer = handlers[message.method](message.params);
-  if ("id" in message) post({ id: message.id, result: answer ?? {} });
-});
-
-$("details").addEventListener("click", async () => {
-  setText("details-status", "Loading…");
-  try {
-    const result = await request("tools/call", { name: "get_entities", arguments: { entity_ids: entityIds.slice(0, 20), observation_limit: 1 } });
-    const loaded = result && result.structuredContent && Array.isArray(result.structuredContent.entities) ? result.structuredContent.entities.length : 0;
-    setText("details-status", `get_entities answered with ${loaded} ${loaded === 1 ? "entity" : "entities"}.`);
-  } catch (_error) {
-    setText("details-status", "get_entities failed.");
-  }
-});
-
-try {
-  await request("ui/initialize", {
-    protocolVersion: PROTOCOL_VERSION,
-    appInfo: { name: "graph-mem-graph-view", version: "1.0.0" },
-    appCapabilities: { availableDisplayModes: ["inline", "fullscreen"] }
-  });
-  notify("ui/notifications/initialized", {});
-  setText("status", "Connected. Waiting for the tool result…");
-} catch (_error) {
-  setText("status", "The host refused the view.");
-}
+/* graph_mem: view scripts */
 </script>
 </body>
 </html>
