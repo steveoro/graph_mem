@@ -43,6 +43,7 @@ module GraphMem
       end
 
       def self.views_for(profile)
+        GraphMem::McpToolRegistry.load_all!
         advertised = GraphMem::McpToolRegistry.tool_classes_for(GraphMem::McpProfile.normalize(profile))
                                               .select(&:mcp_advertised?).map(&:tool_name)
         VIEWS.select { |view| (view[:calls] - advertised).empty? }
