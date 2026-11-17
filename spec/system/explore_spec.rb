@@ -43,6 +43,17 @@ RSpec.describe "Explore", type: :system do
       expect(csp_console_errors).to be_empty
     end
 
+    # GRAPH_STYLES' focus rule must match the API's boolean is_focus (a [is_focus="true"] selector
+    # compares strictly and never matched it).
+    it "draws the focus border on the entity a neighbourhood opens from" do
+      visit explore_path(entity_id: widget.id)
+      wait_for_nodes(3)
+
+      border = ->(id) { evaluate_script(explore_js("ctrl.cy.getElementById(#{id.to_s.to_json}).style('border-color')")) }
+      expect(border.call(widget.id)).to eq("rgb(255,255,0)")
+      expect([ border.call(alpha.id), border.call(router.id) ]).to all(satisfy { |color| color != "rgb(255,255,0)" })
+    end
+
     it "adds an observation from the panel, shows the toast, and undoes it" do
       visit explore_path(entity_id: widget.id)
       wait_for_nodes(3)

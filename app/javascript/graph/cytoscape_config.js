@@ -59,7 +59,9 @@ export const GRAPH_STYLES = [
     }
   },
   {
-    selector: 'node[is_focus="true"]',
+    // [?is_focus] is truthy: the data is a boolean (GraphDataController, the MCP Apps view);
+    // [is_focus="true"] compares strictly with the string and never matched it.
+    selector: 'node[?is_focus]',
     style: {
       'border-width': 4,
       'border-color': '#ffff00',
