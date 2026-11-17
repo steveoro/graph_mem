@@ -1,13 +1,13 @@
 # MCP Apps → graph_mem 1.87.0–1.89.0: a graph view and a search view inside the chat
 
-**Status (2026-11-17): PLAN, reviewed, all questions answered. Step A shipped in #176 as 1.87.0; kickoff ready
-for step B (1.88.0).** Written from `main` at `30beb6f` (1.84.0) and **reviewed at `9df8556`** against three
-sources: this repo's code, the installed `mcp` 1.9.0 gem source, and the live spec (stable 2026-01-26 and the
+**Status (2026-11-17): PLAN, reviewed, all questions answered. Step A shipped in #176 as 1.87.0, step B in #177
+as 1.88.0; kickoff ready for step C (1.89.0).** Written from `main` at `30beb6f` (1.84.0) and **reviewed at
+`9df8556`** against three sources: this repo's code, the installed `mcp` 1.9.0 gem source, and the live spec (stable 2026-01-26 and the
 draft). The review changed the first-load design, the tool linkage and the view packaging, and added the sections
 from "Acceptance criteria" on; "What the review changed" lists the differences. Steve answered every open question
 on 2026-11-12 (decisions 6–13). The train is 1.87.0–1.89.0 on top of 1.86.2. File:line references were checked
-again at `862210d` (1.87.0), and the gem facts against the installed `mcp` 1.10.0; the sections "The Ruby `mcp`
-gem" and "What changes on the wire" describe the 1.86.2 starting point that step A changed (see "A. … shipped").
+again at `862210d` (1.87.0) and, for step C, at `e7bebb5` (1.88.0), and the gem facts against the installed
+`mcp` 1.10.0; the sections "The Ruby `mcp` gem" and "What changes on the wire" describe the 1.86.2 starting point that step A changed (see "A. … shipped").
 If a line has moved, find the code by the quoted text, and if the code no longer matches the description, **stop
 and ask Steve** instead of improvising. Only `spec/docs` was run.
 
@@ -180,6 +180,12 @@ Spec: SEP-1865, **Stable (2026-01-26)**,
     a later linked call in the same chat showed no view.
   - **Devin Desktop 3.13.4:** no view; the tool results arrived as plain text, as before 1.87.0.
   - **Claude: deferred** (Steve, 2026-11-17; see the Claude bullet above). Not part of this train's manual checks.
+- **Step B's manual check (1.88.0, recorded in #177):** Cursor 3.23.23 (global entry, a new chat per call) drew
+  every `traverse_graph` mode and both `find_shortest_path` outcomes; the panel, expand, path and "Show this
+  project" worked; both subset buttons loaded with no tool result. The ~464 KB document was accepted. No consent
+  prompt for the agent's calls or the view's own. Theme switches recolour the open view. Cursor offers no
+  `fullscreen` display mode, so that button stays hidden. **Cursor apparently doesn't pass
+  `ui/update-model-context` to the model:** asked what the view showed, the agent knew only its own tool result.
 
 ## The Ruby `mcp` gem
 
@@ -476,8 +482,9 @@ as graph" switches to Graph mode with the hits' ids. The current query goes to `
 - `_meta.ui`: `prefersBorder: true`, no `csp` (the restrictive default), no `permissions`, no `domain`.
 - **Theming:** read `hostContext.styles.variables` and `theme`, with fallbacks in `:root`, and use the host's font
   variables or system fonts. (The operator UI's own theme switch stays a separate backlog item.)
-- **Size:** about 430 KB for the document. Record in the PR that both transports (Streamable HTTP and stdio)
-  deliver it, and whether Cursor accepts it.
+- **Size:** about 430 KB for the document (planned; 1.88.0 measured 464,379 bytes, and
+  `spec/lib/graph_mem/mcp_apps/view_builder_spec.rb` keeps it under 512,000). Record in the PR that both
+  transports (Streamable HTTP and stdio) deliver it, and whether Cursor accepts it.
 
 ### Lockdown, privacy, cloud gate
 
@@ -545,6 +552,41 @@ unknown request answered with `-32601`, notifications and stray replies dropped,
 
 ### B. Graph mode → 1.88.0
 
+**✅ Shipped in #177 as 1.88.0.** What step C builds on:
+- `GraphMem::McpApps::ViewBuilder.document(shell:, scripts:)` (`lib/graph_mem/mcp_apps/view_builder.rb`) builds
+  the shell `graph.html` plus one inline module script: Cytoscape (its trailer turned into `return Ah;` inside a
+  function scope), `cytoscape_config.js` without its `export `s, then the view scripts listed in `Views::VIEWS`
+  (`scripts:`, today `bridge.js host.js adapter.js loader.js interaction.js graph_view.js`, all under
+  `lib/graph_mem/mcp_apps/view/`). A view script must not use module syntax (the builder refuses it). Built once per
+  process.
+- `bridge.js`: every tool call goes through `bridge.callTool(name, args)`. `host.js`: theming, fullscreen,
+  `size-changed`, a debounced `ui/update-model-context`, the teardown reply. `adapter.js`: results → elements and the
+  draw cap. `loader.js`: `loadEntities(ids, { onProgress, knownIds })` (batched `get_entities`), `loadProject`,
+  `loadContextProject`, `loadRootEntities`. `interaction.js`: the node panel, expand, path, "Show this project".
+  `graph_view.js` (about 300 lines): drawing, layout, the status and note lines, the subset buttons.
+- Specs: `spec/lib/graph_mem/mcp_apps/{view_builder,view_source,views}_spec.rb`,
+  `spec/mcp/mcp_apps_graph_envelopes_spec.rb` (the keys the view reads, recorded from the real tools on synthetic
+  data, including the `search` catalog), `spec/system/mcp_apps_graph_view_spec.rb` (headless Chrome: a stub-host page
+  in a temp file, the built document in a `sandbox="allow-scripts"` iframe under the default CSP, the view's own
+  `tools/call` proxied to the readonly server).
+- Explore's focus rule is now `node[?is_focus]` (the API sends a boolean); the adapter writes a boolean too.
+
+**What step B taught (design inputs for C):**
+- Cursor mounts a view once per chat, and `search` is not linked, so Search mode has to be reachable from the view's
+  own controls with no tool result at all.
+- Cursor showed no consent prompt for the view's calls and didn't pass `ui/update-model-context` to the model. Keep
+  sending the update (other hosts may use it), but the user guide must not promise that the agent sees what the view
+  shows.
+- A result with nothing to draw must also reset the status line; a drawing with lone nodes needs the grid next to
+  the force-laid connected part (both fixed in #177; keep them working when Search mode hands hits to Graph mode).
+- The view-source spec's "names no write tool and no `set_context`" check matches comments too: don't name those
+  tools anywhere in the view sources, comments included.
+- The real-data screenshots from the manual check couldn't be attached. Any screenshot in the PR or the user guide
+  shows synthetic data only.
+- B's diff was about 1,760 lines against the 1,500 estimate, a third of it specs.
+
+The bullets below are the step as planned.
+
 - **B0, before branching:** CI on `main` green (if red, stop and ask), then a generic `bundle update` as its own
   first commit that keeps the Gemfile holds (`regexp_parser < 2.13.2`, `prism < 2`, `mcp` exact) and json on 3.x;
   if CI goes red on it, stop and ask instead of pinning more gems.
@@ -585,18 +627,47 @@ unknown request answered with `-32601`, notifications and stray replies dropped,
   counts and the absence of console errors. If headless Chrome can't load a local file that way without a new
   route, a gem or a package, stop there and do a manual check instead; say so in the PR.
 - Manual check, recorded in the PR: Cursor (global entry, current build) draws each `traverse_graph` mode and a
-  path, the two subset buttons work with no tool result, and the document size (about 430 KB) is accepted over
-  both transports. Cursor is the reference host; the Claude check is deferred.
+  path, the two subset buttons work with no tool result, and the document size (about 430 KB; 464,379 bytes as
+  shipped) is accepted over both transports. Cursor is the reference host; the Claude check is deferred.
 
 ### C. Search mode, docs → 1.89.0
 
-- Search mode (filters, paging, click-through, "Show as graph"), the user guide page under `docs/guides/` (what
-  the views do, how to open them, which clients render them, the Cursor global-entry note, that view calls count
-  as agent calls), the README feature line.
-- Manual check on Cursor (the reference host), recorded in `docs/protocol_compat.md`; the Claude check stays
-  deferred unless Steve gets a supported Claude client.
-- Housekeeping: mark this plan DONE, move it to `docs/plans/done/` and add its row to
-  `docs/plans/done/README.md`.
+- **C0, before branching:** as B0 (CI on `main` green, then a generic `bundle update` as its own first commit that
+  keeps the Gemfile holds and json on 3.x; stop and ask if CI goes red on it).
+- **Search mode** (see "Search mode" above): a mode switch in `graph.html` ("Graph" / "Search"), reachable with no
+  tool result. Its code goes in a new view script (for example `lib/graph_mem/mcp_apps/view/search_view.js`) added
+  to `Views::VIEWS`' `scripts:`, so `graph_view.js` and every file stay under 500 lines. It calls only `search` and
+  `get_entities`, both already in the view's five `calls`; `Views` and the builder need no other change.
+  - A query is required (catalog mode refuses filters, decision 8; no change to `search`). Filters are the ones
+    `search` takes with a query: `project_id`, `entity_types`, `search_in_name`/`_type`/`_aliases`/`_observations`,
+    `perspective`. The project filter offers projects the view already knows (the context project from
+    `get_context`, `Project` entities already loaded); it starts no catalog scan of its own.
+  - Hits come from summary mode's `results` (`entity_id`, `name`, `entity_type`, `project_id`, `description`,
+    `aliases`, `relevance_score`, `matched_fields`; `app/strategies/hybrid_search_strategy.rb` `SearchResult#to_h`).
+    `pagination` has only `current_page` and `per_page`, so the pager is previous / next, with next disabled on a
+    short page.
+  - Clicking a hit opens the details with one `get_entities` call (full observations, that entity only), reusing
+    the node panel (`interaction.js` `showDetails(id)`, which reads type and aliases from `state.entities`, so a hit
+    that isn't drawn needs its summary passed in). "Show as graph" switches to Graph mode and draws the hits through
+    `loadEntities` (batched, `observation_limit: 1`).
+  - The query and filters go to `ui/update-model-context` as short text.
+- **Specs:** the view-source spec covers the new script (no new exemption); `mcp_apps_graph_envelopes_spec.rb` (or a
+  sibling) records `search` summary pages with a query and filters on synthetic data (no outbound HTTP:
+  `spec/support/outbound_http_guard.rb`; `EmbeddingHelper` for embeddings if a spec needs them); the system spec
+  (extend `mcp_apps_graph_view_spec.rb` or add a sibling) checks the switch with no tool result, a query, a filter,
+  paging (next disabled on a short page), a hit's panel, "Show as graph" counts, the model-context update and no
+  console errors. The document stays under 512,000 bytes.
+- **Docs:** the user guide page under `docs/guides/` (what the views do, how to open them, which clients render them,
+  the Cursor global-entry note and its once-per-chat mounting, that view calls count as agent calls in telemetry and
+  `AgentContext` activity, that the agent may not see what the view shows), linked from the README (feature line and
+  docs list) and from `docs/mcp_tools.md`. `docs/mcp_tools.md` and `docs/protocol_compat.md` describe Search mode;
+  the host table in `docs/protocol_compat.md` gets the 1.88.0 and 1.89.0 Cursor checks.
+- Manual check on Cursor (the reference host), recorded in the PR and in `docs/protocol_compat.md`; the Claude check
+  stays deferred unless Steve gets a supported Claude client.
+- Housekeeping: mark this plan DONE, move it to `docs/plans/done/` (`git mv`) and add its row to
+  `docs/plans/done/README.md` (MCP Apps views, 1.87.0–1.89.0). Point the two live references at the new path:
+  `lib/graph_mem/mcp_apps.rb` (module comment) and `docs/protocol_compat.md` ("MCP Apps" section). References inside
+  other done plans stay as written (that folder's README says so).
 
 ### Release (each step)
 
@@ -629,7 +700,8 @@ As in `docs/plans/done/mcp-sdk-1.9.0-plan.md`:
 ## Size
 
 Rough estimates, to be corrected in each PR: A about 700 changed lines (half of it specs and re-recorded
-snapshots), B about 1,500, C about 900. **Stop and ask Steve if a PR's diff grows past ~3,000 lines.**
+snapshots), B about 1,500 (shipped at about 1,760), C about 900. **Stop and ask Steve if a PR's diff grows past
+~3,000 lines.**
 
 ## Open questions for Steve
 
