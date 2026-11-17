@@ -20,7 +20,7 @@ module GraphMem
       def self.for(profile)
         profile = GraphMem::McpProfile.normalize(profile)
         GraphMem::McpToolRegistry.load_all!
-        resources = GraphMem::McpToolRegistry.resource_classes
+        providers = [ TemplateResourceProvider.new(GraphMem::McpToolRegistry.resource_classes) ]
 
         server = MCP::Server.new(
           name: "graph-mem",
@@ -29,10 +29,10 @@ module GraphMem
           capabilities: CAPABILITIES,
           tools: GraphMem::McpToolRegistry.tool_classes_for(profile).select(&:mcp_advertised?).map { |klass| ToolWrapper.build(klass) },
           prompts: GraphMem::McpToolRegistry.prompt_classes_for(profile).map { |klass| PromptWrapper.build(klass) },
-          resource_templates: ResourceCatalog.templates(resources),
+          resource_templates: ResourceCatalog.templates(providers),
           configuration: OfficialMcp.configuration
         )
-        server.resources_read_handler { |params| ResourceCatalog.read(resources, params[:uri].to_s) }
+        server.resources_read_handler { |params| ResourceCatalog.read(providers, params[:uri].to_s) }
         server
       end
     end
