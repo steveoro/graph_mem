@@ -176,6 +176,16 @@ RSpec.describe "MCP Apps graph view", type: :system do
 
   # With no edges the force layout packs the lone nodes in overlapping rows: a grid sized to the
   # labels keeps every label readable.
+  # Pairs of drawn nodes whose label boxes overlap, once the layout has stopped moving them.
+  def overlapping_label_boxes
+    within_frame("view") do
+      boxes = "JSON.stringify(document.getElementById('graph')._cyreg.cy.nodes().map((n) => n.boundingBox({ includeLabels: true })))"
+      previous = nil
+      wait_until { current = page.evaluate_script(boxes); settled = current == previous; previous = current; sleep 0.2; settled }
+      JSON.parse(previous).combination(2).count { |a, b| a["x1"] < b["x2"] && b["x1"] < a["x2"] && a["y1"] < b["y2"] && b["y1"] < a["y2"] }
+    end
+  end
+
   it "draws the nodes alone when include leaves out the relations, without overlapping them" do
     24.times do |i|
       member = MemoryEntity.create!(name: "synth-alpha-member-with-a-long-label-#{i}", entity_type: "Task", project_id: project.id)
@@ -187,14 +197,8 @@ RSpec.describe "MCP Apps graph view", type: :system do
     within_frame("view") do
       expect(page).to have_text("28 entities, 0 relations")
       expect(find_by_id("status").text).to eq("Tool result drawn.")
-      boxes = "JSON.stringify(document.getElementById('graph')._cyreg.cy.nodes().map((n) => n.boundingBox({ includeLabels: true })))"
-      previous = nil
-      wait_until { current = page.evaluate_script(boxes); settled = current == previous; previous = current; sleep 0.2; settled }
-      overlapping = JSON.parse(previous).combination(2).count do |a, b|
-        a["x1"] < b["x2"] && b["x1"] < a["x2"] && a["y1"] < b["y2"] && b["y1"] < a["y2"]
-      end
-      expect(overlapping).to eq(0)
     end
+    expect(overlapping_label_boxes).to eq(0)
   end
 
   it "draws a shortest path, and says when there is none" do
@@ -299,6 +303,23 @@ RSpec.describe "MCP Apps graph view", type: :system do
       expect(calls_served.first).to eq("name" => "search", "arguments" => { "page" => 1, "per_page" => 100 })
       expect(calls_served.last).to include("name" => "get_entities")
       expect(calls_served.last["arguments"]["entity_ids"]).to contain_exactly(project.id, root_b.id, MemoryEntity.find_by!(name: "synth-untyped-root").id)
+      expect(console_errors).to be_empty
+    end
+
+    # One relation must not send the lone roots back to the force layout's overlapping rows: they
+    # get the grid, below the connected part.
+    it "draws root entities with one relation between two of them without overlapping the rest" do
+      roots = Array.new(24) { |i| MemoryEntity.create!(name: "synth-root-with-a-long-label-#{i}", entity_type: "Project") }
+      MemoryRelation.create!(from_entity: roots[0], to_entity: roots[1], relation_type: "depends_on")
+      open_view
+      within_frame("view") do
+        expect(page).to have_text("No tool result reached this view")
+        click_button "Root entities", match: :first
+      end
+      serve_view_calls_until("Root entities loaded.")
+
+      within_frame("view") { expect(find_by_id("counts").text).to eq("26 entities, 1 relation") }
+      expect(overlapping_label_boxes).to eq(0)
       expect(console_errors).to be_empty
     end
 
