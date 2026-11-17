@@ -489,6 +489,11 @@ operator Explore and Search pages untouched, and its own CHANGELOG entry and doc
 
 ### A. Generic resource layer, Apps capability, stub view → 1.87.0
 
+- **A0, before branching:** check that CI on `main` is green. A lockfile refresh on 2026-11-17 (`12b6408`) made
+  every spec file fail to load on CI (the first load error, then `FrozenError` on the frozen autoload paths for
+  each later file, because Rails re-runs `initialize!` after a failed boot); it was reverted in `6b51d75`, and
+  `main` is green again with the 1.86.2 lockfile. This PR leaves `Gemfile.lock` alone; the refresh is retried in
+  its own commit, one gem at a time, outside this train. If `main` is red at kickoff, stop and ask.
 - Providers as above; `TemplateResourceProvider` first, in its own commit, with no output change (snapshots
   identical).
 - Declare the extension (plain-hash `extensions:` key, through `ServerFactory.capabilities(apps_enabled:)`);
