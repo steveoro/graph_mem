@@ -42,7 +42,18 @@
   .empty { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
            gap: 8px; padding: 16px; text-align: center; }
   .empty[hidden] { display: none; }
-  body.busy button[data-load] { pointer-events: none; opacity: .5; }
+  body.busy button[data-load], body.busy button[data-action] { pointer-events: none; opacity: .5; }
+  #panel { width: 320px; max-height: var(--gm-graph-height); overflow: auto; padding: 8px 10px;
+           border: 1px solid var(--gm-border); border-radius: var(--gm-radius); background: var(--gm-bg-2); }
+  #panel[hidden] { display: none; }
+  #panel ul { margin: 0; padding-left: 18px; }
+  #panel li { margin: 3px 0; overflow-wrap: anywhere; }
+  .panel-head { display: flex; align-items: flex-start; gap: 8px; }
+  .panel-head h2 { flex: 1; }
+  @media (max-width: 640px) {
+    .stage { flex-direction: column; }
+    #panel { width: auto; }
+  }
 </style>
 </head>
 <body>
@@ -67,8 +78,28 @@
         <button type="button" data-load="roots">Root entities</button></p>
     </div>
   </div>
+  <aside id="panel" aria-label="Entity details" hidden>
+    <div class="panel-head"><h2 id="panel-title"></h2><button id="panel-close" type="button" aria-label="Close the details">Close</button></div>
+    <p id="panel-type" class="muted"></p>
+    <p id="panel-aliases" class="muted"></p>
+    <p class="bar">
+      <button type="button" data-action="expand-1">Expand 1</button>
+      <button type="button" data-action="expand-2">Expand 2</button>
+      <button type="button" data-action="show-project" hidden>Show this project</button>
+    </p>
+    <p id="panel-status" class="muted"></p>
+    <h3>Observations</h3>
+    <ul id="panel-observations"></ul>
+    <h3>Relations</h3>
+    <ul id="panel-relations"></ul>
+  </aside>
 </div>
-<footer class="bar"><span id="counts" class="muted"></span></footer>
+<footer class="bar">
+  <span id="counts" class="muted"></span>
+  <span class="spacer"></span>
+  <span id="selection" class="muted"></span>
+  <button id="path" type="button" data-action="path" disabled>Path between selected</button>
+</footer>
 <script type="module">
 /* graph_mem: view scripts */
 </script>
