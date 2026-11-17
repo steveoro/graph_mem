@@ -1,14 +1,15 @@
 # MCP Apps → graph_mem 1.87.0–1.89.0: a graph view and a search view inside the chat
 
-**Status (2026-11-17): PLAN, reviewed, all questions answered, kickoff ready for step A (1.87.0).** Written from
-`main` at `30beb6f` (1.84.0) and **reviewed at `9df8556`** against three sources: this repo's code, the installed
-`mcp` 1.9.0 gem source, and the live spec (stable 2026-01-26 and the draft). The review changed the first-load
-design, the tool linkage and the view packaging, and added the sections from "Acceptance criteria" on; "What the
-review changed" lists the differences. Steve answered every open question on 2026-11-12 (decisions 6–13). 1.85.0,
-1.86.0, 1.86.1 (`mcp` 1.10.0) and 1.86.2 shipped other work meanwhile, so this train is 1.87.0–1.89.0 on top of
-1.86.2. File:line references were checked again at `ffbe760` (1.86.2), and the gem facts against the installed
-`mcp` 1.10.0; if a line has moved, find the code by the quoted text, and if the code no longer matches the
-description, **stop and ask Steve** instead of improvising. Only `spec/docs` was run.
+**Status (2026-11-17): PLAN, reviewed, all questions answered. Step A shipped in #176 as 1.87.0; kickoff ready
+for step B (1.88.0).** Written from `main` at `30beb6f` (1.84.0) and **reviewed at `9df8556`** against three
+sources: this repo's code, the installed `mcp` 1.9.0 gem source, and the live spec (stable 2026-01-26 and the
+draft). The review changed the first-load design, the tool linkage and the view packaging, and added the sections
+from "Acceptance criteria" on; "What the review changed" lists the differences. Steve answered every open question
+on 2026-11-12 (decisions 6–13). The train is 1.87.0–1.89.0 on top of 1.86.2. File:line references were checked
+again at `862210d` (1.87.0), and the gem facts against the installed `mcp` 1.10.0; the sections "The Ruby `mcp`
+gem" and "What changes on the wire" describe the 1.86.2 starting point that step A changed (see "A. … shipped").
+If a line has moved, find the code by the quoted text, and if the code no longer matches the description, **stop
+and ask Steve** instead of improvising. Only `spec/docs` was run.
 
 ## Goal
 
@@ -150,7 +151,7 @@ Spec: SEP-1865, **Stable (2026-01-26)**,
   `--font-sans`, …) with `light-dark()` values, plus `hostContext.theme`. Views should set fallback values.
 - **Graceful degradation:** tools MUST still return a meaningful `content` array. As a best practice (not a MUST),
   hosts keep `structuredContent` out of the model's context. graph_mem's `content` text is already the same JSON
-  as `structuredContent` (`lib/graph_mem/official_mcp/tool_wrapper.rb:86-87`), so the model sees the same data
+  as `structuredContent` (`lib/graph_mem/official_mcp/tool_wrapper.rb:90-91`), so the model sees the same data
   either way.
 - **Size:** neither the spec nor the docs set a limit for the HTML resource. The SDK docs note that some hosts
   limit tool-result sizes.
@@ -170,6 +171,14 @@ Spec: SEP-1865, **Stable (2026-01-26)**,
 - **Also listed:** VS Code GitHub Copilot, Microsoft 365 Copilot, Goose, Postman, MCPJam, Archestra.AI on the
   overview; ChatGPT, PostHog Code, Kiro Crew and Glean in the client matrix; MCP Inspector as partial.
 - **Claude Code** is in the matrix without Apps support. It and other CLIs keep the text result.
+- **Step A's manual check (1.87.0, recorded in #176):**
+  - **Cursor 3.23.23** (global entry, HTTP on loopback): the stub rendered inline after `traverse_graph` and
+    after `find_shortest_path`. The view's own `get_entities` ran **without a consent prompt** and its result
+    **did not reach the model's context**. Cursor rendered a view **once per chat** (or once per `resourceUri`):
+    a later linked call in the same chat showed no view.
+  - **Devin Desktop 3.13.4:** no view; the tool results arrived as plain text, as before 1.87.0.
+  - **Claude: not run.** Claude Desktop has no Linux build, and claude.ai needs a public HTTPS endpoint. Still
+    open, with ext-apps #671 in mind.
 
 ## The Ruby `mcp` gem
 
@@ -349,11 +358,11 @@ On `ui/notifications/tool-result` the view draws that result:
   edges. `found: false` shows "no path" instead of an empty canvas.
 - `traverse_graph` has two modes, and the host opens the view for both:
   - **Expansion** (`start_entity_id` alone) → `{ entities, relations, traversal }`, straight to nodes and edges.
-    `include` can leave either key out (`traverse_graph_tool.rb:110-117`): without `entities` the view treats
+    `include` can leave either key out (`traverse_graph_tool.rb:111-118`): without `entities` the view treats
     the result as relations-only, without `relations` it draws the nodes alone, and `include: ["traversal"]`
     falls under the "neither" case below.
   - **Relation query** (no `start_entity_id`, or `from_entity_id`/`to_entity_id`;
-    `app/tools/traverse_graph_tool.rb:43-51`, `:86-108`) → **relations only** by default, with ids and no names,
+    `app/tools/traverse_graph_tool.rb:44-52`, `:87-109`) → **relations only** by default, with ids and no names,
     and **no limit** (`app/services/relation_query_service.rb:32-41`): `traverse_graph({})` returns every relation
     in the graph. The view loads the relations' endpoints with batched `get_entities` (below) before drawing.
 - **Draw cap, for any result:** 2,000 nodes (Explore's `MAX_NODES`) and 5,000 edges, with a "showing N of M"
@@ -477,7 +486,7 @@ as graph" switches to Graph mode with the hits' ids. The current query goes to `
 - The anonymizer and `cloud_allowed` govern graph_mem's own LLM calls; this train makes none and changes none. A
   search from the view calls the embedding provider, exactly as an agent's `search` does.
 - **View calls are recorded as the agent's calls.** Each one goes through `ApplicationTool`'s wrapper, so it writes
-  `ToolTelemetry` and `AgentContext.record_activity!` (`app/tools/application_tool.rb:122`, `:259`). Telemetry
+  `ToolTelemetry` and `AgentContext.record_activity!` (`app/tools/application_tool.rb:138`, `:275`). Telemetry
   will count UI clicks together with agent calls; the user guide says so.
 - A host may put the `content` text of a view-initiated call into the model's context. The batches and
   `observation_limit` above keep those results small.
@@ -488,6 +497,17 @@ Versions follow 1.86.2. Each PR keeps the default `/mcp` at 12 tools, unchanged 
 operator Explore and Search pages untouched, and its own CHANGELOG entry and docs. Branches are `claude/<topic>`.
 
 ### A. Generic resource layer, Apps capability, stub view → 1.87.0
+
+**✅ Shipped in #176 as 1.87.0.** What step B builds on: `GraphMem::OfficialMcp::ResourceCatalog` over
+providers (`TemplateResourceProvider`, `StaticResourceProvider`); `GraphMem::McpApps.enabled?` and
+`GraphMem::McpApps::Views` (`GRAPH_URI`, `VIEWS` with the five `calls`, `provider_for`, `uris_for`; the body reads
+`lib/graph_mem/mcp_apps/view/graph.html` as is); `ServerFactory.capabilities(apps_enabled:)`;
+`ApplicationTool.mcp_ui_view` on `traverse_graph` and `find_shortest_path`; the `mcp_apps_enabled` setting and
+its save hook; the stub's `postMessage` bridge in `graph.html` (only `window.parent`, only JSON-RPC 2.0, an
+unknown request answered with `-32601`, notifications and stray replies dropped, text only via `textContent`);
+`spec/lib/graph_mem/mcp_apps/view_source_spec.rb`. Its A0 ran a `bundle update` and holds `regexp_parser < 2.13.2`
+(2.13.2 breaks `json_schemer` 2.5.0 at load) and `prism < 2` in the Gemfile. The manual check results are under
+"Client support". The bullets below are the step as planned.
 
 - **A0, before branching:** check that CI on `main` is green. A lockfile refresh on 2026-11-17 (`12b6408`) made
   every spec file fail to load on CI (the first load error, then `FrozenError` on the frozen autoload paths for
@@ -523,6 +543,33 @@ operator Explore and Search pages untouched, and its own CHANGELOG entry and doc
 
 ### B. Graph mode → 1.88.0
 
+- **B0, before branching:** CI on `main` green (if red, stop and ask), then a generic `bundle update` as its own
+  first commit that keeps the Gemfile holds (`regexp_parser < 2.13.2`, `prism < 2`, `mcp` exact) and json on 3.x;
+  if CI goes red on it, stop and ask instead of pinning more gems.
+- **What step A taught (design inputs):**
+  - **A view is not guaranteed per call.** Cursor showed a view only once per chat, so a later linked call in the
+    same chat may reach no view, and the mounted view doesn't get that call's result. The view must be useful on
+    its own: after `ui/initialize`, if no `ui/notifications/tool-result` arrives (or it holds nothing to draw),
+    show the "Context project" and "Root entities" buttons; expand, path and the subset loads are the view's own
+    calls; the drawn scope goes to `ui/update-model-context`, so the agent knows what the user sees. Don't build
+    anything that needs a fresh view per agent call. The user guide (step C) says so.
+  - **The view's own calls in Cursor:** no consent prompt, and their results don't reach the model's context. So
+    the root loader's up-to-40 calls are usable in Cursor; keep it. Repeat the check on Claude when one is
+    available; if Claude asks for consent on every view call, stop and ask Steve before changing the loader.
+  - **The model learns what the view shows only through `ui/update-model-context`** (view results don't reach it
+    in Cursor). Keep that update short: scope, counts, selected ids.
+- **Build on 1.87.0, don't replace it:** keep `Views` and the provider, and swap the `graph.html` body for the
+  builder's output (still built once, memoized); keep the bridge's checks and the `-32601` answer; extend
+  `view_source_spec.rb` to every view source and keep its "only the five tools" check, which must find at least
+  one call. The vendored Cytoscape stays in `vendor/javascript/` (not copied under `lib/graph_mem/mcp_apps/view/`,
+  so the view-source spec doesn't scan it). A spec pins its size (416,235 bytes), SHA-256
+  (`2815a1007610f002a3fc89a28e3172534603c9439833a4d3fa4e172576b7e2d3`) and trailer
+  (`export{Ah as default};` plus a newline), so a Cytoscape change fails loudly. In it, `http:` appears only in
+  license comments, `Function(` once (the `Function("return this")()` fallback) and `import` only in error text;
+  a spec on the built document checks that nothing but the vendored file adds such strings.
+- **No new package:** Cytoscape 3.31.4 is the already-vendored file (importmap pin in `config/importmap.rb:7`),
+  inlined; no CDN, no `csp` domains, no npm package (`@modelcontextprotocol/ext-apps`, a bundler), no new gem.
+  Any of those is a stop-and-ask.
 - The bridge helper with its message checks, the HTML builder with inlined Cytoscape and config (trailer and
   `export` rewrites, with their specs), the result → elements adapter for `traverse_graph`,
   `find_shortest_path`, `get_entities` and catalog results, the draw cap, the two subset loads (decision 3), the
@@ -535,6 +582,9 @@ operator Explore and Search pages untouched, and its own CHANGELOG entry and doc
   recorded from the real tools in the test DB (synthetic entities only), and checks the drawn node and edge
   counts and the absence of console errors. If headless Chrome can't load a local file that way without a new
   route, a gem or a package, stop there and do a manual check instead; say so in the PR.
+- Manual check, recorded in the PR: Cursor (global entry, current build) draws each `traverse_graph` mode and a
+  path, the two subset buttons work with no tool result, and the document size (about 430 KB) is accepted over
+  both transports; Claude if one is available (still open from step A).
 
 ### C. Search mode, docs → 1.89.0
 
