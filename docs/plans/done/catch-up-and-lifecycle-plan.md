@@ -4,7 +4,7 @@
 
 ## Context
 
-- **Night jobs never run.** wks-0 is off at night, and Solid Queue skips a missed recurring slot. So the 3:00–5:15
+- **Night jobs never run.** The workstation is off at night, and Solid Queue skips a missed recurring slot. So the 3:00–5:15
   jobs never fire: compaction, embedding backfill, fact keywords, stale scan, review policies, row cleanup, change-set
   prune. Steve runs "Run all scheduled jobs now" (`ScheduledRunJob`) at lunch. Found in the 1.85.0 investigation
   (`docs/plans/review-queue-noise-plan.md`, section D).
