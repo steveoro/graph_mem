@@ -17,6 +17,9 @@ MCP Apps, step B: the interactive view draws the graph. Hosts that support MCP A
   - Clicking a node shows its observations and relations; **Expand 1/2**, **Path between selected** and **Show this project** extend or replace the drawing. The view only calls read tools and never changes the active project; it tells the agent what it shows (scope, counts, selected ids) through `ui/update-model-context`.
   - Fullscreen when the host offers it, and the host's theme and colors.
 
+### Fixed
+- Explore: the entity a neighbourhood or project opens from has its yellow focus border again. The style rule compared `is_focus` with the string `"true"`, and the API sends a boolean; it now matches the boolean. The API output is unchanged.
+
 ### Changed
 - The view document (`resources/read`) is now built by `GraphMem::McpApps::ViewBuilder`: the shell and scripts under `lib/graph_mem/mcp_apps/view/` plus the vendored Cytoscape 3.31.4 and the Explore graph config, inlined (about 460 KB). Capabilities, `tools/list`, `resources/list` and every `tools/call` result are unchanged.
 
