@@ -5,29 +5,64 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>graph_mem</title>
 <style>
+  /* Host variables (hostContext.styles.variables) win; the fallbacks follow the color scheme. */
   :root {
     color-scheme: light dark;
     --gm-bg: var(--color-background-primary, Canvas);
+    --gm-bg-2: var(--color-background-secondary, light-dark(#f4f4f5, #27272a));
     --gm-fg: var(--color-text-primary, CanvasText);
-    --gm-muted: var(--color-text-secondary, GrayText);
+    --gm-muted: var(--color-text-secondary, light-dark(#52525b, #a1a1aa));
+    --gm-danger: var(--color-text-danger, light-dark(#b91c1c, #f87171));
+    --gm-border: var(--color-border-primary, light-dark(#d4d4d8, #3f3f46));
+    --gm-accent: var(--color-ring-primary, light-dark(#2563eb, #60a5fa));
     --gm-font: var(--font-sans, system-ui, sans-serif);
+    --gm-radius: var(--border-radius-md, 6px);
+    --gm-graph-height: 460px;
   }
   :root[data-theme="light"] { color-scheme: light; }
   :root[data-theme="dark"] { color-scheme: dark; }
-  body { margin: 0; padding: 12px 16px; background: var(--gm-bg); color: var(--gm-fg); font: 14px/1.4 var(--gm-font); }
-  h1 { margin: 0 0 4px; font-size: 16px; }
+  :root.fullscreen { --gm-graph-height: calc(100vh - 120px); }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 8px 12px; background: var(--gm-bg); color: var(--gm-fg); font: 13px/1.4 var(--gm-font); }
+  h1 { margin: 0; font-size: 15px; }
+  h2 { margin: 0; font-size: 14px; overflow-wrap: anywhere; }
+  h3 { margin: 10px 0 4px; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--gm-muted); }
   p { margin: 4px 0; }
   .muted { color: var(--gm-muted); }
-  button { font: inherit; margin-top: 8px; }
+  .bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
+  .spacer { flex: 1; }
+  button { font: inherit; color: var(--gm-fg); background: var(--gm-bg-2); border: 1px solid var(--gm-border);
+           border-radius: var(--gm-radius); padding: 3px 9px; cursor: pointer; }
+  button:disabled { opacity: .5; cursor: default; }
+  #status.error { color: var(--gm-danger); }
+  #note:empty { display: none; }
+  .stage { display: flex; gap: 8px; margin: 6px 0; }
+  .canvas { position: relative; flex: 1; min-width: 0; }
+  #graph { height: var(--gm-graph-height); border: 1px solid var(--gm-border); border-radius: var(--gm-radius); background: var(--gm-bg); }
+  .empty { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+           gap: 8px; padding: 16px; text-align: center; }
+  .empty[hidden] { display: none; }
 </style>
 </head>
 <body>
-<h1 id="title">graph_mem graph view</h1>
-<p id="status" class="muted">Waiting for the host…</p>
-<p id="count"></p>
-<p><button id="details" type="button" hidden>Load entity details</button></p>
-<p id="details-status" class="muted"></p>
-<p><button id="fullscreen" type="button" hidden>Fullscreen</button></p>
+<header class="bar">
+  <h1>graph_mem</h1>
+  <span id="scope" class="muted"></span>
+  <span class="spacer"></span>
+  <button id="fit" type="button" disabled>Fit</button>
+  <button id="fullscreen" type="button" hidden>Fullscreen</button>
+</header>
+<p id="status" class="muted" role="status">Waiting for the host…</p>
+<p id="note" class="muted"></p>
+<div class="stage">
+  <div class="canvas">
+    <div id="graph" role="img" aria-label="Graph of graph_mem entities"></div>
+    <div id="empty" class="empty" hidden>
+      <p id="empty-text">Nothing to draw yet.</p>
+    </div>
+  </div>
+</div>
+<footer class="bar"><span id="counts" class="muted"></span></footer>
 <script type="module">
 /* graph_mem: view scripts */
 </script>
