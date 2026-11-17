@@ -126,7 +126,7 @@ Body, session and `MCP-Protocol-Version` limits on the HTTP endpoints are listed
 
 1. Create `app/tools/my_feature_tool.rb` inheriting from `ApplicationTool` with a `tool_name` class method.
 2. Declare `mcp_metadata` with profile membership, the `advertised:` flag, and all four boolean MCP annotation hints.
-3. Update the tool counts in `spec/lib/graph_mem/mcp_tool_registry_spec.rb`, and re-record the list snapshots in `spec/fixtures/mcp/snapshots/` (`spec/mcp/tools_list_snapshot_spec.rb` compares `tools/list`, `prompts/list` and `resources/templates/list` per profile; say so in the PR).
+3. Update the tool counts in `spec/lib/graph_mem/mcp_tool_registry_spec.rb`, and re-record the list snapshots in `spec/fixtures/mcp/snapshots/` (`spec/mcp/tools_list_snapshot_spec.rb` compares `tools/list`, `prompts/list`, `resources/templates/list` and, since 1.87.0, `resources/list` per profile; replace only the changed entries in place; say so in the PR). To open an MCP Apps view on the tool's calls, set `mcp_ui_view` next to `title` (only `traverse_graph` and `find_shortest_path` do).
 4. Add a request/tool spec under `spec/tools/`.
 
 Tool files are **not** registered by filename alone. `GraphMem::McpToolRegistry` eager-loads every `*_tool.rb` before `GraphMem::OfficialMcp::ServerFactory` builds each profile's server, so new classes are picked up even in development lazy-load mode.

@@ -19,12 +19,14 @@ Failed tool calls (`isError: true`) carry one JSON object as their text: `error`
 reason (e.g. `outside_filter`, `project_has_members`). stdio returns the same object as HTTP.
 Details: [`docs/mcp_tools.md`](mcp_tools.md) (Error Handling).
 
+Since 1.87.0 graph_mem also declares the MCP Apps extension; see [MCP Apps](#mcp-apps) below.
+
 Moving another Rails app from fast-mcp to the `mcp` gem:
 [`docs/guides/migrating-fast-mcp-to-mcp-gem.md`](guides/migrating-fast-mcp-to-mcp-gem.md).
 
 ## Client matrix
 
-`script/mcp_compat/clients.sh` at 1.86.1 (2026-11-13, `mcp` 1.10.0, Node 24.11.1, Ruby 3.4.12): 12 of
+`script/mcp_compat/clients.sh` at 1.87.0 (2026-11-17, `mcp` 1.10.0, Node 24.11.1, Ruby 3.4.12): 12 of
 12 OK, and `/mcp` lists 12 tools on every row. Every `auto` row negotiates 2026-07-28, every `legacy`
 row 2025-11-25. The Ruby SDK 1.9.0 and 1.10.0 clients keep the tool `title` and see one on all 12
 tools.
@@ -60,11 +62,11 @@ MCP.
 
 ## Handshake comparison
 
-`script/mcp_compat/compare.rb`, 2026-11-13: graph_mem 1.86.1 (`mcp` 1.10.0), reference servers Memory
+`script/mcp_compat/compare.rb`, 2026-11-17: graph_mem 1.87.0 (`mcp` 1.10.0), reference servers Memory
 2.1.1 and Everything 2.3.0 with SDK 2.4.0 (the MCP servers release v2.4.0), on Node 24.11.1 and Ruby
-3.4.12. 0 failed expectations, 0 unexpected differences; every case recorded at 1.72.0 answers the same
-on both sides (graph_mem and the reference outlines are unchanged), and 1.86.1 adds the invalid UTF-8
-method name cases (documented divergences). Outlines show
+3.4.12. 0 failed expectations, 0 unexpected differences; every case recorded at 1.86.1 answers the same
+on both sides, and 1.87.0 adds "initialize declares the MCP Apps extension" (graph_mem only: the
+reference servers declare no extensions). Outlines show
 `[status, id, result or error code]` (HTTP) or the replies as `[id, result or error code]` (stdio);
 the cases are in `spec/fixtures/mcp/handshakes/`. The reference is Memory on stdio and Everything on
 HTTP. `compare.rb`'s informational Ruby SDK target (`rsdk_server.rb`, a one-tool server on `mcp`
@@ -72,13 +74,14 @@ HTTP. `compare.rb`'s informational Ruby SDK target (`rsdk_server.rb`, a one-tool
 
 ### stdio
 
-19 cases: 8 same, 9 documented divergences, 2 graph_mem only.
+20 cases: 8 same, 9 documented divergences, 3 graph_mem only.
 
 | Case | graph_mem | Memory 2.1.1 | Verdict |
 | --- | --- | --- | --- |
 | initialize 2025-03-26 is echoed | `[[1, "result"]]` | `[[1, "result"]]` | same |
 | initialize 2025-11-25 is echoed, with serverInfo | `[[1, "result"]]` | `[[1, "result"]]` | same |
 | initialize capabilities: no subscribe or listChanged; instructions present | `[[1, "result"]]` | n/a (server-specific) | graph_mem only |
+| initialize declares the MCP Apps extension | `[[1, "result"]]` | n/a (server-specific) | graph_mem only |
 | initialize 2026-07-28 gets 2025-11-25 | `[[1, "result"]]` | `[[1, "result"]]` | same |
 | initialize "9" gets 2025-11-25 | `[[1, "result"]]` | `[[1, "result"]]` | same |
 | server/discover with a 2026-07-28 envelope | `[[7, "result"]]` | `[[7, "result"]]` | same |
@@ -98,7 +101,7 @@ HTTP. `compare.rb`'s informational Ruby SDK target (`rsdk_server.rb`, a one-tool
 
 ### Streamable HTTP
 
-32 cases: 14 same, 16 documented divergences, 2 graph_mem only.
+33 cases: 14 same, 16 documented divergences, 3 graph_mem only.
 
 | Case | graph_mem | Everything 2.3.0 | Verdict |
 | --- | --- | --- | --- |
@@ -114,6 +117,7 @@ HTTP. `compare.rb`'s informational Ruby SDK target (`rsdk_server.rb`, a one-tool
 | initialize 2024-11-05 is echoed | `[200, 21, "result"]` | `[200, 21, "result"]` | same |
 | initialize "9" gets 2025-11-25 | `[200, 21, "result"]` | `[200, 21, "result"]` | same |
 | initialize capabilities: no subscribe or listChanged; instructions present | `[200, 22, "result"]` | n/a (server-specific) | graph_mem only |
+| initialize declares the MCP Apps extension | `[200, 23, "result"]` | n/a (server-specific) | graph_mem only |
 | in a session, no MCP-Protocol-Version header | `[200, 30, "result"]` | `[200, 30, "result"]` | same |
 | in a session, MCP-Protocol-Version 1999-01-01 | `[400, 31, -32022]` | `[400, nil, -32000]` | documented divergence |
 | in a session, MCP-Protocol-Version 2026-07-28 | `[200, 32, "result"]` | `[400, nil, -32000]` | documented divergence |
@@ -175,6 +179,9 @@ Each bullet is one `divergence` text from the fixture files, with the cases it c
   serving. — *tools/list with a non-object _meta, then a ping*
 - Server-specific: Memory implements resource subscriptions and list-changed notifications;
   graph_mem doesn't. — *initialize capabilities: no subscribe or listChanged; instructions present*
+- Server-specific: graph_mem declares the MCP Apps extension (io.modelcontextprotocol/ui, 1.87.0;
+  off with the mcp_apps_enabled setting) and serves its ui:// view; Memory declares no extensions. —
+  *initialize declares the MCP Apps extension*
 - Server-specific: Memory implements resource subscriptions; graph_mem advertises subscribe:
   false. — *resources/subscribe is not offered*
 
@@ -219,8 +226,33 @@ Each bullet is one `divergence` text from the fixture files, with the cases it c
   port*
 - Server-specific: Everything implements subscriptions, list-changed notifications and logging;
   graph_mem doesn't. — *initialize capabilities: no subscribe or listChanged; instructions present*
+- Server-specific: graph_mem declares the MCP Apps extension (io.modelcontextprotocol/ui, 1.87.0;
+  off with the mcp_apps_enabled setting) and serves its ui:// view; Everything declares no
+  extensions. — *initialize declares the MCP Apps extension*
 - Server-specific: Everything implements resource subscriptions; graph_mem advertises subscribe:
   false. — *resources/subscribe is not offered*
+
+## MCP Apps
+
+Since 1.87.0 (`docs/plans/mcp-apps-plan.md`, step A) graph_mem serves the MCP Apps extension
+(SEP-1865, stable 2026-01-26), unless Settings › Feature flags › **MCP Apps views**
+(`mcp_apps_enabled`, default on) is off:
+
+- `initialize` declares `capabilities.extensions["io.modelcontextprotocol/ui"]`
+  (`mimeTypes: ["text/html;profile=mcp-app"]`), for every client.
+- `resources/list` lists `ui://graph-mem/graph` on all three profiles (it was empty before);
+  `resources/read` serves it as `text/html;profile=mcp-app` with `_meta.ui.prefersBorder` on the
+  content item and no `csp`, so the host's restrictive default CSP applies (everything is inlined; the
+  view makes no network request of its own).
+- `tools/list` adds `_meta.ui.resourceUri` to `traverse_graph` and `find_shortest_path` only (nested
+  form only, no `visibility`). `tools/list` can't vary per client in the gem, so every client gets it; a
+  client without the extension treats them as plain tools.
+- `tools/call` results are unchanged for every tool and client; `resources/templates/list` too.
+
+In 1.87.0 the view is a stub (the handshake, the entity count of the tool result); 1.88.0 draws the
+graph. Turned off, the wire is exactly the 1.86.2 one: no extension, no `ui://` resource, no
+`_meta.ui`. Saving the setting rebuilds the HTTP servers (open MCP sessions close); a stdio runner picks
+it up when restarted.
 
 ## Re-running
 

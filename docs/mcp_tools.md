@@ -20,6 +20,18 @@ Profiles are selected when connecting and are not authorization boundaries.
 Every tool also publishes the standard MCP `readOnlyHint`, `destructiveHint`,
 `idempotentHint`, and `openWorldHint` annotations.
 
+## MCP Apps (interactive view)
+
+Since 1.87.0 graph_mem serves the MCP Apps extension (`io.modelcontextprotocol/ui`): a host that supports
+it (Claude, Cursor and others) renders the `ui://graph-mem/graph` view when `traverse_graph` or
+`find_shortest_path` is called, the agent's own calls included. Those two tools carry
+`_meta.ui.resourceUri` in `tools/list`; no other tool is linked, so `search`, `get_context` and the rest
+never open a view. Every client still gets the same `tools/call` result (text plus `structuredContent`),
+and clients without the extension, Claude Code included, see plain tools. The view is listed in
+`resources/list` on all three profiles. In 1.87.0 it is a stub that shows the entity count of the
+result; 1.88.0 draws the graph. Settings › Feature flags › **MCP Apps views** (`mcp_apps_enabled`,
+default on) turns it all off. Wire details: [protocol_compat.md](protocol_compat.md#mcp-apps).
+
 ## Standard Compatibility
 
 All tools accept both graph_mem's native snake_case/ID-based parameters and the `@modelcontextprotocol/server-memory` camelCase/name-based conventions. A `ParameterNormalizer` layer automatically converts incoming parameters before validation:

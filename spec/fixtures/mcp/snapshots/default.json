@@ -2855,5 +2855,16 @@
         "mimeType": "application/json"
       }
     ]
+  },
+  "resources/list": {
+    "resources": [
+      {
+        "uri": "ui://graph-mem/graph",
+        "name": "graph_view",
+        "title": "Graph view",
+        "description": "Interactive view of graph_mem tool results (MCP Apps). Opened by hosts that support the extension.",
+        "mimeType": "text/html;profile=mcp-app"
+      }
+    ]
   }
 }
