@@ -48,8 +48,8 @@ end
 
 server = GraphMem::OfficialMcp::ServerFactory.for(profile)
 RunnerLogger.info(
-  "GraphMem Stdio Runner: serving #{server.tools.count} tools, #{server.prompts.count} prompts and " \
-  "#{server.resource_templates.count} resource templates for the #{profile} profile."
+  "GraphMem Stdio Runner: serving #{server.tools.count} tools, #{server.prompts.count} prompts, " \
+  "#{server.resources.count} resources and #{server.resource_templates.count} resource templates for the #{profile} profile."
 )
 
 begin

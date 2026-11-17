@@ -29,6 +29,7 @@ module GraphMem
           capabilities: CAPABILITIES,
           tools: GraphMem::McpToolRegistry.tool_classes_for(profile).select(&:mcp_advertised?).map { |klass| ToolWrapper.build(klass) },
           prompts: GraphMem::McpToolRegistry.prompt_classes_for(profile).map { |klass| PromptWrapper.build(klass) },
+          resources: ResourceCatalog.resources(providers),
           resource_templates: ResourceCatalog.templates(providers),
           configuration: OfficialMcp.configuration
         )
