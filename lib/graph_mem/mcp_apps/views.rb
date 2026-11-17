@@ -21,7 +21,7 @@ module GraphMem
           uri: GRAPH_URI, name: "graph_view", title: "Graph view",
           description: "Interactive view of graph_mem tool results (MCP Apps). Opened by hosts that support the extension.",
           meta: { ui: { prefersBorder: true } }.freeze,
-          source: "graph.html", scripts: %w[graph_view.js].freeze,
+          source: "graph.html", scripts: %w[bridge.js host.js graph_view.js].freeze,
           calls: %w[search get_entities traverse_graph find_shortest_path get_context].freeze
         }.freeze
       ].freeze
