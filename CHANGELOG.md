@@ -5,6 +5,22 @@ All notable changes to GraphMem will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.87.0] - 2026-11-17
+
+MCP Apps, step A: graph_mem declares the MCP Apps extension and serves a first (stub) interactive view, which hosts such as Claude and Cursor open when `traverse_graph` or `find_shortest_path` is called. 1.88.0 draws the graph.
+
+### Added
+- **MCP Apps extension** (`io.modelcontextprotocol/ui`, SEP-1865): `initialize` declares it, and the `ui://graph-mem/graph` view (`text/html;profile=mcp-app`, `_meta.ui.prefersBorder`, the host's default CSP) is served on all three profiles. For now the view shows the entity count of the tool result and can load those entities with `get_entities`.
+- **Setting `mcp_apps_enabled`** (Settings › Feature flags › MCP Apps views, default on). Saving a change rebuilds the HTTP MCP servers (open sessions close); a stdio runner picks it up when restarted. Turned off, MCP answers exactly as in 1.86.2.
+
+### Changed
+- `resources/list` lists the view (it was empty).
+- `tools/list`: `traverse_graph` and `find_shortest_path` carry `_meta.ui.resourceUri`. No other tool changes, and every `tools/call` result is unchanged for every client.
+- Resources come from providers (`ResourceCatalog`, `TemplateResourceProvider`, `StaticResourceProvider`); the templated resources read as before.
+
+### Dependencies
+- `bundle update`: puma 8.1.2, thruster 0.1.28, websocket-driver 0.9.0, websocket-extensions 0.2.0, connection_pool 3.0.3, net-scp 4.2.2. The Gemfile holds `regexp_parser` below 2.13.2 (2.13.2 breaks json_schemer 2.5.0 at load, so the app couldn't boot) and `prism` below 2 (dependabot.yml).
+
 ## [1.86.2] - 2026-11-13
 
 Review & Fix keeps itself current, and orphan suggestions queued by compaction can be applied again.
