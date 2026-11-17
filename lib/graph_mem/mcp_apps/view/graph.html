@@ -30,7 +30,8 @@
 // postMessage: ui/initialize, then ui/notifications/initialized; shows the entity count of the
 // tool result the host pushes; answers ui/resource-teardown. Step B (1.88.0) draws the graph.
 // Rules: only messages from window.parent; only JSON-RPC 2.0 replies to a pending request or a
-// method handled here (anything else is ignored); page text only through textContent.
+// method handled here; an unknown request gets -32601, anything else is ignored; page text only
+// through textContent.
 
 const PROTOCOL_VERSION = "2026-01-26";
 const pending = new Map();
@@ -88,7 +89,12 @@ window.addEventListener("message", (event) => {
     return;
   }
 
-  if (typeof message.method !== "string" || !Object.hasOwn(handlers, message.method)) return;
+  if (typeof message.method !== "string") return;
+  if (!Object.hasOwn(handlers, message.method)) {
+    // A request (it has an id) gets an answer, as JSON-RPC 2.0 requires; a notification is dropped.
+    if ("id" in message) post({ id: message.id, error: { code: -32601, message: "Method not found" } });
+    return;
+  }
   const answer = handlers[message.method](message.params);
   if ("id" in message) post({ id: message.id, result: answer ?? {} });
 });

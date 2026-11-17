@@ -47,8 +47,13 @@ RSpec.describe "MCP Apps view sources" do
                               'availableDisplayModes: ["inline", "fullscreen"]', '"ui/resource-teardown"')
     end
 
+    it "answers a host request it doesn't handle with -32601 (JSON-RPC 2.0)" do
+      expect(html).to include("code: -32601")
+    end
+
     it "calls only read tools graph_mem's views may call" do
-      called = html.scan(/name: "([a-z_]+)", arguments/).flatten.uniq
+      called = html.scan(%r{"tools/call",\s*\{\s*name:\s*"([a-z_]+)"}).flatten.uniq
+      expect(called).not_to be_empty
       expect(called).to all(be_in(GraphMem::McpApps::Views::VIEWS.first[:calls]))
     end
   end

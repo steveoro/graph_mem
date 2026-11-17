@@ -138,12 +138,13 @@ Add `output_schema` and `annotations` the same way when your tools have them, an
 whatever shape your clients already parse. Without the `rescue`, the gem answers an exception with
 a JSON-RPC `-32603` error instead of an `isError` result.
 
-> **Example (graph_mem):** `lib/graph_mem/official_mcp/tool_wrapper.rb` (88 lines) wraps all 22 tool
+> **Example (graph_mem):** `lib/graph_mem/official_mcp/tool_wrapper.rb` (107 lines) wraps all 22 tool
 > classes with no per-tool code. It keeps graph_mem's result shape (text, `structuredContent` when
 > the tool has an output schema, `_meta` with `version` and `next_move`) and the `ToolError` JSON
-> envelope with its `code`. `PromptWrapper` (31 lines) and `ResourceCatalog` (31 lines, the resource
-> templates plus a `resources_read_handler` that maps a URI to its resource class) do the same for
-> prompts and resources.
+> envelope with its `code`. `PromptWrapper` (31 lines) does the same for prompts. Resources come from
+> providers: `TemplateResourceProvider` (the resource templates, mapping a URI to its resource class)
+> and `StaticResourceProvider` (the MCP Apps `ui://` views); `ResourceCatalog` (35 lines) lists them
+> and backs the `resources_read_handler`.
 
 ### One server per profile
 
