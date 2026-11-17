@@ -63,7 +63,7 @@ RSpec.describe "MCP on the official SDK", type: :request do
 
         expect(result["protocolVersion"]).to eq("2025-11-25")
         expect(result["instructions"]).to eq(GraphMem::McpInstructions.for(profile))
-        expect(result["capabilities"]).to eq(GraphMem::OfficialMcp::ServerFactory::CAPABILITIES.deep_stringify_keys)
+        expect(result["capabilities"]).to eq(GraphMem::OfficialMcp::ServerFactory.capabilities(apps_enabled: GraphMem::McpApps.enabled?).deep_stringify_keys)
         expect(result["serverInfo"]).to include("name" => "graph-mem", "version" => GraphMem::VERSION)
       end
     end

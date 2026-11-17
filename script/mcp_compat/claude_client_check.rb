@@ -246,7 +246,8 @@ begin
 
   capabilities = initialized&.dig("result", "capabilities")
   add.call("A", "N5 capabilities and instructions",
-           capabilities == GraphMem::OfficialMcp::ServerFactory::CAPABILITIES.deep_stringify_keys && initialized.dig("result", "instructions").present?,
+           capabilities == GraphMem::OfficialMcp::ServerFactory.capabilities(apps_enabled: GraphMem::McpApps.enabled?).deep_stringify_keys &&
+             initialized.dig("result", "instructions").present?,
            capabilities.to_json)
 
   prompt = lambda do |path, name, arguments|

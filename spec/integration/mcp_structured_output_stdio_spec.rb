@@ -74,7 +74,7 @@ RSpec.describe "MCP structured output over stdio" do
       expect(replies(out).first["result"]).to include(
         "protocolVersion" => "2025-11-25",
         "instructions" => GraphMem::McpInstructions.for(:default),
-        "capabilities" => GraphMem::OfficialMcp::ServerFactory::CAPABILITIES.deep_stringify_keys
+        "capabilities" => GraphMem::OfficialMcp::ServerFactory.capabilities(apps_enabled: GraphMem::McpApps.enabled?).deep_stringify_keys
       )
       expect(err).to include("serving 12 tools")
     end
