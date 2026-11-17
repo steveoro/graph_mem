@@ -159,6 +159,16 @@ RSpec.describe "MCP on the official SDK", type: :request do
       expect(contents.first).to include("uri" => "memory_graph?entity_id=#{entity.id}", "mimeType" => "application/json")
       expect(JSON.parse(contents.first["text"])).to include("name" => "SynthWidget Resource")
     end
+
+    # MCP Apps (1.87.0): the view travels over Streamable HTTP like any resource.
+    it "lists and serves the ui://graph-mem/graph view over HTTP" do
+      session_id = initialize_session("/mcp/readonly")
+
+      expect(rpc("/mcp/readonly", session_id, "resources/list").dig("result", "resources").pluck("uri")).to eq([ "ui://graph-mem/graph" ])
+      content = rpc("/mcp/readonly", session_id, "resources/read", params: { uri: "ui://graph-mem/graph" }).dig("result", "contents").sole
+      expect(content).to include("mimeType" => "text/html;profile=mcp-app", "_meta" => { "ui" => { "prefersBorder" => true } })
+      expect(content["text"]).to start_with("<!doctype html>")
+    end
   end
 
   describe "access control" do

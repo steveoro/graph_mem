@@ -354,7 +354,8 @@ ensure
   server&.stop(true)
   if started_at
     MemoryEntity.where("name LIKE ?", "McpCheck%").destroy_all
-    [ ToolInvocation, AgentContext, AuditLog, MemoryRelation, MemoryObservation, OperationProgress ].each { |model| model.where(created_at: started_at..).delete_all }
+    # ChangeSet: the agent's MCP writes record change sets (UI-4a); left behind, they break the suite's change-set counts.
+    [ ToolInvocation, AgentContext, AuditLog, ChangeSet, MemoryRelation, MemoryObservation, OperationProgress ].each { |model| model.where(created_at: started_at..).delete_all }
     AgentContext.where(client_id: check_clients).delete_all
   end
   FileUtils.remove_entry(work) if work && File.directory?(work)

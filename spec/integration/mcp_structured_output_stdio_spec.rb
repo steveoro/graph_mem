@@ -121,6 +121,15 @@ RSpec.describe "MCP structured output over stdio" do
       expect(reply).to include("error" => include("code" => -32_602, "message" => "Invalid params: _meta must be an object"))
     end
 
+    # MCP Apps (1.87.0): the view travels over stdio like any resource.
+    it "serves the ui://graph-mem/graph view over stdio" do
+      out, = run_runner(handshake + [ { jsonrpc: "2.0", id: 11, method: "resources/read", params: { uri: "ui://graph-mem/graph" } } ])
+      content = replies(out).find { |message| message["id"] == 11 }.dig("result", "contents").sole
+
+      expect(content).to include("mimeType" => "text/html;profile=mcp-app", "_meta" => { "ui" => { "prefersBorder" => true } })
+      expect(content["text"]).to start_with("<!doctype html>")
+    end
+
     # mcp 1.10.0 (#672); before it, -32603 "Internal error" with the id.
     it "refuses a method name that is not valid UTF-8 with -32600 and the id, then still answers a ping" do
       # Built as bytes: JSON.generate would refuse the raw 0xFF in the method name.
