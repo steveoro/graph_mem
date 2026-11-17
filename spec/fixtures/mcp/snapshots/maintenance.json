@@ -227,6 +227,11 @@
           "idempotentHint": true,
           "openWorldHint": false,
           "readOnlyHint": true
+        },
+        "_meta": {
+          "ui": {
+            "resourceUri": "ui://graph-mem/graph"
+          }
         }
       },
       {
@@ -3017,6 +3022,11 @@
           "idempotentHint": true,
           "openWorldHint": false,
           "readOnlyHint": true
+        },
+        "_meta": {
+          "ui": {
+            "resourceUri": "ui://graph-mem/graph"
+          }
         }
       },
       {

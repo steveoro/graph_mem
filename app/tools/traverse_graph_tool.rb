@@ -14,6 +14,7 @@ class TraverseGraphTool < ApplicationTool
   )
 
   title "Traverse Graph"
+  mcp_ui_view GraphMem::McpApps::Views::GRAPH_URI
 
   description "Traverse from one entity or query relations directly through one object-shaped response. Pass optional " \
     "`start_entity_id` for bounded BFS; `from_entity_id`, `to_entity_id`, and singular `relation_type` for edge filters; " \

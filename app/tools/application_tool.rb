@@ -62,6 +62,22 @@ class ApplicationTool
       @title = value.dup.freeze
     end
 
+    # Sets (with a value) or returns the ui:// view (MCP Apps, 1.87.0) a host renders for this
+    # tool's calls, advertised as `_meta.ui.resourceUri` in tools/list only on a server that
+    # registers that view. Empty by default; traverse_graph and find_shortest_path set it.
+    #
+    #   mcp_ui_view GraphMem::McpApps::Views::GRAPH_URI
+    #
+    # @param uri [String, nil]
+    # @return [String, nil]
+    # @raise [ArgumentError] when the URI isn't a ui:// URI
+    def mcp_ui_view(uri = nil)
+      return @mcp_ui_view if uri.nil?
+      raise ArgumentError, "mcp_ui_view must be a #{MCP::Apps::URI_SCHEME} URI" unless uri.start_with?(MCP::Apps::URI_SCHEME)
+
+      @mcp_ui_view = uri.dup.freeze
+    end
+
     def mcp_profiles
       @mcp_profiles || []
     end

@@ -14,6 +14,7 @@ class FindShortestPathTool < ApplicationTool
   )
 
   title "Find Shortest Path"
+  mcp_ui_view GraphMem::McpApps::Views::GRAPH_URI
 
   description "Find the shortest hop-count path between two entities. Pass required `from_entity_id` and " \
     "`to_entity_id` (integer; also accepts entity name); optional `max_depth` (integer, default 2, max 5), " \

@@ -33,13 +33,14 @@ module GraphMem
         GraphMem::McpToolRegistry.load_all!
         providers = [ TemplateResourceProvider.new(GraphMem::McpToolRegistry.resource_classes) ]
         providers << GraphMem::McpApps::Views.provider_for(profile) if apps_enabled
+        views = apps_enabled ? GraphMem::McpApps::Views.uris_for(profile) : []
 
         server = MCP::Server.new(
           name: "graph-mem",
           version: GraphMem::VERSION.to_s,
           instructions: GraphMem::McpInstructions.for(profile),
           capabilities: capabilities(apps_enabled: apps_enabled),
-          tools: GraphMem::McpToolRegistry.tool_classes_for(profile).select(&:mcp_advertised?).map { |klass| ToolWrapper.build(klass) },
+          tools: GraphMem::McpToolRegistry.tool_classes_for(profile).select(&:mcp_advertised?).map { |klass| ToolWrapper.build(klass, views: views) },
           prompts: GraphMem::McpToolRegistry.prompt_classes_for(profile).map { |klass| PromptWrapper.build(klass) },
           resources: ResourceCatalog.resources(providers),
           resource_templates: ResourceCatalog.templates(providers),
