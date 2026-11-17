@@ -1,13 +1,14 @@
 # MCP Apps → graph_mem 1.87.0–1.89.0: a graph view and a search view inside the chat
 
-**Status (2026-11-13): PLAN, reviewed, all questions answered.** Written from `main` at `30beb6f` (1.84.0) and
-**reviewed at `9df8556`** against three sources: this repo's code, the installed `mcp` 1.9.0 gem source, and the
-live spec (stable 2026-01-26 and the draft). The review changed the first-load design, the tool linkage and the
-view packaging, and added the sections from "Acceptance criteria" on; "What the review changed" lists the
-differences. Steve answered every open question on 2026-11-12 (decisions 6–13). 1.85.0 and 1.86.0 shipped other
-work meanwhile, so this train is now 1.87.0–1.89.0. No kickoff yet. File:line references were checked again at
-`cb44409` (1.86.0); if a line has moved, find the code by the quoted text, and if the code no
-longer matches the description, **stop and ask Steve** instead of improvising. Only `spec/docs` was run.
+**Status (2026-11-17): PLAN, reviewed, all questions answered, kickoff ready for step A (1.87.0).** Written from
+`main` at `30beb6f` (1.84.0) and **reviewed at `9df8556`** against three sources: this repo's code, the installed
+`mcp` 1.9.0 gem source, and the live spec (stable 2026-01-26 and the draft). The review changed the first-load
+design, the tool linkage and the view packaging, and added the sections from "Acceptance criteria" on; "What the
+review changed" lists the differences. Steve answered every open question on 2026-11-12 (decisions 6–13). 1.85.0,
+1.86.0, 1.86.1 (`mcp` 1.10.0) and 1.86.2 shipped other work meanwhile, so this train is 1.87.0–1.89.0 on top of
+1.86.2. File:line references were checked again at `ffbe760` (1.86.2), and the gem facts against the installed
+`mcp` 1.10.0; if a line has moved, find the code by the quoted text, and if the code no longer matches the
+description, **stop and ask Steve** instead of improvising. Only `spec/docs` was run.
 
 ## Goal
 
@@ -172,7 +173,7 @@ Spec: SEP-1865, **Stable (2026-01-26)**,
 
 ## The Ruby `mcp` gem
 
-graph_mem pins `gem "mcp", "1.10.0"` (`Gemfile:36`) since 1.86.1 (`docs/plans/mcp-sdk-1.10.0-plan.md`). Nothing
+graph_mem pins `gem "mcp", "1.10.0"` (`Gemfile:36`) since 1.86.1 (`docs/plans/done/mcp-sdk-1.10.0-plan.md`). Nothing
 in 1.10.0 is for Apps or resources (it brought `Mcp-Param-*` header validation, OAuth `issuer:`, stdio env and SSE
 hardening). A further bump stays its own "one PR per upgrade" change and is a hard stop.
 
@@ -236,13 +237,13 @@ How the specs see these changes:
 
 - `spec/mcp/tools_list_snapshot_spec.rb` compares `tools/list`, `prompts/list` and `resources/templates/list`
   only (`list_methods`, line 14). Step A adds `resources/list` to that list and re-records the three snapshots
-  (`spec/fixtures/mcp/snapshots/{default,readonly,maintenance}.json`) by hand, as `docs/development.md:129`
+  (`spec/fixtures/mcp/snapshots/{default,readonly,maintenance}.json`) by hand, as `docs/development.md:128`
   describes. The diff must show only `_meta` on the linked tools and the new `resources/list` block.
 - The handshake fixtures (`spec/fixtures/mcp/handshakes/{http,stdio}.json`) are hand-written expectations matched
   by subset (`script/mcp_compat/handshake_cases.rb`), not recordings. An added `extensions` key passes them
   unchanged. Step A adds an expectation for it instead of re-recording anything.
 - Three checks compare the served capabilities with `CAPABILITIES.deep_stringify_keys`
-  (`spec/requests/mcp_official_spec.rb:66`, `spec/integration/mcp_structured_output_stdio_spec.rb:76`,
+  (`spec/requests/mcp_official_spec.rb:66`, `spec/integration/mcp_structured_output_stdio_spec.rb:77`,
   `script/mcp_compat/claude_client_check.rb:249`). With an on/off setting, one of its two states can't equal a
   constant. So `CAPABILITIES` stays today's base, and one new method, `ServerFactory.capabilities(apps_enabled:)`,
   returns the base or the base plus `extensions:`. The server and the three checks all call it, and step A adds
@@ -483,7 +484,7 @@ as graph" switches to Graph mode with the hits' ids. The current query goes to `
 
 ## Steps (one PR each)
 
-Versions follow 1.86.0. Each PR keeps the default `/mcp` at 12 tools, unchanged tool schemas and results, the
+Versions follow 1.86.2. Each PR keeps the default `/mcp` at 12 tools, unchanged tool schemas and results, the
 operator Explore and Search pages untouched, and its own CHANGELOG entry and docs. Branches are `claude/<topic>`.
 
 ### A. Generic resource layer, Apps capability, stub view → 1.87.0

@@ -1,5 +1,7 @@
 # Review refresh + orphan apply → graph_mem 1.86.2 (cards clear without F5, live policy numbers, orphan rows apply their top live suggestion)
 
+**✅ DONE:** shipped in #175 as **1.86.2**.
+
 **Status (2026-11-13): PLAN, approved, kickoff ready.** Second PR of the train Steve confirmed on 2026-11-13:
 1.86.1 (`docs/plans/mcp-sdk-1.10.0-plan.md`, `mcp` 1.10.0) → **1.86.2 (this plan)** → MCP Apps 1.87.0–1.89.0
 (`docs/plans/mcp-apps-plan.md`). Steve folded the orphan-parent fix into this release (2026-11-13), so there is

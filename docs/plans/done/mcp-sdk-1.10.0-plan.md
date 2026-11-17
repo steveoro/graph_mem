@@ -1,5 +1,7 @@
 # MCP SDK 1.10.0 → graph_mem 1.86.1 (gem bump, invalid-UTF-8 method case, compat baseline on reference servers v2.4.0)
 
+**✅ DONE:** shipped in #174 as **1.86.1** (compat verification recorded in `docs/protocol_compat.md`).
+
 **Status (2026-11-13): PLAN, approved order, kickoff ready.** Steve confirmed the train on 2026-11-13: **1.86.1** = this
 plan (`mcp` 1.9.0 → 1.10.0 plus the reference-server baseline v2.4.0), then 1.86.2 and 1.86.3 (other fixes), then the
 MCP Apps train 1.87.0–1.89.0 (`docs/plans/mcp-apps-plan.md`).

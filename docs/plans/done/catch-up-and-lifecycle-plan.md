@@ -1,5 +1,7 @@
 # Scheduled-run catch-up and lifecycle repair (plan, 1.86.0)
 
+**✅ DONE:** shipped in #173 as **1.86.0**.
+
 ## Context
 
 - **Night jobs never run.** wks-0 is off at night, and Solid Queue skips a missed recurring slot. So the 3:00–5:15

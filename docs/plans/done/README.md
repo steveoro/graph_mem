@@ -31,6 +31,10 @@ Active plans and the backlog live in [`docs/plans/`](../).
 | [`f2b-same-fact-design.md`](f2b-same-fact-design.md) | The same-fact ladder | 1.82.0 |
 | [`f2c-llm-keywords-design.md`](f2c-llm-keywords-design.md) | LLM words for facts that name no entity | 1.83.0 |
 | [`cleanup-live-jobs-plan.md`](cleanup-live-jobs-plan.md) | Live Background jobs page, step progress bar, F2c minors | 1.84.0 |
+| [`review-queue-noise-plan.md`](review-queue-noise-plan.md) | A quieter Review queue: evidence rules, `still_qualifies`, the per-run cap | 1.85.0 |
+| [`catch-up-and-lifecycle-plan.md`](catch-up-and-lifecycle-plan.md) | Scheduled-run catch-up after boot, Repair for `lifecycle_corruption` | 1.86.0 |
+| [`mcp-sdk-1.10.0-plan.md`](mcp-sdk-1.10.0-plan.md) | `mcp` 1.10.0, compat baseline on the reference servers v2.4.0 | 1.86.1 |
+| [`review-refresh-and-orphan-apply-plan.md`](review-refresh-and-orphan-apply-plan.md) | Review queue refresh after actions, live policy runs, orphan default parent | 1.86.2 |
 
 Removed as noise (still in git history): the chores D-1–D-3 step list (1.55.3) and the F2a, F2b and F2c
 task-by-task implementation plans (their designs above keep the decisions).

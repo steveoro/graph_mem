@@ -1,5 +1,7 @@
 # Review queue noise: from 447 rows to about 40 (plan, 1.85.0)
 
+**✅ DONE:** shipped in #172 as **1.85.0**.
+
 ## Context
 
 On 2026-11-12 Steve pressed "Run all scheduled jobs now" on 1.84.0. The Review queue went from about 23 active
