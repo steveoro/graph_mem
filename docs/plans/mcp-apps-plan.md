@@ -163,7 +163,9 @@ Spec: SEP-1865, **Stable (2026-01-26)**,
   connectors to a side panel or fullscreen and puts more of the extension (app tools) in public preview; not on
   Claude Mobile. A remote graph_mem still needs the usual reachable MCP endpoint (and a token off loopback); the view
   itself opens no connection. ext-apps issue #671 (open) reports Claude fetching a resource without rendering the
-  iframe, so step A's manual check on Claude comes first.
+  iframe. **The Claude check is deferred** (Steve, 2026-11-17): only Linux workstations are available, Claude
+  Desktop has no Linux build, and serving claude.ai over public HTTPS is not an option. **Cursor is the reference
+  host** for this train's manual checks.
 - **Cursor:** its docs mark "Apps (extension)" as Supported (<https://cursor.com/docs/mcp>), since Cursor 2.6.
   Known issues in the forum: inline widgets stopped mounting for some sessions around 3.9.16 (fixed in 3.12), and
   servers configured in a project's `.cursor/mcp.json` never get their `ui://` resource read, while the same server
@@ -177,8 +179,7 @@ Spec: SEP-1865, **Stable (2026-01-26)**,
     **did not reach the model's context**. Cursor rendered a view **once per chat** (or once per `resourceUri`):
     a later linked call in the same chat showed no view.
   - **Devin Desktop 3.13.4:** no view; the tool results arrived as plain text, as before 1.87.0.
-  - **Claude: not run.** Claude Desktop has no Linux build, and claude.ai needs a public HTTPS endpoint. Still
-    open, with ext-apps #671 in mind.
+  - **Claude: deferred** (Steve, 2026-11-17; see the Claude bullet above). Not part of this train's manual checks.
 
 ## The Ruby `mcp` gem
 
@@ -388,8 +389,9 @@ entity_types require a query"), and it returns only `entity_id`, `name`, `entity
    entities scanned) and says "scanned N of `total_entities`" when it stopped early (decision 8). The loader is
    one function, so a later `search` change can replace it. A full scan is up to 40 view-initiated calls (20
    catalog pages and up to 20 `get_entities` batches). A host may ask for consent on each, or add each result
-   to the model's context: step A's manual check records what Claude and Cursor do, and step B keeps this
-   loader only if that is usable. If it isn't, stop and ask Steve.
+   to the model's context. Steve (2026-11-17): keep this loader as long as the host shows no consent prompt
+   (Cursor showed none, and the results didn't reach the model's context); stop and ask only if a host prompts
+   for consent on every view call.
 3. **Caps:** 1,000 nodes for a project subset (`GraphTraversalService::MAX_ENTITIES`; Explore's
    `GraphDataController::MAX_NODES` is 2,000), with a "showing N of `scope_entity_count`" note from `get_context`.
 
@@ -475,7 +477,7 @@ as graph" switches to Graph mode with the hits' ids. The current query goes to `
 - **Theming:** read `hostContext.styles.variables` and `theme`, with fallbacks in `:root`, and use the host's font
   variables or system fonts. (The operator UI's own theme switch stays a separate backlog item.)
 - **Size:** about 430 KB for the document. Record in the PR that both transports (Streamable HTTP and stdio)
-  deliver it, and whether Claude and Cursor accept it.
+  deliver it, and whether Cursor accepts it.
 
 ### Lockdown, privacy, cloud gate
 
@@ -536,8 +538,8 @@ unknown request answered with `-32601`, notifications and stray replies dropped,
 - Re-record the snapshots by replacing only the changed entries in place (keep the recorded order, so the diff
   stays small); add the handshake expectation; `docs/mcp_tools.md` and `docs/protocol_compat.md` get a
   short MCP Apps section.
-- Manual check, recorded in the PR: the stub renders in Claude (first, because of ext-apps #671) and in Cursor
-  (global server entry) when the agent calls a linked tool; the view's own `tools/call` to an unlinked tool
+- Manual check, recorded in the PR (as planned; Claude was later deferred and Cursor became the reference host):
+  the stub renders in Claude and in Cursor (global server entry) when the agent calls a linked tool; the view's own `tools/call` to an unlinked tool
   (`get_entities`) works; whether the host asks for consent on each view-initiated call, and whether those
   results reach the model's context.
 
@@ -554,8 +556,8 @@ unknown request answered with `-32601`, notifications and stray replies dropped,
     calls; the drawn scope goes to `ui/update-model-context`, so the agent knows what the user sees. Don't build
     anything that needs a fresh view per agent call. The user guide (step C) says so.
   - **The view's own calls in Cursor:** no consent prompt, and their results don't reach the model's context. So
-    the root loader's up-to-40 calls are usable in Cursor; keep it. Repeat the check on Claude when one is
-    available; if Claude asks for consent on every view call, stop and ask Steve before changing the loader.
+    the root loader's up-to-40 calls are usable in Cursor; keep it as long as the host shows no consent prompt
+    (Steve, 2026-11-17). Stop and ask only if a host prompts for consent on every view call.
   - **The model learns what the view shows only through `ui/update-model-context`** (view results don't reach it
     in Cursor). Keep that update short: scope, counts, selected ids.
 - **Build on 1.87.0, don't replace it:** keep `Views` and the provider, and swap the `graph.html` body for the
@@ -584,14 +586,15 @@ unknown request answered with `-32601`, notifications and stray replies dropped,
   route, a gem or a package, stop there and do a manual check instead; say so in the PR.
 - Manual check, recorded in the PR: Cursor (global entry, current build) draws each `traverse_graph` mode and a
   path, the two subset buttons work with no tool result, and the document size (about 430 KB) is accepted over
-  both transports; Claude if one is available (still open from step A).
+  both transports. Cursor is the reference host; the Claude check is deferred.
 
 ### C. Search mode, docs → 1.89.0
 
 - Search mode (filters, paging, click-through, "Show as graph"), the user guide page under `docs/guides/` (what
   the views do, how to open them, which clients render them, the Cursor global-entry note, that view calls count
   as agent calls), the README feature line.
-- Manual check on Claude and Cursor, recorded in `docs/protocol_compat.md`.
+- Manual check on Cursor (the reference host), recorded in `docs/protocol_compat.md`; the Claude check stays
+  deferred unless Steve gets a supported Claude client.
 - Housekeeping: mark this plan DONE, move it to `docs/plans/done/` and add its row to
   `docs/plans/done/README.md`.
 
