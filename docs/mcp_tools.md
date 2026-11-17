@@ -28,9 +28,31 @@ it (Claude, Cursor and others) renders the `ui://graph-mem/graph` view when `tra
 `_meta.ui.resourceUri` in `tools/list`; no other tool is linked, so `search`, `get_context` and the rest
 never open a view. Every client still gets the same `tools/call` result (text plus `structuredContent`),
 and clients without the extension, Claude Code included, see plain tools. The view is listed in
-`resources/list` on all three profiles. In 1.87.0 it is a stub that shows the entity count of the
-result; 1.88.0 draws the graph. Settings › Feature flags › **MCP Apps views** (`mcp_apps_enabled`,
+`resources/list` on all three profiles. Settings › Feature flags › **MCP Apps views** (`mcp_apps_enabled`,
 default on) turns it all off. Wire details: [protocol_compat.md](protocol_compat.md#mcp-apps).
+
+**Graph mode (1.88.0).** The view draws the result that opened it with Explore's Cytoscape styles:
+
+- `traverse_graph`: an expansion as is (the start entity has the focus border); a relation query (no
+  `start_entity_id`) by loading the relations' endpoints; `include` without `relations` as nodes alone;
+  `include: ["traversal"]` has nothing to draw.
+- `find_shortest_path`: the path highlighted, or "no path" for `found: false`.
+- At most 2,000 entities and 5,000 relations, with a "Showing N of M" note.
+- **Context project** and **Root entities** load a subset without a tool result: the active project's
+  `part_of` subtree (up to 1,000 entities), or the Projects and untyped entities from the paged `search`
+  catalog (up to 20 pages of 100, with a "Scanned N of M" note).
+- Clicking a node opens its observations and relations; **Expand 1/2**, **Path between selected** (the
+  last two clicked nodes) and **Show this project** extend or replace the drawing. Fullscreen when the
+  host offers it; the host's theme and colors.
+
+Everything the view does is its own read-tool call (`search`, `get_entities`, `traverse_graph`,
+`find_shortest_path`, `get_context`) through the host, recorded like an agent's call (telemetry, agent
+activity). It never writes and never sets the agent's active project: what it shows reaches the agent
+only as a short `ui/update-model-context` summary (scope, counts, selected ids).
+
+**A view is not guaranteed per call.** Cursor mounts the view once per chat: a later
+`traverse_graph` or `find_shortest_path` in the same chat opens no new view, and the open one doesn't
+get that result. Use the view's own buttons there, or start a new chat.
 
 ## Standard Compatibility
 

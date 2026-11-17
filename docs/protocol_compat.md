@@ -249,10 +249,38 @@ Since 1.87.0 (`docs/plans/mcp-apps-plan.md`, step A) graph_mem serves the MCP Ap
   client without the extension treats them as plain tools.
 - `tools/call` results are unchanged for every tool and client; `resources/templates/list` too.
 
-In 1.87.0 the view is a stub (the handshake, the entity count of the tool result); 1.88.0 draws the
-graph. Turned off, the wire is exactly the 1.86.2 one: no extension, no `ui://` resource, no
-`_meta.ui`. Saving the setting rebuilds the HTTP servers (open MCP sessions close); a stdio runner picks
-it up when restarted.
+Turned off, the wire is exactly the 1.86.2 one: no extension, no `ui://` resource, no `_meta.ui`.
+Saving the setting rebuilds the HTTP servers (open MCP sessions close); a stdio runner picks it up
+when restarted.
+
+### The view (Graph mode, 1.88.0)
+
+In 1.87.0 the view was a stub; 1.88.0 draws the graph (Graph mode; usage in
+[mcp_tools.md](mcp_tools.md#mcp-apps-interactive-view)). Only the `resources/read` text changed:
+capabilities, `tools/list`, `resources/list`, `resources/templates/list` and every `tools/call` result
+are the 1.87.0 ones (the snapshots and handshake files are unchanged).
+
+- **One document, about 460 KB:** the HTML shell from `lib/graph_mem/mcp_apps/view/` with one inline
+  module script holding the vendored Cytoscape 3.31.4 (`vendor/javascript/`), Explore's
+  `cytoscape_config.js` and the view scripts, built once per process by
+  `GraphMem::McpApps::ViewBuilder`. No CDN, no `csp` domains, no network request: it runs under the
+  host's default CSP.
+- **Bridge** (JSON-RPC 2.0 over `postMessage`, no SDK): `ui/initialize` (protocol `2026-01-26`), then
+  `ui/notifications/initialized`; it takes `tool-input`, `tool-result`, `tool-cancelled`,
+  `host-context-changed`, `ui/resource-teardown` and `ping`, and sends `tools/call`,
+  `ui/request-display-mode` (fullscreen, only when `hostContext.availableDisplayModes` lists it),
+  `ui/notifications/size-changed` and `ui/update-model-context`. Only messages from the host frame
+  count; an unknown request gets `-32601`, other unknown messages are ignored.
+- **Theming:** `hostContext.styles.variables` (standard CSS variables) and `theme`, with fallbacks;
+  fonts from `--font-sans` or the system (the default CSP blocks embedded fonts).
+
+**Hosts (manual checks):**
+
+| Host | Build | Renders the view | View-initiated calls | Notes |
+|---|---|---|---|---|
+| Cursor | 3.23.23 (1.87.0 stub) | yes, once per chat | no consent prompt; results stay out of the model's context | needs a global `mcp.json` entry |
+| Devin Desktop | 3.13.4 (1.87.0 stub) | no | — | plain tool results |
+| Claude | — | deferred | — | no supported client at hand |
 
 ## Re-running
 
