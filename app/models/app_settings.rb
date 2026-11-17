@@ -18,6 +18,8 @@ class AppSettings < RailsSettings::Base
   field :llm_keywords_enabled, default: true, type: :boolean
   # 1.86.0: ScheduledRunCatchUpJob starts "Run all scheduled jobs now" by itself when nothing ran lately.
   field :scheduled_run_catch_up_enabled, default: true, type: :boolean
+  # 1.87.0: MCP Apps (the io.modelcontextprotocol/ui extension and the ui:// views); GraphMem::McpApps.enabled?.
+  field :mcp_apps_enabled, default: true, type: :boolean
 
   # Database backup settings
   field :backup_folder_path, default: "db/backup", type: :string
@@ -254,6 +256,12 @@ class AppSettings < RailsSettings::Base
   # @return [Boolean] true unless turned off in System › Settings
   def self.scheduled_run_catch_up_enabled?
     read_boolean_setting("scheduled_run_catch_up_enabled", default: true)
+  end
+
+  # Read from the database each time (servers are built from it, and a save compares before/after).
+  # @return [Boolean]
+  def self.mcp_apps_enabled?
+    read_boolean_setting("mcp_apps_enabled", default: true)
   end
 
   def self.dream_state_compactor_enabled?

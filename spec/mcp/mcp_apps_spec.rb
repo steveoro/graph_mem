@@ -34,6 +34,28 @@ RSpec.describe "MCP Apps on the wire" do
     end
   end
 
+  describe "the mcp_apps_enabled setting" do
+    after { AppSettings.where(var: "mcp_apps_enabled").delete_all }
+
+    it "is on by default: servers built from it declare the extension" do
+      expect(GraphMem::McpApps.enabled?).to be(true)
+      expect(initialize_result(GraphMem::OfficialMcp::ServerFactory.for(:default))["capabilities"]).to have_key("extensions")
+    end
+
+    it "off, gives today's wire: the base capabilities, no ui:// resource and no _meta.ui" do
+      AppSettings.mcp_apps_enabled = false
+      AppSettings.clear_cache
+
+      %i[default readonly maintenance].each do |profile|
+        server = GraphMem::OfficialMcp::ServerFactory.for(profile)
+        expect(initialize_result(server)["capabilities"]).to eq(base)
+        expect(rpc(server, "resources/list").dig("result", "resources")).to eq([])
+        expect(rpc(server, "tools/list").dig("result", "tools")).to all(satisfy { |tool| !tool.key?("_meta") })
+        expect(rpc(server, "resources/read", { uri: "ui://graph-mem/graph" })).to include("error")
+      end
+    end
+  end
+
   describe "tools/list" do
     def linked(server)
       rpc(server, "tools/list").dig("result", "tools").select { |tool| tool.key?("_meta") }.to_h { |tool| [ tool["name"], tool["_meta"] ] }

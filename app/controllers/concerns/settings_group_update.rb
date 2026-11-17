@@ -35,12 +35,25 @@ module SettingsGroupUpdate
   def write_settings(group, posted)
     review_before = review_policy_values
     mcp_before = mcp_access_values
+    apps_before = AppSettings.mcp_apps_enabled?
     posted.each { |key, raw| AppSettings.public_send("#{key}=", SettingsSchema.cast(SettingsSchema.field(key), raw)) }
     AppSettings.clear_cache
     audit_review_policy_changes(review_before)
     apply_mcp_access_changes(mcp_before)
+    apply_mcp_apps_change(apps_before)
     EmbeddingService.reset_instance! if group.key == :embeddings
     SummaryGenerationClient.reset_instance! if group.key == :summaries
+  end
+
+  # MCP Apps on or off (1.87.0): the HTTP servers are rebuilt with the new value, which closes the
+  # open MCP sessions; nothing happens when the value didn't change. In-process only, like the
+  # access refresh; a stdio runner needs a restart.
+  def apply_mcp_apps_change(before)
+    after = AppSettings.mcp_apps_enabled?
+    return if before == after
+
+    GraphMem::OfficialMcp.refresh_access!(transports: true)
+    Rails.logger.info("[McpApps] MCP Apps #{after ? 'on' : 'off'} (#{Current.actor}); MCP servers rebuilt")
   end
 
   # SettingsSchema check of the review policies group (ReviewPolicySettings).
