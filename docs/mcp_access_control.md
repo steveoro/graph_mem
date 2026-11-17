@@ -206,7 +206,7 @@ support custom headers on a URL-based server:
       "url": "http://192.168.0.18:3030/mcp",
       "headers": {
         "Authorization": "Bearer <GRAPH_MEM_MCP_TOKEN>",
-        "X-MCP-Client": "cursor-wks-1"
+        "X-MCP-Client": "cursor-workstation"
       }
     }
   }
