@@ -227,6 +227,11 @@
           "idempotentHint": true,
           "openWorldHint": false,
           "readOnlyHint": true
+        },
+        "_meta": {
+          "ui": {
+            "resourceUri": "ui://graph-mem/graph"
+          }
         }
       },
       {
@@ -1788,6 +1793,11 @@
           "idempotentHint": true,
           "openWorldHint": false,
           "readOnlyHint": true
+        },
+        "_meta": {
+          "ui": {
+            "resourceUri": "ui://graph-mem/graph"
+          }
         }
       }
     ]
@@ -1836,6 +1846,17 @@
         "name": "MemoryEntities",
         "description": "Access memory entities with pagination, filtering, sorting and relation inclusion",
         "mimeType": "application/json"
+      }
+    ]
+  },
+  "resources/list": {
+    "resources": [
+      {
+        "uri": "ui://graph-mem/graph",
+        "name": "graph_view",
+        "title": "Graph view",
+        "description": "Interactive view of graph_mem tool results (MCP Apps). Opened by hosts that support the extension.",
+        "mimeType": "text/html;profile=mcp-app"
       }
     ]
   }

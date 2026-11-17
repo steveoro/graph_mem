@@ -2,7 +2,8 @@
 
 require "rails_helper"
 
-# What each profile advertises (tools/list, prompts/list, resources/templates/list), compared as JSON
+# What each profile advertises (tools/list, prompts/list, resources/templates/list, and since
+# 1.87.0 resources/list: the MCP Apps ui:// views), compared as JSON
 # (keys in order, lists sorted by name) with what was recorded on graph_mem 1.55.0 in
 # spec/fixtures/mcp/snapshots/ (before fast-mcp was removed in 1.55.1). A
 # change to a tool's name, description, schema or annotations, a prompt, or a resource template
@@ -11,7 +12,7 @@ require "rails_helper"
 # Each list is sorted by name on both sides first: the server lists classes in load order, which
 # depends on which specs ran before (it did on 1.55.0 too).
 RSpec.describe "MCP list snapshots" do
-  list_methods = %w[tools/list prompts/list resources/templates/list]
+  list_methods = %w[tools/list prompts/list resources/templates/list resources/list]
 
   def sorted(snapshot)
     snapshot.transform_values do |result|

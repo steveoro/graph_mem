@@ -76,11 +76,12 @@ open CORS (GHSA-mvf5-2qqv-rg3c).
 
 ## Expected results
 
-At 1.86.1 (2026-11-13, `mcp` 1.10.0; reference servers Memory 2.1.1, Everything 2.3.0, SDK 2.4.0 (the MCP
+At 1.87.0 (2026-11-17, `mcp` 1.10.0; reference servers Memory 2.1.1, Everything 2.3.0, SDK 2.4.0 (the MCP
 servers release v2.4.0), on Node 24.11.1 and Ruby 3.4.12):
 
-- `compare.rb`: 0 failed expectations, 0 unexpected differences (19 stdio and 32 HTTP cases; the two
-  non-object `_meta` cases and the two invalid UTF-8 method name cases are documented divergences). The
+- `compare.rb`: 0 failed expectations, 0 unexpected differences (20 stdio and 33 HTTP cases; the two
+  non-object `_meta` cases and the two invalid UTF-8 method name cases are documented divergences, and
+  "initialize declares the MCP Apps extension" is graph_mem only). The
   `ruby_sdk` column (`mcp` 1.10.0, informational) answers every case exactly like graph_mem, which runs
   on the same gem.
 - `clients.sh`: 12 of 12 OK (TS 2.4.0, Ruby SDK 1.9.0 and 1.10.0), each listing 12 tools on `/mcp`; every

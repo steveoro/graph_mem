@@ -246,7 +246,8 @@ begin
 
   capabilities = initialized&.dig("result", "capabilities")
   add.call("A", "N5 capabilities and instructions",
-           capabilities == GraphMem::OfficialMcp::ServerFactory::CAPABILITIES.deep_stringify_keys && initialized.dig("result", "instructions").present?,
+           capabilities == GraphMem::OfficialMcp::ServerFactory.capabilities(apps_enabled: GraphMem::McpApps.enabled?).deep_stringify_keys &&
+             initialized.dig("result", "instructions").present?,
            capabilities.to_json)
 
   prompt = lambda do |path, name, arguments|
@@ -353,7 +354,8 @@ ensure
   server&.stop(true)
   if started_at
     MemoryEntity.where("name LIKE ?", "McpCheck%").destroy_all
-    [ ToolInvocation, AgentContext, AuditLog, MemoryRelation, MemoryObservation, OperationProgress ].each { |model| model.where(created_at: started_at..).delete_all }
+    # ChangeSet: the agent's MCP writes record change sets (UI-4a); left behind, they break the suite's change-set counts.
+    [ ToolInvocation, AgentContext, AuditLog, ChangeSet, MemoryRelation, MemoryObservation, OperationProgress ].each { |model| model.where(created_at: started_at..).delete_all }
     AgentContext.where(client_id: check_clients).delete_all
   end
   FileUtils.remove_entry(work) if work && File.directory?(work)

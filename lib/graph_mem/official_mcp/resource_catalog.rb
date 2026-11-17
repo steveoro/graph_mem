@@ -2,29 +2,33 @@
 
 module GraphMem
   module OfficialMcp
-    # The ApplicationResource templates as gem resource templates, plus the resources/read
-    # dispatch from a URI to the resource class whose template matches it.
+    # The resources a server lists and reads, from an ordered list of providers. A provider answers
+    # `resources` (static listings), `templates`, `match?(uri)` and `read(uri)` (the `contents` of a
+    # resources/read result); TemplateResourceProvider is one. resources/read asks the providers in
+    # order, so a later provider registers without touching the read path.
+    #
+    # @example
+    #   providers = [ TemplateResourceProvider.new(GraphMem::McpToolRegistry.resource_classes) ]
+    #   ResourceCatalog.templates(providers) # => [MCP::ResourceTemplate, …]
+    #   ResourceCatalog.read(providers, uri) # => [{ uri:, mimeType:, text: }]
     module ResourceCatalog
-      # @param resource_classes [Array<Class<ApplicationResource>>]
-      # @return [Array<MCP::ResourceTemplate>]
-      def self.templates(resource_classes)
-        resource_classes.select(&:templated?).map do |klass|
-          MCP::ResourceTemplate.new(uri_template: klass.uri, name: klass.resource_name, description: klass.description, mime_type: klass.mime_type)
-        end
-      end
+      # @param providers [Array<#resources>]
+      # @return [Array<MCP::Resource>] the static listings, for MCP::Server.new(resources:)
+      def self.resources(providers) = providers.flat_map(&:resources)
 
-      # @param resource_classes [Array<Class<ApplicationResource>>]
+      # @param providers [Array<#templates>]
+      # @return [Array<MCP::ResourceTemplate>]
+      def self.templates(providers) = providers.flat_map(&:templates)
+
+      # @param providers [Array<#match?, #read>]
       # @param uri [String]
       # @return [Array<Hash>] the `contents` of the resources/read result
-      # @raise [MCP::Server::ResourceNotFoundError] when no resource matches
-      def self.read(resource_classes, uri)
-        klass = resource_classes.find { |candidate| candidate.match(uri) }
-        raise MCP::Server::ResourceNotFoundError.new(uri) unless klass
+      # @raise [MCP::Server::ResourceNotFoundError] when no provider matches
+      def self.read(providers, uri)
+        provider = providers.find { |candidate| candidate.match?(uri) }
+        raise MCP::Server::ResourceNotFoundError.new(uri) unless provider
 
-        instance = klass.initialize_from_uri(uri)
-        content = { uri: uri }
-        content[:mimeType] = klass.mime_type if klass.mime_type
-        [ instance.binary? ? content.merge(blob: Base64.strict_encode64(instance.content)) : content.merge(text: instance.content) ]
+        provider.read(uri)
       end
     end
   end

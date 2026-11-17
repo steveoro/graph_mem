@@ -23,12 +23,15 @@ module GraphMem
       end
 
       # @param tool_class [Class<ApplicationTool>]
+      # @param views [Array<String>] the ui:// views the server being built registers: the tool's
+      #   mcp_ui_view becomes `_meta.ui.resourceUri` only when it is one of them
       # @return [Class<MCP::Tool>] with the tool's name, title, description, schemas and annotations
-      def self.build(tool_class)
+      def self.build(tool_class, views: [])
         wrapper = self
         hints = tool_class.annotations.to_h.slice(*ANNOTATION_KEYS)
         output_schema = tool_class.output_schema_to_json
         tool_title = tool_class.title
+        view = tool_class.mcp_ui_view if views.include?(tool_class.mcp_ui_view)
 
         Class.new(MCP::Tool) do
           tool_name tool_class.tool_name
@@ -37,6 +40,7 @@ module GraphMem
           input_schema LenientInputSchema.new(tool_class.input_schema_to_json)
           output_schema(output_schema) if output_schema
           annotations(**hints) if hints.any?
+          meta(MCP::Apps.tool_meta(resource_uri: view)) if view
 
           define_singleton_method(:graph_mem_tool_class) { tool_class }
           define_singleton_method(:call) do |server_context: nil, **args|

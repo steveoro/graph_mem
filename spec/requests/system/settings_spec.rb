@@ -74,6 +74,21 @@ RSpec.describe "System › Settings", type: :request do
       AppSettings.where(var: "enable_contradiction_detection").delete_all
     end
 
+    # MCP Apps (1.87.0): servers are built once per transport, so a change rebuilds the HTTP ones.
+    it "rebuilds the MCP servers when mcp_apps_enabled changes, and not when it is saved unchanged" do
+      allow(GraphMem::OfficialMcp).to receive(:refresh_access!).and_call_original
+
+      patch system_settings_path, params: { tab: "feature_flags", settings: { mcp_apps_enabled: "1" } }
+      expect(GraphMem::OfficialMcp).not_to have_received(:refresh_access!)
+
+      patch system_settings_path, params: { tab: "feature_flags", settings: { mcp_apps_enabled: "0" } }
+      expect(response).to redirect_to(system_settings_path(tab: "feature_flags"))
+      expect(AppSettings.mcp_apps_enabled?).to be(false)
+      expect(GraphMem::OfficialMcp).to have_received(:refresh_access!).with(transports: true).once
+    ensure
+      AppSettings.where(var: "mcp_apps_enabled").delete_all
+    end
+
     it "refuses an out-of-range value with 422, marks the field and saves nothing from the group" do
       patch system_settings_path, params: { tab: "telemetry", settings: { tool_invocation_retention_days: "4000", compaction_review_row_retention_days: "12" } }
 

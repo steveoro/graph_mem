@@ -142,6 +142,16 @@
       "divergence": "Server-specific: Everything implements subscriptions, list-changed notifications and logging; graph_mem doesn't."
     },
     {
+      "name": "initialize declares the MCP Apps extension",
+      "session": "none",
+      "request": {"body": {"jsonrpc": "2.0", "id": 23, "method": "initialize", "params": {"protocolVersion": "2025-11-25", "capabilities": {}, "clientInfo": {"name": "mcp-compat", "version": "0"}}}},
+      "expect": {
+        "graph_mem": {"status": 200, "id": 23, "result": {"capabilities": {"extensions": {"io.modelcontextprotocol/ui": {"mimeTypes": ["text/html;profile=mcp-app"]}}}}},
+        "reference": null
+      },
+      "divergence": "Server-specific: graph_mem declares the MCP Apps extension (io.modelcontextprotocol/ui, 1.87.0; off with the mcp_apps_enabled setting) and serves its ui:// view; Everything declares no extensions."
+    },
+    {
       "name": "in a session, no MCP-Protocol-Version header",
       "session": "new",
       "request": {"body": {"jsonrpc": "2.0", "id": 30, "method": "ping"}},
