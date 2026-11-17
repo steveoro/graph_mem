@@ -174,11 +174,27 @@ RSpec.describe "MCP Apps graph view", type: :system do
     expect(console_errors).to be_empty
   end
 
-  it "draws the nodes alone when include leaves out the relations" do
+  # With no edges the force layout packs the lone nodes in overlapping rows: a grid sized to the
+  # labels keeps every label readable.
+  it "draws the nodes alone when include leaves out the relations, without overlapping them" do
+    24.times do |i|
+      member = MemoryEntity.create!(name: "synth-alpha-member-with-a-long-label-#{i}", entity_type: "Task", project_id: project.id)
+      MemoryRelation.create!(from_entity: member, to_entity: project, relation_type: "part_of")
+    end
     open_view
     push_tool_result(tool_result("traverse_graph", { start_entity_id: project.id, max_depth: 1, include: %w[entities traversal] }))
 
-    within_frame("view") { expect(page).to have_text("4 entities, 0 relations") }
+    within_frame("view") do
+      expect(page).to have_text("28 entities, 0 relations")
+      expect(find_by_id("status").text).to eq("Tool result drawn.")
+      boxes = "JSON.stringify(document.getElementById('graph')._cyreg.cy.nodes().map((n) => n.boundingBox({ includeLabels: true })))"
+      previous = nil
+      wait_until { current = page.evaluate_script(boxes); settled = current == previous; previous = current; sleep 0.2; settled }
+      overlapping = JSON.parse(previous).combination(2).count do |a, b|
+        a["x1"] < b["x2"] && b["x1"] < a["x2"] && a["y1"] < b["y2"] && b["y1"] < a["y2"]
+      end
+      expect(overlapping).to eq(0)
+    end
   end
 
   it "draws a shortest path, and says when there is none" do
@@ -191,7 +207,10 @@ RSpec.describe "MCP Apps graph view", type: :system do
     end
 
     push_tool_result(tool_result("find_shortest_path", { from_entity_id: members[0].id, to_entity_id: loose.id }))
-    within_frame("view") { expect(page).to have_text("No path between the two entities") }
+    within_frame("view") do
+      expect(page).to have_text("No path between the two entities")
+      expect(find_by_id("status").text).to eq("No path between the two entities within the search depth.")
+    end
     expect(console_errors).to be_empty
   end
 
@@ -330,6 +349,7 @@ RSpec.describe "MCP Apps graph view", type: :system do
       push_tool_result(tool_result("traverse_graph", { start_entity_id: project.id, include: [ "traversal" ] }))
       within_frame("view") do
         expect(page).to have_text("The tool result holds nothing to draw.")
+        expect(find_by_id("status").text).to eq("The tool result holds nothing to draw.")
         expect(page).to have_button("Root entities", count: 2)
       end
     end
