@@ -23,8 +23,9 @@ Every tool also publishes the standard MCP `readOnlyHint`, `destructiveHint`,
 ## MCP Apps (interactive view)
 
 Since 1.87.0 graph_mem serves the MCP Apps extension (`io.modelcontextprotocol/ui`): a host that supports
-it (Claude, Cursor and others) renders the `ui://graph-mem/graph` view when `traverse_graph` or
-`find_shortest_path` is called, the agent's own calls included. Those two tools carry
+it (Cursor today; see the host table in [protocol_compat.md](protocol_compat.md#mcp-apps)) renders the
+`ui://graph-mem/graph` view when `traverse_graph` or `find_shortest_path` is called, the agent's own
+calls included. Those two tools carry
 `_meta.ui.resourceUri` in `tools/list`; no other tool is linked, so `search`, `get_context` and the rest
 never open a view. Every client still gets the same `tools/call` result (text plus `structuredContent`),
 and clients without the extension, Claude Code included, see plain tools. The view is listed in

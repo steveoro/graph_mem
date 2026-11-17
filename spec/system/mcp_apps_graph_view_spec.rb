@@ -89,6 +89,7 @@ RSpec.describe "MCP Apps graph view", type: :system do
           if (m.method === "ui/update-model-context") send({ id: m.id, result: {} });
         });
         window.hostTakeCalls = () => queue.splice(0);
+        window.hostQueued = () => queue.length;
         window.hostReply = (id, result) => send({ id, result });
         window.hostSend = (message) => send(message);
         window.hostLog = () => JSON.stringify(log);
@@ -151,6 +152,9 @@ RSpec.describe "MCP Apps graph view", type: :system do
     within_frame("view") do
       expect(page).to have_text("Traversal from synth-alpha-project, depth 1")
       expect(page).to have_text(drawn_counts(result))
+      border = ->(entity) { page.evaluate_script("document.getElementById('graph')._cyreg.cy.getElementById('#{entity.id}').style('border-color')") }
+      expect(border.call(project)).to eq("rgb(255,255,0)") # GRAPH_STYLES' focus rule
+      expect(border.call(members[0])).not_to eq("rgb(255,255,0)")
     end
     wait_until { host_log.any? { |m| m["method"] == "ui/update-model-context" } }
     update = host_log.find { |m| m["method"] == "ui/update-model-context" }["params"]
@@ -293,6 +297,32 @@ RSpec.describe "MCP Apps graph view", type: :system do
       expect(walk["arguments"]).to include("start_entity_id" => project.id, "direction" => "incoming", "relation_types" => [ "part_of" ],
                                            "max_depth" => 5, "max_entities" => 1000)
       expect(console_errors).to be_empty
+    end
+
+    it "keeps a tool result pushed during a subset load and draws it when the load ends" do
+      open_view
+      within_frame("view") { click_button "Root entities", match: :first }
+      wait_until { page.evaluate_script("window.hostQueued()") == 1 } # the first catalog page, unanswered
+      push_tool_result(tool_result("traverse_graph", { start_entity_id: project.id, max_depth: 1 }))
+      serve_view_calls_until("Tool result drawn.")
+
+      within_frame("view") { expect(page).to have_text("Traversal from synth-alpha-project, depth 1") }
+    end
+
+    it "waits for the result after a tool-input, and offers the subset loads after a cancellation" do
+      open_view
+      page.execute_script("window.hostSend(arguments[0])", { method: "ui/notifications/tool-input", params: { arguments: { start_entity_id: project.id } } })
+      sleep 2 # past the view's 1.5 s wait for a result
+      within_frame("view") do
+        expect(page).to have_text("Waiting for the tool result…")
+        expect(page).to have_no_text("No tool result reached this view")
+      end
+
+      page.execute_script("window.hostSend(arguments[0])", { method: "ui/notifications/tool-cancelled", params: { reason: "synth cancel" } })
+      within_frame("view") do
+        expect(page).to have_text("The tool call was cancelled.")
+        expect(page).to have_button("Root entities", count: 2)
+      end
     end
 
     it "offers the subset loads after a tool result with nothing to draw" do

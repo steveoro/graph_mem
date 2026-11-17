@@ -67,7 +67,13 @@ RSpec.describe GraphMem::McpApps::ViewBuilder do
 
     it "has no HTML-breaking sequence inside the script" do
       script = document[/<script type="module">\n(.*)<\/script>/m, 1]
-      expect(script).not_to include("</script", "<!--")
+      expect(script.downcase).not_to include("</script", "<!--")
+    end
+
+    # 461,376 bytes in 1.88.0 (Cytoscape is 416,235). A loose ceiling catches a doubled inline or a
+    # second vendored file before a host has to refuse the document.
+    it "stays under 500 KB" do
+      expect(document.bytesize).to be < 512_000
     end
 
     it "is built once per process" do
