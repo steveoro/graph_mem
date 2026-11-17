@@ -70,7 +70,7 @@ RSpec.describe GraphMem::McpApps::ViewBuilder do
       expect(script.downcase).not_to include("</script", "<!--")
     end
 
-    # 461,376 bytes in 1.88.0 (Cytoscape is 416,235). A loose ceiling catches a doubled inline or a
+    # About 464 KB in 1.88.0 (Cytoscape is 416,235 bytes). A loose ceiling catches a doubled inline or a
     # second vendored file before a host has to refuse the document.
     it "stays under 500 KB" do
       expect(document.bytesize).to be < 512_000
