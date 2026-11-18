@@ -1,6 +1,6 @@
 # graph_mem auto-adoption plan: make agents reach for graph_mem on their own
 
-**Status:** active plan. Drafted 18 Nov 2026 on `main` at 1.89.0. PR A shipped in 1.90.0 (#179); PR B pending.
+**Status:** active plan. Drafted 18 Nov 2026 on `main` at 1.89.0. PR A shipped in 1.90.0 (#179); PR B (1.91.0) next, §6 rechecked against 1.90.0 on 18 Nov 2026.
 **Scope:** Claude Code first, Cursor second. Linux workstations, no Claude Desktop.
 **Decisions (Steve, 18 Nov 2026):**
 - **D1.** Rewording the existing server `instructions` is **not** an MCP surface change: pre-approved.
@@ -301,8 +301,13 @@ URI through a custom `resources_read_handler` that calls `MCP::Skill.read_file` 
 - `AppSettings` field `mcp_skills_enabled`, `default: false` (`app/models/app_settings.rb`); listed in
   `SettingsSchema` with the feature flags; locale label under Settings › Feature flags › "Skills over MCP";
   `docs/app_settings_reference.md` row.
-- `lib/graph_mem/mcp_skills.rb`: `McpSkills.enabled?` and `McpSkills.catalog` (memoized
-  `MCP::Skill.from_directory(Rails.root.join("skills"))`; the folder is already in the Docker image via `COPY . .`).
+- No migration: `AppSettings` is `rails-settings-cached` (one key/value table), so a new `field` plus an
+  `AppSettings.mcp_skills_enabled?` reader (`read_boolean_setting("mcp_skills_enabled", default: false)`, next to
+  `mcp_apps_enabled?`) is enough.
+- `lib/graph_mem/mcp_skills.rb`: `McpSkills.enabled?` and `McpSkills.for(profile)`, which calls
+  `MCP::Skill.from_directory(Rails.root.join("skills"))` **once per server build** (not memoized for the process):
+  the gem records digests at registration and refuses a file changed since then with `-32603`, so a catalog rebuilt
+  with the servers picks up edited skills on the next rebuild or restart. The folder is in the Docker image (`COPY . .`).
 - `ServerFactory.capabilities(apps_enabled:, skills_enabled: false)`: start from `CAPABILITIES`; add
   `extensions:` only when at least one is on, merging `MCP::Apps.capability` and `MCP::Skill.capability`.
   Keyword default `false` keeps existing callers (`script/mcp_compat/claude_client_check.rb`) unchanged.
@@ -312,8 +317,11 @@ URI through a custom `resources_read_handler` that calls `MCP::Skill.read_file` 
 - `resources_read_handler`: when skills are on, `MCP::Skill.read_file(skills, uri)` first, then
   `ResourceCatalog.read(providers, uri)`. Our handler replaces the gem's default reader, so without this
   the skill files would not be served (also noted in the 1.9.0 plan's "Later").
-- Profiles: `project-scan` on default and maintenance only (it calls `graph_write`, absent on readonly); the
-  toolset skill on all three, or a readonly variant on readonly, decided by test Q2 in `auto-adoption-tests.md`.
+- Profiles (1.91.0): `project-scan` on default and maintenance only (it calls `graph_write`, absent on readonly);
+  the toolset skill on all three for now. Test Q2 (T4, `auto-adoption-tests.md`) may later swap in a readonly variant.
+- Unknown `skill://` URIs: our handler falls through to `ResourceCatalog.read`, which raises
+  `ResourceNotFoundError`; the gem's own reader answers `-32602` for a URI under a skill root that names no file.
+  Match the gem for `skill://` misses.
 - Access: `AccessGate` is Rack middleware on every `/mcp` path, so `skills/*` gets the same IP allowlist
   and bearer token as tools; nothing to add. Lockdown unchanged.
 
@@ -325,15 +333,17 @@ servers are rebuilt and open MCP sessions close, so hosts reconnect and see the 
 runner needs a restart. No Rails server restart for HTTP.
 
 **Wire guarantees.**
-- Off (default): `initialize` capabilities, tools/list, prompts/list, resources/list and every snapshot
-  (`spec/mcp/tools_list_snapshot_spec.rb`, `spec/fixtures/mcp/handshakes/*.json`, the `eq CAPABILITIES`
-  specs) stay **byte-identical** to 1.90.0. A spec asserts this explicitly, as the 1.87.0 one does for Apps.
+- Off (default): `initialize` capabilities, tools/list, prompts/list, resources/list, resources/templates/list and every
+  snapshot (`spec/fixtures/mcp/snapshots/{default,readonly,maintenance}.json` via `spec/mcp/tools_list_snapshot_spec.rb`,
+  `spec/fixtures/mcp/handshakes/{stdio,http}.json`, and the capability expectations in `spec/mcp/mcp_apps_spec.rb` and
+  `spec/requests/mcp_official_spec.rb`) stay **byte-identical** to 1.90.0. A spec asserts this explicitly, as
+  `spec/mcp/mcp_apps_spec.rb` "the mcp_apps_enabled setting" does for Apps.
 - On: an approved surface change (D4): the `io.modelcontextprotocol/skills` extension in capabilities,
   `skills/list` / `skills/get`, and `skill://` entries in resources/list and resources/read. Tool counts unchanged.
 
 **Specs:** off = identical wire (each profile); on = capabilities carry both extensions when Apps is also
 on; `skills/list` returns the two skills with digests; `resources/read` serves `SKILL.md` and a
-`references/` file, and a `graph-mem://` resource still reads; an unknown `skill://` URI gives `-32602`;
+`references/` file, and a template resource (`memory_entities{?…}`) and the `ui://graph-mem/graph` view still read; an unknown `skill://` URI gives `-32602`;
 toggling via settings rebuilds the HTTP servers (as the Apps spec does). End-to-end: MCP Inspector ≥ 2.6
 CLI skill verification as a manual check, recorded in `docs/protocol_compat.md`.
 
