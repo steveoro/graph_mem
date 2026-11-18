@@ -5,6 +5,24 @@ All notable changes to GraphMem will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.90.0] - 2026-11-18
+
+Auto-adoption, PR A: agents working in other repositories (sessions started from the parent folder of your repos) reach for graph_mem on their own. Text plus a print-only installer: the server's `instructions` string is the only served change; capabilities, `tools/list`, `prompts/list`, `resources/list`, schemas and every tool result are unchanged, and tool counts stay 12 / 9 / 22.
+
+### Changed
+- **Server instructions** (`initialize`) open with the trigger "Use graph_mem in EVERY coding task in ANY repository" and give three numbered steps that name the tools to call: `get_context` first (then `search` and `set_context` when no project is active, and `get_entities` for the Conventions and "User Preferences"), `search` before a convention or a first edit, and `graph_write` / `graph_edit` before the final reply. The prompts are mentioned only as something the user can type. The readonly text drops the save step and names only `orient` and `recall`.
+- **Skill description** (`graph-mem-mcp-toolset`) leads with "Use at the start of EVERY coding task in any repository", drops the "where the graph_mem MCP server is connected" condition, and narrows the negative clause to designing a graph database schema, so a database-heavy app is no longer excluded. The body is unchanged.
+- `docs/quick_setup.md` §5 is now "Install the skill, rule and hook once per machine", with a table of what a session sees when started in the parent folder vs in the repo; the per-project copy stays as the §6 fallback.
+
+### Added
+- **User-level rule** `docs/rules/graph_mem_user_rule.md` (9 lines), for `~/.claude/rules/graph-mem.md` or Cursor's User Rules: graph_mem in every repository, before the codebase and your own defaults, with a fallback when the server is down.
+- **SessionStart reminder hooks** in `script/agent_hooks/`, for Claude Code (plain stdout) and Cursor (`{"additional_context": ...}`). POSIX `sh`, static text only. They print only when `$GRAPH_MEM_URL/up` answers (default `http://localhost:3030`), and are silent with exit 0 otherwise. `GRAPH_MEM_HOOK_MARKER` optionally names a file to touch each run. The plan named `/api/v1/status`, which needs a session or the token, so the hooks use Rails' anonymous `/up`.
+- **`bin/agent-install`**, print-only: the Claude Code and Cursor install steps for the skill, the rule and the hook, with the hook JSON to merge by hand. `--claude` / `--cursor` print one host; `--url` sets the hook's server. It writes nothing, reads only repo files and never prints MCP server config. Ruby stdlib only.
+- **`script/adoption_eval/summarize.rb`**, read-only: counts adoption metrics (graph_mem before the first edit, `get_context` before the first edit, first graph_mem turn, calls, skill use, denied writes, hook fired, turns, tokens, cost) per arm and per arm and task from Claude Code stream-json logs, and best effort from the Cursor CLI stream; `--csv`. It prints counts only, never prompts, tool inputs or results. Stdlib only.
+
+### Dependencies
+- `bundle update`: dry-types 1.9.1 → 1.9.2.
+
 ## [1.89.0] - 2026-11-18
 
 MCP Apps, step C, the last of the train: the interactive view gets a Search mode, and a user guide explains the view. Hosts that support MCP Apps (Cursor is the reference) show the view next to a `traverse_graph` or `find_shortest_path` result.
