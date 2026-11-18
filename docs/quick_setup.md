@@ -88,9 +88,46 @@ claude mcp add --transport http graph_mem http://localhost:3030/mcp \
 **Devin Desktop:** open its MCP settings, edit the raw config and add the same `graph_mem` block,
 with `"X-MCP-Client": "devin"`. Refresh the tool list afterwards.
 
-## 5. Install the skill in each project
+## 5. Install the skill, rule and hook once per machine
 
-In every project where agents should use graph_mem, run from the project root:
+From the graph_mem repo, run:
+
+```bash
+bin/agent-install            # Claude Code, then Cursor; or --claude / --cursor for one
+```
+
+It only prints: the commands to copy the skill, the user-level rule and the SessionStart reminder
+hook into `~/.claude/` (and `~/.cursor/` for Cursor), and the JSON to merge by hand into
+`~/.claude/settings.json` and `~/.cursor/hooks.json`. It writes nothing; follow its output. Once done,
+agents use graph_mem in **every** repository, whichever folder the session starts in.
+
+- **The rule** (`docs/rules/graph_mem_user_rule.md`) goes to `~/.claude/rules/graph-mem.md`; in Cursor,
+  paste it in Settings > Customize > Rules > User Rules.
+- **The hook** (`script/agent_hooks/`) prints a short static reminder when the server answers on
+  `http://localhost:3030/up`, and nothing otherwise. It's on by default; skip its steps to leave it out.
+  If graph_mem runs elsewhere, pass `--url http://host:port`.
+- **Optional, Claude Code:** `"alwaysLoad": true` on the `graph_mem` server entry loads its tool definitions
+  at session start instead of on demand. It costs roughly 11,000 tokens of context per session, so try
+  the rule and the hook first.
+
+What a session sees, by where it starts (`<projects-dir>` is the parent folder of your repos):
+
+| Text | Started in `<projects-dir>` | Started in `<projects-dir>/<repo>` |
+|---|---|---|
+| `~/.claude/rules/*.md`, the SessionStart hook's reminder | at launch | at launch |
+| `~/.claude/skills/*` | listed | listed |
+| `<projects-dir>/.claude/skills/*` | listed | not listed |
+| `<projects-dir>/<repo>/CLAUDE.md` | once Claude reads or edits a file in the repo | at launch |
+| graph_mem server instructions and tool names | at launch | at launch |
+
+So for a session started in `<projects-dir>`, a per-project install arrives late (the repo's `CLAUDE.md`,
+once Claude opens a file there) or not at all (the repo's `.claude/skills/`); the user-level files are
+there from the start.
+
+## 6. Or install per project (fallback)
+
+For a teammate who doesn't install at user level, or an agent that reads only project files
+(Devin Desktop), copy the skill into each project, from the project root:
 
 ```bash
 GM=~/Projects/graph_mem
@@ -99,15 +136,12 @@ cp -r "$GM/skills/graph-mem-mcp-toolset" .agents/skills/   # Cursor, Devin Deskt
 cp -r "$GM/skills/graph-mem-mcp-toolset" .claude/skills/   # Claude Code
 ```
 
-Copy the whole folder, `references/` included. To install it once for Claude Code in every
-project, copy it to `~/.claude/skills/` instead of `.claude/skills/`.
+Copy the whole folder, `references/` included.
 
 Optional: also copy `$GM/skills/project-scan` the same way. It scans a project into the graph,
 and runs only when you ask for it.
 
-## 6. Add the rule to each project
-
-The rule is ten lines telling the agent when to use the skill. Append it to the project's
+Then add the rule, ten lines telling the agent when to use the skill: append it to the project's
 `AGENTS.md`, which Cursor and Devin Desktop read:
 
 ```bash

@@ -97,6 +97,13 @@ Tools are designed to be used in four phases per session:
 3. **Work** -- Execute the task, consulting the graph as needed
 4. **Persist** -- `graph_write` / `graph_edit` / `graph_delete`
 
+The server's `instructions` (sent in the `initialize` result, `GraphMem::McpInstructions`)
+state this workflow for the agent: use graph_mem in every coding task in any repository; first
+call `get_context` (then `search` and `set_context` when no project is active, and `get_entities`
+for the project's Conventions and "User Preferences"); `search` before choosing a convention or
+first editing a file; save corrections and verified fixes with `graph_write` before the final
+reply. The readonly profile's text drops the save step.
+
 The same workflow is available through MCP prompts: `orient`, `recall` (with a
 required `topic`), and `persist`. `persist` is not served on the readonly
 profile (`/mcp/readonly`, or stdio with `GRAPH_MEM_MCP_PROFILE=readonly`); it

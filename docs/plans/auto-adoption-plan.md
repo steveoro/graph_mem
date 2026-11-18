@@ -1,6 +1,6 @@
 # graph_mem auto-adoption plan: make agents reach for graph_mem on their own
 
-**Status:** active plan, for review. Drafted 18 Nov 2026 on `main` at 1.89.0.
+**Status:** active plan. Drafted 18 Nov 2026 on `main` at 1.89.0. PR A shipped in 1.90.0 (#179); PR B pending.
 **Scope:** Claude Code first, Cursor second. Linux workstations, no Claude Desktop.
 **Decisions (Steve, 18 Nov 2026):**
 - **D1.** Rewording the existing server `instructions` is **not** an MCP surface change: pre-approved.
@@ -106,7 +106,7 @@ What this means for the `<projects-dir>` workflow:
 
 | # | Lever | Host | Impact | Effort | Surface change? | Status |
 |---|---|---|---|---|---|---|
-| 1 | SessionStart command hook printing a short reminder when `/api/v1/status` answers | Claude Code, Cursor | High: every session, every repo | S | No | PR A (snippet, on by default, D3) |
+| 1 | SessionStart command hook printing a short reminder when `/up` answers (the plan said `/api/v1/status`, which needs auth) | Claude Code, Cursor | High: every session, every repo | S | No | PR A (snippet, on by default, D3) |
 | 2 | User-level rule `~/.claude/rules/graph-mem.md` | Claude Code (paste into Cursor User Rules) | High | XS | No | PR A |
 | 3 | Imperative server `instructions` naming tools | Claude Code (Cursor unverified) | Medium-high, zero install | XS | No (D1) | PR A, pre-approved |
 | 4 | Trigger-first skill description | Both | Medium | XS | No | PR A |
@@ -212,6 +212,9 @@ cat <<'TXT'
 graph_mem (MCP server "graph_mem") is connected and holds this user's conventions, preferences, file locations and verified fixes for this repository. Before reading or editing code, call graph_mem get_context, then search for this repository's Project and its Conventions (use ToolSearch to load the tools). Before the final reply, save corrections and verified fixes with graph_write.
 TXT
 ```
+- **As shipped (1.90.0):** the check is `curl -fsS -m 2 "$URL/up"`, Rails' anonymous health check.
+  `/api/v1/status` needs an operator session or the bearer token (`ApiAuthentication` has no loopback
+  exemption, by design), so it would have kept the hook silent; Steve chose `/up` over adding a token.
 - Claude Code `~/.claude/settings.json`:
   `{"hooks":{"SessionStart":[{"matcher":"startup|resume|clear|compact","hooks":[{"type":"command","command":"~/.claude/hooks/graph_mem_session_start.sh","timeout":5}]}]}}`
   (plain stdout on SessionStart is added as context; [docs](https://code.claude.com/docs/en/hooks#exit-code-0)).
