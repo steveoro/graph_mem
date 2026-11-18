@@ -324,7 +324,7 @@ where MCP Inspector is listed as partial (CLI skill verification since 2.6.0).
 |---|---|---|---|
 | MCP Inspector CLI (`--method skills/list --verify --require-digests`) | 2.16.0 | `/mcp`, `/mcp/readonly`, `/mcp/maintenance` | every skill and file verified, no conformance or frontmatter error: 2 skills and 5 files, 1 and 4 on readonly; `skills/get` and a `references/` read match the files |
 | Claude Code | 2.1.327 | `/mcp` | connects and lists its 12 tools as before; doesn't consume skills over MCP (not supported) |
-| Cursor | — | — | manual check pending |
+| Cursor | 3.23.23 | on and off | connects, and the tool list is the same either way; doesn't consume skills over MCP (not supported) |
 
 ## Re-running
 
