@@ -1,0 +1,170 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# Prints how to install graph_mem's agent guidance once per machine, at user level, so agents reach
+# for graph_mem in every repository (docs/plans/auto-adoption-plan.md, PR A): the skill, the
+# user-level rule and the SessionStart reminder hook, for Claude Code and for Cursor.
+#
+# Print-only: it writes nothing and reads nothing under ~/; it reads only this repo's files. You run
+# the printed commands yourself. MCP server config stays in docs/quick_setup.md §4.
+#
+#   bin/agent-install                  # Claude Code, then Cursor
+#   bin/agent-install --claude         # one host only (or --cursor)
+#   bin/agent-install --url http://localhost:3031   # the server the hook checks
+#
+# Plain Ruby (stdlib only), no Rails.
+require "json"
+require "optparse"
+
+# Builds the printed install guidance from the repo's files.
+class AgentInstall
+  DEFAULT_URL = "http://localhost:3030"
+  ROOT = File.expand_path("..", __dir__)
+
+  SKILL = "skills/graph-mem-mcp-toolset"
+  SCAN_SKILL = "skills/project-scan"
+  RULE = "docs/rules/graph_mem_user_rule.md"
+  CLAUDE_HOOK = "script/agent_hooks/graph_mem_session_start.sh"
+  CURSOR_HOOK = "script/agent_hooks/graph_mem_session_start_cursor.sh"
+
+  # Raised for a --url that isn't a plain http(s) base URL.
+  class InvalidUrl < ArgumentError; end
+
+  # @param url [String] the base URL the hook checks (its /up health check)
+  # @raise [InvalidUrl] unless url is http(s)://host[:port] with no path, query or quotes
+  def initialize(url: DEFAULT_URL)
+    raise InvalidUrl, "--url takes http(s)://host[:port], got #{url.inspect}" unless url.match?(%r{\Ahttps?://[\w.\-\[\]:]+\z})
+
+    @url = url
+    [ SKILL, SCAN_SKILL, RULE, CLAUDE_HOOK, CURSOR_HOOK ].each do |path|
+      raise Errno::ENOENT, path unless File.exist?(File.join(ROOT, path))
+    end
+  end
+
+  # @param hosts [Array<Symbol>] :claude and/or :cursor, in print order
+  # @return [String] the guidance for those hosts
+  def render(hosts)
+    ([ intro ] + hosts.map { |host| send(host) }).join("\n")
+  end
+
+  private
+
+  def intro
+    <<~TXT
+      graph_mem agent guidance, installed once per machine (user level), so agents use graph_mem in
+      every repository, wherever the session starts. This script only prints: run the commands
+      yourself, from this repo's root:
+
+        cd #{ROOT}
+
+      The MCP server entry itself is in docs/quick_setup.md §4.
+    TXT
+  end
+
+  def claude
+    <<~TXT
+      == Claude Code ==
+
+      1. Folders:
+           mkdir -p ~/.claude/rules ~/.claude/skills ~/.claude/hooks
+
+      2. The skill (project-scan is optional: it scans a project into the graph, only when asked):
+           cp -r #{SKILL} ~/.claude/skills/
+           cp -r #{SCAN_SKILL} ~/.claude/skills/
+         To update a copy later, remove it first (rm -r ~/.claude/skills/<name>), then copy again.
+
+      3. The user-level rule (loaded in every session):
+           cp #{RULE} ~/.claude/rules/graph-mem.md
+
+      4. The SessionStart reminder hook (on by default; it prints a short static reminder when the
+         server answers, nothing otherwise). To leave it out, skip this step and step 5.
+           cp #{CLAUDE_HOOK} ~/.claude/hooks/
+           chmod +x ~/.claude/hooks/#{File.basename(CLAUDE_HOOK)}
+
+      5. Merge this into ~/.claude/settings.json by hand. If "hooks" or "SessionStart" already
+         exists, add only the inner entry and keep the hooks you have:
+      #{indent(JSON.pretty_generate(claude_settings), 5)}
+
+      6. Check, in a new session started from your projects folder:
+           /memory    lists ~/.claude/rules/graph-mem.md
+           /skills    lists graph-mem-mcp-toolset
+           /context   shows the rule and the skill in the context
+
+      Optional: "alwaysLoad": true on your graph_mem server entry loads its 12 tool definitions at
+      session start instead of on demand. It costs context in every session (about 44 KB of tool
+      JSON, roughly 11,000 tokens), so try the rule and the hook first.
+    TXT
+  end
+
+  def cursor
+    <<~TXT
+      == Cursor ==
+
+      1. The skill: Cursor also reads ~/.claude/skills/, so Claude Code's step 2 covers it. Without
+         Claude Code:
+           mkdir -p ~/.cursor/skills
+           cp -r #{SKILL} ~/.cursor/skills/
+
+      2. The user rule: Cursor Settings > Customize > Rules > User Rules, paste this text:
+
+      #{indent(File.read(File.join(ROOT, RULE)).rstrip, 5)}
+
+      3. The sessionStart reminder hook (on by default; it adds a short static reminder when the
+         server answers, nothing otherwise). To leave it out, skip this step.
+           mkdir -p ~/.cursor/hooks
+           cp #{CURSOR_HOOK} ~/.cursor/hooks/
+           chmod +x ~/.cursor/hooks/#{File.basename(CURSOR_HOOK)}
+         Then merge this into ~/.cursor/hooks.json by hand, keeping any hooks you have:
+      #{indent(JSON.pretty_generate(cursor_hooks), 5)}
+
+      4. Check: the rule shows under User Rules. To see the hook fire, put
+         GRAPH_MEM_HOOK_MARKER=<some file> before the command and look for that file after a new chat.
+    TXT
+  end
+
+  def claude_settings
+    command = "#{url_prefix}~/.claude/hooks/#{File.basename(CLAUDE_HOOK)}"
+    { hooks: { SessionStart: [ { matcher: "startup|resume|clear|compact", hooks: [ { type: "command", command: command, timeout: 5 } ] } ] } }
+  end
+
+  def cursor_hooks
+    { version: 1, hooks: { sessionStart: [ { command: "#{url_prefix}./hooks/#{File.basename(CURSOR_HOOK)}" } ] } }
+  end
+
+  # The hook defaults to DEFAULT_URL; any other --url goes into the command's environment.
+  def url_prefix
+    @url == DEFAULT_URL ? "" : "GRAPH_MEM_URL=#{@url} "
+  end
+
+  def indent(text, spaces)
+    text.lines.map { |line| line.strip.empty? ? line : (" " * spaces) + line }.join
+  end
+end
+
+if $PROGRAM_NAME == __FILE__
+  hosts = []
+  url = AgentInstall::DEFAULT_URL
+  parser = OptionParser.new do |opts|
+    opts.banner = "Usage: bin/agent-install [--claude] [--cursor] [--url URL]\n" \
+                  "Prints how to install graph_mem's skill, user rule and SessionStart hook; writes nothing."
+    opts.on("--claude", "Print the Claude Code block only") { hosts << :claude }
+    opts.on("--cursor", "Print the Cursor block only") { hosts << :cursor }
+    opts.on("--url URL", "The graph_mem base URL the hook checks (default #{AgentInstall::DEFAULT_URL})") { |value| url = value }
+    opts.on("-h", "--help", "Show this help") do
+      puts opts
+      exit
+    end
+  end
+
+  begin
+    parser.parse!(ARGV)
+    raise OptionParser::InvalidArgument, ARGV.join(" ") if ARGV.any?
+
+    hosts = %i[claude cursor] if hosts.empty?
+    puts AgentInstall.new(url: url).render(%i[claude cursor] & hosts)
+  rescue OptionParser::ParseError, AgentInstall::InvalidUrl => e
+    warn "bin/agent-install: #{e.message}"
+    warn parser
+    exit 2
+  end
+end
