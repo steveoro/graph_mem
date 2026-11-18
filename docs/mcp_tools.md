@@ -30,7 +30,8 @@ calls included. Those two tools carry
 never open a view. Every client still gets the same `tools/call` result (text plus `structuredContent`),
 and clients without the extension, Claude Code included, see plain tools. The view is listed in
 `resources/list` on all three profiles. Settings › Feature flags › **MCP Apps views** (`mcp_apps_enabled`,
-default on) turns it all off. Wire details: [protocol_compat.md](protocol_compat.md#mcp-apps).
+default on) turns it all off. Wire details: [protocol_compat.md](protocol_compat.md#mcp-apps). For users: the
+[MCP Apps views guide](guides/mcp-apps-views.md).
 
 **Graph mode (1.88.0).** The view draws the result that opened it with Explore's Cytoscape styles:
 
@@ -46,14 +47,26 @@ default on) turns it all off. Wire details: [protocol_compat.md](protocol_compat
   last two clicked nodes) and **Show this project** extend or replace the drawing. Fullscreen when the
   host offers it; the host's theme and colors.
 
+**Search mode (1.89.0).** A **Graph** / **Search** switch in the view's header, which works with no tool
+result:
+
+- `search` in summary mode with a required query (catalog mode takes no filters).
+- Filters: `project_id` (the projects the view already knows: drawn or found Projects and the context
+  project), `entity_types`, `search_in_name` / `_type` / `_aliases` / `_observations`, and `perspective`.
+- Previous / next paging, 20 hits per page, with next off on a short page (summary pages carry no total).
+- A hit opens the details panel with one `get_entities` call.
+- **Show as graph** draws the page's hits and the relations between them in Graph mode.
+- A `search` error shows in the status line.
+
 Everything the view does is its own read-tool call (`search`, `get_entities`, `traverse_graph`,
 `find_shortest_path`, `get_context`) through the host, recorded like an agent's call (telemetry, agent
 activity). It never writes and never sets the agent's active project: what it shows reaches the agent
-only as a short `ui/update-model-context` summary (scope, counts, selected ids).
+only as a short `ui/update-model-context` summary: scope, counts and selected ids, or the query, filters
+and hit ids. A host may not pass it to the model; Cursor doesn't.
 
 **A view is not guaranteed per call.** Cursor mounts the view once per chat: a later
 `traverse_graph` or `find_shortest_path` in the same chat opens no new view, and the open one doesn't
-get that result. Use the view's own buttons there, or start a new chat.
+get that result. Use the view's own buttons and Search mode there, or start a new chat.
 
 ## Standard Compatibility
 

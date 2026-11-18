@@ -253,14 +253,15 @@ Turned off, the wire is exactly the 1.86.2 one: no extension, no `ui://` resourc
 Saving the setting rebuilds the HTTP servers (open MCP sessions close); a stdio runner picks it up
 when restarted.
 
-### The view (Graph mode, 1.88.0)
+### The view (Graph mode 1.88.0, Search mode 1.89.0)
 
-In 1.87.0 the view was a stub; 1.88.0 draws the graph (Graph mode; usage in
-[mcp_tools.md](mcp_tools.md#mcp-apps-interactive-view)). Only the `resources/read` text changed:
+In 1.87.0 the view was a stub. 1.88.0 draws the graph (Graph mode), and 1.89.0 adds Search mode (usage in
+[mcp_tools.md](mcp_tools.md#mcp-apps-interactive-view); for users, the
+[MCP Apps views guide](guides/mcp-apps-views.md)). In both releases only the `resources/read` text changed:
 capabilities, `tools/list`, `resources/list`, `resources/templates/list` and every `tools/call` result
 are the 1.87.0 ones (the snapshots and handshake files are unchanged).
 
-- **One document, about 460 KB:** the HTML shell from `lib/graph_mem/mcp_apps/view/` with one inline
+- **One document, about 480 KB:** the HTML shell from `lib/graph_mem/mcp_apps/view/` with one inline
   module script holding the vendored Cytoscape 3.31.4 (`vendor/javascript/`), Explore's
   `cytoscape_config.js` and the view scripts, built once per process by
   `GraphMem::McpApps::ViewBuilder`. No CDN, no `csp` domains, no network request: it runs under the
@@ -273,12 +274,16 @@ are the 1.87.0 ones (the snapshots and handshake files are unchanged).
   count; an unknown request gets `-32601`, other unknown messages are ignored.
 - **Theming:** `hostContext.styles.variables` (standard CSS variables) and `theme`, with fallbacks;
   fonts from `--font-sans` or the system (the default CSP blocks embedded fonts).
+- **Search mode** (1.89.0): `search` in summary mode only, with a query, since catalog mode refuses
+  `project_id` and `entity_types`. Its pager is previous / next, because summary pages report no total. The
+  view has no `<form>`: the sandbox has no `allow-forms`, which blocks a submission before its event fires.
 
 **Hosts (manual checks):**
 
 | Host | Build | Renders the view | View-initiated calls | Notes |
 |---|---|---|---|---|
 | Cursor | 3.23.23 (1.87.0 stub) | yes, once per chat | no consent prompt; results stay out of the model's context | needs a global `mcp.json` entry |
+| Cursor | 3.23.23 (1.88.0 Graph mode) | yes: every `traverse_graph` mode, both `find_shortest_path` outcomes, the ~464 KB document | no consent prompt; panel, expand, path, "Show this project" and both subset buttons work | follows light and dark; no `fullscreen` mode offered (button hidden); `ui/update-model-context` not passed to the model |
 | Devin Desktop | 3.13.4 (1.87.0 stub) | no | — | plain tool results |
 | Claude | — | deferred | — | no supported client at hand |
 
