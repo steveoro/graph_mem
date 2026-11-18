@@ -17,8 +17,11 @@ RSpec.describe "script/adoption_eval/summarize.rb" do
   let(:script) { File.join(root, "script/adoption_eval/summarize.rb") }
   let(:logs) { Dir[File.join(root, "spec/fixtures/adoption_eval/*.jsonl")].sort }
 
+  # Outside the bundle, as a user runs it (bundle exec's RUBYOPT makes RubyGems warn on CI).
+  def unbundled(&) = Bundler.with_unbundled_env(&)
+
   def summarize(*args)
-    out, err, status = Open3.capture3("ruby", script, *args)
+    out, err, status = unbundled { Open3.capture3("ruby", script, *args) }
     expect([ err, status.exitstatus ]).to eq([ "", 0 ])
     out
   end
@@ -67,7 +70,7 @@ RSpec.describe "script/adoption_eval/summarize.rb" do
   end
 
   it "prints the usage and fails without logs" do
-    _out, err, status = Open3.capture3("ruby", script)
+    _out, err, status = unbundled { Open3.capture3("ruby", script) }
 
     expect(status.exitstatus).to eq(1)
     expect(err).to include("Usage: ruby script/adoption_eval/summarize.rb")

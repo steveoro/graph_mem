@@ -19,7 +19,8 @@ RSpec.describe "bin/agent-install" do
   end
 
   def run_install(*args)
-    Open3.capture3({ "HOME" => @home }, "ruby", script, *args, chdir: @home)
+    # Outside the bundle, as a user runs it (bundle exec's RUBYOPT makes RubyGems warn on CI).
+    Bundler.with_unbundled_env { Open3.capture3({ "HOME" => @home }, "ruby", script, *args, chdir: @home) }
   end
 
   # The JSON snippets: from a line that is "{" (after the indent) to the "}" line at that indent.
