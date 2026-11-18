@@ -75,6 +75,16 @@ RSpec.describe "script/agent_hooks" do
     expect(json.sub("read the graph_mem MCP tool descriptions", "use ToolSearch to load the tools")).to eq(plain)
   end
 
+  it "probes the server directly when a proxy is set in the environment" do
+    url = stub_server(200)
+    proxy = closed_url
+    [ claude, cursor ].each do |script|
+      out, _err, status = run_hook(script, "GRAPH_MEM_URL" => url, "http_proxy" => proxy, "HTTP_PROXY" => proxy, "ALL_PROXY" => proxy)
+
+      expect([ out.empty?, status.exitstatus ]).to eq([ false, 0 ]), File.basename(script)
+    end
+  end
+
   it "is silent with exit 0 when the server is down or answers an error" do
     [ closed_url, stub_server(500), stub_server(401) ].each do |url|
       [ claude, cursor ].each do |script|

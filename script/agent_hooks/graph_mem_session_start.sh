@@ -7,7 +7,7 @@
 #   GRAPH_MEM_HOOK_MARKER  optional: a file to touch each time the hook runs (to see it fire)
 if [ -n "${GRAPH_MEM_HOOK_MARKER:-}" ]; then touch "$GRAPH_MEM_HOOK_MARKER" 2>/dev/null || :; fi
 URL="${GRAPH_MEM_URL:-http://localhost:3030}"
-curl -fsS -m 2 "$URL/up" >/dev/null 2>&1 || exit 0
+curl -fsS --noproxy '*' -m 2 "$URL/up" >/dev/null 2>&1 || exit 0
 cat <<'TXT'
 graph_mem (MCP server "graph_mem") is connected and holds this user's conventions, preferences, file locations and verified fixes for this repository. Before reading or editing code, call graph_mem get_context, then search for this repository's Project and its Conventions (use ToolSearch to load the tools). Before the final reply, save corrections and verified fixes with graph_write.
 TXT

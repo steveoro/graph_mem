@@ -10,7 +10,7 @@
 #
 #   bin/agent-install                  # Claude Code, then Cursor
 #   bin/agent-install --claude         # one host only (or --cursor)
-#   bin/agent-install --url http://localhost:3031   # the server the hook checks
+#   bin/agent-install --url http://localhost:3031   # the server the hooks check
 #
 # Plain Ruby (stdlib only), no Rails.
 require "json"
@@ -55,7 +55,7 @@ class AgentInstall
       every repository, wherever the session starts. This script only prints: run the commands
       yourself, from this repo's root:
 
-        cd #{ROOT}
+        cd "#{ROOT}"
 
       The MCP server entry itself is in docs/quick_setup.md §4.
     TXT
@@ -114,11 +114,12 @@ class AgentInstall
            mkdir -p ~/.cursor/hooks
            cp #{CURSOR_HOOK} ~/.cursor/hooks/
            chmod +x ~/.cursor/hooks/#{File.basename(CURSOR_HOOK)}
-         Then merge this into ~/.cursor/hooks.json by hand, keeping any hooks you have:
+      #{cursor_url_step}   Then merge this into ~/.cursor/hooks.json by hand, keeping any hooks you have:
       #{indent(JSON.pretty_generate(cursor_hooks), 5)}
 
-      4. Check: the rule shows under User Rules. To see the hook fire, put
-         GRAPH_MEM_HOOK_MARKER=<some file> before the command and look for that file after a new chat.
+      4. Check: the rule shows under User Rules. To see the hook fire, add a line
+         GRAPH_MEM_HOOK_MARKER=<some file> after the comments in the copied script, start a new chat
+         and look for that file.
     TXT
   end
 
@@ -128,10 +129,18 @@ class AgentInstall
   end
 
   def cursor_hooks
-    { version: 1, hooks: { sessionStart: [ { command: "#{url_prefix}./hooks/#{File.basename(CURSOR_HOOK)}" } ] } }
+    { version: 1, hooks: { sessionStart: [ { command: "./hooks/#{File.basename(CURSOR_HOOK)}" } ] } }
   end
 
-  # The hook defaults to DEFAULT_URL; any other --url goes into the command's environment.
+  # Cursor may not run hook commands through a shell, so a --url goes into the copied script.
+  def cursor_url_step
+    return "" if @url == DEFAULT_URL
+
+    "   In the copied script, change #{DEFAULT_URL} to #{@url} (its GRAPH_MEM_URL default).\n"
+  end
+
+  # The hook defaults to DEFAULT_URL; any other --url goes into the Claude Code command's environment
+  # (Claude Code runs hook commands through a shell).
   def url_prefix
     @url == DEFAULT_URL ? "" : "GRAPH_MEM_URL=#{@url} "
   end

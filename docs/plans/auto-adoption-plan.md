@@ -207,12 +207,13 @@ negative clause is narrowed so a DB-heavy app isn't excluded. Check against
 #!/usr/bin/env sh
 # Prints a graph_mem reminder only when the local server answers; silent otherwise.
 URL="${GRAPH_MEM_URL:-http://localhost:3030}"
-curl -fsS -m 2 "$URL/api/v1/status" >/dev/null 2>&1 || exit 0
+curl -fsS --noproxy '*' -m 2 "$URL/up" >/dev/null 2>&1 || exit 0   # as shipped; the draft probed /api/v1/status
 cat <<'TXT'
 graph_mem (MCP server "graph_mem") is connected and holds this user's conventions, preferences, file locations and verified fixes for this repository. Before reading or editing code, call graph_mem get_context, then search for this repository's Project and its Conventions (use ToolSearch to load the tools). Before the final reply, save corrections and verified fixes with graph_write.
 TXT
 ```
-- **As shipped (1.90.0):** the check is `curl -fsS -m 2 "$URL/up"`, Rails' anonymous health check.
+- **As shipped (1.90.0):** the check is `curl -fsS --noproxy '*' -m 2 "$URL/up"`, Rails' anonymous health check
+  (`--noproxy`: curl would send even `localhost` through a configured proxy).
   `/api/v1/status` needs an operator session or the bearer token (`ApiAuthentication` has no loopback
   exemption, by design), so it would have kept the hook silent; Steve chose `/up` over adding a token.
 - Claude Code `~/.claude/settings.json`:

@@ -2,6 +2,7 @@
 
 require "spec_helper"
 require "open3"
+require "tmpdir"
 
 # Auto-adoption A6 (1.90.0): script/adoption_eval/summarize.rb over hand-written synthetic logs in
 # spec/fixtures/adoption_eval (docs/plans/auto-adoption-tests.md §1 and §5):
@@ -54,6 +55,15 @@ RSpec.describe "script/adoption_eval/summarize.rb" do
                                        toolsearch_gm persist_attempts hook_fired median_turns median_tokens median_cost])
     expect(lines[1].split).to eq(%w[B0 all 3 1/3 1/3 2 1.0 0/3 1/3 0 1/3 5 2000 0.1000])
     expect(lines.last).to eq("6 sessions, 1 malformed lines skipped, 1 files skipped (not <arm>-<task>-<run>.jsonl)")
+  end
+
+  it "prints whole tokens past a million, not scientific notation" do
+    Dir.mktmpdir("adoption-eval") do |dir|
+      log = File.join(dir, "B0-T1-1.jsonl")
+      File.write(log, %({"type":"result","num_turns":25,"usage":{"input_tokens":34567,"cache_read_input_tokens":1200000},"total_cost_usd":1.5}\n))
+
+      expect(csv_rows(summarize(log, "--csv"))["B0/all"]["median_tokens"]).to eq("1234567")
+    end
   end
 
   it "prints counts and tool-free labels only: no prompt, text, tool input, result or hook output" do

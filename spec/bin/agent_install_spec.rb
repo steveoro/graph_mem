@@ -34,6 +34,7 @@ RSpec.describe "bin/agent-install" do
     expect(status).to be_success
     expect(err).to be_empty
     expect(out.index("== Claude Code ==")).to be < out.index("== Cursor ==")
+    expect(out).to include(%(cd "#{root}")) # quoted: the repo path may hold a space
     expect(Dir.children(@home)).to be_empty
   end
 
@@ -67,13 +68,15 @@ RSpec.describe "bin/agent-install" do
     expect(json_blocks(out)).to eq([ "version" => 1, "hooks" => { "sessionStart" => [ { "command" => "./hooks/graph_mem_session_start_cursor.sh" } ] } ])
   end
 
-  it "--url puts the server URL in both hook commands" do
+  it "--url: the Claude Code command's environment, and an edit of the copied script for Cursor" do
     out, _err, status = run_install("--url", "http://127.0.0.1:3031")
 
     expect(status).to be_success
     commands = json_blocks(out).map { |block| block.to_json[/"command":"([^"]+)"/, 1] }
     expect(commands).to eq([ "GRAPH_MEM_URL=http://127.0.0.1:3031 ~/.claude/hooks/graph_mem_session_start.sh",
-                             "GRAPH_MEM_URL=http://127.0.0.1:3031 ./hooks/graph_mem_session_start_cursor.sh" ])
+                             "./hooks/graph_mem_session_start_cursor.sh" ])
+    expect(out).to include("In the copied script, change http://localhost:3030 to http://127.0.0.1:3031")
+    expect(run_install("--cursor").first).not_to include("In the copied script")
   end
 
   it "refuses a --url that isn't a plain http(s) base URL, and an unknown option" do

@@ -160,7 +160,7 @@ module AdoptionEval
       [ arm, task, n.to_s, rate.(:adopted), rate.(:ctx_before_edit), median(metrics.map { |m| m[:first_gm_turn] }),
         format("%.1f", metrics.sum { |m| m[:gm_calls] }.fdiv(n)), rate.(:skill_used), rate.(:toolsearch_gm),
         metrics.sum { |m| m[:persist_attempts] }.to_s, rate.(:hook_fired), median(metrics.map { |m| m[:turns] }),
-        median(metrics.map { |m| m[:tokens] }), median(metrics.map { |m| m[:cost] }, "%.4f") ]
+        median(metrics.map { |m| m[:tokens] }, "%.0f"), median(metrics.map { |m| m[:cost] }, "%.4f") ]
     end
 
     def median(values, pattern = "%g")
