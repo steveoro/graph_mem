@@ -5,6 +5,24 @@ All notable changes to GraphMem will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.91.0] - 2026-11-18
+
+Auto-adoption, PR B: Skills over MCP behind a setting that is **off by default**. Turned on, graph_mem serves its skills through the Skills extension (SEP-2640) to MCP clients that support it. Turned off, MCP answers exactly as in 1.90.0. No host we use (Claude, Claude Code, Cursor) consumes the extension yet, so the skill stays installed as files (`bin/agent-install`).
+
+### Added
+- **`mcp_skills_enabled` setting** (Settings › Feature flags › **Skills over MCP**, default off). Saving a change rebuilds the HTTP MCP servers, which closes open sessions; a stdio runner picks it up when restarted.
+- **Skills over MCP** when the setting is on:
+  - `initialize` declares `io.modelcontextprotocol/skills` (no `directoryRead`), next to MCP Apps when that is on.
+  - `skills/list` and `skills/get` serve the skills, each file with its size and SHA-256 digest. `graph-mem-mcp-toolset` is on all three profiles; `project-scan` is on `/mcp` and `/mcp/maintenance` only.
+  - `resources/list` adds each `SKILL.md`, and `resources/read` serves the skill files. A `skill://` URI under a served skill that names no file answers `-32602` "Skill file not found".
+
+  Skills are read from disk at each server build, so an edited skill is served after the next rebuild or restart. Tools, prompts, templates, the instructions and tool counts (12 / 9 / 22) are unchanged. The `/mcp` access control covers `skills/*` like every other method.
+- `GraphMem::McpSkills` (which skills each profile serves), and `ServerFactory.capabilities(apps_enabled:, skills_enabled:)`.
+- `docs/protocol_compat.md` "Skills over MCP": the wire details and a host table (MCP Inspector CLI 2.16.0 verifies every skill and file; Claude Code 2.1.327 connects with it on but doesn't consume skills).
+
+### Dependencies
+- None: `bundle update` changed nothing.
+
 ## [1.90.0] - 2026-11-18
 
 Auto-adoption, PR A: agents working in other repositories (sessions started from the parent folder of your repos) reach for graph_mem on their own. Text plus a print-only installer: the server's `instructions` string is the only served change; capabilities, `tools/list`, `prompts/list`, `resources/list`, schemas and every tool result are unchanged, and tool counts stay 12 / 9 / 22.
