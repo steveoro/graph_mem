@@ -284,6 +284,7 @@ are the 1.87.0 ones (the snapshots and handshake files are unchanged).
 |---|---|---|---|---|
 | Cursor | 3.23.23 (1.87.0 stub) | yes, once per chat | no consent prompt; results stay out of the model's context | needs a global `mcp.json` entry |
 | Cursor | 3.23.23 (1.88.0 Graph mode) | yes: every `traverse_graph` mode, both `find_shortest_path` outcomes, the ~464 KB document | no consent prompt; panel, expand, path, "Show this project" and both subset buttons work | follows light and dark; no `fullscreen` mode offered (button hidden); `ui/update-model-context` not passed to the model |
+| Cursor | 3.23.23 (1.89.0 Search mode) | yes: Graph mode as in 1.88.0, and the mode switch in a view that got no new result | no consent prompt; query, every filter kind, previous / next (next off on a short page), a hit's details, "Show as graph" and a `search` error in the status line work | follows light and dark; `ui/update-model-context` still not passed to the model |
 | Devin Desktop | 3.13.4 (1.87.0 stub) | no | — | plain tool results |
 | Claude | — | deferred | — | no supported client at hand |
 
