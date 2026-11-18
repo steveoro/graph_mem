@@ -20,6 +20,9 @@ class AppSettings < RailsSettings::Base
   field :scheduled_run_catch_up_enabled, default: true, type: :boolean
   # 1.87.0: MCP Apps (the io.modelcontextprotocol/ui extension and the ui:// views); GraphMem::McpApps.enabled?.
   field :mcp_apps_enabled, default: true, type: :boolean
+  # 1.91.0: Skills over MCP (the io.modelcontextprotocol/skills extension, skills/ served as skill://);
+  # GraphMem::McpSkills.enabled?. Off by default: no host we use consumes it yet.
+  field :mcp_skills_enabled, default: false, type: :boolean
 
   # Database backup settings
   field :backup_folder_path, default: "db/backup", type: :string
@@ -262,6 +265,12 @@ class AppSettings < RailsSettings::Base
   # @return [Boolean]
   def self.mcp_apps_enabled?
     read_boolean_setting("mcp_apps_enabled", default: true)
+  end
+
+  # Read from the database each time, like mcp_apps_enabled?.
+  # @return [Boolean] false unless turned on in System › Settings
+  def self.mcp_skills_enabled?
+    read_boolean_setting("mcp_skills_enabled", default: false)
   end
 
   def self.dream_state_compactor_enabled?

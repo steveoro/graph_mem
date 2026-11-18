@@ -68,6 +68,15 @@ and hit ids. A host may not pass it to the model; Cursor doesn't.
 `traverse_graph` or `find_shortest_path` in the same chat opens no new view, and the open one doesn't
 get that result. Use the view's own buttons and Search mode there, or start a new chat.
 
+## Skills over MCP
+
+Since 1.91.0 graph_mem can also serve its skills (`graph-mem-mcp-toolset`, and `project-scan` except on the
+readonly profile) through the Skills extension (`io.modelcontextprotocol/skills`): `skills/list`, `skills/get`
+and `skill://` resources with SHA-256 digests. It is off by default (Settings › Feature flags › **Skills over
+MCP**, `mcp_skills_enabled`): no host we use consumes it yet, so install the skill as files
+(`bin/agent-install`, `docs/quick_setup.md` §5). Off, MCP answers exactly as in 1.90.0. Wire details:
+[protocol_compat.md](protocol_compat.md#skills-over-mcp).
+
 ## Standard Compatibility
 
 All tools accept both graph_mem's native snake_case/ID-based parameters and the `@modelcontextprotocol/server-memory` camelCase/name-based conventions. A `ParameterNormalizer` layer automatically converts incoming parameters before validation:

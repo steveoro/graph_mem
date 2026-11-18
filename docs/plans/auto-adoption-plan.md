@@ -1,6 +1,6 @@
 # graph_mem auto-adoption plan: make agents reach for graph_mem on their own
 
-**Status:** active plan. Drafted 18 Nov 2026 on `main` at 1.89.0. PR A shipped in 1.90.0 (#179); PR B (1.91.0) next, §6 rechecked against 1.90.0 on 18 Nov 2026.
+**Status:** active plan. Drafted 18 Nov 2026 on `main` at 1.89.0. PR A shipped in 1.90.0 (#179); PR B in 1.91.0 (#180), §6 rechecked against 1.90.0 on 18 Nov 2026.
 **Scope:** Claude Code first, Cursor second. Linux workstations, no Claude Desktop.
 **Decisions (Steve, 18 Nov 2026):**
 - **D1.** Rewording the existing server `instructions` is **not** an MCP surface change: pre-approved.
@@ -328,7 +328,7 @@ URI through a custom `resources_read_handler` that calls `MCP::Skill.read_file` 
 **Toggling: restart or listChanged?** Same as MCP Apps, **no listChanged**: graph_mem advertises
 `listChanged: false` and capabilities are fixed in `initialize`, so a notification couldn't add an
 extension to a live session anyway. Saving the setting calls `GraphMem::OfficialMcp.refresh_access!(transports: true)`
-from `SettingsGroupUpdate` (a new `apply_mcp_skills_change`, like `apply_mcp_apps_change`): the HTTP
+from `SettingsGroupUpdate` (as shipped, `apply_mcp_extension_changes` covers both flags, one rebuild per save): the HTTP
 servers are rebuilt and open MCP sessions close, so hosts reconnect and see the new capabilities. A stdio
 runner needs a restart. No Rails server restart for HTTP.
 

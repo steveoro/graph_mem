@@ -246,7 +246,7 @@ begin
 
   capabilities = initialized&.dig("result", "capabilities")
   add.call("A", "N5 capabilities and instructions",
-           capabilities == GraphMem::OfficialMcp::ServerFactory.capabilities(apps_enabled: GraphMem::McpApps.enabled?).deep_stringify_keys &&
+           capabilities == GraphMem::OfficialMcp::ServerFactory.capabilities(apps_enabled: GraphMem::McpApps.enabled?, skills_enabled: GraphMem::McpSkills.enabled?).deep_stringify_keys &&
              initialized.dig("result", "instructions").present?,
            capabilities.to_json)
 

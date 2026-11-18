@@ -36,24 +36,28 @@ module SettingsGroupUpdate
     review_before = review_policy_values
     mcp_before = mcp_access_values
     apps_before = AppSettings.mcp_apps_enabled?
+    skills_before = AppSettings.mcp_skills_enabled?
     posted.each { |key, raw| AppSettings.public_send("#{key}=", SettingsSchema.cast(SettingsSchema.field(key), raw)) }
     AppSettings.clear_cache
     audit_review_policy_changes(review_before)
     apply_mcp_access_changes(mcp_before)
-    apply_mcp_apps_change(apps_before)
+    apply_mcp_extension_changes(apps_before, skills_before)
     EmbeddingService.reset_instance! if group.key == :embeddings
     SummaryGenerationClient.reset_instance! if group.key == :summaries
   end
 
-  # MCP Apps on or off (1.87.0): the HTTP servers are rebuilt with the new value, which closes the
-  # open MCP sessions; nothing happens when the value didn't change. In-process only, like the
-  # access refresh; a stdio runner needs a restart.
-  def apply_mcp_apps_change(before)
-    after = AppSettings.mcp_apps_enabled?
-    return if before == after
+  # MCP Apps (1.87.0) and Skills over MCP (1.91.0) on or off: the HTTP servers are rebuilt with the
+  # new values, which closes the open MCP sessions, once per save however many changed; nothing
+  # happens when neither changed. In-process only, like the access refresh; a stdio runner needs a
+  # restart.
+  def apply_mcp_extension_changes(apps_before, skills_before)
+    apps_after = AppSettings.mcp_apps_enabled?
+    skills_after = AppSettings.mcp_skills_enabled?
+    return if apps_before == apps_after && skills_before == skills_after
 
     GraphMem::OfficialMcp.refresh_access!(transports: true)
-    Rails.logger.info("[McpApps] MCP Apps #{after ? 'on' : 'off'} (#{Current.actor}); MCP servers rebuilt")
+    Rails.logger.info("[McpApps] MCP Apps #{apps_after ? 'on' : 'off'} (#{Current.actor}); MCP servers rebuilt") if apps_before != apps_after
+    Rails.logger.info("[McpSkills] Skills over MCP #{skills_after ? 'on' : 'off'} (#{Current.actor}); MCP servers rebuilt") if skills_before != skills_after
   end
 
   # SettingsSchema check of the review policies group (ReviewPolicySettings).
