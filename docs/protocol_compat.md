@@ -234,7 +234,7 @@ Each bullet is one `divergence` text from the fixture files, with the cases it c
 
 ## MCP Apps
 
-Since 1.87.0 (`docs/plans/mcp-apps-plan.md`, step A) graph_mem serves the MCP Apps extension
+Since 1.87.0 (`docs/plans/done/mcp-apps-plan.md`, step A) graph_mem serves the MCP Apps extension
 (SEP-1865, stable 2026-01-26), unless Settings › Feature flags › **MCP Apps views**
 (`mcp_apps_enabled`, default on) is off:
 
