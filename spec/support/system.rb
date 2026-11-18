@@ -34,6 +34,25 @@ module CspConsoleHelpers
   end
 end
 
+# Capybara 3.40.0 (the latest release) ends ChromeDriver#reset! with the CDP command
+# Storage.clearDataForOrigin and origin "*". Chrome 158 rejects that ("invalid argument: * is not
+# a valid URL"), so every system example errored in its after hook, and the cookies stayed set.
+# Only for that error, this clears the same data without the wildcard: every cookie, and the app
+# server's origin's storage. Chrome 156 (CI in 2026-11) accepts "*", so there this never runs.
+# Remove it once a Capybara release stops sending "*".
+module ChromeResetWithoutWildcardOrigin
+  def reset!
+    super
+  rescue Selenium::WebDriver::Error::InvalidArgumentError => e
+    raise unless e.message.include?("* is not a valid URL")
+
+    browser.execute_cdp("Network.clearBrowserCookies")
+    server = Capybara.current_session.server
+    browser.execute_cdp("Storage.clearDataForOrigin", origin: server.base_url, storageTypes: "cookies,local_storage") if server
+  end
+end
+Capybara::Selenium::Driver::ChromeDriver.prepend(ChromeResetWithoutWildcardOrigin)
+
 RSpec.configure do |config|
   config.include CspConsoleHelpers, type: :system
 
