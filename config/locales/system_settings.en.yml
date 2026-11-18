@@ -258,6 +258,9 @@ en:
         mcp_apps_enabled:
           label: "MCP Apps views"
           description: "Offer the interactive graph view to MCP clients that support MCP Apps (Claude, Cursor and others): the server declares the extension, lists the ui:// view and links traverse_graph and find_shortest_path to it. Clients without the extension see plain tools either way. Saving a change closes the open MCP sessions over HTTP (clients reconnect); a stdio runner picks it up when restarted. Turned off, MCP answers exactly as before 1.87.0."
+        mcp_skills_enabled:
+          label: "Skills over MCP"
+          description: "Serve graph_mem's skills to MCP clients that support the Skills extension: the server declares it, answers skills/list and skills/get, and serves each skill's files as skill:// resources (project-scan not on the readonly profile). No client we use supports it yet (Nov 2026). Saving a change closes the open MCP sessions over HTTP (clients reconnect); a stdio runner picks it up when restarted. Turned off, MCP answers exactly as in 1.90.0."
         review_backlog_ceiling:
           label: "Backlog ceiling per kind"
           description: "Active suggestions per kind before new ones must beat the lowest priority to be queued (a soft limit)."

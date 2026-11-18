@@ -36,11 +36,13 @@ module SettingsGroupUpdate
     review_before = review_policy_values
     mcp_before = mcp_access_values
     apps_before = AppSettings.mcp_apps_enabled?
+    skills_before = AppSettings.mcp_skills_enabled?
     posted.each { |key, raw| AppSettings.public_send("#{key}=", SettingsSchema.cast(SettingsSchema.field(key), raw)) }
     AppSettings.clear_cache
     audit_review_policy_changes(review_before)
     apply_mcp_access_changes(mcp_before)
     apply_mcp_apps_change(apps_before)
+    apply_mcp_skills_change(skills_before)
     EmbeddingService.reset_instance! if group.key == :embeddings
     SummaryGenerationClient.reset_instance! if group.key == :summaries
   end
@@ -54,6 +56,16 @@ module SettingsGroupUpdate
 
     GraphMem::OfficialMcp.refresh_access!(transports: true)
     Rails.logger.info("[McpApps] MCP Apps #{after ? 'on' : 'off'} (#{Current.actor}); MCP servers rebuilt")
+  end
+
+  # Skills over MCP on or off (1.91.0), like apply_mcp_apps_change: a change rebuilds the HTTP
+  # servers (open MCP sessions close); a stdio runner needs a restart.
+  def apply_mcp_skills_change(before)
+    after = AppSettings.mcp_skills_enabled?
+    return if before == after
+
+    GraphMem::OfficialMcp.refresh_access!(transports: true)
+    Rails.logger.info("[McpSkills] Skills over MCP #{after ? 'on' : 'off'} (#{Current.actor}); MCP servers rebuilt")
   end
 
   # SettingsSchema check of the review policies group (ReviewPolicySettings).

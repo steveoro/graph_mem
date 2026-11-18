@@ -119,7 +119,7 @@ class SettingsSchema
       [
         define_group(:feature_flags, %w[enable_dream_state_compactor enable_garbage_collector enable_stale_memory_scan enable_contradiction_detection
                                         fact_supersede_enabled fact_keywords_enabled llm_keywords_enabled
-                                        scheduled_run_catch_up_enabled mcp_apps_enabled]),
+                                        scheduled_run_catch_up_enabled mcp_apps_enabled mcp_skills_enabled]),
         define_group(:embeddings, [
           define_field("embedding_url", validator: :http_url_embedding, fallback: :embedding_settings_fallback_hint, hint: :url),
           define_field("embedding_model", fallback: :embedding_settings_fallback_hint, hint: :model),

@@ -89,6 +89,26 @@ RSpec.describe "System › Settings", type: :request do
       AppSettings.where(var: "mcp_apps_enabled").delete_all
     end
 
+    # Skills over MCP (1.91.0): off by default, listed with the feature flags, and rebuilt like Apps.
+    it "shows mcp_skills_enabled off by default, and rebuilds the MCP servers only when it changes" do
+      allow(GraphMem::OfficialMcp).to receive(:refresh_access!).and_call_original
+
+      get system_settings_path(tab: "feature_flags")
+      expect(response.body).to include("Skills over MCP")
+      expect(AppSettings.mcp_skills_enabled?).to be(false)
+
+      patch system_settings_path, params: { tab: "feature_flags", settings: { mcp_skills_enabled: "0" } }
+      expect(GraphMem::OfficialMcp).not_to have_received(:refresh_access!)
+
+      patch system_settings_path, params: { tab: "feature_flags", settings: { mcp_skills_enabled: "1" } }
+      expect(response).to redirect_to(system_settings_path(tab: "feature_flags"))
+      expect(AppSettings.mcp_skills_enabled?).to be(true)
+      expect(GraphMem::OfficialMcp).to have_received(:refresh_access!).with(transports: true).once
+    ensure
+      AppSettings.where(var: "mcp_skills_enabled").delete_all
+      GraphMem::OfficialMcp::Transports.reset!
+    end
+
     it "refuses an out-of-range value with 422, marks the field and saves nothing from the group" do
       patch system_settings_path, params: { tab: "telemetry", settings: { tool_invocation_retention_days: "4000", compaction_review_row_retention_days: "12" } }
 
