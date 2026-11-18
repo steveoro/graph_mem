@@ -142,6 +142,25 @@ RSpec.describe "MCP Apps graph view: Search mode", :mcp_apps_view, type: :system
     expect(console_errors).to be_empty
   end
 
+  # The project filter's get_context runs outside run(): a result pushed while it is open waits in
+  # pendingResult and must be drawn when that call ends (#178 review), not at the next search.
+  it "draws a tool result pushed while the project filter's get_context is open" do
+    open_view
+    within_frame("view") do
+      expect(page).to have_text("No tool result reached this view")
+      find_by_id("mode-search").click
+    end
+    wait_until { page.evaluate_script("window.hostQueued()") == 1 } # get_context, not answered yet
+    push_tool_result(tool_result("traverse_graph", { start_entity_id: project.id, max_depth: 1 }))
+    serve_view_calls_until("Tool result drawn.")
+
+    expect(calls_served.map { |call| call["name"] }).to eq([ "get_context" ])
+    within_frame("view") do
+      expect(find_by_id("mode-graph")["aria-pressed"]).to eq("true")
+      expect(page).to have_text("Traversal from synth-alpha-project")
+    end
+  end
+
   it "keeps the drawing while Search mode is shown" do
     open_view
     push_tool_result(tool_result("traverse_graph", { start_entity_id: project.id, max_depth: 1 }))

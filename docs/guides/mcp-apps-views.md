@@ -36,7 +36,7 @@ Clients without MCP Apps support see the same tool results as before, and nothin
 
 | Client | Shows the view | Notes |
 |---|---|---|
-| Cursor | yes | The reference client, checked in 1.87.0, 1.88.0 and 1.89.0. Needs a global `mcp.json` entry, and mounts one view per chat. |
+| Cursor | yes | The reference client, checked in 1.87.0 and 1.88.0. Needs a global `mcp.json` entry, and mounts one view per chat. |
 | Devin Desktop | no | Plain tool results. |
 | Claude Code | no | No MCP Apps support: plain tool results. |
 | Claude (desktop and web) | not checked yet | Claude lists MCP Apps support. Checking it needs Claude Desktop, or a graph_mem reachable over public HTTPS. |
