@@ -4,7 +4,7 @@
 
 GraphMem is a Ruby on Rails application implementing a Model Context Protocol (MCP) server for graph-based memory management. It enables AI assistants and other clients to create, retrieve, search, and manage knowledge entities and their relationships through a standardized interface.
 
-[![Version](https://img.shields.io/badge/version-1.88.0-blue.svg)](lib/graph_mem/version.rb)
+[![Version](https://img.shields.io/badge/version-1.89.0-blue.svg)](lib/graph_mem/version.rb)
 [![Rails](https://img.shields.io/badge/rails-8.1.4-orange.svg)](Gemfile)
 [![Ruby](https://img.shields.io/badge/ruby-3.4.12-red.svg)](Gemfile)
 
@@ -140,6 +140,10 @@ The job is **cooperatively pausable**: mutating MCP tools request a pause when c
 * `memory_observations` -- Access observations with advanced filtering
 * `memory_relations` -- Query relationships with bidirectional entity inclusion
 * `memory_graph` -- Graph traversals starting from any entity
+
+### MCP Apps view
+
+In a chat client that supports MCP Apps (Cursor is the reference), `traverse_graph` and `find_shortest_path` open an interactive view next to the result. Its **Graph** mode draws the result with Explore's styles, and you can expand, find paths or load the context project. Its **Search** mode runs a filtered, paged search. The view only reads, never changes the agent's active project, and can be turned off in Settings › Feature flags › **MCP Apps views**. Guide: [`docs/guides/mcp-apps-views.md`](docs/guides/mcp-apps-views.md)
 
 ### REST API
 
@@ -612,6 +616,7 @@ Sign in at `/operator/login`. Default operator credentials: `operator` / `change
 * [Web UI guide](docs/guides/ui-guide.md) (operator and read-only guest, with screenshots)
 * [Operator embeddings guide](docs/operator/embeddings.md)
 * [MCP Tools Reference](docs/mcp_tools.md)
+* [MCP Apps views guide](docs/guides/mcp-apps-views.md): the graph and search view inside a supporting chat client (Cursor)
 * [Agent-CLI backends](docs/agent_cli_backends.md): opt-in cloud models through your workstation's Claude Code or Devin, behind a loopback bridge, anonymized and per project
 * [App Settings Reference](docs/app_settings_reference.md)
 * [Scan profiling](docs/scan_profiling.md): `bin/rails graph_mem:scan_profile`, a safe, measured project scan on pinned open-source repos in a throwaway database, to tune the scan settings

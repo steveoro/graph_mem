@@ -35,6 +35,7 @@ Active plans and the backlog live in [`docs/plans/`](../).
 | [`catch-up-and-lifecycle-plan.md`](catch-up-and-lifecycle-plan.md) | Scheduled-run catch-up after boot, Repair for `lifecycle_corruption` | 1.86.0 |
 | [`mcp-sdk-1.10.0-plan.md`](mcp-sdk-1.10.0-plan.md) | `mcp` 1.10.0, compat baseline on the reference servers v2.4.0 | 1.86.1 |
 | [`review-refresh-and-orphan-apply-plan.md`](review-refresh-and-orphan-apply-plan.md) | Review queue refresh after actions, live policy runs, orphan default parent | 1.86.2 |
+| [`mcp-apps-plan.md`](mcp-apps-plan.md) | MCP Apps views: the generic resource layer, the Apps capability, Graph and Search modes | 1.87.0–1.89.0 |
 
 Removed as noise (still in git history): the chores D-1–D-3 step list (1.55.3) and the F2a, F2b and F2c
 task-by-task implementation plans (their designs above keep the decisions).

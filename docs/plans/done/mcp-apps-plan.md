@@ -1,15 +1,17 @@
 # MCP Apps → graph_mem 1.87.0–1.89.0: a graph view and a search view inside the chat
 
-**Status (2026-11-17): PLAN, reviewed, all questions answered. Step A shipped in #176 as 1.87.0, step B in #177
-as 1.88.0; kickoff ready for step C (1.89.0).** Written from `main` at `30beb6f` (1.84.0) and **reviewed at
+**✅ DONE:** shipped as **1.87.0–1.89.0** in three PRs: step A (the generic resource layer, the Apps capability,
+the stub view) in #176 as 1.87.0; step B (Graph mode) in #177 as 1.88.0; step C (Search mode, the user guide
+[`docs/guides/mcp-apps-views.md`](../../guides/mcp-apps-views.md)) in #178 as 1.89.0. Manual checks on Cursor are
+recorded in each PR and in `docs/protocol_compat.md`; the Claude check stayed deferred.
+
+The plan as it stood when step C started follows. It was written from `main` at `30beb6f` (1.84.0) and **reviewed at
 `9df8556`** against three sources: this repo's code, the installed `mcp` 1.9.0 gem source, and the live spec (stable 2026-01-26 and the
 draft). The review changed the first-load design, the tool linkage and the view packaging, and added the sections
 from "Acceptance criteria" on; "What the review changed" lists the differences. Steve answered every open question
 on 2026-11-12 (decisions 6–13). The train is 1.87.0–1.89.0 on top of 1.86.2. File:line references were checked
 again at `862210d` (1.87.0) and, for step C, at `e7bebb5` (1.88.0), and the gem facts against the installed
 `mcp` 1.10.0; the sections "The Ruby `mcp` gem" and "What changes on the wire" describe the 1.86.2 starting point that step A changed (see "A. … shipped").
-If a line has moved, find the code by the quoted text, and if the code no longer matches the description, **stop
-and ask Steve** instead of improvising. Only `spec/docs` was run.
 
 ## Goal
 
@@ -631,6 +633,8 @@ The bullets below are the step as planned.
   shipped) is accepted over both transports. Cursor is the reference host; the Claude check is deferred.
 
 ### C. Search mode, docs → 1.89.0
+
+**✅ Shipped in #178 as 1.89.0.** The bullets below are the step as planned.
 
 - **C0, before branching:** as B0 (CI on `main` green, then a generic `bundle update` as its own first commit that
   keeps the Gemfile holds and json on 3.x; stop and ask if CI goes red on it).
