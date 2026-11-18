@@ -109,6 +109,18 @@ RSpec.describe "System › Settings", type: :request do
       GraphMem::OfficialMcp::Transports.reset!
     end
 
+    it "rebuilds the MCP servers once when mcp_apps_enabled and mcp_skills_enabled change in one save" do
+      allow(GraphMem::OfficialMcp).to receive(:refresh_access!).and_call_original
+
+      patch system_settings_path, params: { tab: "feature_flags", settings: { mcp_apps_enabled: "0", mcp_skills_enabled: "1" } }
+      expect(response).to redirect_to(system_settings_path(tab: "feature_flags"))
+      expect([ AppSettings.mcp_apps_enabled?, AppSettings.mcp_skills_enabled? ]).to eq([ false, true ])
+      expect(GraphMem::OfficialMcp).to have_received(:refresh_access!).with(transports: true).once
+    ensure
+      AppSettings.where(var: %w[mcp_apps_enabled mcp_skills_enabled]).delete_all
+      GraphMem::OfficialMcp::Transports.reset!
+    end
+
     it "refuses an out-of-range value with 422, marks the field and saves nothing from the group" do
       patch system_settings_path, params: { tab: "telemetry", settings: { tool_invocation_retention_days: "4000", compaction_review_row_retention_days: "12" } }
 

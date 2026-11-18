@@ -41,8 +41,10 @@ module GraphMem
         providers = [ TemplateResourceProvider.new(GraphMem::McpToolRegistry.resource_classes) ]
         providers << GraphMem::McpApps::Views.provider_for(profile) if apps_enabled
         views = apps_enabled ? GraphMem::McpApps::Views.uris_for(profile) : []
-        # nil, never []: an empty Array would still register skills/list and skills/get.
-        skills = skills_enabled ? GraphMem::McpSkills.for(profile) : nil
+        # nil, never []: an empty Array would still register skills/list and skills/get. A skills
+        # tree that can't be loaded gives nil too, and the extension isn't declared.
+        skills = skills_enabled ? GraphMem::McpSkills.for_server(profile) : nil
+        skills_enabled = !skills.nil?
 
         server = MCP::Server.new(
           name: "graph-mem",
@@ -83,7 +85,7 @@ module GraphMem
       def self.skill_file_not_found(uri, params)
         MCP::Server::RequestHandlerError.new(
           "Skill file not found: #{uri.dump}", params,
-          error_type: :invalid_params, error_code: JsonRpcHandler::ErrorCode::INVALID_PARAMS, error_data: { uri: uri }
+          error_type: :invalid_params, error_code: JsonRpcHandler::ErrorCode::INVALID_PARAMS, error_data: { uri: uri.dup.force_encoding(Encoding::UTF_8).scrub }
         )
       end
       private_class_method :skill_file_not_found

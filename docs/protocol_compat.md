@@ -309,7 +309,9 @@ Skills extension (SEP-2640, `io.modelcontextprotocol/skills`) when Settings › 
 
 Turned off, the wire is exactly the 1.90.0 one: no extension, `skills/list` is `-32601`, and a `skill://` read
 is `-32602` "Resource not found". The skills are read from disk when a server is built, so an edited skill is
-served after the next rebuild or restart (the gem refuses a file changed since then with `-32603`). Saving the
+served after the next rebuild or restart (the gem refuses a file changed since then with `-32603`). A file
+under `skills/` the gem refuses (a stray editor file, a hard link, a skill breaking the rules) is logged as
+`[McpSkills] skills not served`, and that server is built without the extension; the tools are unaffected. Saving the
 setting rebuilds the HTTP servers (open MCP sessions close); a stdio runner picks it up when restarted. The
 `AccessGate` covers `skills/*` like every `/mcp` method.
 

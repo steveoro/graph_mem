@@ -49,7 +49,19 @@ RSpec.describe GraphMem::McpSkills do
     AppSettings.where(var: "mcp_skills_enabled").delete_all
   end
 
-  it "rejects an unknown profile" do
+  it "rejects an unknown profile, for a server build too" do
     expect { described_class.for(:bogus) }.to raise_error(GraphMem::McpProfile::InvalidProfile)
+    expect { described_class.for_server(:bogus) }.to raise_error(GraphMem::McpProfile::InvalidProfile)
+  end
+
+  it "for a server build, gives nil instead of raising on a tree the gem refuses" do
+    Dir.mktmpdir("mcp-skills") do |root|
+      write_skill(root, "synth-alpha", "Body.")
+      File.write(File.join(root, "synth-alpha", "synth notes.md"), "a name with a space")
+
+      expect { described_class.for(:default, root: root) }.to raise_error(ArgumentError)
+      expect(described_class.for_server(:default, root: root)).to be_nil
+      expect(described_class.for_server(:default)).to all(be_a(MCP::Skill))
+    end
   end
 end

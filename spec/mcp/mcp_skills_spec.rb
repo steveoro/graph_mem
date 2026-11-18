@@ -116,6 +116,40 @@ RSpec.describe "Skills over MCP on the wire" do
       expect(rpc(server, "resources/read", { uri: "skill://synth-unknown/SKILL.md" }).dig("error", "code")).to eq(-32_602)
     end
 
+    it "matches URIs as exact strings: path-shaped ones reach no file, across the readonly boundary either" do
+      readonly = factory(:readonly, skills_enabled: true)
+      default = factory(:default, skills_enabled: true)
+
+      %w[skill://graph-mem-mcp-toolset/../project-scan/SKILL.md skill://graph-mem-mcp-toolset/%2e%2e/project-scan/SKILL.md
+         skill://graph-mem-mcp-toolset//SKILL.md SKILL://graph-mem-mcp-toolset/SKILL.md].each do |uri|
+        expect(rpc(readonly, "resources/read", { uri: uri }).dig("error", "code")).to eq(-32_602), uri
+      end
+      expect(rpc(default, "resources/read", { uri: "skill://graph-mem-mcp-toolset/references/../SKILL.md" }).dig("error", "code")).to eq(-32_602)
+      expect(rpc(default, "resources/read", { uri: "skill://graph-mem-mcp-toolset/../../../etc/passwd" }).dig("error", "code")).to eq(-32_602)
+    end
+
+    it "scrubs a URI that isn't valid UTF-8 in the refusal, so the reply still encodes as -32602" do
+      uri = "skill://graph-mem-mcp-toolset/synth-\xFF.md".dup.force_encoding(Encoding::UTF_8)
+
+      expect(rpc(factory(:default, skills_enabled: true), "resources/read", { uri: uri }).dig("error", "code")).to eq(-32_602)
+    end
+
+    it "builds without the extension, tools intact, when a file under skills/ can't be loaded" do
+      Dir.mktmpdir("mcp-skills") do |root|
+        FileUtils.mkdir_p(File.join(root, "synth-alpha"))
+        File.write(File.join(root, "synth-alpha", "SKILL.md"), "---\nname: synth-alpha\ndescription: A synthetic skill for specs.\n---\n")
+        File.write(File.join(root, "synth-alpha", "#SKILL.md#"), "a stray editor file")
+        stub_const("GraphMem::McpSkills::ROOT", root)
+        allow(Rails.logger).to receive(:warn).and_call_original
+        server = factory(:default, apps_enabled: false, skills_enabled: true)
+
+        expect(capabilities(server)).to eq(base)
+        expect(rpc(server, "tools/list").dig("result", "tools").size).to eq(12)
+        expect(rpc(server, "skills/list").dig("error", "code")).to eq(-32_601)
+        expect(Rails.logger).to have_received(:warn).with(a_string_starting_with("[McpSkills] skills not served on default:"))
+      end
+    end
+
     it "serves a rebuilt server's skills from disk at build time (synth skills in a temp directory)" do
       Dir.mktmpdir("mcp-skills") do |root|
         FileUtils.mkdir_p(File.join(root, "synth-alpha"))
