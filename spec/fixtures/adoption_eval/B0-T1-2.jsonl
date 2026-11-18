@@ -1,0 +1,5 @@
+{"type":"system","subtype":"init","session_id":"synth-session-2","tools":["Edit","Read"]}
+{"type":"user","message":{"content":[{"type":"text","text":"synth-secret-prompt"}]}}
+{"type":"assistant","message":{"id":"synth-msg-1","content":[{"type":"tool_use","id":"synth-tu-1","name":"Read","input":{"file_path":"synth-app/README.md"}}]}}
+{"type":"assistant","message":{"id":"synth-msg-2","content":[{"type":"tool_use","id":"synth-tu-2","name":"Write","input":{"file_path":"synth-app/CHANGELOG.md"}}]}}
+{"type":"result","subtype":"success","num_turns":4,"usage":{"input_tokens":80,"output_tokens":40,"cache_creation_input_tokens":0,"cache_read_input_tokens":1000},"total_cost_usd":0.08}

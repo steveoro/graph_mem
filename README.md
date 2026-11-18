@@ -4,7 +4,7 @@
 
 GraphMem is a Ruby on Rails application implementing a Model Context Protocol (MCP) server for graph-based memory management. It enables AI assistants and other clients to create, retrieve, search, and manage knowledge entities and their relationships through a standardized interface.
 
-[![Version](https://img.shields.io/badge/version-1.89.0-blue.svg)](lib/graph_mem/version.rb)
+[![Version](https://img.shields.io/badge/version-1.90.0-blue.svg)](lib/graph_mem/version.rb)
 [![Rails](https://img.shields.io/badge/rails-8.1.4-orange.svg)](Gemfile)
 [![Ruby](https://img.shields.io/badge/ruby-3.4.12-red.svg)](Gemfile)
 
@@ -82,6 +82,12 @@ GraphMem ships agent-facing rules and a vendor-neutral skill:
 
 **Using GraphMem as an MCP toolset** (your agent talks to a running server):
 
+- `bin/agent-install` — prints how to install the skill, the user-level rule and
+  the SessionStart reminder hook once per machine, for Claude Code and Cursor
+  (it writes nothing; see `docs/quick_setup.md` §5)
+- `docs/rules/graph_mem_user_rule.md` — the user-level rule: graph_mem in every
+  repository (`~/.claude/rules/`, or Cursor's User Rules)
+- `script/agent_hooks/` — the SessionStart reminder hooks (Claude Code, Cursor)
 - `docs/rules/graph_mem_mcp_rules.md` — always-on rules to copy into your
   agent's rule set (per-agent install targets: `docs/rules/README.md`)
 - `docs/rules/general_coding_rules.md` — optional, project-agnostic coding rules

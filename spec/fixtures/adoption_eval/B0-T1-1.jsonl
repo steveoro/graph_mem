@@ -1,0 +1,10 @@
+{"type":"system","subtype":"hook_started","hook_id":"synth-h1","hook_name":"SessionStart:startup","hook_event":"SessionStart","session_id":"synth-session-1"}
+{"type":"system","subtype":"hook_response","hook_id":"synth-h1","hook_name":"SessionStart:startup","hook_event":"SessionStart","stdout":"graph_mem (MCP server \"graph_mem\") is connected. synth-hook-text","exit_code":0,"outcome":"success"}
+{"type":"system","subtype":"init","session_id":"synth-session-1","tools":["Edit","ToolSearch"],"mcp_servers":[{"name":"graph_mem","status":"connected"}]}
+{"type":"assistant","message":{"id":"synth-msg-1","content":[{"type":"text","text":"synth-secret-text"}]}}
+{"type":"assistant","message":{"id":"synth-msg-1","content":[{"type":"tool_use","id":"synth-tu-1","name":"ToolSearch","input":{"query":"select:mcp__graph_mem__get_context"}}]}}
+{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"synth-tu-1","content":"synth-secret-result"}]}}
+{"type":"assistant","message":{"id":"synth-msg-2","content":[{"type":"tool_use","id":"synth-tu-2","name":"mcp__graph_mem__get_context","input":{}}]}}
+{"type":"assistant","message":{"id":"synth-msg-3","content":[{"type":"tool_use","id":"synth-tu-3","name":"mcp__graph_mem__search","input":{"query":"synth-secret-input"}}]}}
+{"type":"assistant","message":{"id":"synth-msg-4","content":[{"type":"tool_use","id":"synth-tu-4","name":"Edit","input":{"file_path":"synth-app/CHANGELOG.md"}}]}}
+{"type":"result","subtype":"success","num_turns":6,"usage":{"input_tokens":100,"output_tokens":50,"cache_creation_input_tokens":1000,"cache_read_input_tokens":2000},"total_cost_usd":0.12,"permission_denials":[]}
