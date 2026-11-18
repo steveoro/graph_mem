@@ -5,6 +5,33 @@ All notable changes to GraphMem will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.89.0] - 2026-11-18
+
+MCP Apps, step C, the last of the train: the interactive view gets a Search mode, and a user guide explains the view. Hosts that support MCP Apps (Cursor is the reference) show the view next to a `traverse_graph` or `find_shortest_path` result.
+
+### Added
+- **Search mode** in the `ui://graph-mem/graph` view, behind a **Graph** / **Search** switch that works with no tool result (Cursor mounts one view per chat). Switching keeps the drawing.
+  - `search` with a required query and the filters it takes alongside one: project (the projects the view already knows), entity types, match in name / type / aliases / observations, and perspective.
+  - Previous / next paging, 20 hits per page, with next off on a short page.
+  - A hit opens the details panel with one `get_entities` call. **Show as graph** draws the page's hits and the relations between them.
+  - The query and filters reach the agent as a one-line `ui/update-model-context` summary, when the host passes it on (Cursor doesn't).
+  - A `search` error shows in the status line.
+- **User guide** [`docs/guides/mcp-apps-views.md`](docs/guides/mcp-apps-views.md):
+  - what the view does and how it opens;
+  - which clients show it, with the Cursor notes;
+  - that it only reads and never changes the active project;
+  - that its calls count as the agent's calls;
+  - the setting that turns it off.
+
+  It is linked from the README and `docs/mcp_tools.md`.
+
+### Changed
+- The MCP Apps plan is done and moved to `docs/plans/done/`.
+- The view document is about 480 KB. Capabilities, `tools/list`, `resources/list` and every `tools/call` result are unchanged.
+
+### Dependencies
+- `bundle update`: rubocop 1.92.2 → 1.92.3, rubocop-ast 1.51.0 → 1.52.0, selenium-webdriver 4.52.0 → 4.53.0 (development and test only).
+
 ## [1.88.0] - 2026-11-17
 
 MCP Apps, step B: the interactive view draws the graph. Hosts that support MCP Apps (Cursor today) show the result of `traverse_graph` or `find_shortest_path` as a Cytoscape graph next to the chat, and the view can load and explore a subset on its own.
