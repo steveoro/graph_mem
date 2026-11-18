@@ -249,40 +249,22 @@ No gem, migration, tool, parameter or output change. Tool counts 12 / 9 / 22; to
 6. `docs/quick_setup.md`: §5–§6 become "Install once per machine (`bin/agent-install`)", with the per-project
    copy kept as the fallback for teammates; add the F3 table (started in `<projects-dir>` vs in the repo);
    document optional `alwaysLoad: true`.
-7. Specs: `bin/agent-install` output for each flag (contains the rule, the hook JSON, the skill paths; no
+7. `script/adoption_eval/summarize.rb` (read-only log summarizer, stdlib only; spec'd in
+   [`auto-adoption-tests.md`](auto-adoption-tests.md) §5), with synthetic JSONL fixtures.
+8. Specs: `bin/agent-install` output for each flag (contains the rule, the hook JSON, the skill paths; no
    absolute paths outside `~/` and the repo); it creates no files (run under a temp HOME and assert it stays
    empty); both hook scripts print nothing when the URL is unreachable and the expected text when a stub answers.
-8. CHANGELOG 1.90.0, version bump.
+9. CHANGELOG 1.90.0, version bump.
 
 Size: a few hundred lines. Review checks: instructions length, agent-text sync spec, no wire change.
 
 ---
 
-## 5. Quick A/B in goggles_admin2 (Steve, about 30 min, after PR A)
+## 5. A/B in goggles_admin2
 
-Goal: see which always-loaded text moves Claude. Same model, fresh session per run, **started in
-`<projects-dir>`** (D5), task about goggles_admin2, no mention of graph_mem or memory in the prompt.
-
-**Task prompt** (pick one with a stored convention in graph_mem):
-> "In goggles_admin2, add a CHANGELOG entry and bump the version for a small fix to the Data-Fix grid toolbar."
-
-**Measure:** did Claude call a graph_mem tool before its first file read or edit (Y/N), which one, after
-how many turns. Before the first run check `/memory` (which CLAUDE.md and rules files loaded), `/skills`
-(graph-mem-mcp-toolset listed, with description) and `/context` (graph_mem tools deferred, instructions
-present). For logs: `claude -p "<prompt>" --output-format stream-json > runN.jsonl`, then grep `mcp__graph_mem`.
-
-| Arm | Change (user level only, revert after) | Expected if the hypothesis holds |
-|---|---|---|
-| C0 baseline | none | no graph_mem call (reproduces the problem) |
-| C1 instructions | graph_mem on the PR A branch (3.1 text) | some first calls |
-| C2 user rule | add `~/.claude/rules/graph-mem.md` (3.2) | most runs call `get_context` / `search` first |
-| C3 skill text | the 3.3 description in the user-level skill copy | skill invoked more often |
-| C4 hook | add the SessionStart hook (3.4) | near 100% first call |
-| C5 alwaysLoad | `"alwaysLoad": true` on the graph_mem entry in `~/.claude.json` | shows whether hidden descriptions mattered |
-
-Three runs per arm is enough to see a direction (C0, C2, C4 first if short on time). Repeat C0 and C4
-once in Cursor; C1 with no rule in Cursor tells whether Cursor uses server instructions at all.
-Also note whether goggles_admin2's `CLAUDE.md` shows up in `/memory` only after Claude opens a file there (F3).
+Superseded by the full test design in [`auto-adoption-tests.md`](auto-adoption-tests.md) (section 8): the same idea
+(arms that add one lever each, sessions started from `<projects-dir>`, "graph_mem before the first edit" as the
+primary metric), with fixed tasks on two repos, N runs per arm and written decision rules.
 
 ---
 
@@ -326,8 +308,8 @@ URI through a custom `resources_read_handler` that calls `MCP::Skill.read_file` 
 - `resources_read_handler`: when skills are on, `MCP::Skill.read_file(skills, uri)` first, then
   `ResourceCatalog.read(providers, uri)`. Our handler replaces the gem's default reader, so without this
   the skill files would not be served (also noted in the 1.9.0 plan's "Later").
-- Profiles: serve both skills on all three profiles (the skill text already says `graph_write` is on the
-  default profile). Open question 2 below.
+- Profiles: `project-scan` on default and maintenance only (it calls `graph_write`, absent on readonly); the
+  toolset skill on all three, or a readonly variant on readonly, decided by test Q2 in `auto-adoption-tests.md`.
 - Access: `AccessGate` is Rack middleware on every `/mcp` path, so `skills/*` gets the same IP allowlist
   and bearer token as tools; nothing to add. Lockdown unchanged.
 
@@ -360,13 +342,24 @@ announces support details that change the design. Estimated B size: under 600 li
 
 ## 7. Open questions
 
-1. **After the A/B:** per-tool `anthropic/alwaysLoad` `_meta` on `search` + `get_context` (a tools/list
-   output change, option 6), or keep it to the user-side `alwaysLoad` toggle?
-2. **PR B profiles:** serve both skills on all three profiles, or the toolset skill only on default and
-   maintenance (readonly has no `graph_write`)?
-3. **Installer write mode:** revisit after PR A, or keep `bin/agent-install` print-only for good?
-4. **Cursor:** if C1 shows Cursor ignores server instructions and C4 shows the `sessionStart` hook works,
-   should the Cursor block lead with the hook instead of the User Rules paste?
+Each one now has a test with a metric and a decision rule in [`auto-adoption-tests.md`](auto-adoption-tests.md)
+(Steve, 18 Nov 2026: "design some tests that could make the decision bar swing"):
+1. Per-tool `anthropic/alwaysLoad` `_meta` on `search` + `get_context` (a tools/list output change), or only the
+   user-side `alwaysLoad` toggle? → test **Q1**.
+2. PR B profiles: which skills each profile serves? → test **Q2** (`project-scan` stays off readonly by a static rule).
+3. Installer write mode: add one later, or stay print-only? → test **Q3**.
+4. Cursor: lead with the hook or with the User Rules paste? → test **Q4**.
+5. Which levers (instructions, user rule, skill trigger, hook) earn their place in the default install output? → test **Q-L**.
+
+---
+
+## 8. Decision tests
+
+The test design lives in [`auto-adoption-tests.md`](auto-adoption-tests.md): fixed tasks on two open-source repos
+(goggles_admin2 and fast-mcp, as scratch clones), Claude Code headless runs from `<projects-dir>` with stream-json logs,
+arms flipped by user-level files and flags, N = 5 runs per arm per task, and a 20-point bar. Baseline, user rule,
+skill trigger, hook and alwaysLoad arms run on 1.89.0 now; the instructions arms need 1.90.0. `script/adoption_eval`
+(read-only, PR A) summarizes the saved logs into counts.
 
 ---
 
