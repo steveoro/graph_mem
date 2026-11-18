@@ -19,7 +19,8 @@ Failed tool calls (`isError: true`) carry one JSON object as their text: `error`
 reason (e.g. `outside_filter`, `project_has_members`). stdio returns the same object as HTTP.
 Details: [`docs/mcp_tools.md`](mcp_tools.md) (Error Handling).
 
-Since 1.87.0 graph_mem also declares the MCP Apps extension; see [MCP Apps](#mcp-apps) below.
+Since 1.87.0 graph_mem also declares the MCP Apps extension; see [MCP Apps](#mcp-apps) below. Since 1.91.0 it
+can serve its skills through the Skills extension, off by default; see [Skills over MCP](#skills-over-mcp).
 
 Moving another Rails app from fast-mcp to the `mcp` gem:
 [`docs/guides/migrating-fast-mcp-to-mcp-gem.md`](guides/migrating-fast-mcp-to-mcp-gem.md).
@@ -29,7 +30,7 @@ Moving another Rails app from fast-mcp to the `mcp` gem:
 `script/mcp_compat/clients.sh` at 1.87.0 (2026-11-17, `mcp` 1.10.0, Node 24.11.1, Ruby 3.4.12): 12 of
 12 OK, and `/mcp` lists 12 tools on every row. Every `auto` row negotiates 2026-07-28, every `legacy`
 row 2025-11-25. The Ruby SDK 1.9.0 and 1.10.0 clients keep the tool `title` and see one on all 12
-tools.
+tools. Re-run at 1.91.0 (2026-11-18) with Skills over MCP off: the same 12 of 12.
 
 | Client | Mode | Transport | OK | Protocol | Timing note |
 | --- | --- | --- | --- | --- | --- |
@@ -66,7 +67,8 @@ MCP.
 2.1.1 and Everything 2.3.0 with SDK 2.4.0 (the MCP servers release v2.4.0), on Node 24.11.1 and Ruby
 3.4.12. 0 failed expectations, 0 unexpected differences; every case recorded at 1.86.1 answers the same
 on both sides, and 1.87.0 adds "initialize declares the MCP Apps extension" (graph_mem only: the
-reference servers declare no extensions). Outlines show
+reference servers declare no extensions). Re-run at 1.91.0 (2026-11-18) with Skills over MCP off: 0 failed,
+0 unexpected over the same 53 cases (20 stdio, 33 HTTP). Outlines show
 `[status, id, result or error code]` (HTTP) or the replies as `[id, result or error code]` (stdio);
 the cases are in `spec/fixtures/mcp/handshakes/`. The reference is Memory on stdio and Everything on
 HTTP. `compare.rb`'s informational Ruby SDK target (`rsdk_server.rb`, a one-tool server on `mcp`
@@ -287,6 +289,40 @@ are the 1.87.0 ones (the snapshots and handshake files are unchanged).
 | Cursor | 3.23.23 (1.89.0 Search mode) | yes: Graph mode as in 1.88.0, and the mode switch in a view that got no new result | no consent prompt; query, every filter kind, previous / next (next off on a short page), a hit's details, "Show as graph" and a `search` error in the status line work | follows light and dark; `ui/update-model-context` still not passed to the model |
 | Devin Desktop | 3.13.4 (1.87.0 stub) | no | — | plain tool results |
 | Claude | — | deferred | — | no supported client at hand |
+
+## Skills over MCP
+
+Since 1.91.0 (`docs/plans/auto-adoption-plan.md`, PR B) graph_mem can serve the repo's `skills/` through the
+Skills extension (SEP-2640, `io.modelcontextprotocol/skills`) when Settings › Feature flags › **Skills over MCP**
+(`mcp_skills_enabled`, **default off**) is on:
+
+- `initialize` declares `capabilities.extensions["io.modelcontextprotocol/skills"]` (`{}`: no `directoryRead`),
+  next to the MCP Apps entry when that is on too.
+- `skills/list` and `skills/get` answer with each skill's `skill://<name>/SKILL.md` URI, its frontmatter and its
+  files with sizes and `sha256:` digests. `graph-mem-mcp-toolset` (with its three `references/` files) is
+  served on all three profiles; `project-scan` on `/mcp` and `/mcp/maintenance` only (it needs write tools).
+- `resources/list` adds each served `SKILL.md` (`text/markdown`); `resources/read` serves every listed file
+  byte for byte, and answers `-32602` "Skill file not found" for a `skill://` URI under a served skill that
+  names none of its files (another unknown URI is `-32602` "Resource not found", as before).
+- Tools, prompts, resource templates, the instructions and every `tools/call` result are unchanged; tool counts
+  stay 12 / 9 / 22.
+
+Turned off, the wire is exactly the 1.90.0 one: no extension, `skills/list` is `-32601`, and a `skill://` read
+is `-32602` "Resource not found". The skills are read from disk when a server is built, so an edited skill is
+served after the next rebuild or restart (the gem refuses a file changed since then with `-32603`). Saving the
+setting rebuilds the HTTP servers (open MCP sessions close); a stdio runner picks it up when restarted. The
+`AccessGate` covers `skills/*` like every `/mcp` method.
+
+Hosts (2026-11-18). No host we use consumes the extension yet: Claude, Claude Code and Cursor have no Skills
+entry on the [extension client matrix](https://modelcontextprotocol.io/extensions/client-matrix) and aren't
+named in the ext-skills [implementations list](https://github.com/modelcontextprotocol/ext-skills/blob/main/docs/implementations.md),
+where MCP Inspector is listed as partial (CLI skill verification since 2.6.0).
+
+| Client | Version | Toggle on | Result |
+|---|---|---|---|
+| MCP Inspector CLI (`--method skills/list --verify --require-digests`) | 2.16.0 | `/mcp`, `/mcp/readonly`, `/mcp/maintenance` | every skill and file verified, no conformance or frontmatter error: 2 skills and 5 files, 1 and 4 on readonly; `skills/get` and a `references/` read match the files |
+| Claude Code | 2.1.327 | `/mcp` | connects and lists its 12 tools as before; doesn't consume skills over MCP (not supported) |
+| Cursor | — | — | manual check pending |
 
 ## Re-running
 

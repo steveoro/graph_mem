@@ -1,6 +1,6 @@
 # graph_mem auto-adoption plan: make agents reach for graph_mem on their own
 
-**Status:** active plan. Drafted 18 Nov 2026 on `main` at 1.89.0. PR A shipped in 1.90.0 (#179); PR B (1.91.0) next, §6 rechecked against 1.90.0 on 18 Nov 2026.
+**Status:** active plan. Drafted 18 Nov 2026 on `main` at 1.89.0. PR A shipped in 1.90.0 (#179); PR B in 1.91.0 (#180), §6 rechecked against 1.90.0 on 18 Nov 2026.
 **Scope:** Claude Code first, Cursor second. Linux workstations, no Claude Desktop.
 **Decisions (Steve, 18 Nov 2026):**
 - **D1.** Rewording the existing server `instructions` is **not** an MCP surface change: pre-approved.
