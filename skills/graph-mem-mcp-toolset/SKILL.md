@@ -1,17 +1,15 @@
 ---
 name: graph-mem-mcp-toolset
 description: >-
-  Recalls and records project conventions, user preferences, file locations
-  and verified fixes in the graph_mem MCP knowledge graph. Use at the start of
-  any coding task in a project where the graph_mem MCP server is connected,
-  and again before deciding a convention (version bump, changelog or docs
-  style, test style, naming, file or config location, release steps) or
-  editing a file or component for the first time in the session. Use before
-  the final reply when the user gave a correction or stated a preference, or
-  when the session found where something lives or verified a fix. Also use
-  when the user mentions graph_mem, memory, "remember this", "like last time"
-  or "as usual". Not for designing graph databases or knowledge-graph schemas
-  in general, or for an app's own data store.
+  Use at the start of EVERY coding task in any repository, before reading or
+  editing code: loads this user's project conventions, preferences, file
+  locations and verified fixes from the graph_mem MCP memory server, and saves
+  new ones before the final reply. Use again before deciding a convention
+  (version bump, changelog or docs style, test style, naming, file or config
+  location, release steps) or first editing a file or component. Also use when
+  the user says "remember this", "like last time", "as usual" or mentions
+  graph_mem or memory. Skip only when the task is about designing a graph
+  database schema itself.
 license: LGPL-3.0-or-later
 compatibility: Requires a reachable graph_mem MCP server (HTTP /mcp or stdio)
 metadata:

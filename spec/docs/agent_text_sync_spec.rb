@@ -181,10 +181,10 @@ RSpec.describe "agent text sync" do
     let(:skill_text) { skill_path.read }
     let(:references) { root.join("skills/graph-mem-mcp-toolset/references") }
 
-    it "opens the description with what the skill does, in the third person" do
+    it "opens the description with its key use case, without first or second person (1.90.0)" do
       description = frontmatter(skill_path)["description"]
 
-      expect(description).to start_with("Recalls and records project conventions")
+      expect(description).to start_with("Use at the start of EVERY coding task in any repository")
       expect(description).not_to match(/\byou(r)?\b/i)
       expect(description).not_to match(/\bI\b/)
     end
