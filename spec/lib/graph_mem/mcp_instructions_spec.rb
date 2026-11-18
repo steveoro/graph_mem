@@ -20,6 +20,12 @@ RSpec.describe GraphMem::McpInstructions do
     expect(text).not_to include("persist", "graph_write", "graph_edit")
   end
 
+  it "opens every profile's text with the repo-agnostic trigger, before any step" do
+    GraphMem::McpProfile::NAMES.each do |profile|
+      expect(described_class.for(profile).lines.first).to start_with("Use graph_mem in EVERY coding task in ANY repository")
+    end
+  end
+
   it "names only tools advertised on each profile" do
     GraphMem::McpToolRegistry.load_all!
     tool_names = GraphMem::McpToolRegistry.tool_classes.map(&:tool_name)
