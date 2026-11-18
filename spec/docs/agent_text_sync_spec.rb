@@ -55,6 +55,13 @@ RSpec.describe "agent text sync" do
       expect(section.rstrip.lines.size).to be <= 12
     end
 
+    it "keeps the user-level rule plain Markdown within the same 12 lines (1.90.0)" do
+      user_rule = root.join("docs/rules/graph_mem_user_rule.md").read
+
+      expect(user_rule).to start_with("## graph_mem memory (MCP), every repository\n")
+      expect(user_rule.rstrip.lines.size).to be <= 12
+    end
+
     it "carries the general coding rules in AGENTS.md" do
       coding_rules = root.join("docs/rules/general_coding_rules.md").read
       bullets = coding_rules[coding_rules.index("- **Schema first**")..]
@@ -87,7 +94,7 @@ RSpec.describe "agent text sync" do
   describe "reference text only in the skill" do
     it "keeps docs/rules to the copy-out snippets and the README" do
       expect(root.glob("docs/rules/*").map { |path| path.basename.to_s })
-        .to contain_exactly("README.md", "graph_mem_mcp_rules.md", "general_coding_rules.md")
+        .to contain_exactly("README.md", "graph_mem_mcp_rules.md", "graph_mem_user_rule.md", "general_coding_rules.md")
     end
 
     it "links the tool reference from SKILL.md" do

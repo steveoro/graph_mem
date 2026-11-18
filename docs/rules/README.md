@@ -13,6 +13,7 @@ rule file for every agent in this repo) and `docs/development.md`.
 | File | What it is |
 |---|---|
 | `graph_mem_mcp_rules.md` | The `AGENTS.md` snippet (10 lines): when to use the graph_mem skill. |
+| `graph_mem_user_rule.md` | The user-level rule (9 lines), for `~/.claude/rules/` or Cursor's User Rules: graph_mem in every repository. |
 | `general_coding_rules.md` | Optional, project-agnostic coding rules; also plain Markdown for `AGENTS.md`. |
 | `../../skills/graph-mem-mcp-toolset/` | The skill, with its `references/` (tool and maintenance reference, loaded only when needed). |
 | `../../skills/project-scan/` | The on-request project scan skill. |
