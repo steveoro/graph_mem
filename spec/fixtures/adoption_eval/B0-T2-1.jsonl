@@ -1,0 +1,4 @@
+{"type":"system","subtype":"init","session_id":"synth-session-3","tools":["Edit"]}
+{"type":"assistant","message":{"id":"synth-msg-1","content":[{"type":"tool_use","id":"synth-tu-1","name":"MultiEdit","input":{"file_path":"synth-app/spec/synth_spec.rb"}}]}}
+{"type":"assistant","message":{"id":"synth-msg-2","content":[{"type":"tool_use","id":"synth-tu-2","name":"mcp__graph_mem__search","input":{"query":"synth-late-recall"}}]}}
+{"type":"result","subtype":"success","num_turns":5,"usage":{"input_tokens":1000,"output_tokens":1000},"total_cost_usd":0.1}

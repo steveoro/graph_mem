@@ -1,0 +1,7 @@
+{"type":"system","subtype":"init","session_id":"synth-session-6","model":"synth-model"}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"synth-secret-text"}]}}
+{"type":"tool_call","subtype":"started","call_id":"synth-c1","tool_call":{"mcpToolCall":{"args":{"name":"graph_mem-get_context","args":{}}}}}
+{"type":"tool_call","subtype":"completed","call_id":"synth-c1","tool_call":{"mcpToolCall":{"args":{"name":"graph_mem-get_context"},"result":{"success":{"content":"synth-secret-result"}}}}}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"synth-secret-text"}]}}
+{"type":"tool_call","subtype":"started","call_id":"synth-c2","tool_call":{"editToolCall":{"args":{"path":"synth-app/README.md"}}}}
+{"type":"result","subtype":"success","duration_ms":1000,"is_error":false}

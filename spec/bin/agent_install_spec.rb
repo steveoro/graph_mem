@@ -102,7 +102,7 @@ RSpec.describe "bin/agent-install" do
   end
 
   it "requires only the standard library and touches no home path in code" do
-    source = File.read(script)
+    source = File.readlines(script).grep_v(/^\s*#/).join
 
     expect(source.scan(/^require "([^"]+)"/).flatten).to contain_exactly("json", "optparse")
     expect(source).not_to match(/Dir\.home|ENV\["HOME"\]|File\.(write|open)|FileUtils|Net::HTTP|`/)

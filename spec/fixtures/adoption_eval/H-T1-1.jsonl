@@ -1,0 +1,5 @@
+{"type":"system","subtype":"hook_response","hook_name":"SessionStart:startup","hook_event":"SessionStart","output":"graph_mem (MCP server \"graph_mem\") is connected. synth-hook-text","exit_code":0}
+{"type":"system","subtype":"init","session_id":"synth-session-5","tools":["Edit"]}
+{"type":"assistant","message":{"id":"synth-msg-1","content":[{"type":"tool_use","id":"synth-tu-1","name":"mcp__graph_mem__get_context","input":{}}]
+{"type":"assistant","message":{"id":"synth-msg-2","content":[{"type":"tool_use","id":"synth-tu-2","name":"mcp__graph_mem__get_context","input":{}}]}}
+
