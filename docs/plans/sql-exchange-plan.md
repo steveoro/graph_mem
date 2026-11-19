@@ -21,6 +21,9 @@
 >    gets the touched entities; compaction after an import starts only when review rows were seeded.
 > 7. Docs: hand runs only on a file you exported yourself, never with `mariadb --force`; no machine
 >    or live-project names in the repo.
+>
+> Added later the same day: an opt-in **Run full maintenance now** after an import (report checkbox,
+> `FULL=1` on the rake task); the release version becomes "next minor" (see Delivery).
 
 ## Context
 
@@ -308,6 +311,22 @@ will say to prefer the rake task, to run a hand-run script only on a file you ex
 (it skips the validator), and never with `mariadb --force` (it would keep going past a failed
 statement and commit a partial merge).
 
+**Opt-in full maintenance (added 2026-11-19).** The import report (and the dry-run preview, for
+the real run) has a **Run full maintenance now** checkbox, off by default; the rake task takes
+`FULL=1`. When set, once `SqlImportFollowUpJob` has finished, the import starts the existing
+"Run all scheduled jobs now" run: `ScheduledRunJob.start!(trigger: "sql_import")` (a new trigger
+constant next to `TRIGGER_MANUAL`/`TRIGGER_CATCH_UP` in `app/jobs/scheduled_run_job.rb`). It runs the
+`ScheduledRun::ORDER` steps from `app/services/scheduled_run.rb`, each skipped when its own setting
+is off: `DatabaseBackupJob`, `GarbageCollectionJob`, `DreamStateCompactionJob`,
+`EmbeddingScheduledBackfillJob`, `FactKeywordsJob`, `StaleMemoryScanJob`, `ReviewPolicyJob`,
+`MaintenanceReportRowCleanupJob`, `ChangeSetPruneJob` and `ExportJob.cleanup_old_exports`. With it
+set, step 6 above doesn't start compaction itself (the run's compaction step does). If a run is
+already going (`start!` returns nil), nothing new starts and the report says so; the backup step is
+taken after the import, so it never replaces the backup the preview recommends. System › Background
+jobs shows the run as usual. This also helps after a hand-run script: the follow-up job doesn't run
+there, so the docs point to **Run all scheduled jobs now** to get embeddings, keywords, the
+contradiction pass and review policies done at once instead of waiting for the schedule.
+
 ## Delivery
 
 Step 0 is a throwaway check on the test DB (MariaDB 11.8): temp-table DDL does not commit;
@@ -318,9 +337,9 @@ the merge SQL needs. If a point fails, the template changes, not the design.
 | PR | Content |
 |---|---|
 | 1 | `SqlExport` (scope, template v1, writer), `SqlImport::Validator`, `SqlImport::Executor`, both rake tasks (import validated), Cloud toggle `touch: false`, round-trip specs. No UI. |
-| 2 | Import UI (upload, dry-run preview, execute, report), `SqlImportFollowUpJob`, the contradiction-pass hook. |
+| 2 | Import UI (upload, dry-run preview, execute, report), `SqlImportFollowUpJob`, the contradiction-pass hook, the opt-in full maintenance (checkbox and `FULL=1`). |
 | 3 | Export UI and job format choice, SQL as the UI default, sync endpoint `format` (JSON default). |
-| 4 | Docs (`docs/guides/ui-guide.md`, `docs/architecture.md`, new `docs/data_exchange.md` with the format reference and the source machine → target machine recipe), CHANGELOG, release 1.92.0 (`lib/graph_mem/version.rb` then `bin/rails graph_mem:sync_skill_version`). |
+| 4 | Docs (`docs/guides/ui-guide.md`, `docs/architecture.md`, new `docs/data_exchange.md` with the format reference and the source machine → target machine recipe), CHANGELOG, release as the next minor (1.92.0, or 1.93.0 if the contradiction auto-resolve policy ships first) (`lib/graph_mem/version.rb` then `bin/rails graph_mem:sync_skill_version`). |
 
 PRs 1–3 put their CHANGELOG lines under `## [Unreleased]`. No migration, no new MCP tool, no new
 `OperationProgress` type (`export`/`import` are reused). Docs and CHANGELOG use "source machine" /
@@ -347,7 +366,9 @@ Specs (real MariaDB, `OLLAMA_URL=http://127.0.0.1:9`, run through `rvm use ruby-
 - schema guard: a template whose `max_schema` is older than the target schema is refused with both
   versions named; lock: the rendered lock expression equals `ProjectMembership.lock_name`;
 - dry run writes nothing; follow-up job: embeddings requested, trust recomputed, review rows
-  seeded, contradiction ids recorded, compaction started only when rows were seeded;
+  seeded, contradiction ids recorded, compaction started only when rows were seeded; with full
+  maintenance on, one `scheduled_run` row with trigger `sql_import` (none when off, and none
+  started when a run is already going);
 - request specs for both UI flows; job spec for `ExportJob` with each format.
 
 ### Scenario spec: restore an older export over an edited graph
