@@ -3,6 +3,7 @@
 require "rails_helper"
 require "json"
 require "open3"
+require "timeout"
 require "tmpdir"
 
 # script/adoption_eval/run_eval.sh end to end, with fake binaries on PATH (the bin/up spec's pattern):
@@ -324,6 +325,30 @@ RSpec.describe "script/adoption_eval/run_eval.sh" do
     expect(status.exitstatus).to eq(130)
     expect(out_r.read).to include("Restored 3 user-level path(s)")
     expect(home_tree).to eq(before)
+  end
+
+  it "after a SIGKILL mid-session, --restore isn't locked out by the orphaned session, stops it and puts HOME back" do
+    before = home_tree
+    pid = Bundler.with_unbundled_env do
+      Process.spawn(env("FAKE_SLEEP" => "30"), "bash", script, "--suite", "custom", "--arms", "ALL", "--tasks", "T1", "--n", "1", "--yes",
+                    in: File::NULL, out: File::NULL, err: File::NULL)
+    end
+    Timeout.timeout(20) { sleep 0.1 until log("claude.args").include?("-p") }
+    Process.kill("KILL", pid)
+    Process.wait(pid)
+    id = run_ids.sole
+
+    _out, err, status = run_eval("--suite", "custom", "--arms", "I", "--tasks", "T1", "--n", "1", "--yes")
+    expect(status).not_to be_success
+    expect(err).to include("--restore #{id} first")
+
+    started = Time.now
+    _out, err, status = run_eval("--restore", id)
+    expect(status).to be_success, err
+    expect(Time.now - started).to be < 10
+    expect(home_tree).to eq(before)
+    expect(Dir.children(path("tmp"))).to be_empty
+    expect(File.read(path("eval", "runs", id, ".backup", "state")).strip).to eq("restored")
   end
 
   it "runs under LANG=C (the Ruby helpers read UTF-8 whatever the locale)" do

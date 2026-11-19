@@ -235,7 +235,13 @@ restore_paths() {
 # Everything a killed run left: the user-level paths, the production settings, the clones and the
 # private temp dirs, each recorded in $BACKUP when it was changed or created.
 restore_run() {
-  local name sha dir
+  local name sha dir pid
+  # A session orphaned by a killed run is stopped first (only if that pid is still its timeout).
+  if [[ -s $BACKUP/session ]]; then
+    pid=$(cat "$BACKUP/session")
+    if [[ $(ps -o comm= -p "$pid" 2>/dev/null) == timeout ]]; then kill "$pid" 2>/dev/null || true; fi
+    rm -f "$BACKUP/session"
+  fi
   restore_paths
   if [[ -s $BACKUP/settings ]]; then
     mapfile -t ORIGINAL_SETTINGS <"$BACKUP/settings"
@@ -270,10 +276,14 @@ cleanup() {
 run_session() { # run_session LOG COMMAND...
   local log=$1
   shift
-  "$@" >"$log" 2>/dev/null </dev/null &
+  # 9>&-: the session must not hold the run lock, or after a SIGKILL of this script the orphaned
+  # session would keep --restore locked out until it ends.
+  "$@" >"$log" 2>/dev/null </dev/null 9>&- &
   SESSION_PID=$!
+  [[ -n $BACKUP && -d $BACKUP ]] && echo "$SESSION_PID" >"$BACKUP/session"
   wait "$SESSION_PID" || true
   SESSION_PID=""
+  rm -f "$BACKUP/session"
 }
 stop_session() { if [[ -n $SESSION_PID ]]; then kill "$SESSION_PID" 2>/dev/null || true; fi; }
 
