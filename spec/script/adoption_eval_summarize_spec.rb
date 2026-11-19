@@ -11,7 +11,8 @@ require "tmpdir"
 #   B0-T2-1  a graph_mem search only after a MultiEdit: not adopted
 #   R-T1-1   the skill, a search before an Edit in the same message, a denied graph_write (counted once)
 #   H-T1-1   a hook event, a malformed line, no edit, no result (turns, tokens and cost are n/a)
-#   K2-T1-1  a Cursor CLI stream: an MCP get_context, then an edit
+#   K2-T1-1  a Cursor CLI stream: a tool lookup, an MCP get_context, a denied shell call, an edit, a
+#            rejected graph_write
 #   synth-notes  not named <arm>-<task>-<run>.jsonl: skipped
 RSpec.describe "script/adoption_eval/summarize.rb" do
   let(:root) { File.expand_path("../..", __dir__) }
@@ -45,7 +46,10 @@ RSpec.describe "script/adoption_eval/summarize.rb" do
                                     "mean_gm_calls" => "2.0", "median_tokens" => "300")
     expect(rows["H/T1"]).to include("adopted" => "1", "hook_fired" => "1", "median_first_gm_turn" => "1",
                                     "median_turns" => "n/a", "median_tokens" => "n/a", "median_cost" => "n/a")
-    expect(rows["K2/T1"]).to include("adopted" => "1", "ctx_before_edit" => "1", "median_turns" => "n/a")
+    # The Cursor CLI shape as checked on agent 2026.11.19: a tool lookup, get_context, a denied shell call,
+    # an edit, then a rejected graph_write; camelCase usage and no num_turns.
+    expect(rows["K2/T1"]).to include("adopted" => "1", "ctx_before_edit" => "1", "toolsearch_gm" => "1", "mean_gm_calls" => "2.0",
+                                     "persist_attempts" => "1", "median_tokens" => "6928", "median_turns" => "n/a")
   end
 
   it "prints an aligned table with rates as count/n, and a footer of skipped lines and files" do
@@ -84,5 +88,27 @@ RSpec.describe "script/adoption_eval/summarize.rb" do
 
     expect(status.exitstatus).to eq(1)
     expect(err).to include("Usage: ruby script/adoption_eval/summarize.rb")
+  end
+
+  describe "AdoptionEval::Session (used by run_eval.sh and report.rb)" do
+    before { require File.expand_path("../../script/adoption_eval/summarize.rb", __dir__) }
+
+    def session(lines) = AdoptionEval::Session.new("synth-arm", "T1", lines.map(&:to_json))
+
+    it "notes a ToolSearch for a write tool, completeness and a usage-limit stop" do
+      search = { type: "assistant", message: { id: "m1", content: [ { type: "tool_use", name: "ToolSearch", input: { query: "select:mcp__graph_mem__graph_write" } } ] } }
+      limited = { type: "result", is_error: true, result: "Claude AI usage limit reached|1700000000" }
+      done = { type: "result", is_error: false, num_turns: 3 }
+
+      expect(session([ search, done ]).metrics).to include(write_search: true, complete: true, limited: false)
+      expect(session([ search ]).metrics).to include(write_search: true, complete: false, limited: false)
+      expect(session([ limited ]).metrics).to include(complete: true, limited: true)
+      expect(session([ { type: "result", is_error: true, result: "synth-other-error" } ]).metrics[:limited]).to be(false)
+    end
+
+    it "builds from a file named <arm>-<task>-<run>.jsonl, and refuses other names" do
+      expect(AdoptionEval::Session.from_file(logs.find { |path| path.end_with?("R-T1-1.jsonl") })).to have_attributes(arm: "R", task: "T1")
+      expect(AdoptionEval::Session.from_file(logs.find { |path| path.end_with?("synth-notes.jsonl") })).to be_nil
+    end
   end
 end

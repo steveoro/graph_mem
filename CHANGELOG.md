@@ -5,6 +5,18 @@ All notable changes to GraphMem will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- `script/adoption_eval/run_eval.sh`: the auto-adoption tests (`docs/plans/auto-adoption-tests.md`) in one command.
+  - Suites: screen, full, q1, q2, the headless Cursor CLI arms, IDE calibration, the timed install test, or custom.
+  - It builds the eval MCP configs, pins and resets the scratch clones, flips each arm's user-level levers and restores them exactly, runs the sessions, guards the other repos, stops on a usage limit with a resume hint, and writes a timestamped report under `~/adoption-eval/reports/`.
+  - `--setting KEY=VALUE` can rerun under a changed graph_mem setting: it restarts the app container, then restores the setting and restarts again.
+- `script/adoption_eval/report.rb`: a run's counts-only report with the decision rules (Q-L, Q1, Q2, Q3, Q4) applied to the arms present.
+
+### Changed
+- `script/adoption_eval/summarize.rb` reads the Cursor CLI stream as `agent` 2026.11.19 writes it, and notes write-tool lookups, completeness and usage-limit stops.
+
 ## [1.91.0] - 2026-11-18
 
 Auto-adoption, PR B: Skills over MCP behind a setting that is **off by default**. Turned on, graph_mem serves its skills through the Skills extension (SEP-2640) to MCP clients that support it. Turned off, MCP answers exactly as in 1.90.0. No host we use (Claude, Claude Code, Cursor) consumes the extension yet, so the skill stays installed as files (`bin/agent-install`).
