@@ -22,12 +22,15 @@ RSpec.describe "script/adoption_eval/report.rb" do
   def tool(name, input = {}) = { type: "assistant", message: { id: "m-#{name}", content: [ { type: "tool_use", name: name, input: input } ] } }
 
   # One session log: adopted (a graph_mem call before the edit) or not, with turns and tokens.
-  def session(arm, task, run, adopted:, turns: 6, tokens: 1000, write_search: false)
+  # `capped` is a result that stopped at --max-turns (subtype error_max_turns).
+  def session(arm, task, run, adopted:, turns: 6, tokens: 1000, write_search: false, capped: false)
     events = []
     events << tool("ToolSearch", { query: "select:mcp__graph_mem__graph_write" }) if write_search
     events << tool("mcp__graph_mem__get_context") if adopted
     events << tool("Edit", { file_path: "synth-app/CHANGELOG.md" })
-    events << { type: "result", num_turns: turns, usage: { input_tokens: tokens }, total_cost_usd: 0.1 }
+    result = { type: "result", num_turns: turns, usage: { input_tokens: tokens }, total_cost_usd: 0.1 }
+    result[:subtype] = "error_max_turns" if capped
+    events << result
     File.write(File.join(@dir, "logs", "#{arm}-#{task}-#{run}.jsonl"), events.map(&:to_json).join("\n"))
   end
 
@@ -96,20 +99,71 @@ RSpec.describe "script/adoption_eval/report.rb" do
     text = report
 
     expect(text).to include("**R** (the user rule): dropping it: 0 points (0 of 3 tasks the same way) → a tie: drop it",
-                            "  - Efficiency (draft rule): dropping it: turns +25%, tokens +0% (bar 15%, the same way on ≥ 2 tasks) → costs turns beyond the bar: keep it.",
-                            "  - Efficiency (draft rule): dropping it: turns +5%, tokens +5% (bar 15%, the same way on ≥ 2 tasks) → no cost beyond the bar.",
+                            "  - Efficiency (draft rule): dropping it: turns +25% (2 of 3 tasks), tokens +0% (0 of 3 tasks) (bar 15%) → costs turns beyond the bar: the draft rule would keep it.",
+                            "  - Efficiency (draft rule): dropping it: turns +5% (0 of 3 tasks), tokens +5% (0 of 3 tasks) (bar 15%) → no cost beyond the bar.",
                             "- **All levers together** (ALL vs I): adoption 0 points (0 of 3 tasks the same way).",
-                            "  - Efficiency (draft rule): without them (I): turns +20%, tokens +20% (bar 15%, the same way on ≥ 2 tasks) → costs turns and tokens beyond the bar: keep it.",
-                            "- **A skill copy at all** (I vs I0): adoption +20 points (3 of 3 tasks the same way).",
-                            "  - Efficiency (draft rule): without it (I0): turns +8%, tokens +8% (bar 15%, the same way on ≥ 2 tasks) → no cost beyond the bar.")
+                            "  - Efficiency (draft rule): without them (I): turns +20% (3 of 3 tasks), tokens +20% (3 of 3 tasks) (bar 15%) → costs turns and tokens beyond the bar: the draft rule would keep it.",
+                            "- **The 1.89.0 skill copy** (I vs I0): adoption +20 points (3 of 3 tasks the same way).",
+                            "  - Efficiency (draft rule): without it (I0): turns +8% (0 of 3 tasks), tokens +8% (0 of 3 tasks) (bar 15%) → no cost beyond the bar.")
+    expect(text).not_to include("The current skill copy")
   end
 
-  it "Q-L's draft efficiency rule on T1 screening needs 25%" do
+  it "Q-L's draft efficiency rule on T1 screening needs 25%, and 25% fires it" do
     write_run
     sessions("ALL", "T1", n: 5, adopted: 5, turns: 20)
     sessions("I", "T1", n: 5, adopted: 5, turns: 24)
 
     expect(report).to include("without them (I): turns +20%, tokens +0% (bar 25%, T1 screening) → no cost beyond the bar.")
+
+    sessions("I", "T1", n: 5, adopted: 5, turns: 25)
+    expect(report).to include("without them (I): turns +25%, tokens +0% (bar 25%, T1 screening) → costs turns beyond the bar: the draft rule would keep it.")
+  end
+
+  it "marks an efficiency difference as a lower bound when a session hit the turn cap" do
+    write_run(max_turns: 25)
+    sessions("ALL", "T1", n: 5, adopted: 5, turns: 21)
+    sessions("I", "T1", n: 5, adopted: 5, turns: 25, capped: true)
+
+    text = report
+    expect(text).to include("- **Max turns:** 25")
+    expect(text).to include("without them (I): turns +19%, tokens +0% (bar 25%, T1 screening, lower bound: I hit the turn cap in 5/5) → no cost beyond the bar.")
+  end
+
+  it "prints the draft efficiency line only on an adoption tie" do
+    write_run
+    sessions("ALL", "T1", n: 5, adopted: 5, turns: 20)
+    sessions("ALL-R", "T1", n: 5, adopted: 0, turns: 30)
+
+    text = report
+    expect(text).to include("**R** (the user rule): dropping it: +100 points (T1 screening, bar 40 points) → keep it on by default.")
+    expect(text).not_to include("Efficiency (draft rule): dropping it")
+  end
+
+  it "compares the current skill copy when S and I0 were both run" do
+    write_run
+    %w[T1 T2 T3].each do |task|
+      sessions("S", task, n: 5, adopted: 5, turns: 20, tokens: 1000)
+      sessions("I0", task, n: 5, adopted: 5, turns: 24, tokens: 1000)
+    end
+
+    expect(report).to include("- **The current skill copy** (S vs I0): adoption 0 points (0 of 3 tasks the same way).",
+                              "  - Efficiency (draft rule): without it (I0): turns +20% (3 of 3 tasks), tokens +0% (0 of 3 tasks) (bar 15%) → costs turns beyond the bar: the draft rule would keep it.")
+    expect(report).not_to include("The 1.89.0 skill copy")
+  end
+
+  it "warns when I0 still loads a project skill copy or a CLAUDE.md that mentions graph_mem" do
+    write_run(baseline: [
+                { "path" => "<projects-dir>/.claude/skills/graph-mem-mcp-toolset", "exists" => true, "mentions_graph_mem" => true },
+                { "path" => "<projects-dir>/CLAUDE.md", "exists" => true, "mentions_graph_mem" => false },
+                { "path" => "~/.claude/CLAUDE.md", "exists" => true, "mentions_graph_mem" => true }
+              ])
+    sessions("I", "T1", n: 1, adopted: 1)
+    sessions("I0", "T1", n: 1, adopted: 1)
+
+    text = report
+    expect(text).to include("| `<projects-dir>/CLAUDE.md` | yes | no |")
+    expect(text).to include("Caveat: I0 still loads `<projects-dir>/.claude/skills/graph-mem-mcp-toolset` and `~/.claude/CLAUDE.md`, so it is not the instructions alone.")
+    expect(text).not_to include("loads `<projects-dir>/CLAUDE.md`")
   end
 
   it "Q1 needs N=10 per task, and then weighs adoption against tokens" do

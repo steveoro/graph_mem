@@ -64,7 +64,8 @@ module AdoptionEval
         skill_used: @flags[:skill], toolsearch_gm: @flags[:toolsearch], hook_fired: @flags[:hook],
         persist_attempts: @denied.values.count { |name| WRITE_TOOLS.include?(name.sub(GRAPH_MEM, "")) },
         turns: @result&.dig("num_turns"), tokens: tokens, cost: @result&.dig("total_cost_usd"),
-        write_search: @flags[:write_search], complete: !@result.nil?, limited: limited? }
+        write_search: @flags[:write_search], complete: !@result.nil?, limited: limited?,
+        capped: @result&.dig("subtype") == "error_max_turns" }
     end
 
     private

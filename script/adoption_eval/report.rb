@@ -15,6 +15,10 @@ module AdoptionEval
   # One run directory's report.
   class RunReport
     LEVERS = { "R" => "the user rule", "S" => "the skill trigger", "H" => "the SessionStart hook" }.freeze
+    # Still loaded in I0, which removes only the user-level skill copy. Sessions run in <projects-dir>.
+    I0_LOADS = [ [ "<projects-dir>/.claude/skills/graph-mem-mcp-toolset", "exists" ],
+                 [ "<projects-dir>/CLAUDE.md", "mentions_graph_mem" ],
+                 [ "~/.claude/CLAUDE.md", "mentions_graph_mem" ] ].freeze
     # Draft efficiency rule (tests doc §3 Q-L, not yet adopted): extra median turns or tokens, in %,
     # that make a lever worth keeping when adoption ties; T1 screening needs the larger bar.
     EFFICIENCY_BAR = 15
@@ -48,7 +52,7 @@ module AdoptionEval
 
     def header
       facts = { "Suite" => @run["suite"], "Arms" => Array(@run["arms"]).join(", "), "Tasks" => Array(@run["tasks"]).join(", "),
-                "Runs per arm and task" => @run["n"], "graph_mem" => @run["graph_mem_version"],
+                "Runs per arm and task" => @run["n"], "Max turns" => @run["max_turns"], "graph_mem" => @run["graph_mem_version"],
                 "Claude Code" => @run["claude_version"], "Model" => @run["model"], "Cursor CLI" => @run["cursor_version"],
                 "Auth" => @run["auth"], "Clones" => @run["clones"]&.map { |name, sha| "#{name} @ #{sha.to_s[0, 7]}" }&.join(", "),
                 "Settings" => settings, "Started" => @run["started_at"], "Finished" => @run["finished_at"] }
@@ -137,32 +141,56 @@ module AdoptionEval
         elsif lever == "S" then "a tie: keep it (free at runtime)"
         else "a tie: drop it from the default install (it costs a #{lever == 'R' ? 'file' : 'hook'})"
         end
-        "- **#{lever}** (#{label}): #{found} → #{verdict}.#{efficiency_line('ALL', "ALL-#{lever}", 'dropping it')}"
+        draft = kept ? "" : efficiency_line("ALL", "ALL-#{lever}", "dropping it")
+        "- **#{lever}** (#{label}): #{found} → #{verdict}.#{draft}"
       end
       all = rate("ALL")
       stop = all && all >= 85 ? "\n- ALL adopts in #{points(all)} of sessions (≥ 85%): stop adding levers." : ""
       "### Q-L: which levers stay on by default\n\n#{lines.join("\n")}#{stop}\n#{group_lines}"
     end
 
-    # The levers together (I vs ALL) and a skill copy at all (I0 vs I), adoption and efficiency.
+    # The levers together (I vs ALL), the 1.89.0 skill copy (I vs I0) and, when S was run, the current copy (S vs I0).
     def group_lines
-      groups = [ [ "All levers together", "ALL", "I", "without them (I)" ], [ "A skill copy at all", "I", "I0", "without it (I0)" ] ]
+      groups = [ [ "All levers together", "ALL", "I", "without them (I)" ],
+                 [ "The 1.89.0 skill copy", "I", "I0", "without it (I0)" ],
+                 [ "The current skill copy", "S", "I0", "without it (I0)" ] ]
+      saw_i0 = false
       lines = groups.filter_map do |label, with, without, missing|
         cmp = compare(with, without, 20)
         next unless cmp
 
+        saw_i0 = true if without == "I0"
         "- **#{label}** (#{with} vs #{without}): adoption #{describe(cmp)}.#{efficiency_line(with, without, missing)}"
       end
-      lines.empty? ? "" : "\n#{lines.join("\n")}\n"
+      return "" if lines.empty?
+
+      "\n#{lines.join("\n")}#{i0_caveat if saw_i0}\n"
+    end
+
+    # I0 is the instructions alone only when none of these baseline rows is yes.
+    def i0_caveat
+      hits = I0_LOADS.filter_map do |path, key|
+        row = Array(@run["baseline"]).find { |item| item["path"] == path }
+        "`#{path}`" if row&.[](key)
+      end
+      return "" if hits.empty?
+
+      list = hits.size == 1 ? hits[0] : "#{hits[0..-2].join(', ')} and #{hits[-1]}"
+      "\n  - Caveat: I0 still loads #{list}, so it is not the instructions alone."
     end
 
     # A draft-rule line: how much costlier `other` is than `base` in median turns and tokens.
+    # Printed on adoption ties (a decided lever already has its verdict) and phrased as what the draft rule would do.
     def efficiency_line(base, other, what)
       eff = efficiency(base, other)
       return "" unless eff
 
-      worse = eff[:found].select { |f| f[:real] }
-      verdict = worse.any? ? "costs #{worse.map { |f| f[:metric] }.join(' and ')} beyond the bar: keep it" : "no cost beyond the bar"
+      worse = eff[:found].select { |found| found[:real] }
+      verdict = if worse.any?
+        "costs #{worse.map { |found| found[:metric] }.join(' and ')} beyond the bar: the draft rule would keep it"
+      else
+        "no cost beyond the bar"
+      end
       "\n  - Efficiency (draft rule): #{what}: #{describe_efficiency(eff)} → #{verdict}."
     end
 
@@ -182,14 +210,30 @@ module AdoptionEval
       found = %i[turns tokens].filter_map do |metric|
         pooled = extra(base, other, metric) or next
         agree = tasks.count { |task| (value = extra(base, other, metric, task)) && value >= bar }
-        { metric: metric, pooled: pooled, real: pooled >= bar && (screening || agree >= 2) }
+        { metric: metric, pooled: pooled, agree: agree, real: pooled >= bar && (screening || agree >= 2) }
       end
-      found.empty? ? nil : { found: found, bar: bar, screening: screening, tasks: tasks }
+      return if found.empty?
+
+      { found: found, bar: bar, screening: screening, tasks: tasks, capped: capped_notes(base, other) }
+    end
+
+    # Sessions whose result subtype is error_max_turns: their turns (and tokens) stopped at the cap.
+    def capped_notes(*arms)
+      arms.filter_map do |arm|
+        list = sessions_for(arm)
+        count = list.count { |session| session.metrics[:capped] }
+        "#{arm} hit the turn cap in #{count}/#{list.size}" if count.positive?
+      end
     end
 
     def describe_efficiency(eff)
-      parts = eff[:found].map { |f| "#{f[:metric]} #{format('%+d', f[:pooled].round)}%" }
-      "#{parts.join(', ')} (bar #{eff[:bar]}%#{eff[:screening] ? ', T1 screening' : ', the same way on ≥ 2 tasks'})"
+      parts = eff[:found].map do |found|
+        count = eff[:screening] ? "" : " (#{found[:agree]} of #{eff[:tasks].size} tasks)"
+        "#{found[:metric]} #{format('%+d', found[:pooled].round)}%#{count}"
+      end
+      scope = eff[:screening] ? ", T1 screening" : ""
+      bound = eff[:capped].empty? ? "" : ", lower bound: #{eff[:capped].join('; ')}"
+      "#{parts.join(', ')} (bar #{eff[:bar]}%#{scope}#{bound})"
     end
 
     def q1

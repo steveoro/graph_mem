@@ -51,7 +51,7 @@ Options:
                          Cursor arms: K0 K1 K2 (B0 and ALL-I need a 1.89.0 server)
   --model ALIAS          Claude Code model (default: the "model" in ~/.claude/settings.json)
   --cursor-model NAME    Cursor CLI model (default: the CLI's own)
-  --max-turns N          per session (default 25)
+  --max-turns N          per session (default 25; screen and full use 40, so a median can clear the 25% bar)
   --setting KEY=VALUE    change a graph_mem setting in the production container for this run
                          (repeatable; restarts the app container, restored at the end)
   --resume RUN_ID        finish an interrupted run (sessions with a result are kept)
@@ -70,7 +70,7 @@ USAGE
 
 # --- Options ---------------------------------------------------------------------------------
 
-SUITE="" ARMS="" TASKS="" N="" MODEL="" CURSOR_MODEL="" MAX_TURNS=25 RESUME="" RESTORE_ONLY=""
+SUITE="" ARMS="" TASKS="" N="" MODEL="" CURSOR_MODEL="" MAX_TURNS="" RESUME="" RESTORE_ONLY=""
 REFRESH_CLONES=false DRY_RUN=false ASSUME_YES=false GUARD_SKIP=""
 SETTING_KEYS=() SETTING_VALUES=()
 [[ $# -eq 0 ]] && INTERACTIVE=true || INTERACTIVE=false
@@ -100,7 +100,8 @@ while [[ $# -gt 0 ]]; do
   esac
   shift
 done
-[[ $N =~ ^[0-9]*$ && $MAX_TURNS =~ ^[0-9]+$ ]] || die "--n and --max-turns take numbers"
+[[ $N =~ ^[0-9]*$ ]] || die "--n takes a number"
+[[ -z $MAX_TURNS || $MAX_TURNS =~ ^[0-9]+$ ]] || die "--max-turns takes a number"
 
 tty_read() { # tty_read VAR PROMPT [DEFAULT]
   local answer
@@ -162,6 +163,15 @@ suite_plan() { # sets ARMS TASKS N (keeping any given on the command line)
     *) die "unknown suite: $1" ;;
   esac
   ARMS=${ARMS:-$arms} TASKS=${TASKS:-$tasks} N=${N:-$n}
+}
+
+# screen and full need room above the 25% efficiency bar; a median near the old cap of 25 cannot clear it.
+default_max_turns() {
+  [[ -n $MAX_TURNS ]] && return 0
+  case "$SUITE" in
+    screen | full) MAX_TURNS=40 ;;
+    *) MAX_TURNS=25 ;;
+  esac
 }
 
 menu() {
@@ -771,8 +781,10 @@ if [[ -n $RESUME ]]; then
   SUITE=$(jq -r .suite "$RUN_DIR/run.json") ARMS=${ARMS:-$(jq -r '.arms | join(" ")' "$RUN_DIR/run.json")}
   TASKS=${TASKS:-$(jq -r '.tasks | join(" ")' "$RUN_DIR/run.json")} N=${N:-$(jq -r .n "$RUN_DIR/run.json")}
   MODEL=${MODEL:-$(jq -r '.model // empty' "$RUN_DIR/run.json")}
+  [[ -n $MAX_TURNS ]] || MAX_TURNS=$(jq -r '.max_turns // empty' "$RUN_DIR/run.json")
 fi
 suite_plan "${SUITE:=screen}"
+default_max_turns
 for arm in $ARMS; do arm_spec "$arm" >/dev/null; done
 for task in $TASKS; do task_prompt "$task" >/dev/null || die "unknown task: $task"; done
 
@@ -800,7 +812,7 @@ SESSIONS=0
 for arm in $ARMS; do for task in $TASKS; do SESSIONS=$((SESSIONS + N)); done; done
 TOTAL=$SESSIONS
 
-note "" "graph_mem $GM_VERSION at $BASE_URL; suite $SUITE: ${ARMS:-install test} on ${TASKS:--}, N=$N ($SESSIONS sessions)."
+note "" "graph_mem $GM_VERSION at $BASE_URL; suite $SUITE: ${ARMS:-install test} on ${TASKS:--}, N=$N, max-turns $MAX_TURNS ($SESSIONS sessions)."
 for arm in $ARMS; do
   spec=$(arm_spec "$arm")
   if [[ $spec == cursor ]]; then
@@ -862,11 +874,12 @@ apply_settings
 
 clones_json=$(for clone in "${!CLONE_SHA[@]}"; do jq -cn --arg k "$clone" --arg v "${CLONE_SHA[$clone]}" '{($k): $v}'; done | jq -cs add)
 jq -n --arg id "$RUN_ID" --arg suite "$SUITE" --arg arms "$ARMS" --arg tasks "$TASKS" --argjson n "$N" \
-  --arg model "${MODEL:-}" --arg claude "${CLAUDE_VERSION:-}" --arg gm "$GM_VERSION" --argjson clones "$clones_json" \
-  --argjson baseline "$BASELINE" --argjson settings "${SETTINGS_JSON:-[]}" --arg started "$(date -u +%FT%TZ)" \
+  --argjson turns "$MAX_TURNS" --arg model "${MODEL:-}" --arg claude "${CLAUDE_VERSION:-}" --arg gm "$GM_VERSION" \
+  --argjson clones "$clones_json" --argjson baseline "$BASELINE" --argjson settings "${SETTINGS_JSON:-[]}" \
+  --arg started "$(date -u +%FT%TZ)" \
   '{id: $id, suite: $suite, arms: ($arms | split(" ") | map(select(. != ""))), tasks: ($tasks | split(" ") | map(select(. != ""))),
-    n: $n, model: $model, claude_version: $claude, graph_mem_version: $gm, clones: $clones, baseline: $baseline,
-    settings: $settings, started_at: $started}' >"$RUN_DIR/run.json"
+    n: $n, max_turns: $turns, model: $model, claude_version: $claude, graph_mem_version: $gm, clones: $clones,
+    baseline: $baseline, settings: $settings, started_at: $started}' >"$RUN_DIR/run.json"
 
 case "$SUITE" in
   q3) run_q3 ;;
