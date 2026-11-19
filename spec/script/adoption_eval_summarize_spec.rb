@@ -11,7 +11,8 @@ require "tmpdir"
 #   B0-T2-1  a graph_mem search only after a MultiEdit: not adopted
 #   R-T1-1   the skill, a search before an Edit in the same message, a denied graph_write (counted once)
 #   H-T1-1   a hook event, a malformed line, no edit, no result (turns, tokens and cost are n/a)
-#   K2-T1-1  a Cursor CLI stream: an MCP get_context, then an edit
+#   K2-T1-1  a Cursor CLI stream: a tool lookup, an MCP get_context, a denied shell call, an edit, a
+#            rejected graph_write
 #   synth-notes  not named <arm>-<task>-<run>.jsonl: skipped
 RSpec.describe "script/adoption_eval/summarize.rb" do
   let(:root) { File.expand_path("../..", __dir__) }
@@ -45,7 +46,10 @@ RSpec.describe "script/adoption_eval/summarize.rb" do
                                     "mean_gm_calls" => "2.0", "median_tokens" => "300")
     expect(rows["H/T1"]).to include("adopted" => "1", "hook_fired" => "1", "median_first_gm_turn" => "1",
                                     "median_turns" => "n/a", "median_tokens" => "n/a", "median_cost" => "n/a")
-    expect(rows["K2/T1"]).to include("adopted" => "1", "ctx_before_edit" => "1", "median_turns" => "n/a")
+    # The Cursor CLI shape as checked on agent 2026.11.19: a tool lookup, get_context, a denied shell call,
+    # an edit, then a rejected graph_write; camelCase usage and no num_turns.
+    expect(rows["K2/T1"]).to include("adopted" => "1", "ctx_before_edit" => "1", "toolsearch_gm" => "1", "mean_gm_calls" => "2.0",
+                                     "persist_attempts" => "1", "median_tokens" => "6928", "median_turns" => "n/a")
   end
 
   it "prints an aligned table with rates as count/n, and a footer of skipped lines and files" do

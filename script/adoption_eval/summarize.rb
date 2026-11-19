@@ -48,6 +48,7 @@ module AdoptionEval
       @messages = []
       @denied = {}
       @flags = Hash.new(false)
+      @cursor_calls = {}
       lines.each { |line| read(line) }
     end
 
@@ -82,7 +83,7 @@ module AdoptionEval
     def dispatch(event)
       case event["type"]
       when "assistant" then assistant(event)
-      when "tool_call" then cursor_call(event) if event["subtype"] == "started"
+      when "tool_call" then event["subtype"] == "started" ? cursor_call(event) : cursor_done(event)
       when "result" then result(event)
       end
       hook(event) if event["type"] == "system" && event["subtype"].to_s.start_with?("hook")
@@ -125,18 +126,51 @@ module AdoptionEval
       [ @result["result"], @result["subtype"], @result["error"] ].any? { |value| value.to_s.match?(LIMIT_WORDS) }
     end
 
-    # Cursor CLI: tool_call.<kind>ToolCall, an MCP call's name under args; matched by name only.
+    # Cursor CLI (agent -p --output-format stream-json, checked on 2026.11.19): each tool_call event holds
+    # one <kind>ToolCall object next to toolCallId and timings. An MCP call names its server in
+    # args.providerIdentifier (args.name is "<server>-<tool>"); getMcpToolsToolCall is Cursor's tool
+    # lookup; editToolCall changes a file. Names only: arguments and results are never read.
     def cursor_call(event)
-      kind, call = (event["tool_call"] || {}).first
+      kind, call = cursor_tool(event)
       return unless kind
 
-      names = [ call.is_a?(Hash) && call.dig("args", "name"), call.is_a?(Hash) && call.dig("args", "toolName") ].grep(String)
       index = @messages.size.zero? ? message_index(nil) : @messages.size - 1
-      if (gm = names.find { |name| name.include?("graph_mem") })
-        @calls << [ index, gm.split(/__|[-:]/).last ]
-      elsif kind.match?(/edit|write/i)
-        @calls << [ index, :edit ]
+      case kind
+      when "mcpToolCall"
+        name = cursor_gm_tool(call["args"] || {})
+        @calls << [ index, name ] if name
+        @cursor_calls[event["tool_call"]["toolCallId"]] = name if name
+      when "getMcpToolsToolCall" then toolsearch(cursor_lookup(call["args"] || {}))
+      when /\A(edit|write|delete)ToolCall\z/ then @calls << [ index, :edit ]
       end
+    end
+
+    # A completed call refused by the permissions (permissionDenied, or rejected for an MCP tool).
+    def cursor_done(event)
+      _kind, call = cursor_tool(event)
+      result = call.is_a?(Hash) ? call["result"] : nil
+      return unless result.is_a?(Hash) && (result.key?("permissionDenied") || result.key?("rejected"))
+
+      id = event.dig("tool_call", "toolCallId")
+      deny(id, "mcp__graph_mem__#{@cursor_calls[id]}") if @cursor_calls.key?(id)
+    end
+
+    def cursor_tool(event)
+      tool_call = event["tool_call"]
+      return unless tool_call.is_a?(Hash)
+
+      tool_call.find { |key, value| key.end_with?("ToolCall") && value.is_a?(Hash) }
+    end
+
+    def cursor_gm_tool(args)
+      server = args["providerIdentifier"] || args["serverIdentifier"] || args["name"].to_s.split("-").first
+      return unless server.to_s.include?("graph_mem")
+
+      (args["toolName"] || args["name"].to_s.split("-", 2).last).to_s
+    end
+
+    def cursor_lookup(args)
+      args.values_at("server", "toolName").grep(String).then { |values| values.include?("graph_mem") ? values + [ "graph_mem" ] : values }
     end
 
     def hook(event)
@@ -158,7 +192,9 @@ module AdoptionEval
       usage = @result&.dig("usage")
       return unless usage.is_a?(Hash)
 
-      %w[input_tokens output_tokens cache_creation_input_tokens cache_read_input_tokens].sum { |key| usage[key].to_i }
+      # Claude Code's snake_case keys, or the Cursor CLI's camelCase ones.
+      %w[input_tokens output_tokens cache_creation_input_tokens cache_read_input_tokens
+         inputTokens outputTokens cacheWriteTokens cacheReadTokens].sum { |key| usage[key].to_i }
     end
   end
 
