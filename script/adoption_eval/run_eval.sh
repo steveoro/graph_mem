@@ -103,7 +103,7 @@ done
 
 tty_read() { # tty_read VAR PROMPT [DEFAULT]
   local answer
-  { true </dev/tty; } 2>/dev/null || die "this step needs a terminal: $2"
+  (exec </dev/tty) 2>/dev/null || die "this step needs a terminal: $2"
   read -r -p "$2${3:+ [$3]} " answer </dev/tty || die "this step needs a terminal: $2"
   printf -v "$1" '%s' "${answer:-${3:-}}"
 }
@@ -217,7 +217,7 @@ restore_paths() {
     rm -rf "$path"
     [[ -e $BACKUP/$key ]] && cp -a "$BACKUP/$key" "$path"
     count=$((count + 1))
-    [[ -e $BACKUP/$key.newdir ]] && rmdir -p "$(cat "$BACKUP/$key.newdir")" 2>/dev/null || true
+    if [[ -e $BACKUP/$key.newdir ]]; then rmdir -p "$(cat "$BACKUP/$key.newdir")" 2>/dev/null || true; fi
   done < <(find "$BACKUP" -maxdepth 1 -name '*.path' | sort)
   echo restored >"$BACKUP/state"
   note "Restored $count user-level path(s) as they were before the run."
@@ -282,6 +282,8 @@ server_up() { curl -fsS --noproxy '*' -m 5 "$BASE_URL/up" >/dev/null 2>&1; }
 # Which user-level texts exist before the run, and whether they mention graph_mem (counts only).
 baseline_json() {
   local label path exists mentions rows=()
+  # The part before "|" is a display label, so its "~" is meant literally.
+  # shellcheck disable=SC2088
   local -a checks=("~/.claude/CLAUDE.md|$HOME/.claude/CLAUDE.md" "~/.claude/rules/*|$HOME/.claude/rules"
     "<projects-dir>/CLAUDE.md|$PROJECTS_DIR/CLAUDE.md" "~/.claude/skills/graph-mem-mcp-toolset|$HOME/.claude/skills/graph-mem-mcp-toolset"
     "<projects-dir>/.claude/skills/graph-mem-mcp-toolset|$PROJECTS_DIR/.claude/skills/graph-mem-mcp-toolset")
@@ -375,6 +377,7 @@ build_variants() {
   cp -r "$REPO/skills/graph-mem-mcp-toolset" "$WORK/skill-new/"
   cp -r "$REPO/skills/graph-mem-mcp-toolset" "$WORK/skill-lite/"
   # The readonly variant: no Persist section, no line that names a write tool or the persist prompt.
+  # shellcheck disable=SC2016 # Ruby source, single-quoted on purpose
   ruby -e '
     text = File.read(ARGV[0])
     text = text.gsub(/^## Persist.*?(?=^## )/m, "")
@@ -446,7 +449,7 @@ run_cursor_session() { # run_cursor_session ARM TASK RUN LOG
 
 TOTAL=0 DONE=0
 run_sessions() {
-  local arm task i log facts adopted turns tokens complete limited kind
+  local arm task i log adopted turns tokens complete limited kind
   for arm in $ARMS; do
     kind=$(arm_spec "$arm")
     for task in $TASKS; do
@@ -513,7 +516,7 @@ restart_app() {
 }
 
 apply_settings() {
-  local out json args=() i
+  local out json args=() i ok=""
   [[ ${#SETTING_KEYS[@]} -gt 0 ]] || return 0
   need docker
   out=$(app_runner "$SETTINGS_READ" "${SETTING_KEYS[@]}") || die "$(sed -n 's/^ADOPTION_EVAL_ERROR=//p' <<<"$out" | head -1)"
@@ -530,7 +533,8 @@ apply_settings() {
   note "The app container restarts now and again at the end: open MCP sessions (this one's included) close, running jobs stop."
   $ASSUME_YES || { tty_read ok "Change the settings? [y/N]" n; [[ $ok == [yY]* ]] || die "settings left unchanged"; }
   SETTINGS_CHANGED=true
-  out=$(app_runner "$SETTINGS_WRITE" "${args[@]}") && grep -q ADOPTION_EVAL_OK <<<"$out" || die "writing the settings failed"
+  out=$(app_runner "$SETTINGS_WRITE" "${args[@]}") || die "writing the settings failed: $(sed -n 's/^ADOPTION_EVAL_ERROR=//p' <<<"$out" | head -1)"
+  grep -q ADOPTION_EVAL_OK <<<"$out" || die "writing the settings failed"
   restart_app
 }
 
@@ -546,7 +550,7 @@ restore_settings() {
 CURSOR_READY=false CURSOR_ARM=""
 prepare_cursor() {
   $CURSOR_READY && return 0
-  local allow=() tool rule_text
+  local allow=() tool
   if [[ $SUITE != cursor-ide ]]; then
     need agent
     until env -u CURSOR_API_KEY agent status 2>/dev/null | grep -q 'Logged in'; do
@@ -704,7 +708,9 @@ GM_VERSION=$(server_version)
 [[ -n $GM_VERSION ]] || die "graph_mem's MCP initialize failed (check the token in your graph_mem entry)"
 if $CLAUDE_ARMS; then
   [[ -n $MODEL ]] || MODEL=$(jq -r '.model // empty' "$HOME/.claude/settings.json" 2>/dev/null || true)
-  [[ -n $MODEL ]] || { $ASSUME_YES && MODEL=opus || tty_read MODEL "Claude Code model alias?" opus; }
+  if [[ -z $MODEL ]]; then
+    if $ASSUME_YES; then MODEL=opus; else tty_read MODEL "Claude Code model alias?" opus; fi
+  fi
   CLAUDE_VERSION=$(claude --version 2>/dev/null | head -1 || true)
   [[ -n ${ANTHROPIC_API_KEY:-} ]] && note "ANTHROPIC_API_KEY is set: the runs unset it, so they use your Claude login."
 fi
@@ -716,7 +722,12 @@ note "" "graph_mem $GM_VERSION at $BASE_URL; suite $SUITE: ${ARMS:-install test}
 for arm in $ARMS; do
   spec=$(arm_spec "$arm")
   if [[ $spec == cursor ]]; then
-    note "  $arm: Cursor CLI ($([[ $arm == K0 ]] && echo nothing added || { [[ $arm == K1 ]] && echo 'the User Rule, pasted by you' || echo 'the sessionStart hook'; }))"
+    case "$arm" in
+      K0) lever="nothing added" ;;
+      K1) lever="the User Rule, pasted by you" ;;
+      *) lever="the sessionStart hook" ;;
+    esac
+    note "  $arm: Cursor CLI ($lever)"
   else
     read -r rule skill hook mcp <<<"$spec"
     note "  $arm: rule $rule, skill $skill, hook $hook, MCP $mcp"
@@ -729,6 +740,7 @@ if $DRY_RUN; then
   rm -rf "$SECRETS"
   exit 0
 fi
+ok=""
 if ! $ASSUME_YES; then
   tty_read ok "Start? [y/N]" n
   [[ $ok == [yY]* ]] || exit 0
