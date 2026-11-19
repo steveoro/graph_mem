@@ -55,7 +55,8 @@ Options:
   --setting KEY=VALUE    change a graph_mem setting in the production container for this run
                          (repeatable; restarts the app container, restored at the end)
   --resume RUN_ID        finish an interrupted run (sessions with a result are kept)
-  --restore RUN_ID       only put back what a killed run changed, then exit
+  --restore RUN_ID       put back what a killed run left (user-level files, graph_mem settings,
+                         clones, temp dirs), then exit; a new run refuses to start until then
   --refresh-clones       move the scratch clones' pinned commit to origin's default branch
   --guard-skip A,B       repos under the projects folder the edit guard ignores
   --dry-run              print the plan and exit, changing nothing
@@ -182,7 +183,7 @@ menu() {
 
 # --- State shared with the cleanup trap ------------------------------------------------------
 
-RUN_ID="" RUN_DIR="" SECRETS="" WORK="" BACKUP="" SETTINGS_CHANGED=false CLEANED=false
+RUN_ID="" RUN_DIR="" SECRETS="" WORK="" BACKUP="" SETTINGS_CHANGED=false CLEANED=false SESSION_PID=""
 ORIGINAL_SETTINGS=()
 
 USER_PATHS=("$HOME/.claude/rules/graph-mem.md" "$HOME/.claude/skills/graph-mem-mcp-toolset"
@@ -199,48 +200,82 @@ backup_paths() {
   mkdir -p "$BACKUP" && chmod 700 "$BACKUP"
   for path in "$@"; do
     key=$(backup_key "$path")
-    [[ -e $BACKUP/$key || -e $BACKUP/$key.absent ]] && continue
-    if [[ -e $path ]]; then cp -a "$path" "$BACKUP/$key"; else printf '%s\n' "$path" >"$BACKUP/$key.absent"; fi
+    [[ -e $BACKUP/$key || -L $BACKUP/$key || -e $BACKUP/$key.absent ]] && continue
+    # -L too: a dangling symlink is kept as a link (cp -a copies the link, not its target).
+    if [[ -e $path || -L $path ]]; then cp -a "$path" "$BACKUP/$key"; else printf '%s\n' "$path" >"$BACKUP/$key.absent"; fi
     [[ -d $(dirname "$path") ]] || printf '%s\n' "$(dirname "$path")" >"$BACKUP/$key.newdir"
     printf '%s\n' "$path" >"$BACKUP/$key.path"
   done
   echo taken >"$BACKUP/state"
 }
 
-# Puts every backed-up path back exactly as it was, and removes folders the run created.
+# Puts every backed-up path back exactly as it was (a symlink as a symlink), and removes folders
+# the run created. The copies (which may hold tokens) are deleted once all of them are back; if one
+# fails, everything stays and the state stays "taken", so --restore can retry.
 restore_paths() {
-  local marker key path count=0
+  local marker key path count=0 failed=0
   [[ -d $BACKUP && $(cat "$BACKUP/state" 2>/dev/null) == taken ]] || return 0
   while IFS= read -r marker; do
     key=$(basename "$marker" .path)
     path=$(cat "$marker")
     rm -rf "$path"
-    [[ -e $BACKUP/$key ]] && cp -a "$BACKUP/$key" "$path"
+    if [[ -e $BACKUP/$key || -L $BACKUP/$key ]]; then cp -a "$BACKUP/$key" "$path" || failed=1; fi
     count=$((count + 1))
     if [[ -e $BACKUP/$key.newdir ]]; then rmdir -p "$(cat "$BACKUP/$key.newdir")" 2>/dev/null || true; fi
   done < <(find "$BACKUP" -maxdepth 1 -name '*.path' | sort)
+  if [[ $failed -ne 0 ]]; then
+    note "Couldn't put everything back: the copies stay in $BACKUP. Retry with --restore ${BACKUP%/.backup}."
+    return 0
+  fi
+  find "$BACKUP" -mindepth 1 -maxdepth 1 -name 'p%*' ! -name '*.path' ! -name '*.absent' ! -name '*.newdir' -exec rm -rf {} +
   echo restored >"$BACKUP/state"
   note "Restored $count user-level path(s) as they were before the run."
+}
+
+# Everything a killed run left: the user-level paths, the production settings, the clones and the
+# private temp dirs, each recorded in $BACKUP when it was changed or created.
+restore_run() {
+  local name sha dir
+  restore_paths
+  if [[ -s $BACKUP/settings ]]; then
+    mapfile -t ORIGINAL_SETTINGS <"$BACKUP/settings"
+    SETTINGS_CHANGED=true
+  fi
+  if [[ -s $BACKUP/clones ]]; then
+    while read -r name sha; do CLONE_SHA[$name]=$sha; done <"$BACKUP/clones"
+  fi
+  if [[ -s $BACKUP/tmpdirs ]]; then
+    while IFS= read -r dir; do [[ $(basename "$dir") == adoption-eval* ]] && rm -rf "$dir"; done <"$BACKUP/tmpdirs"
+    rm -f "$BACKUP/tmpdirs"
+  fi
 }
 
 cleanup() {
   $CLEANED && return 0
   CLEANED=true
   set +e
+  stop_session
   restore_paths
   for clone in "${!CLONE_SHA[@]}"; do reset_clone "$clone" 2>/dev/null; done
   $SETTINGS_CHANGED && restore_settings
   [[ -n $SECRETS ]] && rm -rf "$SECRETS"
   [[ -n $WORK ]] && rm -rf "$WORK"
+  [[ -n $BACKUP && -d $BACKUP ]] && rm -f "$BACKUP/tmpdirs"
   return 0
 }
 
-if [[ -n $RESTORE_ONLY ]]; then
-  BACKUP=$EVAL_DIR/runs/$RESTORE_ONLY/.backup
-  [[ -d $BACKUP ]] || die "no backup for run $RESTORE_ONLY"
-  restore_paths
-  exit 0
-fi
+# A session runs in the background behind `wait`, so a SIGTERM to this script alone is handled at
+# once: the trap stops the session (timeout passes the signal on) and restores. The redirections
+# belong to the session only: on the function call they would also swallow the trap's messages.
+run_session() { # run_session LOG COMMAND...
+  local log=$1
+  shift
+  "$@" >"$log" 2>/dev/null </dev/null &
+  SESSION_PID=$!
+  wait "$SESSION_PID" || true
+  SESSION_PID=""
+}
+stop_session() { if [[ -n $SESSION_PID ]]; then kill "$SESSION_PID" 2>/dev/null || true; fi; }
 
 # --- Preflight -------------------------------------------------------------------------------
 
@@ -253,8 +288,9 @@ build_mcp_configs() {
   chmod 700 "$SECRETS"
   entry=$(jq -c '.mcpServers.graph_mem // empty' "$HOME/.claude.json" 2>/dev/null || true)
   if [[ -z $entry ]]; then
-    token=$(sed -n 's/^GRAPH_MEM_MCP_TOKEN=//p' "$REPO/.env" 2>/dev/null | tr -d '"' | head -1 || true)
-    entry=$(jq -cn --arg token "$token" '{type: "http", url: "http://localhost:3030/mcp", headers: (if $token == "" then {} else {Authorization: "Bearer \($token)"} end)}')
+    token=$(sed -n 's/^GRAPH_MEM_MCP_TOKEN=//p' "${ADOPTION_ENV_FILE:-$REPO/.env}" 2>/dev/null | tr -d '"' | head -1 || true)
+    # On stdin (printf is a builtin): the token never shows in a process list.
+    entry=$(printf '%s' "$token" | jq -Rcs '. as $token | {type: "http", url: "http://localhost:3030/mcp", headers: (if $token == "" then {} else {Authorization: "Bearer \($token)"} end)}')
   fi
   local mask
   mask=$(umask)
@@ -378,7 +414,7 @@ build_variants() {
   cp -r "$REPO/skills/graph-mem-mcp-toolset" "$WORK/skill-lite/"
   # The readonly variant: no Persist section, no line that names a write tool or the persist prompt.
   # shellcheck disable=SC2016 # Ruby source, single-quoted on purpose
-  ruby -e '
+  ruby -E UTF-8:UTF-8 -e '
     text = File.read(ARGV[0])
     text = text.gsub(/^## Persist.*?(?=^## )/m, "")
     File.write(ARGV[0], text.lines.reject { |line| line.match?(/graph_write|graph_edit|graph_delete|`persist`/) }.join)
@@ -396,7 +432,8 @@ apply_arm() {
   CURRENT_ARM=$1
   mkdir -p "$HOME/.claude/skills"
   if [[ $rule == on ]]; then
-    mkdir -p "$HOME/.claude/rules" && cp "$REPO/docs/rules/graph_mem_user_rule.md" "$HOME/.claude/rules/graph-mem.md"
+    # install replaces a symlink instead of writing through it (here and below).
+    mkdir -p "$HOME/.claude/rules" && install -m 644 "$REPO/docs/rules/graph_mem_user_rule.md" "$HOME/.claude/rules/graph-mem.md"
   else rm -f "$HOME/.claude/rules/graph-mem.md"; fi
   rm -rf "$HOME/.claude/skills/graph-mem-mcp-toolset"
   [[ $skill != none ]] && cp -r "$WORK/skill-$skill/graph-mem-mcp-toolset" "$HOME/.claude/skills/"
@@ -419,7 +456,7 @@ apply_arm() {
 
 # "adopted turns tokens complete limited" for one log, from summarize.rb (counts only).
 log_facts() {
-  ruby -r "$SUMMARIZE" -e '
+  ruby -E UTF-8:UTF-8 -r "$SUMMARIZE" -e '
     m = AdoptionEval::Session.from_file(ARGV[0]).metrics
     puts [m[:adopted] ? "Y" : "N", m[:turns] || "-", m[:tokens] || "-", m[:complete], m[:limited]].join(" ")
   ' "$1"
@@ -429,20 +466,20 @@ run_claude_session() { # run_claude_session ARM TASK RUN LOG
   local prompt allowed=()
   prompt=$(task_prompt "$2")
   for tool in "${READ_TOOLS[@]}"; do allowed+=("mcp__graph_mem__$tool"); done
-  (cd "$PROJECTS_DIR" && env -u ANTHROPIC_API_KEY timeout "${ADOPTION_SESSION_TIMEOUT:-30m}" claude -p "$prompt" \
+  run_session "$4" env -C "$PROJECTS_DIR" -u ANTHROPIC_API_KEY timeout "${ADOPTION_SESSION_TIMEOUT:-30m}" claude -p "$prompt" \
     --model "$MODEL" --output-format stream-json --verbose \
     --mcp-config "$MCP_FILE" --strict-mcp-config --settings "$SETTINGS_FILE" \
     --permission-mode acceptEdits --allowedTools "${allowed[@]}" \
-    --max-turns "$MAX_TURNS" --no-session-persistence) >"$4" 2>/dev/null </dev/null || true
+    --max-turns "$MAX_TURNS" --no-session-persistence
 }
 
 run_cursor_session() { # run_cursor_session ARM TASK RUN LOG
   local prompt
   prompt=$(task_prompt "$2")
   rm -f "$WORK/cursor-hook-marker"
-  (cd "$PROJECTS_DIR" && env -u CURSOR_API_KEY timeout "${ADOPTION_SESSION_TIMEOUT:-30m}" agent -p "$prompt" \
+  run_session "$4" env -C "$PROJECTS_DIR" -u CURSOR_API_KEY timeout "${ADOPTION_SESSION_TIMEOUT:-30m}" agent -p "$prompt" \
     --output-format stream-json --approve-mcps --trust --workspace "$PROJECTS_DIR" --sandbox enabled \
-    ${CURSOR_MODEL:+--model "$CURSOR_MODEL"}) >"$4" 2>/dev/null </dev/null || true
+    ${CURSOR_MODEL:+--model "$CURSOR_MODEL"}
   [[ -e $WORK/cursor-hook-marker ]] && fired=1 || fired=0
   echo "$1,$2,$3,$fired" >>"$RUN_DIR/cursor-hooks.csv"
 }
@@ -533,6 +570,7 @@ apply_settings() {
   note "The app container restarts now and again at the end: open MCP sessions (this one's included) close, running jobs stop."
   $ASSUME_YES || { tty_read ok "Change the settings? [y/N]" n; [[ $ok == [yY]* ]] || die "settings left unchanged"; }
   SETTINGS_CHANGED=true
+  printf '%s\n' "${ORIGINAL_SETTINGS[@]}" >"$BACKUP/settings" # for --restore after a hard kill
   out=$(app_runner "$SETTINGS_WRITE" "${args[@]}") || die "writing the settings failed: $(sed -n 's/^ADOPTION_EVAL_ERROR=//p' <<<"$out" | head -1)"
   grep -q ADOPTION_EVAL_OK <<<"$out" || die "writing the settings failed"
   restart_app
@@ -540,7 +578,11 @@ apply_settings() {
 
 restore_settings() {
   note "Restoring the graph_mem settings..."
-  app_runner "$SETTINGS_WRITE" "${ORIGINAL_SETTINGS[@]}" | grep -q ADOPTION_EVAL_OK || note "Restoring the settings failed: set them back in Settings."
+  if app_runner "$SETTINGS_WRITE" "${ORIGINAL_SETTINGS[@]}" | grep -q ADOPTION_EVAL_OK; then
+    rm -f "$BACKUP/settings"
+  else
+    note "Restoring the settings failed: set them back in Settings, or retry with --restore."
+  fi
   restart_app
   SETTINGS_CHANGED=false
 }
@@ -548,6 +590,9 @@ restore_settings() {
 # --- Cursor ----------------------------------------------------------------------------------
 
 CURSOR_READY=false CURSOR_ARM=""
+
+# A config file's content (read through a symlink), or the given default when it's missing or empty.
+current_or() { if [[ -s $1 ]]; then cat "$1"; else printf '%s\n' "$2"; fi; }
 prepare_cursor() {
   $CURSOR_READY && return 0
   local allow=() tool
@@ -560,19 +605,19 @@ prepare_cursor() {
   fi
   backup_paths "${CURSOR_PATHS[@]}"
   mkdir -p "$HOME/.cursor"
-  [[ -s $HOME/.cursor/mcp.json ]] || echo '{"mcpServers": {}}' >"$HOME/.cursor/mcp.json"
   # Your graph_mem entry (or the eval one) on /mcp/readonly with its own client id; the read tools
-  # allowed, shell and the write tools denied.
-  jq --slurpfile e "$SECRETS/entry.json" '.mcpServers.graph_mem = ((.mcpServers.graph_mem // ($e[0] | del(.type)))
-    | .url |= sub("/mcp(/.*)?$"; "/mcp/readonly") | .headers["X-MCP-Client"] = "adoption-eval-cursor")' \
-    "$HOME/.cursor/mcp.json" >"$WORK/cursor-mcp.json"
-  cat "$WORK/cursor-mcp.json" >"$HOME/.cursor/mcp.json"
+  # allowed, shell and the write tools denied. Built in $WORK, then installed: a symlinked file is
+  # replaced, never written through, and the token-bearing file is 0600.
+  current_or "$HOME/.cursor/mcp.json" '{"mcpServers": {}}' |
+    jq --slurpfile e "$SECRETS/entry.json" '.mcpServers.graph_mem = ((.mcpServers.graph_mem // ($e[0] | del(.type)))
+      | .url |= sub("/mcp(/.*)?$"; "/mcp/readonly") | .headers["X-MCP-Client"] = "adoption-eval-cursor")' >"$WORK/cursor-mcp.json"
+  install -m 600 "$WORK/cursor-mcp.json" "$HOME/.cursor/mcp.json"
   for tool in "${READ_TOOLS[@]}"; do allow+=("Mcp(graph_mem:$tool)"); done
-  [[ -s $HOME/.cursor/cli-config.json ]] || echo '{}' >"$HOME/.cursor/cli-config.json"
-  jq --args '.permissions.allow = ((.permissions.allow // []) + $ARGS.positional)
-    | .permissions.deny = ((.permissions.deny // []) + ["Shell(*)", "Mcp(graph_mem:graph_write)", "Mcp(graph_mem:graph_edit)", "Mcp(graph_mem:graph_delete)"])' \
-    "${allow[@]}" <"$HOME/.cursor/cli-config.json" >"$WORK/cursor-cli.json"
-  cat "$WORK/cursor-cli.json" >"$HOME/.cursor/cli-config.json"
+  current_or "$HOME/.cursor/cli-config.json" '{}' |
+    jq --args '.permissions.allow = ((.permissions.allow // []) + $ARGS.positional)
+      | .permissions.deny = ((.permissions.deny // []) + ["Shell(*)", "Mcp(graph_mem:graph_write)", "Mcp(graph_mem:graph_edit)", "Mcp(graph_mem:graph_delete)"])' \
+      "${allow[@]}" >"$WORK/cursor-cli.json"
+  install -m 600 "$WORK/cursor-cli.json" "$HOME/.cursor/cli-config.json"
   CURSOR_READY=true
   [[ $SUITE == cursor-ide ]] && pause "In the Cursor IDE, reload the MCP servers (Settings > MCP), so graph_mem uses the eval profile."
   return 0
@@ -586,7 +631,8 @@ cursor_arm() {
   rm -f "$HOME/.cursor/hooks/graph_mem_session_start_cursor.sh"
   local saved
   saved=$BACKUP/$(backup_key "$HOME/.cursor/hooks.json")
-  if [[ -e $saved ]]; then cp -a "$saved" "$HOME/.cursor/hooks.json"; else rm -f "$HOME/.cursor/hooks.json"; fi
+  rm -f "$HOME/.cursor/hooks.json"
+  if [[ -e $saved || -L $saved ]]; then cp -a "$saved" "$HOME/.cursor/hooks.json"; fi
   case "$1" in
     K1)
       note "" "Paste this into Cursor: Settings > Customize > Rules > User Rules:" ""
@@ -598,10 +644,10 @@ cursor_arm() {
       awk -v m="GRAPH_MEM_HOOK_MARKER=\"$WORK/cursor-hook-marker\"" 'done == 0 && !/^#/ { print m; done = 1 } { print }' \
         "$REPO/script/agent_hooks/graph_mem_session_start_cursor.sh" >"$HOME/.cursor/hooks/graph_mem_session_start_cursor.sh"
       chmod 755 "$HOME/.cursor/hooks/graph_mem_session_start_cursor.sh"
-      [[ -s $HOME/.cursor/hooks.json ]] || echo '{"version": 1, "hooks": {}}' >"$HOME/.cursor/hooks.json"
-      jq '.version //= 1 | .hooks.sessionStart = ((.hooks.sessionStart // []) + [{"command": "./hooks/graph_mem_session_start_cursor.sh"}])' \
-        "$HOME/.cursor/hooks.json" >"$WORK/cursor-hooks.json"
-      cat "$WORK/cursor-hooks.json" >"$HOME/.cursor/hooks.json"
+      current_or "$HOME/.cursor/hooks.json" '{"version": 1, "hooks": {}}' |
+        jq '.version //= 1 | .hooks.sessionStart = ((.hooks.sessionStart // []) + [{"command": "./hooks/graph_mem_session_start_cursor.sh"}])' \
+          >"$WORK/cursor-hooks.json"
+      install -m 644 "$WORK/cursor-hooks.json" "$HOME/.cursor/hooks.json"
       ;;
   esac
   CURSOR_ARM=$1
@@ -682,6 +728,30 @@ q3_check() { # prints the failed checks
 
 # --- Main ------------------------------------------------------------------------------------
 
+# Cleanup can run from the first temp dir on: it only undoes what was recorded.
+trap cleanup EXIT
+trap 'stop_session; exit 130' INT TERM
+
+# One run at a time: two runs would take each other's levers as the "before" state.
+take_lock() {
+  need flock
+  mkdir -p "$EVAL_DIR" && chmod 700 "$EVAL_DIR"
+  exec 9>"$EVAL_DIR/.lock"
+  flock -n 9 || die "another run_eval.sh is running (lock: $EVAL_DIR/.lock)"
+}
+
+if [[ -n $RESTORE_ONLY ]]; then
+  take_lock
+  RUN_DIR=$EVAL_DIR/runs/$RESTORE_ONLY BACKUP=$EVAL_DIR/runs/$RESTORE_ONLY/.backup
+  [[ -d $BACKUP ]] || die "no backup for run $RESTORE_ONLY"
+  if [[ -s $BACKUP/settings ]]; then
+    need docker
+    build_mcp_configs
+  fi
+  restore_run
+  exit 0
+fi
+
 $INTERACTIVE && [[ -r /dev/tty ]] && menu
 if [[ -n $RESUME ]]; then
   RUN_DIR=$EVAL_DIR/runs/$RESUME
@@ -746,19 +816,34 @@ if ! $ASSUME_YES; then
   [[ $ok == [yY]* ]] || exit 0
 fi
 
+take_lock
+# A run that didn't put things back (killed) must be restored first, or this one would record its
+# leftovers as the "before" state.
+for state in "$EVAL_DIR"/runs/*/.backup/state; do
+  [[ -e $state ]] || continue
+  stale=$(basename "$(dirname "$(dirname "$state")")")
+  [[ $stale == "${RESUME:-}" ]] && continue
+  if [[ $(cat "$state") == taken || -s $(dirname "$state")/settings ]]; then
+    die "run $stale didn't put things back (killed?): run script/adoption_eval/run_eval.sh --restore $stale first"
+  fi
+done
 RUN_ID=${RESUME:-$(date -u +%Y%m%dT%H%M%SZ)}
 RUN_DIR=$EVAL_DIR/runs/$RUN_ID
 BACKUP=$RUN_DIR/.backup
 mkdir -p "$RUN_DIR/logs" "$EVAL_DIR/reports"
-chmod 700 "$EVAL_DIR" "$RUN_DIR"
-trap cleanup EXIT
-trap 'exit 130' INT TERM
-restore_paths # a killed earlier attempt of this run left its changes: undo them first
-[[ -n $RESUME ]] && rm -rf "$BACKUP"
+chmod 700 "$RUN_DIR"
+note "Run $RUN_ID. If it stops: --resume $RUN_ID; after a hard kill: --restore $RUN_ID first."
+if [[ -n $RESUME ]]; then
+  restore_run # a killed earlier attempt of this run left its changes: undo them first
+  $SETTINGS_CHANGED && restore_settings
+  rm -rf "$BACKUP"
+fi
 BASELINE=$(baseline_json)
 backup_paths "${USER_PATHS[@]}"
 build_variants
+printf '%s\n' "$SECRETS" "$WORK" >"$BACKUP/tmpdirs" # for --restore after a hard kill
 [[ $SUITE == q3 ]] || for clone in "${CLONES[@]}"; do prepare_clone "$clone"; done
+for clone in "${!CLONE_SHA[@]}"; do echo "$clone ${CLONE_SHA[$clone]}"; done >"$BACKUP/clones"
 GUARD_BEFORE=$(guard_state)
 SETTINGS_JSON=[]
 apply_settings
@@ -786,6 +871,6 @@ jq --arg finished "$(date -u +%FT%TZ)" --arg auth "$auth" --arg cursor "${CURSOR
   '.finished_at = $finished | .auth = $auth | .cursor_version = $cursor | .cursor_model = $cmodel' \
   "$RUN_DIR/run.json" >"$RUN_DIR/run.json.tmp" && mv "$RUN_DIR/run.json.tmp" "$RUN_DIR/run.json"
 cleanup
-report=$(ruby "$REPO/script/adoption_eval/report.rb" "$RUN_DIR")
+report=$(ruby -E UTF-8:UTF-8 "$REPO/script/adoption_eval/report.rb" "$RUN_DIR")
 cp "$report" "$EVAL_DIR/reports/$RUN_ID-report.md"
 note "" "Report: $EVAL_DIR/reports/$RUN_ID-report.md (counts only; the logs stay in $RUN_DIR)"

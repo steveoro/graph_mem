@@ -18,6 +18,7 @@ RSpec.describe "script/adoption_eval/run_eval.sh" do
     # /up answers; an MCP initialize gets a version; every call's arguments are logged.
     "curl" => <<~'SH',
       printf '%s\n' "$*" >>"$FAKE_LOG/curl.args"
+      [ -n "${FAKE_DOWN:-}" ] && exit 7
       case "$*" in *initialize*) printf '%s\n' '{"result":{"serverInfo":{"version":"9.9.9-synth"}}}' ;; esac
       exit 0
     SH
@@ -26,6 +27,7 @@ RSpec.describe "script/adoption_eval/run_eval.sh" do
     "claude" => <<~'SH',
       [ "$1" = "--version" ] && { echo "9.9.9-synth (Claude Code)"; exit 0; }
       printf '%s\n' "$*" >>"$FAKE_LOG/claude.args"
+      [ -n "${FAKE_SLEEP:-}" ] && sleep "$FAKE_SLEEP"
       settings=""; prev=""
       for arg in "$@"; do [ "$prev" = "--settings" ] && settings=$arg; prev=$arg; done
       echo '{"type":"system","subtype":"init","apiKeySource":"none"}'
@@ -115,11 +117,15 @@ RSpec.describe "script/adoption_eval/run_eval.sh" do
     Bundler.with_unbundled_env { Open3.capture3(env(extra), "bash", script, *args, stdin_data: "") }
   end
 
-  # Every file under HOME with its content, to compare before and after a run.
-  def home_tree
-    Dir.glob("**/*", File::FNM_DOTMATCH, base: path("home")).sort.to_h do |entry|
-      full = path("home", entry)
-      [ entry, File.file?(full) ? File.read(full) : :dir ]
+  # Every entry under a folder (HOME by default): a symlink as its target, a file with its content.
+  def home_tree(dir = path("home"))
+    Dir.glob("**/*", File::FNM_DOTMATCH, base: dir).sort.to_h do |entry|
+      full = File.join(dir, entry)
+      value = if File.symlink?(full) then "-> #{File.readlink(full)}"
+      elsif File.file?(full) then [ File.read(full), File.stat(full).mode.to_s(8) ]
+      else :dir
+      end
+      [ entry, value ]
     end
   end
 
@@ -221,7 +227,109 @@ RSpec.describe "script/adoption_eval/run_eval.sh" do
     expect(mcp["headers"]).to include("X-MCP-Client" => "adoption-eval-cursor", "Authorization" => "Bearer synth-token")
     dir = path("eval", "runs", run_ids.sole)
     expect(File.read(File.join(dir, "cursor-hooks.csv")).lines.drop(1)).to eq([ "K0,T1,1,0\n", "K2,T1,1,1\n" ])
+    # The restored backup keeps no copy of the token-bearing files, only its markers.
+    backup = Dir.children(File.join(dir, ".backup"))
+    expect(backup).to all(satisfy { |name| name == "state" || name == "clones" || name.end_with?(".path", ".absent", ".newdir") })
+    expect(Dir.glob(File.join(dir, "**", "*"), File::FNM_DOTMATCH).select { |file| File.file?(file) && File.read(file).include?("synth-token") }).to be_empty
     expect(File.read(File.join(dir, "report.md"))).to include("K0   T1    1  0/1", "K2   T1    1  1/1")
+  end
+
+  it "replaces symlinked config instead of writing through it, and puts the links back (dotfiles stay untouched)" do
+    dotfiles = path("dotfiles")
+    FileUtils.mkdir_p(dotfiles)
+    home = path("home")
+    File.write(File.join(dotfiles, "mcp.json"), File.read("#{home}/.cursor/mcp.json"))
+    File.write(File.join(dotfiles, "cli-config.json"), File.read("#{home}/.cursor/cli-config.json"))
+    File.write(File.join(dotfiles, "graph-mem.md"), "synth-own-rule\n")
+    FileUtils.mkdir_p([ "#{home}/.claude/rules", "#{home}/.claude/hooks" ])
+    { "#{home}/.cursor/mcp.json" => "mcp.json", "#{home}/.cursor/cli-config.json" => "cli-config.json",
+      "#{home}/.claude/rules/graph-mem.md" => "graph-mem.md", "#{home}/.claude/hooks/graph_mem_session_start.sh" => "synth-missing" }
+      .each { |link, target| FileUtils.rm_f(link) && File.symlink(File.join(dotfiles, target), link) }
+    before = [ home_tree, home_tree(dotfiles) ]
+    _out, err, status = run_eval("--suite", "custom", "--arms", "ALL,K0", "--tasks", "T1", "--n", "1", "--yes")
+
+    expect(status).to be_success, err
+    expect([ home_tree, home_tree(dotfiles) ]).to eq(before)
+    expect(File.symlink?("#{home}/.claude/hooks/graph_mem_session_start.sh")).to be(true) # dangling, kept
+  end
+
+  it "keeps the .env token off every process list, and leaves no temp files when it stops early" do
+    File.write(path("home", ".claude.json"), "{}")
+    File.write(path("synth.env"), "GRAPH_MEM_MCP_TOKEN=synth-env-token\n")
+    real_jq = `sh -c 'command -v jq'`.strip
+    File.write(path("bin", "jq"), "#!/bin/sh\nprintf '%s\\n' \"$*\" >>\"$FAKE_LOG/jq.args\"\nexec #{real_jq} \"$@\"\n")
+    File.chmod(0o755, path("bin", "jq"))
+    _out, err, status = run_eval("--suite", "screen", "--dry-run", extra: { "ADOPTION_ENV_FILE" => path("synth.env") })
+
+    expect(status).to be_success, err
+    expect(log("jq.args") + log("curl.args")).not_to include("synth-env-token")
+    expect(Dir.children(path("tmp"))).to be_empty
+
+    _out, err, status = run_eval("--suite", "screen", "--yes", extra: { "ADOPTION_ENV_FILE" => path("synth.env"), "FAKE_DOWN" => "1" })
+    expect(status).not_to be_success
+    expect(err).to include("doesn't answer")
+    expect(Dir.children(path("tmp"))).to be_empty
+  end
+
+  it "refuses to start while a killed run hasn't been restored, or while another run holds the lock" do
+    FileUtils.mkdir_p(path("eval", "runs", "20260101T000000Z", ".backup"))
+    File.write(path("eval", "runs", "20260101T000000Z", ".backup", "state"), "taken\n")
+    _out, err, status = run_eval("--suite", "custom", "--arms", "I", "--tasks", "T1", "--n", "1", "--yes")
+    expect(status).not_to be_success
+    expect(err).to include("--restore 20260101T000000Z first")
+
+    FileUtils.rm_rf(path("eval", "runs"))
+    File.open(path("eval", ".lock"), File::CREAT | File::WRONLY) do |lock|
+      lock.flock(File::LOCK_EX)
+      _out, err, status = run_eval("--suite", "custom", "--arms", "I", "--tasks", "T1", "--n", "1", "--yes")
+      expect(status).not_to be_success
+      expect(err).to include("another run_eval.sh is running")
+    end
+  end
+
+  it "--restore puts back what a killed run left: levers, settings and temp dirs" do
+    backup = path("eval", "runs", "20260101T000000Z", ".backup")
+    FileUtils.mkdir_p([ backup, path("home", ".claude", "rules"), path("tmp", "adoption-eval.synth") ])
+    rule = path("home", ".claude", "rules", "graph-mem.md")
+    File.write(rule, "synth-leftover-rule\n")
+    File.write(File.join(backup, "p%.claude%rules%graph-mem.md.absent"), "#{rule}\n")
+    File.write(File.join(backup, "p%.claude%rules%graph-mem.md.path"), "#{rule}\n")
+    File.write(File.join(backup, "state"), "taken\n")
+    File.write(File.join(backup, "settings"), "mcp_skills_enabled\nfalse\n")
+    File.write(File.join(backup, "tmpdirs"), "#{path('tmp', 'adoption-eval.synth')}\n")
+    _out, err, status = run_eval("--restore", "20260101T000000Z")
+
+    expect(status).to be_success, err
+    expect(File.exist?(rule)).to be(false)
+    expect(Dir.children(path("tmp"))).to be_empty
+    expect(log("docker.args")).to match(/runner .*ADOPTION_EVAL_OK.* mcp_skills_enabled false/m).and include("restart app")
+    expect(File.read(File.join(backup, "state")).strip).to eq("restored")
+    expect(File.exist?(File.join(backup, "settings"))).to be(false)
+  end
+
+  it "restores at once on a SIGTERM to the script alone, mid-session" do
+    before = home_tree
+    out_r, out_w = IO.pipe
+    pid = Bundler.with_unbundled_env do
+      Process.spawn(env("FAKE_SLEEP" => "30"), "bash", script, "--suite", "custom", "--arms", "ALL", "--tasks", "T1", "--n", "1", "--yes",
+                    in: File::NULL, out: File::NULL, err: out_w)
+    end
+    out_w.close
+    Timeout.timeout(20) { sleep 0.1 until log("claude.args").include?("-p") }
+    started = Time.now
+    Process.kill("TERM", pid)
+    _, status = Timeout.timeout(15) { Process.wait2(pid) }
+
+    expect(Time.now - started).to be < 10
+    expect(status.exitstatus).to eq(130)
+    expect(out_r.read).to include("Restored 3 user-level path(s)")
+    expect(home_tree).to eq(before)
+  end
+
+  it "runs under LANG=C (the Ruby helpers read UTF-8 whatever the locale)" do
+    _out, err, status = run_eval("--suite", "custom", "--arms", "ALL", "--tasks", "T1", "--n", "1", "--yes", extra: { "LANG" => "C", "LC_ALL" => "C" })
+
+    expect(status).to be_success, err
   end
 
   it "asks for a Cursor login it can't do itself, and needs a terminal for it" do

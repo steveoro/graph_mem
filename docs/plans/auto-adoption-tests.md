@@ -273,7 +273,12 @@ What it does by itself:
 - **Clones:** `goggles_admin2-eval` and `fast-mcp-eval` next to this repo are reused, or cloned from the local source repo
   (no network), and pinned in `~/adoption-eval/clones.lock` (`--refresh-clones` moves the pin); reset before each session.
 - **Levers:** each arm's rule, skill copy (1.89.0, current, or the readonly "lite" variant), hook and MCP config, set at
-  user level and put back exactly afterwards (`--restore <run-id>` after a hard kill).
+  user level and put back exactly afterwards. Files are written with `install`, so a symlinked config (a dotfiles
+  manager) is replaced and its target never touched; the link comes back on restore, and the backup copies (which may
+  hold tokens) are deleted once everything is back.
+- **One run at a time:** a lock in `~/adoption-eval/.lock`; a run that was killed (`SIGKILL`) must be put back with
+  `--restore <run-id>` (user-level files, the graph_mem settings, the clones, the temp dirs) before another starts. The
+  run id is printed first thing. A `SIGTERM` or Ctrl-C stops the current session and restores at once.
 - **Sessions:** Claude Code as in section 1 (write tools and Bash denied); the Cursor CLI with graph_mem on
   `/mcp/readonly` under its own client id, the five read tools allowed and shell and the write tools denied in
   `~/.cursor/cli-config.json`, K2's hook with a marker file. A usage limit stops the run with a resume hint.
