@@ -85,4 +85,26 @@ RSpec.describe "script/adoption_eval/summarize.rb" do
     expect(status.exitstatus).to eq(1)
     expect(err).to include("Usage: ruby script/adoption_eval/summarize.rb")
   end
+
+  describe "AdoptionEval::Session (used by run_eval.sh and report.rb)" do
+    before { require File.expand_path("../../script/adoption_eval/summarize.rb", __dir__) }
+
+    def session(lines) = AdoptionEval::Session.new("synth-arm", "T1", lines.map(&:to_json))
+
+    it "notes a ToolSearch for a write tool, completeness and a usage-limit stop" do
+      search = { type: "assistant", message: { id: "m1", content: [ { type: "tool_use", name: "ToolSearch", input: { query: "select:mcp__graph_mem__graph_write" } } ] } }
+      limited = { type: "result", is_error: true, result: "Claude AI usage limit reached|1700000000" }
+      done = { type: "result", is_error: false, num_turns: 3 }
+
+      expect(session([ search, done ]).metrics).to include(write_search: true, complete: true, limited: false)
+      expect(session([ search ]).metrics).to include(write_search: true, complete: false, limited: false)
+      expect(session([ limited ]).metrics).to include(complete: true, limited: true)
+      expect(session([ { type: "result", is_error: true, result: "synth-other-error" } ]).metrics[:limited]).to be(false)
+    end
+
+    it "builds from a file named <arm>-<task>-<run>.jsonl, and refuses other names" do
+      expect(AdoptionEval::Session.from_file(logs.find { |path| path.end_with?("R-T1-1.jsonl") })).to have_attributes(arm: "R", task: "T1")
+      expect(AdoptionEval::Session.from_file(logs.find { |path| path.end_with?("synth-notes.jsonl") })).to be_nil
+    end
+  end
 end

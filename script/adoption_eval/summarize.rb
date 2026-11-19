@@ -18,12 +18,24 @@ module AdoptionEval
   WRITE_TOOLS = %w[graph_write graph_edit graph_delete].freeze
   # graph_mem tool names a ToolSearch query may mention ("search" and "summarize" alone are too common).
   GM_WORDS = /graph[_-]mem|\b(get_context|set_context|get_entities|traverse_graph|find_shortest_path|rank_observations|graph_write|graph_edit|graph_delete)\b/
+  WRITE_WORDS = /(?<![a-z])graph_(write|edit|delete)(?![a-z])/
+  # A result that ended on the account's usage or rate limit: the session didn't run its course.
+  LIMIT_WORDS = /usage limit|rate limit|limit reached|too many requests|overloaded/i
   COLUMNS = %w[arm task n adopted ctx_before_edit median_first_gm_turn mean_gm_calls skill_used toolsearch_gm
                persist_attempts hook_fired median_turns median_tokens median_cost].freeze
+
+  NAME = /\A(?<arm>.+)-(?<task>[^-]+)-(?<run>[^-]+)\.jsonl\z/
 
   # One session's metrics, from its JSONL events in order.
   class Session
     attr_reader :arm, :task, :malformed
+
+    # @param path [String] a log named <arm>-<task>-<run>.jsonl
+    # @return [Session, nil] nil when the name doesn't fit
+    def self.from_file(path)
+      match = File.basename(path).match(NAME)
+      match && new(match[:arm], match[:task], File.foreach(path))
+    end
 
     # @param arm [String]
     # @param task [String]
@@ -50,7 +62,8 @@ module AdoptionEval
         gm_calls: @calls.count { |(_, kind)| kind.is_a?(String) },
         skill_used: @flags[:skill], toolsearch_gm: @flags[:toolsearch], hook_fired: @flags[:hook],
         persist_attempts: @denied.values.count { |name| WRITE_TOOLS.include?(name.sub(GRAPH_MEM, "")) },
-        turns: @result&.dig("num_turns"), tokens: tokens, cost: @result&.dig("total_cost_usd") }
+        turns: @result&.dig("num_turns"), tokens: tokens, cost: @result&.dig("total_cost_usd"),
+        write_search: @flags[:write_search], complete: !@result.nil?, limited: limited? }
     end
 
     private
@@ -96,8 +109,20 @@ module AdoptionEval
       if name.match?(GRAPH_MEM) then @calls << [ index, name.sub(GRAPH_MEM, "") ]
       elsif EDIT_TOOLS.include?(name) then @calls << [ index, :edit ]
       elsif name == "Skill" then @flags[:skill] ||= input.values.grep(String).any? { |value| value.include?("graph-mem-mcp-toolset") }
-      elsif name == "ToolSearch" then @flags[:toolsearch] ||= input.values.grep(String).any? { |value| value.match?(GM_WORDS) }
+      elsif name == "ToolSearch" then toolsearch(input.values.grep(String))
       end
+    end
+
+    def toolsearch(queries)
+      @flags[:toolsearch] ||= queries.any? { |value| value.match?(GM_WORDS) }
+      @flags[:write_search] ||= queries.any? { |value| value.match?(WRITE_WORDS) }
+    end
+
+    # The result ended on a usage or rate limit (its text is matched, never printed).
+    def limited?
+      return false unless @result && @result["is_error"]
+
+      [ @result["result"], @result["subtype"], @result["error"] ].any? { |value| value.to_s.match?(LIMIT_WORDS) }
     end
 
     # Cursor CLI: tool_call.<kind>ToolCall, an MCP call's name under args; matched by name only.
@@ -172,18 +197,16 @@ module AdoptionEval
     end
   end
 
-  NAME = /\A(?<arm>.+)-(?<task>[^-]+)-(?<run>[^-]+)\.jsonl\z/
-
   # @param paths [Array<String>] the log files
   # @param csv [Boolean]
   # @return [String] the table and a counts-only footer
   def self.summarize(paths, csv: false)
-    named = paths.map { |path| [ path, File.basename(path).match(NAME) ] }
-    sessions = named.select(&:last).map { |path, match| Session.new(match[:arm], match[:task], File.foreach(path)) }
+    named = paths.map { |path| [ path, Session.from_file(path) ] }
+    sessions = named.map(&:last).compact
     rows = Report.new(sessions).rows(csv: csv)
     table = csv ? rows.map { |row| row.join(",") } : align(rows)
     footer = "#{sessions.size} sessions, #{sessions.sum(&:malformed)} malformed lines skipped, " \
-             "#{named.count { |_, match| match.nil? }} files skipped (not <arm>-<task>-<run>.jsonl)"
+             "#{named.count { |_, session| session.nil? }} files skipped (not <arm>-<task>-<run>.jsonl)"
     (table + [ (csv ? "# " : "") + footer ]).join("\n")
   end
 
