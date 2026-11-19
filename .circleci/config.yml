@@ -60,9 +60,22 @@ jobs:
           command: google-chrome --version && chromedriver --version
       - run:
           name: Install database client
+          # Canonical's archive has timed out over http from CircleCI (2026-11-19, the whole morning):
+          # fail fast and retry, then switch the Ubuntu sources to an HTTPS mirror and try once more.
           command: |
-            sudo apt-get update
-            sudo apt-get install -y --no-install-recommends mariadb-client
+            apt_opts=(-o Acquire::Retries=3 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20)
+            install_client() {
+              sudo apt-get "${apt_opts[@]}" update &&
+                sudo apt-get "${apt_opts[@]}" install -y --no-install-recommends mariadb-client
+            }
+            if ! install_client; then
+              echo "The Ubuntu archive didn't answer: retrying through an HTTPS mirror."
+              for list in /etc/apt/sources.list /etc/apt/sources.list.d/*.list /etc/apt/sources.list.d/*.sources; do
+                [ -f "$list" ] || continue
+                sudo sed -i -E 's#https?://(archive|security)\.ubuntu\.com/ubuntu#https://mirrors.edge.kernel.org/ubuntu#g' "$list"
+              done
+              install_client
+            fi
       - ruby/install-deps:
           key: graph_mem-v2
       - run:
