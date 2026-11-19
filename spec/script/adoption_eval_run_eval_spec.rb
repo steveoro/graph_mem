@@ -325,6 +325,8 @@ RSpec.describe "script/adoption_eval/run_eval.sh" do
     expect(status.exitstatus).to eq(130)
     expect(out_r.read).to include("Restored 3 user-level path(s)")
     expect(home_tree).to eq(before)
+    # No stale session pid for a later --resume to kill.
+    expect(Dir.children(path("eval", "runs", run_ids.sole, ".backup"))).not_to include("session", "tmpdirs")
   end
 
   it "after a SIGKILL mid-session, --restore isn't locked out by the orphaned session, stops it and puts HOME back" do

@@ -266,7 +266,8 @@ cleanup() {
   $SETTINGS_CHANGED && restore_settings
   [[ -n $SECRETS ]] && rm -rf "$SECRETS"
   [[ -n $WORK ]] && rm -rf "$WORK"
-  [[ -n $BACKUP && -d $BACKUP ]] && rm -f "$BACKUP/tmpdirs"
+  # The session's pid is dead by now (stop_session): a stale one could match a reused pid later.
+  [[ -n $BACKUP && -d $BACKUP ]] && rm -f "$BACKUP/tmpdirs" "$BACKUP/session"
   return 0
 }
 

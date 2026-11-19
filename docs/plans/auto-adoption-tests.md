@@ -277,7 +277,8 @@ What it does by itself:
   manager) is replaced and its target never touched; the link comes back on restore, and the backup copies (which may
   hold tokens) are deleted once everything is back.
 - **One run at a time:** a lock in `~/adoption-eval/.lock`; a run that was killed (`SIGKILL`) must be put back with
-  `--restore <run-id>` (user-level files, the graph_mem settings, the clones, the temp dirs) before another starts. The
+  `--restore <run-id>` (user-level files, the graph_mem settings, the clones, the temp dirs; it also stops the killed
+  run's session if it's still going) before another starts. The
   run id is printed first thing. A `SIGTERM` or Ctrl-C stops the current session and restores at once.
 - **Sessions:** Claude Code as in section 1 (write tools and Bash denied); the Cursor CLI with graph_mem on
   `/mcp/readonly` under its own client id, the five read tools allowed and shell and the write tools denied in
