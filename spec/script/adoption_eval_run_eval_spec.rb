@@ -138,8 +138,9 @@ RSpec.describe "script/adoption_eval/run_eval.sh" do
     out, err, status = run_eval("--suite", "screen", "--dry-run")
 
     expect(status).to be_success, err
-    expect(out.lines.size).to eq(30)
-    expect(err).to include("graph_mem 9.9.9-synth", "ALL+A: rule on, skill new, hook on, MCP alwaysload")
+    expect(out.lines.size).to eq(35)
+    expect(err).to include("graph_mem 9.9.9-synth", "I0: rule off, skill none, hook off, MCP default",
+                           "ALL+A: rule on, skill new, hook on, MCP alwaysload")
     expect(home_tree).to eq(before)
     expect(Dir.exist?(path("eval", "runs"))).to be(false)
     expect(Dir.children(path("projects"))).to contain_exactly("goggles_admin2", "fast-mcp", "synth-other")

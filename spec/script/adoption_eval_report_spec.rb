@@ -84,6 +84,34 @@ RSpec.describe "script/adoption_eval/report.rb" do
                               "**S** (the skill trigger): needs ALL and ALL-S, or S and I.")
   end
 
+  it "Q-L's draft efficiency rule: a tie that costs turns or tokens beyond the bar, on at least 2 tasks" do
+    write_run
+    %w[T1 T2 T3].each do |task|
+      sessions("ALL", task, n: 5, adopted: 5, turns: 20, tokens: 1000)
+      sessions("ALL-R", task, n: 5, adopted: 5, turns: task == "T3" ? 20 : 25, tokens: 1000)
+      sessions("ALL-H", task, n: 5, adopted: 5, turns: 21, tokens: 1050)
+      sessions("I", task, n: 5, adopted: 5, turns: 24, tokens: 1200)
+      sessions("I0", task, n: 5, adopted: 4, turns: 26, tokens: 1300)
+    end
+    text = report
+
+    expect(text).to include("**R** (the user rule): dropping it: 0 points (0 of 3 tasks the same way) → a tie: drop it",
+                            "  - Efficiency (draft rule): dropping it: turns +25%, tokens +0% (bar 15%, the same way on ≥ 2 tasks) → costs turns beyond the bar: keep it.",
+                            "  - Efficiency (draft rule): dropping it: turns +5%, tokens +5% (bar 15%, the same way on ≥ 2 tasks) → no cost beyond the bar.",
+                            "- **All levers together** (ALL vs I): adoption 0 points (0 of 3 tasks the same way).",
+                            "  - Efficiency (draft rule): without them (I): turns +20%, tokens +20% (bar 15%, the same way on ≥ 2 tasks) → costs turns and tokens beyond the bar: keep it.",
+                            "- **A skill copy at all** (I vs I0): adoption +20 points (3 of 3 tasks the same way).",
+                            "  - Efficiency (draft rule): without it (I0): turns +8%, tokens +8% (bar 15%, the same way on ≥ 2 tasks) → no cost beyond the bar.")
+  end
+
+  it "Q-L's draft efficiency rule on T1 screening needs 25%" do
+    write_run
+    sessions("ALL", "T1", n: 5, adopted: 5, turns: 20)
+    sessions("I", "T1", n: 5, adopted: 5, turns: 24)
+
+    expect(report).to include("without them (I): turns +20%, tokens +0% (bar 25%, T1 screening) → no cost beyond the bar.")
+  end
+
   it "Q1 needs N=10 per task, and then weighs adoption against tokens" do
     write_run
     sessions("ALL", "T1", n: 5, adopted: 2)

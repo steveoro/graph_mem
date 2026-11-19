@@ -15,6 +15,10 @@ module AdoptionEval
   # One run directory's report.
   class RunReport
     LEVERS = { "R" => "the user rule", "S" => "the skill trigger", "H" => "the SessionStart hook" }.freeze
+    # Draft efficiency rule (tests doc §3 Q-L, not yet adopted): extra median turns or tokens, in %,
+    # that make a lever worth keeping when adoption ties; T1 screening needs the larger bar.
+    EFFICIENCY_BAR = 15
+    EFFICIENCY_SCREEN_BAR = 25
 
     # @param dir [String] a run directory holding run.json and logs/
     def initialize(dir)
@@ -133,11 +137,59 @@ module AdoptionEval
         elsif lever == "S" then "a tie: keep it (free at runtime)"
         else "a tie: drop it from the default install (it costs a #{lever == 'R' ? 'file' : 'hook'})"
         end
-        "- **#{lever}** (#{label}): #{found} → #{verdict}."
+        "- **#{lever}** (#{label}): #{found} → #{verdict}.#{efficiency_line('ALL', "ALL-#{lever}", 'dropping it')}"
       end
       all = rate("ALL")
       stop = all && all >= 85 ? "\n- ALL adopts in #{points(all)} of sessions (≥ 85%): stop adding levers." : ""
-      "### Q-L: which levers stay on by default\n\n#{lines.join("\n")}#{stop}\n"
+      "### Q-L: which levers stay on by default\n\n#{lines.join("\n")}#{stop}\n#{group_lines}"
+    end
+
+    # The levers together (I vs ALL) and a skill copy at all (I0 vs I), adoption and efficiency.
+    def group_lines
+      groups = [ [ "All levers together", "ALL", "I", "without them (I)" ], [ "A skill copy at all", "I", "I0", "without it (I0)" ] ]
+      lines = groups.filter_map do |label, with, without, missing|
+        cmp = compare(with, without, 20)
+        next unless cmp
+
+        "- **#{label}** (#{with} vs #{without}): adoption #{describe(cmp)}.#{efficiency_line(with, without, missing)}"
+      end
+      lines.empty? ? "" : "\n#{lines.join("\n")}\n"
+    end
+
+    # A draft-rule line: how much costlier `other` is than `base` in median turns and tokens.
+    def efficiency_line(base, other, what)
+      eff = efficiency(base, other)
+      return "" unless eff
+
+      worse = eff[:found].select { |f| f[:real] }
+      verdict = worse.any? ? "costs #{worse.map { |f| f[:metric] }.join(' and ')} beyond the bar: keep it" : "no cost beyond the bar"
+      "\n  - Efficiency (draft rule): #{what}: #{describe_efficiency(eff)} → #{verdict}."
+    end
+
+    # Extra median turns or tokens of `other` over `base`, in %, pooled or on one task.
+    def extra(base, other, metric, task = nil)
+      a = median(sessions_for(base, task).map { |s| s.metrics[metric] })
+      b = median(sessions_for(other, task).map { |s| s.metrics[metric] })
+      a && b && a.positive? ? (b.fdiv(a) - 1) * 100 : nil
+    end
+
+    def efficiency(base, other)
+      tasks = tasks_of(base, other)
+      return if tasks.empty?
+
+      screening = tasks == [ "T1" ]
+      bar = screening ? EFFICIENCY_SCREEN_BAR : EFFICIENCY_BAR
+      found = %i[turns tokens].filter_map do |metric|
+        pooled = extra(base, other, metric) or next
+        agree = tasks.count { |task| (value = extra(base, other, metric, task)) && value >= bar }
+        { metric: metric, pooled: pooled, real: pooled >= bar && (screening || agree >= 2) }
+      end
+      found.empty? ? nil : { found: found, bar: bar, screening: screening, tasks: tasks }
+    end
+
+    def describe_efficiency(eff)
+      parts = eff[:found].map { |f| "#{f[:metric]} #{format('%+d', f[:pooled].round)}%" }
+      "#{parts.join(', ')} (bar #{eff[:bar]}%#{eff[:screening] ? ', T1 screening' : ', the same way on ≥ 2 tasks'})"
     end
 
     def q1

@@ -129,6 +129,7 @@ Each arm is the baseline plus **one** toggle, so it can be flipped in seconds. "
 | **A** alwaysLoad | server entry `"alwaysLoad": true` | `MCP=mcp-alwaysload.json` | 1.89.0 (now) |
 | **RSH** text levers, no instructions | R + S + H | the three above together | 1.89.0 (now) |
 | **I** new instructions | the server runs the 1.90.0 instructions | run the 1.90.0 server | **1.90.0** |
+| **I0** instructions only | I without any user-level skill copy (no rule, no hook) | `run_eval.sh` arm `I0` | **1.90.0** |
 | **ALL** | I + R + S + H | | **1.90.0** |
 | **ALL−x** | ALL minus one of I, R, S, H (four arms) | | **1.90.0** |
 | **ALL+A** | ALL + alwaysLoad | | **1.90.0** |
@@ -147,6 +148,12 @@ After the server moves to 1.90.0, **B0 is re-run once** (it then carries the new
   (ALL−x) costs **≥ 15 points**. A lever that clears neither bar is kept only if it's free at runtime (instructions,
   skill text) and dropped from the default install output if it costs a file or a hook (R, H). If ALL is **≥ 85%**,
   stop adding levers.
+- **Efficiency rule (draft, 2026-11-19, not adopted yet):** when adoption saturates, the bars above see only ties. The
+  first screen round on 1.91.0 adopted in 30/30 sessions, yet I needed about 20% more turns and 17% more tokens than ALL.
+  So a lever that ties on adoption also stays on by default when dropping it makes sessions costlier: ALL−x's
+  **median turns or median tokens ≥ 15% above ALL's**, the same way on at least 2 of 3 tasks (T1 screening: **≥ 25%**).
+  The same comparison runs for the levers together (I vs ALL) and for a skill copy at all (I0 vs I).
+  `report.rb` prints it as a "draft rule" line beside each verdict; it changes no verdict until it's adopted here.
 
 ### Q1. `anthropic/alwaysLoad` on `search` + `get_context` (a tools/list surface change)
 - **Arms:** B0 vs A now; the best text arm vs ALL+A after 1.90.0. Server-wide `alwaysLoad` (all 12 tools upfront) is the
@@ -253,8 +260,8 @@ script/adoption_eval/run_eval.sh --help
 
 | Suite | Arms × tasks × N | Sessions |
 |---|---|---|
-| `screen` (default) | I, ALL, ALL−R, ALL−S, ALL−H, ALL+A × T1 × 5 | 30 |
-| `full` | the same × T1–T3 × 5 | 90 |
+| `screen` (default) | I0, I, ALL, ALL−R, ALL−S, ALL−H, ALL+A × T1 × 5 | 35 |
+| `full` | the same × T1–T3 × 5 | 105 |
 | `q1` | ALL, ALL+A × T1–T3 × 10 | 60 |
 | `q2` | RO-full, RO-lite × T4 × 5 | 10 |
 | `cursor` | K0, K1, K2 × T1, T3 × 5, headless Cursor CLI | 30 |
@@ -263,7 +270,8 @@ script/adoption_eval/run_eval.sh --help
 | `custom` | `--arms`, `--tasks`, `--n` | |
 
 On 1.91.0 the server always sends the new instructions, so **I** (rule off, the 1.89.0 skill, no hook) is the doc's B0
-with them; the single-lever arms R, S, H and A sit on top of I. B0 on the old instructions and ALL−I need a 1.89.0
+with them; the single-lever arms R, S, H and A sit on top of I. **I0** drops the skill copy too: the instructions alone,
+which is also a machine where nothing was installed at user level. B0 on the old instructions and ALL−I need a 1.89.0
 server: compare with the 1.89.0 logs.
 
 What it does by itself:

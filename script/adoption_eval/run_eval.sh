@@ -35,8 +35,8 @@ usage() {
 Usage: script/adoption_eval/run_eval.sh [options]
 
 Suites (docs/plans/auto-adoption-tests.md):
-  screen      I ALL ALL-R ALL-S ALL-H ALL+A on T1, N=5 (30 sessions, the default)
-  full        the same arms on T1 T2 T3, N=5 (90)
+  screen      I0 I ALL ALL-R ALL-S ALL-H ALL+A on T1, N=5 (35 sessions, the default)
+  full        the same arms on T1 T2 T3, N=5 (105)
   q1          ALL ALL+A on T1 T2 T3, N=10 (60)
   q2          RO-full RO-lite on T4, N=5 (10)
   cursor      K0 K1 K2 on T1 T3, N=5, headless Cursor CLI (30; K1 needs one paste in Cursor)
@@ -47,7 +47,7 @@ Suites (docs/plans/auto-adoption-tests.md):
 Options:
   --suite NAME           a suite above (no options at all opens a menu)
   --arms A,B --tasks T1,T3 --n N
-                         Claude Code arms: I R S H A ALL ALL-R ALL-S ALL-H ALL+A RO-full RO-lite;
+                         Claude Code arms: I0 I R S H A ALL ALL-R ALL-S ALL-H ALL+A RO-full RO-lite;
                          Cursor arms: K0 K1 K2 (B0 and ALL-I need a 1.89.0 server)
   --model ALIAS          Claude Code model (default: the "model" in ~/.claude/settings.json)
   --cursor-model NAME    Cursor CLI model (default: the CLI's own)
@@ -129,6 +129,7 @@ task_clone() { [[ $1 == T3 ]] && echo fast-mcp-eval || echo goggles_admin2-eval;
 # "rule skill hook mcp" for a Claude Code arm; "cursor" for a Cursor arm.
 arm_spec() {
   case "$1" in
+    I0) echo "off none off default" ;; # the server instructions alone: no rule, no skill copy, no hook
     I) echo "off old off default" ;;
     R) echo "on old off default" ;;
     S) echo "off new off default" ;;
@@ -150,8 +151,8 @@ arm_spec() {
 suite_plan() { # sets ARMS TASKS N (keeping any given on the command line)
   local arms tasks n
   case "$1" in
-    screen) arms="I ALL ALL-R ALL-S ALL-H ALL+A" tasks="T1" n=5 ;;
-    full) arms="I ALL ALL-R ALL-S ALL-H ALL+A" tasks="T1 T2 T3" n=5 ;;
+    screen) arms="I0 I ALL ALL-R ALL-S ALL-H ALL+A" tasks="T1" n=5 ;;
+    full) arms="I0 I ALL ALL-R ALL-S ALL-H ALL+A" tasks="T1 T2 T3" n=5 ;;
     q1) arms="ALL ALL+A" tasks="T1 T2 T3" n=10 ;;
     q2) arms="RO-full RO-lite" tasks="T4" n=5 ;;
     cursor) arms="K0 K1 K2" tasks="T1 T3" n=5 ;;
@@ -165,7 +166,7 @@ suite_plan() { # sets ARMS TASKS N (keeping any given on the command line)
 
 menu() {
   local choice
-  note "Suites: 1) screen (30)  2) full (90)  3) q1 (60)  4) q2 (10)  5) cursor (30, headless)"
+  note "Suites: 1) screen (35)  2) full (105)  3) q1 (60)  4) q2 (10)  5) cursor (30, headless)"
   note "        6) cursor-ide (10, manual)  7) q3 (install test)  8) custom"
   tty_read choice "Suite?" 1
   case "$choice" in
