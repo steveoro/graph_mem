@@ -103,9 +103,9 @@ RSpec.describe "script/adoption_eval/report.rb" do
                             "  - Efficiency (draft rule): dropping it: turns +5% (0 of 3 tasks), tokens +5% (0 of 3 tasks) (bar 15%) → no cost beyond the bar.",
                             "- **All levers together** (ALL vs I): adoption 0 points (0 of 3 tasks the same way).",
                             "  - Efficiency (draft rule): without them (I): turns +20% (3 of 3 tasks), tokens +20% (3 of 3 tasks) (bar 15%) → costs turns and tokens beyond the bar: the draft rule would keep it.",
-                            "- **The 1.89.0 skill copy** (I vs I0): adoption +20 points (3 of 3 tasks the same way).",
-                            "  - Efficiency (draft rule): without it (I0): turns +8% (0 of 3 tasks), tokens +8% (0 of 3 tasks) (bar 15%) → no cost beyond the bar.")
+                            "- **The 1.89.0 skill copy** (I vs I0): adoption +20 points (3 of 3 tasks the same way).")
     expect(text).not_to include("The current skill copy")
+    expect(text).not_to include("without it (I0)")
   end
 
   it "Q-L's draft efficiency rule on T1 screening needs 25%, and 25% fires it" do
@@ -119,7 +119,7 @@ RSpec.describe "script/adoption_eval/report.rb" do
     expect(report).to include("without them (I): turns +25%, tokens +0% (bar 25%, T1 screening) → costs turns beyond the bar: the draft rule would keep it.")
   end
 
-  it "marks an efficiency difference as a lower bound when a session hit the turn cap" do
+  it "marks an efficiency difference as a lower bound when the measured arm hit the turn cap" do
     write_run(max_turns: 25)
     sessions("ALL", "T1", n: 5, adopted: 5, turns: 21)
     sessions("I", "T1", n: 5, adopted: 5, turns: 25, capped: true)
@@ -129,14 +129,29 @@ RSpec.describe "script/adoption_eval/report.rb" do
     expect(text).to include("without them (I): turns +19%, tokens +0% (bar 25%, T1 screening, lower bound: I hit the turn cap in 5/5) → no cost beyond the bar.")
   end
 
+  it "marks the difference as an upper bound when the baseline arm hit the cap, and inexact when both did" do
+    write_run
+    sessions("ALL", "T1", n: 5, adopted: 5, turns: 40, capped: true)
+    sessions("I", "T1", n: 5, adopted: 5, turns: 30)
+
+    expect(report).to include("turns -25%, tokens +0% (bar 25%, T1 screening, upper bound: ALL hit the turn cap in 5/5)")
+
+    sessions("I", "T1", n: 5, adopted: 5, turns: 40, capped: true)
+    expect(report).to include("turns +0%, tokens +0% (bar 25%, T1 screening, inexact: ALL hit the turn cap in 5/5; I hit the turn cap in 5/5)")
+  end
+
   it "prints the draft efficiency line only on an adoption tie" do
     write_run
     sessions("ALL", "T1", n: 5, adopted: 5, turns: 20)
     sessions("ALL-R", "T1", n: 5, adopted: 0, turns: 30)
+    sessions("I", "T1", n: 5, adopted: 5, turns: 20)
+    sessions("I0", "T1", n: 5, adopted: 0, turns: 30)
 
     text = report
     expect(text).to include("**R** (the user rule): dropping it: +100 points (T1 screening, bar 40 points) → keep it on by default.")
+    expect(text).to include("**The 1.89.0 skill copy** (I vs I0): adoption +100 points (T1 screening, bar 40 points).")
     expect(text).not_to include("Efficiency (draft rule): dropping it")
+    expect(text).not_to include("Efficiency (draft rule): without it (I0)")
   end
 
   it "compares the current skill copy when S and I0 were both run" do

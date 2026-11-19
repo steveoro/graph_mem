@@ -781,7 +781,8 @@ if [[ -n $RESUME ]]; then
   SUITE=$(jq -r .suite "$RUN_DIR/run.json") ARMS=${ARMS:-$(jq -r '.arms | join(" ")' "$RUN_DIR/run.json")}
   TASKS=${TASKS:-$(jq -r '.tasks | join(" ")' "$RUN_DIR/run.json")} N=${N:-$(jq -r .n "$RUN_DIR/run.json")}
   MODEL=${MODEL:-$(jq -r '.model // empty' "$RUN_DIR/run.json")}
-  [[ -n $MAX_TURNS ]] || MAX_TURNS=$(jq -r '.max_turns // empty' "$RUN_DIR/run.json")
+  # A run from before max_turns was recorded started at 25. Leave it there instead of the suite default.
+  [[ -n $MAX_TURNS ]] || MAX_TURNS=$(jq -r '.max_turns // 25' "$RUN_DIR/run.json")
 fi
 suite_plan "${SUITE:=screen}"
 default_max_turns

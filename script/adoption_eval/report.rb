@@ -150,6 +150,7 @@ module AdoptionEval
     end
 
     # The levers together (I vs ALL), the 1.89.0 skill copy (I vs I0) and, when S was run, the current copy (S vs I0).
+    # The draft-rule line is only on an adoption tie, same as the lever lines.
     def group_lines
       groups = [ [ "All levers together", "ALL", "I", "without them (I)" ],
                  [ "The 1.89.0 skill copy", "I", "I0", "without it (I0)" ],
@@ -160,7 +161,8 @@ module AdoptionEval
         next unless cmp
 
         saw_i0 = true if without == "I0"
-        "- **#{label}** (#{with} vs #{without}): adoption #{describe(cmp)}.#{efficiency_line(with, without, missing)}"
+        draft = cmp[:real] ? "" : efficiency_line(with, without, missing)
+        "- **#{label}** (#{with} vs #{without}): adoption #{describe(cmp)}.#{draft}"
       end
       return "" if lines.empty?
 
@@ -214,7 +216,20 @@ module AdoptionEval
       end
       return if found.empty?
 
-      { found: found, bar: bar, screening: screening, tasks: tasks, capped: capped_notes(base, other) }
+      base_capped = capped_notes(base)
+      other_capped = capped_notes(other)
+      { found: found, bar: bar, screening: screening, tasks: tasks,
+        capped: base_capped + other_capped, bound: efficiency_bound(base_capped, other_capped) }
+    end
+
+    # A capped median is held down at the cap. Only the compared arm: the extra is too low (a lower
+    # bound). Only the base: the extra is too high (an upper bound). Both: the direction is unknown.
+    def efficiency_bound(base_capped, other_capped)
+      return "inexact" if base_capped.any? && other_capped.any?
+      return "lower bound" if other_capped.any?
+      return "upper bound" if base_capped.any?
+
+      nil
     end
 
     # Sessions whose result subtype is error_max_turns: their turns (and tokens) stopped at the cap.
@@ -232,7 +247,7 @@ module AdoptionEval
         "#{found[:metric]} #{format('%+d', found[:pooled].round)}%#{count}"
       end
       scope = eff[:screening] ? ", T1 screening" : ""
-      bound = eff[:capped].empty? ? "" : ", lower bound: #{eff[:capped].join('; ')}"
+      bound = eff[:bound] ? ", #{eff[:bound]}: #{eff[:capped].join('; ')}" : ""
       "#{parts.join(', ')} (bar #{eff[:bar]}%#{scope}#{bound})"
     end
 

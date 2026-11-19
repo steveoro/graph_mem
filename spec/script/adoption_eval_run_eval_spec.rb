@@ -166,7 +166,9 @@ RSpec.describe "script/adoption_eval/run_eval.sh" do
     expect(JSON.parse(File.read(path("eval", "runs", run_ids.sole, "run.json")))["max_turns"]).to eq(40)
 
     File.write(path("log", "claude.args"), "")
-    _out, err, status = run_eval("--suite", "full", "--arms", "I", "--tasks", "T1", "--n", "1", "--max-turns", "12", "--yes")
+    # A second run in the same UTC second shares a run id. A separate eval dir keeps this example off that clock.
+    _out, err, status = run_eval("--suite", "full", "--arms", "I", "--tasks", "T1", "--n", "1", "--max-turns", "12", "--yes",
+                                 extra: { "ADOPTION_EVAL_DIR" => path("eval2") })
 
     expect(status).to be_success, err
     expect(log("claude.args")).to include("--max-turns 12")
@@ -192,6 +194,22 @@ RSpec.describe "script/adoption_eval/run_eval.sh" do
     expect(File.read(path("eval", "clones.lock"))).to include("goggles_admin2-eval #{`git -C #{clone} rev-parse HEAD`.strip}")
     run = JSON.parse(File.read(path("eval", "runs", id, "run.json")))
     expect(run["baseline"]).to include({ "path" => "~/.claude/skills/graph-mem-mcp-toolset", "exists" => true, "mentions_graph_mem" => false })
+  end
+
+  it "--resume of a run with no recorded max_turns keeps the old cap of 25" do
+    run_eval("--suite", "screen", "--arms", "I", "--tasks", "T1", "--n", "1", "--yes")
+    id = run_ids.sole
+    run = JSON.parse(File.read(path("eval", "runs", id, "run.json")))
+    run.delete("max_turns")
+    run["n"] = 2
+    File.write(path("eval", "runs", id, "run.json"), JSON.generate(run))
+    File.write(path("log", "claude.args"), "")
+    _out, err, status = run_eval("--resume", id, "--yes")
+
+    expect(status).to be_success, err
+    expect(log("claude.args")).to include("--max-turns 25")
+    expect(log("claude.args")).not_to include("--max-turns 40")
+    expect(JSON.parse(File.read(path("eval", "runs", id, "run.json")))["max_turns"]).to eq(25)
   end
 
   it "--resume keeps the finished sessions and runs only the missing ones" do

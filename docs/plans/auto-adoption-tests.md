@@ -157,8 +157,10 @@ After the server moves to 1.90.0, **B0 is re-run once** (it then carries the new
   the 1.89.0 skill copy (I vs I0) and, when arm S was run, for the current skill copy (S vs I0). `report.rb` prints it
   on adoption ties as a "draft rule" line (what the draft rule would do); it changes no verdict until it's adopted here.
   A session that stops at `--max-turns` (`error_max_turns`) still counts as complete, with turns and tokens cut off at
-  the cap, so when any session in the comparison hit the cap the printed difference is a **lower bound**. `screen` and
-  `full` pass `--max-turns 40` (other suites stay at 25) so a median can clear the 25% bar.
+  the cap. That holds the capped arm's median down, so the printed difference is a **lower bound** when only the arm
+  being measured hit the cap, an **upper bound** when only the baseline arm did, and **inexact** when both did.
+  `screen` and `full` pass `--max-turns 40` (other suites stay at 25) so a median can clear the 25% bar. Resuming a
+  run whose `run.json` has no `max_turns` keeps 25, the cap that run started with.
 
 ### Q1. `anthropic/alwaysLoad` on `search` + `get_context` (a tools/list surface change)
 - **Arms:** B0 vs A now; the best text arm vs ALL+A after 1.90.0. Server-wide `alwaysLoad` (all 12 tools upfront) is the
