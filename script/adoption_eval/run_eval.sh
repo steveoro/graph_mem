@@ -103,8 +103,8 @@ done
 
 tty_read() { # tty_read VAR PROMPT [DEFAULT]
   local answer
-  [[ -r /dev/tty ]] || die "this step needs a terminal"
-  read -r -p "$2${3:+ [$3]} " answer </dev/tty
+  { true </dev/tty; } 2>/dev/null || die "this step needs a terminal: $2"
+  read -r -p "$2${3:+ [$3]} " answer </dev/tty || die "this step needs a terminal: $2"
   printf -v "$1" '%s' "${answer:-${3:-}}"
 }
 pause() {
@@ -190,12 +190,15 @@ USER_PATHS=("$HOME/.claude/rules/graph-mem.md" "$HOME/.claude/skills/graph-mem-m
 CURSOR_PATHS=("$HOME/.cursor/mcp.json" "$HOME/.cursor/cli-config.json" "$HOME/.cursor/hooks.json"
   "$HOME/.cursor/hooks/graph_mem_session_start_cursor.sh")
 
+# A path's file name in $BACKUP: no leading dot, so a glob or an ls sees it.
+backup_key() { printf 'p%%%s' "${1#"$HOME"/}" | tr '/' '%'; }
+
 # Copies each path (or an "absent" marker, and whether its folder existed) into $BACKUP.
 backup_paths() {
   local path key
   mkdir -p "$BACKUP" && chmod 700 "$BACKUP"
   for path in "$@"; do
-    key=$(printf '%s' "${path#"$HOME"/}" | tr '/' '%')
+    key=$(backup_key "$path")
     [[ -e $BACKUP/$key || -e $BACKUP/$key.absent ]] && continue
     if [[ -e $path ]]; then cp -a "$path" "$BACKUP/$key"; else printf '%s\n' "$path" >"$BACKUP/$key.absent"; fi
     [[ -d $(dirname "$path") ]] || printf '%s\n' "$(dirname "$path")" >"$BACKUP/$key.newdir"
@@ -206,18 +209,18 @@ backup_paths() {
 
 # Puts every backed-up path back exactly as it was, and removes folders the run created.
 restore_paths() {
-  local marker key path
+  local marker key path count=0
   [[ -d $BACKUP && $(cat "$BACKUP/state" 2>/dev/null) == taken ]] || return 0
-  for marker in "$BACKUP"/*.path; do
-    [[ -e $marker ]] || continue
+  while IFS= read -r marker; do
     key=$(basename "$marker" .path)
     path=$(cat "$marker")
     rm -rf "$path"
     [[ -e $BACKUP/$key ]] && cp -a "$BACKUP/$key" "$path"
+    count=$((count + 1))
     [[ -e $BACKUP/$key.newdir ]] && rmdir -p "$(cat "$BACKUP/$key.newdir")" 2>/dev/null || true
-  done
+  done < <(find "$BACKUP" -maxdepth 1 -name '*.path' | sort)
   echo restored >"$BACKUP/state"
-  note "Restored the user-level files."
+  note "Restored $count user-level path(s) as they were before the run."
 }
 
 cleanup() {
@@ -225,6 +228,7 @@ cleanup() {
   CLEANED=true
   set +e
   restore_paths
+  for clone in "${!CLONE_SHA[@]}"; do reset_clone "$clone" 2>/dev/null; done
   $SETTINGS_CHANGED && restore_settings
   [[ -n $SECRETS ]] && rm -rf "$SECRETS"
   [[ -n $WORK ]] && rm -rf "$WORK"
@@ -249,7 +253,7 @@ build_mcp_configs() {
   chmod 700 "$SECRETS"
   entry=$(jq -c '.mcpServers.graph_mem // empty' "$HOME/.claude.json" 2>/dev/null || true)
   if [[ -z $entry ]]; then
-    token=$(sed -n 's/^GRAPH_MEM_MCP_TOKEN=//p' "$REPO/.env" 2>/dev/null | tr -d '"' | head -1)
+    token=$(sed -n 's/^GRAPH_MEM_MCP_TOKEN=//p' "$REPO/.env" 2>/dev/null | tr -d '"' | head -1 || true)
     entry=$(jq -cn --arg token "$token" '{type: "http", url: "http://localhost:3030/mcp", headers: (if $token == "" then {} else {Authorization: "Bearer \($token)"} end)}')
   fi
   local mask
@@ -270,7 +274,7 @@ server_version() {
   curl -fsS --noproxy '*' -m 10 -K "$SECRETS/curl.conf" -H 'Content-Type: application/json' \
     -H 'Accept: application/json, text/event-stream' "$MCP_URL" \
     -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"adoption-eval","version":"1"}}}' 2>/dev/null |
-    sed -n 's/^data: //p; /^{/p' | jq -r '.result.serverInfo.version // empty' 2>/dev/null | head -1
+    sed -n 's/^data: //p; /^{/p' | jq -r '.result.serverInfo.version // empty' 2>/dev/null | head -1 || true
 }
 
 server_up() { curl -fsS --noproxy '*' -m 5 "$BASE_URL/up" >/dev/null 2>&1; }
@@ -307,7 +311,7 @@ prepare_clone() {
   local name=$1 dest=$PROJECTS_DIR/$1 src=$PROJECTS_DIR/${CLONE_SOURCE[$1]} branch sha lock=$EVAL_DIR/clones.lock
   if [[ ! -d $dest/.git ]]; then
     if [[ -d $src/.git ]]; then
-      branch=$(git -C "$src" symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null | sed 's#^origin/##')
+      branch=$(git -C "$src" symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null | sed 's#^origin/##' || true)
       git clone -q ${branch:+--branch "$branch"} "$src" "$dest"
       git -C "$dest" remote set-url origin "$(git -C "$src" remote get-url origin 2>/dev/null || echo "${CLONE_URL[$name]}")"
     else
@@ -356,7 +360,7 @@ check_guard() {
   local now changed
   now=$(guard_state)
   [[ $now == "$GUARD_BEFORE" ]] && return 0
-  changed=$(diff <(echo "$GUARD_BEFORE") <(echo "$now") | sed -n 's/^> \(repo\|file\|dir\) \([^ ]*\).*/\2/p' | sort -u | tr '\n' ' ')
+  changed=$(diff <(echo "$GUARD_BEFORE") <(echo "$now") | sed -n 's/^[<>] \(repo\|file\|dir\) \([^ ]*\).*/\2/p' | sort -u | tr '\n' ' ' || true)
   note "Stopped: something changed outside the scratch clones: ${changed:-<projects-dir>}."
   note "Nothing was reverted there. Check it, then rerun with --resume $RUN_ID (or --guard-skip if it's your own work)."
   exit 3
@@ -367,7 +371,7 @@ check_guard() {
 build_variants() {
   WORK=$(mktemp -d "${TMPDIR:-/tmp}/adoption-eval-work.XXXXXX")
   mkdir -p "$WORK/skill-old" "$WORK/skill-new" "$WORK/skill-lite"
-  git -C "$REPO" archive v1.89.0 skills/graph-mem-mcp-toolset | tar -x -C "$WORK/skill-old" --strip-components=1
+  git -C "$REPO" archive "${ADOPTION_OLD_SKILL_REF:-v1.89.0}" skills/graph-mem-mcp-toolset | tar -x -C "$WORK/skill-old" --strip-components=1
   cp -r "$REPO/skills/graph-mem-mcp-toolset" "$WORK/skill-new/"
   cp -r "$REPO/skills/graph-mem-mcp-toolset" "$WORK/skill-lite/"
   # The readonly variant: no Persist section, no line that names a write tool or the persist prompt.
@@ -475,7 +479,7 @@ run_sessions() {
 SETTINGS_READ='
   out = ARGV.to_h do |key|
     field = SettingsSchema.field(key)
-    group = field && SettingsSchema.all.find { |g| g.fields.include?(field) }
+    group = field && SettingsSchema.groups.find { |g| g.fields.include?(field) }
     abort("ADOPTION_EVAL_ERROR=unknown setting #{key}") unless field && !field.readonly
     abort("ADOPTION_EVAL_ERROR=#{key} is in the #{group.key} group, which the eval never changes") if group.check || group.key == :access
     abort("ADOPTION_EVAL_ERROR=#{key} has its own validator; change it in Settings instead") if field.validator
@@ -485,7 +489,11 @@ SETTINGS_READ='
 SETTINGS_WRITE='
   ARGV.each_slice(2) do |key, raw|
     field = SettingsSchema.field(key)
+    group = field && SettingsSchema.groups.find { |g| g.fields.include?(field) }
     abort("ADOPTION_EVAL_ERROR=unknown setting #{key}") unless field && !field.readonly
+    if group.fields.none?(&:validator) && (error = SettingsSchema.errors(group, { key => raw.to_s })[key])
+      abort("ADOPTION_EVAL_ERROR=#{key}: #{error}")
+    end
     AppSettings.public_send("#{key}=", SettingsSchema.cast(field, raw))
   end
   AppSettings.clear_cache
@@ -544,7 +552,7 @@ prepare_cursor() {
     until env -u CURSOR_API_KEY agent status 2>/dev/null | grep -q 'Logged in'; do
       pause "The Cursor CLI isn't logged in: run 'agent login' in another terminal."
     done
-    CURSOR_VERSION=$(agent --version 2>/dev/null | head -1)
+    CURSOR_VERSION=$(agent --version 2>/dev/null | head -1 || true)
   fi
   backup_paths "${CURSOR_PATHS[@]}"
   mkdir -p "$HOME/.cursor"
@@ -572,7 +580,9 @@ cursor_arm() {
   [[ $1 == "$CURSOR_ARM" ]] && return 0
   if [[ $CURSOR_ARM == K1 ]]; then pause "Remove the graph_mem User Rule from Cursor (Settings > Customize > Rules)."; fi
   rm -f "$HOME/.cursor/hooks/graph_mem_session_start_cursor.sh"
-  [[ -e $BACKUP/.cursor%hooks.json ]] && cp -a "$BACKUP/.cursor%hooks.json" "$HOME/.cursor/hooks.json" || rm -f "$HOME/.cursor/hooks.json"
+  local saved
+  saved=$BACKUP/$(backup_key "$HOME/.cursor/hooks.json")
+  if [[ -e $saved ]]; then cp -a "$saved" "$HOME/.cursor/hooks.json"; else rm -f "$HOME/.cursor/hooks.json"; fi
   case "$1" in
     K1)
       note "" "Paste this into Cursor: Settings > Customize > Rules > User Rules:" ""
@@ -695,7 +705,7 @@ GM_VERSION=$(server_version)
 if $CLAUDE_ARMS; then
   [[ -n $MODEL ]] || MODEL=$(jq -r '.model // empty' "$HOME/.claude/settings.json" 2>/dev/null || true)
   [[ -n $MODEL ]] || { $ASSUME_YES && MODEL=opus || tty_read MODEL "Claude Code model alias?" opus; }
-  CLAUDE_VERSION=$(claude --version 2>/dev/null | head -1)
+  CLAUDE_VERSION=$(claude --version 2>/dev/null | head -1 || true)
   [[ -n ${ANTHROPIC_API_KEY:-} ]] && note "ANTHROPIC_API_KEY is set: the runs unset it, so they use your Claude login."
 fi
 SESSIONS=0
@@ -759,7 +769,7 @@ case "$SUITE" in
     ;;
 esac
 
-auth=$(cat "$RUN_DIR"/logs/*.jsonl 2>/dev/null | jq -r 'select(.type == "system" and .subtype == "init") | .apiKeySource // empty' 2>/dev/null | sort -u | paste -sd, -)
+auth=$(cat "$RUN_DIR"/logs/*.jsonl 2>/dev/null | jq -r 'select(.type == "system" and .subtype == "init") | .apiKeySource // empty' 2>/dev/null | sort -u | paste -sd, - || true)
 jq --arg finished "$(date -u +%FT%TZ)" --arg auth "$auth" --arg cursor "${CURSOR_VERSION:-}" --arg cmodel "$CURSOR_MODEL" \
   '.finished_at = $finished | .auth = $auth | .cursor_version = $cursor | .cursor_model = $cmodel' \
   "$RUN_DIR/run.json" >"$RUN_DIR/run.json.tmp" && mv "$RUN_DIR/run.json.tmp" "$RUN_DIR/run.json"
