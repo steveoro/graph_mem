@@ -1,6 +1,9 @@
 # graph_mem auto-adoption: decision tests
 
 **Status:** active, companion to [`auto-adoption-plan.md`](auto-adoption-plan.md) (section 8 there points here).
+**Run it:** `script/adoption_eval/run_eval.sh` does the setup below, flips the arms, runs the sessions and writes the
+report in one command ([section 6](#6-scriptadoption_evalrun_evalsh-one-command-for-all-of-it)). Sections 1–5 stay as
+the reference for what it does.
 **Why:** each open question in the plan needs data before a choice. Every test below has fixed tasks, arms that
 are easy to flip, one primary metric and a decision rule written down *before* the runs.
 
@@ -210,7 +213,8 @@ In this order, so each step is useful even if the next is skipped:
 3. **Full round** for whatever cleared screening, plus RSH: T1–T3, N = 5 (15 runs per arm).
 4. **Cursor K0, K1, K2** on T1 and T3, N = 5 each (30 chats, manual checklist).
 
-After 1.90.0: I, ALL, ALL−x, ALL+A, K3, the Q3 install test, and `script/adoption_eval` over every saved log.
+After 1.90.0: I, ALL, ALL−x, ALL+A, K3, the Q3 install test, and `script/adoption_eval` over every saved log. On
+1.91.0, run them with `script/adoption_eval/run_eval.sh` (section 6).
 
 ### Report format (counts only)
 
@@ -230,3 +234,61 @@ Plus the Claude Code version, the model alias, and the baseline-state yes/no lis
 - Prints the per-arm and per-arm-per-task table above; never prints prompts, tool inputs or results (counts and tool
   names only).
 - Specs use synthetic JSONL fixtures (hand-written events, `synth-*` values), no real transcripts.
+- The Cursor CLI parser follows the stream of `agent` 2026.11.19: one `<kind>ToolCall` object per `tool_call` event,
+  graph_mem's MCP calls named by `args.providerIdentifier` and `args.toolName`, `getMcpToolsToolCall` as the tool lookup,
+  `editToolCall` as an edit, `permissionDenied` / `rejected` as a denied call, camelCase `usage`, no `num_turns`.
+- `ruby script/adoption_eval/report.rb <run-dir>` writes a run's `report.md` (counts only) and `summary.csv`: the run's
+  facts, the table, and the section 3 decision rules for the arms present, each one decided or naming what it needs.
+
+---
+
+## 6. `script/adoption_eval/run_eval.sh`: one command for all of it
+
+```bash
+script/adoption_eval/run_eval.sh                       # a menu: suite, N, model
+script/adoption_eval/run_eval.sh --suite screen --yes  # or any suite below, without questions
+script/adoption_eval/run_eval.sh --resume <run-id>     # after a usage limit or an interruption
+script/adoption_eval/run_eval.sh --help
+```
+
+| Suite | Arms × tasks × N | Sessions |
+|---|---|---|
+| `screen` (default) | I, ALL, ALL−R, ALL−S, ALL−H, ALL+A × T1 × 5 | 30 |
+| `full` | the same × T1–T3 × 5 | 90 |
+| `q1` | ALL, ALL+A × T1–T3 × 10 | 60 |
+| `q2` | RO-full, RO-lite × T4 × 5 | 10 |
+| `cursor` | K0, K1, K2 × T1, T3 × 5, headless Cursor CLI | 30 |
+| `cursor-ide` | K0, K2 × T1 × 5, manual IDE chats to calibrate the CLI | 10 |
+| `q3` | the timed install test, one per host | 2 |
+| `custom` | `--arms`, `--tasks`, `--n` | |
+
+On 1.91.0 the server always sends the new instructions, so **I** (rule off, the 1.89.0 skill, no hook) is the doc's B0
+with them; the single-lever arms R, S, H and A sit on top of I. B0 on the old instructions and ALL−I need a 1.89.0
+server: compare with the 1.89.0 logs.
+
+What it does by itself:
+- **Configs:** the eval MCP configs (default, `alwaysLoad`, `/mcp/readonly`, `X-MCP-Client: adoption-eval`) from your
+  user-scope graph_mem entry, or the repo's `.env`, in a private temp dir deleted at exit; the token never reaches a
+  process list or the run folder.
+- **Clones:** `goggles_admin2-eval` and `fast-mcp-eval` next to this repo are reused, or cloned from the local source repo
+  (no network), and pinned in `~/adoption-eval/clones.lock` (`--refresh-clones` moves the pin); reset before each session.
+- **Levers:** each arm's rule, skill copy (1.89.0, current, or the readonly "lite" variant), hook and MCP config, set at
+  user level and put back exactly afterwards (`--restore <run-id>` after a hard kill).
+- **Sessions:** Claude Code as in section 1 (write tools and Bash denied); the Cursor CLI with graph_mem on
+  `/mcp/readonly` under its own client id, the five read tools allowed and shell and the write tools denied in
+  `~/.cursor/cli-config.json`, K2's hook with a marker file. A usage limit stops the run with a resume hint.
+- **Edit guard:** both CLIs start in `<projects-dir>`, and the Cursor CLI can't be confined to the clone, so after every
+  session the script compares the other repos' `git status` and the folder's top-level files; on a change it stops and
+  reverts nothing (`--guard-skip` for a repo you're working in meanwhile).
+- **Report:** `~/adoption-eval/runs/<ISO id>/` holds the logs (private: transcripts and graph output), `run.json` and the
+  CSVs; `~/adoption-eval/reports/<ISO id>-report.md` is the counts-only report from `report.rb`, safe to share.
+- **Production settings (opt-in):** `--setting KEY=VALUE` (repeatable) changes a graph_mem setting in the app container
+  through `SettingsSchema` (never the access group, a cross-checked group, or a field with its own validator), restarts the
+  container, and restores and restarts at the end. Each restart closes every open MCP session, yours included.
+
+It pauses only for what a person must do: pasting and removing Cursor's User Rule (K1), `agent login` when the Cursor CLI
+isn't logged in, the IDE calibration chats, and the timed install test.
+
+Seen on the first runs (2026-11-19, Cursor CLI 2026.11.19): the CLI runs the user-level `sessionStart` hook from
+`~/.cursor/hooks.json` (the K2 marker fired), and in `-p` mode its agent may end on a question it can't ask
+(`askQuestionToolCall`, rejected) before any edit; such a session counts as adopted when it made any graph_mem call.
