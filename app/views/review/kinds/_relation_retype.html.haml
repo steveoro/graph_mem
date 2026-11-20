@@ -13,3 +13,16 @@
 %p.review-hint= t("#{scope}.membership", new_type: payload["new_type"])
 - if payload["operation"].present? && payload["operation"] != "retype"
   %p.review-warning= t("#{scope}.operation", operation: payload["operation"])
+-# The child already has another part_of parent: the plain Apply would give it a second one, so the
+-# card offers the two real choices (RelationRetypeChoice), each through the confirm card.
+- parent_id = CompactionReviewApplier::RelationRetype.choice_parent_id(payload)
+- if parent_id
+  - parent_name = MemoryEntity.where(id: parent_id).pick(:name)
+  - target_name = names[payload["to_entity_id"].to_i] || payload["to_name"]
+  %p.review-warning{ data: { testid: "relation-retype-has-parent" } }= t("#{scope}.has_parent", child: names[payload["from_entity_id"].to_i] || payload["from_name"], parent: parent_name)
+  - if row.pending?
+    .review-detail__actions
+      = link_to t("#{scope}.move", target: target_name), review_row_preview_path(row.row_uuid, parent_choice: "move"),
+        class: "ui-btn ui-btn-primary", data: { turbo_frame: "review-detail", testid: "relation-retype-move" }
+      = link_to t("#{scope}.keep", parent: parent_name), review_row_preview_path(row.row_uuid, parent_choice: "keep"),
+        class: "ui-btn", data: { turbo_frame: "review-detail", testid: "relation-retype-keep" }

@@ -52,7 +52,7 @@ module Api
       # @return [Object] the block's value
       # @raise [ProjectMembership::LockTimeout]
       def with_membership_lock_if(needed, &block)
-        needed ? ProjectMembership.with_membership_lock(&block) : yield
+        RelationMembershipWrite.with_lock_if(needed, &block)
       end
     end
   end

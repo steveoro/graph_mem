@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 module ReviewPolicies
-  # Auto-resolve value changes (1.92.0, docs/plans/contradiction-auto-resolve-plan.md). On by
+  # Auto-resolve value changes (1.92.0, docs/plans/done/contradiction-auto-resolve-plan.md). On by
   # default, for one class of contradiction rows only: the two facts are on one entity, have the same
   # source and perspective, and are a plain value change (ContradictionDetector.value_change) of the
   # key-value class: one "Key: value" line each, the same key, one changed value, the same unit. The

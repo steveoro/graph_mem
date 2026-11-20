@@ -53,9 +53,12 @@ module ReviewHelper
   # @param row [MaintenanceReportRow]
   # @param preview [Hash] CompactionReviewApplier.preview of the row
   # @return [Boolean] the detail pane offers Apply…: not for a choice kind, nor for a lifecycle row
-  #   Repair refuses (a cross-entity superseded_by: Dismiss only)
+  #   Repair refuses (a cross-entity superseded_by: Dismiss only), nor for a relation_retype row
+  #   whose child already has a parent (its card offers Move and Keep)
   def review_offers_apply?(row, preview)
     return false if ReviewRowClassifier::CHOICE_KINDS.include?(row.kind)
+    # A relation_retype row whose child already has a parent offers Move / Keep on its card instead.
+    return false if row.kind == "relation_retype" && CompactionReviewApplier::RelationRetype.choice_parent_id(row.effective_payload)
 
     row.kind != "lifecycle_corruption" || preview[:ok]
   end

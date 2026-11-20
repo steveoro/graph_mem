@@ -452,6 +452,145 @@ RSpec.describe 'DataExchange', type: :request do
     end
   end
 
+  # A part_of moves membership: retype, delete and duplicate cleanup lock and sync like graph_write.
+  describe 'part_of membership on update, delete and duplicate cleanup' do
+    let(:suffix) { SecureRandom.hex(3) }
+    let!(:alpha) { MemoryEntity.create!(name: "Alpha Project #{suffix}", entity_type: 'Project') }
+    let!(:gamma) { MemoryEntity.create!(name: "Gamma Project #{suffix}", entity_type: 'Project') }
+    let!(:widget) { MemoryEntity.create!(name: "SynthWidget #{suffix}", entity_type: 'Component') }
+    let!(:part) { MemoryEntity.create!(name: "SynthPart #{suffix}", entity_type: 'Component') }
+
+    def retype(relation, type)
+      patch update_relation_data_exchange_index_path, params: { id: relation.id, relation_type: type }, as: :json
+    end
+
+    def body = JSON.parse(response.body)
+
+    it 'syncs the child when the type becomes part_of, and un-syncs it when it stops being one' do
+      relation = MemoryRelation.create!(from_entity: widget, to_entity: alpha, relation_type: 'depends_on')
+
+      retype(relation, 'Part Of')
+      expect(response).to have_http_status(:ok)
+      expect([ relation.reload.relation_type, widget.reload.project_id ]).to eq([ 'part_of', alpha.id ])
+
+      retype(relation, 'depends_on')
+      expect(response).to have_http_status(:ok)
+      expect(widget.reload.project_id).to be_nil
+    end
+
+    it 'refuses a second parent and a name collision, with nothing changed' do
+      MemoryRelation.create!(from_entity: widget, to_entity: alpha, relation_type: 'part_of')
+      ProjectMembership.sync!(widget)
+      second = MemoryRelation.create!(from_entity: widget, to_entity: gamma, relation_type: 'depends_on')
+
+      retype(second, 'part_of')
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(body).to include('success' => false, 'error' => include('already has a part_of parent'))
+      expect([ second.reload.relation_type, widget.reload.project_id ]).to eq([ 'depends_on', alpha.id ])
+
+      MemoryEntity.create!(name: part.name, entity_type: 'Component', project_id: gamma.id)
+      colliding = MemoryRelation.create!(from_entity: part, to_entity: gamma, relation_type: 'depends_on')
+      retype(colliding, 'part_of')
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(body['error']).to include('already exists there', 'rename the entity or pick another parent')
+      expect([ colliding.reload.relation_type, part.reload.project_id ]).to eq([ 'depends_on', nil ])
+    end
+
+    it 'leaves an unrelated retype alone, without the lock' do
+      relation = MemoryRelation.create!(from_entity: widget, to_entity: part, relation_type: 'depends_on')
+      allow(ProjectMembership).to receive(:with_membership_lock).and_call_original
+
+      retype(relation, 'calls')
+
+      expect(response).to have_http_status(:ok)
+      expect(relation.reload.relation_type).to eq('calls')
+      expect(ProjectMembership).not_to have_received(:with_membership_lock)
+    end
+
+    it 'un-scopes the child and its subtree when a part_of is deleted, and refuses a collision' do
+      edge = MemoryRelation.create!(from_entity: widget, to_entity: alpha, relation_type: 'part_of')
+      MemoryRelation.create!(from_entity: part, to_entity: widget, relation_type: 'part_of')
+      [ widget, part ].each { |entity| ProjectMembership.sync!(entity) }
+      clash = MemoryEntity.create!(name: part.name, entity_type: 'Component')
+
+      delete delete_relation_data_exchange_index_path, params: { id: edge.id }
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(MemoryRelation.exists?(edge.id)).to be(true)
+      expect(part.reload.project_id).to eq(alpha.id)
+
+      clash.destroy!
+      delete delete_relation_data_exchange_index_path, params: { id: edge.id }
+      expect(response).to have_http_status(:ok)
+      expect([ widget.reload.project_id, part.reload.project_id ]).to eq([ nil, nil ])
+    end
+
+    it 'syncs the child of a part_of it deletes as a reverse duplicate' do
+      MemoryRelation.create!(from_entity: alpha, to_entity: part, relation_type: 'part_of')
+      newer = MemoryRelation.create!(from_entity: part, to_entity: alpha, relation_type: 'synth_placeholder')
+      newer.update_column(:relation_type, 'part_of') # a part_of pair, as written before the cycle check
+      ProjectMembership.sync!(part)
+      expect(part.reload.project_id).to eq(alpha.id)
+
+      delete delete_duplicate_relations_data_exchange_index_path
+
+      expect(response).to have_http_status(:ok)
+      expect(MemoryRelation.exists?(newer.id)).to be(false)
+      expect(part.reload.project_id).to be_nil
+    end
+
+    context 'duplicate cleanup re-reads under the lock' do
+      def part_of_pair
+        MemoryRelation.create!(from_entity: alpha, to_entity: part, relation_type: 'part_of')
+        newer = MemoryRelation.create!(from_entity: part, to_entity: alpha, relation_type: 'synth_placeholder')
+        newer.update_column(:relation_type, 'part_of')
+        ProjectMembership.sync!(part)
+        newer
+      end
+
+      it 'refuses a collision where the child would land, with nothing deleted' do
+        newer = part_of_pair
+        MemoryEntity.create!(name: part.name, entity_type: 'Component')
+
+        delete delete_duplicate_relations_data_exchange_index_path
+
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(body['error']).to include('already exists there')
+        expect(MemoryRelation.exists?(newer.id)).to be(true)
+        expect(part.reload.project_id).to eq(alpha.id)
+      end
+
+      it "doesn't count a duplicate deleted before the cleanup's transaction" do
+        MemoryRelation.create!(from_entity: widget, to_entity: part, relation_type: 'depends_on')
+        newer = MemoryRelation.create!(from_entity: part, to_entity: widget, relation_type: 'depends_on')
+        allow(RelationMembershipWrite).to receive(:with_lock_if).and_wrap_original do |original, needed, &block|
+          newer.destroy!
+          original.call(needed, &block)
+        end
+
+        delete delete_duplicate_relations_data_exchange_index_path
+
+        expect(response).to have_http_status(:ok)
+        expect(body['deleted_count']).to eq(0)
+        expect(AuditLog.where(auditable_type: 'MemoryRelation', auditable_id: newer.id, action: 'delete').count).to eq(1)
+      end
+
+      it 'refuses, with nothing deleted, a duplicate retyped into part_of after it was read' do
+        MemoryRelation.create!(from_entity: widget, to_entity: part, relation_type: 'depends_on')
+        newer = MemoryRelation.create!(from_entity: part, to_entity: widget, relation_type: 'depends_on')
+        allow(RelationMembershipWrite).to receive(:with_lock_if).and_wrap_original do |original, needed, &block|
+          newer.update_column(:relation_type, 'part_of')
+          original.call(needed, &block)
+        end
+
+        delete delete_duplicate_relations_data_exchange_index_path
+
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(body['error']).to include('became a part_of')
+        expect(MemoryRelation.exists?(newer.id)).to be(true)
+      end
+    end
+  end
+
   describe 'POST /data_exchange/create_relation' do
     it 'creates a new relation' do
       post create_relation_data_exchange_index_path, params: {

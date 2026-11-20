@@ -165,11 +165,11 @@ Query parameters:
 
 - `GET /api/v1/memory_relations/:id`
 - `PATCH /api/v1/memory_relations/:id` with `{ "memory_relation": { "relation_type": "depends_on" } }`
-- `DELETE /api/v1/memory_relations/:id` -- `204 No Content`
+- `DELETE /api/v1/memory_relations/:id` -- `204 No Content` (`422` when a `part_of` delete is refused, see below)
 
 `relation_type` is normalized when it is set (create, or an update that changes it): `"Has Many"` is stored as `has_many`, a known synonym as its canonical type, and an unmapped type in lower snake case. The response shows the stored type. An update that leaves the type alone keeps the stored spelling.
 
-Since 1.93.0, a create or a type change that makes a relation `part_of`, or stops it being one, takes the membership lock and syncs the child's project in the same transaction. A `part_of` that would give the child a second parent or create a cycle, a name already taken in the new project, or a lock that stays busy is refused with the usual `422` and nothing is saved. `DELETE` of a `part_of` relation does not sync membership yet (known follow-up).
+Since 1.93.0, a create or a type change that makes a relation `part_of`, or stops it being one, takes the membership lock and syncs the child's project in the same transaction. A `part_of` that would give the child a second parent or create a cycle, a name already taken in the new project, or a lock that stays busy is refused with the usual `422` and nothing is saved. A `DELETE` of a `part_of` relation (any case, e.g. `Part_Of`) does the same (after 1.93.0, which didn't sync it): the former child and its subtree leave the project (usually back to the global scope), and if one of their names is taken there, or the lock stays busy, the delete is refused with `422` (`{ "error": "Validation failed", "details": { "base": [...] } }`) and nothing is deleted. Deleting any other relation is unchanged.
 
 ---
 

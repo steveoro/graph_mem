@@ -838,6 +838,12 @@ paths:
             application/json:
               schema:
                 "$ref": "#/components/schemas/error_response"
+        '422':
+          description: A part_of delete refused (the child's name is taken in the scope it moves to) or the membership lock is busy; nothing deleted
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/error_response"
 
   # ── Context ────────────────────────────────────────────────────────
   "/api/v1/context":

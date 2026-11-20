@@ -253,7 +253,8 @@ class GraphDeleteService
     with_deletion_reason(attributes[:reason]) { relation.destroy! }
     # Removing a part_of edge un-roots the child: membership follows its
     # (now absent) parent — typically back to the global namespace.
-    ProjectMembership.sync!(from_entity) if snapshot["relation_type"] == "part_of" && from_entity
+    # (As SQL reads the stored type: a `Part_Of` row is a parent edge too.)
+    ProjectMembership.sync!(from_entity) if from_entity && MemoryRelation.reads_as_part_of?(snapshot["relation_type"])
     {
       relation_id: snapshot["id"],
       from_entity_id: snapshot["from_entity_id"],

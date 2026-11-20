@@ -217,7 +217,11 @@ Dependencies between the plans:
 - **REST membership fixes.** `POST /api/v1/bulk` and `POST`/`PATCH /api/v1/memory_relations`
   take the membership lock and sync the child's project when a relation is, becomes or stops being
   `part_of`, refusing with the existing 422. `DELETE` of a `part_of` relation through the REST API
-  still doesn't sync membership (known follow-up).
+  didn't sync membership in 1.93.0; the follow-up after it does (lock, delete, sync, 422 on a
+  collision or a busy lock), and so do the operator's data-exchange retype, delete and duplicate
+  cleanup. The writers still missing the lock or the sync (entity deletes, entity merges with two
+  parents, the "Repair relation duplicates" button, scan validation, rake tasks, the scan's lock
+  order) are planned in [`part-of-membership-plan.md`](part-of-membership-plan.md).
 - **Docs corrected.** `docs/dream_state.md` now says an orphan has no `part_of` parent (the
   `depends_on` clause was never in the code) and that the tree walk follows `part_of` children
   down from the Project roots.

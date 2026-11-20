@@ -1,6 +1,9 @@
 # frozen_string_literal: true
 
 class DataExchangeController < ApplicationController
+  # A relation the duplicate cleanup read as another type reads as part_of under its row lock.
+  class DuplicatesChanged < StandardError; end
+
   # GET /data_exchange/export?ids[]=1&ids[]=2
   # Returns JSON file with selected root nodes and all their children (sync/direct download)
   def export
@@ -231,22 +234,23 @@ class DataExchangeController < ApplicationController
   # DELETE /data_exchange/delete_duplicate_relations
   # Deletes the newer relation from each duplicate pair (keeps the older one by ID)
   def delete_duplicate_relations
-    duplicates = find_duplicate_relations
-    deleted_count = 0
+    ids = find_duplicate_relations.map { |dup| dup[:delete][:id] }
+    locked = MemoryRelation.where(id: ids).pluck(:relation_type).any? { |type| MemoryRelation.reads_as_part_of?(type) }
 
-    begin
-      Current.deletion_reason = "duplicate"
-      ActiveRecord::Base.transaction do
-        duplicates.each do |dup|
-          relation = MemoryRelation.find_by(id: dup[:delete][:id])
-          if relation
-            relation.destroy!
-            deleted_count += 1
-          end
+    # Deleting one edge of a part_of pair changes its child's parent: lock first, then re-read the
+    # rows under a row lock (only rows still there count), delete, and sync in the transaction.
+    deleted_count = RelationMembershipWrite.with_lock_if(locked) do
+      Current.set(deletion_reason: "duplicate") do
+        ActiveRecord::Base.transaction do
+          relations = MemoryRelation.where(id: ids).lock.to_a
+          part_of = relations.select { |relation| MemoryRelation.reads_as_part_of?(relation.relation_type) }
+          raise DuplicatesChanged if part_of.any? && !locked
+
+          relations.each(&:destroy!)
+          MemoryEntity.where(id: part_of.map(&:from_entity_id).uniq).find_each { |child| ProjectMembership.sync!(child) }
+          relations.size
         end
       end
-    ensure
-      Current.deletion_reason = nil
     end
 
     render json: {
@@ -256,6 +260,11 @@ class DataExchangeController < ApplicationController
     }
   rescue ActiveRecord::RecordNotDestroyed => e
     render json: { success: false, error: "Failed to delete relations: #{e.message}" }, status: :unprocessable_content
+  rescue ProjectMembership::LockTimeout, ProjectMembership::Collision => e
+    render json: { success: false, error: membership_conflict_message(e) }, status: :unprocessable_content
+  rescue DuplicatesChanged
+    render json: { success: false, error: "A duplicate became a part_of while the cleanup ran; nothing was deleted, retry." },
+           status: :unprocessable_content
   end
 
   # PATCH /data_exchange/update_relation
@@ -279,7 +288,8 @@ class DataExchangeController < ApplicationController
       return render json: { error: "Relation type is required" }, status: :unprocessable_content
     end
 
-    relation.update!(relation_type: new_type)
+    # A retype into or out of part_of moves membership: lock, create-time rules, sync.
+    RelationMembershipWrite.update!(relation, relation_type: new_type)
 
     render json: {
       success: true,
@@ -292,6 +302,10 @@ class DataExchangeController < ApplicationController
     }
   rescue ActiveRecord::RecordInvalid => e
     render json: { success: false, error: e.message }, status: :unprocessable_content
+  rescue RelationSemantics::ValidationError => e
+    render json: { success: false, error: e.message }, status: :unprocessable_content
+  rescue ProjectMembership::LockTimeout, ProjectMembership::Collision => e
+    render json: { success: false, error: membership_conflict_message(e) }, status: :unprocessable_content
   end
 
   # DELETE /data_exchange/delete_relation
@@ -313,12 +327,8 @@ class DataExchangeController < ApplicationController
     to_name = relation.to_entity&.name
     relation_type = relation.relation_type
 
-    begin
-      Current.deletion_reason = params[:reason]
-      relation.destroy!
-    ensure
-      Current.deletion_reason = nil
-    end
+    # A part_of delete syncs the former child under the lock, in the same transaction.
+    RelationMembershipWrite.destroy!(relation, reason: params[:reason])
 
     render json: {
       success: true,
@@ -326,6 +336,8 @@ class DataExchangeController < ApplicationController
     }
   rescue ActiveRecord::RecordNotDestroyed => e
     render json: { success: false, error: e.message }, status: :unprocessable_content
+  rescue ProjectMembership::LockTimeout, ProjectMembership::Collision => e
+    render json: { success: false, error: membership_conflict_message(e) }, status: :unprocessable_content
   end
 
   private

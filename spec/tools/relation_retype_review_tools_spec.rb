@@ -45,13 +45,13 @@ RSpec.describe "relation_retype through the MCP review tools", type: :model do
     expect(widget.reload.project_id).to eq(project.id)
   end
 
-  it "answers an invalid-arguments error when the part_of would be refused" do
+  it "answers an invalid-arguments error naming the two choices when the child already has a parent" do
     other = MemoryEntity.create!(name: "Beta Project #{suffix}", entity_type: "Project")
     MemoryRelation.create!(from_entity: widget, to_entity: other, relation_type: "part_of")
     item_id = MaintenanceReportRow.find_by!(kind: "relation_retype").row_uuid
 
     expect { ApplyMaintenanceReviewTool.new.call(item_id: item_id) }
-      .to raise_error(GraphMem::InvalidArgumentsError, /Cannot retype relation ##{variant.id}: .*already has a part_of parent/)
+      .to raise_error(GraphMem::InvalidArgumentsError, /A choice is required: .*already part_of .*parent_choice "move".*"keep"/)
     expect(variant.reload.relation_type).to eq("contained_in")
   end
 end

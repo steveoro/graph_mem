@@ -38,6 +38,7 @@ Active plans and the backlog live in [`docs/plans/`](../).
 | [`mcp-apps-plan.md`](mcp-apps-plan.md) | MCP Apps views: the generic resource layer, the Apps capability, Graph and Search modes | 1.87.0–1.89.0 |
 | [`auto-adoption-plan.md`](auto-adoption-plan.md) | Agents reach for graph_mem in other repos: server instructions, skill trigger, user rule, hook, print-only installer; Skills over MCP behind a setting | 1.90.0–1.91.0 |
 | [`auto-adoption-tests.md`](auto-adoption-tests.md) | The decision tests for the plan above, the eval scripts, and the result (the instructions alone suffice) | closed with 1.92.0 |
+| [`contradiction-auto-resolve-plan.md`](contradiction-auto-resolve-plan.md) | Value changes and value-flip contradictions resolved on their own: the value-change pairing, the auto-resolve policy, the false-merge guards | 1.92.0 |
 
 Removed as noise (still in git history): the chores D-1–D-3 step list (1.55.3) and the F2a, F2b and F2c
 task-by-task implementation plans (their designs above keep the decisions).

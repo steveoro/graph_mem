@@ -5,6 +5,20 @@ All notable changes to GraphMem will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+- The contradiction auto-resolve plan (shipped in 1.92.0) is done and moved to `docs/plans/done/`.
+
+### Fixed
+- `DELETE /api/v1/memory_relations/:id` of a `part_of` relation (any case, e.g. `Part_Of`) takes the membership lock and syncs the former child: it and its subtree leave the project, usually back to the global scope. A name already taken there, or a busy lock, answers `422` (now documented in the API spec) and nothing is deleted. Other deletes are unchanged.
+- The operator's data-exchange actions do the same for `part_of`: retyping a relation into or out of `part_of` checks the create-time rules (one parent, no cycle) and syncs the child, deleting a relation syncs its former child, and **Delete duplicate relations** syncs the child of a `part_of` it deletes. A refusal leaves everything unchanged.
+- A `relation_retype` review row whose entity already has a `part_of` parent could never be applied: Apply was refused as a second parent and the preview offered only Cancel. The row now offers the two real choices: **Move under** its target (the old parent edge and the variant are replaced by the new `part_of`, and the entity and its subtree follow; the preview says whether the project changes, and a cycle or a name collision is refused) or **Keep** the current parent (the variant becomes `relates_to`, merged into an existing `relates_to` with the sweep's rule). Both are undoable. Over MCP, `apply_maintenance_review` takes the choice as `action_params.parent_choice` (`"move"` or `"keep"`) and answers a validation error naming both without it; the row's `reason` says when the choice is needed. A row whose entity has no other parent applies as before.
+- A `reparent_entity` or `orphan_parent` review row refused by a name collision left the entity's parent edge moved while its project stayed: the move now rolls back on its own, so the old parent stays.
+- Applying a `relation_integrity` review row that deletes a `part_of` (a merge collision's extra parent) syncs the child to the parent it keeps; a name collision refuses the row with nothing deleted.
+- Deleting a relation stored as a case variant of `part_of` (e.g. `Part_Of`) through MCP `graph_delete`, Explore or a `delete_relation` review row now syncs the former child; these paths compared the type case-sensitively and skipped the sync.
+- Undoing a relation's retype into `part_of` syncs the child back out of the project; the undo only noted the type it restored, so the child kept the project of the parent edge that was gone.
+
 ## [1.93.0] - 2026-11-20
 
 Relation types are kept tidy. A type is normalized when it is written ("Has Many" and "has-many" become `has_many`, a known synonym its canonical type), a sweep canonicalizes the types already stored, and the types nothing maps go to the operator to map or accept. No migration and no change to any MCP tool, parameter or schema (tool counts stay 12 / 9 / 22).
@@ -29,7 +43,7 @@ Relation types are kept tidy. A type is normalized when it is written ("Has Many
 - The Dream State plan marks R1a shipped, and the mcp 1.11.0 bump is now planned as 1.93.1.
 
 ### Fixed
-- `POST /api/v1/bulk` and `POST`/`PATCH /api/v1/memory_relations` now take the membership lock and sync the child's project when a relation is, becomes or stops being `part_of`. Before, they stored the edge without the lock or the sync, so a child's `project_id` could drift from its tree. A second parent, a cycle, a name taken in the new project or a busy lock is refused with the existing `422`. Known gap: `DELETE /api/v1/memory_relations/:id` of a `part_of` edge doesn't sync membership yet.
+- `POST /api/v1/bulk` and `POST`/`PATCH /api/v1/memory_relations` now take the membership lock and sync the child's project when a relation is, becomes or stops being `part_of`. Before, they stored the edge without the lock or the sync, so a child's `project_id` could drift from its tree. A second parent, a cycle, a name taken in the new project or a busy lock is refused with the existing `422`. Known gap: `DELETE /api/v1/memory_relations/:id` of a `part_of` edge doesn't sync membership yet (fixed in [Unreleased]).
 - Undoing a deleted relation, through an audit undo or an entity-merge undo, restores the relation with the type it had stored. Before, it was canonicalized again on the way back.
 - An entity merge re-pointing a relation, or its undo, no longer canonicalizes the stored type, so a variant like `Part Of` can't turn into `part_of` behind the single-parent and cycle checks and the membership sync.
 

@@ -15,9 +15,10 @@ class MemoryRelation < ApplicationRecord
   # never turns a variant into `part_of` behind the single-parent/cycle checks and the membership sync.
   before_validation :canonicalize_relation_type, if: -> { new_record? || will_save_change_to_relation_type? }
 
-  # When true, a create keeps `relation_type` exactly as assigned (no canonicalization): an undo
-  # re-inserting a deleted relation (ChangeSetUndo::AuditInverse, ChangeSetUndo::Merge) restores
-  # its stored type as it was, and the next RelationTypeSweep canonicalizes it.
+  # When true, a save keeps `relation_type` exactly as assigned (no canonicalization): an undo
+  # re-inserting a deleted relation or writing back an updated type (ChangeSetUndo::AuditInverse,
+  # ChangeSetUndo::Merge) restores its stored type as it was, and the next RelationTypeSweep
+  # canonicalizes it.
   # @return [Boolean, nil]
   attr_accessor :keep_stored_type
 
@@ -128,6 +129,11 @@ class MemoryRelation < ApplicationRecord
   end
 
   def relation_semantics_are_valid
+    # A restored row keeps its stored type: a variant SQL doesn't read as part_of (e.g. "Is Part Of")
+    # is not a parent edge, so the hierarchy rules RelationSemantics would apply to its canonical
+    # type don't hold it (it existed next to the child's real parent).
+    return if keep_stored_type && !MemoryRelation.reads_as_part_of?(relation_type)
+
     RelationSemantics.validate_create!(
       from_entity_id: from_entity_id,
       to_entity_id: to_entity_id,

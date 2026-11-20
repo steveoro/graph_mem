@@ -18,6 +18,8 @@ class CompactionReviewApplier
   # already `new_type`, or a `new_type` twin exists, which the next sweep merges into) succeed with
   # nothing written. Undo is the generic audit undo: the created edge is destroyed (membership
   # synced) and the variant re-inserted with its stored type (MemoryRelation#keep_stored_type).
+  # When the child already has another part_of parent, the row needs a choice (move under the
+  # target, or keep the parent and make the variant relates_to): RelationRetypeChoice.
   #
   #   RelationRetype.apply({ operation: "retype", relation_id: 41, new_type: "part_of", … })
   #   # => { success: true, message: "Relation #41 'child_of' replaced by part_of #57" }
@@ -28,15 +30,19 @@ class CompactionReviewApplier
     module_function
 
     # @param effective [Hash] the row's effective payload (indifferent access)
-    # @param _action_params [Hash] unused: a retype row takes no overrides
+    # @param action_params [Hash] `parent_choice` ("move" or "keep") when the child already has
+    #   another part_of parent (RelationRetypeChoice); otherwise unused
     # @return [Hash] `{ success:, message: }` or `{ success: false, error: }`
-    def apply(effective, _action_params = {})
+    def apply(effective, action_params = {})
       problem = operation_problem(effective)
       return { success: false, error: problem } if problem
 
       relation = MemoryRelation.lock.find_by(id: effective[:relation_id].to_i)
       stale = stale_reason(relation, effective)
       return stale if stale
+
+      parent_id = parent_choice_needed(relation, effective)
+      return RelationRetypeChoice.apply(relation, parent_id, action_params || {}) if parent_id
 
       retype!(relation, effective[:new_type].to_s)
     rescue ActiveRecord::RecordInvalid => e
@@ -46,15 +52,43 @@ class CompactionReviewApplier
     end
 
     # @return [Hash] `{ ok:, effects:, warnings:, undo: }` (see Preview)
-    def preview(effective, _action_params = {})
+    def preview(effective, action_params = {})
       problem = operation_problem(effective)
       return Preview.result(false, warnings: [ problem ]) if problem
 
       relation = MemoryRelation.find_by(id: effective[:relation_id].to_i)
       stale = stale_reason(relation, effective)
-      return preview_retype(relation, effective[:new_type].to_s) unless stale
+      unless stale
+        parent_id = parent_choice_needed(relation, effective)
+        return RelationRetypeChoice.preview(relation, parent_id, action_params || {}) if parent_id
+
+        return preview_retype(relation, effective[:new_type].to_s)
+      end
 
       stale[:success] ? Preview.result(true, effects: [ stale[:message] ]) : Preview.result(false, warnings: [ stale[:error] ])
+    end
+
+    # The child's other part_of parent when the row retypes into part_of and the child has one: the
+    # row then needs a choice (RelationRetypeChoice). nil otherwise.
+    # @param relation [MemoryRelation]
+    # @param effective [Hash]
+    # @return [Integer, nil]
+    def parent_choice_needed(relation, effective)
+      return nil unless RelationTypeSweep.part_of?(effective[:new_type].to_s)
+
+      RelationRetypeChoice.current_parent_id(relation)
+    end
+
+    # The parent the row asks about, for the Review card: nil when the relation is gone, stale, or
+    # the child has no other parent (the plain Apply then stays).
+    # @param effective [Hash] the row's effective payload
+    # @return [Integer, nil]
+    def choice_parent_id(effective)
+      effective = effective.to_h.with_indifferent_access
+      relation = MemoryRelation.find_by(id: effective[:relation_id].to_i)
+      return nil if operation_problem(effective) || stale_reason(relation, effective)
+
+      parent_choice_needed(relation, effective)
     end
 
     # @return [String, nil] why the row's operation can't be applied
