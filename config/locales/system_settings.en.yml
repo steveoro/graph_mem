@@ -34,6 +34,7 @@ en:
           auto_apply_relationships: "Applies high-band relationship proposals at or above the confidence below (never part_of), at most 50 per run. Reverse: Undo the run (removes the relations)."
           auto_apply_expired_validity: "Marks observations obsolete when their own valid_until has passed, at most 100 per run. Reverse: Undo the run."
           auto_apply_fact_supersede: "Applies \"Outdated by a fact\" suggestions the judge marked superseded at or above the confidence below, only for facts an operator marked, never with a guard or for an entity outside the project, at most 100 per run. Reverse: Undo the run."
+          auto_apply_contradiction: "On by default. Resolves a contradiction that is a plain value change: two facts of one entity, with the same source and perspective, that are one \"Key: value\" line each with the same key and one changed value (\"Port: 3000\", later \"Port: 3001\"). The older fact is marked superseded by the newer one; nothing is deleted. Different keys, a changed unit, lists and ties on the dates are never applied, at most 100 per run. Reverse: Undo the run. Turn it off to review these by hand."
       mcp_access:
         intro: "Who may reach /mcp (and bearer requests on /api/v1): allowed client IPs, Host names and browser origins. Each list adds to its ENV value, which is shown first and can't be removed here. Changes apply without a restart."
         sessions_notice_title: "Saving a change to allowed hosts or origins closes every open MCP session."
@@ -240,6 +241,17 @@ en:
           label: "Auto-apply expired validity (stale memory)"
         enable_auto_apply_fact_supersede:
           label: "Auto-apply source fact supersedes"
+        enable_auto_apply_contradiction:
+          label: "Auto-resolve value changes"
+        auto_apply_contradiction_free_text:
+          label: "Auto-resolve value changes in free text"
+          description: "Off by default. Also resolve two sentences that differ only in one or two values (\"listens on port 3000\" / \"listens on port 3001\"), within the two limits below. Needs \"Auto-resolve value changes\" on."
+        auto_apply_contradiction_max_distance:
+          label: "Free-text value change: maximum distance"
+          description: "The most two free-text facts may differ (cosine distance) to be resolved automatically. Free text only."
+        auto_apply_contradiction_max_tokens:
+          label: "Free-text value change: changed values"
+          description: "How many values may differ between two free-text facts (1 or 2). Free text only."
         auto_apply_fact_supersede_min_confidence:
           label: "Auto-apply source fact confidence"
           description: "Minimum judge confidence for auto-applying an \"Outdated by a fact\" suggestion."

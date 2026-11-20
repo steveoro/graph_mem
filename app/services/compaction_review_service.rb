@@ -267,7 +267,9 @@ class CompactionReviewService
             return { success: false, error: "Suggestion is not actionable (status: #{row.status})" }
           end
 
-          result = CompactionReviewApplier.apply(row, action_params, resolution: resolution)
+          # The keyword travels only when set, so the default call stays the two-argument one.
+          options = resolution == :obsolete ? {} : { resolution: resolution }
+          result = CompactionReviewApplier.apply(row, action_params, **options)
           if result[:success]
             track_review_row(row, status: "approved", applied_at: Time.current)
           else

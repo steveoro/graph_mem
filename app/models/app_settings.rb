@@ -130,6 +130,15 @@ class AppSettings < RailsSettings::Base
   field :enable_auto_apply_fact_supersede, default: false, type: :boolean
   field :auto_apply_fact_supersede_min_confidence, default: 0.9, type: :float,
         validates: { numericality: { greater_than_or_equal_to: 0.8, less_than_or_equal_to: 0.99 } }
+  # Auto-resolve value changes (1.92.0, ReviewPolicies::AutoApplyContradiction). On by default for the
+  # key-value class only: one "Key: value" line each, the same key, one changed value. Sentences that
+  # differ in 1-2 values (free text) are applied only with the second toggle, within the two limits.
+  field :enable_auto_apply_contradiction, default: true, type: :boolean
+  field :auto_apply_contradiction_free_text, default: false, type: :boolean
+  field :auto_apply_contradiction_max_distance, default: 0.10, type: :float,
+        validates: { numericality: { greater_than_or_equal_to: 0.02, less_than_or_equal_to: 0.15 } }
+  field :auto_apply_contradiction_max_tokens, default: 2, type: :integer,
+        validates: { numericality: { greater_than_or_equal_to: 1, less_than_or_equal_to: 2 } }
 
   # Default and accepted range of each numeric review setting.
   REVIEW_NUMBERS = {
@@ -138,8 +147,12 @@ class AppSettings < RailsSettings::Base
     "review_expire_low_confidence_days" => [ 30, 7..365 ],
     "auto_apply_relationship_min_confidence" => [ 0.9, 0.8..1.0 ],
     "fact_supersede_max_distance" => [ 0.45, 0.2..0.6 ],
-    "auto_apply_fact_supersede_min_confidence" => [ 0.9, 0.8..0.99 ]
+    "auto_apply_fact_supersede_min_confidence" => [ 0.9, 0.8..0.99 ],
+    "auto_apply_contradiction_max_distance" => [ 0.10, 0.02..0.15 ],
+    "auto_apply_contradiction_max_tokens" => [ 2, 1..2 ]
   }.freeze
+  # Boolean review settings that aren't a policy's own toggle, with their defaults.
+  REVIEW_FLAGS = { "auto_apply_contradiction_free_text" => false }.freeze
   # Each review policy's toggle and its default (snooze_expiry always runs).
   REVIEW_POLICY_TOGGLES = {
     "dangling" => [ "enable_review_policy_dangling", true ],
@@ -149,7 +162,8 @@ class AppSettings < RailsSettings::Base
     "expire_low_confidence" => [ "enable_review_policy_expire_low_confidence", true ],
     "auto_apply_relationships" => [ "enable_auto_apply_relationships", false ],
     "auto_apply_expired_validity" => [ "enable_auto_apply_expired_validity", false ],
-    "auto_apply_fact_supersede" => [ "enable_auto_apply_fact_supersede", false ]
+    "auto_apply_fact_supersede" => [ "enable_auto_apply_fact_supersede", false ],
+    "auto_apply_contradiction" => [ "enable_auto_apply_contradiction", true ]
   }.freeze
 
   # MCP tool invocation retention (zero disables automatic pruning)
@@ -319,6 +333,13 @@ class AppSettings < RailsSettings::Base
   def self.review_policy_enabled?(policy)
     var, default = REVIEW_POLICY_TOGGLES.fetch(policy.to_s)
     read_boolean_setting(var, default: default)
+  end
+
+  # Uncached read of a boolean review setting that isn't a policy toggle.
+  # @param name [String, Symbol] a key of REVIEW_FLAGS
+  # @return [Boolean]
+  def self.review_flag?(name)
+    read_boolean_setting(name.to_s, default: REVIEW_FLAGS.fetch(name.to_s))
   end
 
   # Uncached read of a numeric review setting, clamped to its range (a value written outside the
