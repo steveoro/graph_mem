@@ -2,7 +2,7 @@
 
 require "rails_helper"
 
-# 1.92.0 (docs/plans/contradiction-auto-resolve-plan.md): on by default for key-value value changes
+# 1.92.0 (docs/plans/done/contradiction-auto-resolve-plan.md): on by default for key-value value changes
 # only. The AutoApply hard rule still refuses every other choice and destructive kind.
 RSpec.describe ReviewPolicies::AutoApplyContradiction do
   let!(:service_entity) { MemoryEntity.create!(name: "SynthService", entity_type: "Service") }

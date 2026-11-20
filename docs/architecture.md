@@ -452,7 +452,7 @@ and nothing acts across projects. Step list: `docs/plans/done/fact-supersede-pla
   `auto_apply_fact_supersede_min_confidence` (0.9), with no guard, a scoped entity and an
   operator-confirmed fact; at most 100 per run, in `policy.*` change sets. It lifts the AutoApply
   hard rule for this kind only.
-- **Value changes** (1.92.0, `docs/plans/contradiction-auto-resolve-plan.md`). The contradiction
+- **Value changes** (1.92.0, `docs/plans/done/contradiction-auto-resolve-plan.md`). The contradiction
   pass of the stale scan (`ContradictionDetector`) also pairs two facts of one entity, with the same
   source and perspective, that differ only in a value ("Port: 3000" / "Port: 3001"), without a
   negative word: `FactKeywords::TokenDiff.value_change` classes the pair `:key_value` (one

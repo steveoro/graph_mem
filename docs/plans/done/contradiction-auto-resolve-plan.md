@@ -1,6 +1,8 @@
 # Plan: auto-resolve value changes and value-flip contradictions (one PR)
 
-> Status: approved by Steve on 2026-11-19, not started. Written against `main` at 1a16c22 (1.91.0).
+**✅ DONE:** shipped in #184 as **1.92.0**.
+
+> Status (at writing): approved by Steve on 2026-11-19, not started. Written against `main` at 1a16c22 (1.91.0).
 > Release: the **next minor** after `main` at release time. With `main` on 1.91.x that is **1.92.0**:
 > this is one small PR and is expected to ship before the SQL exchange's release PR (four PRs), which
 > then takes the following minor. If `main` already reads 1.92.x, this ships as 1.93.0. Minor, not

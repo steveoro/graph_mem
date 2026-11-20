@@ -3,7 +3,7 @@
 require "rails_helper"
 
 # 1.92.0: the tokens two facts differ in, and whether that is a plain value change. Every guard of
-# docs/plans/contradiction-auto-resolve-plan.md section D answers nil here.
+# docs/plans/done/contradiction-auto-resolve-plan.md section D answers nil here.
 RSpec.describe FactKeywords::TokenDiff do
   def change(first, second) = described_class.value_change(first, second)
 

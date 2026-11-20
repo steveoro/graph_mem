@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- The contradiction auto-resolve plan (shipped in 1.92.0) is done and moved to `docs/plans/done/`.
+
 ### Fixed
 - `DELETE /api/v1/memory_relations/:id` of a `part_of` relation (any case, e.g. `Part_Of`) takes the membership lock and syncs the former child: it and its subtree leave the project, usually back to the global scope. A name already taken there, or a busy lock, answers `422` (now documented in the API spec) and nothing is deleted. Other deletes are unchanged.
 - The operator's data-exchange actions do the same for `part_of`: retyping a relation into or out of `part_of` checks the create-time rules (one parent, no cycle) and syncs the child, deleting a relation syncs its former child, and **Delete duplicate relations** syncs the child of a `part_of` it deletes. A refusal leaves everything unchanged.
