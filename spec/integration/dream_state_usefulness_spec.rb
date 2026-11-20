@@ -156,6 +156,9 @@ RSpec.describe "Dream-state usefulness acceptance benchmark", :with_test_embeddi
       graph
 
       run = CompactionRunner.start_or_resume!
+      # R1a: the first job is the relation_types phase (one batch: this graph has under 200 relations).
+      perform_enqueued_jobs(only: DreamStateCompactionJob)
+      expect(run.reload.phase).to eq("orphans")
       perform_enqueued_jobs(only: DreamStateCompactionJob)
       run.reload
 

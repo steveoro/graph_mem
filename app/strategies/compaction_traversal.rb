@@ -6,6 +6,9 @@ class CompactionTraversal
 
   PHASES = CompactionRun::PHASES
 
+  # @param phase [String] one of PHASES
+  # @return [Array<Integer>] the entity ids the phase visits, in order; [] for `relation_types`,
+  #   which walks relation ids (DreamStateCompactor::RelationTypesPhase)
   def entity_ids_for_phase(phase)
     case phase
     when "orphans"

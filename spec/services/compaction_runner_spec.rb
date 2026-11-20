@@ -12,8 +12,19 @@ RSpec.describe CompactionRunner, type: :service do
       run = described_class.acquire_run!
 
       expect(run).to be_running
-      expect(run.phase).to eq("orphans")
-      expect(run.stats).to include("entities_processed" => 0)
+      expect(run.phase).to eq("relation_types")
+      expect(run.stats).to include("entities_processed" => 0, "relations_processed" => 0)
+    end
+
+    it "counts the relations once and the entities once per entity phase in the progress total" do
+      a = MemoryEntity.create!(name: "SynthService #{SecureRandom.hex(3)}", entity_type: "Service")
+      b = MemoryEntity.create!(name: "SynthWidget #{SecureRandom.hex(3)}", entity_type: "Component")
+      MemoryRelation.create!(from_entity: a, to_entity: b, relation_type: "depends_on")
+
+      run = described_class.acquire_run!
+
+      expect(run.stats).to include("total_entities" => 2, "total_relations" => 1)
+      expect(run.operation_progress.total_count).to eq((2 * CompactionRun::ENTITY_PHASES.size) + 1)
     end
 
     it "resumes a paused run instead of creating a duplicate" do
@@ -94,8 +105,17 @@ RSpec.describe CompactionRunner, type: :service do
 
       snapshot = described_class.status_snapshot
 
-      expect(snapshot[:progress][:overall][:total]).to eq(10 * CompactionRun::PHASES.size)
+      expect(snapshot[:progress][:overall][:total]).to eq(10 * CompactionRun::ENTITY_PHASES.size)
       expect(snapshot[:progress][:overall][:percent]).to eq(100)
+    end
+
+    it "adds the relations the relation_types phase walked to the fallback progress" do
+      CompactionRun.create!(status: "paused", phase: "orphans",
+                            stats: { "entities_processed" => 2, "relations_processed" => 5, "total_entities" => 10, "total_relations" => 5 })
+
+      progress = described_class.status_snapshot[:progress][:overall]
+
+      expect(progress).to include(current: 7, total: (10 * CompactionRun::ENTITY_PHASES.size) + 5)
     end
   end
 end

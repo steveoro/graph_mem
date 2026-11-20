@@ -65,6 +65,7 @@
       = dashboard_stat_chip("Orphans parented", stats["orphans_parented"] || 0)
       = dashboard_stat_chip("Orphans queued", stats["orphans_queued"] || 0)
       = dashboard_stat_chip("Relationships queued", stats["relationships_queued"] || 0)
+      = dashboard_stat_chip("Relation types fixed", stats["relation_types_fixed"].to_i + stats["relation_types_merged"].to_i)
 
   .system-actions
     - if compaction_pausable?(compaction)
