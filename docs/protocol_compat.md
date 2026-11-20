@@ -292,7 +292,7 @@ are the 1.87.0 ones (the snapshots and handshake files are unchanged).
 
 ## Skills over MCP
 
-Since 1.91.0 (`docs/plans/auto-adoption-plan.md`, PR B) graph_mem can serve the repo's `skills/` through the
+Since 1.91.0 (`docs/plans/done/auto-adoption-plan.md`, PR B) graph_mem can serve the repo's `skills/` through the
 Skills extension (SEP-2640, `io.modelcontextprotocol/skills`) when Settings › Feature flags › **Skills over MCP**
 (`mcp_skills_enabled`, **default off**) is on:
 

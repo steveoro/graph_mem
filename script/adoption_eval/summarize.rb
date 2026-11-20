@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-# Summarizes auto-adoption eval logs into counts (docs/plans/auto-adoption-tests.md §1 and §5).
+# Summarizes auto-adoption eval logs into counts (docs/plans/done/auto-adoption-tests.md §1 and §5).
 #
 #   ruby script/adoption_eval/summarize.rb ~/adoption-eval/logs/*.jsonl [--csv]
 #

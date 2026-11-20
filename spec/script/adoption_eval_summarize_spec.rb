@@ -5,7 +5,7 @@ require "open3"
 require "tmpdir"
 
 # Auto-adoption A6 (1.90.0): script/adoption_eval/summarize.rb over hand-written synthetic logs in
-# spec/fixtures/adoption_eval (docs/plans/auto-adoption-tests.md §1 and §5):
+# spec/fixtures/adoption_eval (docs/plans/done/auto-adoption-tests.md §1 and §5):
 #   B0-T1-1  hook fired, ToolSearch for a graph_mem tool, get_context and search before the first Edit
 #   B0-T1-2  no graph_mem call before a Write
 #   B0-T2-1  a graph_mem search only after a MultiEdit: not adopted

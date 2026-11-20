@@ -6,7 +6,7 @@ require "open3"
 require "tmpdir"
 
 # script/adoption_eval/report.rb over synthetic run directories: the decision rules of
-# docs/plans/auto-adoption-tests.md §3, each decided or naming what it still needs. Sessions are
+# docs/plans/done/auto-adoption-tests.md §3, each decided or naming what it still needs. Sessions are
 # hand-built stream-json events with synth-* values.
 RSpec.describe "script/adoption_eval/report.rb" do
   let(:script) { File.expand_path("../../script/adoption_eval/report.rb", __dir__) }

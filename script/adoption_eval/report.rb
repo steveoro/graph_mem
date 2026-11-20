@@ -2,7 +2,7 @@
 
 # Writes report.md and summary.csv for one run of script/adoption_eval/run_eval.sh: the run's facts
 # (run.json), the summarize table over its logs, and the decision rules of
-# docs/plans/auto-adoption-tests.md §3 applied to whatever arms the run has. Counts only: the report
+# docs/plans/done/auto-adoption-tests.md §3 applied to whatever arms the run has. Counts only: the report
 # never quotes a prompt, a tool input or a result, so it is safe to share.
 #
 #   ruby script/adoption_eval/report.rb ~/adoption-eval/runs/<run-id>
@@ -82,7 +82,7 @@ module AdoptionEval
     end
 
     def decisions
-      [ "## Decisions (docs/plans/auto-adoption-tests.md §3)\n", lever_decisions, q1, q2, q4, q3 ].join("\n")
+      [ "## Decisions (docs/plans/done/auto-adoption-tests.md §3)\n", lever_decisions, q1, q2, q4, q3 ].join("\n")
     end
 
     def not_run

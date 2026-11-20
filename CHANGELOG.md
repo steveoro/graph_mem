@@ -10,15 +10,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Value changes are paired as contradictions: two facts on one entity, with the same source and perspective, that differ only in a value ("Port: 3000" / "Port: 3001") are found even without a negative word.
 - The contradiction card highlights the tokens that differ between the two sides.
-- `script/adoption_eval/run_eval.sh`: the auto-adoption tests (`docs/plans/auto-adoption-tests.md`) in one command.
+- `script/adoption_eval/run_eval.sh`: the auto-adoption tests (`docs/plans/done/auto-adoption-tests.md`) in one command.
   - Suites: screen, full, q1, q2, the headless Cursor CLI arms, IDE calibration, the timed install test, or custom.
   - It builds the eval MCP configs, pins and resets the scratch clones, flips each arm's user-level levers and restores them exactly, runs the sessions, guards the other repos, stops on a usage limit with a resume hint, and writes a timestamped report under `~/adoption-eval/reports/`.
   - `--setting KEY=VALUE` can rerun under a changed graph_mem setting: it restarts the app container, then restores the setting and restarts again.
 - `script/adoption_eval/report.rb`: a run's counts-only report with the decision rules (Q-L, Q1, Q2, Q3, Q4) applied to the arms present.
 - Adoption eval arm `I0`, the server instructions alone, with no user-level skill copy, rule or hook. It is in the `screen` and `full` suites. The report warns when a project skill copy or a `CLAUDE.md` that mentions graph_mem would still load in that arm.
-- A draft efficiency rule for Q-L (`docs/plans/auto-adoption-tests.md`): when adoption ties, a lever also counts if dropping it raises median turns or tokens by 15% or more (25% on T1 screening). `report.rb` prints it on ties, without changing the verdict, and compares I with ALL, the 1.89.0 skill copy (I vs I0) and, when S was run, the current skill copy (S vs I0). A session that hits the turn cap is counted. That comparison is a lower bound when only the measured arm hit the cap, an upper bound when only the baseline arm did, and inexact when both did. `screen` and `full` use 40 turns; resuming a run that recorded no cap stays at 25.
+- A draft efficiency rule for Q-L (`docs/plans/done/auto-adoption-tests.md`): when adoption ties, a lever also counts if dropping it raises median turns or tokens by 15% or more (25% on T1 screening). `report.rb` prints it on ties, without changing the verdict, and compares I with ALL, the 1.89.0 skill copy (I vs I0) and, when S was run, the current skill copy (S vs I0). A session that hits the turn cap is counted. That comparison is a lower bound when only the measured arm hit the cap, an upper bound when only the baseline arm did, and inexact when both did. `screen` and `full` use 40 turns; resuming a run that recorded no cap stays at 25.
+
+### Fixed
+- The adoption eval stops on the plan's usage limit as Claude Code 2.1.328 reports it (a `429` result reading "You've hit your 5-hour limit", after a rejected `rate_limit_event`). A capped run was counted as sessions that didn't adopt.
 
 ### Changed
+- The auto-adoption plan and its decision tests are done and moved to `docs/plans/done/`. Result: on two rounds of the screen suite, every complete session used graph_mem before its first edit, the server instructions alone included, so no further adoption lever is planned.
 - **Auto-resolve value changes** review policy (Settings › Review policies, **on by default**): a `Key: value` fact whose newer twin has the same key and another value is marked superseded by the newer one. Undo the policy run to revert; turn the setting off to keep reviewing them by hand. Sentences that differ in 1–2 values are included only with "free text" on (off by default).
 - The "LLM:" label on review cards and the entity panel reads "LLM topic:" (it names what a fact is about; it was never a status).
 - `script/adoption_eval/summarize.rb` reads the Cursor CLI stream as `agent` 2026.11.19 writes it, and notes write-tool lookups, completeness and usage-limit stops.

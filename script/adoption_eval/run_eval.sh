@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Runs the auto-adoption tests of docs/plans/auto-adoption-tests.md end to end and writes a report.
+# Runs the auto-adoption tests of docs/plans/done/auto-adoption-tests.md end to end and writes a report.
 #
 #   script/adoption_eval/run_eval.sh                 # menu: pick a suite, N and the model
 #   script/adoption_eval/run_eval.sh --suite screen --yes
@@ -34,7 +34,7 @@ usage() {
   cat <<'USAGE'
 Usage: script/adoption_eval/run_eval.sh [options]
 
-Suites (docs/plans/auto-adoption-tests.md):
+Suites (docs/plans/done/auto-adoption-tests.md):
   screen      I0 I ALL ALL-R ALL-S ALL-H ALL+A on T1, N=5 (35 sessions, the default)
   full        the same arms on T1 T2 T3, N=5 (105)
   q1          ALL ALL+A on T1 T2 T3, N=10 (60)

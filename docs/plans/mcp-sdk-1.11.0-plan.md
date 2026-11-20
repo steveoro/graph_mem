@@ -114,7 +114,7 @@ Pre-existing and unchanged: ids between 2^53 and 2^128 are answered by graph_mem
   `script/mcp_compat/README.md:10,19,20,22,23,33,38,73-74,79-87`
   (`:59` runs `compare.rb` with `MEMORY_FILE_PATH=$(mktemp)`; Memory 2.2.1 keeps a lock file next to that path, so keep it a temp file); `refservers/package.json` (Everything 2.3.0, Memory 2.1.1, overrides 2.4.0).
 - Version text: `README.md:73`; `docs/development.md:83`; `docs/architecture.md:61,70` (+ the feature table ending `:79`);
-  `docs/protocol_compat.md:5,30-48,66-75,81,108,147,168-176,202-207,224,226`; `docs/plans/auto-adoption-plan.md:31,284,292` (historical, leave).
+  `docs/protocol_compat.md:5,30-48,66-75,81,108,147,168-176,202-207,224,226`; `docs/plans/done/auto-adoption-plan.md:31,284,292` (historical, leave).
 
 ## Steps
 
