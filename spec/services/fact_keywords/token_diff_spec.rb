@@ -51,6 +51,11 @@ RSpec.describe FactKeywords::TokenDiff do
       expect(change("Adapter: mysql", "Adapter: trilogy")).to be_nil
       expect(change("Released: 2026-11-12", "Released: 2026-11-13")).to be_nil
       expect(change("Port: 3000", "port: 3000.")).to be_nil
+      # Boolean synonyms mean the same value (Graphy, #184).
+      expect(change("Enabled: true", "Enabled: yes")).to be_nil
+      expect(change("Enabled: no", "Enabled: off")).to be_nil
+      expect(change("SynthFeature is enabled", "SynthFeature is on")).to be_nil
+      expect(change("Enabled: yes", "Enabled: off")).to include(class: :key_value, from: "yes", to: "off")
     end
   end
 

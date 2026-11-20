@@ -34,7 +34,8 @@ module FactKeywords
       | [[:alnum:]_]+(?:['’][[:alnum:]_]+)*
     /xi
 
-    BOOLEANS = %w[true false yes no on off enabled disabled].freeze
+    TRUE_WORDS = %w[true yes on enabled].freeze
+    BOOLEANS = (TRUE_WORDS + %w[false no off disabled]).freeze
     NUMBER = /\A(?<number>-?(?:\d{1,3}(?:,\d{3})+|\d+))(?<unit>[a-z]{1,8}|%)?\z/i
     DOTTED = /\A(?<number>-?(?:v\d+(?:\.\d+)*|\d+(?:\.\d+)+))(?<unit>[a-z]{1,8}|%)?\z/i
     DATE = /\A\d{4}-\d{2}-\d{2}\z/
@@ -148,9 +149,13 @@ module FactKeywords
         to: changed.map { |i| right[i].text }.join(", "), count: changed.size }
     end
 
-    # Two values of the same kind and unit that differ.
+    # Two values of the same kind and unit that differ. Booleans differ by what they mean: "true"
+    # and "yes" are the same value.
     def comparable?(from, to)
-      from && to && from[:kind] == to[:kind] && from[:unit] == to[:unit] && from[:value] != to[:value]
+      return false unless from && to && from[:kind] == to[:kind] && from[:unit] == to[:unit]
+      return TRUE_WORDS.include?(from[:value]) != TRUE_WORDS.include?(to[:value]) if from[:kind] == :boolean
+
+      from[:value] != to[:value]
     end
 
     # Whether the token sits in a list: a list mark right before or after it, or "and" / "or" next to it.
