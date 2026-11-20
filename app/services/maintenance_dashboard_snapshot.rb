@@ -54,7 +54,7 @@ class MaintenanceDashboardSnapshot
       operation: OperationProgress.where(operation_type: "relation_type_sweep").recent.first&.snapshot,
       report: report && { id: report.id, created_at: report.created_at, changes: data["changes"].to_a.size + data["changes_omitted"].to_i,
                           **data.slice("source", "actor", "started_at", "finished_at", "counts").symbolize_keys },
-      unmapped_count: UnmappedRelationTypes.count
+      unmapped_count: UnmappedRelationTypes.cached_count
     }
   end
 

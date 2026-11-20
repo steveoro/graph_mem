@@ -7,19 +7,23 @@
 # - **accept** (a known novel type): a self-mapping, `variant` = `canonical_type` = the folded
 #   type, so MemoryRelation.mapped_relation_type answers it (the type leaves the unmapped list and
 #   graph_write stops hinting for it) and a sweep stores it folded;
-# - **remove**: deletes a row (mapped, accepted or seeded alike), so the type is unmapped again.
+# - **remove**: deletes a row (mapped, accepted, or seeded by an earlier release alike). The type is
+#   unmapped again unless the code vocabulary also maps it (a row an older install seeded): then
+#   the code mapping applies, and the result says so (`:removed_code_mapped`).
 #
-# Each one resets the canonicalize cache of this process; other processes follow within
-# RelationTypeMapping::CANONICALIZE_TTL, and a sweep resets its own first.
+# Each one resets the canonicalize cache of this process (other processes follow within
+# RelationTypeMapping::CANONICALIZE_TTL, and a sweep resets its own first) and expires the cached
+# unmapped count of the Background jobs card.
 #
 #   RelationTypeDecision.map("Synth Link Kind", "depends_on")
 #   # => #<data Result ok=true, key=:mapped, type="synth_link_kind", canonical_type="depends_on", relations=3>
 class RelationTypeDecision
   # @!attribute ok [Boolean]
-  # @!attribute key [Symbol] what happened (:mapped, :mapped_part_of, :accepted, :removed) or why not (:blank,
+  # @!attribute key [Symbol] what happened (:mapped, :mapped_part_of, :accepted, :removed,
+  #   :removed_code_mapped) or why not (:blank,
   #   :too_long, :canonical, :already_mapped, :not_canonical, :not_found)
   # @!attribute type [String, nil] the folded type (the removed row's variant for a removal)
-  # @!attribute canonical_type [String, nil]
+  # @!attribute canonical_type [String, nil] for :removed_code_mapped, the type the code still maps it to
   # @!attribute relations [Integer] relations stored with a spelling of the type
   Result = Data.define(:ok, :key, :type, :canonical_type, :relations)
 
@@ -55,8 +59,11 @@ class RelationTypeDecision
       return result(false, :not_found, nil, nil) unless mapping
 
       mapping.destroy!
-      RelationTypeMapping.reset_canonicalize_cache!
+      changed!
       log(:removed, mapping.variant, mapping.canonical_type)
+      still = MemoryRelation.mapped_relation_type(mapping.variant)
+      return result(true, :removed_code_mapped, mapping.variant, still) if still
+
       result(true, :removed, mapping.variant, mapping.canonical_type)
     end
 
@@ -84,11 +91,16 @@ class RelationTypeDecision
 
     def record(type, canonical, key)
       RelationTypeMapping.create!(variant: type, canonical_type: canonical)
-      RelationTypeMapping.reset_canonicalize_cache!
+      changed!
       log(key, type, canonical)
       result(true, key, type, canonical)
     rescue ActiveRecord::RecordInvalid, ActiveRecord::RecordNotUnique
       result(false, :already_mapped, type, canonical)
+    end
+
+    def changed!
+      RelationTypeMapping.reset_canonicalize_cache!
+      UnmappedRelationTypes.expire_cached_count!
     end
 
     def result(ok, key, type, canonical)

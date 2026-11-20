@@ -35,7 +35,24 @@ class UnmappedRelationTypes
           .sort_by { |row| [ -row.count, row.type ] }
   end
 
-  # @return [Integer] how many folded types are unmapped (the Background jobs card)
+  # Cache key of #cached_count.
+  COUNT_CACHE_KEY = "relation_types/unmapped_count"
+  COUNT_CACHE_TTL = 1.minute
+
+  # The card's count, cached for COUNT_CACHE_TTL: the Background jobs cards are polled every few
+  # seconds while a job runs, and #count reads the whole relations table. A mapping decision and a
+  # finished sweep expire it (#expire_cached_count!); the unmapped-types page reads #call, exact.
+  # @return [Integer]
+  def self.cached_count
+    Rails.cache.fetch(COUNT_CACHE_KEY, expires_in: COUNT_CACHE_TTL) { count }
+  end
+
+  # @return [void]
+  def self.expire_cached_count!
+    Rails.cache.delete(COUNT_CACHE_KEY)
+  end
+
+  # @return [Integer] how many folded types are unmapped, read now
   def self.count
     unmapped_spellings.map { |spelling, _count| MemoryRelation.fold_relation_type(spelling) }.uniq.size
   end

@@ -103,6 +103,7 @@ en:
           one: "%{type} is accepted as a known type (1 relation); the next sweep stores it in this spelling."
           other: "%{type} is accepted as a known type (%{count} relations); the next sweep stores it in this spelling."
         removed: "The mapping of %{type} is removed. No relation changed."
+        removed_code_mapped: "The mapping of %{type} is removed, but the code vocabulary still maps it to %{canonical}, so it stays mapped. No relation changed."
         blank: "No type was given. Nothing was done."
         too_long: "The type is too long. Nothing was done."
         canonical: "%{type} is a canonical type already. Nothing was done."

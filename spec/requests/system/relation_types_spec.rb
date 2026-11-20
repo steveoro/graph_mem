@@ -230,6 +230,17 @@ RSpec.describe "System › Background jobs › Relation types", type: :request d
       expect(listed).to eq("synth_links_to" => 1)
     end
 
+    it "says the code vocabulary still maps a type whose row it removes (an older install's seed)" do
+      mapping = RelationTypeMapping.create!(variant: "imports", canonical_type: "depends_on")
+
+      delete system_relation_type_mapping_path(mapping)
+
+      follow_redirect!
+      expect(toast(:notice)).to include("The mapping of imports is removed, but the code vocabulary still maps it to depends_on, " \
+                                        "so it stays mapped. No relation changed.")
+      expect(MemoryRelation.mapped_relation_type("imports")).to eq("depends_on")
+    end
+
     it "says so for a mapping that no longer exists" do
       delete system_relation_type_mapping_path(id: 0)
 

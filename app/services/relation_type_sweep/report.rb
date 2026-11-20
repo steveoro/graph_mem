@@ -24,7 +24,10 @@ class RelationTypeSweep
     #
     # @return [Hash] see #summary
     def finish!
-      update_report! { |data| data["finished_at"] = Time.current.iso8601 } unless @dry_run
+      unless @dry_run
+        update_report! { |data| data["finished_at"] = Time.current.iso8601 }
+        UnmappedRelationTypes.expire_cached_count! # the stored types changed
+      end
       summary
     end
 

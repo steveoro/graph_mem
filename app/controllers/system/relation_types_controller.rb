@@ -76,7 +76,7 @@ module System
                                                      count: result.relations)
       return redirect_to(back, alert: message) unless result.ok
 
-      flash[:link] = { "href" => system_relation_types_sweep_path, "label" => t("#{SCOPE}.sweep.button") } unless result.key == :removed
+      flash[:link] = { "href" => system_relation_types_sweep_path, "label" => t("#{SCOPE}.sweep.button") } unless result.key.start_with?("removed")
       redirect_to back, notice: message
     end
   end
