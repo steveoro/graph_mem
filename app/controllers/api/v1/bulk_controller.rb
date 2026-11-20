@@ -26,7 +26,8 @@ module Api
 
         # Membership lock BEFORE the transaction when a relation is a part_of (the advisory-first rule
         # graph_write follows): each new part_of syncs its child's project_id inside the transaction.
-        with_membership_lock_for(relations_data) do
+        part_of = relations_data.any? { |rel| MemoryRelation.canonical_relation_type(rel[:relation_type]) == "part_of" }
+        with_membership_lock_if(part_of) do
           ActiveRecord::Base.transaction do
             entities_data.each_with_index do |ent, idx|
               entity = MemoryEntity.create!(name: ent[:name], entity_type: ent[:entity_type], aliases: ent[:aliases], description: ent[:description])
@@ -89,13 +90,6 @@ module Api
       end
 
       private
-
-      # @param relations_data [Array<Hash>] the request's relations
-      # @yield the bulk transaction, under the membership lock when any relation is a part_of
-      def with_membership_lock_for(relations_data, &block)
-        part_of = relations_data.any? { |rel| MemoryRelation.canonical_relation_type(rel[:relation_type]) == "part_of" }
-        part_of ? ProjectMembership.with_membership_lock(&block) : yield
-      end
 
       # Creates one relation through the validating create path (single parent, no cycle) and, for a
       # part_of, syncs the child's project like graph_write does.
