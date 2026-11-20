@@ -91,7 +91,7 @@ RSpec.describe MemoryRelation, type: :model do
       expect(rel.relation_type).to eq("calls")
     end
 
-    it "keeps a case-only variant of a canonical type" do
+    it "folds a case-only variant of a canonical type to the canonical spelling" do
       rel = described_class.create!(from_entity: entity_a, to_entity: entity_b, relation_type: "Depends_On")
 
       expect(rel.relation_type).to eq("depends_on")
@@ -115,6 +115,57 @@ RSpec.describe MemoryRelation, type: :model do
 
     it "keeps other characters as they are" do
       expect(described_class.fold_relation_type("Synth::Link.v2")).to eq("synth::link.v2")
+    end
+
+    it "folds an underscore next to a space or a hyphen into the one underscore, but keeps a plain double underscore" do
+      expect(described_class.fold_relation_type("has_ many")).to eq("has_many")
+      expect(described_class.fold_relation_type("part_-of")).to eq("part_of")
+      expect(described_class.fold_relation_type("synth _-_ link")).to eq("synth_link")
+      expect(described_class.fold_relation_type("synth__link")).to eq("synth__link")
+    end
+  end
+
+  describe ".reads_as_part_of?" do
+    it "answers as the column's collation compares: case and trailing spaces don't count, spaces and variants do" do
+      expect(%w[part_of Part_Of PART_OF].map { |type| described_class.reads_as_part_of?(type) }).to all(be(true))
+      expect(described_class.reads_as_part_of?("part_of  ")).to be(true)
+      expect([ "Part Of", "part-of", "child_of", "", nil ].map { |type| described_class.reads_as_part_of?(type) }).to all(be(false))
+      expect(described_class.reads_as_part_of?("pärt_of")).to be(true)
+    end
+  end
+
+  describe "canonicalization on update (only when the type changes)" do
+    def stored(from, to, type)
+      relation = described_class.create!(from_entity: from, to_entity: to, relation_type: "synth_placeholder_#{SecureRandom.hex(3)}")
+      relation.update_column(:relation_type, type)
+      relation
+    end
+
+    it "keeps the stored spelling on an endpoint-only update, and canonicalizes an explicit type change" do
+      other = MemoryEntity.create!(name: "RelEntity C", entity_type: "Task")
+      relation = stored(entity_b, entity_a, "Part Of")
+
+      relation.update!(to_entity_id: other.id)
+      expect(relation.reload.relation_type).to eq("Part Of")
+
+      relation.update!(relation_type: "Is-Part-Of")
+      expect(relation.reload.relation_type).to eq("part_of")
+    end
+
+    it "keeps a stored Part Of through an entity merge, without touching membership" do
+      project = MemoryEntity.create!(name: "Alpha Project", entity_type: "Project")
+      source = MemoryEntity.create!(name: "SynthWidget Old", entity_type: "Component")
+      target = MemoryEntity.create!(name: "SynthWidget", entity_type: "Component")
+      child = MemoryEntity.create!(name: "SynthGear", entity_type: "Component")
+      incoming = stored(child, source, "Part Of")
+      outgoing = stored(source, project, "part-of")
+
+      result = NodeOperationsStrategy.new.merge_into(source.id, target.id)
+
+      expect(result[:success]).to be(true)
+      expect(incoming.reload).to have_attributes(relation_type: "Part Of", to_entity_id: target.id)
+      expect(outgoing.reload).to have_attributes(relation_type: "part-of", from_entity_id: target.id)
+      expect([ child.reload.project_id, target.reload.project_id ]).to eq([ nil, nil ])
     end
   end
 

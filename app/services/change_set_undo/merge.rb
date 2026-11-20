@@ -128,6 +128,10 @@ class ChangeSetUndo
       entity.reload
     end
 
+    # Relations come back with their stored type as it was (R1a): the duplicate probe compares it
+    # the way the unique key does, so a variant restored next to its canonical twin doesn't collide
+    # (the next RelationTypeSweep merges it), and a restored row counts as a part_of edge (cycle
+    # check, membership sync) only when it reads as part_of in SQL (MemoryRelation.reads_as_part_of?).
     def restore_relations(step)
       step["repointed"].each do |entry|
         MemoryRelation.find(entry["id"]).update!(from_entity_id: entry["from_before"], to_entity_id: entry["to_before"])
@@ -137,10 +141,11 @@ class ChangeSetUndo
           @effects.skipped << "relation ##{attrs['id']} (#{attrs['relation_type']}) exists again"
           next
         end
-        if attrs["relation_type"] == "part_of" && RelationSemantics.would_create_cycle?(attrs["from_entity_id"], attrs["to_entity_id"])
+        if MemoryRelation.reads_as_part_of?(attrs["relation_type"]) &&
+           RelationSemantics.would_create_cycle?(attrs["from_entity_id"], attrs["to_entity_id"])
           raise Conflict, [ "Can't undo: restoring the part_of edges would create a cycle" ]
         end
-        MemoryRelation.create!(attrs.slice(*MemoryRelation.column_names))
+        MemoryRelation.create!(attrs.slice(*MemoryRelation.column_names)) { |relation| relation.keep_stored_type = true }
       end
     end
 
@@ -159,7 +164,7 @@ class ChangeSetUndo
     end
 
     def finish(step, restored, target)
-      part_of_edges = (step["repointed"] + step["destroyed"]).select { |r| r["relation_type"] == "part_of" }
+      part_of_edges = (step["repointed"] + step["destroyed"]).select { |r| MemoryRelation.reads_as_part_of?(r["relation_type"]) }
       cycles = part_of_edges.select do |r|
         from, to = r["from_before"] || r["from_entity_id"], r["to_before"] || r["to_entity_id"]
         RelationSemantics.would_create_cycle?(from, to)

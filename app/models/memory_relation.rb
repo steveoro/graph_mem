@@ -10,11 +10,14 @@ class MemoryRelation < ApplicationRecord
 
   after_commit :recompute_observation_trust_scores, on: [ :create, :destroy ]
 
-  before_validation :canonicalize_relation_type
+  # Only when the type is being set: a create, or an update that changes it. An update of other
+  # columns (an entity merge re-pointing an endpoint, its undo) keeps the stored spelling, so it
+  # never turns a variant into `part_of` behind the single-parent/cycle checks and the membership sync.
+  before_validation :canonicalize_relation_type, if: -> { new_record? || will_save_change_to_relation_type? }
 
-  # When true, the save keeps `relation_type` exactly as assigned (no canonicalization): an undo
-  # re-inserting a deleted relation restores its stored type as it was, and RelationTypeSweep's
-  # merge updates a twin's weight/confidence/properties without touching its type.
+  # When true, a create keeps `relation_type` exactly as assigned (no canonicalization): an undo
+  # re-inserting a deleted relation (ChangeSetUndo::AuditInverse, ChangeSetUndo::Merge) restores
+  # its stored type as it was, and the next RelationTypeSweep canonicalizes it.
   # @return [Boolean, nil]
   attr_accessor :keep_stored_type
 
@@ -25,13 +28,32 @@ class MemoryRelation < ApplicationRecord
   validate :relation_semantics_are_valid, on: :create
 
   # Folds a relation type to the spelling stored for it: trimmed, lower-cased, and every run of
-  # whitespace and/or hyphens turned into one underscore ("Has Many", "has-many", " HAS  many "
-  # all become `has_many`). Any other character is kept as it is; no transliteration.
+  # whitespace, hyphens and underscores that holds at least one whitespace or hyphen turned into
+  # one underscore ("Has Many", "has-many", " HAS  many ", "has_ many", "part_-of" all become
+  # `has_many` / `part_of`). A run of underscores alone ("synth__type") is kept as typed, so a
+  # stored snake-case type never changes. Any other character is kept as it is; no transliteration.
   #
   # @param raw_type [String, Symbol, nil]
   # @return [String] the folded type ("" for nil)
   def self.fold_relation_type(raw_type)
-    raw_type.to_s.strip.downcase.gsub(/[\s-]+/, "_")
+    raw_type.to_s.strip.downcase.gsub(/[\s_-]*[\s-][\s_-]*/, "_")
+  end
+
+  # Whether a stored type is `part_of` as SQL reads it: compared under the column's collation
+  # (utf8mb4_general_ci: case and trailing spaces don't count), the way ProjectMembership,
+  # RelationSemantics and the unique key see it. "Part_Of" is; "Part Of" and "child_of" aren't.
+  #
+  # @param stored_type [String, nil]
+  # @return [Boolean]
+  def self.reads_as_part_of?(stored_type)
+    return false if stored_type.blank?
+
+    type = stored_type.to_s
+    # ASCII: the collation's rule in Ruby (case-insensitive, trailing spaces padded); else ask the DB.
+    return type.sub(/ +\z/, "").casecmp?("part_of") if type.ascii_only?
+
+    sql = sanitize_sql_array([ "SELECT CONVERT(? USING utf8mb4) COLLATE utf8mb4_general_ci = 'part_of'", type ])
+    connection.select_value(sql).to_i == 1
   end
 
   # The canonical type a raw type maps to, or nil when nothing maps. The folded spelling is looked

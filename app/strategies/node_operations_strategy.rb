@@ -359,10 +359,10 @@ class NodeOperationsStrategy
         to_entity_id: target_id,
         relation_type: relation.relation_type
       )
-        reparented_child_ids << relation.from_entity_id if relation.relation_type == "part_of"
+        reparented_child_ids << relation.from_entity_id if MemoryRelation.reads_as_part_of?(relation.relation_type)
         relation.destroy!
       else
-        reparented_child_ids << relation.from_entity_id if relation.relation_type == "part_of"
+        reparented_child_ids << relation.from_entity_id if MemoryRelation.reads_as_part_of?(relation.relation_type)
         relation.update!(to_entity_id: target_id)
       end
     end

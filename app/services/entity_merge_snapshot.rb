@@ -53,7 +53,7 @@ class EntityMergeSnapshot
 
     def children_of(source_id, relations)
       child_ids = relations.filter_map do |relation|
-        relation.from_entity_id if relation.to_entity_id == source_id && relation.relation_type == "part_of"
+        relation.from_entity_id if relation.to_entity_id == source_id && MemoryRelation.reads_as_part_of?(relation.relation_type)
       end
       return [] if child_ids.empty?
 
