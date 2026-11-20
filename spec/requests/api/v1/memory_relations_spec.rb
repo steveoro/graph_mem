@@ -438,6 +438,18 @@ RSpec.describe 'API V1 Memory Relations', type: :request do
         expect(widget.reload.project_id).to be_nil
       end
 
+      it "syncs the child back out when a retype into part_of is undone" do
+        relation = MemoryRelation.create!(from_entity: widget, to_entity: alpha, relation_type: "depends_on")
+        patch_type(relation, "part_of")
+        expect(widget.reload.project_id).to eq(alpha.id)
+
+        change_set = ChangeSet.where(kind: "api.write").order(:id).last
+        expect(ChangeSetUndo.call(change_set.uuid, actor: "operator:synth@127.0.0.1")).to be_ok
+
+        expect(relation.reload.relation_type).to eq("depends_on")
+        expect(widget.reload.project_id).to be_nil
+      end
+
       it "refuses a retype into a second parent with nothing written" do
         MemoryRelation.create!(from_entity: widget, to_entity: alpha, relation_type: "part_of")
         ProjectMembership.sync!(widget)

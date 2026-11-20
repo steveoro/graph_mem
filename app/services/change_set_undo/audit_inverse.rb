@@ -95,6 +95,7 @@ class ChangeSetUndo
         return @conflicts << "Can't undo: #{label(row.auditable_type, record.id, row)} no longer holds the changed #{drifted.join(', ')}"
       end
 
+      note_touched(record) # the type before the undo: a retype into part_of syncs the child back out
       record.assign_attributes(changes.transform_values { |change| change["from"] })
       # A relation type comes back as it was stored (a relation_retype kept as relates_to restores
       # its variant), not canonicalized again.
