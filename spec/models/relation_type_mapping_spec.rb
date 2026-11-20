@@ -34,6 +34,30 @@ RSpec.describe RelationTypeMapping, type: :model do
     end
   end
 
+  describe ".canonicalize without a seeded table" do
+    it "falls back to the code vocabulary when the table has no row" do
+      expect(described_class.count).to eq(0)
+      expect(described_class.canonicalize("calls_method")).to eq("calls")
+      expect(described_class.canonicalize(" Child_Of ")).to eq("part_of")
+    end
+
+    it "lets a table row win over the code mapping" do
+      described_class.create!(canonical_type: "relates_to", variant: "requires")
+      described_class.reset_canonicalize_cache!
+
+      expect(described_class.canonicalize("requires")).to eq("relates_to")
+    end
+
+    it "maps a canonical type to itself and still returns nil for unknown types" do
+      expect(described_class.canonicalize("has_many")).to eq("has_many")
+      expect(described_class.canonicalize("synth_unmapped_type")).to be_nil
+    end
+
+    it "writes nothing" do
+      expect { described_class.canonicalize("requires") }.not_to change(described_class, :count)
+    end
+  end
+
   it "always maps a canonical type to itself, ignoring stale variant rows" do
     # Upgraded databases may carry `belongs_to` under `part_of` from the
     # pre-split vocabulary — the canonical name still self-maps.

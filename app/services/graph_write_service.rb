@@ -355,11 +355,7 @@ class GraphWriteService
     # and rolls the edge back with it (execution is transactional).
     sync_membership!(MemoryEntity.find(from_id)) if canonical_type == "part_of"
     payload = GraphTraversalSerializer.relation_json(relation)
-    type_hint = type_hint_for(
-      attributes[:relation_type],
-      GraphVocabulary::RELATION_TYPES,
-      RelationTypeMapping
-    )
+    type_hint = relation_type_hint(attributes[:relation_type], canonical_type)
     payload[:type_hint] = type_hint if type_hint
     payload
   end
@@ -368,6 +364,14 @@ class GraphWriteService
     return value unless value.is_a?(String)
 
     ImportEntityResolver.find_by_name(value, project_id: @project_id)&.id || value
+  end
+
+  # A hint for a relation type that maps to nothing: the folded (stored) type and a close
+  # vocabulary type. nil when the submitted type maps or is in the vocabulary.
+  def relation_type_hint(submitted, stored_type)
+    return if MemoryRelation.mapped_relation_type(submitted)
+
+    GraphVocabulary.suggestion(stored_type, GraphVocabulary::RELATION_TYPES)
   end
 
   def type_hint_for(value, examples, mapping_class)

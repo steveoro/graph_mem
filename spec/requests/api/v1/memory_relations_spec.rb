@@ -20,9 +20,9 @@ RSpec.describe 'API V1 Memory Relations', type: :request do
         let!(:entity1) { MemoryEntity.create!(name: 'Entity 1', entity_type: 'TypeA') }
         let!(:entity2) { MemoryEntity.create!(name: 'Entity 2', entity_type: 'TypeB') }
         let!(:entity3) { MemoryEntity.create!(name: 'Entity 3', entity_type: 'TypeC') }
-        let!(:relation1) { MemoryRelation.create!(from_entity_id: entity1.id, to_entity_id: entity2.id, relation_type: 'connects_to') }
+        let!(:relation1) { MemoryRelation.create!(from_entity_id: entity1.id, to_entity_id: entity2.id, relation_type: 'synth_links_to') }
         let!(:relation2) { MemoryRelation.create!(from_entity_id: entity2.id, to_entity_id: entity3.id, relation_type: 'points_at') }
-        let!(:relation3) { MemoryRelation.create!(from_entity_id: entity1.id, to_entity_id: entity3.id, relation_type: 'connects_to') }
+        let!(:relation3) { MemoryRelation.create!(from_entity_id: entity1.id, to_entity_id: entity3.id, relation_type: 'synth_links_to') }
 
         run_test! do |response|
           data = JSON.parse(response.body)
@@ -49,21 +49,21 @@ RSpec.describe 'API V1 Memory Relations', type: :request do
         end
 
         context 'when filtering by relation_type' do
-          let(:relation_type) { 'connects_to' }
+          let(:relation_type) { 'synth_links_to' }
           run_test! do |response|
             data = JSON.parse(response.body)
             expect(data.size).to eq(2)
-            expect(data.all? { |rel| rel['relation_type'] == 'connects_to' }).to be true
+            expect(data.all? { |rel| rel['relation_type'] == 'synth_links_to' }).to be true
           end
         end
 
         context 'when filtering by multiple parameters' do
           let(:from_entity_id) { entity1.id }
-          let(:relation_type) { 'connects_to' }
+          let(:relation_type) { 'synth_links_to' }
           run_test! do |response|
             data = JSON.parse(response.body)
             expect(data.size).to eq(2)
-            expect(data.all? { |rel| rel['from_entity_id'] == entity1.id && rel['relation_type'] == 'connects_to' }).to be true
+            expect(data.all? { |rel| rel['from_entity_id'] == entity1.id && rel['relation_type'] == 'synth_links_to' }).to be true
           end
         end
 

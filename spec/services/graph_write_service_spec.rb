@@ -91,6 +91,26 @@ RSpec.describe GraphWriteService do
       expect(MemoryEntity.find_by(name: "Must also not persist")).to be_nil
     end
 
+    it "stores and returns a variant relation type canonical or folded" do
+      service = MemoryEntity.create!(name: "SynthService", entity_type: "Class")
+      widget = MemoryEntity.create!(name: "SynthWidget", entity_type: "Class")
+      gadget = MemoryEntity.create!(name: "SynthGadget", entity_type: "Class")
+
+      result = described_class.call(
+        operations: [
+          { type: "create_relation", from_entity_id: service.id, to_entity_id: widget.id, relation_type: "Has Many" },
+          { type: "create_relation", from_entity_id: service.id, to_entity_id: gadget.id, relation_type: " Synth-Link  Kind " }
+        ]
+      )
+
+      expect(result[:status]).to eq("ok")
+      expect(result.dig(:results, 0, :result, :relation_type)).to eq("has_many")
+      expect(result.dig(:results, 0, :result)).not_to have_key(:type_hint)
+      expect(result.dig(:results, 1, :result, :relation_type)).to eq("synth_link_kind")
+      expect(MemoryRelation.where(from_entity_id: service.id).pluck(:relation_type))
+        .to contain_exactly("has_many", "synth_link_kind")
+    end
+
     it "canonicalizes entity types before duplicate probing" do
       existing = MemoryEntity.create!(name: "Mapped project", entity_type: "Project")
       EntityTypeMapping.create!(canonical_type: "Project", variant: "workspace")
