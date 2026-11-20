@@ -1,6 +1,9 @@
 # frozen_string_literal: true
 
 class DataExchangeController < ApplicationController
+  # A relation the duplicate cleanup read as another type reads as part_of under its row lock.
+  class DuplicatesChanged < StandardError; end
+
   # GET /data_exchange/export?ids[]=1&ids[]=2
   # Returns JSON file with selected root nodes and all their children (sync/direct download)
   def export
@@ -231,20 +234,21 @@ class DataExchangeController < ApplicationController
   # DELETE /data_exchange/delete_duplicate_relations
   # Deletes the newer relation from each duplicate pair (keeps the older one by ID)
   def delete_duplicate_relations
-    duplicates = find_duplicate_relations
-    deleted_count = 0
-    relations = MemoryRelation.where(id: duplicates.map { |dup| dup[:delete][:id] }).to_a
-    part_of = relations.select { |relation| MemoryRelation.reads_as_part_of?(relation.relation_type) }
+    ids = find_duplicate_relations.map { |dup| dup[:delete][:id] }
+    locked = MemoryRelation.where(id: ids).pluck(:relation_type).any? { |type| MemoryRelation.reads_as_part_of?(type) }
 
-    # Deleting one edge of a part_of pair changes its child's parent: lock first, sync in the transaction.
-    RelationMembershipWrite.with_lock_if(part_of.any?) do
+    # Deleting one edge of a part_of pair changes its child's parent: lock first, then re-read the
+    # rows under a row lock (only rows still there count), delete, and sync in the transaction.
+    deleted_count = RelationMembershipWrite.with_lock_if(locked) do
       Current.set(deletion_reason: "duplicate") do
         ActiveRecord::Base.transaction do
-          relations.each do |relation|
-            relation.destroy!
-            deleted_count += 1
-          end
+          relations = MemoryRelation.where(id: ids).lock.to_a
+          part_of = relations.select { |relation| MemoryRelation.reads_as_part_of?(relation.relation_type) }
+          raise DuplicatesChanged if part_of.any? && !locked
+
+          relations.each(&:destroy!)
           MemoryEntity.where(id: part_of.map(&:from_entity_id).uniq).find_each { |child| ProjectMembership.sync!(child) }
+          relations.size
         end
       end
     end
@@ -258,6 +262,9 @@ class DataExchangeController < ApplicationController
     render json: { success: false, error: "Failed to delete relations: #{e.message}" }, status: :unprocessable_content
   rescue ProjectMembership::LockTimeout, ProjectMembership::Collision => e
     render json: { success: false, error: membership_conflict_message(e) }, status: :unprocessable_content
+  rescue DuplicatesChanged
+    render json: { success: false, error: "A duplicate became a part_of while the cleanup ran; nothing was deleted, retry." },
+           status: :unprocessable_content
   end
 
   # PATCH /data_exchange/update_relation
