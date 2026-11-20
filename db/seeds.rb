@@ -3,4 +3,5 @@
 # The data can then be loaded with the bin/rails db:seed command (or created alongside the database with db:setup).
 
 load Rails.root.join("db/seeds/entity_type_mappings.rb")
-load Rails.root.join("db/seeds/relation_type_mappings.rb")
+# Relation type mappings are not seeded (R1a): RelationTypeMapping falls back to the code vocabulary
+# (GraphVocabulary::RELATION_TYPE_MAPPINGS), and a table row is an operator's choice that wins over it.

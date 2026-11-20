@@ -5,7 +5,7 @@ class RelationTypeMapping < ApplicationRecord
   validates :variant, presence: true, uniqueness: { case_sensitive: false }
 
   # Memoized per-process with a TTL, like EntityTypeMapping: bounds
-  # cross-process staleness after a re-seed to under a minute.
+  # cross-process staleness after an operator's change to under a minute.
   CANONICALIZE_TTL = 60.seconds
 
   # Returns the canonical type for a given variant string, or nil if no mapping exists. A variant
@@ -54,7 +54,7 @@ class RelationTypeMapping < ApplicationRecord
   end
   private_class_method :vocabulary_type
 
-  # Clears the process cache — call after re-seeding/upserting mappings so
+  # Clears the process cache — call after upserting or removing mappings so
   # new or changed variants take effect without a restart.
   def self.reset_canonicalize_cache!
     @canonical_cache = {}
