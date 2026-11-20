@@ -1,13 +1,18 @@
 # Plan: make MariaDB vector search use its index (plus zero-vector fixes)
 
-> Status: **draft for Steve, 2026-11-20. Plan only: no code PR until Steve says go.** Written against
-> `main` at `c546109` (merge of #188, Dream State R1a, **1.93.0**). Each kickoff rechecks its own line
-> references against `main`.
+> Status: **plan, decisions taken by Steve on 2026-11-20 (see "Decisions"). Still plan only: no code PR
+> until Steve says go.** Written against `main` at `c546109` (merge of #188, Dream State R1a,
+> **1.93.0**). Each kickoff rechecks its own line references against `main`.
 >
 > Motivation: an outside pitch to move graph_mem onto a separate graph/vector database. A code-side
 > look showed that graph_mem already stores its vectors in MariaDB 11.8 with HNSW indexes. The
 > cheaper win is to make the queries able to use those indexes, and to fix how unembedded rows are
 > handled. A new backend isn't needed for that.
+>
+> **Scope note.** At the current reference graph size (hundreds of entities, a few thousand
+> observations, full embedding coverage) vector search speed is **not a bottleneck today**. The
+> real bottleneck is LLM summarization on a CPU-only Ollama host, which this plan does not address.
+> This plan fixes correctness now (step 0) and prepares the index path for when the graph grows.
 
 ## Goal
 
@@ -17,7 +22,7 @@
    would make the index path lose rows (step 2).
 4. Bring `suggest_merges` and the other similarity checks off O(N) per entity and O(N²) loops (step 3).
 5. Stop loading the 3 KB vector with every entity row (step 4).
-6. Optionally, add FULLTEXT as an extra text signal next to `LIKE` (step 5).
+6. *(Deferred.)* FULLTEXT as an extra text signal next to `LIKE` (step 5).
 
 Out of scope: new gems, a second database or backend, a new embedding model, MCP params or outputs.
 Each step keeps the tool budget unchanged.
@@ -142,8 +147,8 @@ triggers installed by the spec's setup):
 **Fix:** replace those guards with `embedded_at.present?` and add `.with_embedding` where ids are
 gathered for the ranker. Small change, no migration. It changes the observation order that
 `summarize`, `rank_observations`, `get_entities` and `traverse_graph` return, but only in that
-unembedded rows stop getting a false top score. **Steve to confirm** this counts as a bug fix
-(no MCP params or outputs change).
+unembedded rows stop getting a false top score. **Decided: ships as a bug fix, 1.93.2** (Decision 2;
+no MCP params or outputs change).
 
 ## Step 1. Synthetic benchmark plus EXPLAIN and recall specs
 
@@ -151,13 +156,15 @@ unembedded rows stop getting a false top score. **Steve to confirm** this counts
   observations into a **scratch database** created by the task. It never touches the dev or
   production database. The data is 768-d clustered vectors with 5% zero placeholders, generic names
   (`SynthEntity123`) and 10 synthetic types. The task prints p50/p95 per channel (exact and ANN) and
-  recall@k against exact, as Markdown for a PR body. It's opt-in, run by hand, and not part of CI.
+  recall@k against exact, as Markdown for a PR body. It also measures **write cost**: insert and
+  embed throughput (rows/s, p95 per write) with and without the `VECTOR KEY`s, the numbers Decision 1
+  waits for. It's opt-in, run by hand, and not part of CI.
 - Specs (CI, small N of about 2,000 rows so the suite stays fast):
   - **EXPLAIN-shape specs**: for each query in the table above, assert whether
     `key = idx_*_embedding` is expected. Today none should use it; steps 2 and 3 flip the ones they
     change.
   - **recall spec**: ANN against exact recall@10 on the clustered fixture ≥ an agreed threshold
-    (proposal: ≥ 0.8 average, no single probe below 0.5; see Q4).
+    (Decision 4: ≥ 0.8 average, no single probe below 0.5, as a starting bar).
   - **filter-hazard spec**: documents that ANN with a selective `WHERE` can return fewer rows than
     exact. This is the reason filtered searches stay exact.
 - Gate the EXPLAIN specs on `MariaDB >= 11.8` and keep CI pinned to `cimg/mariadb:11.8.6`. Optimizer
@@ -178,13 +185,19 @@ unembedded rows stop getting a false top score. **Steve to confirm** this counts
 - **Fallback**: if the index is missing (`EmbeddingIndexStatus`), or any filter is present, keep
   today's exact query unchanged. That keeps the "WHERE loses no recall" guarantee from
   `architecture.md:121`.
-- Optional switch: `AppSettings` `vector_search_mode` = `exact | ann` (default `exact` until Steve
-  flips it). AppSettings is rails-settings-cached, so this needs no migration. The settings page gains
-  one field.
+- **Setting (Decision 3):** `AppSettings` `vector_search_mode` = `exact | ann`, **default `exact`**.
+  It's an app setting, not an MCP param. The `ann` path runs only when the operator sets `ann`, and the
+  plan expects that only once the graph grows. AppSettings is rails-settings-cached, so this needs no
+  migration. The settings page gains one field, documented in `docs/app_settings_reference.md`.
+- **Recall gate:** the step 1 recall spec runs the `ann` path and must clear the Decision 4 bar
+  (≥ 0.8 average recall@10, no probe below 0.5). If the first K and the index settings don't clear
+  it, step 2 tunes K, the `mhnsw_ef_search` session value or the index `M` until they do. Changing
+  `M` means rebuilding the index through `embeddings:add_indexes`, with no migration. Step 2 doesn't
+  merge below the bar.
 - Docs: `docs/operator/embeddings.md` explains `mhnsw_max_cache_size`. The 16 MB default holds
   roughly 5-10k 768-d nodes (estimate). Raise it before switching to `ann` on a larger graph.
-- **Changes result order** (ANN is approximate). **Needs Steve's approval** before `ann` becomes the
-  default. No MCP params or outputs change.
+- With the default `exact`, result order doesn't change. With `ann` it can, because ANN is
+  approximate; that's the operator's choice (Decision 3). No MCP params or outputs change.
 
 ## Step 3. `suggest_merges` and the other similarity checks
 
@@ -192,8 +205,11 @@ unembedded rows stop getting a false top score. **Steve to confirm** this counts
   every embedded entity. Iterate in id batches without loading the vector. For each entity, run an
   inner ANN query (literal vector, `ORDER BY d LIMIT K`), then apply the type filter, `id > ?`,
   `embedded_at` and the threshold outside. Same-type filtering stays in the outer query, so K must be
-  generous; the step 1 recall spec covers it. Add a wall-clock budget, with a `truncated` note in the
-  existing output text only if Steve approves (see Q6). Otherwise stop at `limit` as today.
+  generous; the step 1 recall spec covers it. The ANN query is used only when `vector_search_mode`
+  is `ann`; with `exact` (the default) the batching applies and each per-entity query stays exact.
+- **Time budget (Decision 6):** the scan stops when a wall-clock budget runs out. When it does, it
+  says so with **one line in its existing text output** (for example "Scan stopped after the time
+  budget: N of M entities checked."), with **no new field**. It still stops at `limit` as today.
 - `EntityMergeEvidence.candidates_for`, `ContradictionDetector#find_contradiction_pairs`,
   `FactSupersede::Candidates`, `SummarizerService#contradiction_partner_ids`: replace the
   scalar-subquery vector with the loaded literal (it removes one subquery per row) and move `HAVING`
@@ -201,8 +217,9 @@ unembedded rows stop getting a false top score. **Steve to confirm** this counts
   That's a cost cleanup with no recall change.
 - One shared helper (`VectorQuery.nearest(relation, vector, k:, exact:)`) builds both shapes, so the
   rule "filtered → exact, unfiltered → inner ANN" lives in one place.
-- **Changes MCP tool behaviour** (`suggest_merges`: different candidates when ANN misses near-ties).
-  **Needs Steve's approval.** The params, outputs and tool count stay unchanged.
+- **MCP tool behaviour** (approved, Decision 6): `suggest_merges` can stop early on the budget, with
+  the text line above. In `ann` mode it can also return different candidates when ANN misses
+  near-ties. The params, output fields and tool count stay unchanged.
 
 ## Step 4. Stop loading the 3 KB vector with every entity row
 
@@ -216,7 +233,9 @@ unembedded rows stop getting a false top score. **Steve to confirm** this counts
 - `as_json` already leaves the vector out (`memory_entity.rb:53-56`), so no output changes. This is a
   pure performance change and needs no approval beyond the plan.
 
-## Step 5 (optional). FULLTEXT as an extra text signal alongside `LIKE`
+## Step 5 (deferred). FULLTEXT as an extra text signal alongside `LIKE`
+
+**Deferred by Decision 7: not scheduled, no PR.** It's kept here for a later decision.
 
 Checked on MariaDB 11.8.6 with `utf8mb4_general_ci` and InnoDB defaults:
 
@@ -237,53 +256,52 @@ existing index is reused, so there's no migration. A FULLTEXT index on
 `memory_observations.content`, where FT fits prose better, **would need a migration and Steve's
 approval** (not in this plan).
 
-The quality gain isn't proven. Ship it only with a before/after on a fixed synthetic query set.
-**Changes result order**, so it **needs Steve's approval.**
+The quality gain isn't proven. If it's ever picked up, it ships only with a before/after on a fixed
+synthetic query set, and it changes result order, so it needs Steve's approval then.
 
-## Releases (proposal for Steve)
+## Releases (Decision 5)
 
 The train as it reads on `main` (`docs/plans/dream-state-semantics-plan.md`, "Order and size";
-`docs/plans/sql-exchange-plan.md:342`; `docs/plans/mcp-sdk-1.11.0-plan.md:1-4`):
+`docs/plans/sql-exchange-plan.md:342`; `docs/plans/mcp-sdk-1.11.0-plan.md:1-4`), with this plan's
+releases placed:
 
 | Version | What |
 |---|---|
 | 1.93.0 | Dream State R1a (#188, shipped) |
 | 1.93.1 | mcp 1.11.0 bump |
+| **1.93.2** | **This plan: step 0 (zero-vector bug fix) + step 1 (benchmark and specs)**, PRs A and B |
 | 1.94.0 | SQL exchange (four PRs) |
 | 1.95.0 (+1.95.1) | Dream State R1b (+ R1c) |
 | 1.96.0 | Dream State R2 |
-| unnumbered | Dream State R3, R4 (each behind a measurement) |
+| **1.97.0** | **This plan: steps 2-4** (`vector_search_mode`, `suggest_merges` budget, no vector on default loads), PRs C, E, D |
+| unnumbered | Dream State R3, R4 (after 1.97.0) |
 
-Proposal:
-
-- **Step 0 as an independent patch**, as soon as Steve wants it: the next free patch on whichever
-  minor is current (for example **1.93.2** after the mcp bump, or a `.x` patch on 1.94.0). It's a bug
-  fix with no migration and no new surface.
-- **Step 1** ships with step 0 or as its own patch. It's only specs and an opt-in rake task, so there's
-  no runtime change.
-- **Steps 2-4 as one minor after R2: 1.97.0** (PRs below). They don't touch relations, membership or
-  the export formats, so they could slot in **between trains** instead (for example after the SQL
-  exchange and before R1b) if Steve prefers. The version would then be the next minor at that point,
-  and the Dream State versions would move up by one.
-- **Step 5**, if approved: its own minor after that (1.98.0), or folded into 1.97.0.
-- Dream State R3 proposes "embedding-near entities of different types" as a discovery rule. It
-  benefits from step 3's helper, so if R3 is scheduled, steps 2-3 should land first.
+- **1.93.2 right after the mcp 1.93.1 bump.** It's a bug fix with no migration and no new surface.
+- **Step 1 ships with step 0 in 1.93.2.** It's specs plus an opt-in rake task, with no runtime change.
+  The plan already orders B right after A, and shipping it early also gives the write-cost numbers
+  that Decision 1 waits for well before 1.97.0. If PR B isn't ready when A is, A ships alone as
+  1.93.2 and B becomes the first PR of the 1.97.0 train (no version of its own).
+- **Steps 2-4 as one minor, 1.97.0, after R2 and before R3.** R3's "embedding-near entities of
+  different types" rule can then use step 3's helper.
+- Step 5 is deferred and has no version.
 
 ## PR breakdown
 
 | PR | Scope | Size | Depends on | Approval needed |
 |---|---|---|---|---|
-| A | Step 0: specs, then guard fixes (summarizer, ranker, the other guards) | S, ~250-450 lines | none | Steve confirms it's a bug fix (result order changes for unembedded rows) |
-| B | Step 1: bench rake task, EXPLAIN-shape, recall and filter-hazard specs | S/M, ~500-800 lines | A (or in parallel) | none (specs and opt-in tooling) |
-| C | Step 2: inner-ANN search channels, exact fallback, optional `vector_search_mode` setting, operator docs | M, ~700-1,100 lines | B | **yes**: result order; default mode |
-| D | Step 3: `VectorQuery` helper, `suggest_merges` batching plus ANN, subquery → literal in the scoped checks | M, ~800-1,300 lines | B, C (helper) | **yes**: `suggest_merges` behaviour |
-| E | Step 4: stop loading vectors by default; explicit readers | S/M, ~300-600 lines | A | none (performance only) |
-| F | Step 5 (optional): boolean-mode FULLTEXT channel and the before/after query set | S, ~250-450 lines | B | **yes**: result order |
+| A | Step 0: specs, then guard fixes (summarizer, ranker, the other guards). **1.93.2** | S, ~250-450 lines | none | decided: bug fix (Decision 2) |
+| B | Step 1: bench rake task (search latency, recall, write cost), EXPLAIN-shape, recall and filter-hazard specs. **1.93.2** (release in this PR) | S/M, ~500-800 lines | A | none (specs and opt-in tooling) |
+| C | Step 2: inner-ANN search channels, exact fallback, `vector_search_mode` setting (default `exact`), recall tuning to the bar, operator docs. **1.97.0** | M, ~700-1,100 lines | B | decided (Decisions 3, 4) |
+| D | Step 3: `VectorQuery` helper, `suggest_merges` batching, time budget and text line, ANN in `ann` mode, subquery → literal in the scoped checks. **1.97.0** (release in this PR) | M, ~800-1,300 lines | B, C (helper and setting) | decided (Decision 6) |
+| E | Step 4: stop loading vectors by default; explicit readers. **1.97.0** | S/M, ~300-600 lines | A | none (performance only) |
+| F | Step 5: **deferred** (Decision 7), not scheduled | — | — | would need approval if picked up |
 | Release | Version, CHANGELOG, `sync_skill_version` (in the last PR of each release) | S | — | — |
 
-Each PR stays under the ~3,000-line stop. Order: A → B → (C, E in either order) → D → F. **No new
-gems. No migrations** in A-F. Removing the index machinery (see Q1) would be a separate PR with a
-migration and needs Steve's approval.
+Each PR stays under the ~3,000-line stop. Order: **A → B** (1.93.2, after mcp 1.93.1), then after R2
+**C → E → D** (1.97.0; E can come before C, and D goes last because it needs C's helper and
+setting). F is deferred. **No new gems. No migrations** in A-E. Removing the index machinery
+(Decision 1, if the benchmark says so) would be a separate PR with a migration and needs Steve's
+approval.
 
 ## Test burden
 
@@ -293,34 +311,36 @@ migration and needs Steve's approval.
   placeholders). The index and triggers are installed in the spec setup the way
   `embeddings:add_indexes` does it, and dropped afterwards so other specs see the usual schema.
 - Recall thresholds: ANN against exact recall@10 ≥ 0.8 average, with no probe below 0.5, on the
-  ~2,000-row CI fixture (proposal, Q4). `suggest_merges` keeps exact results on a fixture small
+  ~2,000-row CI fixture (Decision 4, a starting bar that step 2 must clear). `suggest_merges` keeps exact results on a fixture small
   enough to stay below K.
 - Performance: the bench rake task is opt-in and never runs in CI (CircleCI medium is too noisy).
-  Each of C, D and E pastes its numbers into the PR body at 10k, 50k and 200k synthetic rows.
+  Each of B, C, D and E pastes its numbers into the PR body at 10k, 50k and 200k synthetic rows. B
+  includes write cost with and without the index.
 - Expected suite growth: about 15-25 spec examples, mostly in services and strategies, plus a
   few seconds of index setup.
 
-## Open questions for Steve
+## Decisions (Nov 20, 2026)
 
-1. **Keep or drop the HNSW indexes?**
-   - Keeping them costs index maintenance on every embed write (not measured yet; step 1 can
-     measure it), the NOT NULL plus zero-vector trigger machinery (`embedding_vector_trigger_manager.rb`,
-     `embedding_index_manager.rb`, `app/lib/structure_dump_guard.rb`, `embedded_at`) and the step 0
-     class of bugs.
-   - What it buys: the index path in steps 2-3.
-   - Dropping them is an operator action today (`embeddings:drop_indexes`, no code change). Fully
-     removing the machinery would be a PR with a migration and needs your approval.
-   - Proposal: keep them, and decide after step 1's numbers at your expected graph size.
-2. Step 0: may the ranking fix (unembedded observations stop getting a top vector score) ship as a
-   bug-fix patch, even though it changes observation order in `summarize`, `rank_observations`,
-   `get_entities` and `traverse_graph`?
-3. Step 2: should ANN become the default for unfiltered searches, or stay behind
-   `vector_search_mode = exact` until you flip it?
-4. The recall bar: is recall@10 ≥ 0.8 average (no probe below 0.5) on the synthetic fixture
-   acceptable for switching an unfiltered channel to ANN?
-5. Releases: steps 2-4 as 1.97.0 after R2, or between the SQL exchange and R1b? Should step 0 ship
-   as an early patch (for example 1.93.2)?
-6. `suggest_merges`: may a long scan stop at a time budget? If it should say so, may it add a line to
-   the existing text (no new output field)? Or must it stay "stop at `limit`" only?
-7. Step 5: worth doing at all, given the 3-character minimum and the underscore and CamelCase
-   tokenization? If yes, is a fixed synthetic query set enough evidence?
+Steve's answers to the plan's open questions:
+
+1. **HNSW indexes: keep them.** Decide again after step 1's benchmark has measured their write cost.
+   Dropping them would be an operator action (`embeddings:drop_indexes`), and fully removing the
+   machinery would be a separate PR with a migration that needs approval.
+2. **Step 0 ships as a bug fix**, although it changes observation order for unembedded rows in
+   `summarize`, `rank_observations`, `get_entities` and `traverse_graph`.
+3. **Index search is not the default.** Step 2 ships an app setting `vector_search_mode`
+   (`exact | ann`, not an MCP param) that defaults to `exact`. Flip it only if the graph grows.
+4. **Recall bar accepted as a starting bar**: ≥ 0.8 average recall@10, no probe below 0.5. Step 2's
+   tuning must actually clear it.
+5. **Releases:** step 0 as **1.93.2**, right after the mcp 1.93.1 bump, with step 1 alongside it.
+   Steps 2-4 as **1.97.0**, after R2 and before R3.
+6. **`suggest_merges` may stop on a time budget** and say so with a line in its existing text
+   output. No new field.
+7. **Step 5 (FULLTEXT) is skipped for now** and stays in the plan as deferred.
+
+## New questions (for the 1.97.0 kickoff)
+
+1. The `suggest_merges` time budget: is a fixed constant enough (proposal: 30 s for the MCP tool and
+   the REST copy alike), or should it be an `AppSettings` value?
+2. Should `vector_search_mode` also govern `suggest_merges`' ANN query (this plan assumes yes, so one
+   switch covers all the index paths), or should `suggest_merges` keep its own switch?
