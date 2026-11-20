@@ -10,6 +10,22 @@ RSpec.describe GraphDeleteService do
   let!(:relation) { MemoryRelation.create!(from_entity: first, to_entity: second, relation_type: "relates_to") }
 
   describe ".call" do
+    it "syncs the child and its subtree when it deletes a case-only Part_Of edge" do
+      alpha = MemoryEntity.create!(name: "Alpha Project", entity_type: "Project")
+      widget = MemoryEntity.create!(name: "SynthWidget", entity_type: "Component")
+      part = MemoryEntity.create!(name: "SynthPart", entity_type: "Component")
+      edge = MemoryRelation.create!(from_entity: widget, to_entity: alpha, relation_type: "part_of")
+      edge.update_column(:relation_type, "Part_Of")
+      MemoryRelation.create!(from_entity: part, to_entity: widget, relation_type: "part_of")
+      [ widget, part ].each { |entity| ProjectMembership.sync!(entity) }
+      expect([ widget.reload.project_id, part.reload.project_id ]).to eq([ alpha.id, alpha.id ])
+
+      described_class.call(operations: [ { type: "delete_relation", relation_id: edge.id } ])
+
+      expect(MemoryRelation.exists?(edge.id)).to be(false)
+      expect([ widget.reload.project_id, part.reload.project_id ]).to eq([ nil, nil ])
+    end
+
     it "applies mixed deletions with per-operation reasons" do
       entity_id = second.id
       relation_id = relation.id

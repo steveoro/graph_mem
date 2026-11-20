@@ -219,7 +219,7 @@ class CompactionReviewApplier
         # row-lock transaction must roll back ONLY this delete.
         ActiveRecord::Base.transaction(requires_new: true) do
           from_entity = relation.from_entity
-          part_of = relation.relation_type == "part_of"
+          part_of = MemoryRelation.reads_as_part_of?(relation.relation_type)
           relation.destroy!
           ProjectMembership.sync!(from_entity) if part_of && from_entity
         end

@@ -273,6 +273,20 @@ RSpec.describe CompactionReviewService, type: :service do
       expect(MemoryRelation.find_by(id: part_of_edge.id)).to be_present
     end
 
+    it "syncs the child when a delete_relation row removes a case-only Part_Of edge" do
+      project = MemoryEntity.create!(name: "DelPartOfProj", entity_type: "Project")
+      child = MemoryEntity.create!(name: "DelPartOfChild", entity_type: "Class")
+      edge = MemoryRelation.create!(from_entity: child, to_entity: project, relation_type: "part_of")
+      edge.update_column(:relation_type, "Part_Of")
+      ProjectMembership.sync!(child)
+      row = MaintenanceReportRow.create!(maintenance_report: report, report_type: "compaction_review", row_uuid: "del-rel-case",
+                                         kind: "delete_relation", status: "active", payload: { "relation_id" => edge.id },
+                                         signature: described_class.signature_for("delete_relation", { relation_id: edge.id }))
+
+      expect(described_class.apply(row.row_uuid)[:success]).to be(true)
+      expect(child.reload.project_id).to be_nil
+    end
+
     it "applying a part_of relationship_proposal syncs the child's project scope" do
       project = MemoryEntity.create!(name: "PropProj", entity_type: "Project")
       orphan = MemoryEntity.create!(name: "PropOrphan", entity_type: "Class")
