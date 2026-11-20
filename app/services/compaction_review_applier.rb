@@ -178,7 +178,10 @@ class CompactionReviewApplier
 
       deleted_ids = []
       missing_ids = []
+      children = []
 
+      # CompactionReviewService.apply holds the membership lock: a deleted part_of (a merge
+      # collision's extra parent, one edge of a part_of pair) syncs its child in this savepoint.
       ActiveRecord::Base.transaction(requires_new: true) do
         begin
           Current.deletion_reason = "duplicate"
@@ -187,6 +190,7 @@ class CompactionReviewApplier
             if relation
               relation.destroy!
               deleted_ids << relation_id
+              children << relation.from_entity_id if MemoryRelation.reads_as_part_of?(relation.relation_type)
             else
               missing_ids << relation_id
             end
@@ -194,12 +198,13 @@ class CompactionReviewApplier
         ensure
           Current.deletion_reason = nil
         end
+        MemoryEntity.where(id: children.uniq).find_each { |child| ProjectMembership.sync!(child) }
       end
 
       message = "Deleted #{deleted_ids.size} duplicate relation(s)"
       message += "; #{missing_ids.size} relation(s) were already absent" if missing_ids.any?
       { success: true, message: message, deleted_relation_ids: deleted_ids, missing_relation_ids: missing_ids }
-    rescue ActiveRecord::RecordInvalid, ActiveRecord::RecordNotDestroyed => e
+    rescue ActiveRecord::RecordInvalid, ActiveRecord::RecordNotDestroyed, ProjectMembership::Collision => e
       { success: false, error: "Failed to apply relation integrity repair: #{e.message}" }
     end
 
