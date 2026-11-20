@@ -39,11 +39,15 @@ class CompactionReviewService
       { success: false, error: e.message }
     end
 
-    def apply(item_id, action_params = {}, report_type: "compaction_review")
+    # @param resolution [Symbol] how a contradiction row retires the other side: :obsolete (the
+    #   default: the UI and MCP paths) or :supersede (1.92.0, ReviewPolicies::AutoApplyContradiction
+    #   only). A Ruby keyword on purpose: it is never read from action_params, so no caller that
+    #   passes user or agent input can set it.
+    def apply(item_id, action_params = {}, report_type: "compaction_review", resolution: :obsolete)
       row = find_item(item_id, report_type: report_type)
       return { success: false, error: "Suggestion not found" } unless row
 
-      record_review("apply", row) { apply_row(row, action_params) }
+      record_review("apply", row) { apply_row(row, action_params, resolution: resolution) }
     end
 
     def dismiss(item_id, reason: nil, report_type: "compaction_review")
@@ -242,7 +246,7 @@ class CompactionReviewService
 
     private
 
-    def apply_row(row, action_params)
+    def apply_row(row, action_params, resolution: :obsolete)
       # Dismissed/approved rows must never apply: rescan review relies on
       # "dismissed = no longer actionable" to retire stale proposals safely.
       unless row.status.in?(%w[active ignored])
@@ -263,7 +267,7 @@ class CompactionReviewService
             return { success: false, error: "Suggestion is not actionable (status: #{row.status})" }
           end
 
-          result = CompactionReviewApplier.apply(row, action_params)
+          result = CompactionReviewApplier.apply(row, action_params, resolution: resolution)
           if result[:success]
             track_review_row(row, status: "approved", applied_at: Time.current)
           else

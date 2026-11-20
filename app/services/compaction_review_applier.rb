@@ -10,7 +10,9 @@ class CompactionReviewApplier
       Preview.call(row, action_params)
     end
 
-    def apply(row, action_params)
+    # @param resolution [Symbol] contradiction rows only: :obsolete (default) or :supersede (the
+    #   auto-apply policy); see CompactionReviewService.apply
+    def apply(row, action_params, resolution: :obsolete)
       effective = row.effective_payload.with_indifferent_access
 
       case row.kind
@@ -37,7 +39,7 @@ class CompactionReviewApplier
       when "stale_memory"
         apply_stale_memory(effective)
       when "contradiction"
-        Contradiction.apply(effective, action_params)
+        Contradiction.apply(effective, action_params, resolution: resolution)
       when "fact_supersede"
         FactSupersede.apply(effective, action_params)
       when "lifecycle_corruption"
