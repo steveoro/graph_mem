@@ -5,6 +5,34 @@ All notable changes to GraphMem will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.93.0] - 2026-11-20
+
+Relation types are kept tidy. A type is normalized when it is written ("Has Many" and "has-many" become `has_many`, a known synonym its canonical type), a sweep canonicalizes the types already stored, and the types nothing maps go to the operator to map or accept. No migration and no change to any MCP tool, parameter or schema (tool counts stay 12 / 9 / 22).
+
+**Upgrade.** Nothing changes by itself in the stored data until the sweep runs. First open System › Background jobs › Relation types › **Canonicalize relation types** (or run `DRY_RUN=1 bin/rails graph_mem:canonicalize_relations`) to see the counts, then run the sweep. Its changes can't be undone, so read the dry run first; the run's report lists every change. The next dream-state run also does it, as its first phase. Rows already in `relation_type_mappings` stay and still win over the code's mapping. `graph_write` now stores and returns the normalized type, not the spelling you sent.
+
+### Added
+- **`RelationTypeSweep`** canonicalizes the stored relation types, 200 relations at a time. Per relation: a case-only difference is fixed in place; a variant with no canonical twin is retyped; a variant whose canonical twin exists on the same two entities is merged into it (the twin keeps the higher `weight` and `confidence`; the variant's `properties` go under `merged_from` when the twin has its own) and deleted. A variant of `part_of` is never written: it is queued as a review row, because a `part_of` edge moves membership.
+  - It runs as the new first phase of dream-state compaction (`relation_types`, with its own cursor and run stats, paused like the other phases), as `bin/rails graph_mem:canonicalize_relations` (`DRY_RUN=1` counts only, `VERBOSE=1` lists the changes), and from **System › Background jobs › Relation types › Canonicalize relation types**, which shows the dry run's counts first.
+  - Each batch that writes is one change set, `dream.relation_types`. A run ends with a `relation_type_sweep` report (counts, and up to 2,000 changes with relation id, old and new type and merged-into id); it is an internal report type that `get_maintenance_reports` doesn't return.
+- **Review kind `relation_retype`**: a stored variant of `part_of`. Payload: `operation` (`"retype"`), `relation_id`, `from_entity_id`, `from_name`, `to_entity_id`, `to_name`, `old_type`, `new_type`, `reason`. Applying it (Review & Fix, `apply_maintenance_review`) deletes the variant and creates the `part_of` edge through the normal path, under the membership lock; a second parent, a cycle or a name taken is refused with nothing written. It is applied one row at a time: bulk apply, group apply and the policies never touch it. It is undoable.
+- **Relation types** card on System › Background jobs: the last sweep (any source), a progress bar while one runs, the unmapped-type count, **View the changes** (the report, 100 a page).
+- **Unmapped relation types** page (`/system/jobs/relation_types`): each stored type that is neither canonical nor mapped, with its count, its stored spellings and two example edges, and a filter. **Map** a type to a canonical type, or **Accept** it as a known type of its own; the **Mappings** table lists every row with **Remove**. None of these retypes a relation: the next sweep does.
+- System › Activity shows why a change set can't be undone.
+
+### Changed
+- **Relation types are normalized when set**, on every write path (`graph_write`, the REST API, importers, review applies): trimmed, lower-cased, and a run of spaces or hyphens becomes one underscore, then mapped. An operator's row in `relation_type_mappings` comes first, then the code's `GraphVocabulary::RELATION_TYPE_MAPPINGS`; a type nothing maps is stored folded (`"Synth Links To"` becomes `synth_links_to`). Before, the lookup ran only through the table, which an install that had not seeded it left almost empty. An update that doesn't change the type keeps its stored spelling.
+- `db:seed` no longer seeds relation type mappings (the entity type seed is unchanged). The table holds only what an operator adds, and a seeded row would have looked like a choice of theirs.
+- The pre-flight integrity sweep runs once per compaction run (flagged in its stats), and the run's progress total counts the relations the first phase walks.
+- The dream-state card shows a **Relation types fixed** chip (retyped, case-fixed and merged relations).
+- `docs/dream_state.md`: an orphan is an entity with no `part_of` parent (it said "no `part_of` or `depends_on`", which the code never did), and the tree walk follows `part_of` children down from the Project roots (it said `part_of` and `depends_on` from children to parents). The same orphan wording is fixed in `docs/garbage_collector.md`.
+- The Dream State plan marks R1a shipped, and the mcp 1.11.0 bump is now planned as 1.93.1.
+
+### Fixed
+- `POST /api/v1/bulk` and `POST`/`PATCH /api/v1/memory_relations` now take the membership lock and sync the child's project when a relation is, becomes or stops being `part_of`. Before, they stored the edge without the lock or the sync, so a child's `project_id` could drift from its tree. A second parent, a cycle, a name taken in the new project or a busy lock is refused with the existing `422`. Known gap: `DELETE /api/v1/memory_relations/:id` of a `part_of` edge doesn't sync membership yet.
+- Undoing a deleted relation, through an audit undo or an entity-merge undo, restores the relation with the type it had stored. Before, it was canonicalized again on the way back.
+- An entity merge re-pointing a relation, or its undo, no longer canonicalizes the stored type, so a variant like `Part Of` can't turn into `part_of` behind the single-parent and cycle checks and the membership sync.
+
 ## [1.92.0] - 2026-11-20
 
 Contradictions that are a plain value change resolve themselves: "Port: 3000", later "Port: 3001", on the same entity ends with the older fact superseded by the newer one, with no review needed. This also closes the auto-adoption work.
