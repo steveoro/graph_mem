@@ -13,6 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - It builds the eval MCP configs, pins and resets the scratch clones, flips each arm's user-level levers and restores them exactly, runs the sessions, guards the other repos, stops on a usage limit with a resume hint, and writes a timestamped report under `~/adoption-eval/reports/`.
   - `--setting KEY=VALUE` can rerun under a changed graph_mem setting: it restarts the app container, then restores the setting and restarts again.
 - `script/adoption_eval/report.rb`: a run's counts-only report with the decision rules (Q-L, Q1, Q2, Q3, Q4) applied to the arms present.
+- Adoption eval arm `I0`, the server instructions alone, with no user-level skill copy, rule or hook. It is in the `screen` and `full` suites. The report warns when a project skill copy or a `CLAUDE.md` that mentions graph_mem would still load in that arm.
+- A draft efficiency rule for Q-L (`docs/plans/auto-adoption-tests.md`): when adoption ties, a lever also counts if dropping it raises median turns or tokens by 15% or more (25% on T1 screening). `report.rb` prints it on ties, without changing the verdict, and compares I with ALL, the 1.89.0 skill copy (I vs I0) and, when S was run, the current skill copy (S vs I0). A session that hits the turn cap is counted. That comparison is a lower bound when only the measured arm hit the cap, an upper bound when only the baseline arm did, and inexact when both did. `screen` and `full` use 40 turns; resuming a run that recorded no cap stays at 25.
 
 ### Changed
 - `script/adoption_eval/summarize.rb` reads the Cursor CLI stream as `agent` 2026.11.19 writes it, and notes write-tool lookups, completeness and usage-limit stops.

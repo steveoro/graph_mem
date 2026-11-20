@@ -36,6 +36,7 @@ RSpec.describe "script/adoption_eval/run_eval.sh" do
         echo '{"type":"system","subtype":"hook_response","hook_name":"SessionStart:startup","hook_event":"SessionStart","stdout":"graph_mem synth-hook"}'
       if [ -n "${FAKE_LIMIT:-}" ]; then echo '{"type":"result","is_error":true,"result":"Claude AI usage limit reached|1"}'; exit 1; fi
       [ -n "${FAKE_TOUCH:-}" ] && touch "$FAKE_TOUCH"
+      if [ -d "$HOME/.claude/skills/graph-mem-mcp-toolset" ]; then echo skill; else echo none; fi >>"$FAKE_LOG/skill.seen"
       [ -f "$HOME/.claude/rules/graph-mem.md" ] &&
         echo '{"type":"assistant","message":{"id":"m1","content":[{"type":"tool_use","name":"mcp__graph_mem__get_context","input":{}}]}}'
       echo '{"type":"assistant","message":{"id":"m2","content":[{"type":"tool_use","name":"Edit","input":{"file_path":"synth"}}]}}'
@@ -138,12 +139,40 @@ RSpec.describe "script/adoption_eval/run_eval.sh" do
     out, err, status = run_eval("--suite", "screen", "--dry-run")
 
     expect(status).to be_success, err
-    expect(out.lines.size).to eq(30)
-    expect(err).to include("graph_mem 9.9.9-synth", "ALL+A: rule on, skill new, hook on, MCP alwaysload")
+    expect(out.lines.size).to eq(35)
+    expect(err).to include("graph_mem 9.9.9-synth", "max-turns 40", "I0: rule off, skill none, hook off, MCP default",
+                           "ALL+A: rule on, skill new, hook on, MCP alwaysload")
     expect(home_tree).to eq(before)
     expect(Dir.exist?(path("eval", "runs"))).to be(false)
     expect(Dir.children(path("projects"))).to contain_exactly("goggles_admin2", "fast-mcp", "synth-other")
     expect(Dir.children(path("tmp"))).to be_empty
+  end
+
+  it "arm I0 removes the skill copy for that session and puts HOME back exactly" do
+    before = home_tree
+    _out, err, status = run_eval("--suite", "custom", "--arms", "I,I0,ALL", "--tasks", "T1", "--n", "1", "--yes")
+
+    expect(status).to be_success, err
+    expect(log("skill.seen")).to eq("skill\nnone\nskill\n")
+    expect(log("claude.args")).to include("--max-turns 25")
+    expect(home_tree).to eq(before)
+  end
+
+  it "screen defaults to 40 turns, and --max-turns overrides that" do
+    _out, err, status = run_eval("--suite", "screen", "--arms", "I", "--tasks", "T1", "--n", "1", "--yes")
+
+    expect(status).to be_success, err
+    expect(log("claude.args")).to include("--max-turns 40")
+    expect(JSON.parse(File.read(path("eval", "runs", run_ids.sole, "run.json")))["max_turns"]).to eq(40)
+
+    File.write(path("log", "claude.args"), "")
+    # A second run in the same UTC second shares a run id. A separate eval dir keeps this example off that clock.
+    _out, err, status = run_eval("--suite", "full", "--arms", "I", "--tasks", "T1", "--n", "1", "--max-turns", "12", "--yes",
+                                 extra: { "ADOPTION_EVAL_DIR" => path("eval2") })
+
+    expect(status).to be_success, err
+    expect(log("claude.args")).to include("--max-turns 12")
+    expect(log("claude.args")).not_to include("--max-turns 40")
   end
 
   it "runs the arms with their levers in place, writes the report, and puts HOME back exactly" do
@@ -165,6 +194,22 @@ RSpec.describe "script/adoption_eval/run_eval.sh" do
     expect(File.read(path("eval", "clones.lock"))).to include("goggles_admin2-eval #{`git -C #{clone} rev-parse HEAD`.strip}")
     run = JSON.parse(File.read(path("eval", "runs", id, "run.json")))
     expect(run["baseline"]).to include({ "path" => "~/.claude/skills/graph-mem-mcp-toolset", "exists" => true, "mentions_graph_mem" => false })
+  end
+
+  it "--resume of a run with no recorded max_turns keeps the old cap of 25" do
+    run_eval("--suite", "screen", "--arms", "I", "--tasks", "T1", "--n", "1", "--yes")
+    id = run_ids.sole
+    run = JSON.parse(File.read(path("eval", "runs", id, "run.json")))
+    run.delete("max_turns")
+    run["n"] = 2
+    File.write(path("eval", "runs", id, "run.json"), JSON.generate(run))
+    File.write(path("log", "claude.args"), "")
+    _out, err, status = run_eval("--resume", id, "--yes")
+
+    expect(status).to be_success, err
+    expect(log("claude.args")).to include("--max-turns 25")
+    expect(log("claude.args")).not_to include("--max-turns 40")
+    expect(JSON.parse(File.read(path("eval", "runs", id, "run.json")))["max_turns"]).to eq(25)
   end
 
   it "--resume keeps the finished sessions and runs only the missing ones" do

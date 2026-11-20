@@ -100,10 +100,11 @@ RSpec.describe "script/adoption_eval/summarize.rb" do
       limited = { type: "result", is_error: true, result: "Claude AI usage limit reached|1700000000" }
       done = { type: "result", is_error: false, num_turns: 3 }
 
-      expect(session([ search, done ]).metrics).to include(write_search: true, complete: true, limited: false)
-      expect(session([ search ]).metrics).to include(write_search: true, complete: false, limited: false)
-      expect(session([ limited ]).metrics).to include(complete: true, limited: true)
+      expect(session([ search, done ]).metrics).to include(write_search: true, complete: true, limited: false, capped: false)
+      expect(session([ search ]).metrics).to include(write_search: true, complete: false, limited: false, capped: false)
+      expect(session([ limited ]).metrics).to include(complete: true, limited: true, capped: false)
       expect(session([ { type: "result", is_error: true, result: "synth-other-error" } ]).metrics[:limited]).to be(false)
+      expect(session([ { type: "result", subtype: "error_max_turns", num_turns: 25 } ]).metrics).to include(complete: true, capped: true, limited: false)
     end
 
     it "builds from a file named <arm>-<task>-<run>.jsonl, and refuses other names" do
