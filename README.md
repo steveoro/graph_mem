@@ -8,6 +8,12 @@ GraphMem is a Ruby on Rails application implementing a Model Context Protocol (M
 [![Rails](https://img.shields.io/badge/rails-8.1.4-orange.svg)](Gemfile)
 [![Ruby](https://img.shields.io/badge/ruby-3.4.12-red.svg)](Gemfile)
 
+<p align="center">
+  <a href="docs/images/ui/home.png"><img src="docs/images/ui/home.png" alt="The operator's Home page: health tiles, graph counts, the review digest, background jobs, MCP clients and recent activity" width="49%"></a>
+  <a href="docs/images/ui/explore-context-menu.png"><img src="docs/images/ui/explore-context-menu.png" alt="Explore: a project's graph with a node's context menu and the entity panel" width="49%"></a>
+</p>
+<p align="center"><em>The operator UI: Home, and Explore with a node's context menu (synthetic data).</em></p>
+
 ## Overview
 
 GraphMem provides persistent, structured storage for knowledge entities, their relationships, and observations. It's designed as an MCP server that enables AI assistants to maintain memory across sessions, build domain-specific knowledge graphs, and effectively reference past interactions.
