@@ -1,7 +1,8 @@
 # Plan: Dream State as knowledge traversal (relations first)
 
-> Status: draft for Steve's review, 2026-11-20, written on `main` at 1.92.0. Not started.
-> No code in this PR. Each release below gets its own kickoff once the plan is approved.
+> Status: draft, 2026-11-20, written on `main` at 1.92.0. Not started. Steve answered the four
+> questions on 2026-11-20 (see "Answers" at the end); R1 is ready for a kickoff once this is merged.
+> No code in this PR. Each release below gets its own kickoff.
 
 ## Context
 
@@ -29,6 +30,7 @@ debugging history of its use); it needs the right edges.
 3. A **lifecycle for relations** ("was used") is its own release: it needs a migration and changes
    what `traverse_graph` returns.
 4. **Measure first**, and again after each release.
+5. Docs under `docs/` are kept up to date with each release (`docs/dream_state.md` first of all).
 
 ## Measurements (production graph, 2026-11-20, read-only, counts only)
 
@@ -69,6 +71,23 @@ What they say:
   they queue rows by default.
 - **Weights and confidences are empty**, so nothing ranks one edge above another yet.
 
+Why the vocabulary drifted (checked after Steve recalled an earlier canonicalization):
+
+| What | Count |
+|---|---|
+| Canonical relation types in `GraphVocabulary` | 21 |
+| Variants the code maps to them (`GraphVocabulary::RELATION_TYPE_MAPPINGS`) | 59 |
+| Rows in production's `relation_type_mappings` table | **4** (55 seed rows missing) |
+| Out-of-vocabulary types / relations | 108 / 239 |
+| Fixed by the code's mapping plus trivial normalizing (case, spaces, hyphens) | 10 types, 56 relations |
+| Left with no mapping at all | 98 types, 183 relations (69 types used once) |
+
+- `graph_write`, the REST API and the importers do canonicalize through `RelationTypeMapping`, but
+  the table they read was never seeded in production, so there it does almost nothing.
+- There is no task, job or UI that sweeps the relations already stored.
+- Even fully seeded, the mapping covers a quarter of the drift. The rest are one-off verbs an
+  operator has to map or accept, which is the case for a UI.
+
 Not measured: how many `part_of` edges phase 1 created. Relation audit rows carry no dream-state
 actor to tell (87 creations in the audit window have an empty actor). Release 1 fixes that first.
 
@@ -77,26 +96,32 @@ actor to tell (87 creations in the audit window have an empty actor). Release 1 
 ### R1. Relations: vocabulary and retyping (no migration, no MCP change)
 
 1. **Canonical types for existing relations** (new idea 0, from the measurements).
-   - A dream-state step runs every relation's type through `RelationTypeMapping.canonicalize`.
-   - A row whose canonical type differs is retyped in place; when the canonical twin already exists
-     (the unique index on from, to, type), the variant row is merged into it.
-   - A type with no mapping and no vocabulary entry is counted in the run's stats and listed once in
-     a report for the operator, who adds a mapping or accepts the type. Nothing is guessed.
-   - Open point for Steve: canonicalize the same way on **every** write path (`graph_write`
-     included). That changes what a write stores for a variant type, so it may count as MCP
-     behaviour; the stored type would still be what `GraphVocabulary` documents.
+   - **Seed first:** the mapping table is filled from `GraphVocabulary::RELATION_TYPE_MAPPINGS` at
+     boot or deploy when rows are missing (idempotent), so production stops running on 4 rows.
+   - **Normalize on every write path** (Steve: yes): case, spaces and hyphens are folded before the
+     lookup, in one place (`MemoryRelation.canonical_relation_type`), so `graph_write`, the REST
+     API and the importers store the same type for "USES", "uses" and "Uses". A type that maps to
+     nothing is still stored as written (normalized): novel types stay allowed.
+   - **Sweep the stored relations:** one service object (`RelationTypeSweep`) used by a dream-state
+     step, a rake task (`graph_mem:canonicalize_relations`, with a dry run) and a button on
+     **System › Maintenance** ("Canonicalize relation types", with the counts it would change).
+     A row whose canonical type differs is retyped in place; when the canonical twin already exists
+     (the unique index on from, to, type), the variant row is merged into it. One undoable change
+     set per run.
+   - **The unmapped rest goes to the operator:** a page (Maintenance or Review) lists each type
+     that is neither canonical nor mapped, with its use count and two example edges, and lets the
+     operator map it to a canonical type (then the sweep retypes its rows), or accept it as is.
+     Nothing is guessed. 98 types today, 69 of them used once.
 2. **Retype `part_of` on dependency-like children** (ideas 1, 3).
-   - Candidate: a `part_of` edge whose child has a dependency-like entity type (a configurable
-     list, starting with the framework, library, gem, tool and external-service types) and whose
-     parent is a Project.
+   - Candidate: a `part_of` edge whose child has a dependency-like entity type and whose parent is
+     a Project. The list of dependency-like types is a setting (Steve: yes), editable in Settings,
+     seeded from the types seen in the graph (the framework, library, gem and tool types).
    - Proposal: a new review row kind `relation_retype` (`part_of` → `depends_on`), with the
      evidence shown: the child's type, and any fact that says the project uses or used it.
-   - **Project scoping is kept**: `part_of` is the ownership edge and sets `project_id`. Two ways,
-     for Steve to pick:
-     (a) the retyped entity keeps its `project_id` (scoped to the project it was learned in) and
-     only the edge changes; or
-     (b) it becomes global (`project_id` NULL), since a library isn't owned by one project.
-     The plan recommends (a): nothing moves in search scoping, and (b) can follow per entity.
+   - **Project scoping is kept** (Steve): the retyped entity keeps its `project_id` and only the
+     edge changes, so nothing moves in search scoping and it never lands at root level. A library
+     two projects use gets a `depends_on` edge from each (an entity can have one `part_of` parent
+     but any number of dependents); the row for the second project proposes that edge.
    - A policy `auto_apply_relation_retype`, **off by default**, applies the rows whose child type is
      on the list and whose project has no fact claiming to *own* the entity. Undoable change sets.
 3. **Stop creating the problem** (idea 4). Phase 1 auto-parents only when the orphan's type is
@@ -149,9 +174,11 @@ current rules sit near 25%).
 - Nothing here weakens the `/mcp` lockdown, the anonymizer or the cloud gate.
 - No LLM call is required for R1; an LLM judge for retype evidence can be discussed for R3.
 
-## Questions for Steve before the R1 kickoff
+## Answers (Steve, 2026-11-20)
 
-1. Retyped libraries: keep their `project_id` (recommended) or become global?
-2. Canonicalize relation types on every write path, `graph_write` included?
-3. The dependency-like type list: start from the types seen in the graph, editable in Settings?
-4. Is R1's scope right for one release, or should the vocabulary sweep (item 1) ship alone first?
+1. A retyped library keeps its project scope, never root level; one used by two projects is a
+   dependency of both.
+2. Canonicalize relation types on every write path, and give the operator a way to run it over the
+   whole graph (the rake task and the Maintenance button above).
+3. The dependency-like type list starts from the types in the graph and is editable in Settings.
+4. R1 ships as one release.
