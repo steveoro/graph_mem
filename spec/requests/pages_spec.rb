@@ -121,6 +121,7 @@ RSpec.describe "Home", type: :request do
       expect(live["data-operation-progress-operation-id-value"]).to eq(running.operation_id)
       expect(doc.at_css("[data-testid='home-job-recent']").text).to include("Project scan", "failed", "synthetic failure")
       expect(doc.css("a").map { |link| link["href"] }).to include(system_jobs_path, "/system/queue")
+      expect(doc.at_css("a[href='#{system_jobs_path}']").text).to include("Background jobs")
     end
 
     it "lists the latest change sets, status only" do

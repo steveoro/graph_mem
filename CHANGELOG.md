@@ -16,6 +16,8 @@ Contradictions that are a plain value change resolve themselves: "Port: 3000", l
 ### Changed
 - **Auto-resolve value changes** review policy (Settings › Review policies, **on by default**): a `Key: value` fact whose newer twin has the same key and another value is marked superseded by the newer one. Undo the policy run to revert, and the pair then stays in the queue for you (the policy doesn't apply it again); turn the setting off to keep reviewing them by hand. Sentences that differ in 1–2 values are included only with "free text" on (off by default).
 - The "LLM:" label on review cards and the entity panel reads "LLM topic:" (it names what a fact is about; it was never a status).
+- The UI guide's screenshots (`docs/images/ui/`) are retaken at 1.92.0, with synthetic data; five images no doc used are removed.
+- Home's Jobs card names the page its controls link opens, "Background jobs" (it still said "Maintenance", a hub removed in 1.62.0).
 - The auto-adoption plan and its decision tests are done and moved to `docs/plans/done/`. Result: on two rounds of the screen suite, every complete session used graph_mem before its first edit, the server instructions alone included, so no further adoption lever is planned.
 
 ### Fixed
