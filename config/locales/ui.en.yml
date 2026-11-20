@@ -55,6 +55,9 @@ en:
         now: "Stored now: %{type}."
         gone: "The relation is gone."
         operation: "Operation: %{operation}."
+        has_parent: "%{child} is already part_of %{parent}: choose to move it under this row's target, or to keep its parent."
+        move: "Move under %{target}…"
+        keep: "Keep %{parent}…"
     guest_search_throttled:
       title: "Too many searches"
       body: "Guests can run up to %{limit} searches a minute. Please wait a moment and try again."

@@ -96,6 +96,9 @@ class ChangeSetUndo
       end
 
       record.assign_attributes(changes.transform_values { |change| change["from"] })
+      # A relation type comes back as it was stored (a relation_retype kept as relates_to restores
+      # its variant), not canonicalized again.
+      record.keep_stored_type = true if record.is_a?(MemoryRelation)
       # The undo of a lifecycle repair writes back the inconsistent state it fixed, as it was.
       record.restoring_audited_state = true if record.is_a?(MemoryObservation) && lifecycle_repair?
       @effects.reembed!(record) if record.respond_to?(:embedded_at) && (record.changed & model::EMBEDDING_FIELDS).any?

@@ -224,6 +224,53 @@ RSpec.describe "Review & Fix", type: :request do
       expect(other.reload.status).to eq("obsolete")
     end
 
+    it "offers Move and Keep for a relation_retype row whose child already has a parent, through the confirm card" do
+      project = MemoryEntity.create!(name: "Alpha Service", entity_type: "Project")
+      gadget = MemoryEntity.create!(name: "SynthGadget", entity_type: "Component")
+      [ widget, gadget ].each do |entity|
+        MemoryRelation.create!(from_entity: entity, to_entity: project, relation_type: "part_of")
+        ProjectMembership.sync!(entity)
+      end
+      variant = MemoryRelation.create!(from_entity: widget, to_entity: gadget, relation_type: "synth_placeholder")
+      variant.update_column(:relation_type, "Is Part Of")
+      RelationTypeSweep.call
+      row = MaintenanceReportRow.find_by!(kind: "relation_retype")
+
+      get review_row_path(row.row_uuid)
+      card = Nokogiri::HTML5.fragment(response.body)
+      expect(card.at_css("[data-testid='relation-retype-has-parent']").text).to include("SynthWidget is already part_of Alpha Service")
+      expect(card.at_css("[data-testid='relation-retype-move']").text).to eq("Move under SynthGadget…")
+      expect(card.at_css("[data-testid='relation-retype-keep']").text).to eq("Keep Alpha Service…")
+      expect(response.body).not_to include("Apply…")
+
+      get review_row_preview_path(row.row_uuid, parent_choice: "move")
+      expect(response.body).to include("Moves &#39;SynthWidget&#39; from &#39;Alpha Service&#39; under &#39;SynthGadget&#39;",
+                                       "Stays in project &#39;Alpha Service&#39;")
+      confirm = Nokogiri::HTML5.fragment(response.body).at_css("form:has([data-testid='preview-confirm'])")
+      expect(confirm.at_css("input[name='parent_choice']")["value"]).to eq("move")
+
+      post review_row_apply_path(row.row_uuid), params: { parent_choice: "move" }, headers: turbo
+      expect(response).to have_http_status(:ok)
+      expect(MemoryRelation.where(from_entity_id: widget.id, relation_type: "part_of").pluck(:to_entity_id)).to eq([ gadget.id ])
+    end
+
+    it "keeps the parent of a relation_retype row from the card's Keep choice" do
+      project = MemoryEntity.create!(name: "Alpha Service", entity_type: "Project")
+      gadget = MemoryEntity.create!(name: "SynthGadget", entity_type: "Component")
+      MemoryRelation.create!(from_entity: widget, to_entity: project, relation_type: "part_of")
+      variant = MemoryRelation.create!(from_entity: widget, to_entity: gadget, relation_type: "synth_placeholder")
+      variant.update_column(:relation_type, "Is Part Of")
+      RelationTypeSweep.call
+      row = MaintenanceReportRow.find_by!(kind: "relation_retype")
+
+      get review_row_preview_path(row.row_uuid, parent_choice: "keep")
+      expect(response.body).to include("Keeps &#39;SynthWidget&#39; part_of &#39;Alpha Service&#39;", "No membership change")
+      post review_row_apply_path(row.row_uuid), params: { parent_choice: "keep" }, headers: turbo
+
+      expect(response).to have_http_status(:ok)
+      expect(variant.reload.relation_type).to eq("relates_to")
+    end
+
     it "runs group actions, answering 409 when the group changed since the preview" do
       row = proposal
       preview = ReviewGroupActions.preview(group_key: row.group_key, op: "apply")

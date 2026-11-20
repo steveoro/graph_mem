@@ -53,7 +53,7 @@ RSpec.describe CompactionReviewApplier::RelationRetype do
     expect(row.reload.status).to eq("active")
   end
 
-  it "leaves everything unchanged and answers a validation error when the entity already has a part_of parent" do
+  it "leaves everything unchanged and asks to move or keep when the entity already has a part_of parent" do
     MemoryRelation.create!(from_entity: widget, to_entity: other_project, relation_type: "part_of")
     ProjectMembership.sync!(widget)
     variant, row = queued_row
@@ -61,7 +61,7 @@ RSpec.describe CompactionReviewApplier::RelationRetype do
     result = apply(row)
 
     expect(result[:success]).to be(false)
-    expect(result[:error]).to start_with("Cannot retype relation ##{variant.id}:").and include("already has a part_of parent")
+    expect(result[:error]).to start_with("A choice is required").and include("is already part_of '#{other_project.name}'", '"move"', '"keep"')
     expect(variant.reload.relation_type).to eq("child_of")
     expect(widget.reload.project_id).to eq(other_project.id)
     expect(row.reload).to have_attributes(status: "active", resolution_reason: result[:error])

@@ -127,6 +127,43 @@ class RelationTypeSweep
                   .where.not(id: except_id).pick(:id)
   end
 
+  # Merges a variant row into its twin (same endpoints, the type the variant becomes) and deletes
+  # the variant: the twin keeps the higher weight and confidence, and the properties rule of
+  # .merged_properties. The twin's own type is left as stored. Used by the sweep and by a
+  # relation_retype row kept as relates_to (CompactionReviewApplier::RelationRetype).
+  #
+  # @param variant [MemoryRelation]
+  # @param twin [MemoryRelation] locked by the caller
+  # @param reason [String] the delete's audit reason
+  # @return [MemoryRelation] the twin
+  def self.merge_into_twin!(variant, twin, reason:)
+    twin.assign_attributes(weight: [ twin.weight, variant.weight ].compact.max,
+                           confidence: [ twin.confidence, variant.confidence ].compact.max,
+                           properties: merged_properties(twin, variant))
+    twin.save! if twin.changed?
+    Current.set(deletion_reason: reason) { variant.destroy! }
+    twin
+  end
+
+  # The twin keeps its own properties. When it has none it takes the variant's; otherwise the
+  # variant's (when it has any) are kept under "merged_from", one entry per merged variant, so
+  # nothing is lost. (Entity merges and the integrity repair drop a duplicate edge's properties;
+  # there was no earlier rule for a merge that keeps a row.)
+  #
+  # @param twin [MemoryRelation]
+  # @param variant [MemoryRelation]
+  # @return [Hash]
+  def self.merged_properties(twin, variant)
+    mine = twin.properties.is_a?(Hash) ? twin.properties : {}
+    theirs = variant.properties.is_a?(Hash) ? variant.properties : {}
+    return mine if theirs.empty?
+    return theirs if mine.empty?
+
+    merged_from = Array(mine["merged_from"]) + [ { "relation_id" => variant.id, "relation_type" => variant.relation_type,
+                                                   "properties" => theirs } ]
+    mine.merge("merged_from" => merged_from)
+  end
+
   attr_reader :batch_size, :counts
 
   # @param dry_run [Boolean]
@@ -282,31 +319,9 @@ class RelationTypeSweep
 
   def merge!(relation, plan, touched)
     twin = MemoryRelation.lock.find(plan.twin_id)
-    twin.assign_attributes(weight: higher(twin.weight, relation.weight), confidence: higher(twin.confidence, relation.confidence),
-                           properties: merged_properties(twin, relation))
-    twin.save! if twin.changed?
-    Current.set(deletion_reason: "relation type canonicalized: merged into ##{twin.id}") { relation.destroy! }
+    self.class.merge_into_twin!(relation, twin, reason: "relation type canonicalized: merged into ##{twin.id}")
     touched.merge([ relation.from_entity_id, relation.to_entity_id ])
     entry(plan, "merged", merged_into_id: twin.id)
-  end
-
-  def higher(left, right)
-    [ left, right ].compact.max
-  end
-
-  # The twin keeps its own properties. When it has none it takes the variant's; otherwise the
-  # variant's (when it has any) are kept under "merged_from", one entry per merged variant, so
-  # nothing is lost. (Entity merges and the integrity repair drop a duplicate edge's properties;
-  # there was no earlier rule for a merge that keeps a row.)
-  def merged_properties(twin, variant)
-    mine = twin.properties.is_a?(Hash) ? twin.properties : {}
-    theirs = variant.properties.is_a?(Hash) ? variant.properties : {}
-    return mine if theirs.empty?
-    return theirs if mine.empty?
-
-    merged_from = Array(mine["merged_from"]) + [ { "relation_id" => variant.id, "relation_type" => variant.relation_type,
-                                                   "properties" => theirs } ]
-    mine.merge("merged_from" => merged_from)
   end
 
   # --- review rows -----------------------------------------------------------------------------
@@ -315,9 +330,14 @@ class RelationTypeSweep
     return [] if plans.empty?
 
     pending, fresh = plans.partition { |plan| queued_row(plan) }
-    names = MemoryEntity.where(id: fresh.flat_map { |plan| [ plan.from_entity_id, plan.to_entity_id ] }).pluck(:id, :name).to_h
+    # The child's current part_of parent (another entity, or the twin would have merged): the row
+    # then asks to move or keep (CompactionReviewApplier::RelationRetype).
+    parents = MemoryRelation.where(from_entity_id: fresh.map(&:from_entity_id), relation_type: PART_OF)
+                            .pluck(:from_entity_id, :to_entity_id).to_h
+    ids = fresh.flat_map { |plan| [ plan.from_entity_id, plan.to_entity_id ] } + parents.values
+    names = MemoryEntity.where(id: ids).pluck(:id, :name).to_h
     rows = CompactionReviewService.seed_report(report_type: REVIEW_REPORT_TYPE, source: REPORT_TYPE, source_ref: @source_ref,
-                                               items: fresh.map { |plan| review_item(plan, names) })
+                                               items: fresh.map { |plan| review_item(plan, names, parent_id: parents[plan.from_entity_id]) })
     seeded = rows.index_by { |row| row.payload["relation_id"].to_i }
     pending.map { |plan| entry(plan, "already_queued", review_row_id: queued_row(plan).presence) } +
       fresh.map do |plan|
@@ -337,15 +357,23 @@ class RelationTypeSweep
     nil
   end
 
-  def review_item(plan, names)
+  # @param parent_id [Integer, nil] the child's current part_of parent, when it has one
+  def review_item(plan, names, parent_id: nil)
     {
       id: SecureRandom.uuid, kind: REVIEW_KIND, operation: "retype", relation_id: plan.relation_id,
       from_entity_id: plan.from_entity_id, from_name: names[plan.from_entity_id],
       to_entity_id: plan.to_entity_id, to_name: names[plan.to_entity_id],
-      old_type: plan.old_type, new_type: plan.new_type,
-      reason: "'#{plan.old_type}' is a variant of #{plan.new_type}; a #{plan.new_type} edge moves membership, " \
-              "so it is created by hand (Apply), never by the sweep"
+      old_type: plan.old_type, new_type: plan.new_type, reason: review_reason(plan, names, parent_id)
     }
+  end
+
+  def review_reason(plan, names, parent_id)
+    reason = "'#{plan.old_type}' is a variant of #{plan.new_type}; a #{plan.new_type} edge moves membership, " \
+             "so it is created by hand (Apply), never by the sweep"
+    return reason unless parent_id
+
+    "#{reason}. '#{names[plan.from_entity_id]}' is already #{plan.new_type} '#{names[parent_id]}': choose to move it " \
+      "under '#{names[plan.to_entity_id]}', or to keep its parent (the variant then becomes relates_to)"
   end
 
   # One change entry of the report.

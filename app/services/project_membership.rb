@@ -107,13 +107,23 @@ class ProjectMembership
       with_membership_lock { reassign_locked!(entity, target_project_id) }
     end
 
+    # The first name of `entity`'s subtree (itself and its members) already taken in the target
+    # scope by an entity outside the subtree, or nil. Read-only: a preview asks it, reassign! refuses on it.
+    # @param entity [MemoryEntity]
+    # @param target_project_id [Integer, nil] nil = the global scope
+    # @param subtree_ids [Array<Integer>, nil] the subtree when the caller has it already
+    # @return [String, nil]
+    def collision_name(entity, target_project_id, subtree_ids: nil)
+      subtree_ids ||= [ entity.id ] + member_ids(entity.id).to_a
+      subtree_names = MemoryEntity.where(id: subtree_ids).pluck(:name)
+      MemoryEntity.where(project_id: target_project_id, name: subtree_names).where.not(id: subtree_ids).pick(:name)
+    end
+
     def reassign_locked!(entity, target_project_id)
       return if entity.entity_type == NodeOperationsStrategy::PROJECT_ENTITY_TYPE
 
       subtree_ids = [ entity.id ] + member_ids(entity.id).to_a
-      subtree_names = MemoryEntity.where(id: subtree_ids).pluck(:name)
-      collision = MemoryEntity.where(project_id: target_project_id, name: subtree_names)
-                              .where.not(id: subtree_ids).pluck(:name).first
+      collision = collision_name(entity, target_project_id, subtree_ids: subtree_ids)
       if collision
         raise Collision,
               "cannot move '#{entity.name}' into project #{target_project_id.inspect}: " \
