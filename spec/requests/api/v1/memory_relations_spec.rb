@@ -322,6 +322,26 @@ RSpec.describe 'API V1 Memory Relations', type: :request do
           expect(response).to have_http_status(:not_found)
         end
       end
+
+      response(422, 'part_of delete refused (name collision in the scope the child moves to, or a busy membership lock)') do
+        schema '$ref' => '#/components/schemas/error_response'
+        let(:parent) { MemoryEntity.create!(name: 'Alpha Project', entity_type: 'Project') }
+        let(:child) { MemoryEntity.create!(name: 'SynthWidget', entity_type: 'Component') }
+        let!(:part_of) do
+          MemoryRelation.create!(from_entity: child, to_entity: parent, relation_type: 'part_of').tap { ProjectMembership.sync!(child) }
+        end
+        let(:id) { part_of.id }
+
+        # Created once the child sits in the project: the global scope it would move back to is taken.
+        before { MemoryEntity.create!(name: 'SynthWidget', entity_type: 'Component') }
+
+        run_test! do |response|
+          expect(response).to have_http_status(:unprocessable_content)
+          expect(JSON.parse(response.body)['error']).to eq('Validation failed')
+          expect(MemoryRelation.exists?(part_of.id)).to be(true)
+          expect(child.reload.project_id).to eq(parent.id)
+        end
+      end
     end
   end
 
@@ -441,6 +461,67 @@ RSpec.describe 'API V1 Memory Relations', type: :request do
         expect(body["details"]["base"].sole).to include("already exists there")
         expect(relation.reload.relation_type).to eq("depends_on")
         expect(widget.reload.project_id).to be_nil
+      end
+    end
+
+    describe "DELETE" do
+      let!(:sub) { MemoryEntity.create!(name: "SynthPart #{suffix}", entity_type: "Component") }
+
+      def delete_relation(relation) = delete("/api/v1/memory_relations/#{relation.id}", as: :json)
+
+      def parent_widget(type)
+        edge = MemoryRelation.create!(from_entity: widget, to_entity: alpha, relation_type: "synth_placeholder")
+        edge.update_column(:relation_type, type)
+        MemoryRelation.create!(from_entity: sub, to_entity: widget, relation_type: "part_of")
+        [ widget, sub ].each { |entity| ProjectMembership.sync!(entity) }
+        expect([ widget.reload.project_id, sub.reload.project_id ]).to eq([ alpha.id, alpha.id ])
+        edge
+      end
+
+      %w[part_of Part_Of].each do |type|
+        it "clears the child's and its subtree's project for a #{type} edge" do
+          edge = parent_widget(type)
+
+          delete_relation(edge)
+
+          expect(response).to have_http_status(:no_content)
+          expect(MemoryRelation.exists?(edge.id)).to be(false)
+          expect([ widget.reload.project_id, sub.reload.project_id ]).to eq([ nil, nil ])
+        end
+      end
+
+      it "refuses a collision at the scope the child moves to, with nothing deleted" do
+        edge = parent_widget("part_of")
+        MemoryEntity.create!(name: sub.name, entity_type: "Component")
+
+        delete_relation(edge)
+
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(body["details"]["base"].sole).to include("already exists there")
+        expect(MemoryRelation.exists?(edge.id)).to be(true)
+        expect([ widget.reload.project_id, sub.reload.project_id ]).to eq([ alpha.id, alpha.id ])
+      end
+
+      it "answers a busy lock with 422 and nothing deleted" do
+        edge = parent_widget("part_of")
+        allow(ProjectMembership).to receive(:with_membership_lock).and_raise(ProjectMembership::LockTimeout, "lock busy")
+
+        delete_relation(edge)
+
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(body["details"]["base"]).to eq([ "lock busy; retry shortly" ])
+        expect(MemoryRelation.exists?(edge.id)).to be(true)
+      end
+
+      it "takes no lock for another type and answers 204 as before" do
+        edge = MemoryRelation.create!(from_entity: widget, to_entity: gear, relation_type: "depends_on")
+        allow(ProjectMembership).to receive(:with_membership_lock).and_call_original
+
+        delete_relation(edge)
+
+        expect(response).to have_http_status(:no_content)
+        expect(MemoryRelation.exists?(edge.id)).to be(false)
+        expect(ProjectMembership).not_to have_received(:with_membership_lock)
       end
     end
   end
