@@ -54,8 +54,11 @@ class NodeOperationsStrategy
 
     # Membership lock BEFORE the transaction: taking GET_LOCK while
     # holding row locks deadlocks against the backfill (advisory-first).
+    # A savepoint (requires_new): called inside a caller's transaction (a
+    # review apply under its row lock), a refused sync must roll back this
+    # move, not leave the edge moved and the project unchanged.
     ProjectMembership.with_membership_lock do
-      ActiveRecord::Base.transaction do
+      ActiveRecord::Base.transaction(requires_new: true) do
         # Remove only existing hierarchy parents; preserve depends_on edges
         MemoryRelation
           .where(from_entity_id: node_id, relation_type: "part_of")
