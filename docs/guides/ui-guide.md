@@ -2,7 +2,7 @@
 
 A tour of the web UI for the **operator** (the graph's owner, full access) and the optional **read-only guest**, as of 1.64.0. It covers signing in, the app shell, each section, the guest account and the usual problems.
 
-The screenshots come from a test instance with synthetic data (`Alpha Service`, `SynthWidget`, `SynthGadget`). The image files are in [`docs/images/ui/`](../images/ui/).
+The screenshots were retaken at 1.92.0 from a test instance with synthetic data (`Alpha Service`, `Beta Service`, `Gamma Queue`, `SynthWidget`, `SynthGadget`). The image files are in [`docs/images/ui/`](../images/ui/).
 
 - [Signing in](#signing-in)
 - [The app shell](#the-app-shell)
