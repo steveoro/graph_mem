@@ -23,6 +23,12 @@
 #   scan.pairs    # => [#<struct Result observation_id_1=12, observation_id_2=15, …>] (contradiction rows)
 #   scan.fallback # => [#<struct Result …>] (close facts with no subject to tell: FactSupersede's)
 #   ContradictionDetector.still_pairable?(first, second) # => false once a rule above excludes them
+#
+# Value changes (1.92.0): two facts of one entity, with the same source and perspective, that differ
+# only in a value ("Port: 3000" / "Port: 3001", FactKeywords::TokenDiff) are paired too, without a
+# negative word. A key-value change skips the keyword gate (the same key is the same subject); a
+# free-text one keeps it. The row is an ordinary contradiction row: which kind of pair it is gets
+# recomputed from the live texts (.value_change), never stored.
 class ContradictionDetector
   DEFAULT_MAX_DISTANCE = 0.35
   # The most a pair of facts that mention no entity may differ (cosine distance) and still be handed
@@ -161,10 +167,28 @@ class ContradictionDetector
       foreign.any? && !FactKeywords::Relatedness.compare(first, second, ignore: foreign).same_subject
     end
 
+    # The value change between two facts (1.92.0), when they may pair as one: the same entity, source
+    # and perspective (nil equals nil), and FactKeywords::TokenDiff.value_change of their texts.
+    #
+    #   ContradictionDetector.value_change(older, newer)
+    #   # => { class: :key_value, key: "port", from: "3000", to: "3001", count: 1 }
+    #
+    # @param first [MemoryObservation] the older fact (its value is `from`)
+    # @param second [MemoryObservation] the newer one
+    # @return [Hash, nil]
+    def value_change(first, second)
+      return nil unless first && second
+      return nil unless first.memory_entity_id == second.memory_entity_id
+      return nil unless first.source == second.source && first.perspective == second.perspective
+
+      FactKeywords::TokenDiff.value_change(first.content, second.content)
+    end
+
     # The re-check behind review policies (1.85.0): whether two live observations would still make a
-    # contradiction row under the current rules. Both active, opposite polarity, not two dated
-    # events, and (with fact keywords on) .pairable; pending keyword paths are computed first (no
-    # LLM call). The vector distance isn't re-checked: an edit makes a new observation.
+    # contradiction row under the current rules. Both active, opposite polarity or a value change
+    # (1.92.0), not two dated events, and (with fact keywords on, except for a key-value change)
+    # .pairable; pending keyword paths are computed first (no LLM call). The vector distance isn't
+    # re-checked: an edit makes a new observation.
     #
     #   ContradictionDetector.still_pairable?(row_first, row_second) # => true
     #
@@ -177,9 +201,10 @@ class ContradictionDetector
       return false if ids.uniq.size < 2 || pair.any?(&:nil?)
 
       first, second = pair
-      return false unless polarity_conflict?(first.content, second.content)
+      change = value_change(first, second)
+      return false unless polarity_conflict?(first.content, second.content) || change
       return false if dated_events?(first.content, second.content)
-      return true unless keyword_gate?
+      return true if key_value?(change) || !keyword_gate?
 
       FactKeywords.ensure!(pair)
       FactKeywords::Relatedness.computed?(first, second) && pairable(first, second).present?
@@ -277,13 +302,15 @@ class ContradictionDetector
           .limit(max_results)
 
         candidates.each do |candidate|
-          next unless polarity_conflict?(anchor.content, candidate.content)
+          other = by_id[candidate.id]
+          change = value_change(anchor, other)
+          next unless polarity_conflict?(anchor.content, candidate.content) || change
           next if dated_events?(anchor.content, candidate.content)
 
           distance = candidate[:vec_distance].to_f
           comparison = nil
-          if gate
-            other = by_id[candidate.id]
+          # A key-value change is the same subject by construction: no keyword gate (1.92.0).
+          if gate && !key_value?(change)
             next unless other && FactKeywords::Relatedness.computed?(anchor, other)
 
             comparison = pairable(anchor, other)
@@ -308,6 +335,10 @@ class ContradictionDetector
       pairs.uniq { |p| [ p.observation_id_1, p.observation_id_2 ].sort }
            .sort_by { |p| -p.confidence }
            .first(max_results)
+    end
+
+    def key_value?(change)
+      !change.nil? && change[:class] == :key_value
     end
 
     def polarity_conflict?(text1, text2)

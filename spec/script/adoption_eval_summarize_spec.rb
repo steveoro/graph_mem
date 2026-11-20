@@ -5,7 +5,7 @@ require "open3"
 require "tmpdir"
 
 # Auto-adoption A6 (1.90.0): script/adoption_eval/summarize.rb over hand-written synthetic logs in
-# spec/fixtures/adoption_eval (docs/plans/auto-adoption-tests.md §1 and §5):
+# spec/fixtures/adoption_eval (docs/plans/done/auto-adoption-tests.md §1 and §5):
 #   B0-T1-1  hook fired, ToolSearch for a graph_mem tool, get_context and search before the first Edit
 #   B0-T1-2  no graph_mem call before a Write
 #   B0-T2-1  a graph_mem search only after a MultiEdit: not adopted
@@ -104,6 +104,17 @@ RSpec.describe "script/adoption_eval/summarize.rb" do
       expect(session([ search ]).metrics).to include(write_search: true, complete: false, limited: false, capped: false)
       expect(session([ limited ]).metrics).to include(complete: true, limited: true, capped: false)
       expect(session([ { type: "result", is_error: true, result: "synth-other-error" } ]).metrics[:limited]).to be(false)
+
+      # The shape Claude Code 2.1.328 wrote when the 5-hour window ran out (1.92.0): each sign alone counts.
+      capped_result = { type: "result", subtype: "success", is_error: true, num_turns: 1, usage: { input_tokens: 0 } }
+      rejected = { type: "rate_limit_event", rate_limit_info: { status: "rejected" } }
+      allowed = { type: "rate_limit_event", rate_limit_info: { status: "allowed" } }
+      expect(session([ capped_result.merge(api_error_status: 429) ]).metrics[:limited]).to be(true)
+      expect(session([ capped_result.merge(result: "You've hit your 5-hour limit · resets 9:00pm (synth)") ]).metrics[:limited]).to be(true)
+      expect(session([ rejected, capped_result ]).metrics[:limited]).to be(true)
+      expect(session([ allowed, capped_result ]).metrics[:limited]).to be(false)
+      expect(session([ rejected, done ]).metrics[:limited]).to be(false)
+      expect(session([ rejected, allowed, capped_result ]).metrics[:limited]).to be(false) # the last event wins
       expect(session([ { type: "result", subtype: "error_max_turns", num_turns: 25 } ]).metrics).to include(complete: true, capped: true, limited: false)
     end
 

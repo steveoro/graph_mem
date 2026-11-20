@@ -540,4 +540,20 @@
     gap: 0.75rem;
     grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
   }
+
+  /* The tokens that differ between the two sides (1.92.0); same look as the search snippet marks. */
+  .review-contradiction mark {
+    background: var(--color-ui-warn-soft);
+    color: inherit;
+    border-radius: 2px;
+  }
+
+  .review-sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+  }
 }

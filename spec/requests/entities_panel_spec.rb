@@ -142,6 +142,7 @@ RSpec.describe "Entity panel", type: :request do
       words = html.css("[data-testid='entity-panel-llm-words']")
       expect(words.size).to eq(1)
       expect(words.first.css(".ui-badge").map(&:text)).to eq(%w[name presence])
+      expect(words.first.text.squish).to start_with("LLM topic:") # 1.92.0: it names a topic, not a status
       expect(html.css("[data-testid='entity-panel-mentions']")).to be_empty
     end
 

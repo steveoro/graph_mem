@@ -28,6 +28,17 @@ GraphMem stores operator-tunable runtime settings in the primary MariaDB `settin
 
 **Review policies** (System › Settings › Review policies) gain in 1.64.0: `fact_supersede_max_distance` (0.45, 0.2-0.6: how close an observation must be to a source fact to be checked against it), `enable_auto_apply_fact_supersede` (`false`) and `auto_apply_fact_supersede_min_confidence` (0.9, 0.8-0.99). See `docs/architecture.md` "Source facts and fact supersede".
 
+**Auto-resolve value changes** (1.92.0, the same panel; `ReviewPolicies::AutoApplyContradiction`):
+
+| Setting | Default | Range | What it does |
+|---|---|---|---|
+| `enable_auto_apply_contradiction` | `true` | — | **On by default.** A contradiction that is a plain value change is resolved without a question: two facts of one entity, with the same source and perspective, that are one `Key: value` line each with the same key and one changed value ("Port: 3000", later "Port: 3001"). The older fact is marked superseded by the newer one (link and reason set, nothing deleted), at most 100 per run. Undo the policy run on Review › Policies to revert: a fact the policy superseded once and that is active again (the run was undone, or you re-activated it) is never superseded by it again while its audit row is kept (90 days), so the pair stays in the queue for you. Turn it off to review these by hand. |
+| `auto_apply_contradiction_free_text` | `false` | — | Also resolve two sentences that differ only in one or two values. Needs the toggle above. |
+| `auto_apply_contradiction_max_distance` | `0.10` | 0.02–0.15 | Free text only: the most the two facts may differ (cosine distance). |
+| `auto_apply_contradiction_max_tokens` | `2` | 1–2 | Free text only: how many values may differ. |
+
+Never applied: different keys ("Port (dev)" / "Port (test)"), a changed unit ("5s" / "5m"), list-like values, a tie on which fact is newer, facts of two entities, sources or perspectives, and any contradiction that isn't a value change.
+
 Boolean flags consumed by background workers use direct database reads so Solid Queue processes see UI changes without restart.
 
 ## Database Backup

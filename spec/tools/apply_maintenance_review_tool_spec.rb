@@ -176,5 +176,16 @@ RSpec.describe ApplyMaintenanceReviewTool, type: :model do
       expect { tool.call(item_id: row.row_uuid) }.to raise_error(/Choose which observation to keep/)
       expect(other.reload.status).to eq("active")
     end
+
+    # 1.92.0: superseding is the auto-apply policy's Ruby keyword. No action_params key reaches it.
+    it "still marks the other side obsolete, with no link, when action_params ask for a supersede" do
+      params = { "keep_observation_id" => kept.id, "resolution" => "supersede", "supersede" => true }
+      result = tool.call(item_id: row.row_uuid, action_params: params)
+
+      expect(result).to include(success: true)
+      expect(other.reload).to have_attributes(status: "obsolete", superseded_by_id: nil,
+                                              obsolescence_reason: "Contradicted by observation ##{kept.id} (contradiction review)")
+      expect(kept.reload.status).to eq("active")
+    end
   end
 end

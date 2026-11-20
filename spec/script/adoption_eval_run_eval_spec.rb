@@ -34,7 +34,13 @@ RSpec.describe "script/adoption_eval/run_eval.sh" do
       echo '{"type":"system","subtype":"init","apiKeySource":"none"}'
       grep -q graph_mem_session_start "$settings" 2>/dev/null &&
         echo '{"type":"system","subtype":"hook_response","hook_name":"SessionStart:startup","hook_event":"SessionStart","stdout":"graph_mem synth-hook"}'
-      if [ -n "${FAKE_LIMIT:-}" ]; then echo '{"type":"result","is_error":true,"result":"Claude AI usage limit reached|1"}'; exit 1; fi
+      if [ -n "${FAKE_LIMIT:-}" ]; then
+        # The shape Claude Code 2.1.328 wrote on the 5-hour limit: a rejected rate_limit_event, then an
+        # error result with 429 and no tokens (subtype "success").
+        echo '{"type":"rate_limit_event","rate_limit_info":{"status":"rejected"}}'
+        echo '{"type":"result","subtype":"success","is_error":true,"api_error_status":429,"num_turns":1,"result":"You have hit your 5-hour limit (synth)","usage":{"input_tokens":0}}'
+        exit 1
+      fi
       [ -n "${FAKE_TOUCH:-}" ] && touch "$FAKE_TOUCH"
       if [ -d "$HOME/.claude/skills/graph-mem-mcp-toolset" ]; then echo skill; else echo none; fi >>"$FAKE_LOG/skill.seen"
       [ -f "$HOME/.claude/rules/graph-mem.md" ] &&

@@ -154,7 +154,24 @@ RSpec.describe AppSettings, type: :model do
       expect(described_class.review_policy_enabled?(:auto_apply_relationships)).to be(false)
       expect(described_class.review_policy_enabled?(:auto_apply_expired_validity)).to be(false)
       expect(described_class.review_policy_enabled?(:auto_apply_fact_supersede)).to be(false)
-      expect(described_class::REVIEW_NUMBERS.keys.map { |name| described_class.review_number(name) }).to eq([ 300, 40, 30, 0.9, 0.45, 0.9 ])
+      expect(described_class::REVIEW_NUMBERS.keys.map { |name| described_class.review_number(name) }).to eq([ 300, 40, 30, 0.9, 0.45, 0.9, 0.1, 2 ])
+    end
+
+    # 1.92.0: the one auto-apply policy that is on by default, for key-value value changes only.
+    it "defaults auto-resolve value changes to on, with free text off, and clamps its two limits" do
+      expect(described_class.review_policy_enabled?(:auto_apply_contradiction)).to be(true)
+      expect(described_class.review_flag?(:auto_apply_contradiction_free_text)).to be(false)
+      expect(described_class::REVIEW_NUMBERS.slice("auto_apply_contradiction_max_distance", "auto_apply_contradiction_max_tokens"))
+        .to eq("auto_apply_contradiction_max_distance" => [ 0.10, 0.02..0.15 ], "auto_apply_contradiction_max_tokens" => [ 2, 1..2 ])
+
+      write_past_validation("auto_apply_contradiction_max_distance", 0.9)
+      write_past_validation("auto_apply_contradiction_max_tokens", 7)
+      write_past_validation("auto_apply_contradiction_free_text", true)
+      expect(described_class.review_number(:auto_apply_contradiction_max_distance)).to eq(0.15)
+      expect(described_class.review_number(:auto_apply_contradiction_max_tokens)).to eq(2)
+      expect(described_class.review_flag?(:auto_apply_contradiction_free_text)).to be(true)
+    ensure
+      described_class.where(var: %w[auto_apply_contradiction_max_distance auto_apply_contradiction_max_tokens auto_apply_contradiction_free_text]).delete_all
     end
 
     it "clamps numbers written past validation to their range" do

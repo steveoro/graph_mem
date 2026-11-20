@@ -57,7 +57,7 @@ RSpec.describe "Review keyword paths", type: :request do
     get review_row_path(row.row_uuid)
 
     words = html.css("[data-testid='llm-words']")
-    expect(words.map { |node| node.text.squish }).to eq([ "LLM: email presence", "LLM: presence" ])
+    expect(words.map { |node| node.text.squish }).to eq([ "LLM topic: email presence", "LLM topic: presence" ])
     expect(words.map { |node| node.css("strong").map(&:text) }).to all(eq([ "presence" ]))
   end
 end

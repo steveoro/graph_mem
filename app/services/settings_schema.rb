@@ -168,7 +168,7 @@ class SettingsSchema
       toggles = AppSettings::REVIEW_POLICY_TOGGLES.map do |policy, (key, _default)|
         define_field(key, help: "system.settings.review_policies.policies.#{policy}")
       end
-      toggles + AppSettings::REVIEW_NUMBERS.keys
+      toggles + AppSettings::REVIEW_FLAGS.keys + AppSettings::REVIEW_NUMBERS.keys
     end
 
     def define_group(key, fields, page: :settings, check: nil, partial: nil)

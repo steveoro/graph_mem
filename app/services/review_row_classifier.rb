@@ -21,7 +21,8 @@ class ReviewRowClassifier
   # The only kinds bulk apply, group apply and auto-apply policies may touch.
   SAFE_BULK_KINDS = %w[relationship_proposal stale_memory].freeze
   # Apply needs a per-row choice (which observation to keep; supersede or retire); dismiss and
-  # snooze work as usual. Only ReviewPolicies::AutoApplyFactSupersede may apply fact_supersede.
+  # snooze work as usual. Only ReviewPolicies::AutoApplyFactSupersede may apply fact_supersede, and
+  # only ReviewPolicies::AutoApplyContradiction a contradiction (a plain value change, 1.92.0).
   CHOICE_KINDS = %w[contradiction fact_supersede].freeze
   ERROR_KINDS = %w[entity_error embedding_backfill_failed lifecycle_corruption].freeze
   SCAN_KINDS = %w[delete_entity delete_relation delete_observation reparent_entity move_observation].freeze

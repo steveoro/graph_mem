@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-# Summarizes auto-adoption eval logs into counts (docs/plans/auto-adoption-tests.md §1 and §5).
+# Summarizes auto-adoption eval logs into counts (docs/plans/done/auto-adoption-tests.md §1 and §5).
 #
 #   ruby script/adoption_eval/summarize.rb ~/adoption-eval/logs/*.jsonl [--csv]
 #
@@ -20,7 +20,7 @@ module AdoptionEval
   GM_WORDS = /graph[_-]mem|\b(get_context|set_context|get_entities|traverse_graph|find_shortest_path|rank_observations|graph_write|graph_edit|graph_delete)\b/
   WRITE_WORDS = /(?<![a-z])graph_(write|edit|delete)(?![a-z])/
   # A result that ended on the account's usage or rate limit: the session didn't run its course.
-  LIMIT_WORDS = /usage limit|rate limit|limit reached|too many requests|overloaded/i
+  LIMIT_WORDS = /usage limit|rate limit|rate_limit|limit reached|hit your .{0,24}limit|too many requests|overloaded/i
   COLUMNS = %w[arm task n adopted ctx_before_edit median_first_gm_turn mean_gm_calls skill_used toolsearch_gm
                persist_attempts hook_fired median_turns median_tokens median_cost].freeze
 
@@ -86,6 +86,7 @@ module AdoptionEval
       when "assistant" then assistant(event)
       when "tool_call" then event["subtype"] == "started" ? cursor_call(event) : cursor_done(event)
       when "result" then result(event)
+      when "rate_limit_event" then @flags[:rejected] = event.dig("rate_limit_info", "status") == "rejected" # the last event wins
       end
       hook(event) if event["type"] == "system" && event["subtype"].to_s.start_with?("hook")
       deny(event["tool_use_id"], event["tool_name"]) if [ event["type"], event["subtype"] ].include?("permission_denied")
@@ -121,10 +122,14 @@ module AdoptionEval
     end
 
     # The result ended on a usage or rate limit (its text is matched, never printed).
+    # As Claude Code 2.1.328 ends a session on the plan's limit (seen 2026-11-19): a rate_limit_event
+    # with status "rejected", then an error result with api_error_status 429 and the text "You've hit
+    # your 5-hour limit …" (subtype stays "success", 0 tokens). Any one of the three signs counts.
     def limited?
       return false unless @result && @result["is_error"]
+      return true if @flags[:rejected] || @result["api_error_status"].to_i == 429
 
-      [ @result["result"], @result["subtype"], @result["error"] ].any? { |value| value.to_s.match?(LIMIT_WORDS) }
+      @result.values_at("result", "subtype", "error", "api_error_type").any? { |value| value.to_s.match?(LIMIT_WORDS) }
     end
 
     # Cursor CLI (agent -p --output-format stream-json, checked on 2026.11.19): each tool_call event holds

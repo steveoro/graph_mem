@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 module GraphMem
-  # Skills over MCP (SEP-2640, extension io.modelcontextprotocol/skills; docs/plans/auto-adoption-plan.md
+  # Skills over MCP (SEP-2640, extension io.modelcontextprotocol/skills; docs/plans/done/auto-adoption-plan.md
   # section 6): the repo's skills/ served as skill:// resources, and whether they are on.
   #
   # @example

@@ -1,6 +1,6 @@
 # graph_mem auto-adoption: decision tests
 
-**Status:** active, companion to [`auto-adoption-plan.md`](auto-adoption-plan.md) (section 8 there points here).
+**Status:** DONE (closed 2026-11-20 with 1.92.0). The conclusion is in [section 7](#7-results-and-conclusion-2026-11-20). Companion to [`auto-adoption-plan.md`](auto-adoption-plan.md).
 **Run it:** `script/adoption_eval/run_eval.sh` does the setup below, flips the arms, runs the sessions and writes the
 report in one command ([section 6](#6-scriptadoption_evalrun_evalsh-one-command-for-all-of-it)). Sections 1–5 stay as
 the reference for what it does.
@@ -316,3 +316,44 @@ isn't logged in, the IDE calibration chats, and the timed install test.
 Seen on the first runs (2026-11-19, Cursor CLI 2026.11.19): the CLI runs the user-level `sessionStart` hook from
 `~/.cursor/hooks.json` (the K2 marker fired), and in `-p` mode its agent may end on a question it can't ask
 (`askQuestionToolCall`, rejected) before any edit; such a session counts as adopted when it made any graph_mem call.
+
+---
+
+## 7. Results and conclusion (2026-11-20)
+
+Two `screen` rounds on graph_mem 1.91.0 (2026-11-19; Claude Code 2.1.328, model alias `fable`, task T1, N = 5 per arm),
+run with `script/adoption_eval/run_eval.sh`. Counts only.
+
+| Round | Arms | Complete sessions | graph_mem before the first edit |
+|---|---|---|---|
+| 1 | I, ALL, ALL−R, ALL−S, ALL−H, ALL+A | 30 of 30 | 30 of 30 |
+| 2 | I0, I, ALL, ALL−R, ALL−S (3), then cut off | 22 of 35 | 22 of 22 |
+
+- **Adoption is saturated on T1: 52 of 52 complete sessions used graph_mem before their first edit.** That includes
+  **I0, 5 of 5**: the 1.90.0 server instructions alone, with no user-level skill copy, rule or hook.
+- Round 2 ran into the plan's 5-hour usage limit: 12 sessions ended at once with no tokens (all of ALL−H and ALL+A, two
+  of ALL−S) and one ALL−S session was cut off after it had already called graph_mem. The script didn't recognise the
+  limit as Claude Code reports it, so that run's own report counts them as sessions that didn't adopt; ignore its
+  ALL−S, ALL−H and ALL+A rows. Fixed in 1.92.0 (`summarize.rb`), so a capped run now stops with a resume hint.
+- **The efficiency gap of round 1 didn't repeat.** Round 1: I needed 24 median turns against ALL's 20 (+20%, +17%
+  tokens). Round 2: I0 17, I 18, ALL 19. So the draft efficiency rule (section 3, Q-L) stays **unadopted**, and
+  `report.rb` keeps printing it as a draft line only.
+- A round costs about 280–355k tokens per session (11–12M for the 35 sessions of `screen`), which is what filled the
+  usage window.
+
+**Outcome (agreed with Steve, 2026-11-20):**
+
+| Question | Outcome |
+|---|---|
+| Q-L, the instructions | Keep: they carry adoption by themselves (I0), at no install cost. |
+| Q-L, the skill trigger wording | Keep: free at runtime. |
+| Q-L, the user rule and the SessionStart hook | Ties at 100%: by the rule above they leave the default install output. `bin/agent-install` still prints them; changing its default is a follow-up, not done here. |
+| Q1, per-tool `alwaysLoad` | Not pursued: nothing left for it to add on adoption, and its N = 10 round was never run. |
+| Q2, a readonly skill variant | Not run. The static rule stands: `project-scan` stays off readonly (1.91.0). |
+| Q3, an installer write mode | Not run: `bin/agent-install` stays print-only (D2). |
+| Q4, Cursor | Not run as a suite. Two smoke sessions showed the Cursor CLI runs the user-level `sessionStart` hook and calls graph_mem with nothing added. |
+| B0 on the 1.89.0 instructions, ALL−I | Not run: the server no longer serves the old text. |
+
+Limits of this result: one task (T1, which asks for a convention outright), one model, one machine. T2 and T3 were
+never run; at this cost per round they weren't worth it for a question that already had its answer. The scripts stay
+in `script/adoption_eval/` for a later re-check, for example after a change to the instructions.
