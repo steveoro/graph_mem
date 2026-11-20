@@ -336,8 +336,9 @@ The review rows (`maintenance_report_rows`) that dream-state compaction, the sta
   | `auto_apply_expired_validity` | off | stale_memory `valid_until_elapsed` → applied (max 100) |
   | `auto_apply_relationships` | off | high-band proposals ≥ 0.90 confidence, never `part_of` → applied (max 50) |
   | `auto_apply_fact_supersede` | off | `fact_supersede` rows judged superseded ≥ 0.90, unguarded, scoped, operator-confirmed fact → applied (max 100) |
+  | `auto_apply_contradiction` | **on** (key-value class) | 1.92.0: `contradiction` rows that are a plain value change (one `Key: value` line each, same key, one changed value, same unit; same entity, source and perspective; a clear newer side) → the older fact superseded by the newer (max 100). Free text only with `auto_apply_contradiction_free_text` |
 
-  Hard rule: a policy never applies a destructive or choice kind, whatever the settings say. Each run writes a `review_policy_run` report with the counts, the change-set uuids and the apply/dismiss rates per kind and score.
+  Hard rule: a policy never applies a destructive or choice kind, whatever the settings say; `auto_apply_fact_supersede` and `auto_apply_contradiction` lift it for their own kind only. Each run writes a `review_policy_run` report with the counts, the change-set uuids and the apply/dismiss rates per kind and score.
 
 ### The Review & Fix page (UI-5b, 1.58.0)
 
@@ -444,6 +445,21 @@ and nothing acts across projects. Step list: `docs/plans/done/fact-supersede-pla
   `auto_apply_fact_supersede_min_confidence` (0.9), with no guard, a scoped entity and an
   operator-confirmed fact; at most 100 per run, in `policy.*` change sets. It lifts the AutoApply
   hard rule for this kind only.
+- **Value changes** (1.92.0, `docs/plans/contradiction-auto-resolve-plan.md`). The contradiction
+  pass of the stale scan (`ContradictionDetector`) also pairs two facts of one entity, with the same
+  source and perspective, that differ only in a value ("Port: 3000" / "Port: 3001"), without a
+  negative word: `FactKeywords::TokenDiff.value_change` classes the pair `:key_value` (one
+  `Key: value` line each, the same key, one changed value, the same unit; no keyword gate) or
+  `:free_text` (sentences that differ in place in 1-2 values; keyword gate kept). The row is an
+  ordinary `contradiction` row with unchanged payload keys; the class is recomputed from the live
+  texts wherever it matters.
+  `ReviewPolicies::AutoApplyContradiction` (`enable_auto_apply_contradiction`, **on** by default)
+  then applies the key-value class unattended: the older fact is marked `superseded` by the newer
+  one through `CompactionReviewService.apply(..., resolution: :supersede)`, a Ruby keyword the MCP
+  tool and the UI can't reach (their apply still marks the other side obsolete). Different keys,
+  a changed unit, list-like values, a tie on which fact is newer and every other contradiction are
+  left for the operator. Each batch is one `policy.auto_apply_contradiction` change set, undoable
+  for 30 days. The contradiction card marks the tokens that differ (`ReviewHelper#review_diff_text`).
 - **Find & supersede** (`/review/supersede`, `Review::SupersedeController`, operator only): an
   escaped text search in one project (or all projects, view only), inactive rows on request
   (view only), optionally with a source fact's candidates, guards and pending verdicts.
