@@ -10,7 +10,8 @@ class ChangeSet
   #
   # Strategy (one-way): `audit` → `merge` (first merge step, if no other write came first) →
   # `none` with a reason: `mixed_merge`, `hard_delete` (an entity or observation deleted outside a
-  # merge), `audit_incomplete` (an audit row failed) or `snapshot_too_large`.
+  # merge), `audit_incomplete` (an audit row failed) or `snapshot_too_large`. A kind listed in
+  # ChangeSet::NOT_UNDOABLE_KINDS starts as `none` with its reason (`relation_canonicalization`).
   class Context
     HARD_DELETE_TYPES = %w[MemoryEntity MemoryObservation].freeze
     # Sections dropped when the snapshot exceeds MAX_SNAPSHOT_BYTES; their sizes are kept.
@@ -35,6 +36,7 @@ class ChangeSet
       @summary = summary
       @strategy = "audit"
       @not_undoable_reason = nil
+      downgrade!(ChangeSet::NOT_UNDOABLE_KINDS[kind]) if ChangeSet::NOT_UNDOABLE_KINDS.key?(kind)
       @sections = {}
       @dropped = {}
       @audit_failures = 0

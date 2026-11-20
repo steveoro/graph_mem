@@ -12,6 +12,12 @@ class MemoryRelation < ApplicationRecord
 
   before_validation :canonicalize_relation_type
 
+  # When true, the save keeps `relation_type` exactly as assigned (no canonicalization): an undo
+  # re-inserting a deleted relation restores its stored type as it was, and RelationTypeSweep's
+  # merge updates a twin's weight/confidence/properties without touching its type.
+  # @return [Boolean, nil]
+  attr_accessor :keep_stored_type
+
   validates :relation_type, presence: true
   validates :weight, numericality: { greater_than_or_equal_to: 0 }, allow_nil: true
   validates :confidence, numericality: { greater_than_or_equal_to: 0, less_than_or_equal_to: 1 }, allow_nil: true
@@ -69,10 +75,26 @@ class MemoryRelation < ApplicationRecord
     Thread.current[:gmem_trust_recompute_suppressed] == true
   end
 
+  # Recomputes the trust score of every active observation of the given entities (the structural
+  # boost counts their relations). The after_commit hook runs it per created or deleted edge; bulk
+  # writers that suppress the hook call it once per touched entity.
+  #
+  # @param entity_ids [Enumerable<Integer>]
+  # @return [void]
+  def self.recompute_trust_scores_for(entity_ids)
+    entity_ids.to_a.compact.uniq.each do |entity_id|
+      MemoryObservation
+        .where(memory_entity_id: entity_id, status: MemoryObservation::ACTIVE_STATUS)
+        .find_each do |observation|
+          observation.update_column(:trust_score, ObservationTrustRanker.rank(observation))
+        end
+    end
+  end
+
   private
 
   def canonicalize_relation_type
-    return if relation_type.blank?
+    return if relation_type.blank? || keep_stored_type
 
     self.relation_type = MemoryRelation.canonical_relation_type(relation_type)
   end
@@ -96,12 +118,6 @@ class MemoryRelation < ApplicationRecord
   def recompute_observation_trust_scores
     return if self.class.trust_recompute_suppressed?
 
-    [ from_entity_id, to_entity_id ].compact.uniq.each do |entity_id|
-      MemoryObservation
-        .where(memory_entity_id: entity_id, status: MemoryObservation::ACTIVE_STATUS)
-        .find_each do |observation|
-          observation.update_column(:trust_score, ObservationTrustRanker.rank(observation))
-        end
-    end
+    self.class.recompute_trust_scores_for([ from_entity_id, to_entity_id ])
   end
 end

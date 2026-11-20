@@ -126,6 +126,7 @@ en:
       unknown_actor: "unknown"
       undone: "undone"
       undoable_until: "until %{time}"
+      not_undoable: "not undoable: %{reason}"
       columns:
         when: "When"
         change: "Change"

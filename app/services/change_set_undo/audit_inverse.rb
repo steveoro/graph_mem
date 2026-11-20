@@ -104,6 +104,9 @@ class ChangeSetUndo
     end
 
     # Only relation deletes reach here: entity and observation deletes make the set not undoable.
+    # The relation comes back with its stored type as it was (keep_stored_type): canonicalizing it
+    # on the way back would turn the variant a relation_retype apply deleted into a second copy of
+    # the edge that replaced it (R1a).
     def invert_delete(model, row)
       return @conflicts << "Can't re-create a deleted #{row.auditable_type}" unless model == MemoryRelation
 
@@ -111,7 +114,9 @@ class ChangeSetUndo
       problem = relation_restore_problem(attrs)
       return @conflicts << "Can't re-create relation ##{attrs['id']}: #{problem}" if problem
 
-      relation = MemoryRelation.create!(attrs)
+      relation = MemoryRelation.new(attrs)
+      relation.keep_stored_type = true
+      relation.save!
       note_touched(relation)
     end
 
