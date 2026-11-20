@@ -262,4 +262,16 @@ RSpec.describe RelationTypeSweep do
     expect(observation.reload.trust_score).to eq(ObservationTrustRanker.rank(observation))
     expect(observation.trust_score).to be > 0.0
   end
+
+  # A mapping added in the web process must reach a sweep the job worker starts right after it,
+  # even when the worker's cache answered nil for the type a moment before.
+  it "drops the process's mapping cache before a run" do
+    relation = stored_relation(service, widget, "synth_links_to")
+    expect(MemoryRelation.mapped_relation_type("synth_links_to")).to be_nil
+    RelationTypeMapping.create!(variant: "synth_links_to", canonical_type: "depends_on")
+
+    described_class.call
+
+    expect(relation.reload.relation_type).to eq("depends_on")
+  end
 end

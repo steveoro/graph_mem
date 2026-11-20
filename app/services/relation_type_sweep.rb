@@ -62,7 +62,9 @@ class RelationTypeSweep
 
   include Report
 
-  # Runs the whole sweep, batch after batch.
+  # Runs the whole sweep, batch after batch. It first drops this process's mapping cache
+  # (RelationTypeMapping::CANONICALIZE_TTL), so a mapping the operator has just added in the web
+  # process is seen by a sweep the job worker starts right after it.
   #
   # @param dry_run [Boolean] plan only: nothing is written, not even the report; same counts
   # @param actor [String] audit and change-set actor
@@ -70,6 +72,7 @@ class RelationTypeSweep
   # @param progress [#call, nil] called with the sweep after each batch
   # @return [Hash] see #summary
   def self.call(dry_run: false, actor: DEFAULT_ACTOR, source: "manual", progress: nil)
+    RelationTypeMapping.reset_canonicalize_cache!
     sweep = new(dry_run: dry_run, actor: actor, source: source)
     cursor = 0
     loop do
