@@ -14,6 +14,10 @@ module ReviewPolicies
   # (a polarity pair that isn't a value change) stays for the operator. A tie on which fact is newer
   # skips the row. At most 100 per run.
   #
+  # A revert sticks: once this policy superseded a fact and the fact is active again (the run was
+  # undone, or an operator re-activated it), the pair is left for the operator, for as long as the
+  # audit row is kept (AuditLog::MAX_AGE_DAYS).
+  #
   #   ReviewPolicies::AutoApplyContradiction.new.call
   #   # => { "acted" => 2, "skipped" => 0, "busy" => 0, "refused" => 0, "change_sets" => ["…"] }
   class AutoApplyContradiction < AutoApply
@@ -28,9 +32,28 @@ module ReviewPolicies
       kind == KIND || super
     end
 
+    # One query for every row's facts and one for the reverted ones, whatever the backlog.
     def eligible
-      ids = MaintenanceReportRow.active.where(kind: KIND).select { |row| newer_side(row, count_ties: true) }.map(&:id)
+      rows = MaintenanceReportRow.active.where(kind: KIND).to_a
+      fact_ids = rows.flat_map { |row| pair_ids(row) }.uniq
+      facts = MemoryObservation.where(id: fact_ids).index_by(&:id)
+      reverted = reverted_ids(fact_ids)
+      ids = rows.select { |row| newer_side(row, facts: facts, reverted: reverted, count_ties: true) }.map(&:id)
       MaintenanceReportRow.where(id: ids)
+    end
+
+    def pair_ids(row)
+      payload = row.effective_payload
+      [ payload["observation_id_1"], payload["observation_id_2"] ].map(&:to_i)
+    end
+
+    # The facts this policy already superseded once (its audit rows): active again means someone
+    # reverted it.
+    #
+    # @return [Set<Integer>]
+    def reverted_ids(fact_ids)
+      AuditLog.where(auditable_type: "MemoryObservation", auditable_id: fact_ids, actor: "policy:#{policy_name}")
+              .distinct.pluck(:auditable_id).to_set
     end
 
     # Applies one row: the live facts are read again first (an operator action in between wins),
@@ -54,15 +77,17 @@ module ReviewPolicies
     # The fact to keep, read from the live observations (the payload's text is cut and may be old).
     #
     # @return [MemoryObservation, nil] nil when the row isn't an applicable value change
-    def newer_side(row, count_ties: false)
-      payload = row.effective_payload
-      ids = [ payload["observation_id_1"], payload["observation_id_2"] ].map(&:to_i)
-      pair = MemoryObservation.where(id: ids).index_by(&:id).values_at(*ids)
+    # @param facts [Hash{Integer => MemoryObservation}, nil] preloaded facts (nil reads them now)
+    # @param reverted [Set<Integer>, nil] preloaded reverted_ids (nil reads them now)
+    def newer_side(row, facts: nil, reverted: nil, count_ties: false)
+      ids = pair_ids(row)
+      pair = (facts || MemoryObservation.where(id: ids).index_by(&:id)).values_at(*ids)
       return nil unless ids.uniq.size == 2 && pair.all? { |fact| fact&.active? }
 
       older, newer = by_age(*pair)
       change = ContradictionDetector.value_change(older || pair.first, newer || pair.last)
       return nil unless change && applicable_class?(change, pair)
+      return nil if (reverted || reverted_ids(ids)).intersect?(ids.to_set)
       return newer if newer
 
       @stats["skipped"] += 1 if count_ties

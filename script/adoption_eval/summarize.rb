@@ -86,7 +86,7 @@ module AdoptionEval
       when "assistant" then assistant(event)
       when "tool_call" then event["subtype"] == "started" ? cursor_call(event) : cursor_done(event)
       when "result" then result(event)
-      when "rate_limit_event" then @flags[:rejected] ||= event.dig("rate_limit_info", "status") == "rejected"
+      when "rate_limit_event" then @flags[:rejected] = event.dig("rate_limit_info", "status") == "rejected" # the last event wins
       end
       hook(event) if event["type"] == "system" && event["subtype"].to_s.start_with?("hook")
       deny(event["tool_use_id"], event["tool_name"]) if [ event["type"], event["subtype"] ].include?("permission_denied")

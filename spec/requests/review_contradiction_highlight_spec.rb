@@ -27,14 +27,14 @@ RSpec.describe "Review contradiction highlight", type: :request do
     expect(card.css("[data-testid='contradiction-text-1'] mark").map(&:text)).to eq([ "3000" ])
     expect(card.css("[data-testid='contradiction-text-2'] mark").map(&:text)).to eq([ "3001" ])
     expect(card.css("[data-testid='contradiction-text-1']").text).to eq("Port: 3000")
-    expect(card.css(".review-sr-only").map(&:text)).to eq([ "Differs: 3000 → 3001", "Differs: 3001 → 3000" ])
+    expect(card.css(".review-sr-only").map(&:text)).to eq([ "Differs from the other side: 3000 here, 3001 there", "Differs from the other side: 3001 here, 3000 there" ])
   end
 
   it "marks an inserted word on the side that has it" do
     card = card_for("SynthService is supported", "SynthService is not supported")
 
     expect(card.css("mark").map(&:text)).to eq([ "not" ])
-    expect(card.css(".review-sr-only").map(&:text)).to eq([ "Differs: — → not", "Differs: not → —" ])
+    expect(card.css(".review-sr-only").map(&:text)).to eq([ "Differs from the other side: — here, not there", "Differs from the other side: not here, — there" ])
   end
 
   it "marks nothing when more than three tokens differ on a side" do

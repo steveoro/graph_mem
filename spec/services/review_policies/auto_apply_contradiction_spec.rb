@@ -201,5 +201,44 @@ RSpec.describe ReviewPolicies::AutoApplyContradiction do
       expect(older.reload).to have_attributes(status: "superseded", superseded_by_id: newer.id)
       expect(row.reload.status).to eq("approved")
     end
+
+    # Graphy, #184: the reopened row was picked up again by the next run, so the revert didn't last.
+    it "sticks: the next policy runs leave an undone pair for the operator" do
+      older, newer = facts("Port: 3000", "Port: 3001")
+      row = seed(older, newer)
+      ChangeSetUndo.call(run["change_sets"].sole, actor: "operator:synth@127.0.0.1")
+
+      expect(run).to include("acted" => 0, "change_sets" => [])
+      expect(older.reload.status).to eq("active")
+      expect(row.reload.status).to eq("active")
+
+      # A later value on the same key is still resolved against the fact that was never reverted.
+      latest = MemoryObservation.create!(memory_entity: service_entity, content: "Port: 3002")
+      seed(newer, latest)
+      expect(run["acted"]).to eq(1)
+      expect(newer.reload).to have_attributes(status: "superseded", superseded_by_id: latest.id)
+      expect(older.reload.status).to eq("active")
+    end
+
+    it "sticks when an operator re-activates the superseded fact by hand" do
+      older, newer = facts("Port: 3000", "Port: 3001")
+      first = seed(older, newer)
+      run
+      older.reload.update!(status: "active", obsoleted_at: nil, obsolescence_reason: nil, superseded_by_id: nil)
+      first.update_columns(status: "active", applied_at: nil)
+
+      expect(run["acted"]).to eq(0)
+      expect(older.reload.status).to eq("active")
+    end
+
+    it "reads the facts of every row in one query, and the reverted ones in one" do
+      3.times { |i| seed(*facts("Depth#{i}: 1", "Depth#{i}: 2")) }
+      queries = []
+      counter = ->(*, payload) { queries << payload[:sql] if payload[:sql].match?(/FROM `(memory_observations|audit_logs)`/) && payload[:name] != "SCHEMA" }
+      ActiveSupport::Notifications.subscribed(counter, "sql.active_record") { described_class.new.send(:eligible).to_a }
+
+      expect(queries.grep(/memory_observations/).size).to eq(1)
+      expect(queries.grep(/audit_logs/).size).to eq(1)
+    end
   end
 end

@@ -5,7 +5,28 @@ All notable changes to GraphMem will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.92.0] - 2026-11-20
+
+Contradictions that are a plain value change resolve themselves: "Port: 3000", later "Port: 3001", on the same entity ends with the older fact superseded by the newer one, with no review needed. This also closes the auto-adoption work.
+
+### Added
+- Value changes are paired as contradictions: two facts on one entity, with the same source and perspective, that differ only in a value ("Port: 3000" / "Port: 3001") are found even without a negative word.
+- The contradiction card highlights the tokens that differ between the two sides.
+
+### Changed
+- **Auto-resolve value changes** review policy (Settings › Review policies, **on by default**): a `Key: value` fact whose newer twin has the same key and another value is marked superseded by the newer one. Undo the policy run to revert, and the pair then stays in the queue for you (the policy doesn't apply it again); turn the setting off to keep reviewing them by hand. Sentences that differ in 1–2 values are included only with "free text" on (off by default).
+- The "LLM:" label on review cards and the entity panel reads "LLM topic:" (it names what a fact is about; it was never a status).
+- The auto-adoption plan and its decision tests are done and moved to `docs/plans/done/`. Result: on two rounds of the screen suite, every complete session used graph_mem before its first edit, the server instructions alone included, so no further adoption lever is planned.
+
+### Fixed
+- The adoption eval stops on the plan's usage limit as Claude Code 2.1.328 reports it (a `429` result reading "You've hit your 5-hour limit", after a rejected `rate_limit_event`). A capped run was counted as sessions that didn't adopt.
+
+### Dependencies
+- `bundle update`: parser 3.3.13.0 → 3.3.14.0, bootsnap 1.26.1 → 1.26.2, dry-schema 1.16.0 → 1.17.0, rubocop-ast 1.52.0 → 1.53.0 (parser and rubocop-ast are development and test only).
+
+## [1.91.1] - 2026-11-20
+
+The adoption eval scripts (#181, #183) and the hardened CI step (#182). Tagged `v1.91.1` at the #183 merge; `version.rb` still read 1.91.0 at that tag.
 
 ### Added
 - `script/adoption_eval/run_eval.sh`: the auto-adoption tests (`docs/plans/done/auto-adoption-tests.md`) in one command.
@@ -18,25 +39,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - `script/adoption_eval/summarize.rb` reads the Cursor CLI stream as `agent` 2026.11.19 writes it, and notes write-tool lookups, completeness and usage-limit stops.
-
-## [1.92.0] - 2026-11-20
-
-Contradictions that are a plain value change resolve themselves: "Port: 3000", later "Port: 3001", on the same entity ends with the older fact superseded by the newer one, with no review needed. This also closes the auto-adoption work.
-
-### Added
-- Value changes are paired as contradictions: two facts on one entity, with the same source and perspective, that differ only in a value ("Port: 3000" / "Port: 3001") are found even without a negative word.
-- The contradiction card highlights the tokens that differ between the two sides.
-
-### Changed
-- **Auto-resolve value changes** review policy (Settings › Review policies, **on by default**): a `Key: value` fact whose newer twin has the same key and another value is marked superseded by the newer one. Undo the policy run to revert; turn the setting off to keep reviewing them by hand. Sentences that differ in 1–2 values are included only with "free text" on (off by default).
-- The "LLM:" label on review cards and the entity panel reads "LLM topic:" (it names what a fact is about; it was never a status).
-- The auto-adoption plan and its decision tests are done and moved to `docs/plans/done/`. Result: on two rounds of the screen suite, every complete session used graph_mem before its first edit, the server instructions alone included, so no further adoption lever is planned.
-
-### Fixed
-- The adoption eval stops on the plan's usage limit as Claude Code 2.1.328 reports it (a `429` result reading "You've hit your 5-hour limit", after a rejected `rate_limit_event`). A capped run was counted as sessions that didn't adopt.
-
-### Dependencies
-- `bundle update`: parser 3.3.13.0 → 3.3.14.0, bootsnap 1.26.1 → 1.26.2, dry-schema 1.16.0 → 1.17.0, rubocop-ast 1.52.0 → 1.53.0 (parser and rubocop-ast are development and test only).
 
 ## [1.91.0] - 2026-11-18
 

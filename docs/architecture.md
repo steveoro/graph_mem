@@ -459,7 +459,8 @@ and nothing acts across projects. Step list: `docs/plans/done/fact-supersede-pla
   tool and the UI can't reach (their apply still marks the other side obsolete). Different keys,
   a changed unit, list-like values, a tie on which fact is newer and every other contradiction are
   left for the operator. Each batch is one `policy.auto_apply_contradiction` change set, undoable
-  for 30 days. The contradiction card marks the tokens that differ (`ReviewHelper#review_diff_text`).
+  for 30 days. A revert sticks: a fact the policy superseded once (its audit row) that is active
+  again is left for the operator on later runs. The contradiction card marks the tokens that differ (`ReviewHelper#review_diff_text`).
 - **Find & supersede** (`/review/supersede`, `Review::SupersedeController`, operator only): an
   escaped text search in one project (or all projects, view only), inactive rows on request
   (view only), optionally with a source fact's candidates, guards and pending verdicts.

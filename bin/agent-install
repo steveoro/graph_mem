@@ -2,7 +2,7 @@
 # frozen_string_literal: true
 
 # Prints how to install graph_mem's agent guidance once per machine, at user level, so agents reach
-# for graph_mem in every repository (docs/plans/auto-adoption-plan.md, PR A): the skill, the
+# for graph_mem in every repository (docs/plans/done/auto-adoption-plan.md, PR A): the skill, the
 # user-level rule and the SessionStart reminder hook, for Claude Code and for Cursor.
 #
 # Print-only: it writes nothing and reads nothing under ~/; it reads only this repo's files. You run

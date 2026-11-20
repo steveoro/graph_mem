@@ -33,7 +33,7 @@ en:
       policies_queued: "Review policies queued; the numbers update when the run finishes."
       imported: "Imported %{count} new merge suggestion(s)."
       contradiction:
-        differs: "Differs: %{own} → %{other}"
+        differs: "Differs from the other side: %{own} here, %{other} there"
       keyword_path:
         keywords: "Keywords:"
         llm_words: "LLM topic:"

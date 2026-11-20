@@ -114,6 +114,7 @@ RSpec.describe "script/adoption_eval/summarize.rb" do
       expect(session([ rejected, capped_result ]).metrics[:limited]).to be(true)
       expect(session([ allowed, capped_result ]).metrics[:limited]).to be(false)
       expect(session([ rejected, done ]).metrics[:limited]).to be(false)
+      expect(session([ rejected, allowed, capped_result ]).metrics[:limited]).to be(false) # the last event wins
       expect(session([ { type: "result", subtype: "error_max_turns", num_turns: 25 } ]).metrics).to include(complete: true, capped: true, limited: false)
     end
 
