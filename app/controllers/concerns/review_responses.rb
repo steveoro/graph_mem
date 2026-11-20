@@ -11,7 +11,7 @@ module ReviewResponses
   NOT_UNDOABLE = {
     "hard_delete" => "entity deleted", "mixed_merge" => "merge mixed with other writes",
     "audit_incomplete" => "the audit trail is incomplete", "snapshot_too_large" => "too large to snapshot",
-    "relation_canonicalization" => "relation types canonicalized: reverse by hand from the sweep report"
+    "relation_canonicalization" => "relation types canonicalized: reverse by hand from the sweep report or the audit rows"
   }.freeze
 
   included do

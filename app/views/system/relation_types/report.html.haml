@@ -50,3 +50,5 @@
   - if data["changes_omitted"].to_i.positive?
     %p.system-hint{ data: { testid: "relation-types-report-omitted" } }
       = t("#{scope}.report.omitted", count: data["changes_omitted"].to_i, max: RelationTypeSweep::MAX_REPORTED_CHANGES)
+      = link_to t("system.activity.title"), system_activity_path, class: "system-link", data: { testid: "relation-types-report-activity" }
+      = link_to t("system.activity.audit_log"), system_audit_log_path, class: "system-link"

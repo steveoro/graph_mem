@@ -345,7 +345,9 @@ RSpec.describe "System › Background jobs › Relation types", type: :request d
 
       get system_relation_types_report_path(report)
 
-      expect(html.at_css("[data-testid='relation-types-report-omitted']").text).to include("3 more changes aren't listed")
+      expect(html.at_css("[data-testid='relation-types-report-omitted']").text)
+        .to include("3 more changes aren't listed", "their audit rows are in the run's change sets")
+      expect(html.at_css("[data-testid='relation-types-report-activity']")["href"]).to eq(system_activity_path)
     end
 
     it "is a 404 for another report type" do

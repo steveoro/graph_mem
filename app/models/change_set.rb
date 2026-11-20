@@ -30,7 +30,8 @@ class ChangeSet < ApplicationRecord
   NOT_UNDOABLE_EXPLANATIONS = {
     "relation_canonicalization" => "relation types canonicalized by the sweep can't be restored (a variant would be " \
                                    "canonicalized again on save, a merged row would collide with its twin); " \
-                                   "reverse a change by hand from the relation type sweep report"
+                                   "reverse a change by hand from the relation type sweep report, or, past the " \
+                                   "changes it lists, from this change set's audit rows (Audit log)"
   }.freeze
   WINDOWS = { "merge" => 7.days, "audit" => 30.days }.freeze
   MAX_SNAPSHOT_BYTES = 4.megabytes

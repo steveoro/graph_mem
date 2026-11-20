@@ -42,8 +42,8 @@ en:
         meta: "Started %{started}, finished %{finished}, by %{actor} (%{source})."
         unfinished: "not finished"
         omitted:
-          one: "1 more change isn't listed (the report keeps the first %{max})."
-          other: "%{count} more changes aren't listed (the report keeps the first %{max})."
+          one: "1 more change isn't listed (the report keeps the first %{max}): its audit row is in the run's change sets, on Activity and in the Audit log."
+          other: "%{count} more changes aren't listed (the report keeps the first %{max}): their audit rows are in the run's change sets, on Activity and in the Audit log."
         empty: "The sweep changed nothing."
         columns:
           relation: "Relation"

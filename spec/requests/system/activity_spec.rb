@@ -64,7 +64,7 @@ RSpec.describe "System › Activity", type: :request do
       row = Nokogiri::HTML(response.body).at_css("[data-testid='activity-row-#{sweep.uuid}']")
       expect(row.at_css("[data-testid='activity-undo-#{sweep.uuid}']")).to be_nil
       expect(row.at_css("[data-testid='activity-not-undoable']").text)
-        .to eq("not undoable: relation types canonicalized: reverse by hand from the sweep report")
+        .to eq("not undoable: relation types canonicalized: reverse by hand from the sweep report or the audit rows")
       expect(row.text).to include("dream.relation_types")
     end
 
