@@ -119,7 +119,10 @@ class ChangeSetUndo
 
   def refusal_reason(original)
     return "Already undone (#{local_time(original.undone_at)} by #{original.undone_by || 'unknown'})" if original.undone_at
-    return "Not undoable: #{original.not_undoable_reason || 'none'}" if original.undo_strategy == "none"
+    if original.undo_strategy == "none"
+      reason = original.not_undoable_reason
+      return "Not undoable: #{ChangeSet::NOT_UNDOABLE_EXPLANATIONS.fetch(reason.to_s, reason || 'none')}"
+    end
     return "The undo window passed on #{local_time(original.undoable_until)}" unless original.undoable?
 
     nil

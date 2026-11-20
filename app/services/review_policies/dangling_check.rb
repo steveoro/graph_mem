@@ -59,6 +59,26 @@ module ReviewPolicies
       "relation ##{relation_id} gone" unless MemoryRelation.exists?(id: relation_id)
     end
 
+    # R1a: the relation is gone, already the new type, has a twin of the new type (the next sweep
+    # merges into it), or its stored type no longer maps to the new type (a mapping changed).
+    # Only "retype" rows; R1b's operations bring their own checks.
+    def relation_retype_reason(_payload, field)
+      return nil unless field.call("operation").to_s == "retype"
+
+      relation = MemoryRelation.find_by(id: field.call("relation_id"))
+      return "relation ##{field.call('relation_id')} gone" unless relation
+
+      new_type = field.call("new_type").to_s
+      return "relation already #{new_type}" if RelationTypeSweep.stored_as?(relation.id, new_type)
+      if RelationTypeSweep.twin_id(relation.from_entity_id, relation.to_entity_id, new_type, except_id: relation.id)
+        return "#{new_type} relation already exists"
+      end
+
+      target = RelationTypeSweep.target_type(relation.relation_type)
+      "no longer flagged: '#{relation.relation_type}' maps to #{target}" unless
+        MemoryRelation.fold_relation_type(target) == MemoryRelation.fold_relation_type(new_type)
+    end
+
     def relation_integrity_reason(_payload, field)
       keep_id = field.call("keep_id")
       delete_ids = Array(field.call("delete_ids") || field.call("delete_id"))

@@ -7,6 +7,8 @@ en:
         write: "API write"
       compaction:
         auto_merge: "Compaction auto-merge"
+      dream:
+        relation_types: "Relation types canonicalized"
       maintenance:
         merge_node: "Merge (maintenance)"
       project:

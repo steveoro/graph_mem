@@ -43,11 +43,20 @@ module Api
           properties: relation_params[:properties] || {}
         )
 
-        if @memory_relation.save
-          render json: @memory_relation, status: :created
-        else
-          render_validation_errors(@memory_relation)
+        # A part_of moves membership: the lock before the transaction, the validating create (one
+        # parent, no cycle) and the child's sync in it, so a name collision rolls the edge back.
+        part_of = canonical_type == "part_of"
+        saved = with_membership_lock_if(part_of) do
+          ActiveRecord::Base.transaction do
+            next false unless @memory_relation.save
+
+            ProjectMembership.sync!(@memory_relation.from_entity) if part_of
+            true
+          end
         end
+        saved ? render(json: @memory_relation, status: :created) : render_validation_errors(@memory_relation)
+      rescue ProjectMembership::Collision, ProjectMembership::LockTimeout => e
+        render_membership_error(e)
       end
 
       # GET /api/v1/memory_relations/:id
@@ -75,11 +84,10 @@ module Api
         attributes = update_relation_params.to_h
         attributes["relation_type"] = canonical_type if canonical_type
 
-        if @memory_relation.update(attributes)
-          render json: @memory_relation
-        else
-          render_validation_errors(@memory_relation)
-        end
+        updated = update_with_membership(attributes, canonical_type)
+        updated ? render(json: @memory_relation) : render_validation_errors(@memory_relation)
+      rescue ProjectMembership::Collision, ProjectMembership::LockTimeout, RelationSemantics::ValidationError => e
+        render_membership_error(e)
       end
 
       # DELETE /api/v1/memory_relations/:id
@@ -97,6 +105,33 @@ module Api
 
       def set_relation
         @memory_relation = MemoryRelation.find(params[:id])
+      end
+
+      # A type change into or out of part_of (as SQL reads the stored type) moves membership: under
+      # the lock, a retype into part_of passes the create-time rules (one parent, no cycle) first,
+      # and the child is synced in the same transaction. Any other update is a plain one.
+      # @return [Boolean] whether the update was saved
+      def update_with_membership(attributes, canonical_type)
+        was_part_of = MemoryRelation.reads_as_part_of?(@memory_relation.relation_type)
+        moves = canonical_type.present? && was_part_of != (canonical_type == "part_of")
+        with_membership_lock_if(moves) do
+          ActiveRecord::Base.transaction do
+            if moves && !was_part_of
+              RelationSemantics.validate_create!(from_entity_id: @memory_relation.from_entity_id,
+                                                 to_entity_id: @memory_relation.to_entity_id, relation_type: canonical_type)
+            end
+            next false unless @memory_relation.update(attributes)
+
+            ProjectMembership.sync!(@memory_relation.from_entity) if moves
+            true
+          end
+        end
+      end
+
+      # A refusal from the membership rules, as a validation failure (422, the error this API documents).
+      def render_membership_error(error)
+        message = error.is_a?(ProjectMembership::LockTimeout) ? "#{error.message}; retry shortly" : error.message
+        render_error("Validation failed", details: { base: [ message ] })
       end
 
       def relation_params

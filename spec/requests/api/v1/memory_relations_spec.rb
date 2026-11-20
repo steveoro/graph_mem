@@ -20,9 +20,9 @@ RSpec.describe 'API V1 Memory Relations', type: :request do
         let!(:entity1) { MemoryEntity.create!(name: 'Entity 1', entity_type: 'TypeA') }
         let!(:entity2) { MemoryEntity.create!(name: 'Entity 2', entity_type: 'TypeB') }
         let!(:entity3) { MemoryEntity.create!(name: 'Entity 3', entity_type: 'TypeC') }
-        let!(:relation1) { MemoryRelation.create!(from_entity_id: entity1.id, to_entity_id: entity2.id, relation_type: 'connects_to') }
+        let!(:relation1) { MemoryRelation.create!(from_entity_id: entity1.id, to_entity_id: entity2.id, relation_type: 'synth_links_to') }
         let!(:relation2) { MemoryRelation.create!(from_entity_id: entity2.id, to_entity_id: entity3.id, relation_type: 'points_at') }
-        let!(:relation3) { MemoryRelation.create!(from_entity_id: entity1.id, to_entity_id: entity3.id, relation_type: 'connects_to') }
+        let!(:relation3) { MemoryRelation.create!(from_entity_id: entity1.id, to_entity_id: entity3.id, relation_type: 'synth_links_to') }
 
         run_test! do |response|
           data = JSON.parse(response.body)
@@ -49,21 +49,21 @@ RSpec.describe 'API V1 Memory Relations', type: :request do
         end
 
         context 'when filtering by relation_type' do
-          let(:relation_type) { 'connects_to' }
+          let(:relation_type) { 'synth_links_to' }
           run_test! do |response|
             data = JSON.parse(response.body)
             expect(data.size).to eq(2)
-            expect(data.all? { |rel| rel['relation_type'] == 'connects_to' }).to be true
+            expect(data.all? { |rel| rel['relation_type'] == 'synth_links_to' }).to be true
           end
         end
 
         context 'when filtering by multiple parameters' do
           let(:from_entity_id) { entity1.id }
-          let(:relation_type) { 'connects_to' }
+          let(:relation_type) { 'synth_links_to' }
           run_test! do |response|
             data = JSON.parse(response.body)
             expect(data.size).to eq(2)
-            expect(data.all? { |rel| rel['from_entity_id'] == entity1.id && rel['relation_type'] == 'connects_to' }).to be true
+            expect(data.all? { |rel| rel['from_entity_id'] == entity1.id && rel['relation_type'] == 'synth_links_to' }).to be true
           end
         end
 
@@ -321,6 +321,126 @@ RSpec.describe 'API V1 Memory Relations', type: :request do
         run_test! do |response|
           expect(response).to have_http_status(:not_found)
         end
+      end
+    end
+  end
+
+  # R1a: a part_of moves membership. Plain request specs (not rswag): the documented responses are unchanged.
+  describe "membership of part_of writes" do
+    let(:suffix) { SecureRandom.hex(3) }
+    let!(:alpha) { MemoryEntity.create!(name: "Alpha Project #{suffix}", entity_type: "Project") }
+    let!(:beta) { MemoryEntity.create!(name: "Beta Project #{suffix}", entity_type: "Project") }
+    let!(:widget) { MemoryEntity.create!(name: "SynthWidget #{suffix}", entity_type: "Component") }
+    let!(:gear) { MemoryEntity.create!(name: "SynthGear #{suffix}", entity_type: "Component") }
+
+    def create_relation(from, to, type)
+      post "/api/v1/memory_relations", params: { memory_relation: { from_entity_id: from.id, to_entity_id: to.id, relation_type: type } },
+                                       as: :json
+    end
+
+    def body = JSON.parse(response.body)
+
+    describe "POST" do
+      it "syncs the child's project for part_of and for a Part Of spelling" do
+        create_relation(widget, alpha, "part_of")
+        expect(response).to have_http_status(:created)
+        create_relation(gear, beta, "Part Of")
+        expect(response).to have_http_status(:created)
+        expect(body["relation_type"]).to eq("part_of")
+
+        expect([ widget.reload.project_id, gear.reload.project_id ]).to eq([ alpha.id, beta.id ])
+      end
+
+      it "refuses a second parent with nothing written" do
+        create_relation(widget, alpha, "part_of")
+
+        create_relation(widget, beta, "child_of")
+
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(body["error"]).to eq("Validation failed")
+        expect(body["details"]["base"].sole).to include("already has a part_of parent")
+        expect(MemoryRelation.where(from_entity_id: widget.id).pluck(:to_entity_id)).to eq([ alpha.id ])
+        expect(widget.reload.project_id).to eq(alpha.id)
+      end
+
+      it "refuses a name collision in the target project with nothing written" do
+        MemoryEntity.create!(name: widget.name, entity_type: "Component", project_id: alpha.id)
+
+        create_relation(widget, alpha, "part_of")
+
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(body).to include("error" => "Validation failed")
+        expect(body["details"]["base"].sole).to include("already exists there")
+        expect(MemoryRelation.where(from_entity_id: widget.id)).to be_empty
+        expect(widget.reload.project_id).to be_nil
+      end
+
+      it "answers a busy membership lock with 422 and nothing written" do
+        allow(ProjectMembership).to receive(:with_membership_lock).and_raise(ProjectMembership::LockTimeout, "lock busy")
+
+        create_relation(widget, alpha, "part_of")
+
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(body["details"]["base"]).to eq([ "lock busy; retry shortly" ])
+        expect(MemoryRelation.where(from_entity_id: widget.id)).to be_empty
+      end
+
+      it "takes no lock for another type and behaves as before, the identical relation answering 200" do
+        allow(ProjectMembership).to receive(:with_membership_lock).and_call_original
+
+        create_relation(widget, gear, "depends_on")
+        expect(response).to have_http_status(:created)
+        created = body["id"]
+        create_relation(widget, gear, "requires")
+
+        expect(response).to have_http_status(:ok)
+        expect(body["id"]).to eq(created)
+        expect(ProjectMembership).not_to have_received(:with_membership_lock)
+        expect(widget.reload.project_id).to be_nil
+      end
+    end
+
+    describe "PATCH of the type" do
+      def patch_type(relation, type)
+        patch "/api/v1/memory_relations/#{relation.id}", params: { memory_relation: { relation_type: type } }, as: :json
+      end
+
+      it "syncs the child when the type becomes part_of, and again when it stops being one" do
+        relation = MemoryRelation.create!(from_entity: widget, to_entity: alpha, relation_type: "depends_on")
+
+        patch_type(relation, "Part Of")
+        expect(response).to have_http_status(:ok)
+        expect(relation.reload.relation_type).to eq("part_of")
+        expect(widget.reload.project_id).to eq(alpha.id)
+
+        patch_type(relation, "depends_on")
+        expect(response).to have_http_status(:ok)
+        expect(widget.reload.project_id).to be_nil
+      end
+
+      it "refuses a retype into a second parent with nothing written" do
+        MemoryRelation.create!(from_entity: widget, to_entity: alpha, relation_type: "part_of")
+        ProjectMembership.sync!(widget)
+        relation = MemoryRelation.create!(from_entity: widget, to_entity: beta, relation_type: "depends_on")
+
+        patch_type(relation, "part_of")
+
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(body["details"]["base"].sole).to include("already has a part_of parent")
+        expect(relation.reload.relation_type).to eq("depends_on")
+        expect(widget.reload.project_id).to eq(alpha.id)
+      end
+
+      it "refuses a retype into part_of that collides in the target project" do
+        MemoryEntity.create!(name: widget.name, entity_type: "Component", project_id: alpha.id)
+        relation = MemoryRelation.create!(from_entity: widget, to_entity: alpha, relation_type: "depends_on")
+
+        patch_type(relation, "part_of")
+
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(body["details"]["base"].sole).to include("already exists there")
+        expect(relation.reload.relation_type).to eq("depends_on")
+        expect(widget.reload.project_id).to be_nil
       end
     end
   end

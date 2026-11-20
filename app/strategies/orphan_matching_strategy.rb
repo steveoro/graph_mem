@@ -3,7 +3,7 @@
 # Strategy class for matching orphan nodes to potential parent Projects
 #
 # This strategy:
-# - Identifies orphan nodes (entities with no incoming part_of/depends_on relations, excluding Projects)
+# - Identifies orphan nodes (entities with no outgoing part_of relation (no part_of parent), excluding Projects)
 # - Tokenizes each orphan node's name
 # - Matches tokens against Project names and aliases
 # - Returns orphans with suggested parent matches for the Clean-up UI
@@ -36,14 +36,14 @@ class OrphanMatchingStrategy
   # Get all orphan nodes (root nodes that are not Projects)
   # @return [Array<MemoryEntity>] Array of orphan entities
   def orphan_nodes
-    # Find entities that have no incoming "part_of" or "depends_on" relations
+    # Find entities that have no outgoing "part_of" relation (no part_of parent)
     child_entity_ids = MemoryRelation
       .where(relation_type: CHILD_RELATION_TYPES)
       .pluck(:from_entity_id)
       .uniq
 
     # Orphans are entities that:
-    # 1. Have no incoming part_of/depends_on relations, AND
+    # 1. Have no outgoing part_of relation (no part_of parent), AND
     # 2. Are NOT of type "Project"
     MemoryEntity
       .where.not(id: child_entity_ids)

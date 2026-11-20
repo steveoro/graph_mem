@@ -1,6 +1,6 @@
 # Dream-State Compaction
 
-GraphMem's **dream-state** mode is a background compaction pipeline that periodically optimizes the knowledge graph while MCP clients are idle or between batches. It auto-parents orphan nodes, deduplicates identical observations, and auto-merges near-duplicate entities—queuing lower-confidence cases for operator or agent review.
+GraphMem's **dream-state** mode is a background compaction pipeline that periodically optimizes the knowledge graph while MCP clients are idle or between batches. It canonicalizes stored relation types, auto-parents orphan nodes, deduplicates identical observations, and auto-merges near-duplicate entities—queuing lower-confidence cases for operator or agent review.
 
 The name evokes offline consolidation: work happens in the background on a predictable schedule, similar to how biological systems consolidate memory during sleep.
 
@@ -8,7 +8,8 @@ The name evokes offline consolidation: work happens in the background on a predi
 
 Agent sessions routinely produce graph clutter:
 
-- **Structural orphans** — entities not linked under any `Project` via `part_of` or `depends_on`
+- **Relation type drift** — the same edge stored as `has_many`, `Has Many` and `has-many`, or under a synonym of a canonical type
+- **Structural orphans** — entities with no `part_of` parent (`depends_on` doesn't count as a parent)
 - **Observation noise** — the same fact stored multiple times on one entity
 - **Near-duplicate entities** — separate nodes that embeddings show are semantically almost identical
 
@@ -25,6 +26,7 @@ DreamStateCompactionJob ──(re-enqueue while :continued)──┐
         ▼                                                │
 DreamStateCompactor.process_batch!  ◄────────────────────┘
         │
+        ├── RelationTypeSweep       (relation_types phase: relation ids)
         ├── CompactionTraversal     (phase entity lists)
         ├── OrphanMatchingStrategy  (token match to Projects)
         └── NodeOperationsStrategy  (move_to_parent, merge_into)
@@ -37,7 +39,8 @@ CompactionValve     ←── cooperative pause from MCP tools
 | Component                 | Location                                  | Role                                                                      |
 | ------------------------- | ----------------------------------------- | ------------------------------------------------------------------------- |
 | `DreamStateCompactionJob` | `app/jobs/dream_state_compaction_job.rb`  | Processes one batch per invocation; re-enqueues itself while work remains |
-| `DreamStateCompactor`     | `app/strategies/dream_state_compactor.rb` | Core compaction logic for each phase                                      |
+| `DreamStateCompactor`     | `app/strategies/dream_state_compactor.rb` | Core compaction logic for each phase (`DreamStateCompactor::RelationTypesPhase` for `relation_types`) |
+| `RelationTypeSweep`       | `app/services/relation_type_sweep.rb`     | Canonicalizes the stored relation types; also run by a rake task and a job |
 | `CompactionRunner`        | `app/services/compaction_runner.rb`       | Starts/resumes runs; exposes `status_snapshot` for MCP, Home and Background jobs      |
 | `CompactionRun`           | `app/models/compaction_run.rb`            | Persists run state, cursor, and cumulative stats                          |
 | `CompactionTraversal`     | `app/strategies/compaction_traversal.rb`  | Deterministic entity ordering per phase                                   |
@@ -48,11 +51,33 @@ CompactionValve     ←── cooperative pause from MCP tools
 
 ## Compaction phases
 
-Each run progresses through three phases in order:
+Each run progresses through four phases in order:
 
-### Phase 1: `orphans`
+### Phase 1: `relation_types`
 
-**Entity set:** All non-`Project` entities with no incoming `part_of` or `depends_on` relation (`OrphanMatchingStrategy#orphan_nodes`).
+**Set:** every relation, by id, 200 at a time (`RelationTypeSweep::BATCH_SIZE`). This phase walks relations, not entities.
+
+A relation's type is normalized when it is written (see [mcp_tools.md](mcp_tools.md#relation-type-canonicalization)), but relations stored earlier, or written by a path that restores a stored type, can still carry a variant. `RelationTypeSweep` computes each stored type's canonical type: the type folded to lower snake case, then an operator's row in `relation_type_mappings`, else `GraphVocabulary::RELATION_TYPE_MAPPINGS` in code. A type nothing maps keeps its folded spelling.
+
+**Per relation**, one outcome:
+
+| Outcome | When | What happens |
+| --- | --- | --- |
+| `unchanged` | The stored type already is the canonical type | Nothing |
+| `case_only` | The two types differ only in case or trailing spaces (the column compares them as equal) | Plain update in place; the row is its own twin, so it can't collide |
+| `retyped` | A different type, and no relation of the canonical type on the same two entities | The type is updated in place |
+| `merged` | A different type, and a relation of the canonical type already joins the same two entities (the twin) | The variant is deleted into the twin: the twin keeps the higher `weight` and `confidence`; if the twin has no `properties` it takes the variant's, otherwise the variant's are kept on the twin under `merged_from` |
+| `queued` | The canonical type is `part_of` and there is no `part_of` twin | Nothing is written. A `relation_retype` review row is queued instead (see the review table below) |
+
+Three more counts keep the totals honest: `already_queued` (a row for it is pending, or you dismissed it), `skipped_part_of` (a stored `part_of` whose canonical type is another type; it can't happen today, and the sweep never retypes out of `part_of`) and `error` (a relation that changed during the sweep, or failed validation; the sweep goes on and the next run retries it). They and the five outcomes add up to `scanned`.
+
+A `part_of` edge decides which project an entity belongs to, and an update skips the create-time checks (one parent, no cycle) and the membership sync. So the sweep never creates, deletes or retypes a `part_of` edge, and never takes the membership lock.
+
+**Writes:** each batch that writes is one change set of kind `dream.relation_types`, actor `compaction:<run id>`. That kind is not undoable (see "Relation type change sets" below). The run keeps one report for all its batches: a `relation_type_sweep` maintenance report listing every change that wasn't `unchanged`, up to 2,000 (the counts always cover the whole run). That report type is internal: `get_maintenance_reports` doesn't return it. Read it on **System › Background jobs › Relation types › View the changes**.
+
+### Phase 2: `orphans`
+
+**Entity set:** All non-`Project` entities with no `part_of` parent: no outgoing `part_of` edge, since `child part_of parent` runs from the child (`OrphanMatchingStrategy#orphan_nodes`). `depends_on` is not a parent relation here.
 
 **Per entity:**
 
@@ -73,9 +98,9 @@ Each run progresses through three phases in order:
 
 
 
-### Phase 2: `tree_walk`
+### Phase 3: `tree_walk`
 
-**Entity set:** Breadth-first walk of each `Project` subtree, following outgoing `part_of` and `depends_on` edges from children to parents (queue starts at all `Project` roots ordered by ID).
+**Entity set:** Breadth-first walk from the `Project` roots (ordered by ID) down their `part_of` children: the children of an entity are the entities whose `part_of` edge points at it. `depends_on` edges aren't followed. Every non-`Project` entity the walk didn't reach (no `part_of` chain to a Project) is then appended, ordered by ID.
 
 **Per entity:**
 
@@ -87,7 +112,7 @@ Each run progresses through three phases in order:
 
 `Project` entities are never auto-merged or queued for merge review.
 
-### Phase 3: `relationship_discovery`
+### Phase 4: `relationship_discovery`
 
 **Entity set:** All non-`Project` entities ordered by ID.
 
@@ -112,9 +137,10 @@ To accept a proposal: inspect `get_maintenance_reports(report_type: "compaction_
 
 Compaction is **incremental**, not monolithic:
 
-- `BATCH_SIZE = 5` entities per job invocation
-- `CompactionRun#cursor_entity_id` records the last processed entity; the next batch resumes after it
-- When a phase's entity list is exhausted, the run advances to the next phase (or marks `completed`)
+- `BATCH_SIZE = 5` entities per job invocation; in `relation_types`, 200 relations
+- `CompactionRun#cursor_entity_id` records the last processed entity; the next batch resumes after it. The `relation_types` phase keeps its cursor, a relation id, in `stats["relation_cursor_id"]`, so `cursor_entity_id` stays empty while it runs
+- When a phase's list is exhausted, the run advances to the next phase (or marks `completed`)
+- Progress totals count the entities once per entity phase (`orphans`, `tree_walk`, `relationship_discovery`) plus the relations the first phase walks (`total_relations`, read when the run starts)
 
 `DreamStateCompactionJob` returns:
 
@@ -144,12 +170,12 @@ is the source of truth.
 When a compaction run is `running`:
 
 1. The valve sets `pause_requested` on the active `CompactionRun`.
-2. The compactor checks the flag after each entity in the current batch; if set, it flushes pending review items, pauses the run, and yields.
+2. The compactor checks the flag after each entity in the current batch (after each batch of 200 relations in `relation_types`); if set, it flushes pending review items, pauses the run, and yields.
 3. The valve polls up to **3 seconds** for the run to reach `paused` status.
 
 Operators can also pause manually from **System › Background jobs** (`/system/jobs`, which posts to `POST /system/jobs/compaction/pause`).
 
-Paused runs resume from `cursor_entity_id` on the next scheduled job or when an operator clicks **Start / Resume**.
+Paused runs resume from `cursor_entity_id` (`relation_cursor_id` in the first phase) on the next scheduled job or when an operator clicks **Start / Resume**.
 
 ## Review queue (`compaction_review`)
 
@@ -158,10 +184,13 @@ Items that are not safe to apply automatically are batched into `MaintenanceRepo
 
 | `kind`          | Contents                                                                     |
 | --------------- | ---------------------------------------------------------------------------- |
+| `relation_retype` | A stored variant whose canonical type is `part_of`: `operation` (`"retype"`), `relation_id`, `from_entity_id`, `from_name`, `to_entity_id`, `to_name`, `old_type`, `new_type`, `reason` |
 | `orphan_parent` | Orphan entity, top 3 suggested `Project` parents with scores, optional error |
 | `entity_merge`  | Two entities, cosine distance, `recommendation: "review_manually"`           |
 | `relationship_proposal` | Suggested link with relation type, confidence band, supporting observation IDs, explanation |
 
+
+`relation_retype` rows come from the `relation_types` phase, the rake task and the UI sweep alike. A `part_of` edge moves membership, so the row is applied by hand and one at a time: bulk apply, group apply and the auto-apply policies never touch it. **Apply** runs under the membership lock: it deletes the variant, creates the `part_of` edge through the normal path (one parent, no cycle) with the variant's `weight`, `confidence` and `properties`, and syncs the child's project. A refusal (a second parent, a cycle, a name taken in the new project) is returned as an error and nothing is written. A row that is already done succeeds with nothing written; the Dangling policy dismisses a row whose relation is gone, already has the new type, has a twin of it (the next sweep merges into the twin), or whose type no longer maps to it. The row can't be edited, only applied or dismissed, and its undo is the ordinary audit undo (the `part_of` edge is removed and the variant comes back with its stored type).
 
 Reports are flushed at the end of each batch and when advancing phases. Read them via:
 
@@ -181,7 +210,15 @@ To action a queued relationship proposal: inspect the evidence, then call
 
 | Key                    | Meaning                            |
 | ---------------------- | ---------------------------------- |
-| `entities_processed`   | Entities visited across all phases |
+| `relations_processed`  | Relations the `relation_types` phase has scanned |
+| `relation_cursor_id`   | The relation id that phase resumes after |
+| `relation_types_fixed` | Relations retyped in place or fixed for case (`retyped` + `case_only`) |
+| `relation_types_merged` | Variant relations merged into their canonical twin |
+| `relation_retypes_queued` | `relation_retype` review rows queued |
+| `relation_types_report_id` | The run's `relation_type_sweep` report |
+| `total_relations`      | Relations counted when the run started (for the progress bar) |
+| `entities_processed`   | Entities visited across the entity phases |
+| `integrity_sweep_done` | The pre-flight integrity sweep ran for this run |
 | `orphans_parented`     | Orphans auto-linked to a Project   |
 | `orphans_queued`       | Orphans sent to review             |
 | `observations_deduped` | Duplicate observation rows removed |
@@ -247,13 +284,35 @@ Configure under **System › Settings › Feature Flags**.
 The **Dream State / Compactor Run** card on **System › Background jobs** (`/system/jobs`; the Maintenance hub that held it until 1.62.0 is gone) shows:
 
 - Run status badge (`idle`, `running`, `paused`, `completed`, `failed`)
-- Phase stepper (`orphans` → `tree_walk` → `relationship_discovery`)
+- Phase stepper (`relation_types` → `orphans` → `tree_walk` → `relationship_discovery`)
 - Cursor entity, pause flag, timestamps, duration
-- Live stat chips
+- Live stat chips (**Relation types fixed** counts the retyped, case-fixed and merged relations)
 - **Pause** / **Start / Resume** buttons
 - **Repair relation duplicates** when a failed run may be caused by relation integrity issues
 
 Manual start enqueues `DreamStateCompactionJob` via `CompactionRunner.start_or_resume!`.
+
+The **Relation types** card below it runs the same sweep on demand and lists the types that nothing maps. A run that was created before the `relation_types` phase existed keeps its phase and never visits it.
+
+### Relation types card
+
+**Canonicalize relation types** opens a dry run: the sweep's counts, with nothing written (the page lists counts only; the report of the real run lists each change). **Run the sweep now** then queues `RelationTypeSweepJob`, which shows its progress on the card. The button is refused while another sweep is queued or running, and while a dream-state run is in progress (its first phase is the same sweep): pause that run or wait for it. A sweep from the card asks a running dream-state run to pause first, like a graph write does.
+
+The card also shows the last sweep of any source (the card, the rake task or a dream-state run: when, by whom, the counts), **View the changes** (the report, 100 changes a page) and **Unmapped relation types (N)**. That page lists each stored type that is neither canonical nor mapped, with its use count, the spellings it is stored under and two example edges. Per type, **Map** to a canonical type adds a row to `relation_type_mappings`, and **Accept** keeps it as a known type of its own (a row mapping it to itself). The **Mappings** table lists every row with **Remove**. None of these retypes anything: the next sweep applies a mapping, and removing a row changes no relation. A type mapped to `part_of` is queued for review by the sweep, like any variant of it.
+
+The same sweep runs from the command line:
+
+```bash
+bin/rails graph_mem:canonicalize_relations                 # runs the sweep
+DRY_RUN=1 bin/rails graph_mem:canonicalize_relations      # counts only, nothing written
+VERBOSE=1 bin/rails graph_mem:canonicalize_relations      # also lists the changes
+```
+
+### Relation type change sets
+
+The sweep's change sets (`dream.relation_types`, one per batch that writes) can't be undone from System › Activity or `POST /changes/:uuid/undo`: a restored variant would be canonicalized again on save, and a merged row would collide with its twin. Activity shows why in the set's Undo column. To reverse a change by hand, use the sweep's report, which lists each relation's id, old and new type and the id of the twin it was merged into; past the 2,000 changes a report lists, the set's audit rows (Audit log) have the rest.
+
+Two other undos restore a deleted relation with the type it had stored, without canonicalizing it again: the audit undo (for instance of a `relation_retype` apply) and the undo of an entity merge. The next sweep canonicalizes such a relation.
 
 ## MCP tools
 

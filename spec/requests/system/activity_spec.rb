@@ -54,6 +54,20 @@ RSpec.describe "System › Activity", type: :request do
       expect(doc.at_css("[data-testid='activity-row-#{nameless.uuid}']").text).to include("Review apply", "unknown")
     end
 
+    it "says why a relation type sweep's change set can't be undone (R1a)" do
+      sweep = change_set("relation types canonicalized: 3 retyped", kind: "dream.relation_types", actor: "compaction:7",
+                                                                   undo_strategy: "none", undoable_until: nil,
+                                                                   not_undoable_reason: "relation_canonicalization")
+
+      get system_activity_path
+
+      row = Nokogiri::HTML(response.body).at_css("[data-testid='activity-row-#{sweep.uuid}']")
+      expect(row.at_css("[data-testid='activity-undo-#{sweep.uuid}']")).to be_nil
+      expect(row.at_css("[data-testid='activity-not-undoable']").text)
+        .to eq("not undoable: relation types canonicalized: reverse by hand from the sweep report or the audit rows")
+      expect(row.text).to include("dream.relation_types")
+    end
+
     it "pages 50 change sets at a time" do
       ChangeSet.insert_all!(Array.new(51) do |index|
         { uuid: SecureRandom.uuid, kind: "graph.write", actor: "agent:synth-client", summary: "synthetic change #{index}",

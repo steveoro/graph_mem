@@ -22,20 +22,20 @@ class CompactionRunner
           return failed_run
         end
 
-        total_entities = MemoryEntity.count
+        stats = default_stats
         operation = OperationProgress.start!(
           operation_type: "compaction",
-          total_count: total_entities * CompactionRun::PHASES.size,
+          total_count: progress_total(stats),
           phase: CompactionTraversal::PHASES.first,
           message: "Starting compaction",
-          counters: default_stats
+          counters: stats
         )
 
         CompactionRun.create!(
           operation_progress: operation,
           status: "running",
           phase: CompactionTraversal::PHASES.first,
-          stats: default_stats,
+          stats: stats,
           started_at: Time.current
         )
       end
@@ -94,15 +94,27 @@ class CompactionRunner
       end
 
       stats = run.stats || {}
-      total = [ stats["total_entities"].to_i * CompactionRun::PHASES.size, 0 ].max
-      current = [ stats["entities_processed"].to_i, total ].min
+      total = progress_total(stats)
+      current = [ stats["entities_processed"].to_i + stats["relations_processed"].to_i, total ].min
       percent = run.completed? ? 100 : (total.zero? ? 0 : ((current.to_f / total) * 100).round)
       { phase: { current: current, total: total, percent: percent }, overall: { current: current, total: total, percent: percent } }
+    end
+
+    # Entities once per entity phase, plus the relations the relation_types phase walks (0 for a
+    # run created before that phase existed: its totals stay what they were).
+    # @param stats [Hash] the run's stats
+    # @return [Integer]
+    def progress_total(stats)
+      [ (stats["total_entities"].to_i * CompactionRun::ENTITY_PHASES.size) + stats["total_relations"].to_i, 0 ].max
     end
 
     def default_stats
       {
         "entities_processed" => 0,
+        "relations_processed" => 0,
+        "relation_types_fixed" => 0,
+        "relation_types_merged" => 0,
+        "relation_retypes_queued" => 0,
         "merges_auto" => 0,
         "merges_queued" => 0,
         "observations_deduped" => 0,
@@ -113,7 +125,8 @@ class CompactionRunner
         "counters_repaired" => 0,
         "dangling_relations_removed" => 0,
         "lifecycle_issues_found" => 0,
-        "total_entities" => MemoryEntity.count
+        "total_entities" => MemoryEntity.count,
+        "total_relations" => MemoryRelation.count
       }
     end
   end

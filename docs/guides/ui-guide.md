@@ -59,7 +59,7 @@ The sidebar lists Home, Search and Explore at the top, then three groups (Review
 | System | **Audit log** | Change history for entities, observations and relations |
 | System | **Telemetry** | MCP tool volume, errors, latency, and the full MCP clients table |
 | System | **Embeddings** | Vector coverage, connection test, backfill, ANN indexes |
-| System | **Background jobs** | The compactor, the garbage collector and relation repair |
+| System | **Background jobs** | The compactor, the garbage collector, relation repair and relation types |
 | System | **Queue** | Mission Control for the Solid Queue jobs (its own layout) |
 | System | **API docs** | Swagger UI for `/api/v1` (its own page) |
 
@@ -94,8 +94,8 @@ embedding service) never holds up the rest, and each links to the page where you
 
 The controls that used to be on Home are under **Projects & Data** since 1.62.0 (the Maintenance
 hub that held them is gone): **Start / Resume** and
-**Pause** for the compactor, **Run now** for the garbage collector and **Repair relation
-duplicates** are on **Background jobs**, and the scan form is **Scans › New scan**. The scheduling and the meaning of each counter are in [dream_state.md](../dream_state.md) and
+**Pause** for the compactor, **Run now** for the garbage collector, **Repair relation
+duplicates** and **Canonicalize relation types** are on **Background jobs**, and the scan form is **Scans › New scan**. The scheduling and the meaning of each counter are in [dream_state.md](../dream_state.md) and
 [garbage_collector.md](../garbage_collector.md).
 
 ### Search
@@ -213,7 +213,9 @@ Operator only; a guest gets 403 from every page.
 - **Activity** (`/system/activity`): every change set, newest first, 50 a page, with who (and, for MCP, the claim) and when, and **Undo** while it can still be undone. The row-level history is the **Audit log**.
 - **Settings** (`/system/settings`): every runtime setting is described in the [app settings reference](../app_settings_reference.md). Each tab has its own **Save** button and saves only its own fields; a value out of range comes back marked (HTTP 422) and nothing in the tab is saved.
 - **Backups** (`/system/backups`): the backup settings, **Run backup now**, and the backup files. **Restore** opens a card that asks you to type the file name; the button stays disabled until it matches, and the server checks it again.
-- **Background jobs** (`/system/jobs`): the compactor, garbage collector and relation-repair cards, and the graph totals.
+- **Background jobs** (`/system/jobs`): the compactor, garbage collector and relation-repair cards, the Relation types card, and the graph totals.
+  - **Relation types** (1.93.0): the card shows the last sweep (when, by whom, scanned, retyped, case only, merged, queued, errors), a bar while one runs, and how many stored relation types are neither canonical nor mapped. **Canonicalize relation types** opens a dry run: counts only, nothing written. **Run the sweep now** on that page queues it; it is refused while a sweep is queued or running, and while a dream-state run is running (the compactor's first phase is the same sweep). A sweep retypes a variant to its canonical type, merges it into an identical edge that already has that type, and never writes a `part_of` edge: it queues a review row for that instead (Review & Fix, kind `relation_retype`, applied one at a time). **View the changes** opens the run's report, a list to reverse a change by hand: the sweep's change sets can't be undone, and Activity says so in their Undo column.
+  - **Unmapped relation types** (`/system/jobs/relation_types`, from the card's second button): each stored type that is neither canonical nor mapped, with its count, the spellings it is stored under and two example edges. Filter the list, **Map** a type to a canonical type, or **Accept** it as a known type of its own. The **Mappings** table lists every mapping row, each with **Remove**. None of these changes a relation: the next sweep applies a mapping, and removing a row leaves relations as they are. See [dream_state.md](../dream_state.md#relation-types-card).
 - **Typed confirmations**: besides restore, **Regenerate all** and **Drop indexes** on Embeddings ask you to type `REGENERATE` / `DROP`, and pruning the audit log asks for the number of rows it will delete.
 - **Queue** (`/system/queue`): Mission Control shows queues, failed jobs (retry or discard), workers and recurring tasks. It opens as a full page with its own navigation; **Back to main app** returns to the shell.
 - **API docs**: Swagger UI for the REST API, with its own page.

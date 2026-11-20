@@ -1,9 +1,12 @@
 # frozen_string_literal: true
 
 # Compacts the knowledge graph during dream-state background runs:
+# - Relation-types phase: canonicalize stored relation types (RelationTypesPhase, RelationTypeSweep)
 # - Orphan phase: auto-parent high-confidence matches, queue the rest
 # - Tree-walk phase: dedupe identical observations, auto-merge very similar entities
 class DreamStateCompactor
+  include RelationTypesPhase
+
   AUTO_MERGE_DISTANCE = 0.10
   REVIEW_MERGE_DISTANCE = 0.30
   AUTO_ORPHAN_SCORE = OrphanMatchingStrategy::AUTO_PARENT_SCORE
@@ -31,6 +34,7 @@ class DreamStateCompactor
 
     phase = @run.phase.presence || CompactionTraversal::PHASES.first
     @run.update!(phase: phase, status: "running", started_at: @run.started_at || Time.current) unless @run.running?
+    return process_relation_types_batch! if phase == RelationTypesPhase::PHASE
 
     entity_ids = @traversal.entity_ids_for_phase(phase)
     start_idx = cursor_start_index(entity_ids)
@@ -97,15 +101,16 @@ class DreamStateCompactor
     end
   end
 
-  def broadcast_progress(phase, entity_id = nil)
+  # @param step [Integer] how many items the batch processed (relations count one each)
+  def broadcast_progress(phase, entity_id = nil, step: 1, message: nil)
     operation = @run.operation_progress
     return unless operation
 
     operation.update_progress!(
-      current: operation.current_count.to_i + 1,
+      current: operation.current_count.to_i + step,
       total: operation.total_count,
       phase: phase,
-      message: entity_id ? "Processed entity ##{entity_id}" : "Processing #{phase}",
+      message: message || (entity_id ? "Processed entity ##{entity_id}" : "Processing #{phase}"),
       counters: @run.reload.stats
     )
     OperationProgressBroadcaster.call(operation)

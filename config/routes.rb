@@ -205,6 +205,14 @@ Rails.application.routes.draw do
     post "jobs/garbage_collection/run", to: "jobs#run_garbage_collection", as: :run_garbage_collection
     post "jobs/relations/repair", to: "jobs#repair_relations", as: :repair_relations
     post "jobs/scheduled_run", to: "jobs#scheduled_run", as: :scheduled_run
+    # R1a: relation types (the sweep's dry run and start, its reports, the unmapped types).
+    get "jobs/relation_types", to: "relation_types#index", as: :relation_types
+    get "jobs/relation_types/sweep", to: "relation_types#preview", as: :relation_types_sweep
+    post "jobs/relation_types/sweep", to: "relation_types#sweep"
+    get "jobs/relation_types/reports/:id", to: "relation_types#report", as: :relation_types_report
+    post "jobs/relation_types/map", to: "relation_types#map", as: :map_relation_type
+    post "jobs/relation_types/accept", to: "relation_types#accept", as: :accept_relation_type
+    delete "jobs/relation_types/mappings/:id", to: "relation_types#destroy_mapping", as: :relation_type_mapping
   end
   # Mission Control (System › Queue). Its base controller is System::QueueDashboardController.
   mount MissionControl::Jobs::Engine, at: "/system/queue"

@@ -1,0 +1,81 @@
+- scope = "system.relation_types.index"
+- query = @query.presence
+- content_for :title, t("#{scope}.title")
+- content_for :page_header do
+  = ui_page_header(t("#{scope}.title"), subtitle: t("#{scope}.subtitle")) do
+    = link_to t("#{scope}.back"), system_jobs_path, class: "ui-btn", data: { testid: "relation-types-back" }
+    = link_to t("#{scope}.sweep_link"), system_relation_types_sweep_path, class: "ui-btn ui-btn-primary",
+      data: { testid: "relation-types-sweep-link", turbo_prefetch: false }
+
+.system-page{ data: { testid: "unmapped-relation-types" } }
+  %p.system-hint= t("#{scope}.explain")
+  .ui-card
+    = form_with url: system_relation_types_path, method: :get, local: true, class: "system-inline-form", role: "search" do
+      %label.system-sr-only{ for: "relation_types_filter" }= t("#{scope}.filter_label")
+      = search_field_tag :q, @query, id: "relation_types_filter", class: "ui-input", placeholder: t("#{scope}.filter_label")
+      = submit_tag t("#{scope}.filter"), class: "ui-btn", name: nil
+      - if query
+        = link_to t("#{scope}.reset"), system_relation_types_path, class: "ui-btn"
+
+    - if @rows.empty?
+      %p.system-hint{ data: { testid: "unmapped-relation-types-empty" } }
+        = query ? t("#{scope}.empty_filtered", query: query) : t("#{scope}.empty")
+    - else
+      .system-table-wrap
+        %table.system-table{ data: { testid: "unmapped-relation-types-table" } }
+          %thead
+            %tr
+              - %w[type count examples actions].each do |column|
+                %th{ scope: "col" }= t("#{scope}.columns.#{column}")
+          %tbody
+            - @rows.each_with_index do |row, index|
+              - field_id = "relation_type_target_#{index}"
+              %tr{ data: { testid: "unmapped-relation-type", type: row.type } }
+                %td
+                  %span.system-mono= row.type
+                  - if row.spellings.keys != [ row.type ]
+                    %div.system-hint= t("#{scope}.stored_as", spellings: row.spellings.keys.join(", "))
+                %td{ data: { testid: "unmapped-relation-type-count" } }= number_with_delimiter(row.count)
+                %td
+                  %ul.system-list
+                    - row.examples.each do |example|
+                      %li{ data: { testid: "unmapped-relation-type-example" } }
+                        = link_to(example.from_name || "##{example.from_id}", explore_path(entity_id: example.from_id), class: "system-link")
+                        %span.system-mono= "—#{example.relation_type}→"
+                        = link_to(example.to_name || "##{example.to_id}", explore_path(entity_id: example.to_id), class: "system-link")
+                %td
+                  .system-actions
+                    = form_with url: system_map_relation_type_path, method: :post, class: "system-inline-form" do
+                      = hidden_field_tag :type, row.type, id: nil
+                      = hidden_field_tag :q, query, id: nil if query
+                      %label.system-sr-only{ for: field_id }= t("#{scope}.map_label", type: row.type)
+                      = select_tag :canonical_type, options_for_select(@canonical_types), id: field_id, class: "ui-input"
+                      = submit_tag t("#{scope}.map"), class: "ui-btn", name: nil, data: { testid: "btn-map-relation-type" }
+                    = button_to t("#{scope}.accept"), system_accept_relation_type_path, method: :post, params: { type: row.type, q: query }.compact,
+                      class: "ui-btn", "aria-label": t("#{scope}.accept_label", type: row.type), data: { testid: "btn-accept-relation-type" }
+
+  %section.ui-card{ "aria-labelledby": "relation-type-mappings-title", data: { testid: "relation-type-mappings" } }
+    %h2.system-card__title#relation-type-mappings-title= t("#{scope}.mappings_title")
+    %p.system-hint= t("#{scope}.mappings_hint")
+    - if @mappings.empty?
+      %p.system-hint= t("#{scope}.mappings_empty")
+    - else
+      .system-table-wrap
+        %table.system-table
+          %thead
+            %tr
+              - %w[variant canonical kind updated actions].each do |column|
+                %th{ scope: "col" }= t("#{scope}.mapping_columns.#{column}")
+          %tbody
+            - @mappings.each do |mapping|
+              - kind = RelationTypeDecision.kind(mapping)
+              %tr{ data: { testid: "relation-type-mapping", variant: mapping.variant, kind: kind } }
+                %td.system-mono= mapping.variant
+                %td.system-mono= mapping.canonical_type
+                %td
+                  %span.ui-badge= t("#{scope}.kinds.#{kind}")
+                %td.system-nowrap= l(mapping.updated_at, format: :short)
+                %td
+                  = button_to t("#{scope}.remove"), system_relation_type_mapping_path(mapping, q: query), method: :delete, class: "ui-btn",
+                    "aria-label": t("#{scope}.remove_label", type: mapping.variant),
+                    data: { testid: "btn-remove-relation-type-mapping", turbo_confirm: t("#{scope}.remove_confirm", type: mapping.variant) }

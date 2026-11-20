@@ -23,8 +23,8 @@ class MaintenanceDashboardSnapshot
   # Everything the cards read, without the graph totals (an anti-join), so a poll stays cheap.
   #
   # @return [Hash] `{ refreshed_at:, compaction:, latest_reports:, operations:, schedules:,
-  #   cursor_entity:, scheduled_run:, active: }` (`active`: some job is running, so the page polls
-  #   faster)
+  #   cursor_entity:, scheduled_run:, relation_types:, active: }` (`active`: some job is running, so
+  #   the page polls faster)
   def cards
     data = {
       refreshed_at: Time.current,
@@ -33,10 +33,29 @@ class MaintenanceDashboardSnapshot
       operations: operation_snapshots,
       schedules: schedule_hints,
       cursor_entity: cursor_entity,
-      scheduled_run: scheduled_run_snapshot
+      scheduled_run: scheduled_run_snapshot,
+      relation_types: relation_types_snapshot
     }
     data.merge(active: data.dig(:scheduled_run, :state).in?(%i[running stopping]) || data.dig(:compaction, :dream_state) == "running" ||
-                       data.dig(:operations, :garbage_collection, :status) == "running")
+                       data.dig(:operations, :garbage_collection, :status) == "running" ||
+                       data.dig(:relation_types, :operation, :status) == "running")
+  end
+
+  # The "Relation types" card (R1a): the last sweep started from the card (its progress row), the
+  # newest sweep report of any source (the card, the rake task, a dream-state run) and how many
+  # stored types are unmapped.
+  #
+  # @return [Hash] `{ operation: Hash, nil, report: Hash, nil, unmapped_count: Integer }`; `report`:
+  #   `{ id:, created_at:, source:, actor:, started_at:, finished_at:, counts:, changes: (Integer) }`
+  def relation_types_snapshot
+    report = MaintenanceReport.by_type(RelationTypeSweep::REPORT_TYPE).recent.first
+    data = report&.data.to_h
+    {
+      operation: OperationProgress.where(operation_type: "relation_type_sweep").recent.first&.snapshot,
+      report: report && { id: report.id, created_at: report.created_at, changes: data["changes"].to_a.size + data["changes_omitted"].to_i,
+                          **data.slice("source", "actor", "started_at", "finished_at", "counts").symbolize_keys },
+      unmapped_count: UnmappedRelationTypes.cached_count
+    }
   end
 
   # The "Run all scheduled jobs now" card (1.81.0): the switch's state, the latest run (its

@@ -15,12 +15,24 @@ class ChangeSet < ApplicationRecord
   KINDS = %w[
     merge compaction.auto_merge graph.write graph.edit graph.delete
     review.apply review.bulk_apply review.dismiss review.bulk_dismiss review.restore review.ignore review.snooze review.group_apply review.group_dismiss review.group_snooze
-    api.write maintenance.merge_node project.cloud_access undo redo
+    api.write maintenance.merge_node project.cloud_access undo redo dream.relation_types
   ].freeze
   # Reserved for UI-5 policy runs and UI-4b Explore actions.
   KIND_PATTERNS = [ /\Apolicy\.[a-z_]+\z/, /\Aexplore\.[a-z_]+\z/ ].freeze
   STRATEGIES = %w[audit merge none].freeze
-  NOT_UNDOABLE_REASONS = %w[hard_delete mixed_merge audit_incomplete snapshot_too_large].freeze
+  NOT_UNDOABLE_REASONS = %w[hard_delete mixed_merge audit_incomplete snapshot_too_large relation_canonicalization].freeze
+  # Kinds that are never undoable through the generic undo, with the reason stored on the set.
+  # `dream.relation_types` (RelationTypeSweep, R1a): a restored variant type would be canonicalized
+  # again on save, and a merged variant row would collide with its canonical twin. The sweep's
+  # report lists every change (relation id, old and new type, merged-into id) to reverse one by hand.
+  NOT_UNDOABLE_KINDS = { "dream.relation_types" => "relation_canonicalization" }.freeze
+  # What each not-undoable reason means, for refusals that need more than the reason code.
+  NOT_UNDOABLE_EXPLANATIONS = {
+    "relation_canonicalization" => "relation types canonicalized by the sweep can't be restored (a variant would be " \
+                                   "canonicalized again on save, a merged row would collide with its twin); " \
+                                   "reverse a change by hand from the relation type sweep report, or, past the " \
+                                   "changes it lists, from this change set's audit rows (Audit log)"
+  }.freeze
   WINDOWS = { "merge" => 7.days, "audit" => 30.days }.freeze
   MAX_SNAPSHOT_BYTES = 4.megabytes
   SNAPSHOT_VERSION = 1

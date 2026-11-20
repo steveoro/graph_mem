@@ -34,6 +34,9 @@
                   %span.system-hint= t("system.activity.undoable_until", time: l(set.undoable_until, format: :short))
                 - elsif set.undone_at
                   = t("system.activity.undone")
+                - elsif set.not_undoable_reason.present?
+                  %span.system-hint{ data: { testid: "activity-not-undoable" } }= t("system.activity.not_undoable",
+                    reason: ReviewResponses::NOT_UNDOABLE.fetch(set.not_undoable_reason, set.not_undoable_reason))
                 - else
                   = "—"
     = paginate @change_sets

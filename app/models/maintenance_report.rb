@@ -3,13 +3,17 @@
 class MaintenanceReport < ApplicationRecord
   REPORT_TYPES = %w[orphans duplicates compaction_review embedding_maintenance contradictions
                     scan_review stale_memory_scan review_policy_run].freeze
+  # Run reports kept out of REPORT_TYPES on purpose: REPORT_TYPES is the enum of the MCP
+  # `get_maintenance_reports` schema, which this list must not change. `relation_type_sweep`:
+  # RelationTypeSweep's run report (counts and the list of changes).
+  INTERNAL_REPORT_TYPES = %w[relation_type_sweep].freeze
   MAX_REPORTS_PER_TYPE = 30
 
   serialize :data, coder: JSON
 
   has_many :maintenance_report_rows, dependent: :nullify
 
-  validates :report_type, presence: true, inclusion: { in: REPORT_TYPES }
+  validates :report_type, presence: true, inclusion: { in: REPORT_TYPES + INTERNAL_REPORT_TYPES }
 
   scope :recent, -> { order(created_at: :desc) }
   scope :by_type, ->(type) { where(report_type: type) }

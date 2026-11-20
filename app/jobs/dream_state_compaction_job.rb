@@ -14,7 +14,7 @@ class DreamStateCompactionJob < ApplicationJob
     return unless run
     return if run.status.in?(%w[completed failed])
 
-    if run.cursor_entity_id.blank? && (run.stats["entities_processed"].to_i == 0)
+    if preflight_pending?(run)
       begin
         result = GraphIntegrityService.call
         queue_integrity_issues(run, result)
@@ -22,6 +22,7 @@ class DreamStateCompactionJob < ApplicationJob
       rescue StandardError => e
         Rails.logger.error "[DreamState] Pre-flight integrity sweep failed: #{e.message}"
       end
+      run.merge_stats!("integrity_sweep_done" => true)
     end
 
     run.with_lock do
@@ -50,6 +51,16 @@ class DreamStateCompactionJob < ApplicationJob
   end
 
   private
+
+  # Once per run, before its first batch. The relation_types phase (first since R1a) keeps its
+  # cursor in the stats, not in cursor_entity_id, so the run records that the sweep ran; a run
+  # started before R1a has no flag and still runs it only while nothing was processed.
+  def preflight_pending?(run)
+    stats = run.stats || {}
+    return false if stats["integrity_sweep_done"]
+
+    run.cursor_entity_id.blank? && stats["entities_processed"].to_i.zero? && stats["relations_processed"].to_i.zero?
+  end
 
   # Policies run after a completed compaction run that seeded review rows (any flush or the sweep).
   def enqueue_review_policies(run)

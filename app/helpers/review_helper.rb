@@ -97,6 +97,9 @@ module ReviewHelper
     when "stale_memory" then "#{payload['entity_name'] || "##{payload['entity_id']}"}: #{Array(payload['observation_ids']).size} stale observation(s)"
     when "delete_entity" then "Delete #{payload['entity_name'].presence || "entity ##{payload['entity_id']}"}"
     when "delete_relation" then "Delete relation ##{payload['relation_id']}"
+    when "relation_retype"
+      "#{payload['from_name'] || "##{payload['from_entity_id']}"} #{payload['old_type']} → #{payload['new_type']} " \
+        "#{payload['to_name'] || "##{payload['to_entity_id']}"}"
     when "lifecycle_corruption" then "Observation ##{payload['observation_id']}: #{payload['issue']}"
     else payload["entity_name"].presence || payload["reason"].presence || row.group_key.to_s
     end.to_s.truncate(140)

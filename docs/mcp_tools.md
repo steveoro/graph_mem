@@ -175,6 +175,11 @@ The fix is always the same: give each agent its own `X-MCP-Client` header value.
 - **Soft vocabularies:** `entity_type` and `relation_type` schemas publish
   canonical `examples`. Novel values remain valid; likely misspellings add a
   non-blocking `type_hint` to the created result.
+- **Relation types are normalized on write** (see
+  [Relation Type Canonicalization](#relation-type-canonicalization)): the
+  created relation holds, and the result returns, the canonical or folded type,
+  not the spelling you sent. `"Has Many"` is stored as `has_many`; a synonym
+  such as `calls_method` comes back as `calls`. No parameter or schema changes.
 
 #### `graph_edit`
 - **Description:** Atomically update entities and observations, including observation supersession.
@@ -442,6 +447,7 @@ These tools perform structural graph queries. `direction` is one of `outgoing`
   - `kind` (string, optional): Row kind filter, e.g. `entity_merge` or `orphan_parent`.
   - `page` (integer, optional, default: 1): 1-based page. Response `per_page` is fixed at 50.
 - **Response:** `{ report_type, status, kind, page, per_page, total_count, total_pages, items: [{ item_id, kind, status, payload, ... }] }`
+- **Review kinds:** among the kinds you can filter on, `relation_retype` (1.93.0) is a stored relation type that canonicalizes to `part_of`. Its `payload` has `operation` (`"retype"`), `relation_id`, `from_entity_id`, `from_name`, `to_entity_id`, `to_name`, `old_type`, `new_type` and `reason`. `apply_maintenance_review` applies it (`dry_run: true` previews it) by deleting the variant and creating the `part_of` edge through the normal path, so a second parent, a cycle or a name taken in the new project is refused with nothing written. It takes no `action_params` and can't be edited. Bulk and group apply and the auto-apply policies never touch it. See [dream_state.md](dream_state.md#review-queue-compaction_review).
 
 #### `dismiss_maintenance_review`
 - **Description:** Dismiss, ignore, or restore a maintenance-review queue row without applying the suggestion. Pass required `item_id` (string UUID) and `action` (dismiss, ignore, or restore); optional `report_type` (string, default compaction_review), `reason` (string). Do not use to execute the suggestion; use `apply_maintenance_review` instead. Do not use to look up a row; use `list_maintenance_review` instead. Do not use to merge entities; use `merge_entities` instead.
@@ -506,6 +512,18 @@ Data-exchange import matching and execution share the same canonicalization via 
 | ... | (see `app/lib/graph_vocabulary.rb` for the full list; `db/seeds/entity_type_mappings.rb` seeds it) |
 
 A variant the `entity_type_mappings` table doesn't hold falls back to the code-owned vocabulary (`GraphVocabulary`), so types added in a release canonicalize before `bin/rails db:seed` is run again (1.74.0).
+
+## Relation Type Canonicalization
+
+Relation types are normalized when the type is set: on a create (`graph_write`, the REST API, the importers, the review applies) and on an explicit change of type. The steps:
+
+1. The type is trimmed, lower-cased, and every run of spaces and hyphens, with any underscores next to it, becomes one underscore. A run of underscores alone is kept as typed.
+2. The folded type is mapped to a canonical type: a row of the `relation_type_mappings` table first (an operator's choice), else the code-owned vocabulary (`GraphVocabulary::RELATION_TYPE_MAPPINGS`).
+3. A type nothing maps stays allowed: it is stored folded, in lower snake case.
+
+Examples: `"Has Many"` and `"has-many"` are stored as `has_many`; `calls_method` is stored as `calls`; `"Synth Links To"`, which nothing maps, is stored as `synth_links_to`. `graph_write` returns the stored type, plus a `type_hint` (`submitted`, `suggested`; the submitted value is the stored, folded type) when the type maps to nothing and a vocabulary type is close to it.
+
+An update that doesn't change the type keeps the stored spelling, and an undo restores a deleted relation with the type it had. Relations stored before this, with variants, are canonicalized by the relation type sweep (see [dream_state.md](dream_state.md#phase-1-relation_types)). The mapping table is no longer seeded: `bin/rails db:seed` loads the entity type mappings only, and a database seeded earlier keeps its relation rows. There is no schema change. Unmapped types are listed on System › Background jobs, where an operator maps or accepts them.
 
 ## Vector Search Architecture
 
@@ -584,11 +602,12 @@ Some tools overlap by design; pick by intent:
 
 Solid Queue runs `DreamStateCompactionJob` on a schedule (`config/recurring.yml`). The job:
 
-1. **Orphans phase** -- matches orphan nodes to `Project` roots; auto-parents high-confidence token matches
-2. **Tree-walk phase** -- walks each project subtree; deduplicates identical observations; auto-merges entities with cosine distance &lt; 0.10
-3. **Review queue** -- writes lower-confidence items to `maintenance_reports` (`compaction_review`), readable via `get_maintenance_reports`
+1. **Relation-types phase** (1.93.0) -- canonicalizes the stored relation types; a variant of `part_of` is queued as a `relation_retype` review row, never written
+2. **Orphans phase** -- matches orphan nodes to `Project` roots; auto-parents high-confidence token matches
+3. **Tree-walk phase** -- walks each project subtree; deduplicates identical observations; auto-merges entities with cosine distance &lt; 0.10
+4. **Review queue** -- writes lower-confidence items to `maintenance_reports` (`compaction_review`), readable via `get_maintenance_reports`
 
-Mutating tools and the heavy maintenance tools (`summarize`, `suggest_merges`, `detect_contradictions`, the review apply/dismiss) cooperatively **pause** an active compaction run (`CompactionValve`) so live MCP traffic takes priority. Paused runs resume from `cursor_entity_id` on the next trigger.
+Mutating tools and the heavy maintenance tools (`summarize`, `suggest_merges`, `detect_contradictions`, the review apply/dismiss) cooperatively **pause** an active compaction run (`CompactionValve`) so live MCP traffic takes priority. Paused runs resume from their cursor on the next trigger.
 
 To close the loop on the review queue: call `list_maintenance_review`, inspect the suggested merges/parents, and apply the good ones with `apply_maintenance_review` (or the `graph_delete` `merge_entities` operation when both entity ids are already known).
 

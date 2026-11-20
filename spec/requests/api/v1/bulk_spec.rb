@@ -110,6 +110,76 @@ RSpec.describe "API V1 Bulk", type: :request do
       end
     end
 
+    context "creating part_of relations (membership)" do
+      let!(:alpha) { MemoryEntity.create!(name: "Alpha Project", entity_type: "Project") }
+      let!(:beta) { MemoryEntity.create!(name: "Beta Project", entity_type: "Project") }
+      let!(:widget) { MemoryEntity.create!(name: "SynthWidget", entity_type: "Component") }
+      let!(:gear) { MemoryEntity.create!(name: "SynthGear", entity_type: "Component") }
+
+      it "syncs each child's project, for part_of and for a Part Of spelling" do
+        params = { relations: [ { from_entity_id: widget.id, to_entity_id: alpha.id, relation_type: "part_of" },
+                                { from_entity_id: gear.id, to_entity_id: beta.id, relation_type: "Part Of" } ] }
+
+        post "/api/v1/bulk", params: params, as: :json
+
+        expect(response).to have_http_status(:created)
+        expect(JSON.parse(response.body)["created_relations"].map { |rel| rel["relation_type"] }).to eq(%w[part_of part_of])
+        expect([ widget.reload.project_id, gear.reload.project_id ]).to eq([ alpha.id, beta.id ])
+      end
+
+      it "refuses a second parent and rolls the whole call back" do
+        MemoryRelation.create!(from_entity: widget, to_entity: alpha, relation_type: "part_of")
+        ProjectMembership.sync!(widget)
+        params = { relations: [ { from_entity_id: gear.id, to_entity_id: beta.id, relation_type: "part_of" },
+                                { from_entity_id: widget.id, to_entity_id: beta.id, relation_type: "child_of" } ] }
+
+        post "/api/v1/bulk", params: params, as: :json
+
+        expect(response).to have_http_status(:unprocessable_content)
+        body = JSON.parse(response.body)
+        expect(body["error"]).to eq("Bulk operation rolled back")
+        expect(body["details"].sole).to include("type" => "relation", "index" => 1)
+        expect(body["details"].sole["error"]).to include("already has a part_of parent")
+        expect(MemoryRelation.where(from_entity_id: gear.id)).to be_empty
+        expect([ widget.reload.project_id, gear.reload.project_id ]).to eq([ alpha.id, nil ])
+      end
+
+      it "refuses a name collision in the target project" do
+        MemoryEntity.create!(name: "SynthWidget", entity_type: "Component", project_id: alpha.id)
+
+        post "/api/v1/bulk", params: { relations: [ { from_entity_id: widget.id, to_entity_id: alpha.id, relation_type: "part_of" } ] },
+                             as: :json
+
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(JSON.parse(response.body)["details"].sole["error"]).to include("already exists there")
+        expect(MemoryRelation.where(from_entity_id: widget.id)).to be_empty
+        expect(widget.reload.project_id).to be_nil
+      end
+
+      it "answers 422 and writes nothing when the membership lock is busy" do
+        allow(ProjectMembership).to receive(:with_membership_lock).and_raise(ProjectMembership::LockTimeout, "lock busy")
+
+        post "/api/v1/bulk", params: { entities: [ { name: "SynthGadget", entity_type: "Component" } ],
+                                       relations: [ { from_entity_id: widget.id, to_entity_id: alpha.id, relation_type: "part_of" } ] },
+                             as: :json
+
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(JSON.parse(response.body)["details"].sole["error"]).to eq("lock busy; retry shortly")
+        expect(MemoryEntity.exists?(name: "SynthGadget")).to be(false)
+      end
+
+      it "doesn't take the membership lock for a batch without a part_of" do
+        allow(ProjectMembership).to receive(:with_membership_lock).and_call_original
+
+        post "/api/v1/bulk", params: { relations: [ { from_entity_id: widget.id, to_entity_id: gear.id, relation_type: "depends_on" } ] },
+                             as: :json
+
+        expect(response).to have_http_status(:created)
+        expect(ProjectMembership).not_to have_received(:with_membership_lock)
+        expect(widget.reload.project_id).to be_nil
+      end
+    end
+
     context "mixed operations" do
       it "creates entities, observations, and relations in a single call" do
         parent = MemoryEntity.create!(name: "MixedParent", entity_type: "Project")

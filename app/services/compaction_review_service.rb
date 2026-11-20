@@ -13,6 +13,11 @@ class CompactionReviewService
   # so a few attempts cover the residual same-entity race.
   CHECKREAD_MAX_ATTEMPTS = 3
   SNOOZE_DAYS = 30
+  EDIT_REFUSALS = {
+    "contradiction" => "Contradiction rows can't be edited; choose which observation to keep",
+    "fact_supersede" => "Outdated-by-fact rows can't be edited; supersede or retire when applying",
+    "relation_retype" => "Relation retype rows can't be edited; apply or dismiss them"
+  }.freeze
 
   extend ChangeRecording
   extend Queries
@@ -375,11 +380,11 @@ class CompactionReviewService
         validate_observation_id!(edits[:observation_id]) if edits[:observation_id].present?
       when "reparent_entity"
         validate_entity_ids!([ edits[:entity_id] || edits[:node_id], edits[:parent_id] ].compact)
-      when "contradiction", "fact_supersede"
-        # An edit could point the row at other observations; the choice is made at apply time.
+      when "contradiction", "fact_supersede", "relation_retype"
+        # An edit could point the row at other observations (or another relation, operation or
+        # type); the choice is made at apply time, or the row is dismissed.
         record = MaintenanceReportRow.new
-        record.errors.add(:base, row.kind == "contradiction" ? "Contradiction rows can't be edited; choose which observation to keep" :
-                                                               "Outdated-by-fact rows can't be edited; supersede or retire when applying")
+        record.errors.add(:base, EDIT_REFUSALS.fetch(row.kind))
         raise ActiveRecord::RecordInvalid.new(record)
       end
     end

@@ -44,6 +44,16 @@ module Api
       def render_validation_errors(model)
         render_error("Validation failed", details: model.errors.as_json)
       end
+
+      # Runs the block under the advisory membership lock when `needed` (a write that creates,
+      # retypes or removes a part_of edge), else plainly. Take it BEFORE the write's transaction:
+      # the advisory-first rule (ProjectMembership::LOCK_NAME_PREFIX).
+      # @param needed [Boolean]
+      # @return [Object] the block's value
+      # @raise [ProjectMembership::LockTimeout]
+      def with_membership_lock_if(needed, &block)
+        needed ? ProjectMembership.with_membership_lock(&block) : yield
+      end
     end
   end
 end

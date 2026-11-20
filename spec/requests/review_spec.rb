@@ -163,6 +163,27 @@ RSpec.describe "Review & Fix", type: :request do
       end
     end
 
+    it "shows a relation_retype row with its card and the membership move it previews (R1a)" do
+      project = MemoryEntity.create!(name: "Alpha Project", entity_type: "Project")
+      variant = MemoryRelation.create!(from_entity: widget, to_entity: project, relation_type: "synth_placeholder")
+      variant.update_column(:relation_type, "child_of")
+      RelationTypeSweep.call
+      row = MaintenanceReportRow.find_by!(kind: "relation_retype")
+
+      get review_row_path(row.row_uuid)
+
+      expect(response).to have_http_status(:ok)
+      card = Nokogiri::HTML5.fragment(response.body)
+      expect(card.at_css("[data-testid='relation-retype-summary']").text)
+        .to eq("Relation ##{variant.id}: 'SynthWidget' child_of 'Alpha Project' should be part_of.")
+      expect(response.body).to include("SynthWidget child_of → part_of Alpha Project",
+                                       "Replaces &#39;SynthWidget&#39; child_of &#39;Alpha Project&#39; (##{variant.id})")
+
+      post review_row_apply_path(row.row_uuid), headers: turbo
+      expect(response).to have_http_status(:ok)
+      expect(widget.reload.project_id).to eq(project.id)
+    end
+
     it "previews a suggestion-only orphan row under its top live suggestion, with Apply on the confirm card (1.86.2)" do
       orphan = MemoryEntity.create!(name: "synth-orphan-task", entity_type: "Task")
       gone = MemoryEntity.create!(name: "synth-gone-project", entity_type: "Project")

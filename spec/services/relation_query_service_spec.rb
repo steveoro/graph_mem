@@ -37,6 +37,11 @@ RSpec.describe RelationQueryService do
       expect(plural.pluck(:relation_id)).to contain_exactly(first_relation.id, second_relation.id)
     end
 
+    it "folds case, spaces and hyphens of the filter" do
+      expect(described_class.call(relation_type: "Depends On").pluck(:relation_id)).to eq([ first_relation.id ])
+      expect(described_class.call(relation_types: [ "PART-OF" ]).pluck(:relation_id)).to eq([ second_relation.id ])
+    end
+
     it "rejects missing endpoint entities with canonical guidance" do
       expect {
         described_class.call(from_entity_id: 999_999)

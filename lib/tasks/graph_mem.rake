@@ -18,6 +18,25 @@ namespace :graph_mem do
     end
   end
 
+  desc "Canonicalize stored relation types (R1a; DRY_RUN=1 counts without writing; VERBOSE=1 also lists the changes)"
+  task canonicalize_relations: :environment do
+    dry_run = ENV["DRY_RUN"].to_s.match?(/\A(1|true|yes)\z/i)
+    summary = RelationTypeSweep.call(dry_run: dry_run, actor: "rake:canonicalize_relations", source: "rake")
+    counts = summary[:counts]
+
+    puts "Relation types#{' (dry run: nothing written)' if dry_run}: " +
+         counts.map { |outcome, count| "#{outcome} #{count}" }.join(", ")
+    puts "Report: maintenance report ##{summary[:report_id]}" if summary[:report_id]
+    if ENV["VERBOSE"].present?
+      summary[:changes].each do |change|
+        puts "  ##{change['relation_id']} #{change['action']}: #{change['old_type']} -> #{change['new_type']}" \
+             "#{" (into ##{change['merged_into_id']})" if change['merged_into_id']}" \
+             "#{" (review row #{change['review_row_id']})" if change['review_row_id']}#{" (#{change['error']})" if change['error']}"
+      end
+      puts "  … #{summary[:changes_omitted]} more not listed" if summary[:changes_omitted].to_i.positive?
+    end
+  end
+
   desc "Report MCP tool usage (DAYS=30 by default; DAYS=all for all history)"
   task tool_usage: :environment do
     days = ENV.fetch("DAYS", ToolUsageReport::DEFAULT_WINDOW_DAYS.to_s)

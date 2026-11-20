@@ -104,6 +104,9 @@ class ChangeSetUndo
     end
 
     # Only relation deletes reach here: entity and observation deletes make the set not undoable.
+    # The relation comes back with its stored type as it was (keep_stored_type): canonicalizing it
+    # on the way back would turn the variant a relation_retype apply deleted into a second copy of
+    # the edge that replaced it (R1a).
     def invert_delete(model, row)
       return @conflicts << "Can't re-create a deleted #{row.auditable_type}" unless model == MemoryRelation
 
@@ -111,7 +114,7 @@ class ChangeSetUndo
       problem = relation_restore_problem(attrs)
       return @conflicts << "Can't re-create relation ##{attrs['id']}: #{problem}" if problem
 
-      relation = MemoryRelation.create!(attrs)
+      relation = MemoryRelation.create!(attrs) { |record| record.keep_stored_type = true }
       note_touched(relation)
     end
 
@@ -131,7 +134,7 @@ class ChangeSetUndo
       if MemoryRelation.exists?(attrs.slice("from_entity_id", "to_entity_id", "relation_type"))
         return "the same relation exists again"
       end
-      return "it would create a part_of cycle" if attrs["relation_type"] == "part_of" &&
+      return "it would create a part_of cycle" if MemoryRelation.reads_as_part_of?(attrs["relation_type"]) &&
                                                   RelationSemantics.would_create_cycle?(attrs["from_entity_id"], attrs["to_entity_id"])
 
       nil
@@ -152,7 +155,7 @@ class ChangeSetUndo
       when MemoryEntity then @effects.entity_ids << record.id
       when MemoryObservation then @effects.entity_ids.merge([ record.memory_entity_id, record.memory_entity_id_before_last_save ].compact)
       when MemoryRelation
-        @effects.part_of_entity_ids << record.from_entity_id if record.relation_type == "part_of"
+        @effects.part_of_entity_ids << record.from_entity_id if MemoryRelation.reads_as_part_of?(record.relation_type)
       end
     end
 

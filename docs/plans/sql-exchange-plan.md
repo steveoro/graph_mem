@@ -339,7 +339,7 @@ the merge SQL needs. If a point fails, the template changes, not the design.
 | 1 | `SqlExport` (scope, template v1, writer), `SqlImport::Validator`, `SqlImport::Executor`, both rake tasks (import validated), Cloud toggle `touch: false`, round-trip specs. No UI. |
 | 2 | Import UI (upload, dry-run preview, execute, report), `SqlImportFollowUpJob`, the contradiction-pass hook, the opt-in full maintenance (checkbox and `FULL=1`). |
 | 3 | Export UI and job format choice, SQL as the UI default, sync endpoint `format` (JSON default). |
-| 4 | Docs (`docs/guides/ui-guide.md`, `docs/architecture.md`, new `docs/data_exchange.md` with the format reference and the source machine → target machine recipe), CHANGELOG, release as the next minor after Dream State R1a (expected 1.94.0: 1.92.0 was the contradiction auto-resolve policy, 1.92.1 is mcp 1.11.0, 1.93.0 is R1a; see `dream-state-semantics-plan.md`, "Order and size") (`lib/graph_mem/version.rb` then `bin/rails graph_mem:sync_skill_version`). |
+| 4 | Docs (`docs/guides/ui-guide.md`, `docs/architecture.md`, new `docs/data_exchange.md` with the format reference and the source machine → target machine recipe), CHANGELOG, release as the next minor after Dream State R1a (expected 1.94.0: 1.92.0 was the contradiction auto-resolve policy, 1.93.0 is R1a, 1.93.1 is mcp 1.11.0; see `dream-state-semantics-plan.md`, "Order and size") (`lib/graph_mem/version.rb` then `bin/rails graph_mem:sync_skill_version`). |
 
 PRs 1–3 put their CHANGELOG lines under `## [Unreleased]`. No migration, no new MCP tool, no new
 `OperationProgress` type (`export`/`import` are reused). Docs and CHANGELOG use "source machine" /

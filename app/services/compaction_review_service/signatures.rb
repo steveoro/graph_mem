@@ -104,6 +104,15 @@ class CompactionReviewService
         return nil unless ids.size == 2
 
         [ "contradiction", ids.join("-") ].join("|")
+      when "relation_retype"
+        # One suggestion per relation, operation and target type (R1a; R1b's "add" has no relation
+        # yet: its endpoints stand in for it).
+        operation = payload[:operation].presence || "retype"
+        subject = payload[:relation_id].presence ||
+                  ([ payload[:from_entity_id], payload[:to_entity_id] ].join("-") if payload[:from_entity_id] && payload[:to_entity_id])
+        return nil if subject.blank? || payload[:new_type].blank?
+
+        [ "relation_retype", operation, subject, payload[:new_type] ].join("|")
       when "fact_supersede"
         # Per pair: a dismissal suppresses this fact against this observation only.
         fact_id = payload[:fact_observation_id]
