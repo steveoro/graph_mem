@@ -10,6 +10,40 @@ module ReviewHelper
   # Kinds whose Apply button reads otherwise (an i18n key).
   APPLY_LABELS = { "lifecycle_corruption" => "ui.review.lifecycle_corruption.repair" }.freeze
 
+  # One side of a contradiction with the tokens that differ from the other side in <mark> (1.92.0).
+  # The text is escaped piece by piece (safe_join); a token past the 300-character cut isn't marked.
+  #
+  #   review_diff_text("Port: 3000", [ span ]) # => "Port: <mark>3000</mark>"
+  #
+  # @param text [String, nil] the side's text
+  # @param spans [Array<FactKeywords::TokenDiff::Span>] its differing tokens (offsets in `text`)
+  # @return [ActiveSupport::SafeBuffer]
+  def review_diff_text(text, spans)
+    text = text.to_s
+    shown = text.truncate(ContradictionDetector::REVIEW_CONTENT_LIMIT)
+    cut = shown == text ? text.length : ContradictionDetector::REVIEW_CONTENT_LIMIT - 3
+    position = 0
+    pieces = spans.sort_by(&:offset).each_with_object([]) do |span, parts|
+      next if span.offset < position || span.offset + span.length > cut
+
+      parts << shown[position...span.offset] << tag.mark(shown[span.offset, span.length])
+      position = span.offset + span.length
+    end
+    safe_join(pieces << shown[position..])
+  end
+
+  # The differing tokens of each contradiction side, when few enough to highlight: at most
+  # TokenDiff::HIGHLIGHT_MAX per side, and at least one.
+  #
+  # @param pair [Array<MemoryObservation, nil>] the two sides, live
+  # @return [Array<Array<FactKeywords::TokenDiff::Span>>, nil] [first side's, second side's], or nil
+  def review_diff_spans(pair)
+    return nil unless pair.all?
+
+    found = FactKeywords::TokenDiff.diff(pair.first.content, pair.last.content).values_at(:left, :right)
+    found if found.sum(&:size).positive? && found.all? { |spans| spans.size <= FactKeywords::TokenDiff::HIGHLIGHT_MAX }
+  end
+
   # @param kind [String] a review row kind
   # @return [String] the label of its Apply button ("Repair" for a lifecycle_corruption row)
   def review_apply_label(kind)

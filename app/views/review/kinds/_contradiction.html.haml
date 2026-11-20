@@ -3,13 +3,20 @@
 - sides = MemoryObservation.where(id: ids).includes(:memory_entity).index_by(&:id)
 - pair = ids.map { |id| sides[id] }
 - shared = pair.all? && FactKeywords::Relatedness.computed?(pair) ? FactKeywords::Relatedness.compare(*pair).shared : []
+-# 1.92.0: the tokens that differ between the two sides are marked (a few only), and named in a
+-# visually hidden line so colour isn't the only cue.
+- diff = review_diff_spans(pair)
 %p.review-hint= "Distance #{payload['distance']} · confidence #{payload['confidence']}"
 .review-contradiction{ data: { testid: "contradiction-sides" } }
   - ids.each_with_index do |id, index|
     - observation = sides[id]
     .ui-card.review-contradiction__side{ data: { testid: "contradiction-side-#{index + 1}" } }
       %h4= "##{id} · #{observation&.memory_entity&.name || payload["entity_name_#{index + 1}"]}"
-      %p= (observation&.content || payload["content_#{index + 1}"]).to_s.truncate(300)
+      - if diff
+        %p{ data: { testid: "contradiction-text-#{index + 1}" } }= review_diff_text(observation.content, diff[index])
+        %p.review-sr-only= t("ui.review.contradiction.differs", own: diff[index].map(&:text).join(", ").presence || "—", other: diff[1 - index].map(&:text).join(", ").presence || "—")
+      - else
+        %p= (observation&.content || payload["content_#{index + 1}"]).to_s.truncate(300)
       %p.review-hint= observation ? "#{observation.status} · #{time_ago_in_words(observation.created_at)} old" : "gone"
       = render "review/kinds/keyword_path", observation: observation, shared: shared
       - if observation&.active? && row.pending?
