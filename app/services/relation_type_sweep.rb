@@ -148,6 +148,10 @@ class RelationTypeSweep
     @counts = Hash.new(0)
     @changes = []
     @omitted = 0
+    # (from, to, folded target) => relation id, for each relation planned as "retyped" in this run:
+    # a later variant of the same type on the same endpoints plans as "merged" into it, so a dry
+    # run counts what the real run does (where the first retype has landed by then).
+    @claimed = {}
     @targets = {}
   end
 
@@ -169,25 +173,33 @@ class RelationTypeSweep
 
   private
 
+  # @param claims [Boolean] also count the retypes planned earlier in this run as twins (planning);
+  #   false re-plans from the stored rows only (under the lock, before writing)
   # @return [Plan, nil] nil when the relation is already canonical (byte-identical)
-  def plan_for(relation_id, from_entity_id, to_entity_id, stored_type)
+  def plan_for(relation_id, from_entity_id, to_entity_id, stored_type, claims: true)
     target = @targets.fetch(stored_type) { @targets[stored_type] = self.class.target_type(stored_type) }
     return nil if target.blank? || target == stored_type
 
     plan = Plan.new(relation_id: relation_id, from_entity_id: from_entity_id, to_entity_id: to_entity_id,
                     old_type: stored_type, new_type: target)
-    plan.action = action_for(plan)
+    plan.action = action_for(plan, claims)
+    @claimed[claim_key(plan)] ||= plan.relation_id if claims && plan.action == "retyped"
     plan
   end
 
-  def action_for(plan)
+  def claim_key(plan)
+    [ plan.from_entity_id, plan.to_entity_id, MemoryRelation.fold_relation_type(plan.new_type) ]
+  end
+
+  def action_for(plan, claims)
     return "case_only" if self.class.stored_as?(plan.relation_id, plan.new_type)
-    # A stored part_of (any case) can't canonicalize to another type today: RelationTypeMapping
+    # A stored part_of (as SQL reads it) can't canonicalize to another type today: RelationTypeMapping
     # maps every vocabulary type to itself before any table row, and part_of is no other type's
     # variant. Guarded anyway: retyping it in place would move membership without a sync.
     return "skipped_part_of" if self.class.stored_as?(plan.relation_id, PART_OF)
 
     plan.twin_id = self.class.twin_id(plan.from_entity_id, plan.to_entity_id, plan.new_type, except_id: plan.relation_id)
+    plan.twin_id ||= @claimed[claim_key(plan)] if claims
     return "merged" if plan.twin_id
     return "queue" if self.class.part_of?(plan.new_type)
 
@@ -244,12 +256,14 @@ class RelationTypeSweep
   def write_one(plan, touched)
     ActiveRecord::Base.transaction(requires_new: true) do
       relation = MemoryRelation.lock.find_by(id: plan.relation_id)
-      fresh = relation && plan_for(relation.id, relation.from_entity_id, relation.to_entity_id, relation.relation_type)
+      fresh = relation && plan_for(relation.id, relation.from_entity_id, relation.to_entity_id, relation.relation_type, claims: false)
       if relation.nil?
         entry(plan, "error", error: "deleted during the sweep")
       elsif fresh.nil?
         entry(plan, "unchanged")
-      elsif fresh.action != plan.action || fresh.new_type != plan.new_type
+      elsif fresh.new_type != plan.new_type || !WRITE_ACTIONS.include?(fresh.action)
+        # Still a write to the same type is fine (a retype planned before a sibling variant took the
+        # type on these endpoints is now a merge into it, or the other way round when that one failed).
         entry(plan, "error", error: "changed during the sweep; left for the next one")
       else
         write!(relation, fresh, touched)
@@ -270,7 +284,6 @@ class RelationTypeSweep
     twin = MemoryRelation.lock.find(plan.twin_id)
     twin.assign_attributes(weight: higher(twin.weight, relation.weight), confidence: higher(twin.confidence, relation.confidence),
                            properties: merged_properties(twin, relation))
-    twin.keep_stored_type = true # its own type is fixed when the cursor reaches it
     twin.save! if twin.changed?
     Current.set(deletion_reason: "relation type canonicalized: merged into ##{twin.id}") { relation.destroy! }
     touched.merge([ relation.from_entity_id, relation.to_entity_id ])

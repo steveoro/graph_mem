@@ -182,6 +182,46 @@ RSpec.describe RelationTypeSweep do
     end
   end
 
+  describe "several variants of one type on the same endpoints, no canonical row yet" do
+    def variants(*types) = types.map { |type| stored_relation(service, widget, type, weight: 0.1 * types.index(type)) }
+
+    it "retypes the first and merges the next into it, and the dry run counts the same" do
+      first, second = variants("Has Many", "has-many")
+
+      dry = described_class.call(dry_run: true)
+      real = described_class.call
+
+      expect(real[:counts]).to eq(dry[:counts])
+      expect(real[:counts]).to include("retyped" => 1, "merged" => 1, "error" => 0)
+      expect(real[:changes]).to eq(dry[:changes])
+      expect(real[:changes].last).to include("relation_id" => second.id, "action" => "merged", "merged_into_id" => first.id)
+      expect(MemoryRelation.where(from_entity_id: service.id).pluck(:id, :relation_type)).to eq([ [ first.id, "has_many" ] ])
+    end
+
+    it "merges every later variant into the first, three of them" do
+      first, = variants("Has Many", "has-many", "HAS  many")
+
+      dry = described_class.call(dry_run: true)
+      real = described_class.call
+
+      expect(real[:counts]).to eq(dry[:counts])
+      expect(real[:counts]).to include("retyped" => 1, "merged" => 2, "error" => 0)
+      expect(real[:changes].drop(1).map { |change| change["merged_into_id"] }).to eq([ first.id, first.id ])
+    end
+
+    it "counts the same when the pair is split across two batches" do
+      stub_const("RelationTypeSweep::BATCH_SIZE", 1)
+      first, = variants("Has Many", "has-many")
+
+      dry = described_class.call(dry_run: true)
+      real = described_class.call
+
+      expect(real[:counts]).to eq(dry[:counts])
+      expect(real[:counts]).to include("scanned" => 2, "retyped" => 1, "merged" => 1, "error" => 0)
+      expect(real[:changes].last["merged_into_id"]).to eq(first.id)
+    end
+  end
+
   it "is idempotent: a second run changes nothing" do
     stored_relation(service, widget, "requires")
     stored_relation(widget, service, "Has-Many")
