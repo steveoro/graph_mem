@@ -67,7 +67,7 @@ en:
       none_running: "Nothing running."
       none_recent: "No finished jobs yet."
       compaction: "Dream-state compaction: %{state}"
-      controls: "Compactor, garbage collection and scans: Maintenance"
+      controls: "Compactor, garbage collection and scans: Background jobs"
       all_jobs: "All jobs"
     activity:
       title: "Recent activity"
