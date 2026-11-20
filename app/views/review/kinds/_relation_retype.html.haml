@@ -1,0 +1,15 @@
+-# A relation_retype row (R1a): a stored variant whose canonical type is part_of. The relation is read
+-# live; what Apply does is the effects card under it (CompactionReviewApplier::RelationRetype).
+- scope = "ui.review.relation_retype"
+- relation = MemoryRelation.find_by(id: payload["relation_id"].to_i)
+- names = MemoryEntity.where(id: [ payload["from_entity_id"], payload["to_entity_id"] ].compact.map(&:to_i)).pluck(:id, :name).to_h
+%p{ data: { testid: "relation-retype-summary" } }= t("#{scope}.summary", id: payload["relation_id"], old_type: payload["old_type"],
+  new_type: payload["new_type"], from: names[payload["from_entity_id"].to_i] || payload["from_name"],
+  to: names[payload["to_entity_id"].to_i] || payload["to_name"])
+- if relation.nil?
+  %p.review-warning= t("#{scope}.gone")
+- elsif relation.relation_type != payload["old_type"]
+  %p.review-hint= t("#{scope}.now", type: relation.relation_type)
+%p.review-hint= t("#{scope}.membership", new_type: payload["new_type"])
+- if payload["operation"].present? && payload["operation"] != "retype"
+  %p.review-warning= t("#{scope}.operation", operation: payload["operation"])

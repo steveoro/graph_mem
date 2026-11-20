@@ -16,8 +16,10 @@ class ReviewRowClassifier
   include Anchors
 
   # Applied one by one only: never bulk-, group- or policy-applied.
+  # relation_retype (R1a): its apply creates a part_of, a membership move, so no bulk, group or
+  # policy apply ever touches it.
   DESTRUCTIVE_KINDS = %w[entity_merge delete_entity delete_relation delete_observation reparent_entity
-                         move_observation].freeze
+                         move_observation relation_retype].freeze
   # The only kinds bulk apply, group apply and auto-apply policies may touch.
   SAFE_BULK_KINDS = %w[relationship_proposal stale_memory].freeze
   # Apply needs a per-row choice (which observation to keep; supersede or retire); dismiss and
@@ -34,11 +36,11 @@ class ReviewRowClassifier
   # §2.5.1: how much acting on a kind changes the graph (0-1) and fixed confidences.
   IMPACT = Hash.new(0.5).merge(
     "relationship_proposal" => 0.3, "entity_merge" => 0.8, "orphan_parent" => 0.5, "stale_memory" => 0.6,
-    "contradiction" => 0.6, "fact_supersede" => 0.6, "relation_integrity" => 0.4,
+    "contradiction" => 0.6, "fact_supersede" => 0.6, "relation_integrity" => 0.4, "relation_retype" => 0.6,
     **ERROR_KINDS.index_with(0.7), **SCAN_KINDS.index_with(0.6)
   ).freeze
   CONFIDENCE = {
-    "relation_integrity" => 0.9, **ERROR_KINDS.index_with(1.0), **SCAN_KINDS.index_with(0.7)
+    "relation_integrity" => 0.9, "relation_retype" => 0.9, **ERROR_KINDS.index_with(1.0), **SCAN_KINDS.index_with(0.7)
   }.freeze
   BAND_CONFIDENCE = { "high" => 0.9, "medium" => 0.6, "low" => 0.3 }.freeze
   # A relationship score nudges the band's confidence by at most ±BAND_NUDGE (never across bands).
