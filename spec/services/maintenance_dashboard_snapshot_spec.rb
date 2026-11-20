@@ -12,8 +12,9 @@ RSpec.describe MaintenanceDashboardSnapshot do
       result = described_class.call
 
       expect(result.keys).to contain_exactly(:refreshed_at, :compaction, :graph_stats, :latest_reports, :schedules, :cursor_entity, :operations,
-                                             :scheduled_run, :active)
+                                             :scheduled_run, :relation_types, :active)
       expect(result[:active]).to be(false)
+      expect(result[:relation_types]).to eq(operation: nil, report: nil, unmapped_count: 0)
       expect(described_class.cards.keys).to eq(result.keys - [ :graph_stats ])
       expect(result[:scheduled_run]).to include(state: :idle, run: nil, latest_audit: nil)
       expect(result[:graph_stats][:totals][:entities]).to be >= 1

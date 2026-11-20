@@ -1,0 +1,26 @@
+- scope = "system.relation_types"
+- counts = @summary[:counts]
+- changes = counts.values_at("case_only", "retyped", "merged", "queued").sum(&:to_i)
+- content_for :title, t("#{scope}.sweep.title")
+- content_for :page_header do
+  = ui_page_header(t("#{scope}.sweep.title"), subtitle: t("#{scope}.sweep.subtitle")) do
+    = link_to t("#{scope}.sweep.back"), system_jobs_path, class: "ui-btn", data: { testid: "relation-types-back" }
+
+.system-page{ data: { testid: "relation-types-preview" } }
+  .ui-card
+    %p.system-hint= t("#{scope}.sweep.explain")
+    .system-stats{ data: { testid: "relation-types-dry-run" } }
+      - (%w[scanned] + RelationTypeSweep::OUTCOMES).each do |key|
+        %div{ data: { testid: "dry-run-#{key}" } }
+          = dashboard_stat_chip(t("#{scope}.counts.#{key}"), number_with_delimiter(counts[key].to_i))
+    %p.system-hint= t("#{scope}.sweep.omitted")
+
+    .system-actions
+      - if @busy
+        .system-warning{ data: { testid: "relation-types-busy" } }= t("#{scope}.sweep.#{@busy}")
+      - elsif changes.zero?
+        %p.system-hint{ data: { testid: "relation-types-nothing" } }= t("#{scope}.sweep.nothing")
+      - else
+        = button_to t("#{scope}.sweep.confirm"), system_relation_types_sweep_path, method: :post, class: "ui-btn ui-btn-primary",
+          data: { testid: "btn-relation-types-confirm", turbo_confirm: t("#{scope}.sweep.confirm_prompt") }
+      = link_to t("#{scope}.index.title"), system_relation_types_path, class: "ui-btn"

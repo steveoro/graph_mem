@@ -1,0 +1,52 @@
+- scope = "system.relation_types"
+- data = @report.data.to_h
+- counts = data["counts"].to_h
+- at = ->(iso) { iso.present? ? l(Time.zone.parse(iso.to_s), format: :short) : t("#{scope}.report.unfinished") }
+- entity = ->(id) { id ? link_to(@names[id] || "##{id}", explore_path(entity_id: id), class: "system-link") : "—" }
+- content_for :title, t("#{scope}.report.title", id: @report.id)
+- content_for :page_header do
+  = ui_page_header(t("#{scope}.report.title", id: @report.id), subtitle: t("#{scope}.report.subtitle")) do
+    = link_to t("#{scope}.sweep.back"), system_jobs_path, class: "ui-btn", data: { testid: "relation-types-back" }
+
+.system-page{ data: { testid: "relation-types-report" } }
+  %p.system-hint{ data: { testid: "relation-types-report-meta" } }
+    = t("#{scope}.report.meta", started: at.call(data["started_at"]), finished: at.call(data["finished_at"]),
+      actor: data["actor"].presence || "—", source: data["source"].presence || "—")
+  .system-stats
+    - (%w[scanned] + RelationTypeSweep::OUTCOMES).each do |key|
+      = dashboard_stat_chip(t("#{scope}.counts.#{key}"), number_with_delimiter(counts[key].to_i))
+
+  - if @changes.empty?
+    %p.system-hint{ data: { testid: "relation-types-report-empty" } }= t("#{scope}.report.empty")
+  - else
+    .system-table-wrap
+      %table.system-table{ data: { testid: "relation-types-changes" } }
+        %thead
+          %tr
+            - %w[relation action types edge merged_into review_row error].each do |column|
+              %th{ scope: "col" }= t("#{scope}.report.columns.#{column}")
+        %tbody
+          - @changes.each do |change|
+            %tr{ data: { testid: "relation-types-change" } }
+              %td.system-mono= "##{change['relation_id']}"
+              %td= t("#{scope}.counts.#{change['action']}", default: change["action"].to_s.humanize)
+              %td.system-mono= "#{change['old_type']} → #{change['new_type']}"
+              %td
+                = entity.call(change["from_entity_id"])
+                = "→"
+                = entity.call(change["to_entity_id"])
+              %td.system-mono= change["merged_into_id"] ? "##{change['merged_into_id']}" : "—"
+              %td
+                - if change["review_row_id"].present?
+                  = link_to t("#{scope}.report.review_row"), review_row_path(change["review_row_id"]), class: "system-link"
+                - elsif change.key?("review_row_id")
+                  = t("#{scope}.report.dismissed")
+                - else
+                  = "—"
+              %td= change["error"].presence || "—"
+    .system-pagination
+      = paginate @changes
+
+  - if data["changes_omitted"].to_i.positive?
+    %p.system-hint{ data: { testid: "relation-types-report-omitted" } }
+      = t("#{scope}.report.omitted", count: data["changes_omitted"].to_i, max: RelationTypeSweep::MAX_REPORTED_CHANGES)

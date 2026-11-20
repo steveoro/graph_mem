@@ -14,7 +14,7 @@ en:
       api_docs: "API docs"
     jobs:
       title: "Background jobs"
-      subtitle: "Every scheduled job on demand, the dream-state compactor, the garbage collector and relation repair."
+      subtitle: "Every scheduled job on demand, the dream-state compactor, the garbage collector, relation repair and relation types."
       totals: "The graph: %{entities} entities, %{observations} observations, %{relations} relations, %{orphans} orphans."
       queue_link: "Open the queue (Mission Control)"
       progress: "%{label}: %{done} of %{total} (%{percent}%)"

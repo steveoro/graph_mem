@@ -1,0 +1,43 @@
+-# Relation types (R1a): the sweep's last run (its bar while it runs, refreshed with the page), the
+-# newest sweep report of any source, and the unmapped types. locals: data (MaintenanceDashboardSnapshot#relation_types_snapshot)
+- scope = "system.relation_types"
+- operation = data[:operation]
+- report = data[:report]
+- at = ->(iso) { iso.present? ? l(Time.zone.parse(iso.to_s), format: :short) : "—" }
+.ui-card.system-card--state{ data: { testid: "relation-types-card" } }
+  .system-card__header
+    %h2.system-card__title= t("#{scope}.card.title")
+    - if operation
+      = dashboard_status_badge(operation[:status])
+    %span.system-hint= t("#{scope}.card.hint")
+  .system-card__body
+    - if operation && operation[:status] == "running"
+      = render "system/jobs/progress", testid: "relation-types-progress", percent: operation[:percentage],
+        label: t("system.jobs.progress", label: operation[:phase].to_s.humanize, done: number_with_delimiter(operation[:current]),
+          total: number_with_delimiter(operation[:total]), percent: operation[:percentage].to_f.round)
+    - elsif operation && operation[:status] == "failed"
+      .system-warning.system-error{ data: { testid: "relation-types-error" } }
+        %strong= "#{operation[:error_class] || 'Error'}:"
+        = operation[:error]
+    - if report
+      - counts = report[:counts].to_h
+      %p.system-hint{ data: { testid: "relation-types-last-run" } }
+        - if report[:finished_at].present?
+          = t("#{scope}.card.last_run", time: at.call(report[:finished_at]), actor: report[:actor].presence || "—", source: report[:source].presence || "—")
+        - else
+          = t("#{scope}.card.running_since", time: at.call(report[:started_at]), actor: report[:actor].presence || "—", source: report[:source].presence || "—")
+      .system-stats
+        - %w[scanned retyped case_only merged queued error].each do |key|
+          = dashboard_stat_chip(t("#{scope}.counts.#{key}"), number_with_delimiter(counts[key].to_i))
+    - else
+      %p.system-hint{ data: { testid: "relation-types-last-run" } }= t("#{scope}.card.never_run")
+    %p.system-hint{ data: { testid: "relation-types-unmapped" } }= t("#{scope}.card.unmapped", count: data[:unmapped_count])
+
+  .system-actions
+    = link_to t("#{scope}.sweep.button"), system_relation_types_sweep_path, class: "ui-btn ui-btn-primary",
+      data: { testid: "btn-relation-types-sweep", turbo_prefetch: false }
+    = link_to t("#{scope}.card.unmapped_link", count: data[:unmapped_count]), system_relation_types_path, class: "ui-btn",
+      data: { testid: "relation-types-unmapped-link" }
+    - if report
+      = link_to t("#{scope}.card.view_report", count: report[:changes]), system_relation_types_report_path(report[:id]), class: "ui-btn",
+        data: { testid: "relation-types-report-link" }

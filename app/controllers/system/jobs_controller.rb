@@ -3,7 +3,7 @@
 module System
   # Background jobs (UI-7, moved from Projects & Data): the scheduled-jobs switch (1.81.0), the
   # dream-state compactor, garbage collector and relation-repair cards, and their controls. Each
-  # control redirects back here.
+  # control redirects back here. The Relation types card (R1a) links to System::RelationTypesController.
   class JobsController < BaseController
     self.nav_section = :jobs
 

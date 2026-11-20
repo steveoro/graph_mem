@@ -111,6 +111,24 @@ RSpec.describe GraphWriteService do
         .to contain_exactly("has_many", "synth_link_kind")
     end
 
+    # R1a: the operator's "Accept" on the unmapped types page is a self-mapping row.
+    it "stops hinting for a relation type the operator accepted" do
+      service = MemoryEntity.create!(name: "SynthService", entity_type: "Class")
+      widget = MemoryEntity.create!(name: "SynthWidget", entity_type: "Class")
+      gadget = MemoryEntity.create!(name: "SynthGadget", entity_type: "Class")
+      write = ->(to) { described_class.call(operations: [ { type: "create_relation", from_entity_id: service.id, to_entity_id: to.id, relation_type: "Replacez" } ]) }
+      RelationTypeMapping.reset_canonicalize_cache!
+
+      expect(write.call(widget).dig(:results, 0, :result, :type_hint)).to eq(submitted: "replacez", suggested: "replaces")
+      expect(RelationTypeDecision.accept("Replacez")).to have_attributes(ok: true, key: :accepted)
+      result = write.call(gadget)
+
+      expect(result.dig(:results, 0, :result, :relation_type)).to eq("replacez")
+      expect(result.dig(:results, 0, :result)).not_to have_key(:type_hint)
+    ensure
+      RelationTypeMapping.reset_canonicalize_cache!
+    end
+
     it "canonicalizes entity types before duplicate probing" do
       existing = MemoryEntity.create!(name: "Mapped project", entity_type: "Project")
       EntityTypeMapping.create!(canonical_type: "Project", variant: "workspace")

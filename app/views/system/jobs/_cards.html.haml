@@ -8,3 +8,4 @@
     schedules: snapshot[:schedules], latest_reports: snapshot[:latest_reports]
   = render "system/jobs/garbage_collector_card", latest_reports: snapshot[:latest_reports], schedules: snapshot[:schedules],
     operation: snapshot.dig(:operations, :garbage_collection)
+  = render "system/jobs/relation_types_card", data: snapshot[:relation_types]
