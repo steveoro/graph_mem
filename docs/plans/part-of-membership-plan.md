@@ -1,6 +1,6 @@
 # Plan: every `part_of` writer keeps membership in step
 
-> Status: proposed for Steve, not started. Written against `claude/part-of-membership-followup` at
+> Status: not started. Steve answered questions 1, 2 and 5 on 2026-11-20 (see "Answers" at the end). Written against `claude/part-of-membership-followup` at
 > 9c02208 (1.93.0 plus PR #189). Every gap below was read in the code on that commit; the ones marked
 > *probed* were also reproduced on a synthetic graph in the test database.
 
@@ -77,21 +77,29 @@ syncs each child, then destroys the node, all inside the lock and one transactio
 children parentless on purpose; it is silent about `project_id`, and the intent there is "not
 deleted", not "kept in the project".
 
-**Intended behaviour:** the children become global (with their subtrees), as `delete_node` does
-today; a name already taken at global scope refuses the delete with nothing changed.
+**Intended behaviour (Steve, 2026-11-20):** the children move **one level up, under the deleted
+entity's own parent**, with their subtrees. They stay in the same project, so no name can collide.
+Only when the deleted entity had no parent do they become global, and then a name already taken
+at global scope refuses the delete with nothing changed. This changes `delete_node` too: today it
+makes the children global even when the deleted entity had a parent.
 
 **Fix:** one helper used by all four, e.g. `RelationMembershipWrite.destroy_entity!(entity, reason:)`
-(lock if the entity has `part_of` children; in one transaction: note the children, destroy the
-entity, sync each child), and `delete_node`'s non-cascade branch moved onto it. The REST destroy
+(lock if the entity has `part_of` children; in one transaction: note the children and the
+entity's parent, destroy the entity, then give each child a `part_of` edge to that parent through
+the validating create path, or none when there was no parent, and sync each child), and
+`delete_node`'s non-cascade branch moved onto it. The new edges and the deleted ones are in the
+same change set, so undo puts the entity back between them. The previews (`graph_delete` dry run,
+the review row, the data-exchange dialog) say where the children go. The REST destroy
 gains the lock; `graph_delete` and the review apply are already under it (the lock is reentrant).
 A collision answers each path's existing error: REST 422 (DELETE on `memory_entities` documents
 `204` and `404` only, so this adds a documented `422`, like PR #189 did for relations),
 `graph_delete` its validation `OperationFailed` (`GraphDeleteService.membership_collision_error`
-exists), the review row its failure reason. **Size:** about 60 lines of code, 120 of specs.
+exists), the review row its failure reason. **Size:** about 90 lines of code, 160 of specs.
 
 **Spec:** Project ← mid ← leaf (leaf under mid, mid under the Project); delete mid through each of
-the four paths; leaf's `project_id` becomes NULL; with a global entity named like the leaf, each
-path refuses and nothing is deleted.
+the four paths; leaf is then `part_of` the Project and keeps its `project_id`; undo restores mid
+between them. A second case with mid parentless: leaf's `project_id` becomes NULL, and with a
+global entity named like the leaf each path refuses and nothing is deleted.
 
 ### 2. Entity merge can leave the target with two parents (changed: a real gap, but not the one described)
 
@@ -108,6 +116,14 @@ it gains the source's and is not synced (its project stays NULL while its path r
 reading, not probed). Reached from MCP `graph_delete` `merge_entities`, Explore's merge, REST
 `POST /api/v1/memory_entities/:id/merge_into/:target_id`, data exchange `merge_node`, a review
 `entity_merge` row, the redo of an undone merge, and dream-state auto-merge (nightly, unattended).
+
+**The rule (Steve, 2026-11-20), for operator and agent merges alike:** the target keeps its own
+relationships, and everything that hung on the source moves to the target, all of it. That is
+already what the code does for the source's children (`reassign_incoming_relations!` re-points
+each `part_of` child to the target and syncs it; checked on 2026-11-20) and for the target's own
+edges. The one place it breaks is the source's own parent edge, below. PR 1 adds a spec that pins
+the whole rule: every child of the source ends under the target, in the target's project, and no
+relation of the target is lost.
 
 **Fix:** in `reassign_outgoing_relations!`, a source edge that reads as `part_of` is dropped when the
 target already has a parent (the target keeps its own; the dropped edge is in the merge snapshot,
@@ -277,12 +293,18 @@ counts). Checked on a synthetic graph with one case of each kind: it reported 1,
 
 ## Open questions for Steve
 
-1. **Children of a deleted entity:** global (as `delete_node` does), or under the deleted entity's
-   own parent (one level up)? This plan assumes global.
-2. **Merging two entities with different parents:** the target keeps its own parent (this plan),
-   or the merge is refused until one is moved?
 3. **Release:** under `[Unreleased]` with PR #189, or a patch release of its own?
 4. **The guard:** is a per-example invariant check acceptable for suite time, or only on the
    request, service and strategy specs?
-5. **Existing drift:** run the backfill once after PR 1 (the drift count first), or leave existing
-   rows to the operator?
+6. **How the backfill runs by itself** (answer 5 below): a one-time job queued by the first boot
+   of the new version (it needs a marker, for example an `AppSettings` key), or a data migration.
+   A migration is the simpler and more usual place, but it is a migration, which the kickoffs
+   treat as a stop; say which.
+
+## Answers (Steve, 2026-11-20)
+
+1. **Children of a deleted entity** move under the deleted entity's parent (item 1).
+2. **Merging:** the target keeps its relationships and all of the source's children move to the
+   target, for agent-initiated merges too (item 2). The current code was checked against this.
+5. **Existing drift:** the backfill runs automatically after PR 1. PR 1 records the drift count
+   before and after in its run output.
