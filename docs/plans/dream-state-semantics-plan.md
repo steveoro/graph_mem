@@ -1,8 +1,8 @@
 # Plan: Dream State as knowledge traversal (relations first)
 
-> Status: draft, 2026-11-20, written on `main` at 1.92.0. Not started. Revised the same day after
-> Steve's answers and two review rounds (see "Answers" at the end). No code in this PR. Each PR
-> below gets its own kickoff.
+> Status: draft, 2026-11-20, written on `main` at 1.92.0. Revised the same day after Steve's
+> answers and two review rounds (see "Answers" at the end). **R1a shipped as 1.93.0** (see its
+> "As built" note); R1b onward is not started. Each PR below gets its own kickoff.
 
 ## Context
 
@@ -106,9 +106,9 @@ The versions, as expected today (each kickoff confirms its own against `version.
 
 | PR | What | When | Version |
 |---|---|---|---|
-| mcp 1.11.0 | (its own plan) | next | 1.92.1 |
-| **R1a** | Relation vocabulary: mapping fallback, normalize on write, the sweep, the unmapped-types page | right after mcp 1.11.0 | 1.93.0 |
-| SQL exchange | (its own plan, four PRs) | after R1a | 1.94.0 |
+| **R1a** | Relation vocabulary: mapping fallback, normalize on write, the sweep, the unmapped-types page | first (shipped) | 1.93.0 |
+| mcp 1.11.0 | (its own plan) | after R1a | 1.93.1 |
+| SQL exchange | (its own plan, four PRs) | after mcp 1.11.0 | 1.94.0 |
 | **R1b** | Retype library `part_of` edges, the orphan rule, the exports, dream-state actor on its edges | after the SQL exchange train | 1.95.0 |
 | **R1c** | Removal-style evidence rows | with or right after R1b | with R1b, or 1.95.1 |
 | **R2** | Relation lifecycle | after R1 | 1.96.0 |
@@ -132,8 +132,9 @@ Dependencies between the plans:
   it. Scan-written `Project depends_on Project` edges already hit this today. So R1b also changes
   both exports and their imports, the same way: the tree is `part_of` only, and an export of a
   Project additionally follows its outgoing `depends_on` edges one hop (the libraries, without
-  their own dependents). `docs/dream_state.md` describes `depends_on` as running "from children to
-  parents" in the tree walk; that sentence is corrected in the same PR.
+  their own dependents). `docs/dream_state.md` described `depends_on` as running "from children to
+  parents" in the tree walk; the dream-state tree walk follows `part_of` only (R1a corrected that
+  sentence), so what R1b changes is the two exports.
 - R2 changes `memory_relations`, so it bumps the SQL exchange script format version.
 
 ## R1a. Relation vocabulary (no migration; one stored-value change, approved)
@@ -155,7 +156,7 @@ Dependencies between the plans:
    - **Callers:** a new dream-state phase `relation_types` that runs first (its own cursor over
      relation ids, the compactor's pause checks, 200 relations per batch); `bin/rails
      graph_mem:canonicalize_relations` with `DRY_RUN=1`; and a "Canonicalize relation types" button
-     on System › Maintenance that shows the dry-run counts first and then queues the job.
+     on System › Background jobs that shows the dry-run counts first and then queues the job.
    - **Per relation**, the canonical type is computed, then:
      - *same type*: nothing;
      - *differs by case only*: a plain update. The unique key (from, to, type) compares
@@ -176,7 +177,7 @@ Dependencies between the plans:
      generic undo: a restored variant would be canonicalized again on save, and a merged row would
      collide with its twin. Instead the run report lists every change (relation id, old type, new
      type, merged-into id), which is enough to reverse one by hand.
-4. **The unmapped types go to the operator.** A page under System › Maintenance lists each type
+4. **The unmapped types go to the operator.** A page under System › Background jobs lists each type
    that is neither canonical nor mapped, with its use count and two example edges (names shown to
    the operator only), and two actions: **map** it to a canonical type (a row in
    `relation_type_mappings`; the next sweep retypes its relations) or **accept** it (kept as a
@@ -193,7 +194,41 @@ Dependencies between the plans:
    or `depends_on`" parent, which the code never did: `part_of` only), `docs/mcp_tools.md`
    (normalized types), `docs/architecture.md`.
 
-**Done when** (re-measured on production after the first sweep, counts only):
+**As built (1.93.0).** What differs from the list above:
+
+- **Where the UI is.** The Maintenance hub no longer exists (gone since 1.62.0): the card ("Relation
+  types") and the unmapped-types page are under System › Background jobs, at
+  `/system/jobs/relation_types`. The page also lists the mapping table with **Remove**, which the
+  list above didn't have.
+- **Order.** R1a shipped before mcp 1.11.0, so the mcp bump is 1.93.1 (the version table is
+  updated; the SQL exchange stays 1.94.0, R1b 1.95.0, R2 1.96.0).
+- **No seed.** The relation seed file was removed and `db/seeds.rb` keeps only the entity type
+  seed; installs seeded earlier keep their rows (they still win over the code's mapping).
+- **Properties of a merged variant.** The twin keeps its own `properties`. With none of its own it
+  takes the variant's; otherwise the variant's are kept on the twin under `merged_from` (one entry
+  per merged variant: relation id, stored type, properties).
+- **Canonicalize only when the type is set.** The save callback runs on a create and on an update
+  that changes the type, not on every save, so an entity merge re-pointing an edge, or its undo,
+  keeps the stored spelling and can't turn a variant into `part_of` behind the create-time checks.
+  An undo that re-inserts a deleted relation restores its stored type as it was.
+- **The sweep's outcomes.** Besides the five in the list, a run counts `already_queued`,
+  `skipped_part_of` and `error`; a variant that canonicalizes to `part_of` and has a `part_of` twin
+  is merged into it (the edge exists, membership doesn't change) rather than queued.
+- **REST membership fixes.** `POST /api/v1/bulk` and `POST`/`PATCH /api/v1/memory_relations`
+  take the membership lock and sync the child's project when a relation is, becomes or stops being
+  `part_of`, refusing with the existing 422. `DELETE` of a `part_of` relation through the REST API
+  still doesn't sync membership (known follow-up).
+- **Docs corrected.** `docs/dream_state.md` now says an orphan has no `part_of` parent (the
+  `depends_on` clause was never in the code) and that the tree walk follows `part_of` children
+  down from the Project roots.
+- **Not changed:** tool counts (12 / 9 / 22), parameters and schemas. `relation_retype` appears in
+  `list_maintenance_review` and `apply_maintenance_review`; its payload keys are `operation`
+  (`"retype"`), `relation_id`, `from_entity_id`, `from_name`, `to_entity_id`, `to_name`, `old_type`,
+  `new_type`, `reason`.
+
+**Done when** (re-measured on production after the first sweep, counts only; **not done yet**: the
+re-measurement waits for the release to be deployed and the first sweep to run, so the table below
+still shows the targets only):
 
 | Measure | Before | Target |
 |---|---|---|
@@ -329,7 +364,7 @@ current rules sit near 25%).
    traversal results don't carry an outdated library, so **if "just used by" means the library
    moves to global scope, do that**. A library used by two projects is one node both depend on.
 2. Canonicalize relation types on every write path, and give the operator a way to run it over the
-   whole graph (the rake task and the Maintenance button).
+   whole graph (the rake task and the Background jobs button).
 3. The dependency-like type list starts from the types in the graph and is editable in Settings.
 4. R1 is one piece of work, shipped as separate PRs: the vocabulary part first, right after mcp
    1.11.0; the retyping after the SQL exchange train.

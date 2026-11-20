@@ -140,6 +140,7 @@ use the tools above (`graph_write`, `graph_edit` and `graph_delete` take them as
 
 A background **dream-state** job (`DreamStateCompactionJob`, scheduled via Solid Queue `recurring.yml`) periodically compacts the knowledge graph:
 
+- **Relation-types phase** -- canonicalizes the stored relation types (`Has Many` → `has_many`); a variant of `part_of` is queued for review, never written
 - **Orphan phase** -- attaches high-confidence orphan nodes to matching `Project` roots
 - **Tree-walk phase** -- deduplicates identical observations and auto-merges very similar entities (cosine distance &lt; 0.10)
 - **Review queue** -- lower-confidence merges and orphan matches are written to `maintenance_reports` (`compaction_review`), readable via `get_maintenance_reports`

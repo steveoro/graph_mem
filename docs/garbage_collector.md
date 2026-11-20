@@ -45,7 +45,7 @@ An entity is flagged as an **orphan** when **all** of the following are true:
 - It does not appear as `from_entity_id` in any relation
 - It does not appear as `to_entity_id` in any relation
 
-This definition is stricter than the dream-state "orphan" concept (see [dream_state.md](dream_state.md)). A node linked into the graph via `part_of` or `depends_on` but carrying no observations is **not** reported here.
+This definition is stricter than the dream-state "orphan" concept (see [dream_state.md](dream_state.md)). A node with a `part_of` parent or any other relation but carrying no observations is **not** reported here.
 
 The report stores:
 
@@ -130,7 +130,7 @@ Valid report types today: `orphans`, `duplicates`, `compaction_review`, `embeddi
 |---|---|---|
 | **Goal** | Diagnose hygiene issues | Actively compact the graph |
 | **Mutates graph?** | Yes (duplicate observations + counters) | Yes — parents orphans, dedupes observations, auto-merges entities |
-| **Orphan definition** | No observations **and** no relations | No incoming `part_of`/`depends_on` (non-Project) |
+| **Orphan definition** | No observations **and** no relations | No `part_of` parent (non-Project) |
 | **Duplicate observations** | Deletes duplicates, keeps lowest id | Deletes byte-identical duplicates |
 | **Schedule (production)** | 2:00 PM GMT daily | 3:00 AM GMT daily |
 | **MCP status tool** | — | `dream_state_status` |

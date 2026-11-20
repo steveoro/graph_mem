@@ -167,6 +167,10 @@ Query parameters:
 - `PATCH /api/v1/memory_relations/:id` with `{ "memory_relation": { "relation_type": "depends_on" } }`
 - `DELETE /api/v1/memory_relations/:id` -- `204 No Content`
 
+`relation_type` is normalized when it is set (create, or an update that changes it): `"Has Many"` is stored as `has_many`, a known synonym as its canonical type, and an unmapped type in lower snake case. The response shows the stored type. An update that leaves the type alone keeps the stored spelling.
+
+Since 1.93.0, a create or a type change that makes a relation `part_of`, or stops it being one, takes the membership lock and syncs the child's project in the same transaction. A `part_of` that would give the child a second parent or create a cycle, a name already taken in the new project, or a lock that stays busy is refused with the usual `422` and nothing is saved. `DELETE` of a `part_of` relation does not sync membership yet (known follow-up).
+
 ---
 
 ## Context
@@ -279,7 +283,7 @@ When LLM summarization is disabled or unavailable, `generation_mode` is `determi
 
 `POST /api/v1/bulk`
 
-Atomic transaction supporting up to 50 total operations. Rolls back entirely on any error.
+Atomic transaction supporting up to 50 total operations. Rolls back entirely on any error. Relation types are normalized as above. Since 1.93.0, a batch with a `part_of` relation takes the membership lock first and syncs each child's project; a refusal (second parent, cycle, name taken, busy lock) rolls the whole batch back with the usual `422`.
 
 ```json
 {
