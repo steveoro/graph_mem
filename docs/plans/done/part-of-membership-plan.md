@@ -1,12 +1,15 @@
 # Plan: every `part_of` writer keeps membership in step
 
-> Status: **PR 1 shipped in 1.93.1** (items 1, 2 and 3, the guard, and the scan, import and backfill
-> rules added along the way: see "As built" below). **PR 2 is not started** (1.93.2; its scope is under
-> "Order and size"). Steve answered questions 1, 2 and 5 on 2026-11-20 and the rest on 2026-11-24 (see
+**✅ DONE:** PR 1 shipped as **1.93.1**, PR 2 as **1.93.2**.
+
+> Status: **complete.** PR 1 shipped in 1.93.1 (items 1, 2 and 3, the guard, and the scan, import and
+> backfill rules added along the way: see "As built (PR 1)" below). PR 2 shipped in 1.93.2 (items 4, 6
+> and 7, the comment for item 5, the dream-state lock order and the integrity sweep: see "PR 2 as
+> built"). Steve answered questions 1, 2 and 5 on 2026-11-20 and the rest on 2026-11-24 (see
 > "Answers" at the end). Written against `claude/part-of-membership-followup` at
 > 9c02208 (1.93.0 plus PR #189). Every gap below was read in the code on that commit; the ones marked
 > *probed* were also reproduced on a synthetic graph in the test database. The gap sections below
-> describe the code before PR 1, not as it is now.
+> describe the code before PR 1 (items 4, 6 and 7: before PR 2), not as it is now.
 
 ## Context
 
@@ -160,7 +163,7 @@ exactly the graphs that are already inconsistent.
 child's project on the second; the button's call keeps the first, deletes the second and the child
 moves to the first parent's project; with a name taken there, nothing is deleted.
 
-### 4. Project scan validation deletes a wrong-root `part_of` without a sync (verified; PR 2)
+### 4. Project scan validation deletes a wrong-root `part_of` without a sync (verified; fixed in 1.93.2)
 
 `ProjectScanValidator#validate_entity_relations` deletes a `part_of` from an entity of the scanned
 project to another Project root (`wrong_part_of_to_project_root?`) through `#delete_relation`: no
@@ -184,7 +187,7 @@ handles is found or created with `project_id: @root.id` (`find_by(name:, project
 when the entity has no parent yet, so the new edge's derived project equals the stored one. No fix;
 a comment in `ensure_parent` should say why no sync is needed.
 
-### 6. Rake tasks (PR 2; verified; namespaces corrected: `data:` in `lib/tasks/memory_data.rake`, `tools:` in `lib/tasks/memory_graph_utilities.rake`)
+### 6. Rake tasks (PR 2, shipped in 1.93.2; verified; namespaces corrected: `data:` in `lib/tasks/memory_data.rake`, `tools:` in `lib/tasks/memory_graph_utilities.rake`)
 
 - `data:migrate_json` and `data:append_json` create relations with
   `MemoryRelation.new(...).save` (validated, no lock, no sync). The JSON Lines files they read carry
@@ -201,7 +204,7 @@ gets the snapshot, the audit and undo, and item 2's fix); `create_relation` call
 call `ProjectIdBackfill` at the end (simpler than a sync per edge, and they already rewrite the
 graph in bulk). **Size:** about 40 lines, 60 of specs.
 
-### 7. Scan writers sync inside a transaction (changed: one of the two is a real ordering problem; PR 2)
+### 7. Scan writers sync inside a transaction (changed: one of the two is a real ordering problem; fixed in 1.93.2)
 
 - `ProjectScanner#reconcile_relation` creates a `part_of` and calls `ProjectMembership.sync!` inside
   `#reconcile`'s `ActiveRecord::Base.transaction`, with no lock taken first. `sync!` → `reassign!`
@@ -249,10 +252,11 @@ verification. The invariant is what matters to an agent's search; how a writer g
 | PR | Scope | Version | State |
 |---|---|---|---|
 | PR 1 | Items 1, 2 and 3, the guard (option 3), plus the scan, import and backfill rules ("As built") | 1.93.1 | shipped |
-| PR 2 | Items 4, 6 and 7, the comment for item 5, and the notes under "PR 2 scope" | 1.93.2 | not started |
+| PR 2 | Items 4, 6 and 7, the comment for item 5, and the notes under "PR 2 scope" | 1.93.2 | shipped |
 
-The mcp 1.11.0 bump (`mcp-sdk-1.11.0-plan.md`) is now 1.93.3 and the vector search steps 0 and 1
-(`mariadb-vector-search-plan.md`) 1.93.4; the minors (1.94.0 and later) are unchanged.
+The mcp 1.11.0 bump ([`mcp-sdk-1.11.0-plan.md`](../mcp-sdk-1.11.0-plan.md)) is now 1.93.3 and the vector search
+steps 0 and 1 ([`mariadb-vector-search-plan.md`](../mariadb-vector-search-plan.md)) 1.93.4; the minors
+(1.94.0 and later) are unchanged.
 
 ### As built (PR 1, 1.93.1)
 
@@ -330,6 +334,79 @@ while building PR 1:
 About 120 lines of code and 200 of specs for items 4, 6 and 7, plus a scan-profile run to measure
 the reconcile lock hold time.
 
+### PR 2 as built (1.93.2)
+
+What differs from the plan above:
+
+- **Scan validation** (item 4) is as planned: a wrong-root `part_of` is deleted through
+  `RelationMembershipWrite.destroy!` (lock, delete, sync of the child). A name collision keeps the
+  edge and is recorded as "Failed to delete relation N: cannot move …".
+- **The scanner takes the fallback, not the hoist** (item 7). The plan said to measure a lock hoisted
+  around `#reconcile` first. It can't be hoisted: `#reconcile`'s transaction runs inline LLM word
+  batches and embedding calls between its writes, and those calls read rows the transaction wrote, so
+  they can't move out of it, and the lock is never held across a network call. So the fallback the plan
+  named became the design: `reconcile_relation` creates a model `part_of` inside the transaction
+  without a sync and remembers it (`ProjectScanner::MembershipSync`); after the commit the scan takes
+  the lock once and syncs each child, one transaction per child. A scan whose model emits no `part_of`
+  takes no lock. Measured on a synthetic scan profile: 2 lock acquisitions, none inside a
+  transaction, the longest hold 8.8 ms.
+- **The collision replacement edge.** The plan said a collision deletes the edge just created and
+  records the conflict. The scan had already stamped the child into the scanned project, so deleting
+  the edge alone would leave an entity in the project with no path to its root, which the drift guard
+  rejects. So the model's edge is deleted (audited, with its own deletion reason, and taken back out
+  of `relations_created`) and replaced by a containment edge to the root, which needs no sync because
+  the stamp is already the root. The scan's error reads "Project scope conflict for X: …; kept under
+  <root>". A lock that stays busy leaves the scan's stamps and records "Project scope not synced for N
+  part_of edge(s): …; run bin/rails graph_mem:backfill_project_ids".
+- **The guided scan** (`ProjectScanSkill#ensure_part_of`) runs outside any transaction, so it takes the
+  lock first and creates the edge and syncs the child in one savepoint under it; a collision rolls the
+  edge back.
+- **Rake tasks** (item 6) as planned, with two additions. `data:merge_entity` now refuses what
+  `merge_into` refuses: different entity types (it used to merge across them), Project roots and name
+  collisions, and merges nothing then; the merge is attributed to `rake:merge_entity` and is one
+  undoable `merge` change set. `tools:create_relation` reports an existing relation as a duplicate. The two JSON tasks run under the lock taken before anything is written, with
+  inline embeddings suppressed (the lock is never held across the embedding service), then run
+  `ProjectIdBackfill` (printing its report) and enqueue an embedding backfill. A collision in that
+  backfill aborts with the conflict hint: its stamps roll back and the rows the file added stay.
+- **Dream state: where the lock goes.** The compactor's per-entity transaction is not the only one:
+  `DreamStateCompactionJob` wraps the whole batch in `run.with_lock`, a transaction of its own. A lock
+  taken only around the per-entity transaction would still be inside that one, so
+  `DreamStateCompactor.with_membership_lock(phase)` is used in both places: around each entity's
+  transaction and, in the job, around `run.with_lock`. It covers `MEMBERSHIP_PHASES` (`orphans` and
+  `tree_walk`) only; those phases make no LLM call. Measured hold: 23 to 52 ms per batch on the test
+  database, with a batch of one entity (`DREAM_STATE_BATCH_SIZE`, the default).
+- **The deferred re-embed.** Inline embeddings are suppressed under the lock (a merge survivor's
+  re-embedding would otherwise run at the commit, still under it), so a merge survivor has no embedding
+  until the embedding backfill the compactor enqueues after an auto-merge runs, and drops out of vector
+  search meanwhile.
+- **A busy lock re-enqueues the job.** A `ProjectMembership::LockTimeout` in the dream-state job
+  enqueues the same run again after `LOCK_RETRY_WAIT` (1 minute) instead of failing it.
+- **The integrity sweep** deletes a dangling `part_of` whose child survives through `destroy!` (sync);
+  a collision keeps the edge for the next sweep with a logged warning, and `dangling_relations_removed`
+  counts only the relations actually deleted.
+- **The skeleton writer's comment** (item 5) says why its containment edges need no sync.
+- **Toolchain, in the same PR.** Ruby 3.4.13 everywhere (`.ruby-version`, `.versions.conf`, the
+  Dockerfile, the CircleCI images, the Cursor setup, the stdio runner, the compat harness defaults and
+  the docs) and a `bundle update` (brakeman 8.1.0 to 8.1.1, because CI's `bin/brakeman` runs
+  `--ensure-latest` and failed `scan_ruby` on `main`; addressable, dry-logic, json, rack and
+  selenium-webdriver). One spec (`change_set_prune_job_spec`) now requires `fugit`, like its siblings,
+  since it failed when run alone.
+- **Release.** 1.93.2, as planned.
+
+### Follow-ups
+
+Found while building PR 2, all older than it and not fixed there:
+
+- **`merge_into` holds the membership lock across a network call.** It re-embeds the survivor at commit
+  time, still under the lock, on every path that doesn't suppress inline embeddings: REST, MCP, Explore
+  and the review apply, and `data:merge_entity` (dream state suppresses them).
+- **`graph_write` entity creates embed inline inside the lock and the transaction**, which holds the
+  lock across a call to the embedding service as well.
+- **Files over 500 lines** (AGENTS.md: split them): `project_scanner.rb` (766), `project_scan_skill.rb`
+  (602) and `lib/tasks/memory_data.rake` (614).
+- **The two JSON rake task bodies** (`migrate_json_lines`, `append_json_lines`) are about 130 lines each
+  (the limit is 60).
+
 MCP surface unchanged in PR 1: no tool, parameter, schema or description changes; `graph_delete`'s
 result for an entity delete keeps its keys (the children's new scope is not reported). REST:
 `DELETE /api/v1/memory_entities/:id` gained a documented `422` (swagger edited by hand, as in PR #189).
@@ -376,8 +453,7 @@ counts). Checked on a synthetic graph with one case of each kind: it reported 1,
 
 ## Open questions for Steve
 
-None open for PR 1: questions 3, 4 and 6 were answered on 2026-11-24 (see "Answers"). PR 2's kickoff
-may add its own.
+None: questions 3, 4 and 6 were answered on 2026-11-24 (see "Answers"), and PR 2 raised none of its own.
 
 ## Answers
 

@@ -67,14 +67,28 @@ class GraphIntegrityService
     repaired
   end
 
+  # Deletes relations whose endpoint is gone (only possible with foreign key checks off). A part_of
+  # whose child survives goes through RelationMembershipWrite.destroy!, so the child (and its
+  # subtree) leaves the gone parent's project; a name collision there keeps that edge for the next
+  # sweep, logged. Returns how many were deleted.
   def repair_dangling_relations
     valid_entity_ids = MemoryEntity.pluck(:id).to_set
     dangling = MemoryRelation.where.not(from_entity_id: valid_entity_ids)
       .or(MemoryRelation.where.not(to_entity_id: valid_entity_ids))
 
-    count = dangling.count
-    dangling.destroy_all
-    count
+    parent_edges, others = dangling.to_a.partition do |relation|
+      MemoryRelation.reads_as_part_of?(relation.relation_type) && valid_entity_ids.include?(relation.from_entity_id)
+    end
+    others.each(&:destroy)
+    others.size + parent_edges.count { |relation| destroy_dangling_parent_edge(relation) }
+  end
+
+  def destroy_dangling_parent_edge(relation)
+    RelationMembershipWrite.destroy!(relation, reason: "dangling: the parent entity is gone")
+    true
+  rescue ProjectMembership::Collision, ProjectMembership::LockTimeout => e
+    Rails.logger.warn "[GraphIntegrity] kept dangling part_of #{relation.id}: #{e.message}"
+    false
   end
 
   def repair_stale_embeddings

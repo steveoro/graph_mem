@@ -78,6 +78,44 @@ RSpec.describe GraphIntegrityService do
       expect(MemoryRelation.find_by(id: relation.id)).to be_nil
     end
 
+    # PR 2 of the part_of membership plan: the surviving child of a dangling part_of is synced.
+    context "with a part_of whose parent row is gone" do
+      let(:project) { MemoryEntity.create!(name: "Alpha Project", entity_type: "Project") }
+      let(:mid) { fs_member!(project, "SynthModule", "Component") }
+      let!(:leaf) { fs_member!(mid, "SynthLeaf", "Component") }
+
+      def delete_row_without_fk_checks(entity)
+        ActiveRecord::Base.connection.execute("SET FOREIGN_KEY_CHECKS = 0")
+        ActiveRecord::Base.connection.execute("DELETE FROM memory_entities WHERE id = #{entity.id}")
+      ensure
+        ActiveRecord::Base.connection.execute("SET FOREIGN_KEY_CHECKS = 1")
+      end
+
+      it "deletes it and moves the child out of the gone parent's project" do
+        delete_row_without_fk_checks(mid)
+
+        result = described_class.call
+
+        expect(result[:dangling_relations_removed]).to eq(2) # leaf -> mid, mid -> project
+        expect(MemoryRelation.where(from_entity_id: leaf.id)).to be_empty
+        expect(leaf.reload.project_id).to be_nil
+      end
+
+      # Drift is the point: the refused sync keeps the dangling edge and the child's old stamp.
+      it "keeps it, logged, when the child's name is taken where it would go", membership_drift: :allowed do
+        MemoryEntity.create!(name: "SynthLeaf", entity_type: "Component") # global
+        delete_row_without_fk_checks(mid)
+        allow(Rails.logger).to receive(:warn).and_call_original
+
+        result = described_class.call
+
+        expect(result[:dangling_relations_removed]).to eq(1) # mid -> project only
+        expect(MemoryRelation.where(from_entity_id: leaf.id, to_entity_id: mid.id)).to exist
+        expect(leaf.reload.project_id).to eq(project.id)
+        expect(Rails.logger).to have_received(:warn).with(/kept dangling part_of .*'SynthLeaf' already exists/)
+      end
+    end
+
     it "returns embeddings_backfilled result" do
       allow(EmbeddingService).to receive(:vector_enabled?).and_return(true)
       allow(EmbeddingService).to receive(:embed_entity).and_return(true)

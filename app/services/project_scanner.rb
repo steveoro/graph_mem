@@ -211,6 +211,7 @@ class ProjectScanner
   include CodeSkeleton
   include FactDedupe
   include Containment
+  include MembershipSync
 
   # Files the scan skipped because they left the root or are denylisted (ProjectScanFileFilter).
   def skip_counters
@@ -391,6 +392,7 @@ class ProjectScanner
         dismiss_conflicting_compaction_reviews
       end
     end
+    sync_part_of_children! # after the commit, under the membership lock (MembershipSync)
   rescue StandardError => e
     @logger.error "ProjectScanner: reconciliation failed: #{e.message}"
     @errors << "Reconciliation failed: #{e.message}"
@@ -546,20 +548,15 @@ class ProjectScanner
 
     return if @dry_run
 
-    MemoryRelation.create!(
+    relation = MemoryRelation.create!(
       from_entity_id: from_entity.id,
       to_entity_id: target.id,
       relation_type: relation_type,
       confidence: rel["confidence"].to_f.clamp(0.0, 1.0).presence,
       properties: { source: scan_source("reconcile"), scan_id: @scan_id }
     )
-    if relation_type == "part_of"
-      begin
-        ProjectMembership.sync!(from_entity)
-      rescue ProjectMembership::Collision => e
-        @errors << "Project scope conflict for #{from_entity.name}: #{e.message}"
-      end
-    end
+    # The child's project moves after the commit, under the lock (MembershipSync), never in here.
+    defer_part_of_sync(relation) if MemoryRelation.reads_as_part_of?(relation_type)
     @relations_created_count += 1
   rescue StandardError => e
     @errors << "Failed to create relation #{from_entity.name} -> #{target_name}: #{e.message}"

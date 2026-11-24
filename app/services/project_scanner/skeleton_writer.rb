@@ -131,6 +131,10 @@ class ProjectScanner
       list.join(",")
     end
 
+    # No membership sync (and no lock) is needed: every entity here was found or created in the
+    # root's scope (#entity_for: project_id: @root.id), the parent is the root itself, and the edge
+    # is created only when the entity has no parent yet, so the project the edge implies is the one
+    # already stored. The scan's own model edges are synced after the commit (MembershipSync).
     def ensure_parent(entity)
       return if MemoryRelation.exists?(from_entity_id: entity.id, relation_type: PART_OF)
 

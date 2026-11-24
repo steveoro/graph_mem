@@ -34,12 +34,31 @@ class ProjectMembership
   # on GET_LOCK (while the backfill holds the lock and waits on those
   # very rows) forms a cycle InnoDB cannot see — it surfaces as a ~50s
   # ActiveRecord::LockWaitTimeout on the WRITER. The entry points that
-  # wrap their work in with_membership_lock: ImportExecutionStrategy
-  # (whole execute), NodeOperationsStrategy move_node/merge_into,
-  # ProjectIdBackfill.run, GraphWriteService entity/relation writes,
-  # GraphDeleteService call/execute_one (part_of deletes + merges) and
-  # CompactionReviewService relation deletes. reassign! itself takes the
-  # lock too so stray callers stay safe (reentrant on the same session).
+  # wrap their work in with_membership_lock:
+  # - imports and the backfill: ImportExecutionStrategy (whole execute),
+  #   ProjectIdBackfill.run;
+  # - the graph tools: GraphWriteService entity/relation writes,
+  #   GraphDeleteService call/execute_one (part_of deletes + merges);
+  # - moves, merges and deletes: NodeOperationsStrategy move_node/
+  #   merge_into/delete_node, RelationMembershipWrite (update!, destroy!,
+  #   destroy_entity!, with_lock_if: the REST and data-exchange writers, the
+  #   scan validator, GraphIntegrityService's dangling part_of delete),
+  #   RelationIntegrityRepairer, ChangeSetUndo, CompactionReviewService and
+  #   CompactionReviewApplier (review applies, relation_retype);
+  # - scans: ProjectScanner::MembershipSync (once, after the reconcile
+  #   commits: the reconcile's transaction runs LLM and embedding calls, so
+  #   the lock can't be taken around or inside it) and ProjectScanSkill
+  #   (ensure_part_of: lock, then one savepoint for create + sync);
+  # - dream state: DreamStateCompactor.with_membership_lock (the orphans and
+  #   tree_walk phases, around each entity's transaction) and
+  #   DreamStateCompactionJob (around run.with_lock, whose transaction wraps
+  #   the whole batch);
+  # - the rake tasks data:migrate_json / data:append_json (whole run, before
+  #   any write); data:merge_entity and tools:create_relation reach it
+  #   through merge_into and GraphWriteService.
+  # FactSupersede::Bulk takes it too, only to order itself against the
+  # review applies. reassign! itself takes the lock too so stray callers
+  # stay safe (reentrant on the same session).
   LOCK_NAME_PREFIX = "graph_mem.project_membership"
   LOCK_TIMEOUT_SECONDS = 60
 

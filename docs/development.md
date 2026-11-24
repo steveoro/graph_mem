@@ -10,7 +10,7 @@ This guide covers everything you need to know to set up a development environmen
 
 Before starting, ensure you have the following installed:
 
-* Ruby 3.4.12+ (we recommend using [RVM](https://rvm.io/) or [rbenv](https://github.com/rbenv/rbenv) for Ruby version management)
+* Ruby 3.4.13+ (we recommend using [RVM](https://rvm.io/) or [rbenv](https://github.com/rbenv/rbenv) for Ruby version management)
 * MariaDB 11.8+ (with vector support)
 * [Bundler](https://bundler.io/)
 * Git
@@ -39,6 +39,22 @@ Install the required Ruby gems:
 ```bash
 bundle install
 ```
+
+> **Upgrading from a checkout on an earlier Ruby.** The project runs on Ruby 3.4.13 (1.93.2: `.ruby-version`
+> and `.versions.conf` pin it). With RVM, install it and create the `graph_mem` gemset for it, then
+> install the gems there; a gemset belongs to one Ruby, so the one you had on 3.4.12 doesn't carry over:
+>
+> ```bash
+> rvm install ruby-3.4.13
+> rvm use ruby-3.4.13@graph_mem --create
+> bundle install
+> ```
+>
+> With rbenv, `rbenv install 3.4.13` and `bundle install`. A scripted or agent shell must select the
+> gemset in the same command as the one it runs (source RVM's script, then `rvm use
+> ruby-3.4.13@graph_mem && bundle exec rspec`), because RVM's per-directory switch is a hook of the
+> interactive shell. `Bundler::GemNotFound` listing most of the lockfile means the wrong Ruby or gemset
+> is active, not a broken bundle.
 
 ### Step 3: Configure the Database
 
@@ -204,7 +220,7 @@ server the boot succeeds but any spec touching embeddings or vector search fails
 ### Membership drift guard
 
 An entity's `project_id` is derived from its `part_of` parent chain (see
-[architecture](architecture.md#project-membership-1931)).
+[architecture](architecture.md#project-membership-1931-1932)).
 `spec/support/membership_drift_guard.rb` fails an example that leaves the graph drifted, so a writer
 that changes a `part_of` edge without syncing the child can't pass the suite.
 

@@ -8,7 +8,7 @@
 # startup lives in start.sh, not here.
 set -euo pipefail
 
-RUBY_VERSION="3.4.12"
+RUBY_VERSION="3.4.13"
 GEMSET="graph_mem"
 BUNDLER_VERSION="2.6.2"
 DB_PASSWORD="${DB_PASSWORD:-my_password}"

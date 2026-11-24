@@ -214,6 +214,48 @@ RSpec.describe ProjectScanValidator, type: :service do
       expect(MemoryRelation.exists?(wrong_relation.id)).to be false
     end
 
+    # Item 4 of the part_of membership plan: the delete syncs the child, under the lock.
+    context "when the child carries the wrong root's project" do
+      let(:other_project) { MemoryEntity.create!(name: "OtherProject", entity_type: "Project") }
+      let(:stray) { fs_member!(@project, "StrayComponent", "Component") }
+
+      # The legacy second parent, and the stamp sync! picked from it.
+      def wrong_parent!
+        relation = MemoryRelation.new(from_entity: stray, to_entity: other_project, relation_type: "part_of")
+        relation.save(validate: false)
+        stray.update_column(:project_id, other_project.id)
+        relation
+      end
+
+      it "deletes the edge and moves the child back into the scanned project" do
+        wrong_relation = wrong_parent!
+
+        result = nil
+        expect(open_transactions_at_get_lock { result = validator.call }).to eq(0)
+
+        expect(result.relations_deleted).to eq(1)
+        expect(result.errors).to be_empty
+        expect(MemoryRelation.exists?(wrong_relation.id)).to be false
+        expect(stray.reload.project_id).to eq(@project.id)
+        expect(membership_lock_free?).to be(true)
+      end
+
+      # Drift is the point: the refused delete leaves the second parent and the wrong stamp.
+      it "keeps the edge and records the error when the child's name is taken in the scanned project",
+         membership_drift: :allowed do
+        wrong_relation = wrong_parent!
+        # Free in the scanned project while the stray sits in the other one.
+        fs_member!(@project, "StrayComponent (copy)", "Component").update_column(:name, "StrayComponent")
+
+        result = validator.call
+
+        expect(result.relations_deleted).to eq(0)
+        expect(result.errors.sole).to match(/Failed to delete relation #{wrong_relation.id}: .*'StrayComponent' already exists/)
+        expect(MemoryRelation.exists?(wrong_relation.id)).to be true
+        expect(stray.reload.project_id).to eq(other_project.id)
+      end
+    end
+
     it "queues a delete_relation review for usage relations not supported by scan context" do
       library = MemoryEntity.create!(name: "jQuery", entity_type: "Framework")
       MemoryRelation.create!(from_entity: @entity, to_entity: library, relation_type: "depends_on")

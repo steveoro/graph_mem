@@ -11,6 +11,31 @@ class DreamStateCompactor
   REVIEW_MERGE_DISTANCE = 0.30
   AUTO_ORPHAN_SCORE = OrphanMatchingStrategy::AUTO_PARENT_SCORE
   BATCH_SIZE = ENV.fetch("DREAM_STATE_BATCH_SIZE", "1").to_i.clamp(1, 50)
+  # The phases whose per-entity work can move an entity (an orphan's auto-parent) or merge one
+  # (tree_walk's auto-merge): both take the membership lock.
+  MEMBERSHIP_PHASES = %w[orphans tree_walk].freeze
+
+  # @param phase [String, Symbol, nil] a run's phase
+  # @return [Boolean] true when the phase can move or merge entities, so it needs the membership lock
+  def self.membership_phase?(phase)
+    MEMBERSHIP_PHASES.include?(phase.to_s)
+  end
+
+  # Runs the block under the membership lock when +phase+ can move or merge entities, so the lock is
+  # taken before any transaction the block opens (the advisory-first rule, see
+  # ProjectMembership::LOCK_NAME_PREFIX); merge_into and move_to_parent then re-enter it. Used around
+  # each entity's transaction, and by DreamStateCompactionJob around run.with_lock, whose transaction
+  # wraps the whole batch. Inline embeddings are skipped inside: a merge survivor's re-embedding
+  # would run at the commit, still under the lock, so the embedding backfill does it (enqueued after
+  # an auto-merge). These phases make no LLM call (orphan and merge evidence come from the database).
+  #
+  # @param phase [String, nil] the run's phase
+  # @return [Object] the block's value
+  def self.with_membership_lock(phase, &block)
+    return yield unless membership_phase?(phase)
+
+    ProjectMembership.with_membership_lock { EmbeddingService.suppress_inline_embeddings(&block) }
+  end
 
   def initialize(
     run:,
@@ -49,8 +74,10 @@ class DreamStateCompactor
       @run.increment_stat!("entities_processed")
 
       begin
-        ActiveRecord::Base.transaction(requires_new: true) do
-          process_entity_for_phase(phase, entity_id)
+        self.class.with_membership_lock(phase) do
+          ActiveRecord::Base.transaction(requires_new: true) do
+            process_entity_for_phase(phase, entity_id)
+          end
         end
       rescue StandardError => e
         log_entity_error(entity_id, phase, e)
@@ -256,6 +283,7 @@ class DreamStateCompactor
       end
       if result[:success]
         @run.increment_stat!("merges_auto")
+        enqueue_embedding_backfill
         return
       end
 
@@ -264,6 +292,18 @@ class DreamStateCompactor
     end
 
     queue_merge_review(best.source, best.target, best.distance, best.score)
+  end
+
+  # The survivor's aliases changed with inline embeddings off (with_membership_lock): re-embedding it
+  # is the backfill's job. Queued once every open transaction commits (at once when none is open):
+  # the queue can live in its own database, and a backfill that ran before the merge committed would
+  # not see the survivor's cleared embedding. A failed enqueue never undoes the merge.
+  def enqueue_embedding_backfill
+    ActiveRecord.after_all_transactions_commit do
+      EmbeddingsMaintenanceEnqueuer.enqueue!("backfill")
+    rescue StandardError => e
+      Rails.logger.warn "[DreamState] could not enqueue the embedding backfill: #{e.message}"
+    end
   end
 
   def queue_merge_review(entity_a, entity_b, distance, score, error: nil)

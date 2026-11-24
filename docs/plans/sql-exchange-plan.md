@@ -347,7 +347,7 @@ PRs 1–3 put their CHANGELOG lines under `## [Unreleased]`. No migration, no ne
 
 ## Verification
 
-Specs (real MariaDB, `OLLAMA_URL=http://127.0.0.1:9`, run through `rvm use ruby-3.4.12@graph_mem`):
+Specs (real MariaDB, `OLLAMA_URL=http://127.0.0.1:9`, run through `rvm use ruby-3.4.13@graph_mem`):
 
 - round trip: export a project, destroy and alter some of its rows, import → equal graph;
 - idempotency: importing the same script twice → second run reports only "unchanged";

@@ -413,20 +413,23 @@ class ProjectScanSkill
     return if @dry_run || child.id == parent.id
     return if MemoryRelation.exists?(from_entity_id: child.id, to_entity_id: parent.id, relation_type: "part_of")
 
-    MemoryRelation.create!(
-      from_entity_id: child.id,
-      to_entity_id: parent.id,
-      relation_type: MemoryRelation.canonical_relation_type("part_of"),
-      confidence: 0.9
-    )
-    # Attaching under a project parent pulls the child (and its subtree)
-    # into that project's scope — a same-name conflict is reported, not raised.
-    begin
-      ProjectMembership.sync!(child)
-    rescue ProjectMembership::Collision => e
-      @errors << "Project scope conflict for #{child.name}: #{e.message}"
+    # Attaching under a project parent pulls the child (and its subtree) into that project's scope.
+    # Lock first, then one transaction (the guided scan runs outside any): a same-name conflict
+    # rolls the edge back with the sync, and is reported, not raised.
+    ProjectMembership.with_membership_lock do
+      ActiveRecord::Base.transaction(requires_new: true) do
+        MemoryRelation.create!(
+          from_entity_id: child.id,
+          to_entity_id: parent.id,
+          relation_type: MemoryRelation.canonical_relation_type("part_of"),
+          confidence: 0.9
+        )
+        ProjectMembership.sync!(child)
+      end
     end
     @relations_created_count += 1
+  rescue ProjectMembership::Collision => e
+    @errors << "Project scope conflict for #{child.name}: #{e.message}"
   end
 
   # Internal globs only; files outside the root or denylisted are never read (PR-0 §0.5 item 5).
