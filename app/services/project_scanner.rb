@@ -210,6 +210,7 @@ class ProjectScanner
   include ProjectLinks
   include CodeSkeleton
   include FactDedupe
+  include Containment
 
   # Files the scan skipped because they left the root or are denylisted (ProjectScanFileFilter).
   def skip_counters
@@ -380,6 +381,7 @@ class ProjectScanner
       prepare_scan_llm_words!(reconciled)
       reconciled.each { |entity, item| import_observations(entity, Array(item["observations"])) }
       reconciled.each { |entity, item| Array(item["relations"]).each { |rel| reconcile_relation(entity, rel) } }
+      attach_to_root!(reconciled.map(&:first)) # what the model left without a parent (Containment)
       compute_scan_fact_keywords!
       report_reconcile_counts!
 
