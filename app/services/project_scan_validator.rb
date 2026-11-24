@@ -407,17 +407,16 @@ class ProjectScanValidator
     architecture_names.any? { |name| terms.any? { |term| content_matches_term?(name, term) } }
   end
 
+  # A part_of edge goes through RelationMembershipWrite.destroy! (lock, delete, sync): the child
+  # leaves the wrong root's project. A name collision where it lands keeps the edge and is an error.
   def delete_relation(relation, reason)
     return if @dry_run
 
-    Current.deletion_reason = reason
-    relation.destroy!
+    RelationMembershipWrite.destroy!(relation, reason: reason)
     @relations_deleted += 1
   rescue StandardError => e
     @logger.warn "ProjectScanValidator: failed to delete relation #{relation.id}: #{e.message}"
     @errors << "Failed to delete relation #{relation.id}: #{e.message}"
-  ensure
-    Current.deletion_reason = nil
   end
 
   # @return [Boolean] the entity holds an active fact of a Rails code map skeleton
