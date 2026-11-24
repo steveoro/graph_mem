@@ -129,13 +129,19 @@ RSpec.describe ImportObservationDuplicateDetector, :with_test_embeddings do
       expect(detector.fallback_warning).to include("1 whose text was not embedded before the import")
     end
 
-    it "stops at the first failed call: the service is down" do
+    it "raises UnavailableError at the first failed call, as find_duplicate's own call did" do
       allow(embedding_service).to receive(:embed!).and_raise(EmbeddingService::EmbeddingError, "HTTP 503")
 
-      expect(detector.precompute!([ "Reworded imported fact", "Distinct imported fact" ])).to eq(0)
+      expect { detector.precompute!([ "Reworded imported fact", "Distinct imported fact" ]) }
+        .to raise_error(described_class::UnavailableError, "Embedding service is unavailable: HTTP 503")
       expect(embedding_service).to have_received(:embed!).once
-      %w[Reworded Distinct].each { |word| detector.find_duplicate(entity: entity, content: "#{word} imported fact") }
-      expect(detector.fallback_warning).to include("2 because the embedding service failed before the import (HTTP 503)")
+    end
+
+    it "raises UnavailableError for an empty vector, as the comparison did" do
+      allow(embedding_service).to receive(:embed!).and_return([])
+
+      expect { detector.precompute!([ "Reworded imported fact" ]) }
+        .to raise_error(described_class::UnavailableError, "Embedding service returned an empty vector.")
     end
   end
 

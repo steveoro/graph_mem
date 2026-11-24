@@ -7,21 +7,17 @@
 # every active observation already attached to the target entity.
 #
 # The membership lock is never held across a network call, so an import embeds its texts before it
-# takes the lock (precompute!) and, under it, find_duplicate only looks vectors up: a text without
-# one is matched exactly only, and fallback_warning sums those up in one line per import.
+# takes the lock (precompute!, which raises UnavailableError when the service fails, so the import
+# stops before writing anything) and, under it, find_duplicate only looks vectors up: a text without
+# one (the import's pre-read missed it) is matched exactly only, and fallback_warning sums those up
+# in one line per import.
 #
 #   detector = ImportObservationDuplicateDetector.new
 #   detector.precompute!([ "SynthWidget renders tiles." ])     # before the lock: one embedding call
 #   detector.find_duplicate(entity: widget, content: "SynthWidget renders tiles.") # under it: none
-#   detector.fallback_warning # => nil, or "Semantic observation de-duplication matched 2 fact(s) …"
+#   detector.fallback_warning # => nil, or "Semantic observation de-duplication matched 1 fact(s) …"
 class ImportObservationDuplicateDetector
   class UnavailableError < StandardError; end
-
-  # The most distinct texts precompute! embeds: one embedding call each (EmbeddingService has no
-  # batch call), made before the import takes the membership lock, while the operator waits (500
-  # calls of about 50 ms each is under half a minute). The texts of a larger import beyond it are
-  # matched exactly only, and the import's warning says so.
-  MAX_PRECOMPUTED_TEXTS = 500
 
   Result = Struct.new(
     :duplicate,
@@ -42,34 +38,25 @@ class ImportObservationDuplicateDetector
     @threshold = threshold.to_f
     @only_embedded = only_embedded
     @precomputed = nil
-    @missing = {}
-    @fallbacks = Hash.new(0)
+    @fallbacks = 0
   end
 
-  # Embeds, before the caller takes the membership lock, the texts find_duplicate may compare
-  # semantically under it. From then on find_duplicate makes no embedding call: a text with no
-  # vector (not given here, beyond MAX_PRECOMPUTED_TEXTS, or the service failed) is matched exactly
-  # only, and counted for fallback_warning. The first failed call ends the precompute (the service
-  # is down: each later call would wait out its retries too). Without vector columns nothing is
+  # Embeds, before the caller takes the membership lock, every text find_duplicate may compare
+  # semantically under it, one embedding call per distinct text (EmbeddingService has no batch
+  # call). From then on find_duplicate makes no embedding call: a text with no vector (one the
+  # caller didn't pass: its pre-read raced an entity or a fact that changed before the lock) is
+  # matched exactly only, and counted for fallback_warning. Without vector columns nothing is
   # embedded, and find_duplicate raises UnavailableError as before.
   # @param texts [Enumerable<String>] observation contents, as find_duplicate will get them
   # @return [Integer] how many texts got a vector
+  # @raise [UnavailableError] at the first failed call ("Embedding service is unavailable: …", the
+  #   error find_duplicate's own call raised before), so the caller stops before it writes anything
   def precompute!(texts)
     @precomputed = {}
-    @missing = {}
-    @fallbacks = Hash.new(0)
-    @unavailable = nil
-    distinct = texts.map(&:to_s).reject(&:blank?).uniq
-    @distinct_count = distinct.size
+    @fallbacks = 0
     return 0 unless EmbeddingService.vector_enabled?
 
-    distinct.each_with_index do |text, index|
-      reason = if index >= MAX_PRECOMPUTED_TEXTS then :capped
-      elsif @unavailable then :unavailable
-      else precompute_vector(text)
-      end
-      @missing[text] = reason if reason
-    end
+    texts.map(&:to_s).reject(&:blank?).uniq.each { |text| @precomputed[text] = precompute_vector(text) }
     @precomputed.size
   end
 
@@ -85,18 +72,12 @@ class ImportObservationDuplicateDetector
   end
 
   # @return [String, nil] one line for the import's log when facts were matched exactly only for
-  #   want of a precomputed vector, with how many and why; nil when none were
+  #   want of a precomputed vector, with how many; nil when none were
   def fallback_warning
-    return nil if @fallbacks.empty?
+    return nil if @fallbacks.zero?
 
-    reasons = @fallbacks.map do |reason, count|
-      case reason
-      when :unavailable then "#{count} because the embedding service failed before the import (#{@unavailable})"
-      when :capped then "#{count} beyond the first #{MAX_PRECOMPUTED_TEXTS} of #{@distinct_count} distinct texts embedded before the import"
-      else "#{count} whose text was not embedded before the import"
-      end
-    end
-    "Semantic observation de-duplication matched #{@fallbacks.values.sum} fact(s) exactly only: #{reasons.join('; ')}"
+    "Semantic observation de-duplication matched #{@fallbacks} fact(s) exactly only: " \
+      "#{@fallbacks} whose text was not embedded before the import"
   end
 
   # @param entity [MemoryEntity] Target entity for the imported observation
@@ -154,7 +135,7 @@ class ImportObservationDuplicateDetector
     return embed!(content) unless @precomputed || ProjectMembership.membership_lock_held?
 
     vector = @precomputed&.[](content)
-    @fallbacks[@missing.fetch(content, :not_precomputed)] += 1 unless vector
+    @fallbacks += 1 unless vector
     vector
   end
 
@@ -164,19 +145,13 @@ class ImportObservationDuplicateDetector
     raise UnavailableError, "Embedding service is unavailable: #{e.message}"
   end
 
-  # @return [Symbol, nil] nil when the text got its vector, else why not
+  # The errors find_duplicate raised when it embedded under the lock: a failed call
+  # (embed!) or an empty vector (nearest_observation).
   def precompute_vector(text)
-    vector = @embedding_service.embed!(text)
-    if QueryTokenizer.vector_literal(vector).blank?
-      @unavailable = "the embedding service returned no vector"
-      return :unavailable
-    end
+    vector = embed!(text)
+    raise UnavailableError, "Embedding service returned an empty vector." if QueryTokenizer.vector_literal(vector).blank?
 
-    @precomputed[text] = vector
-    nil
-  rescue StandardError => e
-    @unavailable = e.message
-    :unavailable
+    vector
   end
 
   def nearest_observation(observations, incoming_vector)

@@ -108,7 +108,8 @@ class ImportExecutionStrategy
     # Build decision lookup by node path
     decision_map = decisions.index_by { |d| d[:node_path] || d["node_path"] }
     initialize_progress!(import_data)
-    # The semantic de-duplication's embedding calls, before the membership lock (DuplicateVectors).
+    # The semantic de-duplication's embedding calls, before the membership lock (DuplicateVectors);
+    # a failed one raises UnavailableError, rescued below: the import fails having written nothing.
     precompute_duplicate_vectors(import_data, decision_map)
 
     # Bulk imports cannot afford a synchronous embedding call and a

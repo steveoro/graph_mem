@@ -10,7 +10,9 @@
 # declared nodes, references and Class/Module collisions by name), holding active facts that the
 # detector's rule lets it compare (compares_semantically?), and not already holding that exact text.
 # The read is racy and only saves calls: the authoritative checks run under the lock, and a text it
-# missed is matched exactly only, in the import's one warning.
+# missed is matched exactly only, in the import's one warning. Every text it finds is embedded; a
+# failed call raises ImportObservationDuplicateDetector::UnavailableError, so the import fails before
+# the lock and writes nothing (#execute reports it as it reported the same failure under the lock).
 module ImportExecutionStrategy::DuplicateVectors
   # Names and ids per IN list.
   BATCH = 1_000
@@ -23,6 +25,7 @@ module ImportExecutionStrategy::DuplicateVectors
   # @param import_data [Hash] the payload (root_nodes)
   # @param decision_map [Hash{String => Hash}] decisions by node path
   # @return [Integer] how many texts got a vector
+  # @raise [ImportObservationDuplicateDetector::UnavailableError] when the embedding service fails
   def precompute_duplicate_vectors(import_data, decision_map)
     nodes = []
     roots = import_data["root_nodes"] || import_data[:root_nodes] || []
