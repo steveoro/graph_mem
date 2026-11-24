@@ -35,7 +35,11 @@ class ChangeSetUndo
 
     def redo_merges
       @change_set.section(:redo_merges).each do |pair|
-        result = NodeOperationsStrategy.new.merge_into(pair["source_id"], pair["target_id"], change_set_kind: "redo")
+        result = begin
+          NodeOperationsStrategy.new.merge_into(pair["source_id"], pair["target_id"], change_set_kind: "redo")
+        rescue ProjectMembership::Collision => e
+          { success: false, error: e.message }
+        end
         raise Conflict, [ "Can't redo the merge: #{result[:error]}" ] unless result[:success]
 
         # The redone merge cleared the target's embedded_at with inline embeds suppressed.
@@ -171,7 +175,9 @@ class ChangeSetUndo
       end
       raise Conflict, [ "Can't undo: restoring the part_of edges would create a cycle" ] if cycles.any?
 
-      ([ restored ] + MemoryEntity.where(id: step["children"].map(&:first)).to_a).each { |entity| ProjectMembership.sync!(entity) }
+      # The target too: a merge that gave it the source's parent edge (it had none) moved it into
+      # that parent's project, and the edge is the source's again.
+      ([ restored, target ] + MemoryEntity.where(id: step["children"].map(&:first)).to_a).each { |entity| ProjectMembership.sync!(entity) }
       [ restored.id, target.id ].each do |entity_id|
         MemoryEntity.where(id: entity_id).update_all(memory_observations_count: MemoryObservation.where(memory_entity_id: entity_id).count)
       end

@@ -6,7 +6,7 @@ RSpec.describe ProjectScanValidator, type: :service do
   before do
     @project = MemoryEntity.create!(name: "TestProject", entity_type: "Project")
     @entity = MemoryEntity.create!(name: "SampleComponent", entity_type: "Component")
-    MemoryRelation.create!(from_entity: @entity, to_entity: @project, relation_type: "part_of")
+    fs_member!(@project, @entity)
   end
 
   def validator(options = {})
@@ -26,7 +26,7 @@ RSpec.describe ProjectScanValidator, type: :service do
   describe "#call" do
     it "auto-moves a scan-sourced observation with a single clear target" do
       target = MemoryEntity.create!(name: "Dream State Compactor", entity_type: "Component")
-      MemoryRelation.create!(from_entity: target, to_entity: @project, relation_type: "part_of")
+      fs_member!(@project, target)
 
       observation = MemoryObservation.create!(
         memory_entity: @entity,
@@ -44,7 +44,7 @@ RSpec.describe ProjectScanValidator, type: :service do
 
     it "queues a move_observation review for a manual/sourceless observation with a single clear target" do
       target = MemoryEntity.create!(name: "Dream State Compactor", entity_type: "Component")
-      MemoryRelation.create!(from_entity: target, to_entity: @project, relation_type: "part_of")
+      fs_member!(@project, target)
 
       observation = MemoryObservation.create!(
         memory_entity: @entity,
@@ -96,8 +96,8 @@ RSpec.describe ProjectScanValidator, type: :service do
     it "queues a move_observation review with candidate_ids when multiple targets match" do
       candidate = MemoryEntity.create!(name: "Dream State Compactor", entity_type: "Component")
       other = MemoryEntity.create!(name: "UI Refreshes", entity_type: "Feature")
-      MemoryRelation.create!(from_entity: candidate, to_entity: @project, relation_type: "part_of")
-      MemoryRelation.create!(from_entity: other, to_entity: @project, relation_type: "part_of")
+      fs_member!(@project, candidate)
+      fs_member!(@project, other)
 
       observation = MemoryObservation.create!(
         memory_entity: @entity,
@@ -116,7 +116,7 @@ RSpec.describe ProjectScanValidator, type: :service do
 
     it "does not mutate the graph when dry_run is true" do
       target = MemoryEntity.create!(name: "Dream State Compactor", entity_type: "Component")
-      MemoryRelation.create!(from_entity: target, to_entity: @project, relation_type: "part_of")
+      fs_member!(@project, target)
 
       observation = MemoryObservation.create!(
         memory_entity: @entity,
@@ -140,7 +140,7 @@ RSpec.describe ProjectScanValidator, type: :service do
 
       5.times do |i|
         entity = MemoryEntity.create!(name: "BatchEntity#{i}", entity_type: "Component")
-        MemoryRelation.create!(from_entity: entity, to_entity: @project, relation_type: "part_of")
+        fs_member!(@project, entity)
         MemoryObservation.create!(memory_entity: entity, content: "Entity #{i} observation", source: "manual")
       end
 
@@ -189,7 +189,7 @@ RSpec.describe ProjectScanValidator, type: :service do
 
       5.times do |i|
         entity = MemoryEntity.create!(name: "NoBatchEntity#{i}", entity_type: "Component")
-        MemoryRelation.create!(from_entity: entity, to_entity: @project, relation_type: "part_of")
+        fs_member!(@project, entity)
         MemoryObservation.create!(memory_entity: entity, content: "Entity #{i} observation", source: "manual")
       end
 
@@ -204,7 +204,7 @@ RSpec.describe ProjectScanValidator, type: :service do
     it "auto-deletes a part_of relation to the wrong project root" do
       other_project = MemoryEntity.create!(name: "OtherProject", entity_type: "Project")
       stray = MemoryEntity.create!(name: "StrayComponent", entity_type: "Component")
-      MemoryRelation.create!(from_entity: stray, to_entity: @project, relation_type: "part_of")
+      fs_member!(@project, stray)
       wrong_relation = MemoryRelation.new(from_entity: stray, to_entity: other_project, relation_type: "part_of")
       wrong_relation.save(validate: false)
 

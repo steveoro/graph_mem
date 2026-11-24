@@ -120,7 +120,16 @@ class CompactionReviewApplier
       return { success: false, error: "Source and target entities are required" } if source_id.zero? || target_id.zero?
       return { success: false, error: "Cannot merge an entity into itself" } if source_id == target_id
 
-      NodeOperationsStrategy.new.merge_into(source_id, target_id)
+      # A savepoint (see create_relation): a refused merge rolls back only its own writes, so the
+      # row can still record the failure reason.
+      result = nil
+      ActiveRecord::Base.transaction(requires_new: true) do
+        result = NodeOperationsStrategy.new.merge_into(source_id, target_id)
+        raise ActiveRecord::Rollback unless result[:success]
+      end
+      result
+    rescue ProjectMembership::Collision => e
+      { success: false, error: "Failed to merge nodes: #{e.message}" }
     end
 
     def create_relation(row, effective, action_params)
@@ -243,13 +252,13 @@ class CompactionReviewApplier
                  error: "#{NodeOperationsStrategy::PROJECT_ROOT_PROTECTED_ERROR} (#{members} members still scoped to it)" }
       end
 
-      Current.deletion_reason = effective[:reason] || "scan_review"
-      entity.destroy!
-      { success: true, message: "Entity #{entity_id} deleted" }
-    rescue ActiveRecord::RecordNotDestroyed, ActiveRecord::RecordInvalid => e
+      # Never a cascade: its part_of children move under its parent (global when it has none), in a
+      # savepoint, so a refusal rolls back only this delete and the row records why.
+      moves = RelationMembershipWrite.destroy_entity!(entity, reason: effective[:reason] || "scan_review")
+      { success: true, message: [ "Entity #{entity_id} deleted", moves.summary(past: true) ].compact.join("; ") }
+    rescue ActiveRecord::RecordNotDestroyed, ActiveRecord::RecordInvalid,
+           ProjectMembership::Collision, ProjectMembership::LockTimeout => e
       { success: false, error: "Failed to delete entity: #{e.message}" }
-    ensure
-      Current.deletion_reason = nil
     end
 
     def dismiss_compaction_review(effective)

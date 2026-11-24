@@ -6,8 +6,7 @@ require "rails_helper"
 RSpec.describe "Entity panel", type: :request do
   let!(:alpha) { MemoryEntity.create!(name: "Alpha Service", entity_type: "Project") }
   let!(:widget) do
-    MemoryEntity.create!(name: "SynthWidget", entity_type: "Component", project_id: alpha.id, aliases: "synth tile",
-                         description: "Renders synthetic tiles")
+    fs_member!(alpha, "SynthWidget", "Component", aliases: "synth tile", description: "Renders synthetic tiles")
   end
   let!(:router) { MemoryEntity.create!(name: "Synth Router", entity_type: "Service") }
   let(:frame) { { "Turbo-Frame" => "entity-panel" } }
@@ -32,8 +31,10 @@ RSpec.describe "Entity panel", type: :request do
       expect(html.at_css("turbo-frame#entity-panel h2").text).to eq("SynthWidget")
       expect(response.body).to include("Alpha Service", "synth tile", "Renders synthetic tiles")
       expect(observations).to eq([ "High-trust fact", "Low-trust note" ])
+      # The middle link is the widget's part_of edge to its project root (fs_member!).
       expect(html.css("[data-testid='entity-panel-relation']").map { |link| [ link.text, link["href"] ] })
-        .to eq([ [ "Synth Router", entity_panel_path(router) ], [ "Synth Router", entity_panel_path(router) ] ])
+        .to eq([ [ "Synth Router", entity_panel_path(router) ], [ "Alpha Service", entity_panel_path(alpha) ],
+                 [ "Synth Router", entity_panel_path(router) ] ])
       expect(html.at_css("[data-testid='entity-panel-explore']")["href"]).to eq(explore_path(entity_id: widget.id))
       expect(html.css("a").map { |link| link["href"] }).to all(satisfy { |href| !href.to_s.match?(%r{/edit|/operator/}) })
       expect(html.at_css("ui-sidebar, nav.ui-sidebar")).to be_nil # no layout inside a frame request
@@ -159,7 +160,7 @@ RSpec.describe "Entity panel", type: :request do
       expect(forms).to all(satisfy { |form| form.at_css("input[name='authenticity_token']") })
       expect(forms.reject { |form| form["action"].start_with?("/changes/") || form["method"] == "get" })
         .to all(satisfy { |form| form["data-turbo-stream"] == "true" })
-      expect(html.css("[data-testid='entity-panel-remove-relation']").size).to eq(2)
+      expect(html.css("[data-testid='entity-panel-remove-relation']").size).to eq(3) # with the part_of to Alpha Service
       expect(html.css("[data-testid='entity-panel-retire']").size).to eq(2)
       expect(html.at_css("[data-testid='entity-panel-merge']")["href"]).to eq(new_explore_merge_path(source_id: widget.id))
       change = html.at_css("[data-testid='entity-panel-change']")

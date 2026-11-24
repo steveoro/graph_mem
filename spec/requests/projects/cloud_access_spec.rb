@@ -5,7 +5,7 @@ require "rails_helper"
 # Agent-CLI PR2, step U: the Projects page "Cloud" column, the only place cloud_allowed is set.
 RSpec.describe "Projects › Cloud access", type: :request do
   let!(:project) { MemoryEntity.create!(name: "Gadget Project", entity_type: "Project") }
-  let!(:widget) { MemoryEntity.create!(name: "SynthWidget", entity_type: "Component", project_id: project.id) }
+  let!(:widget) { fs_member!(project, "SynthWidget", "Component") }
 
   def toggle(entity, allowed, root: nil) = patch projects_cloud_access_path(entity), params: { allowed: allowed, root: root }.compact
 

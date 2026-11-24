@@ -99,6 +99,31 @@ RSpec.describe CompactionReviewApplier, ".preview" do
     expect(preview).to include(ok: true, undo: "not undoable: hard delete", warnings: [ "Can't be undone" ])
   end
 
+  it "says where a delete_entity's children go" do
+    [ [ widget, project ], [ beta, widget ] ].each do |child, parent|
+      MemoryRelation.create!(from_entity: child, to_entity: parent, relation_type: "part_of")
+      ProjectMembership.sync!(child)
+    end
+
+    preview, applied = preview_then_apply(row("delete_entity", { "entity_id" => widget.id }))
+
+    expect(preview[:effects]).to include("1 child entity moves under 'Alpha Service' (##{project.id})")
+    expect(applied).to include(success: true, message: "Entity #{widget.id} deleted; 1 child entity moved under 'Alpha Service' (##{project.id})")
+    expect(beta.reload.project_id).to eq(project.id)
+  end
+
+  # Drift is this example's point: a parentless entity stamped into a project by hand.
+  it "warns that a delete_entity whose children can't become global will be refused", membership_drift: :allowed do
+    MemoryRelation.create!(from_entity: beta, to_entity: widget, relation_type: "part_of")
+    [ widget, beta ].each { |entity| entity.update_column(:project_id, project.id) }
+    MemoryEntity.create!(name: "Beta Service", entity_type: "Component")
+
+    preview = described_class.preview(row("delete_entity", { "entity_id" => widget.id }))
+
+    expect(preview).to include(ok: false, effects: include("1 child entity becomes global"),
+                               warnings: [ "Refused: 'Beta Service' already exists in the global scope", "Can't be undone" ])
+  end
+
   it "returns the preview from apply_maintenance_review dry_run" do
     proposal = row("relationship_proposal", { "from_entity_id" => widget.id, "to_entity_id" => beta.id, "relation_type" => "depends_on" })
 

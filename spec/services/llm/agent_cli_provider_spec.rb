@@ -8,7 +8,7 @@ RSpec.describe Llm::AgentCliProvider do
   subject(:provider) { described_class.new }
 
   let!(:project) { MemoryEntity.create!(name: "Zq7Canary Project", entity_type: "Project", aliases: "Zq7cp") }
-  let!(:widget) { MemoryEntity.create!(name: "Zq7CanaryWidget", entity_type: "Component", project_id: project.id) }
+  let!(:widget) { fs_member!(project, "Zq7CanaryWidget", "Component") }
   # Answers with the first token of the prompt it was sent, so the answer must be restored.
   let(:handler) do
     lambda do |request|

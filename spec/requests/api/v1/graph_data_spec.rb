@@ -92,7 +92,7 @@ RSpec.describe "API V1 Graph Data", type: :request do
 
     def grow(count)
       count.times do |i|
-        node = MemoryEntity.create!(name: "Synth Extra #{SecureRandom.hex(4)} #{i}", entity_type: "Note", project_id: alpha.id)
+        node = fs_member!(alpha, "Synth Extra #{SecureRandom.hex(4)} #{i}", "Note")
         MemoryObservation.create!(memory_entity: node, content: "Synthetic note #{i}.")
         MemoryRelation.create!(from_entity: node, to_entity: widget, relation_type: "relates_to")
       end
@@ -186,7 +186,7 @@ RSpec.describe "API V1 Graph Data", type: :request do
 
     it "counts the real total for a capped root view and a capped children view" do
       3.times { |i| MemoryEntity.create!(name: "Synth Project #{i}", entity_type: "Project") }
-      3.times { |i| MemoryRelation.create!(from_entity: MemoryEntity.create!(name: "Synth Child #{i}", entity_type: "Note"), to_entity: widget, relation_type: "part_of") }
+      3.times { |i| fs_member!(widget, "Synth Child #{i}", "Note") }
       stub_const("Api::V1::GraphDataController::MAX_NODES", 2)
 
       get "/api/v1/graph_data", params: { root_only: "true" }

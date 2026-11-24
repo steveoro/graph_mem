@@ -9,13 +9,49 @@
 # a second run changes 0 rows. Unrooted entities stay NULL (global). No
 # renames and no re-embedding — project_id is not an embedding field.
 #
-# Used by the backfill migration and by
-# `bin/rails graph_mem:backfill_project_ids[dry_run]` for the report only.
+# A stamp with no part_of path to its project is repaired toward the stamp
+# when it can be: if every entity up its part_of chain carries the same stamp
+# P, the topmost one (which has no parent) gets a part_of to P's root, once per
+# top, through the model (audited) in one change set of kind CHANGE_SET_KIND;
+# otherwise the stamp is cleared. The two edge kinds of the drift report
+# (reached_by_two_roots, several_parents) are only reported.
+#
+# Used by the repair migrations and by
+# `bin/rails graph_mem:backfill_project_ids[dry_run]`.
 class ProjectIdBackfill
-  Report = Struct.new(:per_project, :unrooted, :conflicts, :changed, keyword_init: true)
+  Report = Struct.new(:per_project, :unrooted, :conflicts, :changed, :drift, :attached, :cleared, keyword_init: true)
+  # The change set of the part_of edges a run adds (System > Activity; undoable, see #attach!).
+  CHANGE_SET_KIND = "maintenance.membership_repair"
+  ACTOR = "maintenance:project_id_backfill"
 
-  # @param out [#puts, #call] report sink — $stdout for the rake task, a
-  #   `say` lambda for the migration.
+  # The kinds of membership drift {#drift} counts, in report order. The first three are stamps the
+  # backfill repairs; the last two are edges it reports but never changes.
+  DRIFT_KINDS = %i[wrong_project stamped_without_path path_without_stamp reached_by_two_roots several_parents].freeze
+
+  # Membership drift, read-only: what the stored `project_id` stamps and the part_of edges disagree
+  # on. `ids` lists the offending entity ids per kind (ascending), `counts` their sizes.
+  #
+  #   drift = ProjectIdBackfill.drift
+  #   drift.any?                    # => false on a consistent graph
+  #   drift.counts[:wrong_project]  # => 0
+  #   drift.summary                 # => "wrong_project=0 stamped_without_path=0 ..."
+  Drift = Struct.new(:counts, :ids, keyword_init: true) do
+    # @return [Boolean] true when any kind has an offender
+    def any? = counts.values.any?(&:positive?)
+
+    # @return [String] "kind=count" pairs in DRIFT_KINDS order
+    def summary = DRIFT_KINDS.map { |kind| "#{kind}=#{counts.fetch(kind, 0)}" }.join(" ")
+  end
+
+  # The drift report, without the lock and without writing: the same walk the backfill applies
+  # (ProjectMembership.member_ids from every Project, lower Project id first).
+  # @return [Drift]
+  def self.drift
+    new(out: nil).drift
+  end
+
+  # @param out [#puts, #call, nil] report sink — $stdout for the rake task, a
+  #   `say` lambda for the migration; nil when only {#drift} is read.
   def initialize(out: $stdout)
     @out = out
   end
@@ -107,9 +143,30 @@ class ProjectIdBackfill
   end
   private_class_method :moving_rows
 
+  # @param membership [Hash<Integer, Integer>, nil] a {#compute_membership} map already in hand
+  # @param conflicts [Hash<Integer, Array<Integer>>, nil] its conflicts
+  # @return [Drift] see {.drift}
+  def drift(membership: nil, conflicts: nil)
+    membership, conflicts = compute_membership unless membership
+    ids = { wrong_project: [], stamped_without_path: [], path_without_stamp: [] }
+    MemoryEntity.where.not(entity_type: NodeOperationsStrategy::PROJECT_ENTITY_TYPE).order(:id)
+                .pluck(:id, :project_id).each do |id, project_id|
+      expected = membership[id]
+      if project_id && expected && project_id != expected then ids[:wrong_project] << id
+      elsif project_id && expected.nil? then ids[:stamped_without_path] << id
+      elsif project_id.nil? && expected then ids[:path_without_stamp] << id
+      end
+    end
+    ids[:reached_by_two_roots] = conflicts.keys.sort
+    # Compared by the column's collation, so a stored `Part_Of` counts.
+    ids[:several_parents] = MemoryRelation.where(relation_type: "part_of").group(:from_entity_id)
+                                          .having("COUNT(*) > 1").order(:from_entity_id).pluck(:from_entity_id)
+    Drift.new(counts: ids.transform_values(&:size), ids: ids)
+  end
+
   # @param dry_run [Boolean] print the report without writing
   # @return [Report] per-project member counts, unrooted count, conflicts,
-  #   changed-row count (0 on a re-run)
+  #   changed-row count (0 on a re-run), and the drift found before the run
   def run(dry_run: false)
     # Compute + apply under the shared membership lock so a live re-parent
     # can't land between the two steps and get stamped under its old
@@ -121,28 +178,17 @@ class ProjectIdBackfill
     attempts = 0
     begin
       attempts += 1
-      membership = conflicts = nil
-      unrooted_count = changed = 0
+      membership = conflicts = drift_before = tops = nil
+      unrooted_count = changed = cleared = @changed = 0
       ProjectMembership.with_membership_lock do
         membership, conflicts = compute_membership
+        drift_before = drift(membership: membership, conflicts: conflicts)
+        tops, covered = attachment_plan(drift_before.ids[:stamped_without_path])
+        cleared = drift_before.counts[:stamped_without_path] - covered
+        membership, conflicts = write!(membership, conflicts, tops) unless dry_run
         unrooted_count = MemoryEntity.where.not(id: membership.keys)
                                      .where.not(entity_type: "Project").count
-        # apply_membership runs several update_all statements — wrap them in
-        # one transaction INSIDE the advisory lock (lock-before-txn ordering):
-        # a failure mid-apply (e.g. clearing a scope that collides with a
-        # global same-name row) must roll back every stamp, not leave the
-        # projects written so far committed.
-        changed = dry_run ? 0 : MemoryEntity.transaction do
-          begin
-            apply_membership(membership)
-          rescue ActiveRecord::RecordNotUnique => e
-            # Re-raise carrying the batch-aware hint (movers derived from
-            # `membership`, not a name scan); the DB error stays as `cause`
-            # so the rake abort can still print the raw diagnostics.
-            raise ActiveRecord::RecordNotUnique,
-                  self.class.conflict_hint(e, membership: membership)
-          end
-        end
+        changed = @changed
       end
     rescue ActiveRecord::LockWaitTimeout, ProjectMembership::LockTimeout
       retry if attempts < MAX_LOCK_WAIT_RETRIES
@@ -155,13 +201,77 @@ class ProjectIdBackfill
       per_project: per_project,
       unrooted: unrooted_count,
       conflicts: conflicts,
-      changed: changed
+      changed: changed,
+      drift: drift_before,
+      attached: tops.size,
+      cleared: cleared
     )
     print_report(report, dry_run: dry_run)
     report
   end
 
   private
+
+  # Attaches the planned tops, then stamps from the edges, in one transaction INSIDE the advisory
+  # lock (lock-before-txn ordering): a failure mid-apply (e.g. clearing a scope that collides with a
+  # global same-name row) must roll back every edge and stamp, not leave those written so far.
+  # @return [Array(Hash, Hash)] the membership and conflicts the stamps were applied from
+  def write!(membership, conflicts, tops)
+    ChangeSet.record(kind: CHANGE_SET_KIND, actor: ACTOR, summary: "attached #{tops.size} part_of tree(s) to their stamped project") do
+      MemoryEntity.transaction do
+        attach!(tops)
+        membership, conflicts = compute_membership if tops.any?
+        @changed = apply_membership(membership)
+      rescue ActiveRecord::RecordNotUnique => e
+        # Re-raise carrying the batch-aware hint (movers derived from `membership`, not a name
+        # scan); the DB error stays as `cause` so the rake abort can still print the raw diagnostics.
+        raise ActiveRecord::RecordNotUnique, self.class.conflict_hint(e, membership: membership)
+      end
+    end
+    [ membership, conflicts ]
+  end
+
+  # For each entity stamped into a project with no part_of path to it: its owned part_of chain,
+  # walked up to the top (cycle-guarded). The top gets an edge to the stamped project's root only
+  # when every entity on the chain carries that same stamp and the top has no part_of at all.
+  # @param ids [Array<Integer>] the stamped_without_path entities
+  # @return [Array(Hash{Integer => Integer}, Integer)] top id => project id, and how many of `ids`
+  #   those edges root
+  def attachment_plan(ids)
+    tops = {}
+    covered = ids.count do |id|
+      chain = owned_chain(id)
+      stamps = MemoryEntity.where(id: chain).distinct.pluck(:project_id)
+      top = chain&.last
+      next false unless top && stamps.size == 1 && stamps.first &&
+                        !MemoryRelation.exists?(from_entity_id: top, relation_type: "part_of") &&
+                        !RelationSemantics.would_create_cycle?(top, stamps.first)
+
+      tops[top] = stamps.first
+    end
+    [ tops, covered ]
+  end
+
+  # @return [Array<Integer>, nil] the entity and its owned part_of ancestors, nil on a cycle
+  def owned_chain(id)
+    chain = [ id ]
+    while (parent = MemoryRelation.where(from_entity_id: chain.last, relation_type: "part_of")
+                                  .where(ProjectMembership::OWNED_EDGE_SQL).order(:id).pick(:to_entity_id))
+      return nil if chain.include?(parent)
+
+      chain << parent
+    end
+    chain
+  end
+
+  # Undoing the change set (ChangeSetUndo, audit strategy) deletes these edges and syncs each top
+  # back out of the project: the tree goes global, as the clear would have made it.
+  def attach!(tops)
+    tops.each do |top_id, project_id|
+      MemoryRelation.create!(from_entity_id: top_id, to_entity_id: project_id, relation_type: "part_of",
+                             properties: { "source" => "project_id_backfill" })
+    end
+  end
 
   # @return [Array(Hash<Integer, Integer>, Hash<Integer, Array<Integer>>)]
   #   entity_id => project_id map, plus entity_id => [project_ids] when two
@@ -224,6 +334,9 @@ class ProjectIdBackfill
     emit "  unrooted (stays NULL): #{report.unrooted}"
     emit "  conflicts: #{report.conflicts.size}" +
          (report.conflicts.any? ? " #{report.conflicts.inspect}" : "")
+    emit "  drift before the run: #{report.drift.summary}"
+    emit "  stamps without a path: #{report.attached} top(s) attached to the stamped project's root, " \
+         "#{report.cleared} stamp(s) cleared#{' (would be)' if dry_run}"
     emit(dry_run ? "  (no rows written)" : "  changed rows: #{report.changed}")
   end
 

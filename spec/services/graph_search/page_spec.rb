@@ -7,12 +7,11 @@ require "rails_helper"
 RSpec.describe GraphSearch::Page do
   let!(:alpha) { MemoryEntity.create!(name: "Alpha Service", entity_type: "Project") }
   let!(:gadget) { MemoryEntity.create!(name: "Gadget Project", entity_type: "Project") }
-  let!(:widget) { MemoryEntity.create!(name: "SynthWidget", entity_type: "Component", project_id: alpha.id, aliases: "synth tile|Gizmo") }
-  let!(:router) { MemoryEntity.create!(name: "Synth Router", entity_type: "Service", project_id: gadget.id) }
+  let!(:widget) { fs_member!(alpha, "SynthWidget", "Component", aliases: "synth tile|Gizmo") }
+  let!(:router) { fs_member!(gadget, "Synth Router", "Service") }
   let!(:parts) do
     Array.new(24) do |i|
-      MemoryEntity.create!(name: format("Synth Part %02d", i + 1), entity_type: i.even? ? "Component" : "Note",
-                           project_id: i < 12 ? alpha.id : gadget.id)
+      fs_member!(i < 12 ? alpha : gadget, format("Synth Part %02d", i + 1), i.even? ? "Component" : "Note")
     end
   end
 
@@ -211,7 +210,7 @@ RSpec.describe GraphSearch::Page do
 
       expect(row.snippets.map(&:content)).to eq([ "SynthWidget renders synthetic tiles", "Tiles were cached" ])
       expect(row.project_name).to eq("Alpha Service")
-      expect(row.relation_count).to eq(2)
+      expect(row.relation_count).to eq(3) # the two depends_on edges and its part_of to Alpha Service
     end
 
     it "applies the perspective to snippets and shows obsolete ones only when asked" do

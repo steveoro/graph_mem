@@ -166,11 +166,11 @@ RSpec.describe GraphMemContext do
     it "returns every member with no truncation (scope is an indexed project_id filter)" do
       project = MemoryEntity.create!(name: "UncappedProject", entity_type: "Project")
       members = Array.new(3) do |i|
-        MemoryEntity.create!(name: "UncappedChild#{i}", entity_type: "Task", project_id: project.id)
+        fs_member!(project, "UncappedChild#{i}", "Task")
       end
       # A same-named entity in ANOTHER project is outside this scope.
       other = MemoryEntity.create!(name: "OtherProject", entity_type: "Project")
-      foreign = MemoryEntity.create!(name: "UncappedChild0", entity_type: "Task", project_id: other.id)
+      foreign = fs_member!(other, "UncappedChild0", "Task")
       described_class.for("cursor-A").current_project_id = project.id
 
       scope = described_class.for("cursor-A").scoped_entity_scope

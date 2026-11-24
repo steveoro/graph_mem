@@ -99,7 +99,7 @@ RSpec.describe GraphDeleteService do
     end
 
     it "refuses a Project with members even with allow_empty_project_delete" do
-      first.update!(project_id: project.id)
+      fs_member!(project, first)
 
       expect {
         described_class.call(
@@ -112,7 +112,9 @@ RSpec.describe GraphDeleteService do
     end
 
     it "maps a member committed after the count (FK refusal) to project_has_members" do
-      allow_any_instance_of(MemoryEntity).to receive(:destroy!) do
+      # Stubbed at the delete helper, outside its savepoint, so the simulated concurrent commit
+      # survives the savepoint rollback the way another session's commit would.
+      allow(RelationMembershipWrite).to receive(:destroy_entity!) do
         first.update_column(:project_id, project.id)
         raise ActiveRecord::InvalidForeignKey, "fk"
       end
@@ -139,7 +141,7 @@ RSpec.describe GraphDeleteService do
     end
 
     it "rolls back the whole batch and keeps the code when a later Project delete is refused" do
-      first.update!(project_id: project.id)
+      fs_member!(project, first)
       relation_id = relation.id
 
       expect {
@@ -212,5 +214,22 @@ RSpec.describe GraphDeleteService do
       relations_deleted: before[2] - MemoryRelation.count
     )
     expect(summary).to include(entities_deleted: 1, observations_deleted: 2, relations_deleted: 1)
+  end
+
+  describe "delete_entity of an entity with part_of children" do
+    def delete_through_path(entity)
+      described_class.call(operations: [ { type: "delete_entity", entity_id: entity.id } ])
+    rescue McpGraphMemErrors::OperationFailed => e
+      e
+    end
+
+    def refused?(outcome)
+      outcome.is_a?(McpGraphMemErrors::OperationFailed) && outcome.category == "validation" &&
+        outcome.message.include?("already exists there")
+    end
+
+    def undo_status = :not_undoable
+
+    it_behaves_like "an entity delete that moves part_of children up"
   end
 end

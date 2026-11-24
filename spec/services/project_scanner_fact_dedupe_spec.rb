@@ -149,7 +149,10 @@ RSpec.describe ProjectScanner, "reworded facts", :with_test_embeddings do
       facts.replace([ "Validates presence of email." ])
 
       expect(scan.observations_deduped).to eq(0)
-      expect(widget_facts).to contain_exactly("Validates presence of name.", "Validates presence of email.")
+      # Both written. The rescan's validation then retires the first: SynthWidget hangs on the root
+      # now (Containment), and that fact names neither it nor the project.
+      expect(MemoryEntity.find_by!(name: "SynthWidget").memory_observations.pluck(:content))
+        .to contain_exactly("Validates presence of name.", "Validates presence of email.")
     end
 
     it "asks for the words at most SCAN_LLM_BATCHES times inside the reconcile, and once when the LLM fails (final review)" do

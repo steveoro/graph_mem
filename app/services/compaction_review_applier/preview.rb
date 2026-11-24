@@ -36,14 +36,15 @@ class CompactionReviewApplier
         return result(false, warnings: [ NodeOperationsStrategy::PROJECT_ROOT_PROTECTED_ERROR ])
       end
 
-      repointed, dropped = merge_relation_counts(source.id, target.id)
+      repointed, dropped, parent = merge_relation_counts(source.id, target.id)
       children = MemoryRelation.where(to_entity_id: source.id, relation_type: "part_of").count
       result(true, undo: UNDO_MERGE, effects: [
         "'#{source.name}' (##{source.id}) merges into '#{target.name}' (##{target.id})",
         "#{source.memory_observations.count} observation(s) move to the target",
         "#{repointed} relation(s) re-pointed, #{dropped} dropped as duplicates",
+        merge_parent_effect(target, parent),
         "#{children} child entit#{children == 1 ? 'y' : 'ies'} reparented"
-      ])
+      ].compact)
     end
 
     def preview_relationship_proposal(effective, params)
@@ -92,11 +93,13 @@ class CompactionReviewApplier
       end
 
       relations = MemoryRelation.where(from_entity_id: entity.id).or(MemoryRelation.where(to_entity_id: entity.id)).count
-      children = MemoryRelation.where(to_entity_id: entity.id, relation_type: "part_of").count
-      result(true, undo: UNDO_NONE, effects: [
-        "Deletes '#{entity.name}' (##{entity.id}) with #{entity.memory_observations.count} observation(s) and #{relations} relation(s)",
-        "#{children} child entit#{children == 1 ? 'y is' : 'ies are'} left without a parent"
-      ], warnings: [ "Can't be undone" ])
+      moves = RelationMembershipWrite.entity_delete_plan(entity)
+      collision = moves.collision_name
+      effects = [ "Deletes '#{entity.name}' (##{entity.id}) with #{entity.memory_observations.count} observation(s) and #{relations} relation(s)" ]
+      effects << moves.summary if moves.summary
+      warnings = [ "Can't be undone" ]
+      warnings.unshift("Refused: '#{collision}' already exists in #{project_label(ProjectMembership.project_id_for_parent(moves.parent))}") if collision
+      result(collision.nil?, undo: UNDO_NONE, effects: effects, warnings: warnings)
     end
 
     def preview_stale_memory(effective, _params)
@@ -165,15 +168,38 @@ class CompactionReviewApplier
                               "Scope becomes #{project_label(ProjectMembership.project_id_for_parent(parent))}" ])
     end
 
+    # Mirrors reassign_outgoing_relations! / reassign_incoming_relations! (the edges between the two
+    # aren't counted). The source's own parent edge is counted apart: see merge_parent_effect.
+    # @return [Array(Integer, Integer, Array(Symbol, MemoryRelation), nil)] re-pointed, dropped as
+    #   duplicates, and [:taken or :dropped, the source's parent edge]
     def merge_relation_counts(source_id, target_id)
       relations = MemoryRelation.where(from_entity_id: source_id).or(MemoryRelation.where(to_entity_id: source_id))
                                 .where.not(from_entity_id: target_id).where.not(to_entity_id: target_id).to_a
+      strategy = NodeOperationsStrategy.new
+      parent = nil
       dropped = relations.count do |relation|
         from = relation.from_entity_id == source_id ? target_id : relation.from_entity_id
         to = relation.to_entity_id == source_id ? target_id : relation.to_entity_id
-        MemoryRelation.exists?(from_entity_id: from, to_entity_id: to, relation_type: relation.relation_type)
+        next true if MemoryRelation.exists?(from_entity_id: from, to_entity_id: to, relation_type: relation.relation_type)
+        next false unless parent.nil? && relation.from_entity_id == source_id && MemoryRelation.reads_as_part_of?(relation.relation_type)
+
+        parent = [ strategy.target_takes_parent?(source_id, target_id, relation.to_entity_id) ? :taken : :dropped, relation ]
+        false
       end
-      [ relations.size - dropped, dropped ]
+      parent_count = parent ? 1 : 0
+      [ relations.size - dropped - parent_count, dropped, parent ]
+    end
+
+    # What happens to the source's own part_of parent edge, or nil when it has none.
+    def merge_parent_effect(target, parent)
+      return nil unless parent
+
+      name = MemoryEntity.where(id: parent.last.to_entity_id).pick(:name)
+      if parent.first == :taken
+        "'#{target.name}' has no parent of its own: it takes the source's, part_of '#{name}'"
+      else
+        "'#{target.name}' keeps its own parent: the source's part_of '#{name}' is dropped"
+      end
     end
 
     def result(ok, effects: [], warnings: [], undo: UNDO_AUDIT)

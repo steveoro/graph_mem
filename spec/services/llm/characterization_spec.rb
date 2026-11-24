@@ -197,7 +197,7 @@ RSpec.describe "LLM calls (characterization)" do
   # 1.84.0: FactKeywords::LlmWords (1.83.0) through the summary transport, in JSON mode.
   describe "G6: the LLM words of facts that name no entity (FactKeywords::LlmWords)" do
     let!(:root) { MemoryEntity.create!(name: "Gadget Project", entity_type: "Project") }
-    let!(:widget) { MemoryEntity.create!(name: "SynthWidget", entity_type: "Class", project_id: root.id) }
+    let!(:widget) { fs_member!(root, "SynthWidget", "Class") }
     let!(:fact) do
       MemoryObservation.create!(memory_entity: widget, content: "Validates presence of name.").tap do |observation|
         observation.update_columns(keywords: [ "Gadget Project", "SynthWidget" ], keywords_at: Time.current)

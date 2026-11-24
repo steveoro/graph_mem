@@ -9,8 +9,13 @@
 # no lock, no sync. Used by the REST relation endpoints and the operator's data-exchange actions;
 # neither can move a relation's endpoints, so only the type is checked.
 #
+# Deleting an entity moves membership too (its part_of children lose their parent edge):
+# destroy_entity! is the one delete every entity-delete path uses, always under the membership
+# lock (see EntityDelete).
+#
 #   RelationMembershipWrite.update!(relation, relation_type: "part_of", weight: 0.5)
 #   RelationMembershipWrite.destroy!(relation, reason: "wrong parent")
+#   RelationMembershipWrite.destroy_entity!(entity, reason: "obsolete") # => EntityDelete::Plan
 module RelationMembershipWrite
   module_function
 
@@ -54,6 +59,23 @@ module RelationMembershipWrite
       end
     end
     relation
+  end
+
+  # Deletes an entity; its part_of children move under its parent, or become global when it has
+  # none (EntityDelete).
+  # @param entity [MemoryEntity]
+  # @param reason [String, nil] recorded on the audit rows (Current.deletion_reason)
+  # @return [EntityDelete::Plan] where the children went
+  # @raise [ProjectMembership::Collision, ProjectMembership::LockTimeout, ActiveRecord::RecordInvalid,
+  #   ActiveRecord::RecordNotDestroyed] nothing is deleted
+  def destroy_entity!(entity, reason: nil)
+    EntityDelete.new(entity).destroy!(reason: reason)
+  end
+
+  # @param entity [MemoryEntity]
+  # @return [EntityDelete::Plan] where its children would go if it were deleted now (read-only)
+  def entity_delete_plan(entity)
+    EntityDelete.new(entity).plan
   end
 
   # @return [Object] the block's value, under the membership lock when `needed`

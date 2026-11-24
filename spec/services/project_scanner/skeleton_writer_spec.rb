@@ -49,10 +49,9 @@ RSpec.describe ProjectScanner::SkeletonWriter do
   end
 
   it "upgrades a stored Class to the role type, keeps another role, and keeps an existing parent" do
-    file = MemoryEntity.create!(name: "app/models/gadget/swimmer.rb", entity_type: "File", project_id: root.id)
-    swimmer = MemoryEntity.create!(name: "Gadget::Swimmer", entity_type: "Class", project_id: root.id)
-    MemoryRelation.create!(from_entity_id: swimmer.id, to_entity_id: file.id, relation_type: "part_of")
-    badge = MemoryEntity.create!(name: "Gadget::Badge", entity_type: "Service", project_id: root.id, aliases: "badge")
+    file = fs_member!(root, "app/models/gadget/swimmer.rb", "File")
+    swimmer = fs_member!(file, "Gadget::Swimmer", "Class")
+    badge = fs_member!(root, "Gadget::Badge", "Service", aliases: "badge")
 
     write(build_map)
 

@@ -5,7 +5,7 @@ require "rails_helper"
 # UI-4b E2: the Explore page (operator and guest) and the /graph redirect. Synthetic data.
 RSpec.describe "Explore page", type: :request do
   let!(:alpha) { MemoryEntity.create!(name: "Alpha Service", entity_type: "Project") }
-  let!(:widget) { MemoryEntity.create!(name: "SynthWidget", entity_type: "Component", project_id: alpha.id) }
+  let!(:widget) { fs_member!(alpha, "SynthWidget", "Component") }
 
   def html = Nokogiri::HTML(response.body)
   def root_data = html.at_css("[data-controller='explore']")

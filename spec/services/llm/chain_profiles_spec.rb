@@ -6,7 +6,7 @@ require "rails_helper"
 # stub bridge. Which failure moves to the next model, which to the next profile, and what stays.
 RSpec.describe "Llm chains with profiles and backup models" do
   let!(:project) { MemoryEntity.create!(name: "Gadget Project", entity_type: "Project", cloud_allowed: true) }
-  let!(:widget) { MemoryEntity.create!(name: "SynthWidget", entity_type: "Component", project_id: project.id) }
+  let!(:widget) { fs_member!(project, "SynthWidget", "Component") }
   let(:local) { FakeProvider.new(name: "ollama", result: { ok: true, text: "local answer", error: nil, latency_ms: 1.0 }) }
   # "profile/model" => the bridge's answer; anything else answers ok with "<profile>/<model>".
   let(:answers) { {} }

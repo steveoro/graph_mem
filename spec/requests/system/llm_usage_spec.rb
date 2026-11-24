@@ -9,7 +9,7 @@ RSpec.describe "System › Settings › LLM usage", type: :request do
 
   let(:cache) { ActiveSupport::Cache::MemoryStore.new }
   let!(:project) { MemoryEntity.create!(name: "Zq7Canary Project", entity_type: "Project", cloud_allowed: true) }
-  let!(:widget) { MemoryEntity.create!(name: "Zq7CanaryWidget", entity_type: "Component", project_id: project.id) }
+  let!(:widget) { fs_member!(project, "Zq7CanaryWidget", "Component") }
   let(:local) { FakeProvider.new(name: "ollama", result: { ok: true, text: "Zq7CanaryWidget answer", error: nil, latency_ms: 1.0 }) }
 
   before do

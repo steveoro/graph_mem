@@ -157,7 +157,9 @@ class GraphDeleteService
 
     snapshot = entity.attributes
     begin
-      with_deletion_reason(attributes[:reason]) { entity.destroy! }
+      # Its part_of children move under its parent, or become global (a name taken there raises
+      # ProjectMembership::Collision: the batch rolls back, answered as a validation error).
+      RelationMembershipWrite.destroy_entity!(entity, reason: attributes[:reason])
     rescue ActiveRecord::InvalidForeignKey
       raise unless project
 

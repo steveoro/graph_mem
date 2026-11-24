@@ -105,7 +105,7 @@ RSpec.describe "Explore observation edits", type: :request do
     context "with a source fact (fact supersede F1)" do
       let!(:gadget) { MemoryEntity.create!(name: "Gadget Project", entity_type: "Project") }
 
-      before { widget.update!(project_id: gadget.id) }
+      before { fs_member!(gadget, widget) }
 
       it "marks and unmarks in explore.fact_mark change sets; undo removes the mark" do
         post fact_explore_observation_path(fact, mark: "1"), headers: stream_headers
@@ -130,12 +130,12 @@ RSpec.describe "Explore observation edits", type: :request do
         post fact_explore_observation_path(fact, mark: "0"), headers: stream_headers
         expect(response).to have_http_status(:unprocessable_content)
 
-        widget.update!(project_id: nil)
+        RelationMembershipWrite.destroy!(widget.relations_from.find_by!(to_entity: gadget)) # back to global
         post fact_explore_observation_path(fact, mark: "1"), headers: stream_headers
         expect(response).to have_http_status(:unprocessable_content)
         expect(response.body).to include("Only an observation inside a project")
 
-        widget.update!(project_id: gadget.id)
+        fs_member!(gadget, widget)
         fact.mark_obsolete!
         post fact_explore_observation_path(fact, mark: "1"), headers: stream_headers
         expect(response).to have_http_status(:unprocessable_content)

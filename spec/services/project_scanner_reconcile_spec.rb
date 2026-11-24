@@ -58,7 +58,7 @@ RSpec.describe ProjectScanner, "reconcile" do
 
   it "reuses an entity an earlier scan made with another type" do
     project = MemoryEntity.create!(name: "Gadget Project", entity_type: "Project")
-    MemoryEntity.create!(name: "SynthWidget", entity_type: "Module", project_id: project.id)
+    fs_member!(project, "SynthWidget", "Module")
     items.push(item("SynthWidget", "Class", "SynthWidget renders gadget frames."))
 
     result = scan
@@ -193,7 +193,7 @@ RSpec.describe ProjectScanner, "reconcile" do
 
   it "leaves same-named entities of other projects and the global namespace alone" do
     other = MemoryEntity.create!(name: "Alpha Service", entity_type: "Project")
-    foreign = MemoryEntity.create!(name: "SynthWidget", entity_type: "Module", project_id: other.id)
+    foreign = fs_member!(other, "SynthWidget", "Module")
     global = MemoryEntity.create!(name: "synthwidget", entity_type: "Component")
     items.push(item("SynthWidget", "Class", "SynthWidget renders gadget frames."))
 
@@ -221,5 +221,50 @@ RSpec.describe ProjectScanner, "reconcile" do
     expect(MemoryEntity.where(project_id: project.id).pluck(:name)).to eq(%w[SynthWidget])
     expect(project.memory_observations.pluck(:content)).to contain_exactly("Gadget Project renders gadget frames.", "Gadget ships a CLI.")
     expect(MemoryRelation.where(from_entity_id: project.id, relation_type: "depends_on")).to exist
+  end
+
+  # Containment: what the model left without a parent hangs on the scanned project's root.
+  describe "containment" do
+    def project = MemoryEntity.find_by!(name: "Gadget Project", project_id: nil)
+    def parent_edges(name) = MemoryRelation.where(from_entity_id: MemoryEntity.find_by!(name: name).id, relation_type: "part_of")
+
+    it "puts an entity the model gave no part_of under the root, with a marked containment edge" do
+      items.push(item("SynthWidget", "Class", "SynthWidget renders gadget frames."))
+
+      result = with_llm_provider(provider) { described_class.new(project_root: root, project_name: "Gadget Project", scan_id: "synth-scan").call }
+
+      edge = parent_edges("SynthWidget").sole
+      expect(edge.to_entity_id).to eq(project.id)
+      expect(edge.properties).to include("source" => "project_scan:synth-scan:containment", "scan_id" => "synth-scan")
+      expect(ProjectScanner::Containment.containment_source?(edge.properties["source"])).to be(true)
+      expect(result.relations_created).to eq(1)
+    end
+
+    it "keeps a part_of the model emitted to another entity" do
+      items.push(item("SynthWidget", "Class", "SynthWidget renders gadget frames.", relations: [ { to: "FrameBuffer", type: "part_of" } ]),
+                 item("FrameBuffer", "Class", "FrameBuffer holds SynthWidget frames."))
+
+      scan
+
+      expect(parent_edges("SynthWidget").pluck(:to_entity_id)).to eq([ MemoryEntity.find_by!(name: "FrameBuffer").id ])
+      expect(parent_edges("FrameBuffer").pluck(:to_entity_id)).to eq([ project.id ])
+    end
+
+    it "takes no membership lock inside the reconcile transaction for it" do
+      items.push(item("SynthWidget", "Class", "SynthWidget renders gadget frames."))
+      sql = []
+      callback = ->(*, payload) { sql << payload[:sql].to_s }
+
+      ActiveSupport::Notifications.subscribed(callback, "sql.active_record") { scan }
+
+      expect(parent_edges("SynthWidget").count).to eq(1)
+      expect(sql.grep(/GET_LOCK/)).to be_empty
+    end
+
+    it "writes nothing on a dry run" do
+      items.push(item("SynthWidget", "Class", "SynthWidget renders gadget frames."))
+
+      expect { scan(dry_run: true) }.not_to change(MemoryRelation, :count)
+    end
   end
 end

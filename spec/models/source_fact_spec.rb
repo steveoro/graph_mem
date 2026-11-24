@@ -5,7 +5,7 @@ require "rails_helper"
 # Fact supersede F1: the source-fact tag, replaces: hints, outdated_by and who confirmed a fact.
 RSpec.describe SourceFact, type: :model do
   let!(:gadget) { MemoryEntity.create!(name: "Gadget Project", entity_type: "Project") }
-  let!(:widget) { MemoryEntity.create!(name: "SynthWidget", entity_type: "Component", project_id: gadget.id) }
+  let!(:widget) { fs_member!(gadget, "SynthWidget", "Component") }
   let!(:loose) { MemoryEntity.create!(name: "Alpha Service", entity_type: "Service") }
 
   def observe(entity, content, **attrs) = MemoryObservation.create!(memory_entity: entity, content: content, **attrs)

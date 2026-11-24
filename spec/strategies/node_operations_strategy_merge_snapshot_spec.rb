@@ -14,10 +14,10 @@ RSpec.describe NodeOperationsStrategy, "merge snapshot" do
 
   before do
     MemoryObservation.create!(memory_entity: source, content: "SynthWidget renders synthetic tiles.")
-    MemoryRelation.create!(from_entity: source, to_entity: project, relation_type: "part_of")
+    fs_member!(project, source)
     MemoryRelation.create!(from_entity: source, to_entity: beta, relation_type: "depends_on")
     MemoryRelation.create!(from_entity: target, to_entity: beta, relation_type: "depends_on")
-    MemoryRelation.create!(from_entity: child, to_entity: source, relation_type: "part_of")
+    fs_member!(source, child)
   end
 
   def merge_step

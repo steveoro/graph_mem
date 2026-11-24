@@ -257,7 +257,7 @@ RSpec.describe "Review & Fix", type: :request do
     it "keeps the parent of a relation_retype row from the card's Keep choice" do
       project = MemoryEntity.create!(name: "Alpha Service", entity_type: "Project")
       gadget = MemoryEntity.create!(name: "SynthGadget", entity_type: "Component")
-      MemoryRelation.create!(from_entity: widget, to_entity: project, relation_type: "part_of")
+      fs_member!(project, widget)
       variant = MemoryRelation.create!(from_entity: widget, to_entity: gadget, relation_type: "synth_placeholder")
       variant.update_column(:relation_type, "Is Part Of")
       RelationTypeSweep.call

@@ -7,10 +7,10 @@ require "rails_helper"
 RSpec.describe Llm::Anonymizer::Dictionary do
   let!(:gadget) { MemoryEntity.create!(name: "Gadget Project", entity_type: "Project") }
   let!(:alpha) { MemoryEntity.create!(name: "Alpha Project", entity_type: "Project") }
-  let!(:widget) { MemoryEntity.create!(name: "SynthWidget", entity_type: "Component", project_id: gadget.id) }
-  let!(:member) { MemoryEntity.create!(name: "Zq7 Ada", entity_type: "Person", project_id: gadget.id) }
+  let!(:widget) { fs_member!(gadget, "SynthWidget", "Component") }
+  let!(:member) { fs_member!(gadget, "Zq7 Ada", "Person") }
   let!(:global_person) { MemoryEntity.create!(name: "Zq7 Bea", entity_type: "Person", aliases: "Zq7bea") }
-  let!(:other_user) { MemoryEntity.create!(name: "Zq7 Cid", entity_type: "User", project_id: alpha.id) }
+  let!(:other_user) { fs_member!(alpha, "Zq7 Cid", "User") }
   let!(:global_component) { MemoryEntity.create!(name: "Zq7 Gizmo", entity_type: "Component") }
   let(:session) { Llm::Anonymizer::Session.new(Llm::Scope.for_entities([ widget ])) }
   let(:text) { "Zq7 Ada, Zq7 Bea (zq7bea), Zq7 Cid and Zq7 Gizmo review SynthWidget." }
@@ -40,7 +40,7 @@ RSpec.describe Llm::Anonymizer::Dictionary do
   end
 
   it "keeps the type a term got first: a person who is also a scope member stays as before" do
-    MemoryEntity.create!(name: "SynthWidget Owner", entity_type: "Component", project_id: gadget.id)
+    fs_member!(gadget, "SynthWidget Owner", "Component")
     MemoryEntity.create!(name: "SynthWidget Owner", entity_type: "Person")
 
     expect(session.mask(Llm::Prompt.new.data("SynthWidget Owner")).text).to match(/\A⟦ENT_\h{4}⟧\z/)

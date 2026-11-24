@@ -219,11 +219,18 @@ paths:
       operationId: deleteMemoryEntity
       summary: Delete memory entity (cascades to observations and relations)
       tags: [Memory Entities]
+      description: Its part_of children move under its own part_of parent, with their subtrees, or become global when it has none.
       responses:
         '204':
           description: Deleted
         '404':
           description: Not found
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/error_response"
+        '422':
+          description: Delete refused (a part_of child's name is taken in the scope it moves to, the membership lock is busy, or a Project root still has members); nothing deleted
           content:
             application/json:
               schema:

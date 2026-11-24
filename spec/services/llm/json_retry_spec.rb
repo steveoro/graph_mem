@@ -7,7 +7,7 @@ require "rails_helper"
 # The plan's spec table, one example per row, against the stub bridge.
 RSpec.describe "Cloud JSON answers: shape, one retry, fall back" do
   let!(:project) { MemoryEntity.create!(name: "Gadget Project", entity_type: "Project", cloud_allowed: true) }
-  let!(:widget) { MemoryEntity.create!(name: "SynthWidget", entity_type: "Component", project_id: project.id) }
+  let!(:widget) { fs_member!(project, "SynthWidget", "Component") }
   let(:local) { FakeProvider.new(name: "ollama", result: { ok: true, text: '{"local": true}', error: nil, latency_ms: 1.0 }) }
   let(:queue) { [] }
   let!(:stub) do

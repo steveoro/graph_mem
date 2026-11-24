@@ -6,7 +6,7 @@ require "rails_helper"
 # changes, never embedded.
 RSpec.describe MemoryObservation, "keywords" do
   let(:root) { MemoryEntity.create!(name: "Gadget Project", entity_type: "Project") }
-  let(:widget) { MemoryEntity.create!(name: "SynthWidget", entity_type: "Class", project_id: root.id) }
+  let(:widget) { fs_member!(root, "SynthWidget", "Class") }
   let(:fact) { described_class.create!(memory_entity: widget, content: "SynthWidget keeps a FrameBuffer.") }
 
   def computed!(observation, path)
@@ -34,7 +34,7 @@ RSpec.describe MemoryObservation, "keywords" do
   end
 
   it "is pending again when it moves to another entity, as an entity merge moves facts" do
-    other = MemoryEntity.create!(name: "AlphaService", entity_type: "Service", project_id: root.id)
+    other = fs_member!(root, "AlphaService", "Service")
     computed!(fact, [ "Gadget Project", "SynthWidget", "FrameBuffer" ])
 
     fact.update!(memory_entity: other)

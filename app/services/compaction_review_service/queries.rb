@@ -60,11 +60,14 @@ class CompactionReviewService
     end
 
     # For `delete_entity` rows on the page: how many children are queued
-    # for deletion themselves vs would be left parentless. entity.destroy!
-    # removes observations + relations via dependent: :destroy, but child
-    # ENTITIES keep living without a parent — applying one row NEVER
-    # cascades, by (possibly temporary) design choice: the operator
-    # approved one deletion, not a subtree wipe. If lone-seeded subtree
+    # for deletion themselves vs would survive it (`parentless`). Applying
+    # one row NEVER cascades, by (possibly temporary) design choice: the
+    # operator approved one deletion, not a subtree wipe. The surviving
+    # child ENTITIES are not left parentless: they move one level up, under
+    # the deleted entity's own parent, with their subtrees and in the same
+    # project; only when it had no parent do they become global (and a name
+    # already taken there refuses the apply). See
+    # RelationMembershipWrite::EntityDelete. If lone-seeded subtree
     # deletions turn out common, revisit with a separate "apply with
     # children" action rather than a default cascade.
     def delete_children_info(report_type:, items:)

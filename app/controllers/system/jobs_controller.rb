@@ -99,6 +99,8 @@ module System
     end
 
     def relation_repair_notice(result)
+      return "Relation repair refused, nothing was deleted: #{result.error}." if result.error
+
       parts = [
         "Relation repair completed.",
         "Deleted #{result.deleted_count} relation(s).",

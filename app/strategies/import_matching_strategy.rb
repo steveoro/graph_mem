@@ -154,7 +154,10 @@ class ImportMatchingStrategy
     }
   end
 
-  # Recursively match nodes in the import tree
+  # Recursively match nodes in the import tree. Every declared node, contained or not
+  # (ImportEntityResolver.contained_child?), is matched in the import's project first, then
+  # globally: containment decides only where the execute creates a node absent from both
+  # (ImportExecutionStrategy#declared_scope_id), which the preview doesn't show.
   # @param node [Hash] The node to match
   # @param path [String] Current path in the tree
   # @param parent_name [String, nil] Name of the parent node in import data
@@ -249,8 +252,10 @@ class ImportMatchingStrategy
     observations = node["observations"] || node[:observations] || []
 
     # Find exact match by name AND entity_type — inside the import's
-    # project scope first. Reference nodes additionally resolve a single
-    # other project's declaration (a mere reference never creates a
+    # project scope first, then globally, for every declared node (one
+    # outside the project's part_of tree too: an earlier import may have
+    # stamped it into the project). Reference nodes additionally resolve a
+    # single other project's declaration (a mere reference never creates a
     # project-scoped copy). Class↔Module sibling-type fallbacks catch a
     # same-scope v1.49 leftover, then a global reference stub awaiting a
     # declarer — read-only here; execution decides whether retyping applies.

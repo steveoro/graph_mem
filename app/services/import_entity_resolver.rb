@@ -45,11 +45,36 @@ class ImportEntityResolver
       EntityTypeMapping.canonicalize(raw_type) || raw_type.to_s.strip
     end
 
+    # Whether a tree node's edge to its tree parent makes it a member of the parent's project: a
+    # part_of from the child to the parent. It decides only where a declared node is CREATED when
+    # absent: in the import's project when such a chain links it to the import's root Project,
+    # else in the global namespace. The lookup doesn't depend on it: every declared node is looked
+    # up in the import's project first, then globally (#find_by_name_and_type), in the preview
+    # (ImportMatchingStrategy) and the execute (ImportExecutionStrategy) alike, so a node an earlier
+    # import stamped into the project is found again rather than copied into the global scope.
+    #
+    #   ImportEntityResolver.contained_child?({ "relation_type" => "part_of" })    # => true
+    #   ImportEntityResolver.contained_child?({ "relation_type" => "depends_on" }) # => false
+    #
+    # @param node [Hash] a tree node (string or symbol keys)
+    # @return [Boolean]
+    def contained_child?(node)
+      type = node["relation_type"] || node[:relation_type] || "part_of"
+      direction = node["relation_direction"] || node[:relation_direction]
+      direction != "parent_to_child" && MemoryRelation.reads_as_part_of?(MemoryRelation.canonical_relation_type(type))
+    end
+
     # Project-scoped name+type lookup: the import's own project first, then
     # the GLOBAL namespace (project_id NULL — reference stubs, Project roots,
     # operator-created globals). Entities belonging to OTHER projects are
     # never matched: scoped names let same-name entities coexist per project,
     # so RepoB's `module Foo` no longer collides with RepoA's `class Foo`.
+    # The import passes its project for every declared node, contained or not
+    # (#contained_child?); project_id nil looks up the global namespace only.
+    # @param name [String]
+    # @param raw_type [String] any spelling (canonicalized)
+    # @param project_id [Integer, nil] the import's project
+    # @return [MemoryEntity, nil]
     def find_by_name_and_type(name, raw_type, project_id: nil)
       type = canonical_type(raw_type)
       own = project_id && MemoryEntity.find_by(name: name, entity_type: type, project_id: project_id)

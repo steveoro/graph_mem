@@ -260,7 +260,7 @@ RSpec.describe "MCP on the official SDK", type: :request do
       name = "SynthMember #{SecureRandom.hex(3)}"
       2.times do |n|
         project = MemoryEntity.create!(name: "SynthProject #{n} #{SecureRandom.hex(3)}", entity_type: "Project")
-        MemoryEntity.create!(name: name, entity_type: "Task", project_id: project.id)
+        fs_member!(project, name, "Task")
       end
       session_id = initialize_session("/mcp")
       payload = envelope(tool_call("/mcp", session_id, "graph_write", { operations: [ { type: "create_observation", entity_name: name, text_content: "synthetic" } ] }))

@@ -250,7 +250,7 @@ RSpec.describe SearchTool, type: :model do
   # UI-3 F3: the filter arguments. The examples above are unchanged.
   describe "project_id, entity_types and search_in_* in summary mode" do
     let!(:alpha) { MemoryEntity.create!(name: "Alpha Service", entity_type: "Project") }
-    let!(:widget) { MemoryEntity.create!(name: "SynthWidget", entity_type: "Component", project_id: alpha.id) }
+    let!(:widget) { fs_member!(alpha, "SynthWidget", "Component") }
     let!(:router) { MemoryEntity.create!(name: "Synth Router", entity_type: "Service", aliases: "router") }
 
     def names(result) = result[:results].pluck(:name)

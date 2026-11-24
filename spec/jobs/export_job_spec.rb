@@ -73,16 +73,8 @@ RSpec.describe ExportJob, type: :job do
         name: "Nested Export Task",
         entity_type: "Task"
       )
-      MemoryRelation.create!(
-        from_entity: nested_task,
-        to_entity: linked_project,
-        relation_type: "part_of"
-      )
-      MemoryRelation.create!(
-        from_entity: linked_project,
-        to_entity: project,
-        relation_type: "part_of"
-      )
+      fs_member!(linked_project, nested_task)
+      fs_member!(project, linked_project)
 
       export_id = SecureRandom.uuid
       described_class.new.perform(export_id, [ project.id ])

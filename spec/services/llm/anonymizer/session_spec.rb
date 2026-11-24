@@ -5,9 +5,9 @@ require "rails_helper"
 # Agent-CLI PR2, step A1: masking a Prompt's data segments and restoring answers exactly.
 RSpec.describe Llm::Anonymizer::Session do
   let!(:project) { MemoryEntity.create!(name: "Zq7Canary Project", entity_type: "Project", aliases: "Zq7cp") }
-  let!(:widget) { MemoryEntity.create!(name: "Zq7CanaryWidget", entity_type: "Component", project_id: project.id) }
-  let!(:service) { MemoryEntity.create!(name: "Zq7 Alpha Service", entity_type: "Service", project_id: project.id, aliases: "Zq7 Alpha") }
-  let!(:person) { MemoryEntity.create!(name: "Zq7 Ada", entity_type: "Person", project_id: project.id) }
+  let!(:widget) { fs_member!(project, "Zq7CanaryWidget", "Component") }
+  let!(:service) { fs_member!(project, "Zq7 Alpha Service", "Service", aliases: "Zq7 Alpha") }
+  let!(:person) { fs_member!(project, "Zq7 Ada", "Person") }
   let!(:other) { MemoryEntity.create!(name: "Other Zq7 Gizmo", entity_type: "Component") }
   let(:session) { described_class.new(Llm::Scope.for_entities([ widget ])) }
 
@@ -126,7 +126,7 @@ RSpec.describe Llm::Anonymizer::Session do
     end
 
     it "inserts originals JSON-escaped in JSON mode, so the answer still parses" do
-      MemoryEntity.create!(name: 'Zq7 "Quoted" \\ Widget', entity_type: "Component", project_id: project.id)
+      fs_member!(project, 'Zq7 "Quoted" \\ Widget', "Component")
       quoted = masked('Zq7 "Quoted" \\ Widget')
 
       parsed = JSON.parse(session.unmask({ name: quoted }.to_json, json: true).text)

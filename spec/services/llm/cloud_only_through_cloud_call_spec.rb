@@ -8,7 +8,7 @@ require "prism"
 # Static checks over app/ and lib/ plus a runtime check of the call stack of each cloud generate.
 RSpec.describe "Cloud providers only through CloudCall" do
   let!(:project) { MemoryEntity.create!(name: "Gadget Project", entity_type: "Project", cloud_allowed: true) }
-  let!(:widget) { MemoryEntity.create!(name: "SynthWidget", entity_type: "Component", project_id: project.id) }
+  let!(:widget) { fs_member!(project, "SynthWidget", "Component") }
 
   def calls_in(path)
     found = []

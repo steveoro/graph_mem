@@ -6,8 +6,8 @@ require "rails_helper"
 RSpec.describe SearchFilter do
   let!(:alpha) { MemoryEntity.create!(name: "Alpha Service", entity_type: "Project") }
   let!(:gadget) { MemoryEntity.create!(name: "Gadget Project", entity_type: "Project") }
-  let!(:widget) { MemoryEntity.create!(name: "SynthWidget", entity_type: "Component", project_id: alpha.id) }
-  let!(:router) { MemoryEntity.create!(name: "Synth Router", entity_type: "Service", project_id: gadget.id) }
+  let!(:widget) { fs_member!(alpha, "SynthWidget", "Component") }
+  let!(:router) { fs_member!(gadget, "Synth Router", "Service") }
   let!(:stray) { MemoryEntity.create!(name: "Stray Note", entity_type: "Component") }
 
   describe ".build" do

@@ -336,7 +336,7 @@ RSpec.describe SummarizerService do
       project = MemoryEntity.create!(name: "GraphMem", entity_type: "Project")
       child = MemoryEntity.create!(name: "SummarizerService", entity_type: "Service")
       other_project = MemoryEntity.create!(name: "AdminHub", entity_type: "Project")
-      MemoryRelation.create!(from_entity: child, to_entity: project, relation_type: "part_of")
+      fs_member!(project, child)
       MemoryObservation.create!(memory_entity: child, content: "graph_mem summarization uses scoped retrieval.")
       MemoryObservation.create!(memory_entity: other_project, content: "AdminHub is the default BTS app.")
 
@@ -502,7 +502,7 @@ RSpec.describe SummarizerService do
     end
 
     it "scope context stays limited to the scoped subtree" do
-      MemoryRelation.create!(from_entity: alpha, to_entity: project_a, relation_type: "part_of")
+      fs_member!(project_a, alpha)
       # The tool layer resolves the active context to its subtree ids; the
       # service treats the list itself as the allowlist.
       result = described_class.new(

@@ -39,9 +39,10 @@ RSpec.describe "relation_integrity apply and membership" do
     expect(widget.reload.project_id).to eq(alpha.id)
   end
 
-  it "refuses a name collision in the kept parent's project, with nothing deleted" do
+  # Drift is this example's point: the refused repair leaves the child's second parent in place.
+  it "refuses a name collision in the kept parent's project, with nothing deleted", membership_drift: :allowed do
     keep, extra = two_parents
-    MemoryEntity.create!(name: widget.name, entity_type: "Component", project_id: alpha.id)
+    fs_member!(alpha, widget.name)
 
     result = CompactionReviewService.apply(collision_row(keep, extra).row_uuid, {})
 

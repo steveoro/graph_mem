@@ -384,7 +384,7 @@ RSpec.describe 'API V1 Memory Relations', type: :request do
       end
 
       it "refuses a name collision in the target project with nothing written" do
-        MemoryEntity.create!(name: widget.name, entity_type: "Component", project_id: alpha.id)
+        fs_member!(alpha, widget.name, "Component")
 
         create_relation(widget, alpha, "part_of")
 
@@ -464,7 +464,7 @@ RSpec.describe 'API V1 Memory Relations', type: :request do
       end
 
       it "refuses a retype into part_of that collides in the target project" do
-        MemoryEntity.create!(name: widget.name, entity_type: "Component", project_id: alpha.id)
+        fs_member!(alpha, widget.name, "Component")
         relation = MemoryRelation.create!(from_entity: widget, to_entity: alpha, relation_type: "depends_on")
 
         patch_type(relation, "part_of")

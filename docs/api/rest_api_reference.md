@@ -67,7 +67,13 @@ Required: `name`, `entity_type`.
 
 ### Delete Entity
 
-`DELETE /api/v1/memory_entities/:id` -- `204 No Content`. Cascades to observations and relations.
+`DELETE /api/v1/memory_entities/:id` -- `204 No Content`. Cascades to observations and relations (`422` when the delete is refused, see below).
+
+Since 1.93.1, the entity's `part_of` children move one level up, under the deleted entity's own `part_of` parent, with their subtrees, and stay in the same project. When it had no parent they become global. A child parked under it by a `reference_stub` edge is not moved. The delete is refused with `422` (`{ "error": "Validation failed", "details": { "base": [...] } }`) and nothing is deleted when:
+
+- a child's name is already taken in the scope it moves to (only possible at global scope, when the entity had no parent);
+- the membership lock stays busy (the message ends "retry shortly");
+- the entity is a Project root that still has members (before 1.93.1 this was a `500`).
 
 ### Search Entities (hybrid text + vector)
 
@@ -90,6 +96,8 @@ When a project context is active, the filters intersect it. With `include_retrie
 `POST /api/v1/memory_entities/:id/merge_into/:target_id`
 
 Merges source entity (`:id`) into target (`:target_id`): reassigns observations and relations, then deletes the source. Returns `204 No Content`.
+
+Since 1.93.1 the target keeps its own relationships and its own parent, and every `part_of` child of the source moves to the target. The source's own parent edge is dropped when the target already has a parent (or re-pointing it would make a cycle); when the target has none, it takes the source's, and the target and its subtree move into that parent's project. The merge's undo restores both. A name already taken in a scope something moves to, or a membership lock that stays busy, answers `422` (`{ "error": "..." }`) and nothing is merged.
 
 ---
 

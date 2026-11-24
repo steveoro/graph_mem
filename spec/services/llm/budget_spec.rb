@@ -9,7 +9,7 @@ RSpec.describe Llm::Budget do
 
   let(:cache) { ActiveSupport::Cache::MemoryStore.new }
   let!(:project) { MemoryEntity.create!(name: "Gadget Project", entity_type: "Project", cloud_allowed: true) }
-  let!(:widget) { MemoryEntity.create!(name: "SynthWidget", entity_type: "Component", project_id: project.id) }
+  let!(:widget) { fs_member!(project, "SynthWidget", "Component") }
   let(:local) { FakeProvider.new(name: "ollama", result: { ok: true, text: "local answer", error: nil, latency_ms: 1.0 }) }
   let(:handler) { ->(_request) { [ 200, { ok: true, text: "bridge answer", failure_class: nil } ] } }
   let!(:stub) { start_bridge_stub { |request| handler.call(request) } }

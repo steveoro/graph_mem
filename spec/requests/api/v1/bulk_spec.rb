@@ -145,7 +145,7 @@ RSpec.describe "API V1 Bulk", type: :request do
       end
 
       it "refuses a name collision in the target project" do
-        MemoryEntity.create!(name: "SynthWidget", entity_type: "Component", project_id: alpha.id)
+        fs_member!(alpha, "SynthWidget", "Component")
 
         post "/api/v1/bulk", params: { relations: [ { from_entity_id: widget.id, to_entity_id: alpha.id, relation_type: "part_of" } ] },
                              as: :json

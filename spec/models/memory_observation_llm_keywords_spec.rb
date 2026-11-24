@@ -6,7 +6,7 @@ require "rails_helper"
 # computed, pending again when its text changes, never embedded nor in the JSON.
 RSpec.describe MemoryObservation, "LLM words" do
   let(:root) { MemoryEntity.create!(name: "Gadget Project", entity_type: "Project") }
-  let(:widget) { MemoryEntity.create!(name: "SynthWidget", entity_type: "Class", project_id: root.id) }
+  let(:widget) { fs_member!(root, "SynthWidget", "Class") }
   let(:fact) { described_class.create!(memory_entity: widget, content: "Validates presence of name.") }
 
   after { AppSettings.where(var: "llm_keywords_enabled").delete_all }

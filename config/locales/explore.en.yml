@@ -106,8 +106,10 @@ en:
       outgoing: "out"
       incoming: "in"
       dropped:
-        one: "1 relation is dropped (a duplicate, or between the two)"
-        other: "%{count} relations are dropped (duplicates, or between the two)"
+        one: "1 relation is dropped (a duplicate, between the two, or the source's parent)"
+        other: "%{count} relations are dropped (duplicates, between the two, or the source's parent)"
+      parent_taken: "%{target} has no parent of its own: it takes the source's, %{parent}."
+      parent_dropped: "%{target} keeps its own parent: the source's part_of %{parent} is dropped."
       aliases: "The survivor gains the aliases: %{aliases}"
       children:
         one: "1 part_of child is re-parented: %{names}"

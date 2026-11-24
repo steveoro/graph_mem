@@ -3,9 +3,11 @@
 # What merging `source` into `target` would do (UI-4b W6), read-only, with the same lookups as
 # NodeOperationsStrategy#merge_into_once / #merge_locked!: the observations that move (any
 # status), the relations re-pointed to the target, the ones dropped (duplicates of a target
-# triple, and A↔B edges), the aliases the target gains, the part_of children re-parented and
-# the entities that change project. `digest` fingerprints all of that, so EntityMergeService can
-# refuse a merge that would do more than the operator saw.
+# triple, A↔B edges, and the source's parent edge when the target keeps its own), the aliases the
+# target gains, the part_of children re-parented, what happens to the source's parent edge
+# (`parent_edge`: :taken by a target that has no parent, or :dropped) and the entities that change
+# project. `digest` fingerprints all of that, so EntityMergeService can refuse a merge that would
+# do more than the operator saw.
 #
 #   preview = EntityMergePreview.new(source_id, target_id).call
 #   preview.blockers           # => [] or ["Cannot merge entities of different types: …"]
@@ -24,9 +26,11 @@ class EntityMergePreview
     end
   end
 
+  # parent_edge: [Symbol, nil] :taken, :dropped, or nil when the source has no parent edge;
+  # parent_name: [String, nil] the source's parent.
   Result = Struct.new(:source, :target, :blockers, :observation_count, :observation_sample, :repointed, :dropped,
                       :aliases_gained, :children, :project_moves, :review_row_count, :survivor_hint, :digest,
-                      keyword_init: true) do
+                      :parent_edge, :parent_name, keyword_init: true) do
     def blocked? = blockers.any?
   end
 
@@ -56,7 +60,7 @@ class EntityMergePreview
     target = MemoryEntity.find_by(id: @target_id)
     return nil unless source && target && source.id != target.id
 
-    repointed, dropped, child_ids = relation_effects(source, target, labels: false)
+    repointed, dropped, child_ids, = relation_effects(source, target, labels: false)
     digest_of(source.memory_observations.pluck(:id), repointed, dropped, child_ids, source, target)
   end
 
@@ -77,7 +81,7 @@ class EntityMergePreview
 
   def build(source, target, blockers)
     observations = source.memory_observations.order(:id)
-    repointed, dropped, child_ids = relation_effects(source, target)
+    repointed, dropped, child_ids, parent = relation_effects(source, target)
     children = MemoryEntity.where(id: child_ids).order(:id).to_a
     gained = aliases_gained(source, target)
     observation_ids = observations.pluck(:id)
@@ -86,13 +90,16 @@ class EntityMergePreview
       source: source, target: target, blockers: blockers,
       observation_count: observation_ids.size, observation_sample: observations.limit(SAMPLE).to_a,
       repointed: repointed, dropped: dropped, aliases_gained: gained, children: children,
-      project_moves: project_moves(children, target), review_row_count: MaintenanceReportRow.where(status: "active", anchor_entity_id: source.id).count,
+      project_moves: project_moves(children, target, parent), review_row_count: MaintenanceReportRow.where(status: "active", anchor_entity_id: source.id).count,
       survivor_hint: EntityMergeEvidence.pick_survivor(source, target).last == target ? :target : :source,
-      digest: digest_of(observation_ids, repointed, dropped, child_ids, source, target)
+      digest: digest_of(observation_ids, repointed, dropped, child_ids, source, target),
+      parent_edge: parent&.first, parent_name: parent && MemoryEntity.where(id: parent.last).pick(:name)
     )
   end
 
   # Mirrors reassign_outgoing_relations!, reassign_incoming_relations! and the A↔B cleanup.
+  # @return [Array] repointed and dropped entries, child ids, and the source's parent edge outcome
+  #   as [:taken or :dropped, parent id] (nil when it has none)
   def relation_effects(source, target, labels: true)
     target_out = MemoryRelation.where(from_entity_id: target.id).pluck(:to_entity_id, :relation_type).to_set
     target_in = MemoryRelation.where(to_entity_id: target.id).pluck(:from_entity_id, :relation_type).to_set
@@ -104,10 +111,16 @@ class EntityMergePreview
     incoming = MemoryRelation.where(to_entity_id: source.id).order(:id)
     outgoing = outgoing.includes(:to_entity) if labels
     incoming = incoming.includes(:from_entity) if labels
+    parent = nil
+    strategy = NodeOperationsStrategy.new
     outgoing.each do |relation|
       entry = relation_entry(relation, :outgoing, source, labels)
       if relation.to_entity_id == target.id then dropped << entry
       elsif target_out.include?([ relation.to_entity_id, relation.relation_type ]) then dropped << entry
+      elsif MemoryRelation.reads_as_part_of?(relation.relation_type)
+        taken = strategy.target_takes_parent?(source.id, target.id, relation.to_entity_id)
+        parent ||= [ taken ? :taken : :dropped, relation.to_entity_id ]
+        (taken ? repointed : dropped) << entry
       else repointed << entry
       end
     end
@@ -118,7 +131,7 @@ class EntityMergePreview
       child_ids << relation.from_entity_id if relation.relation_type == "part_of"
       (target_in.include?([ relation.from_entity_id, relation.relation_type ]) ? dropped : repointed) << entry
     end
-    [ repointed, dropped, child_ids.uniq ]
+    [ repointed, dropped, child_ids.uniq, parent ]
   end
 
   def relation_entry(relation, direction, source, labels)
@@ -140,14 +153,22 @@ class EntityMergePreview
     value.to_s.split(/[,|;]/).map(&:strip).reject(&:blank?)
   end
 
-  # Re-parented children take the target's project, and their subtrees with them.
-  def project_moves(children, target)
-    moving = children.reject { |child| child.project_id == target.project_id }
-    return [] if moving.empty?
+  # Re-parented children take the target's project, and their subtrees with them. A target that
+  # takes the source's parent moves first, with its own subtree, into that parent's project.
+  def project_moves(children, target, parent)
+    target_project_id = target.project_id
+    moves = []
+    if parent&.first == :taken
+      target_project_id = ProjectMembership.project_id_for_parent(MemoryEntity.find_by(id: parent.last))
+      moves << [ target.project_id, [ target.id ] ] if target_project_id != target.project_id
+    end
+    moving = children.reject { |child| child.project_id == target_project_id }
+    moves.concat(moving.group_by(&:project_id).map { |project_id, group| [ project_id, group.map(&:id) ] })
+    return [] if moves.empty?
 
-    names = MemoryEntity.where(id: (moving.map(&:project_id) + [ target.project_id ]).compact.uniq).pluck(:id, :name).to_h
-    moving.group_by(&:project_id).map do |project_id, group|
-      ProjectMove.new(from_name: names[project_id], to_name: names[target.project_id], count: subtree_size(group.map(&:id)))
+    names = MemoryEntity.where(id: (moves.map(&:first) + [ target_project_id ]).compact.uniq).pluck(:id, :name).to_h
+    moves.map do |project_id, ids|
+      ProjectMove.new(from_name: names[project_id], to_name: names[target_project_id], count: subtree_size(ids))
     end
   end
 

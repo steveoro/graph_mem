@@ -9,7 +9,7 @@ RSpec.describe "graph_mem:fact_keywords:refresh", type: :task do
 
   def project_with_fact(name, entity_name, content)
     root = MemoryEntity.create!(name: name, entity_type: "Project")
-    entity = MemoryEntity.create!(name: entity_name, entity_type: "Class", project_id: root.id)
+    entity = fs_member!(root, entity_name, "Class")
     fact = MemoryObservation.create!(memory_entity: entity, content: content)
     fact.update_columns(keywords: [ "stale" ], keywords_at: 1.day.ago)
     fact
@@ -67,7 +67,7 @@ RSpec.describe "graph_mem:fact_keywords:llm_refresh and llm_report", type: :task
 
   def fact_in(project_name, entity_name)
     root = MemoryEntity.find_or_create_by!(name: project_name, entity_type: "Project")
-    entity = MemoryEntity.create!(name: entity_name, entity_type: "Class", project_id: root.id)
+    entity = fs_member!(root, entity_name, "Class")
     MemoryObservation.create!(memory_entity: entity, content: "#{entity_name} renders frames.").tap do |fact|
       fact.update_columns(keywords: [ project_name, entity_name ], keywords_at: Time.current, llm_keywords: %w[old], llm_keywords_at: 1.day.ago)
     end

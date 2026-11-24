@@ -43,6 +43,11 @@ class ProjectMembership
   LOCK_NAME_PREFIX = "graph_mem.project_membership"
   LOCK_TIMEOUT_SECONDS = 60
 
+  # The part_of edges membership follows: every one except a `reference_stub` park edge (see
+  # member_ids). COALESCE: edges with NULL properties or no reference_stub key must NOT be filtered
+  # out — `NOT(JSON_EXTRACT = ...)` evaluates NULL for them and would drop them along with the stubs.
+  OWNED_EDGE_SQL = "COALESCE(JSON_UNQUOTE(JSON_EXTRACT(properties, '$.reference_stub')), 'false') <> 'true'"
+
   class << self
     # Runs `block` while holding the named advisory lock; other sessions
     # taking the same lock wait up to LOCK_TIMEOUT_SECONDS. The name is
@@ -160,11 +165,7 @@ class ProjectMembership
       queue = [ root_id ]
       until queue.empty?
         current = queue.shift
-        # COALESCE: edges with NULL properties or no reference_stub key
-        # must NOT be filtered out — `NOT(JSON_EXTRACT = ...)` evaluates
-        # NULL for them and would drop them along with the stubs.
-        MemoryRelation.where(to_entity_id: current, relation_type: "part_of")
-          .where("COALESCE(JSON_UNQUOTE(JSON_EXTRACT(properties, '$.reference_stub')), 'false') <> 'true'")
+        MemoryRelation.where(to_entity_id: current, relation_type: "part_of").where(OWNED_EDGE_SQL)
           .pluck(:from_entity_id).each do |child_id|
             next if ids.include?(child_id)
             next if project_entity_ids.include?(child_id) # nested Project: its own scope

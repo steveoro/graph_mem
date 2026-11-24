@@ -69,7 +69,7 @@ RSpec.describe ChangeSetUndo::Merge do
   describe "refusals (all-or-nothing)" do
     it "refuses when the source's name is taken again in its scope" do
       uuid = merge!
-      MemoryEntity.create!(name: "SynthWidget", entity_type: "Component", project_id: project.id)
+      fs_member!(project, "SynthWidget", "Component")
 
       result = undo(uuid)
       expect(result.status).to eq(:conflict)
@@ -81,6 +81,7 @@ RSpec.describe ChangeSetUndo::Merge do
       uuid = merge!
       observation.reload.update!(memory_entity_id: beta.id)
       MemoryRelation.find(child_edge.id).update!(to_entity_id: beta.id)
+      ProjectMembership.sync!(child)
 
       result = undo(uuid)
       expect(result.conflicts).to include("Can't undo: 1 observation(s) moved or deleted since the merge",
@@ -142,7 +143,7 @@ RSpec.describe ChangeSetUndo::Merge do
 
     it "lists the refusals of every step at once" do
       uuid = batch!
-      MemoryEntity.create!(name: "SynthWidget", entity_type: "Component", project_id: project.id)
+      fs_member!(project, "SynthWidget", "Component")
       MemoryEntity.create!(name: "SynthGadget", entity_type: "Component")
 
       expect(undo(uuid).conflicts).to contain_exactly(

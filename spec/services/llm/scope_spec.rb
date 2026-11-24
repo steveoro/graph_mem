@@ -6,7 +6,7 @@ require "rails_helper"
 RSpec.describe Llm::Scope do
   let!(:gadget) { MemoryEntity.create!(name: "Gadget Project", entity_type: "Project") }
   let!(:alpha) { MemoryEntity.create!(name: "Alpha Project", entity_type: "Project") }
-  let!(:widget) { MemoryEntity.create!(name: "SynthWidget", entity_type: "Component", project_id: gadget.id) }
+  let!(:widget) { fs_member!(gadget, "SynthWidget", "Component") }
   let!(:global) { MemoryEntity.create!(name: "Alpha Service", entity_type: "Service") }
 
   describe ".for_entities" do
@@ -33,7 +33,7 @@ RSpec.describe Llm::Scope do
 
   describe ".for_scan" do
     it "finds the Project root by name, case-insensitively, and only a root" do
-      MemoryEntity.create!(name: "Beta Project", entity_type: "Component", project_id: alpha.id)
+      fs_member!(alpha, "Beta Project", "Component")
 
       expect(described_class.for_scan("gadget project").project_ids).to eq([ gadget.id ])
       expect(described_class.for_scan("Beta Project")).to be_unscoped
@@ -52,7 +52,7 @@ end
 RSpec.describe Llm::CloudGate do
   let!(:gadget) { MemoryEntity.create!(name: "Gadget Project", entity_type: "Project") }
   let!(:alpha) { MemoryEntity.create!(name: "Alpha Project", entity_type: "Project") }
-  let!(:widget) { MemoryEntity.create!(name: "SynthWidget", entity_type: "Component", project_id: gadget.id) }
+  let!(:widget) { fs_member!(gadget, "SynthWidget", "Component") }
   let!(:global) { MemoryEntity.create!(name: "Alpha Service", entity_type: "Service") }
 
   def allowed?(*entities) = described_class.allowed?(Llm::Scope.for_entities(entities))

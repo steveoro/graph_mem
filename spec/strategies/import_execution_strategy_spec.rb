@@ -438,13 +438,7 @@ RSpec.describe ImportExecutionStrategy, type: :model do
     end
 
     context 'relation deduplication' do
-      let!(:existing_relation) do
-        MemoryRelation.create!(
-          from_entity: existing_task,
-          to_entity: existing_project,
-          relation_type: 'part_of'
-        )
-      end
+      let!(:existing_relation) { fs_member!(existing_project, existing_task) }
 
       let(:import_data) do
         {
@@ -484,13 +478,7 @@ RSpec.describe ImportExecutionStrategy, type: :model do
     end
 
     context 'skip action for child nodes' do
-      let!(:existing_relation) do
-        MemoryRelation.create!(
-          from_entity: existing_task,
-          to_entity: existing_project,
-          relation_type: 'part_of'
-        )
-      end
+      let!(:existing_relation) { fs_member!(existing_project, existing_task) }
 
       let(:import_data) do
         {
@@ -1200,12 +1188,8 @@ RSpec.describe ImportExecutionStrategy, type: :model do
     let!(:project) { MemoryEntity.create!(name: 'Scan Project', entity_type: 'Project') }
     let!(:file_entity) { MemoryEntity.create!(name: 'foo.rb', entity_type: 'File') }
     let!(:class_entity) { MemoryEntity.create!(name: 'Foo', entity_type: 'Class') }
-    let!(:part1) do
-      MemoryRelation.create!(from_entity: file_entity, to_entity: project, relation_type: 'part_of')
-    end
-    let!(:part2) do
-      MemoryRelation.create!(from_entity: class_entity, to_entity: file_entity, relation_type: 'part_of')
-    end
+    let!(:part1) { fs_member!(project, file_entity).relations_from.find_by!(to_entity: project) }
+    let!(:part2) { fs_member!(file_entity, class_entity).relations_from.find_by!(to_entity: file_entity) }
     let!(:file_obs) do
       MemoryObservation.create!(memory_entity: file_entity, content: 'Defined at lib/foo.rb', source: 'graphify')
     end
@@ -1359,7 +1343,7 @@ RSpec.describe ImportExecutionStrategy, type: :model do
 
     it 'queues a reparent_entity item for a same-tree move and applies new provenance' do
       other_file = MemoryEntity.create!(name: 'bar.rb', entity_type: 'File')
-      MemoryRelation.create!(from_entity: other_file, to_entity: project, relation_type: 'part_of')
+      fs_member!(project, other_file)
       MemoryObservation.create!(memory_entity: other_file, content: 'Defined at lib/bar.rb',
                                 source: 'graphify')
 
@@ -1456,7 +1440,7 @@ RSpec.describe ImportExecutionStrategy, type: :model do
     # flags the move.
     def moved_foo_setup
       other_file = MemoryEntity.create!(name: 'bar.rb', entity_type: 'File')
-      MemoryRelation.create!(from_entity: other_file, to_entity: project, relation_type: 'part_of')
+      fs_member!(project, other_file)
       MemoryObservation.create!(memory_entity: other_file, content: 'Defined at lib/bar.rb',
                                 source: 'graphify')
 
@@ -1516,7 +1500,7 @@ RSpec.describe ImportExecutionStrategy, type: :model do
 
     it 'retires a reparent proposal whose entity was deleted' do
       ghost = MemoryEntity.create!(name: 'Ghost', entity_type: 'Class')
-      MemoryRelation.create!(from_entity: ghost, to_entity: project, relation_type: 'part_of')
+      fs_member!(project, ghost)
       MemoryObservation.create!(memory_entity: ghost, content: 'Defined at lib/ghost.rb', source: 'graphify')
       stale = stale_scan_row(
         kind: 'reparent_entity',
@@ -1563,7 +1547,7 @@ RSpec.describe ImportExecutionStrategy, type: :model do
     it 'diffs the operator merge target, not the payload namesake' do
       other_root = MemoryEntity.create!(name: 'Other Project', entity_type: 'Project')
       other_file = MemoryEntity.create!(name: 'ghost.rb', entity_type: 'File')
-      MemoryRelation.create!(from_entity: other_file, to_entity: other_root, relation_type: 'part_of')
+      fs_member!(other_root, other_file)
       ghost_obs = MemoryObservation.create!(memory_entity: other_file, content: 'Defined at ghost.rb',
                                             source: 'graphify')
       other_decisions = [ { node_path: '0', action: 'merge', target_id: other_root.id } ]

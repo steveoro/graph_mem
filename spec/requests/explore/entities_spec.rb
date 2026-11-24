@@ -5,7 +5,7 @@ require "rails_helper"
 # UI-4b W2: PATCH /explore/entities/:id. Synthetic data.
 RSpec.describe "Explore entity edits", type: :request do
   let!(:alpha) { MemoryEntity.create!(name: "Alpha Service", entity_type: "Project") }
-  let!(:widget) { MemoryEntity.create!(name: "SynthWidget", entity_type: "Component", project_id: alpha.id, aliases: "synth tile") }
+  let!(:widget) { fs_member!(alpha, "SynthWidget", "Component", aliases: "synth tile") }
 
   def patch_entity(entity, attributes, headers: stream_headers)
     patch explore_entity_path(entity), params: { entity: attributes }, headers: headers
@@ -32,7 +32,7 @@ RSpec.describe "Explore entity edits", type: :request do
     end
 
     it "answers 422 with the model's message in the panel form for a duplicate name, writing nothing" do
-      MemoryEntity.create!(name: "Synth Router", entity_type: "Service", project_id: alpha.id)
+      fs_member!(alpha, "Synth Router", "Service")
 
       expect { patch_entity(widget, { name: "synth router" }) }.not_to change(ChangeSet, :count)
 

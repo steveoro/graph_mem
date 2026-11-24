@@ -74,14 +74,7 @@ RSpec.describe ExportStrategy, type: :model do
 
   # Create relations: task1 is part_of project1
   let!(:relation1) do
-    MemoryRelation.create!(
-      from_entity: task1,
-      to_entity: project1,
-      relation_type: 'part_of',
-      weight: 2.0,
-      confidence: 0.8,
-      properties: { 'source' => 'export-spec' }
-    )
+    fs_member!(project1, task1, relation: { weight: 2.0, confidence: 0.8, properties: { 'source' => 'export-spec' } })
   end
 
   # task2 depends_on task1
@@ -242,19 +235,9 @@ RSpec.describe ExportStrategy, type: :model do
           name: 'Nested Task Under Linked Project',
           entity_type: 'Task'
         )
-        MemoryRelation.create!(
-          from_entity: nested_task,
-          to_entity: linked_project,
-          relation_type: 'part_of'
-        )
-        MemoryRelation.create!(
-          from_entity: linked_project,
-          to_entity: project1,
-          relation_type: 'part_of',
-          weight: 1.5,
-          confidence: 0.7,
-          properties: { 'source' => 'project-boundary' }
-        )
+        fs_member!(linked_project, nested_task)
+        fs_member!(project1, linked_project,
+                   relation: { weight: 1.5, confidence: 0.7, properties: { 'source' => 'project-boundary' } })
 
         result = strategy.export([ project1.id ])
         root_node = result[:root_nodes].first
@@ -284,11 +267,7 @@ RSpec.describe ExportStrategy, type: :model do
           name: 'Task Inside Related Project',
           entity_type: 'Task'
         )
-        MemoryRelation.create!(
-          from_entity: nested_task,
-          to_entity: related_project,
-          relation_type: 'part_of'
-        )
+        fs_member!(related_project, nested_task)
         MemoryRelation.create!(
           from_entity: project1,
           to_entity: related_project,
@@ -317,16 +296,8 @@ RSpec.describe ExportStrategy, type: :model do
           name: 'Task Of Explicit Root',
           entity_type: 'Task'
         )
-        MemoryRelation.create!(
-          from_entity: nested_task,
-          to_entity: linked_project,
-          relation_type: 'part_of'
-        )
-        MemoryRelation.create!(
-          from_entity: linked_project,
-          to_entity: project1,
-          relation_type: 'part_of'
-        )
+        fs_member!(linked_project, nested_task)
+        fs_member!(project1, linked_project)
 
         result = strategy.export([ project1.id, linked_project.id ])
         explicit_root = result[:root_nodes].find { |node| node[:name] == linked_project.name }

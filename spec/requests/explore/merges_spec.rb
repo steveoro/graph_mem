@@ -6,9 +6,9 @@ require "rails_helper"
 # a stale digest answers 409 and writes nothing. Synthetic data.
 RSpec.describe "Explore merges", type: :request do
   let!(:alpha) { MemoryEntity.create!(name: "Alpha Service", entity_type: "Project") }
-  let!(:widget_a) { MemoryEntity.create!(name: "SynthWidget A", entity_type: "Component", project_id: alpha.id) }
-  let!(:widget_b) { MemoryEntity.create!(name: "SynthWidget B", entity_type: "Component", project_id: alpha.id) }
-  let!(:router) { MemoryEntity.create!(name: "Synth Router", entity_type: "Service", project_id: alpha.id) }
+  let!(:widget_a) { fs_member!(alpha, "SynthWidget A", "Component") }
+  let!(:widget_b) { fs_member!(alpha, "SynthWidget B", "Component") }
+  let!(:router) { fs_member!(alpha, "Synth Router", "Service") }
 
   before do
     MemoryObservation.create!(memory_entity: widget_a, content: "SynthWidget A renders synthetic tiles.")

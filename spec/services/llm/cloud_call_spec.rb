@@ -6,7 +6,7 @@ require "rails_helper"
 # provider exists; every value is synthetic.
 RSpec.describe Llm::CloudCall do
   let!(:project) { MemoryEntity.create!(name: "Zq7Canary Project", entity_type: "Project", aliases: "Zq7cp") }
-  let!(:widget) { MemoryEntity.create!(name: "Zq7CanaryWidget", entity_type: "Component", project_id: project.id) }
+  let!(:widget) { fs_member!(project, "Zq7CanaryWidget", "Component") }
   let(:canaries) { [ "Zq7Canary", "zq7canary", "Zq7cp", "ops@zq7canary.example" ] }
 
   def prompt(data = "Zq7CanaryWidget mails ops@zq7canary.example about Zq7cp.")
@@ -66,7 +66,7 @@ RSpec.describe Llm::CloudCall do
 
   it "restores JSON answers JSON-escaped, so the caller's parser runs unchanged" do
     allow_cloud
-    MemoryEntity.create!(name: 'Zq7 "Q" Widget', entity_type: "Component", project_id: project.id)
+    fs_member!(project, 'Zq7 "Q" Widget', "Component")
     fake = FakeProvider.new(cloud: true) { |text, **| { ok: true, text: { name: text[/⟦ENT_\h+⟧/] }.to_json, error: nil, latency_ms: 1.0 } }
 
     result = with_llm_provider(fake) { Llm::Router.generate(:judge, prompt('Zq7 "Q" Widget'), style: "concise", options: { format: "json" }) }

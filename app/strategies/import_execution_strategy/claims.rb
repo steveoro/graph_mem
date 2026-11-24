@@ -45,10 +45,12 @@ module ImportExecutionStrategy::Claims
   # Typed scoped lookup plus the Class-Module sibling fallbacks (same
   # scope first, then global) — mirrors ImportMatchingStrategy's
   # resolution so a `skip`/`add_relation` decision lands on the same
-  # entity the matcher chose. Reference nodes resolve against the WHOLE
-  # graph instead (stored edge target → own scope → single declarer →
-  # global stub), same as match, so a re-import lands on the claimed
-  # entity rather than minting a second stub.
+  # entity the matcher chose. Every declared node, contained or not, is
+  # looked up in the import's project first, then globally. Reference
+  # nodes resolve against the WHOLE graph instead (stored edge target →
+  # own scope → single declarer → global stub), same as match, so a
+  # re-import lands on the claimed entity rather than minting a second stub.
+  # @return [MemoryEntity, nil]
   def find_declared_or_stub(name, entity_type, node = nil, reference: false)
     if reference
       return ImportEntityResolver.find_reference(name, entity_type,
@@ -59,6 +61,17 @@ module ImportExecutionStrategy::Claims
     find_entity_by_name_and_type(name, entity_type, project_id: @import_project_id) ||
       ImportEntityResolver.class_module_collision(name, entity_type, project_id: @import_project_id) ||
       ImportEntityResolver.class_module_collision(name, entity_type, project_id: nil)
+  end
+
+  # The scope a declared node is created in when neither the import's project nor the global
+  # namespace holds it: the import's project when a part_of chain links the node to the import's
+  # root (process_node_recursive's `contained`), else the global namespace. Lookups don't depend on
+  # it: a node outside the project's part_of tree is still looked up in the project first
+  # (#find_declared_or_stub), so one an earlier import stamped into the project (and the membership
+  # repair then attached to its root) is found again instead of copied into the global scope.
+  # @return [Integer, nil]
+  def declared_scope_id
+    @node_contained == false ? nil : @import_project_id
   end
 
   # Resolved ids of the payload entities referencing this node — the
@@ -87,13 +100,14 @@ module ImportExecutionStrategy::Claims
   # A declaring node that resolves onto an entity of a sibling type claims
   # it: retype the stub (or the same-project v1.49 leftover) so the
   # declared Class-Module wins. Reference nodes never retype — they do
-  # not own.
+  # not own. A node created global (#declared_scope_id nil) also claims a
+  # global entity.
   def retype_on_claim(entity, raw_type, node)
     return if node[:reference] == true || node["reference"] == true
 
     canonical = ImportEntityResolver.resolved_code_type(entity.entity_type, ImportEntityResolver.canonical_type(raw_type))
     return if entity.entity_type == canonical
-    return unless reference_stub_entity?(entity) || entity.project_id == @import_project_id
+    return unless reference_stub_entity?(entity) || [ @import_project_id, declared_scope_id ].include?(entity.project_id)
 
     @logger.info "ImportExecutionStrategy: Retyping '#{entity.name}' " \
                  "#{entity.entity_type} -> #{canonical} on claim"

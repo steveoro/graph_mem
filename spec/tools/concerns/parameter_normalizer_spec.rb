@@ -131,7 +131,7 @@ RSpec.describe ParameterNormalizer do
       end
 
       it "prefers the context project's entity over a global namesake" do
-        scoped = MemoryEntity.create!(name: "MyTask", entity_type: "Task", project_id: project.id)
+        scoped = fs_member!(project, "MyTask", "Task")
         result = described_class.normalize("create_observation", {
           entity_name: "MyTask",
           text_content: "fact"
