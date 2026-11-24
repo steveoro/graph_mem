@@ -102,7 +102,7 @@ See [summarization guide](summarization.md).
 |---|---|---|
 | `import_observation_duplicate_max_distance` | `0.35` | Maximum semantic distance for treating imported observation text as an existing fact. Range `0.20` (strict) to `0.50` (broad). |
 
-The import embeds the texts it compares before it takes the membership lock (1.93.3: at most 500 distinct texts, one embedding call each) and only looks the vectors up under it. A fact without a vector, because the embedding service failed or the import is larger than that, is matched by its exact text only, and the import's log says how many ([troubleshooting](troubleshooting.md#problem-an-import-matched-facts-exactly-only)).
+The import embeds the texts it compares before it takes the membership lock (1.93.3: every distinct text, one embedding call each) and only looks the vectors up under it. When the embedding service fails then, the import fails before writing anything, as before. A fact the pre-read missed (its entity or facts changed before the lock) is matched by its exact text only, and the import's log says how many ([troubleshooting](troubleshooting.md#problem-an-import-matched-facts-exactly-only)).
 
 ## Project Scans
 

@@ -163,23 +163,17 @@ Every part failed to give a JSON object with an `architecture` array, so the sca
 - The log of an import that completed has one line (1.93.3):
 
   ```
-  ImportExecutionStrategy: Semantic observation de-duplication matched 14 fact(s) exactly only: 12 because the embedding service failed before the import (connection refused); 2 whose text was not embedded before the import
+  ImportExecutionStrategy: Semantic observation de-duplication matched 2 fact(s) exactly only: 2 whose text was not embedded before the import
   ```
 
 - An imported fact that is worded differently from one the entity already had was added next to it instead of being skipped as a duplicate.
 
-**Cause:** the import's semantic de-duplication compares an incoming fact's embedding with the entity's existing facts (`import_observation_duplicate_max_distance`, see [app_settings_reference.md](app_settings_reference.md#imports)). The lock an import holds is never held across an embedding call, so the import embeds the texts it will need before it takes the lock, and under the lock only looks those vectors up. A fact with no vector is matched on its exact text only. The line counts those facts by reason:
-
-- **`N because the embedding service failed before the import (<error>)`**: an embedding call failed while the texts were being embedded. The first failure ends that step (the service is down, and each later call would wait out its retries), so every text after it has no vector. `<error>` is the service's message.
-- **`N beyond the first 500 of M distinct texts embedded before the import`**: the import needed more than `MAX_PRECOMPUTED_TEXTS` (500) distinct texts embedded. One call each is made, while the operator waits, so the first 500 get a vector and the rest are matched exactly.
-- **`N whose text was not embedded before the import`**: the text was not in that list. The list is read before the lock without holding it, so an entity or fact that appeared (or changed) after the read can need a vector it didn't get.
+**Cause:** the import's semantic de-duplication compares an incoming fact's embedding with the entity's existing facts (`import_observation_duplicate_max_distance`, see [app_settings_reference.md](app_settings_reference.md#imports)). The lock an import holds is never held across an embedding call, so the import embeds the texts it will need before it takes the lock, and under the lock only looks those vectors up. The list of texts is read before the lock without holding it, so an entity or a fact that appeared or changed between that read and the lock (another writer, or the embedding backfill stamping the entity's facts) can need a vector the import didn't compute. Such a fact is matched on its exact text only, never embedded under the lock, and the line counts them.
 
 **Solutions:**
 
-1. For the first reason, bring the embedding service back (see [operator/embeddings.md](operator/embeddings.md)): check the URL and model on the Embeddings page and that the service answers. Before 1.93.3 such an import failed with "Semantic observation de-duplication unavailable"; it now completes, and the facts are in the graph.
-2. The facts the line counts were added as new observations. If an entity now holds a fact twice in different words, retire one with Find & supersede or by hand. Running the same import again won't help: the facts now exist, so it matches them exactly and skips them.
-3. For an import beyond the cap, split the file, or accept exact matching for the rest.
-4. The upload and the preview still refuse when the embedding service is down ("Import requires the embedding service for observation de-duplication"), and an import whose database has no vector columns still fails with "Semantic observation de-duplication unavailable". Only a service that fails between the preview and the execute reaches the line above.
+1. The facts the line counts were added as new observations. If an entity now holds a fact twice in different words, retire one with Find & supersede or by hand. Running the same import again won't help: the facts now exist, so it matches them exactly and skips them.
+2. This line never comes from the embedding service being down. Then the import fails before it takes the lock, writing nothing, with "Semantic observation de-duplication unavailable: Embedding service is unavailable: …" (the upload and the preview refuse first, with "Import requires the embedding service for observation de-duplication"). Bring the service back (see [operator/embeddings.md](operator/embeddings.md): check the URL and model on the Embeddings page and that the service answers) and run the import again. A database without vector columns fails the import with "Semantic observation de-duplication unavailable" too.
 
 ### Problem: The log says "deferred embedding of … failed"
 

@@ -410,7 +410,8 @@ Found while building PR 2, all older than it and not fixed there. The first thre
   review `fact_supersede` apply, Find & supersede and REST `POST /api/v1/bulk` with a `part_of`.
 - **The import's semantic de-duplication embedded each candidate fact inside the lock. Fixed in
   1.93.3** (found while fixing the two above): the import embeds the distinct texts it needs before it
-  takes the lock, and under the lock a text without a vector is matched exactly.
+  takes the lock (a failed call still fails the import, now before the lock and writing nothing), and
+  under the lock a text without a vector (the pre-read's race) is matched exactly.
 - **Files over 500 lines** (AGENTS.md: split them): `project_scanner.rb` (766), `project_scan_skill.rb`
   (602) and `lib/tasks/memory_data.rake` (614).
 - **The two JSON rake task bodies** (`migrate_json_lines`, `append_json_lines`) are about 130 lines each
