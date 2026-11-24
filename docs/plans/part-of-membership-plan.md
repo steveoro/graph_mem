@@ -381,11 +381,15 @@ may add its own.
 
 ### Steve, 2026-11-24
 
-3. **Release:** the plan's entries ship with PR #189's as a patch release of their own, 1.93.1. The
-   mcp 1.11.0 bump and the vector search steps move to 1.93.3 and 1.93.4 ("bump version as needed,
-   we can retarget subsequent releases accordingly").
-4. **The guard:** the per-example invariant check runs on every example except system specs.
+3. **Release:** "bump version as needed, we can retarget subsequent releases accordingly". The
+   numbers were then chosen in the session: PR 1 ships with PR #189's entries as 1.93.1, PR 2 as
+   1.93.2, and the mcp 1.11.0 bump and the vector search steps move to 1.93.3 and 1.93.4.
+4. **The guard:** Steve left its scope to the implementer. Decided in the session: the invariant
+   check runs after every example except system specs, to be narrowed to request, service,
+   strategy, job and tool specs only if it cost more than 5% of suite time (measured: about 2%).
 6. **How the backfill runs by itself:** a data migration, approved.
+Answers 7 to 9 are the options Steve chose when the guard exposed the scan and import writers:
+
 7. **Scans:** every entity a scan reconciles that the model left without a parent gets a containment
    `part_of` to the project root.
 8. **Imports:** an import follows the `part_of` edges to decide scope. Only nodes linked to the
