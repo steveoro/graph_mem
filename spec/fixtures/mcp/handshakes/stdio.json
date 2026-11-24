@@ -250,6 +250,33 @@
         "reference": {"replies": 2, "messages": [{"id": 1, "result_has": ["protocolVersion"]}, {"id": 3, "result": {}}]}
       },
       "divergence": "graph_mem refuses a non-object _meta with -32602 and the id (Ruby SDK 1.9.0, #651); Memory's transport fails to parse the message (a ZodError on stderr) and sends no reply. Both keep serving."
+    },
+    {
+      "name": "resources/read without params",
+      "send": [
+        {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "2025-11-25", "capabilities": {}, "clientInfo": {"name": "mcp-compat", "version": "0"}}},
+        {"jsonrpc": "2.0", "method": "notifications/initialized"},
+        {"jsonrpc": "2.0", "id": 47, "method": "resources/read"}
+      ],
+      "expect": {
+        "graph_mem": {"replies": 2, "messages": [{"id": 1, "result_has": ["protocolVersion"]}, {"id": 47, "error_code": -32602}]},
+        "reference": {"replies": 2, "messages": [{"id": 1, "result_has": ["protocolVersion"]}, {"id": 47, "error_code": -32603}]}
+      },
+      "divergence": "graph_mem checks the params before any resource is looked up and answers -32602 \"Missing or invalid uri\" with the id (Ruby SDK 1.11.0, #687); Memory's schema check fails (a ZodError) and it answers -32603 with the id."
+    },
+    {
+      "name": "an integer id beyond 128 bits, then a ping",
+      "send": [
+        {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "2025-11-25", "capabilities": {}, "clientInfo": {"name": "mcp-compat", "version": "0"}}},
+        {"jsonrpc": "2.0", "method": "notifications/initialized"},
+        {"jsonrpc": "2.0", "id": 340282366920938463463374607431768211456, "method": "ping"},
+        {"jsonrpc": "2.0", "id": 8, "method": "ping"}
+      ],
+      "expect": {
+        "graph_mem": {"replies": 3, "messages": [{"id": 1, "result_has": ["protocolVersion"]}, {"id": null, "error_code": -32600}, {"id": 8, "result": {}}]},
+        "reference": {"replies": 2, "messages": [{"id": 1, "result_has": ["protocolVersion"]}, {"id": 8, "result": {}}]}
+      },
+      "divergence": "Neither answers the id 2**128: graph_mem refuses it as an invalid request, -32600 without the id (Ruby SDK 1.11.0, #688); Memory's transport refuses ids beyond 2^53 (a ZodError on stderr) and sends no reply. Both keep serving."
     }
   ]
 }
