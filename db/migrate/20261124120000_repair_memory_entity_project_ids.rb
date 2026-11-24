@@ -7,9 +7,13 @@
 # gets a part_of to that project's root, in one `maintenance.membership_repair` change set), else
 # cleared (ProjectIdBackfill). Logs the drift counts before and after (ProjectIdBackfill.drift).
 #
-# Never fails the deploy: production runs db:prepare at container boot, and a failed migration
-# would keep the app down. On a name collision (or a busy membership lock) it logs why, leaves the
-# data unchanged and completes; fix the name and run `bin/rails graph_mem:backfill_project_ids`.
+# Never fails the deploy for the three reasons the repair can be refused: production runs
+# db:prepare at container boot, and a failed migration would keep the app down. On a name collision
+# (ActiveRecord::RecordNotUnique), a membership lock that stays busy (ProjectMembership::LockTimeout,
+# ActiveRecord::LockWaitTimeout) or a part_of edge the repair would add being refused
+# (ActiveRecord::RecordInvalid) it logs why, leaves the data unchanged (the apply is one
+# transaction) and completes; fix the cause and run `bin/rails graph_mem:backfill_project_ids`.
+# Any other error fails the migration as usual.
 # Uses ProjectIdBackfill like BackfillMemoryEntityProjectIds, and nothing else of the app.
 class RepairMemoryEntityProjectIds < ActiveRecord::Migration[8.1]
   def up
@@ -18,16 +22,20 @@ class RepairMemoryEntityProjectIds < ActiveRecord::Migration[8.1]
       ProjectIdBackfill.new(out: ->(line) { say line, true }).run(dry_run: false)
     rescue ActiveRecord::RecordNotUnique => e
       # The transactional apply rolled back: nothing changed.
-      skipped("a name collision: #{ProjectIdBackfill.conflict_hint(e)}")
+      skipped("of a name collision: #{ProjectIdBackfill.conflict_hint(e)}")
     rescue ProjectMembership::LockTimeout, ActiveRecord::LockWaitTimeout => e
       skipped("the membership lock stayed busy: #{e.message}")
+    rescue ActiveRecord::RecordInvalid => e
+      # Raised inside the same transaction, which rolled back: nothing changed.
+      skipped("a part_of edge the repair would add was refused: #{e.message}")
     end
     log_drift("after")
   end
 
   def down
-    # Nothing to undo: the repair only recomputed project_id from the part_of edges, which it never
-    # changed; the stamps it fixed were wrong.
+    # Nothing to do here: the repair recomputed project_id and, for a consistently stamped chain,
+    # added a part_of from its top to the project root; those edges are one
+    # `maintenance.membership_repair` change set that System > Activity can undo.
   end
 
   private
@@ -38,8 +46,9 @@ class RepairMemoryEntityProjectIds < ActiveRecord::Migration[8.1]
     Rails.logger.info("[RepairMemoryEntityProjectIds] #{line}")
   end
 
+  # @param reason [String] completes "because ..."
   def skipped(reason)
-    message = "project_id repair skipped, data unchanged, because of #{reason}. " \
+    message = "project_id repair skipped, data unchanged, because #{reason}. " \
               "Fix it, then run bin/rails graph_mem:backfill_project_ids"
     say message, true
     Rails.logger.warn("[RepairMemoryEntityProjectIds] #{message}")

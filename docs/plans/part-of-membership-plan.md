@@ -302,8 +302,10 @@ What differs from the plan above:
   backfill prints it, the migration logs it and the guard uses it.
 - **A data migration was added** (`20261124120000_repair_memory_entity_project_ids.rb`): approved by
   Steve (answer 6). It runs the repair once at `db:prepare`, logs the drift before and after, never
-  fails the deploy (a collision or a busy lock skips with a hint) and its `down` does nothing. The
-  plan had said "no migration"; it is data only, with no schema change.
+  fails the deploy (a collision, a busy lock or, since review, a refused `part_of` edge skips with a
+  hint; any other error fails it) and its `down` does nothing (the edges it adds are one
+  `maintenance.membership_repair` change set, undoable in System › Activity). The plan had said "no
+  migration"; it is data only, with no schema change.
 - **The guard's scope and cost.** Option 3, on every example except system specs, as a group-level
   `around` hook inside the fixture transaction (it records the failure instead of raising, so the
   rollback still happens), opt-out `membership_drift: :allowed`. Measured overhead: about 2% of the
