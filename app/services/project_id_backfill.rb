@@ -12,10 +12,36 @@
 # Used by the backfill migration and by
 # `bin/rails graph_mem:backfill_project_ids[dry_run]` for the report only.
 class ProjectIdBackfill
-  Report = Struct.new(:per_project, :unrooted, :conflicts, :changed, keyword_init: true)
+  Report = Struct.new(:per_project, :unrooted, :conflicts, :changed, :drift, keyword_init: true)
 
-  # @param out [#puts, #call] report sink — $stdout for the rake task, a
-  #   `say` lambda for the migration.
+  # The kinds of membership drift {#drift} counts, in report order. The first three are stamps the
+  # backfill repairs; the last two are edges it reports but never changes.
+  DRIFT_KINDS = %i[wrong_project stamped_without_path path_without_stamp reached_by_two_roots several_parents].freeze
+
+  # Membership drift, read-only: what the stored `project_id` stamps and the part_of edges disagree
+  # on. `ids` lists the offending entity ids per kind (ascending), `counts` their sizes.
+  #
+  #   drift = ProjectIdBackfill.drift
+  #   drift.any?                    # => false on a consistent graph
+  #   drift.counts[:wrong_project]  # => 0
+  #   drift.summary                 # => "wrong_project=0 stamped_without_path=0 ..."
+  Drift = Struct.new(:counts, :ids, keyword_init: true) do
+    # @return [Boolean] true when any kind has an offender
+    def any? = counts.values.any?(&:positive?)
+
+    # @return [String] "kind=count" pairs in DRIFT_KINDS order
+    def summary = DRIFT_KINDS.map { |kind| "#{kind}=#{counts.fetch(kind, 0)}" }.join(" ")
+  end
+
+  # The drift report, without the lock and without writing: the same walk the backfill applies
+  # (ProjectMembership.member_ids from every Project, lower Project id first).
+  # @return [Drift]
+  def self.drift
+    new(out: nil).drift
+  end
+
+  # @param out [#puts, #call, nil] report sink — $stdout for the rake task, a
+  #   `say` lambda for the migration; nil when only {#drift} is read.
   def initialize(out: $stdout)
     @out = out
   end
@@ -107,9 +133,30 @@ class ProjectIdBackfill
   end
   private_class_method :moving_rows
 
+  # @param membership [Hash<Integer, Integer>, nil] a {#compute_membership} map already in hand
+  # @param conflicts [Hash<Integer, Array<Integer>>, nil] its conflicts
+  # @return [Drift] see {.drift}
+  def drift(membership: nil, conflicts: nil)
+    membership, conflicts = compute_membership unless membership
+    ids = { wrong_project: [], stamped_without_path: [], path_without_stamp: [] }
+    MemoryEntity.where.not(entity_type: NodeOperationsStrategy::PROJECT_ENTITY_TYPE).order(:id)
+                .pluck(:id, :project_id).each do |id, project_id|
+      expected = membership[id]
+      if project_id && expected && project_id != expected then ids[:wrong_project] << id
+      elsif project_id && expected.nil? then ids[:stamped_without_path] << id
+      elsif project_id.nil? && expected then ids[:path_without_stamp] << id
+      end
+    end
+    ids[:reached_by_two_roots] = conflicts.keys.sort
+    # Compared by the column's collation, so a stored `Part_Of` counts.
+    ids[:several_parents] = MemoryRelation.where(relation_type: "part_of").group(:from_entity_id)
+                                          .having("COUNT(*) > 1").order(:from_entity_id).pluck(:from_entity_id)
+    Drift.new(counts: ids.transform_values(&:size), ids: ids)
+  end
+
   # @param dry_run [Boolean] print the report without writing
   # @return [Report] per-project member counts, unrooted count, conflicts,
-  #   changed-row count (0 on a re-run)
+  #   changed-row count (0 on a re-run), and the drift found before the run
   def run(dry_run: false)
     # Compute + apply under the shared membership lock so a live re-parent
     # can't land between the two steps and get stamped under its old
@@ -121,10 +168,11 @@ class ProjectIdBackfill
     attempts = 0
     begin
       attempts += 1
-      membership = conflicts = nil
+      membership = conflicts = drift_before = nil
       unrooted_count = changed = 0
       ProjectMembership.with_membership_lock do
         membership, conflicts = compute_membership
+        drift_before = drift(membership: membership, conflicts: conflicts)
         unrooted_count = MemoryEntity.where.not(id: membership.keys)
                                      .where.not(entity_type: "Project").count
         # apply_membership runs several update_all statements — wrap them in
@@ -155,7 +203,8 @@ class ProjectIdBackfill
       per_project: per_project,
       unrooted: unrooted_count,
       conflicts: conflicts,
-      changed: changed
+      changed: changed,
+      drift: drift_before
     )
     print_report(report, dry_run: dry_run)
     report
@@ -224,6 +273,7 @@ class ProjectIdBackfill
     emit "  unrooted (stays NULL): #{report.unrooted}"
     emit "  conflicts: #{report.conflicts.size}" +
          (report.conflicts.any? ? " #{report.conflicts.inspect}" : "")
+    emit "  drift before the run: #{report.drift.summary}"
     emit(dry_run ? "  (no rows written)" : "  changed rows: #{report.changed}")
   end
 
