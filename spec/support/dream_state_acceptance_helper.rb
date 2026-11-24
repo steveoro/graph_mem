@@ -111,11 +111,7 @@ module DreamStateAcceptanceHelper
   end
 
   def link_child!(child, parent)
-    MemoryRelation.create!(
-      from_entity: child,
-      to_entity: parent,
-      relation_type: "part_of"
-    )
+    fs_member!(parent, child)
   end
 
   def assign_test_embedding!(entity, *leading_values)
