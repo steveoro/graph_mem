@@ -30,7 +30,8 @@ module GraphMem
         entities = MemoryEntity.where(project_id: project.id).to_a
         ids = entities.map(&:id)
         observations = MemoryObservation.active.where(memory_entity_id: ids).pluck(:memory_entity_id, :content)
-        relations = MemoryRelation.where(from_entity_id: ids).or(MemoryRelation.where(to_entity_id: ids)).pluck(:from_entity_id, :to_entity_id, :relation_type)
+        relations = MemoryRelation.where(from_entity_id: ids).or(MemoryRelation.where(to_entity_id: ids))
+                                  .pluck(:from_entity_id, :to_entity_id, :relation_type, :properties)
         metrics = graph_metrics(project, entities, observations, relations)
         expected ? metrics.merge(accuracy(project, entities, relations, expected)) : metrics
       end
@@ -55,11 +56,19 @@ module GraphMem
       # @return [String] lower case, punctuation as spaces, whitespace squished
       def normalized(text) = ProjectScanner::NoiseFilter.normalized(text)
 
+      # `root_only_entities` and `isolated_entities` read the model's relations only: the part_of a
+      # scan adds to the root for an entity the model left without a parent
+      # (ProjectScanner::Containment) is not one. An isolated entity is one the model left
+      # unconnected (its only edge, if any, is that containment edge); a root-only one is connected
+      # to the root alone, by relations the model emitted.
       def graph_metrics(project, entities, observations, relations)
         per_entity = observations.group_by(&:first).transform_values { |rows| rows.map(&:last) }
-        touching = relations.each_with_object(Hash.new { |h, k| h[k] = [] }) do |(from, to, _type), list|
-          list[from] << to
-          list[to] << from
+        touching = Hash.new { |h, k| h[k] = [] }
+        relations.each do |from, to, _type, properties|
+          next if ProjectScanner::Containment.containment_source?(properties.is_a?(Hash) ? properties["source"] : nil)
+
+          touching[from] << to
+          touching[to] << from
         end
         {
           "entities" => entities.size,
@@ -82,7 +91,7 @@ module GraphMem
         names = entities.to_h { |entity| [ entity.id, entity.name.downcase ] }.merge(project.id => project.name.downcase)
         found = names.except(project.id).values.uniq
         wanted = expected[:entities].map(&:downcase)
-        found_relations = relations.filter_map do |from, to, type|
+        found_relations = relations.filter_map do |from, to, type, _properties|
           [ names[from], MemoryRelation.canonical_relation_type(type), names[to] ] if names[from] && names[to] && type != "part_of"
         end.uniq
         wanted_relations = expected[:relations].map { |from, type, to| [ from.downcase, MemoryRelation.canonical_relation_type(type), to.downcase ] }

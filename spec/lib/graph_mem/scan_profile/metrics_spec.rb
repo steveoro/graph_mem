@@ -4,10 +4,13 @@ require "rails_helper"
 
 # F-3b step M: the noise metrics, on a synthetic graph.
 RSpec.describe GraphMem::ScanProfile::Metrics do
-  let!(:project) { MemoryEntity.create!(name: "Gadget Project", entity_type: "Project") }
+  let(:project) { MemoryEntity.create!(name: "Gadget Project", entity_type: "Project") }
 
-  def entity(name, type = "Class", observations: [])
-    MemoryEntity.create!(name: name, entity_type: type, project_id: project.id).tap do |record|
+  # A scan's entity: under the root by the scan's own containment edge (ProjectScanner::Containment),
+  # or, with `model_part_of`, by a part_of the model emitted.
+  def entity(name, type = "Class", observations: [], model_part_of: false)
+    phase = model_part_of ? "reconcile" : ProjectScanner::Containment::CONTAINMENT_PHASE
+    fs_member!(project, name, type, relation: { properties: { "source" => "project_scan:synth:#{phase}", "scan_id" => "synth" } }).tap do |record|
       observations.each { |text| MemoryObservation.create!(memory_entity: record, content: text) }
     end
   end
@@ -16,18 +19,20 @@ RSpec.describe GraphMem::ScanProfile::Metrics do
     MemoryRelation.create!(from_entity_id: from.id, to_entity_id: to.id, relation_type: type)
   end
 
-  before do
+  def scanned_graph!
     widget = entity("SynthWidget", observations: [ "SynthWidget renders gadget frames.", "synthwidget renders gadget frames" ])
     service = entity("AlphaService", "Service", observations: [ "AlphaService schedules SynthWidget renders.", "Fast." ])
     entity("Utils", "Module", observations: [ "Utils holds shared helpers." ])
     entity(".rb", "File", observations: [ "A Ruby file." ])
     entity("Gadget Notes", "Concept")
-    report = entity("ReportBuilder", observations: [ "ReportBuilder writes one report section per frame." ])
+    entity("ReportBuilder", observations: [ "ReportBuilder writes one report section per frame." ], model_part_of: true)
     relate(service, widget, "depends_on")
-    relate(report, project, "part_of")
   end
 
+  # Isolated: Utils, .rb and Gadget Notes (only the scan's containment edge); root-only: ReportBuilder
+  # (the model's own part_of to the root, nothing else).
   it "counts empty entities, short and duplicate observations, generic and file names, root-only and isolated entities, and types" do
+    scanned_graph!
     metrics = described_class.call(project)
 
     expect(metrics).to include("entities" => 6, "entities_without_observations" => 1, "observations" => 7, "short_observations" => 2,
@@ -40,6 +45,7 @@ RSpec.describe GraphMem::ScanProfile::Metrics do
   it "measures recall and precision against an expected list (synth)" do
     expected = { entities: %w[SynthWidget AlphaService FrameBuffer], relations: [ %w[AlphaService depends_on SynthWidget], %w[SynthWidget uses FrameBuffer] ] }
 
+    scanned_graph!
     metrics = described_class.call(project, expected: expected)
 
     expect(metrics["recall"]).to eq("entities" => 0.667, "relations" => 0.5)
