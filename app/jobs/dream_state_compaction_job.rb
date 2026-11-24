@@ -29,11 +29,19 @@ class DreamStateCompactionJob < ApplicationJob
     end
 
     # run.with_lock's transaction wraps the batch, so a batch that can move or merge entities takes
-    # the membership lock before it (DreamStateCompactor.with_membership_lock).
-    DreamStateCompactor.with_membership_lock(run.phase) do
+    # the membership lock before it (DreamStateCompactor.with_membership_lock). The phase is read
+    # fresh for that choice; if an overlapping slice still advanced the run into a membership phase
+    # before the row lock, this slice runs again instead of taking the lock inside the transaction.
+    locked_phase = run.reload.phase
+    DreamStateCompactor.with_membership_lock(locked_phase) do
       run.with_lock do
         run.reload
         return if run.status.in?(%w[completed failed])
+
+        if DreamStateCompactor.membership_phase?(run.phase) && !DreamStateCompactor.membership_phase?(locked_phase)
+          self.class.perform_later(run.id)
+          return
+        end
 
         compactor = DreamStateCompactor.new(run: run)
         result = compactor.process_batch!

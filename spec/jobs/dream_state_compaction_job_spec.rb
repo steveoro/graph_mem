@@ -149,6 +149,30 @@ RSpec.describe DreamStateCompactionJob, type: :job do
       expect(membership_lock_free?).to be(true)
     end
 
+    it "runs again, without locking inside the transaction, when the run moved into a membership phase after the lock was chosen" do
+      run.update!(phase: "relationship_discovery", cursor_entity_id: nil)
+      fs_member!(project, "SynthWidget", "Task")
+      advanced = false
+      # Another slice advances the run between this slice's phase read and its row lock.
+      allow_any_instance_of(CompactionRun).to receive(:with_lock).and_wrap_original do |original, *args, &block|
+        CompactionRun.where(id: run.id).update_all(phase: "orphans") unless advanced
+        advanced = true
+        original.call(*args, &block)
+      end
+
+      locks = []
+      subscriber = ActiveSupport::Notifications.subscribe("sql.active_record") do |*, payload|
+        locks << payload[:sql] if payload[:sql].to_s.include?("GET_LOCK")
+      end
+      expect { described_class.new.perform(run.id) }.to have_enqueued_job(described_class).with(run.id)
+      ActiveSupport::Notifications.unsubscribe(subscriber)
+
+      expect(locks).to be_empty # the batch didn't run in this slice, so no lock inside its transaction
+      expect(run.reload.phase).to eq("orphans")
+      expect(run.stats["entities_processed"].to_i).to eq(0)
+      expect(membership_lock_free?).to be(true)
+    end
+
     it "runs the batch later, without failing the run, while the lock stays busy" do
       fs_member!(project, "SynthWidget", "Task") # the batch's entity, left unprocessed
       stub_const("ProjectMembership::LOCK_TIMEOUT_SECONDS", 0)
