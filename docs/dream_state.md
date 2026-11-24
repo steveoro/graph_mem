@@ -147,7 +147,7 @@ To accept a proposal: inspect `get_maintenance_reports(report_type: "compaction_
 
 Compaction is **incremental**, not monolithic:
 
-- `BATCH_SIZE = 5` entities per job invocation; in `relation_types`, 200 relations
+- `BATCH_SIZE` entities per job invocation (`DREAM_STATE_BATCH_SIZE`, default 1, at most 50); in `relation_types`, 200 relations
 - `CompactionRun#cursor_entity_id` records the last processed entity; the next batch resumes after it. The `relation_types` phase keeps its cursor, a relation id, in `stats["relation_cursor_id"]`, so `cursor_entity_id` stays empty while it runs
 - When a phase's list is exhausted, the run advances to the next phase (or marks `completed`)
 - Progress totals count the entities once per entity phase (`orphans`, `tree_walk`, `relationship_discovery`) plus the relations the first phase walks (`total_relations`, read when the run starts)
@@ -160,6 +160,14 @@ Compaction is **incremental**, not monolithic:
 | `:continued` | Re-enqueue immediately with the same `run_id`          |
 | `:paused`    | Stop; resume on next scheduled trigger or manual start |
 | `:completed` | Stop; run marked finished                              |
+
+## The membership lock
+
+An orphan's auto-parent (`orphans`) and an auto-merge (`tree_walk`) change a `part_of` edge, so they take the membership lock (`ProjectMembership.with_membership_lock`, see [architecture](architecture.md#project-membership-1931-1932)). The lock must come **before** any transaction, and a batch runs inside two: the compactor's per-entity transaction, and `run.with_lock` in `DreamStateCompactionJob`, which wraps the whole batch. Since 1.93.2 both are covered. `DreamStateCompactor.with_membership_lock(phase)` takes the lock for the phases in `MEMBERSHIP_PHASES` (`orphans` and `tree_walk`) around each entity's transaction, and the job takes it around `run.with_lock`, so the first `GET_LOCK` of a batch has no transaction open and the inner ones just re-enter it. The other phases (`relation_types`, `relationship_discovery`) don't take it: neither writes a `part_of` edge (the relation sweep queues a `part_of` variant as a review row, and discovery only proposes). Cursor and pause handling are unchanged.
+
+- **Hold time.** A batch is one entity by default (`DREAM_STATE_BATCH_SIZE`), so the lock is held for one entity's work: 23 to 52 ms per batch on the test database. Neither phase makes an LLM call (the orphan and merge evidence come from the database), so no network call runs inside it. A larger batch size holds it longer, for the whole batch.
+- **A busy lock retries.** When an import, the backfill or a merge holds the lock for the full wait (`ProjectMembership::LOCK_TIMEOUT_SECONDS`), the job logs a warning and enqueues itself again after `DreamStateCompactionJob::LOCK_RETRY_WAIT` (1 minute) with the same run. The run isn't failed and its cursor hasn't moved, so the batch is simply tried again.
+- **The merge survivor is re-embedded later.** The lock is never held across an embedding call, so inline embeddings are suppressed inside it. A merge changes the survivor's aliases, which clears its embedding stamp, and re-embedding it inline would run at the commit, still under the lock. After each auto-merge the compactor enqueues the embedding backfill (`EmbeddingsMaintenanceEnqueuer`; a failed enqueue is logged and never undoes the merge). Until the backfill runs, the survivor has no embedding and drops out of vector search.
 
 
 Failed runs store the error message in `stats["error"]` and set status to `failed`. `CompactionRunner#acquire_run!` can resume a failed run when no other active run exists.
@@ -360,7 +368,7 @@ Since 1.93.1 that button is safe for membership. A `part_of` edge decides which 
 - **Review band** — cosine distance between **0.10** and **0.30** requires human or agent confirmation.
 - **Type-safe merges** — only entities of the same `entity_type` are considered for auto-merge or merge review. `NodeOperationsStrategy#merge_into` refuses cross-type merges.
 - **Low-confidence orphans** — token scores below **10** are never auto-parented.
-- **Pre-flight integrity sweep** — before each run, `GraphIntegrityService` auto-repairs counter cache drift and dangling relations, backfills missing embeddings (queuing failures for review), and detects observation lifecycle corruption (active with `obsoleted_at`, superseded without `superseded_by`, cross-entity `superseded_by` references). Lifecycle issues and embedding failures are queued into `compaction_review`. A lifecycle row's **Repair** (1.86.0) re-reads the observation: superseded without `superseded_by` points at its active same-entity `outdated_by`, else becomes obsolete; active with `obsoleted_at` has it cleared; a cross-entity `superseded_by` is Dismiss only. Undoable; a row already consistent is resolved, and the Dangling policy dismisses it.
+- **Pre-flight integrity sweep** — before each run, `GraphIntegrityService` auto-repairs counter cache drift and dangling relations (a dangling `part_of` whose child survives is deleted with a membership sync, and kept with a logged warning on a name collision), backfills missing embeddings (queuing failures for review), and detects observation lifecycle corruption (active with `obsoleted_at`, superseded without `superseded_by`, cross-entity `superseded_by` references). Lifecycle issues and embedding failures are queued into `compaction_review`. A lifecycle row's **Repair** (1.86.0) re-reads the observation: superseded without `superseded_by` points at its active same-entity `outdated_by`, else becomes obsolete; active with `obsoleted_at` has it cleared; a cross-entity `superseded_by` is Dismiss only. Undoable; a row already consistent is resolved, and the Dangling policy dismisses it.
 
 
 

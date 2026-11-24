@@ -39,6 +39,7 @@ Active plans and the backlog live in [`docs/plans/`](../).
 | [`auto-adoption-plan.md`](auto-adoption-plan.md) | Agents reach for graph_mem in other repos: server instructions, skill trigger, user rule, hook, print-only installer; Skills over MCP behind a setting | 1.90.0–1.91.0 |
 | [`auto-adoption-tests.md`](auto-adoption-tests.md) | The decision tests for the plan above, the eval scripts, and the result (the instructions alone suffice) | closed with 1.92.0 |
 | [`contradiction-auto-resolve-plan.md`](contradiction-auto-resolve-plan.md) | Value changes and value-flip contradictions resolved on their own: the value-change pairing, the auto-resolve policy, the false-merge guards | 1.92.0 |
+| [`part-of-membership-plan.md`](part-of-membership-plan.md) | Every `part_of` writer keeps an entity's project in step: entity delete, merge, relation repair, scans, imports, rake tasks, dream state, the integrity sweep, and the spec suite's drift guard | 1.93.1–1.93.2 |
 
 Removed as noise (still in git history): the chores D-1–D-3 step list (1.55.3) and the F2a, F2b and F2c
 task-by-task implementation plans (their designs above keep the decisions).

@@ -361,8 +361,8 @@ releases placed:
 | Version | What |
 |---|---|
 | 1.93.0 | Dream State R1a (#188, shipped) |
-| 1.93.1 | `part_of` membership, PR 1 (`docs/plans/part-of-membership-plan.md`, shipped) |
-| 1.93.2 | `part_of` membership, PR 2 (scans and rake tasks) |
+| 1.93.1 | `part_of` membership, PR 1 (`docs/plans/done/part-of-membership-plan.md`, shipped) |
+| 1.93.2 | `part_of` membership, PR 2 (scans, rake tasks, dream state, integrity sweep; `docs/plans/done/part-of-membership-plan.md`, shipped) |
 | 1.93.3 | mcp 1.11.0 bump |
 | **1.93.4** | **This plan: step 0 (zero-vector bug fix) + step 1 (benchmark and specs)**, PRs A and B |
 | 1.94.0 | SQL exchange (four PRs) |

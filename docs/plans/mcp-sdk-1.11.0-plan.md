@@ -1,6 +1,6 @@
 # MCP SDK 1.11.0 → graph_mem 1.93.3 (gem bump, two malformed-input wire changes, compat baseline on reference servers v2.5.0)
 
-**Release renumbered (2026-11-24): 1.93.1 -> 1.93.3.** The `part_of` membership PRs (`part-of-membership-plan.md`) took 1.93.1 and 1.93.2, so this bump follows them; the content of the plan is unchanged.
+**Release renumbered (2026-11-24): 1.93.1 -> 1.93.3.** The `part_of` membership PRs (`done/part-of-membership-plan.md`) took 1.93.1 and 1.93.2, so this bump follows them; the content of the plan is unchanged.
 
 **Status (2026-11-19): PLAN, approved, kickoff ready.** Steve approved this plan on 2026-11-19 (as 1.91.1; renumbered 1.93.1
 after 1.92.0 and Dream State R1a 1.93.0 shipped first, then 1.93.3 on 2026-11-24) and answered the four open

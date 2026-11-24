@@ -110,8 +110,8 @@ The versions, as expected today (each kickoff confirms its own against `version.
 | PR | What | When | Version |
 |---|---|---|---|
 | **R1a** | Relation vocabulary: mapping fallback, normalize on write, the sweep, the unmapped-types page | first (shipped) | 1.93.0 |
-| `part_of` membership, PR 1 | Every `part_of` writer keeps membership in step: entity delete, merge, relation repair, scans, imports, the drift guard (`part-of-membership-plan.md`) | after R1a (shipped) | 1.93.1 |
-| `part_of` membership, PR 2 | The scan validator and scanner lock order, the rake tasks (`part-of-membership-plan.md`) | after PR 1 | 1.93.2 |
+| `part_of` membership, PR 1 | Every `part_of` writer keeps membership in step: entity delete, merge, relation repair, scans, imports, the drift guard (`done/part-of-membership-plan.md`) | after R1a (shipped) | 1.93.1 |
+| `part_of` membership, PR 2 | The scan validator and scanner lock order, the rake tasks, dream state and the integrity sweep (`done/part-of-membership-plan.md`) | after PR 1 (shipped) | 1.93.2 |
 | mcp 1.11.0 | (its own plan) | after the membership PRs | 1.93.3 |
 | SQL exchange | (its own plan, four PRs) | after mcp 1.11.0 | 1.94.0 |
 | **R1b** | Retype library `part_of` edges, the orphan rule, the exports, dream-state actor on its edges | after the SQL exchange train | 1.95.0 |
@@ -227,8 +227,8 @@ Dependencies between the plans:
   collision or a busy lock), and so do the operator's data-exchange retype, delete and duplicate
   cleanup. The writers still missing the lock or the sync at 1.93.0 (entity deletes, entity merges
   with two parents, the "Repair relation duplicates" button) were fixed in 1.93.1; scan
-  validation, the rake tasks and the scan's lock order are planned for PR 2 in
-  [`part-of-membership-plan.md`](part-of-membership-plan.md).
+  validation, the rake tasks, the scan's lock order, dream state's and the integrity sweep's edge
+  writes in 1.93.2 (see [`part-of-membership-plan.md`](done/part-of-membership-plan.md)).
 - **Docs corrected.** `docs/dream_state.md` now says an orphan has no `part_of` parent (the
   `depends_on` clause was never in the code) and that the tree walk follows `part_of` children
   down from the Project roots.
