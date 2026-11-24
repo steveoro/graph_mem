@@ -45,6 +45,19 @@ class ImportEntityResolver
       EntityTypeMapping.canonicalize(raw_type) || raw_type.to_s.strip
     end
 
+    # Whether a tree node's edge to its tree parent makes it a member of the parent's project: a
+    # part_of from the child to the parent. Only a node such a chain links to the import's root
+    # Project is created, and matched, in the import's project; any other declared node is global,
+    # matched by name globally, like a reference node (ImportMatchingStrategy and
+    # ImportExecutionStrategy apply the same rule, so the preview matches the execute).
+    # @param node [Hash] a tree node (string or symbol keys)
+    # @return [Boolean]
+    def contained_child?(node)
+      type = node["relation_type"] || node[:relation_type] || "part_of"
+      direction = node["relation_direction"] || node[:relation_direction]
+      direction != "parent_to_child" && MemoryRelation.reads_as_part_of?(MemoryRelation.canonical_relation_type(type))
+    end
+
     # Project-scoped name+type lookup: the import's own project first, then
     # the GLOBAL namespace (project_id NULL — reference stubs, Project roots,
     # operator-created globals). Entities belonging to OTHER projects are

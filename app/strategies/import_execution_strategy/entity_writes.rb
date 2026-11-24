@@ -123,7 +123,7 @@ module ImportExecutionStrategy::EntityWrites
     # duplicate edge. Declared nodes resolve inside this import's project,
     # then the global namespace.
     reference_node = node[:reference] == true || node["reference"] == true
-    node_project_id = reference_node ? nil : @import_project_id
+    node_project_id = reference_node ? nil : declared_scope_id
     existing = if reference_node
                  ImportEntityResolver.find_reference(name, entity_type,
                                                      project_id: @import_project_id,
@@ -132,7 +132,8 @@ module ImportExecutionStrategy::EntityWrites
     else
                  find_entity_by_name_and_type(name, entity_type, project_id: node_project_id)
     end
-    if existing && node[:reference] != true && node["reference"] != true && reference_stub_entity?(existing)
+    # (A global node merges into the stub: a copy could only collide with it.)
+    if existing && node_project_id && node[:reference] != true && node["reference"] != true && reference_stub_entity?(existing)
       # A `create` decision that resolves to an unclaimed stub means the
       # matcher refused the claim (another project declares the name too).
       # Merging would attach this declared subtree onto the shared stub —

@@ -56,9 +56,16 @@ module ImportExecutionStrategy::Claims
                                                  referrer_ids: reference_referrer_ids(node),
                                                  relation_types: reference_relation_types(node))
     end
-    find_entity_by_name_and_type(name, entity_type, project_id: @import_project_id) ||
-      ImportEntityResolver.class_module_collision(name, entity_type, project_id: @import_project_id) ||
+    find_entity_by_name_and_type(name, entity_type, project_id: declared_scope_id) ||
+      ImportEntityResolver.class_module_collision(name, entity_type, project_id: declared_scope_id) ||
       ImportEntityResolver.class_module_collision(name, entity_type, project_id: nil)
+  end
+
+  # The scope the node being processed is declared in: the import's project when a part_of chain
+  # links it to the import's root (process_node_recursive's `contained`), else the global namespace.
+  # @return [Integer, nil]
+  def declared_scope_id
+    @node_contained == false ? nil : @import_project_id
   end
 
   # Resolved ids of the payload entities referencing this node — the
@@ -93,7 +100,7 @@ module ImportExecutionStrategy::Claims
 
     canonical = ImportEntityResolver.resolved_code_type(entity.entity_type, ImportEntityResolver.canonical_type(raw_type))
     return if entity.entity_type == canonical
-    return unless reference_stub_entity?(entity) || entity.project_id == @import_project_id
+    return unless reference_stub_entity?(entity) || entity.project_id == declared_scope_id
 
     @logger.info "ImportExecutionStrategy: Retyping '#{entity.name}' " \
                  "#{entity.entity_type} -> #{canonical} on claim"

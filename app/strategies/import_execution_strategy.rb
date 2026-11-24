@@ -162,7 +162,7 @@ class ImportExecutionStrategy
               decision = decision_map[path]
               parent_id = resolve_parent_id(decision, path)
 
-              process_node_recursive(root_node, path, decision_map, parent_id, nil)
+              process_node_recursive(root_node, path, decision_map, parent_id, nil, index.zero?)
             end
 
             # Non-tree edges (e.g. code-structure `calls`/`inherits` imported from
@@ -298,8 +298,12 @@ class ImportExecutionStrategy
   # @param decision_map [Hash] Map of node paths to decisions
   # @param parent_entity_id [Integer, nil] Parent entity ID for root imports
   # @param tree_parent_id [Integer, nil] Parent entity ID from tree traversal
-  def process_node_recursive(node, path, decision_map, parent_entity_id, tree_parent_id)
+  # @param contained [Boolean] a part_of chain links the node to the import's root
+  #   (ImportEntityResolver.contained_child?): a declared node is created and matched in the
+  #   import's project, else globally (#declared_scope_id)
+  def process_node_recursive(node, path, decision_map, parent_entity_id, tree_parent_id, contained = true)
     decision = decision_map[path]
+    @node_contained = contained
 
     # Determine the action - check child_action first, then action
     child_action = decision&.dig(:child_action) || decision&.dig("child_action")
@@ -365,7 +369,8 @@ class ImportExecutionStrategy
     children.each_with_index do |child, index|
       child_path = "#{path}.children.#{index}"
       # Children inherit this entity as their tree parent
-      process_node_recursive(child, child_path, decision_map, nil, entity_id)
+      process_node_recursive(child, child_path, decision_map, nil, entity_id,
+                             contained && ImportEntityResolver.contained_child?(child))
     end
 
     @progress_tracker&.increment!(message: "Processed import node #{path}", counters: progress_counters)
