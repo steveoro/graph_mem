@@ -295,6 +295,34 @@ RSpec.describe 'DataExchange', type: :request do
 
       expect(response).to have_http_status(:unprocessable_content)
     end
+
+    describe 'an entity with part_of children' do
+      def delete_through_path(entity)
+        delete delete_node_data_exchange_index_path, params: { node_id: entity.id }
+        response
+      end
+
+      def refused?(outcome)
+        outcome.status == 422 && JSON.parse(outcome.body)['error'].to_s.include?('already exists there')
+      end
+
+      def undo_status = :none
+
+      it_behaves_like 'an entity delete that moves part_of children up'
+
+      it 'says where the children went' do
+        alpha = MemoryEntity.create!(name: 'Alpha Project', entity_type: 'Project')
+        widget = MemoryEntity.create!(name: 'SynthWidget', entity_type: 'Component')
+        gadget = MemoryEntity.create!(name: 'SynthGadget', entity_type: 'Component')
+        MemoryRelation.create!(from_entity: widget, to_entity: alpha, relation_type: 'part_of')
+        MemoryRelation.create!(from_entity: gadget, to_entity: widget, relation_type: 'part_of')
+        [ widget, gadget ].each { |entity| ProjectMembership.sync!(entity) }
+
+        delete_through_path(widget)
+
+        expect(JSON.parse(response.body)['message']).to eq("Successfully deleted 'SynthWidget'; 1 child entity moved under 'Alpha Project' (##{alpha.id})")
+      end
+    end
   end
 
   # Async export endpoints

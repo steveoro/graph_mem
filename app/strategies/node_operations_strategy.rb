@@ -197,16 +197,20 @@ class NodeOperationsStrategy
   end
 
   # Delete a node
-  # Children will become orphans unless cascade_delete is true
+  # Without cascade_delete its part_of children move under its own parent with their subtrees, or
+  # become global when it has none (RelationMembershipWrite.destroy_entity!).
   # @param node_id [Integer] The node to delete
   # @param cascade_delete [Boolean] If true, delete all descendants too
   # @param reason [String, nil] Optional reason for the deletion
   # @return [Hash] Result with :success and :message or :error
+  # @raise [ProjectMembership::Collision] a child's name is taken where it moves; nothing deleted
+  # @raise [ProjectMembership::LockTimeout] nothing deleted
   def delete_node(node_id, cascade_delete: false, reason: nil)
     node = MemoryEntity.find_by(id: node_id)
 
     return error_result("Node not found") unless node
     return error_result(PROJECT_ROOT_PROTECTED_ERROR) if project_root?(node)
+    return delete_node_keeping_children(node, reason) unless cascade_delete
 
     node_name = node.name
     deleted_count = 0
@@ -216,23 +220,7 @@ class NodeOperationsStrategy
       # Membership lock BEFORE the transaction — see move_node.
       ProjectMembership.with_membership_lock do
         ActiveRecord::Base.transaction do
-          if cascade_delete
-            # Delete all descendants first
-            deleted_count = delete_descendants(node_id)
-          else
-            # Remove hierarchy links only; descendants with another parent remain attached.
-            # Orphaned children lose their part_of chain → unrooted (global);
-            # re-sync them so project_id mirrors the CURRENT edges.
-            orphan_ids = MemoryRelation.where(to_entity_id: node_id, relation_type: "part_of")
-                                       .pluck(:from_entity_id)
-            MemoryRelation
-              .where(to_entity_id: node_id, relation_type: "part_of")
-              .destroy_all
-            orphan_ids.each do |child_id|
-              orphan = MemoryEntity.find_by(id: child_id)
-              ProjectMembership.sync!(orphan) if orphan
-            end
-          end
+          deleted_count = delete_descendants(node_id)
 
           # Delete the node itself (observations will be deleted via dependent: :destroy)
           node.destroy!
@@ -245,11 +233,7 @@ class NodeOperationsStrategy
       Current.deletion_reason = nil
     end
 
-    message = cascade_delete ?
-      "Successfully deleted '#{node_name}' and #{deleted_count - 1} descendants" :
-      "Successfully deleted '#{node_name}'"
-
-    success_result(message)
+    success_result("Successfully deleted '#{node_name}' and #{deleted_count - 1} descendants")
   rescue ActiveRecord::RecordInvalid => e
     error_result("Failed to delete node: #{e.message}")
   rescue ProjectRootProtected
@@ -270,6 +254,14 @@ class NodeOperationsStrategy
   end
 
   private
+
+  def delete_node_keeping_children(node, reason)
+    moves = RelationMembershipWrite.destroy_entity!(node, reason: reason)
+    @logger.info "NodeOperationsStrategy: Deleted node '#{node.name}' (#{node.id})"
+    success_result([ "Successfully deleted '#{node.name}'", moves.summary(past: true) ].compact.join("; "))
+  rescue ActiveRecord::RecordInvalid, ActiveRecord::RecordNotDestroyed => e
+    error_result("Failed to delete node: #{e.message}")
+  end
 
   def project_root?(entity)
     entity.entity_type == PROJECT_ENTITY_TYPE

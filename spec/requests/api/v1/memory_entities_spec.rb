@@ -305,6 +305,57 @@ RSpec.describe 'API V1 Memory Entities', type: :request do
           expect(response).to have_http_status(:not_found)
         end
       end
+
+      response(422, 'delete refused (a part_of child\'s name is taken in the scope it moves to, a busy membership lock, or a Project root with members)') do
+        schema '$ref' => '#/components/schemas/error_response'
+        let(:alpha) { MemoryEntity.create!(name: 'Alpha Project', entity_type: 'Project') }
+        let(:widget) { MemoryEntity.create!(name: 'SynthWidget', entity_type: 'Component') }
+        let(:gadget) { MemoryEntity.create!(name: 'SynthGadget', entity_type: 'Component') }
+        let(:id) { widget.id }
+
+        # The parentless widget is stamped into Alpha by hand, so its child moves to the global
+        # scope, where the name is taken (drift is this example's point: nothing is deleted).
+        before do
+          MemoryRelation.create!(from_entity: gadget, to_entity: widget, relation_type: 'part_of')
+          [ widget, gadget ].each { |entity| entity.update_column(:project_id, alpha.id) }
+          MemoryEntity.create!(name: 'SynthGadget', entity_type: 'Component')
+        end
+
+        run_test!(membership_drift: :allowed) do |response|
+          expect(response).to have_http_status(:unprocessable_content)
+          expect(JSON.parse(response.body)['error']).to eq('Validation failed')
+          expect(MemoryEntity.exists?(widget.id)).to be(true)
+          expect(gadget.reload.project_id).to eq(alpha.id)
+        end
+      end
+    end
+  end
+
+  # Item 1 of the part_of membership plan: plain request specs (not rswag).
+  describe 'DELETE /api/v1/memory_entities/:id of an entity with part_of children' do
+    def delete_through_path(entity)
+      delete "/api/v1/memory_entities/#{entity.id}", as: :json
+      response
+    end
+
+    def refused?(outcome)
+      outcome.status == 422 && JSON.parse(outcome.body).dig('details', 'base').to_a.join.include?('already exists there')
+    end
+
+    def undo_status = :not_undoable
+
+    it_behaves_like 'an entity delete that moves part_of children up'
+
+    it 'answers a Project root that still has members with 422 and deletes nothing' do
+      alpha = MemoryEntity.create!(name: 'Alpha Project', entity_type: 'Project')
+      widget = MemoryEntity.create!(name: 'SynthWidget', entity_type: 'Component')
+      MemoryRelation.create!(from_entity: widget, to_entity: alpha, relation_type: 'part_of')
+      ProjectMembership.sync!(widget)
+
+      delete "/api/v1/memory_entities/#{alpha.id}", as: :json
+
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(MemoryEntity.exists?(alpha.id)).to be(true)
     end
   end
 

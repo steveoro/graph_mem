@@ -157,14 +157,17 @@ module Api
       end
 
       # DELETE /api/v1/memory_entities/:id
+      # Its part_of children move under its parent (global when it has none). 422, with nothing
+      # deleted, when a child's name is taken in the scope it moves to, when the membership lock is
+      # busy, or when the entity can't be deleted (a Project root that still has members).
       def destroy
-        begin
-          Current.deletion_reason = params[:reason]
-          @memory_entity.destroy!
-        ensure
-          Current.deletion_reason = nil
-        end
+        RelationMembershipWrite.destroy_entity!(@memory_entity, reason: params[:reason])
         head :no_content
+      rescue ProjectMembership::Collision, ProjectMembership::LockTimeout => e
+        message = e.is_a?(ProjectMembership::LockTimeout) ? "#{e.message}; retry shortly" : e.message
+        render_error("Validation failed", details: { base: [ message ] })
+      rescue ActiveRecord::RecordNotDestroyed, ActiveRecord::RecordInvalid => e
+        render_error("Validation failed", details: { base: [ e.record.errors.full_messages.to_sentence.presence || e.message ] })
       end
 
       # POST /api/v1/memory_entities/:id/merge_into/:target_id

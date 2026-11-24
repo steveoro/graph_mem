@@ -1226,4 +1226,20 @@ RSpec.describe CompactionReviewService, type: :service do
       expect(row.effective_payload["observation_ids"].size).to eq(base + 8)
     end
   end
+
+  describe "applying a delete_entity row to an entity with part_of children" do
+    def delete_through_path(entity)
+      item = { id: SecureRandom.uuid, kind: "delete_entity", entity_id: entity.id, entity_name: entity.name, reason: "synthetic" }
+      row = described_class.seed_report(report_type: "compaction_review", source: "test", items: [ item ]).sole
+      described_class.apply(row.row_uuid).merge(row: row.reload)
+    end
+
+    def refused?(outcome)
+      !outcome[:success] && outcome[:row].status == "active" && outcome[:row].resolution_reason.to_s.include?("already exists there")
+    end
+
+    def undo_status = :not_undoable
+
+    it_behaves_like "an entity delete that moves part_of children up"
+  end
 end

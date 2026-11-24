@@ -243,13 +243,13 @@ class CompactionReviewApplier
                  error: "#{NodeOperationsStrategy::PROJECT_ROOT_PROTECTED_ERROR} (#{members} members still scoped to it)" }
       end
 
-      Current.deletion_reason = effective[:reason] || "scan_review"
-      entity.destroy!
-      { success: true, message: "Entity #{entity_id} deleted" }
-    rescue ActiveRecord::RecordNotDestroyed, ActiveRecord::RecordInvalid => e
+      # Never a cascade: its part_of children move under its parent (global when it has none), in a
+      # savepoint, so a refusal rolls back only this delete and the row records why.
+      moves = RelationMembershipWrite.destroy_entity!(entity, reason: effective[:reason] || "scan_review")
+      { success: true, message: [ "Entity #{entity_id} deleted", moves.summary(past: true) ].compact.join("; ") }
+    rescue ActiveRecord::RecordNotDestroyed, ActiveRecord::RecordInvalid,
+           ProjectMembership::Collision, ProjectMembership::LockTimeout => e
       { success: false, error: "Failed to delete entity: #{e.message}" }
-    ensure
-      Current.deletion_reason = nil
     end
 
     def dismiss_compaction_review(effective)

@@ -92,11 +92,13 @@ class CompactionReviewApplier
       end
 
       relations = MemoryRelation.where(from_entity_id: entity.id).or(MemoryRelation.where(to_entity_id: entity.id)).count
-      children = MemoryRelation.where(to_entity_id: entity.id, relation_type: "part_of").count
-      result(true, undo: UNDO_NONE, effects: [
-        "Deletes '#{entity.name}' (##{entity.id}) with #{entity.memory_observations.count} observation(s) and #{relations} relation(s)",
-        "#{children} child entit#{children == 1 ? 'y is' : 'ies are'} left without a parent"
-      ], warnings: [ "Can't be undone" ])
+      moves = RelationMembershipWrite.entity_delete_plan(entity)
+      collision = moves.collision_name
+      effects = [ "Deletes '#{entity.name}' (##{entity.id}) with #{entity.memory_observations.count} observation(s) and #{relations} relation(s)" ]
+      effects << moves.summary if moves.summary
+      warnings = [ "Can't be undone" ]
+      warnings.unshift("Refused: '#{collision}' already exists in #{project_label(ProjectMembership.project_id_for_parent(moves.parent))}") if collision
+      result(collision.nil?, undo: UNDO_NONE, effects: effects, warnings: warnings)
     end
 
     def preview_stale_memory(effective, _params)

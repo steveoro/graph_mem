@@ -437,7 +437,7 @@ RSpec.describe NodeOperationsStrategy, type: :model do
       expect(source_child.reload.project_id).to eq(project_b.id)
     end
 
-    it "delete_node un-roots orphaned children" do
+    it "delete_node moves the children under the deleted node's parent, keeping their project" do
       node = MemoryEntity.create!(name: "DelScoped", entity_type: "File", project_id: project_a.id)
       child = MemoryEntity.create!(name: "DelScopedChild", entity_type: "Class",
                                    project_id: project_a.id)
@@ -447,7 +447,8 @@ RSpec.describe NodeOperationsStrategy, type: :model do
       result = strategy.delete_node(node.id)
 
       expect(result[:success]).to be true
-      expect(child.reload.project_id).to be_nil
+      expect(MemoryRelation.where(from_entity_id: child.id, relation_type: "part_of").pluck(:to_entity_id)).to eq([ project_a.id ])
+      expect(child.reload.project_id).to eq(project_a.id)
     end
   end
 
