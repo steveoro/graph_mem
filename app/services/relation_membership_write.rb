@@ -10,7 +10,8 @@
 # neither can move a relation's endpoints, so only the type is checked.
 #
 # Deleting an entity moves membership too (its part_of children lose their parent edge):
-# destroy_entity! is the one delete every entity-delete path uses (see EntityDelete).
+# destroy_entity! is the one delete every entity-delete path uses, always under the membership
+# lock (see EntityDelete).
 #
 #   RelationMembershipWrite.update!(relation, relation_type: "part_of", weight: 0.5)
 #   RelationMembershipWrite.destroy!(relation, reason: "wrong parent")

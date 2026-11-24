@@ -9,9 +9,11 @@ module RelationMembershipWrite
   # `dependent: :destroy` on MemoryEntity removes the entity's edges, so each child gets a new
   # part_of edge to that parent through the validating create path (one parent, no cycle) and is
   # synced (ProjectMembership.sync!) in the same savepoint: a ProjectMembership::Collision rolls the
-  # whole delete back. The membership lock comes first when the entity has part_of children (the
-  # advisory-first rule); it is reentrant, so callers already under it (graph_delete, a review
-  # apply) just raise its refcount.
+  # whole delete back. Every delete takes the membership lock first (the advisory-first rule), even
+  # for an entity without part_of children: whether it has children is read under the lock, so a
+  # child attached meanwhile is still moved and synced in the right order. The lock is reentrant,
+  # so callers already under it (graph_delete, a review apply) just raise its refcount, and entity
+  # deletes are rare enough that a childless one waiting on it costs little.
   #
   # A `reference_stub` park edge is not ownership (ProjectMembership::OWNED_EDGE_SQL): a parked
   # stub child stays where it is (global) and is not moved, and an entity whose only parent edge
@@ -74,7 +76,7 @@ module RelationMembershipWrite
     # @raise [ProjectMembership::LockTimeout] nothing deleted
     # @raise [ActiveRecord::RecordInvalid, ActiveRecord::RecordNotDestroyed] nothing deleted
     def destroy!(reason: nil)
-      RelationMembershipWrite.with_lock_if(owned_edges.exists?(to_entity_id: @entity.id)) do
+      ProjectMembership.with_membership_lock do
         # A savepoint: a caller inside its own transaction (a review apply under its row lock)
         # rescues a refusal and records it, so only this delete may roll back.
         ActiveRecord::Base.transaction(requires_new: true) do

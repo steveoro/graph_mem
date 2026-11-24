@@ -35,13 +35,10 @@ RSpec.describe RelationMembershipWrite::EntityDelete do
       expect(membership_lock_free?).to be(true)
     end
 
-    it "takes no lock for an entity without part_of children" do
-      sql = []
-      subscriber = ActiveSupport::Notifications.subscribe("sql.active_record") { |*, payload| sql << payload[:sql].to_s }
-      described_class.new(leaf).destroy!
-      ActiveSupport::Notifications.unsubscribe(subscriber)
-
-      expect(sql.grep(/GET_LOCK/)).to be_empty
+    # Whether it has children is read under the lock, so a child attached meanwhile can't skip it.
+    it "takes the membership lock before its transaction for an entity without part_of children too" do
+      expect(open_transactions_at_get_lock { described_class.new(leaf).destroy! }).to eq(0)
+      expect(membership_lock_free?).to be(true)
       expect(MemoryEntity.exists?(leaf.id)).to be(false)
     end
 
