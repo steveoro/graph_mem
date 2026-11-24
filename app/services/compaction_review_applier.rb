@@ -120,7 +120,16 @@ class CompactionReviewApplier
       return { success: false, error: "Source and target entities are required" } if source_id.zero? || target_id.zero?
       return { success: false, error: "Cannot merge an entity into itself" } if source_id == target_id
 
-      NodeOperationsStrategy.new.merge_into(source_id, target_id)
+      # A savepoint (see create_relation): a refused merge rolls back only its own writes, so the
+      # row can still record the failure reason.
+      result = nil
+      ActiveRecord::Base.transaction(requires_new: true) do
+        result = NodeOperationsStrategy.new.merge_into(source_id, target_id)
+        raise ActiveRecord::Rollback unless result[:success]
+      end
+      result
+    rescue ProjectMembership::Collision => e
+      { success: false, error: "Failed to merge nodes: #{e.message}" }
     end
 
     def create_relation(row, effective, action_params)

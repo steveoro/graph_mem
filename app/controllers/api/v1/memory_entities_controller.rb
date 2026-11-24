@@ -183,6 +183,10 @@ module Api
         end
       rescue ActiveRecord::RecordNotFound
         render_error("Target MemoryEntity not found when attempting to merge.", status: :not_found)
+      rescue ProjectMembership::Collision, ProjectMembership::LockTimeout => e
+        # A re-pointed child, or a target taking the source's parent, collides in its new scope;
+        # nothing is merged.
+        render_error(e.is_a?(ProjectMembership::LockTimeout) ? "#{e.message}; retry shortly" : e.message)
       end
 
       private

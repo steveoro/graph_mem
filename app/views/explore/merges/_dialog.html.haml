@@ -33,6 +33,9 @@
             %li= entry.label
     - if preview.aliases_gained.any?
       %p{ data: { testid: "explore-merge-aliases" } }= t("explore.merges.aliases", aliases: preview.aliases_gained.join(", "))
+    - if preview.parent_edge
+      %p{ data: { testid: "explore-merge-parent" } }
+        = t("explore.merges.parent_#{preview.parent_edge}", target: target.name, parent: preview.parent_name || "?")
     - if preview.children.any?
       %p{ data: { testid: "explore-merge-children" } }= t("explore.merges.children", count: preview.children.size, names: preview.children.first(5).map(&:name).join(", "))
     - preview.project_moves.each do |move|

@@ -253,6 +253,20 @@ class NodeOperationsStrategy
     (parse_aliases(target.aliases) + source_aliases).map(&:strip).reject(&:blank?).uniq.join(",")
   end
 
+  # Whether a merge re-points the source's parent edge (part_of `parent_id`) to the target, rather
+  # than dropping it (also used by EntityMergePreview). The create-time rules for that edge: one
+  # parent (the target has none besides the source, whose edge the merge removes) and no cycle (the
+  # parent is not below the target, nor below the source, whose children the target inherits).
+  # @param source_id [Integer]
+  # @param target_id [Integer]
+  # @param parent_id [Integer] the source's part_of parent
+  # @return [Boolean] true: the target takes that parent; false: the edge is dropped
+  def target_takes_parent?(source_id, target_id, parent_id)
+    return false if MemoryRelation.where(from_entity_id: target_id, relation_type: "part_of").where.not(to_entity_id: source_id).exists?
+
+    !RelationSemantics.would_create_cycle?(target_id, parent_id) && !RelationSemantics.would_create_cycle?(source_id, parent_id)
+  end
+
   private
 
   def delete_node_keeping_children(node, reason)
@@ -282,12 +296,18 @@ class NodeOperationsStrategy
     # Transfer observations from source to target and recompute trust
     transfer_observations!(source, target)
 
-    reassign_outgoing_relations!(source.id, target.id)
+    # The target takes the source's parent only when it has none of its own: sync it first, so the
+    # source's children re-pointed next land in the target's new scope.
+    target_reparented = reassign_outgoing_relations!(source.id, target.id)
+    ProjectMembership.sync!(target) if target_reparented
     reassign_incoming_relations!(source.id, target.id)
 
     # Delete any relations that were directly between source and target
     MemoryRelation.where(from_entity_id: source.id, to_entity_id: target.id).destroy_all
+    direct_parent = MemoryRelation.where(from_entity_id: target.id, to_entity_id: source.id, relation_type: "part_of").exists?
     MemoryRelation.where(from_entity_id: target.id, to_entity_id: source.id).destroy_all
+    # A target that was part_of the source now hangs on the parent it took from the source (or none).
+    ProjectMembership.sync!(target) if direct_parent
 
     # Clean up duplicate relations that may have been created
     cleanup_duplicate_relations(target.id)
@@ -327,8 +347,14 @@ class NodeOperationsStrategy
     aliases_string.split(/[,|;]/).map(&:strip).reject(&:blank?)
   end
 
-  # Re-assign outgoing relations (source -> X) without violating uniqueness.
+  # Re-assign outgoing relations (source -> X) without violating uniqueness. The target keeps its own
+  # relationships: a source edge that reads as part_of (the source's parent) is dropped when the
+  # target already has a parent other than the source, or when re-pointing it would make a part_of
+  # cycle; otherwise it is re-pointed and the target takes that parent. A dropped edge is in the
+  # merge snapshot, so undo restores it.
+  # @return [Boolean] true when the target took the source's parent (the caller syncs it)
   def reassign_outgoing_relations!(source_id, target_id)
+    reparented = false
     MemoryRelation.where(from_entity_id: source_id).where.not(to_entity_id: target_id).find_each do |relation|
       if MemoryRelation.exists?(
         from_entity_id: target_id,
@@ -336,11 +362,16 @@ class NodeOperationsStrategy
         relation_type: relation.relation_type
       )
         relation.destroy!
+      elsif MemoryRelation.reads_as_part_of?(relation.relation_type) && !target_takes_parent?(source_id, target_id, relation.to_entity_id)
+        relation.destroy!
       else
         relation.update!(from_entity_id: target_id)
+        reparented ||= MemoryRelation.reads_as_part_of?(relation.relation_type)
       end
     end
+    reparented
   end
+
 
   # Re-assign incoming relations (X -> source) without violating uniqueness.
   # part_of children re-pointed under the target change scope when the

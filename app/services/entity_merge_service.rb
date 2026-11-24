@@ -35,6 +35,10 @@ class EntityMergeService
       set = ChangeSet.find_by(uuid: result[:change_set_uuid])
       result.merge(status: :ok, undoable: set ? set.undoable? : false, not_undoable_reason: set&.not_undoable_reason)
     end
+  rescue ProjectMembership::Collision => e
+    # A re-pointed child, or a target taking the source's parent, collides in its new scope; the
+    # merge's transaction rolled back.
+    { success: false, status: :unprocessable_content, error: e.message }
   end
 
   private
