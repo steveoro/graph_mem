@@ -486,6 +486,58 @@ RSpec.describe "MCP on the official SDK", type: :request do
     end
   end
 
+  # mcp 1.11.0 (#687): resources/read checks its params (an object with a string uri) before graph_mem's read
+  # handler runs. Before 1.11.0: -32603 "Internal error" without params (the handler's NoMethodError reached
+  # Rails.error), and "Resource not found: 123" (-32602) for a non-string uri.
+  describe "resources/read without a string uri" do
+    {
+      "without params" => %({"jsonrpc":"2.0","id":9,"method":"resources/read"}),
+      "with a non-string uri" => %({"jsonrpc":"2.0","id":9,"method":"resources/read","params":{"uri":123}})
+    }.each do |label, body|
+      %w[/mcp /mcp/readonly].each do |path|
+        it "answers -32602 with the id #{label} on #{path}, before the read handler runs" do
+          allow(Rails.error).to receive(:report).and_call_original
+          session_id = initialize_session(path)
+
+          post path, params: body, headers: request_headers.merge("Mcp-Session-Id" => session_id)
+
+          expect(response).to have_http_status(:ok)
+          expect(response.parsed_body).to include("id" => 9, "error" => include("code" => -32_602, "data" => "Missing or invalid uri"))
+          # The one report is the gem's own refusal (every RequestHandlerError reaches Rails.error as handled,
+          # like "Resource not found"), not an error raised in graph_mem's handler.
+          expect(Rails.error).to have_received(:report).once
+          expect(Rails.error).to have_received(:report)
+            .with(an_instance_of(MCP::Server::RequestHandlerError).and(having_attributes(message: "Missing or invalid uri")), any_args)
+        end
+      end
+    end
+  end
+
+  # mcp 1.11.0 (#688): the transport refuses an integer id beyond 128 bits before graph_mem sees the request
+  # (writing a huge integer back costs CPU). Before 1.11.0 the request was answered with the id echoed.
+  describe "an integer id beyond 128 bits" do
+    it "answers HTTP 400 -32600 without an id for 2**128 on /mcp" do
+      session_id = initialize_session("/mcp")
+
+      post "/mcp", params: %({"jsonrpc":"2.0","id":340282366920938463463374607431768211456,"method":"ping"}),
+                   headers: request_headers.merge("Mcp-Session-Id" => session_id)
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to include("error" => include("code" => -32_600))
+      expect(response.parsed_body).not_to have_key("id")
+    end
+
+    it "still answers 2**128 - 1 (128 bits) with the id on /mcp" do
+      session_id = initialize_session("/mcp")
+
+      post "/mcp", params: %({"jsonrpc":"2.0","id":340282366920938463463374607431768211455,"method":"ping"}),
+                   headers: request_headers.merge("Mcp-Session-Id" => session_id)
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body).to include("id" => (2**128) - 1, "result" => {})
+    end
+  end
+
   # /mcp CORS comes from GRAPH_MEM_MCP_ALLOWED_ORIGINS, the transport's own Origin list (mcp-sdk-1.8.2 plan B1).
   # rack-cors answers every preflight 200 and sends the CORS headers only for a listed origin.
   describe "CORS preflight (rack-cors)" do
