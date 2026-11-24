@@ -64,7 +64,9 @@ class ProjectMembership
   # embeddings are deferred to the outermost block's exit
   # (EmbeddingService::InlineDeferral), so an interactive write is still
   # embedded before it returns; the bulk paths (imports, dream state, the
-  # JSON tasks, undo) suppress them and embed later.
+  # JSON tasks, undo) suppress them and embed later. In specs,
+  # spec/support/embedding_lock_guard.rb fails an example whose embedding
+  # call runs while this thread holds the lock.
   LOCK_NAME_PREFIX = "graph_mem.project_membership"
   LOCK_TIMEOUT_SECONDS = 60
   # How many with_membership_lock blocks this thread is inside (the lock is reentrant).

@@ -4,7 +4,8 @@ require "rails_helper"
 
 # The interactive writers that take the membership lock keep their freshness: what they write is
 # embedded before the call returns, and every embedding call runs after the lock is released
-# (EmbeddingService::InlineDeferral).
+# (EmbeddingService::InlineDeferral). spec/support/embedding_lock_guard.rb fails any other spec
+# that embeds under the lock; these check each path's outcome.
 RSpec.describe "Embedding outside the membership lock", :with_test_embeddings do
   let!(:calls) { record_embedding_calls! }
 

@@ -15,7 +15,7 @@ module EmbeddingHelper
     service = EmbeddingService.new(
       config: { url: "http://test", model: "test", provider: "ollama", dims: dims }
     )
-    # Below embed / embed!, so the calls take the real path down to the request.
+    # Below embed / embed!, so the calls still pass spec/support/embedding_lock_guard.rb.
     allow(service).to receive(:embed_with_retries).and_return(nil)
     allow(EmbeddingService).to receive(:vector_enabled?).and_return(true)
     allow(EmbeddingService).to receive(:instance).and_return(service)
