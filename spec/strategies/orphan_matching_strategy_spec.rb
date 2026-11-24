@@ -46,11 +46,7 @@ RSpec.describe OrphanMatchingStrategy, type: :model do
     )
 
     # Make it a child of project_admin_hub
-    MemoryRelation.create!(
-      from_entity: entity,
-      to_entity: project_admin_hub,
-      relation_type: "part_of"
-    )
+    fs_member!(project_admin_hub, entity)
 
     entity
   end

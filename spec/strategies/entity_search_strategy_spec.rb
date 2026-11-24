@@ -415,7 +415,7 @@ RSpec.describe EntitySearchStrategy, type: :model do
 
   describe "fields: and scope: (SearchFilter)" do
     let!(:alpha) { MemoryEntity.create!(name: "Alpha Service", entity_type: "Project") }
-    let!(:by_name) { MemoryEntity.create!(name: "SynthWidget", entity_type: "Component", project_id: alpha.id) }
+    let!(:by_name) { fs_member!(alpha, "SynthWidget", "Component") }
     let!(:by_type) { MemoryEntity.create!(name: "Gauge", entity_type: "SynthPart") }
     let!(:by_alias) { MemoryEntity.create!(name: "Dial", entity_type: "Component", aliases: "synth dial") }
 

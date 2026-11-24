@@ -23,14 +23,14 @@ RSpec.describe MemoryEntity, type: :model do
     end
 
     it "has many relations_to (inbound)" do
-      other = described_class.create!(name: "OtherFrom", entity_type: "Task")
-      rel = MemoryRelation.create!(from_entity: other, to_entity: entity, relation_type: "part_of")
+      other = fs_member!(entity, described_class.create!(name: "OtherFrom", entity_type: "Task"))
+      rel = other.relations_from.find_by!(to_entity: entity)
       expect(entity.relations_to).to include(rel)
     end
 
     it "destroys dependent relations on delete" do
       other = described_class.create!(name: "RelCleanup", entity_type: "Task")
-      MemoryRelation.create!(from_entity: entity, to_entity: other, relation_type: "part_of")
+      fs_member!(other, entity)
       MemoryRelation.create!(from_entity: other, to_entity: entity, relation_type: "depends_on")
       expect { entity.destroy! }.to change(MemoryRelation, :count).by(-2)
     end

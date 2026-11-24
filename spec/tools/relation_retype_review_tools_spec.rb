@@ -47,7 +47,7 @@ RSpec.describe "relation_retype through the MCP review tools", type: :model do
 
   it "answers an invalid-arguments error naming the two choices when the child already has a parent" do
     other = MemoryEntity.create!(name: "Beta Project #{suffix}", entity_type: "Project")
-    MemoryRelation.create!(from_entity: widget, to_entity: other, relation_type: "part_of")
+    fs_member!(other, widget)
     item_id = MaintenanceReportRow.find_by!(kind: "relation_retype").row_uuid
 
     expect { ApplyMaintenanceReviewTool.new.call(item_id: item_id) }

@@ -121,7 +121,7 @@ RSpec.describe FactKeywordsJob do
     it "counts a batch that mixes a refused project with a failed call as a failure (Graphy)" do
       stub_const("FactKeywords::LlmWords::BATCH_SIZE", 2)
       other_root = MemoryEntity.create!(name: "Other Project", entity_type: "Project")
-      other = MemoryEntity.create!(name: "AlphaService", entity_type: "Service", project_id: other_root.id)
+      other = fs_member!(other_root, "AlphaService", "Service")
       facts = Array.new(5).flat_map do |i|
         [ MemoryObservation.create!(memory_entity: widget, content: "SynthWidget fact #{i}."),
           MemoryObservation.create!(memory_entity: other, content: "AlphaService fact #{i}.") ]

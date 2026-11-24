@@ -81,7 +81,7 @@ RSpec.describe ImportMatchingStrategy, type: :model do
         EntityTypeMapping.find_or_create_by!(variant: "workspace") { |mapping| mapping.canonical_type = "Project" }
         child = MemoryEntity.create!(name: "Canonical Child", entity_type: "Project")
         parent = MemoryEntity.create!(name: "Canonical Parent", entity_type: "Project")
-        MemoryRelation.create!(from_entity: child, to_entity: parent, relation_type: "part_of")
+        fs_member!(parent, child)
 
         result = strategy.send(:match_child_node, { "name" => child.name, "entity_type" => "workspace" }, "root/child", parent.name, parent.id)
 
@@ -201,13 +201,7 @@ RSpec.describe ImportMatchingStrategy, type: :model do
 
     context 'child node matching (1:1 exact match)' do
       # Create relation so Task One is a child of Project Alpha
-      let!(:task_relation) do
-        MemoryRelation.create!(
-          from_entity: task_one,
-          to_entity: project_alpha,
-          relation_type: 'part_of'
-        )
-      end
+      let!(:task_relation) { fs_member!(project_alpha, task_one).relations_from.find_by!(to_entity: project_alpha) }
 
       let!(:observation_one) do
         MemoryObservation.create!(
@@ -310,6 +304,14 @@ RSpec.describe ImportMatchingStrategy, type: :model do
           )
         end
 
+        # Task One's parent is a global entity here, so Task One is global too and the import into
+        # Other Project finds it: under Project Alpha it would be that project's own Task One (names
+        # are per project), and the import would create a new one.
+        let!(:task_relation) do
+          folder = MemoryEntity.create!(name: 'Loose Folder', entity_type: 'Task')
+          fs_member!(folder, task_one).relations_from.find_by!(to_entity: folder)
+        end
+
         let(:import_data) do
           {
             root_nodes: [
@@ -401,13 +403,7 @@ RSpec.describe ImportMatchingStrategy, type: :model do
     end
 
     context 'stats calculation' do
-      let!(:task_relation) do
-        MemoryRelation.create!(
-          from_entity: task_one,
-          to_entity: project_alpha,
-          relation_type: 'part_of'
-        )
-      end
+      let!(:task_relation) { fs_member!(project_alpha, task_one).relations_from.find_by!(to_entity: project_alpha) }
 
       let(:import_data) do
         {

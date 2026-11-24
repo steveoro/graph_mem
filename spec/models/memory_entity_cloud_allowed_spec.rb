@@ -14,7 +14,7 @@ RSpec.describe MemoryEntity, "cloud_allowed" do
   it "can be true on a Project root only" do
     expect(project.update(cloud_allowed: true)).to be(true)
 
-    member = described_class.create!(name: "SynthWidget", entity_type: "Component", project_id: project.id)
+    member = fs_member!(project, "SynthWidget")
     global = described_class.create!(name: "Alpha Service", entity_type: "Service")
     [ member, global ].each do |entity|
       expect(entity.update(cloud_allowed: true)).to be(false)

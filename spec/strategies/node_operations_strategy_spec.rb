@@ -116,11 +116,7 @@ RSpec.describe NodeOperationsStrategy, type: :model do
 
     it "returns error when relation already exists" do
       # Create the relation first
-      MemoryRelation.create!(
-        from_entity: orphan_node,
-        to_entity: project,
-        relation_type: "part_of"
-      )
+      fs_member!(project, orphan_node)
 
       result = strategy.move_to_parent(orphan_node.id, project.id)
 

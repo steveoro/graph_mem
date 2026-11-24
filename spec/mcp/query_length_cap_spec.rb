@@ -8,7 +8,7 @@ require "rails_helper"
 RSpec.describe "The D-7 query length cap" do
   let(:server) { GraphMem::OfficialMcp::ServerFactory.for(:default) }
   let!(:project) { MemoryEntity.create!(name: "Synth Cap Project", entity_type: "Project") }
-  let!(:widget) { MemoryEntity.create!(name: "SynthWidget", entity_type: "Component", project_id: project.id) }
+  let!(:widget) { fs_member!(project, "SynthWidget", "Component") }
 
   before { MemoryObservation.create!(memory_entity: widget, content: "SynthWidget renders frames.") }
 

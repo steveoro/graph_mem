@@ -9,9 +9,9 @@ RSpec.describe "MCP Apps graph view: the search results Search mode reads" do
   let(:server) { GraphMem::OfficialMcp::ServerFactory.for(:readonly, apps_enabled: true) }
   let!(:alpha) { MemoryEntity.create!(name: "synth-alpha-project", entity_type: "Project") }
   let!(:beta) { MemoryEntity.create!(name: "synth-beta-project", entity_type: "Project") }
-  let!(:task) { MemoryEntity.create!(name: "synth-quokka-a", entity_type: "Task", project_id: alpha.id) }
-  let!(:issue) { MemoryEntity.create!(name: "synth-quokka-b", entity_type: "Issue", project_id: alpha.id) }
-  let!(:aliased) { MemoryEntity.create!(name: "synth-gamma", entity_type: "Task", project_id: beta.id, aliases: "synth-quokka-c") }
+  let!(:task) { fs_member!(alpha, "synth-quokka-a", "Task") }
+  let!(:issue) { fs_member!(alpha, "synth-quokka-b", "Issue") }
+  let!(:aliased) { fs_member!(beta, "synth-gamma", "Task", aliases: "synth-quokka-c") }
 
   hit_keys = %w[entity_id name entity_type project_id description aliases relevance_score matched_fields]
 

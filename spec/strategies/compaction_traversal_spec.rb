@@ -11,7 +11,7 @@ RSpec.describe CompactionTraversal, type: :model do
     let!(:orphan) { MemoryEntity.create!(name: "TraverseOrphan", entity_type: "Task") }
 
     before do
-      MemoryRelation.create!(from_entity: child, to_entity: project, relation_type: "part_of")
+      fs_member!(project, child)
     end
 
     it "lists orphan entities first in the orphans phase" do
