@@ -170,6 +170,33 @@ Every part failed to give a JSON object with an `architecture` array, so the sca
 2. **When it reports drift on an indexed column** (unexpected default or `vector(n)` dimensions): the ALTER would have to rebuild the vector index, so repair explicitly — `bin/rails embeddings:drop_indexes` then `embeddings:add_indexes` (plus `embeddings:regenerate` first if the embedding model/dimensions actually changed).
 3. **Re-dump:** `bin/rails db:schema:dump` — the warning should be gone and the dump is canonical again.
 
+### Problem: Membership drift (an entity is in the wrong project)
+
+**Symptoms:**
+- An entity shows up in a project's search or scope although nothing in that project's `part_of` tree leads to it, or an entity under a project's tree is still global or in another project.
+- A name is refused as taken in a project, and the entity holding it has no path to that project.
+- An entity has two `part_of` parents.
+
+**Cause:** an entity's project (`memory_entities.project_id`) is derived from its single `part_of` parent chain. A writer that changed a `part_of` edge, or deleted an entity with `part_of` children, without syncing the children left the stamp behind. Releases before 1.93.1 had such writers (entity delete, merge, the operator's relation repair, scans and imports).
+
+**Solutions:**
+
+1. **See it first, with the dry run:** `bin/rails graph_mem:backfill_project_ids[dry_run]` writes nothing and prints the drift it found:
+
+   ```
+   project_id backfill (DRY RUN)
+     Alpha Service (#4): 12 members
+     unrooted (stays NULL): 3
+     conflicts: 0
+     drift before the run: wrong_project=0 stamped_without_path=2 path_without_stamp=1 reached_by_two_roots=0 several_parents=0
+     stamps without a path: 1 top(s) attached to the stamped project's root, 1 stamp(s) cleared (would be)
+     (no rows written)
+   ```
+
+   `wrong_project`, `stamped_without_path` and `path_without_stamp` are stamps the run repairs. `reached_by_two_roots` and `several_parents` are edges it only reports: fix them by hand (Explore, or **Repair relation duplicates** on System › Background jobs for an extra parent). From the console, `ProjectIdBackfill.drift` returns the same counts with the entity ids.
+2. **Repair it:** `bin/rails graph_mem:backfill_project_ids` takes the membership lock and does it in one transaction. A stamp whose `part_of` chain is stamped consistently (every entity up the chain carries the same project, and the top has no parent) is repaired toward the stamp: the top gets one `part_of` to that project's root. Any other stamp with no path is cleared. The new edges are one change set, `maintenance.membership_repair`, in System › Activity; undoing it deletes them and the trees go global. A second run changes nothing.
+3. **On upgrade to 1.93.1:** the migration `RepairMemoryEntityProjectIds` runs this repair once at `db:prepare`, and prints and logs `membership drift before: ...` and `membership drift after: ...` (the five counts above). It never fails the deploy. On a name collision or a membership lock that stays busy it logs "project_id repair skipped, data unchanged" with the reason and the hint, and completes. A collision means a name is already taken where a stamp would land (for example, an entity that would become global has the name of a global one): merge or rename one of them (the hint names the entities), then run `bin/rails graph_mem:backfill_project_ids`. A busy lock: wait for the running job (an import, a scan or a merge) and run the task again. Run the dry run before upgrading to see what the migration will do. Its `down` does nothing.
+
 ### Problem: Database Connection Errors
 
 **Symptoms:**

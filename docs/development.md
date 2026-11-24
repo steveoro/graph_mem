@@ -201,6 +201,36 @@ bundle exec rspec
 The suite needs a MariaDB 11.8+ server (see [Prerequisites](#prerequisites)). On an older
 server the boot succeeds but any spec touching embeddings or vector search fails.
 
+### Membership drift guard
+
+An entity's `project_id` is derived from its `part_of` parent chain (see
+[architecture](architecture.md#project-membership-1931)).
+`spec/support/membership_drift_guard.rb` fails an example that leaves the graph drifted, so a writer
+that changes a `part_of` edge without syncing the child can't pass the suite.
+
+- **What it checks:** `ProjectIdBackfill.drift`, the same report the backfill prints. The example
+  fails when an entity's `project_id` differs from what its `part_of` chain gives (`wrong_project`,
+  `stamped_without_path`, `path_without_stamp`), when two Project roots reach one entity, or when an
+  entity has two `part_of` parents. The failure message lists the offending entities by kind.
+- **When it runs:** after every example except system specs, inside the example's fixture
+  transaction (before the rollback, so it sees the example's rows). It records the failure on the
+  example instead of raising, so the rollback still happens. On a graph with no `part_of` edge and no
+  `project_id` it costs one query; the whole suite pays about 2%.
+- **Build consistent data with `fs_member!`.** `fs_member!(parent, "SynthWidget")`
+  (`spec/support/fact_supersede_helpers.rb`) creates the `part_of` edge to `parent` (a Project root or
+  any entity) and then runs `ProjectMembership.sync!`, so the member's `project_id` is what its chain
+  gives. It also takes an existing entity in place of a name, and returns the member reloaded. Do not
+  stamp `project_id` by hand or create a `part_of` edge without a sync.
+
+  ```ruby
+  alpha  = fs_project!("Alpha Service")
+  widget = fs_member!(alpha, "SynthWidget")
+  gadget = fs_member!(widget, "SynthGadget", "Class")
+  ```
+- **Opting out:** tag the example (or group) `membership_drift: :allowed`, with a one-line comment
+  saying why, only when the drift is the point of the example (a repair spec that builds two parents
+  on purpose, a refused repair, an entity found through a `part_of` that was never synced).
+
 ## MCP Access Control in Development
 
 All MCP profile paths are governed by the same `GRAPH_MEM_MCP_TOKEN` and

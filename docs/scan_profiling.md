@@ -152,7 +152,13 @@ are never committed.
     punctuation and spacing);
   - entities named like a file (`user.rb`, `.md`, `Gemfile`) or by a generic word (`Utils`,
     `Helper`, `Config`, …);
-  - entities whose only relations are to the project root, and entities with no relation at all;
+  - entities whose only relations are to the project root (`root_only_entities`), and entities with no
+    relation at all (`isolated_entities`). Since 1.93.1 a scan hangs every entity it reconciled on the
+    project root (see "Containment" in [Project scans](summarization.md#project-scans)), so these two
+    count only the relations the model emitted, not that containment edge: an isolated entity is one
+    the model left unconnected (it has nothing, or only the containment edge), a root-only one is
+    connected to the root alone by relations the model emitted. Numbers from before 1.93.1 counted
+    every edge, so they are not comparable;
   - the type spread, and the entities the Rails code map's skeleton holds (`code map`);
   - **rescan churn**: what the second scan of unchanged code created, obsoleted or deleted. The
     clearest noise signal: a stable scan has none;

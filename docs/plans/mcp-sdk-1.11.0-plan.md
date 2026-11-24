@@ -1,8 +1,10 @@
-# MCP SDK 1.11.0 → graph_mem 1.93.1 (gem bump, two malformed-input wire changes, compat baseline on reference servers v2.5.0)
+# MCP SDK 1.11.0 → graph_mem 1.93.3 (gem bump, two malformed-input wire changes, compat baseline on reference servers v2.5.0)
+
+**Release renumbered (2026-11-24): 1.93.1 -> 1.93.3.** The `part_of` membership PRs (`part-of-membership-plan.md`) took 1.93.1 and 1.93.2, so this bump follows them; the content of the plan is unchanged.
 
 **Status (2026-11-19): PLAN, approved, kickoff ready.** Steve approved this plan on 2026-11-19 (as 1.91.1; renumbered 1.93.1
-after 1.92.0 and Dream State R1a 1.93.0 shipped first) and answered the four open
-questions (see Decisions): a patch release, 1.93.1; SDK 1.9.0 dropped from the client matrix (12 rows); both new compat cases
+after 1.92.0 and Dream State R1a 1.93.0 shipped first, then 1.93.3 on 2026-11-24) and answered the four open
+questions (see Decisions): a patch release, 1.93.3; SDK 1.9.0 dropped from the client matrix (12 rows); both new compat cases
 added as documented differences; sub-dependency bumps in the reference servers' lockfile are fine.
 
 **Written 2026-11-19 (Europe/Rome)** from `main` at `ef3c900` (merge of #180, tagged **v1.91.0**; `mcp` 1.10.0). Every
@@ -34,7 +36,7 @@ run (Node 24.22.1, Ruby 3.4.12, harness and fixtures from `ef3c900`):
 | | |
 |---|---|
 | **Status** | PLAN, approved 2026-11-19, kickoff ready. |
-| **Branch / PR** | **One PR**, `claude/mcp-1.11.0`, off `main`, title `mcp 1.11.0 (1.93.1)`: B0–B6 + release RB. Steve merges and tags. Never merge, tag, push tags or run `rake release`. |
+| **Branch / PR** | **One PR**, `claude/mcp-1.11.0`, off `main`, title `mcp 1.11.0 (1.93.3)`: B0–B6 + release RB. Steve merges and tags. Never merge, tag, push tags or run `rake release`. |
 | **Commits** | **B0** generic `bundle update` (own commit, only if it changes something), **B1** gem bump, **B2** specs for the two wire changes, **B3** compat cases, **B4** harness versions, **B6** reference servers v2.5.0, **B5** version text + re-recorded results (after B6), **RB** release. Review fixes go in new commits. No force-push after review starts. |
 | **Scope** | No tool, prompt, resource, skill or `/api/v1` changes, and **no new MCP params or outputs**. The only wire changes are the two gem-side error answers (#687, #688), pre-approved. No `event_store:`, `retry_interval:`, `allowed_origins: :any` or `close_sse_stream`. npm changes only in `script/mcp_compat/refservers/` (B6). `spec/fixtures/mcp/snapshots/` stays byte-identical: `/mcp` 12 tools, readonly 9, maintenance 22. `mcp_skills_enabled` and `mcp_apps_enabled` defaults unchanged. |
 | **Data** | Synthetic fixtures only (`SynthClient`, `synth-*` names). Never real data, real credentials or a production dump. |
@@ -167,23 +169,23 @@ Re-run `compare.rb` and `clients.sh` against graph_mem on the new baseline and r
 (`:5,30-48,66-75` and the new cases) and `script/mcp_compat/README.md:79-87`. Leave the 1.10.0-era divergence texts true
 ("Ruby SDK 1.10.0 and 1.11.0" where they still hold).
 
-### RB. Release 1.93.1
-`lib/graph_mem/version.rb` → `1.93.1`, then `bin/rails graph_mem:sync_skill_version` (SKILL.md and the README badge). Don't
-edit `version.rb` or SKILL.md while the full suite is running. CHANGELOG `## [1.93.1] - <date>`:
+### RB. Release 1.93.3
+`lib/graph_mem/version.rb` → `1.93.3`, then `bin/rails graph_mem:sync_skill_version` (SKILL.md and the README badge). Don't
+edit `version.rb` or SKILL.md while the full suite is running. CHANGELOG `## [1.93.3] - <date>`:
 - Changed: "`resources/read` without a string `uri` is refused as invalid params (-32602) before any resource is looked up; without params it was an internal error (-32603) (mcp 1.11.0)."
 - Changed: "A request whose integer id is beyond 128 bits is refused as an invalid request (-32600, HTTP 400 on /mcp) instead of answered (mcp 1.11.0)."
 - Changed: "The compat harness's reference baseline is the MCP servers release v2.5.0 (Everything 2.3.1, Memory 2.2.1; TS SDK still 2.4.0)."
 - Dependencies: `mcp` 1.10.0 → 1.11.0 (plus the B0 line, or "bundle update changed nothing").
 
 ## Version and train
-- **1.93.1, a patch release**, as 1.86.1 was: a dependency bump plus wire changes on malformed input only, no surface change.
+- **1.93.3, a patch release**, as 1.86.1 was: a dependency bump plus wire changes on malformed input only, no surface change.
   If another PR lands first, take the next free patch number.
 - **Dependabot** watches bundler daily, not the npm locks. If it opens "Bump mcp from 1.10.0 to 1.11.0", don't base work on it;
   Steve closes it once this merges.
 
 ## Decisions (Steve, 2026-11-19)
 1. Exact pin `"1.11.0"` (D14).
-2. **Patch release 1.93.1** (approved as 1.91.1, renumbered).
+2. **Patch release 1.93.3** (approved as 1.91.1, renumbered).
 3. **Client matrix is TS 2.4.0 + Ruby SDK 1.10.0 and 1.11.0, 12 rows**; 1.9.0 is dropped (approved).
 4. **Both new answers are documented divergences** with one compat case each, on stdio and HTTP (approved, B3). The two
    gem-side error-answer changes (#687, #688) are the only wire changes this PR may carry.

@@ -3,6 +3,9 @@
 > Status: draft, 2026-11-20, written on `main` at 1.92.0. Revised the same day after Steve's
 > answers and two review rounds (see "Answers" at the end). **R1a shipped as 1.93.0** (see its
 > "As built" note); R1b onward is not started. Each PR below gets its own kickoff.
+>
+> **Versions (2026-11-24):** the `part_of` membership PRs took 1.93.1 and 1.93.2 (their own plan), so
+> the mcp 1.11.0 bump moved to 1.93.3. The minors below are unchanged.
 
 ## Context
 
@@ -107,7 +110,9 @@ The versions, as expected today (each kickoff confirms its own against `version.
 | PR | What | When | Version |
 |---|---|---|---|
 | **R1a** | Relation vocabulary: mapping fallback, normalize on write, the sweep, the unmapped-types page | first (shipped) | 1.93.0 |
-| mcp 1.11.0 | (its own plan) | after R1a | 1.93.1 |
+| `part_of` membership, PR 1 | Every `part_of` writer keeps membership in step: entity delete, merge, relation repair, scans, imports, the drift guard (`part-of-membership-plan.md`) | after R1a (shipped) | 1.93.1 |
+| `part_of` membership, PR 2 | The scan validator and scanner lock order, the rake tasks (`part-of-membership-plan.md`) | after PR 1 | 1.93.2 |
+| mcp 1.11.0 | (its own plan) | after the membership PRs | 1.93.3 |
 | SQL exchange | (its own plan, four PRs) | after mcp 1.11.0 | 1.94.0 |
 | **R1b** | Retype library `part_of` edges, the orphan rule, the exports, dream-state actor on its edges | after the SQL exchange train | 1.95.0 |
 | **R1c** | Removal-style evidence rows | with or right after R1b | with R1b, or 1.95.1 |
@@ -200,7 +205,8 @@ Dependencies between the plans:
   types") and the unmapped-types page are under System › Background jobs, at
   `/system/jobs/relation_types`. The page also lists the mapping table with **Remove**, which the
   list above didn't have.
-- **Order.** R1a shipped before mcp 1.11.0, so the mcp bump is 1.93.1 (the version table is
+- **Order.** R1a shipped before mcp 1.11.0, so the mcp bump was 1.93.1, and the two `part_of` membership PRs then
+  took 1.93.1 and 1.93.2, which made it 1.93.3 (the version table is
   updated; the SQL exchange stays 1.94.0, R1b 1.95.0, R2 1.96.0).
 - **No seed.** The relation seed file was removed and `db/seeds.rb` keeps only the entity type
   seed; installs seeded earlier keep their rows (they still win over the code's mapping).
@@ -219,9 +225,10 @@ Dependencies between the plans:
   `part_of`, refusing with the existing 422. `DELETE` of a `part_of` relation through the REST API
   didn't sync membership in 1.93.0; the follow-up after it does (lock, delete, sync, 422 on a
   collision or a busy lock), and so do the operator's data-exchange retype, delete and duplicate
-  cleanup. The writers still missing the lock or the sync (entity deletes, entity merges with two
-  parents, the "Repair relation duplicates" button, scan validation, rake tasks, the scan's lock
-  order) are planned in [`part-of-membership-plan.md`](part-of-membership-plan.md).
+  cleanup. The writers still missing the lock or the sync at 1.93.0 (entity deletes, entity merges
+  with two parents, the "Repair relation duplicates" button) were fixed in 1.93.1; scan
+  validation, the rake tasks and the scan's lock order are planned for PR 2 in
+  [`part-of-membership-plan.md`](part-of-membership-plan.md).
 - **Docs corrected.** `docs/dream_state.md` now says an orphan has no `part_of` parent (the
   `depends_on` clause was never in the code) and that the tree walk follows `part_of` children
   down from the Project roots.

@@ -1,8 +1,12 @@
 # Plan: every `part_of` writer keeps membership in step
 
-> Status: not started. Steve answered questions 1, 2 and 5 on 2026-11-20 (see "Answers" at the end). Written against `claude/part-of-membership-followup` at
+> Status: **PR 1 shipped in 1.93.1** (items 1, 2 and 3, the guard, and the scan, import and backfill
+> rules added along the way: see "As built" below). **PR 2 is not started** (1.93.2; its scope is under
+> "Order and size"). Steve answered questions 1, 2 and 5 on 2026-11-20 and the rest on 2026-11-24 (see
+> "Answers" at the end). Written against `claude/part-of-membership-followup` at
 > 9c02208 (1.93.0 plus PR #189). Every gap below was read in the code on that commit; the ones marked
-> *probed* were also reproduced on a synthetic graph in the test database.
+> *probed* were also reproduced on a synthetic graph in the test database. The gap sections below
+> describe the code before PR 1, not as it is now.
 
 ## Context
 
@@ -57,7 +61,7 @@ So the backfill is a repair after the fact, not a guarantee; the gaps below shou
 
 Ranked by reach and by how often they can fire.
 
-### 1. Deleting an entity leaves its children's project behind (verified, *probed*)
+### 1. Deleting an entity leaves its children's project behind (verified, *probed*; fixed in 1.93.1)
 
 `MemoryEntity has_many :relations_to, dependent: :destroy`, so destroying an entity deletes its
 children's `part_of` edges, and nothing syncs the children: each keeps the deleted entity's project
@@ -101,7 +105,7 @@ the four paths; leaf is then `part_of` the Project and keeps its `project_id`; u
 between them. A second case with mid parentless: leaf's `project_id` becomes NULL, and with a
 global entity named like the leaf each path refuses and nothing is deleted.
 
-### 2. Entity merge can leave the target with two parents (changed: a real gap, but not the one described)
+### 2. Entity merge can leave the target with two parents (changed: a real gap, but not the one described; fixed in 1.93.1)
 
 The suspected case is fine. When the target was `part_of` the source, `merge_locked!` first
 re-points the source's own outgoing edges to the target (`reassign_outgoing_relations!`, so the
@@ -131,7 +135,7 @@ so undo restores it), and re-pointed then synced when it has none; the merge pre
 **Size:** about 30 lines, 60 of specs. **Spec:** the two probed cases above, and a merge undo that
 restores both edges.
 
-### 3. "Repair relation duplicates" deletes parents without a sync (changed: not the nightly path)
+### 3. "Repair relation duplicates" deletes parents without a sync (changed: not the nightly path; fixed in 1.93.1)
 
 `RelationIntegrityRepairer#delete_relation_ids` destroys relations with no lock and no sync. The
 unattended callers (`GraphIntegrityService`, run as the dream-state pre-flight and by the nightly
@@ -156,7 +160,7 @@ exactly the graphs that are already inconsistent.
 child's project on the second; the button's call keeps the first, deletes the second and the child
 moves to the first parent's project; with a name taken there, nothing is deleted.
 
-### 4. Project scan validation deletes a wrong-root `part_of` without a sync (verified)
+### 4. Project scan validation deletes a wrong-root `part_of` without a sync (verified; PR 2)
 
 `ProjectScanValidator#validate_entity_relations` deletes a `part_of` from an entity of the scanned
 project to another Project root (`wrong_part_of_to_project_root?`) through `#delete_relation`: no
@@ -180,7 +184,7 @@ handles is found or created with `project_id: @root.id` (`find_by(name:, project
 when the entity has no parent yet, so the new edge's derived project equals the stored one. No fix;
 a comment in `ensure_parent` should say why no sync is needed.
 
-### 6. Rake tasks (verified; namespaces corrected: `data:` in `lib/tasks/memory_data.rake`, `tools:` in `lib/tasks/memory_graph_utilities.rake`)
+### 6. Rake tasks (PR 2; verified; namespaces corrected: `data:` in `lib/tasks/memory_data.rake`, `tools:` in `lib/tasks/memory_graph_utilities.rake`)
 
 - `data:migrate_json` and `data:append_json` create relations with
   `MemoryRelation.new(...).save` (validated, no lock, no sync). The JSON Lines files they read carry
@@ -197,7 +201,7 @@ gets the snapshot, the audit and undo, and item 2's fix); `create_relation` call
 call `ProjectIdBackfill` at the end (simpler than a sync per edge, and they already rewrite the
 graph in bulk). **Size:** about 40 lines, 60 of specs.
 
-### 7. Scan writers sync inside a transaction (changed: one of the two is a real ordering problem)
+### 7. Scan writers sync inside a transaction (changed: one of the two is a real ordering problem; PR 2)
 
 - `ProjectScanner#reconcile_relation` creates a `part_of` and calls `ProjectMembership.sync!` inside
   `#reconcile`'s `ActiveRecord::Base.transaction`, with no lock taken first. `sync!` → `reassign!`
@@ -242,23 +246,92 @@ verification. The invariant is what matters to an agent's search; how a writer g
 
 ## Order and size
 
-- **PR 1 (code paths an agent or the operator hit):** items 1, 2 and 3, plus the guard (option 3).
-  About 200 lines of code, 350 of specs.
-- **PR 2 (scans and rake):** items 4, 6 and 7, and the comment for item 5. About 120 lines of code,
-  200 of specs, plus a scan-profile run to measure the reconcile lock hold time.
+| PR | Scope | Version | State |
+|---|---|---|---|
+| PR 1 | Items 1, 2 and 3, the guard (option 3), plus the scan, import and backfill rules ("As built") | 1.93.1 | shipped |
+| PR 2 | Items 4, 6 and 7, the comment for item 5, and the notes under "PR 2 scope" | 1.93.2 | not started |
 
-No migration (no schema change; confirmed: every fix is in Ruby). MCP surface unchanged: no tool,
-parameter, schema or description changes; `graph_delete`'s result for an entity delete keeps its
-keys (the children's new scope is not reported). REST: `DELETE /api/v1/memory_entities/:id` gains a
-documented `422` (swagger edited by hand, as in PR #189).
+The mcp 1.11.0 bump (`mcp-sdk-1.11.0-plan.md`) is now 1.93.3 and the vector search steps 0 and 1
+(`mariadb-vector-search-plan.md`) 1.93.4; the minors (1.94.0 and later) are unchanged.
+
+### As built (PR 1, 1.93.1)
+
+What differs from the plan above:
+
+- **Entity deletes were never undoable.** The plan said the new edges and the deleted ones are in
+  the same change set, so undo puts the entity back between them. That line was wrong: an entity
+  delete is `hard_delete` (`ChangeSet` strategy `none`), before and after. The review preview still
+  says "Can't be undone".
+- **The helper is `RelationMembershipWrite.destroy_entity!`** (`RelationMembershipWrite::EntityDelete`),
+  as proposed, with a read-only `plan` the previews use. A `reference_stub` park edge is not
+  ownership: a parked stub child is not moved. `graph_delete`'s `summary.relations_deleted` is a row
+  count delta, so it is net of the re-parent edges the delete creates. The REST destroy documents a
+  `422` (name collision, busy lock, and a Project root that still has members, which was a `500`).
+- **Merge** (item 2): `target_takes_parent?` decides between dropping the source's parent edge and
+  re-pointing it (a cycle also drops it). Explore's dialog and the review preview say which
+  (`parent_edge`), including the target's own project move; undo syncs the target too. A collision is
+  a `422` on REST `merge_into` and in Explore, and a failure reason on a review row (applied in a
+  savepoint).
+- **Relation repair** (item 3): the button takes the lock, finds the issues under it and syncs each
+  child; a collision rolls everything back ("Relation repair refused, nothing was deleted"). The
+  nightly path is pinned by a spec: it deletes no `part_of`.
+- **Scan rule, added after the guard exposed it.** Every entity a scan reconciles was stamped into
+  the project but got a `part_of` only when the model emitted one, so scans left entities in a
+  project's scope with no path to its root. `ProjectScanner::Containment` now gives each reconciled
+  entity still without a parent a `part_of` to the root (marked, counted in `relations_created`, no
+  lock: the stamp is already the root). The rescan's validation reaches those entities too. The scan
+  profile's `isolated_entities` and `root_only_entities` read the model's relations only.
+- **Import rule, added after the guard exposed it.** The import stamped every declared node of the
+  tree into the import's project whatever its tree edge, so a `depends_on` child (which exports put
+  in the tree) sat in the project with no `part_of` path. Now only a node a child-to-parent `part_of`
+  chain links to the import's root Project is created and matched in the project; every other
+  declared node is global, like a reference node (`ImportEntityResolver.contained_child?`, shared
+  by the executor and `ImportMatchingStrategy`).
+- **The backfill repairs toward the stamp, added after the guard exposed it.** `ProjectIdBackfill`
+  cleared every stamp no path backs. Now a stamp whose owned `part_of` chain is stamped consistently
+  gets its chain's top attached to that project's root (one change set, `maintenance.membership_repair`,
+  undoable), and only the rest are cleared. `ProjectIdBackfill.drift` is the one drift report: the
+  backfill prints it, the migration logs it and the guard uses it.
+- **A data migration was added** (`20261124120000_repair_memory_entity_project_ids.rb`): approved by
+  Steve (answer 6). It runs the repair once at `db:prepare`, logs the drift before and after, never
+  fails the deploy (a collision or a busy lock skips with a hint) and its `down` does nothing. The
+  plan had said "no migration"; it is data only, with no schema change.
+- **The guard's scope and cost.** Option 3, on every example except system specs, as a group-level
+  `around` hook inside the fixture transaction (it records the failure instead of raising, so the
+  rollback still happens), opt-out `membership_drift: :allowed`. Measured overhead: about 2% of the
+  suite. About 100 spec files changed, most of them rebuilt on `fs_member!` to build consistent data.
+- **Release.** A patch release of its own, 1.93.1, carrying PR #189's entries (answer 3).
+
+### PR 2 scope (1.93.2)
+
+Items 4 and 7 as written, item 6 (the rake tasks), the comment for item 5, plus two notes found
+while building PR 1:
+
+- **Dream-state auto-merge takes the membership lock inside a transaction.**
+  `DreamStateCompactor` runs each entity in `ActiveRecord::Base.transaction(requires_new: true)`, and
+  the merge inside it takes the lock, the order the lock comment says deadlocks against the backfill.
+  Take the lock around the per-entity work, before its transaction (or around the merge phase), and
+  measure the hold time.
+- **`GraphIntegrityService#repair_dangling_relations` could delete a `part_of` without a sync** when
+  foreign key checks are off: it deletes relations whose endpoint is gone, so the surviving child of
+  such an edge keeps its project. Route it through `RelationMembershipWrite.destroy!`, or sync the
+  child, and add a spec.
+
+About 120 lines of code and 200 of specs for items 4, 6 and 7, plus a scan-profile run to measure
+the reconcile lock hold time.
+
+MCP surface unchanged in PR 1: no tool, parameter, schema or description changes; `graph_delete`'s
+result for an entity delete keeps its keys (the children's new scope is not reported). REST:
+`DELETE /api/v1/memory_entities/:id` gained a documented `422` (swagger edited by hand, as in PR #189).
 
 ## Verification
 
 Synthetic scenarios (each in the specs, and once on a development copy):
 
 - Project ← mid ← leaf, delete mid through REST, `graph_delete`, a `delete_entity` review row and
-  data exchange `delete_node`: leaf is global afterwards; with a global entity named like leaf,
-  every path refuses and nothing is deleted.
+  data exchange `delete_node`: leaf is `part_of` the Project afterwards and keeps its project. With
+  mid parentless instead, leaf is global; with a global entity named like leaf, every path refuses
+  and nothing is deleted.
 - Two entities under different Projects, merged (MCP, Explore, review row, dream-state auto-merge):
   the target keeps one parent, its own; undo restores the source and both edges.
 - A child with two `part_of` parents repaired by the **Repair relation duplicates** button: one
@@ -293,18 +366,34 @@ counts). Checked on a synthetic graph with one case of each kind: it reported 1,
 
 ## Open questions for Steve
 
-3. **Release:** under `[Unreleased]` with PR #189, or a patch release of its own?
-4. **The guard:** is a per-example invariant check acceptable for suite time, or only on the
-   request, service and strategy specs?
-6. **How the backfill runs by itself** (answer 5 below): a one-time job queued by the first boot
-   of the new version (it needs a marker, for example an `AppSettings` key), or a data migration.
-   A migration is the simpler and more usual place, but it is a migration, which the kickoffs
-   treat as a stop; say which.
+None open for PR 1: questions 3, 4 and 6 were answered on 2026-11-24 (see "Answers"). PR 2's kickoff
+may add its own.
 
-## Answers (Steve, 2026-11-20)
+## Answers
+
+### Steve, 2026-11-20
 
 1. **Children of a deleted entity** move under the deleted entity's parent (item 1).
 2. **Merging:** the target keeps its relationships and all of the source's children move to the
    target, for agent-initiated merges too (item 2). The current code was checked against this.
 5. **Existing drift:** the backfill runs automatically after PR 1. PR 1 records the drift count
    before and after in its run output.
+
+### Steve, 2026-11-24
+
+3. **Release:** the plan's entries ship with PR #189's as a patch release of their own, 1.93.1. The
+   mcp 1.11.0 bump and the vector search steps move to 1.93.3 and 1.93.4 ("bump version as needed,
+   we can retarget subsequent releases accordingly").
+4. **The guard:** the per-example invariant check runs on every example except system specs.
+6. **How the backfill runs by itself:** a data migration, approved.
+7. **Scans:** every entity a scan reconciles that the model left without a parent gets a containment
+   `part_of` to the project root.
+8. **Imports:** an import follows the `part_of` edges to decide scope. Only nodes linked to the
+   import's root Project by a child-to-parent `part_of` chain are created in, and matched by name in,
+   the import's project. Every other declared node is treated like a reference node: global,
+   matched by name globally, and created global when absent. That covers a `depends_on` child
+   (which exports place in the tree), anything below it, and any root node after the first. Such a
+   node now merges into an existing same-named global entity instead of getting a project-scoped
+   copy, and the preview (`ImportMatchingStrategy`) matches what the import writes.
+9. **The backfill repairs toward the stamp** when a consistently stamped chain's top has no parent,
+   and clears the stamp otherwise.

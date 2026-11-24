@@ -112,6 +112,16 @@ A `part_of` edge decides which project an entity belongs to, and an update skips
 
 `Project` entities are never auto-merged or queued for merge review.
 
+**What a merge does with the hierarchy (1.93.1).** Every merge follows one rule, whether it is the auto-merge here, a queued `entity_merge` row, `graph_delete` `merge_entities`, REST `merge_into` or Explore's merge: the target keeps its own relationships and its own parent, and everything that hung on the source moves to the target.
+
+- All of the source's `part_of` children move to the target (and into its project, with their subtrees).
+- The source's own parent edge is dropped when the target already has a parent, or when re-pointing it would make a `part_of` cycle. The dropped edge is in the merge snapshot, so undo restores it.
+- When the target has no parent, it takes the source's. The target and its subtree then move into that parent's project, before the source's children follow.
+- Undo puts both edges back and syncs the target back to its own scope.
+- A name that is already taken in the scope a child or the target moves to refuses the merge, with nothing merged: a `422` on REST `merge_into` and in Explore, a failure reason on a review row,, and in the auto-merge the failure is logged for that entity and the run goes on.
+
+The row's preview (and Explore's merge dialog) says which of the two happens to the parent edge, and whether the target changes project.
+
 ### Phase 4: `relationship_discovery`
 
 **Entity set:** All non-`Project` entities ordered by ID.
@@ -340,6 +350,8 @@ Compaction merges and moves assume relations are well-formed. Duplicate or confl
 Default integrity sweeps (`GraphIntegrityService`) auto-repair same-direction duplicates and queue ambiguous reverse pairs / merge collisions into `compaction_review` as `relation_integrity` rows. Each row preserves a reviewed `keep_id` and the selected `delete_id` / `delete_ids`.
 
 Operators and agents can apply those rows from the compaction-review UI or via `apply_maintenance_review` (deletes the reviewed duplicates with `Current.deletion_reason = "duplicate"`; already-absent relations are a safe stale outcome). The dashboard **Repair relation duplicates** button still runs an explicit destructive repair (`review_ambiguous: false`), then operators can **Start / Resume** compaction.
+
+Since 1.93.1 that button is safe for membership. A `part_of` edge decides which project an entity belongs to, so the repair takes the membership lock before one transaction, finds the issues under it, deletes the extra parents and the newer edge of each reverse pair, and syncs each child of a deleted `part_of` edge to the parent it keeps (or to no project). If a child's name is already taken in that parent's project, the whole repair rolls back and the notice says "Relation repair refused, nothing was deleted: …"; rename or re-parent one of the two, then repair again. The unattended callers (the pre-flight and the nightly garbage collection run with `review_ambiguous: true`) delete only same-direction duplicates, which the unique key makes impossible, so they never delete a `part_of` edge: they queue `relation_integrity` rows.
 
 ## Safety guarantees
 
