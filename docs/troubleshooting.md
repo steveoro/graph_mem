@@ -358,8 +358,8 @@ To keep *every* Docker network out of home-LAN ranges, also set the daemon pool 
 **Solutions:**
 
 1. **Ruby Version**
-   - Ensure you're using Ruby 3.4.12+
-   - Install with `rvm install 3.4.12` or `rbenv install 3.4.12`
+   - Ensure you're using Ruby 3.4.13+
+   - Install with `rvm install 3.4.13` or `rbenv install 3.4.13`
 
 2. **Bundle Install Errors**
    - Check for native extension errors
