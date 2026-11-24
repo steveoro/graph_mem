@@ -3,9 +3,6 @@ source "https://rubygems.org"
 # Bundle edge Rails instead: gem "rails", github: "rails/rails", branch: "main"
 gem "rails", "~> 8"
 gem "prism", "< 2" # Prism parser for the Rails AST extractor; 2.x waits for rubocop-ast and Haml (dependabot.yml)
-# Not a direct dependency: regexp_parser 2.13.2 breaks json_schemer 2.5.0 at load (mcp tool schemas, so the app
-# can't boot). Lift this once a json_schemer release after 2.5.0 supports it.
-gem "regexp_parser", "< 2.13.2"
 
 gem "propshaft" # The modern asset pipeline for Rails [https://github.com/rails/propshaft]
 
