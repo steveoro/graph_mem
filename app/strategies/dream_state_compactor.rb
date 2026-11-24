@@ -25,9 +25,10 @@ class DreamStateCompactor
   # taken before any transaction the block opens (the advisory-first rule, see
   # ProjectMembership::LOCK_NAME_PREFIX); merge_into and move_to_parent then re-enter it. Used around
   # each entity's transaction, and by DreamStateCompactionJob around run.with_lock, whose transaction
-  # wraps the whole batch. Inline embeddings are skipped inside: a merge survivor's re-embedding
-  # would run at the commit, still under the lock, so the embedding backfill does it (enqueued after
-  # an auto-merge). These phases make no LLM call (orphan and merge evidence come from the database).
+  # wraps the whole batch. Inline embeddings are suppressed inside (unattended batch work), not
+  # deferred to the lock's exit as an interactive merge's are: the embedding backfill re-embeds a
+  # merge survivor (enqueued after an auto-merge). These phases make no LLM call (orphan and merge
+  # evidence come from the database).
   #
   # @param phase [String, nil] the run's phase
   # @return [Object] the block's value

@@ -114,6 +114,8 @@ class MemoryEntity < ApplicationRecord
 
   def set_initial_embedding
     return if EmbeddingService.inline_embeddings_suppressed?
+    # Under the membership lock: embedded when the outermost lock block exits (InlineDeferral).
+    return if EmbeddingService.defer_inline_embedding(self)
 
     EmbeddingService.embed_entity(self)
   rescue StandardError => e
@@ -137,6 +139,7 @@ class MemoryEntity < ApplicationRecord
     # Suppressed (bulk imports): the stamp was already cleared by
     # invalidate_stale_embedding — the deferred backfill re-embeds this row.
     return if EmbeddingService.inline_embeddings_suppressed?
+    return if EmbeddingService.defer_inline_embedding(self)
 
     EmbeddingService.embed_entity(self)
   rescue StandardError => e

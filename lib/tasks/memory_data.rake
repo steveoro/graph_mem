@@ -13,8 +13,9 @@ namespace :data do
   # The JSON Lines tasks write entities and relations with plain model calls, part_of edges
   # included, so they run under the membership lock, taken before anything is written (as
   # graph_write does), and end with ProjectIdBackfill, which derives every project_id from the
-  # part_of edges. Inline embeddings are skipped, since the lock is never held across a network
-  # call: the embedding backfill enqueued at the end embeds the new rows, as after an import.
+  # part_of edges. Inline embeddings are suppressed, not deferred to the lock's exit (that would be
+  # one embedding call per row of the file): the embedding backfill enqueued at the end embeds the
+  # new rows, as after an import.
   def with_membership_backfill
     ProjectMembership.with_membership_lock do
       EmbeddingService.suppress_inline_embeddings { yield }

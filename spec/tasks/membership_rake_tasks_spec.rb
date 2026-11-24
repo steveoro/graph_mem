@@ -97,6 +97,17 @@ RSpec.describe "rake tasks writing part_of edges", type: :task do
       expect(ChangeSet.where(kind: "merge", actor: "rake:merge_entity").sole).to be_undoable
     end
 
+    it "re-embeds the survivor before it ends, after the membership lock is released", :with_test_embeddings do
+      target = fs_member!(alpha, "SynthWidget", "Component")
+      source = fs_member!(beta, "SynthWidgetCopy", "Component")
+      calls = record_embedding_calls!
+
+      invoke("data:merge_entity", source.id.to_s, target.id.to_s)
+
+      expect(calls.sole).to include(text: "Component: SynthWidget. Aliases: SynthWidgetCopy", held: false, lock_free: true)
+      expect(target.reload.embedded_at).to be_present
+    end
+
     it "refuses entities of different types and merges nothing" do
       target = fs_member!(alpha, "SynthWidget", "Component")
       source = fs_member!(beta, "SynthWidgetCopy", "Class")

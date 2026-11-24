@@ -6,7 +6,11 @@ require "uri"
 
 # Generates vector embeddings via Ollama (or OpenAI-compatible) API.
 # Configuration priority: AppSettings → ENV → defaults (see EmbeddingConfig).
+# The models embed inline on create and on a text change; under the membership lock that call is
+# deferred to the lock's exit (InlineDeferral), and bulk paths suppress it (suppress_inline_embeddings).
 class EmbeddingService
+  extend InlineDeferral
+
   MAX_RETRIES = 3
   RETRY_BASE_DELAY = 0.5
 
