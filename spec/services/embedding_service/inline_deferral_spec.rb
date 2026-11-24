@@ -9,6 +9,8 @@ RSpec.describe EmbeddingService::InlineDeferral, :with_test_embeddings do
 
   def locked(&) = ProjectMembership.with_membership_lock(&)
 
+  def locked_with_timeout(&) = ProjectMembership.with_membership_lock(timeout: 0, &)
+
   def create_widget(name = "SynthWidget") = MemoryEntity.create!(name: name, entity_type: "Component")
 
   it "embeds an entity and an observation created under the lock once the lock is released" do
@@ -104,6 +106,39 @@ RSpec.describe EmbeddingService::InlineDeferral, :with_test_embeddings do
     locked { create_widget("SynthCog") }
     expect(Rails.logger).to have_received(:warn).with(/deferred embedding of MemoryEntity#\d+ failed: connection lost/)
     expect(MemoryEntity.missing_embedding.pluck(:name)).to contain_exactly("SynthWidget", "SynthCog")
+  end
+
+  it "doesn't defer another thread's create into this thread's list: that thread embeds it inline" do
+    gear = nil
+    locked do
+      Thread.new { gear = create_widget("SynthGear") }.join
+      # The specs' threads share this connection (and its session's lock), so only `held` is per thread.
+      expect(calls.map { |call| call.values_at(:text, :held) }).to eq([ [ "Component: SynthGear", false ] ])
+    end
+
+    expect(calls.size).to eq(1) # nothing left for this thread's exit
+    expect(gear.reload.embedded_at).to be_present
+  end
+
+  it "leaves no deferral and no lock depth behind after a LockTimeout" do
+    conn = ActiveRecord::Base.connection
+    name = ProjectMembership.lock_name(conn)
+    # Another session holds the lock (its own pool: this connection would just re-enter it).
+    holder = stub_const("DeferralLockHolder", Class.new(ActiveRecord::Base) { self.abstract_class = true })
+    holder.establish_connection(ActiveRecord::Base.connection_db_config)
+    holder.connection.select_value("SELECT GET_LOCK(#{conn.quote(name)}, 5)")
+
+    expect { locked_with_timeout { create_widget } }.to raise_error(ProjectMembership::LockTimeout)
+
+    expect(ProjectMembership.membership_lock_held?).to be(false)
+    expect(ActiveSupport::IsolatedExecutionState[described_class::STATE_KEY]).to be_nil
+    gear = create_widget("SynthGear")
+    expect(calls.sole).to include(text: "Component: SynthGear", held: false)
+    expect(gear.reload.embedded_at).to be_present
+    expect(MemoryEntity.where(name: "SynthWidget")).not_to exist
+  ensure
+    holder.connection.select_value("SELECT RELEASE_LOCK(#{conn.quote(name)})") if holder&.connection
+    holder.connection_pool&.disconnect! if holder
   end
 
   it "defers nothing that is suppressed (the bulk paths enqueue the backfill instead)" do
