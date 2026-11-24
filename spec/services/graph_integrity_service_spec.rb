@@ -16,6 +16,28 @@ RSpec.describe GraphIntegrityService do
     allow(GarbageCollectionRunner).to receive(:call).and_return({ reports: [], audit_logs_pruned: 0 })
   end
 
+  # The dream-state pre-flight and the nightly garbage collection: reverse pairs and merge
+  # collisions are queued for review, and no part_of edge is deleted (item 3 of the part_of plan).
+  # Drift is this example's point: the two-parent child and the reverse pair stay until reviewed.
+  it "deletes no part_of edge, whatever the integrity issues", membership_drift: :allowed do
+    allow(RelationIntegrityRepairer).to receive(:call).and_call_original
+    alpha = MemoryEntity.create!(name: "Alpha Project", entity_type: "Project")
+    widget = MemoryEntity.create!(name: "SynthWidget", entity_type: "Component")
+    gadget = MemoryEntity.create!(name: "SynthGadget", entity_type: "Component")
+    MemoryRelation.create!(from_entity: widget, to_entity: alpha, relation_type: "part_of")
+    MemoryRelation.create!(from_entity: gadget, to_entity: widget, relation_type: "part_of")
+    [ widget, gadget ].each { |entity| ProjectMembership.sync!(entity) }
+    second_parent = MemoryRelation.new(from_entity: widget, to_entity: gadget, relation_type: "part_of")
+    second_parent.save!(validate: false) # a second parent AND the reverse of gadget part_of widget
+    part_of_ids = MemoryRelation.where(relation_type: "part_of").pluck(:id)
+
+    result = described_class.call
+
+    expect(result[:relation_integrity].deleted_relation_ids).to eq([])
+    expect(result[:relation_integrity].review_items.map { |item| item[:issue_kind] }).to contain_exactly("reverse_pair", "merge_collision")
+    expect(MemoryRelation.where(relation_type: "part_of").pluck(:id)).to match_array(part_of_ids)
+  end
+
   describe ".call" do
     it "runs relation integrity repair and garbage collection" do
       result = described_class.call

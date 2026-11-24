@@ -339,6 +339,24 @@ RSpec.describe "System › Background jobs", type: :request do
       expect(response.body).to include("Relation repair completed")
       expect(MemoryRelation.count).to eq(1)
     end
+
+    # Drift is this example's point: a second parent the refused repair leaves in place.
+    it "deletes nothing and says why when a child's name is taken in the project it would move to", membership_drift: :allowed do
+      alpha = MemoryEntity.create!(name: "Alpha Project", entity_type: "Project")
+      beta = MemoryEntity.create!(name: "Beta Project", entity_type: "Project")
+      widget = MemoryEntity.create!(name: "SynthWidget", entity_type: "Component", project_id: beta.id)
+      MemoryRelation.create!(from_entity: widget, to_entity: alpha, relation_type: "part_of")
+      MemoryRelation.new(from_entity: widget, to_entity: beta, relation_type: "part_of").save!(validate: false)
+      MemoryEntity.create!(name: "SynthWidget", entity_type: "Component", project_id: alpha.id).then do |twin|
+        MemoryRelation.create!(from_entity: twin, to_entity: alpha, relation_type: "part_of")
+      end
+
+      post system_repair_relations_path
+      follow_redirect!
+
+      expect(response.body).to include("Relation repair refused, nothing was deleted", "SynthWidget")
+      expect(MemoryRelation.where(from_entity_id: widget.id).count).to eq(2)
+    end
   end
 
   # 1.84.0: one bar under the running step's label, for how far that step is.

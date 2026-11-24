@@ -5,6 +5,18 @@
 # - same_direction_duplicates: multiple rows for the same (from, to, type) tuple
 # - reverse_pairs: A→B and B→A with the same type (review-only when ambiguous)
 # - merge_collisions: child X linked to multiple parents with single-parent types
+#
+# With review_ambiguous: true (GraphIntegrityService: the dream-state pre-flight and the nightly
+# garbage collection) only same-direction duplicates are deleted, which the unique key
+# (from_entity_id, to_entity_id, relation_type) makes impossible, so no part_of is ever deleted
+# there; reverse pairs and merge collisions are queued as relation_integrity review rows.
+# With review_ambiguous: false (the operator's "Repair relation duplicates") the extra parents and
+# the newer edge of each pair are deleted too: under the membership lock (taken before the
+# transaction), in one transaction, with each child of a deleted part_of synced to the parent it
+# keeps. A ProjectMembership::Collision rolls the whole repair back; the result carries the reason.
+#
+#   result = RelationIntegrityRepairer.call(dry_run: false, review_ambiguous: false)
+#   result.error # => nil, or "cannot move 'SynthWidget' into project 4: …" (nothing deleted)
 class RelationIntegrityRepairer
   Result = Struct.new(
     :dry_run,
@@ -13,6 +25,7 @@ class RelationIntegrityRepairer
     :merge_collisions,
     :deleted_relation_ids,
     :review_items,
+    :error,
     keyword_init: true
   ) do
     def deleted_count
@@ -24,6 +37,10 @@ class RelationIntegrityRepairer
     end
   end
 
+  # @param dry_run [Boolean] find the issues, write nothing
+  # @param review_ambiguous [Boolean] queue reverse pairs and merge collisions for review (true)
+  #   instead of deleting them (false)
+  # @return [Result] `error` is set (and nothing deleted) when a membership sync refused the repair
   def self.call(dry_run: false, review_ambiguous: true)
     new(dry_run: dry_run, review_ambiguous: review_ambiguous).call
   end
@@ -33,7 +50,22 @@ class RelationIntegrityRepairer
     @review_ambiguous = review_ambiguous
   end
 
+  # @return [Result]
   def call
+    return scan_and_repair if @dry_run || @review_ambiguous
+
+    # Can delete part_of edges: the membership lock before the transaction (the advisory-first
+    # rule), and the issues found under it, so the walk sees the edges the repair deletes.
+    ProjectMembership.with_membership_lock do
+      ActiveRecord::Base.transaction { scan_and_repair }
+    end
+  rescue ProjectMembership::Collision, ProjectMembership::LockTimeout => e
+    refused(e)
+  end
+
+  private
+
+  def scan_and_repair
     same_direction = find_same_direction_duplicates
     reverse = find_reverse_pairs
     merge = find_merge_collisions
@@ -48,6 +80,7 @@ class RelationIntegrityRepairer
       else
         deleted_ids.concat(repair_reverse_pairs!(reverse))
         deleted_ids.concat(repair_merge_collisions!(merge))
+        sync_children!
       end
     end
 
@@ -61,7 +94,20 @@ class RelationIntegrityRepairer
     )
   end
 
-  private
+  # Nothing was deleted: the issues are found again (read-only) so the operator sees them.
+  def refused(error)
+    same_direction = find_same_direction_duplicates
+    Result.new(
+      dry_run: @dry_run, same_direction_duplicates: same_direction, reverse_pairs: find_reverse_pairs,
+      merge_collisions: find_merge_collisions, deleted_relation_ids: [], review_items: [],
+      error: error.is_a?(ProjectMembership::LockTimeout) ? "#{error.message}; retry shortly" : "#{error.message}; rename or re-parent one of them, then repair again"
+    )
+  end
+
+  # Each child that lost a part_of edge takes the project of the parent it keeps (or none).
+  def sync_children!
+    MemoryEntity.where(id: @part_of_children.to_a).order(:id).each { |child| ProjectMembership.sync!(child) }
+  end
 
   def find_same_direction_duplicates
     duplicate_keys.flat_map do |(from_id, to_id, rel_type)|
@@ -199,6 +245,7 @@ class RelationIntegrityRepairer
   end
 
   def delete_relation_ids(ids)
+    @part_of_children ||= Set.new
     begin
       Current.deletion_reason = "duplicate"
       ids.filter_map do |relation_id|
@@ -206,6 +253,7 @@ class RelationIntegrityRepairer
         next unless relation
 
         relation.destroy!
+        @part_of_children << relation.from_entity_id if MemoryRelation.reads_as_part_of?(relation.relation_type)
         relation_id
       end
     ensure
