@@ -4,7 +4,8 @@ require "rails_helper"
 load Rails.root.join("db/migrate/20261124120000_repair_memory_entity_project_ids.rb")
 
 # Drift is the point of every example: the migration repairs it (membership_drift: :allowed covers
-# the edge kinds it only reports, and the collision case it leaves unchanged).
+# the edge kinds it only reports, and the skipped runs that leave it unchanged: a collision, a busy
+# lock, a refused edge).
 RSpec.describe RepairMemoryEntityProjectIds, membership_drift: :allowed do
   let!(:alpha) { MemoryEntity.create!(name: "Alpha Project", entity_type: "Project") }
   let!(:beta) { MemoryEntity.create!(name: "Beta Project", entity_type: "Project") }
@@ -81,6 +82,70 @@ RSpec.describe RepairMemoryEntityProjectIds, membership_drift: :allowed do
     expect(stdout).to include("project_id repair skipped, data unchanged", "SynthGadget", "bin/rails graph_mem:backfill_project_ids")
     expect(log).to include("WARN [RepairMemoryEntityProjectIds] project_id repair skipped, data unchanged", "SynthGadget")
     expect(stdout).to include("membership drift after: wrong_project=0 stamped_without_path=1 path_without_stamp=1")
+  end
+
+  it "changes nothing on a second run" do
+    stamped = component("SynthGadget").tap { |entity| entity.update_column(:project_id, alpha.id) }
+    component("SynthWidget").tap { |entity| part_of!(entity, alpha).then { entity.update_column(:project_id, beta.id) } }
+    component("SynthSprocket").tap { |entity| part_of!(entity, beta) }
+    run_up
+    stamps = MemoryEntity.order(:id).pluck(:id, :project_id)
+    edges = MemoryRelation.order(:id).pluck(:id)
+    change_sets = ChangeSet.count
+    expect(MemoryRelation.where(from_entity_id: stamped.id).pluck(:to_entity_id)).to eq([ alpha.id ])
+
+    stdout, = run_up
+
+    expect(MemoryEntity.order(:id).pluck(:id, :project_id)).to eq(stamps)
+    expect(MemoryRelation.order(:id).pluck(:id)).to eq(edges)
+    expect(ChangeSet.count).to eq(change_sets)
+    expect(ProjectIdBackfill.drift.any?).to be(false)
+    expect(stdout).to include("0 top(s) attached to the stamped project's root, 0 stamp(s) cleared", "changed rows: 0")
+  end
+
+  it "completes without raising and changes nothing when the membership lock stays busy" do
+    stub_const("ProjectMembership::LOCK_TIMEOUT_SECONDS", 0)
+    stamped = component("SynthGadget").tap { |entity| entity.update_column(:project_id, alpha.id) }
+    conn = ActiveRecord::Base.connection
+    name = ProjectMembership.lock_name(conn)
+    holder = stub_const("RepairMigrationLockHolder", Class.new(ActiveRecord::Base) { self.abstract_class = true })
+    holder.establish_connection(ActiveRecord::Base.connection_db_config)
+    holder.connection.select_value("SELECT GET_LOCK(#{conn.quote(name)}, 5)")
+    edges = MemoryRelation.count
+    change_sets = ChangeSet.count
+
+    stdout, log = run_up
+
+    expect(stamped.reload.project_id).to eq(alpha.id)
+    expect([ MemoryRelation.count, ChangeSet.count ]).to eq([ edges, change_sets ])
+    expect(stdout).to include("project_id repair skipped, data unchanged, because the membership lock stayed busy")
+    expect(log).to include("WARN [RepairMemoryEntityProjectIds] project_id repair skipped, data unchanged")
+    expect(stdout).to include("membership drift after: wrong_project=0 stamped_without_path=1")
+  ensure
+    holder.connection.select_value("SELECT RELEASE_LOCK(#{conn.quote(name)})") if holder&.connection
+    holder.connection_pool&.disconnect! if holder
+  end
+
+  it "completes without raising and changes nothing when a part_of edge the repair would add is refused" do
+    stamped = component("SynthGadget").tap { |entity| entity.update_column(:project_id, alpha.id) }
+    refused = component("SynthWidget").tap { |entity| entity.update_column(:project_id, beta.id) }
+    # A writer outside the lock gave the second top a parent after the repair planned its edge.
+    allow(RelationSemantics).to receive(:validate_create!).and_wrap_original do |original, **args|
+      raise RelationSemantics::ValidationError, "Entity already has a part_of parent" if args[:from_entity_id] == refused.id
+
+      original.call(**args)
+    end
+    change_sets = ChangeSet.count
+
+    stdout, log = run_up
+
+    expect([ stamped.reload.project_id, refused.reload.project_id ]).to eq([ alpha.id, beta.id ])
+    expect(MemoryRelation.where(from_entity_id: [ stamped.id, refused.id ])).to be_empty # the first top's edge rolled back too
+    expect(ChangeSet.count).to eq(change_sets)
+    expect(stdout).to include("project_id repair skipped, data unchanged, because a part_of edge the repair would add " \
+                              "was refused: Validation failed: Entity already has a part_of parent")
+    expect(log).to include("WARN [RepairMemoryEntityProjectIds] project_id repair skipped, data unchanged")
+    expect(stdout).to include("membership drift after: wrong_project=0 stamped_without_path=2")
   end
 
   it "reports the dry-run counts of the shared backfill" do
