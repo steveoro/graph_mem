@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "rails_helper"
+require "fugit"
 
 RSpec.describe ChangeSetPruneJob, type: :job do
   def change_set(age_days, snapshot: { "v" => 1, "merges" => [ { "source" => { "id" => 1 } } ] })
