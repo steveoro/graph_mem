@@ -240,7 +240,6 @@ class NodeOperationsStrategy
     error_result(PROJECT_ROOT_PROTECTED_ERROR)
   end
 
-
   # The target's aliases after a merge, without writing anything (also used by EntityMergePreview):
   # the target's, then the source's and the source's name (unless it equals the target's name).
   # @param source [MemoryEntity]
@@ -371,7 +370,6 @@ class NodeOperationsStrategy
     end
     reparented
   end
-
 
   # Re-assign incoming relations (X -> source) without violating uniqueness.
   # part_of children re-pointed under the target change scope when the
