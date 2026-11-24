@@ -148,15 +148,19 @@ namespace :tools do
     end
 
     begin
-      relation = MemoryRelation.create!(
-        from_entity_id: from_id,
-        to_entity_id: to_id,
-        relation_type: relation_type
-      )
+      # graph_write's create: the type is canonicalized, a part_of passes the one-parent and no-cycle
+      # rules and moves the child into its parent's project under the membership lock.
+      payload = Current.set(actor: "rake:create_relation") do
+        GraphWriteService.execute_one("create_relation", { from_entity_id: from_id, to_entity_id: to_id, relation_type: relation_type })
+      end
+      if payload[:status] == "possible_duplicate"
+        puts "Error creating relation: it already exists (ID: #{payload[:candidates].first[:relation_id]})."
+        next
+      end
 
       puts "Relation created successfully!"
-      puts "ID: #{relation.id}"
-      puts "#{from_entity.name} --[#{relation.relation_type}]--> #{to_entity.name}"
+      puts "ID: #{payload[:relation_id]}"
+      puts "#{from_entity.name} --[#{payload[:relation_type]}]--> #{to_entity.name}"
     rescue => e
       puts "Error creating relation: #{e.message}"
     end

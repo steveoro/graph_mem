@@ -10,10 +10,32 @@ namespace :data do
     Pathname.new(file_path_str)
   end
 
+  # The JSON Lines tasks write entities and relations with plain model calls, part_of edges
+  # included, so they run under the membership lock, taken before anything is written (as
+  # graph_write does), and end with ProjectIdBackfill, which derives every project_id from the
+  # part_of edges. Inline embeddings are skipped, since the lock is never held across a network
+  # call: the embedding backfill enqueued at the end embeds the new rows, as after an import.
+  def with_membership_backfill
+    ProjectMembership.with_membership_lock do
+      EmbeddingService.suppress_inline_embeddings { yield }
+      ProjectIdBackfill.new.run
+    end
+    EmbeddingsMaintenanceEnqueuer.enqueue!("backfill")
+  rescue ActiveRecord::RecordNotUnique => e
+    # The backfill's stamps rolled back (the rows the file added stay): tell the operator how to unblock.
+    abort "project_id backfill aborted and rolled back: #{ProjectIdBackfill.conflict_hint(e)}\n" \
+          "  raw error: #{e.cause&.message || e.message}"
+  end
+
   desc "Migrate data from JSON Lines file to the database (clears existing data).\r\n \
  Pass file_path as argument or set GRAPH_MEM_JSON_FILE env var.\r\n \
  Default: ~/.codeium/windsurf-next/memories/memory.json"
-  task :migrate_json, [ :file_path ] => :environment do |t, args|
+  task :migrate_json, [ :file_path ] => :environment do |_t, args|
+    with_membership_backfill { migrate_json_lines(args) }
+  end
+
+  # data:migrate_json's body, under with_membership_backfill.
+  def migrate_json_lines(args)
     json_file_path = get_json_file_path(args[:file_path])
 
     unless json_file_path.exist?
@@ -154,7 +176,12 @@ namespace :data do
   desc "Append data from JSON Lines file to the database (adds missing, skips existing).\r\n \
  Pass file_path as argument or set GRAPH_MEM_JSON_FILE env var.\r\n \
  Default: ~/.codeium/windsurf-next/memories/memory.json"
-  task :append_json, [ :file_path ] => :environment do |t, args|
+  task :append_json, [ :file_path ] => :environment do |_t, args|
+    with_membership_backfill { append_json_lines(args) }
+  end
+
+  # data:append_json's body, under with_membership_backfill.
+  def append_json_lines(args)
     json_file_path = get_json_file_path(args[:file_path])
 
     unless json_file_path.exist?
@@ -304,8 +331,9 @@ namespace :data do
   #-- -------------------------------------------------------------------------
   #++
 
-  desc "Merge one MemoryEntity into another. \n" \
-       "Moves all relations and observations from the 'from' entity to the 'to' entity, then deletes the 'from' entity.\n" \
+  desc "Merge one MemoryEntity into another (NodeOperationsStrategy#merge_into). \n" \
+       "Moves the 'from' entity's observations, relations and part_of children to the same-type 'to' entity, then deletes it; " \
+       "recorded as an undoable merge change set (System > Activity).\n" \
        "Args: from_id (integer), to_id (integer)"
   task :merge_entity, [ :from_id, :to_id ] => :environment do |_t, args|
     from_id_str = args[:from_id]
@@ -350,44 +378,19 @@ namespace :data do
     puts "Found destination entity: '#{to_entity.name}' (ID: #{to_entity.id}, Type: #{to_entity.entity_type})"
     puts "---"
 
-    ActiveRecord::Base.transaction do
-      puts "Attempting to move observations..."
-      observations_moved_count = from_entity.memory_observations.update_all(memory_entity_id: to_entity.id)
-      puts "Moved #{observations_moved_count} observations from entity #{from_id} to entity #{to_id}."
-      puts "---"
-
-      puts "Attempting to update relations where entity #{from_id} was the source..."
-      relations_as_source_updated_count = MemoryRelation.where(from_entity_id: from_id).update_all(from_entity_id: to_id)
-      puts "Updated #{relations_as_source_updated_count} relations where entity #{from_id} was the source, to now originate from entity #{to_id}."
-      puts "---"
-
-      puts "Attempting to update relations where entity #{from_id} was the target..."
-      relations_as_target_updated_count = MemoryRelation.where(to_entity_id: from_id).update_all(to_entity_id: to_id)
-      puts "Updated #{relations_as_target_updated_count} relations where entity #{from_id} was the target, to now target entity #{to_id}."
-      puts "---"
-
-      # Note: If unique constraints exist (e.g., on [from_entity_id, to_entity_id, relation_type]),
-      # the update_all operations might fail if a moved relation becomes a duplicate of an existing one.
-      # The transaction will roll back in such cases.
-
-      puts "Attempting to delete source entity #{from_entity.name} (ID: #{from_id})..."
-      from_entity.destroy!
-      puts "Source entity #{from_id} ('#{from_entity.name}') deleted successfully."
-      puts "---"
-
-      puts "Entity merge from ID #{from_id} to ID #{to_id} completed successfully."
-    rescue ActiveRecord::RecordInvalid => e
-      puts "Error during merge (RecordInvalid): #{e.message}. Transaction rolled back."
-      puts "Validation errors: #{e.record.errors.full_messages.join(', ')}" if e.record
-      exit 1
-    rescue ActiveRecord::StatementInvalid => e
-      puts "Error during merge (StatementInvalid, possibly unique constraint violation): #{e.message}. Transaction rolled back."
-      exit 1
-    rescue StandardError => e
-      puts "An unexpected error occurred: #{e.message}. Transaction rolled back."
-      puts "Backtrace:\n#{e.backtrace.join("\n")}"
+    # The merge every other path uses: the target keeps its own parent, the source's children move
+    # under it in its project (membership lock, one transaction), with the undo snapshot and audit.
+    result = Current.set(actor: "rake:merge_entity") { NodeOperationsStrategy.new.merge_into(from_id, to_id) }
+    unless result[:success]
+      puts "Error: #{result[:error]}. Nothing was merged."
       exit 1
     end
+
+    puts result[:message]
+    puts "Change set #{result[:change_set_uuid]}: undo it in System > Activity." if result[:change_set_uuid]
+  rescue ProjectMembership::Collision, ProjectMembership::LockTimeout => e
+    puts "Error: #{e.message}. Nothing was merged."
+    exit 1
   end
   #-- -------------------------------------------------------------------------
   #++
