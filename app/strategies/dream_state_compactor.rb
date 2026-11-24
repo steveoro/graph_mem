@@ -15,6 +15,12 @@ class DreamStateCompactor
   # (tree_walk's auto-merge): both take the membership lock.
   MEMBERSHIP_PHASES = %w[orphans tree_walk].freeze
 
+  # @param phase [String, Symbol, nil] a run's phase
+  # @return [Boolean] true when the phase can move or merge entities, so it needs the membership lock
+  def self.membership_phase?(phase)
+    MEMBERSHIP_PHASES.include?(phase.to_s)
+  end
+
   # Runs the block under the membership lock when +phase+ can move or merge entities, so the lock is
   # taken before any transaction the block opens (the advisory-first rule, see
   # ProjectMembership::LOCK_NAME_PREFIX); merge_into and move_to_parent then re-enter it. Used around
@@ -26,7 +32,7 @@ class DreamStateCompactor
   # @param phase [String, nil] the run's phase
   # @return [Object] the block's value
   def self.with_membership_lock(phase, &block)
-    return yield unless MEMBERSHIP_PHASES.include?(phase.to_s)
+    return yield unless membership_phase?(phase)
 
     ProjectMembership.with_membership_lock { EmbeddingService.suppress_inline_embeddings(&block) }
   end
@@ -289,11 +295,15 @@ class DreamStateCompactor
   end
 
   # The survivor's aliases changed with inline embeddings off (with_membership_lock): re-embedding it
-  # is the backfill's job. A failed enqueue never undoes the merge.
+  # is the backfill's job. Queued once every open transaction commits (at once when none is open):
+  # the queue can live in its own database, and a backfill that ran before the merge committed would
+  # not see the survivor's cleared embedding. A failed enqueue never undoes the merge.
   def enqueue_embedding_backfill
-    EmbeddingsMaintenanceEnqueuer.enqueue!("backfill")
-  rescue StandardError => e
-    Rails.logger.warn "[DreamState] could not enqueue the embedding backfill: #{e.message}"
+    ActiveRecord.after_all_transactions_commit do
+      EmbeddingsMaintenanceEnqueuer.enqueue!("backfill")
+    rescue StandardError => e
+      Rails.logger.warn "[DreamState] could not enqueue the embedding backfill: #{e.message}"
+    end
   end
 
   def queue_merge_review(entity_a, entity_b, distance, score, error: nil)

@@ -186,6 +186,15 @@ RSpec.describe DreamStateCompactor, type: :model do
       expect(membership_lock_free?).to be(true)
     end
 
+    it "queues the embedding backfill only once the merge has committed" do
+      ActiveRecord::Base.transaction(requires_new: true) do
+        described_class.new(run: run).process_batch!
+        expect(EmbeddingsMaintenanceEnqueuer).not_to have_received(:enqueue!)
+      end
+
+      expect(EmbeddingsMaintenanceEnqueuer).to have_received(:enqueue!).with("backfill")
+    end
+
     it "takes no lock for a phase that neither moves nor merges" do
       run.update!(phase: "relationship_discovery", cursor_entity_id: nil)
       sql = []
