@@ -226,7 +226,7 @@
         "graph_mem": {"status": 400, "error_code": -32700},
         "reference": {"status": 200, "id": 35, "result": {}}
       },
-      "divergence": "graph_mem refuses invalid UTF-8 with -32700 (like the Ruby SDK 1.9.0 and 1.10.0); Node decodes the byte as U+FFFD and answers the ping."
+      "divergence": "graph_mem refuses invalid UTF-8 with -32700 (like the Ruby SDK 1.9.0, 1.10.0 and 1.11.0); Node decodes the byte as U+FFFD and answers the ping."
     },
     {
       "name": "tools/call with an invalid UTF-8 tool name",
@@ -236,7 +236,7 @@
         "graph_mem": {"status": 200, "id": 42, "error_code": -32603},
         "reference": {"status": 200, "id": 42, "error_code": -32602}
       },
-      "divergence": "graph_mem can't echo the invalid name back and answers -32603 with the id (Ruby SDK 1.8.2, 1.9.0 and 1.10.0, #629); Node decodes the byte as U+FFFD and answers -32602 \"Tool synth-\uFFFD not found\"."
+      "divergence": "graph_mem can't echo the invalid name back and answers -32603 with the id (Ruby SDK 1.8.2, 1.9.0, 1.10.0 and 1.11.0, #629); Node decodes the byte as U+FFFD and answers -32602 \"Tool synth-\uFFFD not found\"."
     },
     {
       "name": "a method name that is not valid UTF-8",
@@ -246,7 +246,7 @@
         "graph_mem": {"status": 200, "id": 46, "error_code": -32600},
         "reference": {"status": 200, "id": 46, "error_code": -32601}
       },
-      "divergence": "graph_mem refuses the method as an invalid request, -32600 with the id (Ruby SDK 1.10.0, #672); Node decodes the byte as U+FFFD and answers -32601 Method not found."
+      "divergence": "graph_mem refuses the method as an invalid request, -32600 with the id (Ruby SDK 1.10.0 and 1.11.0, #672); Node decodes the byte as U+FFFD and answers -32601 Method not found."
     },
     {
       "name": "a JSON array (batch) body",

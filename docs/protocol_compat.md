@@ -2,7 +2,7 @@
 
 ## Summary
 
-Since 1.55.0 graph_mem is served by the official MCP Ruby SDK (`mcp` gem, pinned to 1.10.0) over
+Since 1.55.0 graph_mem is served by the official MCP Ruby SDK (`mcp` gem, pinned to 1.11.0) over
 Streamable HTTP and stdio. It speaks MCP 2024-11-05 through 2025-11-25 through the `initialize`
 handshake, and 2026-07-28 natively: `server/discover` and the stateless per-request lifecycle. A
 supported `initialize` version is echoed; anything else (2026-07-28, a future date, garbage) gets
@@ -27,10 +27,10 @@ Moving another Rails app from fast-mcp to the `mcp` gem:
 
 ## Client matrix
 
-`script/mcp_compat/clients.sh` at 1.87.0 (2026-11-17, `mcp` 1.10.0, Node 24.11.1, Ruby 3.4.12): 12 of
-12 OK, and `/mcp` lists 12 tools on every row. Every `auto` row negotiates 2026-07-28, every `legacy`
-row 2025-11-25. The Ruby SDK 1.9.0 and 1.10.0 clients keep the tool `title` and see one on all 12
-tools. Re-run at 1.91.0 (2026-11-18) with Skills over MCP off: the same 12 of 12.
+`script/mcp_compat/clients.sh` at 1.93.4 (2026-11-24, `mcp` 1.11.0, Node 24.11.1, Ruby 3.4.13, Skills
+over MCP off): 12 of 12 OK, and `/mcp` lists 12 tools on every row. Every `auto` row negotiates
+2026-07-28, every `legacy` row 2025-11-25. The Ruby SDK 1.10.0 and 1.11.0 clients keep the tool `title`
+and see one on all 12 tools.
 
 | Client | Mode | Transport | OK | Protocol | Timing note |
 | --- | --- | --- | --- | --- | --- |
@@ -38,14 +38,14 @@ tools. Re-run at 1.91.0 (2026-11-18) with Skills over MCP off: the same 12 of 12
 | TS client 2.4.0 | auto | HTTP | OK | 2026-07-28 | |
 | TS client 2.4.0 | legacy | stdio | OK | 2025-11-25 | |
 | TS client 2.4.0 | legacy | HTTP | OK | 2025-11-25 | |
-| Ruby SDK 1.9.0 | auto | stdio | OK | 2026-07-28 | `auto` costs nothing extra; titles on 12 of 12 tools |
-| Ruby SDK 1.9.0 | auto | HTTP | OK | 2026-07-28 | titles on 12 of 12 tools |
-| Ruby SDK 1.9.0 | legacy | stdio | OK | 2025-11-25 | titles on 12 of 12 tools |
-| Ruby SDK 1.9.0 | legacy | HTTP | OK | 2025-11-25 | titles on 12 of 12 tools |
 | Ruby SDK 1.10.0 | auto | stdio | OK | 2026-07-28 | `auto` costs nothing extra; titles on 12 of 12 tools |
 | Ruby SDK 1.10.0 | auto | HTTP | OK | 2026-07-28 | titles on 12 of 12 tools |
 | Ruby SDK 1.10.0 | legacy | stdio | OK | 2025-11-25 | titles on 12 of 12 tools |
 | Ruby SDK 1.10.0 | legacy | HTTP | OK | 2025-11-25 | titles on 12 of 12 tools |
+| Ruby SDK 1.11.0 | auto | stdio | OK | 2026-07-28 | `auto` costs nothing extra; titles on 12 of 12 tools |
+| Ruby SDK 1.11.0 | auto | HTTP | OK | 2026-07-28 | titles on 12 of 12 tools |
+| Ruby SDK 1.11.0 | legacy | stdio | OK | 2025-11-25 | titles on 12 of 12 tools |
+| Ruby SDK 1.11.0 | legacy | HTTP | OK | 2025-11-25 | titles on 12 of 12 tools |
 
 ## Claude Code
 
@@ -63,20 +63,20 @@ MCP.
 
 ## Handshake comparison
 
-`script/mcp_compat/compare.rb`, 2026-11-17: graph_mem 1.87.0 (`mcp` 1.10.0), reference servers Memory
-2.1.1 and Everything 2.3.0 with SDK 2.4.0 (the MCP servers release v2.4.0), on Node 24.11.1 and Ruby
-3.4.12. 0 failed expectations, 0 unexpected differences; every case recorded at 1.86.1 answers the same
-on both sides, and 1.87.0 adds "initialize declares the MCP Apps extension" (graph_mem only: the
-reference servers declare no extensions). Re-run at 1.91.0 (2026-11-18) with Skills over MCP off: 0 failed,
-0 unexpected over the same 53 cases (20 stdio, 33 HTTP). Outlines show
+`script/mcp_compat/compare.rb`, 2026-11-24: graph_mem 1.93.4 (`mcp` 1.11.0), reference servers Memory
+2.2.1 and Everything 2.3.1 with SDK 2.4.0 (the MCP servers release v2.5.0), on Node 24.11.1 and Ruby
+3.4.13, Skills over MCP off. 0 failed expectations, 0 unexpected differences over 57 cases (22 stdio,
+35 HTTP); every case recorded at 1.91.0 answers the same on both sides, and 1.93.4 adds two documented
+divergences on each transport: "resources/read without params" (#687) and "an integer id beyond 128
+bits" (#688). Outlines show
 `[status, id, result or error code]` (HTTP) or the replies as `[id, result or error code]` (stdio);
 the cases are in `spec/fixtures/mcp/handshakes/`. The reference is Memory on stdio and Everything on
 HTTP. `compare.rb`'s informational Ruby SDK target (`rsdk_server.rb`, a one-tool server on `mcp`
-1.10.0) answers every case exactly as graph_mem does, so it has no column of its own.
+1.11.0) answers every case exactly as graph_mem does, so it has no column of its own.
 
 ### stdio
 
-20 cases: 8 same, 9 documented divergences, 3 graph_mem only.
+22 cases: 8 same, 11 documented divergences, 3 graph_mem only.
 
 | Case | graph_mem | Memory 2.2.1 | Verdict |
 | --- | --- | --- | --- |
@@ -100,10 +100,12 @@ HTTP. `compare.rb`'s informational Ruby SDK target (`rsdk_server.rb`, a one-tool
 | tools/call with an invalid UTF-8 tool name, then a ping | `[[1, "result"], [42, -32603], [5, "result"]]` | `[[1, "result"], [42, -32602], [5, "result"]]` | documented divergence |
 | a method name that is not valid UTF-8, then a ping | `[[1, "result"], [43, -32600], [6, "result"]]` | `[[43, -32601], [1, "result"], [6, "result"]]` | documented divergence |
 | tools/list with a non-object _meta, then a ping | `[[1, "result"], [2, -32602], [3, "result"]]` | `[[1, "result"], [3, "result"]]` | documented divergence |
+| resources/read without params | `[[1, "result"], [47, -32602]]` | `[[1, "result"], [47, -32603]]` | documented divergence |
+| an integer id beyond 128 bits, then a ping | `[[1, "result"], [nil, -32600], [8, "result"]]` | `[[1, "result"], [8, "result"]]` | documented divergence |
 
 ### Streamable HTTP
 
-33 cases: 14 same, 16 documented divergences, 3 graph_mem only.
+35 cases: 14 same, 18 documented divergences, 3 graph_mem only.
 
 | Case | graph_mem | Everything 2.3.1 | Verdict |
 | --- | --- | --- | --- |
@@ -140,6 +142,8 @@ HTTP. `compare.rb`'s informational Ruby SDK target (`rsdk_server.rb`, a one-tool
 | an initialize from a foreign Origin | `[403, nil, -32600]` | `[403, nil, -32000]` | documented divergence |
 | an initialize from another localhost port | `[403, nil, -32600]` | `[200, 44, "result"]` | documented divergence |
 | tools/list with a non-object _meta | `[200, 45, -32602]` | `[400, nil, -32700]` | documented divergence |
+| resources/read without params | `[200, 47, -32602]` | `[200, 47, -32603]` | documented divergence |
+| an integer id beyond 128 bits | `[400, nil, -32600]` | `[400, nil, -32700]` | documented divergence |
 
 Browser origins: graph_mem accepts same-origin requests and the exact origins in
 `GRAPH_MEM_MCP_ALLOWED_ORIGINS`, and grants CORS on `/mcp` to that same list. It answers every
@@ -165,20 +169,26 @@ Each bullet is one `divergence` text from the fixture files, with the cases it c
 - graph_mem (the official SDK) answers malformed lines with JSON-RPC errors and serves a
   one-element batch; the TS SDK drops them silently. Both keep serving. — *malformed lines: parse
   error, batch, missing jsonrpc, primitive*
-- Neither runs it: graph_mem answers -32600 (like the Ruby SDK 1.9.0 and 1.10.0); the TS SDK drops
-  the line silently. — *tools/call with "id": null is refused, not run*
-- graph_mem refuses invalid UTF-8 with -32700 (like the Ruby SDK 1.9.0 and 1.10.0); Node decodes the
-  byte as U+FFFD and answers the ping. Both keep serving. — *an invalid UTF-8 object key, then a
-  ping*
+- Neither runs it: graph_mem answers -32600 (like the Ruby SDK 1.9.0, 1.10.0 and 1.11.0); the TS SDK
+  drops the line silently. — *tools/call with "id": null is refused, not run*
+- graph_mem refuses invalid UTF-8 with -32700 (like the Ruby SDK 1.9.0, 1.10.0 and 1.11.0); Node
+  decodes the byte as U+FFFD and answers the ping. Both keep serving. — *an invalid UTF-8 object key,
+  then a ping*
 - graph_mem can't echo the invalid name back and answers -32603 with the id (Ruby SDK 1.8.2,
-  1.9.0 and 1.10.0, #629); Node decodes the byte as U+FFFD and answers -32602 "Tool synth-� not
-  found". Both keep serving. — *tools/call with an invalid UTF-8 tool name, then a ping*
-- graph_mem refuses the method as an invalid request, -32600 with the id (Ruby SDK 1.10.0, #672);
-  Node decodes the byte as U+FFFD and answers -32601 Method not found. Both keep serving. — *a method
-  name that is not valid UTF-8, then a ping*
+  1.9.0, 1.10.0 and 1.11.0, #629); Node decodes the byte as U+FFFD and answers -32602 "Tool synth-�
+  not found". Both keep serving. — *tools/call with an invalid UTF-8 tool name, then a ping*
+- graph_mem refuses the method as an invalid request, -32600 with the id (Ruby SDK 1.10.0 and 1.11.0,
+  #672); Node decodes the byte as U+FFFD and answers -32601 Method not found. Both keep serving. — *a
+  method name that is not valid UTF-8, then a ping*
 - graph_mem refuses a non-object _meta with -32602 and the id (Ruby SDK 1.9.0, #651); Memory's
   transport fails to parse the message (a ZodError on stderr) and sends no reply. Both keep
   serving. — *tools/list with a non-object _meta, then a ping*
+- graph_mem checks the params before any resource is looked up and answers -32602 "Missing or
+  invalid uri" with the id (Ruby SDK 1.11.0, #687); Memory's schema check fails (a ZodError) and it
+  answers -32603 with the id. — *resources/read without params*
+- Neither answers the id 2**128: graph_mem refuses it as an invalid request, -32600 without the id
+  (Ruby SDK 1.11.0, #688); Memory's transport refuses ids beyond 2^53 (a ZodError on stderr) and
+  sends no reply. Both keep serving. — *an integer id beyond 128 bits, then a ping*
 - Server-specific: Memory implements resource subscriptions and list-changed notifications;
   graph_mem doesn't. — *initialize capabilities: no subscribe or listChanged; instructions present*
 - Server-specific: graph_mem declares the MCP Apps extension (io.modelcontextprotocol/ui, 1.87.0;
@@ -199,17 +209,23 @@ Each bullet is one `divergence` text from the fixture files, with the cases it c
   2026-07-28*
 - Neither runs it; graph_mem (the official SDK) answers -32600 with HTTP 200, the TS SDK -32700
   with 400. — *tools/call with "id": null is refused, not run*
-- graph_mem refuses invalid UTF-8 with -32700 (like the Ruby SDK 1.9.0 and 1.10.0); Node decodes the
-  byte as U+FFFD and answers the ping. — *an invalid UTF-8 object key*
+- graph_mem refuses invalid UTF-8 with -32700 (like the Ruby SDK 1.9.0, 1.10.0 and 1.11.0); Node
+  decodes the byte as U+FFFD and answers the ping. — *an invalid UTF-8 object key*
 - graph_mem can't echo the invalid name back and answers -32603 with the id (Ruby SDK 1.8.2,
-  1.9.0 and 1.10.0, #629); Node decodes the byte as U+FFFD and answers -32602 "Tool synth-� not
-  found". — *tools/call with an invalid UTF-8 tool name*
-- graph_mem refuses the method as an invalid request, -32600 with the id (Ruby SDK 1.10.0, #672);
-  Node decodes the byte as U+FFFD and answers -32601 Method not found. — *a method name that is not
-  valid UTF-8*
+  1.9.0, 1.10.0 and 1.11.0, #629); Node decodes the byte as U+FFFD and answers -32602 "Tool synth-�
+  not found". — *tools/call with an invalid UTF-8 tool name*
+- graph_mem refuses the method as an invalid request, -32600 with the id (Ruby SDK 1.10.0 and 1.11.0,
+  #672); Node decodes the byte as U+FFFD and answers -32601 Method not found. — *a method name that is
+  not valid UTF-8*
 - graph_mem refuses a non-object _meta with -32602 and the id, HTTP 200 (Ruby SDK 1.9.0, #651);
   Everything's transport can't parse the message and answers HTTP 400 -32700 "Parse error: Invalid
   JSON-RPC message" with id null. — *tools/list with a non-object _meta*
+- graph_mem checks the params before any resource is looked up and answers -32602 "Missing or
+  invalid uri" with the id (Ruby SDK 1.11.0, #687); Everything's schema check fails (a ZodError) and
+  it answers -32603 with the id. — *resources/read without params*
+- Both refuse the id 2**128 with 400 and no id; graph_mem answers -32600 "id must be an integer of at
+  most 128 bits" (Ruby SDK 1.11.0, #688), Everything's transport -32700 "Parse error: Invalid
+  JSON-RPC message" (it refuses ids beyond 2^53). — *an integer id beyond 128 bits*
 - graph_mem refuses batches (removed in 2025-06-18, and an array body was a high bug before
   1.54.0); the TS SDK still accepts them on the 2025 transport. — *a JSON array (batch) body*
 - Both refuse it; graph_mem (the official SDK) answers -32600 with HTTP 200 and echoes the id, the

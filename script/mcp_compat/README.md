@@ -77,15 +77,15 @@ all interfaces, and 2.0.0 also had open CORS (GHSA-mvf5-2qqv-rg3c).
 
 ## Expected results
 
-At 1.87.0 (2026-11-17, `mcp` 1.10.0; reference servers Memory 2.1.1, Everything 2.3.0, SDK 2.4.0 (the MCP
-servers release v2.4.0), on Node 24.11.1 and Ruby 3.4.12):
+At 1.93.4 (2026-11-24, `mcp` 1.11.0; reference servers Memory 2.2.1, Everything 2.3.1, SDK 2.4.0 (the MCP
+servers release v2.5.0), on Node 24.11.1 and Ruby 3.4.13):
 
-- `compare.rb`: 0 failed expectations, 0 unexpected differences (20 stdio and 33 HTTP cases; the two
-  non-object `_meta` cases and the two invalid UTF-8 method name cases are documented divergences, and
-  "initialize declares the MCP Apps extension" is graph_mem only). The
-  `ruby_sdk` column (`mcp` 1.10.0, informational) answers every case exactly like graph_mem, which runs
-  on the same gem.
-- `clients.sh`: 12 of 12 OK (TS 2.4.0, Ruby SDK 1.9.0 and 1.10.0), each listing 12 tools on `/mcp`; every
+- `compare.rb`: 0 failed expectations, 0 unexpected differences (22 stdio and 35 HTTP cases; the
+  "resources/read without params" and "an integer id beyond 128 bits" cases, new in 1.93.4, are
+  documented divergences on both transports, and "initialize declares the MCP Apps extension" is
+  graph_mem only). The `ruby_sdk` column (`mcp` 1.11.0, informational) answers every case exactly like
+  graph_mem, which runs on the same gem.
+- `clients.sh`: 12 of 12 OK (TS 2.4.0, Ruby SDK 1.10.0 and 1.11.0), each listing 12 tools on `/mcp`; every
   Ruby SDK row reports a title on all 12 (`titled=12`). Every `auto` row negotiates 2026-07-28, every
   `legacy` row 2025-11-25. The TS stdio `auto` row takes about 1.1 s longer than `legacy` (the
   `server/discover` probe runs in a sibling process); the Ruby SDK's `auto` costs nothing extra.
