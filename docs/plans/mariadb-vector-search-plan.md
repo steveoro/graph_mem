@@ -1,8 +1,9 @@
 # Plan: make MariaDB vector search use its index (plus zero-vector fixes)
 
-> Status: **plan, decisions taken by Steve on 2026-11-20 (see "Decisions"). Still plan only: no code PR
-> until Steve says go.** Written against `main` at `c546109` (merge of #188, Dream State R1a,
-> **1.93.0**). Each kickoff rechecks its own line references against `main`.
+> Status: **plan, decisions taken by Steve on 2026-11-20 and 2026-11-24 (see the two "Decisions"
+> sections). Still plan only: no code PR until Steve says go.** Written against `main` at `c546109`
+> (merge of #188, Dream State R1a, **1.93.0**). Each kickoff rechecks its own line references
+> against `main`.
 >
 > Motivation: an outside pitch to move graph_mem onto a separate graph/vector database. A code-side
 > look showed that graph_mem already stores its vectors in MariaDB 11.8 with HNSW indexes. The
@@ -185,11 +186,14 @@ no MCP params or outputs change).
 - **Fallback**: if the index is missing (`EmbeddingIndexStatus`), or any filter is present, keep
   today's exact query unchanged. That keeps the "WHERE loses no recall" guarantee from
   `architecture.md:121`.
-- **Setting (Decision 3):** `AppSettings` `vector_search_mode` = `exact | ann`, **default `exact`**.
-  It's an app setting, not an MCP param. The `ann` path runs only when the operator sets `ann`, and the
-  plan expects that only once the graph grows. AppSettings is rails-settings-cached, so this needs no
-  migration. The settings page gains one field, documented in `docs/app_settings_reference.md`.
-- **Recall gate:** the step 1 recall spec runs the `ann` path and must clear the Decision 4 bar
+- **Setting (Decision 3, Decisions N2-N3):** `AppSettings` `vector_search_mode` = `exact | ann`,
+  **default `exact`**. It's an app setting, not an MCP param. The `ann` path runs only when the
+  operator sets `ann`, and the plan expects that only once the graph grows. **It governs the search
+  channels only** (this step). `suggest_merges` has its own switch, `suggest_merges_mode` (step 3),
+  and the scoped checks stay exact in either mode. AppSettings is rails-settings-cached, so this needs
+  no migration. The Settings page gains one field with an info tooltip (see "Settings page fields
+  and tooltips" below), documented in `docs/app_settings_reference.md`.
+- **Recall gate:** the step 1 recall spec runs the search `ann` path and must clear the Decision 4 bar
   (≥ 0.8 average recall@10, no probe below 0.5). If the first K and the index settings don't clear
   it, step 2 tunes K, the `mhnsw_ef_search` session value or the index `M` until they do. Changing
   `M` means rebuilding the index through `embeddings:add_indexes`, with no migration. Step 2 doesn't
@@ -205,21 +209,106 @@ no MCP params or outputs change).
   every embedded entity. Iterate in id batches without loading the vector. For each entity, run an
   inner ANN query (literal vector, `ORDER BY d LIMIT K`), then apply the type filter, `id > ?`,
   `embedded_at` and the threshold outside. Same-type filtering stays in the outer query, so K must be
-  generous; the step 1 recall spec covers it. The ANN query is used only when `vector_search_mode`
-  is `ann`; with `exact` (the default) the batching applies and each per-entity query stays exact.
-- **Time budget (Decision 6):** the scan stops when a wall-clock budget runs out. When it does, it
-  says so with **one line in its existing text output** (for example "Scan stopped after the time
-  budget: N of M entities checked."), with **no new field**. It still stops at `limit` as today.
+  generous. The ANN query is used only when **`suggest_merges_mode`** is `ann` (Decision N2: its own
+  switch, separate from `vector_search_mode`); with `exact` (the default) the batching applies and
+  each per-entity query stays exact, with the same candidates as today.
+- **Setting `suggest_merges_mode` (Decision N2):** `AppSettings` field, `exact | ann`, **default
+  `exact`**, not an MCP param, no migration. It governs only `suggest_merges`' per-entity inner query,
+  for the MCP tool and the REST copy alike. `vector_search_mode` doesn't affect it, and it doesn't
+  affect search.
+- **Recall gate for the merge `ann` path (Decision N2):** the step 1 recall spec gains a
+  `suggest_merges` probe set: in `ann` mode, the candidate pairs found per probe entity against exact
+  must clear the same Decision 4 bar (≥ 0.8 average, no probe below 0.5). If they don't, step 3 raises
+  K (the step 2 tuning of `mhnsw_ef_search` and `M` applies too). Step 3 doesn't merge below the bar.
+- **Time budget (Decision 6, Decision N1):** the scan stops when a wall-clock budget runs out. The
+  budget is the `AppSettings` field **`suggest_merges_time_budget_seconds`** (integer, **default 30**,
+  validated as a positive integer through `validates: { numericality: { greater_than: 0,
+  less_than_or_equal_to: 600 } }`; the 600 s cap is a proposal so a typo can't make one call run for
+  hours, and it gives the Settings page its "Accepted range: 1–600" line). No migration
+  (rails-settings-cached). It applies to the MCP tool and `GET /api/v1/maintenance/suggest_merges`
+  alike, read once at the start of each call. When the budget runs out, the scan says so with **one
+  line in its existing text output** (for example "Scan stopped after the time budget: N of M
+  entities checked."), with **no new field**. It still stops at `limit` as today.
 - `EntityMergeEvidence.candidates_for`, `ContradictionDetector#find_contradiction_pairs`,
   `FactSupersede::Candidates`, `SummarizerService#contradiction_partner_ids`: replace the
   scalar-subquery vector with the loaded literal (it removes one subquery per row) and move `HAVING`
   to an outer query. These are scoped to one entity, a subtree or an id list, so **they stay exact**.
   That's a cost cleanup with no recall change.
 - One shared helper (`VectorQuery.nearest(relation, vector, k:, exact:)`) builds both shapes, so the
-  rule "filtered → exact, unfiltered → inner ANN" lives in one place.
+  rule "filtered → exact, unfiltered → inner ANN" lives in one place. **The helper reads no setting**:
+  each caller passes `exact:` from its own switch (`vector_search_mode` for the search channels,
+  `suggest_merges_mode` for `suggest_merges`, always `true` for the scoped checks above).
 - **MCP tool behaviour** (approved, Decision 6): `suggest_merges` can stop early on the budget, with
-  the text line above. In `ann` mode it can also return different candidates when ANN misses
-  near-ties. The params, output fields and tool count stay unchanged.
+  the text line above. In `ann` mode (`suggest_merges_mode`) it can also return different candidates
+  when ANN misses near-ties. The params, output fields and tool count stay unchanged.
+
+## Settings page fields and tooltips (steps 2 and 3; Decision N3)
+
+Steve's requirement: each of the three new settings gets an **info tooltip** that says plainly what it
+controls and which feature it affects, so `vector_search_mode` and `suggest_merges_mode` can't be
+confused.
+
+**How the Settings page renders help today** (checked on `main`): every field comes from
+`SettingsSchema` (`app/services/settings_schema.rb`) and renders through
+`app/views/system/settings/_field.html.haml`: a label (`system.settings.fields.<key>.label`), the
+input, and an **always-visible hint paragraph** `%p.system-hint{ id: "setting_<key>_help" }` with the
+text of `system.settings.fields.<key>.description` (the input points at it with
+`aria-describedby`; `SettingsFieldsHelper#settings_field_input`), then the accepted range for numeric
+fields. Locale file: `config/locales/system_settings.en.yml`. **There is no tooltip or info-icon
+component on the Settings page today** (the only tooltip in the app is the Explore graph's node
+tooltip, `app/javascript/graph/tooltip.js`, which doesn't fit a form).
+
+**So:** keep the existing pattern (label + short `.description` hint) and add a small accessible info
+tooltip, rendered by `_field` only when the optional key `system.settings.fields.<key>.tooltip`
+exists (so no other field changes):
+
+- an info button right after the label: `%button.system-info{ type: "button", aria: { label:
+  t("system.settings.info_button", label: t(field.label)), describedby: "setting_<key>_tip",
+  expanded: "false" } }` showing an "i" glyph. It's a
+  real `<button>`, so it's keyboard focusable, and it never submits the form;
+- the tip: `%span.system-info__tip{ id: "setting_<key>_tip", role: "tooltip", hidden: true }` with the
+  `.tooltip` text;
+- shown on hover and on keyboard focus, toggled on click/tap (touch), hidden with **Escape** and on
+  blur. CSS in `app/assets/tailwind/system.css` (`.system-info`, `.system-info__tip`, using the
+  existing `--color-ui-*` tokens) plus a tiny Stimulus controller (`settings_tip_controller.js`,
+  about 20 lines, no new package) for Escape, the click toggle and `aria-expanded`;
+- the text stays in the DOM (`hidden` toggled), so screen readers read it through
+  `aria-describedby`; the always-visible `.description` hint stays as today.
+- spec: a request/view spec that the three fields render the button and the tip with the
+  `aria-describedby` link, and that a field without a `.tooltip` key renders no button.
+
+**Where:** the three fields go in the **Embeddings** tab (`define_group(:embeddings, ...)`), after the
+embedding fields, in this order: `vector_search_mode`, `suggest_merges_mode`,
+`suggest_merges_time_budget_seconds`. The two modes use `input: :select, choices: %w[exact ann]` and a
+validator `:vector_lookup_mode` in `SettingsSchema::Validators` that accepts `exact` and `ann` and
+stores the blank option ("— use ENV / default —") as `exact`. Readers treat any value other than `ann`
+as `exact`. The budget is a plain integer field (its range comes from the `validates` above). The
+labels name the feature first, so the two modes differ at a glance.
+
+**Drafted `en` locale keys** (`config/locales/system_settings.en.yml`):
+
+```yaml
+en:
+  system:
+    settings:
+      info_button: "About: %{label}"   # the info button's aria-label
+      fields:
+        vector_search_mode:
+          label: "Search: vector lookup mode"
+          description: "Search only. exact (default) or ann; see the info icon."
+          tooltip: "How semantic search finds similar memories. exact checks every vector: slower on big graphs, never misses. ann uses the HNSW index: much faster, may rarely miss a close match. Affects search only, not merge suggestions. Searches with a filter always stay exact."
+        suggest_merges_mode:
+          label: "Merge suggestions: vector lookup mode"
+          description: "Merge suggestions only. exact (default) or ann; see the info icon."
+          tooltip: "How merge suggestions (suggest_merges) find entities that look like duplicates. exact compares each entity with every other one: slower on big graphs, never misses a pair. ann uses the HNSW index: much faster, may rarely miss a close pair. Affects merge suggestions only, not search. The time budget below still applies."
+        suggest_merges_time_budget_seconds:
+          label: "Merge suggestions: time budget (seconds)"
+          description: "Merge suggestions only. Default 30."
+          tooltip: "The most seconds one merge suggestions run (suggest_merges, from MCP or the REST API) may take. When time runs out it stops and its text says how many entities it checked. To check more, raise this or switch merge suggestions to ann. Affects merge suggestions only, not search."
+```
+
+**Docs:** `docs/app_settings_reference.md`, Embeddings section, gains the three rows (setting,
+default, range, effect) with the same plain wording, and says which switch affects which feature.
 
 ## Step 4. Stop loading the 3 KB vector with every entity row
 
@@ -273,7 +362,7 @@ releases placed:
 | 1.94.0 | SQL exchange (four PRs) |
 | 1.95.0 (+1.95.1) | Dream State R1b (+ R1c) |
 | 1.96.0 | Dream State R2 |
-| **1.97.0** | **This plan: steps 2-4** (`vector_search_mode`, `suggest_merges` budget, no vector on default loads), PRs C, E, D |
+| **1.97.0** | **This plan: steps 2-4** (`vector_search_mode`, `suggest_merges_mode`, `suggest_merges` time budget setting, no vector on default loads), PRs C, E, D |
 | unnumbered | Dream State R3, R4 (after 1.97.0) |
 
 - **1.93.2 right after the mcp 1.93.1 bump.** It's a bug fix with no migration and no new surface.
@@ -291,15 +380,15 @@ releases placed:
 |---|---|---|---|---|
 | A | Step 0: specs, then guard fixes (summarizer, ranker, the other guards). **1.93.2** | S, ~250-450 lines | none | decided: bug fix (Decision 2) |
 | B | Step 1: bench rake task (search latency, recall, write cost), EXPLAIN-shape, recall and filter-hazard specs. **1.93.2** (release in this PR) | S/M, ~500-800 lines | A | none (specs and opt-in tooling) |
-| C | Step 2: inner-ANN search channels, exact fallback, `vector_search_mode` setting (default `exact`), recall tuning to the bar, operator docs. **1.97.0** | M, ~700-1,100 lines | B | decided (Decisions 3, 4) |
-| D | Step 3: `VectorQuery` helper, `suggest_merges` batching, time budget and text line, ANN in `ann` mode, subquery → literal in the scoped checks. **1.97.0** (release in this PR) | M, ~800-1,300 lines | B, C (helper and setting) | decided (Decision 6) |
+| C | Step 2: inner-ANN search channels, exact fallback, `vector_search_mode` setting (default `exact`, **search only**) with its info tooltip, plus the Settings info-tooltip component (`_field`, CSS, Stimulus controller), recall tuning to the bar, operator docs. **1.97.0** | M, ~800-1,200 lines | B | decided (Decisions 3, 4, N2, N3) |
+| D | Step 3: `VectorQuery` helper (`exact:` from each caller's own setting), `suggest_merges` batching, `suggest_merges_time_budget_seconds` (default 30) and text line, separate `suggest_merges_mode` (default `exact`) with ANN in `ann` mode and its recall gate, both fields with info tooltips, subquery → literal in the scoped checks. **1.97.0** (release in this PR) | M, ~900-1,400 lines | B, C (inner-ANN shape, tooltip component) | decided (Decisions 6, N1, N2, N3) |
 | E | Step 4: stop loading vectors by default; explicit readers. **1.97.0** | S/M, ~300-600 lines | A | none (performance only) |
 | F | Step 5: **deferred** (Decision 7), not scheduled | — | — | would need approval if picked up |
 | Release | Version, CHANGELOG, `sync_skill_version` (in the last PR of each release) | S | — | — |
 
 Each PR stays under the ~3,000-line stop. Order: **A → B** (1.93.2, after mcp 1.93.1), then after R2
-**C → E → D** (1.97.0; E can come before C, and D goes last because it needs C's helper and
-setting). F is deferred. **No new gems. No migrations** in A-E. Removing the index machinery
+**C → E → D** (1.97.0; E can come before C, and D goes last because it reuses C's inner-ANN query
+shape and the Settings tooltip component). F is deferred. **No new gems. No migrations** in A-E. Removing the index machinery
 (Decision 1, if the benchmark says so) would be a separate PR with a migration and needs Steve's
 approval.
 
@@ -311,8 +400,9 @@ approval.
   placeholders). The index and triggers are installed in the spec setup the way
   `embeddings:add_indexes` does it, and dropped afterwards so other specs see the usual schema.
 - Recall thresholds: ANN against exact recall@10 ≥ 0.8 average, with no probe below 0.5, on the
-  ~2,000-row CI fixture (Decision 4, a starting bar that step 2 must clear). `suggest_merges` keeps exact results on a fixture small
-  enough to stay below K.
+  ~2,000-row CI fixture (Decision 4, a starting bar that step 2 must clear). The same bar applies to
+  `suggest_merges` in `ann` mode (candidate pairs per probe entity against exact, Decision N2). In
+  `exact` mode `suggest_merges` keeps today's results, checked on a fixture small enough to stay below K.
 - Performance: the bench rake task is opt-in and never runs in CI (CircleCI medium is too noisy).
   Each of B, C, D and E pastes its numbers into the PR body at 10k, 50k and 200k synthetic rows. B
   includes write cost with and without the index.
@@ -338,9 +428,22 @@ Steve's answers to the plan's open questions:
    output. No new field.
 7. **Step 5 (FULLTEXT) is skipped for now** and stays in the plan as deferred.
 
-## New questions (for the 1.97.0 kickoff)
+## Decisions (Nov 24, 2026)
 
-1. The `suggest_merges` time budget: is a fixed constant enough (proposal: 30 s for the MCP tool and
-   the REST copy alike), or should it be an `AppSettings` value?
-2. Should `vector_search_mode` also govern `suggest_merges`' ANN query (this plan assumes yes, so one
-   switch covers all the index paths), or should `suggest_merges` keep its own switch?
+Steve's answers to the two questions raised for the 1.97.0 kickoff (both now resolved):
+
+- **N1. The `suggest_merges` time budget is an app setting**, `suggest_merges_time_budget_seconds`,
+  **default 30 s**, a positive integer (proposed cap 600). rails-settings-cached, no migration. It
+  applies to the MCP tool and `GET /api/v1/maintenance/suggest_merges` alike, and is documented in
+  `docs/app_settings_reference.md` (step 3).
+- **N2. Two separate switches.** `vector_search_mode` (`exact | ann`, default `exact`) governs the
+  search channels only (step 2). A new `suggest_merges_mode` (`exact | ann`, default `exact`) governs
+  only `suggest_merges`' per-entity inner query (step 3). The scoped checks
+  (`EntityMergeEvidence`, `ContradictionDetector`, `FactSupersede::Candidates`, `SummarizerService`
+  partners) stay exact whatever either switch says. `VectorQuery` takes `exact:` from each caller's
+  own setting. The Decision 4 recall bar applies to both `ann` paths.
+- **N3. Each of the three settings gets an info tooltip** on the Settings page that says plainly what
+  it controls and which feature it affects, so the two modes can't be confused. The wording and the
+  component are in "Settings page fields and tooltips".
+
+No MCP params or outputs change: all three are app settings.
