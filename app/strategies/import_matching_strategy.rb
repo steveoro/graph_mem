@@ -106,7 +106,7 @@ class ImportMatchingStrategy
     match_results = []
 
     root_nodes.each_with_index do |root_node, index|
-      match_results.concat(match_node_recursive(root_node, "#{index}", nil, nil, index.zero?))
+      match_results.concat(match_node_recursive(root_node, "#{index}", nil))
     end
 
     {
@@ -154,21 +154,22 @@ class ImportMatchingStrategy
     }
   end
 
-  # Recursively match nodes in the import tree
+  # Recursively match nodes in the import tree. Every declared node, contained or not
+  # (ImportEntityResolver.contained_child?), is matched in the import's project first, then
+  # globally: containment decides only where the execute creates a node absent from both
+  # (ImportExecutionStrategy#declared_scope_id), which the preview doesn't show.
   # @param node [Hash] The node to match
   # @param path [String] Current path in the tree
   # @param parent_name [String, nil] Name of the parent node in import data
   # @return [Array<MatchResult>] Array of match results for this node and children
-  # @param contained [Boolean] a part_of chain links the node to the import's root (see
-  #   ImportEntityResolver.contained_child?): it matches in the import's project, else globally
-  def match_node_recursive(node, path, parent_name, parent_entity_id = nil, contained = true)
+  def match_node_recursive(node, path, parent_name, parent_entity_id = nil)
     results = []
     node_name = node["name"] || node[:name]
     is_child = parent_name.present?
 
     # Match this node using appropriate strategy
     if is_child
-      node_result = match_child_node(node, path, parent_name, parent_entity_id, contained ? @import_project_id : nil)
+      node_result = match_child_node(node, path, parent_name, parent_entity_id)
     else
       node_result = match_root_node(node, path)
       # An existing Project root of exactly this name pins this import's project scope: children
@@ -188,8 +189,7 @@ class ImportMatchingStrategy
     children = node["children"] || node[:children] || []
     children.each_with_index do |child, index|
       child_path = "#{path}.children.#{index}"
-      results.concat(match_node_recursive(child, child_path, node_name, this_entity_id,
-                                          contained && ImportEntityResolver.contained_child?(child)))
+      results.concat(match_node_recursive(child, child_path, node_name, this_entity_id))
     end
 
     results
@@ -246,15 +246,16 @@ class ImportMatchingStrategy
   # @param path [String] Path in the import tree
   # @param parent_name [String] Name of the parent in import data
   # @return [MatchResult] Match result for this node
-  # @param scope_id [Integer, nil] the project a declared node matches in (nil: global only)
-  def match_child_node(node, path, parent_name, parent_entity_id = nil, scope_id = @import_project_id)
+  def match_child_node(node, path, parent_name, parent_entity_id = nil)
     name = node["name"] || node[:name]
     entity_type = node["entity_type"] || node[:entity_type]
     observations = node["observations"] || node[:observations] || []
 
     # Find exact match by name AND entity_type — inside the import's
-    # project scope first. Reference nodes additionally resolve a single
-    # other project's declaration (a mere reference never creates a
+    # project scope first, then globally, for every declared node (one
+    # outside the project's part_of tree too: an earlier import may have
+    # stamped it into the project). Reference nodes additionally resolve a
+    # single other project's declaration (a mere reference never creates a
     # project-scoped copy). Class↔Module sibling-type fallbacks catch a
     # same-scope v1.49 leftover, then a global reference stub awaiting a
     # declarer — read-only here; execution decides whether retyping applies.
@@ -271,9 +272,11 @@ class ImportMatchingStrategy
                                                         referrer_ids: reference_referrer_ids(node),
                                                         relation_types: reference_relation_types(node))
     else
-                    ImportEntityResolver.find_by_name_and_type(name, entity_type, project_id: scope_id)
+                    ImportEntityResolver.find_by_name_and_type(name, entity_type,
+                                                               project_id: @import_project_id)
     end
-    exact_match ||= ImportEntityResolver.class_module_collision(name, entity_type, project_id: scope_id)
+    exact_match ||= ImportEntityResolver.class_module_collision(name, entity_type,
+                                                                project_id: @import_project_id)
     exact_match ||= ImportEntityResolver.class_module_collision(name, entity_type,
                                                                 project_id: nil)
 

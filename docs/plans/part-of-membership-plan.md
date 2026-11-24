@@ -287,6 +287,14 @@ What differs from the plan above:
   chain links to the import's root Project is created and matched in the project; every other
   declared node is global, like a reference node (`ImportEntityResolver.contained_child?`, shared
   by the executor and `ImportMatchingStrategy`).
+- **2026-11-24, after review: the import's lookup is project-first.** A declared node outside the
+  `part_of` tree was looked up only globally, so re-importing a file whose `depends_on` child an
+  older import had stamped into the project (and the backfill had then attached to the root) missed
+  it and created a second, global copy. Every declared node is now looked up in the import's project
+  first, then globally, in `ImportMatchingStrategy` and the executor alike; `contained_child?` decides
+  only where a node absent from both is created (global for a node outside the tree), so the matcher
+  no longer needs it. Answer 8 below keeps the wording Steve chose; its "matched by name globally"
+  now reads "matched in the import's project first, then globally".
 - **The backfill repairs toward the stamp, added after the guard exposed it.** `ProjectIdBackfill`
   cleared every stamp no path backs. Now a stamp whose owned `part_of` chain is stamped consistently
   gets its chain's top attached to that project's root (one change set, `maintenance.membership_repair`,

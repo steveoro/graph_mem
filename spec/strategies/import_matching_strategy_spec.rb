@@ -269,17 +269,14 @@ RSpec.describe ImportMatchingStrategy, type: :model do
           expect(child_match.to_h[:will_add_observations]).to be false
         end
 
-      # A relates_to child is no member of the project: it matches globally, so the related entity is a global one.
       it 'marks an existing outgoing non-hierarchical relation as skip' do
-        shared = MemoryEntity.create!(name: 'Shared Task', entity_type: 'Task')
         MemoryRelation.create!(
           from_entity: project_alpha,
-          to_entity: shared,
+          to_entity: task_one,
           relation_type: 'relates_to'
         )
         directional_import = import_data.deep_dup
         directional_child = directional_import[:root_nodes].first[:children].first
-        directional_child[:name] = 'Shared Task'
         directional_child[:relation_type] = 'relates_to'
         directional_child[:relation_direction] = 'parent_to_child'
 

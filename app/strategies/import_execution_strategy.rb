@@ -299,8 +299,9 @@ class ImportExecutionStrategy
   # @param parent_entity_id [Integer, nil] Parent entity ID for root imports
   # @param tree_parent_id [Integer, nil] Parent entity ID from tree traversal
   # @param contained [Boolean] a part_of chain links the node to the import's root
-  #   (ImportEntityResolver.contained_child?): a declared node is created and matched in the
-  #   import's project, else globally (#declared_scope_id)
+  #   (ImportEntityResolver.contained_child?): a declared node found in neither the import's project
+  #   nor the global namespace is created in the project, else global (#declared_scope_id). The
+  #   lookup is the project first, then global, either way (#find_declared_or_stub).
   def process_node_recursive(node, path, decision_map, parent_entity_id, tree_parent_id, contained = true)
     decision = decision_map[path]
     @node_contained = contained

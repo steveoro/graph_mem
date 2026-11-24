@@ -120,17 +120,20 @@ module ImportExecutionStrategy::EntityWrites
     # the stored edge's current target and a single declarer (Class↔Module
     # included, a claim may have retyped the stub) win first, so an
     # unchanged re-import no-ops instead of minting a duplicate stub +
-    # duplicate edge. Declared nodes resolve inside this import's project,
-    # then the global namespace.
+    # duplicate edge. Declared nodes, contained or not, resolve inside this
+    # import's project, then the global namespace (`lookup_project_id`); a
+    # node absent from both is created in `node_project_id`
+    # (#declared_scope_id: global for a node outside the project's tree).
     reference_node = node[:reference] == true || node["reference"] == true
     node_project_id = reference_node ? nil : declared_scope_id
+    lookup_project_id = reference_node ? nil : @import_project_id
     existing = if reference_node
                  ImportEntityResolver.find_reference(name, entity_type,
                                                      project_id: @import_project_id,
                                                      referrer_ids: reference_referrer_ids(node),
                                                      relation_types: reference_relation_types(node))
     else
-                 find_entity_by_name_and_type(name, entity_type, project_id: node_project_id)
+                 find_entity_by_name_and_type(name, entity_type, project_id: lookup_project_id)
     end
     # (A global node merges into the stub: a copy could only collide with it.)
     if existing && node_project_id && node[:reference] != true && node["reference"] != true && reference_stub_entity?(existing)
@@ -150,10 +153,11 @@ module ImportExecutionStrategy::EntityWrites
     # `module Billing` as `Class:Billing`), then the global namespace: a
     # global collision is only claimable when it is an unclaimed reference
     # stub AND no other project declares this name+type (the matcher
-    # refuses multi-declarer claims by handing down a `create`).
-    collision = ImportEntityResolver.class_module_collision(name, entity_type, project_id: node_project_id)
+    # refuses multi-declarer claims by handing down a `create`). A node
+    # created global also claims a global collision.
+    collision = ImportEntityResolver.class_module_collision(name, entity_type, project_id: lookup_project_id)
     collision ||= ImportEntityResolver.class_module_collision(name, entity_type, project_id: nil)
-    if collision && (collision.project_id == node_project_id ||
+    if collision && ([ node_project_id, lookup_project_id ].include?(collision.project_id) ||
                      (reference_stub_entity?(collision) && !other_declarers?(name, entity_type)))
       # Specific beats generic (1.74.0): a stored role type (Model) is reused as is by a generic
       # declaration (Class); a stored Class/Module takes the role type.
