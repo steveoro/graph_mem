@@ -3,6 +3,9 @@
 class DreamStateCompactionJob < ApplicationJob
   queue_as :default
 
+  # How long a batch waits to run again when the membership lock stayed busy.
+  LOCK_RETRY_WAIT = 1.minute
+
   # Re-enqueue while work remains so recurring triggers can also resume paused runs.
   def perform(run_id = nil)
     unless AppSettings.dream_state_compactor_enabled?
@@ -25,21 +28,29 @@ class DreamStateCompactionJob < ApplicationJob
       run.merge_stats!("integrity_sweep_done" => true)
     end
 
-    run.with_lock do
-      run.reload
-      return if run.status.in?(%w[completed failed])
+    # run.with_lock's transaction wraps the batch, so a batch that can move or merge entities takes
+    # the membership lock before it (DreamStateCompactor.with_membership_lock).
+    DreamStateCompactor.with_membership_lock(run.phase) do
+      run.with_lock do
+        run.reload
+        return if run.status.in?(%w[completed failed])
 
-      compactor = DreamStateCompactor.new(run: run)
-      result = compactor.process_batch!
+        compactor = DreamStateCompactor.new(run: run)
+        result = compactor.process_batch!
 
-      case result
-      when :continued
-        self.class.perform_later(run.id)
-      when :paused, :completed
-        Rails.logger.info "[DreamState] run #{run.id} #{result}"
-        enqueue_review_policies(run) if result == :completed
+        case result
+        when :continued
+          self.class.perform_later(run.id)
+        when :paused, :completed
+          Rails.logger.info "[DreamState] run #{run.id} #{result}"
+          enqueue_review_policies(run) if result == :completed
+        end
       end
     end
+  rescue ProjectMembership::LockTimeout => e
+    # An import, backfill or merge holds the lock: the batch runs later and the run isn't failed.
+    Rails.logger.warn "[DreamState] run #{run&.id} waits for the membership lock: #{e.message}"
+    self.class.set(wait: LOCK_RETRY_WAIT).perform_later(run.id) if run
   rescue StandardError => e
     run&.mark_failed!(e)
     if run&.operation_progress

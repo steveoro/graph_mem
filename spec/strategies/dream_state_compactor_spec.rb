@@ -160,6 +160,43 @@ RSpec.describe DreamStateCompactor, type: :model do
     end
   end
 
+  # PR 2 of the part_of membership plan: an auto-merge takes the membership lock before the entity's
+  # transaction, never inside it.
+  describe "membership lock", :with_test_embeddings do
+    let!(:source) { fs_member!(project, "SynthWidget", "Task") }
+    let!(:target) { fs_member!(project, "SynthWidgetTwin", "Task") }
+
+    before do
+      [ source, target ].each do |entity|
+        MemoryObservation.create!(memory_entity: entity, content: "SynthWidget batches gadget frames before the nightly export run.")
+        assign_test_embedding!(entity, 1.0, 0.0)
+      end
+      allow(EmbeddingsMaintenanceEnqueuer).to receive(:enqueue!).and_call_original
+      run.update!(cursor_entity_id: project.id) # the tree walk visits the project, then source, then target
+    end
+
+    it "auto-merges with the lock taken before the entity's transaction" do
+      result = nil
+      expect(open_transactions_at_get_lock { result = described_class.new(run: run).process_batch! }).to eq(0)
+
+      expect(result).to eq(:continued)
+      expect(MemoryEntity.where(id: [ source.id, target.id ]).count).to eq(1)
+      expect(run.reload.stats["merges_auto"]).to eq(1)
+      expect(EmbeddingsMaintenanceEnqueuer).to have_received(:enqueue!).with("backfill")
+      expect(membership_lock_free?).to be(true)
+    end
+
+    it "takes no lock for a phase that neither moves nor merges" do
+      run.update!(phase: "relationship_discovery", cursor_entity_id: nil)
+      sql = []
+      callback = ->(*, payload) { sql << payload[:sql].to_s }
+
+      ActiveSupport::Notifications.subscribed(callback, "sql.active_record") { described_class.new(run: run).process_batch! }
+
+      expect(sql.grep(/GET_LOCK/)).to be_empty
+    end
+  end
+
   describe "project root protection" do
     it "does not auto-merge Project entities" do
       project_a = MemoryEntity.create!(name: "MergeProjectA", entity_type: "Project")

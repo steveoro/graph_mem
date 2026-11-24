@@ -124,4 +124,46 @@ RSpec.describe DreamStateCompactionJob, type: :job do
       described_class.new.perform
     end
   end
+
+  # PR 2 of the part_of membership plan: run.with_lock opens a transaction around the batch, so a
+  # batch that can merge takes the membership lock before it.
+  describe "membership lock" do
+    let(:run) do
+      CompactionRun.create!(status: "running", phase: "tree_walk", cursor_entity_id: project.id,
+                            stats: { "integrity_sweep_done" => true }, started_at: Time.current)
+    end
+
+    before { AppSettings.enable_dream_state_compactor = true }
+
+    it "auto-merges with the lock taken before run.with_lock's transaction", :with_test_embeddings do
+      pair = [ fs_member!(project, "SynthWidget", "Task"), fs_member!(project, "SynthWidgetTwin", "Task") ]
+      pair.each do |entity|
+        MemoryObservation.create!(memory_entity: entity, content: "SynthWidget batches gadget frames before the nightly export run.")
+        assign_test_embedding!(entity, 1.0, 0.0)
+      end
+
+      expect(open_transactions_at_get_lock { described_class.new.perform(run.id) }).to eq(0)
+
+      expect(MemoryEntity.where(id: pair.map(&:id)).count).to eq(1)
+      expect(run.reload.stats["merges_auto"]).to eq(1)
+      expect(membership_lock_free?).to be(true)
+    end
+
+    it "runs the batch later, without failing the run, while the lock stays busy" do
+      fs_member!(project, "SynthWidget", "Task") # the batch's entity, left unprocessed
+      stub_const("ProjectMembership::LOCK_TIMEOUT_SECONDS", 0)
+      conn = ActiveRecord::Base.connection
+      holder = stub_const("DreamStateLockHolder", Class.new(ActiveRecord::Base) { self.abstract_class = true })
+      holder.establish_connection(ActiveRecord::Base.connection_db_config)
+      holder.connection.select_value("SELECT GET_LOCK(#{conn.quote(ProjectMembership.lock_name(conn))}, 5)")
+
+      expect { described_class.new.perform(run.id) }.to have_enqueued_job(described_class).with(run.id)
+
+      expect(run.reload.status).to eq("running")
+      expect(run.stats["entities_processed"].to_i).to eq(0)
+    ensure
+      holder&.connection&.select_value("SELECT RELEASE_LOCK(#{conn.quote(ProjectMembership.lock_name(conn))})")
+      holder&.connection_pool&.disconnect!
+    end
+  end
 end
