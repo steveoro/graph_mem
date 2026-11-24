@@ -5,6 +5,18 @@ All notable changes to GraphMem will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.93.4] - 2026-11-24
+
+The official MCP Ruby SDK moves to 1.11.0, and the compat harness to the MCP reference servers release v2.5.0. Two answers to malformed MCP requests change; no change to any MCP tool, parameter or schema (tool counts stay 12 / 9 / 22), and no migration.
+
+### Changed
+- `resources/read` without a string `uri` is refused as invalid params (-32602) before any resource is looked up; without params it was an internal error (-32603) (mcp 1.11.0).
+- A request whose integer id is beyond 128 bits is refused as an invalid request (-32600, HTTP 400 on /mcp) instead of answered (mcp 1.11.0).
+- The compat harness's reference baseline is the MCP servers release v2.5.0 (Everything 2.3.1, Memory 2.2.1; TS SDK still 2.4.0).
+
+### Dependencies
+- `mcp` 1.10.0 → 1.11.0. A generic `bundle update` changed nothing else.
+
 ## [1.93.3] - 2026-11-24
 
 The membership lock is never held across an embedding call now. Merges, `graph_write`, the review and Find & supersede applies, `POST /api/v1/bulk` and the import's semantic de-duplication all made their embedding calls inside the lock (1.93.2 left that open); they embed after it, and the import before it. The spec suite gets a guard that fails an example which embeds under the lock, and the `regexp_parser` hold is lifted. No change to any MCP tool, parameter or schema (tool counts stay 12 / 9 / 22), and no migration.

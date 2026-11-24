@@ -255,7 +255,7 @@ verification. The invariant is what matters to an agent's search; how a writer g
 | PR 2 | Items 4, 6 and 7, the comment for item 5, and the notes under "PR 2 scope" | 1.93.2 | shipped |
 | Follow-up | The embedding calls under the lock (see "Follow-ups") | 1.93.3 | shipped |
 
-The mcp 1.11.0 bump ([`mcp-sdk-1.11.0-plan.md`](../mcp-sdk-1.11.0-plan.md)) is now 1.93.4 and the vector search
+The mcp 1.11.0 bump ([`mcp-sdk-1.11.0-plan.md`](mcp-sdk-1.11.0-plan.md)) is now 1.93.4 and the vector search
 steps 0 and 1 ([`mariadb-vector-search-plan.md`](../mariadb-vector-search-plan.md)) 1.93.5 (renumbered twice on
 2026-11-24: first 1.93.3 and 1.93.4, then again for the follow-up's 1.93.3); the minors (1.94.0 and later) are
 unchanged.
