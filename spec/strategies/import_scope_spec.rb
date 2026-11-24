@@ -18,7 +18,10 @@ RSpec.describe "Import scope" do
   end
   let(:paths) { { "SynthWidget" => "0.children.0", "Alpha Service" => "0.children.1", "SynthGadget" => "0.children.1.children.0" } }
 
-  before { allow(detector).to receive(:find_duplicate).and_return(ImportObservationDuplicateDetector::Result.new(duplicate: false)) }
+  before do
+    allow(detector).to receive(:find_duplicate).and_return(ImportObservationDuplicateDetector::Result.new(duplicate: false))
+    allow(detector).to receive_messages(precompute!: 0, fallback_warning: nil) # the vectors computed before the lock
+  end
 
   def execute!
     decisions = [ { node_path: "0", action: "create" } ] + paths.values.map { |path| { node_path: path, action: "create" } }

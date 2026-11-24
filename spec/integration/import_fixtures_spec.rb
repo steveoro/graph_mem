@@ -1,17 +1,19 @@
 # frozen_string_literal: true
 
 require "rails_helper"
-require "digest"
 
 RSpec.describe "Graph export import fixtures", :with_test_embeddings, type: :request do
   let(:baseline_fixture) { load_fixture("graph_mem_test_export.json") }
   let(:paraphrased_fixture) { load_fixture("graph_mem_test_export_2.json") }
   let(:fixture_node_count) { flatten_nodes(baseline_fixture).size }
 
+  # Deterministic vectors below EmbeddingService#embed (spec/support/embedding_helper.rb), so every
+  # call passes spec/support/embedding_lock_guard.rb and is recorded with the lock state.
+  let!(:embedding_calls) { record_embedding_calls! }
+
   before do
     sign_in_operator
     AppSettings.import_observation_duplicate_max_distance = 0.35
-    configure_test_embeddings!
     seed_baseline_fixture!
   end
 
@@ -54,10 +56,15 @@ RSpec.describe "Graph export import fixtures", :with_test_embeddings, type: :req
 
     upload_fixture!(paraphrased_fixture, "graph_mem_test_export_2.json")
     graph_counts = graph_record_counts
+    embedding_calls.clear
 
     execute_import!
 
     expect(graph_record_counts).to eq(graph_counts)
+    # The paraphrases were embedded before the import took the membership lock (each distinct text
+    # once), none under it.
+    expect(embedding_calls.map { |call| call[:text] }).to match_array(paraphrased_contents.uniq)
+    expect(embedding_calls).to all(include(held: false, lock_free: true))
   end
 
   it "rejects paraphrased imports when embeddings are unavailable" do
@@ -91,11 +98,14 @@ RSpec.describe "Graph export import fixtures", :with_test_embeddings, type: :req
     nodes
   end
 
-  def paraphrased_observation_count
+  def paraphrased_contents
     flatten_nodes(paraphrased_fixture)
       .flat_map { |node| node.fetch("observations", []) }
-      .count { |observation| observation.fetch("content").start_with?("Restated: ") }
+      .map { |observation| observation.fetch("content") }
+      .select { |content| content.start_with?("Restated: ") }
   end
+
+  def paraphrased_observation_count = paraphrased_contents.size
 
   def graph_record_counts
     {
@@ -103,22 +113,6 @@ RSpec.describe "Graph export import fixtures", :with_test_embeddings, type: :req
       observations: MemoryObservation.count,
       relations: MemoryRelation.count
     }
-  end
-
-  def configure_test_embeddings!
-    service = EmbeddingService.new(
-      config: { url: "http://test", model: "test", provider: "ollama", dims: 768 }
-    )
-    allow(service).to receive(:embed) { |content| deterministic_embedding(content) }
-    allow(service).to receive(:embed!) { |content| deterministic_embedding(content) }
-    allow(EmbeddingService).to receive(:vector_enabled?).and_return(true)
-    allow(EmbeddingService).to receive(:instance).and_return(service)
-  end
-
-  def deterministic_embedding(content)
-    canonical_content = content.to_s.delete_prefix("Restated: ")
-    index = Digest::SHA256.hexdigest(canonical_content).to_i(16) % 768
-    Array.new(768, 0.0).tap { |vector| vector[index] = 1.0 }
   end
 
   def seed_baseline_fixture!

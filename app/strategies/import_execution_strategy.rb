@@ -108,6 +108,8 @@ class ImportExecutionStrategy
     # Build decision lookup by node path
     decision_map = decisions.index_by { |d| d[:node_path] || d["node_path"] }
     initialize_progress!(import_data)
+    # The semantic de-duplication's embedding calls, before the membership lock (DuplicateVectors).
+    precompute_duplicate_vectors(import_data, decision_map)
 
     # Bulk imports cannot afford a synchronous embedding call and a
     # per-endpoint trust-score recompute per row/edge (measured: ~1.5M
@@ -195,6 +197,10 @@ class ImportExecutionStrategy
         end
       end
     end
+
+    # One line per import for the facts matched exactly only (no precomputed vector).
+    dedup_warning = @observation_duplicate_detector.fallback_warning
+    @logger.warn "ImportExecutionStrategy: #{dedup_warning}" if dedup_warning
 
     recompute_trust_for_touched_entities
 
@@ -289,6 +295,7 @@ class ImportExecutionStrategy
   include ImportExecutionStrategy::Relations
   include ImportExecutionStrategy::Reporting
   include ImportExecutionStrategy::EntityWrites
+  include ImportExecutionStrategy::DuplicateVectors
 
   private
 

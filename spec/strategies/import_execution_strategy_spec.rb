@@ -12,6 +12,8 @@ RSpec.describe ImportExecutionStrategy, type: :model do
         duplicate: MemoryObservation.active.exists?(memory_entity_id: entity.id, content: content)
       )
     end
+    # The vectors computed before the membership lock (spec/strategies/import_execution_strategy/duplicate_vectors_spec.rb).
+    allow(observation_duplicate_detector).to receive_messages(precompute!: 0, fallback_warning: nil)
   end
 
   # Setup existing entities in the database
@@ -1156,13 +1158,14 @@ RSpec.describe ImportExecutionStrategy, type: :model do
     end
     let(:decisions) { [ { node_path: '0', action: 'create' } ] }
 
-    it 'suppresses inline embeddings and enqueues a maintenance backfill' do
-      allow(EmbeddingService).to receive(:embed_entity).and_raise('should not be called')
-      allow(EmbeddingService).to receive(:embed_observation).and_raise('should not be called')
+    it 'suppresses inline embeddings and enqueues a maintenance backfill', :with_test_embeddings do
+      calls = record_embedding_calls!
       expect(EmbeddingsMaintenanceEnqueuer).to receive(:enqueue!).with('backfill')
 
       report = strategy.execute(import_data, decisions)
       expect(report.success).to be(true)
+      expect(calls).to be_empty
+      expect(MemoryEntity.find_by!(name: 'Bulk Project').embedded_at).to be_nil
     end
 
     it 'degrades observation de-duplication to exact matching while suppressed' do

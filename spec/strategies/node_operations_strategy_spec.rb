@@ -187,10 +187,8 @@ RSpec.describe NodeOperationsStrategy, type: :model do
       expect(target_node.memory_observations.count).to eq(3)
     end
 
-    it "does not re-embed moved observations when vectors are enabled" do
-      allow(EmbeddingService).to receive(:vector_enabled?).and_return(true)
-      allow(EmbeddingService).to receive(:embed_entity)
-      expect(EmbeddingService).not_to receive(:embed_observation)
+    it "does not re-embed moved observations when vectors are enabled, only the target, after the lock", :with_test_embeddings do
+      calls = record_embedding_calls!
       observations = source_with_data.memory_observations
       stamp = 1.day.ago.change(usec: 0)
       observations.update_all(embedded_at: stamp)
@@ -199,6 +197,7 @@ RSpec.describe NodeOperationsStrategy, type: :model do
       result = strategy.merge_into(source_with_data.id, target_node.id)
 
       expect(result[:success]).to be true
+      expect(calls.sole).to include(text: "Task: TargetNode. Aliases: target,source,src,SourceNode", held: false)
       moved = MemoryObservation.where(id: observation_ids)
       expect(moved.pluck(:memory_entity_id).uniq).to eq([ target_node.id ])
       expect(moved.pluck(:embedded_at)).to all(be_within(1.second).of(stamp))
