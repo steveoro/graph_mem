@@ -6,7 +6,9 @@ require "rails_helper"
 # SearchTool#call before GraphSearch was extracted from it. These examples are never edited:
 # with the new arguments omitted, the output must stay exactly this. Synthetic graph only; the
 # two vector channels are stubbed with fixed results, so nothing reaches an embedding service.
-RSpec.describe "GraphSearch" do
+# Frozen gate recorded before the membership guard; its data stamps projects without edges, and
+# re-recording would change the gate's reference output.
+RSpec.describe "GraphSearch", membership_drift: :allowed do
   subject(:tool) { SearchTool.new }
 
   let(:old) { Time.utc(2025, 3, 1, 12) }
