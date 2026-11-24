@@ -46,6 +46,18 @@ RSpec.describe "Skills over MCP over HTTP", type: :request do
     end
   end
 
+  # mcp 1.11.0 (#687): the gem checks the uri before the skill:// routing in ServerFactory.read runs.
+  # Before 1.11.0: -32603 "Internal error".
+  it "answers resources/read without params with -32602 and the id, as with the toggle off" do
+    session = open_session("/mcp")
+
+    post "/mcp", params: %({"jsonrpc":"2.0","id":9,"method":"resources/read"}),
+                 headers: request_headers.merge("Mcp-Session-Id" => session)
+
+    expect(response).to have_http_status(:ok)
+    expect(response.parsed_body).to include("id" => 9, "error" => include("code" => -32_602, "data" => "Missing or invalid uri"))
+  end
+
   it "refuses skills/list from an IP outside GRAPH_MEM_MCP_ALLOWED_IPS, as any method" do
     saved = ENV.fetch("GRAPH_MEM_MCP_ALLOWED_IPS", nil)
     ENV["GRAPH_MEM_MCP_ALLOWED_IPS"] = "10.9.9.9"

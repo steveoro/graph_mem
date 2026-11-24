@@ -140,6 +140,26 @@ RSpec.describe "MCP structured output over stdio" do
       expect(replies(out).find { |message| message["id"] == 10 }).to include("result" => {})
     end
 
+    # mcp 1.11.0 (#687); before it, -32603 "Internal error" with the id.
+    it "refuses a resources/read without params with -32602 and the id, then still answers a ping" do
+      out, = run_runner(handshake + [ { jsonrpc: "2.0", id: 12, method: "resources/read" }, { jsonrpc: "2.0", id: 13, method: "ping" } ])
+
+      expect(replies(out).find { |message| message["id"] == 12 }).to include("error" => include("code" => -32_602, "data" => "Missing or invalid uri"))
+      expect(replies(out).find { |message| message["id"] == 13 }).to include("result" => {})
+    end
+
+    # mcp 1.11.0 (#688); before it, the ping was answered with the id echoed.
+    it "refuses an integer id beyond 128 bits with -32600 and no id, then still answers a ping" do
+      oversized = %({"jsonrpc":"2.0","id":340282366920938463463374607431768211456,"method":"ping"}) # 2**128
+      out, = run_runner(handshake + [ oversized, { jsonrpc: "2.0", id: 14, method: "ping" } ])
+
+      refused, pong = replies(out).drop(1) # after the initialize reply, in order
+
+      expect(refused).to include("error" => include("code" => -32_600))
+      expect(refused).not_to have_key("id")
+      expect(pong).to include("id" => 14, "result" => {})
+    end
+
     it "ends the session on a line over GRAPH_MEM_MCP_MAX_REQUEST_BYTES without writing anything else" do
       oversized = JSON.generate(jsonrpc: "2.0", id: 6, method: "ping", params: { pad: "x" * 5_000 })
       out, = run_runner(handshake + [ oversized, { jsonrpc: "2.0", id: 7, method: "ping" } ],

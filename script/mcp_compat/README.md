@@ -7,7 +7,7 @@ is synthetic and read-only. Run it against a local dev or test instance, never p
 
 The cases live in `spec/fixtures/mcp/handshakes/` (`stdio.json`, `http.json`). Each case gives the
 messages and headers and the expected answer per target: `graph_mem`, and `reference` (the
-reference servers: Memory 2.1.1 over stdio, Everything 2.3.0 over HTTP). A `divergence` explains every place
+reference servers: Memory 2.2.1 over stdio, Everything 2.3.1 over HTTP). A `divergence` explains every place
 where graph_mem answers differently, and an optional `changes_in` names the plan step that will
 change it (no case carries one since 1.55.0).
 
@@ -16,11 +16,11 @@ change it (no case carries one since 1.55.0).
 | `spec/requests/mcp_protocol_compat_spec.rb` | Runs in the normal suite and asserts graph_mem's expectations: HTTP through the Rails app, stdio through `bin/mcp_stdio_runner.rb` subprocesses. Needs no Node. |
 | `compare.rb` | Replays the cases against running servers, checks each target's expectations, and compares graph_mem with the reference by shape and code: "same", "documented divergence", "graph_mem only" or "unexpected" (exit 1); a "same" row that still carries a `divergence` note is labelled stale. Plain Ruby. |
 | `handshake_cases.rb` | Loads and checks the cases; shared by the spec and `compare.rb`. |
-| `rsdk_server.rb <stdio\|http PORT>` | A one-tool server on the official Ruby SDK (`mcp` 1.10.0), for `compare.rb`'s informational `ruby_sdk` column. |
-| `rsdk_client.rb <stdio\|http> <auto\|legacy> <url \| -- cmd…>` | Connects the Ruby SDK client (`RSDK_VERSION`, default 1.10.0), lists tools and counts their titles (1.9.0 and later keep the field). |
+| `rsdk_server.rb <stdio\|http PORT>` | A one-tool server on the official Ruby SDK (`mcp` 1.11.0), for `compare.rb`'s informational `ruby_sdk` column. |
+| `rsdk_client.rb <stdio\|http> <auto\|legacy> <url \| -- cmd…>` | Connects the Ruby SDK client (`RSDK_VERSION`, default 1.11.0), lists tools and counts their titles (1.9.0 and later keep the field). |
 | `tsclient/tsclient.mjs <stdio\|http> <auto\|legacy> <url \| -- cmd…>` | Connects the TS client (`@modelcontextprotocol/client` 2.4.0) and lists tools. |
-| `refservers/` | `package.json` + `package-lock.json` for the reference servers (Memory 2.1.1, Everything 2.3.0, SDK 2.4.0). |
-| `clients.sh <url>` | The client matrix: TS 2.4.0 and Ruby SDK 1.9.0 and 1.10.0, × auto and legacy, × stdio and HTTP (12 rows). |
+| `refservers/` | `package.json` + `package-lock.json` for the reference servers (Memory 2.2.1, Everything 2.3.1, SDK 2.4.0). |
+| `clients.sh <url>` | The client matrix: TS 2.4.0 and Ruby SDK 1.10.0 and 1.11.0, × auto and legacy, × stdio and HTTP (12 rows). |
 | `claude_client_check.rb` | Claude Code as the client: the automated `docs/plans/done/claude-mcp-client-check.md` (below). |
 
 ## Setup (once)
@@ -30,12 +30,12 @@ The SDK clients and servers run outside graph_mem's bundle:
 ```bash
 source "$HOME/.rvm/scripts/rvm"
 rvm gemset create mcp_compat && rvm use ruby-3.4.13@mcp_compat
-gem install mcp -v 1.9.0 && gem install mcp -v 1.10.0 && gem install faraday rack rackup webrick
+gem install mcp -v 1.10.0 && gem install mcp -v 1.11.0 && gem install faraday rack rackup webrick
 (cd script/mcp_compat/tsclient && npm ci)   # Node >= 20
 ```
 
 Reference servers (Node >= 24, the `engines` of both servers). `refservers/`
-pins Memory 2.1.1 and Everything 2.3.0 (the MCP servers release v2.4.0), with the SDK's `server` and
+pins Memory 2.2.1 and Everything 2.3.1 (the MCP servers release v2.5.0), with the SDK's `server` and
 `core` packages pinned to 2.4.0 through `overrides` (`node` 2.1.2 and `server-legacy` 2.4.0 run against
 them), and its committed `package-lock.json` pins every other transitive dependency:
 
@@ -70,21 +70,22 @@ script/mcp_compat/clients.sh http://127.0.0.1:3999/mcp
 Any subset of the `--…` targets works: graph_mem alone just checks graph_mem. Stop the servers
 afterwards. No case runs a tool, so the test DB stays empty.
 
-Everything 2.3.0 and later listen only on 127.0.0.1 by default (`HOST` widens the bind; the harness
-never sets it). Keep Everything at 2.3.0 or later: 2.0.x listened on all interfaces, and 2.0.0 also had
-open CORS (GHSA-mvf5-2qqv-rg3c).
+Everything listens only on 127.0.0.1 by default (`HOST` widens the bind; the harness never sets it).
+Keep Everything at 2.3.1 or later: 2.3.0 and earlier have GHSA-38j4-j742-j7r3 (the `gzip-file-as-resource`
+tool's private-address guard let NAT64 addresses through; the harness never calls it), 2.0.x listened on
+all interfaces, and 2.0.0 also had open CORS (GHSA-mvf5-2qqv-rg3c).
 
 ## Expected results
 
-At 1.87.0 (2026-11-17, `mcp` 1.10.0; reference servers Memory 2.1.1, Everything 2.3.0, SDK 2.4.0 (the MCP
-servers release v2.4.0), on Node 24.11.1 and Ruby 3.4.12):
+At 1.93.4 (2026-11-24, `mcp` 1.11.0; reference servers Memory 2.2.1, Everything 2.3.1, SDK 2.4.0 (the MCP
+servers release v2.5.0), on Node 24.11.1 and Ruby 3.4.13):
 
-- `compare.rb`: 0 failed expectations, 0 unexpected differences (20 stdio and 33 HTTP cases; the two
-  non-object `_meta` cases and the two invalid UTF-8 method name cases are documented divergences, and
-  "initialize declares the MCP Apps extension" is graph_mem only). The
-  `ruby_sdk` column (`mcp` 1.10.0, informational) answers every case exactly like graph_mem, which runs
-  on the same gem.
-- `clients.sh`: 12 of 12 OK (TS 2.4.0, Ruby SDK 1.9.0 and 1.10.0), each listing 12 tools on `/mcp`; every
+- `compare.rb`: 0 failed expectations, 0 unexpected differences (22 stdio and 35 HTTP cases; the
+  "resources/read without params" and "an integer id beyond 128 bits" cases, new in 1.93.4, are
+  documented divergences on both transports, and "initialize declares the MCP Apps extension" is
+  graph_mem only). The `ruby_sdk` column (`mcp` 1.11.0, informational) answers every case exactly like
+  graph_mem, which runs on the same gem.
+- `clients.sh`: 12 of 12 OK (TS 2.4.0, Ruby SDK 1.10.0 and 1.11.0), each listing 12 tools on `/mcp`; every
   Ruby SDK row reports a title on all 12 (`titled=12`). Every `auto` row negotiates 2026-07-28, every
   `legacy` row 2025-11-25. The TS stdio `auto` row takes about 1.1 s longer than `legacy` (the
   `server/discover` probe runs in a sibling process); the Ruby SDK's `auto` costs nothing extra.

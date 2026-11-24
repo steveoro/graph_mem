@@ -1,5 +1,7 @@
 # MCP SDK 1.11.0 → graph_mem 1.93.4 (gem bump, two malformed-input wire changes, compat baseline on reference servers v2.5.0)
 
+**✅ DONE:** shipped as **1.93.4** (compat verification recorded in `docs/protocol_compat.md`; see "As built" at the end).
+
 **Release renumbered (2026-11-24): 1.93.1 -> 1.93.3 -> 1.93.4.** The `part_of` membership PRs (`done/part-of-membership-plan.md`) took 1.93.1 and 1.93.2, so this bump moved to 1.93.3; the embedding calls then moved out of the membership lock (1.93.3, a follow-up of those PRs, see its Follow-ups), so it is now 1.93.4. The content of the plan is unchanged.
 
 **Status (2026-11-19): PLAN, approved, kickoff ready.** Steve approved this plan on 2026-11-19 (as 1.91.1; renumbered 1.93.1
@@ -214,3 +216,19 @@ edit `version.rb` or SKILL.md while the full suite is running. CHANGELOG `## [1.
 
 ## Size
 About 2.5 hours: B0 15 min, B1 10 min, B2 40 min, B3 30 min, B4 10 min, B6 30 min, B5 30 min, RB 10 min.
+
+## As built (2026-11-24)
+
+Steps B1–B6 and RB as planned, on Ruby 3.4.13 and Node 24.11.1. Where the work differed from the text above:
+- **B0** changed nothing (the `bundle update` of 1.93.3 was the same day), so it has no commit. The
+  `regexp_parser < 2.13.2` hold this plan keeps was already lifted in 1.93.3.
+- **B2:** the `resources/read` specs can't expect *no* `Rails.error` report: the gem reports every
+  `RequestHandlerError` as handled, as it already did for "Resource not found". They assert that the one
+  report is the gem's own "Missing or invalid uri" refusal. On 1.10.0 (lock reverted once) every new refusal
+  spec fails, and the read without params reports the read handler's `NoMethodError` there, as inferred.
+- **B6:** `npm install` from the committed lock moved only the two servers (and recorded Memory 2.2.1's
+  dependency on `@modelcontextprotocol/node`, already in the tree); no sub-dependency moved and `npm audit`
+  found nothing, so the approved sub-dependency bumps weren't needed. The hono peer flag npm adds was dropped,
+  as in 1.86.1.
+- **B5:** `compare.rb` and `clients.sh` were re-run once, after B6, and recorded at 1.93.4: 0 failed, 0
+  unexpected over 22 stdio and 35 HTTP cases, every 1.91.0 outline unchanged; 12 of 12 clients OK.

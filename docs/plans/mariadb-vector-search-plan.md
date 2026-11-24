@@ -357,7 +357,7 @@ synthetic query set, and it changes result order, so it needs Steve's approval t
 ## Releases (Decision 5)
 
 The train as it reads on `main` (`docs/plans/dream-state-semantics-plan.md`, "Order and size";
-`docs/plans/sql-exchange-plan.md:342`; `docs/plans/mcp-sdk-1.11.0-plan.md:1-4`), with this plan's
+`docs/plans/sql-exchange-plan.md:342`; `docs/plans/done/mcp-sdk-1.11.0-plan.md:1-4`), with this plan's
 releases placed:
 
 | Version | What |
