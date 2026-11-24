@@ -203,7 +203,9 @@ module ImportExecutionStrategy::EntityWrites
   # entities with PRE-EXISTING observations — the path where semantic
   # dedup (and its UnavailableError) applies. Import-created rows are
   # unembedded by design (deferred backfill), so the detector would only
-  # degrade to the exact match the cache already covers.
+  # degrade to the exact match the cache already covers. Under the
+  # membership lock the detector makes no embedding call: it uses the
+  # vectors DuplicateVectors computed before the lock, or matches exactly.
   def import_observations(node, entity)
     observations = node[:observations] || node["observations"] || []
     return if observations.empty?

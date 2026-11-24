@@ -13,7 +13,7 @@ description: >-
 license: LGPL-3.0-or-later
 compatibility: Requires a reachable graph_mem MCP server (HTTP /mcp or stdio)
 metadata:
-  graph-mem-version: "1.93.2"
+  graph-mem-version: "1.93.3"
 ---
 
 # graph_mem: recall before you decide, persist what you learned

@@ -15,10 +15,29 @@ module EmbeddingHelper
     service = EmbeddingService.new(
       config: { url: "http://test", model: "test", provider: "ollama", dims: dims }
     )
-    allow(service).to receive(:embed).and_return(nil)
-    allow(service).to receive(:embed!).and_return(nil)
+    # Below embed / embed!, so the calls still pass spec/support/embedding_lock_guard.rb.
+    allow(service).to receive(:embed_with_retries).and_return(nil)
     allow(EmbeddingService).to receive(:vector_enabled?).and_return(true)
     allow(EmbeddingService).to receive(:instance).and_return(service)
+  end
+
+  # With `:with_test_embeddings`: answers each embedding call with deterministic_embedding and
+  # records it, below EmbeddingService#embed, so the real path runs and the vector is stored.
+  #
+  #   calls = record_embedding_calls!
+  #   MemoryEntity.create!(name: "SynthWidget", entity_type: "Component")
+  #   calls.sole # => { text: "Component: SynthWidget", held: false, lock_free: true }
+  #
+  # @return [Array<Hash>] the calls so far, in order: `text`, `held` (this thread was inside
+  #   ProjectMembership.with_membership_lock) and `lock_free` (no session held the lock, read from
+  #   MariaDB)
+  def record_embedding_calls!
+    calls = []
+    allow(EmbeddingService.instance).to receive(:embed_with_retries) do |text, **|
+      calls << { text: text, held: ProjectMembership.membership_lock_held?, lock_free: membership_lock_free? }
+      deterministic_embedding(text)
+    end
+    calls
   end
 end
 

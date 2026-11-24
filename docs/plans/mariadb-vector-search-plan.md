@@ -6,7 +6,9 @@
 > against `main`.
 >
 > **Release renumbered (2026-11-24):** the `part_of` membership PRs took 1.93.1 and 1.93.2, so the
-> mcp 1.11.0 bump is now 1.93.3 and this plan's step 0 + 1 release is **1.93.4** (it was 1.93.2).
+> mcp 1.11.0 bump became 1.93.3 and this plan's step 0 + 1 release 1.93.4 (it was 1.93.2). Later the
+> same day the embedding calls moved out of the membership lock (1.93.3, a follow-up of those PRs), so
+> the mcp 1.11.0 bump is now **1.93.4** and this plan's step 0 + 1 release is **1.93.5**.
 > 1.97.0 is unchanged.
 >
 > Motivation: an outside pitch to move graph_mem onto a separate graph/vector database. A code-side
@@ -152,7 +154,7 @@ triggers installed by the spec's setup):
 **Fix:** replace those guards with `embedded_at.present?` and add `.with_embedding` where ids are
 gathered for the ranker. Small change, no migration. It changes the observation order that
 `summarize`, `rank_observations`, `get_entities` and `traverse_graph` return, but only in that
-unembedded rows stop getting a false top score. **Decided: ships as a bug fix, 1.93.4** (Decision 2;
+unembedded rows stop getting a false top score. **Decided: ships as a bug fix, 1.93.5** (Decision 2;
 no MCP params or outputs change).
 
 ## Step 1. Synthetic benchmark plus EXPLAIN and recall specs
@@ -363,19 +365,20 @@ releases placed:
 | 1.93.0 | Dream State R1a (#188, shipped) |
 | 1.93.1 | `part_of` membership, PR 1 (`docs/plans/done/part-of-membership-plan.md`, shipped) |
 | 1.93.2 | `part_of` membership, PR 2 (scans, rake tasks, dream state, integrity sweep; `docs/plans/done/part-of-membership-plan.md`, shipped) |
-| 1.93.3 | mcp 1.11.0 bump |
-| **1.93.4** | **This plan: step 0 (zero-vector bug fix) + step 1 (benchmark and specs)**, PRs A and B |
+| 1.93.3 | Embeddings outside the membership lock (a follow-up of the `part_of` membership PRs, shipped) |
+| 1.93.4 | mcp 1.11.0 bump |
+| **1.93.5** | **This plan: step 0 (zero-vector bug fix) + step 1 (benchmark and specs)**, PRs A and B |
 | 1.94.0 | SQL exchange (four PRs) |
 | 1.95.0 (+1.95.1) | Dream State R1b (+ R1c) |
 | 1.96.0 | Dream State R2 |
 | **1.97.0** | **This plan: steps 2-4** (`vector_search_mode`, `suggest_merges_mode`, `suggest_merges` time budget setting, no vector on default loads), PRs C, E, D |
 | unnumbered | Dream State R3, R4 (after 1.97.0) |
 
-- **1.93.4 right after the mcp 1.93.3 bump.** It's a bug fix with no migration and no new surface.
-- **Step 1 ships with step 0 in 1.93.4.** It's specs plus an opt-in rake task, with no runtime change.
+- **1.93.5 right after the mcp 1.93.4 bump.** It's a bug fix with no migration and no new surface.
+- **Step 1 ships with step 0 in 1.93.5.** It's specs plus an opt-in rake task, with no runtime change.
   The plan already orders B right after A, and shipping it early also gives the write-cost numbers
   that Decision 1 waits for well before 1.97.0. If PR B isn't ready when A is, A ships alone as
-  1.93.4 and B becomes the first PR of the 1.97.0 train (no version of its own).
+  1.93.5 and B becomes the first PR of the 1.97.0 train (no version of its own).
 - **Steps 2-4 as one minor, 1.97.0, after R2 and before R3.** R3's "embedding-near entities of
   different types" rule can then use step 3's helper.
 - Step 5 is deferred and has no version.
@@ -384,15 +387,15 @@ releases placed:
 
 | PR | Scope | Size | Depends on | Approval needed |
 |---|---|---|---|---|
-| A | Step 0: specs, then guard fixes (summarizer, ranker, the other guards). **1.93.4** | S, ~250-450 lines | none | decided: bug fix (Decision 2) |
-| B | Step 1: bench rake task (search latency, recall, write cost), EXPLAIN-shape, recall and filter-hazard specs. **1.93.4** (release in this PR) | S/M, ~500-800 lines | A | none (specs and opt-in tooling) |
+| A | Step 0: specs, then guard fixes (summarizer, ranker, the other guards). **1.93.5** | S, ~250-450 lines | none | decided: bug fix (Decision 2) |
+| B | Step 1: bench rake task (search latency, recall, write cost), EXPLAIN-shape, recall and filter-hazard specs. **1.93.5** (release in this PR) | S/M, ~500-800 lines | A | none (specs and opt-in tooling) |
 | C | Step 2: inner-ANN search channels, exact fallback, `vector_search_mode` setting (default `exact`, **search only**) with its info tooltip, plus the Settings info-tooltip component (`_field`, CSS, Stimulus controller), recall tuning to the bar, operator docs. **1.97.0** | M, ~800-1,200 lines | B | decided (Decisions 3, 4, N2, N3) |
 | D | Step 3: `VectorQuery` helper (`exact:` from each caller's own setting), `suggest_merges` batching, `suggest_merges_time_budget_seconds` (default 30) and text line, separate `suggest_merges_mode` (default `exact`) with ANN in `ann` mode and its recall gate, both fields with info tooltips, subquery → literal in the scoped checks. **1.97.0** (release in this PR) | M, ~900-1,400 lines | B, C (inner-ANN shape, tooltip component) | decided (Decisions 6, N1, N2, N3) |
 | E | Step 4: stop loading vectors by default; explicit readers. **1.97.0** | S/M, ~300-600 lines | A | none (performance only) |
 | F | Step 5: **deferred** (Decision 7), not scheduled | — | — | would need approval if picked up |
 | Release | Version, CHANGELOG, `sync_skill_version` (in the last PR of each release) | S | — | — |
 
-Each PR stays under the ~3,000-line stop. Order: **A → B** (1.93.4, after mcp 1.93.3), then after R2
+Each PR stays under the ~3,000-line stop. Order: **A → B** (1.93.5, after mcp 1.93.4), then after R2
 **C → E → D** (1.97.0; E can come before C, and D goes last because it reuses C's inner-ANN query
 shape and the Settings tooltip component). F is deferred. **No new gems. No migrations** in A-E. Removing the index machinery
 (Decision 1, if the benchmark says so) would be a separate PR with a migration and needs Steve's
@@ -428,7 +431,7 @@ Steve's answers to the plan's open questions:
    (`exact | ann`, not an MCP param) that defaults to `exact`. Flip it only if the graph grows.
 4. **Recall bar accepted as a starting bar**: ≥ 0.8 average recall@10, no probe below 0.5. Step 2's
    tuning must actually clear it.
-5. **Releases:** step 0 as **1.93.4**, right after the mcp 1.93.3 bump, with step 1 alongside it (renumbered on 2026-11-24, see the note at the top).
+5. **Releases:** step 0 as **1.93.5**, right after the mcp 1.93.4 bump, with step 1 alongside it (renumbered twice on 2026-11-24, see the note at the top).
    Steps 2-4 as **1.97.0**, after R2 and before R3.
 6. **`suggest_merges` may stop on a time budget** and say so with a line in its existing text
    output. No new field.

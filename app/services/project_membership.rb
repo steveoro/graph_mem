@@ -59,8 +59,18 @@ class ProjectMembership
   # FactSupersede::Bulk takes it too, only to order itself against the
   # review applies. reassign! itself takes the lock too so stray callers
   # stay safe (reentrant on the same session).
+  #
+  # The lock is never held across a network call. The models' inline
+  # embeddings are deferred to the outermost block's exit
+  # (EmbeddingService::InlineDeferral), so an interactive write is still
+  # embedded before it returns; the bulk paths (imports, dream state, the
+  # JSON tasks, undo) suppress them and embed later. In specs,
+  # spec/support/embedding_lock_guard.rb fails an example whose embedding
+  # call runs while this thread holds the lock.
   LOCK_NAME_PREFIX = "graph_mem.project_membership"
   LOCK_TIMEOUT_SECONDS = 60
+  # How many with_membership_lock blocks this thread is inside (the lock is reentrant).
+  LOCK_DEPTH_KEY = :gmem_membership_lock_depth
 
   # The part_of edges membership follows: every one except a `reference_stub` park edge (see
   # member_ids). COALESCE: edges with NULL properties or no reference_stub key must NOT be filtered
@@ -72,7 +82,26 @@ class ProjectMembership
     # taking the same lock wait up to LOCK_TIMEOUT_SECONDS. The name is
     # namespaced by database so a dev DB and the test DB on the same
     # server never serialize against each other.
-    def with_membership_lock(timeout: LOCK_TIMEOUT_SECONDS)
+    #
+    # The lock is never held across a network call: inside it the models' inline embeddings are
+    # deferred, and the outermost block embeds them after its RELEASE_LOCK, on every exit (see
+    # EmbeddingService::InlineDeferral; suppressed ones are not deferred). A nested block embeds
+    # nothing itself.
+    # @param timeout [Integer] seconds to wait for the lock
+    # @yieldreturn [Object]
+    # @return [Object] the block's value
+    # @raise [LockTimeout] when the lock stays busy for `timeout` seconds
+    def with_membership_lock(timeout: LOCK_TIMEOUT_SECONDS, &block)
+      EmbeddingService.defer_inline_embeddings { hold_membership_lock(timeout, &block) }
+    end
+
+    # @return [Boolean] whether this thread is inside a with_membership_lock block (the depth is kept
+    #   per execution context, like the connection that holds the session's lock)
+    def membership_lock_held?
+      ActiveSupport::IsolatedExecutionState[LOCK_DEPTH_KEY].to_i.positive?
+    end
+
+    def hold_membership_lock(timeout)
       conn = ActiveRecord::Base.connection
       name = lock_name(conn)
       # Both lock statements MUST bypass the ActiveRecord query cache: inside
@@ -89,14 +118,19 @@ class ProjectMembership
         raise LockTimeout, "could not acquire #{name} within #{timeout}s — " \
                            "another import, backfill, move or merge holds the membership lock"
       end
+      state = ActiveSupport::IsolatedExecutionState
+      depth = state[LOCK_DEPTH_KEY].to_i
+      state[LOCK_DEPTH_KEY] = depth + 1
       begin
         yield
       ensure
+        state[LOCK_DEPTH_KEY] = depth
         conn.uncached do
           conn.select_value("SELECT RELEASE_LOCK(#{conn.quote(name)})")
         end
       end
     end
+    private :hold_membership_lock
 
     def lock_name(conn = ActiveRecord::Base.connection)
       "#{LOCK_NAME_PREFIX}:#{conn.current_database}"

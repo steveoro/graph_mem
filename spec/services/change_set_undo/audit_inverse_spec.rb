@@ -182,11 +182,12 @@ RSpec.describe ChangeSetUndo::AuditInverse do
     expect { undo(uuid) }.to raise_error(ActiveRecord::StatementInvalid, /syntax error/)
   end
 
-  it "re-embeds the restored text after the lock (best effort)" do
+  it "re-embeds the restored text after the lock (best effort)", :with_test_embeddings do
     uuid = recorded("graph.edit") { GraphEditService.call(operations: [ { type: "update_entity", entity_id: widget.id, name: "SynthWidget 2" } ]) }
-    allow(EmbeddingService).to receive(:embed_entity)
+    calls = record_embedding_calls!
 
     expect(undo(uuid)).to be_ok
-    expect(EmbeddingService).to have_received(:embed_entity).with(have_attributes(id: widget.id, name: "SynthWidget"))
+    expect(calls.sole).to include(text: "Component: SynthWidget. original", held: false, lock_free: true)
+    expect(widget.reload.embedded_at).to be_present
   end
 end

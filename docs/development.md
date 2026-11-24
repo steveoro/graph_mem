@@ -220,7 +220,7 @@ server the boot succeeds but any spec touching embeddings or vector search fails
 ### Membership drift guard
 
 An entity's `project_id` is derived from its `part_of` parent chain (see
-[architecture](architecture.md#project-membership-1931-1932)).
+[architecture](architecture.md#project-membership-1931-1932-1933)).
 `spec/support/membership_drift_guard.rb` fails an example that leaves the graph drifted, so a writer
 that changes a `part_of` edge without syncing the child can't pass the suite.
 
@@ -246,6 +246,46 @@ that changes a `part_of` edge without syncing the child can't pass the suite.
 - **Opting out:** tag the example (or group) `membership_drift: :allowed`, with a one-line comment
   saying why, only when the drift is the point of the example (a repair spec that builds two parents
   on purpose, a refused repair, an entity found through a `part_of` that was never synced).
+
+### Embedding lock guard
+
+The membership lock (`ProjectMembership.with_membership_lock`) is never held across a network call (see
+[architecture](architecture.md#project-membership-1931-1932-1933)). `spec/support/embedding_lock_guard.rb`
+fails an example that calls the embedding service while its thread holds the lock, so a path that embeds
+under it can't pass the suite.
+
+- **What it checks:** every public embedding call of `EmbeddingService` (`embed`, `embed!`,
+  `embed_entity`, `embed_observation` and the two binary forms; the class-level API delegates to them).
+  The check runs before `vector_enabled?`, so it also sees the many specs that run with vectors off, and
+  it sees both the real client and the `:with_test_embeddings` stub (which stubs below it, at the private
+  `embed_with_retries`). The thread's lock state is `ProjectMembership.membership_lock_held?`.
+- **How it fails:** the call raises, but the models' embedding callbacks rescue their own errors, so the
+  attempt is also recorded and an `after` hook fails the example. The message names the method, the
+  nearest repo frames that made the call (not the embedding plumbing) and the fix: defer the inline
+  embedding (the models' callbacks do it under the lock), suppress it on a bulk path
+  (`EmbeddingService.suppress_inline_embeddings`) and enqueue the backfill after the commit, or move the
+  call before or after the lock.
+- **No opt-out:** no tag turns it off. A spec that stubs `embed`, `embed!` or `embed_entity` itself
+  replaces the check with its stub and bypasses it, so a spec on a lock path uses
+  `:with_test_embeddings` and `record_embedding_calls!` instead:
+
+  ```ruby
+  it "embeds a new entity after the lock", :with_test_embeddings do
+    calls = record_embedding_calls!
+    ProjectMembership.with_membership_lock do
+      MemoryEntity.create!(name: "SynthWidget", entity_type: "Component")
+    end
+    expect(calls.sole).to include(text: "Component: SynthWidget", held: false, lock_free: true)
+  end
+  ```
+
+  `record_embedding_calls!` answers each call with a deterministic vector and records its text, whether
+  this thread held the lock (`held`) and whether MariaDB showed the lock free (`lock_free`).
+- **Doubles:** a double standing in for `ImportObservationDuplicateDetector` must answer `precompute!`
+  and `fallback_warning`, which `ImportExecutionStrategy` calls around the lock.
+- **Fixing a failure:** a new write path that creates or edits rows under the lock needs nothing
+  special, the models defer. A new explicit embedding call (a service, a job step) moves outside the
+  lock block.
 
 ## MCP Access Control in Development
 

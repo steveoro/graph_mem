@@ -95,4 +95,62 @@ RSpec.describe ImportObservationDuplicateDetector, :with_test_embeddings do
       expect(embedding_service).not_to have_received(:embed!)
     end
   end
+
+  # The membership lock is never held across a network call: an import embeds first, then compares.
+  describe "#precompute!" do
+    before { MemoryObservation.create!(memory_entity: entity, content: "Existing imported fact") }
+
+    it "embeds each distinct non-blank text once, and find_duplicate then uses that vector without a call" do
+      expect(detector.precompute!([ "Reworded imported fact", "", "  ", "Reworded imported fact" ])).to eq(1)
+      expect(embedding_service).to have_received(:embed!).once
+
+      result = ProjectMembership.with_membership_lock { detector.find_duplicate(entity: entity, content: "Reworded imported fact") }
+
+      expect(result.duplicate).to be(true)
+      expect(embedding_service).to have_received(:embed!).once
+      expect(detector.fallback_warning).to be_nil
+    end
+
+    it "matches a text it has no vector for exactly only, and sums that up in one warning line" do
+      detector.precompute!([ "Reworded imported fact" ])
+
+      2.times { |i| expect(detector.find_duplicate(entity: entity, content: "Unforeseen fact #{i}").duplicate).to be(false) }
+
+      expect(embedding_service).to have_received(:embed!).once
+      expect(detector.fallback_warning).to eq("Semantic observation de-duplication matched 2 fact(s) exactly only: " \
+                                              "2 whose text was not embedded before the import")
+    end
+
+    it "makes no embedding call under the membership lock, even without a precompute" do
+      result = ProjectMembership.with_membership_lock { detector.find_duplicate(entity: entity, content: "Reworded imported fact") }
+
+      expect(result.duplicate).to be(false)
+      expect(embedding_service).not_to have_received(:embed!)
+      expect(detector.fallback_warning).to include("1 whose text was not embedded before the import")
+    end
+
+    it "raises UnavailableError at the first failed call, as find_duplicate's own call did" do
+      allow(embedding_service).to receive(:embed!).and_raise(EmbeddingService::EmbeddingError, "HTTP 503")
+
+      expect { detector.precompute!([ "Reworded imported fact", "Distinct imported fact" ]) }
+        .to raise_error(described_class::UnavailableError, "Embedding service is unavailable: HTTP 503")
+      expect(embedding_service).to have_received(:embed!).once
+    end
+
+    it "raises UnavailableError for an empty vector, as the comparison did" do
+      allow(embedding_service).to receive(:embed!).and_return([])
+
+      expect { detector.precompute!([ "Reworded imported fact" ]) }
+        .to raise_error(described_class::UnavailableError, "Embedding service returned an empty vector.")
+    end
+  end
+
+  describe "#compares_semantically?" do
+    it "wants every stamp, or with only_embedded one" do
+      scan_detector = described_class.new(embedding_service: embedding_service, only_embedded: true)
+
+      expect([ [], [ Time.current ], [ Time.current, nil ] ].map { |stamps| detector.compares_semantically?(stamps) }).to eq([ false, true, false ])
+      expect([ [], [ nil ], [ Time.current, nil ] ].map { |stamps| scan_detector.compares_semantically?(stamps) }).to eq([ false, false, true ])
+    end
+  end
 end

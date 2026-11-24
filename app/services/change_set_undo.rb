@@ -165,13 +165,6 @@ class ChangeSetUndo
 
   # Best effort: the daily backfill picks up whatever is left with embedded_at NULL.
   def reembed_changed_text
-    @effects.reembed.first(MAX_INLINE_EMBEDS).each do |klass, id|
-      record = klass.where(embedded_at: nil).find_by(id: id)
-      next unless record
-
-      klass == MemoryEntity ? EmbeddingService.embed_entity(record) : EmbeddingService.embed_observation(record)
-    rescue StandardError => e
-      Rails.logger.warn "ChangeSetUndo: re-embedding #{klass.name}##{id} failed: #{e.message}"
-    end
+    EmbeddingService.embed_missing(@effects.reembed.first(MAX_INLINE_EMBEDS))
   end
 end

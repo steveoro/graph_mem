@@ -1,6 +1,6 @@
 # Plan: every `part_of` writer keeps membership in step
 
-**✅ DONE:** PR 1 shipped as **1.93.1**, PR 2 as **1.93.2**.
+**✅ DONE:** PR 1 shipped as **1.93.1**, PR 2 as **1.93.2**, and the follow-ups that held the lock across an embedding call as **1.93.3**.
 
 > Status: **complete.** PR 1 shipped in 1.93.1 (items 1, 2 and 3, the guard, and the scan, import and
 > backfill rules added along the way: see "As built (PR 1)" below). PR 2 shipped in 1.93.2 (items 4, 6
@@ -253,10 +253,12 @@ verification. The invariant is what matters to an agent's search; how a writer g
 |---|---|---|---|
 | PR 1 | Items 1, 2 and 3, the guard (option 3), plus the scan, import and backfill rules ("As built") | 1.93.1 | shipped |
 | PR 2 | Items 4, 6 and 7, the comment for item 5, and the notes under "PR 2 scope" | 1.93.2 | shipped |
+| Follow-up | The embedding calls under the lock (see "Follow-ups") | 1.93.3 | shipped |
 
-The mcp 1.11.0 bump ([`mcp-sdk-1.11.0-plan.md`](../mcp-sdk-1.11.0-plan.md)) is now 1.93.3 and the vector search
-steps 0 and 1 ([`mariadb-vector-search-plan.md`](../mariadb-vector-search-plan.md)) 1.93.4; the minors
-(1.94.0 and later) are unchanged.
+The mcp 1.11.0 bump ([`mcp-sdk-1.11.0-plan.md`](../mcp-sdk-1.11.0-plan.md)) is now 1.93.4 and the vector search
+steps 0 and 1 ([`mariadb-vector-search-plan.md`](../mariadb-vector-search-plan.md)) 1.93.5 (renumbered twice on
+2026-11-24: first 1.93.3 and 1.93.4, then again for the follow-up's 1.93.3); the minors (1.94.0 and later) are
+unchanged.
 
 ### As built (PR 1, 1.93.1)
 
@@ -395,13 +397,21 @@ What differs from the plan above:
 
 ### Follow-ups
 
-Found while building PR 2, all older than it and not fixed there:
+Found while building PR 2, all older than it and not fixed there. The first three were fixed in 1.93.3:
 
-- **`merge_into` holds the membership lock across a network call.** It re-embeds the survivor at commit
-  time, still under the lock, on every path that doesn't suppress inline embeddings: REST, MCP, Explore
-  and the review apply, and `data:merge_entity` (dream state suppresses them).
-- **`graph_write` entity creates embed inline inside the lock and the transaction**, which holds the
-  lock across a call to the embedding service as well.
+- **`merge_into` held the membership lock across a network call. Fixed in 1.93.3.** It re-embedded the
+  survivor at commit time, still under the lock, on every path that doesn't suppress inline embeddings:
+  REST, MCP, Explore and the review apply, and `data:merge_entity` (dream state suppresses them). The
+  models' inline embeddings are now deferred while the lock is held and made after the outermost lock
+  block exits (`EmbeddingService::InlineDeferral`; see
+  [architecture](../../architecture.md#project-membership-1931-1932-1933)).
+- **`graph_write` entity creates embedded inline inside the lock and the transaction. Fixed in 1.93.3**
+  by the same deferral, which also covers the `graph_write` observations and `create_observation`, the
+  review `fact_supersede` apply, Find & supersede and REST `POST /api/v1/bulk` with a `part_of`.
+- **The import's semantic de-duplication embedded each candidate fact inside the lock. Fixed in
+  1.93.3** (found while fixing the two above): the import embeds the distinct texts it needs before it
+  takes the lock (a failed call still fails the import, now before the lock and writing nothing), and
+  under the lock a text without a vector (the pre-read's race) is matched exactly.
 - **Files over 500 lines** (AGENTS.md: split them): `project_scanner.rb` (766), `project_scan_skill.rb`
   (602) and `lib/tasks/memory_data.rake` (614).
 - **The two JSON rake task bodies** (`migrate_json_lines`, `append_json_lines`) are about 130 lines each
@@ -469,7 +479,8 @@ None: questions 3, 4 and 6 were answered on 2026-11-24 (see "Answers"), and PR 2
 
 3. **Release:** "bump version as needed, we can retarget subsequent releases accordingly". The
    numbers were then chosen in the session: PR 1 ships with PR #189's entries as 1.93.1, PR 2 as
-   1.93.2, and the mcp 1.11.0 bump and the vector search steps move to 1.93.3 and 1.93.4.
+   1.93.2, and the mcp 1.11.0 bump and the vector search steps move to 1.93.3 and 1.93.4. (The follow-up
+   that moved the embedding calls out of the lock then took 1.93.3, so they moved on to 1.93.4 and 1.93.5.)
 4. **The guard:** Steve left its scope to the implementer. Decided in the session: the invariant
    check runs after every example except system specs, to be narrowed to request, service,
    strategy, job and tool specs only if it cost more than 5% of suite time (measured: about 2%).

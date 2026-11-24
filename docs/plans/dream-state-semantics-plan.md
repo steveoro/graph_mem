@@ -5,7 +5,9 @@
 > "As built" note); R1b onward is not started. Each PR below gets its own kickoff.
 >
 > **Versions (2026-11-24):** the `part_of` membership PRs took 1.93.1 and 1.93.2 (their own plan), so
-> the mcp 1.11.0 bump moved to 1.93.3. The minors below are unchanged.
+> the mcp 1.11.0 bump moved to 1.93.3. Later the same day the embedding calls moved out of the
+> membership lock (a follow-up of those PRs, released as 1.93.3), so the mcp 1.11.0 bump moved on to
+> 1.93.4. The minors below are unchanged.
 
 ## Context
 
@@ -112,7 +114,8 @@ The versions, as expected today (each kickoff confirms its own against `version.
 | **R1a** | Relation vocabulary: mapping fallback, normalize on write, the sweep, the unmapped-types page | first (shipped) | 1.93.0 |
 | `part_of` membership, PR 1 | Every `part_of` writer keeps membership in step: entity delete, merge, relation repair, scans, imports, the drift guard (`done/part-of-membership-plan.md`) | after R1a (shipped) | 1.93.1 |
 | `part_of` membership, PR 2 | The scan validator and scanner lock order, the rake tasks, dream state and the integrity sweep (`done/part-of-membership-plan.md`) | after PR 1 (shipped) | 1.93.2 |
-| mcp 1.11.0 | (its own plan) | after the membership PRs | 1.93.3 |
+| Embeddings outside the membership lock | A follow-up of the membership PRs (`done/part-of-membership-plan.md`, Follow-ups) | after PR 2 (shipped) | 1.93.3 |
+| mcp 1.11.0 | (its own plan) | after the follow-up | 1.93.4 |
 | SQL exchange | (its own plan, four PRs) | after mcp 1.11.0 | 1.94.0 |
 | **R1b** | Retype library `part_of` edges, the orphan rule, the exports, dream-state actor on its edges | after the SQL exchange train | 1.95.0 |
 | **R1c** | Removal-style evidence rows | with or right after R1b | with R1b, or 1.95.1 |
@@ -206,7 +209,8 @@ Dependencies between the plans:
   `/system/jobs/relation_types`. The page also lists the mapping table with **Remove**, which the
   list above didn't have.
 - **Order.** R1a shipped before mcp 1.11.0, so the mcp bump was 1.93.1, and the two `part_of` membership PRs then
-  took 1.93.1 and 1.93.2, which made it 1.93.3 (the version table is
+  took 1.93.1 and 1.93.2, which made it 1.93.3, and the follow-up that moved the embedding calls out of the
+  membership lock took 1.93.3, which made it 1.93.4 (the version table is
   updated; the SQL exchange stays 1.94.0, R1b 1.95.0, R2 1.96.0).
 - **No seed.** The relation seed file was removed and `db/seeds.rb` keeps only the entity type
   seed; installs seeded earlier keep their rows (they still win over the code's mapping).

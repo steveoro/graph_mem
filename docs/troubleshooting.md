@@ -155,6 +155,38 @@ A scan is partial when a part failed or a file wasn't sent (over 50 KB, past the
 
 Every part failed to give a JSON object with an `architecture` array, so the scan used the deterministic fallback. Check that `summary_model` follows JSON instructions (scans send `format: "json"`), raise `project_scan_chunk_output_tokens` if answers are cut, and raise `summary_num_ctx` to the model's real window. "summary_num_ctx (N) leaves no room for project files" means the window minus the answer budget and the prompt (about 1,000 tokens) leaves under 1,024 tokens for files. The message names the exact minimum for your settings: at the default `project_scan_chunk_output_tokens` (2048) that is about 4,150 (8192 is the default); on a smaller window, lower `project_scan_chunk_output_tokens` instead.
 
+## Import and Embedding Issues
+
+### Problem: An import matched facts exactly only
+
+**Symptoms:**
+- The log of an import that completed has one line (1.93.3):
+
+  ```
+  ImportExecutionStrategy: Semantic observation de-duplication matched 2 fact(s) exactly only: 2 whose text was not embedded before the import
+  ```
+
+- An imported fact that is worded differently from one the entity already had was added next to it instead of being skipped as a duplicate.
+
+**Cause:** the import's semantic de-duplication compares an incoming fact's embedding with the entity's existing facts (`import_observation_duplicate_max_distance`, see [app_settings_reference.md](app_settings_reference.md#imports)). The lock an import holds is never held across an embedding call, so the import embeds the texts it will need before it takes the lock, and under the lock only looks those vectors up. The list of texts is read before the lock without holding it, so an entity or a fact that appeared or changed between that read and the lock (another writer, or the embedding backfill stamping the entity's facts) can need a vector the import didn't compute. Such a fact is matched on its exact text only, never embedded under the lock, and the line counts them.
+
+**Solutions:**
+
+1. The facts the line counts were added as new observations. If an entity now holds a fact twice in different words, retire one with Find & supersede or by hand. Running the same import again won't help: the facts now exist, so it matches them exactly and skips them.
+2. This line never comes from the embedding service being down. Then the import fails before it takes the lock, writing nothing, with "Semantic observation de-duplication unavailable: Embedding service is unavailable: …" (the upload and the preview refuse first, with "Import requires the embedding service for observation de-duplication"). Bring the service back (see [operator/embeddings.md](operator/embeddings.md): check the URL and model on the Embeddings page and that the service answers) and run the import again. A database without vector columns fails the import with "Semantic observation de-duplication unavailable" too.
+
+### Problem: The log says "deferred embedding of … failed"
+
+**Symptoms:**
+- The log has `EmbeddingService: deferred embedding of MemoryEntity#42 failed: <message>` (or `MemoryObservation#…`).
+- A just-written entity or fact is missing from vector search.
+
+**Cause:** inside the membership lock a write's embedding is deferred until the outermost lock block exits (1.93.3, see [architecture](architecture.md#project-membership-1931-1932-1933)). That call ran after the lock was released, and the embedding service failed. The write itself is committed and unaffected; the row has no embedding stamp, as with an inline embedding that failed.
+
+**Solutions:**
+1. Restore the embedding service, then run `bin/rails embeddings:backfill` or click **Backfill missing** on the Embeddings page. The daily backfill picks the row up too.
+2. A row that was rolled back is simply skipped; no line is logged for it.
+
 ## Database Issues
 
 ### Problem: `db:schema:dump` warns "dump came from a DB without the embedding indexes/triggers"
