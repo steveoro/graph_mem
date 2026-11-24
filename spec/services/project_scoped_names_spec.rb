@@ -265,7 +265,9 @@ RSpec.describe "project-scoped entity names" do
     it "clears project_id on rows no part_of chain reaches (unrooted)" do
       project = MemoryEntity.create!(name: "BackProj", entity_type: "Project")
       stale = MemoryEntity.create!(name: "StaleStamp", entity_type: "File",
-                                   project_id: project.id) # stamped but no edge
+                                   project_id: project.id) # stamped, no path: under a global parent
+      MemoryRelation.create!(from_entity: stale, to_entity: MemoryEntity.create!(name: "LooseDir", entity_type: "File"),
+                             relation_type: "part_of")
       member = MemoryEntity.create!(name: "BackChild2", entity_type: "File")
       MemoryRelation.create!(from_entity: member, to_entity: project, relation_type: "part_of")
 
@@ -283,7 +285,9 @@ RSpec.describe "project-scoped entity names" do
       member = MemoryEntity.create!(name: "BackChild", entity_type: "Task")
       MemoryRelation.create!(from_entity: member, to_entity: project, relation_type: "part_of")
       stale = MemoryEntity.create!(name: "StaleDup", entity_type: "Task",
-                                   project_id: project.id) # stamped, no edge
+                                   project_id: project.id) # stamped, no path: under a global parent
+      MemoryRelation.create!(from_entity: stale, to_entity: MemoryEntity.create!(name: "LooseDir", entity_type: "Task"),
+                             relation_type: "part_of")
       MemoryEntity.create!(name: "StaleDup", entity_type: "Task") # global namesake
 
       expect { ProjectIdBackfill.new(out: ->(_l) { }).run }

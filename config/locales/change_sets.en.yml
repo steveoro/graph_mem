@@ -11,5 +11,6 @@ en:
         relation_types: "Relation types canonicalized"
       maintenance:
         merge_node: "Merge (maintenance)"
+        membership_repair: "Membership repair (project_id backfill)"
       project:
         cloud_access: "Cloud access"

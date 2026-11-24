@@ -1,8 +1,11 @@
 # frozen_string_literal: true
 
 # Data only (no schema change): re-runs the project_id backfill once, so membership drift left by
-# the part_of writers fixed in this release (entity delete, merge, the operator's relation repair)
-# is repaired on upgrade. Logs the drift counts before and after (ProjectIdBackfill.drift).
+# the part_of writers fixed in this release (entity delete, merge, the operator's relation repair,
+# scans and imports stamping entities without a part_of) is repaired on upgrade. A stamp with no
+# path is repaired toward the stamp when its part_of chain is stamped consistently (the chain's top
+# gets a part_of to that project's root, in one `maintenance.membership_repair` change set), else
+# cleared (ProjectIdBackfill). Logs the drift counts before and after (ProjectIdBackfill.drift).
 #
 # Never fails the deploy: production runs db:prepare at container boot, and a failed migration
 # would keep the app down. On a name collision (or a busy membership lock) it logs why, leaves the
