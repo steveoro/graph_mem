@@ -112,6 +112,29 @@ RSpec.describe ProjectScanSkill, type: :service do
     end
   end
 
+  # Item 7 of the part_of membership plan: the attach and its sync are one transaction, under the
+  # lock taken first, so a name conflict leaves no edge behind. Drift is the point: an old stamp
+  # with no path (`app`) whose global child's name the project already holds.
+  it "rolls the part_of back when attaching a directory collides in the project", membership_drift: :allowed do
+    with_scan_project do |root|
+      create_project_files(root)
+      project = MemoryEntity.create!(name: "Test Project", entity_type: "Project")
+      app_dir = MemoryEntity.create!(name: "app", entity_type: "Component", project_id: project.id)
+      gizmo = MemoryEntity.create!(name: "SynthGizmo", entity_type: "Component")
+      MemoryRelation.create!(from_entity: gizmo, to_entity: app_dir, relation_type: "part_of")
+      fs_member!(project, "SynthGizmo", "Component")
+      skill = described_class.new(create_operation(root, depths: [ "birds_eye" ]))
+
+      expect(open_transactions_at_get_lock { skill.process! }).to eq(0)
+
+      expect(MemoryRelation.where(from_entity: app_dir, relation_type: "part_of")).to be_empty
+      expect(gizmo.reload.project_id).to be_nil
+      expect(skill.instance_variable_get(:@errors).sole).to match(/Project scope conflict for app: .*'SynthGizmo' already exists/)
+      expect(MemoryRelation.where(from_entity: MemoryEntity.find_by!(name: "README.md", project_id: project.id), to_entity: project)).to exist
+      expect(membership_lock_free?).to be(true)
+    end
+  end
+
   it "creates project and child entities across all depths" do
     with_scan_project do |root|
       create_project_files(root)

@@ -267,4 +267,41 @@ RSpec.describe ProjectScanner, "reconcile" do
       expect { scan(dry_run: true) }.not_to change(MemoryRelation, :count)
     end
   end
+
+  # Item 7 of the part_of membership plan: the reconcile transaction runs LLM and embedding calls, so
+  # the model's part_of edges move their child after the commit, under the lock (MembershipSync).
+  describe "a part_of the model emits" do
+    def project = MemoryEntity.find_by!(name: "Gadget Project", project_id: nil)
+
+    let!(:kit) { MemoryEntity.create!(name: "Shared Kit", entity_type: "Component") }
+
+    before do
+      items.push(item("SynthWidget", "Class", "SynthWidget renders gadget frames.", relations: [ { to: "Shared Kit", type: "part_of" } ]))
+    end
+
+    it "moves the child into its parent's scope after the commit, with no lock inside a transaction" do
+      result = nil
+      expect(open_transactions_at_get_lock { result = scan }).to eq(0)
+
+      widget = MemoryEntity.find_by!(name: "SynthWidget")
+      expect(result.errors).to be_empty
+      expect(MemoryRelation.where(from_entity: widget, relation_type: "part_of").pluck(:to_entity_id)).to eq([ kit.id ])
+      expect(widget.project_id).to be_nil # the global parent's scope
+      expect(membership_lock_free?).to be(true)
+    end
+
+    it "replaces an edge whose move collides with a containment edge, and records the conflict" do
+      MemoryEntity.create!(name: "SynthWidget", entity_type: "Component") # global: the move would collide
+
+      result = with_llm_provider(provider) { described_class.new(project_root: root, project_name: "Gadget Project", scan_id: "synth-scan").call }
+
+      widget = MemoryEntity.find_by!(name: "SynthWidget", project_id: project.id)
+      edge = MemoryRelation.where(from_entity: widget, relation_type: "part_of").sole
+      expect(edge.to_entity_id).to eq(project.id)
+      expect(edge.properties["source"]).to eq("project_scan:synth-scan:containment")
+      expect(MemoryRelation.where(from_entity: widget, to_entity: kit)).to be_empty
+      expect(result.errors.sole).to match(/Project scope conflict for SynthWidget: .*'SynthWidget' already exists/)
+      expect(result.relations_created).to eq(1)
+    end
+  end
 end
