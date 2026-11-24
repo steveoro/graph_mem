@@ -6,7 +6,7 @@ require "rails_helper"
 # are off in specs, so Semantic is shown as unavailable.
 RSpec.describe "Search page", type: :request do
   let!(:alpha) { MemoryEntity.create!(name: "Alpha Service", entity_type: "Project") }
-  let!(:widget) { MemoryEntity.create!(name: "SynthWidget", entity_type: "Component", project_id: alpha.id) }
+  let!(:widget) { fs_member!(alpha, "SynthWidget", "Component") }
   let!(:router) { MemoryEntity.create!(name: "Synth Router", entity_type: "Service") }
 
   def html = Nokogiri::HTML(response.body)
@@ -50,7 +50,7 @@ RSpec.describe "Search page", type: :request do
   end
 
   it "keeps the filters in the form and in the paging links" do
-    24.times { |i| MemoryEntity.create!(name: "Synth Part #{i}", entity_type: "Component", project_id: alpha.id) }
+    24.times { |i| fs_member!(alpha, "Synth Part #{i}", "Component") }
 
     get search_path, params: { q: "synth", project_id: alpha.id, types: [ "Component" ], match: [ "", "name" ], mode: "text" }
 

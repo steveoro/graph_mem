@@ -65,7 +65,7 @@ RSpec.describe "Role matrix", type: :request do
 
   before do
     MemoryObservation.create!(memory_entity: entity, content: "SynthWidget renders synthetic tiles.")
-    MemoryRelation.create!(from_entity: entity, to_entity: project, relation_type: "part_of")
+    fs_member!(project, entity)
   end
 
   def record_counts

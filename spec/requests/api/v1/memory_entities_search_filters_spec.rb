@@ -6,7 +6,7 @@ require "rails_helper"
 # vectors are off in specs, so only the text channel ranks.
 RSpec.describe "API v1 memory entity search filters", type: :request do
   let!(:alpha) { MemoryEntity.create!(name: "Alpha Service", entity_type: "Project") }
-  let!(:widget) { MemoryEntity.create!(name: "SynthWidget", entity_type: "Component", project_id: alpha.id) }
+  let!(:widget) { fs_member!(alpha, "SynthWidget", "Component") }
   let!(:router) { MemoryEntity.create!(name: "Synth Router", entity_type: "Service") }
   let!(:dial) { MemoryEntity.create!(name: "Dial", entity_type: "Component", aliases: "synth dial") }
   let(:json) { { "Accept" => "application/json" } }

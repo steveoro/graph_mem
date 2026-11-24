@@ -9,7 +9,7 @@ RSpec.describe "API v1 guest access", type: :request do
   let!(:widget) { MemoryEntity.create!(name: "SynthWidget", entity_type: "Component") }
   let!(:project) { MemoryEntity.create!(name: "Alpha Service", entity_type: "Project") }
   let!(:observation) { MemoryObservation.create!(memory_entity: widget, content: "SynthWidget renders synthetic tiles.") }
-  let!(:relation) { MemoryRelation.create!(from_entity: widget, to_entity: project, relation_type: "part_of") }
+  let!(:relation) { fs_member!(project, widget).relations_from.find_by!(to_entity: project) }
   let(:json) { { "Accept" => "application/json" } }
 
   def record_counts

@@ -48,7 +48,7 @@ RSpec.describe "Explore relation edits", type: :request do
       add(widget, widget, "relates_to")
       expect(response).to have_http_status(:unprocessable_content)
 
-      MemoryRelation.create!(from_entity: router, to_entity: alpha, relation_type: "part_of")
+      fs_member!(alpha, router)
       add(alpha, router, "part_of")
       expect(response).to have_http_status(:unprocessable_content)
       expect(toast_text).to include("Project roots can't be moved.")
