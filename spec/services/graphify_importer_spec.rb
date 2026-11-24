@@ -378,8 +378,7 @@ RSpec.describe GraphifyImporter do
       # Project — a rescan, not a foreign tree: descendants keep their actions.
       # Parent moved_class under existing_project for this scenario:
       MemoryRelation.where(from_entity_id: moved_class.id, relation_type: "part_of").destroy_all
-      MemoryRelation.create!(from_entity_id: moved_class.id, to_entity_id: existing_project.id,
-                             relation_type: "part_of")
+      fs_member!(existing_project, moved_class)
 
       matches = [
         root_match(name: "graph_mem", fuzzy_id: existing_file.id),

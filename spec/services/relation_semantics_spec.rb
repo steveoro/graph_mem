@@ -15,7 +15,7 @@ RSpec.describe RelationSemantics do
     end
 
     it "rejects part_of cycles" do
-      MemoryRelation.create!(from_entity: child, to_entity: project, relation_type: "part_of")
+      fs_member!(project, child)
 
       expect {
         described_class.validate_create!(from_entity_id: project.id, to_entity_id: child.id, relation_type: "part_of")
@@ -23,7 +23,7 @@ RSpec.describe RelationSemantics do
     end
 
     it "allows depends_on without removing hierarchy semantics" do
-      MemoryRelation.create!(from_entity: child, to_entity: project, relation_type: "part_of")
+      fs_member!(project, child)
 
       expect {
         described_class.validate_create!(from_entity_id: child.id, to_entity_id: other.id, relation_type: "depends_on")

@@ -180,8 +180,7 @@ RSpec.describe ProjectScanner, type: :service do
   it "auto-deletes part_of relations that point to the wrong project root" do
     project = MemoryEntity.create!(name: "TestProject", entity_type: "Project")
     other_project = MemoryEntity.create!(name: "OtherProject", entity_type: "Project")
-    stray = MemoryEntity.create!(name: "StrayComponent", entity_type: "Component")
-    MemoryRelation.create!(from_entity: stray, to_entity: project, relation_type: "part_of")
+    stray = fs_member!(project, "StrayComponent")
     wrong_relation = MemoryRelation.new(from_entity: stray, to_entity: other_project, relation_type: "part_of")
     wrong_relation.save(validate: false)
 

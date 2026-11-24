@@ -22,7 +22,7 @@ RSpec.describe ImportEntityResolver do
       other_project = MemoryEntity.create!(name: "OtherProj", entity_type: "Project")
       referrer = MemoryEntity.create!(name: "Ref", entity_type: "Class")
       mixin = MemoryEntity.create!(name: "Foo", entity_type: "Module")
-      other = MemoryEntity.create!(name: "Foo", entity_type: "Class", project_id: other_project.id)
+      other = fs_member!(other_project, "Foo", "Class")
       MemoryRelation.create!(from_entity: referrer, to_entity: mixin, relation_type: "mixes_in")
       # An unrelated edge to a SAME-NAMED entity — must not make the
       # lookup ambiguous.
@@ -37,9 +37,9 @@ RSpec.describe ImportEntityResolver do
       other_project = MemoryEntity.create!(name: "OtherProj", entity_type: "Project")
       referrer = MemoryEntity.create!(name: "Ref", entity_type: "Class")
       first = MemoryEntity.create!(name: "Foo", entity_type: "Class")
-      second = MemoryEntity.create!(name: "Foo", entity_type: "Class", project_id: other_project.id)
+      second = fs_member!(other_project, "Foo", "Class")
       MemoryRelation.create!(from_entity: referrer, to_entity: first, relation_type: "mixes_in")
-      MemoryRelation.create!(from_entity: referrer, to_entity: second, relation_type: "part_of")
+      fs_member!(second, referrer)
 
       expect(
         described_class.stored_reference_target("Foo", [ referrer.id ], [ "mixes_in" ])

@@ -327,8 +327,7 @@ RSpec.describe StaleMemoryScanner do
                    entity_name: orphan.name, observation_ids: [ imported.id ],
                    signal: "unrooted_after_rescan", reason: "unreachable" } ]
       )
-      MemoryRelation.create!(from_entity_id: orphan.id, to_entity_id: project.id,
-                             relation_type: "part_of") # re-rooted after the scan
+      fs_member!(project, orphan) # re-rooted after the scan
       row = MaintenanceReportRow.find_by(kind: "stale_memory")
       result = CompactionReviewService.apply(row.row_uuid, {})
       expect(result[:success]).to be(true)

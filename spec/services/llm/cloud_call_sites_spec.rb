@@ -8,8 +8,8 @@ require "rails_helper"
 # the secret is random.
 RSpec.describe "Cloud calls at the call sites" do
   let!(:project) { MemoryEntity.create!(name: "Zq7Canary Project", entity_type: "Project", aliases: "Zq7cp") }
-  let!(:widget) { MemoryEntity.create!(name: "Zq7CanaryWidget", entity_type: "Component", project_id: project.id) }
-  let!(:service) { MemoryEntity.create!(name: "Zq7 Alpha Service", entity_type: "Service", project_id: project.id) }
+  let!(:widget) { fs_member!(project, "Zq7CanaryWidget", "Component") }
+  let!(:service) { fs_member!(project, "Zq7 Alpha Service", "Service") }
   let(:secret) { "sk-#{SecureRandom.alphanumeric(40)}" }
   let(:canary_text) do
     "Zq7CanaryWidget calls Zq7 Alpha Service for Zq7cp at https://git.zq7canary.example/org/repo.git, build.zq7canary.internal " \
@@ -54,7 +54,7 @@ RSpec.describe "Cloud calls at the call sites" do
 
       project.update!(cloud_allowed: true)
       other = MemoryEntity.create!(name: "Gadget Project", entity_type: "Project")
-      gizmo = MemoryEntity.create!(name: "Gadget Gizmo", entity_type: "Component", project_id: other.id)
+      gizmo = fs_member!(other, "Gadget Gizmo", "Component")
       MemoryObservation.create!(memory_entity: gizmo, content: "Gadget Gizmo ships.")
       results = [ widget, gizmo ].map { |entity| HybridSearchStrategy::SearchResult.new(entity: entity, score: 0.9, matched_fields: [ "name" ]) }
       allow(HybridSearchStrategy).to receive(:new).and_return(instance_double(HybridSearchStrategy, search: results))

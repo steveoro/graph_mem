@@ -58,7 +58,7 @@ RSpec.describe ProjectScanner, "reconcile" do
 
   it "reuses an entity an earlier scan made with another type" do
     project = MemoryEntity.create!(name: "Gadget Project", entity_type: "Project")
-    MemoryEntity.create!(name: "SynthWidget", entity_type: "Module", project_id: project.id)
+    fs_member!(project, "SynthWidget", "Module")
     items.push(item("SynthWidget", "Class", "SynthWidget renders gadget frames."))
 
     result = scan
@@ -193,7 +193,7 @@ RSpec.describe ProjectScanner, "reconcile" do
 
   it "leaves same-named entities of other projects and the global namespace alone" do
     other = MemoryEntity.create!(name: "Alpha Service", entity_type: "Project")
-    foreign = MemoryEntity.create!(name: "SynthWidget", entity_type: "Module", project_id: other.id)
+    foreign = fs_member!(other, "SynthWidget", "Module")
     global = MemoryEntity.create!(name: "synthwidget", entity_type: "Component")
     items.push(item("SynthWidget", "Class", "SynthWidget renders gadget frames."))
 

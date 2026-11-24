@@ -12,11 +12,11 @@ RSpec.describe ProjectMembership do
       stub = MemoryEntity.create!(name: "WalkStub", entity_type: "Class")
       nested = MemoryEntity.create!(name: "NestedProj", entity_type: "Project")
       nested_member = MemoryEntity.create!(name: "NestedMember", entity_type: "File")
-      MemoryRelation.create!(from_entity: member, to_entity: project_a, relation_type: "part_of")
+      fs_member!(project_a, member)
       MemoryRelation.create!(from_entity: stub, to_entity: project_a, relation_type: "part_of",
                              properties: { "reference_stub" => true })
       MemoryRelation.create!(from_entity: nested, to_entity: project_a, relation_type: "part_of")
-      MemoryRelation.create!(from_entity: nested_member, to_entity: nested, relation_type: "part_of")
+      fs_member!(nested, nested_member)
 
       ids = described_class.member_ids(project_a.id)
       expect(ids).to include(member.id)

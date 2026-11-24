@@ -55,10 +55,8 @@ RSpec.describe FactKeywords::Relatedness do
                                          connected: true).subject).to eq(:unknown)
 
     root = MemoryEntity.create!(name: "gadget_mcp", entity_type: "Project")
-    deployment, infrastructure, rules = %w[Deployment Infrastructure ServerRules].map do |name|
-      MemoryEntity.create!(name: name, entity_type: "Component", project_id: root.id)
-    end
-    MemoryRelation.create!(from_entity: deployment, to_entity: infrastructure, relation_type: "part_of")
+    infrastructure, rules = %w[Infrastructure ServerRules].map { |name| fs_member!(root, name) }
+    deployment = fs_member!(infrastructure, "Deployment")
     facts = { deployment => "We deploy with Kamal.", infrastructure => "We deploy with Capistrano.", rules => "Never deploy on Fridays." }
               .to_h do |entity, content|
       observation = MemoryObservation.create!(memory_entity: entity, content: content)
@@ -72,7 +70,7 @@ RSpec.describe FactKeywords::Relatedness do
 
   it "compares observations by their stored paths and owners" do
     root = MemoryEntity.create!(name: "Gadget Project", entity_type: "Project")
-    grant = MemoryEntity.create!(name: "AdminGrant", entity_type: "Model", project_id: root.id)
+    grant = fs_member!(root, "AdminGrant", "Model")
     first = MemoryObservation.create!(memory_entity: grant, content: "It belongs to a User.")
     second = MemoryObservation.create!(memory_entity: grant, content: "It names a Team.")
     first.update_columns(keywords: [ "Gadget Project", "AdminGrant", "User" ], keywords_at: Time.current)
@@ -107,7 +105,7 @@ RSpec.describe FactKeywords::Relatedness do
 
   it "leaves out the ignored names from both facts' mentions (1.85.0, for the contradiction detector)" do
     root = MemoryEntity.create!(name: "suite_web", entity_type: "Project")
-    page = MemoryEntity.create!(name: "ScorePage", entity_type: "Component", project_id: root.id)
+    page = fs_member!(root, "ScorePage")
     first, second = [ "It renders suite_core scores.", "It does not render suite_core scores." ].map do |content|
       MemoryObservation.create!(memory_entity: page, content: content).tap do |fact|
         fact.update_columns(keywords: [ root.name, page.name, "suite_core" ], keywords_at: Time.current)
@@ -122,7 +120,7 @@ RSpec.describe FactKeywords::Relatedness do
   it "compares LLM words only for two facts on the same entity record" do
     facts = [ "Gadget Project", "Other Project" ].map do |project|
       root = MemoryEntity.create!(name: project, entity_type: "Project")
-      widget = MemoryEntity.create!(name: "SynthWidget", entity_type: "Class", project_id: root.id)
+      widget = fs_member!(root, "SynthWidget", "Class")
       MemoryObservation.create!(memory_entity: widget, content: "Validates presence of name.").tap do |fact|
         fact.update_columns(keywords: [ project, "SynthWidget" ], keywords_at: Time.current, llm_keywords: %w[name presence],
                             llm_keywords_at: Time.current)

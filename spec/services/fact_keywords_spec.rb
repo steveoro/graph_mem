@@ -30,7 +30,8 @@ RSpec.describe FactKeywords do
     expect(facts.map(&:keywords_at)).to all(eq(Time.zone.parse("2026-11-10 12:00")))
   end
 
-  it "finds the project through part_of when the entity isn't stamped with it" do
+  # Drift is this example's point: an entity under a project whose project_id was never stamped.
+  it "finds the project through part_of when the entity isn't stamped with it", membership_drift: :allowed do
     gadget = project("Gadget Project")
     entity("FrameBuffer", gadget)
     loose = MemoryEntity.create!(name: "SynthWidget", entity_type: "Class")

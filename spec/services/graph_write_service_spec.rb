@@ -296,7 +296,7 @@ RSpec.describe GraphWriteService do
     it "raises AmbiguousReference with the operation index and the candidates, not a system error" do
       projects = Array.new(2) { |n| MemoryEntity.create!(name: "Ambiguity project #{n} #{SecureRandom.hex(3)}", entity_type: "Project") }
       name = "Ambiguous member #{SecureRandom.hex(3)}"
-      projects.each { |project| MemoryEntity.create!(name: name, entity_type: "Task", project_id: project.id) }
+      projects.each { |project| fs_member!(project, name, "Task") }
 
       expect {
         described_class.call(operations: [ { type: "create_observation", entity_name: name, text_content: "x" } ])

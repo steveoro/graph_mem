@@ -99,7 +99,7 @@ RSpec.describe GraphDeleteService do
     end
 
     it "refuses a Project with members even with allow_empty_project_delete" do
-      first.update!(project_id: project.id)
+      fs_member!(project, first)
 
       expect {
         described_class.call(
@@ -141,7 +141,7 @@ RSpec.describe GraphDeleteService do
     end
 
     it "rolls back the whole batch and keeps the code when a later Project delete is refused" do
-      first.update!(project_id: project.id)
+      fs_member!(project, first)
       relation_id = relation.id
 
       expect {

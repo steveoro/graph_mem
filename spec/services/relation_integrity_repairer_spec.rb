@@ -14,7 +14,8 @@ RSpec.describe RelationIntegrityRepairer, type: :service do
   end
 
   describe ".call(dry_run: true)" do
-    it "reports issues without deleting relations" do
+    # Drift is this example's point: a child with two part_of parents, which the scan only reports or queues.
+    it "reports issues without deleting relations", membership_drift: :allowed do
       rel1 = MemoryRelation.create!(from_entity: entity_a, to_entity: entity_b, relation_type: "depends_on")
       MemoryRelation.create!(from_entity: entity_b, to_entity: entity_a, relation_type: "depends_on")
 
@@ -34,7 +35,8 @@ RSpec.describe RelationIntegrityRepairer, type: :service do
   end
 
   describe ".call(dry_run: false, review_ambiguous: true)" do
-    it "queues ambiguous reverse pairs and merge collisions for review" do
+    # Drift is this example's point: a child with two part_of parents, which the scan only reports or queues.
+    it "queues ambiguous reverse pairs and merge collisions for review", membership_drift: :allowed do
       MemoryRelation.create!(from_entity: entity_a, to_entity: entity_b, relation_type: "depends_on")
       MemoryRelation.create!(from_entity: entity_b, to_entity: entity_a, relation_type: "depends_on")
 

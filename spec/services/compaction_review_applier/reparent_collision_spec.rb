@@ -13,7 +13,7 @@ RSpec.describe "reparent_entity apply on a name collision" do
   it "rolls the move back, with the old parent kept" do
     MemoryRelation.create!(from_entity: widget, to_entity: alpha, relation_type: "part_of")
     ProjectMembership.sync!(widget)
-    MemoryEntity.create!(name: widget.name, entity_type: "Component", project_id: beta.id)
+    fs_member!(beta, widget.name, "Component")
     report = MaintenanceReport.create!(report_type: "compaction_review", data: { "source" => "project_scan" })
     payload = { "entity_id" => widget.id, "parent_id" => beta.id }
     row = MaintenanceReportRow.create!(maintenance_report: report, report_type: "compaction_review", row_uuid: SecureRandom.uuid,

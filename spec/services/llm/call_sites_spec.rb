@@ -111,7 +111,7 @@ RSpec.describe "LLM call sites (through Llm::Router)" do
   # 1.83.0 (named 1.84.0): FactKeywords::LlmWords reuses the summary task, in JSON mode, from a job.
   it "G6: the LLM words of a fact are task :summary, not inline, in JSON mode" do
     root = MemoryEntity.create!(name: "Gadget Project", entity_type: "Project")
-    widget = MemoryEntity.create!(name: "SynthWidget", entity_type: "Class", project_id: root.id)
+    widget = fs_member!(root, "SynthWidget", "Class")
     fact = MemoryObservation.create!(memory_entity: widget, content: "Validates presence of name.")
     fact.update_columns(keywords: [ "Gadget Project", "SynthWidget" ], keywords_at: Time.current)
     fake = FakeProvider.new { |*| { ok: true, text: { fact.id.to_s => %w[name presence] }.to_json, error: nil, latency_ms: 3.0 } }

@@ -104,7 +104,7 @@ RSpec.describe CompactionReviewApplier::RelationRetypeChoice do
     it "refuses a name collision in the target's project with nothing changed" do
       MemoryRelation.where(from_entity_id: gadget.id).delete_all
       part_of!(gadget, beta)
-      MemoryEntity.create!(name: widget.name, entity_type: "Component", project_id: beta.id)
+      fs_member!(beta, widget.name, "Component")
       variant, row = queued_row
 
       expect(CompactionReviewApplier.preview(row, { "parent_choice" => "move" })[:warnings].sole).to include("already exists there")

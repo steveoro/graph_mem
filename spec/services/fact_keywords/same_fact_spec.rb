@@ -85,7 +85,7 @@ RSpec.describe FactKeywords::Relatedness, "the same-fact ladder" do
 
   it "treats a fact on an entity with no project as that entity's, not as the project's (Graphy)" do
     root = MemoryEntity.create!(name: "Gadget Project", entity_type: "Project")
-    app = MemoryEntity.create!(name: "SynthApp", entity_type: "Component", project_id: root.id)
+    app = fs_member!(root, "SynthApp", "Component")
     loose = MemoryEntity.create!(name: "LooseNotes", entity_type: "Note")
     member = MemoryObservation.create!(memory_entity: app, content: "SynthApp runs on Puma 6.")
     member.update_columns(keywords: [ "Gadget Project", "SynthApp", "Puma" ], keywords_at: Time.current)
@@ -149,7 +149,7 @@ RSpec.describe FactKeywords::Relatedness, "the same-fact ladder" do
 
   it "passes the stored words of computed facts, and none with LLM keywords off" do
     root = MemoryEntity.create!(name: "Gadget Project", entity_type: "Project")
-    app = MemoryEntity.create!(name: "SynthApp", entity_type: "Component", project_id: root.id)
+    app = fs_member!(root, "SynthApp", "Component")
     old, new = [ "Developed using Rails 8.0", "Updated using Rails 8.1" ].map do |content|
       MemoryObservation.create!(memory_entity: app, content: content).tap do |fact|
         fact.update_columns(keywords: [ "Gadget Project", "SynthApp" ], keywords_at: Time.current,
@@ -166,7 +166,7 @@ RSpec.describe FactKeywords::Relatedness, "the same-fact ladder" do
 
   it "reads the details from the facts themselves when comparing observations" do
     root = MemoryEntity.create!(name: "Gadget Project", entity_type: "Project")
-    app = MemoryEntity.create!(name: "SynthApp", entity_type: "Component", project_id: root.id)
+    app = fs_member!(root, "SynthApp", "Component")
     old, new = [ "Developed using Rails 8.0", "Updated using Rails 8.1" ].map do |content|
       MemoryObservation.create!(memory_entity: app, content: content).tap do |fact|
         fact.update_columns(keywords: [ "Gadget Project", "SynthApp", "Rails" ], keywords_at: Time.current)

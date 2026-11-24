@@ -6,10 +6,10 @@ require "rails_helper"
 RSpec.describe EntityMergePreview do
   let!(:alpha) { MemoryEntity.create!(name: "Alpha Service", entity_type: "Project") }
   let!(:gadget) { MemoryEntity.create!(name: "Gadget Project", entity_type: "Project") }
-  let!(:source) { MemoryEntity.create!(name: "SynthWidget A", entity_type: "Component", aliases: "widget a", project_id: alpha.id) }
-  let!(:target) { MemoryEntity.create!(name: "SynthWidget B", entity_type: "Component", project_id: gadget.id) }
-  let!(:router) { MemoryEntity.create!(name: "Synth Router", entity_type: "Service", project_id: alpha.id) }
-  let!(:cache) { MemoryEntity.create!(name: "Synth Cache", entity_type: "Service", project_id: alpha.id) }
+  let!(:source) { fs_member!(alpha, "SynthWidget A", "Component", aliases: "widget a") }
+  let!(:target) { fs_member!(gadget, "SynthWidget B", "Component") }
+  let!(:router) { fs_member!(alpha, "Synth Router", "Service") }
+  let!(:cache) { fs_member!(alpha, "Synth Cache", "Service") }
   let!(:child) { MemoryEntity.create!(name: "Synth Part", entity_type: "Component", project_id: alpha.id) }
   let!(:grandchild) { MemoryEntity.create!(name: "Synth Bolt", entity_type: "Component", project_id: alpha.id) }
 
@@ -34,7 +34,9 @@ RSpec.describe EntityMergePreview do
     expect(preview.blockers).to eq([])
     expect(preview.observation_count).to eq(2) # any status, like transfer_observations!
     expect(preview.repointed.map(&:id)).to contain_exactly(repointed_out.id, child_edge.id)
-    expect(preview.dropped.map(&:id)).to contain_exactly(duplicate_out.id, between.id)
+    # The source's own part_of to Alpha is dropped too: the target keeps its parent (Gadget Project).
+    source_parent = source.relations_from.find_by!(to_entity: alpha)
+    expect(preview.dropped.map(&:id)).to contain_exactly(duplicate_out.id, between.id, source_parent.id)
     expect(preview.aliases_gained).to eq([ "widget a", "SynthWidget A" ])
     expect(preview.children).to eq([ child ])
     expect(preview.project_moves.sole).to have_attributes(from_name: "Alpha Service", to_name: "Gadget Project", count: 2)
@@ -44,7 +46,7 @@ RSpec.describe EntityMergePreview do
     expect(MemoryObservation.where(id: observations.map(&:id)).pluck(:memory_entity_id).uniq).to eq([ target.id ])
     expect(repointed_out.reload.from_entity_id).to eq(target.id)
     expect(child_edge.reload.to_entity_id).to eq(target.id)
-    expect(MemoryRelation.where(id: [ duplicate_out.id, between.id ])).to be_empty
+    expect(MemoryRelation.where(id: [ duplicate_out.id, between.id, source_parent.id ])).to be_empty
     expect(target.reload.aliases.split(",")).to eq([ "widget a", "SynthWidget A" ])
     expect([ child.reload.project_id, grandchild.reload.project_id ]).to eq([ gadget.id, gadget.id ])
   end
@@ -69,7 +71,9 @@ RSpec.describe EntityMergePreview do
     ActiveSupport::Notifications.subscribed(callback, "sql.active_record") { described_class.new(source.id, target.id).digest }
 
     expect(queries.grep(/maintenance_report_rows|LIMIT 5\b/)).to be_empty
-    expect(queries.grep(/relation_type` = 'part_of'/)).to be_empty
+    # With the source under a project, one EXISTS asks whether the target keeps its own parent
+    # (NodeOperationsStrategy#target_takes_parent?); it has one here, so nothing walks a subtree.
+    expect(queries.grep(/relation_type` = 'part_of'/).reject { |sql| sql.start_with?("SELECT 1 AS one") }).to be_empty
   end
 
   it "walks each moving project group once and caps the count it shows" do
@@ -80,7 +84,8 @@ RSpec.describe EntityMergePreview do
     expect(move.count_label).to eq("1+")
   end
 
-  it "counts new ids, not part_of rows, so a child with two moving parents can't hide another" do
+  # Drift is this example's point: children with a second part_of parent, as older rows can have.
+  it "counts new ids, not part_of rows, so a child with two moving parents can't hide another", membership_drift: :allowed do
     stub_const("#{described_class}::SUBTREE_CAP", 10)
     sibling = MemoryEntity.create!(name: "Synth Gear", entity_type: "Component", project_id: alpha.id)
     MemoryRelation.create!(from_entity: sibling, to_entity: source, relation_type: "part_of")

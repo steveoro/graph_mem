@@ -68,7 +68,7 @@ RSpec.describe CompactionReviewApplier::RelationRetype do
   end
 
   it "refuses a part_of that would close a cycle" do
-    MemoryRelation.create!(from_entity: project, to_entity: widget, relation_type: "part_of")
+    fs_member!(widget, project)
     variant, row = queued_row
 
     result = apply(row)
@@ -78,7 +78,7 @@ RSpec.describe CompactionReviewApplier::RelationRetype do
   end
 
   it "refuses a name collision in the target project and rolls the edge back" do
-    MemoryEntity.create!(name: widget.name, entity_type: "Component", project_id: project.id)
+    fs_member!(project, widget.name, "Component")
     variant, row = queued_row
 
     result = apply(row)
@@ -92,6 +92,7 @@ RSpec.describe CompactionReviewApplier::RelationRetype do
   it "treats a relation that is gone, or already part_of, as stale" do
     variant, row = queued_row
     variant.update_column(:relation_type, "Part_Of")
+    ProjectMembership.sync!(variant.from_entity) # a stored Part_Of is a parent edge: the child is in its project
 
     expect(apply(row)).to include(success: true, message: "Nothing to do: relation ##{variant.id} is already part_of")
     expect(variant.reload.relation_type).to eq("Part_Of")
@@ -174,7 +175,7 @@ RSpec.describe CompactionReviewApplier::RelationRetype do
       variant.update_column(:relation_type, "part_of")
       expect(dangling(row)).to eq("relation already part_of")
       variant.update_column(:relation_type, "child_of")
-      MemoryRelation.create!(from_entity: widget, to_entity: project, relation_type: "part_of")
+      fs_member!(project, widget)
       expect(dangling(row)).to eq("part_of relation already exists")
       variant.destroy!
       expect(dangling(row)).to eq("relation ##{variant.id} gone")

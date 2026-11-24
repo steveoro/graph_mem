@@ -6,7 +6,7 @@ require "rails_helper"
 # (faked here at the provider boundary).
 RSpec.describe FactKeywords::LlmWords do
   let(:root) { MemoryEntity.create!(name: "Gadget Project", entity_type: "Project") }
-  let(:widget) { MemoryEntity.create!(name: "SynthWidget", entity_type: "Class", project_id: root.id) }
+  let(:widget) { fs_member!(root, "SynthWidget", "Class") }
   let(:answers) { {} }
   let(:provider) do
     FakeProvider.new do |prompt, **|
@@ -72,7 +72,7 @@ RSpec.describe FactKeywords::LlmWords do
 
   it "asks one project's facts per call" do
     other_root = MemoryEntity.create!(name: "Other Project", entity_type: "Project")
-    other = MemoryEntity.create!(name: "AlphaService", entity_type: "Service", project_id: other_root.id)
+    other = fs_member!(other_root, "AlphaService", "Service")
     mine = fact("Validates presence of name.")
     theirs = MemoryObservation.create!(memory_entity: other, content: "Retries the queue.").tap do |observation|
       observation.update_columns(keywords: [ "Other Project", "AlphaService" ], keywords_at: Time.current)

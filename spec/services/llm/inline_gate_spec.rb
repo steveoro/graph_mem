@@ -7,7 +7,7 @@ require "rails_helper"
 # only, with a capped timeout. generated_by names the answering model.
 RSpec.describe "The inline gate" do
   let!(:project) { MemoryEntity.create!(name: "Gadget Project", entity_type: "Project", cloud_allowed: true) }
-  let!(:widget) { MemoryEntity.create!(name: "SynthWidget", entity_type: "Component", project_id: project.id) }
+  let!(:widget) { fs_member!(project, "SynthWidget", "Component") }
   let(:handler) { ->(_request) { [ 200, { ok: true, text: "SynthWidget renders frames (observation_id=1).", failure_class: nil } ] } }
   let!(:stub) { start_bridge_stub { |request| handler.call(request) } }
   let(:local) { FakeProvider.new(name: "ollama", available: false) }

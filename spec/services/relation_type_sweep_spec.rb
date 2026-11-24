@@ -145,7 +145,7 @@ RSpec.describe RelationTypeSweep do
 
     it "keeps a stored part_of: an operator row can't remap a vocabulary type, and the guard holds anyway" do
       RelationTypeMapping.create!(variant: "part_of", canonical_type: "contains")
-      relation = MemoryRelation.create!(from_entity: widget, to_entity: project, relation_type: "part_of")
+      relation = fs_member!(project, widget).relations_from.find_by!(to_entity: project)
       expect(described_class.call[:counts]).to include("unchanged" => 1)
 
       # The guard behind it: were a stored part_of ever to canonicalize to another type, it is left alone.

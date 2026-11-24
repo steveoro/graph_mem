@@ -371,7 +371,7 @@ RSpec.describe "project-scoped entity names" do
       MemoryEntity.create!(name: "DupProj", entity_type: "Project")
       MemoryEntity.create!(name: "DupName", entity_type: "File")
       proj = MemoryEntity.find_by!(name: "DupProj")
-      MemoryEntity.create!(name: "DupName", entity_type: "File", project_id: proj.id)
+      fs_member!(proj, "DupName", "File")
 
       require Rails.root.join("db/migrate/20261012000000_add_project_scope_to_memory_entities")
       migration = AddProjectScopeToMemoryEntities.new

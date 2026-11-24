@@ -12,7 +12,7 @@ RSpec.describe SubgraphSearchService do
       first = MemoryEntity.create!(name: "Shared Alpha", entity_type: "Project")
       second = MemoryEntity.create!(name: "Shared Beta", entity_type: "Task")
       observation = MemoryObservation.create!(memory_entity: first, content: "Shared fact")
-      relation = MemoryRelation.create!(from_entity: second, to_entity: first, relation_type: "part_of")
+      relation = fs_member!(first, second).relations_from.find_by!(to_entity: first)
 
       result = described_class.call(query: "Shared")
 
