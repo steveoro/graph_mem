@@ -254,7 +254,7 @@ class DreamStateCompactor
   end
 
   def embedding_sql_literal(entity)
-    return if entity.embedding.blank?
+    return if entity.embedded_at.blank?
 
     vector = entity.embedding.to_s.unpack("e*")
     return if vector.empty?

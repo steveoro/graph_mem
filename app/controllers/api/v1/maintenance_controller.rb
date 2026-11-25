@@ -18,7 +18,7 @@ module Api
         entities.each do |entity|
           break if suggestions.length >= limit
 
-          next if entity.embedding.blank?
+          next if entity.embedded_at.blank?
 
           candidates = MemoryEntity
             .where.not(id: entity.id)

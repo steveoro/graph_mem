@@ -47,8 +47,7 @@ class SuggestMergesTool < ApplicationTool
     entities.each_with_index do |entity, i|
       break if suggestions.length >= effective_limit
 
-      vector_sql = entity.embedding
-      next if vector_sql.blank?
+      next if entity.embedded_at.blank?
 
       candidates = MemoryEntity
         .where.not(id: entity.id)

@@ -16,12 +16,13 @@ class EntityMergeEvidence
   class << self
     # Finds the best merge candidates for +entity+ (same type, higher id, within +review_distance+).
     #
-    # @param entity [MemoryEntity] the source entity (must have an embedding, not a Project)
+    # @param entity [MemoryEntity] the source entity, not a Project. An unembedded one (`embedded_at`
+    #   NULL; its column may hold the zero-vector placeholder) has no candidates.
     # @param limit [Integer] max matches returned
     # @param review_distance [Float] cosine distance below which a pair is a candidate
     # @return [Array<Match>] matches scoring at least {REVIEW_SCORE}, best first
     def candidates_for(entity, limit: 3, review_distance: DreamStateCompactor::REVIEW_MERGE_DISTANCE)
-      return [] if entity.embedding.blank?
+      return [] if entity.embedded_at.blank?
       return [] if entity.entity_type == NodeOperationsStrategy::PROJECT_ENTITY_TYPE
 
       source_vector_sql = vector_sql_literal(entity)
@@ -142,7 +143,7 @@ class EntityMergeEvidence
     end
 
     def vector_sql_literal(entity)
-      return if entity.embedding.blank?
+      return if entity.embedded_at.blank?
 
       vector = entity.embedding.to_s.unpack("e*")
       return if vector.empty?
