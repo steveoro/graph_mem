@@ -1,0 +1,6 @@
+-# "Run full maintenance now" (off by default): "Run all scheduled jobs now" once the import's follow-up ends.
+.ui-field
+  %span.projects-checks
+    = check_box_tag :full_maintenance, "1", false, required: required, data: { testid: "import-full-maintenance" }
+    = label_tag :full_maintenance, t("projects.imports.sql.full_maintenance.label")
+  %p.projects-hint= t("projects.imports.sql.full_maintenance.hint")

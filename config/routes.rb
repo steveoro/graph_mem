@@ -126,6 +126,7 @@ Rails.application.routes.draw do
       member do
         post :execute
         get :report
+        post :maintenance
       end
     end
     resources :exports, only: [ :index, :create, :show ], param: :operation_id do

@@ -1,0 +1,14 @@
+-# The entities matched by alias or claimed (or inserted, and why), and the links whose other end isn't here.
+- notes = notes.to_h
+- { "matches" => "matches_count", "skipped_links" => "skipped_count" }.each do |key, count_key|
+  - next if notes[key].blank?
+  .ui-card{ data: { testid: "sql-import-#{key.dasherize}" } }
+    %h2.ui-label= t("projects.imports.sql.#{key}")
+    %ul
+      - notes[key].each do |row|
+        %li
+          = "#{row['entity']}: #{row['detail']}"
+          - if row["reason"].present?
+            %span.projects-hint= "(#{row['reason']})"
+    - if notes[count_key].to_i > notes[key].size
+      %p.projects-hint= t("projects.imports.sql.more", count: notes[count_key].to_i - notes[key].size)

@@ -3,6 +3,8 @@
 module Projects
   # Imports (UI-6 P4): upload a GraphMem export or a Graphify graph.json, review the matches,
   # execute (inside the request, Decision 3), and open any past import's report from the history.
+  # A graph_mem-sql script is validated and dry-run on upload, its preview shown instead of the
+  # review, and run for real on execute (SqlImport::Flow); its report can start full maintenance.
   # Every upload error re-renders the form (422); nothing redirects to Home.
   #
   # :id is the upload's ImportSession id for show / execute / destroy, and the import's
@@ -30,8 +32,10 @@ module Projects
       redirect_to projects_import_path(@upload.session_id)
     end
 
-    # GET /projects/imports/:id: the review
+    # GET /projects/imports/:id: the review, or an SQL script's dry-run preview
     def show
+      return show_sql if ImportSession.sql?(@session_id)
+
       @matches = ImportSession.load_matches(@session_id)
       @stats = ImportSession.load_stats(@session_id) || {}
       @meta = ImportSession.load_meta(@session_id)
@@ -42,8 +46,10 @@ module Projects
       @available_parents = parents.first(ExportStrategy::ROOT_NODES_LIMIT)
     end
 
-    # POST /projects/imports/:id/execute
+    # POST /projects/imports/:id/execute (an SQL script: full_maintenance=1 to run all scheduled jobs after it)
     def execute
+      return execute_sql if ImportSession.sql?(@session_id)
+
       operation = ImportFlow.execute(@session_id, params[:decisions])
       session.delete(:import_session_id)
       redirect_to report_projects_import_path(operation.operation_id)
@@ -54,6 +60,16 @@ module Projects
       @operation = find_operation!(params[:id], "import")
     end
 
+    # POST /projects/imports/:id/maintenance: an SQL import report's "Run full maintenance now"
+    def maintenance
+      operation = find_operation!(params[:id], "import")
+      raise ActiveRecord::RecordNotFound, "Not an SQL import" unless operation.details.to_h["format"] == "sql"
+      return redirect_to(report_projects_import_path(operation.operation_id)) unless params[:full_maintenance] == "1"
+
+      outcome = SqlImport::FollowUp.request_full_maintenance!(operation)
+      redirect_to report_projects_import_path(operation.operation_id), notice: t("projects.imports.sql.full_maintenance.#{outcome}")
+    end
+
     # DELETE /projects/imports/:id: cancel the review
     def destroy
       ImportSession.cleanup(@session_id)
@@ -62,6 +78,21 @@ module Projects
     end
 
     private
+
+    def show_sql(error: nil, status: :ok)
+      @preview = ImportSession.load_preview(@session_id) || {}
+      @meta = ImportSession.load_meta(@session_id)
+      @error = error
+      render :sql_preview, status: status
+    end
+
+    def execute_sql
+      operation = SqlImport::Flow.execute(@session_id, full_maintenance: params[:full_maintenance] == "1")
+      session.delete(:import_session_id)
+      redirect_to report_projects_import_path(operation.operation_id)
+    rescue *SqlImport::Flow::REFUSALS => e
+      show_sql(error: t("projects.imports.sql.not_run", reason: e.message), status: :unprocessable_content)
+    end
 
     def load_session
       raise ActiveRecord::RecordNotFound, "Import not found" unless uuid?(params[:id]) && ImportSession.exists?(params[:id])

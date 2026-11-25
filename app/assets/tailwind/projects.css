@@ -139,4 +139,14 @@
   .projects-progress {
     width: 100%;
   }
+
+  /* An SQL import's affected-rows filter: the selects keep their own width, on one line. */
+  .projects-filter .ui-input {
+    width: auto;
+  }
+
+  .projects-link {
+    color: var(--color-ui-accent);
+    text-decoration: underline;
+  }
 }

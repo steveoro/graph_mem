@@ -1,0 +1,38 @@
+-# Every affected row of an SQL import (unchanged rows are only counted), filterable by table and
+-# action. `links`: entity ids open in Explore (not on a preview, whose new rows were rolled back).
+- rows = Array(rows)
+- scope = "projects.imports.sql"
+- shown = rows.select { |row| [ params[:rows_table].blank? || row["table"] == params[:rows_table], params[:rows_action].blank? || row["action"] == params[:rows_action] ].all? }
+- page = Kaminari.paginate_array(shown).page(params[:page]).per(50)
+.ui-card{ data: { testid: "sql-import-rows" } }
+  %h2.ui-label= t("#{scope}.rows", count: total.to_i)
+  - if total.to_i > rows.size
+    %p.projects-hint= t("#{scope}.rows_capped", count: rows.size)
+  - if rows.empty?
+    %p.projects-muted= t("#{scope}.no_rows")
+  - else
+    = form_with url: url, method: :get, class: "projects-actions projects-filter", data: { testid: "sql-import-rows-filter" } do
+      = label_tag :rows_table, t("#{scope}.table"), class: "ui-label"
+      = select_tag :rows_table, options_for_select([ [ t("#{scope}.all"), "" ] ] + rows.map { |row| row["table"] }.uniq.map { |table| [ t("#{scope}.tables.#{table}", default: table), table ] }, params[:rows_table]), class: "ui-input"
+      = label_tag :rows_action, t("#{scope}.action"), class: "ui-label"
+      = select_tag :rows_action, options_for_select([ [ t("#{scope}.all"), "" ] ] + rows.map { |row| row["action"] }.uniq.map { |action| [ t("#{scope}.actions.#{action}", default: action), action ] }, params[:rows_action]), class: "ui-input"
+      = submit_tag t("#{scope}.filter"), class: "ui-btn", name: nil
+    %table.projects-table
+      %thead
+        %tr
+          - %w[table action id entity detail fields].each do |column|
+            %th{ scope: "col" }= column == "id" ? "#" : t("#{scope}.#{column}")
+      %tbody
+        - page.each do |row|
+          %tr{ data: { testid: "sql-import-row" } }
+            %td= t("#{scope}.tables.#{row['table']}", default: row["table"])
+            %td= t("#{scope}.actions.#{row['action']}", default: row["action"])
+            %td
+              - if links && row["table"] == "memory_entities" && row["id"]
+                = link_to row["id"], explore_path(entity_id: row["id"]), class: "projects-link"
+              - else
+                = row["id"] || "—"
+            %td= row["entity"]
+            %td= row["detail"]
+            %td= Array(row["fields"]).join(", ")
+    = paginate page
