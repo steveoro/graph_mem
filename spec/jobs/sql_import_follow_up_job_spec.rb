@@ -154,6 +154,17 @@ RSpec.describe SqlImportFollowUpJob do
     SqlImportEmbeddingsLockHolder.connection_pool.disconnect! if defined?(SqlImportEmbeddingsLockHolder)
   end
 
+  it "records a follow-up the adapter refused to queue as failed, with its error, and runs clean when queued again" do
+    refused = described_class.new.tap { |job| job.enqueue_error = ActiveJob::EnqueueError.new("adapter refused") }
+    allow(described_class).to receive(:perform_later).and_yield(refused).and_return(false)
+    operation = import!(sql_export(project))
+    expect(follow_up(operation)).to eq("status" => "failed", "error" => "ActiveJob::EnqueueError: adapter refused")
+
+    described_class.perform_now(operation.operation_id)
+
+    expect(follow_up(operation)).to include("status" => "done", "error" => nil)
+  end
+
   it "starts one scheduled run (trigger sql_import) instead of compaction when full maintenance is asked for" do
     operation = import!(sql_export(project), full_maintenance: true)
 

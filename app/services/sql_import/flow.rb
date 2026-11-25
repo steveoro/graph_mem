@@ -7,19 +7,43 @@ module SqlImport
   # graph_mem:import_sql shares the end of a real run (#finish): the operation's details get the file,
   # the affected rows with their detail (the script records them without it), the alias, claim and
   # skipped-link notes and the full-maintenance choice, then SqlImportFollowUpJob is queued, after the
-  # import committed and released the membership lock.
+  # import committed and released the membership lock. A follow-up that can't be queued is recorded as
+  # failed on the operation, not raised: the import is done.
+  #
+  # A REFUSALS error comes only from before the commit (nothing was written); anything #execute meets
+  # after it is raised as FinishFailed, which no REFUSALS entry matches (the executor raises its own
+  # post-commit errors as Executor::Committed).
   #
   #   session_id = SqlImport::Flow.upload(file, file_name: "synth_prj.sql")  # raises Validator::Invalid, …
   #   ImportSession.load_preview(session_id)["summary"] # => { "memory_entities" => { "new" => 6, … }, … }
   #   operation = SqlImport::Flow.execute(session_id, full_maintenance: false)
+  #   operation.details["follow_up"] # => { "status" => "queued" }, or { "status" => "failed", "error" => "…" }
   module Flow
+    # The run committed, then leaving it (Executor::Committed) or completing its record (#finish) failed:
+    # the rows are written, its details and follow-up may be missing. The message is Flow.error_text of
+    # the error.
+    class FinishFailed < StandardError
+      # @return [String] the committed run's operation id
+      attr_reader :operation_id
+
+      # @param operation_id [String]
+      # @param error [StandardError]
+      def initialize(operation_id, error)
+        @operation_id = operation_id
+        super(Flow.error_text(error))
+      end
+    end
+
     PRODUCER = "graph_mem-sql"
     # Rows a preview keeps (the operation's own list is capped at 5,000 by the script too).
     MAX_ROWS = 5_000
     # Alias/claim notes and skipped links kept for the preview and the report, each.
     MAX_NOTES = 100
-    # ActiveRecord::StatementInvalid: a value that passes the validator's grammar and that MariaDB rejects
-    # (1e999, a roots line that isn't JSON) fails the run inside its transaction, so nothing was written.
+    # Characters of an error kept on the operation or shown after a commit (as the follow-up's own errors).
+    MAX_ERROR = 500
+    # What a run refused before it committed: nothing was written. ActiveRecord::StatementInvalid: a value
+    # that passes the validator's grammar and that MariaDB rejects (1e999, a roots line that isn't JSON)
+    # fails the run inside its transaction. Rescue these around the run only, never around #finish.
     REFUSALS = [ Validator::Invalid, Executor::Refused, ProjectMembership::LockTimeout, ActiveRecord::StatementInvalid ].freeze
     # The notes listing links the run didn't write, by the action of their affected rows.
     LINK_NOTES = { "skipped_links" => "skipped_link", "dropped_links" => "dropped_link" }.freeze
@@ -35,6 +59,13 @@ module SqlImport
       return error.message unless error.is_a?(ActiveRecord::StatementInvalid)
 
       (error.cause || error).message
+    end
+
+    # @param error [StandardError]
+    # @return [String] "<class>: <message>" (the database's own message for a statement it refused, as
+    #   #refusal_reason), at most MAX_ERROR characters
+    def error_text(error)
+      "#{error.class}: #{refusal_reason(error)}".truncate(MAX_ERROR)
     end
 
     # Stores the upload, validates it and dry-runs it; a refused file leaves nothing behind.
@@ -54,19 +85,31 @@ module SqlImport
     end
 
     # Validates the session's script again and runs it for real, then #finish. The session is removed
-    # once it ran; a refused run keeps it, so the preview can show why.
+    # as soon as the run committed, so a second Execute finds no import; a refused run keeps it, so the
+    # preview can show why.
     #
     # @param session_id [String]
     # @param full_maintenance [Boolean] start "Run all scheduled jobs now" after the follow-up
     # @return [OperationProgress]
-    # @raise [Validator::Invalid, Executor::Refused, ProjectMembership::LockTimeout]
+    # @raise [Validator::Invalid, Executor::Refused, ProjectMembership::LockTimeout, ActiveRecord::StatementInvalid]
+    #   before the commit (REFUSALS): nothing was written
+    # @raise [FinishFailed] after the commit: the rows are written
     def execute(session_id, full_maintenance:)
       meta = ImportSession.load_meta(session_id).stringify_keys
       result = Executor.call(Validator.validate_file(ImportSession.sql_path(session_id)))
-      finish(result, file_name: meta["file_name"], full_maintenance: full_maintenance).tap { ImportSession.cleanup(session_id) }
+      begin
+        ImportSession.cleanup(session_id)
+        finish(result, file_name: meta["file_name"], full_maintenance: full_maintenance)
+      rescue StandardError => e
+        raise FinishFailed.new(result.operation_id, e)
+      end
+    rescue Executor::Committed => e
+      ImportSession.cleanup(session_id)
+      raise FinishFailed.new(e.result.operation_id, e.cause)
     end
 
-    # Completes the record of a real run and queues its follow-up.
+    # Completes the record of a real run and queues its follow-up. A follow-up that can't be queued is
+    # recorded on the operation (details["follow_up"] status "failed", with the error), not raised.
     #
     # @param result [Executor::Result] a real (not dry) run
     # @param file_name [String, nil]
@@ -84,9 +127,30 @@ module SqlImport
           "full_maintenance" => full_maintenance, "follow_up" => { "status" => "queued" }
         ).compact)
       end
-      SqlImportFollowUpJob.perform_later(operation.operation_id)
+      queue_follow_up(operation)
       operation
     end
+
+    # Queues SqlImportFollowUpJob, or records why it couldn't be (the queue database is down, or an
+    # adapter refused the job) as the follow-up's failure.
+    #
+    # @param operation [OperationProgress] the run's `import` row
+    # @return [void]
+    def queue_follow_up(operation)
+      error = nil
+      queued = SqlImportFollowUpJob.perform_later(operation.operation_id) { |job| error = job.enqueue_error }
+      follow_up_failed!(operation, error ? error_text(error) : "the job was not queued") unless queued
+    rescue StandardError => e
+      follow_up_failed!(operation, error_text(e))
+    end
+
+    def follow_up_failed!(operation, error)
+      Rails.logger.error "SqlImport::Flow: the follow-up of import #{operation.operation_id} could not be queued: #{error}"
+      operation.reload.with_lock do
+        operation.update!(details: operation.details.to_h.merge("follow_up" => { "status" => "failed", "error" => error }))
+      end
+    end
+    private_class_method :follow_up_failed!
 
     # @param script [Validator::Script]
     # @param result [Executor::Result] the dry run

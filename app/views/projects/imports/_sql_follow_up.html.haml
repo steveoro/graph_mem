@@ -1,5 +1,6 @@
 -# An SQL import's follow-up (SqlImport::FollowUp, details["follow_up"]) and "Run full maintenance now".
 - follow_up = details["follow_up"]
+- failed = follow_up&.dig("status") == "failed"
 - scope = "projects.imports.sql.follow_up"
 .ui-card{ data: { testid: "sql-import-follow-up" } }
   %h2.ui-label
@@ -35,9 +36,14 @@
         %li= t("#{scope}.compaction.#{follow_up['compaction']}")
       - if follow_up["error"]
         %li.projects-error{ role: "alert" }= t("#{scope}.error", error: follow_up["error"])
+    - if failed
+      %p.projects-hint{ data: { testid: "sql-import-follow-up-recover" } }
+        = t("#{scope}.recover")
+        %code= "bin/rails runner 'SqlImportFollowUpJob.perform_later(\"#{operation.operation_id}\")'"
   - if details["full_maintenance_outcome"]
     %p.projects-hint{ data: { testid: "sql-import-full-maintenance" } }= t("projects.imports.sql.full_maintenance.#{details['full_maintenance_outcome']}")
-  - elsif details["full_maintenance"]
+  - elsif details["full_maintenance"] && !failed
+    -# Not after a failed follow-up, which never starts it: the form below then starts the run at once.
     %p.projects-hint{ data: { testid: "sql-import-full-maintenance" } }= t("projects.imports.sql.full_maintenance.requested")
   - else
     = form_with url: maintenance_projects_import_path(operation.operation_id), method: :post, class: "ui-form", data: { testid: "sql-import-maintenance-form" } do
