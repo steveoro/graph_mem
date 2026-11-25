@@ -105,7 +105,7 @@ A `part_of` edge decides which project an entity belongs to, and an update skips
 **Per entity:**
 
 1. **Observation deduplication** — for each duplicate `content` on the entity, keep the lowest `id` and delete the rest.
-2. **Entity merge scan** — if the entity has an embedding and is not a `Project`:
+2. **Entity merge scan** — if the entity has an embedding (`embedded_at` set; an unembedded entity's zero-vector placeholder is never compared, 1.93.5) and is not a `Project`:
   - Find up to 3 candidates with cosine distance **< 0.30** (`REVIEW_MERGE_DISTANCE`), excluding Projects, **requiring the same `entity_type`**, and `id > entity.id` for deterministic ordering.
   - If distance **< 0.10** (`AUTO_MERGE_DISTANCE`), auto-merge via `NodeOperationsStrategy#merge_into`.
   - Otherwise, queue a merge review item, but only when the pair's evidence score reaches `EntityMergeEvidence::REVIEW_SCORE` (6). Distance in the review band scores 4 and each shared observation adds 2 (max 6), so a distance-only pair is not queued. A shared observation counts only when `ObservationEvidence` finds it distinctive: at least 40 characters and held by at most 3 entities.

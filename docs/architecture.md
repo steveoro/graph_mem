@@ -212,6 +212,8 @@ The models embed inline when a row is created and when its embedded text changes
 
 `ProjectMembership.membership_lock_held?` tells whether this thread is inside a lock block; the spec suite's embedding lock guard reads it ([development.md](development.md#embedding-lock-guard)).
 
+**Unembedded rows (`embedded_at`).** With the vector indexes installed (`embeddings:add_indexes`; the committed `db/structure.sql` has them), the embedding columns are `NOT NULL` and a `BEFORE INSERT` trigger stores the zero vector in a row that has no embedding yet. MariaDB's cosine distance to the zero vector is NaN: the client reads it as 0, a `<` comparison on it is false (`>=` is true) and arithmetic on it raises ERROR 1690 (`spec/db/zero_vector_distance_spec.rb`). So `embedded_at`, never the vector column, decides whether a row is embedded: the `with_embedding` / `missing_embedding` scopes, and every guard that skips an unembedded row before a distance query (the summarizer's contradiction marks, `ContradictionDetector`, `EntityMergeEvidence`, `suggest_merges` and its REST copy). `ObservationRelevanceRanker` gives an unembedded observation no vector score (it is scored on its tokens alone) instead of the false similarity of 1.0 the placeholder's 0 gave it before 1.93.5, which ranked it first in `summarize`, `rank_observations`, `get_entities` and `traverse_graph`.
+
 ### 4. Data Access Layer
 
 #### Core Models
