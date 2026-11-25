@@ -104,6 +104,8 @@ class ImportFlow
       failed(I18n.t("projects.imports.sql.refused", reason: e.message))
     rescue ProjectMembership::LockTimeout
       failed(I18n.t("projects.imports.sql.busy"))
+    rescue ActiveRecord::StatementInvalid => e
+      failed(I18n.t("projects.imports.sql.refused", reason: SqlImport::Flow.refusal_reason(e)))
     end
 
     def failed(message)

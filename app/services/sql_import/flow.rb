@@ -18,11 +18,24 @@ module SqlImport
     MAX_ROWS = 5_000
     # Alias/claim notes and skipped links kept for the preview and the report, each.
     MAX_NOTES = 100
-    REFUSALS = [ Validator::Invalid, Executor::Refused, ProjectMembership::LockTimeout ].freeze
+    # ActiveRecord::StatementInvalid: a value that passes the validator's grammar and that MariaDB rejects
+    # (1e999, a roots line that isn't JSON) fails the run inside its transaction, so nothing was written.
+    REFUSALS = [ Validator::Invalid, Executor::Refused, ProjectMembership::LockTimeout, ActiveRecord::StatementInvalid ].freeze
     # The notes listing links the run didn't write, by the action of their affected rows.
     LINK_NOTES = { "skipped_links" => "skipped_link", "dropped_links" => "dropped_link" }.freeze
 
     module_function
+
+    # The reason to show for a refusal: the database's own message for a value MariaDB rejected (not the
+    # adapter's wrapper with the statement), else the refusal's message.
+    #
+    # @param error [StandardError] one of REFUSALS
+    # @return [String]
+    def refusal_reason(error)
+      return error.message unless error.is_a?(ActiveRecord::StatementInvalid)
+
+      (error.cause || error).message
+    end
 
     # Stores the upload, validates it and dry-runs it; a refused file leaves nothing behind.
     #

@@ -131,6 +131,17 @@ RSpec.describe "Projects › Imports (graph_mem-sql)", type: :request do
       expect(html.at_css("[data-testid='import-form-error']").text).to include("refused and nothing was written", "is a Project on one side")
     end
 
+    it "refuses a value MariaDB rejects after the grammar passed it, with the database's message, writing and keeping nothing" do
+      script = sql_export(project)
+      sql_delete_tree!(project)
+      rejected = resign(script.sub("'part_of', NULL,", "'part_of', 1e999,"))
+      expect(SqlImport::Validator.validate(rejected)).to be_a(SqlImport::Validator::Script)
+
+      expect { upload(rejected) }.not_to(change { [ MemoryEntity.count, OperationProgress.count, AuditLog.count, stored_scripts.size ] })
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(html.at_css("[data-testid='import-form-error']").text).to include("refused and nothing was written", "Illegal double '1e999' value")
+    end
+
     it "validates the stored script again on execute: a changed one doesn't run and the preview says why" do
       script = sql_export(project)
       sql_delete_tree!(project)
