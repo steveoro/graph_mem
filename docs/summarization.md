@@ -51,7 +51,7 @@ Every Ollama request sends `think: false` (1.75.0). A thinking model (`qwen3`, `
    - `global`: searches the full graph and uses context only as a relevance boost.
 3. **Optional traversal** via `GraphTraversalService` when `max_depth > 0`.
 4. **Active observation filtering** — obsolete and superseded rows are excluded.
-5. **Query-aware ranking** — observation token/vector relevance, then entity relevance, `trust_score`, confidence, then stable ID tie-breakers. An observation without an embedding yet (`embedded_at` NULL) is scored on its tokens alone (1.93.5; before, the zero-vector placeholder gave it the top vector score, see [architecture](architecture.md#embedding-service-appservicesembedding_servicerb)).
+5. **Query-aware ranking** — observation token/vector relevance, then entity relevance, `trust_score`, confidence, then stable ID tie-breakers. An observation without a current embedding (`embedded_at` NULL: new, or edited and waiting to be re-embedded) is scored on its tokens alone (1.93.5; before, a new fact's zero-vector placeholder gave it the top vector score, and an edited fact was scored on its old vector; see [architecture](architecture.md#embedding-service-appservicesembedding_servicerb)).
 6. **Contradiction hints** — when vectors are available, semantically similar polarity-opposite pairs of embedded observations are flagged with `has_contradiction: true` in the evidence payload; an unembedded one is not compared.
 
 Source IDs are attached by GraphMem from the selected evidence. They are never taken from LLM output.
