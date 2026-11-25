@@ -34,5 +34,5 @@
                 = row["id"] || "—"
             %td= row["entity"]
             %td= row["detail"]
-            %td= Array(row["fields"]).join(", ")
+            %td= row["reason"] || Array(row["fields"]).join(", ")
     = paginate page

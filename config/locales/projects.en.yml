@@ -124,6 +124,7 @@ en:
           unchanged: "unchanged"
           kept_local: "kept local"
           skipped_link: "skipped"
+          dropped_link: "link dropped"
         table: "Table"
         action: "Action"
         entity: "Entity"
@@ -138,6 +139,7 @@ en:
         no_rows: "No row would change."
         matches: "Matched by alias or claimed"
         skipped_links: "Skipped links (the other end is not here)"
+        dropped_links: "Dropped outdated_by links (the model would refuse them; each fact keeps its status and reason)"
         more: "… and %{count} more"
         full_maintenance:
           label: "Run full maintenance now"
@@ -173,10 +175,10 @@ en:
           keywords: "Keyword paths requested for the new and changed facts."
           fact_supersede: "%{count} source facts queued for Outdated by a fact."
           review_rows: "Review rows seeded: %{merges} entity merges, %{duplicates} reworded duplicates."
+          near_duplicates_vectors_off: "The near-duplicate check needs vector columns, which this install doesn't have: reworded duplicates among the %{count} new observations were not looked for."
           near_duplicates_unchecked: "The near-duplicate check could not run for %{count} new observations (%{reason}): reworded duplicates among them were not proposed for review."
           reasons:
             unavailable: "the embedding service is down"
-            vectors_off: "vector columns are off here"
             lock_busy: "they are not embedded yet"
             not_embedded: "they are not embedded yet"
           compaction:

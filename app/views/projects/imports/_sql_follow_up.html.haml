@@ -25,7 +25,10 @@
         %li= t("#{scope}.fact_supersede", count: follow_up["fact_supersede_queued"].to_i)
       - if review_rows
         %li= t("#{scope}.review_rows", merges: review_rows["entity_merge"].to_i, duplicates: review_rows["delete_observation"].to_i)
-      - if unchecked.positive?
+      - if unchecked.positive? && follow_up.dig("near_duplicates", "reason") == "vectors_off"
+        -# No vector columns on this install: a standing limit, not something to fix now.
+        %li.projects-hint{ data: { testid: "sql-import-near-duplicates-unchecked" } }= t("#{scope}.near_duplicates_vectors_off", count: unchecked)
+      - elsif unchecked.positive?
         %li.projects-error{ role: "status", data: { testid: "sql-import-near-duplicates-unchecked" } }
           = t("#{scope}.near_duplicates_unchecked", count: unchecked, reason: t("#{scope}.reasons.#{follow_up.dig('near_duplicates', 'reason')}", default: t("#{scope}.reasons.not_embedded")))
       - if follow_up["compaction"]

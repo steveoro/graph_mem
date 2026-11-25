@@ -1,6 +1,7 @@
--# The entities matched by alias or claimed (or inserted, and why), and the links whose other end isn't here.
+-# The entities matched by alias or claimed (or inserted, and why), the links whose other end isn't
+-# here, and the outdated_by links the merge dropped (the model would refuse them).
 - notes = notes.to_h
-- { "matches" => "matches_count", "skipped_links" => "skipped_count" }.each do |key, count_key|
+- { "matches" => "matches_count", "skipped_links" => "skipped_links_count", "dropped_links" => "dropped_links_count" }.each do |key, count_key|
   - next if notes[key].blank?
   .ui-card{ data: { testid: "sql-import-#{key.dasherize}" } }
     %h2.ui-label= t("projects.imports.sql.#{key}")

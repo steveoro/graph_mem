@@ -19,6 +19,8 @@ module SqlImport
     # Alias/claim notes and skipped links kept for the preview and the report, each.
     MAX_NOTES = 100
     REFUSALS = [ Validator::Invalid, Executor::Refused, ProjectMembership::LockTimeout ].freeze
+    # The notes listing links the run didn't write, by the action of their affected rows.
+    LINK_NOTES = { "skipped_links" => "skipped_link", "dropped_links" => "dropped_link" }.freeze
 
     module_function
 
@@ -88,25 +90,28 @@ module SqlImport
     end
 
     # @param affected [Array<Hash>] Executor::Result#affected
-    # @return [Array<Hash>] table, action, id, entity, detail and the changed fields (the shape of
-    #   the operation's details["affected"], plus detail)
+    # @return [Array<Hash>] table, action, id, entity, detail and the changed fields, or the reason of a
+    #   skipped or dropped link (the shape of the operation's details["affected"], plus detail and reason)
     def rows(affected)
       affected.map do |row|
+        link = LINK_NOTES.value?(row["action"])
         { "table" => row["table"], "action" => row["action"], "id" => row["id"], "entity" => row["entity"], "detail" => row["detail"],
-          "fields" => row["action"] == "skipped_link" ? nil : row["changed"]&.keys }
+          "fields" => (row["changed"]&.keys unless link), "reason" => (row.dig("changed", "reason") if link) }.compact
       end
     end
 
     # @return [Hash] "matches": the entities matched by alias, claimed from global, or inserted because
     #   their name was ambiguous or a namesake wasn't claimed; "skipped_links": the edges whose other end
-    #   isn't here, with the reason; each capped at MAX_NOTES, with the full counts
+    #   isn't here; "dropped_links": the outdated_by links the merge dropped because the model would
+    #   refuse them, each with the reason; each capped at MAX_NOTES, with the full counts ("<key>_count")
     def notes(affected)
       matches = affected.select { |row| row["table"] == "memory_entities" && row["detail"].to_s.match?(/\A[^,]+, /) }
-      skipped = affected.select { |row| row["action"] == "skipped_link" }
-      { "matches" => matches.first(MAX_NOTES).map { |row| row.slice("action", "id", "entity", "detail") },
-        "matches_count" => matches.size,
-        "skipped_links" => skipped.first(MAX_NOTES).map { |row| row.slice("entity", "detail").merge("reason" => row.dig("changed", "reason")) },
-        "skipped_count" => skipped.size }
+      LINK_NOTES.each_with_object("matches" => matches.first(MAX_NOTES).map { |row| row.slice("action", "id", "entity", "detail") },
+                                  "matches_count" => matches.size) do |(key, action), notes|
+        listed = affected.select { |row| row["action"] == action }
+        notes[key] = listed.first(MAX_NOTES).map { |row| row.slice("entity", "detail").merge("reason" => row.dig("changed", "reason")) }
+        notes["#{key}_count"] = listed.size
+      end
     end
   end
 end

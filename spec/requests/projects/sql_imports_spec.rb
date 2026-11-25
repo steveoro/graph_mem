@@ -83,6 +83,32 @@ RSpec.describe "Projects › Imports (graph_mem-sql)", type: :request do
       expect(html.at_css("[data-testid='import-row-#{operation.operation_id}']").text).to include("synth_prj.sql", "1 new, 1 updated, 0 kept local")
     end
 
+    it "lists an outdated_by link the merge dropped, as a note and as a row, on the preview and the report" do
+      gear = fs_member!(project, "SynthGear", "Component")
+      source_fact = fs_fact!(gear, "SynthGear replaces the old renderer.")
+      fs_observe!(widget, "SynthWidget used the old renderer.").mark_obsolete!(reason: "synthetic retire", outdated_by: source_fact)
+      source_fact.update!(tags: []) # after it outdated the observation
+      script = sql_export(project)
+      sql_delete_tree!(project)
+
+      upload(script)
+      session_id = session_id_from_redirect
+      get projects_import_path(session_id, rows_action: "dropped_link")
+
+      note = "SynthWidget: outdated_by -> #"
+      reason = "the observation it names is not a source fact of the same project"
+      expect(html.at_css("[data-testid='sql-import-dropped-links']").text).to include(note, "SynthGear replaces the old renderer.", reason)
+      expect(html.css("[data-testid='sql-import-row']").map(&:text)).to contain_exactly(include("link dropped", "SynthWidget", reason))
+      expect(html.at_css("select#rows_action option[selected]").text).to eq("link dropped")
+
+      post execute_projects_import_path(session_id)
+      follow_redirect!
+
+      expect(html.at_css("[data-testid='sql-import-dropped-links']").text).to include(note, reason)
+      expect(html.css("[data-testid='sql-import-row']").map(&:text)).to include(include("link dropped", reason))
+      expect(MemoryObservation.find_by!(content: "SynthWidget used the old renderer.")).to have_attributes(status: "obsolete", outdated_by_id: nil)
+    end
+
     it "refuses a file the validator rejects, with its reason, writing and keeping nothing" do
       edited = sql_export(project).sub("'SynthWidget'", "'SynthWidgeT'")
 
@@ -140,20 +166,33 @@ RSpec.describe "Projects › Imports (graph_mem-sql)", type: :request do
       expect(flash[:notice]).to eq("Full maintenance started (System › Background jobs).")
     end
 
-    it "shows the follow-up's outcome, saying when the near-duplicate check couldn't run", :with_test_embeddings do
+    # A new fact next to a reworded one the target had; returns the follow-up's report page.
+    def report_with_reworded_fact
       fs_observe!(widget, "Restated: SynthWidget renders tiles.")
       script = sql_export(project)
       MemoryObservation.where(memory_entity_id: widget.id).delete_all
       fs_observe!(widget, "SynthWidget renders tiles.")
       operation = run_import(script)
-
       SqlImportFollowUpJob.perform_now(operation.operation_id)
       get report_projects_import_path(operation.operation_id)
+      html.at_css("[data-testid='sql-import-near-duplicates-unchecked']")
+    end
+
+    it "warns when the near-duplicate check couldn't run because the embedding service is down", :with_test_embeddings do
+      unchecked = report_with_reworded_fact
 
       expect(html.at_css("[data-testid='sql-import-follow-up-status']").text).to eq("done")
       expect(html.at_css("[data-testid='sql-import-follow-up']").text).to include("the embedding service did not answer")
-      expect(html.at_css("[data-testid='sql-import-near-duplicates-unchecked']").text)
-        .to include("could not run for 1 new observations (the embedding service is down)")
+      expect(unchecked.text).to include("could not run for 1 new observations (the embedding service is down)")
+      expect(unchecked["class"]).to eq("projects-error")
+    end
+
+    it "only hints that the near-duplicate check needs vector columns on an install without them" do
+      unchecked = report_with_reworded_fact
+
+      expect(unchecked.text).to include("needs vector columns, which this install doesn't have", "1 new observations")
+      expect(unchecked["class"]).to eq("projects-hint")
+      expect(unchecked["role"]).to be_nil
     end
 
     it "refuses the full-maintenance route without a CSRF token" do
