@@ -99,19 +99,13 @@ class MemoryRelation < ApplicationRecord
   end
 
   # Recomputes the trust score of every active observation of the given entities (the structural
-  # boost counts their relations). The after_commit hook runs it per created or deleted edge; bulk
-  # writers that suppress the hook call it once per touched entity.
+  # boost counts their relations): ObservationTrustRecompute. The after_commit hook runs it per
+  # created or deleted edge; bulk writers that suppress the hook call it once per touched entity.
   #
   # @param entity_ids [Enumerable<Integer>]
   # @return [void]
   def self.recompute_trust_scores_for(entity_ids)
-    entity_ids.to_a.compact.uniq.each do |entity_id|
-      MemoryObservation
-        .where(memory_entity_id: entity_id, status: MemoryObservation::ACTIVE_STATUS)
-        .find_each do |observation|
-          observation.update_column(:trust_score, ObservationTrustRanker.rank(observation))
-        end
-    end
+    ObservationTrustRecompute.call(entity_ids: entity_ids)
   end
 
   private

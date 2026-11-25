@@ -3,16 +3,6 @@
 # Progress, report and rescan bookkeeping for ImportExecutionStrategy
 # (extracted for the 500-line rule).
 module ImportExecutionStrategy::Reporting
-  def recompute_trust_for_touched_entities
-    @relation_endpoint_ids.each do |entity_id|
-      MemoryObservation
-        .where(memory_entity_id: entity_id, status: MemoryObservation::ACTIVE_STATUS)
-        .find_each do |observation|
-          observation.update_column(:trust_score, ObservationTrustRanker.rank(observation))
-        end
-    end
-  end
-
   def enqueue_embedding_backfill
     # Merges count too: an alias-only merge clears embedded_at via
     # before_update but creates nothing, so without this the entity silently

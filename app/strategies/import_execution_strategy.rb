@@ -203,7 +203,8 @@ class ImportExecutionStrategy
     dedup_warning = @observation_duplicate_detector.fallback_warning
     @logger.warn "ImportExecutionStrategy: #{dedup_warning}" if dedup_warning
 
-    recompute_trust_for_touched_entities
+    # Shared with the SQL import's follow-up (SqlImport::FollowUp).
+    ObservationTrustRecompute.call(entity_ids: @relation_endpoint_ids)
 
     @progress_tracker&.complete!(message: "Import completed", counters: progress_counters)
 
