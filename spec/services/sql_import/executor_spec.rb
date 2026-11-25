@@ -29,6 +29,17 @@ RSpec.describe SqlImport::Executor do
     expect(sql_counts(newer)).to include("entities/updated" => 1)
   end
 
+  it "records each affected row in the import operation, its changed field names as a JSON array" do
+    script = sql_export(project)
+    widget.update_columns(description: "older here", updated_at: 1.day.ago)
+
+    result = sql_import(script)
+
+    affected = OperationProgress.find_by!(operation_id: result.operation_id).details["affected"]
+    expect(affected).to contain_exactly(include("table" => "memory_entities", "action" => "updated", "id" => widget.id,
+                                                "entity" => "SynthWidget", "fields" => [ "description" ]))
+  end
+
   it "matches observations on SHA2 of the content, so a trailing space makes another fact" do
     fs_observe!(widget, "abc ")
     script = sql_export(project)
