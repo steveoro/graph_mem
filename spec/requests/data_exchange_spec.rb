@@ -122,6 +122,83 @@ RSpec.describe 'DataExchange', type: :request do
         expect(data['root_nodes'].length).to eq(2)
       end
     end
+
+    context 'with a format' do
+      it 'keeps JSON as the default and as format=json' do
+        get export_data_exchange_index_path, params: { ids: [ project1.id ] }
+        default_type = response.content_type
+        get export_data_exchange_index_path, params: { ids: [ project1.id ], format: 'json' }
+
+        expect(response.content_type).to eq(default_type)
+        expect(response.content_type).to include('application/json')
+        expect(response.headers['Content-Disposition']).to match(/graph_mem_export_\d{8}_\d{6}\.json/)
+        expect(JSON.parse(response.body)['root_nodes'].first['name']).to eq('Project Alpha')
+      end
+
+      it 'returns a graph_mem-sql script for format=sql' do
+        get export_data_exchange_index_path, params: { ids: [ project1.id ], format: 'sql' }
+
+        expect(response).to have_http_status(:ok)
+        expect(response.content_type).to include('application/sql')
+        expect(response.headers['Content-Disposition']).to include('attachment')
+        expect(response.headers['Content-Disposition']).to match(/graph_mem_export_\d{8}_\d{6}\.sql/)
+        expect(response.body.lines.first).to start_with('-- graph_mem-sql v')
+        expect(response.body).to include("'Project Alpha'", "'Task One'", "'Test observation'")
+        expect { SqlImport::Validator.validate(response.body) }.not_to raise_error
+      end
+
+      it 'answers 400 to an unknown format, whatever else is wrong' do
+        [ 'xml', 'SQL', 'sql;', '' ].reject(&:empty?).each do |format|
+          get export_data_exchange_index_path, params: { ids: [ project1.id ], format: format }
+
+          expect(response).to have_http_status(:bad_request)
+          expect(JSON.parse(response.body)['error']).to include("Unknown format '#{format}'")
+        end
+        get export_data_exchange_index_path, params: { format: 'xml' }
+        expect(response).to have_http_status(:bad_request)
+      end
+
+      it 'answers a script request the way the JSON one answers: no ids 422, a member of a project 422 with the reason' do
+        get export_data_exchange_index_path, params: { format: 'sql' }
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(JSON.parse(response.body)['error']).to eq('No entity IDs provided')
+
+        get export_data_exchange_index_path, params: { ids: [ 'abc' ], format: 'sql' }
+        expect(response).to have_http_status(:unprocessable_content)
+
+        get export_data_exchange_index_path, params: { ids: [ task1.id ], format: 'sql' }
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(JSON.parse(response.body)['error']).to include('Task One', 'member of a project')
+      end
+    end
+
+    context 'when signed out' do
+      before { delete operator_logout_path }
+
+      it 'sends either format to the login page' do
+        [ nil, 'json', 'sql' ].each do |format|
+          get export_data_exchange_index_path, params: { ids: [ project1.id ], format: format }.compact
+
+          expect(response).to redirect_to(operator_login_path)
+        end
+      end
+    end
+
+    context 'as a guest' do
+      before do
+        delete operator_logout_path
+        enable_guest!
+        sign_in_guest
+      end
+
+      it 'answers both formats as it answers the JSON one' do
+        get export_data_exchange_index_path, params: { ids: [ project1.id ] }
+        status = response.status
+        get export_data_exchange_index_path, params: { ids: [ project1.id ], format: 'sql' }
+
+        expect(response.status).to eq(status)
+      end
+    end
   end
 
   # Cleanup endpoints

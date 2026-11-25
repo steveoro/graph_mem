@@ -118,13 +118,13 @@
     {
       "warning_type": "File Access",
       "warning_code": 16,
-      "fingerprint": "9d7f3e04fd0207d2673bf04b90be440e7b7ef44a871268a881b43eb9af0eadfb",
+      "fingerprint": "7b5a2015347d792d8a126b3dabde115892608ba176e7542c20df9e6920e7c7e1",
       "check_name": "SendFile",
       "message": "Parameter value used in file name",
       "file": "app/controllers/projects/exports_controller.rb",
-      "line": 47,
+      "line": 63,
       "link": "https://brakemanscanner.org/docs/warning_types/file_access/",
-      "code": "send_file(ExportJob.download_path(find_operation!(params[:operation_id], \"export\").operation_id), :type => \"application/json\", :disposition => \"attachment\", :filename => (\"graph_mem_export_#{find_operation!(params[:operation_id], \"export\").created_at.strftime(\"%Y%m%d_%H%M%S\")}.json\"))",
+      "code": "send_file(ExportJob.download_path(find_operation!(params[:operation_id], \"export\").operation_id, :format => export_format(find_operation!(params[:operation_id], \"export\"))), :type => :BRAKEMAN_SAFE_LITERAL, :disposition => \"attachment\", :filename => download_name(find_operation!(params[:operation_id], \"export\"), export_format(find_operation!(params[:operation_id], \"export\"))))",
       "render_path": null,
       "location": {
         "type": "method",
@@ -136,7 +136,7 @@
       "cwe_id": [
         22
       ],
-      "note": "UI-6 exports download: the path is ExportJob.download_path of an operation id that find_operation! checked as a UUID and loaded from OperationProgress (operation_type export); nothing from params reaches the path."
+      "note": "UI-6 exports download: the path is ExportJob.download_path of an operation id that find_operation! checked as a UUID and loaded from OperationProgress (operation_type export); nothing from params reaches the path. The format is read from the row's details and checked against ExportJob::FORMATS; the type comes from a fixed map and the name from the row's root names (parameterized), never from params."
     }
   ],
   "brakeman_version": "8.1.0"

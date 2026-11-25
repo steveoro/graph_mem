@@ -22,6 +22,13 @@
             %span.projects-muted= "(#{entity.entity_type}, #{entity.memory_observations_count} observations)"
       - if @roots_capped
         %p.projects-hint{ data: { testid: "export-roots-capped" } }= t("projects.exports.index.capped", count: ExportStrategy::ROOT_NODES_LIMIT)
+      %fieldset.projects-checks{ data: { testid: "export-format" } }
+        %legend.ui-label= t("projects.exports.index.format")
+        - ExportJob::FORMATS.each do |format|
+          %label{ data: { testid: "export-format-#{format}" } }
+            = radio_button_tag "export_format", format, @export_format == format, id: "export_format_#{format}"
+            %strong= t("projects.exports.formats.#{format}.name")
+            %span.projects-muted= t("projects.exports.formats.#{format}.hint")
       .projects-actions
         = submit_tag t("projects.exports.index.submit"), class: "ui-btn ui-btn-primary", data: { testid: "export-submit" }
 
@@ -34,11 +41,13 @@
         %tr
           %th= t("projects.imports.index.when")
           %th= t("projects.exports.index.roots")
+          %th= t("projects.exports.index.format")
           %th= t("projects.scans.index.status")
       %tbody
         - @exports.each do |export|
           %tr{ data: { testid: "export-row-#{export.operation_id}" } }
             %td= link_to t("projects.ago", time: time_ago_in_words(export.created_at)), projects_export_path(export.operation_id)
             %td= Array(export.details&.dig("root_names")).join(", ").presence || "—"
+            %td= t("projects.exports.formats.#{export_format(export)}.name")
             %td= dashboard_status_badge(export.status)
     = paginate @exports
