@@ -1,8 +1,8 @@
 -- Guards: each one stops the script before anything is written (SIGNAL rolls the transaction back).
 -- After the structure, the staged values: this path skips the validations of the models, so a value that
 -- MemoryEntity, MemoryObservation or MemoryRelation would refuse is refused here, the message naming the
--- field and the row (blank as Rails reads it: empty or only whitespace, Unicode spaces included). Tags or
--- properties that are not JSON at all are left to the json_valid CHECK of the tables, which refuses the write.
+-- field and the row (blank as Rails reads it: empty or only whitespace, Unicode spaces included), tags or
+-- properties that are not JSON at all included (the merge would otherwise fail in JSON_EXTRACT, naming no row).
 -- The lifecycle links are mapped by the merge and checked after it (06). Last, a created_at or updated_at
 -- more than a day ahead of the clock here is refused.
 DELIMITER //
@@ -58,6 +58,7 @@ BEGIN NOT ATOMIC
                                   WHEN BINARY o.perspective NOT IN ('world', 'experience')
                                     THEN CONCAT('perspective "', o.perspective, '" is not world or experience')
                                   WHEN o.valid_until < o.valid_from THEN CONCAT('valid_until ', o.valid_until, ' is before valid_from ', o.valid_from)
+                                  WHEN NOT JSON_VALID(o.tags) THEN 'tags is not JSON'
                                   WHEN JSON_VALID(o.tags) AND (JSON_TYPE(o.tags) <> 'ARRAY' OR EXISTS (
                                          SELECT 1 FROM JSON_TABLE(IF(JSON_VALID(o.tags), o.tags, '[]'), '$[*]' COLUMNS (i FOR ORDINALITY)) t
                                          WHERE JSON_TYPE(JSON_EXTRACT(o.tags, CONCAT('$[', t.i - 1, ']'))) <> 'STRING'))
@@ -74,6 +75,7 @@ BEGIN NOT ATOMIC
                              CASE WHEN r.relation_type REGEXP blank THEN 'relation_type is blank'
                                   WHEN r.weight < 0 THEN CONCAT('weight ', r.weight, ' is below 0')
                                   WHEN r.confidence < 0 OR r.confidence > 1 THEN CONCAT('confidence ', r.confidence, ' is not between 0 and 1')
+                                  WHEN NOT JSON_VALID(r.properties) THEN 'properties is not JSON'
                                   WHEN JSON_VALID(r.properties) AND JSON_TYPE(r.properties) <> 'OBJECT' THEN 'properties is not a JSON object'
                              END AS problem
                       FROM gm_stage_relations r

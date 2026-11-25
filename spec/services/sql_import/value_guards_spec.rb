@@ -132,6 +132,11 @@ RSpec.describe "graph_mem-sql: staged values the models would refuse" do
         refused(edited(fact_line, tags, "'[\\\"synth\\\", 1]'"), /memory_observations\.tags is not an array of strings/)
         refused(edited(fact_line, tags, "'[[\\\"synth\\\"]]'"), /memory_observations\.tags is not an array of strings/)
       end
+
+      it "refuses tags that are not JSON at all, naming the field" do
+        refused(edited(fact_line, tags, "'x'"), /memory_observations\.tags is not JSON/)
+        refused(edited(fact_line, tags, "'['"), /memory_observations\.tags is not JSON/)
+      end
     end
 
     describe "MemoryRelation" do
@@ -151,6 +156,10 @@ RSpec.describe "graph_mem-sql: staged values the models would refuse" do
       it "refuses properties that are not a JSON object" do
         refused(edited(edge_line, properties, "'[1]'"), /memory_relations\.properties is not a JSON object/)
         refused(edited(edge_line, properties, "'null'"), /memory_relations\.properties is not a JSON object/)
+      end
+
+      it "refuses properties that are not JSON at all, naming the field" do
+        refused(edited(edge_line, properties, "'x'"), /memory_relations\.properties is not JSON/)
       end
     end
   end
