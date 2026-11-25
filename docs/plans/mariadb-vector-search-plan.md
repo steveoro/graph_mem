@@ -1,7 +1,8 @@
 # Plan: make MariaDB vector search use its index (plus zero-vector fixes)
 
-> Status: **in progress. Steve said go on 2026-11-25; step 0 is done in PR A** (see "As built (PR A)"
-> under step 0), step 1 (PR B) is next. Decisions taken by Steve on 2026-11-20 and 2026-11-24 (see
+> Status: **in progress. Steve said go on 2026-11-25; steps 0 and 1 are done in PRs A and B, released
+> as 1.93.5** (see "As built (PR A)" under step 0 and "As built (PR B)" under step 1); steps 2-4 (PRs C,
+> E, D, 1.97.0) come after Dream State R2. Decisions taken by Steve on 2026-11-20 and 2026-11-24 (see
 > the two "Decisions" sections). Written against `main` at `c546109` (merge of #188, Dream State R1a,
 > **1.93.0**). Each kickoff rechecks its own line references against `main`.
 >
@@ -200,6 +201,57 @@ caller since before `c546109`; its guard is switched anyway, and step 4 can dele
     exact. This is the reason filtered searches stay exact.
 - Gate the EXPLAIN specs on `MariaDB >= 11.8` and keep CI pinned to `cimg/mariadb:11.8.6`. Optimizer
   output can change between minors.
+
+**As built (PR B, 1.93.5).** `bin/rails graph_mem:vector_bench` (`lib/tasks/vector_bench.rake`,
+`lib/graph_mem/vector_bench/`; how to run it: `docs/development.md`, "Vector index bench") and the specs
+`spec/db/vector_index_explain_spec.rb` and `spec/db/vector_index_recall_spec.rb`. Both use one generator,
+`GraphMem::VectorBench::Fixture`: a shared direction plus a cluster center plus noise, so two members of
+a cluster sit at a cosine distance of about 0.3 and two clusters at about 0.6 (a first cut with
+orthogonal clusters left the index stuck in a wrong cluster for many probes). The specs seed 1,000
+entities and 1,000 observations in 20 clusters once per group inside a group-level transaction that
+`after(:all)` rolls back (`spec/support/vector_index_fixture.rb`); the three files add about 3 s. Checked
+on MariaDB 11.8.9 (local) and 11.8.6 (the `mariadb:11.8` image, CI's minor):
+- **EXPLAIN.** None of the sites in the table uses the index; the line references held within a few
+  lines, except `import_observation_duplicate_detector.rb`, whose query is now at 157-180 (comment
+  165-172). **Correction to the table:** a scalar-subquery vector does not keep the index out:
+  `ORDER BY VEC_DISTANCE_COSINE(embedding, (SELECT embedding ...)) LIMIT n` uses it on both minors, and
+  so does a `WHERE embedded_at IS NOT NULL`. What keeps it out today is the `HAVING` (entity search,
+  both `suggest_merges`, merge evidence, contradictions, supersede, the summarizer), `+ 0` (entity
+  search, the import detector), the aggregate (observation search) or the missing `ORDER BY` (ranker,
+  summarizer, pairwise). A plain one-type `WHERE entity_type = ? ORDER BY d LIMIT 10` is cost-based: on the CI
+  fixture (11.8.9) EXPLAIN picks the `entity_type` B-tree for the rarer types and the vector index for
+  the commoner ones (8 of 20 probes, which then returned 3-10 rows instead of 10). That is why the typed
+  search keeps its `+ 0`.
+- **Recall@10 on the CI fixture** (raw `ORDER BY d LIMIT 10` against exact, 40 probes): the index's
+  graph differs run to run on the same rows; over 30 runs the average was 0.37-0.85 on 11.8.9 and
+  0.66-0.88 on 11.8.6, with probes at 0 (the search stays in a wrong cluster) in almost every run and
+  none clearing the Decision 4 bar. The spec asserts a floor of 0.2 and keeps the bar as a `pending`
+  example for step 2. Filter hazard (one of 10 types, 20 probes): exact 200 rows; the index with the
+  WHERE 129-198, only 38-135 of them exact; the index's top 10 filtered afterwards 20-34.
+- **Bench** (11.8.9, one workstation, default `M=6`, `mhnsw_ef_search=20`, 16 MiB cache; p50):
+
+  | | 10k entities + 10k observations | 50k + 50k |
+  |---|---:|---:|
+  | entity search, exact (`limit 40`) | 21.7 ms | 717 ms |
+  | entity search with a type, exact | 4.9 ms | 544 ms |
+  | entity search, raw index shape | 6.6 ms (0.24 ms with a binary literal) | 43 ms (31 ms) |
+  | observation search, exact | 1,158 ms | 6,849 ms |
+  | observation search, raw index shape | 8.9 ms | 31.5 ms |
+  | `suggest_merges`, per entity, exact (one call over every entity) | 1.5 ms (about 14 s) | 201 ms (about 159 min) |
+  | recall@10, entities / observations (20 probes) | 0.39 / 0.29 | 0.34 / 0.61 |
+  | INSERT with / without the VECTOR KEYs | 2.3 / 0.7 ms (401 / 1,393 rows/s) | 3.5 / 0.7 ms (220 / 1,372 rows/s) |
+  | embedding UPDATE with / without (p95 with) | 1.2 / 1.0 ms (1.9 ms) | 2.6 / 1.0 ms (22 ms) |
+
+  Runs took 43 s and 5.5 min; 200k rows was not run (seeding alone slowed from 3,030 to 1,143 rows/s
+  between the two, so it would take well over 20 min). For Decision 1: the VECTOR KEYs make a
+  single-row write 2.5-5 times slower at 50k rows, still a few ms (the INSERT puts the placeholder's zero
+  vector into the graph too, and costs more than the embedding UPDATE that follows it).
+- **Found on the way, for steps 2-3:** a `VEC_FromText('<text>')` that isn't referenced by a `HAVING`
+  is parsed again for every row the query reads, about 40-130 µs a row for a full-precision 768-d
+  vector. That is most of the exact observation search's cost (`MIN(...)` with `GROUP BY`, no
+  `HAVING`), and it makes the raw index shape 25 times slower at 10k when it selects `d` with the text
+  literal. A binary literal (or one parse per query) avoids it. Nothing changed here (no runtime change
+  in PR B).
 
 ## Step 2. Index-friendly vector search for unfiltered queries; exact scans stay for filtered ones
 
