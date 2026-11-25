@@ -82,7 +82,7 @@ INSERT INTO operation_progresses (operation_id, operation_type, status, phase, m
                      'outside_app', JSON_EXTRACT(IF(@gm_operation_id IS NULL, 'true', 'false'), '$'),
                      'affected_count', n,
                      'affected', (SELECT JSON_ARRAYAGG(JSON_OBJECT('table', tbl, 'action', action, 'id', target_id, 'entity', entity,
-                                                                   'fields', JSON_KEYS(changed))
+                                                                   'fields', JSON_EXTRACT(JSON_KEYS(changed), '$'))
                                                ORDER BY tbl, target_id LIMIT 5000) FROM gm_touched)),
          UTC_TIMESTAMP(6), UTC_TIMESTAMP(6), UTC_TIMESTAMP(6), UTC_TIMESTAMP(6)
   FROM (SELECT COUNT(*) AS n FROM gm_touched) total;
