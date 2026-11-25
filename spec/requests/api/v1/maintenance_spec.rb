@@ -115,5 +115,24 @@ RSpec.describe "API V1 Maintenance", type: :request do
       get "/api/v1/maintenance/suggest_merges", params: { entity_type: "Project" }
       expect(response).to have_http_status(:ok)
     end
+
+    # An unembedded entity holds the zero vector (spec/support/zero_vector_helpers.rb).
+    context "with an unembedded entity" do
+      include_context "zero-vector placeholders"
+
+      it "never compares it, as an anchor or as a candidate" do
+        left = assign_test_embedding!(MemoryEntity.create!(name: "SynthEntity1", entity_type: "Task"), 1.0, 0.0)
+        right = assign_test_embedding!(MemoryEntity.create!(name: "SynthEntity2", entity_type: "Task"), 0.99, Math.sqrt(1 - (0.99**2)))
+        pending_entity = unembedded { MemoryEntity.create!(name: "SynthEntity3", entity_type: "Task") }
+
+        sql = vector_distance_sql { get "/api/v1/maintenance/suggest_merges", params: { threshold: 0.3 } }
+
+        pairs = JSON.parse(response.body)["suggestions"].map { |suggestion| [ suggestion.dig("entity_a", "entity_id"), suggestion.dig("entity_b", "entity_id") ] }
+        expect(pairs).to eq([ [ left.id, right.id ] ])
+        expect(sql.size).to eq(2)
+        expect(sql).to all(match(/embedded_at`? IS NOT NULL/))
+        expect(sql.grep(/WHERE id = #{pending_entity.id}\b/)).to be_empty
+      end
+    end
   end
 end
