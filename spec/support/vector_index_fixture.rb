@@ -27,8 +27,8 @@ module VectorIndexFixture
   K = 10
   # The recall spec's floor. Recall@10 averaged over its 40 probes measured 0.37-0.85 in 30 local runs
   # on this fixture (MariaDB 11.8.9; one table alone fell to 0.09 once), with probes at 0 in almost
-  # every run (the search stays in a wrong cluster) and none clearing Decision 4's bar, which stays
-  # pending until step 2 tunes the ANN path.
+  # every run (the search stays in a wrong cluster) and none clearing Decision 4's bar, which is
+  # skipped until step 2 tunes the ANN path.
   MEASURED_RECALL_FLOOR = 0.2
   TABLES = EmbeddingIndexStatus::INDEX_NAMES.keys.map(&:to_s).freeze
 
