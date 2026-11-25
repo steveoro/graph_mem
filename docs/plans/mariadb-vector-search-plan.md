@@ -1,9 +1,9 @@
 # Plan: make MariaDB vector search use its index (plus zero-vector fixes)
 
-> Status: **plan, decisions taken by Steve on 2026-11-20 and 2026-11-24 (see the two "Decisions"
-> sections). Still plan only: no code PR until Steve says go.** Written against `main` at `c546109`
-> (merge of #188, Dream State R1a, **1.93.0**). Each kickoff rechecks its own line references
-> against `main`.
+> Status: **in progress. Steve said go on 2026-11-25; step 0 is done in PR A** (see "As built (PR A)"
+> under step 0), step 1 (PR B) is next. Decisions taken by Steve on 2026-11-20 and 2026-11-24 (see
+> the two "Decisions" sections). Written against `main` at `c546109` (merge of #188, Dream State R1a,
+> **1.93.0**). Each kickoff rechecks its own line references against `main`.
 >
 > **Release renumbered (2026-11-24):** the `part_of` membership PRs took 1.93.1 and 1.93.2, so the
 > mcp 1.11.0 bump became 1.93.3 and this plan's step 0 + 1 release 1.93.4 (it was 1.93.2). Later the
@@ -156,6 +156,30 @@ gathered for the ranker. Small change, no migration. It changes the observation 
 `summarize`, `rank_observations`, `get_entities` and `traverse_graph` return, but only in that
 unembedded rows stop getting a false top score. **Decided: ships as a bug fix, 1.93.5** (Decision 2;
 no MCP params or outputs change).
+
+**As built (PR A, on `main` at 1.93.4).** The step 0 line references held, except the compactor's
+helper, which moved (`dream_state_compactor.rb:229` → `257`, `embedding_sql_literal`) and has had no
+caller since before `c546109`; its guard is switched anyway, and step 4 can delete it.
+- **Test schema.** The committed `db/structure.sql` already has the NOT NULL columns, the VECTOR KEYs
+  and the triggers, and `db:schema:load` (CI) or `db:test:prepare` installs them, so every spec runs on
+  the index install. The specs install and drop nothing: the shared context `zero-vector placeholders`
+  (`spec/support/zero_vector_helpers.rb`) checks the install in `before(:all)` and fails the group
+  without it, and `unembedded { … }` checks each record it creates holds the zero vector. This replaces
+  the install-and-drop setup "Test burden" describes; PR B can reuse the context.
+- **On the old code** 10 of the 16 new examples failed (a 17th, pinning `>=` below, came later):
+  the ranker's similarity for a placeholder was 1.0 (score 0.4 with no matching token),
+  `ObservationRankingService` and `summarize` ranked it first, the summarizer ran its partner query
+  anchored on it, and `EntityMergeEvidence.candidates_for` (and so the tree walk) ran its merge query
+  with a zero-vector literal. That last caller is **not**
+  covered by `with_embedding`: the tree walk passes every entity. `ContradictionDetector` and
+  `suggest_merges` (both copies) were already safe through `with_embedding`, as expected.
+- **MariaDB 11.8.9** (local) matches the 11.8.6 notes above; the client reads the NaN as `0.0`
+  (mysql2). One more check: `d >= x` is **true** for the NaN, so only a `<` threshold drops it.
+- **Also fixed in PR A:** `review_policies/auto_apply_contradiction.rb` (`within_distance?`) guarded its
+  pairwise distance with `embedding IS NOT NULL`, which a placeholder passes; the NaN then read as
+  0.0, inside any distance cap, so a seeded contradiction row with an unembedded fact was auto-applied
+  (a spec showed it). Its pairs normally come from `ContradictionDetector`, which compares embedded
+  facts only, so it was latent; it now checks `embedded_at`.
 
 ## Step 1. Synthetic benchmark plus EXPLAIN and recall specs
 

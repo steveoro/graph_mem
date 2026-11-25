@@ -234,4 +234,27 @@ RSpec.describe DreamStateCompactor, type: :model do
       expect(node_ops).not_to have_received(:merge_into)
     end
   end
+
+  # The tree walk visits every entity, embedded or not; an unembedded one holds the zero vector
+  # (spec/support/zero_vector_helpers.rb).
+  describe "an unembedded entity in the tree walk" do
+    include_context "zero-vector placeholders"
+
+    let!(:pending_entity) { unembedded { MemoryEntity.create!(name: "SynthEntity1", entity_type: "Task") } }
+
+    it "runs no merge query for it" do
+      twin = assign_test_embedding!(MemoryEntity.create!(name: "SynthEntity2", entity_type: "Task"), 1.0)
+      compactor = described_class.new(run: run)
+
+      sql = vector_distance_sql { compactor.send(:process_entity_for_phase, "tree_walk", pending_entity.id) }
+
+      expect(sql).to be_empty
+      expect(compactor.instance_variable_get(:@review_items)).to be_empty
+      expect(MemoryEntity.where(id: [ pending_entity.id, twin.id ]).count).to eq(2)
+    end
+
+    it "gets no vector literal" do
+      expect(described_class.new(run: run).send(:embedding_sql_literal, pending_entity)).to be_nil
+    end
+  end
 end

@@ -120,4 +120,28 @@ RSpec.describe EntityMergeEvidence do
       expect(described_class.qualifies?(nil, right)).to be(false)
     end
   end
+
+  # An unembedded entity holds the zero vector (spec/support/zero_vector_helpers.rb). Dream state's
+  # tree walk passes every entity of the graph, embedded or not, to candidates_for.
+  describe "an unembedded source entity" do
+    include_context "zero-vector placeholders"
+
+    it "is skipped by candidates_for before any vector query" do
+      pending_entity = unembedded { MemoryEntity.create!(name: "SynthEntity1", entity_type: "Task") }
+      embedded = assign_test_embedding!(MemoryEntity.create!(name: "SynthEntity2", entity_type: "Task"), 1.0)
+
+      matches = nil
+      sql = vector_distance_sql { matches = described_class.candidates_for(pending_entity) }
+
+      expect(matches).to eq([])
+      expect(sql).to be_empty
+      expect(vector_distance_sql { described_class.candidates_for(embedded) }).not_to be_empty
+    end
+
+    it "gets no vector literal" do
+      pending_entity = unembedded { MemoryEntity.create!(name: "SynthEntity1", entity_type: "Task") }
+
+      expect(described_class.send(:vector_sql_literal, pending_entity)).to be_nil
+    end
+  end
 end

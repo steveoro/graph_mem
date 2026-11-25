@@ -117,11 +117,13 @@ module ReviewPolicies
       nil
     end
 
-    # The live cosine distance of the two facts, when both are embedded.
+    # The live cosine distance of the two facts, when both are embedded. `embedded_at`, not the
+    # column, says so: an unembedded fact holds the zero-vector placeholder, whose distance is NaN
+    # and reads as 0.0, inside any cap.
     def within_distance?(pair)
       distance = MemoryObservation.connection.select_value(MemoryObservation.sanitize_sql([
         "SELECT VEC_DISTANCE_COSINE(a.embedding, b.embedding) FROM memory_observations a, memory_observations b " \
-        "WHERE a.id = ? AND b.id = ? AND a.embedding IS NOT NULL AND b.embedding IS NOT NULL", pair.first.id, pair.last.id
+        "WHERE a.id = ? AND b.id = ? AND a.embedded_at IS NOT NULL AND b.embedded_at IS NOT NULL", pair.first.id, pair.last.id
       ]))
       !distance.nil? && distance.to_f <= AppSettings.review_number(:auto_apply_contradiction_max_distance)
     end

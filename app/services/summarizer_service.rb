@@ -218,8 +218,10 @@ class SummarizerService
     end
   end
 
+  # The anchor's stamp, not its vector column: an unembedded row holds the zero-vector placeholder,
+  # whose distances are NaN (never "near"), so it is not compared at all.
   def contradiction_partner_ids(observation, candidate_ids)
-    return [] unless observation.embedding.present?
+    return [] unless observation.embedded_at.present?
 
     partners = MemoryObservation
       .active

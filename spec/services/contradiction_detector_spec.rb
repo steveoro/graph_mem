@@ -121,4 +121,33 @@ RSpec.describe ContradictionDetector do
       expect(result).not_to be_empty
     end
   end
+
+  # An unembedded row holds the zero vector (spec/support/zero_vector_helpers.rb); load_observations
+  # keeps it out through `with_embedding`, before the anchor guard.
+  describe ".detect with an unembedded observation", :with_test_embeddings do
+    include_context "zero-vector placeholders"
+
+    before do
+      record_embedding_calls!
+      AppSettings.fact_keywords_enabled = false
+    end
+
+    after { AppSettings.where(var: "fact_keywords_enabled").delete_all }
+
+    it "never compares it, as an anchor or as a candidate" do
+      embedded = [ "Alpha Service sync is enabled", "Alpha Service runs in two regions" ].map do |content|
+        MemoryObservation.create!(memory_entity: entity, content: content)
+      end
+      pending_fact = unembedded { MemoryObservation.create!(memory_entity: entity, content: "Alpha Service sync is not enabled") }
+
+      result = nil
+      sql = vector_distance_sql { result = described_class.detect(entity.id, max_distance: 0.35, max_results: 10) }
+
+      expect(result).to be_empty
+      expect(sql.size).to eq(2)
+      embedded.each { |anchor| expect(sql.grep(/o2\.id = #{anchor.id}\b/).size).to eq(1) }
+      expect(sql).to all(match(/embedded_at`? IS NOT NULL/)) # candidates: embedded rows only
+      expect(sql.grep(/o2\.id = #{pending_fact.id}\b/)).to be_empty
+    end
+  end
 end

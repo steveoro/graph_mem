@@ -149,6 +149,24 @@ RSpec.describe ReviewPolicies::AutoApplyContradiction do
       expect(row.reload.status).to eq("approved")
     end
 
+    context "with a zero-vector placeholder" do
+      include_context "zero-vector placeholders"
+
+      # An unembedded fact holds the zero vector; its cosine distance is NaN, which reads as 0.0
+      # and would pass any cap.
+      it "doesn't apply a pair whose newer fact has no embedding yet" do
+        AppSettings.auto_apply_contradiction_free_text = true
+        older = MemoryObservation.create!(memory_entity: service_entity, content: "It listens on port 5000", created_at: 2.days.ago)
+        newer = unembedded do
+          MemoryObservation.create!(memory_entity: service_entity, content: "It listens on port 5001", created_at: 1.day.ago)
+        end
+        seed(older, newer)
+
+        expect(run["acted"]).to eq(0)
+        expect(older.reload.status).to eq("active")
+      end
+    end
+
     it "doesn't apply past the distance cap, or three changed values" do
       AppSettings.auto_apply_contradiction_free_text = true
       vectors["port 4001"] = apart

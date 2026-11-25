@@ -284,7 +284,7 @@ class ContradictionDetector
       # For small N (same entity + 1-hop) this is simple and correct; it can be
       # optimized later if contradiction detection is run on large subgraphs.
       observations.each do |anchor|
-        next if anchor.embedding.blank?
+        next if anchor.embedded_at.blank?
 
         candidates = MemoryObservation
           .active

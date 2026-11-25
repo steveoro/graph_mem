@@ -516,4 +516,43 @@ RSpec.describe SummarizerService do
       expect(contents).not_to include("borealis august fact")
     end
   end
+
+  # An unembedded row holds the zero vector, whose distance is NaN and reads as 0.0
+  # (spec/db/zero_vector_distance_spec.rb).
+  describe "unembedded observations", :with_test_embeddings do
+    include_context "zero-vector placeholders"
+
+    let(:service) { MemoryEntity.create!(name: "Alpha Service", entity_type: "Service") }
+
+    before { record_embedding_calls! }
+
+    it "doesn't compare an unembedded observation for contradiction marks" do
+      embedded = MemoryObservation.create!(memory_entity: service, content: "Alpha Service caching is enabled").reload
+      pending_fact = unembedded { MemoryObservation.create!(memory_entity: service, content: "Alpha Service caching is not enabled") }
+
+      result = nil
+      sql = vector_distance_sql do
+        expect { result = described_class.call(query: "Alpha Service caching", entity_id: service.id) }.not_to raise_error
+      end
+
+      anchored = sql.grep(/o2\.id = #{embedded.id}\b/)
+      expect(result[:observations].pluck(:id)).to contain_exactly(embedded.id, pending_fact.id)
+      expect(result[:observations].pluck(:has_contradiction)).to all(be(false))
+      expect(anchored).not_to be_empty
+      expect(anchored).to all(match(/embedded_at`? IS NOT NULL/)) # partners: embedded rows only
+      expect(sql.grep(/o2\.id = #{pending_fact.id}\b/)).to be_empty
+    end
+
+    it "doesn't give an unembedded observation the top vector score" do
+      # The embedded fact holds all four query tokens and a test vector unlike the query's: 0.6.
+      # The pending one holds two tokens: 0.5, where the placeholder's false 1.0 made it 0.7.
+      embedded = MemoryObservation.create!(memory_entity: service, content: "Alpha Service latency budget is 200 ms").reload
+      pending_fact = unembedded { MemoryObservation.create!(memory_entity: service, content: "Alpha Service restarts nightly") }
+
+      result = described_class.call(query: "alpha service latency budget", entity_id: service.id)
+
+      expect(result[:observations].pluck(:id)).to eq([ embedded.id, pending_fact.id ])
+      expect(result[:observations].pluck(:query_relevance)).to eq([ 0.6, 0.5 ])
+    end
+  end
 end

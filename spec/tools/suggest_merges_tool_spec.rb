@@ -69,6 +69,26 @@ RSpec.describe SuggestMergesTool, type: :model do
       end
     end
 
+    # An unembedded entity holds the zero vector (spec/support/zero_vector_helpers.rb).
+    context 'with an unembedded entity' do
+      include_context 'zero-vector placeholders'
+
+      it 'never compares it, as an anchor or as a candidate' do
+        left = assign_test_embedding!(MemoryEntity.create!(name: 'SynthEntity1', entity_type: 'Task'), 1.0, 0.0)
+        right = assign_test_embedding!(MemoryEntity.create!(name: 'SynthEntity2', entity_type: 'Task'), 0.99, Math.sqrt(1 - (0.99**2)))
+        pending_entity = unembedded { MemoryEntity.create!(name: 'SynthEntity3', entity_type: 'Task') }
+
+        result = nil
+        sql = vector_distance_sql { result = tool.call(threshold: 0.3) }
+
+        pairs = result[:suggestions].map { |suggestion| [ suggestion[:entity_a][:entity_id], suggestion[:entity_b][:entity_id] ] }
+        expect(pairs).to eq([ [ left.id, right.id ] ])
+        expect(sql.size).to eq(2)
+        expect(sql).to all(match(/embedded_at`? IS NOT NULL/))
+        expect(sql.grep(/WHERE id = #{pending_entity.id}\b/)).to be_empty
+      end
+    end
+
     context 'return format' do
       it 'returns the expected structure' do
         result = tool.call
