@@ -287,6 +287,70 @@ under it can't pass the suite.
   special, the models defer. A new explicit embedding call (a service, a job step) moves outside the
   lock block.
 
+### Vector index specs
+
+`spec/db/vector_index_explain_spec.rb` and `spec/db/vector_index_recall_spec.rb` (step 1 of the
+[MariaDB vector search plan](plans/mariadb-vector-search-plan.md)) run on a clustered fixture of 1,000
+entities and 1,000 observations, from the bench's generator (`GraphMem::VectorBench::Fixture`, below).
+The shared context `vector index fixture` (`spec/support/vector_index_fixture.rb`) seeds it once per
+group inside a group-level transaction (`pin_connection!`, the call the fixture transactions use), so
+every example's own transaction nests as a savepoint and `after(:all)` rolls the rows back, vector index
+included; it then checks the memory tables are empty again. The group is skipped below MariaDB 11.8.
+
+- **EXPLAIN shapes:** each example runs a real vector query site and checks whether its EXPLAIN shows
+  `idx_memory_entities_embedding` / `idx_memory_observations_embedding`. Today none does; a control
+  example checks the raw `ORDER BY VEC_DISTANCE_COSINE(...) LIMIT n` shape does. Steps 2 and 3 flip the
+  examples of the queries they change.
+- **Recall:** recall@10 of the raw index shape against exact, one probe per cluster and table. The
+  index's graph differs from run to run on the same rows, so the asserted floor sits under the lowest
+  measured run, and the plan's bar (Decision 4) is a skipped example until step 2 clears it (not `pending`: a run that happened to clear it would fail the suite).
+- **Filter hazard:** with a one-type filter the index returns fewer rows than exact, which is why
+  filtered searches stay exact scans.
+
+## Vector index bench
+
+`bin/rails graph_mem:vector_bench` measures vector search and write cost on synthetic rows, for the
+PR bodies of the [MariaDB vector search plan](plans/mariadb-vector-search-plan.md). It's opt-in and run
+by hand, never in CI. It creates its own scratch database (`graph_mem_vector_bench`), loads
+`db/structure.sql` into it, installs the VECTOR KEYs and triggers through `EmbeddingIndexManager` (as
+`embeddings:add_indexes` does) and drops it at the end. It refuses production, any database named in
+`config/database.yml`, a name without the `_vector_bench` suffix and an existing database it didn't
+make. It never connects to the configured database, never calls the embedding endpoint, and keeps the
+SQL log off while it runs.
+
+```bash
+RAILS_ENV=test bin/rails graph_mem:vector_bench ROWS=50000 > tmp/vector_bench_50k.md
+```
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `ROWS` | 10000 | entities |
+| `OBSERVATIONS` | `ROWS` | observations, each on an entity of its own cluster |
+| `CLUSTERS` | 50 | vector clusters |
+| `PROBES` | 20 | timed queries per channel (and recall probes per table) |
+| `WRITES` | 500 | single-row writes per table, with and without the VECTOR KEYs |
+| `K` | 10 | recall@K |
+| `SEED` | 1 | the generator's seed |
+| `DB` | `graph_mem_vector_bench` | another `<name>_vector_bench` scratch database |
+| `KEEP_DB` | off | `1` keeps the database at the end (the next run drops it) |
+
+The data (`GraphMem::VectorBench::Fixture`): 768-d unit vectors, each a shared direction plus a cluster
+center plus noise, so two members of a cluster sit at a cosine distance of about 0.3 and two clusters at
+about 0.6 (tie-heavy: a probe's top 10 sit within a few hundredths); 5% zero-vector placeholders;
+generic names (`SynthEntity123`, `SynthFact123`); 10 types drawn independently of the cluster. The
+Markdown it prints has three parts:
+
+- **Search latency**, p50/p95 per channel: today's exact queries (`VectorSearchStrategy#search` with and
+  without a type, `#search_observations`, `suggest_merges`' per-entity query,
+  `EntityMergeEvidence.candidates_for`) and the raw index shape, with whether EXPLAIN shows the index;
+- **Recall@K** of the raw index shape against exact, and the rows a one-type filter keeps;
+- **Write cost**: single-row INSERTs and embedding UPDATEs (`EmbeddingService#store_vector`'s
+  statement), rows/s and p50/p95, with the VECTOR KEYs and again after `EmbeddingIndexManager.drop_indexes!`.
+
+It loads the local MariaDB server for the length of the run (on one workstation: 10k rows about 45 s,
+50k rows about 5.5 min; 200k rows would take well over 20 min), so run it when nothing else needs the
+server.
+
 ## MCP Access Control in Development
 
 All MCP profile paths are governed by the same `GRAPH_MEM_MCP_TOKEN` and
