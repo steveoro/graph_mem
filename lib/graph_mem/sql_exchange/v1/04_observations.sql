@@ -18,13 +18,31 @@ UPDATE gm_map_observations g JOIN gm_stage_observations o ON o.sk = g.sk
                      WHERE n.memory_entity_id = g.entity_id AND n.id >= LAST_INSERT_ID() AND SHA2(n.content, 256) = o.content_sha),
       g.action = 'new'
   WHERE g.target_id IS NULL;
+-- outdated_by names the source fact that retired the row: the model takes it only on an inactive row, and
+-- only pointing at another observation that is a source fact of the same project, as both are once this run
+-- has written them (the staged tags of a fact that is new or newer, else its tags here). A link that fails
+-- this is dropped, as GC and the fact supersede fallback leave it: the row keeps its status, obsoleted_at and
+-- reason, and the report lists the link (dropped_link) with the reason.
+UPDATE gm_map_observations g JOIN gm_stage_observations o ON o.sk = g.sk JOIN memory_entities e ON e.id = g.entity_id
+  LEFT JOIN gm_map_observations dep ON dep.sk = o.outdated_by_sk
+  LEFT JOIN gm_stage_observations od ON od.sk = dep.sk LEFT JOIN memory_observations ld ON ld.id = dep.target_id
+  LEFT JOIN memory_entities fe ON fe.id = dep.entity_id
+  SET g.link_note = CASE WHEN BINARY o.status = 'active' THEN 'an active observation has no outdated_by'
+                         WHEN dep.sk IS NULL THEN 'the observation it names is not in the file'
+                         WHEN dep.sk = g.sk THEN 'it names the observation itself'
+                         WHEN NOT (JSON_CONTAINS(IF(od.updated_at > ld.updated_at, od.tags, ld.tags), '"source-fact"')
+                                   AND COALESCE(fe.project_id, IF(BINARY fe.entity_type = 'Project', fe.id, NULL)) IS NOT NULL
+                                   AND COALESCE(fe.project_id, IF(BINARY fe.entity_type = 'Project', fe.id, NULL))
+                                       <=> COALESCE(e.project_id, IF(BINARY e.entity_type = 'Project', e.id, NULL)))
+                           THEN 'the observation it names is not a source fact of the same project' END
+  WHERE o.outdated_by_sk IS NOT NULL;
 UPDATE gm_map_observations g JOIN gm_stage_observations o ON o.sk = g.sk
   LEFT JOIN gm_map_observations sup ON sup.sk = o.superseded_by_sk AND sup.entity_id = g.entity_id AND sup.sk <> g.sk
   LEFT JOIN gm_map_observations dep ON dep.sk = o.outdated_by_sk AND dep.sk <> g.sk
   SET g.superseded_by_id = IF(BINARY o.status = 'superseded', sup.target_id, NULL),
       g.status = IF(BINARY o.status = 'superseded' AND sup.target_id IS NULL, 'obsolete', o.status),
       g.obsoleted_at = IF(BINARY o.status = 'active', NULL, COALESCE(o.obsoleted_at, o.updated_at)),
-      g.outdated_by_id = IF(BINARY o.status = 'active', NULL, dep.target_id);
+      g.outdated_by_id = IF(g.link_note IS NULL, dep.target_id, NULL);
 -- Matched rows: what differs, then newer wins (a tie is kept local).
 UPDATE gm_map_observations g JOIN gm_stage_observations o ON o.sk = g.sk JOIN memory_observations l ON l.id = g.target_id
   SET g.changed = JSON_MERGE_PRESERVE('{}',

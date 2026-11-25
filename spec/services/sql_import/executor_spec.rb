@@ -29,6 +29,17 @@ RSpec.describe SqlImport::Executor do
     expect(sql_counts(newer)).to include("entities/updated" => 1)
   end
 
+  it "records each affected row in the import operation, its changed field names as a JSON array" do
+    script = sql_export(project)
+    widget.update_columns(description: "older here", updated_at: 1.day.ago)
+
+    result = sql_import(script)
+
+    affected = OperationProgress.find_by!(operation_id: result.operation_id).details["affected"]
+    expect(affected).to contain_exactly(include("table" => "memory_entities", "action" => "updated", "id" => widget.id,
+                                                "entity" => "SynthWidget", "fields" => [ "description" ]))
+  end
+
   it "matches observations on SHA2 of the content, so a trailing space makes another fact" do
     fs_observe!(widget, "abc ")
     script = sql_export(project)
@@ -103,7 +114,7 @@ RSpec.describe SqlImport::Executor do
   it "canonicalizes staged relation types with this machine's mappings, but never turns a variant into part_of" do
     gadget = fs_member!(project, "SynthGadget", "Component")
     MemoryRelation.create!(from_entity: widget, to_entity: gadget, relation_type: "uses_synth")
-    MemoryRelation.insert_all!([ { from_entity_id: gadget.id, to_entity_id: widget.id, relation_type: "child_of", properties: "{}",
+    MemoryRelation.insert_all!([ { from_entity_id: gadget.id, to_entity_id: widget.id, relation_type: "child_of", properties: {},
                                    created_at: Time.current, updated_at: Time.current } ])
     script = sql_export(project)
     expect(script).to include("'child_of'")

@@ -59,4 +59,39 @@ RSpec.describe "graph_mem:export_sql and graph_mem:import_sql", type: :task do
     end.to raise_error(SystemExit).and output(/import refused, nothing was written: the body does not match its sha256/).to_stderr
     expect(MemoryEntity.count).to eq(2)
   end
+
+  it "refuses a value MariaDB rejects after the grammar passed it: the database's message, no backtrace, nothing written" do
+    run_task("graph_mem:export_sql", { "OUT" => path }, "SynthPrj")
+    sql_delete_tree!(project)
+    File.write(path, resign(File.read(path).sub("'part_of', NULL,", "'part_of', 1e999,")))
+    expect(SqlImport::Validator.validate_file(path)).to be_a(SqlImport::Validator::Script)
+    records = [ AuditLog.count, OperationProgress.count ]
+
+    expect do
+      with_env("FILE" => path) { Rake::Task["graph_mem:import_sql"].execute }
+    end.to raise_error(SystemExit).and output(/\Aimport refused, nothing was written: Illegal double '1e999' value[^\n]*\n\z/).to_stderr
+    expect([ MemoryEntity.count, MemoryRelation.count ]).to eq([ 0, 0 ])
+    expect([ AuditLog.count, OperationProgress.count ]).to eq(records)
+  end
+
+  it "prints the control characters of a staged string (tab, ESC) as spaces in the affected rows" do
+    fs_observe!(MemoryEntity.find_by!(name: "SynthWidget"), "Tab\there \e[31mred\e[0m")
+    run_task("graph_mem:export_sql", { "OUT" => path }, "SynthPrj")
+    sql_delete_tree!(project)
+
+    expect do
+      with_env("FILE" => path) { Rake::Task["graph_mem:import_sql"].execute }
+    end.to output(a_string_including("Tab here  [31mred [0m").and(satisfy("has no tab or ESC") { |text| !text.match?(/[\t\e]/) })).to_stdout
+  end
+
+  it "prints a refusal that quotes a staged string without a raw control character (MariaDB escapes them in the message)" do
+    fs_observe!(MemoryEntity.find_by!(name: "SynthWidget"), "A synthetic fact.", perspective: "world")
+    run_task("graph_mem:export_sql", { "OUT" => path }, "SynthPrj")
+    File.write(path, resign(File.read(path).sub("'world'", "'\e[31mworld'")))
+
+    expect do
+      with_env("FILE" => path) { Rake::Task["graph_mem:import_sql"].execute }
+    end.to raise_error(SystemExit).and output(a_string_including('perspective "\\001B[31mworld" is not world or experience')
+                                                .and(satisfy("has no ESC") { |text| !text.include?("\e") })).to_stderr
+  end
 end

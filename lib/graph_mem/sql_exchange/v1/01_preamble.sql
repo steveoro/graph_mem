@@ -7,7 +7,11 @@
 -- Never with --force: it would keep going past a failed statement and commit a partial merge.
 -- A hand run skips the relation-type canonicalization (the next relation-type sweep normalizes those
 -- types). Either way the script stamps project membership and checks it before COMMIT; embeddings,
--- keywords and trust scores are filled later by the background jobs.
+-- keywords and trust scores are filled later by the background jobs. Before writing anything it refuses
+-- a staged value the models would refuse (a blank name or content, a confidence outside 0..1, tags that
+-- are not an array of strings, ...) and a created_at or updated_at more than a day ahead of the clock
+-- here, naming the field and the row. An outdated_by link the model would refuse is dropped instead
+-- (the row keeps its status and reason) and listed in the report as a dropped_link.
 -- A project member with no match in its project claims a global namesake of the same type that has
 -- no owned part_of parent (a reference stub's park edge doesn't own), with its part_of subtree,
 -- unless a name of that subtree is taken in the project; otherwise it is inserted as a copy and the
@@ -65,7 +69,7 @@ CREATE TEMPORARY TABLE gm_local_observations (
 CREATE TEMPORARY TABLE gm_map_observations (
   sk INT NOT NULL PRIMARY KEY, entity_id BIGINT NOT NULL, target_id BIGINT NULL, action VARCHAR(16) NULL,
   status VARCHAR(255) NULL, obsoleted_at DATETIME(6) NULL, superseded_by_id BIGINT NULL, outdated_by_id BIGINT NULL,
-  changed LONGTEXT NULL, KEY gm_target (target_id)
+  link_note VARCHAR(255) NULL, changed LONGTEXT NULL, KEY gm_target (target_id)
 ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 CREATE TEMPORARY TABLE gm_map_relations (
   sk INT NOT NULL PRIMARY KEY, from_id BIGINT NULL, to_id BIGINT NULL, crossing TINYINT NOT NULL, part_of TINYINT NOT NULL,

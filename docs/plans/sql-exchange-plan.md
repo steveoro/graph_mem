@@ -159,6 +159,24 @@ older than the script's, or newer than the newest schema the script's template v
 non-Project entity; after the merge, any touched entity with two `part_of` parents, a `part_of`
 cycle (recursive CTE), or a member whose `project_id` is not its mapped root.
 
+Added in the PR 1 review (2026-11-25), before anything is written, each message naming the field and
+the row:
+- **value guards**, since the SQL path skips the model validations: a blank name, entity type,
+  content or relation type (blank as Rails reads it, Unicode whitespace included), a Project root
+  typed `Project` only under the collation (its members' `project_id` must point at a Project), an
+  observation status or perspective outside its list (exact compare), a confidence outside 0..1, a
+  negative weight, a `valid_until` before `valid_from`, tags that aren't an array of strings,
+  properties that aren't an object. Tags or properties that aren't JSON at all fail the tables'
+  `json_valid` CHECK at the write. After the merge, on a new row or a changed field as the model
+  applies it: an observation whose lifecycle columns disagree, or an active source fact outside a
+  project. An `outdated_by` link the model would refuse is dropped, not refused (see "My calls");
+- **timestamp guard**: a staged `created_at` or `updated_at` (entities, observations, relations)
+  more than a day ahead of the target's `UTC_TIMESTAMP()`; it would win every newer-wins compare
+  until that date. The day allows for clock skew.
+
+A value that passes the validator's grammar but that MariaDB rejects (`1e999`) fails the statement
+and rolls the run back too; `graph_mem:import_sql` prints it as a refusal, without a backtrace.
+
 ## Record of affected rows (added 2026-11-19)
 
 Every run, in the app or by hand, shows and records what it touched. All of it is written inside
@@ -446,6 +464,19 @@ source machine → target machine run with `DRY_RUN=1` first. `bundle exec ruboc
   of another type, or a Project is never claimed: the copy is inserted and the report says why. The
   report lists the claimed rows (action `claimed`). Added in the session, following the JSON import:
   a reference stub another project also declares stays shared (copy).
+- **Steve, 2026-11-25 ("your defaults are fine by me"): the two calls PR 1 made in the session
+  stand.** A claimed reference stub's park edge is re-pointed to the incoming parent rather than
+  deleted (no row is ever deleted, and the end state is the JSON import's), and newer-wins also
+  applies to a claimed entity (a stub parked after the export keeps its own content).
+- **Decided in the session on 2026-11-25 by the lead, not by Steve, applying his "your defaults are
+  fine by me": an `outdated_by` link the model would refuse is dropped, not refused.** The merge drops
+  the link when the observation is active, when it names the observation itself or one not in the
+  file, or when the observation it names is not a source fact of the same project once the run has
+  written both (for example a fact that lost its `source-fact` tag after it outdated the row), as it
+  already stores a superseded row whose replacement can't be mapped as obsolete. The row keeps its
+  status, `obsoleted_at` and reason, the state the model accepts and the fact supersede fallback and
+  GC leave; the report lists a `dropped_link` note with the link and the reason (no audit row, not
+  counted in the summary).
 
 ## Known limits
 

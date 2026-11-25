@@ -1,7 +1,7 @@
 -- Post-merge checks on what this run wrote or claimed (each one rolls everything back): an entity with two part_of
 -- parents, a part_of cycle, an entity whose project_id is not the one its part_of parent gives (the
--- rule ProjectMembership applies; reference_stub edges don't own), or an observation whose lifecycle
--- columns disagree.
+-- rule ProjectMembership applies; reference_stub edges don't own), an observation whose lifecycle
+-- columns disagree, or a written observation that breaks a source-fact rule of MemoryObservation.
 INSERT INTO gm_check_ids (id)
   SELECT target_id FROM gm_map_entities WHERE is_ref = 0 AND action = 'new'
   UNION SELECT from_id FROM gm_map_relations WHERE part_of = 1 AND action IN ('new', 'moved')
@@ -40,8 +40,34 @@ BEGIN NOT ATOMIC
       WHERE g.action IN ('new', 'updated')
         AND ((o.status = 'active') <> (o.obsoleted_at IS NULL) OR (o.status = 'superseded') <> (o.superseded_by_id IS NOT NULL)
              OR (s.id IS NOT NULL AND (s.memory_entity_id <> o.memory_entity_id OR s.id = o.id))
-             OR (o.status = 'active' AND o.outdated_by_id IS NOT NULL))) THEN
+             OR (o.status = 'active' AND o.outdated_by_id IS NOT NULL) OR o.outdated_by_id = o.id)) THEN
     SET msg = 'graph_mem-sql: an observation would have inconsistent lifecycle columns';
+  END IF;
+  -- The source-fact rules of MemoryObservation (SourceFact), on a new row or a changed field as the model
+  -- applies them; a fact belongs to the project of its entity (the entity itself for a Project root). The
+  -- merge drops an outdated_by link that would fail (04), so the second check only catches one it kept.
+  IF msg IS NULL THEN
+    SET who = (SELECT e.name FROM gm_map_observations g JOIN memory_observations o ON o.id = g.target_id
+               JOIN memory_entities e ON e.id = o.memory_entity_id
+               WHERE (g.action = 'new' OR (g.action = 'updated' AND JSON_CONTAINS_PATH(g.changed, 'one', '$.tags')))
+                 AND o.status = 'active' AND JSON_CONTAINS(o.tags, '"source-fact"')
+                 AND COALESCE(e.project_id, IF(BINARY e.entity_type = 'Project', e.id, NULL)) IS NULL LIMIT 1);
+    IF who IS NOT NULL THEN
+      SET msg = CONCAT('graph_mem-sql: memory_observations.tags: a source-fact on "', who, '" needs an entity inside a project');
+    END IF;
+  END IF;
+  IF msg IS NULL THEN
+    SET who = (SELECT e.name FROM gm_map_observations g JOIN memory_observations o ON o.id = g.target_id
+               JOIN memory_entities e ON e.id = o.memory_entity_id
+               JOIN memory_observations f ON f.id = o.outdated_by_id JOIN memory_entities fe ON fe.id = f.memory_entity_id
+               WHERE (g.action = 'new' OR (g.action = 'updated' AND JSON_CONTAINS_PATH(g.changed, 'one', '$.outdated_by_id')))
+                 AND NOT (JSON_CONTAINS(f.tags, '"source-fact"')
+                          AND COALESCE(fe.project_id, IF(BINARY fe.entity_type = 'Project', fe.id, NULL)) IS NOT NULL
+                          AND COALESCE(fe.project_id, IF(BINARY fe.entity_type = 'Project', fe.id, NULL))
+                              <=> COALESCE(e.project_id, IF(BINARY e.entity_type = 'Project', e.id, NULL))) LIMIT 1);
+    IF who IS NOT NULL THEN
+      SET msg = CONCAT('graph_mem-sql: memory_observations.outdated_by_id of an observation on "', who, '" must be a source fact in the same project');
+    END IF;
   END IF;
   IF msg IS NOT NULL THEN
     SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = msg;
