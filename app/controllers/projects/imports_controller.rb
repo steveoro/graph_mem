@@ -91,7 +91,7 @@ module Projects
       session.delete(:import_session_id)
       redirect_to report_projects_import_path(operation.operation_id)
     rescue *SqlImport::Flow::REFUSALS => e
-      show_sql(error: t("projects.imports.sql.not_run", reason: e.message), status: :unprocessable_content)
+      show_sql(error: t("projects.imports.sql.not_run", reason: SqlImport::Flow.refusal_reason(e)), status: :unprocessable_content)
     end
 
     def load_session
