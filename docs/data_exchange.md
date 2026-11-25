@@ -54,6 +54,8 @@ The raw SQL skips the model callbacks, so a job does their work once the import 
 5. records the entities it touched, so the stale scan's contradiction pass looks at them too (the imported rows keep the source `updated_at`, which the scan's own filter would miss);
 6. starts (or resumes) dream-state compaction, only when step 4 seeded a review row, and runs the review policies for those rows. With **Run full maintenance now** set it starts "Run all scheduled jobs now" with the trigger `sql_import` instead (System › Background jobs shows it); when a run is already going nothing new starts and the report says so.
 
+If the follow-up can't be queued once the import has committed (for example the job queue's database is down), the import still counts as done: its record says `follow_up: failed` with the error, the report shows it, and **Run full maintenance now** starts at once. The scheduled jobs embed the rows and fill their keyword paths; trust scores and review rows come only from the follow-up, so queue it again on the server with `bin/rails runner 'SqlImportFollowUpJob.perform_later("<operation id>")'` (the report shows the command with the id). Only a failure before the commit says "nothing was written"; any later failure names the operation that was written.
+
 Nothing in the job takes the membership lock, so nothing embeds under it. The report page shows each step's outcome in its "After the import" card, with a **Run full maintenance now** button until it has been asked for. When the embedding service is down the card warns how many new facts the near-duplicate check could not compare; on an install without vector columns it says so as a hint.
 
 ## Format reference (graph_mem-sql v1)
