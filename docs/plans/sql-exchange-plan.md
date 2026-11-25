@@ -436,6 +436,16 @@ source machine → target machine run with `DRY_RUN=1` first. `bundle exec ruboc
   in the repo and the target schema is not newer than that version's `max_schema`; otherwise the
   UI refuses it and names the format and schema versions.
 - No MCP tool for export/import in this plan (tool budget); it can be proposed separately.
+- **Steve, 2026-11-25 (PR 1 review, point 4): "claim the global namesake"**, like the JSON import.
+  A staged project member with no match in its mapped project takes over a global entity
+  (`project_id` NULL) of the same name and canonical type that has no owned `part_of` parent (a
+  `reference_stub` park edge doesn't count, as in `ProjectMembership::OWNED_EDGE_SQL`): newer wins on
+  its content, the incoming `part_of` attaches it (a stub's park edge row is moved, not deleted),
+  `project_id` becomes the mapped root, and its owned `part_of` subtree is stamped into the project in
+  the same run, unless a name of that subtree is already taken there. A namesake with an owned parent,
+  of another type, or a Project is never claimed: the copy is inserted and the report says why. The
+  report lists the claimed rows (action `claimed`). Added in the session, following the JSON import:
+  a reference stub another project also declares stays shared (copy).
 
 ## Known limits
 

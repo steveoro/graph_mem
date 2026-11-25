@@ -1,10 +1,11 @@
--- Post-merge checks on what this run wrote (each one rolls everything back): an entity with two part_of
+-- Post-merge checks on what this run wrote or claimed (each one rolls everything back): an entity with two part_of
 -- parents, a part_of cycle, an entity whose project_id is not the one its part_of parent gives (the
 -- rule ProjectMembership applies; reference_stub edges don't own), or an observation whose lifecycle
 -- columns disagree.
 INSERT INTO gm_check_ids (id)
   SELECT target_id FROM gm_map_entities WHERE is_ref = 0 AND action = 'new'
-  UNION SELECT from_id FROM gm_map_relations WHERE part_of = 1 AND action IN ('new', 'moved');
+  UNION SELECT from_id FROM gm_map_relations WHERE part_of = 1 AND action IN ('new', 'moved')
+  UNION SELECT entity_id FROM gm_claim_subtree;
 DELIMITER //
 BEGIN NOT ATOMIC
   DECLARE who VARCHAR(255) DEFAULT NULL;

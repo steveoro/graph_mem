@@ -8,6 +8,10 @@
 -- A hand run skips the relation-type canonicalization (the next relation-type sweep normalizes those
 -- types). Either way the script stamps project membership and checks it before COMMIT; embeddings,
 -- keywords and trust scores are filled later by the background jobs.
+-- A project member with no match in its project claims a global namesake of the same type that has
+-- no owned part_of parent (a reference stub's park edge doesn't own), with its part_of subtree,
+-- unless a name of that subtree is taken in the project; otherwise it is inserted as a copy and the
+-- report says why the namesake was not claimed.
 SET NAMES utf8mb4;
 SET time_zone = '+00:00';
 SET SESSION sql_mode = '{{sql_mode}}';
@@ -15,7 +19,7 @@ SET @gm_lock = GET_LOCK(CONCAT('{{lock_prefix}}', ':', DATABASE()), 60);
 START TRANSACTION;
 DROP TEMPORARY TABLE IF EXISTS gm_stage_meta, gm_stage_entities, gm_stage_aliases, gm_stage_refs, gm_stage_observations,
   gm_stage_relations, gm_map_entities, gm_alias_candidates, gm_local_observations, gm_map_observations, gm_map_relations,
-  gm_check_ids, gm_touched, gm_report;
+  gm_claim_candidates, gm_claim_subtree, gm_check_ids, gm_touched, gm_report;
 CREATE TEMPORARY TABLE gm_stage_meta (k VARCHAR(32) NOT NULL PRIMARY KEY, v TEXT NOT NULL)
   DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
 CREATE TEMPORARY TABLE gm_stage_entities (
@@ -44,9 +48,16 @@ CREATE TEMPORARY TABLE gm_stage_relations (
 CREATE TEMPORARY TABLE gm_map_entities (
   sk INT NOT NULL PRIMARY KEY, is_ref TINYINT NOT NULL, scope_id BIGINT NULL, target_id BIGINT NULL,
   matched_by VARCHAR(16) NULL, alias_tried TINYINT NOT NULL DEFAULT 0, action VARCHAR(16) NULL,
-  newer_differs TINYINT NOT NULL DEFAULT 0, alias_suffix TEXT NULL, changed LONGTEXT NULL, KEY gm_target (target_id)
+  newer_differs TINYINT NOT NULL DEFAULT 0, alias_suffix TEXT NULL, claim_note VARCHAR(255) NULL, changed LONGTEXT NULL,
+  KEY gm_target (target_id)
 ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 CREATE TEMPORARY TABLE gm_alias_candidates (sk INT NOT NULL, target_id BIGINT NOT NULL, PRIMARY KEY (sk, target_id));
+CREATE TEMPORARY TABLE gm_claim_candidates (
+  sk INT NOT NULL PRIMARY KEY, target_id BIGINT NOT NULL, scope_id BIGINT NOT NULL, note VARCHAR(255) NULL
+) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+CREATE TEMPORARY TABLE gm_claim_subtree (
+  entity_id BIGINT NOT NULL PRIMARY KEY, sk INT NOT NULL, scope_id BIGINT NOT NULL, name VARCHAR(255) NOT NULL, KEY gm_scope_name (scope_id, name)
+) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 CREATE TEMPORARY TABLE gm_local_observations (
   id BIGINT NOT NULL PRIMARY KEY, entity_id BIGINT NOT NULL, content_sha CHAR(64) NOT NULL, active TINYINT NOT NULL,
   KEY gm_entity_content (entity_id, content_sha)

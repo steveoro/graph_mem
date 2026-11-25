@@ -2,7 +2,8 @@
 -- the edge. part_of is ownership: one parent per entity, so an incoming part_of for an entity that has
 -- another parent here moves the existing row (newer wins, both ends in the export) or is kept local; an
 -- edge crossing the export's boundary is only added when its entity has no parent yet and the edge
--- doesn't change that entity's project.
+-- doesn't change that entity's project. A claimed reference stub's park edge is always moved: it
+-- becomes the incoming part_of (no row is deleted).
 INSERT INTO gm_map_relations (sk, from_id, to_id, crossing, part_of)
   SELECT r.sk, f.target_id, t.target_id, f.is_ref OR t.is_ref, r.relation_type = 'part_of'
   FROM gm_stage_relations r JOIN gm_map_entities f ON f.sk = r.from_sk JOIN gm_map_entities t ON t.sk = r.to_sk;
@@ -26,7 +27,11 @@ UPDATE gm_map_relations g JOIN gm_stage_relations r ON r.sk = g.sk
         WHERE relation_type = 'part_of' AND from_entity_id IN (SELECT from_id FROM gm_map_relations WHERE part_of = 1)
         GROUP BY from_entity_id) p ON p.from_entity_id = g.from_id
   JOIN memory_relations l ON l.id = p.id
-  SET g.action = IF(p.n = 1 AND g.crossing = 0 AND r.updated_at > l.updated_at, 'moved', 'kept_local'),
+  SET g.action = IF(p.n = 1 AND g.crossing = 0
+                     AND (r.updated_at > l.updated_at
+                          OR (COALESCE(JSON_UNQUOTE(JSON_EXTRACT(l.properties, '$.reference_stub')), 'false') = 'true'
+                              AND EXISTS (SELECT 1 FROM gm_map_entities c WHERE c.target_id = g.from_id AND c.matched_by = 'claim'))),
+                     'moved', 'kept_local'),
       g.detail = IF(p.n = 1, 'the entity has another part_of parent here', 'the entity has several part_of parents here'),
       g.target_id = l.id
   WHERE g.action IS NULL AND g.target_id IS NULL AND g.part_of = 1;
