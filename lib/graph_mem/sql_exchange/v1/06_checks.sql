@@ -44,7 +44,8 @@ BEGIN NOT ATOMIC
     SET msg = 'graph_mem-sql: an observation would have inconsistent lifecycle columns';
   END IF;
   -- The source-fact rules of MemoryObservation (SourceFact), on a new row or a changed field as the model
-  -- applies them; a fact belongs to the project of its entity (the entity itself for a Project root).
+  -- applies them; a fact belongs to the project of its entity (the entity itself for a Project root). The
+  -- merge drops an outdated_by link that would fail (04), so the second check only catches one it kept.
   IF msg IS NULL THEN
     SET who = (SELECT e.name FROM gm_map_observations g JOIN memory_observations o ON o.id = g.target_id
                JOIN memory_entities e ON e.id = o.memory_entity_id

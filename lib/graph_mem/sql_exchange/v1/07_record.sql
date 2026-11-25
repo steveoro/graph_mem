@@ -1,7 +1,8 @@
 -- The record of this run, written in the same transaction (a rolled-back or dry run leaves none): one
 -- audit_logs row per new or updated row in the shape Auditable writes (a snapshot for a create, the
 -- {from, to} fields for an update; actor sql_import), and one completed `import` operation_progresses
--- row whose operation_id the app sets in @gm_operation_id (a hand run generates its own).
+-- row whose operation_id the app sets in @gm_operation_id (a hand run generates its own). A written
+-- observation whose staged outdated_by link was dropped is listed once more, as a dropped_link note.
 SET @gm_op = COALESCE(@gm_operation_id, UUID());
 INSERT INTO gm_touched (tbl, action, target_id, project, entity, detail, changed)
   SELECT 'memory_entities', m.action, e.id, pr.name, e.name,
@@ -27,6 +28,14 @@ INSERT INTO gm_touched (tbl, action, target_id, project, entity, detail, changed
   FROM gm_map_observations g JOIN memory_observations o ON o.id = g.target_id JOIN memory_entities e ON e.id = o.memory_entity_id
   LEFT JOIN memory_entities pr ON pr.id = e.project_id
   WHERE g.action IN ('new', 'updated', 'kept_local')
+  UNION ALL
+  SELECT 'memory_observations', 'dropped_link', o.id, pr.name, e.name,
+         CONCAT('outdated_by -> ', IF(f.id IS NULL, CONCAT('staged observation ', s.outdated_by_sk), CONCAT('#', f.id, ' ', LEFT(f.content, 80)))),
+         JSON_OBJECT('reason', g.link_note)
+  FROM gm_map_observations g JOIN gm_stage_observations s ON s.sk = g.sk JOIN memory_observations o ON o.id = g.target_id
+  JOIN memory_entities e ON e.id = o.memory_entity_id LEFT JOIN memory_entities pr ON pr.id = e.project_id
+  LEFT JOIN gm_map_observations d ON d.sk = s.outdated_by_sk LEFT JOIN memory_observations f ON f.id = d.target_id
+  WHERE g.link_note IS NOT NULL AND g.action IN ('new', 'updated')
   UNION ALL
   SELECT 'memory_relations', IF(g.action = 'moved', 'updated', g.action), g.target_id, pr.name, COALESCE(fe.name, fs.name, fr.name),
          CONCAT(r.relation_type, ' -> ', COALESCE(te.name, CONCAT('(missing) ', COALESCE(ts.name, tr.name)))),

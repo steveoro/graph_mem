@@ -6,6 +6,7 @@ require "rails_helper"
 # the SQL path skips the model validations, so each example edits one staged value of a real export
 # into one MemoryEntity, MemoryObservation or MemoryRelation would refuse, signs the file again (the
 # validator only reads the grammar), and expects the import refused, naming the field, with nothing written.
+# An outdated_by link the model would refuse is the exception: the merge drops it (04) and lists it.
 RSpec.describe "graph_mem-sql: staged values the models would refuse" do
   let!(:project) { fs_project!("SynthPrj") }
   let!(:widget) { fs_member!(project, "SynthWidget", "Component", description: "renders") }
@@ -178,7 +179,7 @@ RSpec.describe "graph_mem-sql: staged values the models would refuse" do
     end
   end
 
-  describe "the source-fact rules of MemoryObservation (checked after the merge, on a new row or a changed field)" do
+  describe "the source-fact rules of MemoryObservation (after the merge, on a new row or a changed field)" do
     it "refuses a source-fact tag on an entity outside a project on a new row, not on a matched row it leaves as it is" do
       global = MemoryEntity.create!(name: "SynthNotes", entity_type: "Preference")
       fs_observe!(global, "Synth notes are kept here.").update_columns(tags: [ SourceFact::SOURCE_FACT_TAG ]) # a fact whose entity left its project
@@ -190,18 +191,64 @@ RSpec.describe "graph_mem-sql: staged values the models would refuse" do
       refused(notes, /memory_observations\.tags: a source-fact on "SynthNotes" needs an entity inside a project/)
     end
 
-    it "refuses an outdated_by link to an observation that is not a source fact of the same project" do
+    it "drops an outdated_by link to a fact that lost its source-fact tag, keeping the row as the model accepts it, and lists the link" do
       source_fact = fs_fact!(gear, "SynthGear replaces the old renderer.")
-      outdated = fs_observe!(widget, "SynthWidget used the old renderer.")
-      outdated.update_columns(status: "obsolete", obsoleted_at: Time.current, outdated_by_id: source_fact.id)
+      outdated = fs_observe!(widget, "SynthWidget used the old renderer.", tags: [ "synth" ])
+      outdated.mark_obsolete!(reason: "Outdated by source fact ##{source_fact.id}", outdated_by: source_fact)
+      source_fact.update!(tags: []) # after it outdated the observation
+      kept = outdated.reload.attributes.slice("content", "status", "obsoleted_at", "obsolescence_reason", "tags", "created_at", "updated_at")
+      exported = sql_export(project)
+      sql_delete_tree!(project) # a fresh target
+
+      result = sql_import(exported)
+
+      copy = MemoryObservation.find_by!(content: outdated.content)
+      expect(copy.attributes).to include(kept.merge("outdated_by_id" => nil))
+      expect(copy).to be_valid
+      fact_copy = MemoryObservation.find_by!(content: source_fact.content)
+      expect(result.affected).to include(include("table" => "memory_observations", "action" => "dropped_link", "id" => copy.id, "entity" => "SynthWidget",
+                                                 "detail" => "outdated_by -> ##{fact_copy.id} SynthGear replaces the old renderer.",
+                                                 "changed" => { "reason" => "the observation it names is not a source fact of the same project" }))
+      expect(OperationProgress.find_by!(operation_id: result.operation_id).details["affected"])
+        .to include(include("action" => "dropped_link", "id" => copy.id, "fields" => [ "reason" ]))
+      expect(sql_counts(result)).to eq("entities/new" => 3, "observations/new" => 3, "relations/new" => 3) # a note, not a row action
+      expect(AuditLog.where(reason: "sql_import:#{result.operation_id}", auditable_id: copy.id).pluck(:action)).to eq([ "create" ])
+    end
+
+    it "keeps an outdated_by link to a source fact of the same project" do
+      source_fact = fs_fact!(gear, "SynthGear replaces the old renderer.")
+      fs_observe!(widget, "SynthWidget used the old renderer.").mark_obsolete!(reason: "synthetic retire", outdated_by: source_fact)
       exported = sql_export(project)
       sql_delete_tree!(project)
-      staged = line(/^\(\d+, \d+, 'SynthGear replaces the old renderer\.'.*$/, exported)
 
-      refused(edited(staged, "'[\\\"source-fact\\\"]'", "'[]'", exported),
-              /memory_observations\.outdated_by_id of an observation on "SynthWidget" must be a source fact in the same project/)
-      sql_import(exported)
-      expect(MemoryObservation.find_by!(content: outdated.content).outdated_by.content).to eq(source_fact.content)
+      result = sql_import(exported)
+
+      expect(MemoryObservation.find_by!(content: "SynthWidget used the old renderer.").outdated_by.content).to eq(source_fact.content)
+      expect(result.affected.map { |row| row["action"] }).not_to include("dropped_link")
+    end
+
+    it "drops a staged outdated_by link that names the observation itself, one not in the file, or sits on an active row" do
+      source_fact = fs_fact!(gear, "SynthGear replaces the old renderer.")
+      fs_observe!(widget, "SynthWidget used the old renderer.").mark_obsolete!(reason: "synthetic retire", outdated_by: source_fact)
+      exported = sql_export(project)
+      sql_delete_tree!(project)
+      staged = line(/^\(\d+, \d+, 'SynthWidget used the old renderer\.'.*$/, exported)
+      own = staged[/\A\((\d+),/, 1]
+      link = staged[/, NULL, NULL, (\d+), '[^']*', '[^']*'\)[,;]\z/, 1] or raise("no outdated_by key in #{staged}")
+
+      { ", NULL, NULL, #{own}, '" => "it names the observation itself",
+        ", NULL, NULL, 999, '" => "the observation it names is not in the file" }.each do |edit, reason|
+        result = sql_import(edited(staged, ", NULL, NULL, #{link}, '", edit, exported))
+        copy = MemoryObservation.find_by!(content: "SynthWidget used the old renderer.")
+        expect(copy).to have_attributes(status: "obsolete", outdated_by_id: nil).and(be_valid)
+        expect(result.affected).to include(include("action" => "dropped_link", "id" => copy.id, "changed" => { "reason" => reason }))
+        sql_delete_tree!(MemoryEntity.find_by!(name: "SynthPrj"))
+      end
+      result = sql_import(edited(staged, "'obsolete'", "'active'", exported))
+      copy = MemoryObservation.find_by!(content: "SynthWidget used the old renderer.")
+      expect(copy).to have_attributes(status: "active", obsoleted_at: nil, outdated_by_id: nil).and(be_valid)
+      expect(result.affected).to include(include("action" => "dropped_link", "id" => copy.id,
+                                                 "changed" => { "reason" => "an active observation has no outdated_by" }))
     end
   end
 end
