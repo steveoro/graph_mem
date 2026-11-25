@@ -133,8 +133,8 @@ RSpec.describe "graph_mem-sql: restore an older export over an edited graph" do
 
     dry = sql_import(script, dry_run: true)
     expect(sql_counts(dry)).to include("entities/new" => 8)
-    broken = resign(script.sub('[\"synth\"]', '[\"synth\"')) # tags no longer JSON: the observations INSERT fails
-    expect { sql_import(broken) }.to raise_error(ActiveRecord::StatementInvalid, /CONSTRAINT|tags/)
+    broken = resign(script.sub('[\"synth\"]', '[\"synth\"')) # tags no longer JSON: the value guard refuses the run
+    expect { sql_import(broken) }.to raise_error(SqlImport::Executor::Refused, /memory_observations\.tags is not JSON/)
 
     expect(graph_snapshot).to eq(snapshot)
     expect(AuditLog.count).to eq(audits)

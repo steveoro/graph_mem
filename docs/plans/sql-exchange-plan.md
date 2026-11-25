@@ -166,8 +166,8 @@ the row:
   typed `Project` only under the collation (its members' `project_id` must point at a Project), an
   observation status or perspective outside its list (exact compare), a confidence outside 0..1, a
   negative weight, a `valid_until` before `valid_from`, tags that aren't an array of strings,
-  properties that aren't an object. Tags or properties that aren't JSON at all fail the tables'
-  `json_valid` CHECK at the write. After the merge, on a new row or a changed field as the model
+  properties that aren't an object, and tags or properties that aren't JSON at all (the merge's
+  `JSON_EXTRACT` would otherwise fail first, naming no row; the tables' `json_valid` CHECK stays as a backstop). After the merge, on a new row or a changed field as the model
   applies it: an observation whose lifecycle columns disagree, or an active source fact outside a
   project. An `outdated_by` link the model would refuse is dropped, not refused (see "My calls");
 - **timestamp guard**: a staged `created_at` or `updated_at` (entities, observations, relations)
