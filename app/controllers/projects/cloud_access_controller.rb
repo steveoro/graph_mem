@@ -24,8 +24,11 @@ module Projects
       return redirect_to(projects_path, alert: t("projects.cloud_access.root_changed", project: project.name)) if allowed && params[:root].to_s != root.to_s
 
       state = allowed ? "on" : "off"
+      # touch: false keeps updated_at a content timestamp (validations and callbacks still run), so the
+      # toggle doesn't make the project look newer than a graph_mem-sql import's copy of it.
       ChangeSet.record(kind: "project.cloud_access", subject: project, summary: t("projects.cloud_access.summary_#{state}", project: project.name)) do
-        project.update!(cloud_allowed: allowed, cloud_root: root)
+        project.assign_attributes(cloud_allowed: allowed, cloud_root: root)
+        project.save!(touch: false)
       end
       notice = t("projects.cloud_access.#{state}", project: project.name)
       notice += " #{root ? t('projects.cloud_access.root', root: root) : t('projects.cloud_access.no_root')}" if allowed

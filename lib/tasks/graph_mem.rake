@@ -37,6 +37,50 @@ namespace :graph_mem do
     end
   end
 
+  desc "Export projects (or global roots) by name as a graph_mem-sql script " \
+       "(graph_mem:export_sql[SynthPrj,...]; OUT=path, default tmp/exports/<first name>.sql; NESTED=0 leaves nested Projects out)"
+  task :export_sql, [ :name ] => :environment do |_t, args|
+    names = [ args[:name], *args.extras ].compact_blank
+    abort "usage: bin/rails graph_mem:export_sql[<project>,...] [OUT=path] [NESTED=0]" if names.empty?
+
+    roots = names.map do |name|
+      MemoryEntity.find_by(name: name, project_id: nil) or abort "no Project root or global entity named '#{name}'"
+    end
+    out = ENV["OUT"].presence || ExportJob::TEMP_DIR.join("#{names.first.parameterize(separator: '_').presence || 'export'}.sql").to_s
+    FileUtils.mkdir_p(File.dirname(out))
+    counts = SqlExport::Writer.new(roots.map(&:id), include_nested: ENV["NESTED"] != "0").write_file(out)
+    puts "Wrote #{out}: #{counts.map { |key, count| "#{key}=#{count}" }.join(' ')}"
+  rescue ArgumentError => e
+    abort "export refused: #{e.message}"
+  end
+
+  desc "Import a graph_mem-sql script (FILE=path; DRY_RUN=1 runs it and rolls it back). Always validated first; " \
+       "prints the counts and the affected rows"
+  task import_sql: :environment do
+    path = ENV["FILE"].presence or abort "usage: bin/rails graph_mem:import_sql FILE=path [DRY_RUN=1]"
+    dry_run = ENV["DRY_RUN"].to_s.match?(/\A(1|true|yes)\z/i)
+    result = SqlImport::Executor.call(SqlImport::Validator.validate_file(path), dry_run: dry_run)
+
+    puts dry_run ? "Dry run: nothing was written." : "Imported: operation #{result.operation_id}"
+    [ result.summary, result.affected ].each do |rows|
+      next puts("(no affected rows)") if rows.empty?
+
+      columns = rows.first.keys
+      # A staged string can carry control characters (tab, ESC): each one is printed as a space.
+      cells = ([ columns.to_h { |column| [ column, column ] } ] + rows).map do |row|
+        columns.map { |column| (row[column].is_a?(Hash) ? row[column].to_json : row[column].to_s).gsub(/[[:cntrl:]]/, " ").truncate(60) }
+      end
+      widths = cells.transpose.map { |column| column.map(&:length).max }
+      cells.each { |row| puts row.zip(widths).map { |cell, width| cell.ljust(width) }.join("  ").rstrip }
+    end
+    puts "Embeddings, keywords and trust scores of the new and changed rows are filled by the background jobs." unless dry_run
+  rescue SqlImport::Validator::Invalid, SqlImport::Executor::Refused, ProjectMembership::LockTimeout, Errno::ENOENT,
+         ActiveRecord::StatementInvalid => e
+    # A value that passes the grammar and that MariaDB rejects (1e999, a roots line that isn't JSON) rolls the
+    # run back as a guard does: the database's message, without a backtrace.
+    abort "import refused, nothing was written: #{e.is_a?(ActiveRecord::StatementInvalid) ? (e.cause&.message || e.message) : e.message}"
+  end
+
   desc "Report MCP tool usage (DAYS=30 by default; DAYS=all for all history)"
   task tool_usage: :environment do
     days = ENV.fetch("DAYS", ToolUsageReport::DEFAULT_WINDOW_DAYS.to_s)
