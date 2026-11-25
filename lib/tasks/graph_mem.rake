@@ -66,15 +66,19 @@ namespace :graph_mem do
       next puts("(no affected rows)") if rows.empty?
 
       columns = rows.first.keys
+      # A staged string can carry control characters (tab, ESC): each one is printed as a space.
       cells = ([ columns.to_h { |column| [ column, column ] } ] + rows).map do |row|
-        columns.map { |column| (row[column].is_a?(Hash) ? row[column].to_json : row[column].to_s).truncate(60) }
+        columns.map { |column| (row[column].is_a?(Hash) ? row[column].to_json : row[column].to_s).gsub(/[[:cntrl:]]/, " ").truncate(60) }
       end
       widths = cells.transpose.map { |column| column.map(&:length).max }
       cells.each { |row| puts row.zip(widths).map { |cell, width| cell.ljust(width) }.join("  ").rstrip }
     end
     puts "Embeddings, keywords and trust scores of the new and changed rows are filled by the background jobs." unless dry_run
-  rescue SqlImport::Validator::Invalid, SqlImport::Executor::Refused, ProjectMembership::LockTimeout, Errno::ENOENT => e
-    abort "import refused, nothing was written: #{e.message}"
+  rescue SqlImport::Validator::Invalid, SqlImport::Executor::Refused, ProjectMembership::LockTimeout, Errno::ENOENT,
+         ActiveRecord::StatementInvalid => e
+    # A value that passes the grammar and that MariaDB rejects (1e999, a roots line that isn't JSON) rolls the
+    # run back as a guard does: the database's message, without a backtrace.
+    abort "import refused, nothing was written: #{e.is_a?(ActiveRecord::StatementInvalid) ? (e.cause&.message || e.message) : e.message}"
   end
 
   desc "Report MCP tool usage (DAYS=30 by default; DAYS=all for all history)"
