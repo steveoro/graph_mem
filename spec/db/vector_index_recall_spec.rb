@@ -33,9 +33,12 @@ RSpec.describe "Vector index recall against exact search", :with_test_embeddings
     expect(average).to be >= VectorIndexFixture::MEASURED_RECALL_FLOOR, "recall@10 #{average.round(3)} per probe: #{per_probe}"
   end
 
-  # Decision 4 of the plan: >= 0.8 average recall@10, no probe below 0.5.
+  # Decision 4 of the plan: >= 0.8 average recall@10, no probe below 0.5. Skipped, not pending: the
+  # index's recall varies from run to run on identical rows (MariaDB builds its graph differently
+  # each time), so a pending example that happened to pass would fail the suite at random. Step 2
+  # (PR C) removes the skip once its tuning clears the bar.
   it "clears the Decision 4 bar: average recall@10 >= 0.8, no probe below 0.5" do
-    pending "step 2 (PR C) tunes K, mhnsw_ef_search or the index M until the ANN path clears this bar"
+    skip "step 2 (PR C) tunes K, mhnsw_ef_search or the index M until the ANN path clears this bar"
     expect([ average, per_probe.values.flatten.min ]).to satisfy("average >= 0.8 and min >= 0.5, got #{average.round(3)} / #{per_probe}") { |avg, min|
       avg >= 0.8 && min >= 0.5
     }

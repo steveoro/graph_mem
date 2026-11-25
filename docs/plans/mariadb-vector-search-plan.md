@@ -225,8 +225,8 @@ on MariaDB 11.8.9 (local) and 11.8.6 (the `mariadb:11.8` image, CI's minor):
 - **Recall@10 on the CI fixture** (raw `ORDER BY d LIMIT 10` against exact, 40 probes): the index's
   graph differs run to run on the same rows; over 30 runs the average was 0.37-0.85 on 11.8.9 and
   0.66-0.88 on 11.8.6, with probes at 0 (the search stays in a wrong cluster) in almost every run and
-  none clearing the Decision 4 bar. The spec asserts a floor of 0.2 and keeps the bar as a `pending`
-  example for step 2. Filter hazard (one of 10 types, 20 probes): exact 200 rows; the index with the
+  none clearing the Decision 4 bar. The spec asserts a floor of 0.2 and keeps the bar as a skipped
+  example for step 2 (skipped rather than `pending`, so a lucky run can't fail the suite). Filter hazard (one of 10 types, 20 probes): exact 200 rows; the index with the
   WHERE 129-198, only 38-135 of them exact; the index's top 10 filtered afterwards 20-34.
 - **Bench** (11.8.9, one workstation, default `M=6`, `mhnsw_ef_search=20`, 16 MiB cache; p50):
 

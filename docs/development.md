@@ -303,7 +303,7 @@ included; it then checks the memory tables are empty again. The group is skipped
   examples of the queries they change.
 - **Recall:** recall@10 of the raw index shape against exact, one probe per cluster and table. The
   index's graph differs from run to run on the same rows, so the asserted floor sits under the lowest
-  measured run, and the plan's bar (Decision 4) is a `pending` example until step 2 clears it.
+  measured run, and the plan's bar (Decision 4) is a skipped example until step 2 clears it (not `pending`: a run that happened to clear it would fail the suite).
 - **Filter hazard:** with a one-type filter the index returns fewer rows than exact, which is why
   filtered searches stay exact scans.
 
