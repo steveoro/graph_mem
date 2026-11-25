@@ -114,7 +114,7 @@ RSpec.describe SqlImport::Executor do
   it "canonicalizes staged relation types with this machine's mappings, but never turns a variant into part_of" do
     gadget = fs_member!(project, "SynthGadget", "Component")
     MemoryRelation.create!(from_entity: widget, to_entity: gadget, relation_type: "uses_synth")
-    MemoryRelation.insert_all!([ { from_entity_id: gadget.id, to_entity_id: widget.id, relation_type: "child_of", properties: "{}",
+    MemoryRelation.insert_all!([ { from_entity_id: gadget.id, to_entity_id: widget.id, relation_type: "child_of", properties: {},
                                    created_at: Time.current, updated_at: Time.current } ])
     script = sql_export(project)
     expect(script).to include("'child_of'")

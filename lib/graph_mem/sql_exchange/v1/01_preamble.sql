@@ -7,7 +7,9 @@
 -- Never with --force: it would keep going past a failed statement and commit a partial merge.
 -- A hand run skips the relation-type canonicalization (the next relation-type sweep normalizes those
 -- types). Either way the script stamps project membership and checks it before COMMIT; embeddings,
--- keywords and trust scores are filled later by the background jobs.
+-- keywords and trust scores are filled later by the background jobs. Before writing anything it refuses
+-- a staged value the models would refuse (a blank name or content, a confidence outside 0..1, tags that
+-- are not an array of strings, ...), naming the field and the row.
 -- A project member with no match in its project claims a global namesake of the same type that has
 -- no owned part_of parent (a reference stub's park edge doesn't own), with its part_of subtree,
 -- unless a name of that subtree is taken in the project; otherwise it is inserted as a copy and the
