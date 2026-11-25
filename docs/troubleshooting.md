@@ -207,7 +207,7 @@ Every part failed to give a JSON object with an `architecture` array, so the sca
 - `"<name>" would have two part_of parents`, `"<name>" would be part_of itself (a part_of cycle)` or `the project of "<name>" would not match its part_of parent`: the target's `part_of` tree conflicts with the script's in a way the merge can't settle. Look at that entity's parent on both machines, fix one, and run again; see also [membership drift](#problem-membership-drift-an-entity-is-in-the-wrong-project).
 - "the membership lock stayed busy for 60 s": only from a [hand run](data_exchange.md#hand-runs); the app says "The graph is busy" instead. Wait for the other write to end and run again.
 
-**A MariaDB message.** A number the grammar passes but MariaDB rejects (for example `1e999`) fails its statement and rolls the run back. `graph_mem:import_sql` prints the database's message without a backtrace. On the Imports page the same file answers with a server error and the message is in the log, because only the validator's and the guards' refusals have a page; export from a source machine that doesn't hold such a value, or use the rake task to read the message.
+**A MariaDB message.** A number the grammar passes but MariaDB rejects (for example `1e999`) fails its statement and rolls the run back. `graph_mem:import_sql` prints the database's message without a backtrace, and the Imports page shows it as "The import was refused and nothing was written" with the same message. Such a value doesn't come from a graph_mem export: the file was edited or written by another tool.
 
 **Solutions:**
 
