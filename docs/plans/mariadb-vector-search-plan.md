@@ -238,7 +238,7 @@ on MariaDB 11.8.9 (local) and 11.8.6 (the `mariadb:11.8` image, CI's minor):
   | observation search, exact | 1,158 ms | 6,849 ms |
   | observation search, raw index shape | 8.9 ms | 31.5 ms |
   | `suggest_merges`, per entity, exact (one call over every entity) | 1.5 ms (about 14 s) | 201 ms (about 159 min) |
-  | recall@10, entities / observations (20 probes) | 0.39 / 0.29 | 0.34 / 0.61 |
+  | recall@10, entities / observations (20 probes) | 0.39 / 0.29 (a second run: 0.40 / 0.57) | 0.34 / 0.61 |
   | INSERT with / without the VECTOR KEYs | 2.3 / 0.7 ms (401 / 1,393 rows/s) | 3.5 / 0.7 ms (220 / 1,372 rows/s) |
   | embedding UPDATE with / without (p95 with) | 1.2 / 1.0 ms (1.9 ms) | 2.6 / 1.0 ms (22 ms) |
 

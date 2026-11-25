@@ -5,7 +5,9 @@ All notable changes to GraphMem will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.93.5] - 2026-11-25
+
+Steps 0 and 1 of the MariaDB vector search plan. A row without a current embedding (`embedded_at` NULL: new, or edited and waiting to be re-embedded) is no longer scored or compared on its vector column, where a new row's zero-vector placeholder read as distance 0, and an opt-in bench plus EXPLAIN, recall and filter-hazard specs measure the vector index before any query is changed. The bench and the specs change nothing at runtime; no change to any MCP tool, parameter or schema (tool counts stay 12 / 9 / 22), and no migration.
 
 ### Fixed
 - **An unembedded observation got the top vector score.** With the vector indexes installed (the committed schema, or `embeddings:add_indexes`), a row that has no embedding yet holds a zero-vector placeholder, and MariaDB's cosine distance to it is NaN, which the client reads as 0. `ObservationRelevanceRanker` turned that into a vector similarity of 1.0, the maximum, so a fact still waiting for its embedding ranked above embedded ones in `summarize`, `rank_observations` and the observation order of `get_entities` and `traverse_graph`. It is now scored on its tokens alone, as without the indexes, and the order of those results changes only in that. The guards that skip unembedded rows read `embedded_at` instead of the vector column: the ranker (on the loaded record and on the row), the summarizer's contradiction marks, `ContradictionDetector`, dream state's merge pass (`EntityMergeEvidence`, which the tree walk calls for every entity) and `suggest_merges` (the MCP tool and `GET /api/v1/maintenance/suggest_merges`). The summarizer and the merge pass ran a distance query on a placeholder before (it matched nothing); the detector and `suggest_merges` already left placeholders out. No change to any MCP tool, parameter or schema (tool counts stay 12 / 9 / 22), and no migration.
