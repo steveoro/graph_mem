@@ -175,11 +175,11 @@ caller since before `c546109`; its guard is switched anyway, and step 4 can dele
   `suggest_merges` (both copies) were already safe through `with_embedding`, as expected.
 - **MariaDB 11.8.9** (local) matches the 11.8.6 notes above; the client reads the NaN as `0.0`
   (mysql2). One more check: `d >= x` is **true** for the NaN, so only a `<` threshold drops it.
-- **Left as is:** `review_policies/auto_apply_contradiction.rb` (`within_distance?`) guards its pairwise
-  distance with `embedding IS NOT NULL`, which a placeholder passes. Its pairs come from
-  `ContradictionDetector`, which compares embedded facts only, and nothing writes the zero vector back
-  to an embedded row, so it can't meet a placeholder today; switching it to `embedded_at` is a
-  one-line follow-up.
+- **Also fixed in PR A:** `review_policies/auto_apply_contradiction.rb` (`within_distance?`) guarded its
+  pairwise distance with `embedding IS NOT NULL`, which a placeholder passes; the NaN then read as
+  0.0, inside any distance cap, so a seeded contradiction row with an unembedded fact was auto-applied
+  (a spec showed it). Its pairs normally come from `ContradictionDetector`, which compares embedded
+  facts only, so it was latent; it now checks `embedded_at`.
 
 ## Step 1. Synthetic benchmark plus EXPLAIN and recall specs
 
