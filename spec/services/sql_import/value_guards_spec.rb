@@ -36,6 +36,17 @@ RSpec.describe "graph_mem-sql: staged values the models would refuse" do
     resign(text.sub(staged) { changed })
   end
 
+  # `staged` with its created_at or updated_at (the last two values of every staged line) set to `value`.
+  def dated(staged, column, value, text = script)
+    created, updated = staged.scan(/'(\d{4}-\d\d-\d\d \d\d:\d\d:\d\d\.\d{6})'/).flatten.last(2)
+    edited(staged, "'#{created}', '#{updated}')", column == :created_at ? "'#{value}', '#{updated}')" : "'#{created}', '#{value}')", text)
+  end
+
+  # The UTC clock of the database plus `hours`, as the writer formats a timestamp.
+  def db_clock_plus(hours)
+    ActiveRecord::Base.connection.select_value("SELECT DATE_FORMAT(UTC_TIMESTAMP(6) + INTERVAL #{Integer(hours)} HOUR, '%Y-%m-%d %H:%i:%s.%f')")
+  end
+
   # Imports `text` on the current graph and expects the refusal, with nothing written.
   def refused(text, message)
     snapshot = graph_snapshot
@@ -140,6 +151,30 @@ RSpec.describe "graph_mem-sql: staged values the models would refuse" do
         refused(edited(edge_line, properties, "'[1]'"), /memory_relations\.properties is not a JSON object/)
         refused(edited(edge_line, properties, "'null'"), /memory_relations\.properties is not a JSON object/)
       end
+    end
+  end
+
+  describe "timestamps more than a day ahead of the UTC clock here (they would win every newer-wins compare)" do
+    before do
+      script
+      sql_delete_tree!(project)
+    end
+
+    it "refuses a created_at or updated_at dated 2099, naming the table and the row" do
+      future = "2099-01-01 00:00:00.000000"
+      refused(dated(entity_line, :updated_at, future),
+              /memory_entities\.updated_at 2099-01-01 00:00:00\.000000 is more than a day ahead of the clock here \(UTC .*\): staged entity \d+ "SynthWidget"/)
+      refused(dated(fact_line, :created_at, future), /memory_observations\.created_at 2099-01-01 .*: staged observation \d+ on "SynthWidget"/)
+      refused(dated(edge_line, :updated_at, future), /memory_relations\.updated_at 2099-01-01 .*: staged relation \d+ from "SynthWidget" to "SynthGear"/)
+    end
+
+    it "allows one day for clock skew: 23 hours ahead is imported, 25 hours ahead is refused" do
+      refused(dated(entity_line, :updated_at, db_clock_plus(25)), /memory_entities\.updated_at .* is more than a day ahead/)
+
+      ahead = db_clock_plus(23)
+      sql_import(dated(entity_line, :updated_at, ahead))
+
+      expect(MemoryEntity.find_by!(name: "SynthWidget").updated_at).to eq(Time.find_zone("UTC").parse(ahead))
     end
   end
 

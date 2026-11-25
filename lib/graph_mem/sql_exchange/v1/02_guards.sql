@@ -3,7 +3,8 @@
 -- MemoryEntity, MemoryObservation or MemoryRelation would refuse is refused here, the message naming the
 -- field and the row (blank as Rails reads it: empty or only whitespace, Unicode spaces included). Tags or
 -- properties that are not JSON at all are left to the json_valid CHECK of the tables, which refuses the write.
--- The lifecycle links are mapped by the merge and checked after it (06).
+-- The lifecycle links are mapped by the merge and checked after it (06). Last, a created_at or updated_at
+-- more than a day ahead of the clock here is refused.
 DELIMITER //
 BEGIN NOT ATOMIC
   DECLARE here VARCHAR(255) DEFAULT NULL;
@@ -11,6 +12,7 @@ BEGIN NOT ATOMIC
   DECLARE msg VARCHAR(512) DEFAULT NULL;
   DECLARE blank VARCHAR(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci
     DEFAULT '^[[:space:]\\x{85}\\x{A0}\\x{1680}\\x{2000}-\\x{200A}\\x{2028}\\x{2029}\\x{202F}\\x{205F}\\x{3000}]*$';
+  DECLARE latest DATETIME(6) DEFAULT UTC_TIMESTAMP(6) + INTERVAL 1 DAY;
   SET here = (SELECT MAX(version) FROM schema_migrations);
   SET theirs = (SELECT v FROM gm_stage_meta WHERE k = 'schema');
   IF COALESCE(@gm_lock, 0) <> 1 THEN
@@ -78,6 +80,25 @@ BEGIN NOT ATOMIC
                       LEFT JOIN gm_stage_entities fe ON fe.sk = r.from_sk LEFT JOIN gm_stage_refs fr ON fr.sk = r.from_sk
                       LEFT JOIN gm_stage_entities te ON te.sk = r.to_sk LEFT JOIN gm_stage_refs tr ON tr.sk = r.to_sk) v
                     WHERE problem IS NOT NULL ORDER BY sk LIMIT 1), 512);
+  END IF;
+  -- Timestamps are UTC (as Rails stores them and the writer exports them). One more than a day ahead of
+  -- the UTC clock here (the allowance is for clock skew) would win every newer-wins compare until then.
+  IF msg IS NULL THEN
+    SET msg = LEFT((SELECT CONCAT('graph_mem-sql: ', tbl, IF(created_at > latest, '.created_at ', '.updated_at '),
+                                  IF(created_at > latest, created_at, updated_at), ' is more than a day ahead of the clock here (UTC ',
+                                  UTC_TIMESTAMP(), '): ', who)
+                    FROM (SELECT 1 AS pos, sk, 'memory_entities' AS tbl, created_at, updated_at, CONCAT('staged entity ', sk, ' "', name, '"') AS who
+                            FROM gm_stage_entities
+                          UNION ALL
+                          SELECT 2, o.sk, 'memory_observations', o.created_at, o.updated_at, CONCAT('staged observation ', o.sk, ' on "', e.name, '"')
+                            FROM gm_stage_observations o JOIN gm_stage_entities e ON e.sk = o.entity_sk
+                          UNION ALL
+                          SELECT 3, r.sk, 'memory_relations', r.created_at, r.updated_at,
+                                 CONCAT('staged relation ', r.sk, ' from "', COALESCE(fe.name, fr.name), '" to "', COALESCE(te.name, tr.name), '"')
+                            FROM gm_stage_relations r
+                            LEFT JOIN gm_stage_entities fe ON fe.sk = r.from_sk LEFT JOIN gm_stage_refs fr ON fr.sk = r.from_sk
+                            LEFT JOIN gm_stage_entities te ON te.sk = r.to_sk LEFT JOIN gm_stage_refs tr ON tr.sk = r.to_sk) t
+                    WHERE created_at > latest OR updated_at > latest ORDER BY pos, sk LIMIT 1), 512);
   END IF;
   IF msg IS NOT NULL THEN
     SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = msg;
