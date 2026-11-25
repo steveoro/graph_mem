@@ -86,10 +86,16 @@ module Projects
       render :sql_preview, status: status
     end
 
+    # A refusal (before the commit) re-renders the preview: nothing was written. After the commit the
+    # session is gone and the report opens, saying what didn't happen when the record couldn't be completed.
     def execute_sql
       operation = SqlImport::Flow.execute(@session_id, full_maintenance: params[:full_maintenance] == "1")
       session.delete(:import_session_id)
       redirect_to report_projects_import_path(operation.operation_id)
+    rescue SqlImport::Flow::FinishFailed => e
+      session.delete(:import_session_id)
+      redirect_to report_projects_import_path(e.operation_id),
+                  alert: t("projects.imports.sql.not_finished", operation_id: e.operation_id, error: e.message)
     rescue *SqlImport::Flow::REFUSALS => e
       show_sql(error: t("projects.imports.sql.not_run", reason: SqlImport::Flow.refusal_reason(e)), status: :unprocessable_content)
     end

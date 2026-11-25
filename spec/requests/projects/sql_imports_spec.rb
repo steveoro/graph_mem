@@ -151,8 +151,72 @@ RSpec.describe "Projects › Imports (graph_mem-sql)", type: :request do
 
       expect { post execute_projects_import_path(session_id) }.not_to(change { [ MemoryEntity.count, OperationProgress.count ] })
       expect(response).to have_http_status(:unprocessable_content)
-      expect(html.at_css("[data-testid='sql-import-error']").text).to include("did not run", "does not match its sha256")
+      expect(html.at_css("[data-testid='sql-import-error']").text).to include("did not run and nothing was written", "does not match its sha256")
       expect(ImportSession.exists?(session_id)).to be(true)
+      expect(enqueued_jobs).to be_empty
+    end
+
+    # Uploads the script with the project deleted, so Execute writes its two entities; returns the session id.
+    def upload_fresh_import
+      script = sql_export(project)
+      sql_delete_tree!(project)
+      upload(script)
+      session_id_from_redirect
+    end
+
+    it "reports a follow-up that couldn't be queued as failed on a written import, which a second Execute doesn't run again" do
+      allow(SqlImportFollowUpJob).to receive(:perform_later).and_raise(ActiveRecord::StatementInvalid, "queue down")
+      session_id = upload_fresh_import
+
+      post execute_projects_import_path(session_id), params: { full_maintenance: "1" }
+
+      operation = OperationProgress.find_by!(operation_type: "import")
+      expect(response).to redirect_to(report_projects_import_path(operation.operation_id))
+      expect(operation.details).to include("full_maintenance" => true, "follow_up" => { "status" => "failed", "error" => "ActiveRecord::StatementInvalid: queue down" })
+      expect(MemoryEntity.where(name: %w[SynthPrj SynthWidget]).count).to eq(2)
+      expect(ImportSession.exists?(session_id)).to be(false)
+
+      follow_redirect!
+      expect(html.at_css("[data-testid='sql-import-follow-up-status']").text).to eq("failed")
+      expect(html.at_css("[data-testid='sql-import-follow-up']").text).to include("The follow-up failed: ActiveRecord::StatementInvalid: queue down")
+      expect(html.at_css("[data-testid='sql-import-follow-up-recover']").text)
+        .to include("The imported rows are written", "Run full maintenance now runs those jobs at once", "SqlImportFollowUpJob.perform_later(\"#{operation.operation_id}\")")
+      expect(html.at_css("[data-testid='sql-import-full-maintenance']")).to be_nil # asked for, but a failed follow-up never starts it
+      expect(html.at_css("[data-testid='sql-import-maintenance-form']")).to be_present
+
+      expect { post execute_projects_import_path(session_id) }.not_to(change { [ OperationProgress.count, MemoryEntity.count, AuditLog.count ] })
+      expect(response).to have_http_status(:not_found)
+    end
+
+    it "says the import was written when completing its record fails after the commit, never that nothing was written" do
+      allow(SqlImport::Flow).to receive(:finish).and_raise(ActiveRecord::StatementInvalid, "details lost")
+      session_id = upload_fresh_import
+
+      post execute_projects_import_path(session_id)
+
+      operation = OperationProgress.find_by!(operation_type: "import")
+      expect(response).to redirect_to(report_projects_import_path(operation.operation_id))
+      expect(flash[:alert]).to include("The import was written (operation #{operation.operation_id})",
+                                       "its follow-up was not queued: ActiveRecord::StatementInvalid: details lost", "Run full maintenance now")
+      expect(flash[:alert]).not_to include("nothing was written")
+      expect(MemoryEntity.where(name: %w[SynthPrj SynthWidget]).count).to eq(2)
+      expect(ImportSession.exists?(session_id)).to be(false)
+
+      expect { post execute_projects_import_path(session_id) }.not_to(change { [ OperationProgress.count, MemoryEntity.count ] })
+      expect(response).to have_http_status(:not_found)
+    end
+
+    it "says the import was written when leaving the run fails after the commit, and doesn't keep the upload" do
+      session_id = upload_fresh_import
+      fail_sql_import_after_commit!("lock release lost")
+
+      post execute_projects_import_path(session_id)
+
+      operation = OperationProgress.find_by!(operation_type: "import")
+      expect(response).to redirect_to(report_projects_import_path(operation.operation_id))
+      expect(flash[:alert]).to include("The import was written (operation #{operation.operation_id})", "ActiveRecord::StatementInvalid: lock release lost")
+      expect(MemoryEntity.where(name: %w[SynthPrj SynthWidget]).count).to eq(2)
+      expect(ImportSession.exists?(session_id)).to be(false)
       expect(enqueued_jobs).to be_empty
     end
 
@@ -175,6 +239,18 @@ RSpec.describe "Projects › Imports (graph_mem-sql)", type: :request do
       second = sql_import(sql_export(project)).operation_id
       post maintenance_projects_import_path(second), params: { full_maintenance: "1" }
       expect(flash[:notice]).to eq("Full maintenance started (System › Background jobs).")
+    end
+
+    it "starts full maintenance at once after a follow-up that couldn't be queued, though Execute asked for it" do
+      allow(SqlImportFollowUpJob).to receive(:perform_later).and_raise(ActiveRecord::StatementInvalid, "queue down")
+      operation = run_import(sql_export(project), full_maintenance: "1")
+      expect(operation.details.dig("follow_up", "status")).to eq("failed")
+
+      post maintenance_projects_import_path(operation.operation_id), params: { full_maintenance: "1" }
+
+      expect(flash[:notice]).to eq("Full maintenance started (System › Background jobs).")
+      expect(OperationProgress.where(operation_type: "scheduled_run").sole.details["trigger"]).to eq("sql_import")
+      expect(operation.reload.details["full_maintenance_outcome"]).to eq("started")
     end
 
     # A new fact next to a reworded one the target had; returns the follow-up's report page.

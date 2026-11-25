@@ -113,6 +113,7 @@ en:
         refused: "The import was refused and nothing was written: %{reason}"
         busy: "The graph is busy (an import or maintenance holds the membership lock). Nothing was written; try again in a minute."
         not_run: "The import did not run and nothing was written: %{reason}"
+        not_finished: "The import was written (operation %{operation_id}), but completing its record failed, so its follow-up was not queued: %{error}. The scheduled jobs embed the new rows and fill their keyword paths, and Run full maintenance now runs those jobs at once."
         tables:
           memory_entities: "Entities"
           memory_observations: "Observations"
@@ -187,6 +188,7 @@ en:
             "off": "Review rows were seeded, but dream-state compaction is switched off."
             full_maintenance: "Compaction runs as a step of full maintenance."
           error: "The follow-up failed: %{error}"
+          recover: "The imported rows are written. The scheduled jobs embed them and fill their keyword paths, and Run full maintenance now runs those jobs at once. The trust scores and review rows come only from this follow-up; to run it again, on the server:"
       index:
         title: "Imports"
         subtitle: "Every import, the command-line ones included, newest first."

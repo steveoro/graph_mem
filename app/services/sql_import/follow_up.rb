@@ -87,7 +87,7 @@ module SqlImport
     # @param last_attempt [Boolean]
     # @return [Symbol] :done or :deferred
     def call(last_attempt:)
-      save!("status" => "running")
+      save!("status" => "running", "error" => nil) # a run queued again after a failure starts clean
       if embeddings(last_attempt) == :deferred
         save!("status" => "queued", "deferred" => @operation.details.dig("follow_up", "deferred").to_i + 1)
         return :deferred

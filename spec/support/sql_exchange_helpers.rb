@@ -57,6 +57,14 @@ module SqlExchangeHelpers
     project.delete
   end
 
+  # Makes an SQL import fail once it committed, as an error on the way out of the run would (here after
+  # the membership lock is released); the rows stay written.
+  def fail_sql_import_after_commit!(message)
+    allow(ProjectMembership).to receive(:with_membership_lock).and_wrap_original do |original, *args, **kwargs, &block|
+      original.call(*args, **kwargs, &block).tap { raise ActiveRecord::StatementInvalid, message }
+    end
+  end
+
   # @return [Hash{String => Integer}] "table/action" => rows of a result's summary
   def sql_counts(result)
     result.summary.to_h { |row| [ "#{row['table'].delete_prefix('memory_')}/#{row['action']}", row["rows"] ] }
