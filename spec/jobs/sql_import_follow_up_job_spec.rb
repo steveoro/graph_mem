@@ -111,6 +111,20 @@ RSpec.describe SqlImportFollowUpJob do
     expect(calls).to all(include(held: false))
   end
 
+  it "compares new facts only with the facts that were there before the import, not with each other", :with_test_embeddings do
+    record_embedding_calls!
+    fs_observe!(widget, "SynthWidget renders tiles.")
+    fs_observe!(widget, "Restated: SynthWidget renders tiles.")
+    script = sql_export(project)
+    sql_delete_tree!(project) # a fresh target: both rewordings come in as new rows
+    operation = import!(script)
+
+    described_class.perform_now(operation.operation_id)
+
+    expect(MaintenanceReportRow.where(kind: "delete_observation")).to be_empty
+    expect(follow_up(operation)).to include("near_duplicates" => { "checked" => 2, "unchecked" => 0 }, "compaction" => "not_needed")
+  end
+
   it "reports a near-duplicate check that couldn't run because the embedding service is down", :with_test_embeddings do
     operation = import!(reworded_duplicate_script)
 

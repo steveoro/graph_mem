@@ -7,10 +7,13 @@ module SqlImport
   # - entity_merge: a written entity whose name or an alias is the name or an alias of another entity
   #   of the same type in the same scope (an ambiguous alias inserts a copy), scored with
   #   EntityMergeEvidence;
-  # - delete_observation: a new active observation whose nearest active sibling on the same entity is
-  #   within AppSettings.import_observation_duplicate_max_distance, read from the stored embeddings
-  #   (the follow-up's backfill ran first; nothing is embedded here). A new observation without an
-  #   embedding can't be checked: it is counted in `unchecked`, for the report to say so.
+  # - delete_observation: a new active observation whose nearest active sibling on the same entity,
+  #   among the observations that were there before the import, is within
+  #   AppSettings.import_observation_duplicate_max_distance, read from the stored embeddings (the
+  #   follow-up's backfill ran first; nothing is embedded here). New observations are not compared with
+  #   each other: a fresh project import would otherwise propose pairs the source may have reviewed. A
+  #   new observation without an embedding can't be checked: it is counted in `unchecked`, for the
+  #   report to say so.
   #
   #   result = SqlImport::ReviewSeeds.call(touched, operation_id: "…")
   #   result.rows      # => [MaintenanceReportRow, …] the rows seeded
@@ -85,35 +88,35 @@ module SqlImport
 
     def duplicate_items
       threshold = AppSettings.import_observation_duplicate_max_distance.to_f
-      proposed = Set.new
-      MemoryObservation.active.where(id: @touched.new_observation_ids).order(:id).filter_map do |observation|
+      new_ids = @touched.new_observation_ids
+      new_by_entity = MemoryObservation.where(id: new_ids).pluck(:memory_entity_id, :id).group_by(&:first).transform_values { |pairs| pairs.map(&:last) }
+      MemoryObservation.active.where(id: new_ids).order(:id).filter_map do |observation|
         unless EmbeddingService.vector_enabled? && observation.embedded_at
           @unchecked += 1
           next
         end
 
         @checked += 1
-        sibling_id, distance = nearest_sibling(observation)
-        # Two new rewordings of one fact: only the first one is proposed.
-        next if sibling_id.nil? || distance.to_f > threshold || proposed.include?(sibling_id)
+        sibling_id, distance = nearest_sibling(observation, new_by_entity.fetch(observation.memory_entity_id))
+        next if sibling_id.nil? || distance.to_f > threshold
 
-        proposed << observation.id
         { id: SecureRandom.uuid, kind: "delete_observation", observation_id: observation.id, similar_observation_id: sibling_id,
           cosine_distance: distance.to_f.round(4),
           reason: "SQL import #{@operation_id}: within #{threshold} of fact ##{sibling_id} on the same entity (a reworded duplicate?)" }
       end
     end
 
-    # The nearest embedded active sibling, from the two stored vectors. Ordering on (d + 0) keeps the
-    # exact, filtered order (ImportObservationDuplicateDetector#nearest_observation explains why).
-    def nearest_sibling(observation)
-      ActiveRecord::Base.connection.select_rows(<<~SQL.squish).first
+    # The nearest embedded active sibling that the import didn't add (`new_ids`: its new observations on
+    # that entity), from the two stored vectors. Ordering on (d + 0) keeps the exact, filtered order
+    # (ImportObservationDuplicateDetector#nearest_observation explains why).
+    def nearest_sibling(observation, new_ids)
+      sql = MemoryObservation.sanitize_sql_array([ <<~SQL.squish, observation.id, new_ids, MemoryObservation::ACTIVE_STATUS ])
         SELECT s.id, VEC_DISTANCE_COSINE(s.embedding, n.embedding) AS d
-        FROM memory_observations n JOIN memory_observations s ON s.memory_entity_id = n.memory_entity_id AND s.id <> n.id
-        WHERE n.id = #{observation.id.to_i} AND s.status = #{MemoryObservation.connection.quote(MemoryObservation::ACTIVE_STATUS)}
-          AND s.embedded_at IS NOT NULL
+        FROM memory_observations n JOIN memory_observations s ON s.memory_entity_id = n.memory_entity_id
+        WHERE n.id = ? AND s.id NOT IN (?) AND s.status = ? AND s.embedded_at IS NOT NULL
         ORDER BY (d + 0) ASC LIMIT 1
       SQL
+      ActiveRecord::Base.connection.select_rows(sql).first
     end
   end
 end
