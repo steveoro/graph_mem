@@ -1,8 +1,10 @@
 # Plan: SQL-script export/import for graph_mem (idempotent project sync)
 
-> Status: approved by Steve on 2026-11-19, not started. Written against `main` at ef3c900 (1.91.0),
-> rechecked against `main` at a0869d4 (still 1.91.0).
-> Nothing in the repository is touched and no branch is created until Steve says the repo is free.
+**✅ DONE:** shipped as **1.94.0** in four PRs: steps 1 and 2 as #199 and #200, steps 3 and 4 as the two PRs after them. See "As built" at the end.
+
+> Status: **complete.** Approved by Steve on 2026-11-19. Written against `main` at ef3c900 (1.91.0),
+> rechecked against `main` at a0869d4 (still 1.91.0). The text below is the plan as approved and
+> revised; "As built" lists where the code differs from it.
 
 > **Revision 2026-11-19 (review).** Changes folded in after a review against the code on `main`:
 > 1. Newer wins: checked which writes move `updated_at` without a content change. Derived writes
@@ -489,3 +491,57 @@ source machine → target machine run with `DRY_RUN=1` first. `bundle exec ruboc
   or compaction review catches it.
 - An SQL import has no one-click undo (no `ChangeSet`); the preview recommends a backup. It does
   write audit rows with the old and new values, so single fields can be put back by hand.
+
+## As built (1.94.0)
+
+What shipped, and where it differs from the text above. The code, the specs, [`CHANGELOG.md`](../../../CHANGELOG.md) and the operator
+reference [`docs/data_exchange.md`](../../data_exchange.md) are the source of truth.
+
+**Delivery.** PR 1 (services, template v1, validator, executor, both rake tasks, Cloud toggle `touch: false`,
+the scenario spec), PR 2 (the import UI, `SqlImportFollowUpJob`, the contradiction hook, full maintenance), PR 3 (the
+export format choice, `ExportJob`, the sync endpoint's `format`) and PR 4 (the docs and the release). No migration, no
+new MCP tool, no new `OperationProgress` type. Tool counts stay 12 / 9 / 22.
+
+**Differences from the plan above.**
+
+- **Template files.** `lib/graph_mem/sql_exchange/v1/` has eight files: `01_preamble` (the usage comment, session,
+  lock, transaction and the `CREATE TEMPORARY TABLE` of every `gm_` table, so the plan's "staging" and "resolve"
+  sections live in 01 and 03-05), `02_guards`, `03_entities`, `04_observations`, `05_relations`, `06_checks`,
+  `07_record`, `08_report`. A sixth staging table, `gm_stage_meta` (`format`, `app`, `schema`, `exported_at`,
+  `roots`), carries the header's facts into the script; `gm_touched` has the columns `tbl, action, target_id,
+  project, entity, detail, changed`.
+- **`sql_mode`** adds `STRICT_ALL_TABLES` to the plan's list (`SqlExport::Template::SQL_MODE`); it still never contains
+  `NO_BACKSLASH_ESCAPES`.
+- **Executor and flow.** Between the staging `INSERT`s and the merge the executor canonicalizes the staged relation
+  types with the target's mappings (`SqlExport::Template.relation_type`, the line the Dream State plan asked for);
+  a variant of `part_of` that SQL doesn't read as `part_of` keeps its spelling. `SqlImport::Flow` is the in-app
+  path (upload, dry run, preview, execute, `finish`), shared with the rake task; the validator runs before every
+  dry run and every real run. The in-app lock is the app's own: the script's guard reads `@gm_lock` set by the executor.
+- **Follow-up.** `SqlImport::FollowUp`, `SqlImport::Touched` and `SqlImport::ReviewSeeds` hold the job's logic
+  (`SqlImportFollowUpJob` retries a busy embeddings lock every minute, five times, and the last attempt goes on
+  without the backfill). The near-duplicate check compares a new fact with the active facts the entity had
+  **before** the import, read from stored embeddings, never with the import's other new facts, and a new fact it
+  couldn't compare is counted and reported (no embedding, or no vector columns). Merge proposals skip Project roots.
+- **Shared trust recompute.** `ObservationTrustRecompute` (`app/services/observation_trust_recompute.rb`), used by
+  the JSON import, the relation hook and the follow-up; the plan named a small service moved out of
+  `import_execution_strategy/reporting.rb`.
+- **Statement splitter.** `GraphMem::SqlStatements` (shared with `ScanProfile::StructureLoader`) is the extracted
+  DELIMITER-aware splitter.
+- **Guards.** The PR 1 review's value guards, the timestamp guard, the claim rules and the dropped `outdated_by`
+  links (see "My calls") shipped as written. A value that passes the grammar and that MariaDB rejects (`1e999`)
+  is a refusal in `graph_mem:import_sql`; the import page doesn't rescue it (a server error, the message in the log).
+- **UI.** The preview and the report list the affected rows filterable by table and action, with the entity,
+  detail and the changed field names (the old and new values are in the audit rows). Entities link to Explore on
+  the report only (a preview's new rows were rolled back). **Download as CSV** was not built. The
+  report's "Run full maintenance now" button (`POST /projects/imports/:id/maintenance`) works before and after the
+  follow-up ends.
+- **Export.** `ExportJob::FORMATS` is `sql` and `json`; a row without a format is a JSON export. The download is
+  named after the first root (`synthprj.sql`, `synthprj_plus_2.sql`) and sent as `application/sql`. The sync
+  endpoint answers 400 for an unknown `format` and 422 for a script request for an unknown id or a member of a project.
+- **Docs.** `docs/data_exchange.md` (new), `docs/guides/ui-guide.md`, `docs/architecture.md`,
+  `docs/troubleshooting.md`; the Dream State and vector search plans' order tables name 1.94.0 as shipped.
+
+**Verification** as planned: the scenario spec `spec/integration/sql_exchange_synth_project_spec.rb` (restore an
+older export over an edited graph, the forward sync and the fresh target), round-trip, idempotency, atomicity,
+validator, guard, follow-up, request and job specs, and the derived-writer timestamp spec
+(`spec/integration/updated_at_content_timestamp_spec.rb`).

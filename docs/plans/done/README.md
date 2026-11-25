@@ -41,6 +41,7 @@ Active plans and the backlog live in [`docs/plans/`](../).
 | [`contradiction-auto-resolve-plan.md`](contradiction-auto-resolve-plan.md) | Value changes and value-flip contradictions resolved on their own: the value-change pairing, the auto-resolve policy, the false-merge guards | 1.92.0 |
 | [`part-of-membership-plan.md`](part-of-membership-plan.md) | Every `part_of` writer keeps an entity's project in step: entity delete, merge, relation repair, scans, imports, rake tasks, dream state, the integrity sweep, and the spec suite's drift guard | 1.93.1–1.93.2 |
 | [`mcp-sdk-1.11.0-plan.md`](mcp-sdk-1.11.0-plan.md) | `mcp` 1.11.0 (the `resources/read` uri check and ids beyond 128 bits), compat baseline on the reference servers v2.5.0 | 1.93.4 |
+| [`sql-exchange-plan.md`](sql-exchange-plan.md) | graph_mem-sql: a self-contained SQL script that syncs a project between machines (export, validated import in one transaction, follow-up job, Projects › Exports and Imports, the sync endpoint's `format`), with its "As built" | 1.94.0 |
 
 Removed as noise (still in git history): the chores D-1–D-3 step list (1.55.3) and the F2a, F2b and F2c
 task-by-task implementation plans (their designs above keep the decisions).

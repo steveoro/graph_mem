@@ -433,7 +433,7 @@ synthetic query set, and it changes result order, so it needs Steve's approval t
 ## Releases (Decision 5)
 
 The train as it reads on `main` (`docs/plans/dream-state-semantics-plan.md`, "Order and size";
-`docs/plans/sql-exchange-plan.md:342`; `docs/plans/done/mcp-sdk-1.11.0-plan.md:1-4`), with this plan's
+`docs/plans/done/sql-exchange-plan.md` (Delivery); `docs/plans/done/mcp-sdk-1.11.0-plan.md:1-4`), with this plan's
 releases placed:
 
 | Version | What |
@@ -444,7 +444,7 @@ releases placed:
 | 1.93.3 | Embeddings outside the membership lock (a follow-up of the `part_of` membership PRs, shipped) |
 | 1.93.4 | mcp 1.11.0 bump |
 | **1.93.5** | **This plan: step 0 (zero-vector bug fix) + step 1 (benchmark and specs)**, PRs A and B |
-| 1.94.0 | SQL exchange (four PRs) |
+| 1.94.0 | SQL exchange (four PRs, `docs/plans/done/sql-exchange-plan.md`, shipped) |
 | 1.95.0 (+1.95.1) | Dream State R1b (+ R1c) |
 | 1.96.0 | Dream State R2 |
 | **1.97.0** | **This plan: steps 2-4** (`vector_search_mode`, `suggest_merges_mode`, `suggest_merges` time budget setting, no vector on default loads), PRs C, E, D |
