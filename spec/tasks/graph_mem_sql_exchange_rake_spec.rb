@@ -38,6 +38,18 @@ RSpec.describe "graph_mem:export_sql and graph_mem:import_sql", type: :task do
     expect(MemoryEntity.find_by!(name: "SynthWidget").project_id).to eq(MemoryEntity.find_by!(name: "SynthPrj").id)
   end
 
+  it "queues the follow-up after a real run only, recording FULL=1 for it" do
+    run_task("graph_mem:export_sql", { "OUT" => path }, "SynthPrj")
+    sql_delete_tree!(project)
+
+    expect { run_task("graph_mem:import_sql", { "FILE" => path, "DRY_RUN" => "1", "FULL" => "1" }) }.not_to have_enqueued_job(SqlImportFollowUpJob)
+    expect { run_task("graph_mem:import_sql", { "FILE" => path, "FULL" => "1" }) }.to have_enqueued_job(SqlImportFollowUpJob)
+    expect(OperationProgress.find_by!(operation_type: "import").details)
+      .to include("full_maintenance" => true, "file_name" => File.basename(path), "follow_up" => { "status" => "queued" })
+    expect { run_task("graph_mem:import_sql", { "FILE" => path }) }.to have_enqueued_job(SqlImportFollowUpJob)
+    expect(OperationProgress.where(operation_type: "import").order(:id).last.details["full_maintenance"]).to be(false)
+  end
+
   it "always validates: an edited file is refused and nothing is written" do
     run_task("graph_mem:export_sql", { "OUT" => path }, "SynthPrj")
     File.write(path, File.read(path).sub("'SynthWidget'", "'SynthWidgeT'"))

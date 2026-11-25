@@ -170,12 +170,14 @@ class StaleMemoryScanner
     return none unless AppSettings.contradiction_detection_enabled? && EmbeddingService.vector_enabled?
 
     cutoff = Time.current
-    scans = MemoryEntity.joins(:memory_observations)
-                        .where(memory_observations: { status: MemoryObservation::ACTIVE_STATUS })
-                        .where("memory_observations.updated_at > :at OR memory_observations.llm_keywords_at > :at", at: watermark)
-                        .distinct
-                        .pluck(:id)
-                        .map { |entity_id| ContradictionDetector.scan(entity_id) }
+    # An SQL import keeps the source updated_at on the rows it writes, so its follow-up lists the
+    # entities whose facts it added or changed (SqlImport::FollowUp).
+    scans = (MemoryEntity.joins(:memory_observations)
+                         .where(memory_observations: { status: MemoryObservation::ACTIVE_STATUS })
+                         .where("memory_observations.updated_at > :at OR memory_observations.llm_keywords_at > :at", at: watermark)
+                         .distinct
+                         .pluck(:id) | SqlImport::FollowUp.contradiction_entity_ids(after: watermark))
+            .map { |entity_id| ContradictionDetector.scan(entity_id) }
     items = scans.flat_map(&:pairs).uniq { |result| [ result.observation_id_1, result.observation_id_2 ].map(&:to_i).sort }
                  .filter_map { |result| ContradictionDetector.review_item(result) }
     { next_watermark: cutoff, contradiction_items: items, **route_fallback(scans.flat_map(&:fallback), retry_pairs) }

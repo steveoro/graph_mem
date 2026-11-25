@@ -54,12 +54,14 @@ namespace :graph_mem do
     abort "export refused: #{e.message}"
   end
 
-  desc "Import a graph_mem-sql script (FILE=path; DRY_RUN=1 runs it and rolls it back). Always validated first; " \
-       "prints the counts and the affected rows"
+  desc "Import a graph_mem-sql script (FILE=path; DRY_RUN=1 runs it and rolls it back; FULL=1 runs all scheduled jobs " \
+       "after the follow-up). Always validated first; prints the counts and the affected rows, then queues the follow-up"
   task import_sql: :environment do
-    path = ENV["FILE"].presence or abort "usage: bin/rails graph_mem:import_sql FILE=path [DRY_RUN=1]"
+    path = ENV["FILE"].presence or abort "usage: bin/rails graph_mem:import_sql FILE=path [DRY_RUN=1] [FULL=1]"
     dry_run = ENV["DRY_RUN"].to_s.match?(/\A(1|true|yes)\z/i)
+    full = ENV["FULL"].to_s.match?(/\A(1|true|yes)\z/i)
     result = SqlImport::Executor.call(SqlImport::Validator.validate_file(path), dry_run: dry_run)
+    SqlImport::Flow.finish(result, file_name: File.basename(path), full_maintenance: full) unless dry_run
 
     puts dry_run ? "Dry run: nothing was written." : "Imported: operation #{result.operation_id}"
     [ result.summary, result.affected ].each do |rows|
@@ -72,7 +74,10 @@ namespace :graph_mem do
       widths = cells.transpose.map { |column| column.map(&:length).max }
       cells.each { |row| puts row.zip(widths).map { |cell, width| cell.ljust(width) }.join("  ").rstrip }
     end
-    puts "Embeddings, keywords and trust scores of the new and changed rows are filled by the background jobs." unless dry_run
+    unless dry_run
+      puts "Follow-up queued (SqlImportFollowUpJob): embeddings, trust scores, keywords, review rows" \
+           "#{full ? ', then all scheduled jobs (FULL=1)' : ''}. Its outcome shows on the import's report page."
+    end
   rescue SqlImport::Validator::Invalid, SqlImport::Executor::Refused, ProjectMembership::LockTimeout, Errno::ENOENT => e
     abort "import refused, nothing was written: #{e.message}"
   end
