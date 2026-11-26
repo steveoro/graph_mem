@@ -11,6 +11,8 @@ class ProjectScanner
   #   column's collation) is held by a **global** entity of a dependency-like type is that entity,
   #   when the scanned project has no entity of that name itself: no project copy, no `part_of`
   #   (neither Containment's nor a model-emitted one), and its project_id is never touched;
+  # - a model-emitted `part_of` from one of the project's own items to such a global node isn't
+  #   written either (it would move the item out of the project): Containment parents it on the root;
   # - the scan adds `Project depends_on` it when the edge is missing;
   # - its facts go onto it as scan-sourced facts whose source names the project
   #   (`project_scan:<scan id>:dependency:<project id>`), so the project's scan validation covers
@@ -71,9 +73,22 @@ class ProjectScanner
       @relations_created_count += 1
     end
 
-    # @return [Boolean] a part_of from a global dependency: never written (it would stamp it into a scope)
-    def dependency_part_of?(from_entity, relation_type)
-      relation_type == "part_of" && global_dependency?(from_entity)
+    # A part_of the scan never writes:
+    # - from a global dependency: it would stamp the shared node into a scope;
+    # - to one (this scan's, or a global entity of a dependency-like type the target lookup found):
+    #   MembershipSync would move the project's own item out to the global scope. Containment
+    #   parents such an item on the root instead.
+    # @param from_entity [MemoryEntity]
+    # @param target [MemoryEntity]
+    # @param relation_type [String] canonical
+    # @return [Boolean]
+    def dependency_part_of?(from_entity, target, relation_type)
+      relation_type == "part_of" && (global_dependency?(from_entity) || global_dependency_target?(target))
+    end
+
+    # @return [Boolean] a global entity of a dependency-like type
+    def global_dependency_target?(target)
+      global_dependency?(target) || (target.project_id.nil? && scan_dependency_types.entity?(target))
     end
 
     # @return [String] the source of a fact the scan writes onto `entity`

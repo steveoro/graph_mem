@@ -92,6 +92,26 @@ RSpec.describe ProjectScanner, "global dependencies" do
     expect(other_fact.reload.status).to eq("active")
   end
 
+  it "keeps the project's own item in the project when the model puts it part_of a global library" do
+    other = fs_project!("Other Project")
+    library = MemoryEntity.create!(name: "SynthLib", entity_type: "Framework")
+    MemoryRelation.create!(from_entity: other, to_entity: library, relation_type: "depends_on")
+    MemoryEntity.create!(name: "SynthCodec", entity_type: "Gem") # global, not named as an item in the scan
+
+    result = scan(item("SynthLib", "Framework", "SynthLib parses the feeds."),
+                  item("SynthWidget", "Class", "SynthWidget renders gadget frames.", relations: [ { to: "SynthLib", type: "part_of" } ]),
+                  item("SynthPanel", "Class", "SynthPanel shows the codec output.", relations: [ { to: "SynthCodec", type: "part_of" } ]))
+
+    expect(result.errors).to be_empty
+    %w[SynthWidget SynthPanel].each do |name|
+      entity = MemoryEntity.find_by!(name: name, project_id: project.id)
+      expect(MemoryRelation.where(from_entity_id: entity.id, relation_type: "part_of").pluck(:to_entity_id)).to eq([ project.id ]), name
+    end
+    expect(MemoryRelation.where(to_entity_id: library.id, relation_type: "part_of")).not_to exist
+    expect(library.reload.project_id).to be_nil
+    expect(ProjectIdBackfill.new(out: StringIO.new).run.changed).to eq(0)
+  end
+
   it "makes a project copy as before when the namesake or the item isn't dependency-like" do
     MemoryEntity.create!(name: "SynthLib", entity_type: "Service")
     MemoryEntity.create!(name: "SynthGem", entity_type: "Gem")

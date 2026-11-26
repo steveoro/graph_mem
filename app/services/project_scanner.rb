@@ -549,7 +549,7 @@ class ProjectScanner
     return if from_entity.id == target.id
 
     relation_type = MemoryRelation.canonical_relation_type(relation_type)
-    return if part_of_another_root?(target, relation_type) || dependency_part_of?(from_entity, relation_type)
+    return if part_of_another_root?(target, relation_type) || dependency_part_of?(from_entity, target, relation_type)
     return if relation_exists?(from_entity, target, relation_type)
 
     return if @dry_run

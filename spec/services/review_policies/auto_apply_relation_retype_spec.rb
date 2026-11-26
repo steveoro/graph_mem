@@ -97,6 +97,22 @@ RSpec.describe ReviewPolicies::AutoApplyRelationRetype do
     expect(described_class.ownership_signal?(library, app)).to be(true)
   end
 
+  it "fails closed when the read of the library's facts is capped: the row stays for the operator" do
+    enable!
+    stub_const("DependencyEvidence::SCAN_LIMIT", 3)
+    2.times { |i| fs_observe!(library, "SynthLib parses feed #{i}.") }
+    expect(described_class.ownership_signal?(library, app)).to be(false) # 2 candidates: read in full, no phrase
+
+    fs_observe!(library, "SynthLib parses feed 2.")
+    fs_observe!(app, "SynthLib is our own fork, vendored in this repo.") # newer than the cap reaches
+    expect(described_class.ownership_signal?(library, app)).to be(true)
+
+    row = swap_row
+    expect(run).to include("acted" => 0, "skipped" => 1)
+    expect(row.reload.status).to eq("active")
+    expect(part_of.reload).to be_present
+  end
+
   it "never applies a retype or an add row" do
     enable!
     variant = MemoryRelation.create!(from_entity: MemoryEntity.create!(name: "SynthWidget", entity_type: "Component"),

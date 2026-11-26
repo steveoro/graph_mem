@@ -6,7 +6,8 @@ module ReviewPolicies
   # `depends_on` it, so the entity and its own subtree leave the project's scope; this policy does
   # it unattended only when nothing says the project owns the entity: the project has no fact that
   # names the entity (DependencyEvidence: held by it, its keyword path holds it, or its text names
-  # it while the path is pending) and matches one of OWNERSHIP_PHRASES. Such a row stays for the
+  # it while the path is pending) and matches one of OWNERSHIP_PHRASES, and the read of those facts
+  # wasn't capped (more than DependencyEvidence::SCAN_LIMIT candidates). Such a row stays for the
   # operator, and so does one whose entity is no longer of a dependency-like type (the setting or
   # the entity changed since it was queued).
   #
@@ -28,11 +29,16 @@ module ReviewPolicies
     OWNERSHIP_PHRASES = [ "part of this project", "our own", "maintained here", "vendored", "forked" ].freeze
     OWNERSHIP_PATTERN = /\b(?:#{OWNERSHIP_PHRASES.map { |phrase| phrase.split.map { |word| Regexp.escape(word) }.join('\s+') }.join('|')})\b/i
 
+    # A read capped at DependencyEvidence::SCAN_LIMIT can't prove that no ownership fact exists, so it
+    # counts as a signal: the row stays for the operator (fail closed).
     # @param library [MemoryEntity] the row's dependency-like entity
     # @param project [MemoryEntity] the Project it is part_of
-    # @return [Boolean] a fact of the project names the entity with an ownership phrase
+    # @return [Boolean] a fact of the project names the entity with an ownership phrase, or the read was capped
     def self.ownership_signal?(library, project)
-      DependencyEvidence.facts_matching(library, project, OWNERSHIP_PATTERN).any?
+      candidates = DependencyEvidence.candidates(library, project)
+      return true if candidates.size >= DependencyEvidence::SCAN_LIMIT
+
+      candidates.any? { |fact| OWNERSHIP_PATTERN.match?(fact.content.to_s) && DependencyEvidence.names?(fact, library) }
     end
 
     private
