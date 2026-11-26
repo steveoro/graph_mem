@@ -14,6 +14,7 @@ host: the app container uses host networking.
 git clone https://github.com/steveoro/graph_mem.git ~/Projects/graph_mem
 cd ~/Projects/graph_mem
 cp .env.example .env
+cp config/database.example.yml config/database.yml
 ollama pull nomic-embed-text
 ```
 
@@ -25,8 +26,10 @@ Edit `.env` and set (you'll add `RAILS_MASTER_KEY` in the next step):
 | `OPERATOR_PASSWORD` | Your password for the web UI. Add the line: the operator login stays disabled while the password is the default `changeme`. |
 | `DB_BACKUP_HOST_PATH` | An existing folder for database backups, e.g. `/home/<you>/backups/graph_mem`. |
 
-Leave everything else as it is. `config/database.yml` doesn't need changes: the container gets
-its database URL from `.env`.
+Leave everything else as it is. The copied `config/database.yml` needs no edits: the container
+gets its main database URL from `.env`, and the cache, queue and cable databases are SQLite files
+in the `storage` volume. The file is git-ignored, so a fresh clone doesn't have it: without it the
+image has no `cable` database and the app container restarts in a loop.
 
 ## 2. Generate your own master key
 
@@ -167,6 +170,7 @@ context to that project (it creates the Project entity if needed).
 
 | Symptom | Fix |
 |---|---|
+| App container keeps restarting; `docker compose logs app` says ``The `cable` database is not configured`` | `config/database.yml` is missing: `cp config/database.example.yml config/database.yml`, then `docker compose down && bin/up --build`. |
 | App container keeps restarting; `docker compose logs app` mentions the master key or `secret_key_base` | `RAILS_MASTER_KEY` in `.env` doesn't match `config/credentials.yml.enc`: redo step 2. |
 | Operator login returns 503 | Set `OPERATOR_PASSWORD` in `.env`, then `docker compose down && bin/up`. |
 | `embeddings:check` fails | Ollama isn't running, or `nomic-embed-text` isn't pulled. |

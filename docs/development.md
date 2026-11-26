@@ -61,7 +61,7 @@ bundle install
 Copy the sample database configuration:
 
 ```bash
-cp config/database.yml.sample config/database.yml
+cp config/database.example.yml config/database.yml
 ```
 
 Edit `config/database.yml` to match your local MariaDB configuration.

@@ -193,9 +193,10 @@ ollama pull nomic-embed-text
 git clone https://github.com/steveoro/graph_mem.git
 cd graph_mem
 
-# Copy example config and set your master key
+# Copy the example configs (both files are git-ignored) and set your master key
 cp .env.example .env
-# Edit .env: set RAILS_MASTER_KEY (from config/master.key) and DB_PASSWORD
+cp config/database.example.yml config/database.yml
+# Edit .env: set RAILS_MASTER_KEY (your own key: docs/quick_setup.md, step 2) and DB_PASSWORD
 
 # Start the stack (MariaDB 11.8 + Rails in production mode), with the host's LAN
 # as the MCP allowlist defaults (on Linux "@lan", read by graph_mem from its
