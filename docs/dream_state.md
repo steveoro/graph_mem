@@ -29,6 +29,7 @@ DreamStateCompactor.process_batch!  ◄─────────────�
         │
         ├── RelationTypeSweep       (relation_types phase: relation ids)
         ├── DependencyEdgesPhase    (dependency_edges phase: dependency-like part_of edges)
+        ├── RemovalEvidencePass     (dependency_edges phase, second pass: removal facts, R1c)
         ├── CompactionTraversal     (phase entity lists)
         ├── OrphanMatchingStrategy  (token match to Projects)
         └── NodeOperationsStrategy  (move_to_parent, merge_into)
@@ -41,7 +42,7 @@ CompactionValve     ←── cooperative pause from MCP tools
 | Component                 | Location                                  | Role                                                                      |
 | ------------------------- | ----------------------------------------- | ------------------------------------------------------------------------- |
 | `DreamStateCompactionJob` | `app/jobs/dream_state_compaction_job.rb`  | Processes one batch per invocation; re-enqueues itself while work remains |
-| `DreamStateCompactor`     | `app/strategies/dream_state_compactor.rb` | Core compaction logic for each phase (`DreamStateCompactor::RelationTypesPhase` for `relation_types`, `DreamStateCompactor::DependencyEdgesPhase` for `dependency_edges` and the orphans' `add` rows) |
+| `DreamStateCompactor`     | `app/strategies/dream_state_compactor.rb` | Core compaction logic for each phase (`DreamStateCompactor::RelationTypesPhase` for `relation_types`, `DreamStateCompactor::DependencyEdgesPhase` for `dependency_edges` and the orphans' `add` rows, `DreamStateCompactor::RemovalEvidencePass` for the second pass of `dependency_edges`) |
 | `RelationTypeSweep`       | `app/services/relation_type_sweep.rb`     | Canonicalizes the stored relation types; also run by a rake task and a job |
 | `CompactionRunner`        | `app/services/compaction_runner.rb`       | Starts/resumes runs; exposes `status_snapshot` for MCP, Home and Background jobs      |
 | `CompactionRun`           | `app/models/compaction_run.rb`            | Persists run state, cursor, and cumulative stats                          |
@@ -49,6 +50,7 @@ CompactionValve     ←── cooperative pause from MCP tools
 | `CompactionValve`         | `app/services/compaction_valve.rb`        | Requests cooperative pause when MCP tools need the graph                  |
 | `DependencyLikeTypes`     | `app/services/dependency_like_types.rb`   | The dependency-like entity types (the `dependency_like_types` setting), matched by canonical type |
 | `DependencyEvidence`      | `app/services/dependency_evidence.rb`     | The project facts that name a library with a use (or an ownership) phrase |
+| `RemovalEvidence`         | `app/services/removal_evidence.rb`        | The Project's dependency edges and the project facts that say their entity was removed, replaced or dropped (R1c) |
 
 
 
@@ -86,6 +88,14 @@ A `part_of` edge decides which project an entity belongs to, and an update skips
 A library a project only uses is not a part of it: held by `part_of`, it sits in the project's scope (`project_id`), comes back in the project's searches and is walked as one of its members. **Per edge**, nothing is written: a `relation_retype` review row with `operation: "swap"` is queued (see the review table below), whose Apply turns `library part_of Project` into `Project depends_on library` and moves the library, with its own `part_of` subtree, to the global scope. Its `evidence` is the entity's type and up to three facts of the project (its root and members) that name the entity, by its keyword path or by name, with a use phrase (uses, used, using, depends on, relies on, built on or with, requires): `DependencyEvidence.for_swap`, deterministic, no LLM, at most 200 candidate facts read. A row pending, applied or dismissed with the same signature (one per edge) is never queued again.
 
 The phase only queues rows, so it takes no membership lock. Pause is checked after each batch. Applying the swaps can be left to the `auto_apply_relation_retype` policy (off by default), which applies one only when the entity is still dependency-like and no fact of the project says the project owns it.
+
+**Second pass: removal facts (R1c).** Once the swaps are queued (`stats["dependency_pass"]` becomes `removal`, in the same job), the phase reads the edges between a Project and what it uses once more, to find the ones a fact says are over: `DreamStateCompactor::RemovalEvidencePass` with `RemovalEvidence`, deterministic, no LLM.
+
+- **Edges:** every `depends_on` from a Project root and every `part_of` into a Project root (its direct children, of any type), by relation id, 200 at a time, its cursor in `stats["removal_cursor_id"]`. A deeper member's `part_of` and a member's own `depends_on` are not read.
+- **Facts:** the project's active facts (held by its root or by a member) that name the edge's entity, by its keyword path or by its text (a global library is in no project's keyword path, so the text counts even when the path is computed), and contain a removal phrase: "removed", "replaced … by", "replaced … with" ("…" is up to three words, as in "replaced SynthLib with SynthParser"), "dropped", "no longer uses", "no longer used", "no longer depends on", "no longer needs", "migrated away from", "migrated off", "switched away from", "got rid of", "ripped out", "uninstalled" (`RemovalEvidence::PHRASES`, whole words, any case). At most 200 candidate facts are read per edge. A global library's own facts are not the project's, so they are not read.
+- **Rows:** one informational `relation_review` row per (relation, fact), at most three new ones per relation and run, never queued again once pending, applied or dismissed (see the review table below). The phrase is matched anywhere in the fact, so a fact that names the entity as the replacement ("replaced OldLib with SynthLib") is queued too: dismiss it.
+
+Then the phase ends. Like the swap pass, it writes nothing but review rows and takes no membership lock; pause is checked after each batch.
 
 ### Phase 3: `orphans`
 
@@ -216,6 +226,7 @@ Items that are not safe to apply automatically are batched into `MaintenanceRepo
 | `kind`          | Contents                                                                     |
 | --------------- | ---------------------------------------------------------------------------- |
 | `relation_retype` | `operation` `"retype"`: a stored variant whose canonical type is `part_of`. `"swap"` (R1b): a dependency-like entity's `part_of` a Project, to become `Project depends_on entity`. `"add"` (R1b): `Project depends_on` a dependency-like orphan. Keys: `operation`, `relation_id`, `from_entity_id`, `from_name`, `to_entity_id`, `to_name`, `old_type`, `new_type`, `reason`, plus `evidence` for swap and add (below) |
+| `relation_review` | R1c, informational: a fact of a project says an entity the Project still `depends_on` (or holds by a direct `part_of`) was removed, replaced or dropped. Keys: `relation_id`, `relation_type`, `from_entity_id`, `from_name`, `to_entity_id`, `to_name`, `evidence` (`observation_id`, `entity_id`, `entity_name`, `excerpt`: the fact, cut to 200 characters), `reason` (below) |
 | `orphan_parent` | Orphan entity, top 3 suggested `Project` parents with scores, optional error |
 | `entity_merge`  | Two entities, cosine distance, `recommendation: "review_manually"`           |
 | `relationship_proposal` | Suggested link with relation type, confidence band, supporting observation IDs, explanation |
@@ -225,12 +236,19 @@ Items that are not safe to apply automatically are batched into `MaintenanceRepo
 
 **`swap` and `add` rows (R1b).** A `swap` row comes from the `dependency_edges` phase. `relation_id` and the endpoints are the stored `part_of` edge (library → Project), `old_type` is `part_of` and `new_type` is `depends_on`; `evidence` is `{ entity_type, facts: [{ observation_id, entity_id, entity_name, content }] }`. **Apply** runs under the membership lock, in one savepoint: the `part_of` is deleted, `Project depends_on library` is created through the validating path (an existing one is kept) and the library's project is synced, so the library and its own `part_of` children become global (`project_id` NULL) and stay attached to it. Two refusals write nothing:
 
-- a global entity already holds **the library's name**: the row answers so, and an `entity_merge` suggestion for the two is queued, the global one into the project's library (same type only, as a merge needs; with another type the row asks to rename or retype one). The merged library keeps this row's edge and takes the global one's edges and children, so the swap applies next and leaves one global node with a `depends_on` from each project;
+- a global entity already holds **the library's name**: the row answers so, and an `entity_merge` suggestion for the two is queued, the global one into the project's library (same type only, as a merge needs; with another type the row asks to rename or retype one). The merged library keeps this row's edge and takes the global one's edges and children, so the swap applies next and leaves one global node with a `depends_on` from each project. Since 1.95.0 an `entity_merge` is also queued for each pair of the same name and type across the two `part_of` subtrees (the global one's member into the library's): the library merge would move the global one's children into the project, where such a name is taken, so apply those first (an imported copy of a library brings such pairs, see [data_exchange.md](data_exchange.md#known-limits));
 - **a child's name** is taken globally: the row answers naming the child, and nothing is queued (merging two unrelated children would be wrong). Rename or move the child, then apply again.
 
 An `add` row comes from the `orphans` phase: `relation_id` and `old_type` are null, the endpoints are the edge to create (Project → entity), `new_type` is `depends_on` and `evidence` is `{ entity_type, score, matched_tokens }`. Apply creates the edge; nothing else changes.
 
 A row whose edge is gone or already swapped, or whose `depends_on` exists, answers like a stale `retype` row (done: success with nothing written; gone: an error asking to dismiss it), and the Dangling policy dismisses it. Neither can be edited or bulk-applied. Undo is the ordinary audit undo: after a swap, the `depends_on` goes, the `part_of` comes back with its id and the library and its children return to the project's scope; redo makes them global again. The review card shows the operation, both endpoints, the scope effect ("SynthLib and its 2 children leave SynthApp's scope (they become global)") and the evidence. The `auto_apply_relation_retype` policy (off by default) applies `swap` rows only, never `retype` or `add`, and leaves a row for the operator when its library is no longer of a dependency-like type or a fact of the project names it with an ownership phrase ("part of this project", "our own", "maintained here", "vendored", "forked").
+
+**`relation_review` rows (R1c)** come from the second pass of the `dependency_edges` phase, one per (relation, fact): the signature is the relation id and the fact's id, so a dismissal suppresses that pair only and a new fact about the same edge gets its own row. In R1 the row is **informational**: R2's relation lifecycle will give it its apply (end the relation, with the fact as the reason). Until then:
+
+- the Review card shows the relation and the fact, read live, with **Dismiss** and **Snooze** only;
+- **Apply** writes nothing (no lock, no change set; the row stays active) and answers a validation error, "ending a relation arrives with the relation lifecycle; remove the relation by hand if it is wrong" (over MCP, category `validation`, with a `next_move` to dismiss or snooze it, or to delete the relation by id with `graph_delete`); a `dry_run` preview says the same;
+- no policy applies it, and bulk apply and group apply skip it ("informational: dismiss or snooze it"); it can't be edited;
+- the Dangling policy dismisses it once its relation is gone (a swap deletes the `part_of`, so a row on it goes; the new `depends_on` is read on the next run) or its fact is gone or no longer active.
 
 Reports are flushed at the end of each batch and when advancing phases. Read them via:
 
@@ -259,6 +277,10 @@ To action a queued relationship proposal: inspect the evidence, then call
 | `dependency_cursor_id` | The relation id that phase resumes after |
 | `dependency_swaps_queued` | `relation_retype` `swap` rows queued |
 | `dependency_adds_queued` | `relation_retype` `add` rows queued (dependency-like orphans) |
+| `dependency_pass` | `removal` once the `dependency_edges` phase's swap pass is done and its removal pass runs (R1c) |
+| `removal_edges_checked` | Edges (a Project's `depends_on`, a `part_of` into a Project) the removal pass read |
+| `removal_cursor_id` | The relation id the removal pass resumes after |
+| `relation_reviews_queued` | `relation_review` rows queued (R1c) |
 | `relation_types_report_id` | The run's `relation_type_sweep` report |
 | `total_relations`      | Relations counted when the run started (for the progress bar) |
 | `entities_processed`   | Entities visited across the entity phases |
@@ -338,7 +360,7 @@ The **Dream State / Compactor Run** card on **System › Background jobs** (`/sy
 - Run status badge (`idle`, `running`, `paused`, `completed`, `failed`)
 - Phase stepper (`relation_types` → `dependency_edges` → `orphans` → `tree_walk` → `relationship_discovery`)
 - Cursor entity, pause flag, timestamps, duration
-- Live stat chips (**Relation types fixed** counts the retyped, case-fixed and merged relations; **Dependency rows queued** the `swap` and `add` rows)
+- Live stat chips (**Relation types fixed** counts the retyped, case-fixed and merged relations; **Dependency rows queued** the `swap` and `add` rows; **Relation reviews queued** the `relation_review` rows, R1c)
 - **Pause** / **Start / Resume** buttons
 - **Repair relation duplicates** when a failed run may be caused by relation integrity issues
 
@@ -403,6 +425,7 @@ Since 1.93.1 that button is safe for membership. A `part_of` edge decides which 
 - **Type-safe merges** — only entities of the same `entity_type` are considered for auto-merge or merge review. `NodeOperationsStrategy#merge_into` refuses cross-type merges.
 - **Low-confidence orphans** — token scores below **10** are never auto-parented.
 - **Dependency-like entities are never parented or swapped unattended by default** — an orphan of a dependency-like type gets an `add` row, and a library `part_of` a Project a `swap` row; only the `auto_apply_relation_retype` policy, off by default, applies swaps on its own.
+- **A removal fact never ends or deletes a relation** — it queues an informational `relation_review` row, which nothing applies (R1c).
 - **Pre-flight integrity sweep** — before each run, `GraphIntegrityService` auto-repairs counter cache drift and dangling relations (a dangling `part_of` whose child survives is deleted with a membership sync, and kept with a logged warning on a name collision), backfills missing embeddings (queuing failures for review), and detects observation lifecycle corruption (active with `obsoleted_at`, superseded without `superseded_by`, cross-entity `superseded_by` references). Lifecycle issues and embedding failures are queued into `compaction_review`. A lifecycle row's **Repair** (1.86.0) re-reads the observation: superseded without `superseded_by` points at its active same-entity `outdated_by`, else becomes obsolete; active with `obsoleted_at` has it cleared; a cross-entity `superseded_by` is Dismiss only. Undoable; a row already consistent is resolved, and the Dangling policy dismisses it.
 
 
