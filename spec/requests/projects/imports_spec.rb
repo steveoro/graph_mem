@@ -58,7 +58,7 @@ RSpec.describe "Projects › Imports", type: :request do
     it "refuses a JSON file, a GraphMem export or a Graphify graph.json, saying JSON imports were retired, and writes nothing" do
       files_before = stored_files
       [ [ export_json, "alpha-export.json" ], [ graphify_json, "graph.json" ], [ "  #{export_json}", "alpha-export.txt" ],
-        [ "[]", "nodes" ] ].each do |text, name|
+        [ "[]", "nodes" ], [ "\uFEFF#{export_json}", "alpha-export.txt" ], [ "\uFEFF\n[]", "nodes" ] ].each do |text, name|
         expect { upload(text, name: name) }.not_to(change { [ MemoryEntity.count, OperationProgress.count, AuditLog.count ] })
 
         expect(response).to have_http_status(:unprocessable_content)
