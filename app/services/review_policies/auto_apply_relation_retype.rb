@@ -7,7 +7,8 @@ module ReviewPolicies
   # it unattended only when nothing says the project owns the entity: the project has no fact that
   # names the entity (DependencyEvidence: held by it, its keyword path holds it, or its text names
   # it while the path is pending) and matches one of OWNERSHIP_PHRASES. Such a row stays for the
-  # operator.
+  # operator, and so does one whose entity is no longer of a dependency-like type (the setting or
+  # the entity changed since it was queued).
   #
   # Never a "retype" row (it creates a part_of, a membership move) nor an "add" row: both are
   # refused row by row. The AutoApply hard rule is lifted for this kind only; every other
@@ -49,7 +50,7 @@ module ReviewPolicies
     def with_locked_row(row)
       return if @stopped
       return @stats["refused"] += 1 unless applicable_kind?(row.kind) && swap?(row)
-      return @stats["skipped"] += 1 if owned?(row)
+      return @stats["skipped"] += 1 if left_for_operator?(row)
 
       result = CompactionReviewService.apply(row.row_uuid, {}, report_type: row.report_type)
       @stats[result[:success] ? "acted" : "skipped"] += 1
@@ -65,14 +66,19 @@ module ReviewPolicies
       row.effective_payload["operation"].to_s == OPERATION
     end
 
-    # The live edge's endpoints: a gone edge or endpoint isn't "owned" (the apply answers it).
-    def owned?(row)
+    # Read on the live edge's endpoints; a gone edge or endpoint is left to the apply, which
+    # answers it as a stale row.
+    def left_for_operator?(row)
       relation = MemoryRelation.find_by(id: row.effective_payload["relation_id"].to_i)
       library = relation&.from_entity
       project = relation&.to_entity
       return false unless library && project
 
-      self.class.ownership_signal?(library, project)
+      !dependency_types.entity?(library) || self.class.ownership_signal?(library, project)
+    end
+
+    def dependency_types
+      @dependency_types ||= DependencyLikeTypes.current
     end
   end
 end

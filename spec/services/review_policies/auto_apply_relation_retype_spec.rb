@@ -72,6 +72,16 @@ RSpec.describe ReviewPolicies::AutoApplyRelationRetype do
     end
   end
 
+  it "leaves a swap for the operator when its entity is no longer of a dependency-like type" do
+    enable!
+    row = swap_row
+    AppSettings.dependency_like_types = "Tool"
+
+    expect(run).to include("acted" => 0, "skipped" => 1)
+    expect(row.reload.status).to eq("active")
+    expect(library.reload.project_id).to eq(app.id)
+  end
+
   it "reads the signal from facts held by the library and from keyword paths, not from facts naming something else" do
     enable!
     other = fs_member!(app, "SynthOther", "Component")
