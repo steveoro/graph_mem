@@ -12,7 +12,7 @@ namespace :graphify do
     warn("Warning: #{resolution.message} (set GRAPH_MEM_SCAN_STRICT=1 to refuse)")
   end
 
-  desc "Translate a Graphify graph.json into a graph_mem import file (GRAPH=…, PROJECT=..., OUT=...)"
+  desc "Translate a Graphify graph.json into the graph_mem import payload, to inspect it (GRAPH=…, PROJECT=..., OUT=...)"
   task translate: :environment do
     path = ENV["GRAPH"].presence || abort("GRAPH is required (location of graph.json)")
     check_graph_path.call(path)
@@ -30,8 +30,8 @@ namespace :graphify do
     puts "Wrote #{out}"
     puts "Stats: #{result.stats.to_json}"
     puts "Ambiguous relations withheld for review: #{result.ambiguous_relations.size}"
-    puts "Upload #{out} via Projects & Data › Imports (/projects/imports) to review and apply; " \
-         "ambiguous edges are queued to scan_review after a successful execute."
+    puts "To import the graph, run bin/rails graphify:import GRAPH=#{path} PROJECT=#{project} " \
+         "(Projects › Imports takes graph_mem-sql scripts only since 1.94.0); it queues the ambiguous edges to scan_review."
   end
 
   desc "Headless Graphify import: match, auto-accept, execute (GRAPH=…, PROJECT=...)"

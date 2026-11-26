@@ -315,6 +315,14 @@ RSpec.describe GraphifyImporter do
       ghost = edge.merge("to_name" => "Ghost")
       expect(described_class.seed_ambiguous_relations([ ghost ], "proj")).to eq([])
     end
+
+    # rails_ast:import passes its producer; ported from the retired JSON review's request spec (1.94.0).
+    it "labels the row and its report with the producer it is given" do
+      row = described_class.seed_ambiguous_relations([ edge ], "proj", source: "rails_ast_extractor").sole
+
+      expect(row.payload["explanation"]).to include("Rails ast extractor AMBIGUOUS")
+      expect(row.maintenance_report.data["source"]).to eq("rails_ast_extractor")
+    end
   end
 
   describe ".headless_decisions" do

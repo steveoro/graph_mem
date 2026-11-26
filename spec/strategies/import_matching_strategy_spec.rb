@@ -462,15 +462,6 @@ RSpec.describe ImportMatchingStrategy, type: :model do
     end
   end
 
-  describe '#available_parents' do
-    it 'returns available parent entities' do
-      parents = strategy.available_parents
-
-      expect(parents).to be_an(Array)
-      expect(parents.map(&:name)).to include('Project Alpha')
-    end
-  end
-
   describe 'MatchResult' do
     it 'has expected structure for root node' do
       match_result = ImportMatchingStrategy::MatchResult.new(

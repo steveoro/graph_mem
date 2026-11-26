@@ -116,8 +116,8 @@ The versions, as expected today (each kickoff confirms its own against `version.
 | `part_of` membership, PR 2 | The scan validator and scanner lock order, the rake tasks, dream state and the integrity sweep (`done/part-of-membership-plan.md`) | after PR 1 (shipped) | 1.93.2 |
 | Embeddings outside the membership lock | A follow-up of the membership PRs (`done/part-of-membership-plan.md`, Follow-ups) | after PR 2 (shipped) | 1.93.3 |
 | mcp 1.11.0 | (its own plan) | after the follow-up | 1.93.4 |
-| SQL exchange | (its own plan, four PRs: `done/sql-exchange-plan.md`) | after mcp 1.11.0 (shipped) | 1.94.0 |
-| **R1b** | Retype library `part_of` edges, the orphan rule, the exports, dream-state actor on its edges | after the SQL exchange train | 1.95.0 |
+| SQL exchange | (its own plan, five PRs incl. the JSON export's retirement: `done/sql-exchange-plan.md`) | after mcp 1.11.0 (shipped) | 1.94.0 |
+| **R1b** | Retype library `part_of` edges, the orphan rule, the SQL export's scope, dream-state actor on its edges | after the SQL exchange train | 1.95.0 |
 | **R1c** | Removal-style evidence rows | with or right after R1b | with R1b, or 1.95.1 |
 | **R2** | Relation lifecycle | after R1 | 1.96.0 |
 
@@ -136,16 +136,23 @@ Dependencies between the plans:
 - R1b moves libraries out of the `part_of` tree, so a project-subtree export no longer contains
   them. That is why it waits: the exchange lands on today's tree, and R1b's kickoff then decides
   whether a subtree export follows a Project's `depends_on` edges (it should, one hop).
-- **The JSON export reads `depends_on` as child → parent**, like `part_of` (`ExportStrategy`, and
-  `ExportJob#count_subtree`): children are the rows pointing *to* an entity, and an entity with an
-  outgoing `depends_on` is never an export root. After R1b's swap, a Project export would lose its
-  libraries, and a library would become a root whose export pulls in every Project that depends on
-  it. Scan-written `Project depends_on Project` edges already hit this today. So R1b also changes
-  both exports and their imports, the same way: the tree is `part_of` only, and an export of a
-  Project additionally follows its outgoing `depends_on` edges one hop (the libraries, without
-  their own dependents). `docs/dream_state.md` described `depends_on` as running "from children to
+- **The JSON export and its reviewed import are gone** (retired in 1.94.0, after the SQL exchange):
+  they read `depends_on` as child → parent, like `part_of`, which R1b's swap would have broken, so
+  nothing of them is left to change. What is left for R1b is **the SQL export's scope**
+  (`SqlExport::Scope`): a Project's script carries its `part_of` tree (`ProjectMembership.member_ids`)
+  and nested Projects, and every relation with an end in it, the other end travelling as a reference
+  by name that the import only looks up. After the swap a Project's script would carry `Project
+  depends_on library` with the library as a reference only: its facts and its own subtree would not
+  travel, and an import on a machine that lacks the library would skip the edge. So R1b also makes
+  the Project's export follow its outgoing `depends_on` edges one hop (the libraries as rows, with
+  their own `part_of` subtrees, without their other dependents); the script format version moves
+  only if the template changes. The export picker's roots (`SqlExport::Roots`) still treat an outgoing
+  `depends_on` as a child edge, like `part_of`: R1b's kickoff decides whether that becomes `part_of`
+  only. The JSON import engine, kept for `graphify:import` and `rails_ast:import`, still reads a
+  `depends_on` child in its payload tree as child → parent; R1b's kickoff checks whether the Graphify
+  translation writes any. `docs/dream_state.md` described `depends_on` as running "from children to
   parents" in the tree walk; the dream-state tree walk follows `part_of` only (R1a corrected that
-  sentence), so what R1b changes is the two exports.
+  sentence).
 - R2 changes `memory_relations`, so it bumps the SQL exchange script format version.
 
 ## R1a. Relation vocabulary (no migration; one stored-value change, approved)
@@ -307,8 +314,8 @@ or the backfill. Retyping simply applies it.
 NULL `project_id` for it and its children, and no `part_of`; two dream-state runs afterwards create
 no `part_of` and queue no orphan row for it; undo restores the `part_of` and the `project_id` of
 the library and its children; redo makes them NULL again; a backfill run afterwards changes 0
-rows; a JSON export of the Project still contains the library, and an export of the library
-doesn't contain the Project. On production: library-like entities under `part_of` a Project go from about 20
+rows; the Project's graph_mem-sql export still carries the library as rows (not only a reference by
+name), and an export of the library doesn't carry the Project. On production: library-like entities under `part_of` a Project go from about 20
 to those with an ownership signal; orphans don't rise; dream-state-created edges are countable by
 actor.
 
@@ -339,7 +346,7 @@ Questions the R2 plan must answer before a kickoff:
   it, or is it refused?
 - an ended `part_of`: does it still count for membership, the single-parent check, orphans and
   `ProjectSubtree`? (`project_id` would follow.)
-- which other readers hide ended edges: `find_shortest_path`, `get_context`, graph stats, the JSON
+- which other readers hide ended edges: `find_shortest_path`, `get_context`, graph stats, the SQL
   export, Explore;
 - the SQL exchange script format version, bumped by the migration.
 

@@ -61,7 +61,7 @@ RSpec.describe "Projects & Data", type: :system do
     expect(page).to have_no_css("[data-testid='export-download']", visible: true)
 
     FileUtils.mkdir_p(ExportJob::TEMP_DIR)
-    File.write(ExportJob.download_path(export.operation_id), { root_nodes: [ { name: "Alpha Service" } ] }.to_json)
+    File.write(ExportJob.download_path(export.operation_id), "-- graph_mem-sql v1\n")
     export.complete!(current: 1, message: "Export complete")
     broadcast_until(export, "Export complete")
     expect(page).to have_css("[data-testid='export-download']", visible: true)

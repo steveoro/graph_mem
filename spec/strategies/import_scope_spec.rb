@@ -68,9 +68,9 @@ RSpec.describe "Import scope" do
 
     def preview_match = preview.find { |result| result.node_path == "0.children.0" }
 
-    # The decisions the import review submits for this preview.
-    def execute_reviewed!
-      decisions = ImportDecisions.merge(nil, preview.map(&:to_h))
+    # The decisions graphify:import and rails_ast:import submit for this preview.
+    def execute_headless!
+      decisions = GraphifyImporter.headless_decisions(preview)
       ImportExecutionStrategy.new(observation_duplicate_detector: detector).execute(import_data, decisions)
     end
 
@@ -94,7 +94,7 @@ RSpec.describe "Import scope" do
       expect(MemoryRelation.exists?(from_entity_id: member.id, to_entity_id: project.id, relation_type: "part_of")).to be(true)
 
       expect([ preview_match.exact_match&.id, preview_match.child_action ]).to eq([ member.id, "skip" ])
-      expect(execute_reviewed!.success).to be(true)
+      expect(execute_headless!.success).to be(true)
       expect(services).to eq([ [ member.id, project.id ] ])
     end
 
@@ -122,9 +122,9 @@ RSpec.describe "Import scope" do
       end
       let!(:member) { fs_member!(project, "SynthWidget", "Class") }
 
-      it "claims it through the review's decision, retyping it (specific beats generic)" do
+      it "claims it through the headless decisions, retyping it (specific beats generic)" do
         expect(preview_match.exact_match&.id).to eq(member.id)
-        expect(execute_reviewed!.success).to be(true)
+        expect(execute_headless!.success).to be(true)
         expect(MemoryEntity.where(name: "SynthWidget").pluck(:id, :entity_type)).to eq([ [ member.id, "Model" ] ])
       end
 
@@ -138,13 +138,13 @@ RSpec.describe "Import scope" do
       global = MemoryEntity.create!(name: "Beta Service", entity_type: "Service")
 
       expect(preview_match.exact_match&.id).to eq(global.id)
-      expect(execute_reviewed!.success).to be(true)
+      expect(execute_headless!.success).to be(true)
       expect(services).to eq([ [ global.id, nil ] ])
     end
 
     it "creates the node global when neither scope holds the name" do
       expect([ preview_match.exact_match, preview_match.child_action ]).to eq([ nil, "create" ])
-      expect(execute_reviewed!.success).to be(true)
+      expect(execute_headless!.success).to be(true)
       expect(services.map(&:last)).to eq([ nil ])
     end
   end
