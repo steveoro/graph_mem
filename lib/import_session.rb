@@ -1,40 +1,23 @@
 # frozen_string_literal: true
 
-# Helper class to manage temporary file storage for import sessions
-# This replaces session-based storage to avoid cookie overflow issues.
-# A JSON upload keeps its parsed data, matches and stats; a graph_mem-sql upload keeps the script
-# itself (`<id>_script.sql`) and its dry-run preview (create_sql).
+# Temporary file storage for an uploaded graph_mem-sql script between its preview and its execute, so
+# nothing of it goes into the cookie session: the script itself (`<id>_script.sql`), what the upload was
+# (`<id>_meta.json`) and its dry-run preview (`<id>_preview.json`), under a fresh UUID.
+# (The JSON upload's data, matches and stats went with the JSON import's retirement in 1.94.0.)
+#
+#   session_id = ImportSession.create_sql(upload, meta: { file_name: "synth_prj.sql", producer: "graph_mem-sql" })
+#   ImportSession.store_preview(session_id, preview)
+#   ImportSession.load_preview(session_id) # => { "summary" => { … }, … }
+#   ImportSession.cleanup(session_id)
 class ImportSession
   TEMP_DIR = Rails.root.join("tmp", "data_exchange")
 
   class << self
-    # Create a new import session with the given data
-    # @param import_data [Hash] The parsed JSON import data
-    # @param matches [Array] The serialized match results
-    # @param stats [Hash] Import statistics
-    # @param version [String] Import format version
-    # @param meta [Hash] what the upload was (file_name, producer, project_name), for the history
-    # @return [String] The session ID
-    def create(import_data:, matches:, stats:, version:, meta: {})
-      session_id = SecureRandom.uuid
-      ensure_temp_dir
-
-      write_file(session_id, "data", import_data)
-      write_file(session_id, "matches", matches)
-      write_file(session_id, "stats", stats)
-      write_file(session_id, "version", { version: version })
-      write_file(session_id, "meta", meta)
-
-      session_id
-    end
-
     # Check if an import session exists
     # @param session_id [String] The session ID
     # @return [Boolean]
     def exists?(session_id)
-      return false if session_id.blank?
-
-      File.exist?(path_for(session_id, "data")) || sql?(session_id)
+      sql?(session_id)
     end
 
     # Stores an uploaded graph_mem-sql script under a fresh id (copied as it is, never parsed here)
@@ -76,64 +59,11 @@ class ImportSession
       File.exist?(path) ? JSON.parse(File.read(path)) : nil
     end
 
-    # Load import data from a session
+    # Load what the upload was (file_name, producer)
     # @param session_id [String] The session ID
-    # @return [Hash, nil] The import data or nil if not found
-    def load_data(session_id)
-      read_file(session_id, "data")
-    end
-
-    # Load match results from a session
-    # @param session_id [String] The session ID
-    # @return [Array, nil] The match results or nil if not found
-    def load_matches(session_id)
-      read_file(session_id, "matches")
-    end
-
-    # Load stats from a session
-    # @param session_id [String] The session ID
-    # @return [Hash, nil] The stats or nil if not found
-    def load_stats(session_id)
-      read_file(session_id, "stats")
-    end
-
-    # Load version from a session
-    # @param session_id [String] The session ID
-    # @return [String, nil] The version or nil if not found
-    def load_version(session_id)
-      data = read_file(session_id, "version")
-      data&.dig(:version) || data&.dig("version")
-    end
-
-    # Load what the upload was (file_name, producer, project_name)
-    # @param session_id [String] The session ID
-    # @return [Hash] empty for a session written before the meta file existed
+    # @return [Hash] symbol keys; empty when the session has no meta file
     def load_meta(session_id)
       read_file(session_id, "meta") || {}
-    end
-
-    # Store the import report
-    # @param session_id [String] The session ID
-    # @param report [Hash] The import report
-    def store_report(session_id, report)
-      ensure_temp_dir
-      write_file(session_id, "report", report)
-    end
-
-    # Load the import report
-    # @param session_id [String] The session ID
-    # @return [Hash, nil] The report or nil if not found
-    def load_report(session_id)
-      read_file(session_id, "report")
-    end
-
-    # Check if a report exists for a session
-    # @param session_id [String] The session ID
-    # @return [Boolean]
-    def report_exists?(session_id)
-      return false if session_id.blank?
-
-      File.exist?(path_for(session_id, "report"))
     end
 
     # Clean up all files for a session
@@ -141,7 +71,7 @@ class ImportSession
     def cleanup(session_id)
       return if session_id.blank?
 
-      %w[data matches stats version meta report preview].each do |suffix|
+      %w[meta preview].each do |suffix|
         FileUtils.rm_f(path_for(session_id, suffix))
       end
       FileUtils.rm_f(sql_path(session_id))

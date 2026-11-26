@@ -171,6 +171,18 @@ RSpec.describe ImportExecutionStrategy, type: :model do
         expect(report.entities_created).to eq(0)
       end
 
+      # Ported from the retired JSON review's request spec (1.94.0).
+      it "scopes a new child under the merge target's project, not under the payload root's name" do
+        child = { 'name' => 'SynthWidget', 'entity_type' => 'Task', 'relation_type' => 'part_of', 'observations' => [], 'children' => [] }
+        import_data['root_nodes'].first['children'] = [ child ]
+
+        report = strategy.execute(import_data, decisions + [ { node_path: '0.children.0', child_action: 'create' } ])
+
+        expect(report.success).to be true
+        expect(MemoryEntity.find_by!(name: 'SynthWidget').project_id).to eq(existing_project.id)
+        expect(MemoryEntity.where(name: 'Project to Merge')).not_to exist
+      end
+
       it 'enqueues an embedding backfill on a merge-only import' do
         # An alias-only merge creates nothing but clears embedded_at via
         # before_update — the backfill must be queued or the entity silently

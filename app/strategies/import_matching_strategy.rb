@@ -7,7 +7,8 @@
 # - For root/Project nodes, uses EntitySearchStrategy to find potential matches
 # - For child nodes, uses 1:1 exact matching by name+type
 # - Calculates confidence scores and status
-# - Returns structured match results for operator review
+# - Returns structured match results, which GraphifyImporter.headless_decisions turns into the
+#   decisions graphify:import and rails_ast:import execute (the reviewed JSON upload was retired in 1.94.0)
 class ImportMatchingStrategy
   # Confidence thresholds (for root nodes)
   HIGH_CONFIDENCE_THRESHOLD = 20
@@ -169,8 +170,8 @@ class ImportMatchingStrategy
       # resolve names inside it before falling back to the global namespace. Never the fuzzy
       # suggestion (selected_match_id): its search on "<name> Project" matches any root whose name
       # contains "Project", so "RepoC" was scoped to "Gadget Project" and its classes were matched,
-      # and in headless imports merged, into that project's (1.74.0). An operator who picks another
-      # root in Import Review still merges into it: execution resolves children inside the chosen root.
+      # and in headless imports merged, into that project's (1.74.0). A decision that names another
+      # root still merges into it: execution resolves children inside the chosen root.
       if ImportEntityResolver.canonical_type(node["entity_type"] || node[:entity_type]) == "Project"
         @import_project_id ||= ImportEntityResolver.find_by_name_and_type(node_name, "Project")&.id
       end

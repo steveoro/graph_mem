@@ -40,20 +40,22 @@ RSpec.describe "Content Security Policy", type: :request do
       end
     end
 
-    it "enforces the policy and nonces every script through the import review and report" do
-      export = { version: "1.0", root_nodes: [ { name: "Alpha Service", entity_type: "Project", observations: [], children: [] } ] }
-      upload = Rack::Test::UploadedFile.new(StringIO.new(export.to_json), "application/json", original_filename: "synthetic.json")
+    it "enforces the policy and nonces every script through an SQL import's preview and report" do
+      script = sql_export(fs_project!("SynthPrj"))
+      upload = Rack::Test::UploadedFile.new(StringIO.new(script), "application/sql", original_filename: "synth_prj.sql")
       post projects_imports_path, params: { file: upload }
-      review = response.location
+      preview = response.location
 
-      get review
+      get preview
       expect(response).to have_http_status(:ok)
       expect_scripts_nonced(expect_enforced_policy)
 
-      post "#{review}/execute", params: { decisions: { "0" => { node_path: "0", action: "create", target_id: "", parent_id: "" } } }
+      post "#{preview}/execute"
       get response.location
       expect(response).to have_http_status(:ok)
       expect_scripts_nonced(expect_enforced_policy)
+    ensure
+      ImportSession.cleanup(preview[%r{\h{8}-\h{4}-\h{4}-\h{4}-\h{12}\z}]) if preview
     end
 
     it "leaves rswag's own policy on /api-docs untouched" do

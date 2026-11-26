@@ -1,14 +1,14 @@
 # frozen_string_literal: true
 
 module Projects
-  # Imports (UI-6 P4): upload a GraphMem export or a Graphify graph.json, review the matches,
-  # execute (inside the request, Decision 3), and open any past import's report from the history.
-  # A graph_mem-sql script is validated and dry-run on upload, its preview shown instead of the
-  # review, and run for real on execute (SqlImport::Flow); its report can start full maintenance.
-  # Every upload error re-renders the form (422); nothing redirects to Home.
+  # Imports (UI-6 P4): upload a graph_mem-sql script, which is validated and dry-run (SqlImport::Flow), see
+  # its preview, execute it, and open any past import's report from the history (the rake imports and
+  # the JSON imports from before 1.94.0 included); the report can start full maintenance. JSON imports were
+  # retired in 1.94.0: a JSON file is refused (ImportFlow). Every upload error re-renders the form (422);
+  # nothing redirects to Home.
   #
   # :id is the upload's ImportSession id for show / execute / destroy, and the import's
-  # OperationProgress id for report. Both are UUIDs, checked before any lookup.
+  # OperationProgress id for report and maintenance. Both are UUIDs, checked before any lookup.
   class ImportsController < BaseController
     self.nav_section = :imports
     PER_PAGE = 25
@@ -23,36 +23,34 @@ module Projects
     # GET /projects/imports/new
     def new; end
 
-    # POST /projects/imports (multipart: file, project_name)
+    # POST /projects/imports (multipart: file)
     def create
-      @upload = ImportFlow.upload(params[:file], project_name: params[:project_name])
+      @upload = ImportFlow.upload(params[:file])
       return render :new, status: :unprocessable_content if @upload.error
 
       session[:import_session_id] = @upload.session_id
       redirect_to projects_import_path(@upload.session_id)
     end
 
-    # GET /projects/imports/:id: the review, or an SQL script's dry-run preview
+    # GET /projects/imports/:id: the script's dry-run preview
     def show
-      return show_sql if ImportSession.sql?(@session_id)
-
-      @matches = ImportSession.load_matches(@session_id)
-      @stats = ImportSession.load_stats(@session_id) || {}
-      @meta = ImportSession.load_meta(@session_id)
-      @items = ImportReviewService.items(@matches, page: params[:page])
-      # One more than the cap, so the hint shows only when something was cut.
-      parents = SqlExport::Roots.list(limit: SqlExport::Roots::LIMIT + 1)
-      @parents_capped = parents.size > SqlExport::Roots::LIMIT
-      @available_parents = parents.first(SqlExport::Roots::LIMIT)
+      show_preview
     end
 
-    # POST /projects/imports/:id/execute (an SQL script: full_maintenance=1 to run all scheduled jobs after it)
+    # POST /projects/imports/:id/execute (full_maintenance=1 to run all scheduled jobs after it)
+    #
+    # A refusal (before the commit) re-renders the preview: nothing was written. After the commit the
+    # session is gone and the report opens, saying what didn't happen when the record couldn't be completed.
     def execute
-      return execute_sql if ImportSession.sql?(@session_id)
-
-      operation = ImportFlow.execute(@session_id, params[:decisions])
+      operation = SqlImport::Flow.execute(@session_id, full_maintenance: params[:full_maintenance] == "1")
       session.delete(:import_session_id)
       redirect_to report_projects_import_path(operation.operation_id)
+    rescue SqlImport::Flow::FinishFailed => e
+      session.delete(:import_session_id)
+      redirect_to report_projects_import_path(e.operation_id),
+                  alert: t("projects.imports.sql.not_finished", operation_id: e.operation_id, error: e.message)
+    rescue *SqlImport::Flow::REFUSALS => e
+      show_preview(error: t("projects.imports.sql.not_run", reason: SqlImport::Flow.refusal_reason(e)), status: :unprocessable_content)
     end
 
     # GET /projects/imports/:id/report
@@ -70,7 +68,7 @@ module Projects
       redirect_to report_projects_import_path(operation.operation_id), notice: t("projects.imports.sql.full_maintenance.#{outcome}")
     end
 
-    # DELETE /projects/imports/:id: cancel the review
+    # DELETE /projects/imports/:id: cancel the preview
     def destroy
       ImportSession.cleanup(@session_id)
       session.delete(:import_session_id)
@@ -79,25 +77,11 @@ module Projects
 
     private
 
-    def show_sql(error: nil, status: :ok)
+    def show_preview(error: nil, status: :ok)
       @preview = ImportSession.load_preview(@session_id) || {}
       @meta = ImportSession.load_meta(@session_id)
       @error = error
       render :sql_preview, status: status
-    end
-
-    # A refusal (before the commit) re-renders the preview: nothing was written. After the commit the
-    # session is gone and the report opens, saying what didn't happen when the record couldn't be completed.
-    def execute_sql
-      operation = SqlImport::Flow.execute(@session_id, full_maintenance: params[:full_maintenance] == "1")
-      session.delete(:import_session_id)
-      redirect_to report_projects_import_path(operation.operation_id)
-    rescue SqlImport::Flow::FinishFailed => e
-      session.delete(:import_session_id)
-      redirect_to report_projects_import_path(e.operation_id),
-                  alert: t("projects.imports.sql.not_finished", operation_id: e.operation_id, error: e.message)
-    rescue *SqlImport::Flow::REFUSALS => e
-      show_sql(error: t("projects.imports.sql.not_run", reason: SqlImport::Flow.refusal_reason(e)), status: :unprocessable_content)
     end
 
     def load_session

@@ -3,215 +3,80 @@
 require "rails_helper"
 require_relative "../../lib/import_session"
 
+# The temp files of an uploaded graph_mem-sql script between its preview and its execute.
 RSpec.describe ImportSession do
-  let(:import_data) do
-    {
-      version: "1.0",
-      root_nodes: [
-        { name: "Test Project", entity_type: "Project", observations: [], children: [] }
-      ]
-    }
+  let(:script) { "-- graph_mem-sql v1\n-- synthetic\n" }
+  let(:meta) { { file_name: "synth_prj.sql", producer: "graph_mem-sql" } }
+  let(:session_ids) { [] }
+
+  after { session_ids.each { |id| described_class.cleanup(id) } }
+
+  def create_session
+    described_class.create_sql(StringIO.new(script), meta: meta).tap { |id| session_ids << id }
   end
 
-  let(:matches) do
-    [
-      { import_node: { name: "Test", entity_type: "Project" }, matches: [], status: "new", node_path: "0" }
-    ]
-  end
+  describe ".create_sql" do
+    it "stores the script as it is under a fresh UUID, with what the upload was" do
+      session_id = create_session
 
-  let(:stats) do
-    { total: 1, high_confidence: 0, low_confidence: 0, new: 1 }
-  end
-
-  let(:version) { "1.0" }
-
-  describe ".create" do
-    it "creates a new session and returns a UUID" do
-      session_id = described_class.create(
-        import_data: import_data,
-        matches: matches,
-        stats: stats,
-        version: version
-      )
-
-      expect(session_id).to be_present
-      expect(session_id).to match(/\A[0-9a-f\-]{36}\z/)
-
-      # Cleanup
-      described_class.cleanup(session_id)
+      expect(session_id).to match(/\A\h{8}-\h{4}-\h{4}-\h{4}-\h{12}\z/)
+      expect(File.binread(described_class.sql_path(session_id))).to eq(script)
+      expect(described_class.load_meta(session_id)).to eq(meta)
+      expect(create_session).not_to eq(session_id)
     end
   end
 
-  describe ".exists?" do
-    it "returns true for existing session" do
-      session_id = described_class.create(
-        import_data: import_data,
-        matches: matches,
-        stats: stats,
-        version: version
-      )
+  describe ".exists? and .sql?" do
+    it "is true for a stored script" do
+      session_id = create_session
 
-      expect(described_class.exists?(session_id)).to be true
-
-      # Cleanup
-      described_class.cleanup(session_id)
+      expect([ described_class.exists?(session_id), described_class.sql?(session_id) ]).to eq([ true, true ])
     end
 
-    it "returns false for non-existing session" do
-      expect(described_class.exists?("non-existent-id")).to be false
+    it "is false for an unknown or blank id" do
+      [ "non-existent-id", nil, "" ].each do |session_id|
+        expect([ described_class.exists?(session_id), described_class.sql?(session_id) ]).to eq([ false, false ])
+      end
     end
 
-    it "returns false for blank session_id" do
-      expect(described_class.exists?(nil)).to be false
-      expect(described_class.exists?("")).to be false
-    end
-  end
+    it "is false for the files a JSON upload left before 1.94.0" do
+      session_id = SecureRandom.uuid
+      FileUtils.mkdir_p(described_class::TEMP_DIR)
+      leftover = described_class::TEMP_DIR.join("#{session_id}_data.json")
+      File.write(leftover, "{}")
 
-  describe ".load_data" do
-    it "loads import data from a session" do
-      session_id = described_class.create(
-        import_data: import_data,
-        matches: matches,
-        stats: stats,
-        version: version
-      )
-
-      loaded_data = described_class.load_data(session_id)
-      expect(loaded_data[:version]).to eq("1.0")
-      expect(loaded_data[:root_nodes]).to be_an(Array)
-
-      # Cleanup
-      described_class.cleanup(session_id)
+      expect(described_class.exists?(session_id)).to be(false)
+    ensure
+      FileUtils.rm_f(leftover)
     end
   end
 
-  describe ".load_matches" do
-    it "loads match results from a session" do
-      session_id = described_class.create(
-        import_data: import_data,
-        matches: matches,
-        stats: stats,
-        version: version
-      )
+  describe ".store_preview and .load_preview" do
+    it "stores the dry run's preview and loads it with string keys" do
+      session_id = create_session
 
-      loaded_matches = described_class.load_matches(session_id)
-      expect(loaded_matches).to be_an(Array)
-      expect(loaded_matches.first[:status]).to eq("new")
+      expect(described_class.load_preview(session_id)).to be_nil
+      described_class.store_preview(session_id, { summary: { memory_entities: { new: 2 } } })
 
-      # Cleanup
-      described_class.cleanup(session_id)
+      expect(described_class.load_preview(session_id)).to eq("summary" => { "memory_entities" => { "new" => 2 } })
     end
   end
 
-  describe ".load_stats" do
-    it "loads stats from a session" do
-      session_id = described_class.create(
-        import_data: import_data,
-        matches: matches,
-        stats: stats,
-        version: version
-      )
-
-      loaded_stats = described_class.load_stats(session_id)
-      expect(loaded_stats[:total]).to eq(1)
-      expect(loaded_stats[:new]).to eq(1)
-
-      # Cleanup
-      described_class.cleanup(session_id)
-    end
-  end
-
-  describe ".load_version" do
-    it "loads version from a session" do
-      session_id = described_class.create(
-        import_data: import_data,
-        matches: matches,
-        stats: stats,
-        version: version
-      )
-
-      loaded_version = described_class.load_version(session_id)
-      expect(loaded_version).to eq("1.0")
-
-      # Cleanup
-      described_class.cleanup(session_id)
-    end
-  end
-
-  describe ".store_report and .load_report" do
-    let(:report) do
-      { success: true, entities_created: 5, observations_created: 10, errors: [] }
-    end
-
-    it "stores and loads a report" do
-      session_id = described_class.create(
-        import_data: import_data,
-        matches: matches,
-        stats: stats,
-        version: version
-      )
-
-      described_class.store_report(session_id, report)
-      loaded_report = described_class.load_report(session_id)
-
-      expect(loaded_report[:success]).to be true
-      expect(loaded_report[:entities_created]).to eq(5)
-
-      # Cleanup
-      described_class.cleanup(session_id)
-    end
-  end
-
-  describe ".report_exists?" do
-    it "returns true when report exists" do
-      session_id = described_class.create(
-        import_data: import_data,
-        matches: matches,
-        stats: stats,
-        version: version
-      )
-
-      described_class.store_report(session_id, { success: true })
-
-      expect(described_class.report_exists?(session_id)).to be true
-
-      # Cleanup
-      described_class.cleanup(session_id)
-    end
-
-    it "returns false when report does not exist" do
-      session_id = described_class.create(
-        import_data: import_data,
-        matches: matches,
-        stats: stats,
-        version: version
-      )
-
-      expect(described_class.report_exists?(session_id)).to be false
-
-      # Cleanup
-      described_class.cleanup(session_id)
+  describe ".load_meta" do
+    it "is empty for a session without a meta file" do
+      expect(described_class.load_meta(SecureRandom.uuid)).to eq({})
     end
   end
 
   describe ".cleanup" do
-    it "removes all session files" do
-      session_id = described_class.create(
-        import_data: import_data,
-        matches: matches,
-        stats: stats,
-        version: version
-      )
-
-      described_class.store_report(session_id, { success: true })
-
-      expect(described_class.exists?(session_id)).to be true
-      expect(described_class.report_exists?(session_id)).to be true
+    it "removes the script, its meta and its preview" do
+      session_id = create_session
+      described_class.store_preview(session_id, { summary: {} })
 
       described_class.cleanup(session_id)
 
-      expect(described_class.exists?(session_id)).to be false
-      expect(described_class.report_exists?(session_id)).to be false
+      expect(described_class.exists?(session_id)).to be(false)
+      expect(described_class::TEMP_DIR.glob("#{session_id}_*")).to be_empty
     end
 
     it "handles nil session_id gracefully" do

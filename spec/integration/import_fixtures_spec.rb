@@ -2,7 +2,10 @@
 
 require "rails_helper"
 
-RSpec.describe "Graph export import fixtures", :with_test_embeddings, type: :request do
+# A GraphMem JSON export (the format the JSON import engine reads; the export and the upload were retired
+# in 1.94.0) re-imported through the engine graphify:import and rails_ast:import run: the matcher, the
+# headless decisions and ImportExecutionStrategy.
+RSpec.describe "Graph export import fixtures", :with_test_embeddings do
   let(:baseline_fixture) { load_fixture("graph_mem_test_export.json") }
   let(:paraphrased_fixture) { load_fixture("graph_mem_test_export_2.json") }
   let(:fixture_node_count) { flatten_nodes(baseline_fixture).size }
@@ -12,13 +15,8 @@ RSpec.describe "Graph export import fixtures", :with_test_embeddings, type: :req
   let!(:embedding_calls) { record_embedding_calls! }
 
   before do
-    sign_in_operator
     AppSettings.import_observation_duplicate_max_distance = 0.35
     seed_baseline_fixture!
-  end
-
-  after do
-    ImportSession.cleanup(@session_id) if @session_id
   end
 
   it "keeps the graph_mem export fixture import-compatible" do
@@ -39,10 +37,9 @@ RSpec.describe "Graph export import fixtures", :with_test_embeddings, type: :req
 
     expect_all_nodes_to_match_existing_graph(match_result)
 
-    upload_fixture!(baseline_fixture, "graph_mem_test_export.json")
     graph_counts = graph_record_counts
 
-    execute_import!
+    expect(import!(baseline_fixture, match_result).success).to be(true)
 
     expect(graph_record_counts).to eq(graph_counts)
   end
@@ -54,11 +51,10 @@ RSpec.describe "Graph export import fixtures", :with_test_embeddings, type: :req
     child_results = match_result.fetch(:match_results).select(&:is_child)
     expect(child_results).to all(have_attributes(will_add_observations: false))
 
-    upload_fixture!(paraphrased_fixture, "graph_mem_test_export_2.json")
     graph_counts = graph_record_counts
     embedding_calls.clear
 
-    execute_import!
+    expect(import!(paraphrased_fixture, match_result).success).to be(true)
 
     expect(graph_record_counts).to eq(graph_counts)
     # The paraphrases were embedded before the import took the membership lock (each distinct text
@@ -67,18 +63,16 @@ RSpec.describe "Graph export import fixtures", :with_test_embeddings, type: :req
     expect(embedding_calls).to all(include(held: false, lock_free: true))
   end
 
-  it "rejects paraphrased imports when embeddings are unavailable" do
+  it "rejects paraphrased imports when embeddings are unavailable, in the match and in the execute, writing nothing" do
+    match_result = ImportMatchingStrategy.new.match(baseline_fixture) # the same tree, matched while embeddings run
     allow(EmbeddingService).to receive(:vector_enabled?).and_return(false)
 
-    file = Rack::Test::UploadedFile.new(
-      StringIO.new(JSON.generate(paraphrased_fixture)),
-      "application/json",
-      original_filename: "graph_mem_test_export_2.json"
-    )
-    post projects_imports_path, params: { file: file }
-
-    expect(response).to have_http_status(:unprocessable_content)
-    expect(response.body).to include("requires the embedding service")
+    expect { ImportMatchingStrategy.new.match(paraphrased_fixture) }
+      .to raise_error(ImportObservationDuplicateDetector::UnavailableError, /semantic observation de-duplication cannot run/)
+    report = nil
+    expect { report = import!(paraphrased_fixture, match_result) }.not_to(change { graph_record_counts })
+    expect(report.success).to be(false)
+    expect(report.errors.join).to include("de-duplication")
   end
 
   private
@@ -116,8 +110,7 @@ RSpec.describe "Graph export import fixtures", :with_test_embeddings, type: :req
   end
 
   def seed_baseline_fixture!
-    upload_fixture!(baseline_fixture, "graph_mem_test_export.json")
-    execute_import!
+    expect(import!(baseline_fixture, ImportMatchingStrategy.new.match(baseline_fixture)).success).to be(true)
     # Imports defer embeddings to the maintenance backfill (inline embedding
     # is suppressed during execute). Run the backfill now — the deterministic
     # test embeddings make it instant — so subsequent imports can run
@@ -125,20 +118,12 @@ RSpec.describe "Graph export import fixtures", :with_test_embeddings, type: :req
     EmbeddingService.backfill_all
   end
 
-  def upload_fixture!(data, filename)
-    file = Rack::Test::UploadedFile.new(
-      StringIO.new(JSON.generate(data)),
-      "application/json",
-      original_filename: filename
-    )
-    post projects_imports_path, params: { file: file }
-    expect(response).to redirect_to(%r{/projects/imports/\h{8}-\h{4}-\h{4}-\h{4}-\h{12}\z})
-    @session_id = response.location[%r{/projects/imports/(\h{8}-\h{4}-\h{4}-\h{4}-\h{12})\z}, 1]
-  end
-
-  def execute_import!
-    post execute_projects_import_path(@session_id), params: { decisions: {} }
-    expect(response).to redirect_to(%r{/projects/imports/\h{8}-\h{4}-\h{4}-\h{4}-\h{12}/report\z})
+  # Executes the import as graphify:import and rails_ast:import do: the matcher's results turned into
+  # headless decisions.
+  # @return [ImportExecutionStrategy::ImportReport]
+  def import!(data, match_result)
+    decisions = GraphifyImporter.headless_decisions(match_result.fetch(:match_results))
+    ImportExecutionStrategy.new.execute(data, decisions)
   end
 
   def expect_all_nodes_to_match_existing_graph(match_result)

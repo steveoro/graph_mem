@@ -70,8 +70,8 @@ class GraphifyImporter
   # text search on "<name> <type>" and routinely resolves to an unrelated
   # Project (the type word alone matches any project named "… Project"),
   # so it is never trusted unattended.
-  # Unattended imports never re-parent. Operators keep full re-parent rights
-  # through explicit Import Review decisions.
+  # Unattended imports never re-parent; operators re-parent in Explore (the
+  # reviewed JSON import, with its own decisions, was retired in 1.94.0).
   # @param match_results [Array<ImportMatchingStrategy::MatchResult>]
   # @return [Array<Hash>] decisions for ImportExecutionStrategy#execute
   def headless_decisions(match_results)
