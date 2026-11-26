@@ -35,6 +35,7 @@ module DashboardHelper
   def compaction_phase_label(phase)
     case phase.to_s
     when "relation_types" then "Relation types"
+    when "dependency_edges" then "Dependency edges"
     when "orphans" then "Orphan parenting"
     when "tree_walk" then "Tree walk compaction"
     when "relationship_discovery" then "Relationship discovery"

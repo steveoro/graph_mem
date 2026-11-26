@@ -23,9 +23,9 @@ RSpec.describe DashboardHelper, type: :helper do
   end
 
   describe "#compaction_phase_label" do
-    it "labels every compaction phase, relation_types first (R1a)" do
+    it "labels every compaction phase, relation_types first (R1a), then dependency_edges (R1b)" do
       expect(helper.compaction_phases.map { |phase| helper.compaction_phase_label(phase) })
-        .to eq([ "Relation types", "Orphan parenting", "Tree walk compaction", "Relationship discovery" ])
+        .to eq([ "Relation types", "Dependency edges", "Orphan parenting", "Tree walk compaction", "Relationship discovery" ])
     end
   end
 

@@ -3,13 +3,16 @@
 # Strategy class for matching orphan nodes to potential parent Projects
 #
 # This strategy:
-# - Identifies orphan nodes (entities with no outgoing part_of relation (no part_of parent), excluding Projects)
+# - Identifies orphan nodes (entities with no outgoing part_of relation (no part_of parent) and that
+#   no Project depends_on, excluding Projects)
 # - Tokenizes each orphan node's name
 # - Matches tokens against Project names and aliases
 # - Returns orphans with suggested parent matches for the Clean-up UI
 class OrphanMatchingStrategy
   # Relation types that define parent-child hierarchy
   CHILD_RELATION_TYPES = RelationSemantics::CHILD_RELATION_TYPES
+  # A Project's edge to what it uses (R1b): its target is no orphan.
+  PROJECT_DEPENDENCY_TYPE = "depends_on"
   AUTO_PARENT_SCORE = 10
   AUTO_PARENT_MARGIN = 3
   # Lowest score worth suggesting: an exact name or alias token, or two fragments. One fragment (5)
@@ -33,6 +36,22 @@ class OrphanMatchingStrategy
     new.match_to_projects(orphan_entity, [ project_entity ]).any?
   end
 
+  # Whether an entity is an orphan by the rule of #orphan_nodes (one entity, for a policy check).
+  # @param entity [MemoryEntity, nil]
+  # @return [Boolean]
+  def self.orphan?(entity)
+    return false if entity.nil? || entity.entity_type == "Project"
+
+    !MemoryRelation.where(from_entity_id: entity.id, relation_type: CHILD_RELATION_TYPES).exists? &&
+      !MemoryRelation.where(to_entity_id: entity.id).merge(project_dependency_edges).exists?
+  end
+
+  # The `depends_on` edges a Project holds (Dream State R1b: their targets are no orphans).
+  # @return [ActiveRecord::Relation<MemoryRelation>]
+  def self.project_dependency_edges
+    MemoryRelation.where(relation_type: PROJECT_DEPENDENCY_TYPE, from_entity_id: MemoryEntity.where(entity_type: "Project").select(:id))
+  end
+
   # Get all orphan nodes (root nodes that are not Projects)
   # @return [Array<MemoryEntity>] Array of orphan entities
   def orphan_nodes
@@ -44,9 +63,11 @@ class OrphanMatchingStrategy
 
     # Orphans are entities that:
     # 1. Have no outgoing part_of relation (no part_of parent), AND
-    # 2. Are NOT of type "Project"
+    # 2. Are NOT the target of a Project's depends_on (R1b: a library the project uses), AND
+    # 3. Are NOT of type "Project"
     MemoryEntity
       .where.not(id: child_entity_ids)
+      .where.not(id: self.class.project_dependency_edges.select(:to_entity_id))
       .where.not(entity_type: "Project")
       .order(:name)
   end

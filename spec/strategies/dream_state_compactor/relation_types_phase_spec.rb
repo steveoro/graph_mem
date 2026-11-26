@@ -24,12 +24,12 @@ RSpec.describe DreamStateCompactor::RelationTypesPhase do
   end
 
   it "is the first phase, before the entity phases" do
-    expect(CompactionRun::PHASES).to eq(%w[relation_types orphans tree_walk relationship_discovery])
-    expect(CompactionTraversal.new.next_phase_after("relation_types")).to eq("orphans")
+    expect(CompactionRun::PHASES).to eq(%w[relation_types dependency_edges orphans tree_walk relationship_discovery])
+    expect(CompactionTraversal.new.next_phase_after("relation_types")).to eq("dependency_edges")
     expect(CompactionRunner.acquire_run!.phase).to eq("relation_types")
   end
 
-  it "walks relations by id cursor in batches, then moves on to orphans with one report for the run" do
+  it "walks relations by id cursor in batches, then moves on to dependency_edges with one report for the run" do
     stub_const("RelationTypeSweep::BATCH_SIZE", 2)
     variants = widgets(3).map { |widget| stored_relation(service, widget, "requires") }
     queued = stored_relation(service, project, "child_of")
@@ -45,7 +45,7 @@ RSpec.describe DreamStateCompactor::RelationTypesPhase do
     expect(DreamStateCompactor.new(run: run).process_batch!).to eq(:continued)
 
     run.reload
-    expect(run.phase).to eq("orphans")
+    expect(run.phase).to eq("dependency_edges")
     expect(run.stats).to include("relations_processed" => 4, "relation_types_fixed" => 3, "relation_retypes_queued" => 1)
     expect(variants.map { |variant| variant.reload.relation_type }).to all(eq("depends_on"))
     expect(queued.reload.relation_type).to eq("child_of")

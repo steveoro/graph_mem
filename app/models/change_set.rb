@@ -13,7 +13,7 @@
 #   ChangeSet.find_by(uuid: uuid).undoable? # => true within the window
 class ChangeSet < ApplicationRecord
   KINDS = %w[
-    merge compaction.auto_merge graph.write graph.edit graph.delete
+    merge compaction.auto_merge compaction.auto_parent graph.write graph.edit graph.delete
     review.apply review.bulk_apply review.dismiss review.bulk_dismiss review.restore review.ignore review.snooze review.group_apply review.group_dismiss review.group_snooze
     api.write maintenance.merge_node maintenance.membership_repair project.cloud_access undo redo dream.relation_types
   ].freeze

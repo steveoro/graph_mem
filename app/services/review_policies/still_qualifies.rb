@@ -10,7 +10,9 @@ module ReviewPolicies
   #   entity waiting for its embedding is left for a later run;
   # - `relationship_proposal`: RelationshipDiscoveryStrategy.proposal_qualifies? on the payload (the
   #   identical-content `relates_to` rule is gone; `solves` needs 3 shared terms);
-  # - `orphan_parent`: none of its suggested parents passes OrphanMatchingStrategy.suggestion_qualifies?.
+  # - `orphan_parent`: none of its suggested parents passes OrphanMatchingStrategy.suggestion_qualifies?,
+  #   or (R1b) the entity is no orphan any more (a Project depends_on it), or its type is
+  #   dependency-like (phase 1 queues a relation_retype "add" row for it instead).
   #
   # A row whose entities are gone is left to the Dangling policy. No suppression: a pair whose evidence
   # grows is proposed again. Reverse: Undo the run, or Restore the row.
@@ -74,10 +76,15 @@ module ReviewPolicies
     def orphan_below_bar?(payload)
       orphan = MemoryEntity.find_by(id: payload["entity_id"].to_i)
       return false unless orphan
+      return true if !OrphanMatchingStrategy.orphan?(orphan) || dependency_types.entity?(orphan)
 
       project_ids = Array(payload["suggested_parents"]).filter_map { |parent| parent["project_id"]&.to_i }
       projects = MemoryEntity.where(id: project_ids).to_a
       projects.none? { |project| OrphanMatchingStrategy.suggestion_qualifies?(orphan, project) }
+    end
+
+    def dependency_types
+      @dependency_types ||= DependencyLikeTypes.current
     end
   end
 end

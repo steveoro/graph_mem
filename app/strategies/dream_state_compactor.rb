@@ -2,10 +2,18 @@
 
 # Compacts the knowledge graph during dream-state background runs:
 # - Relation-types phase: canonicalize stored relation types (RelationTypesPhase, RelationTypeSweep)
-# - Orphan phase: auto-parent high-confidence matches, queue the rest
+# - Dependency-edges phase: queue a relation_retype "swap" row for each dependency-like entity
+#   part_of a Project (DependencyEdgesPhase, R1b)
+# - Orphan phase: auto-parent high-confidence matches, queue the rest; a dependency-like orphan
+#   gets an "add" row (Project depends_on it) instead (R1b)
 # - Tree-walk phase: dedupe identical observations, auto-merge very similar entities
+#
+# Every write is attributed to the run: the auto-parent and the auto-merge are change sets
+# (`compaction.auto_parent`, `compaction.auto_merge`) whose audit rows carry the actor
+# `compaction:<run id>`, as the relation-types phase's do, and so do the observation dedupe's.
 class DreamStateCompactor
   include RelationTypesPhase
+  include DependencyEdgesPhase
 
   AUTO_MERGE_DISTANCE = 0.10
   REVIEW_MERGE_DISTANCE = 0.30
@@ -61,6 +69,7 @@ class DreamStateCompactor
     phase = @run.phase.presence || CompactionTraversal::PHASES.first
     @run.update!(phase: phase, status: "running", started_at: @run.started_at || Time.current) unless @run.running?
     return process_relation_types_batch! if phase == RelationTypesPhase::PHASE
+    return process_dependency_edges_batch! if phase == DependencyEdgesPhase::PHASE
 
     entity_ids = @traversal.entity_ids_for_phase(phase)
     start_idx = cursor_start_index(entity_ids)
@@ -188,9 +197,12 @@ class DreamStateCompactor
     matches = @orphan_matcher.match_to_projects(orphan)
     best = matches.first
     return unless best # no suggestion: stays an orphan, visible on Explore
+    # R1b: a project uses a dependency-like entity rather than owns it: no part_of, an "add" row.
+    return queue_dependency_add(orphan, best) if dependency_types.entity?(orphan)
 
     if @orphan_matcher.auto_parent_match?(matches)
-      result = @node_ops.move_to_parent(orphan.id, best[:project].id)
+      # One change set per auto-parent, attributed to the run (undoable like an auto-merge).
+      result = record_compaction_change("compaction.auto_parent", orphan) { @node_ops.move_to_parent(orphan.id, best[:project].id) }
       if result[:success]
         @run.increment_stat!("orphans_parented")
       else
@@ -245,7 +257,7 @@ class DreamStateCompactor
 
       begin
         Current.deletion_reason = "duplicate"
-        observations.drop(1).each(&:destroy!)
+        Current.set(actor: compaction_actor) { observations.drop(1).each(&:destroy!) }
       ensure
         Current.deletion_reason = nil
       end
@@ -279,9 +291,7 @@ class DreamStateCompactor
     if best.distance < AUTO_MERGE_DISTANCE && best.score >= EntityMergeEvidence::AUTO_SCORE
       merged, survivor = EntityMergeEvidence.pick_survivor(best.source, best.target)
       # One change set per auto-merge, attributed to the run (undoable for 7 days).
-      result = ChangeSet.record(kind: "compaction.auto_merge", actor: "compaction:#{@run.id}", subject: survivor) do
-        @node_ops.merge_into(merged.id, survivor.id)
-      end
+      result = record_compaction_change("compaction.auto_merge", survivor) { @node_ops.merge_into(merged.id, survivor.id) }
       if result[:success]
         @run.increment_stat!("merges_auto")
         enqueue_embedding_backfill
@@ -325,6 +335,15 @@ class DreamStateCompactor
     true
   end
 
+  # @return [String] the actor of every write of this run ("compaction:<run id>")
+  def compaction_actor = "compaction:#{@run.id}"
+
+  # Runs a write as one change set of `kind`, attributed to the run: the set's actor and, through
+  # Current.actor, every audit row it writes.
+  def record_compaction_change(kind, subject, &block)
+    Current.set(actor: compaction_actor) { ChangeSet.record(kind: kind, actor: compaction_actor, subject: subject, &block) }
+  end
+
   def log_entity_error(entity_id, phase, error)
     message = "[DreamState] entity #{entity_id} in phase #{phase} failed: #{error.class} - #{error.message}"
     Rails.logger.error(message)
@@ -339,9 +358,11 @@ class DreamStateCompactor
     }
   end
 
-  # Run stats for the kinds the compactor queues, keyed by row kind.
+  # Run stats for the kinds the compactor queues, keyed by row kind; relation_retype rows by
+  # operation (R1b: "swap" from dependency_edges, "add" from orphans).
   QUEUED_STATS = { "entity_merge" => "merges_queued", "relationship_proposal" => "relationships_queued",
                    "orphan_parent" => "orphans_queued" }.freeze
+  QUEUED_RETYPE_STATS = { "swap" => "dependency_swaps_queued", "add" => "dependency_adds_queued" }.freeze
 
   # Seeds the buffered items; the *_queued stats count the rows actually seeded (after suppression,
   # dedupe, the per-run cap and the backlog ceiling), not the candidates.
@@ -352,10 +373,15 @@ class DreamStateCompactor
       source_ref: @run.id,
       items: @review_items
     )
-    rows.group_by(&:kind).each do |kind, seeded|
-      stat = QUEUED_STATS[kind]
+    rows.group_by { |row| queued_stat(row) }.each do |stat, seeded|
       @run.increment_stat!(stat, seeded.size) if stat
     end
     @review_items.clear
+  end
+
+  def queued_stat(row)
+    return QUEUED_STATS[row.kind] unless row.kind == RelationTypeSweep::REVIEW_KIND
+
+    QUEUED_RETYPE_STATS[row.payload["operation"].to_s]
   end
 end
