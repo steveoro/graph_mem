@@ -39,6 +39,12 @@ GraphMem stores operator-tunable runtime settings in the primary MariaDB `settin
 
 Never applied: different keys ("Port (dev)" / "Port (test)"), a changed unit ("5s" / "5m"), list-like values, a tie on which fact is newer, facts of two entities, sources or perspectives, and any contradiction that isn't a value change.
 
+**Dependency-like entity types** (Dream State R1b, the same panel; `DependencyLikeTypes`):
+
+| Setting | Default | What it does |
+|---|---|---|
+| `dependency_like_types` | `Framework, Gem, Tool` | The entity types a project **uses** rather than owns, comma-separated. A type matches by its canonical type (`EntityTypeMapping`, so the vocabulary's aliases count: `lib`, `library` and `frameworks` are Framework, `gem` and `rubygem` are Gem, `tools` is Tool), compared case-insensitively with the listed types canonicalized the same way; a Project never matches. It drives four things: the dream-state `dependency_edges` step queues a `relation_retype` row (`swap`) for an entity of such a type that is `part_of` a Project; phase `orphans` queues an `add` row (`Project depends_on entity`) for an orphan of such a type instead of parenting it; the `auto_apply_relation_retype` policy applies only those swaps; and a project scan links a global entity of such a type instead of making a project copy (see [dream_state.md](dream_state.md#phase-2-dependency_edges)). Saved normalized (`Gem, Tool`); each entry is a type name (letters, digits, spaces, `.`, `-`, `_`, up to 64 characters, not Project or one of its aliases), at most 20. Blank turns all four off. Read uncached, so a change applies to the next run. Each change writes an audit row. |
+
 Boolean flags consumed by background workers use direct database reads so Solid Queue processes see UI changes without restart.
 
 ## Database Backup
