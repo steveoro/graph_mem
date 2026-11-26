@@ -12,6 +12,8 @@
 # progress is persisted in `OperationProgress#details["validation_state"]` so
 # a subsequent `mode: "validate"` scan can continue from where it left off.
 class ProjectScanValidator
+  include Scope
+
   # Relation types that imply the source project actually uses the target.
   USAGE_RELATION_TYPES = %w[
     depends_on
@@ -149,12 +151,6 @@ class ProjectScanValidator
     end
   end
 
-  def compute_entity_ids!
-    ids = ProjectSubtree.resolve(@project_entity.id).entity_ids - @created_entity_ids.to_a - [ @project_entity.id ]
-    @pending_entity_ids = ids.uniq
-    @processed_entity_ids = []
-  end
-
   def pending_entity_ids
     @pending_entity_ids ||= []
   end
@@ -193,6 +189,7 @@ class ProjectScanValidator
       next if observation.content.blank?
       # The Rails code map's facts come from the code itself; its skeleton writer diffs them.
       next if observation.source == RailsCodeMap::SOURCE
+      next unless covered_observation?(entity, observation) # R1b: only this project's facts on a global library
 
       action = resolve_observation_action(observation, entity)
       case action[:type]
@@ -364,6 +361,8 @@ class ProjectScanValidator
   end
 
   def validate_entity_relations(entity)
+    return if global_dependency?(entity) # R1b: a shared node's edges aren't this project's to judge (Scope)
+
     entity.relations_from.find_each do |relation|
       next if from_current_scan?(relation.properties.to_h["source"])
       next if relation.properties.to_h["scan_id"] == @scan_id
