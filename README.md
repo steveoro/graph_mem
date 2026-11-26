@@ -633,7 +633,7 @@ Sign in at `/operator/login`. Default operator credentials: `operator` / `change
 * [Agent-CLI backends](docs/agent_cli_backends.md): opt-in cloud models through your workstation's Claude Code or Devin, behind a loopback bridge, anonymized and per project
 * [App Settings Reference](docs/app_settings_reference.md)
 * [Scan profiling](docs/scan_profiling.md): `bin/rails graph_mem:scan_profile`, a safe, measured project scan on pinned open-source repos in a throwaway database, to tune the scan settings
-* [Data exchange](docs/data_exchange.md): graph_mem-sql, a self-contained SQL script that syncs a project from a source machine to a target machine; the format, merge rules, guards and the JSON alternative
+* [Data exchange](docs/data_exchange.md): graph_mem-sql, a self-contained SQL script that syncs a project from a source machine to a target machine; the format, merge rules, guards and the sync endpoint
 * [Architecture](docs/architecture.md)
 * [Development Guide](docs/development.md)
 * [Troubleshooting](docs/troubleshooting.md)

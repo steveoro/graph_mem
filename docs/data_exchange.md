@@ -1,8 +1,8 @@
-# Data exchange: graph_mem-sql and the JSON export
+# Data exchange: graph_mem-sql
 
-GraphMem moves graph data between machines in two formats. This page is the reference for the newer one, **graph_mem-sql** (1.94.0): what it is, how to move a project from a source machine to a target machine, the format, the merge rules, the guards and the limits.
+GraphMem moves graph data between machines as **graph_mem-sql** scripts (1.94.0). This page is the reference: what it is, how to move a project from a source machine to a target machine, the format, the merge rules, the guards and the limits.
 
-- [Which format to use](#which-format-to-use)
+- [What it is and when to use it](#what-it-is-and-when-to-use-it)
 - [Source machine to target machine](#source-machine-to-target-machine)
 - [What happens after an import](#what-happens-after-an-import)
 - [Format reference (graph_mem-sql v1)](#format-reference-graph_mem-sql-v1)
@@ -14,24 +14,23 @@ GraphMem moves graph data between machines in two formats. This page is the refe
 
 Examples use `<project>` and `SynthPrj` for a Project root, and "source machine" and "target machine" for the two installs.
 
-## Which format to use
+## What it is and when to use it
 
-| | graph_mem-sql script (`.sql`) | GraphMem JSON (`.json`) |
-|---|---|---|
-| What it is | One self-contained SQL script: the data in staging tables plus a fixed merge section | A tree of nodes (format 1.0) |
-| Import | Merged by key in one transaction: what is missing is added, what is older is updated, nothing is deleted, and either everything commits or nothing does | Matched and reviewed: one decision per root, then run from the review page |
-| Carries | Entity `description` and aliases, every observation with its status (`active`, `obsolete`, `superseded`), perspective, validity, tags, confidence, source and supersede / outdated-by links, relations with weight, confidence and properties | Names, types, aliases, observations and relations; no observation status, perspective, supersede links or entity description, so retired facts come back active |
-| Use it for | Keeping a project in step between two machines, repeatedly; restoring an older export over a graph that moved on | A one-off move where you want to decide each match yourself; Graphify and Rails AST graphs, which are JSON only |
-| Default | Projects › Exports preselects it | The sync endpoint `GET /data_exchange/export` still returns it unless you ask for `format=sql` |
+A graph_mem-sql script (`.sql`) is one self-contained SQL script: the data in staging tables plus a fixed merge section.
 
-Both formats import on Projects › Imports; the page tells them apart by the file's first line. The JSON review flow is unchanged by the SQL path.
+- **Import.** It is merged by key in one transaction: what is missing is added, what is older is updated, nothing is deleted, and either everything commits or nothing does.
+- **Carries.** Entity `description` and aliases, every observation with its status (`active`, `obsolete`, `superseded`), perspective, validity, tags, confidence, source and supersede / outdated-by links, and relations with weight, confidence and properties.
+- **Use it for** keeping a project in step between two machines, repeatedly, and for restoring an older export over a graph that moved on.
+- **Where.** Projects › Exports writes it (the only format), Projects › Imports takes it (the only format), the shell runs it with `graph_mem:export_sql` / `graph_mem:import_sql`, and the sync endpoint returns it ([below](#the-sync-endpoint-for-scripts)).
+
+**The GraphMem JSON export and upload were retired in 1.94.0**, with no deprecation period. An old JSON backup can't be imported from the UI any more: Projects › Imports refuses a `.json` file and points to the SQL export. The JSON import engine remains only for `bin/rails graphify:import` (a Graphify `graph.json`) and `bin/rails rails_ast:import`, which run headless.
 
 ## Source machine to target machine
 
 The goal: bring the target machine's `<project>` up to date with the source machine's, or create it there.
 
 1. **Export on the source machine.**
-   - In the operator UI: Projects › Exports, tick the Project root, keep **SQL script** selected, **Export selected**, then **Download** (the file is named after the root, `synthprj.sql`; with several roots `synthprj_plus_2.sql`). Files are deleted after an hour.
+   - In the operator UI: Projects › Exports, tick the Project root, **Export selected**, then **Download** (the file is named after the root, `synthprj.sql`; with several roots `synthprj_plus_2.sql`). Files are deleted after an hour.
    - Or from a shell: `bin/rails graph_mem:export_sql[<project>] OUT=path/to/synthprj.sql`. `OUT` defaults to `tmp/exports/<name>.sql`. Several roots go in one call (`graph_mem:export_sql[SynthPrj,UserPrefs]`); `NESTED=0` leaves Projects nested inside the tree out. A name must be a Project root or a global entity: a member of a project is refused ("export its Project instead").
 2. **Move the file** to the target machine (any way you like; it contains your graph's text, so treat it like a backup).
 3. **Take a backup on the target machine** (System › Backups › **Run backup now**). An SQL import has no one-click undo.
@@ -48,7 +47,7 @@ Running the same file twice is safe: the second run reports only "unchanged" and
 The raw SQL skips the model callbacks, so a job does their work once the import has committed and released the membership lock. `SqlImportFollowUpJob` is queued after every import the app or `graph_mem:import_sql` runs (not after a dry run, and not after a [hand run](#hand-runs)). For the rows the import wrote it:
 
 1. embeds every row without an embedding (the embedding backfill), after a connection check; while another backfill holds the embeddings lock it runs again every minute, up to five times, and the last attempt goes on without the backfill;
-2. recomputes trust scores (`ObservationTrustRecompute`, the same service the JSON import and the relation hook use);
+2. recomputes trust scores (`ObservationTrustRecompute`, the same service the relation hook and the headless JSON import use);
 3. requests keyword paths and queues "Outdated by a fact" for each new source fact, and for each fact that gained the `source-fact` tag;
 4. seeds review rows (source `sql_import`): an `entity_merge` for a written entity that shares a name or an alias with another entity of its type in its scope, and a `delete_observation` for a new fact within `import_observation_duplicate_max_distance` of an active fact the entity had before the import ([settings](app_settings_reference.md#imports)). New facts are not compared with each other, so a fresh project import does not propose pairs the source may have reviewed;
 5. records the entities it touched, so the stale scan's contradiction pass looks at them too (the imported rows keep the source `updated_at`, which the scan's own filter would miss);
@@ -254,14 +253,14 @@ The script still stamps and checks membership, runs every guard, and writes the 
 
 ## The sync endpoint, for scripts
 
-`GET /data_exchange/export?ids[]=<id>[&format=sql|json]` returns the roots as one file, directly (no background job):
+`GET /data_exchange/export?ids[]=<id>[&format=sql]` returns the roots as one graph_mem-sql script, directly (no background job):
 
 | `format` | Response |
 |---|---|
-| omitted, or `json` | the GraphMem JSON tree (`application/json`, `graph_mem_export_<time>.json`), exactly as before 1.94.0 |
-| `sql` | a graph_mem-sql script (`application/sql`, `graph_mem_export_<time>.sql`) |
+| omitted, or `sql` | a graph_mem-sql script (`application/sql`, an attachment named `graph_mem_export_<time>.sql`) |
+| `json` | 400: "The JSON export was retired in 1.94.0 …" |
 | anything else | 400 |
 
-`ids[]` are entity ids. A request with none answers 422, and so does a script request for an unknown id or for a member of a project, with the reason. Authentication is unchanged (the operator sign-in, like the other Data Exchange endpoints).
+`ids[]` are entity ids. A request with none answers 422, and so does an unknown id or a member of a project, with the reason (export its Project instead). Authentication is unchanged (the operator sign-in, like the other Data Exchange endpoints).
 
-JSON stays the default here so existing scripts keep what they got; only the Projects › Exports page preselects SQL.
+Before 1.94.0 this endpoint returned the GraphMem JSON tree by default. A script that calls it without `format` now gets the SQL script, so point its reader at the SQL format (or at `graph_mem:import_sql`).

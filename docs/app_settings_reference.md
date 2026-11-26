@@ -100,9 +100,9 @@ See [summarization guide](summarization.md).
 
 | Setting | Default | Effect |
 |---|---|---|
-| `import_observation_duplicate_max_distance` | `0.35` | Maximum semantic distance for treating imported observation text as an existing fact. Range `0.20` (strict) to `0.50` (broad). |
+| `import_observation_duplicate_max_distance` | `0.35` | Maximum semantic distance for treating imported observation text as an existing fact (the headless JSON import and the SQL import's follow-up use it). Range `0.20` (strict) to `0.50` (broad). |
 
-The import embeds the texts it compares before it takes the membership lock (1.93.3: every distinct text, one embedding call each) and only looks the vectors up under it. When the embedding service fails then, the import fails before writing anything, as before. A fact the pre-read missed (its entity or facts changed before the lock) is matched by its exact text only, and the import's log says how many ([troubleshooting](troubleshooting.md#problem-an-import-matched-facts-exactly-only)).
+The headless JSON import (`graphify:import`, `rails_ast:import`) embeds the texts it compares before it takes the membership lock (1.93.3: every distinct text, one embedding call each) and only looks the vectors up under it. When the embedding service fails then, the import fails before writing anything, as before. A fact the pre-read missed (its entity or facts changed before the lock) is matched by its exact text only, and the import's log says how many ([troubleshooting](troubleshooting.md#problem-an-import-matched-facts-exactly-only)).
 
 ## Project Scans
 

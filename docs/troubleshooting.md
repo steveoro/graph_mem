@@ -159,6 +159,8 @@ Every part failed to give a JSON object with an `architecture` array, so the sca
 
 ### Problem: An import matched facts exactly only
 
+This is the headless JSON import (`graphify:import`, `rails_ast:import`), the only import that still embeds before its lock. An SQL import never embeds in the import itself: its follow-up compares afterwards ([The SQL import's near-duplicate check "couldn't run"](#problem-the-sql-imports-near-duplicate-check-couldnt-run)).
+
 **Symptoms:**
 - The log of an import that completed has one line (1.93.3):
 
@@ -173,7 +175,7 @@ Every part failed to give a JSON object with an `architecture` array, so the sca
 **Solutions:**
 
 1. The facts the line counts were added as new observations. If an entity now holds a fact twice in different words, retire one with Find & supersede or by hand. Running the same import again won't help: the facts now exist, so it matches them exactly and skips them.
-2. This line never comes from the embedding service being down. Then the import fails before it takes the lock, writing nothing, with "Semantic observation de-duplication unavailable: Embedding service is unavailable: …" (the upload and the preview refuse first, with "Import requires the embedding service for observation de-duplication"). Bring the service back (see [operator/embeddings.md](operator/embeddings.md): check the URL and model on the Embeddings page and that the service answers) and run the import again. A database without vector columns fails the import with "Semantic observation de-duplication unavailable" too.
+2. This line never comes from the embedding service being down. Then the import fails before it takes the lock, writing nothing, with "Semantic observation de-duplication unavailable: Embedding service is unavailable: …" (the web import has no such refusal any more: Projects › Imports takes graph_mem-sql scripts only, which import without the embedding service and report what the near-duplicate check could not compare). Bring the service back (see [operator/embeddings.md](operator/embeddings.md): check the URL and model on the Embeddings page and that the service answers) and run the import again. A database without vector columns fails the import with "Semantic observation de-duplication unavailable" too.
 
 ### Problem: An SQL import was refused
 

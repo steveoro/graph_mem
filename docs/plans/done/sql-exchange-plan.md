@@ -545,3 +545,10 @@ new MCP tool, no new `OperationProgress` type. Tool counts stay 12 / 9 / 22.
 older export over an edited graph, the forward sync and the fresh target), round-trip, idempotency, atomicity,
 validator, guard, follow-up, request and job specs, and the derived-writer timestamp spec
 (`spec/integration/updated_at_content_timestamp_spec.rb`).
+
+**2026-11-26: the JSON export and upload were retired in the same release** (1.94.0, #202; the maintainer's decision, no deprecation
+period). Projects › Exports writes graph_mem-sql scripts only, `GET /data_exchange/export` returns the script by default
+and answers 400 for `format=json`, and Projects › Imports takes scripts only (a `.json` file is refused with a pointer to the
+SQL export, or to `graphify:import` for a Graphify `graph.json`). The plan's "JSON stays the default" lines, the
+`ExportJob::FORMATS` of `sql` and `json`, and the Export and UI notes above are superseded by this; the JSON import engine
+stays for `graphify:import` and `rails_ast:import`. See [`CHANGELOG.md`](../../../CHANGELOG.md) (Removed under 1.94.0).
