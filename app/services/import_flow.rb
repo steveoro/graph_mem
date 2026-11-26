@@ -7,6 +7,9 @@ require_relative "../../lib/import_session"
 # ImportMatchingStrategy, ImportExecutionStrategy, ImportSession and GraphifyImporter. The upload is parsed in memory, under MAX_UPLOAD_BYTES,
 # and never written to a path from the request (ImportSession names its files by a fresh UUID).
 #
+# A graph_mem-sql script (its first line an SQL comment, or a .sql name) goes through SqlImport::Flow
+# instead: validate → dry run → preview → execute.
+#
 #   upload = ImportFlow.upload(params[:file], project_name: "Alpha Service")
 #   upload.error              # => nil, or the message to show on the upload form
 #   operation = ImportFlow.execute(upload.session_id, params[:decisions])
@@ -28,6 +31,7 @@ class ImportFlow
     def upload(file, project_name: nil)
       return failed("Please select a file to import") if file.blank?
       return failed(too_large(file.size)) if file.size > MAX_UPLOAD_BYTES
+      return sql_upload(file) if sql?(file)
 
       data = JSON.parse(file.read)
       file_name = File.basename(file.original_filename.to_s)
@@ -80,7 +84,29 @@ class ImportFlow
         (data["links"].is_a?(Array) || data["edges"].is_a?(Array))
     end
 
+    # @param file [#read, #rewind, #original_filename]
+    # @return [Boolean] a graph_mem-sql script: the first line is an SQL comment ("-- graph_mem-sql v1"),
+    #   or the name ends in .sql (any other script is refused by the validator, with its reason)
+    def sql?(file)
+      head = file.read(2).to_s
+      file.rewind
+      head == "--" || File.extname(file.original_filename.to_s).casecmp?(".sql")
+    end
+
     private
+
+    def sql_upload(file)
+      session_id = SqlImport::Flow.upload(file, file_name: File.basename(file.original_filename.to_s))
+      Upload.new(session_id: session_id, error: nil, needs_project_name: false, suggested_name: nil)
+    rescue SqlImport::Validator::Invalid => e
+      failed(I18n.t("projects.imports.sql.invalid", reason: e.message))
+    rescue SqlImport::Executor::Refused => e
+      failed(I18n.t("projects.imports.sql.refused", reason: e.message))
+    rescue ProjectMembership::LockTimeout
+      failed(I18n.t("projects.imports.sql.busy"))
+    rescue ActiveRecord::StatementInvalid => e
+      failed(I18n.t("projects.imports.sql.refused", reason: SqlImport::Flow.refusal_reason(e)))
+    end
 
     def failed(message)
       Upload.new(session_id: nil, error: message, needs_project_name: false, suggested_name: nil)

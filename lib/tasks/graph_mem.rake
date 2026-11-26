@@ -54,12 +54,30 @@ namespace :graph_mem do
     abort "export refused: #{e.message}"
   end
 
-  desc "Import a graph_mem-sql script (FILE=path; DRY_RUN=1 runs it and rolls it back). Always validated first; " \
-       "prints the counts and the affected rows"
+  desc "Import a graph_mem-sql script (FILE=path; DRY_RUN=1 runs it and rolls it back; FULL=1 runs all scheduled jobs " \
+       "after the follow-up). Always validated first; prints the counts and the affected rows, then queues the follow-up"
   task import_sql: :environment do
-    path = ENV["FILE"].presence or abort "usage: bin/rails graph_mem:import_sql FILE=path [DRY_RUN=1]"
+    path = ENV["FILE"].presence or abort "usage: bin/rails graph_mem:import_sql FILE=path [DRY_RUN=1] [FULL=1]"
     dry_run = ENV["DRY_RUN"].to_s.match?(/\A(1|true|yes)\z/i)
-    result = SqlImport::Executor.call(SqlImport::Validator.validate_file(path), dry_run: dry_run)
+    full = ENV["FULL"].to_s.match?(/\A(1|true|yes)\z/i)
+    begin
+      result = SqlImport::Executor.call(SqlImport::Validator.validate_file(path), dry_run: dry_run)
+    rescue SqlImport::Executor::Committed => e # written, then leaving the run failed: reported below, as for #finish
+      result = e.result
+      finish_error = SqlImport::Flow.error_text(e.cause)
+    rescue *SqlImport::Flow::REFUSALS, Errno::ENOENT => e
+      # Before the commit only. A value that passes the grammar and that MariaDB rejects (1e999, a roots line that
+      # isn't JSON) rolls the run back as a guard does: the database's message, without a backtrace.
+      abort "import refused, nothing was written: #{SqlImport::Flow.refusal_reason(e)}"
+    end
+    # Committed from here on: no error below is a refusal. A follow-up that can't be queued is recorded, not raised.
+    unless dry_run || finish_error
+      begin
+        operation = SqlImport::Flow.finish(result, file_name: File.basename(path), full_maintenance: full)
+      rescue StandardError => e
+        finish_error = SqlImport::Flow.error_text(e)
+      end
+    end
 
     puts dry_run ? "Dry run: nothing was written." : "Imported: operation #{result.operation_id}"
     [ result.summary, result.affected ].each do |rows|
@@ -73,12 +91,22 @@ namespace :graph_mem do
       widths = cells.transpose.map { |column| column.map(&:length).max }
       cells.each { |row| puts row.zip(widths).map { |cell, width| cell.ljust(width) }.join("  ").rstrip }
     end
-    puts "Embeddings, keywords and trust scores of the new and changed rows are filled by the background jobs." unless dry_run
-  rescue SqlImport::Validator::Invalid, SqlImport::Executor::Refused, ProjectMembership::LockTimeout, Errno::ENOENT,
-         ActiveRecord::StatementInvalid => e
-    # A value that passes the grammar and that MariaDB rejects (1e999, a roots line that isn't JSON) rolls the
-    # run back as a guard does: the database's message, without a backtrace.
-    abort "import refused, nothing was written: #{e.is_a?(ActiveRecord::StatementInvalid) ? (e.cause&.message || e.message) : e.message}"
+    next if dry_run
+
+    recover = "The scheduled jobs embed the new rows and fill their keyword paths (\"Run full maintenance now\" on the " \
+              "import's report runs them at once); trust scores and review rows come only from the follow-up: " \
+              "bin/rails runner 'SqlImportFollowUpJob.perform_later(\"#{result.operation_id}\")'"
+    if finish_error
+      abort "The import committed (operation #{result.operation_id}), but completing its record failed, so its follow-up " \
+            "was not queued: #{finish_error}\n#{recover}"
+    end
+    follow_up = operation.reload.details["follow_up"].to_h
+    if follow_up["status"] == "failed"
+      warn "Follow-up failed: #{follow_up['error']}\nThe import is written. #{recover}"
+    else
+      puts "Follow-up #{follow_up['status']} (SqlImportFollowUpJob): embeddings, trust scores, keywords, review rows" \
+           "#{full ? ', then all scheduled jobs (FULL=1)' : ''}. Its outcome shows on the import's report page."
+    end
   end
 
   desc "Report MCP tool usage (DAYS=30 by default; DAYS=all for all history)"

@@ -65,6 +65,17 @@ class EntityMergeEvidence
       score_pair(entity_a, entity_b, distance).score >= REVIEW_SCORE
     end
 
+    # Scores a pair found by name or alias rather than by vector (an SQL import's follow-up): the
+    # composite score, with the cosine distance of the stored embeddings when both have one.
+    #
+    # @param entity_a [MemoryEntity]
+    # @param entity_b [MemoryEntity]
+    # @return [Match] its distance is nil when either entity has no embedding
+    def score(entity_a, entity_b)
+      distance = pair_distance(entity_a, entity_b) if entity_a.embedded_at && entity_b.embedded_at
+      score_pair(entity_a, entity_b, distance || Float::INFINITY).tap { |match| match.distance = distance }
+    end
+
     # @param left [MemoryEntity]
     # @param right [MemoryEntity]
     # @return [MemoryEntity, MemoryEntity] the entity to merge away first, then the survivor

@@ -14,6 +14,8 @@
         %span.ui-badge= details["producer"]
         - if details["project_name"].present?
           %span= t("projects.imports.report.into", name: details["project_name"])
+      - elsif details["format"] == "sql"
+        %span.projects-muted{ data: { testid: "import-report-command-line" } }= t("projects.imports.outside_app")
       - else
         %span.projects-muted{ data: { testid: "import-report-command-line" } }= t("projects.imports.command_line")
     - if operation.message.present?
@@ -21,6 +23,12 @@
   - if operation.error_message.present?
     %p.projects-error{ role: "alert" }= operation.error_message
 
+  - if details["format"] == "sql"
+    = render "projects/imports/sql_summary", counts: operation.counters
+    = render "projects/imports/sql_notes", notes: details["notes"]
+    = render "projects/imports/sql_follow_up", operation: operation, details: details
+    = render "projects/imports/sql_rows", rows: details["affected"], total: details["affected_count"],
+      url: report_projects_import_path(operation.operation_id), links: true
   - if summary.present?
     .ui-card.projects-stats{ data: { testid: "import-report-summary" } }
       - %w[entities_created entities_merged entities_skipped observations_created relations_created errors].each do |key|

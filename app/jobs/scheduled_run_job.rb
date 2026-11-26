@@ -11,8 +11,8 @@
 # A step's outcome is nil (not reached), "running", "waiting" (compaction), "done", "skipped" (its
 # setting is off), "stopped" (it stopped early: it runs again on Resume) or "failed" (logged; the
 # run goes on). Compaction works in slices, so the job re-enqueues itself every COMPACTION_POLL
-# until the compaction run ends. The trigger is "manual" (the button) or "catch-up"
-# (ScheduledRunCatchUpJob, 1.86.0). One switch drives it (System::JobsController#scheduled_run):
+# until the compaction run ends. The trigger is "manual" (the button), "catch-up"
+# (ScheduledRunCatchUpJob, 1.86.0) or "sql_import" (an SQL import's "Run full maintenance now"). One switch drives it (System::JobsController#scheduled_run):
 #
 #   ScheduledRunJob.start!        # idle → running
 #   ScheduledRunJob.stop!(row)    # running → stopping → paused (between steps, or inside the
@@ -35,6 +35,7 @@ class ScheduledRunJob < ApplicationJob
   # details["trigger"]: who started the run (1.86.0). A row from before has none: it reads as manual.
   TRIGGER_MANUAL = "manual"
   TRIGGER_CATCH_UP = "catch-up"
+  TRIGGER_SQL_IMPORT = "sql_import"
   COMPACTION_POLL = 1.minute
   # A compaction run in one of these has ended (a paused one ends the step unless we asked for it).
   COMPACTION_ENDED = %w[completed paused failed].freeze
@@ -64,7 +65,8 @@ class ScheduledRunJob < ApplicationJob
 
     # @param steps [Array<ScheduledRun::Step>]
     # @param trigger [String] who started it, kept in the row's details: TRIGGER_MANUAL (the
-    #   operator's button) or TRIGGER_CATCH_UP (ScheduledRunCatchUpJob)
+    #   operator's button), TRIGGER_CATCH_UP (ScheduledRunCatchUpJob) or TRIGGER_SQL_IMPORT
+    #   (SqlImport::FollowUp)
     # @return [OperationProgress, nil] the new run; nil unless idle (two presses at once start one run)
     def start!(steps: ScheduledRun.steps, trigger: TRIGGER_MANUAL)
       row = with_start_lock do

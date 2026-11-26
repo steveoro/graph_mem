@@ -1,0 +1,21 @@
+- header = @preview["header"].to_h
+- scope = "projects.imports.sql.preview"
+- content_for :title, t("#{scope}.title")
+- content_for :page_header, ui_page_header(t("#{scope}.title"), subtitle: t("#{scope}.subtitle", file: @meta[:file_name].presence || "—"))
+
+.projects-page{ data: { testid: "sql-import-preview" } }
+  - if @error
+    %p.projects-error{ role: "alert", data: { testid: "sql-import-error" } }= @error
+  .ui-card
+    %p{ data: { testid: "sql-import-source" } }= t("#{scope}.source", app: header["app"], exported_at: header["exported_at"], roots: header["roots"])
+    %p.projects-hint{ data: { testid: "sql-import-backup" } }
+      = t("#{scope}.backup_html", link: link_to(t("#{scope}.backups"), system_backups_path, class: "projects-link"))
+  = render "projects/imports/sql_summary", counts: @preview["summary"]
+  = render "projects/imports/sql_notes", notes: @preview["notes"]
+  = render "projects/imports/sql_rows", rows: @preview["rows"], total: @preview["row_count"], url: projects_import_path(params[:id]), links: false
+  = form_with url: execute_projects_import_path(params[:id]), method: :post, class: "ui-card ui-form", data: { testid: "sql-import-execute-form" } do
+    = render "projects/imports/full_maintenance_field", required: false
+    .projects-actions
+      = submit_tag t("#{scope}.execute"), class: "ui-btn ui-btn-primary", data: { testid: "import-execute" }
+      = link_to t("#{scope}.cancel"), projects_import_path(params[:id]), class: "ui-btn",
+        data: { turbo_method: :delete, turbo_confirm: t("#{scope}.cancel_confirm"), testid: "import-cancel" }

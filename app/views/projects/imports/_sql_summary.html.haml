@@ -1,0 +1,14 @@
+-# An SQL import's counts per table and action: its dry run's (preview) or its run's (the operation's counters).
+- actions = %w[new claimed updated unchanged kept_local skipped_link]
+%table.projects-table{ data: { testid: "sql-import-summary" } }
+  %thead
+    %tr
+      %th{ scope: "col" }= t("projects.imports.sql.table")
+      - actions.each do |action|
+        %th{ scope: "col" }= t("projects.imports.sql.actions.#{action}")
+  %tbody
+    - %w[memory_entities memory_observations memory_relations].each do |table|
+      %tr{ data: { testid: "sql-import-summary-#{table}" } }
+        %th{ scope: "row" }= t("projects.imports.sql.tables.#{table}")
+        - actions.each do |action|
+          %td= counts.to_h.dig(table, action).to_i

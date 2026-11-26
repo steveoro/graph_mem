@@ -19,6 +19,20 @@ module SqlImport
     # A guard of the script refused the import (SIGNAL): nothing was written. The message says why.
     class Refused < StandardError; end
 
+    # A real run committed, then leaving it failed (dropping the gm_ tables, putting the session back,
+    # releasing the lock): the rows are written. #cause is the error.
+    class Committed < StandardError
+      # @return [Result] the committed run
+      attr_reader :result
+
+      # @param result [Result]
+      # @param error [StandardError]
+      def initialize(result, error)
+        @result = result
+        super("the import committed (operation #{result.operation_id}), then failed: #{error.class}: #{error.message}")
+      end
+    end
+
     SIGNAL_ERROR = 1644
     SESSION_READ = "SELECT @@SESSION.sql_mode, @@SESSION.time_zone, @@SESSION.character_set_client, " \
                    "@@SESSION.character_set_connection, @@SESSION.collation_connection, @@SESSION.character_set_results"
@@ -37,6 +51,7 @@ module SqlImport
     # @return [Result]
     # @raise [Refused] when a guard of the script refused it
     # @raise [ProjectMembership::LockTimeout] when the membership lock stays busy
+    # @raise [Committed] when a real run committed and an error followed (never a Refused or a raw error)
     def self.call(script, dry_run: false, operation_id: SecureRandom.uuid)
       new(script).call(dry_run: dry_run, operation_id: operation_id)
     end
@@ -53,7 +68,7 @@ module SqlImport
     # @return [Result]
     def call(dry_run:, operation_id:)
       CompactionValve.request_pause_if_running!
-      result = nil
+      result = committed = nil
       ProjectMembership.with_membership_lock do
         EmbeddingService.suppress_inline_embeddings do
           @connection.uncached do
@@ -62,13 +77,15 @@ module SqlImport
                 result = run(operation_id, dry_run)
                 raise ActiveRecord::Rollback if dry_run
               end
+              committed = result unless dry_run
             end
           end
         end
       end
       result
-    rescue ActiveRecord::StatementInvalid => e
-      raise unless e.cause.respond_to?(:error_number) && e.cause.error_number == SIGNAL_ERROR
+    rescue StandardError => e
+      raise Committed.new(committed, e) if committed
+      raise unless e.is_a?(ActiveRecord::StatementInvalid) && e.cause.respond_to?(:error_number) && e.cause.error_number == SIGNAL_ERROR
 
       raise Refused, e.cause.message
     end

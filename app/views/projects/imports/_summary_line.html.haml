@@ -1,5 +1,9 @@
--# One import's counts from its OperationProgress details ("summary"), or a dash for a rake import.
-- if summary.present?
+-# One import's counts from its OperationProgress details ("summary"), an SQL import's from its
+-# counters (table => action => rows), or a dash for a rake import.
+- if local_assigns[:counters].present?
+  - total = ->(*actions) { counters.values.sum { |counts| counts.to_h.values_at(*actions).sum(&:to_i) } }
+  %span= t("projects.imports.sql_summary_line", new: total.call("new"), updated: total.call("updated", "claimed"), kept_local: total.call("kept_local"))
+- elsif summary.present?
   %span= t("projects.imports.summary_line", created: summary["entities_created"].to_i, merged: summary["entities_merged"].to_i,
     skipped: summary["entities_skipped"].to_i, errors: summary["errors"].to_i)
 - else

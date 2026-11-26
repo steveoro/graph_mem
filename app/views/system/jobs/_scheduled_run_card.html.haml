@@ -49,6 +49,8 @@
 
     - if run && run[:trigger] == ScheduledRunJob::TRIGGER_CATCH_UP
       %p.system-hint{ data: { testid: "scheduled-run-trigger" } }= t("#{scope}.trigger_catch_up")
+    - elsif run && run[:trigger] == ScheduledRunJob::TRIGGER_SQL_IMPORT
+      %p.system-hint{ data: { testid: "scheduled-run-trigger" } }= t("#{scope}.trigger_sql_import")
 
     - if run
       - audit = data[:latest_audit]

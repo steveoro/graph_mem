@@ -1,0 +1,52 @@
+-# An SQL import's follow-up (SqlImport::FollowUp, details["follow_up"]) and "Run full maintenance now".
+- follow_up = details["follow_up"]
+- failed = follow_up&.dig("status") == "failed"
+- scope = "projects.imports.sql.follow_up"
+.ui-card{ data: { testid: "sql-import-follow-up" } }
+  %h2.ui-label
+    = t("#{scope}.title")
+    - if follow_up
+      %span.ui-badge{ data: { testid: "sql-import-follow-up-status" } }= t("#{scope}.statuses.#{follow_up['status']}", default: follow_up["status"].to_s)
+  - if follow_up.nil?
+    %p.projects-hint= t("#{scope}.none")
+  - else
+    - embeddings = follow_up["embeddings"].to_h
+    - review_rows = follow_up["review_rows"]
+    - unchecked = follow_up.dig("near_duplicates", "unchecked").to_i
+    %ul
+      - if embeddings["skipped"]
+        %li= t("#{scope}.embeddings_skipped.#{embeddings['skipped']}", error: embeddings["error"])
+      - elsif embeddings.any?
+        %li= t("#{scope}.embeddings", entities: embeddings["entities"].to_i, observations: embeddings["observations"].to_i)
+      - if follow_up.key?("trust_scores")
+        %li= t("#{scope}.trust_scores", count: follow_up["trust_scores"].to_i)
+      - if follow_up["keywords_requested"]
+        %li= t("#{scope}.keywords")
+      - if follow_up["fact_supersede_queued"].to_i.positive?
+        %li= t("#{scope}.fact_supersede", count: follow_up["fact_supersede_queued"].to_i)
+      - if review_rows
+        %li= t("#{scope}.review_rows", merges: review_rows["entity_merge"].to_i, duplicates: review_rows["delete_observation"].to_i)
+      - if unchecked.positive? && follow_up.dig("near_duplicates", "reason") == "vectors_off"
+        -# No vector columns on this install: a standing limit, not something to fix now.
+        %li.projects-hint{ data: { testid: "sql-import-near-duplicates-unchecked" } }= t("#{scope}.near_duplicates_vectors_off", count: unchecked)
+      - elsif unchecked.positive?
+        %li.projects-error{ role: "status", data: { testid: "sql-import-near-duplicates-unchecked" } }
+          = t("#{scope}.near_duplicates_unchecked", count: unchecked, reason: t("#{scope}.reasons.#{follow_up.dig('near_duplicates', 'reason')}", default: t("#{scope}.reasons.not_embedded")))
+      - if follow_up["compaction"]
+        %li= t("#{scope}.compaction.#{follow_up['compaction']}")
+      - if follow_up["error"]
+        %li.projects-error{ role: "alert" }= t("#{scope}.error", error: follow_up["error"])
+    - if failed
+      %p.projects-hint{ data: { testid: "sql-import-follow-up-recover" } }
+        = t("#{scope}.recover")
+        %code= "bin/rails runner 'SqlImportFollowUpJob.perform_later(\"#{operation.operation_id}\")'"
+  - if details["full_maintenance_outcome"]
+    %p.projects-hint{ data: { testid: "sql-import-full-maintenance" } }= t("projects.imports.sql.full_maintenance.#{details['full_maintenance_outcome']}")
+  - elsif details["full_maintenance"] && !failed
+    -# Not after a failed follow-up, which never starts it: the form below then starts the run at once.
+    %p.projects-hint{ data: { testid: "sql-import-full-maintenance" } }= t("projects.imports.sql.full_maintenance.requested")
+  - else
+    = form_with url: maintenance_projects_import_path(operation.operation_id), method: :post, class: "ui-form", data: { testid: "sql-import-maintenance-form" } do
+      = render "projects/imports/full_maintenance_field", required: true
+      .projects-actions
+        = submit_tag t("projects.imports.sql.full_maintenance.submit"), class: "ui-btn", data: { testid: "import-full-maintenance-submit" }

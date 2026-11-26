@@ -38,6 +38,62 @@ RSpec.describe "graph_mem:export_sql and graph_mem:import_sql", type: :task do
     expect(MemoryEntity.find_by!(name: "SynthWidget").project_id).to eq(MemoryEntity.find_by!(name: "SynthPrj").id)
   end
 
+  it "queues the follow-up after a real run only, recording FULL=1 for it" do
+    run_task("graph_mem:export_sql", { "OUT" => path }, "SynthPrj")
+    sql_delete_tree!(project)
+
+    expect { run_task("graph_mem:import_sql", { "FILE" => path, "DRY_RUN" => "1", "FULL" => "1" }) }.not_to have_enqueued_job(SqlImportFollowUpJob)
+    expect do
+      with_env("FILE" => path, "FULL" => "1") { Rake::Task["graph_mem:import_sql"].execute }
+    end.to have_enqueued_job(SqlImportFollowUpJob).and output(/^Follow-up queued \(SqlImportFollowUpJob\).*then all scheduled jobs \(FULL=1\)/).to_stdout
+    expect(OperationProgress.find_by!(operation_type: "import").details)
+      .to include("full_maintenance" => true, "file_name" => File.basename(path), "follow_up" => { "status" => "queued" })
+    expect { run_task("graph_mem:import_sql", { "FILE" => path }) }.to have_enqueued_job(SqlImportFollowUpJob)
+    expect(OperationProgress.where(operation_type: "import").order(:id).last.details["full_maintenance"]).to be(false)
+  end
+
+  # The export of SynthPrj at path, with the project deleted, so an import writes its two entities.
+  def export_and_delete
+    run_task("graph_mem:export_sql", { "OUT" => path }, "SynthPrj")
+    sql_delete_tree!(project)
+  end
+
+  it "after the commit, prints a follow-up that couldn't be queued as failed with how to recover, never as a refusal" do
+    export_and_delete
+    allow(SqlImportFollowUpJob).to receive(:perform_later).and_raise(ActiveRecord::StatementInvalid, "queue down")
+
+    expect do
+      with_env("FILE" => path) { Rake::Task["graph_mem:import_sql"].execute }
+    end.to output(/^Imported: operation \h{8}-/).to_stdout
+      .and output(/\AFollow-up failed: ActiveRecord::StatementInvalid: queue down\nThe import is written\. The scheduled jobs embed .*perform_later/).to_stderr
+    operation = OperationProgress.find_by!(operation_type: "import")
+    expect(operation.details["follow_up"]).to eq("status" => "failed", "error" => "ActiveRecord::StatementInvalid: queue down")
+    expect(MemoryEntity.count).to eq(2)
+  end
+
+  it "after the commit, says the import committed when completing its record fails, never that nothing was written" do
+    export_and_delete
+    allow(SqlImport::Flow).to receive(:finish).and_raise(ActiveRecord::StatementInvalid, "details lost")
+
+    expect do
+      with_env("FILE" => path) { Rake::Task["graph_mem:import_sql"].execute }
+    end.to raise_error(SystemExit).and output(/^Imported: operation /).to_stdout
+      .and output(/\AThe import committed \(operation (\h{8}-\h{4}-\h{4}-\h{4}-\h{12})\), but completing its record failed, so its follow-up was not queued: ActiveRecord::StatementInvalid: details lost\n.*perform_later\("\1"\)/).to_stderr
+    expect(MemoryEntity.count).to eq(2)
+  end
+
+  it "after the commit, says the import committed when leaving the run fails, never that nothing was written" do
+    export_and_delete
+    fail_sql_import_after_commit!("lock release lost")
+
+    expect do
+      with_env("FILE" => path) { Rake::Task["graph_mem:import_sql"].execute }
+    end.to raise_error(SystemExit).and output(/^Imported: operation /).to_stdout
+      .and output(/\AThe import committed \(operation \h{8}-.*follow-up was not queued: ActiveRecord::StatementInvalid: lock release lost\n/).to_stderr
+    expect(MemoryEntity.count).to eq(2)
+    expect(OperationProgress.find_by!(operation_type: "import").details).not_to include("follow_up")
+  end
+
   it "always validates: an edited file is refused and nothing is written" do
     run_task("graph_mem:export_sql", { "OUT" => path }, "SynthPrj")
     File.write(path, File.read(path).sub("'SynthWidget'", "'SynthWidgeT'"))

@@ -180,6 +180,19 @@ RSpec.describe SqlImport::Executor do
     SqlExchangeLockHolder.connection_pool.disconnect! if defined?(SqlExchangeLockHolder)
   end
 
+  it "raises an error after the commit as Committed, with the run, never as a refusal (a dry run's stays as it is)" do
+    script = sql_export(project)
+    sql_delete_tree!(project)
+    fail_sql_import_after_commit!("lock release lost")
+
+    expect { sql_import(script, dry_run: true) }.to raise_error(ActiveRecord::StatementInvalid, "lock release lost")
+    expect { sql_import(script) }.to raise_error(described_class::Committed) { |error|
+      expect(error.result.operation_id).to eq(OperationProgress.find_by!(operation_type: "import").operation_id)
+      expect(error.cause).to be_a(ActiveRecord::StatementInvalid).and have_attributes(message: "lock release lost")
+    }
+    expect(MemoryEntity.where(name: %w[SynthPrj SynthWidget]).count).to eq(2)
+  end
+
   it "asks compaction to pause, runs a dry run as a rollback, and puts the session back" do
     script = sql_export(project)
     sql_delete_tree!(project)
