@@ -4,24 +4,28 @@ class DataExchangeController < ApplicationController
   # A relation the duplicate cleanup read as another type reads as part_of under its row lock.
   class DuplicatesChanged < StandardError; end
 
-  # GET /data_exchange/export?ids[]=1&ids[]=2
-  # Returns JSON file with selected root nodes and all their children (sync/direct download)
+  # GET /data_exchange/export?ids[]=1&ids[]=2[&format=sql|json]
+  # Returns the selected root nodes and all their children as one file (sync/direct download): the
+  # GraphMem JSON tree by default (scripts depend on it), or with format=sql a graph_mem-sql script
+  # (application/sql). An unknown format answers 400; a root a script can't carry (a member of a
+  # project) answers 422 with the reason.
   def export
+    format = params[:format].presence || ExportJob::DEFAULT_FORMAT
+    return render json: { error: "Unknown format '#{format}' (use sql or json)" }, status: :bad_request unless ExportJob::FORMATS.include?(format)
+
     entity_ids = params[:ids]
 
     if entity_ids.blank?
       return render json: { error: "No entity IDs provided" }, status: :unprocessable_content
     end
 
-    strategy = ExportStrategy.new
-    json_content = strategy.export_json(entity_ids)
+    stamp = Time.current.strftime("%Y%m%d_%H%M%S")
+    return send_sql_script(entity_ids, stamp) if format == "sql"
 
-    filename = "graph_mem_export_#{Time.current.strftime('%Y%m%d_%H%M%S')}.json"
-
-    send_data json_content,
+    send_data ExportStrategy.new.export_json(entity_ids),
               type: "application/json",
               disposition: "attachment",
-              filename: filename
+              filename: "graph_mem_export_#{stamp}.json"
   end
 
   # GET /data_exchange/root_nodes
@@ -341,6 +345,19 @@ class DataExchangeController < ApplicationController
   end
 
   private
+
+  # Sends the graph_mem-sql script for the roots; an unknown id or a member of a project (SqlExport::Scope
+  # refuses it) answers 422 with the reason.
+  def send_sql_script(entity_ids, stamp)
+    ids = Array(entity_ids).filter_map { |raw| EntityIdList.id(raw.to_s) }
+    return render json: { error: "No valid entity IDs provided" }, status: :unprocessable_content if ids.empty?
+
+    io = StringIO.new
+    SqlExport::Writer.new(ids).write(io)
+    send_data io.string, type: "application/sql", disposition: "attachment", filename: "graph_mem_export_#{stamp}.sql"
+  rescue ArgumentError => e
+    render json: { error: e.message }, status: :unprocessable_content
+  end
 
   # LockTimeout is transient — a concurrent import/backfill/merge holds the
   # advisory lock, so "retry shortly" is the honest hint. Collision is a
