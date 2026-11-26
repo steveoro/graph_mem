@@ -607,7 +607,7 @@ Some tools overlap by design; pick by intent:
 Solid Queue runs `DreamStateCompactionJob` on a schedule (`config/recurring.yml`). The job:
 
 1. **Relation-types phase** (1.93.0) -- canonicalizes the stored relation types; a variant of `part_of` is queued as a `relation_retype` review row, never written
-2. **Dependency-edges phase** (R1b) -- queues a `relation_retype` `swap` row for each entity of a dependency-like type (framework, gem, tool by default) that is `part_of` a Project, never written
+2. **Dependency-edges phase** (R1b) -- queues a `relation_retype` `swap` row for each entity of a dependency-like type (framework, gem, tool, software library and test framework by default) that is `part_of` a Project, never written
 3. **Orphans phase** -- matches orphan nodes (no `part_of` parent, and no Project `depends_on` them) to `Project` roots; auto-parents high-confidence token matches; a dependency-like orphan gets a `relation_retype` `add` row instead
 4. **Tree-walk phase** -- walks each project subtree; deduplicates identical observations; auto-merges entities with cosine distance &lt; 0.10
 5. **Review queue** -- writes lower-confidence items to `maintenance_reports` (`compaction_review`), readable via `get_maintenance_reports`
