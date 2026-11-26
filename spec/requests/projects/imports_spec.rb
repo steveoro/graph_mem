@@ -105,7 +105,7 @@ RSpec.describe "Projects › Imports", type: :request do
     end
 
     it "says the review's parent choice is capped only when a root was cut" do
-      stub_const("ExportStrategy::ROOT_NODES_LIMIT", 3)
+      stub_const("SqlExport::Roots::LIMIT", 3)
       [ "Gadget Project", "Gadget Project Two", "Gadget Project Three" ].each { |name| MemoryEntity.create!(name: name, entity_type: "Project") }
       upload(export_json)
       session_id = session_id_from_redirect

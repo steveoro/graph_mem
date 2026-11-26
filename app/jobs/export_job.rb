@@ -1,93 +1,66 @@
 # frozen_string_literal: true
 
-# Background job for Projects › Exports: runs the export, reports progress through its
-# OperationProgress row (OperationProgressChannel), and saves the result to a temp file that
-# Projects::ExportsController#download serves. The format ("sql", a graph_mem-sql script written by
-# SqlExport::Writer, or "json", the GraphMem JSON tree) is read from the row's details; a row without one
-# is a JSON export.
+# Background job for Projects › Exports: writes a graph_mem-sql script for the roots (SqlExport::Writer),
+# reports progress through its OperationProgress row (OperationProgressChannel), and saves it to a temp
+# file that Projects::ExportsController#download serves.
 #
-#   ExportJob.perform_later(export_id, [ project.id ])                    # as the row's details say
-#   ExportJob.perform_later(export_id, [ project.id ], format: "sql")     # a run without a row
+# The JSON export was retired in 1.94.0: a row whose details say "json" fails with that message. A row
+# without a format (a run without a row starts one) is an SQL export, and the job writes the format to it.
+#
+#   ExportJob.perform_later(export_id, [ project.id ])
 class ExportJob < ApplicationJob
   queue_as :default
 
   TEMP_DIR = Rails.root.join("tmp", "exports")
-  FORMATS = %w[sql json].freeze
-  DEFAULT_FORMAT = "json"
+  FORMAT = "sql"
+  # The hourly cleanup also removes the export_<uuid>.json files the retired JSON export left.
+  CLEANED_EXTENSIONS = [ FORMAT, "json" ].freeze
+  RETIRED_JSON = "The JSON export was retired in 1.94.0: export the graph_mem-sql script instead"
 
   # @param export_id [String] the OperationProgress operation id (a UUID)
   # @param entity_ids [Array<Integer>] the roots
-  # @param format [String, nil] "sql" or "json"; nil reads the row's details, then falls back to JSON
-  def perform(export_id, entity_ids, format: nil)
+  def perform(export_id, entity_ids)
     ensure_temp_dir
     operation = start_operation(export_id)
     broadcast_operation(operation)
 
     begin
-      given = format
-      format = self.class.format_of(operation, given)
-      remember_format(operation, format) if given
-      filepath = self.class.download_path(export_id, format: format)
-      current_count = format == "sql" ? write_sql(operation, entity_ids, filepath) : write_json(operation, entity_ids, filepath)
+      check_format!(operation)
+      current_count = write_sql(operation, entity_ids, self.class.download_path(export_id))
 
       operation.complete!(current: current_count, message: "Export complete")
       broadcast_operation(operation)
 
     rescue StandardError => e
       Rails.logger.error "ExportJob failed: #{e.message}\n#{e.backtrace.first(5).join("\n")}"
-      FileUtils.rm_f(Dir.glob(self.class.download_path(export_id, format: "*")))
+      FileUtils.rm_f(self.class.download_path(export_id))
       operation&.fail!(e)
       broadcast_operation(operation) if operation
     end
   end
 
-  # @param operation [OperationProgress, nil] an export row
-  # @param requested [String, nil] a format given to the job
-  # @return [String] "sql" or "json"
-  # @raise [ArgumentError] for any other value
-  def self.format_of(operation, requested = nil)
-    format = (requested.presence || operation&.details&.dig("format").presence || DEFAULT_FORMAT).to_s
-    raise ArgumentError, "unknown export format '#{format}' (use #{FORMATS.join(' or ')})" unless FORMATS.include?(format)
-
-    format
-  end
-
   private
 
-  # A format given to the job (not read from the row) is written to the row, so the download finds the file.
-  def remember_format(operation, format)
-    return if operation.details&.dig("format") == format
+  # A row that names no format is written as an SQL export, so the download finds the file.
+  # @raise [ArgumentError] for "json" (retired) or any other format
+  def check_format!(operation)
+    format = operation.details&.dig("format").presence
+    raise ArgumentError, RETIRED_JSON if format == "json"
+    raise ArgumentError, "unknown export format '#{format}' (use #{FORMAT})" unless format.nil? || format == FORMAT
+    return if format
 
-    operation.update!(details: (operation.details || {}).merge("format" => format))
+    operation.update!(details: (operation.details || {}).merge("format" => FORMAT))
   end
 
   # Projects › Exports writes the pending row before queueing, so its progress page exists at once;
   # a job queued without one (a console run) starts it.
-  # The total is a placeholder until the format's writer knows its steps.
+  # The total is a placeholder until the writer knows its steps.
   def start_operation(export_id)
     operation = OperationProgress.find_by(operation_id: export_id, operation_type: "export")
     return OperationProgress.start!(operation_type: "export", operation_id: export_id, total_count: 1, message: "Starting export") unless operation
 
     operation.update!(status: "running", total_count: 1, started_at: Time.current, message: "Starting export")
     operation
-  end
-
-  # The JSON tree, one progress step per node.
-  # @return [Integer] the steps done
-  def write_json(operation, entity_ids, filepath)
-    total_count = count_total_nodes(entity_ids)
-    operation.update_progress!(current: 0, total: total_count, message: "Starting export")
-    broadcast_operation(operation)
-
-    current_count = 0
-    progress_callback = lambda do |node_name|
-      current_count += 1
-      operation.update_progress!(current: current_count, total: total_count, message: "Exporting: #{node_name}")
-      broadcast_operation(operation)
-    end
-
-    File.write(filepath, ExportStrategy.new.export_json_with_progress(entity_ids, progress_callback))
-    current_count
   end
 
   # The graph_mem-sql script, one progress step per staging table.
@@ -111,72 +84,30 @@ class ExportJob < ApplicationJob
     FileUtils.mkdir_p(TEMP_DIR)
   end
 
-  def count_total_nodes(entity_ids)
-    count = 0
-
-    entities = MemoryEntity.where(id: entity_ids)
-    entities.each do |entity|
-      count += count_subtree(entity.id, Set.new, nested: false)
-    end
-
-    [ count, 1 ].max  # At least 1 to avoid division by zero
-  end
-
-  def count_subtree(entity_id, visited, nested:)
-    return 0 if visited.include?(entity_id)
-
-    visited.add(entity_id)
-    count = 1  # This entity
-
-    # Nested Projects are export boundaries: count the shallow node only.
-    entity = MemoryEntity.find_by(id: entity_id)
-    return count if nested && entity&.entity_type == ExportStrategy::PROJECT_ENTITY_TYPE
-
-    # Count children
-    child_ids = MemoryRelation
-      .where(to_entity_id: entity_id, relation_type: ExportStrategy::PARENT_TO_CHILD_RELATION_TYPES)
-      .pluck(:from_entity_id)
-
-    child_ids.each do |child_id|
-      count += count_subtree(child_id, visited.dup, nested: true)
-    end
-
-    # Count other related entities
-    related_ids = MemoryRelation
-      .where(from_entity_id: entity_id)
-      .where.not(relation_type: ExportStrategy::PARENT_TO_CHILD_RELATION_TYPES)
-      .pluck(:to_entity_id)
-
-    related_ids.each do |related_id|
-      count += count_subtree(related_id, visited.dup, nested: true)
-    end
-
-    count
-  end
-
   def broadcast_operation(operation)
     OperationProgressBroadcaster.call(operation)
   end
 
   # @param export_id [String] a known export's UUID
-  # @param format [String] "sql" or "json"
-  # @return [String] where the export's file is (or will be)
-  def self.download_path(export_id, format: DEFAULT_FORMAT)
-    File.join(TEMP_DIR, "export_#{export_id}.#{format}")
+  # @return [String] where the export's script is (or will be)
+  def self.download_path(export_id)
+    File.join(TEMP_DIR, "export_#{export_id}.#{FORMAT}")
   end
 
-  # @return [Boolean] whether the export's file in that format is still there
-  def self.export_exists?(export_id, format: DEFAULT_FORMAT)
-    File.exist?(download_path(export_id, format: format))
+  # @param export_id [String] a known export's UUID
+  # @return [Boolean] whether the export's script is still there
+  def self.export_exists?(export_id)
+    File.exist?(download_path(export_id))
   end
 
-  # Class method to cleanup old export files
+  # Removes export files older than max_age (scripts, and JSON files the retired JSON export left).
+  # @param max_age [ActiveSupport::Duration]
   def self.cleanup_old_exports(max_age: 1.hour)
     return unless Dir.exist?(TEMP_DIR)
 
     cutoff_time = Time.current - max_age
 
-    Dir.glob(File.join(TEMP_DIR, "export_*.{#{FORMATS.join(",")}}")).each do |file|
+    Dir.glob(File.join(TEMP_DIR, "export_*.{#{CLEANED_EXTENSIONS.join(",")}}")).each do |file|
       FileUtils.rm_f(file) if File.mtime(file) < cutoff_time
     end
   end

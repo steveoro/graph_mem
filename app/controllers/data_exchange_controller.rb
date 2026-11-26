@@ -4,35 +4,27 @@ class DataExchangeController < ApplicationController
   # A relation the duplicate cleanup read as another type reads as part_of under its row lock.
   class DuplicatesChanged < StandardError; end
 
-  # GET /data_exchange/export?ids[]=1&ids[]=2[&format=sql|json]
-  # Returns the selected root nodes and all their children as one file (sync/direct download): the
-  # GraphMem JSON tree by default (scripts depend on it), or with format=sql a graph_mem-sql script
-  # (application/sql). An unknown format answers 400; a root a script can't carry (a member of a
-  # project) answers 422 with the reason.
+  # The sync endpoint's answer to format=json (400).
+  RETIRED_JSON_EXPORT = "The JSON export was retired in 1.94.0: use the graph_mem-sql script (format=sql, the default)"
+
+  # GET /data_exchange/export?ids[]=1&ids[]=2[&format=sql]
+  # Returns the selected roots and everything under them as one graph_mem-sql script (application/sql), a
+  # sync/direct download. The script is the default since 1.94.0, which retired the JSON export:
+  # format=json answers 400 saying so, any other unknown format 400, and a root a script can't carry
+  # (an unknown id, a member of a project) 422 with the reason.
   def export
-    format = params[:format].presence || ExportJob::DEFAULT_FORMAT
-    return render json: { error: "Unknown format '#{format}' (use sql or json)" }, status: :bad_request unless ExportJob::FORMATS.include?(format)
+    format = params[:format].presence || ExportJob::FORMAT
+    return render json: { error: RETIRED_JSON_EXPORT }, status: :bad_request if format == "json"
+    return render json: { error: "Unknown format '#{format}' (use #{ExportJob::FORMAT})" }, status: :bad_request unless format == ExportJob::FORMAT
+    return render json: { error: "No entity IDs provided" }, status: :unprocessable_content if params[:ids].blank?
 
-    entity_ids = params[:ids]
-
-    if entity_ids.blank?
-      return render json: { error: "No entity IDs provided" }, status: :unprocessable_content
-    end
-
-    stamp = Time.current.strftime("%Y%m%d_%H%M%S")
-    return send_sql_script(entity_ids, stamp) if format == "sql"
-
-    send_data ExportStrategy.new.export_json(entity_ids),
-              type: "application/json",
-              disposition: "attachment",
-              filename: "graph_mem_export_#{stamp}.json"
+    send_sql_script(params[:ids], Time.current.strftime("%Y%m%d_%H%M%S"))
   end
 
   # GET /data_exchange/root_nodes
   # Returns list of root nodes for the export selection UI (JSON API)
   def root_nodes
-    strategy = ExportStrategy.new
-    nodes = strategy.root_nodes
+    nodes = SqlExport::Roots.list
 
     render json: {
       nodes: nodes.map do |entity|

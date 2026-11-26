@@ -23,7 +23,7 @@ RSpec.describe "Graph export import fixtures", :with_test_embeddings, type: :req
 
   it "keeps the graph_mem export fixture import-compatible" do
     expect(baseline_fixture).to include(
-      "version" => ExportStrategy::FORMAT_VERSION,
+      "version" => "1.0",
       "exported_at" => "2026-07-31T00:00:00Z"
     )
     expect(baseline_fixture.fetch("root_nodes").first).to include(

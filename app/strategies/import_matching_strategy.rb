@@ -118,13 +118,6 @@ class ImportMatchingStrategy
     }
   end
 
-  # Get available parent entities (Projects and root nodes)
-  # @return [Array<MemoryEntity>] Entities that can be parents
-  def available_parents
-    # Return Projects and other root-level entities
-    ExportStrategy.new.root_nodes
-  end
-
   private
 
   def parse_json(json_data)

@@ -49,6 +49,6 @@ RSpec.describe "cloud_allowed guards", type: :request do
   it "an export never carries it" do
     project.update!(cloud_allowed: true)
 
-    expect(ExportStrategy.new.export_json([ project.id ])).not_to include("cloud_allowed")
+    expect(sql_export(project)).not_to include("cloud_allowed")
   end
 end

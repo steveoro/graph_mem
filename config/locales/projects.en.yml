@@ -259,17 +259,17 @@ en:
       pick_one: "Pick at least one root to export."
       expired: "This export has expired"
       expired_body: "Export files are kept for an hour. Start a new export to get a fresh file."
-      unknown_format: "Pick a format: SQL script or JSON."
+      retired: "JSON exports were retired"
+      retired_body: "The JSON export was retired in 1.94.0, so this export can't be downloaded. Start a new export to get a graph_mem-sql script."
       formats:
         sql:
           name: "SQL script"
-          hint: "A graph_mem-sql file that syncs the project to another machine; import it on Projects › Imports. Keeps retired facts and their links."
+          hint: "Exports a graph_mem-sql script that syncs the project to another machine; import it on Projects › Imports. Keeps retired facts and their links."
         json:
-          name: "JSON"
-          hint: "The GraphMem JSON tree, reviewed match by match on import."
+          name: "JSON (retired)"
       index:
         title: "Exports"
-        subtitle: "Export roots and everything under them as a graph_mem-sql script or a GraphMem JSON file, in the background."
+        subtitle: "Export roots and everything under them as a graph_mem-sql script, in the background."
         format: "Format"
         filter: "Filter roots by name"
         filter_button: "Filter"

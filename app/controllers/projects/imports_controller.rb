@@ -41,9 +41,9 @@ module Projects
       @meta = ImportSession.load_meta(@session_id)
       @items = ImportReviewService.items(@matches, page: params[:page])
       # One more than the cap, so the hint shows only when something was cut.
-      parents = ExportStrategy.new.root_nodes(limit: ExportStrategy::ROOT_NODES_LIMIT + 1)
-      @parents_capped = parents.size > ExportStrategy::ROOT_NODES_LIMIT
-      @available_parents = parents.first(ExportStrategy::ROOT_NODES_LIMIT)
+      parents = SqlExport::Roots.list(limit: SqlExport::Roots::LIMIT + 1)
+      @parents_capped = parents.size > SqlExport::Roots::LIMIT
+      @available_parents = parents.first(SqlExport::Roots::LIMIT)
     end
 
     # POST /projects/imports/:id/execute (an SQL script: full_maintenance=1 to run all scheduled jobs after it)

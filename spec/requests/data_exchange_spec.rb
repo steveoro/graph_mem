@@ -3,6 +3,8 @@
 require 'rails_helper'
 
 RSpec.describe 'DataExchange', type: :request do
+  include ActiveSupport::Testing::TimeHelpers
+
   before { sign_in_operator }
 
   # Setup test data
@@ -69,113 +71,75 @@ RSpec.describe 'DataExchange', type: :request do
   end
 
   describe 'GET /data_exchange/export' do
-    context 'with valid entity IDs' do
-      it 'returns JSON file download' do
+    it 'returns a graph_mem-sql script by default, the same as format=sql' do
+      travel_to(Time.utc(2026, 11, 26, 12)) do
         get export_data_exchange_index_path, params: { ids: [ project1.id ] }
-
-        expect(response).to have_http_status(:ok)
-        expect(response.content_type).to include('application/json')
-        expect(response.headers['Content-Disposition']).to include('attachment')
-        expect(response.headers['Content-Disposition']).to match(/graph_mem_export_\d{8}_\d{6}\.json/)
-      end
-
-      it 'exports selected entities with children' do
-        get export_data_exchange_index_path, params: { ids: [ project1.id ] }
-
-        data = JSON.parse(response.body)
-
-        expect(data['version']).to eq('1.0')
-        expect(data['root_nodes']).to be_an(Array)
-        expect(data['root_nodes'].length).to eq(1)
-
-        root_node = data['root_nodes'].first
-        expect(root_node['name']).to eq('Project Alpha')
-        expect(root_node['observations'].length).to eq(1)
-      end
-
-      it 'includes child entities' do
-        get export_data_exchange_index_path, params: { ids: [ project1.id ] }
-
-        data = JSON.parse(response.body)
-        root_node = data['root_nodes'].first
-
-        child_names = root_node['children'].map { |c| c['name'] }
-        expect(child_names).to include('Task One')
-      end
-    end
-
-    context 'with no entity IDs' do
-      it 'returns error' do
-        get export_data_exchange_index_path
-
-        expect(response).to have_http_status(:unprocessable_content)
-        data = JSON.parse(response.body)
-        expect(data['error']).to eq('No entity IDs provided')
-      end
-    end
-
-    context 'with multiple entity IDs' do
-      it 'exports multiple root nodes' do
-        get export_data_exchange_index_path, params: { ids: [ project1.id, project2.id ] }
-
-        data = JSON.parse(response.body)
-        expect(data['root_nodes'].length).to eq(2)
-      end
-    end
-
-    context 'with a format' do
-      it 'keeps JSON as the default and as format=json' do
-        get export_data_exchange_index_path, params: { ids: [ project1.id ] }
-        default_type = response.content_type
-        get export_data_exchange_index_path, params: { ids: [ project1.id ], format: 'json' }
-
-        expect(response.content_type).to eq(default_type)
-        expect(response.content_type).to include('application/json')
-        expect(response.headers['Content-Disposition']).to match(/graph_mem_export_\d{8}_\d{6}\.json/)
-        expect(JSON.parse(response.body)['root_nodes'].first['name']).to eq('Project Alpha')
-      end
-
-      it 'returns a graph_mem-sql script for format=sql' do
-        get export_data_exchange_index_path, params: { ids: [ project1.id ], format: 'sql' }
 
         expect(response).to have_http_status(:ok)
         expect(response.content_type).to include('application/sql')
         expect(response.headers['Content-Disposition']).to include('attachment')
-        expect(response.headers['Content-Disposition']).to match(/graph_mem_export_\d{8}_\d{6}\.sql/)
+        expect(response.headers['Content-Disposition']).to include('graph_mem_export_20261126_120000.sql')
         expect(response.body.lines.first).to start_with('-- graph_mem-sql v')
         expect(response.body).to include("'Project Alpha'", "'Task One'", "'Test observation'")
         expect { SqlImport::Validator.validate(response.body) }.not_to raise_error
+        default_body = response.body
+
+        get export_data_exchange_index_path, params: { ids: [ project1.id ], format: 'sql' }
+        expect(response).to have_http_status(:ok)
+        expect(response.body).to eq(default_body)
       end
+    end
 
-      it 'answers 400 to an unknown format, whatever else is wrong' do
-        [ 'xml', 'SQL', 'sql;', '' ].reject(&:empty?).each do |format|
-          get export_data_exchange_index_path, params: { ids: [ project1.id ], format: format }
+    it 'exports several roots in one script' do
+      get export_data_exchange_index_path, params: { ids: [ project1.id, project2.id ] }
 
-          expect(response).to have_http_status(:bad_request)
-          expect(JSON.parse(response.body)['error']).to include("Unknown format '#{format}'")
-        end
-        get export_data_exchange_index_path, params: { format: 'xml' }
+      expect(response).to have_http_status(:ok)
+      expect(response.body).to include("'Project Alpha'", "'Project Beta'")
+    end
+
+    it 'answers 400 to format=json, saying the JSON export was retired, and sends no graph data' do
+      [ { ids: [ project1.id ], format: 'json' }, { format: 'json' } ].each do |params|
+        get export_data_exchange_index_path, params: params
+
         expect(response).to have_http_status(:bad_request)
+        expect(response.content_type).to include('application/json')
+        expect(JSON.parse(response.body)).to eq('error' => 'The JSON export was retired in 1.94.0: use the graph_mem-sql script (format=sql, the default)')
+        expect(response.body).not_to include(project1.name)
       end
 
-      it 'answers a script request the way the JSON one answers: no ids 422, a member of a project 422 with the reason' do
-        get export_data_exchange_index_path, params: { format: 'sql' }
-        expect(response).to have_http_status(:unprocessable_content)
-        expect(JSON.parse(response.body)['error']).to eq('No entity IDs provided')
+      get "#{export_data_exchange_index_path}.json", params: { ids: [ project1.id ] }
+      expect(response).to have_http_status(:bad_request)
+      expect(JSON.parse(response.body)['error']).to include('retired in 1.94.0')
+    end
 
-        get export_data_exchange_index_path, params: { ids: [ 'abc' ], format: 'sql' }
-        expect(response).to have_http_status(:unprocessable_content)
+    it 'answers 400 to an unknown format, whatever else is wrong' do
+      [ 'xml', 'SQL', 'JSON', 'sql;' ].each do |format|
+        get export_data_exchange_index_path, params: { ids: [ project1.id ], format: format }
 
-        get export_data_exchange_index_path, params: { ids: [ task1.id ], format: 'sql' }
-        expect(response).to have_http_status(:unprocessable_content)
-        expect(JSON.parse(response.body)['error']).to include('Task One', 'member of a project')
+        expect(response).to have_http_status(:bad_request)
+        expect(JSON.parse(response.body)['error']).to eq("Unknown format '#{format}' (use sql)")
       end
+      get export_data_exchange_index_path, params: { format: 'xml' }
+      expect(response).to have_http_status(:bad_request)
+    end
+
+    it 'answers 422 with no ids, an id that is no entity, or a member of a project (with the reason)' do
+      get export_data_exchange_index_path
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(JSON.parse(response.body)['error']).to eq('No entity IDs provided')
+
+      get export_data_exchange_index_path, params: { ids: [ 'abc' ] }
+      expect(response).to have_http_status(:unprocessable_content)
+
+      get export_data_exchange_index_path, params: { ids: [ task1.id ] }
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(JSON.parse(response.body)['error']).to include('Task One', 'member of a project')
     end
 
     context 'when signed out' do
       before { delete operator_logout_path }
 
-      it 'sends either format to the login page' do
+      it 'sends every format, the retired json included, to the login page' do
         [ nil, 'json', 'sql' ].each do |format|
           get export_data_exchange_index_path, params: { ids: [ project1.id ], format: format }.compact
 
@@ -191,7 +155,7 @@ RSpec.describe 'DataExchange', type: :request do
         sign_in_guest
       end
 
-      it 'refuses either format (403) and sends no graph data' do
+      it 'refuses every format, the retired json included (403), and sends no graph data' do
         [ nil, 'json', 'sql' ].each do |format|
           get export_data_exchange_index_path, params: { ids: [ project1.id ], format: format }.compact
 
