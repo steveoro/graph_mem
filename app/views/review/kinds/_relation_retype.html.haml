@@ -1,28 +1,32 @@
 -# A relation_retype row (R1a): a stored variant whose canonical type is part_of. The relation is read
 -# live; what Apply does is the effects card under it (CompactionReviewApplier::RelationRetype).
-- scope = "ui.review.relation_retype"
-- relation = MemoryRelation.find_by(id: payload["relation_id"].to_i)
-- names = MemoryEntity.where(id: [ payload["from_entity_id"], payload["to_entity_id"] ].compact.map(&:to_i)).pluck(:id, :name).to_h
-%p{ data: { testid: "relation-retype-summary" } }= t("#{scope}.summary", id: payload["relation_id"], old_type: payload["old_type"],
-  new_type: payload["new_type"], from: names[payload["from_entity_id"].to_i] || payload["from_name"],
-  to: names[payload["to_entity_id"].to_i] || payload["to_name"])
-- if relation.nil?
-  %p.review-warning= t("#{scope}.gone")
-- elsif relation.relation_type != payload["old_type"]
-  %p.review-hint= t("#{scope}.now", type: relation.relation_type)
-%p.review-hint= t("#{scope}.membership", new_type: payload["new_type"])
-- if payload["operation"].present? && payload["operation"] != "retype"
-  %p.review-warning= t("#{scope}.operation", operation: payload["operation"])
--# The child already has another part_of parent: the plain Apply would give it a second one, so the
--# card offers the two real choices (RelationRetypeChoice), each through the confirm card.
-- parent_id = CompactionReviewApplier::RelationRetype.choice_parent_id(payload)
-- if parent_id
-  - parent_name = MemoryEntity.where(id: parent_id).pick(:name)
-  - target_name = names[payload["to_entity_id"].to_i] || payload["to_name"]
-  %p.review-warning{ data: { testid: "relation-retype-has-parent" } }= t("#{scope}.has_parent", child: names[payload["from_entity_id"].to_i] || payload["from_name"], parent: parent_name)
-  - if row.pending?
-    .review-detail__actions
-      = link_to t("#{scope}.move", target: target_name), review_row_preview_path(row.row_uuid, parent_choice: "move"),
-        class: "ui-btn ui-btn-primary", data: { turbo_frame: "review-detail", testid: "relation-retype-move" }
-      = link_to t("#{scope}.keep", parent: parent_name), review_row_preview_path(row.row_uuid, parent_choice: "keep"),
-        class: "ui-btn", data: { turbo_frame: "review-detail", testid: "relation-retype-keep" }
+-# R1b's "swap" and "add" rows have their own card (_relation_retype_dependency).
+- if CompactionReviewApplier::RelationRetypeDependency::OPERATIONS.include?(payload["operation"].to_s)
+  = render "review/kinds/relation_retype_dependency", row: row, payload: payload
+- else
+  - scope = "ui.review.relation_retype"
+  - relation = MemoryRelation.find_by(id: payload["relation_id"].to_i)
+  - names = MemoryEntity.where(id: [ payload["from_entity_id"], payload["to_entity_id"] ].compact.map(&:to_i)).pluck(:id, :name).to_h
+  %p{ data: { testid: "relation-retype-summary" } }= t("#{scope}.summary", id: payload["relation_id"], old_type: payload["old_type"],
+    new_type: payload["new_type"], from: names[payload["from_entity_id"].to_i] || payload["from_name"],
+    to: names[payload["to_entity_id"].to_i] || payload["to_name"])
+  - if relation.nil?
+    %p.review-warning= t("#{scope}.gone")
+  - elsif relation.relation_type != payload["old_type"]
+    %p.review-hint= t("#{scope}.now", type: relation.relation_type)
+  %p.review-hint= t("#{scope}.membership", new_type: payload["new_type"])
+  - if payload["operation"].present? && payload["operation"] != "retype"
+    %p.review-warning= t("#{scope}.operation", operation: payload["operation"])
+  -# The child already has another part_of parent: the plain Apply would give it a second one, so the
+  -# card offers the two real choices (RelationRetypeChoice), each through the confirm card.
+  - parent_id = CompactionReviewApplier::RelationRetype.choice_parent_id(payload)
+  - if parent_id
+    - parent_name = MemoryEntity.where(id: parent_id).pick(:name)
+    - target_name = names[payload["to_entity_id"].to_i] || payload["to_name"]
+    %p.review-warning{ data: { testid: "relation-retype-has-parent" } }= t("#{scope}.has_parent", child: names[payload["from_entity_id"].to_i] || payload["from_name"], parent: parent_name)
+    - if row.pending?
+      .review-detail__actions
+        = link_to t("#{scope}.move", target: target_name), review_row_preview_path(row.row_uuid, parent_choice: "move"),
+          class: "ui-btn ui-btn-primary", data: { turbo_frame: "review-detail", testid: "relation-retype-move" }
+        = link_to t("#{scope}.keep", parent: parent_name), review_row_preview_path(row.row_uuid, parent_choice: "keep"),
+          class: "ui-btn", data: { turbo_frame: "review-detail", testid: "relation-retype-keep" }

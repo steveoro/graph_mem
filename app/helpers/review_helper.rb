@@ -100,11 +100,23 @@ module ReviewHelper
     when "stale_memory" then "#{payload['entity_name'] || "##{payload['entity_id']}"}: #{Array(payload['observation_ids']).size} stale observation(s)"
     when "delete_entity" then "Delete #{payload['entity_name'].presence || "entity ##{payload['entity_id']}"}"
     when "delete_relation" then "Delete relation ##{payload['relation_id']}"
-    when "relation_retype"
-      "#{payload['from_name'] || "##{payload['from_entity_id']}"} #{payload['old_type']} → #{payload['new_type']} " \
-        "#{payload['to_name'] || "##{payload['to_entity_id']}"}"
+    when "relation_retype" then relation_retype_title(payload)
     when "lifecycle_corruption" then "Observation ##{payload['observation_id']}: #{payload['issue']}"
     else payload["entity_name"].presence || payload["reason"].presence || row.group_key.to_s
     end.to_s.truncate(140)
+  end
+
+  private
+
+  # "SynthLib part_of → depends_on SynthApp" (retype); R1b: "swap: SynthApp depends_on SynthLib
+  # (was part_of)" and "add: SynthApp depends_on SynthLib".
+  def relation_retype_title(payload)
+    from = payload["from_name"] || "##{payload['from_entity_id']}"
+    to = payload["to_name"] || "##{payload['to_entity_id']}"
+    case payload["operation"]
+    when CompactionReviewApplier::RelationRetypeDependency::SWAP then "swap: #{to} #{payload['new_type']} #{from} (was #{payload['old_type']})"
+    when CompactionReviewApplier::RelationRetypeDependency::ADD then "add: #{from} #{payload['new_type']} #{to}"
+    else "#{from} #{payload['old_type']} → #{payload['new_type']} #{to}"
+    end
   end
 end
