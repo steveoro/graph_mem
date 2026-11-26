@@ -139,6 +139,9 @@ class AppSettings < RailsSettings::Base
         validates: { numericality: { greater_than_or_equal_to: 0.02, less_than_or_equal_to: 0.15 } }
   field :auto_apply_contradiction_max_tokens, default: 2, type: :integer,
         validates: { numericality: { greater_than_or_equal_to: 1, less_than_or_equal_to: 2 } }
+  # Dream State R1b (ReviewPolicies::AutoApplyRelationRetype): applies relation_retype "swap" rows
+  # with no ownership signal. Off by default.
+  field :enable_auto_apply_relation_retype, default: false, type: :boolean
   # Dream State R1b: the entity types a project uses rather than owns (DependencyLikeTypes), a
   # comma-separated list matched by canonical type. Blank: none.
   DEPENDENCY_LIKE_TYPES_DEFAULT = "Framework, Gem, Tool"
@@ -169,7 +172,8 @@ class AppSettings < RailsSettings::Base
     "auto_apply_relationships" => [ "enable_auto_apply_relationships", false ],
     "auto_apply_expired_validity" => [ "enable_auto_apply_expired_validity", false ],
     "auto_apply_fact_supersede" => [ "enable_auto_apply_fact_supersede", false ],
-    "auto_apply_contradiction" => [ "enable_auto_apply_contradiction", true ]
+    "auto_apply_contradiction" => [ "enable_auto_apply_contradiction", true ],
+    "auto_apply_relation_retype" => [ "enable_auto_apply_relation_retype", false ]
   }.freeze
 
   # MCP tool invocation retention (zero disables automatic pruning)

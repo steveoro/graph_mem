@@ -36,6 +36,7 @@ en:
           auto_apply_expired_validity: "Marks observations obsolete when their own valid_until has passed, at most 100 per run. Reverse: Undo the run."
           auto_apply_fact_supersede: "Applies \"Outdated by a fact\" suggestions the judge marked superseded at or above the confidence below, only for facts an operator marked, never with a guard or for an entity outside the project, at most 100 per run. Reverse: Undo the run."
           auto_apply_contradiction: "On by default. Resolves a contradiction that is a plain value change: two facts of one entity, with the same source and perspective, that are one \"Key: value\" line each with the same key and one changed value (\"Port: 3000\", later \"Port: 3001\"). The older fact is marked superseded by the newer one; nothing is deleted. Different keys, a changed unit, lists and ties on the dates are never applied, at most 100 per run. Reverse: Undo the run; the pair then stays in the queue for you and isn't applied again. Turn it off to review these by hand."
+          auto_apply_relation_retype: "Off by default. Applies dream state's relation_retype swap rows: an entity of a dependency-like type (the list below) that is part_of a Project becomes the Project's depends_on, so it and its own part_of children leave the project's scope (they become global). Never a retype or an add row. A row is left for you when the project has a fact naming the entity with an ownership phrase: \"part of this project\", \"our own\", \"maintained here\", \"vendored\" or \"forked\". A name already taken in the global scope skips the row (the swap queues a merge suggestion when the two have one type). At most 100 per run. Reverse: Undo the run (the part_of and the project scope come back)."
       mcp_access:
         intro: "Who may reach /mcp (and bearer requests on /api/v1): allowed client IPs, Host names and browser origins. Each list adds to its ENV value, which is shown first and can't be removed here. Changes apply without a restart."
         sessions_notice_title: "Saving a change to allowed hosts or origins closes every open MCP session."
@@ -244,6 +245,8 @@ en:
           label: "Auto-apply source fact supersedes"
         enable_auto_apply_contradiction:
           label: "Auto-resolve value changes"
+        enable_auto_apply_relation_retype:
+          label: "Auto-apply dependency swaps (part_of to depends_on)"
         auto_apply_contradiction_free_text:
           label: "Auto-resolve value changes in free text"
           description: "Off by default. Also resolve two sentences that differ only in one or two values (\"listens on port 3000\" / \"listens on port 3001\"), within the two limits below. Needs \"Auto-resolve value changes\" on."

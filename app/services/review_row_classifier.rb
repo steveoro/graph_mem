@@ -16,8 +16,9 @@ class ReviewRowClassifier
   include Anchors
 
   # Applied one by one only: never bulk-, group- or policy-applied.
-  # relation_retype (R1a): its apply creates a part_of, a membership move, so no bulk, group or
-  # policy apply ever touches it.
+  # relation_retype (R1a): its apply creates a part_of, a membership move, so no bulk or group
+  # apply touches it, and only ReviewPolicies::AutoApplyRelationRetype applies one: a "swap" row
+  # (R1b) with no ownership signal, never a "retype" or "add".
   DESTRUCTIVE_KINDS = %w[entity_merge delete_entity delete_relation delete_observation reparent_entity
                          move_observation relation_retype].freeze
   # The only kinds bulk apply, group apply and auto-apply policies may touch.
