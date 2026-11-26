@@ -1,6 +1,6 @@
 # Dream-State Compaction
 
-GraphMem's **dream-state** mode is a background compaction pipeline that periodically optimizes the knowledge graph while MCP clients are idle or between batches. It canonicalizes stored relation types, auto-parents orphan nodes, deduplicates identical observations, and auto-merges near-duplicate entities—queuing lower-confidence cases for operator or agent review.
+GraphMem's **dream-state** mode is a background compaction pipeline that periodically optimizes the knowledge graph while MCP clients are idle or between batches. It canonicalizes stored relation types, proposes to turn a library a project only uses into the project's dependency, auto-parents orphan nodes, deduplicates identical observations, and auto-merges near-duplicate entities—queuing lower-confidence cases for operator or agent review.
 
 The name evokes offline consolidation: work happens in the background on a predictable schedule, similar to how biological systems consolidate memory during sleep.
 
@@ -9,7 +9,8 @@ The name evokes offline consolidation: work happens in the background on a predi
 Agent sessions routinely produce graph clutter:
 
 - **Relation type drift** — the same edge stored as `has_many`, `Has Many` and `has-many`, or under a synonym of a canonical type
-- **Structural orphans** — entities with no `part_of` parent (`depends_on` doesn't count as a parent)
+- **Libraries held as parts** — a framework, gem or tool stored `part_of` the project that only uses it, so it sits in the project's scope and comes back in its searches
+- **Structural orphans** — entities with no `part_of` parent that no Project `depends_on` (a Project's `depends_on` isn't a parent, but its target is no orphan)
 - **Observation noise** — the same fact stored multiple times on one entity
 - **Near-duplicate entities** — separate nodes that embeddings show are semantically almost identical
 
@@ -27,6 +28,7 @@ DreamStateCompactionJob ──(re-enqueue while :continued)──┐
 DreamStateCompactor.process_batch!  ◄────────────────────┘
         │
         ├── RelationTypeSweep       (relation_types phase: relation ids)
+        ├── DependencyEdgesPhase    (dependency_edges phase: dependency-like part_of edges)
         ├── CompactionTraversal     (phase entity lists)
         ├── OrphanMatchingStrategy  (token match to Projects)
         └── NodeOperationsStrategy  (move_to_parent, merge_into)
@@ -39,19 +41,21 @@ CompactionValve     ←── cooperative pause from MCP tools
 | Component                 | Location                                  | Role                                                                      |
 | ------------------------- | ----------------------------------------- | ------------------------------------------------------------------------- |
 | `DreamStateCompactionJob` | `app/jobs/dream_state_compaction_job.rb`  | Processes one batch per invocation; re-enqueues itself while work remains |
-| `DreamStateCompactor`     | `app/strategies/dream_state_compactor.rb` | Core compaction logic for each phase (`DreamStateCompactor::RelationTypesPhase` for `relation_types`) |
+| `DreamStateCompactor`     | `app/strategies/dream_state_compactor.rb` | Core compaction logic for each phase (`DreamStateCompactor::RelationTypesPhase` for `relation_types`, `DreamStateCompactor::DependencyEdgesPhase` for `dependency_edges` and the orphans' `add` rows) |
 | `RelationTypeSweep`       | `app/services/relation_type_sweep.rb`     | Canonicalizes the stored relation types; also run by a rake task and a job |
 | `CompactionRunner`        | `app/services/compaction_runner.rb`       | Starts/resumes runs; exposes `status_snapshot` for MCP, Home and Background jobs      |
 | `CompactionRun`           | `app/models/compaction_run.rb`            | Persists run state, cursor, and cumulative stats                          |
 | `CompactionTraversal`     | `app/strategies/compaction_traversal.rb`  | Deterministic entity ordering per phase                                   |
 | `CompactionValve`         | `app/services/compaction_valve.rb`        | Requests cooperative pause when MCP tools need the graph                  |
+| `DependencyLikeTypes`     | `app/services/dependency_like_types.rb`   | The dependency-like entity types (the `dependency_like_types` setting), matched by canonical type |
+| `DependencyEvidence`      | `app/services/dependency_evidence.rb`     | The project facts that name a library with a use (or an ownership) phrase |
 
 
 
 
 ## Compaction phases
 
-Each run progresses through four phases in order:
+Each run progresses through five phases in order:
 
 ### Phase 1: `relation_types`
 
@@ -75,15 +79,24 @@ A `part_of` edge decides which project an entity belongs to, and an update skips
 
 **Writes:** each batch that writes is one change set of kind `dream.relation_types`, actor `compaction:<run id>`. That kind is not undoable (see "Relation type change sets" below). The run keeps one report for all its batches: a `relation_type_sweep` maintenance report listing every change that wasn't `unchanged`, up to 2,000 (the counts always cover the whole run). That report type is internal: `get_maintenance_reports` doesn't return it. Read it on **System › Background jobs › Relation types › View the changes**.
 
-### Phase 2: `orphans`
+### Phase 2: `dependency_edges`
 
-**Entity set:** All non-`Project` entities with no `part_of` parent: no outgoing `part_of` edge, since `child part_of parent` runs from the child (`OrphanMatchingStrategy#orphan_nodes`). `depends_on` is not a parent relation here.
+**Set:** every `part_of` edge from an entity of a **dependency-like type** to a Project root, by relation id, 200 at a time (`DreamStateCompactor::DependencyEdgesPhase::BATCH_SIZE`). The types are the `dependency_like_types` setting (Settings › Review policies, default `Framework, Gem, Tool`), matched by canonical type, so `lib`, `library`, `rubygem` and `tools` count too ([settings](app_settings_reference.md)). A blank setting has no candidates. Its cursor, a relation id, is `stats["dependency_cursor_id"]`.
+
+A library a project only uses is not a part of it: held by `part_of`, it sits in the project's scope (`project_id`), comes back in the project's searches and is walked as one of its members. **Per edge**, nothing is written: a `relation_retype` review row with `operation: "swap"` is queued (see the review table below), whose Apply turns `library part_of Project` into `Project depends_on library` and moves the library, with its own `part_of` subtree, to the global scope. Its `evidence` is the entity's type and up to three facts of the project (its root and members) that name the entity, by its keyword path or by name, with a use phrase (uses, used, using, depends on, relies on, built on or with, requires): `DependencyEvidence.for_swap`, deterministic, no LLM, at most 200 candidate facts read. A row pending, applied or dismissed with the same signature (one per edge) is never queued again.
+
+The phase only queues rows, so it takes no membership lock. Pause is checked after each batch. Applying the swaps can be left to the `auto_apply_relation_retype` policy (off by default), which applies one only when the entity is still dependency-like and no fact of the project says the project owns it.
+
+### Phase 3: `orphans`
+
+**Entity set:** All non-`Project` entities with no `part_of` parent (no outgoing `part_of` edge, since `child part_of parent` runs from the child) that no Project `depends_on` (`OrphanMatchingStrategy#orphan_nodes`, R1b). A Project's `depends_on` isn't a parent relation, but its target is used by that project, so it is no orphan: without that rule, a swapped library would be an orphan again and this phase would parent it back by name, in a loop. The same rule holds for Explore's orphan list and `GET /data_exchange/orphan_nodes`, and the `still_qualifies` policy dismisses an `orphan_parent` row whose entity is no orphan any more. Another entity's `depends_on` doesn't count.
 
 **Per entity:**
 
 1. Tokenize the orphan name and score matches against every `Project` name and aliases.
-2. If the best match scores **≥ 10** (`AUTO_ORPHAN_SCORE`), call `NodeOperationsStrategy#move_to_parent` to create a `part_of` link.
-3. Otherwise, queue the orphan for review in a `compaction_review` report, with up to three `suggested_parents` (best score first). Applying the row (Review & Fix or `apply_maintenance_review`, also `dry_run`) without a chosen `parent_id` uses the first suggested parent that still exists (1.86.2); the Dangling review policy dismisses the row once its chosen parent, or every suggestion, is gone.
+2. **A dependency-like orphan** (R1b) is never parented: when a Project matches it, a `relation_retype` row with `operation: "add"` is queued instead (`Project depends_on entity`, the best match's project, its score and matched tokens as `evidence`). It is deliberately not a `relationship_proposal`, which the `auto_apply_relationships` policy could apply unattended. Applying it creates the edge, with no membership change (the orphan is global already); a dismissed one isn't queued again, and the `still_qualifies` policy dismisses an `orphan_parent` row left for such an entity.
+3. If the best match scores **≥ 10** (`AUTO_ORPHAN_SCORE`), call `NodeOperationsStrategy#move_to_parent` to create a `part_of` link. Since R1b each auto-parent is one change set, `compaction.auto_parent` (actor `compaction:<run id>`), undoable from System › Activity like an auto-merge.
+4. Otherwise, queue the orphan for review in a `compaction_review` report, with up to three `suggested_parents` (best score first). Applying the row (Review & Fix or `apply_maintenance_review`, also `dry_run`) without a chosen `parent_id` uses the first suggested parent that still exists (1.86.2); the Dangling review policy dismisses the row once its chosen parent, or every suggestion, is gone.
 
 **Scoring highlights** (from `OrphanMatchingStrategy`):
 
@@ -98,7 +111,7 @@ A `part_of` edge decides which project an entity belongs to, and an update skips
 
 
 
-### Phase 3: `tree_walk`
+### Phase 4: `tree_walk`
 
 **Entity set:** Breadth-first walk from the `Project` roots (ordered by ID) down their `part_of` children: the children of an entity are the entities whose `part_of` edge points at it. `depends_on` edges aren't followed. Every non-`Project` entity the walk didn't reach (no `part_of` chain to a Project) is then appended, ordered by ID.
 
@@ -122,7 +135,7 @@ A `part_of` edge decides which project an entity belongs to, and an update skips
 
 The row's preview (and Explore's merge dialog) says which of the two happens to the parent edge, and whether the target changes project.
 
-### Phase 4: `relationship_discovery`
+### Phase 5: `relationship_discovery`
 
 **Entity set:** All non-`Project` entities ordered by ID.
 
@@ -150,7 +163,7 @@ Compaction is **incremental**, not monolithic:
 - `BATCH_SIZE` entities per job invocation (`DREAM_STATE_BATCH_SIZE`, default 1, at most 50); in `relation_types`, 200 relations
 - `CompactionRun#cursor_entity_id` records the last processed entity; the next batch resumes after it. The `relation_types` phase keeps its cursor, a relation id, in `stats["relation_cursor_id"]`, so `cursor_entity_id` stays empty while it runs
 - When a phase's list is exhausted, the run advances to the next phase (or marks `completed`)
-- Progress totals count the entities once per entity phase (`orphans`, `tree_walk`, `relationship_discovery`) plus the relations the first phase walks (`total_relations`, read when the run starts)
+- Progress totals count the entities once per entity phase (`orphans`, `tree_walk`, `relationship_discovery`) plus the relations the first phase walks (`total_relations`, read when the run starts); `dependency_edges` adds nothing to them
 
 `DreamStateCompactionJob` returns:
 
@@ -163,7 +176,7 @@ Compaction is **incremental**, not monolithic:
 
 ## The membership lock
 
-An orphan's auto-parent (`orphans`) and an auto-merge (`tree_walk`) change a `part_of` edge, so they take the membership lock (`ProjectMembership.with_membership_lock`, see [architecture](architecture.md#project-membership-1931-1932-1933)). The lock must come **before** any transaction, and a batch runs inside two: the compactor's per-entity transaction, and `run.with_lock` in `DreamStateCompactionJob`, which wraps the whole batch. Since 1.93.2 both are covered. `DreamStateCompactor.with_membership_lock(phase)` takes the lock for the phases in `MEMBERSHIP_PHASES` (`orphans` and `tree_walk`) around each entity's transaction, and the job takes it around `run.with_lock`, so the first `GET_LOCK` of a batch has no transaction open and the inner ones just re-enter it. The other phases (`relation_types`, `relationship_discovery`) don't take it: neither writes a `part_of` edge (the relation sweep queues a `part_of` variant as a review row, and discovery only proposes). Cursor and pause handling are unchanged.
+An orphan's auto-parent (`orphans`) and an auto-merge (`tree_walk`) change a `part_of` edge, so they take the membership lock (`ProjectMembership.with_membership_lock`, see [architecture](architecture.md#project-membership-1931-1932-1933)). The lock must come **before** any transaction, and a batch runs inside two: the compactor's per-entity transaction, and `run.with_lock` in `DreamStateCompactionJob`, which wraps the whole batch. Since 1.93.2 both are covered. `DreamStateCompactor.with_membership_lock(phase)` takes the lock for the phases in `MEMBERSHIP_PHASES` (`orphans` and `tree_walk`) around each entity's transaction, and the job takes it around `run.with_lock`, so the first `GET_LOCK` of a batch has no transaction open and the inner ones just re-enter it. The other phases (`relation_types`, `dependency_edges`, `relationship_discovery`) don't take it: none writes a `part_of` edge (the relation sweep queues a `part_of` variant as a review row, `dependency_edges` queues swaps, and discovery only proposes). Cursor and pause handling are unchanged.
 
 - **Hold time.** A batch is one entity by default (`DREAM_STATE_BATCH_SIZE`), so the lock is held for one entity's work: 23 to 52 ms per batch on the test database. Neither phase makes an LLM call (the orphan and merge evidence come from the database), so no network call runs inside it. A larger batch size holds it longer, for the whole batch.
 - **A busy lock retries.** When an import, the backfill or a merge holds the lock for the full wait (`ProjectMembership::LOCK_TIMEOUT_SECONDS`), the job logs a warning and enqueues itself again after `DreamStateCompactionJob::LOCK_RETRY_WAIT` (1 minute) with the same run. The run isn't failed and its cursor hasn't moved, so the batch is simply tried again.
@@ -202,13 +215,22 @@ Items that are not safe to apply automatically are batched into `MaintenanceRepo
 
 | `kind`          | Contents                                                                     |
 | --------------- | ---------------------------------------------------------------------------- |
-| `relation_retype` | A stored variant whose canonical type is `part_of`: `operation` (`"retype"`), `relation_id`, `from_entity_id`, `from_name`, `to_entity_id`, `to_name`, `old_type`, `new_type`, `reason` |
+| `relation_retype` | `operation` `"retype"`: a stored variant whose canonical type is `part_of`. `"swap"` (R1b): a dependency-like entity's `part_of` a Project, to become `Project depends_on entity`. `"add"` (R1b): `Project depends_on` a dependency-like orphan. Keys: `operation`, `relation_id`, `from_entity_id`, `from_name`, `to_entity_id`, `to_name`, `old_type`, `new_type`, `reason`, plus `evidence` for swap and add (below) |
 | `orphan_parent` | Orphan entity, top 3 suggested `Project` parents with scores, optional error |
 | `entity_merge`  | Two entities, cosine distance, `recommendation: "review_manually"`           |
 | `relationship_proposal` | Suggested link with relation type, confidence band, supporting observation IDs, explanation |
 
 
-`relation_retype` rows come from the `relation_types` phase, the rake task and the UI sweep alike. A `part_of` edge moves membership, so the row is applied by hand and one at a time: bulk apply, group apply and the auto-apply policies never touch it. **Apply** runs under the membership lock: it deletes the variant, creates the `part_of` edge through the normal path (one parent, no cycle) with the variant's `weight`, `confidence` and `properties`, and syncs the child's project. A refusal (a cycle, a name taken in the new project) is returned as an error and nothing is written. When the child already has another `part_of` parent (typically the Project itself, while the variant points at a more specific entity in it), the plain Apply would give it a second parent, so the row asks for a choice instead (its `reason` says so when it is queued): **Move under** the row's target (the variant and the old parent edge are deleted and the child moves under the target, with its subtree, through the same move as `reparent_entity`; the preview says from which parent to which and whether the project changes) or **Keep** the current parent (the variant becomes `relates_to`, merged into a `relates_to` twin with the sweep's rule if one exists; no membership change). Over MCP the choice is `action_params.parent_choice`, `"move"` or `"keep"`; without it the apply answers a validation error naming both. A row that is already done succeeds with nothing written; the Dangling policy dismisses a row whose relation is gone, already has the new type, has a twin of it (the next sweep merges into the twin), or whose type no longer maps to it. The row can't be edited, only applied or dismissed, and its undo is the ordinary audit undo (the `part_of` edge is removed and the variant comes back with its stored type; after Move the old parent comes back too, after Keep the variant gets its stored type back).
+`relation_retype` rows of operation `retype` come from the `relation_types` phase, the rake task and the UI sweep alike. A `part_of` edge moves membership, so the row is applied by hand and one at a time: bulk apply, group apply and the auto-apply policies never touch it. **Apply** runs under the membership lock: it deletes the variant, creates the `part_of` edge through the normal path (one parent, no cycle) with the variant's `weight`, `confidence` and `properties`, and syncs the child's project. A refusal (a cycle, a name taken in the new project) is returned as an error and nothing is written. When the child already has another `part_of` parent (typically the Project itself, while the variant points at a more specific entity in it), the plain Apply would give it a second parent, so the row asks for a choice instead (its `reason` says so when it is queued): **Move under** the row's target (the variant and the old parent edge are deleted and the child moves under the target, with its subtree, through the same move as `reparent_entity`; the preview says from which parent to which and whether the project changes) or **Keep** the current parent (the variant becomes `relates_to`, merged into a `relates_to` twin with the sweep's rule if one exists; no membership change). Over MCP the choice is `action_params.parent_choice`, `"move"` or `"keep"`; without it the apply answers a validation error naming both. A row that is already done succeeds with nothing written; the Dangling policy dismisses a row whose relation is gone, already has the new type, has a twin of it (the next sweep merges into the twin), or whose type no longer maps to it. The row can't be edited, only applied or dismissed, and its undo is the ordinary audit undo (the `part_of` edge is removed and the variant comes back with its stored type; after Move the old parent comes back too, after Keep the variant gets its stored type back).
+
+**`swap` and `add` rows (R1b).** A `swap` row comes from the `dependency_edges` phase. `relation_id` and the endpoints are the stored `part_of` edge (library → Project), `old_type` is `part_of` and `new_type` is `depends_on`; `evidence` is `{ entity_type, facts: [{ observation_id, entity_id, entity_name, content }] }`. **Apply** runs under the membership lock, in one savepoint: the `part_of` is deleted, `Project depends_on library` is created through the validating path (an existing one is kept) and the library's project is synced, so the library and its own `part_of` children become global (`project_id` NULL) and stay attached to it. Two refusals write nothing:
+
+- a global entity already holds **the library's name**: the row answers so, and an `entity_merge` suggestion for the two is queued, the global one into the project's library (same type only, as a merge needs; with another type the row asks to rename or retype one). The merged library keeps this row's edge and takes the global one's edges and children, so the swap applies next and leaves one global node with a `depends_on` from each project;
+- **a child's name** is taken globally: the row answers naming the child, and nothing is queued (merging two unrelated children would be wrong). Rename or move the child, then apply again.
+
+An `add` row comes from the `orphans` phase: `relation_id` and `old_type` are null, the endpoints are the edge to create (Project → entity), `new_type` is `depends_on` and `evidence` is `{ entity_type, score, matched_tokens }`. Apply creates the edge; nothing else changes.
+
+A row whose edge is gone or already swapped, or whose `depends_on` exists, answers like a stale `retype` row (done: success with nothing written; gone: an error asking to dismiss it), and the Dangling policy dismisses it. Neither can be edited or bulk-applied. Undo is the ordinary audit undo: after a swap, the `depends_on` goes, the `part_of` comes back with its id and the library and its children return to the project's scope; redo makes them global again. The review card shows the operation, both endpoints, the scope effect ("SynthLib and its 2 children leave SynthApp's scope (they become global)") and the evidence. The `auto_apply_relation_retype` policy (off by default) applies `swap` rows only, never `retype` or `add`, and leaves a row for the operator when its library is no longer of a dependency-like type or a fact of the project names it with an ownership phrase ("part of this project", "our own", "maintained here", "vendored", "forked").
 
 Reports are flushed at the end of each batch and when advancing phases. Read them via:
 
@@ -232,7 +254,11 @@ To action a queued relationship proposal: inspect the evidence, then call
 | `relation_cursor_id`   | The relation id that phase resumes after |
 | `relation_types_fixed` | Relations retyped in place or fixed for case (`retyped` + `case_only`) |
 | `relation_types_merged` | Variant relations merged into their canonical twin |
-| `relation_retypes_queued` | `relation_retype` review rows queued |
+| `relation_retypes_queued` | `relation_retype` review rows (`retype`) the `relation_types` phase queued |
+| `dependency_edges_checked` | Dependency-like `part_of` edges the `dependency_edges` phase read |
+| `dependency_cursor_id` | The relation id that phase resumes after |
+| `dependency_swaps_queued` | `relation_retype` `swap` rows queued |
+| `dependency_adds_queued` | `relation_retype` `add` rows queued (dependency-like orphans) |
 | `relation_types_report_id` | The run's `relation_type_sweep` report |
 | `total_relations`      | Relations counted when the run started (for the progress bar) |
 | `entities_processed`   | Entities visited across the entity phases |
@@ -285,7 +311,15 @@ suppressions that expired more than the retention ago. The review policies run n
 Change sets (UI-4a) are pruned by `ChangeSetPruneJob` (5:30 AM GMT): snapshots older than 30
 days are cleared (every undo window has passed), and sets older than 90 days that no audit row
 references are deleted. Compaction auto-merges are change sets too (actor `compaction:<run_id>`),
-so the operator can undo one for 7 days (see [architecture](architecture.md#change-sets-and-undo-ui-4a-1570)).
+so the operator can undo one for 7 days (see [architecture](architecture.md#change-sets-and-undo-ui-4a-1570)), and so are
+orphan auto-parents since R1b (`compaction.auto_parent`, the audit undo, 30 days).
+
+**The run's actor.** Every write of a run is attributed to `compaction:<run id>`: the change set
+and every audit row of an auto-parent, an auto-merge and the relation type sweep, and the audit
+rows of the observation dedupe (which has no change set). So the edges dream state created or
+changed are countable by the `compaction:` prefix of their audit rows' actor (until 1.94.0 only
+the relation type sweep's audit rows had it: the auto-merge set the actor on its change set alone,
+and the auto-parent had none).
 
 ### Feature flag
 
@@ -302,9 +336,9 @@ Configure under **System › Settings › Feature Flags**.
 The **Dream State / Compactor Run** card on **System › Background jobs** (`/system/jobs`; the Maintenance hub that held it until 1.62.0 is gone) shows:
 
 - Run status badge (`idle`, `running`, `paused`, `completed`, `failed`)
-- Phase stepper (`relation_types` → `orphans` → `tree_walk` → `relationship_discovery`)
+- Phase stepper (`relation_types` → `dependency_edges` → `orphans` → `tree_walk` → `relationship_discovery`)
 - Cursor entity, pause flag, timestamps, duration
-- Live stat chips (**Relation types fixed** counts the retyped, case-fixed and merged relations)
+- Live stat chips (**Relation types fixed** counts the retyped, case-fixed and merged relations; **Dependency rows queued** the `swap` and `add` rows)
 - **Pause** / **Start / Resume** buttons
 - **Repair relation duplicates** when a failed run may be caused by relation integrity issues
 
@@ -368,6 +402,7 @@ Since 1.93.1 that button is safe for membership. A `part_of` edge decides which 
 - **Review band** — cosine distance between **0.10** and **0.30** requires human or agent confirmation.
 - **Type-safe merges** — only entities of the same `entity_type` are considered for auto-merge or merge review. `NodeOperationsStrategy#merge_into` refuses cross-type merges.
 - **Low-confidence orphans** — token scores below **10** are never auto-parented.
+- **Dependency-like entities are never parented or swapped unattended by default** — an orphan of a dependency-like type gets an `add` row, and a library `part_of` a Project a `swap` row; only the `auto_apply_relation_retype` policy, off by default, applies swaps on its own.
 - **Pre-flight integrity sweep** — before each run, `GraphIntegrityService` auto-repairs counter cache drift and dangling relations (a dangling `part_of` whose child survives is deleted with a membership sync, and kept with a logged warning on a name collision), backfills missing embeddings (queuing failures for review), and detects observation lifecycle corruption (active with `obsoleted_at`, superseded without `superseded_by`, cross-entity `superseded_by` references). Lifecycle issues and embedding failures are queued into `compaction_review`. A lifecycle row's **Repair** (1.86.0) re-reads the observation: superseded without `superseded_by` points at its active same-entity `outdated_by`, else becomes obsolete; active with `obsoleted_at` has it cleared; a cross-entity `superseded_by` is Dismiss only. Undoable; a row already consistent is resolved, and the Dangling policy dismisses it.
 
 
