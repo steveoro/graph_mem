@@ -42,10 +42,11 @@ class ImportFlow
     end
 
     # @param file [#read, #rewind, #original_filename]
-    # @return [Boolean] a JSON file: its name ends in .json, or its first non-blank character opens a JSON
-    #   object or array (anything else goes to the validator, which refuses what isn't a graph_mem-sql script)
+    # @return [Boolean] a JSON file: its name ends in .json, or its first non-blank character (after any UTF-8
+    #   BOM) opens a JSON object or array (anything else goes to the validator, which refuses what isn't a
+    #   graph_mem-sql script)
     def json?(file)
-      head = file.read(64).to_s
+      head = file.read(64).to_s.b.delete_prefix("\xEF\xBB\xBF".b)
       file.rewind
       File.extname(file.original_filename.to_s).casecmp?(".json") || head.lstrip.start_with?("{", "[")
     end
