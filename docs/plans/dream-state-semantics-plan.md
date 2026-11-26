@@ -2,7 +2,8 @@
 
 > Status: draft, 2026-11-20, written on `main` at 1.92.0. Revised the same day after Steve's
 > answers and two review rounds (see "Answers" at the end). **R1a shipped as 1.93.0** (see its
-> "As built" note); R1b onward is not started. Each PR below gets its own kickoff.
+> "As built" note). R1b started on 2026-11-26 (see its "Kickoff" note); R1c onward is not started. Each
+> PR below gets its own kickoff.
 >
 > **Versions (2026-11-24):** the `part_of` membership PRs took 1.93.1 and 1.93.2 (their own plan), so
 > the mcp 1.11.0 bump moved to 1.93.3. Later the same day the embedding calls moved out of the
@@ -117,7 +118,7 @@ The versions, as expected today (each kickoff confirms its own against `version.
 | Embeddings outside the membership lock | A follow-up of the membership PRs (`done/part-of-membership-plan.md`, Follow-ups) | after PR 2 (shipped) | 1.93.3 |
 | mcp 1.11.0 | (its own plan) | after the follow-up | 1.93.4 |
 | SQL exchange | (its own plan, five PRs incl. the JSON export's retirement: `done/sql-exchange-plan.md`) | after mcp 1.11.0 (shipped) | 1.94.0 |
-| **R1b** | Retype library `part_of` edges, the orphan rule, the SQL export's scope, dream-state actor on its edges | after the SQL exchange train | 1.95.0 |
+| **R1b** | Retype library `part_of` edges, the orphan rule, the scans, the SQL export's scope, dream-state actor on its edges (two PRs, R1b-1 and R1b-2; see its "Kickoff" note) | after the SQL exchange train | 1.95.0 |
 | **R1c** | Removal-style evidence rows | with or right after R1b | with R1b, or 1.95.1 |
 | **R2** | Relation lifecycle | after R1 | 1.96.0 |
 
@@ -318,6 +319,62 @@ rows; the Project's graph_mem-sql export still carries the library as rows (not 
 name), and an export of the library doesn't carry the Project. On production: library-like entities under `part_of` a Project go from about 20
 to those with an ownership signal; orphans don't rise; dream-state-created edges are countable by
 actor.
+
+**Kickoff (2026-11-26).** Steve gave the go after 1.94.0 and answered one question; the other calls
+below were made in the session, on the plan's "R1b's kickoff decides".
+
+- **Scans (Steve's answer).** A project scan only looks up names inside the scanned project, so after a
+  swap the next scan would create a second, project-scoped copy of the library under `part_of`, and
+  dream state would queue a swap that collides with the global name, on every scan. Steve's answer: the
+  scan **links it and writes facts**. An item of a dependency-like type whose name matches a global
+  entity of a dependency-like type is that entity: no project copy and no `part_of`. The scan adds
+  `Project depends_on` it when the edge is missing. Its facts go onto that node as scan-sourced facts,
+  and the project's scan validation covers them, so they can be updated or obsoleted. Steve answered
+  for a library the project already depends on. Extending it to any global namesake of a dependency-like
+  type is a session call: it follows "one global node with a `depends_on` from each". Production had no
+  scanned project on 2026-11-26.
+- **Two PRs, released together.**
+  - **R1b-1** (no version bump, CHANGELOG under `[Unreleased]`) carries:
+    - the `swap` and `add` operations;
+    - the setting and the policy;
+    - the dream-state step that queues swaps;
+    - the orphan rule and phase 1's `add` rows;
+    - the dream-state actor;
+    - the scans;
+    - its docs.
+  - **R1b-2**, stacked on it, carries:
+    - the SQL export's scope and the export picker's roots;
+    - R1c (or 1.95.1 if the diff runs past the stop line);
+    - its docs;
+    - the 1.95.0 release.
+- **Payload keys.** The keys stay R1a's: `operation`, `relation_id`, `from_entity_id`, `from_name`,
+  `to_entity_id`, `to_name`, `old_type`, `new_type`, `reason`, plus `evidence`.
+  - **`swap`:** `relation_id` and the endpoints are the stored `part_of` edge (library → Project),
+    `old_type` is `part_of` and `new_type` is `depends_on`. The apply writes the new edge from the
+    Project to the library.
+  - **`add`:** `relation_id` and `old_type` are null. The endpoints are the edge to create
+    (Project → entity), and `new_type` is `depends_on`.
+  - **`evidence`:** the entity's type, plus the project facts that say it uses or used the entity, or,
+    for `add`, the orphan match (score and matched tokens).
+- **Actor.** Dream state already attributes its change sets to `compaction:<run id>` (the auto-merge
+  and the relation-types phase), so its edges carry that actor rather than the plan's `job:dream_state`.
+  The orphan auto-parent, which today writes with no actor, becomes a change set
+  (`compaction.auto_parent`), so it can be undone like an auto-merge. Dream-state edges are countable
+  by the `compaction:` prefix.
+- **The SQL export's scope.** A Project's script follows the Project's outgoing `depends_on` edges one
+  hop. A target of the edge travels as rows, with its own `part_of` subtree, but without its other
+  dependents, when it is global and not a Project. A `depends_on` to a Project, or to a member of another
+  project, stays a reference by name. The script format version moves only if the template changes.
+- **The export picker's roots** (`SqlExport::Roots`) become `part_of` only. After the swap a global
+  library is the root of its own subtree, and one that depends on another library must stay exportable.
+- **Graphify.** The translation writes no `depends_on` into the payload tree: `imports_from` →
+  `depends_on` travels in the payload's `relations` (`GraphifyImporter::EDGE_RELATION_MAPPINGS`,
+  `GraphifyImporter::Payload#referrers_index`). So the JSON import engine needs no change.
+- **The dependency-like types setting** is a comma-separated string, since Settings has no list type.
+  A type matches by its canonical type (`EntityTypeMapping`), case-insensitively. Its default covers
+  the vocabulary's Framework, Gem and Tool and their aliases. Before the release, a counts-only check
+  on production confirms that it covers the library-like entities measured there (23 in 4 types on
+  2026-11-26, 22 of them `part_of` a Project).
 
 ## R1c. Removal-style evidence (with or right after R1b)
 
