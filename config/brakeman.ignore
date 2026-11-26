@@ -118,13 +118,13 @@
     {
       "warning_type": "File Access",
       "warning_code": 16,
-      "fingerprint": "7b5a2015347d792d8a126b3dabde115892608ba176e7542c20df9e6920e7c7e1",
+      "fingerprint": "1b03d0cfb992ae24b14b49ccf8f80be0f1923e3876df4594e4f431f4b390aace",
       "check_name": "SendFile",
       "message": "Parameter value used in file name",
       "file": "app/controllers/projects/exports_controller.rb",
-      "line": 63,
+      "line": 58,
       "link": "https://brakemanscanner.org/docs/warning_types/file_access/",
-      "code": "send_file(ExportJob.download_path(find_operation!(params[:operation_id], \"export\").operation_id, :format => export_format(find_operation!(params[:operation_id], \"export\"))), :type => :BRAKEMAN_SAFE_LITERAL, :disposition => \"attachment\", :filename => download_name(find_operation!(params[:operation_id], \"export\"), export_format(find_operation!(params[:operation_id], \"export\"))))",
+      "code": "send_file(ExportJob.download_path(find_operation!(params[:operation_id], \"export\").operation_id), :type => \"application/sql\", :disposition => \"attachment\", :filename => download_name(find_operation!(params[:operation_id], \"export\")))",
       "render_path": null,
       "location": {
         "type": "method",
@@ -136,7 +136,7 @@
       "cwe_id": [
         22
       ],
-      "note": "UI-6 exports download: the path is ExportJob.download_path of an operation id that find_operation! checked as a UUID and loaded from OperationProgress (operation_type export); nothing from params reaches the path. The format is read from the row's details and checked against ExportJob::FORMATS; the type comes from a fixed map and the name from the row's root names (parameterized), never from params."
+      "note": "UI-6 exports download: the path is ExportJob.download_path of an operation id that find_operation! checked as a UUID and loaded from OperationProgress (operation_type export); nothing from params reaches the path. The type is fixed (application/sql) and the name comes from the row's root names (parameterized), never from params; a retired JSON export row answers 410 before this."
     }
   ],
   "brakeman_version": "8.1.0"

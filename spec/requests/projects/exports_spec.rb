@@ -3,24 +3,24 @@
 require "rails_helper"
 
 # UI-6 P5: exports run in ExportJob with a progress page; the download is a 410 once the file
-# is gone. The format choice (SQL script preselected, or JSON) is kept in the operation's details; a
-# row without one is JSON.
+# is gone. Since 1.94.0 an export is a graph_mem-sql script; a JSON export row from before then (its
+# details say json, or name no format) shows as retired and its download answers 410.
 RSpec.describe "Projects › Exports", type: :request do
   let!(:alpha) { MemoryEntity.create!(name: "Alpha Service", entity_type: "Project") }
   let!(:widget) { MemoryEntity.create!(name: "SynthWidget", entity_type: "Component") }
 
-  # A finished export. `format: nil` is a row from before the choice existed (no "format" key).
-  def completed_export(file: true, format: nil, roots: [ alpha ])
+  # A finished export. `format: "json"` is a row of the retired JSON export, `format: nil` one from before
+  # the format choice existed (no "format" key, a JSON export too); `file:` writes the file such a row had.
+  def completed_export(file: true, format: "sql", roots: [ alpha ])
     details = { "entity_ids" => roots.map(&:id), "root_names" => roots.map(&:name) }
     details["format"] = format if format
     OperationProgress.create!(operation_type: "export", operation_id: SecureRandom.uuid, status: "completed", percentage: 100,
                               details: details).tap do |export|
       if file
         FileUtils.mkdir_p(ExportJob::TEMP_DIR)
-        extension = format || "json"
-        content = extension == "sql" ? "-- graph_mem-sql v1\n" : { root_nodes: [ { name: "Alpha Service" } ] }.to_json
-        File.write(ExportJob.download_path(export.operation_id, format: extension), content)
-        written << [ export.operation_id, extension ]
+        path = format == "sql" ? ExportJob.download_path(export.operation_id) : File.join(ExportJob::TEMP_DIR, "export_#{export.operation_id}.json")
+        File.write(path, format == "sql" ? "-- graph_mem-sql v1\n" : { root_nodes: [ { name: "Alpha Service" } ] }.to_json)
+        written << path
       end
     end
   end
@@ -29,7 +29,7 @@ RSpec.describe "Projects › Exports", type: :request do
 
   def html = Nokogiri::HTML(response.body)
 
-  after { written.each { |id, format| FileUtils.rm_f(ExportJob.download_path(id, format: format)) } }
+  after { FileUtils.rm_f(written) }
 
   it "answers 403 to a guest and starts nothing" do
     enable_guest!
@@ -58,7 +58,7 @@ RSpec.describe "Projects › Exports", type: :request do
     end
 
     it "says the list is capped only when a root was cut" do
-      stub_const("ExportStrategy::ROOT_NODES_LIMIT", 3)
+      stub_const("SqlExport::Roots::LIMIT", 3)
       root_ids = -> { Nokogiri::HTML(response.body).css("[data-testid^='export-root-']").size }
       MemoryEntity.delete_all
 
@@ -90,36 +90,19 @@ RSpec.describe "Projects › Exports", type: :request do
       expect(html.at_css("[data-testid='export-format-name']").text).to eq("Format: SQL script")
     end
 
-    it "preselects the SQL script on the picker, with JSON as the other choice" do
+    it "offers the SQL script only: no format choice, a hint saying what the export writes" do
       get projects_exports_path
 
-      expect(html.css("[data-testid='export-format'] input[type=radio]").map { |input| [ input["value"], input["checked"] ] })
-        .to eq([ [ "sql", "checked" ], [ "json", nil ] ])
-      expect(html.at_css("legend").text).to be_present
-      html.css("[data-testid='export-format'] input[type=radio]").each do |input|
-        expect(html.css("label[data-testid='export-format-#{input['value']}'] input#export_format_#{input['value']}")).not_to be_empty
-      end
+      form = html.at_css("[data-testid='export-form']")
+      expect(form.css("input[type=radio], [data-testid='export-format']")).to be_empty
+      expect(form.at_css("[data-testid='export-format-hint']").text).to include("graph_mem-sql script")
+      expect(form.text).not_to include("JSON")
     end
 
-    it "queues a JSON export when JSON is picked" do
+    it "queues a script whatever export_format a stale form sends" do
       expect { post projects_exports_path, params: { ids: [ alpha.id ], export_format: "json" } }.to have_enqueued_job(ExportJob).with(anything, [ alpha.id ])
 
-      expect(OperationProgress.sole.details).to include("format" => "json")
-    end
-
-    it "defaults to SQL when no format comes with the request" do
-      post projects_exports_path, params: { ids: [ alpha.id ] }
-
       expect(OperationProgress.sole.details).to include("format" => "sql")
-    end
-
-    it "re-renders the picker (422) for an unknown format and starts nothing" do
-      expect { post projects_exports_path, params: { ids: [ alpha.id ], export_format: "xml" } }.not_to have_enqueued_job
-
-      expect(response).to have_http_status(:unprocessable_content)
-      expect(OperationProgress.count).to eq(0)
-      expect(response.body).to include("Pick a format")
-      expect(html.at_css("input#export_format_sql")["checked"]).to eq("checked")
     end
 
     it "re-renders the picker (422) when nothing is picked" do
@@ -129,36 +112,8 @@ RSpec.describe "Projects › Exports", type: :request do
       expect(response.body).to include("Pick at least one root")
     end
 
-    it "downloads a finished export and answers 410 once the file has expired" do
+    it "downloads a script as application/sql, an attachment named after its root, and answers 410 once the file has expired" do
       export = completed_export
-
-      get projects_export_path(export.operation_id)
-      expect(response.body).to include('data-testid="export-download"')
-      get download_projects_export_path(export.operation_id)
-      expect(response).to have_http_status(:ok)
-      expect(response.content_type).to include("application/json")
-      expect(response.headers["Content-Disposition"]).to match(/attachment.*graph_mem_export_\d{8}_\d{6}\.json/)
-      expect(JSON.parse(response.body)["root_nodes"].first["name"]).to eq("Alpha Service")
-
-      FileUtils.rm_f(ExportJob.download_path(export.operation_id))
-      get download_projects_export_path(export.operation_id)
-      expect(response).to have_http_status(:gone)
-      expect(response.body).to include("This export has expired")
-      get projects_export_path(export.operation_id)
-      expect(response.body).to include('data-testid="export-expired"')
-    end
-
-    it "treats an export row with an explicit json format like one without a format" do
-      export = completed_export(format: "json")
-
-      get download_projects_export_path(export.operation_id)
-
-      expect(response.content_type).to include("application/json")
-      expect(response.headers["Content-Disposition"]).to include(".json")
-    end
-
-    it "downloads a script as application/sql, an attachment named after its root" do
-      export = completed_export(format: "sql")
 
       get projects_export_path(export.operation_id)
       expect(response.body).to include('data-testid="export-download"')
@@ -169,6 +124,28 @@ RSpec.describe "Projects › Exports", type: :request do
       expect(response.content_type).to include("application/sql")
       expect(response.headers["Content-Disposition"]).to eq('attachment; filename="alpha_service.sql"; filename*=UTF-8\'\'alpha_service.sql')
       expect(response.body).to eq("-- graph_mem-sql v1\n")
+
+      FileUtils.rm_f(ExportJob.download_path(export.operation_id))
+      get download_projects_export_path(export.operation_id)
+      expect(response).to have_http_status(:gone)
+      expect(response.body).to include("This export has expired")
+      get projects_export_path(export.operation_id)
+      expect(response.body).to include('data-testid="export-expired"')
+    end
+
+    it "shows an old JSON export as retired, with no download, and answers 410 to its download even with its file still there" do
+      [ completed_export(format: "json"), completed_export(format: nil) ].each do |export|
+        get projects_export_path(export.operation_id)
+        expect(response).to have_http_status(:ok)
+        expect(html.at_css("[data-testid='export-format-name']").text).to eq("Format: JSON (retired)")
+        expect(html.at_css("[data-testid='export-retired']").text).to include("retired in 1.94.0")
+        expect(response.body).not_to include('data-testid="export-download"')
+
+        get download_projects_export_path(export.operation_id)
+        expect(response).to have_http_status(:gone)
+        expect(html.at_css("[data-testid='export-retired-page']").text).to include("The JSON export was retired in 1.94.0")
+        expect(response.body).not_to include("root_nodes")
+      end
     end
 
     it "names a script of several roots after the first and the rest, and one with no usable root name by its time" do
@@ -183,10 +160,10 @@ RSpec.describe "Projects › Exports", type: :request do
     end
 
     it "answers 410 for a script whose file is gone, even when a JSON file with the same id exists" do
-      export = completed_export(format: "sql")
-      FileUtils.rm_f(ExportJob.download_path(export.operation_id, format: "sql"))
-      File.write(ExportJob.download_path(export.operation_id), "{}")
-      written << [ export.operation_id, "json" ]
+      export = completed_export
+      FileUtils.rm_f(ExportJob.download_path(export.operation_id))
+      File.write(File.join(ExportJob::TEMP_DIR, "export_#{export.operation_id}.json"), "{}")
+      written << File.join(ExportJob::TEMP_DIR, "export_#{export.operation_id}.json")
 
       get download_projects_export_path(export.operation_id)
 
@@ -200,14 +177,18 @@ RSpec.describe "Projects › Exports", type: :request do
       expect(response).to have_http_status(:not_found)
     end
 
-    it "lists past exports newest first, each with its format (JSON for a row without one)" do
-      old = completed_export(file: false)
-      sql = completed_export(file: false, format: "sql")
+    it "lists past exports newest first, each with its format (an old JSON one, or one without a format, as retired)" do
+      json = completed_export(file: false, format: "json")
+      old = completed_export(file: false, format: nil)
+      sql = completed_export(file: false)
 
       get projects_exports_path
 
+      expect(response).to have_http_status(:ok)
       expect(response.body).to include("export-row-#{old.operation_id}", "Alpha Service")
-      expect(html.at_css("[data-testid='export-row-#{old.operation_id}']").text).to include("JSON")
+      expect(html.css("[data-testid^='export-row-']").map { |row| row["data-testid"] })
+        .to eq([ sql, old, json ].map { |export| "export-row-#{export.operation_id}" })
+      [ json, old ].each { |export| expect(html.at_css("[data-testid='export-row-#{export.operation_id}']").text).to include("JSON (retired)") }
       expect(html.at_css("[data-testid='export-row-#{sql.operation_id}']").text).to include("SQL script")
     end
 
@@ -222,7 +203,7 @@ RSpec.describe "Projects › Exports", type: :request do
       post projects_exports_path, params: { ids: [ project.id ] }
       export = OperationProgress.find_by!(operation_type: "export")
       ExportJob.new.perform(export.operation_id, [ project.id ])
-      written << [ export.operation_id, "sql" ]
+      written << ExportJob.download_path(export.operation_id)
       get download_projects_export_path(export.operation_id)
       script = response.body
       filename = response.headers["Content-Disposition"][/filename="([^"]+)"/, 1]

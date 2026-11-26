@@ -20,7 +20,9 @@
       %p.projects-error{ role: "alert" }= export.error_message
   .projects-actions
     %span{ data: { progress_action: true, progress_visible_for: "completed" }, style: ("display: none" unless export.status == "completed") }
-      - if live || @file_available
+      - if export_format(export) != ExportJob::FORMAT
+        %span.projects-muted{ data: { testid: "export-retired" } }= t("projects.exports.retired_body")
+      - elsif live || @file_available
         = link_to t("projects.exports.show.download"), download_projects_export_path(export.operation_id), class: "ui-btn ui-btn-primary",
           data: { turbo: false, testid: "export-download" }
       - else

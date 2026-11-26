@@ -120,8 +120,8 @@ Rails.application.routes.draw do
     end
     resources :scan_skills, only: [ :update ], param: :operation_id
     resources :cloud_access, only: [ :update ]
-    # :id is the upload's import session for show (review), execute and destroy (cancel), and the
-    # executed import's operation id for report.
+    # :id is the upload's import session for show (an SQL script's preview), execute and destroy
+    # (cancel), and the executed import's operation id for report and maintenance.
     resources :imports, only: [ :index, :new, :create, :show, :destroy ] do
       member do
         post :execute
